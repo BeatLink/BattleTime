@@ -8,6 +8,9 @@ export type DiscoveredWatch = {
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 
+// Which implementation is carrying the bytes, for the interface to report.
+export type TransportKind = 'ble' | 'electron' | 'mock';
+
 export type TransportListener = {
   onState?: (state: ConnectionState) => void;
   onLine?: (line: string) => void;
@@ -15,6 +18,8 @@ export type TransportListener = {
 };
 
 export interface WatchTransport {
+  readonly kind: TransportKind;
+
   // Scan for watches advertising the Nordic UART Service until stopScan is called.
   startScan(onFound: (watch: DiscoveredWatch) => void): Promise<void>;
   stopScan(): Promise<void>;

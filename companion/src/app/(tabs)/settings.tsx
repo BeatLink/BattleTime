@@ -5,6 +5,16 @@ import { Row, ToggleRow } from '@/components/row';
 import { Screen } from '@/components/screen';
 import { useWatch } from '@/hooks/use-watch';
 
+const TRANSPORT_LABELS = {
+  ble: 'Bluetooth, on this phone',
+  electron: 'Bluetooth, through the desktop app',
+  mock: 'Mock watch',
+} as const;
+
+function transportLabel(kind: keyof typeof TRANSPORT_LABELS): string {
+  return TRANSPORT_LABELS[kind];
+}
+
 export default function SettingsScreen() {
   const { settings, updateSettings, transportKind } = useWatch();
 
@@ -25,7 +35,7 @@ export default function SettingsScreen() {
       </Card>
       <Card title="About">
         <Row label="Version" detail={Constants.expoConfig?.version ?? 'dev'} />
-        <Row label="Transport" detail={transportKind === 'ble' ? 'Bluetooth Low Energy' : 'Mock watch'} />
+        <Row label="Transport" detail={transportLabel(transportKind)} />
         <Row label="Firmware" detail="NeoTime, a wasp-os fork for the PineTime" />
       </Card>
     </Screen>

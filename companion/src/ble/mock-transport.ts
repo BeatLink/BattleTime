@@ -3,6 +3,8 @@ import type { ConnectionState, DiscoveredWatch, TransportListener, WatchTranspor
 
 // A fake watch so the UI runs on web and in Expo Go, where the BLE native module is unavailable.
 export class MockTransport implements WatchTransport {
+  readonly kind = 'mock' as const;
+
   private listener: TransportListener = {};
   private state: ConnectionState = 'disconnected';
   private scanTimer: ReturnType<typeof setTimeout> | null = null;

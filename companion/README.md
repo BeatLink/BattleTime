@@ -12,19 +12,40 @@ code; see [src/services/notifications/README.md](src/services/notifications/READ
 
 ## Getting started
 
+Everything the project needs is in the flake:
+
 ```bash
+nix develop
 npm install
-npx expo run:android   # or: npx expo run:ios
 ```
 
-Bluetooth needs a development build, so Expo Go and the web target fall back to a mock watch.
-That mock is enough to work on screens without hardware.
+One codebase builds three targets:
 
 ```bash
-npx expo start --web   # UI only, mock transport
+npm run android      # or npm run ios, a development build with real Bluetooth
+npm run desktop      # the Electron app, with real Bluetooth through BlueZ
+npm start            # Expo, including the browser, where the mock watch stands in
+```
+
+Bluetooth on a phone needs a development build, so Expo Go falls back to the mock watch. A plain
+browser has no Bluetooth either, and the mock is enough to work on screens without hardware.
+
+```bash
+npm test
 npm run typecheck
 npm run lint
 ```
+
+## The desktop app
+
+The desktop build is the same interface, rendered by React Native for Web and wrapped in Electron.
+Only the transport differs. `electron/ble.js` runs in the main process and talks to BlueZ through
+node-ble, and `electron/preload.js` exposes a narrow bridge to the window, so the interface never
+touches Node. `src/ble/electron-transport.ts` implements the same `WatchTransport` interface the
+phone uses, which is why every screen, the package protocol and the tests are shared unchanged.
+
+Electron comes from the flake rather than npm, because the binary npm downloads does not run on
+NixOS.
 
 ## Layout
 
@@ -37,7 +58,8 @@ src/app/                 Expo Router screens
   (tabs)/settings.tsx    App settings
   scan.tsx               Modal that lists nearby watches
 src/app/configure.tsx    Settings form generated from a package's own schema
-src/ble/                 Transport layer: react-native-ble-plx plus a mock for web and Expo Go
+electron/                Desktop app: main process, preload bridge, BlueZ transport, file server
+src/ble/                 Transport layer: react-native-ble-plx, Electron, and a mock for browsers
 src/packages/            Bundled app packages and the catalogue that joins them to the watch
 src/protocol/            Gadgetbridge and package manager message types, plus the transfer driver
 src/state/               Watch provider (connection, traffic, settings) and persisted settings

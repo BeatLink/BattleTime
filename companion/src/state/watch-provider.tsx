@@ -1,7 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { createTransport, transportKind } from '@/ble/create-transport';
-import type { ConnectionState, DiscoveredWatch, WatchTransport } from '@/ble/transport';
+import { createTransport, detectTransportKind } from '@/ble/create-transport';
+import type {
+  ConnectionState,
+  DiscoveredWatch,
+  TransportKind,
+  WatchTransport,
+} from '@/ble/transport';
 import {
   decodeWatchLine,
   encodeForWatch,
@@ -25,7 +30,7 @@ export type ConsoleEntry = {
 const CONSOLE_LIMIT = 200;
 
 type WatchContextValue = {
-  transportKind: 'ble' | 'mock';
+  transportKind: TransportKind;
   connection: ConnectionState;
   watch: DiscoveredWatch | null;
   scanning: boolean;
@@ -78,6 +83,10 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   const [findPhoneActive, setFindPhoneActive] = useState(false);
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+
+  // Pure check, so it needs neither state nor an effect.
+  const transportKind = useMemo<TransportKind>(() => detectTransportKind(), []);
 
   const log = useCallback((direction: 'in' | 'out', text: string) => {
     setConsoleEntries((entries) => {
@@ -234,6 +243,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       packageChannel,
     }),
     [
+      transportKind,
       connection,
       watch,
       scanning,

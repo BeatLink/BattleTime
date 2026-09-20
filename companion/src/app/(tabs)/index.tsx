@@ -37,7 +37,7 @@ export default function WatchScreen() {
             <ThemedText type="smallBold">{watch?.name ?? remembered?.name ?? 'No watch paired'}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               {stateLabel[connection]}
-              {transportKind === 'mock' ? ' (mock transport)' : ''}
+              {transportKind === 'mock' ? ' (mock watch)' : ''}
             </ThemedText>
           </View>
         </View>

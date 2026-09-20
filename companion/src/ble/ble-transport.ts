@@ -6,6 +6,8 @@ import { ATT_OVERHEAD, DEFAULT_MTU, NUS_RX, NUS_SERVICE, NUS_TX } from './uuids'
 
 // Talks to a real watch over the Nordic UART Service using react-native-ble-plx.
 export class BleTransport implements WatchTransport {
+  readonly kind = 'ble' as const;
+
   private listener: TransportListener = {};
   private device: Device | null = null;
   private txSubscription: Subscription | null = null;
