@@ -30,7 +30,7 @@ waspos apps config <name> <json>
 
 // Read a package that mkpkg.py wrote out as a directory of files.
 function readBundleFromDisk(directory: string): PackageBundle {
-  const metaPath = join(directory, 'package.json');
+  const metaPath = join(directory, 'meta.json');
   const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as PackageMeta;
   const files: PackageBundle['files'] = [];
 
@@ -39,9 +39,6 @@ function readBundleFromDisk(directory: string): PackageBundle {
       const path = join(at, entry);
       if (statSync(path).isDirectory()) {
         walk(path);
-        continue;
-      }
-      if (path === metaPath) {
         continue;
       }
       files.push({
