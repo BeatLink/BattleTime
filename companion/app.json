@@ -1,22 +1,22 @@
 {
   "expo": {
-    "name": "NeoTime Companion App",
-    "slug": "neotime-companion",
+    "name": "WaspOS Companion App",
+    "slug": "waspos-companion",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "neotime",
+    "scheme": "waspos",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#000000",
     "ios": {
-      "bundleIdentifier": "com.neotime.companion",
+      "bundleIdentifier": "com.waspos.companion",
       "supportsTablet": false,
       "infoPlist": {
         "UIBackgroundModes": ["bluetooth-central"]
       }
     },
     "android": {
-      "package": "com.neotime.companion",
+      "package": "com.waspos.companion",
       "adaptiveIcon": {
         "backgroundColor": "#000000",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -46,7 +46,7 @@
           "isBackgroundEnabled": true,
           "neverForLocation": true,
           "modes": ["central"],
-          "bluetoothAlwaysPermission": "NeoTime Companion uses Bluetooth to talk to your watch."
+          "bluetoothAlwaysPermission": "WaspOS Companion uses Bluetooth to talk to your watch."
         }
       ]
     ],

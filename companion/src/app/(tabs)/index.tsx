@@ -87,7 +87,7 @@ export default function WatchScreen() {
                   send({
                     t: 'notify',
                     id: Date.now() % 100000,
-                    src: 'NeoTime Companion',
+                    src: 'WaspOS Companion',
                     title: 'Hello from your phone',
                     body: 'Notifications are working.',
                   })

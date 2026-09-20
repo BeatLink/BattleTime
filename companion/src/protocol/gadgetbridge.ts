@@ -1,5 +1,5 @@
-// Message types for the Gadgetbridge (Bangle.js style) JSON protocol that NeoTime speaks over the Nordic UART Service.
-// The watch side lives in NeoTime/wasp/gadgetbridge.py; keep the two in step.
+// Message types for the Gadgetbridge (Bangle.js style) JSON protocol that wasp-os speaks over the Nordic UART Service.
+// The watch side lives in wasp/gadgetbridge.py in the firmware tree; keep the two in step.
 
 export type NotificationMessage = {
   t: 'notify';

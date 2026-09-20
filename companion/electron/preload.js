@@ -18,7 +18,7 @@ ipcRenderer.on('ble:event', (_event, name, payload) => {
   }
 });
 
-contextBridge.exposeInMainWorld('neotime', {
+contextBridge.exposeInMainWorld('waspos', {
   startScan: () => ipcRenderer.invoke('ble:start-scan'),
   stopScan: () => ipcRenderer.invoke('ble:stop-scan'),
   connect: (id) => ipcRenderer.invoke('ble:connect', id),

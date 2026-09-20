@@ -1,4 +1,4 @@
-// The NeoTime Companion desktop app.
+// The WaspOS Companion desktop app.
 //
 // It runs the same interface as the phone app, served from the web export,
 // with Bluetooth handled here in the main process.
@@ -35,7 +35,7 @@ async function createWindow() {
     width: 480,
     height: 860,
     backgroundColor: '#000000',
-    title: 'NeoTime Companion',
+    title: 'WaspOS Companion',
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),

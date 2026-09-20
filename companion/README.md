@@ -1,8 +1,8 @@
-# NeoTime Companion App
+# WaspOS Companion
 
-A React Native (Expo) phone app for watches running [NeoTime](../NeoTime), the wasp-os fork for
-the PineTime. It talks to the watch over the Nordic UART Service using the same Gadgetbridge-style
-JSON messages that NeoTime already understands.
+A React Native (Expo) phone app for watches running [wasp-os](https://github.com/wasp-os/wasp-os),
+the MicroPython firmware for the PineTime. It talks to the watch over the Nordic UART Service using
+the same Gadgetbridge-style JSON messages the firmware already understands.
 
 ## Status
 
@@ -64,31 +64,31 @@ src/packages/            Bundled app packages and the catalogue that joins them 
 src/protocol/            Gadgetbridge and package manager message types, plus the transfer driver
 src/state/               Watch provider (connection, traffic, settings) and persisted settings
 src/components/          Themed building blocks
-src/constants/theme.ts   Colours from the NeoTime design schema
+src/constants/theme.ts   Colours from the wasp-os design schema
 ```
 
 ## App packages
 
 Watch apps are installed over Bluetooth without reflashing the firmware. Packages are built from
-the NeoTime tree by its `tools/mkpkg.py`, then embedded in this app:
+the wasp-os tree by its `tools/mkpkg.py`, then embedded in this app:
 
 ```bash
-# in the NeoTime checkout
+# in the wasp-os checkout
 python3 tools/mkpkg.py apps/calculator apps/snake --out build-packages
 # back here
-npm run import-packages ../NeoTime/build-packages
+npm run import-packages path/to/wasp-os/build-packages
 ```
 
-The watch side is `wasp/pkgmgr.py` in the NeoTime tree, and the design is in its
+The watch side is `wasp/pkgmgr.py` in the wasp-os tree, and the design is in its
 `docs/app-packaging-design.md`. The mock watch answers package commands too, so the Apps tab can
 be exercised on web with no hardware.
 
 ## Protocol
 
 Messages to the watch are sent as the line of Python `GB({...})`, which the watch REPL evaluates
-against `wasp/gadgetbridge.py` in the NeoTime tree. Gadgetbridge prefixes that line with `\x10`,
+against `wasp/gadgetbridge.py` in the wasp-os tree. Gadgetbridge prefixes that line with `\x10`,
 an Espruino convention that wasp-os does not use and that is unsafe to copy; see
-`docs/app-packaging-references.md` in the NeoTime repo.
+`docs/app-packaging-references.md` in the wasp-os repo.
 
 The watch replies with one JSON object per line, for example `{"t":"music","n":"play"}` or
 `{"t":"findPhone","n":"true"}`. The full list of supported messages is in
@@ -96,5 +96,5 @@ The watch replies with one JSON object per line, for example `{"t":"music","n":"
 
 ## License
 
-LGPL v3 or later, the same licence as wasp-os and NeoTime. See [COPYING](COPYING) and
+LGPL v3 or later, the same licence as wasp-os. See [COPYING](COPYING) and
 [COPYING.LGPL](COPYING.LGPL).

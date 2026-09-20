@@ -36,7 +36,7 @@ export default function SettingsScreen() {
       <Card title="About">
         <Row label="Version" detail={Constants.expoConfig?.version ?? 'dev'} />
         <Row label="Transport" detail={transportLabel(transportKind)} />
-        <Row label="Firmware" detail="NeoTime, a wasp-os fork for the PineTime" />
+        <Row label="Firmware" detail="wasp-os on the PineTime" />
       </Card>
     </Screen>
   );

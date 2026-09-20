@@ -1,5 +1,5 @@
 // Commands and replies for the watch-side package manager, wasp/pkgmgr.py in
-// the NeoTime tree. Keep the two in step.
+// the wasp-os tree. Keep the two in step.
 //
 // Every command is a line of Python evaluated by the watch REPL, the same
 // channel the Gadgetbridge messages use. Every reply is one JSON object

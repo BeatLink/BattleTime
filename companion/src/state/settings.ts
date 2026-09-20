@@ -19,7 +19,7 @@ export const defaultSettings: Settings = {
   forwardWeather: false,
 };
 
-const STORAGE_KEY = 'neotime.settings.v1';
+const STORAGE_KEY = 'waspos.settings.v1';
 
 export async function loadSettings(): Promise<Settings> {
   try {

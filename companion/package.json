@@ -1,5 +1,5 @@
 {
-  "name": "neotime-companion",
+  "name": "waspos-companion",
   "main": "expo-router/entry",
   "version": "0.1.0",
   "private": true,

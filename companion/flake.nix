@@ -1,5 +1,5 @@
 {
-  description = "NeoTime Companion App: phone, web and desktop builds";
+  description = "WaspOS Companion App: phone, web and desktop builds";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -39,7 +39,7 @@
             # a bare Node process and exit immediately.
             unset ELECTRON_RUN_AS_NODE
 
-            echo "NeoTime Companion"
+            echo "WaspOS Companion"
             echo "  npm install          install dependencies"
             echo "  npm start            phone and web, via Expo"
             echo "  npm run desktop      build the web export and open the desktop app"

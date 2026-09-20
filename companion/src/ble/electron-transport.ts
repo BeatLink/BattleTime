@@ -18,7 +18,7 @@ export type DesktopBridge = {
 type BridgeResult = { ok: boolean; error?: string; value?: unknown };
 
 export function desktopBridge(): DesktopBridge | null {
-  const bridge = (globalThis as { neotime?: DesktopBridge }).neotime;
+  const bridge = (globalThis as { waspos?: DesktopBridge }).waspos;
   return bridge ?? null;
 }
 
