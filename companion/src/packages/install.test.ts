@@ -2,8 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import { MockPackages } from '@/ble/mock-packages';
 import { bundledPackages } from '@/packages/bundled';
-import { buildCatalog } from '@/packages/catalog';
-import { decodeBundle } from '@/packages/catalog';
+import { buildCatalog, decodeBundle } from '@/packages/catalog';
 import {
   installPackage,
   listPackages,
