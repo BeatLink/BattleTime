@@ -9,6 +9,12 @@ const NUS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const NUS_RX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
 const NUS_TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
+// A watch sitting in its bootloader advertises one of these instead.
+const DFU_SERVICES = [
+  '00001530-1212-efde-1523-785feabcd123',
+  '0000fe59-0000-1000-8000-00805f9b34fb',
+];
+
 // BlueZ splits a write itself only up to the negotiated MTU, so stay at the
 // size every connection supports.
 const CHUNK = 20;
@@ -85,12 +91,15 @@ class WatchBle {
           // BlueZ lists the services a device advertises, which is how a
           // watch is told apart from everything else in range. It is empty
           // for a device BlueZ has not looked at yet.
-          const uuids = await device.helper.prop('UUIDs').catch(() => []);
+          const uuids = (await device.helper.prop('UUIDs').catch(() => []) || [])
+            .map((uuid) => String(uuid).toLowerCase());
           this.emit('device', {
             id: address,
             name,
             rssi: rssi === null ? null : Number(rssi),
-            uuids: (uuids || []).map((uuid) => String(uuid).toLowerCase()),
+            uuids,
+            bootloader:
+              !uuids.includes(NUS_SERVICE) && uuids.some((uuid) => DFU_SERVICES.includes(uuid)),
           });
         }
       } catch (error) {
@@ -148,19 +157,24 @@ class WatchBle {
 
     this.gatt = await withTimeout(device.gatt(), 'discovering services');
 
-    // A bootloader has no UART service, so a firmware update connects
-    // without one and reaches the DFU characteristics directly.
+    // A bootloader has no UART service. When one is asked for and is not
+    // there, the watch is in its bootloader: keep the link, because that is
+    // what a firmware update needs, and say so.
+    let mode = 'bootloader';
     if (uart) {
-      const service = await withTimeout(
-        this.gatt.getPrimaryService(NUS_SERVICE), 'looking for the UART service');
-      this.rx = await service.getCharacteristic(NUS_RX);
-      this.tx = await service.getCharacteristic(NUS_TX);
+      const service = await this.gatt.getPrimaryService(NUS_SERVICE).catch(() => null);
+      if (service) {
+        this.rx = await service.getCharacteristic(NUS_RX);
+        this.tx = await service.getCharacteristic(NUS_TX);
 
-      await withTimeout(this.tx.startNotifications(), 'subscribing to the watch');
-      this.tx.on('valuechanged', (buffer) => {
-        this.emit('line', buffer.toString('utf8'));
-      });
+        await withTimeout(this.tx.startNotifications(), 'subscribing to the watch');
+        this.tx.on('valuechanged', (buffer) => {
+          this.emit('line', buffer.toString('utf8'));
+        });
+        mode = 'application';
+      }
     }
+    this.emit('mode', mode);
 
     device.on('disconnect', () => {
       this.forget();

@@ -5,6 +5,7 @@ import type {
   ConnectionState,
   DiscoveredWatch,
   TransportKind,
+  WatchMode,
   WatchTransport,
 } from '@/ble/transport';
 import {
@@ -33,6 +34,12 @@ const CONSOLE_LIMIT = 200;
 type WatchContextValue = {
   transportKind: TransportKind;
   connection: ConnectionState;
+  // What the connected watch is running. A watch in its bootloader answers
+  // nothing but DFU, so most of the app has nothing to offer it.
+  watchMode: WatchMode;
+  // True only for a watch that is connected and running its firmware, which
+  // is what every feature but the firmware update needs.
+  watchReady: boolean;
   watch: DiscoveredWatch | null;
   scanning: boolean;
   found: DiscoveredWatch[];
@@ -79,6 +86,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   const nextId = useRef(1);
 
   const [connection, setConnection] = useState<ConnectionState>('disconnected');
+  const [watchMode, setWatchMode] = useState<WatchMode>('application');
   const [watch, setWatch] = useState<DiscoveredWatch | null>(null);
   const [scanning, setScanning] = useState(false);
   const [found, setFound] = useState<DiscoveredWatch[]>([]);
@@ -122,10 +130,12 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       onState: (state) => {
         setConnection(state);
         if (state === 'disconnected') {
+          setWatchMode('application');
           bufferRef.current.reset();
           packageRepliesRef.current.reset();
         }
       },
+      onMode: (mode) => setWatchMode(mode),
       onLine: (chunk) => {
         for (const line of bufferRef.current.push(chunk)) {
           log('in', line);
@@ -230,6 +240,8 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     () => ({
       transportKind,
       connection,
+      watchMode,
+      watchReady: connection === 'connected' && watchMode === 'application',
       watch,
       scanning,
       found,
@@ -252,6 +264,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     [
       transportKind,
       connection,
+      watchMode,
       watch,
       scanning,
       found,

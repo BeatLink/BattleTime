@@ -17,7 +17,8 @@ export async function scan(session: WatchSession, timeoutMs: number): Promise<vo
   }
   for (const watch of found) {
     const rssi = watch.rssi === null ? '' : `  ${watch.rssi} dBm`;
-    say(`${watch.id}  ${watch.name}${rssi}`);
+    const mode = watch.bootloader ? '  (bootloader)' : '';
+    say(`${watch.id}  ${watch.name}${rssi}${mode}`);
   }
   if (found.length === 1) {
     remember(found[0].id, found[0].name);

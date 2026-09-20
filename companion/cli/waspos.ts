@@ -8,7 +8,7 @@ import { WatchSession, DEFAULT_SCAN_MS } from './ble';
 import { apps, appsUsage } from './commands/apps';
 import { flash, flashUsage } from './commands/flash';
 import { scan, scanUsage } from './commands/scan';
-import { repl, reset, send, sendUsage } from './commands/send';
+import { diag, repl, reset, send, sendUsage } from './commands/send';
 import { say, warn } from './output';
 import { resolveAddress } from './target';
 
@@ -81,8 +81,13 @@ const NEEDS_WATCH = new Set([
   'vibrate',
   'send',
   'repl',
+  'diag',
   'reset',
 ]);
+
+// A watch in its bootloader runs no firmware, so only a firmware update has
+// anything to say to it.
+const WORKS_IN_BOOTLOADER = new Set(['flash']);
 
 async function main(argv: string[]): Promise<number> {
   const { args, options } = parse(argv);
@@ -109,6 +114,15 @@ async function main(argv: string[]): Promise<number> {
     const address = await resolveAddress(session, options.address);
     say(`Connecting to ${address}...`);
     await session.connect(address);
+
+    if (session.bootloader) {
+      say('This watch is waiting in its bootloader.');
+      if (!WORKS_IN_BOOTLOADER.has(command)) {
+        throw new Error(
+          `It runs no firmware, so ${command} has nothing to talk to. Send it a firmware package with \`waspos flash\`.`,
+        );
+      }
+    }
 
     switch (command) {
       case 'flash':
@@ -159,6 +173,10 @@ async function main(argv: string[]): Promise<number> {
           throw new Error('Give the line to run.');
         }
         await repl(session, rest[0], options.wait ?? 2000);
+        break;
+
+      case 'diag':
+        await diag(session, rest[0], options.wait ?? 2000);
         break;
 
       case 'reset':

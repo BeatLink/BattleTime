@@ -11,6 +11,7 @@ const listeners = {
   state: new Set(),
   error: new Set(),
   notify: new Set(),
+  mode: new Set(),
 };
 
 ipcRenderer.on('ble:event', (_event, name, payload) => {

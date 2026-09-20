@@ -28,14 +28,16 @@ export default function ScanScreen() {
           <View style={styles.empty}>
             {scanning ? <ActivityIndicator /> : null}
             <ThemedText type="small" themeColor="textSecondary">
-              {scanning ? 'Looking for watches advertising the Nordic UART Service.' : 'No watches found.'}
+              {scanning
+                ? 'Looking for watches, and for any waiting in a bootloader.'
+                : 'No watches found.'}
             </ThemedText>
           </View>
         ) : (
           found.map((watch) => (
             <Row
               key={watch.id}
-              label={watch.name}
+              label={watch.bootloader ? `${watch.name} (bootloader)` : watch.name}
               detail={watch.rssi != null ? `${watch.id}  ·  ${watch.rssi} dBm` : watch.id}
               onPress={async () => {
                 await connect(watch);

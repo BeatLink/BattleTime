@@ -4,6 +4,7 @@ import type {
   ConnectionState,
   DiscoveredWatch,
   TransportListener,
+  WatchMode,
   WatchTransport,
 } from './transport';
 
@@ -26,7 +27,7 @@ export type DesktopBridge = {
   gattUnsubscribe(service: string, characteristic: string): Promise<BridgeResult>;
   reconnect(id: string): Promise<BridgeResult>;
   on(
-    name: 'device' | 'line' | 'state' | 'error' | 'notify',
+    name: 'device' | 'line' | 'state' | 'error' | 'notify' | 'mode',
     listener: (payload: never) => void,
   ): () => void;
 };
@@ -63,6 +64,7 @@ export class ElectronTransport implements WatchTransport {
       bridge.on('device', ((watch: DiscoveredWatch) => this.onFound?.(watch)) as never),
       bridge.on('line', ((line: string) => this.listener.onLine?.(line)) as never),
       bridge.on('state', ((state: ConnectionState) => this.listener.onState?.(state)) as never),
+      bridge.on('mode', ((mode: WatchMode) => this.listener.onMode?.(mode)) as never),
       bridge.on('error', ((message: string) =>
         this.listener.onError?.(new Error(message))) as never),
       bridge.on('notify', ((notification: Notification) => {

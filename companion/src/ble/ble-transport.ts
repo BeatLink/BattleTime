@@ -3,8 +3,19 @@ import type { BleManager, Device, Subscription } from 'react-native-ble-plx';
 import type { DfuLink, WriteMode } from '@/dfu/link';
 
 import { base64ToBytes, bytesToBase64, utf8Decode, utf8Encode } from './encoding';
-import type { ConnectionState, DiscoveredWatch, TransportListener, WatchTransport } from './transport';
+import type {
+  ConnectionState,
+  DiscoveredWatch,
+  TransportListener,
+  WatchMode,
+  WatchTransport,
+} from './transport';
 import { ATT_OVERHEAD, DEFAULT_MTU, NUS_RX, NUS_SERVICE, NUS_TX } from './uuids';
+import { LEGACY_DFU_SERVICE, SECURE_DFU_SERVICE } from '@/dfu/uuids';
+
+// What a watch advertises: the UART service while its firmware runs, and a
+// DFU service while it sits in its bootloader.
+const WATCH_SERVICES = [NUS_SERVICE, LEGACY_DFU_SERVICE, SECURE_DFU_SERVICE];
 
 // Talks to a real watch over the Nordic UART Service using react-native-ble-plx.
 export class BleTransport implements WatchTransport {
@@ -19,13 +30,19 @@ export class BleTransport implements WatchTransport {
   constructor(private readonly manager: BleManager) {}
 
   async startScan(onFound: (watch: DiscoveredWatch) => void) {
-    await this.manager.startDeviceScan([NUS_SERVICE], { allowDuplicates: false }, (error, device) => {
+    await this.manager.startDeviceScan(WATCH_SERVICES, { allowDuplicates: false }, (error, device) => {
       if (error) {
         this.listener.onError?.(error);
         return;
       }
       if (device) {
-        onFound({ id: device.id, name: device.name ?? device.localName ?? 'Unknown watch', rssi: device.rssi });
+        const advertised = (device.serviceUUIDs ?? []).map((uuid) => uuid.toLowerCase());
+        onFound({
+          id: device.id,
+          name: device.name ?? device.localName ?? 'Unknown watch',
+          rssi: device.rssi,
+          bootloader: !advertised.includes(NUS_SERVICE) && advertised.length > 0,
+        });
       }
     });
   }
@@ -38,8 +55,9 @@ export class BleTransport implements WatchTransport {
     return this.connectTo(id, true);
   }
 
-  // A bootloader has no UART service, so the subscription to it is skipped
-  // while a firmware update is running.
+  // A bootloader has no UART service. When one is asked for and is not there,
+  // the watch is in its bootloader, and the link is kept for a firmware
+  // update rather than dropped.
   private async connectTo(id: string, uart: boolean) {
     this.setState('connecting');
     try {
@@ -53,10 +71,12 @@ export class BleTransport implements WatchTransport {
         this.setState('disconnected');
       });
 
-      if (!uart) {
+      if (!uart || !(await this.hasUart(id))) {
+        this.setMode('bootloader');
         this.setState('connected');
         return;
       }
+      this.setMode('application');
 
       this.txSubscription = this.manager.monitorCharacteristicForDevice(
         id,
@@ -134,8 +154,21 @@ export class BleTransport implements WatchTransport {
     this.mtu = DEFAULT_MTU;
   }
 
+  private async hasUart(id: string): Promise<boolean> {
+    try {
+      const found = await this.manager.characteristicsForDevice(id, NUS_SERVICE);
+      return found.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
   private setState(state: ConnectionState) {
     this.listener.onState?.(state);
+  }
+
+  private setMode(mode: WatchMode) {
+    this.listener.onMode?.(mode);
   }
 }
 

@@ -1,16 +1,17 @@
 // Types for node/ble.js, so the command line tool can use it from TypeScript.
 
-import type { DiscoveredWatch } from '@/ble/transport';
+import type { DiscoveredWatch, WatchMode } from '@/ble/transport';
 import type { WriteMode } from '@/dfu/link';
 
 // A scan also reports the services a device advertises, which the command
 // line tool uses to pick out watches.
-export type ScannedDevice = DiscoveredWatch & { uuids: string[] };
+export type ScannedDevice = DiscoveredWatch & { uuids: string[]; bootloader: boolean };
 
 export type WatchBleEvent = {
   device: ScannedDevice;
   line: string;
   state: 'disconnected' | 'connecting' | 'connected';
+  mode: WatchMode;
   error: string;
   notify: { key: string; value: number[] };
 };

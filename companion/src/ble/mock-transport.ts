@@ -2,7 +2,16 @@ import type { DfuLink } from '@/dfu/link';
 import { MockDfuTarget } from '@/dfu/mock-target';
 
 import { MockPackages } from './mock-packages';
-import type { ConnectionState, DiscoveredWatch, TransportListener, WatchTransport } from './transport';
+import type {
+  ConnectionState,
+  DiscoveredWatch,
+  TransportListener,
+  WatchMode,
+  WatchTransport,
+} from './transport';
+
+const MOCK_WATCH = 'mock-pinetime';
+const MOCK_BOOTLOADER = 'mock-dfutarg';
 
 // A fake watch so the UI runs on web and in Expo Go, where the BLE native module is unavailable.
 export class MockTransport implements WatchTransport {
@@ -13,10 +22,14 @@ export class MockTransport implements WatchTransport {
   private scanTimer: ReturnType<typeof setTimeout> | null = null;
   private packages = new MockPackages();
   private dfu: MockDfuTarget | null = null;
+  private mode: WatchMode = 'application';
 
   async startScan(onFound: (watch: DiscoveredWatch) => void) {
     this.scanTimer = setTimeout(() => {
-      onFound({ id: 'mock-pinetime', name: 'PineTime (mock)', rssi: -58 });
+      onFound({ id: MOCK_WATCH, name: 'PineTime (mock)', rssi: -58 });
+      // A second mock watch waiting in its bootloader, so that half of the
+      // app can be worked on without holding a half-flashed watch.
+      onFound({ id: MOCK_BOOTLOADER, name: 'DfuTarg (mock)', rssi: -61, bootloader: true });
     }, 600);
   }
 
@@ -27,11 +40,15 @@ export class MockTransport implements WatchTransport {
     }
   }
 
-  async connect(_id: string) {
+  async connect(id: string) {
     this.setState('connecting');
     await new Promise((resolve) => setTimeout(resolve, 500));
+    this.mode = id === MOCK_BOOTLOADER ? 'bootloader' : 'application';
     this.setState('connected');
-    this.listener.onLine?.('{"t":"info","msg":"mock watch connected"}');
+    this.listener.onMode?.(this.mode);
+    if (this.mode === 'application') {
+      this.listener.onLine?.('{"t":"info","msg":"mock watch connected"}');
+    }
   }
 
   async disconnect() {
@@ -41,6 +58,10 @@ export class MockTransport implements WatchTransport {
   async write(text: string) {
     if (this.state !== 'connected') {
       throw new Error('Not connected');
+    }
+    if (this.mode === 'bootloader') {
+      // A bootloader has no UART to write to.
+      return;
     }
 
     // The mock watch answers package commands, so the Apps tab works without

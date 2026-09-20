@@ -2,6 +2,7 @@
 // offering the same seams the app uses, so every command is the same code
 // the screens run.
 
+import type { WatchMode } from '@/ble/transport';
 import { NUS_SERVICE } from '@/ble/uuids';
 import type { DfuLink, WriteMode } from '@/dfu/link';
 import { LineBuffer } from '@/protocol/gadgetbridge';
@@ -21,6 +22,7 @@ export class WatchSession implements DfuLink {
   private readonly notifyListeners = new Map<string, (value: Uint8Array) => void>();
   private readonly found = new Map<string, ScannedDevice>();
   private onLine: ((line: string) => void) | null = null;
+  private mode: WatchMode = 'application';
   private id = '';
 
   constructor(private readonly verbose = false) {
@@ -49,6 +51,10 @@ export class WatchSession implements DfuLink {
         this.notifyListeners.get(key)?.(Uint8Array.from(value));
         return;
       }
+      if (name === 'mode') {
+        this.mode = payload as WatchMode;
+        return;
+      }
       if (name === 'error' && this.verbose) {
         process.stderr.write(`! ${String(payload)}\n`);
       }
@@ -59,9 +65,10 @@ export class WatchSession implements DfuLink {
     return this.id;
   }
 
-  // Look for watches for a while and report what turned up. Anything
-  // advertising the UART service is a watch; when nothing does, everything
-  // found is reported, because BlueZ may not have read the services yet.
+  // Look for watches for a while and report what turned up. A watch
+  // advertises the UART service, or a DFU service while it waits in its
+  // bootloader; when nothing does either, everything found is reported,
+  // because BlueZ may not have read the services yet.
   async scan(ms = DEFAULT_SCAN_MS): Promise<ScannedDevice[]> {
     this.found.clear();
     await this.ble.startScan();
@@ -69,13 +76,20 @@ export class WatchSession implements DfuLink {
     await this.ble.stopScan();
 
     const all = [...this.found.values()];
-    const watches = all.filter((device) => device.uuids.includes(NUS_SERVICE));
+    const watches = all.filter(
+      (device) => device.uuids.includes(NUS_SERVICE) || device.bootloader,
+    );
     return watches.length > 0 ? watches : all;
   }
 
   async connect(id: string): Promise<void> {
     await this.ble.connect(id, true);
     this.id = id;
+  }
+
+  // Whether the watch answered as a bootloader rather than as firmware.
+  get bootloader(): boolean {
+    return this.mode === 'bootloader';
   }
 
   async close(): Promise<void> {
