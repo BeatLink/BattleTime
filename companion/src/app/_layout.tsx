@@ -37,6 +37,10 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="scan" options={{ presentation: 'modal', headerShown: true, title: 'Find a watch' }} />
+          <Stack.Screen
+            name="configure"
+            options={{ presentation: 'modal', headerShown: true, title: 'App settings' }}
+          />
         </Stack>
       </WatchProvider>
     </ThemeProvider>

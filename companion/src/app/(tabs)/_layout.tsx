@@ -25,6 +25,7 @@ export default function TabLayout() {
         tabBarStyle: { backgroundColor: theme.background, borderTopColor: theme.backgroundSelected },
       }}>
       <Tabs.Screen name="index" options={{ title: 'Watch', tabBarIcon: tabIcon('watch-outline') }} />
+      <Tabs.Screen name="packages" options={{ title: 'Apps', tabBarIcon: tabIcon('grid-outline') }} />
       <Tabs.Screen
         name="notifications"
         options={{ title: 'Notifications', tabBarIcon: tabIcon('notifications-outline') }}

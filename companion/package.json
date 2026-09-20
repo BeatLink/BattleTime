@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "import-packages": "node scripts/import-packages.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",

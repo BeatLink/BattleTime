@@ -31,16 +31,35 @@ npm run lint
 ```
 src/app/                 Expo Router screens
   (tabs)/index.tsx       Watch: connection status and quick actions
+  (tabs)/packages        Install, remove, enable and configure watch apps
   (tabs)/notifications   Forwarding toggles
   (tabs)/console.tsx     Raw traffic and a line into the watch REPL
   (tabs)/settings.tsx    App settings
   scan.tsx               Modal that lists nearby watches
+src/app/configure.tsx    Settings form generated from a package's own schema
 src/ble/                 Transport layer: react-native-ble-plx plus a mock for web and Expo Go
-src/protocol/            Gadgetbridge message types and the encoder and decoder
+src/packages/            Bundled app packages and the catalogue that joins them to the watch
+src/protocol/            Gadgetbridge and package manager message types, plus the transfer driver
 src/state/               Watch provider (connection, traffic, settings) and persisted settings
 src/components/          Themed building blocks
 src/constants/theme.ts   Colours from the NeoTime design schema
 ```
+
+## App packages
+
+Watch apps are installed over Bluetooth without reflashing the firmware. Packages are built from
+the NeoTime tree by its `tools/mkpkg.py`, then embedded in this app:
+
+```bash
+# in the NeoTime checkout
+python3 tools/mkpkg.py apps/calculator apps/snake --out build-packages
+# back here
+npm run import-packages ../NeoTime/build-packages
+```
+
+The watch side is `wasp/pkgmgr.py` in the NeoTime tree, and the design is in its
+`docs/app-packaging-design.md`. The mock watch answers package commands too, so the Apps tab can
+be exercised on web with no hardware.
 
 ## Protocol
 

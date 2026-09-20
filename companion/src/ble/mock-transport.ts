@@ -1,3 +1,4 @@
+import { MockPackages } from './mock-packages';
 import type { ConnectionState, DiscoveredWatch, TransportListener, WatchTransport } from './transport';
 
 // A fake watch so the UI runs on web and in Expo Go, where the BLE native module is unavailable.
@@ -5,6 +6,7 @@ export class MockTransport implements WatchTransport {
   private listener: TransportListener = {};
   private state: ConnectionState = 'disconnected';
   private scanTimer: ReturnType<typeof setTimeout> | null = null;
+  private packages = new MockPackages();
 
   async startScan(onFound: (watch: DiscoveredWatch) => void) {
     this.scanTimer = setTimeout(() => {
@@ -34,8 +36,18 @@ export class MockTransport implements WatchTransport {
     if (this.state !== 'connected') {
       throw new Error('Not connected');
     }
-    // Echo the message back so the console shows traffic in both directions.
-    this.listener.onLine?.(`{"t":"info","msg":"mock received ${text.trim().length} bytes"}`);
+
+    // The mock watch answers package commands, so the Apps tab works without
+    // hardware. Anything else is echoed so the console shows traffic.
+    const replies = this.packages.handle(text);
+    if (replies) {
+      for (const line of replies) {
+        this.listener.onLine?.(`${line}\r\n`);
+      }
+      return;
+    }
+
+    this.listener.onLine?.(`{"t":"info","msg":"mock received ${text.trim().length} bytes"}\r\n`);
   }
 
   setListener(listener: TransportListener) {

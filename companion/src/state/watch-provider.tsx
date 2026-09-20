@@ -10,6 +10,9 @@ import {
   type PhoneToWatchMessage,
   type WatchToPhoneMessage,
 } from '@/protocol/gadgetbridge';
+import { isPackageReply, type PackageReply } from '@/protocol/packages';
+import type { PackageChannel } from '@/protocol/transfer';
+import { ReplyQueue } from '@/state/reply-queue';
 import { defaultSettings, loadSettings, saveSettings, type Settings } from '@/state/settings';
 
 export type ConsoleEntry = {
@@ -40,14 +43,30 @@ type WatchContextValue = {
   sendRaw: (text: string) => Promise<void>;
   updateSettings: (patch: Partial<Settings>) => Promise<void>;
   clearConsole: () => void;
+  // Channel for the package manager commands, which need their replies back.
+  packageChannel: PackageChannel;
 };
 
 const WatchContext = createContext<WatchContextValue | null>(null);
+
+// Parse a line of watch output as JSON, or return null when it is console text.
+function parseLine(line: string): unknown {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('{')) {
+    return null;
+  }
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+}
 
 // Owns the single transport for the app and exposes connection, traffic and settings to every screen.
 export function WatchProvider({ children }: { children: ReactNode }) {
   const transportRef = useRef<WatchTransport | null>(null);
   const bufferRef = useRef(new LineBuffer());
+  const packageRepliesRef = useRef(new ReplyQueue<PackageReply>());
   const nextId = useRef(1);
 
   const [connection, setConnection] = useState<ConnectionState>('disconnected');
@@ -91,11 +110,17 @@ export function WatchProvider({ children }: { children: ReactNode }) {
         setConnection(state);
         if (state === 'disconnected') {
           bufferRef.current.reset();
+          packageRepliesRef.current.reset();
         }
       },
       onLine: (chunk) => {
         for (const line of bufferRef.current.push(chunk)) {
           log('in', line);
+          const parsed = parseLine(line);
+          if (isPackageReply(parsed)) {
+            packageRepliesRef.current.push(parsed);
+            continue;
+          }
           const message = decodeWatchLine(line);
           if (message) {
             handleMessage(message);
@@ -178,6 +203,14 @@ export function WatchProvider({ children }: { children: ReactNode }) {
 
   const clearConsole = useCallback(() => setConsoleEntries([]), []);
 
+  const packageChannel = useMemo<PackageChannel>(
+    () => ({
+      send: (text: string) => sendRaw(text),
+      next: () => packageRepliesRef.current.next(),
+    }),
+    [sendRaw],
+  );
+
   const value = useMemo<WatchContextValue>(
     () => ({
       transportKind,
@@ -198,6 +231,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       sendRaw,
       updateSettings,
       clearConsole,
+      packageChannel,
     }),
     [
       connection,
@@ -217,6 +251,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       sendRaw,
       updateSettings,
       clearConsole,
+      packageChannel,
     ],
   );
 
