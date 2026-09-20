@@ -47,3 +47,6 @@ example
 
 # Electron desktop build
 dist/
+
+# Command line tool build
+build/

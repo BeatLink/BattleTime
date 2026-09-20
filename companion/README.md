@@ -37,6 +37,26 @@ npm run typecheck
 npm run lint
 ```
 
+## The command line tool
+
+Everything the app does to a watch can be done from a terminal on Linux, over the same BlueZ
+transport the desktop app uses:
+
+```bash
+npm run waspos -- scan
+npm run waspos -- flash path/to/micropython.zip
+npm run waspos -- apps list
+npm run waspos -- apps install path/to/wasp-os/build-packages/calculator
+npm run waspos -- notify "Build finished" "All tests passed"
+npm run waspos -- repl "wasp.system.brightness"
+npm run waspos -- reset --ota
+```
+
+The first scan remembers the watch in `~/.config/waspos-companion/cli.json`, so later commands
+need no address; `--address` and `WASPOS_ADDRESS` override it. `npm run waspos -- help` lists
+every command. The tool runs the same code the screens run, with node-ble in place of the phone's
+Bluetooth library, so each protocol exists only once.
+
 ## The desktop app
 
 The desktop build is the same interface, rendered by React Native for Web and wrapped in Electron.
@@ -60,9 +80,11 @@ src/app/                 Expo Router screens
   (tabs)/settings.tsx    App settings
   scan.tsx               Modal that lists nearby watches
 src/app/configure.tsx    Settings form generated from a package's own schema
-electron/                Desktop app: main process, preload bridge, BlueZ transport, file server
+electron/                Desktop app: main process, preload bridge and file server
 src/ble/                 Transport layer: react-native-ble-plx, Electron, and a mock for browsers
 src/dfu/                 Firmware updates: the Nordic DFU protocols and the package reader
+cli/                     The command line tool, which runs the same code as the screens
+node/                    BlueZ over node-ble, shared by the desktop app and the tool
 src/packages/            Bundled app packages and the catalogue that joins them to the watch
 src/protocol/            Gadgetbridge and package manager message types, plus the transfer driver
 src/state/               Watch provider (connection, traffic, settings) and persisted settings

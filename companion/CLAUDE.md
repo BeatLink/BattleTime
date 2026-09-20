@@ -7,7 +7,11 @@ Read [README.md](README.md) for the layout and the protocol.
   use the `useWatch` hook and never import a Bluetooth library directly. There are three
   transports: react-native-ble-plx on a phone, Electron over BlueZ on the desktop, and a mock in
   browsers and Expo Go.
-- `electron/` is the desktop shell and runs in Node, not in the bundle. Metro never sees it.
+- `electron/` and `cli/` run in Node, not in the bundle, and Metro never sees them. Both talk to
+  BlueZ through `node/ble.js`, so a change to Bluetooth on a computer belongs there.
+- `cli/` is the command line tool. It imports the same `src/` modules the screens do, so a feature
+  gets a command rather than a second implementation. `npm run waspos -- <command>` rebuilds it
+  with esbuild and runs it.
 - `src/dfu/` holds both Nordic DFU protocols, ported from wasp-os's `tools/ota-dfu`. Controllers
   talk to a `DfuLink`, which each transport supplies through `dfuLink()`; they never touch a
   Bluetooth library. The two mock bootloaders in that folder are what the tests and the web build
