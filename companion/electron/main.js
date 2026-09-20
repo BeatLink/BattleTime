@@ -6,7 +6,7 @@
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const { join } = require('node:path');
 
-const { DesktopBle } = require('./ble');
+const { WatchBle } = require('../node/ble');
 const { serve } = require('./server');
 
 const DIST = join(__dirname, '..', 'dist');
@@ -54,7 +54,7 @@ async function createWindow() {
 }
 
 function wireBluetooth() {
-  ble = new DesktopBle(emit);
+  ble = new WatchBle(emit);
 
   const handle = (channel, action) =>
     ipcMain.handle(channel, async (_event, ...args) => {

@@ -1,7 +1,7 @@
-// Bluetooth for the desktop app, spoken to BlueZ over D-Bus by node-ble.
+// Bluetooth on a computer, spoken to BlueZ over D-Bus by node-ble.
 //
-// This runs in the Electron main process. The window never touches it
-// directly; it goes through the preload bridge.
+// Shared by the desktop app, where it runs in the Electron main process
+// behind the preload bridge, and by the command line tool.
 
 const { createBluetooth } = require('node-ble');
 
@@ -32,7 +32,7 @@ function withTimeout(promise, what, ms = STEP_TIMEOUT_MS) {
   ]);
 }
 
-class DesktopBle {
+class WatchBle {
   constructor(emit) {
     this.emit = emit;
     this.session = null;
@@ -82,7 +82,16 @@ class DesktopBle {
             continue;
           }
           const rssi = await device.getRSSI().catch(() => null);
-          this.emit('device', { id: address, name, rssi: rssi === null ? null : Number(rssi) });
+          // BlueZ lists the services a device advertises, which is how a
+          // watch is told apart from everything else in range. It is empty
+          // for a device BlueZ has not looked at yet.
+          const uuids = await device.helper.prop('UUIDs').catch(() => []);
+          this.emit('device', {
+            id: address,
+            name,
+            rssi: rssi === null ? null : Number(rssi),
+            uuids: (uuids || []).map((uuid) => String(uuid).toLowerCase()),
+          });
         }
       } catch (error) {
         this.emit('error', String(error.message || error));
@@ -273,4 +282,4 @@ class DesktopBle {
   }
 }
 
-module.exports = { DesktopBle };
+module.exports = { WatchBle };
