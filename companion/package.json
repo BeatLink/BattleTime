@@ -12,8 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "import-packages": "node scripts/import-packages.mjs",
-    "desktop": "expo export --platform web --output-dir dist && electron electron/main.js",
-    "desktop:dev": "electron electron/main.js",
+    "desktop": "expo export --platform web --output-dir dist && node scripts/electron.mjs",
+    "desktop:dev": "node scripts/electron.mjs",
     "build:cli": "esbuild cli/waspos.ts --bundle --platform=node --target=node20 --format=cjs --external:node-ble --alias:@=./src --outfile=build/waspos.cjs",
     "waspos": "npm run build:cli --silent && node build/waspos.cjs"
   },
@@ -46,7 +46,6 @@
   "devDependencies": {
     "@types/jest": "29.5.14",
     "@types/react": "~19.2.2",
-    "electron": "^43.7.3",
     "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
     "eslint-config-expo": "~57.0.2",

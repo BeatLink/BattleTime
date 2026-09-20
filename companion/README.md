@@ -66,7 +66,9 @@ touches Node. `src/ble/electron-transport.ts` implements the same `WatchTranspor
 phone uses, which is why every screen, the package protocol and the tests are shared unchanged.
 
 Electron comes from the flake rather than npm, because the binary npm downloads does not run on
-NixOS.
+NixOS. `npm run desktop` starts it through [scripts/electron.mjs](scripts/electron.mjs), which
+skips the launcher npm would otherwise put first on `PATH`; that launcher starts Electron's
+unwrapped binary, which dies with SIGILL. Run it inside `nix develop`, or the script says so.
 
 ## Layout
 

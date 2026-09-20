@@ -29,9 +29,9 @@
             git
           ] ++ browsers;
 
-          # electron-forge and the npm electron package both look here before
-          # trying to download a binary of their own.
-          ELECTRON_OVERRIDE_DIST_PATH = "${electron}/libexec/electron";
+          # Nothing here should download an Electron of its own; the one on
+          # PATH is the wrapper that works. Pointing anything at the unwrapped
+          # binary under libexec makes it die with SIGILL.
           ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
 
           shellHook = ''
