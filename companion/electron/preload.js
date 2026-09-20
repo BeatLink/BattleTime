@@ -10,6 +10,7 @@ const listeners = {
   line: new Set(),
   state: new Set(),
   error: new Set(),
+  notify: new Set(),
 };
 
 ipcRenderer.on('ble:event', (_event, name, payload) => {
@@ -24,6 +25,17 @@ contextBridge.exposeInMainWorld('waspos', {
   connect: (id) => ipcRenderer.invoke('ble:connect', id),
   disconnect: () => ipcRenderer.invoke('ble:disconnect'),
   write: (text) => ipcRenderer.invoke('ble:write', text),
+  gattHas: (service, characteristic) =>
+    ipcRenderer.invoke('ble:gatt-has', service, characteristic),
+  gattRead: (service, characteristic) =>
+    ipcRenderer.invoke('ble:gatt-read', service, characteristic),
+  gattWrite: (service, characteristic, data, mode) =>
+    ipcRenderer.invoke('ble:gatt-write', service, characteristic, data, mode),
+  gattSubscribe: (service, characteristic) =>
+    ipcRenderer.invoke('ble:gatt-subscribe', service, characteristic),
+  gattUnsubscribe: (service, characteristic) =>
+    ipcRenderer.invoke('ble:gatt-unsubscribe', service, characteristic),
+  reconnect: (id) => ipcRenderer.invoke('ble:reconnect', id),
   on: (name, listener) => {
     listeners[name]?.add(listener);
     return () => listeners[name]?.delete(listener);

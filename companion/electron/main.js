@@ -23,7 +23,7 @@ function emit(name, payload) {
 
 async function createWindow() {
   // In development the Expo dev server is used, so the interface reloads.
-  const devUrl = process.env.NEOTIME_DEV_URL;
+  const devUrl = process.env.WASPOS_DEV_URL;
   let url = devUrl;
   if (!url) {
     const started = await serve(DIST);
@@ -70,6 +70,13 @@ function wireBluetooth() {
   handle('ble:connect', (id) => ble.connect(id));
   handle('ble:disconnect', () => ble.disconnect());
   handle('ble:write', (text) => ble.write(text));
+  handle('ble:gatt-has', (service, char) => ble.gattHas(service, char));
+  handle('ble:gatt-read', (service, char) => ble.gattRead(service, char));
+  handle('ble:gatt-write', (service, char, data, mode) =>
+    ble.gattWrite(service, char, data, mode));
+  handle('ble:gatt-subscribe', (service, char) => ble.gattSubscribe(service, char));
+  handle('ble:gatt-unsubscribe', (service, char) => ble.gattUnsubscribe(service, char));
+  handle('ble:reconnect', (id) => ble.reconnect(id));
 }
 
 app.whenReady().then(async () => {

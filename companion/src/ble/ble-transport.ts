@@ -1,5 +1,7 @@
 import type { BleManager, Device, Subscription } from 'react-native-ble-plx';
 
+import type { DfuLink, WriteMode } from '@/dfu/link';
+
 import { base64ToBytes, bytesToBase64, utf8Decode, utf8Encode } from './encoding';
 import type { ConnectionState, DiscoveredWatch, TransportListener, WatchTransport } from './transport';
 import { ATT_OVERHEAD, DEFAULT_MTU, NUS_RX, NUS_SERVICE, NUS_TX } from './uuids';
@@ -33,6 +35,12 @@ export class BleTransport implements WatchTransport {
   }
 
   async connect(id: string) {
+    return this.connectTo(id, true);
+  }
+
+  // A bootloader has no UART service, so the subscription to it is skipped
+  // while a firmware update is running.
+  private async connectTo(id: string, uart: boolean) {
     this.setState('connecting');
     try {
       const device = await this.manager.connectToDevice(id, { requestMTU: 185 });
@@ -44,6 +52,11 @@ export class BleTransport implements WatchTransport {
         this.cleanup();
         this.setState('disconnected');
       });
+
+      if (!uart) {
+        this.setState('connected');
+        return;
+      }
 
       this.txSubscription = this.manager.monitorCharacteristicForDevice(
         id,
@@ -99,6 +112,14 @@ export class BleTransport implements WatchTransport {
     this.listener = listener;
   }
 
+  dfuLink(): DfuLink | null {
+    const device = this.device;
+    if (!device) {
+      return null;
+    }
+    return new BleDfuLink(this.manager, device.id, (id) => this.connectTo(id, false));
+  }
+
   destroy() {
     this.cleanup();
     void this.manager.destroy();
@@ -115,5 +136,75 @@ export class BleTransport implements WatchTransport {
 
   private setState(state: ConnectionState) {
     this.listener.onState?.(state);
+  }
+}
+
+// Raw GATT over react-native-ble-plx, which takes and returns base64.
+class BleDfuLink implements DfuLink {
+  constructor(
+    private readonly manager: BleManager,
+    private id: string,
+    private readonly reconnectTo: (id: string) => Promise<void>,
+  ) {}
+
+  get deviceId() {
+    return this.id;
+  }
+
+  async hasCharacteristic(service: string, characteristic: string): Promise<boolean> {
+    try {
+      const found = await this.manager.characteristicsForDevice(this.id, service);
+      return found.some((item) => item.uuid.toLowerCase() === characteristic.toLowerCase());
+    } catch {
+      return false;
+    }
+  }
+
+  async read(service: string, characteristic: string): Promise<Uint8Array> {
+    const value = await this.manager.readCharacteristicForDevice(this.id, service, characteristic);
+    return value.value ? base64ToBytes(value.value) : new Uint8Array(0);
+  }
+
+  async write(service: string, characteristic: string, data: Uint8Array, mode: WriteMode) {
+    const payload = bytesToBase64(data);
+    if (mode === 'request') {
+      await this.manager.writeCharacteristicWithResponseForDevice(
+        this.id,
+        service,
+        characteristic,
+        payload,
+      );
+      return;
+    }
+    await this.manager.writeCharacteristicWithoutResponseForDevice(
+      this.id,
+      service,
+      characteristic,
+      payload,
+    );
+  }
+
+  async subscribe(
+    service: string,
+    characteristic: string,
+    onValue: (value: Uint8Array) => void,
+  ): Promise<() => void> {
+    const subscription = this.manager.monitorCharacteristicForDevice(
+      this.id,
+      service,
+      characteristic,
+      (_error, item) => {
+        if (item?.value) {
+          onValue(base64ToBytes(item.value));
+        }
+      },
+    );
+    return () => subscription.remove();
+  }
+
+  async reconnect(deviceId: string): Promise<void> {
+    await this.manager.cancelDeviceConnection(this.id).catch(() => undefined);
+    this.id = deviceId;
+    await this.reconnectTo(deviceId);
   }
 }

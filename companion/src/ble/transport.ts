@@ -1,5 +1,7 @@
 // The transport is the one seam between the app and Bluetooth, so screens never touch a BLE library directly.
 
+import type { DfuLink } from '@/dfu/link';
+
 export type DiscoveredWatch = {
   id: string;
   name: string;
@@ -28,5 +30,8 @@ export interface WatchTransport {
   // Send raw text to the watch, splitting it into MTU-sized writes.
   write(text: string): Promise<void>;
   setListener(listener: TransportListener): void;
+  // Raw GATT for a firmware update, which needs characteristics outside the
+  // UART service. Null where the transport cannot reach them.
+  dfuLink(): DfuLink | null;
   destroy(): void;
 }

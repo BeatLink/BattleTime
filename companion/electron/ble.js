@@ -40,8 +40,11 @@ class DesktopBle {
     this.device = null;
     this.rx = null;
     this.tx = null;
+    this.gatt = null;
     this.scanTimer = null;
     this.seen = new Set();
+    this.characteristics = new Map();
+    this.subscriptions = new Map();
   }
 
   async adapterOrThrow() {
@@ -100,9 +103,9 @@ class DesktopBle {
     }
   }
 
-  async connect(id) {
+  async connect(id, uart = true) {
     try {
-      await this.connectInner(id);
+      await this.connectInner(id, uart);
     } catch (error) {
       this.forget();
       this.emit('state', 'disconnected');
@@ -110,7 +113,7 @@ class DesktopBle {
     }
   }
 
-  async connectInner(id) {
+  async connectInner(id, uart) {
     const adapter = await this.adapterOrThrow();
     this.emit('state', 'connecting');
 
@@ -134,16 +137,21 @@ class DesktopBle {
       await withTimeout(device.connect(), 'connecting to the watch');
     }
 
-    const gatt = await withTimeout(device.gatt(), 'discovering services');
-    const service = await withTimeout(
-      gatt.getPrimaryService(NUS_SERVICE), 'looking for the UART service');
-    this.rx = await service.getCharacteristic(NUS_RX);
-    this.tx = await service.getCharacteristic(NUS_TX);
+    this.gatt = await withTimeout(device.gatt(), 'discovering services');
 
-    await withTimeout(this.tx.startNotifications(), 'subscribing to the watch');
-    this.tx.on('valuechanged', (buffer) => {
-      this.emit('line', buffer.toString('utf8'));
-    });
+    // A bootloader has no UART service, so a firmware update connects
+    // without one and reaches the DFU characteristics directly.
+    if (uart) {
+      const service = await withTimeout(
+        this.gatt.getPrimaryService(NUS_SERVICE), 'looking for the UART service');
+      this.rx = await service.getCharacteristic(NUS_RX);
+      this.tx = await service.getCharacteristic(NUS_TX);
+
+      await withTimeout(this.tx.startNotifications(), 'subscribing to the watch');
+      this.tx.on('valuechanged', (buffer) => {
+        this.emit('line', buffer.toString('utf8'));
+      });
+    }
 
     device.on('disconnect', () => {
       this.forget();
@@ -152,6 +160,78 @@ class DesktopBle {
 
     this.device = device;
     this.emit('state', 'connected');
+  }
+
+  // --- Raw GATT, which a firmware update needs and the UART line does not.
+
+  async characteristic(service, characteristic) {
+    if (!this.gatt) {
+      throw new Error('Not connected');
+    }
+    const key = `${service}/${characteristic}`;
+    let found = this.characteristics.get(key);
+    if (!found) {
+      const primary = await this.gatt.getPrimaryService(service);
+      found = await primary.getCharacteristic(characteristic);
+      this.characteristics.set(key, found);
+    }
+    return found;
+  }
+
+  async gattHas(service, characteristic) {
+    try {
+      await this.characteristic(service, characteristic);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async gattRead(service, characteristic) {
+    const found = await this.characteristic(service, characteristic);
+    return Array.from(await found.readValue());
+  }
+
+  async gattWrite(service, characteristic, data, mode) {
+    const found = await this.characteristic(service, characteristic);
+    const buffer = Buffer.from(data);
+    if (mode === 'request') {
+      await found.writeValueWithResponse(buffer);
+      return;
+    }
+    await found.writeValueWithoutResponse(buffer);
+  }
+
+  async gattSubscribe(service, characteristic) {
+    const key = `${service}/${characteristic}`;
+    if (this.subscriptions.has(key)) {
+      return;
+    }
+    const found = await this.characteristic(service, characteristic);
+    const onValue = (buffer) => this.emit('notify', { key, value: Array.from(buffer) });
+    found.on('valuechanged', onValue);
+    await found.startNotifications();
+    this.subscriptions.set(key, { found, onValue });
+  }
+
+  async gattUnsubscribe(service, characteristic) {
+    const key = `${service}/${characteristic}`;
+    const entry = this.subscriptions.get(key);
+    if (!entry) {
+      return;
+    }
+    this.subscriptions.delete(key);
+    entry.found.off('valuechanged', entry.onValue);
+    await entry.found.stopNotifications().catch(() => undefined);
+  }
+
+  // Drop the link and come back to the given address without the UART
+  // service, which is how a firmware update follows the watch into its
+  // bootloader.
+  async reconnect(id) {
+    await this.disconnect().catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await this.connect(id, false);
   }
 
   async disconnect() {
@@ -175,8 +255,11 @@ class DesktopBle {
 
   forget() {
     this.device = null;
+    this.gatt = null;
     this.rx = null;
     this.tx = null;
+    this.characteristics.clear();
+    this.subscriptions.clear();
   }
 
   async destroy() {

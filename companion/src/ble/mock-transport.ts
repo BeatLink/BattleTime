@@ -1,3 +1,6 @@
+import type { DfuLink } from '@/dfu/link';
+import { MockDfuTarget } from '@/dfu/mock-target';
+
 import { MockPackages } from './mock-packages';
 import type { ConnectionState, DiscoveredWatch, TransportListener, WatchTransport } from './transport';
 
@@ -9,6 +12,7 @@ export class MockTransport implements WatchTransport {
   private state: ConnectionState = 'disconnected';
   private scanTimer: ReturnType<typeof setTimeout> | null = null;
   private packages = new MockPackages();
+  private dfu: MockDfuTarget | null = null;
 
   async startScan(onFound: (watch: DiscoveredWatch) => void) {
     this.scanTimer = setTimeout(() => {
@@ -54,6 +58,14 @@ export class MockTransport implements WatchTransport {
 
   setListener(listener: TransportListener) {
     this.listener = listener;
+  }
+
+  dfuLink(): DfuLink | null {
+    if (this.state !== 'connected') {
+      return null;
+    }
+    this.dfu ??= new MockDfuTarget();
+    return this.dfu;
   }
 
   destroy() {
