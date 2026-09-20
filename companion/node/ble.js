@@ -30,6 +30,19 @@ const CONNECT_TIMEOUT_MS = 15000;
 // leaving the interface stuck on "connecting".
 const STEP_TIMEOUT_MS = 20000;
 
+// How long to wait for BlueZ to resolve a device's services before dropping
+// the link and trying once more from scratch.
+const SERVICES_TIMEOUT_MS = 12000;
+
+// How often to ask whether the services have resolved. BlueZ announces it
+// with a property change, but node-ble reads the property and only then
+// subscribes, so a change in between is missed and the wait never ends.
+const SERVICES_POLL_MS = 250;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function withTimeout(promise, what, ms = STEP_TIMEOUT_MS) {
   return Promise.race([
     promise,
@@ -47,6 +60,7 @@ class WatchBle {
     this.rx = null;
     this.tx = null;
     this.gatt = null;
+    this.pending = null;
     this.scanTimer = null;
     this.seen = new Set();
     this.characteristics = new Map();
@@ -125,10 +139,68 @@ class WatchBle {
     try {
       await this.connectInner(id, uart);
     } catch (error) {
-      this.forget();
+      // Drop the link as well as our own references. A half-open connection
+      // left behind makes every later attempt skip connect() and then wait
+      // for services that will never resolve.
+      await this.dropLink();
       this.emit('state', 'disconnected');
       throw error;
     }
+  }
+
+  // Let go of whatever BlueZ is still holding, without hanging on a link that
+  // is already wedged.
+  async dropLink() {
+    const device = this.device || this.pending;
+    this.forget();
+    if (device) {
+      await withTimeout(device.disconnect(), 'disconnecting', 5000).catch(() => undefined);
+    }
+  }
+
+  // Wait for BlueZ to resolve the services, by asking rather than by waiting
+  // for the one announcement, then hand back the GATT server.
+  async servicesFor(device) {
+    // Asking for the property needs node-ble's D-Bus helper. Without it, fall
+    // back to node-ble's own wait rather than never resolving at all.
+    if (!device.helper || typeof device.helper.prop !== 'function') {
+      return withTimeout(device.gatt(), 'discovering services', SERVICES_TIMEOUT_MS).catch(
+        () => null,
+      );
+    }
+
+    const deadline = Date.now() + SERVICES_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const resolved = await device.helper.prop('ServicesResolved').catch(() => false);
+      if (resolved) {
+        // The property is true, so node-ble returns without waiting.
+        return withTimeout(device.gatt(), 'reading the services', STEP_TIMEOUT_MS);
+      }
+      await sleep(SERVICES_POLL_MS);
+    }
+    return null;
+  }
+
+  // Some links come up without ever resolving their services, which is common
+  // for a watch sitting in its bootloader. Dropping that link and connecting
+  // again clears it, so try that once before giving up.
+  async resolveServices(device) {
+    const first = await this.servicesFor(device);
+    if (first) {
+      return first;
+    }
+
+    await withTimeout(device.disconnect(), 'disconnecting', 5000).catch(() => undefined);
+    await sleep(1500);
+    await withTimeout(device.connect(), 'connecting to the watch');
+
+    const second = await this.servicesFor(device);
+    if (second) {
+      return second;
+    }
+    throw new Error(
+      'Connected, but the watch never offered its services. Move it closer, or restart it.',
+    );
   }
 
   async connectInner(id, uart) {
@@ -155,7 +227,8 @@ class WatchBle {
       await withTimeout(device.connect(), 'connecting to the watch');
     }
 
-    this.gatt = await withTimeout(device.gatt(), 'discovering services');
+    this.pending = device;
+    this.gatt = await this.resolveServices(device);
 
     // A bootloader has no UART service. When one is asked for and is not
     // there, the watch is in its bootloader: keep the link, because that is
@@ -258,11 +331,9 @@ class WatchBle {
   }
 
   async disconnect() {
-    const device = this.device;
-    this.forget();
-    if (device) {
-      await device.disconnect().catch(() => undefined);
-    }
+    // A wedged link makes BlueZ's disconnect hang, so give up on it rather
+    // than leaving the interface stuck.
+    await this.dropLink();
     this.emit('state', 'disconnected');
   }
 
@@ -278,6 +349,7 @@ class WatchBle {
 
   forget() {
     this.device = null;
+    this.pending = null;
     this.gatt = null;
     this.rx = null;
     this.tx = null;

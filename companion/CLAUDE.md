@@ -8,7 +8,9 @@ Read [README.md](README.md) for the layout and the protocol.
   transports: react-native-ble-plx on a phone, Electron over BlueZ on the desktop, and a mock in
   browsers and Expo Go.
 - `electron/` and `cli/` run in Node, not in the bundle, and Metro never sees them. Both talk to
-  BlueZ through `node/ble.js`, so a change to Bluetooth on a computer belongs there.
+  BlueZ through `node/ble.js`, so a change to Bluetooth on a computer belongs there. Every step
+  there has a timeout and a failed connect drops the link, because a half-open BlueZ connection
+  makes every later attempt wait for services that never resolve.
 - `cli/` is the command line tool. It imports the same `src/` modules the screens do, so a feature
   gets a command rather than a second implementation. `npm run waspos -- <command>` rebuilds it
   with esbuild and runs it.
