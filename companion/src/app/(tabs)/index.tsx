@@ -19,10 +19,22 @@ const stateLabel = {
 export default function WatchScreen() {
   const router = useRouter();
   const theme = useTheme();
-  const { connection, watch, settings, transportKind, lastError, findPhoneActive, connect, disconnect, send } =
-    useWatch();
+  const {
+    connection,
+    watchMode,
+    watchReady,
+    watch,
+    settings,
+    transportKind,
+    lastError,
+    findPhoneActive,
+    connect,
+    disconnect,
+    send,
+  } = useWatch();
 
   const connected = connection === 'connected';
+  const inBootloader = connected && watchMode === 'bootloader';
   const dotColor =
     connection === 'connected' ? theme.success : connection === 'connecting' ? theme.warning : theme.textSecondary;
   const remembered =
@@ -36,7 +48,7 @@ export default function WatchScreen() {
           <View style={styles.statusText}>
             <ThemedText type="smallBold">{watch?.name ?? remembered?.name ?? 'No watch paired'}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              {stateLabel[connection]}
+              {inBootloader ? 'Connected, in bootloader' : stateLabel[connection]}
               {transportKind === 'mock' ? ' (mock watch)' : ''}
             </ThemedText>
           </View>
@@ -64,6 +76,19 @@ export default function WatchScreen() {
         </View>
       </Card>
 
+      {inBootloader ? (
+        <Card>
+          <ThemedText type="smallBold" style={{ color: theme.warning }}>
+            This watch is waiting in its bootloader.
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            It is running no firmware, so nothing else here can reach it. Send it a firmware package
+            from the Firmware tab and it will restart into it.
+          </ThemedText>
+          <Button title="Go to Firmware" onPress={() => router.push('/firmware')} />
+        </Card>
+      ) : null}
+
       {findPhoneActive ? (
         <Card>
           <ThemedText type="smallBold" style={{ color: theme.accent }}>
@@ -72,34 +97,33 @@ export default function WatchScreen() {
         </Card>
       ) : null}
 
-      <Card title="Quick actions">
-        <Row
-          label="Find watch"
-          detail="Vibrate the watch until it is tapped"
-          onPress={connected ? () => send({ t: 'find', n: true }) : undefined}
-        />
-        <Row
-          label="Test notification"
-          detail="Send a sample message to the watch"
-          onPress={
-            connected
-              ? () =>
-                  send({
-                    t: 'notify',
-                    id: Date.now() % 100000,
-                    src: 'WaspOS Companion',
-                    title: 'Hello from your phone',
-                    body: 'Notifications are working.',
-                  })
-              : undefined
-          }
-        />
-        <Row
-          label="Vibrate"
-          detail="One short pulse"
-          onPress={connected ? () => send({ t: 'vibrate', n: 1 }) : undefined}
-        />
-      </Card>
+      {watchReady ? (
+        <Card title="Quick actions">
+          <Row
+            label="Find watch"
+            detail="Vibrate the watch until it is tapped"
+            onPress={() => send({ t: 'find', n: true })}
+          />
+          <Row
+            label="Test notification"
+            detail="Send a sample message to the watch"
+            onPress={() =>
+              send({
+                t: 'notify',
+                id: Date.now() % 100000,
+                src: 'WaspOS Companion',
+                title: 'Hello from your phone',
+                body: 'Notifications are working.',
+              })
+            }
+          />
+          <Row
+            label="Vibrate"
+            detail="One short pulse"
+            onPress={() => send({ t: 'vibrate', n: 1 })}
+          />
+        </Card>
+      ) : null}
     </Screen>
   );
 }
