@@ -49,6 +49,7 @@ npm run waspos -- apps list
 npm run waspos -- apps install path/to/wasp-os/build-packages/calculator
 npm run waspos -- notify "Build finished" "All tests passed"
 npm run waspos -- repl "wasp.system.brightness"
+npm run waspos -- diag
 npm run waspos -- reset --ota
 ```
 
@@ -78,7 +79,7 @@ src/app/                 Expo Router screens
   (tabs)/packages        Install, remove, enable and configure watch apps
   (tabs)/firmware.tsx    Send a firmware package to the watch over DFU
   (tabs)/notifications   Forwarding toggles
-  (tabs)/console.tsx     Raw traffic and a line into the watch REPL
+  (tabs)/console.tsx     Raw traffic, quick commands and a line into the watch REPL
   (tabs)/settings.tsx    App settings
   scan.tsx               Modal that lists nearby watches
 src/app/configure.tsx    Settings form generated from a package's own schema
@@ -109,6 +110,26 @@ npm run import-packages path/to/wasp-os/build-packages
 The watch side is `wasp/pkgmgr.py` in the wasp-os tree, and the design is in its
 `docs/app-packaging-design.md`. The mock watch answers package commands too, so the Apps tab can
 be exercised on web with no hardware.
+
+## What each state shows
+
+A screen that needs a watch is left out of the tab bar rather than shown as something that does
+not work, so the app only ever offers what it can actually do:
+
+| State | Tabs |
+| --- | --- |
+| No watch connected | Watch, Settings |
+| Connected, firmware running | all of them |
+| Connected, waiting in a bootloader | Watch, Firmware, Settings |
+
+A watch in its bootloader runs no firmware, so it answers no Gadgetbridge message and has no
+package manager and no REPL. Both transports notice it the same way: the scan looks for a DFU
+service as well as the UART one and marks what it finds, and a connection that asks for the UART
+service and does not get one reports `bootloader` rather than failing. That is what makes an
+interrupted update recoverable, because the watch is left exactly there.
+
+The mock watch has a bootloader twin, `DfuTarg (mock)`, so both states can be worked on with no
+hardware.
 
 ## Firmware updates
 

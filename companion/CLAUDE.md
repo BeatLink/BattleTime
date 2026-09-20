@@ -16,6 +16,9 @@ Read [README.md](README.md) for the layout and the protocol.
   talk to a `DfuLink`, which each transport supplies through `dfuLink()`; they never touch a
   Bluetooth library. The two mock bootloaders in that folder are what the tests and the web build
   run against.
+- A screen that needs a watch is hidden from the tab bar rather than shown broken. `useWatch`
+  gives `watchReady` (connected and running firmware) and `watchMode`; use those, not `connection`,
+  to decide whether a feature is offered.
 - Use `nix develop` for the toolchain. Electron must come from the flake, not from npm.
 - Message shapes in `src/protocol/gadgetbridge.ts` mirror `wasp/gadgetbridge.py` in the firmware tree, and
   `src/protocol/packages.ts` mirrors `wasp/pkgmgr.py`. Change each pair together.
