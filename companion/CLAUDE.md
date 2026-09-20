@@ -8,6 +8,10 @@ Read [README.md](README.md) for the layout and the protocol.
   transports: react-native-ble-plx on a phone, Electron over BlueZ on the desktop, and a mock in
   browsers and Expo Go.
 - `electron/` is the desktop shell and runs in Node, not in the bundle. Metro never sees it.
+- `src/dfu/` holds both Nordic DFU protocols, ported from wasp-os's `tools/ota-dfu`. Controllers
+  talk to a `DfuLink`, which each transport supplies through `dfuLink()`; they never touch a
+  Bluetooth library. The two mock bootloaders in that folder are what the tests and the web build
+  run against.
 - Use `nix develop` for the toolchain. Electron must come from the flake, not from npm.
 - Message shapes in `src/protocol/gadgetbridge.ts` mirror `wasp/gadgetbridge.py` in the firmware tree, and
   `src/protocol/packages.ts` mirrors `wasp/pkgmgr.py`. Change each pair together.

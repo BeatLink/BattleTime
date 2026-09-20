@@ -27,6 +27,10 @@ export default function TabLayout() {
       <Tabs.Screen name="index" options={{ title: 'Watch', tabBarIcon: tabIcon('watch-outline') }} />
       <Tabs.Screen name="packages" options={{ title: 'Apps', tabBarIcon: tabIcon('grid-outline') }} />
       <Tabs.Screen
+        name="firmware"
+        options={{ title: 'Firmware', tabBarIcon: tabIcon('cloud-download-outline') }}
+      />
+      <Tabs.Screen
         name="notifications"
         options={{ title: 'Notifications', tabBarIcon: tabIcon('notifications-outline') }}
       />

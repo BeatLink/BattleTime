@@ -15,6 +15,7 @@ import {
   type PhoneToWatchMessage,
   type WatchToPhoneMessage,
 } from '@/protocol/gadgetbridge';
+import type { DfuLink } from '@/dfu/link';
 import { isPackageReply, type PackageReply } from '@/protocol/packages';
 import type { PackageChannel } from '@/protocol/transfer';
 import { ReplyQueue } from '@/state/reply-queue';
@@ -50,6 +51,9 @@ type WatchContextValue = {
   clearConsole: () => void;
   // Channel for the package manager commands, which need their replies back.
   packageChannel: PackageChannel;
+  // Raw GATT for a firmware update, or null where the transport has no watch
+  // or cannot reach past the UART service.
+  dfuLink: () => DfuLink | null;
 };
 
 const WatchContext = createContext<WatchContextValue | null>(null);
@@ -212,6 +216,8 @@ export function WatchProvider({ children }: { children: ReactNode }) {
 
   const clearConsole = useCallback(() => setConsoleEntries([]), []);
 
+  const dfuLink = useCallback(() => transportRef.current?.dfuLink() ?? null, []);
+
   const packageChannel = useMemo<PackageChannel>(
     () => ({
       send: (text: string) => sendRaw(text),
@@ -241,6 +247,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       updateSettings,
       clearConsole,
       packageChannel,
+      dfuLink,
     }),
     [
       transportKind,
@@ -262,6 +269,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       updateSettings,
       clearConsole,
       packageChannel,
+      dfuLink,
     ],
   );
 
