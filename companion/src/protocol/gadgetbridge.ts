@@ -80,9 +80,11 @@ export type ErrorMessage = { t: 'error'; msg: string };
 // Everything the watch can send to the phone.
 export type WatchToPhoneMessage = MusicControlMessage | FindPhoneMessage | InfoMessage | ErrorMessage;
 
-// Wrap a message the way Gadgetbridge does, so the watch REPL evaluates it as a call to GB().
+// Send the message as a line of Python, which the watch REPL evaluates as a call to GB().
+// Gadgetbridge prefixes this line with \x10, but that is an Espruino convention the watch
+// ignores, and it would corrupt the line on a firmware built with the REPL history keys enabled.
 export function encodeForWatch(message: PhoneToWatchMessage): string {
-  return `\u0010GB(${JSON.stringify(message)})\n`;
+  return `GB(${JSON.stringify(message)})\r\n`;
 }
 
 // Turn one line of watch output into a message, or null when the line is not JSON.

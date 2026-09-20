@@ -164,7 +164,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
 
   const sendRaw = useCallback(
     async (text: string) => {
-      log('out', text.replace(/\u0010/g, ''));
+      log('out', text.trimEnd());
       try {
         await transportRef.current?.write(text);
       } catch (error) {

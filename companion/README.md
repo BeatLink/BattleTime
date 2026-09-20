@@ -44,10 +44,14 @@ src/constants/theme.ts   Colours from the NeoTime design schema
 
 ## Protocol
 
-Messages to the watch are wrapped as `\x10GB({...})\n`, which the watch REPL evaluates through
-`wasp/gadgetbridge.py` in the NeoTime tree. The watch replies with one JSON object per line, for
-example `{"t":"music","n":"play"}` or `{"t":"findPhone","n":"true"}`. The full list of supported
-messages is in [src/protocol/gadgetbridge.ts](src/protocol/gadgetbridge.ts).
+Messages to the watch are sent as the line of Python `GB({...})`, which the watch REPL evaluates
+against `wasp/gadgetbridge.py` in the NeoTime tree. Gadgetbridge prefixes that line with `\x10`,
+an Espruino convention that wasp-os does not use and that is unsafe to copy; see
+`docs/app-packaging-references.md` in the NeoTime repo.
+
+The watch replies with one JSON object per line, for example `{"t":"music","n":"play"}` or
+`{"t":"findPhone","n":"true"}`. The full list of supported messages is in
+[src/protocol/gadgetbridge.ts](src/protocol/gadgetbridge.ts).
 
 ## License
 
