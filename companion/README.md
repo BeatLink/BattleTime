@@ -82,6 +82,8 @@ Both paths now time out each step and report where they stalled instead of hangi
 failure is legible. A watch that BlueZ can serve properly should work as written, but treat the
 transport as untested until one does.
 
+This and the rest of what is unfinished are listed in [TODO.md](TODO.md).
+
 ## Layout
 
 ```
