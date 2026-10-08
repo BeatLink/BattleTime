@@ -16,6 +16,10 @@ What is known to be unfinished in this app. Features live in the watch repo's
 
 ## Waiting on firmware
 
+- **The package manager needs `wasp/pkgmgr.py` on the watch**, which the checked-out wasp-os
+  branch does not carry. Without it the Apps tab and `waspos apps` have nothing to talk to, and
+  every package command times out waiting for a reply. Flash a firmware built from a branch that
+  includes it before using either.
 - **Raw transfer stays unavailable** until the board enables `MICROPY_PY_SYS_STDIO_BUFFER`. The
   watch reports `raw: false`, so every package install goes over base64 with its third of extra
   bytes. The driver already picks the fast path the moment the watch offers it.
