@@ -4,18 +4,19 @@
 
 type Installed = { name: string; version: string; enabled: boolean; kind: 'app' | 'face' };
 
-const ABI = { mpy: 6, arch: 0, raw: false, window: 96 };
+// Current firmware, which offers raw transfer in 512 byte windows.
+const ABI = { mpy: 6, arch: 0, raw: true, window: 512 };
 
 export class MockPackages {
   private installed = new Map<string, Installed>();
   private files = new Map<string, number[]>();
-  private receiving: { path: string; size: number; got: number[] } | null = null;
+  private receiving: { path: string; size: number; raw: boolean; got: number[] } | null = null;
 
   // Handle one line from the phone. Returns the replies to emit, or null when
   // the line is not for the package manager.
   handle(text: string): string[] | null {
-    if (this.receiving) {
-      return this.receiveChunk(text);
+    if (this.receiving && !this.receiving.raw) {
+      return this.accept(decodeBase64(text.trim()));
     }
 
     const trimmed = text.trim();
@@ -23,14 +24,14 @@ export class MockPackages {
       return null;
     }
 
-    const recv = /^pkg\.recv\("([^"]+)", (\d+), (?:True|False)\)/.exec(trimmed);
+    const recv = /^pkg\.recv\("([^"]+)", (\d+), (True|False)\)/.exec(trimmed);
     if (recv) {
       const size = Number(recv[2]);
       if (size === 0) {
         this.files.set(recv[1], []);
         return [reply({ ok: true, rx: 0 }), reply({ ok: true, got: 0, sum: 0 })];
       }
-      this.receiving = { path: recv[1], size, got: [] };
+      this.receiving = { path: recv[1], size, raw: recv[3] === 'False', got: [] };
       return [reply({ ok: true, rx: size })];
     }
 
@@ -82,9 +83,16 @@ export class MockPackages {
     return [reply({ ok: false, err: 'unknown command' })];
   }
 
-  private receiveChunk(text: string): string[] {
+  // Handle bytes sent as they are, which only a raw transfer expects.
+  handleBytes(data: Uint8Array): string[] {
+    if (!this.receiving?.raw) {
+      return [];
+    }
+    return this.accept([...data]);
+  }
+
+  private accept(chunk: number[]): string[] {
     const transfer = this.receiving as { path: string; size: number; got: number[] };
-    const chunk = decodeBase64(text.trim());
     transfer.got.push(...chunk);
 
     const replies = [reply({ ack: transfer.got.length })];

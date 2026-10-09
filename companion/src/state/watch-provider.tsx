@@ -222,6 +222,18 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     [log],
   );
 
+  const sendBytes = useCallback(
+    async (data: Uint8Array) => {
+      log('out', `[${data.length} raw bytes]`);
+      try {
+        await transportRef.current?.writeBytes(data);
+      } catch (error) {
+        setLastError((error as Error).message);
+      }
+    },
+    [log],
+  );
+
   const send = useCallback((message: PhoneToWatchMessage) => sendRaw(encodeForWatch(message)), [sendRaw]);
 
   const clearConsole = useCallback(() => setConsoleEntries([]), []);
@@ -231,9 +243,10 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   const packageChannel = useMemo<PackageChannel>(
     () => ({
       send: (text: string) => sendRaw(text),
+      sendBytes: (data: Uint8Array) => sendBytes(data),
       next: () => packageRepliesRef.current.next(),
     }),
-    [sendRaw],
+    [sendRaw, sendBytes],
   );
 
   const value = useMemo<WatchContextValue>(

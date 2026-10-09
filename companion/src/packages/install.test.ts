@@ -25,6 +25,12 @@ class MockChannel implements PackageChannel {
     }
   }
 
+  async sendBytes(data: Uint8Array) {
+    for (const line of this.watch.handleBytes(data)) {
+      this.queue.push(JSON.parse(line));
+    }
+  }
+
   async next(): Promise<PackageReply> {
     const reply = this.queue.shift();
     if (!reply) throw new Error('no reply');

@@ -55,6 +55,15 @@ export class MockTransport implements WatchTransport {
     this.setState('disconnected');
   }
 
+  async writeBytes(data: Uint8Array) {
+    if (this.state !== 'connected') {
+      throw new Error('Not connected');
+    }
+    for (const line of this.packages.handleBytes(data)) {
+      this.listener.onLine?.(`${line}\r\n`);
+    }
+  }
+
   async write(text: string) {
     if (this.state !== 'connected') {
       throw new Error('Not connected');

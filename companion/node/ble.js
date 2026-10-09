@@ -338,10 +338,14 @@ class WatchBle {
   }
 
   async write(text) {
+    await this.writeBytes(Buffer.from(text, 'utf8'));
+  }
+
+  async writeBytes(data) {
     if (!this.rx) {
       throw new Error('Not connected');
     }
-    const bytes = Buffer.from(text, 'utf8');
+    const bytes = Buffer.from(data);
     for (let offset = 0; offset < bytes.length; offset += CHUNK) {
       await this.rx.writeValueWithoutResponse(bytes.subarray(offset, offset + CHUNK));
     }

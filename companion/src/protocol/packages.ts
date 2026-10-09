@@ -80,7 +80,9 @@ export function encodeReindex(): string {
 }
 
 export function encodeRecv(path: string, size: number, b64: boolean): string {
-  return line(`pkg.recv("${checkPath(path)}", ${size}, ${b64 ? 'True' : 'False'})`);
+  const call = `pkg.recv("${checkPath(path)}", ${size}, ${b64 ? 'True' : 'False'})`;
+  // The REPL ends a line at its carriage return, so a raw transfer sends no line feed to land in the file.
+  return b64 ? line(call) : `${call}\r`;
 }
 
 export function encodeRm(name: string): string {

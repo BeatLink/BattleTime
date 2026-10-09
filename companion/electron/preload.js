@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('waspos', {
   connect: (id) => ipcRenderer.invoke('ble:connect', id),
   disconnect: () => ipcRenderer.invoke('ble:disconnect'),
   write: (text) => ipcRenderer.invoke('ble:write', text),
+  writeBytes: (data) => ipcRenderer.invoke('ble:write-bytes', data),
   gattHas: (service, characteristic) =>
     ipcRenderer.invoke('ble:gatt-has', service, characteristic),
   gattRead: (service, characteristic) =>

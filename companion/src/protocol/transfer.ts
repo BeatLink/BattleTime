@@ -21,10 +21,12 @@ import {
   type PackageReply,
 } from './packages';
 
-// What the driver needs from the outside world: a way to send a line and a way
-// to wait for the next reply. The BLE transport supplies both.
+// What the driver needs from the outside world: a way to send a line, a way to
+// send raw bytes, and a way to wait for the next reply. The BLE transport
+// supplies all three.
 export interface PackageChannel {
   send(text: string): Promise<void>;
+  sendBytes(data: Uint8Array): Promise<void>;
   next(): Promise<PackageReply>;
 }
 
@@ -71,15 +73,15 @@ export async function sendFile(
   const size = data.length;
   const window = windowFor(options.abi ?? null);
 
-  // Base64 is the mode every firmware has. Raw needs sys.stdin.buffer, which
-  // is absent until the board enables it.
-  await channel.send(encodeRecv(path, size, true));
+  // Raw needs sys.stdin.buffer, which only newer firmware has, so base64 is the fallback.
+  const raw = options.abi?.raw === true;
+  await channel.send(encodeRecv(path, size, !raw));
   await expect(channel, (reply) => reply.rx === size, `starting ${path}`);
 
   let sent = 0;
   while (sent < size) {
     const chunk = data.subarray(sent, Math.min(sent + window, size));
-    await channel.send(encodeChunk(chunk));
+    await (raw ? channel.sendBytes(chunk) : channel.send(encodeChunk(chunk)));
     sent += chunk.length;
     const ack = await expect(channel, (reply) => reply.ack === sent, `sending ${path}`);
     options.onProgress?.({ file: path, sent: ack.ack ?? sent, total: size });

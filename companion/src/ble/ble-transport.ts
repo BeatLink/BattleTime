@@ -111,11 +111,14 @@ export class BleTransport implements WatchTransport {
   }
 
   async write(text: string) {
+    await this.writeBytes(utf8Encode(text));
+  }
+
+  async writeBytes(bytes: Uint8Array) {
     const device = this.device;
     if (!device) {
       throw new Error('Not connected');
     }
-    const bytes = utf8Encode(text);
     const chunkSize = Math.max(1, this.mtu - ATT_OVERHEAD);
     for (let offset = 0; offset < bytes.length; offset += chunkSize) {
       const chunk = bytes.subarray(offset, offset + chunkSize);

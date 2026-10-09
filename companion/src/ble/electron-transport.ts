@@ -15,6 +15,7 @@ export type DesktopBridge = {
   connect(id: string): Promise<BridgeResult>;
   disconnect(): Promise<BridgeResult>;
   write(text: string): Promise<BridgeResult>;
+  writeBytes(data: number[]): Promise<BridgeResult>;
   gattHas(service: string, characteristic: string): Promise<BridgeResult>;
   gattRead(service: string, characteristic: string): Promise<BridgeResult>;
   gattWrite(
@@ -97,6 +98,10 @@ export class ElectronTransport implements WatchTransport {
 
   async write(text: string) {
     check(await this.bridge.write(text));
+  }
+
+  async writeBytes(data: Uint8Array) {
+    check(await this.bridge.writeBytes(Array.from(data)));
   }
 
   setListener(listener: TransportListener) {

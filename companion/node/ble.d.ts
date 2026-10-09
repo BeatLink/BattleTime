@@ -24,6 +24,7 @@ export declare class WatchBle {
   reconnect(id: string): Promise<void>;
   disconnect(): Promise<void>;
   write(text: string): Promise<void>;
+  writeBytes(data: Uint8Array | number[]): Promise<void>;
   gattHas(service: string, characteristic: string): Promise<boolean>;
   gattRead(service: string, characteristic: string): Promise<number[]>;
   gattWrite(

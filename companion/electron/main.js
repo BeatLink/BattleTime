@@ -70,6 +70,7 @@ function wireBluetooth() {
   handle('ble:connect', (id) => ble.connect(id));
   handle('ble:disconnect', () => ble.disconnect());
   handle('ble:write', (text) => ble.write(text));
+  handle('ble:write-bytes', (data) => ble.writeBytes(data));
   handle('ble:gatt-has', (service, char) => ble.gattHas(service, char));
   handle('ble:gatt-read', (service, char) => ble.gattRead(service, char));
   handle('ble:gatt-write', (service, char, data, mode) =>

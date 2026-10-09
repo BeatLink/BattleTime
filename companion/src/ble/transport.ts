@@ -39,6 +39,8 @@ export interface WatchTransport {
   disconnect(): Promise<void>;
   // Send raw text to the watch, splitting it into MTU-sized writes.
   write(text: string): Promise<void>;
+  // Send bytes as they are, for a raw file transfer that text encoding would corrupt.
+  writeBytes(data: Uint8Array): Promise<void>;
   setListener(listener: TransportListener): void;
   // Raw GATT for a firmware update, which needs characteristics outside the
   // UART service. Null where the transport cannot reach them.

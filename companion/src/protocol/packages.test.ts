@@ -40,7 +40,8 @@ describe('command encoding', () => {
     expect(encodeRecv('pkg/calculator/app.mpy', 1631, true)).toBe(
       'pkg.recv("pkg/calculator/app.mpy", 1631, True)\r\n',
     );
-    expect(encodeRecv('pkg/a/b', 1, false)).toContain('False');
+    // A raw transfer's command ends at the carriage return, leaving no line feed behind.
+    expect(encodeRecv('pkg/a/b', 1, false)).toBe('pkg.recv("pkg/a/b", 1, False)\r');
   });
 
   it('sends config as a JSON string rather than a literal', () => {

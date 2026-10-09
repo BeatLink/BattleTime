@@ -104,6 +104,14 @@ export class WatchSession implements DfuLink {
     await this.ble.write(text);
   }
 
+  // Bytes as they are, for a raw file transfer.
+  async sendBytes(data: Uint8Array): Promise<void> {
+    if (this.verbose) {
+      process.stderr.write(`> [${data.length} raw bytes]\n`);
+    }
+    await this.ble.writeBytes(data);
+  }
+
   // Lines the watch sends that are not package replies.
   listen(onLine: (line: string) => void) {
     this.onLine = onLine;
@@ -112,6 +120,7 @@ export class WatchSession implements DfuLink {
   get packageChannel(): PackageChannel {
     return {
       send: (text: string) => this.send(text),
+      sendBytes: (data: Uint8Array) => this.sendBytes(data),
       next: () => this.replies.next(),
     };
   }

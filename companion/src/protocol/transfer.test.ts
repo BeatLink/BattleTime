@@ -18,10 +18,11 @@ const abi: AbiInfo = { mpy: 6, arch: 0, raw: false, window: 96 };
 // A watch that behaves, so the driver can be exercised end to end.
 class FakeWatch implements PackageChannel {
   sent: string[] = [];
+  sentBytes: Uint8Array[] = [];
   files = new Map<string, Uint8Array>();
   private replies: PackageReply[] = [];
   private pending: ((reply: PackageReply) => void)[] = [];
-  private receiving: { path: string; size: number; got: number[] } | null = null;
+  private receiving: { path: string; size: number; raw: boolean; got: number[] } | null = null;
 
   constructor(private readonly index: Record<string, unknown>[] = []) {}
 
@@ -29,15 +30,10 @@ class FakeWatch implements PackageChannel {
     this.sent.push(text);
 
     if (this.receiving) {
-      const chunk = Buffer.from(text.trim(), 'base64');
-      this.receiving.got.push(...chunk);
-      this.push({ t: 'pkg', ack: this.receiving.got.length });
-      if (this.receiving.got.length >= this.receiving.size) {
-        const data = Uint8Array.from(this.receiving.got);
-        this.files.set(this.receiving.path, data);
-        this.push({ t: 'pkg', ok: true, got: data.length, sum: checksum(data) });
-        this.receiving = null;
+      if (this.receiving.raw) {
+        throw new Error('a line arrived in the middle of a raw transfer');
       }
+      this.accept([...Buffer.from(text.trim(), 'base64')]);
       return;
     }
 
@@ -51,7 +47,7 @@ class FakeWatch implements PackageChannel {
         this.push({ t: 'pkg', ok: true, got: 0, sum: 0 });
         return;
       }
-      this.receiving = { path: recv[1], size, got: [] };
+      this.receiving = { path: recv[1], size, raw: recv[3] === 'False', got: [] };
       return;
     }
     if (text.startsWith('pkg.abi()')) {
@@ -83,6 +79,26 @@ class FakeWatch implements PackageChannel {
     }
   }
 
+  async sendBytes(data: Uint8Array) {
+    this.sentBytes.push(data);
+    if (!this.receiving?.raw) {
+      throw new Error('raw bytes arrived outside a raw transfer');
+    }
+    this.accept([...data]);
+  }
+
+  private accept(chunk: number[]) {
+    const transfer = this.receiving as { path: string; size: number; got: number[] };
+    transfer.got.push(...chunk);
+    this.push({ t: 'pkg', ack: transfer.got.length });
+    if (transfer.got.length >= transfer.size) {
+      const data = Uint8Array.from(transfer.got);
+      this.files.set(transfer.path, data);
+      this.push({ t: 'pkg', ok: true, got: data.length, sum: checksum(data) });
+      this.receiving = null;
+    }
+  }
+
   async next(): Promise<PackageReply> {
     const ready = this.replies.shift();
     if (ready) {
@@ -108,6 +124,7 @@ class RudeWatch implements PackageChannel {
   async send(text: string) {
     this.sent.push(text);
   }
+  async sendBytes() {}
   async next(): Promise<PackageReply> {
     const reply = this.replies.shift();
     if (!reply) {
@@ -165,6 +182,17 @@ describe('sendFile', () => {
     });
 
     expect(seen).toEqual([96, 192, 250]);
+  });
+
+  it('sends raw bytes to a watch that offers raw transfer', async () => {
+    const watch = new FakeWatch();
+    const data = payload(300);
+
+    await sendFile(watch, 'pkg/a/app.mpy', data, { abi: { ...abi, raw: true, window: 128 } });
+
+    expect(watch.files.get('pkg/a/app.mpy')).toEqual(data);
+    expect(watch.sent).toEqual(['pkg.recv("pkg/a/app.mpy", 300, False)\r']);
+    expect(watch.sentBytes.map((chunk) => chunk.length)).toEqual([128, 128, 44]);
   });
 
   it('sends an empty file without any chunks', async () => {
