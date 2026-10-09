@@ -14,19 +14,17 @@ What is known to be unfinished in this app. Features live in the watch repo's
   watch that BlueZ can serve, or clear the wedged adapter, before trusting the transport. See the
   known limitation in [README.md](README.md).
 
-## Waiting on firmware
+## Waiting on a watch running the new firmware
 
-- **The package manager needs `wasp/pkgmgr.py` on the watch**, which the checked-out wasp-os
-  branch does not carry. Without it the Apps tab and `waspos apps` have nothing to talk to, and
-  every package command times out waiting for a reply. Flash a firmware built from a branch that
-  includes it before using either.
-- **Raw transfer stays unavailable** until the board enables `MICROPY_PY_SYS_STDIO_BUFFER`. The
-  watch reports `raw: false`, so every package install goes over base64 with its third of extra
-  bytes. The driver already picks the fast path the moment the watch offers it.
-- **Transfer windows stay at 96 bytes** until the receive ring in the firmware's `ble_uart.c`
-  grows from 128 bytes. The driver honours whatever window the watch reports.
-- **Watch faces cannot be installed as packages** until the firmware's Faces app reads the package
-  index. The app already builds and sends face packages.
+The firmware side is finished on wasp-os branch `21-freeze-pkgmgr`, but none of it has run on a
+watch yet. A watch on older firmware still has no manager to answer, and every package command
+times out.
+
+- **Package commands** need that firmware, which freezes the manager and puts `pkg` on the REPL.
+- **Raw transfer and 512 byte windows** come with it, through `sys.stdin.buffer` and a 1 KB
+  receive ring. Older firmware reports `raw: false` and 96 byte windows, and the driver follows
+  whatever the watch reports.
+- **Watch face packages** appear in the firmware's Faces app once installed and enabled.
 
 ## Not started
 
