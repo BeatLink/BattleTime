@@ -14,17 +14,15 @@ What is known to be unfinished in this app. Features live in the watch repo's
   watch that BlueZ can serve, or clear the wedged adapter, before trusting the transport. See the
   known limitation in [README.md](README.md).
 
-## Waiting on a watch running the new firmware
+## Firmware support
 
-The firmware side is finished on wasp-os branch `21-freeze-pkgmgr`, but none of it has run on a
-watch yet. A watch on older firmware still has no manager to answer, and every package command
-times out.
+wasp-os branch `21-freeze-pkgmgr` carries the manager, raw transfer and face packages, and all
+of it has run on a PineTime through wasp-os's own gatttool tools. Firmware older than that has
+no manager, and every package command times out.
 
-- **Package commands** need that firmware, which freezes the manager and puts `pkg` on the REPL.
-- **Raw transfer and 512 byte windows** come with it, through `sys.stdin.buffer` and a 1 KB
-  receive ring. Older firmware reports `raw: false` and 96 byte windows, and the driver follows
-  whatever the watch reports.
-- **Watch face packages** appear in the firmware's Faces app once installed and enabled.
+- **Raw transfer is untried from this app.** The driver sends raw bytes whenever the watch
+  offers it, and the tests and the mock watch cover that path, but no Bluetooth path here has
+  reached the watch yet; see above.
 
 ## Not started
 
