@@ -71,16 +71,13 @@ NixOS. `npm run desktop` starts it through [scripts/electron.mjs](scripts/electr
 skips the launcher npm would otherwise put first on `PATH`; that launcher starts Electron's
 unwrapped binary, which dies with SIGILL. Run it inside `nix develop`, or the script says so.
 
-### Known limitation: BlueZ and this watch
+### Connecting by address
 
-Scanning and connecting work, but the desktop and command line paths are unverified against the
-PineTime used here. BlueZ reports the link as connected and then never resolves its services, so
-every D-Bus client, node-ble and `bluetoothctl` alike, stalls in service discovery. `gatttool`
-with `-t random` reaches the same watch, which points at BlueZ rather than at this code.
-
-Both paths now time out each step and report where they stalled instead of hanging, so the
-failure is legible. A watch that BlueZ can serve properly should work as written, but treat the
-transport as untested until one does.
+The command line tool connects to a remembered address without scanning. BlueZ forgets an unpaired
+watch soon after it last saw one, so when it does not know the address the tool runs discovery
+until the watch appears, and says so if it never does. The command line path has installed,
+enabled and removed a package on a PineTime this way; the desktop app uses the same Bluetooth
+layer.
 
 This and the rest of what is unfinished are listed in [TODO.md](TODO.md).
 

@@ -4,25 +4,15 @@ What is known to be unfinished in this app. Features live in the watch repo's
 `ROADMAP.md`, and the app package design and its task list live in that repo's
 `docs/app-packaging-design.md`; only this app's own loose ends are here.
 
-## Blocked on the watch, not on this code
-
-- **The desktop and command line Bluetooth paths are unverified against real hardware.** BlueZ
-  reports the link to the PineTime here as connected and then never resolves its services, so
-  every D-Bus client stalls in service discovery, node-ble and `bluetoothctl` alike. `gatttool`
-  with `-t random` reaches the same watch, which points at BlueZ rather than at this code. Both
-  paths now time out each step and say where they stalled, so the failure is legible. Retry on a
-  watch that BlueZ can serve, or clear the wedged adapter, before trusting the transport. See the
-  known limitation in [README.md](README.md).
-
 ## Firmware support
 
-wasp-os branch `21-freeze-pkgmgr` carries the manager, raw transfer and face packages, and all
-of it has run on a PineTime through wasp-os's own gatttool tools. Firmware older than that has
-no manager, and every package command times out.
+wasp-os branch `21-freeze-pkgmgr` carries the manager, raw transfer and face packages. The
+command line tool has installed, enabled and removed a package on a PineTime over raw transfer.
+Firmware older than that has no manager, and every package command times out.
 
-- **Raw transfer is untried from this app.** The driver sends raw bytes whenever the watch
-  offers it, and the tests and the mock watch cover that path, but no Bluetooth path here has
-  reached the watch yet; see above.
+- **The phone and desktop builds are untried on a watch.** They share the protocol code the
+  command line tool ran, but not its Bluetooth layer on a phone, and the desktop app has not been
+  opened against the watch.
 
 ## Not started
 

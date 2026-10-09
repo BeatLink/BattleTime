@@ -207,14 +207,18 @@ class WatchBle {
     const adapter = await this.adapterOrThrow();
     this.emit('state', 'connecting');
 
-    // A device seen during the scan is already known to BlueZ. Only wait for
-    // one that is not, and give up rather than hanging, because waitDevice
-    // needs discovery running to ever succeed.
+    // BlueZ forgets an unpaired device soon after it last saw one, so a watch
+    // named by its address may be unknown until discovery finds it again.
     let device;
     try {
       device = await adapter.getDevice(id);
     } catch {
-      device = await adapter.waitDevice(id, CONNECT_TIMEOUT_MS);
+      if (!(await adapter.isDiscovering().catch(() => false))) {
+        await adapter.startDiscovery();
+      }
+      device = await adapter.waitDevice(id, CONNECT_TIMEOUT_MS).catch(() => {
+        throw new Error(`No watch at ${id} is in range. Wake it, or move it closer.`);
+      });
     }
 
     // Discovery competes with the connection, so it stops once we have the
