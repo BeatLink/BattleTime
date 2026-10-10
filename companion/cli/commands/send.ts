@@ -8,7 +8,7 @@ import { say } from '../output';
 
 export const sendUsage = `waspos notify <title> <body> [--sender <name>]
 waspos find [on|off]
-waspos vibrate [milliseconds]
+waspos vibrate [count]
 waspos send <json>
 waspos repl <python> [--wait <seconds>]
 waspos diag [name]

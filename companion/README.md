@@ -6,10 +6,12 @@ the same Gadgetbridge-style JSON messages the firmware already understands.
 
 ## Status
 
-Scaffolding only. The app can scan for a watch, connect, install app packages, flash firmware, send
-the built-in test messages and show raw traffic in a console. Forwarding real phone notifications
-and media state still needs native code; see
-[src/services/notifications/README.md](src/services/notifications/README.md).
+Early. The app scans for a watch, connects, installs app packages and flashes firmware, from a
+file or from a GitHub build. It reads the step history, edits alarms and the watch's own settings,
+browses and backs up the watch's files, pushes the weather, and fetches pages for watch apps from
+hosts the user allows. On Android it forwards notifications, calls and now playing, and obeys Do
+Not Disturb. The Android bridge has not been compiled yet; see
+[src/services/phone/README.md](src/services/phone/README.md).
 
 ## Getting started
 
@@ -51,6 +53,12 @@ npm run waspos -- notify "Build finished" "All tests passed"
 npm run waspos -- repl "wasp.system.brightness"
 npm run waspos -- diag
 npm run waspos -- reset --ota
+npm run waspos -- steps
+npm run waspos -- settings brightness=3
+npm run waspos -- alarms 07:30/12345 09:00/67/off
+npm run waspos -- weather Kingston
+npm run waspos -- files get settings.json
+npm run waspos -- backup watch-backup.json
 ```
 
 The first scan remembers the watch in `~/.config/waspos-companion/cli.json`, so later commands
@@ -90,8 +98,13 @@ src/app/                 Expo Router screens
   (tabs)/firmware.tsx    Send a firmware package to the watch over DFU
   (tabs)/notifications   Forwarding toggles
   (tabs)/console.tsx     Raw traffic, quick commands and a line into the watch REPL
-  (tabs)/settings.tsx    App settings
+  (tabs)/settings.tsx    App settings: weather place, hosts watch apps may fetch, GitHub builds
   scan.tsx               Modal that lists nearby watches
+  steps.tsx              The last week of steps, by day and by hour
+  alarms.tsx             The watch's alarms and the days they repeat on
+  watch-settings.tsx     Brightness, face, timeout, units, step goal and theme on the watch
+  files.tsx              The watch's flash: browse, send, read, delete, and free memory
+  backup.tsx             Copy the watch's settings, alarms and logs off and back
 src/app/configure.tsx    Settings form generated from a package's own schema
 electron/                Desktop app: main process, preload bridge and file server
 src/ble/                 Transport layer: react-native-ble-plx, Electron, and a mock for browsers
@@ -99,7 +112,11 @@ src/dfu/                 Firmware updates: the Nordic DFU protocols and the pack
 cli/                     The command line tool, which runs the same code as the screens
 node/                    BlueZ over node-ble, shared by the desktop app and the tool
 src/packages/            Bundled app packages and the catalogue that joins them to the watch
-src/protocol/            Gadgetbridge and package manager message types, plus the transfer driver
+src/protocol/            Gadgetbridge and package manager messages, the transfer driver, files,
+                         backups and the requests the watch answers
+src/services/            Weather, the watch apps' http proxy and GitHub firmware builds
+src/services/phone/      Notifications, calls, media and Do Not Disturb from the phone
+modules/phone-bridge/    The Android native module behind it
 src/state/               Watch provider (connection, traffic, settings) and persisted settings
 src/components/          Themed building blocks
 src/constants/theme.ts   Colours from the wasp-os design schema
@@ -173,6 +190,13 @@ an Espruino convention that wasp-os does not use and that is unsafe to copy; see
 The watch replies with one JSON object per line, for example `{"t":"music","n":"play"}` or
 `{"t":"findPhone","n":"true"}`. The full list of supported messages is in
 [src/protocol/gadgetbridge.ts](src/protocol/gadgetbridge.ts).
+
+Three messages are answered: `settings`, `alarm` and `steps` each come back with a reply of the
+same name, which [src/protocol/requests.ts](src/protocol/requests.ts) matches to the request
+waiting for it. A watch app asks for a page with `{"t":"http","url":..,"id":..}` and gets
+`GB({"t":"http","id":..,"resp":..})` back, cut to 1024 characters, but only from the hosts listed
+in Settings. Files move through the package manager: `pkg.ls_dir`, `pkg.send`, `pkg.rm_file` and
+`pkg.mem` beside the existing `pkg.recv`.
 
 ## License
 

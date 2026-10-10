@@ -9,6 +9,7 @@ import { apps, appsUsage } from './commands/apps';
 import { flash, flashUsage } from './commands/flash';
 import { scan, scanUsage } from './commands/scan';
 import { diag, repl, reset, send, sendUsage } from './commands/send';
+import { alarms, backup, files, listen, restore, settings, setTime, steps, watchUsage, weather } from './commands/watch';
 import { say, warn } from './output';
 import { resolveAddress } from './target';
 
@@ -18,6 +19,8 @@ type Options = {
   timeout?: number;
   wait?: number;
   ota: boolean;
+  logs: boolean;
+  allow?: string;
   verbose: boolean;
 };
 
@@ -31,6 +34,8 @@ ${appsUsage}
 
 ${sendUsage}
 
+${watchUsage}
+
 Options:
   --address <mac>   Which watch to talk to. Otherwise the last one used, or
                     the only one in range. WASPOS_ADDRESS works too.
@@ -41,7 +46,7 @@ Options:
 // Pull the named options out, leaving the positional arguments behind.
 function parse(argv: string[]): { args: string[]; options: Options } {
   const args: string[] = [];
-  const options: Options = { ota: false, verbose: false };
+  const options: Options = { ota: false, logs: false, verbose: false };
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -60,6 +65,12 @@ function parse(argv: string[]): { args: string[]; options: Options } {
         break;
       case '--ota':
         options.ota = true;
+        break;
+      case '--logs':
+        options.logs = true;
+        break;
+      case '--allow':
+        options.allow = argv[++i];
         break;
       case '--verbose':
       case '-v':
@@ -83,6 +94,15 @@ const NEEDS_WATCH = new Set([
   'repl',
   'diag',
   'reset',
+  'time',
+  'settings',
+  'alarms',
+  'steps',
+  'weather',
+  'files',
+  'backup',
+  'restore',
+  'listen',
 ]);
 
 // A watch in its bootloader runs no firmware, so only a firmware update has
@@ -156,7 +176,7 @@ async function main(argv: string[]): Promise<number> {
         break;
 
       case 'vibrate':
-        await send(session, { t: 'vibrate', n: Number(rest[0] ?? 100) });
+        await send(session, { t: 'vibrate', n: Number(rest[0] ?? 1) });
         say('Sent.');
         break;
 
@@ -181,6 +201,51 @@ async function main(argv: string[]): Promise<number> {
 
       case 'reset':
         await reset(session, options.ota);
+        break;
+
+      case 'time':
+        await setTime(session);
+        break;
+
+      case 'settings':
+        await settings(session, rest);
+        break;
+
+      case 'alarms':
+        await alarms(session, rest);
+        break;
+
+      case 'steps':
+        await steps(session, Number(rest[0] ?? 7));
+        break;
+
+      case 'weather':
+        if (!rest[0]) {
+          throw new Error('Give the place to report on.');
+        }
+        await weather(session, rest.join(' '));
+        break;
+
+      case 'files':
+        await files(session, rest);
+        break;
+
+      case 'backup':
+        if (!rest[0]) {
+          throw new Error('Give the file to save the backup in.');
+        }
+        await backup(session, rest[0], options.logs);
+        break;
+
+      case 'restore':
+        if (!rest[0]) {
+          throw new Error('Give the backup file.');
+        }
+        await restore(session, rest[0]);
+        break;
+
+      case 'listen':
+        await listen(session, options.allow, rest[0], options.wait);
         break;
     }
     return 0;

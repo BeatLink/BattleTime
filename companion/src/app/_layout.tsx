@@ -41,6 +41,11 @@ export default function RootLayout() {
             name="configure"
             options={{ presentation: 'modal', headerShown: true, title: 'App settings' }}
           />
+          <Stack.Screen name="steps" options={{ headerShown: true, title: 'Steps' }} />
+          <Stack.Screen name="alarms" options={{ headerShown: true, title: 'Alarms' }} />
+          <Stack.Screen name="watch-settings" options={{ headerShown: true, title: 'Watch settings' }} />
+          <Stack.Screen name="files" options={{ headerShown: true, title: 'Files' }} />
+          <Stack.Screen name="backup" options={{ headerShown: true, title: 'Backup' }} />
         </Stack>
       </WatchProvider>
     </ThemeProvider>

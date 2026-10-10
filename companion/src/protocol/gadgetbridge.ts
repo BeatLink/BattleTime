@@ -14,11 +14,36 @@ export type NotificationMessage = {
 
 export type DismissNotificationMessage = { t: 'notify-'; id: number };
 
-export type AlarmMessage = { t: 'alarm'; d: { h: number; m: number }[] };
+// One alarm as the watch keeps it. `rep` is a day mask, Monday 1 to Sunday 64, and 0 rings once.
+export type Alarm = { h: number; m: number; on?: boolean; rep?: number };
+
+// With `d` the watch replaces its alarms; without it the watch only reports them.
+export type AlarmMessage = { t: 'alarm'; d?: Alarm[] };
 
 export type FindWatchMessage = { t: 'find'; n: boolean };
 
+// The number of short buzzes, which the watch keeps between 1 and 5.
 export type VibrateMessage = { t: 'vibrate'; n: number };
+
+// The watch settings the phone can change.
+export type WatchSettingValues = {
+  brightness: number;
+  notify_level: number;
+  units: 'Metric' | 'Imperial';
+  blank_after: number;
+  clock_24h: boolean;
+  step_goal: number;
+  theme: number[];
+  face: string | null;
+};
+
+// With no other keys the watch only reports its settings.
+export type SettingsMessage = { t: 'settings' } & Partial<WatchSettingValues>;
+
+export type StepsRequestMessage = { t: 'steps'; y: number; m: number; d: number };
+
+// The answer to a watch app's http request, matched by id.
+export type HttpResponseMessage = { t: 'http'; id: string; resp?: string; err?: string };
 
 export type WeatherMessage = {
   t: 'weather';
@@ -64,7 +89,10 @@ export type PhoneToWatchMessage =
   | WeatherMessage
   | MusicStateMessage
   | MusicInfoMessage
-  | CallMessage;
+  | CallMessage
+  | SettingsMessage
+  | StepsRequestMessage
+  | HttpResponseMessage;
 
 export type MusicControlMessage = {
   t: 'music';
@@ -77,14 +105,51 @@ export type InfoMessage = { t: 'info'; msg: string };
 
 export type ErrorMessage = { t: 'error'; msg: string };
 
+export type SettingsReply = { t: 'settings'; faces: [string, string][] } & WatchSettingValues;
+
+export type AlarmReply = { t: 'alarm'; d: Alarm[] };
+
+// A day's step counts in 6 minute slots, null when the watch has no log for it.
+export type StepsReply = {
+  t: 'steps';
+  y: number;
+  m: number;
+  d: number;
+  v: number[] | null;
+  now: number;
+};
+
+// The watch's answer to an incoming call: pick up, hang up, or only stop buzzing.
+export type CallControlMessage = { t: 'call'; n: 'ACCEPT' | 'REJECT' | 'IGNORE' };
+
+// A watch app asking the phone to fetch a URL for it.
+export type HttpRequestMessage = { t: 'http'; url: string; id: string };
+
 // Everything the watch can send to the phone.
-export type WatchToPhoneMessage = MusicControlMessage | FindPhoneMessage | InfoMessage | ErrorMessage;
+export type WatchToPhoneMessage =
+  | MusicControlMessage
+  | FindPhoneMessage
+  | InfoMessage
+  | ErrorMessage
+  | SettingsReply
+  | AlarmReply
+  | StepsReply
+  | CallControlMessage
+  | HttpRequestMessage;
+
+// JSON with every character outside printable ASCII escaped, since the watch's line editor drops those bytes.
+export function asciiJson(value: unknown): string {
+  return JSON.stringify(value).replace(
+    /[\u007f-\uffff]/g,
+    (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`,
+  );
+}
 
 // Send the message as a line of Python, which the watch REPL evaluates as a call to GB().
 // Gadgetbridge prefixes this line with \x10, but that is an Espruino convention the watch
 // ignores, and it would corrupt the line on a firmware built with the REPL history keys enabled.
 export function encodeForWatch(message: PhoneToWatchMessage): string {
-  return `GB(${JSON.stringify(message)})\r\n`;
+  return `GB(${asciiJson(message)})\r\n`;
 }
 
 // Turn one line of watch output into a message, or null when the line is not JSON.

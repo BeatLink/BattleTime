@@ -2,6 +2,8 @@
 // watch on web and in Expo Go. It keeps packages in memory and answers with the
 // same JSON the firmware sends.
 
+import { bytesToBase64 } from './encoding';
+
 type Installed = { name: string; version: string; enabled: boolean; kind: 'app' | 'face' };
 
 // Current firmware, which offers raw transfer in 512 byte windows.
@@ -9,7 +11,11 @@ const ABI = { mpy: 6, arch: 0, raw: true, window: 512 };
 
 export class MockPackages {
   private installed = new Map<string, Installed>();
-  private files = new Map<string, number[]>();
+  // Files on the mock flash, seeded with what a watch that has been worn a while holds.
+  private files = new Map<string, number[]>([
+    ['settings.json', [...'{"brightness": 2, "notify_level": 2}'].map((c) => c.charCodeAt(0))],
+    ['alarms.txt', [...'7,30,159;'].map((c) => c.charCodeAt(0))],
+  ]);
   private receiving: { path: string; size: number; raw: boolean; got: number[] } | null = null;
 
   // Handle one line from the phone. Returns the replies to emit, or null when
@@ -33,6 +39,28 @@ export class MockPackages {
       }
       this.receiving = { path: recv[1], size, raw: recv[3] === 'False', got: [] };
       return [reply({ ok: true, rx: size })];
+    }
+
+    const lsDir = /^pkg\.ls_dir\("([^"]*)"\)/.exec(trimmed);
+    if (lsDir) {
+      return [this.listDir(lsDir[1])];
+    }
+
+    const send = /^pkg\.send\("([^"]+)"\)/.exec(trimmed);
+    if (send) {
+      return this.sendFile(send[1]);
+    }
+
+    const rmFile = /^pkg\.rm_file\("([^"]+)"\)/.exec(trimmed);
+    if (rmFile) {
+      if (!this.files.delete(rmFile[1])) {
+        return [reply({ ok: false, err: 'no such file' })];
+      }
+      return [reply({ ok: true, deleted: rmFile[1] })];
+    }
+
+    if (trimmed.startsWith('pkg.mem()')) {
+      return [reply({ ok: true, free: 19152, alloc: 45648 })];
     }
 
     if (trimmed.startsWith('pkg.abi()')) {
@@ -81,6 +109,43 @@ export class MockPackages {
     }
 
     return [reply({ ok: false, err: 'unknown command' })];
+  }
+
+  private listDir(dir: string): string {
+    const prefix = dir ? `${dir}/` : '';
+    const entries = new Map<string, [string, number, boolean]>();
+    for (const [path, bytes] of this.files) {
+      if (!path.startsWith(prefix)) {
+        continue;
+      }
+      const rest = path.slice(prefix.length);
+      const slash = rest.indexOf('/');
+      if (slash < 0) {
+        entries.set(rest, [rest, bytes.length, false]);
+      } else {
+        const name = rest.slice(0, slash);
+        entries.set(name, [name, 0, true]);
+      }
+    }
+    if (dir && entries.size === 0) {
+      return reply({ ok: false, err: 'no such directory' });
+    }
+    return reply({ ok: true, dir, entries: [...entries.values()] });
+  }
+
+  private sendFile(path: string): string[] {
+    const bytes = this.files.get(path);
+    if (!bytes) {
+      return [reply({ ok: false, err: 'no such file' })];
+    }
+    const replies = [reply({ ok: true, tx: bytes.length })];
+    for (let off = 0; off < bytes.length; off += 192) {
+      replies.push(reply({ off, d: bytesToBase64(Uint8Array.from(bytes.slice(off, off + 192))) }));
+    }
+    replies.push(
+      reply({ ok: true, got: bytes.length, sum: bytes.reduce((total, byte) => (total + byte) >>> 0, 0) }),
+    );
+    return replies;
   }
 
   // Handle bytes sent as they are, which only a raw transfer expects.

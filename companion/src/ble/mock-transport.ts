@@ -1,6 +1,7 @@
 import type { DfuLink } from '@/dfu/link';
 import { MockDfuTarget } from '@/dfu/mock-target';
 
+import { MockGadgetbridge } from './mock-gadgetbridge';
 import { MockPackages } from './mock-packages';
 import type {
   ConnectionState,
@@ -21,6 +22,7 @@ export class MockTransport implements WatchTransport {
   private state: ConnectionState = 'disconnected';
   private scanTimer: ReturnType<typeof setTimeout> | null = null;
   private packages = new MockPackages();
+  private gadgetbridge = new MockGadgetbridge();
   private dfu: MockDfuTarget | null = null;
   private mode: WatchMode = 'application';
 
@@ -47,7 +49,7 @@ export class MockTransport implements WatchTransport {
     this.setState('connected');
     this.listener.onMode?.(this.mode);
     if (this.mode === 'application') {
-      this.listener.onLine?.('{"t":"info","msg":"mock watch connected"}');
+      this.listener.onLine?.('{"t":"info","msg":"mock watch connected"}\r\n');
     }
   }
 
@@ -73,9 +75,10 @@ export class MockTransport implements WatchTransport {
       return;
     }
 
-    // The mock watch answers package commands, so the Apps tab works without
-    // hardware. Anything else is echoed so the console shows traffic.
-    const replies = this.packages.handle(text);
+    // The mock watch answers package commands and the Gadgetbridge messages
+    // that expect a reply, so those screens work without hardware. Anything
+    // else is echoed so the console shows traffic.
+    const replies = this.packages.handle(text) ?? this.gadgetbridge.handle(text);
     if (replies) {
       for (const line of replies) {
         this.listener.onLine?.(`${line}\r\n`);

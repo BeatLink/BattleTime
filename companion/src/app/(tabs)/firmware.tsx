@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -8,7 +9,9 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
+import { downloadFirmware, listFirmwareBuilds, type FirmwareBuild } from '@/services/github-firmware';
 import { useFirmware } from '@/state/use-firmware';
+import { useTask } from '@/state/use-task';
 
 function kilobytes(bytes: number): string {
   return `${Math.round(bytes / 1024)} kB`;
@@ -16,9 +19,12 @@ function kilobytes(bytes: number): string {
 
 export default function FirmwareScreen() {
   const theme = useTheme();
-  const { connection, dfuLink, sendRaw } = useWatch();
+  const { connection, dfuLink, sendRaw, settings } = useWatch();
   const connected = connection === 'connected';
   const firmware = useFirmware(dfuLink, sendRaw);
+  const github = useTask();
+  const [builds, setBuilds] = useState<FirmwareBuild[] | null>(null);
+  const token = settings.githubToken || undefined;
 
   const percent = firmware.total > 0 ? Math.round((firmware.sent / firmware.total) * 100) : 0;
 
@@ -53,6 +59,58 @@ export default function FirmwareScreen() {
           variant="secondary"
           disabled={firmware.flashing}
           onPress={() => firmware.choose()}
+        />
+      </Card>
+
+      <Card title={`Builds from ${settings.githubRepo}`}>
+        {builds === null ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            Releases and recent Actions builds for the {settings.firmwareBoard}. Actions builds need a
+            GitHub token, set in Settings.
+          </ThemedText>
+        ) : builds.length === 0 ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            No builds for the {settings.firmwareBoard} were found.
+          </ThemedText>
+        ) : (
+          builds.slice(0, 15).map((build) => (
+            <Row
+              key={build.id}
+              label={build.title}
+              detail={`${build.detail}, ${new Date(build.date).toLocaleDateString()}, ${kilobytes(build.sizeBytes)}${
+                build.needsToken && !token ? ', needs a token' : ''
+              }`}
+              onPress={
+                firmware.flashing
+                  ? undefined
+                  : () =>
+                      void github.run(`Downloading ${build.title}`, async () =>
+                        firmware.load(await downloadFirmware(build, { token })),
+                      )
+              }
+            />
+          ))
+        )}
+        {github.busy ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            {github.busy}...
+          </ThemedText>
+        ) : null}
+        {github.error ? (
+          <ThemedText type="small" style={{ color: theme.danger }}>
+            {github.error}
+          </ThemedText>
+        ) : null}
+        <Button
+          title={builds ? 'Look again' : 'Look for builds'}
+          variant="secondary"
+          busy={github.busy === 'Looking for builds'}
+          disabled={firmware.flashing}
+          onPress={() =>
+            void github.run('Looking for builds', async () =>
+              setBuilds(await listFirmwareBuilds(settings.githubRepo, settings.firmwareBoard, { token })),
+            )
+          }
         />
       </Card>
 

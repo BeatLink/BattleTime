@@ -5,8 +5,9 @@
 import type { WatchMode } from '@/ble/transport';
 import { NUS_SERVICE } from '@/ble/uuids';
 import type { DfuLink, WriteMode } from '@/dfu/link';
-import { LineBuffer } from '@/protocol/gadgetbridge';
+import { decodeWatchLine, encodeForWatch, LineBuffer } from '@/protocol/gadgetbridge';
 import { isPackageReply, type PackageReply } from '@/protocol/packages';
+import { ReplyRouter, type RequestChannel } from '@/protocol/requests';
 import type { PackageChannel } from '@/protocol/transfer';
 import { ReplyQueue } from '@/state/reply-queue';
 
@@ -19,6 +20,7 @@ export class WatchSession implements DfuLink {
   private readonly ble: WatchBle;
   private readonly lines = new LineBuffer();
   private readonly replies = new ReplyQueue<PackageReply>();
+  private readonly router = new ReplyRouter((message) => this.send(encodeForWatch(message)));
   private readonly notifyListeners = new Map<string, (value: Uint8Array) => void>();
   private readonly found = new Map<string, ScannedDevice>();
   private onLine: ((line: string) => void) | null = null;
@@ -40,6 +42,10 @@ export class WatchSession implements DfuLink {
           const parsed = parse(line);
           if (isPackageReply(parsed)) {
             this.replies.push(parsed);
+            continue;
+          }
+          const message = decodeWatchLine(line);
+          if (message && this.router.push(message)) {
             continue;
           }
           this.onLine?.(line);
@@ -123,6 +129,11 @@ export class WatchSession implements DfuLink {
       sendBytes: (data: Uint8Array) => this.sendBytes(data),
       next: () => this.replies.next(),
     };
+  }
+
+  // The Gadgetbridge messages the watch answers: settings, alarms and steps.
+  get requests(): RequestChannel {
+    return this.router;
   }
 
   // --- DfuLink, so a firmware update runs the same controllers the app does.

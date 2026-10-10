@@ -7,6 +7,8 @@
 
 import { bytesToBase64 } from '@/ble/encoding';
 
+import { asciiJson } from './gadgetbridge';
+
 export type AbiInfo = {
   // Bytecode version the firmware can load, and the native architecture.
   mpy: number | null;
@@ -38,6 +40,17 @@ export type PackageReply = {
   enabled?: boolean;
   removed?: string;
   count?: number;
+  // Directory listing: each entry is a name, a size in bytes and whether it is a directory.
+  dir?: string;
+  entries?: [string, number, boolean][];
+  // A file on its way to the phone: its size, then base64 chunks at each offset.
+  tx?: number;
+  off?: number;
+  d?: string;
+  deleted?: string;
+  // Heap bytes free and in use, after a garbage collection.
+  free?: number;
+  alloc?: number;
 };
 
 // Package and file names are interpolated into Python source, so they are kept
@@ -56,8 +69,8 @@ function checkName(name: string): string {
   return name;
 }
 
-function checkPath(path: string): string {
-  if (!SAFE_PATH.test(path) || path.includes('..')) {
+export function checkPath(path: string): string {
+  if (!SAFE_PATH.test(path) || path.includes('..') || path.startsWith('/')) {
     throw new Error(`Unsafe path: ${path}`);
   }
   return path;
@@ -85,6 +98,22 @@ export function encodeRecv(path: string, size: number, b64: boolean): string {
   return b64 ? line(call) : `${call}\r`;
 }
 
+export function encodeLsDir(path: string): string {
+  return line(`pkg.ls_dir("${path === '' ? '' : checkPath(path)}")`);
+}
+
+export function encodeSend(path: string): string {
+  return line(`pkg.send("${checkPath(path)}")`);
+}
+
+export function encodeRmFile(path: string): string {
+  return line(`pkg.rm_file("${checkPath(path)}")`);
+}
+
+export function encodeMem(): string {
+  return line('pkg.mem()');
+}
+
 export function encodeRm(name: string): string {
   return line(`pkg.rm("${checkName(name)}")`);
 }
@@ -100,7 +129,7 @@ export function encodeDisable(name: string): string {
 // Values cross as a JSON string because Python spells its booleans and its
 // null differently, so a JSON literal would not evaluate.
 export function encodeCfg(name: string, values: Record<string, unknown>): string {
-  const json = JSON.stringify(JSON.stringify(values));
+  const json = asciiJson(asciiJson(values));
   return line(`pkg.cfg("${checkName(name)}", ${json})`);
 }
 

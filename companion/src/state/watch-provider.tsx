@@ -18,7 +18,12 @@ import {
 } from '@/protocol/gadgetbridge';
 import type { DfuLink } from '@/dfu/link';
 import { isPackageReply, type PackageReply } from '@/protocol/packages';
+import { encodeSetTime } from '@/protocol/clock';
+import { ReplyRouter, type RequestChannel } from '@/protocol/requests';
 import type { PackageChannel } from '@/protocol/transfer';
+import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
+import { phoneBridge, type PhoneEvent } from '@/services/phone';
+import { currentWeather } from '@/services/weather';
 import { ReplyQueue } from '@/state/reply-queue';
 import { defaultSettings, loadSettings, saveSettings, type Settings } from '@/state/settings';
 
@@ -61,7 +66,22 @@ type WatchContextValue = {
   // Raw GATT for a firmware update, or null where the transport has no watch
   // or cannot reach past the UART service.
   dfuLink: () => DfuLink | null;
+  // Channel for the Gadgetbridge messages the watch answers: settings, alarms and steps.
+  requests: RequestChannel;
+  // Fetch the weather for the chosen place and send it now.
+  sendWeather: () => Promise<void>;
 };
+
+// Longest notification text sent, since the watch keeps notifications in a few kilobytes of heap.
+const NOTIFY_TITLE_LIMIT = 60;
+const NOTIFY_BODY_LIMIT = 300;
+
+function clip(text: string, limit: number): string {
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+}
+
+// How often the weather is sent while a watch is connected.
+const WEATHER_INTERVAL_MS = 30 * 60 * 1000;
 
 const WatchContext = createContext<WatchContextValue | null>(null);
 
@@ -95,6 +115,13 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   const [findPhoneActive, setFindPhoneActive] = useState(false);
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  // Callbacks that outlive a render read the settings from here.
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+  const sendMessageRef = useRef<(message: PhoneToWatchMessage) => Promise<void>>(async () => {});
+  const [router] = useState(() => new ReplyRouter());
 
 
   // Pure check, so it needs neither state nor an effect.
@@ -108,20 +135,42 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const handleMessage = useCallback((message: WatchToPhoneMessage) => {
+    if (router.push(message)) {
+      return;
+    }
     switch (message.t) {
       case 'findPhone':
         setFindPhoneActive(isFindPhoneOn(message));
         break;
       case 'music':
-        // Media control from the watch needs a platform media session, which is not wired up yet.
+        if (settingsRef.current.forwardMusic) {
+          void phoneBridge.mediaCommand(message.n).catch(() => {});
+        }
         break;
+      case 'call':
+        if ('n' in message) {
+          if (message.n === 'ACCEPT') {
+            void phoneBridge.answerCall().catch(() => {});
+          } else if (message.n === 'REJECT') {
+            void phoneBridge.rejectCall().catch(() => {});
+          }
+        }
+        break;
+      case 'http': {
+        const current = settingsRef.current;
+        const answer = current.httpEnabled
+          ? answerHttpRequest(message, parseHostList(current.httpAllowedHosts))
+          : Promise.resolve({ t: 'http' as const, id: message.id, err: 'disabled on the phone' });
+        void answer.then((reply) => sendMessageRef.current(reply));
+        break;
+      }
       case 'error':
         setLastError(message.msg);
         break;
       case 'info':
         break;
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     const transport = createTransport();
@@ -133,6 +182,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
           setWatchMode('application');
           bufferRef.current.reset();
           packageRepliesRef.current.reset();
+          router.reset();
         }
       },
       onMode: (mode) => setWatchMode(mode),
@@ -162,7 +212,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       transport.destroy();
       transportRef.current = null;
     };
-  }, [handleMessage, log]);
+  }, [handleMessage, log, router]);
 
   const startScan = useCallback(async () => {
     setFound([]);
@@ -235,6 +285,113 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   );
 
   const send = useCallback((message: PhoneToWatchMessage) => sendRaw(encodeForWatch(message)), [sendRaw]);
+  useEffect(() => {
+    sendMessageRef.current = send;
+    router.setSender(send);
+  }, [send, router]);
+
+  const watchReady = connection === 'connected' && watchMode === 'application';
+  // Phone events arrive whenever the platform sends them, so they check the link themselves.
+  const readyRef = useRef(watchReady);
+  useEffect(() => {
+    readyRef.current = watchReady;
+  }, [watchReady]);
+
+  // Forward what the phone reports, unless the user turned it off or the phone is in Do Not Disturb.
+  useEffect(() => {
+    const quiet = async () =>
+      settingsRef.current.respectDoNotDisturb && (await phoneBridge.isDoNotDisturb().catch(() => false));
+
+    // An app that updates a notification posts it again, so unchanged repeats are not sent twice.
+    const sent = new Map<number, string>();
+
+    const forward = async (event: PhoneEvent) => {
+      const current = settingsRef.current;
+      if (!readyRef.current) {
+        return;
+      }
+      switch (event.type) {
+        case 'notification':
+          if (current.forwardNotifications && !(await quiet())) {
+            const title = clip(event.title, NOTIFY_TITLE_LIMIT);
+            const body = clip(event.body, NOTIFY_BODY_LIMIT);
+            const key = `${event.app}\n${title}\n${body}`;
+            if (sent.get(event.id) === key) {
+              break;
+            }
+            sent.set(event.id, key);
+            await send({ t: 'notify', id: event.id, src: event.app, title, body });
+          }
+          break;
+        case 'notificationRemoved':
+          if (current.forwardNotifications && sent.delete(event.id)) {
+            await send({ t: 'notify-', id: event.id });
+          }
+          break;
+        case 'call':
+          if (current.forwardCalls && !(event.state === 'incoming' && (await quiet()))) {
+            await send({ t: 'call', cmd: event.state, name: event.name, number: event.number });
+          }
+          break;
+        case 'media':
+          if (current.forwardMusic) {
+            await send({
+              t: 'musicinfo',
+              artist: event.artist,
+              album: event.album,
+              track: event.track,
+              dur: event.durationSec,
+            });
+            await send({ t: 'musicstate', state: event.playing ? 'play' : 'pause', position: event.positionSec });
+          }
+          break;
+      }
+    };
+
+    return phoneBridge.subscribe((event) => void forward(event));
+  }, [send]);
+
+  // Set the watch clock each time a watch connects, as Gadgetbridge does.
+  useEffect(() => {
+    if (!watchReady) {
+      return;
+    }
+    // Sent once the connection has settled, outside the render that noticed it.
+    const timer = setTimeout(() => void sendRaw(encodeSetTime()), 500);
+    return () => clearTimeout(timer);
+  }, [watchReady, sendRaw]);
+
+  // Keep the app running in the background while a watch is connected, so the link survives.
+  const watchName = watch?.name ?? 'watch';
+  useEffect(() => {
+    if (!watchReady || !phoneBridge.available) {
+      return;
+    }
+    void phoneBridge.startKeepAlive(watchName).catch(() => {});
+    return () => {
+      void phoneBridge.stopKeepAlive().catch(() => {});
+    };
+  }, [watchReady, watchName]);
+
+  const sendWeather = useCallback(async () => {
+    const place = settingsRef.current.weatherPlace;
+    if (!place) {
+      throw new Error('Choose a place for the weather in Settings first.');
+    }
+    await send(await currentWeather(place));
+  }, [send]);
+
+  // Send the weather when a watch connects and every half hour after that.
+  const weatherOn = watchReady && settings.forwardWeather && settings.weatherPlace !== null;
+  useEffect(() => {
+    if (!weatherOn) {
+      return;
+    }
+    const push = () => sendWeather().catch((error: Error) => setLastError(error.message));
+    void push();
+    const timer = setInterval(push, WEATHER_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [weatherOn, sendWeather]);
 
   const clearConsole = useCallback(() => setConsoleEntries([]), []);
 
@@ -254,7 +411,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       transportKind,
       connection,
       watchMode,
-      watchReady: connection === 'connected' && watchMode === 'application',
+      watchReady,
       watch,
       scanning,
       found,
@@ -273,8 +430,13 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       clearConsole,
       packageChannel,
       dfuLink,
+      requests: router,
+      sendWeather,
     }),
     [
+      watchReady,
+      sendWeather,
+      router,
       transportKind,
       connection,
       watchMode,

@@ -25,6 +25,13 @@ Both reuse the existing ABI check and transfer driver, so only the source of the
 
 ## Notification forwarding
 
-Reading phone notifications still needs native platform code; see
-[src/services/notifications/README.md](src/services/notifications/README.md). Media control from
-the watch needs a media session bridge on each platform.
+The Android bridge in [src/services/phone](src/services/phone/README.md) is wired into the
+Notifications tab and the watch provider, but has never been compiled. It needs a development
+build to prove it, and the keep-alive notification needs `POST_NOTIFICATIONS` asked for on Android
+13 and later.
+
+## Untried on a watch
+
+The settings, alarm, steps, file, call, vibrate and http messages pass the firmware's simulator
+tests and this app's tests against the mock watch, but have not yet run against a PineTime with
+the matching firmware.

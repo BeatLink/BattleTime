@@ -18,6 +18,8 @@ export type FirmwareState = {
   finished: boolean;
   error: string | null;
   choose: () => Promise<void>;
+  // Take a package that came from somewhere other than the file picker, such as GitHub.
+  load: (firmware: FirmwarePackage) => void;
   flash: () => Promise<void>;
   clearError: () => void;
 };
@@ -65,6 +67,15 @@ export function useFirmware(link: () => DfuLink | null, sendRaw: (text: string) 
   const [finished, setFinished] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const load = useCallback((parsed: FirmwarePackage) => {
+    setFirmware(parsed);
+    setFinished(false);
+    setStatus(null);
+    setSent(0);
+    setError(null);
+    setTotal(parsed.images.reduce((sum, image) => sum + image.image.length, 0));
+  }, []);
+
   const choose = useCallback(async () => {
     setError(null);
     const picked = await DocumentPicker.getDocumentAsync({
@@ -76,17 +87,12 @@ export function useFirmware(link: () => DfuLink | null, sendRaw: (text: string) 
     }
     const asset = picked.assets[0];
     try {
-      const parsed = readFirmwarePackage(await readPicked(asset.uri), asset.name);
-      setFirmware(parsed);
-      setFinished(false);
-      setStatus(null);
-      setSent(0);
-      setTotal(parsed.images.reduce((sum, image) => sum + image.image.length, 0));
+      load(readFirmwarePackage(await readPicked(asset.uri), asset.name));
     } catch (caught) {
       setFirmware(null);
       setError((caught as Error).message);
     }
-  }, []);
+  }, [load]);
 
   const flash = useCallback(async () => {
     const dfu = link();
@@ -126,5 +132,5 @@ export function useFirmware(link: () => DfuLink | null, sendRaw: (text: string) 
 
   const clearError = useCallback(() => setError(null), []);
 
-  return { firmware, status, sent, total, flashing, finished, error, choose, flash, clearError };
+  return { firmware, status, sent, total, flashing, finished, error, choose, load, flash, clearError };
 }

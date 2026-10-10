@@ -31,6 +31,7 @@ export default function WatchScreen() {
     connect,
     disconnect,
     send,
+    sendWeather,
   } = useWatch();
 
   const connected = connection === 'connected';
@@ -98,6 +99,20 @@ export default function WatchScreen() {
       ) : null}
 
       {watchReady ? (
+        <Card title="On the watch">
+          <Row label="Steps" detail="The last week, day by day and hour by hour" onPress={() => router.push('/steps')} />
+          <Row label="Alarms" detail="Set times and the days they repeat on" onPress={() => router.push('/alarms')} />
+          <Row
+            label="Watch settings"
+            detail="Brightness, face, timeout, units, step goal and theme"
+            onPress={() => router.push('/watch-settings')}
+          />
+          <Row label="Files" detail="Browse, send and delete files, and check memory" onPress={() => router.push('/files')} />
+          <Row label="Backup" detail="Save the watch's settings and alarms, and put them back" onPress={() => router.push('/backup')} />
+        </Card>
+      ) : null}
+
+      {watchReady ? (
         <Card title="Quick actions">
           <Row
             label="Find watch"
@@ -122,6 +137,13 @@ export default function WatchScreen() {
             detail="One short pulse"
             onPress={() => send({ t: 'vibrate', n: 1 })}
           />
+          {settings.weatherPlace ? (
+            <Row
+              label="Send weather"
+              detail={`Current conditions in ${settings.weatherPlace.name}`}
+              onPress={() => void sendWeather().catch(() => {})}
+            />
+          ) : null}
         </Card>
       ) : null}
     </Screen>
