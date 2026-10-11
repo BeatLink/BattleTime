@@ -1,0 +1,1158 @@
+extern crate std;
+
+use std::{string::String, vec, vec::Vec};
+
+use super::*;
+use crate::image::{CodeBlock, CodeProblem};
+
+// ============================================================================
+// Building images by hand
+// ============================================================================
+
+/// Writes bytecode one instruction at a time.
+#[derive(Clone, Default)]
+struct Code {
+    bytes: Vec<u8>,
+}
+
+impl Code {
+    fn new() -> Self {
+        Code::default()
+    }
+    fn op(mut self, opcode: u8) -> Self {
+        self.bytes.push(opcode);
+        self
+    }
+    fn op_byte(mut self, opcode: u8, operand: u8) -> Self {
+        self.bytes.extend([opcode, operand]);
+        self
+    }
+    fn op_u16(mut self, opcode: u8, operand: u16) -> Self {
+        self.bytes.push(opcode);
+        self.bytes.extend(operand.to_le_bytes());
+        self
+    }
+    fn small(self, value: i8) -> Self {
+        self.op_byte(0x01, value as u8)
+    }
+    fn int(mut self, value: i32) -> Self {
+        self.bytes.push(0x02);
+        self.bytes.extend(value.to_le_bytes());
+        self
+    }
+    fn long(mut self, value: i64) -> Self {
+        self.bytes.push(0x03);
+        self.bytes.extend(value.to_le_bytes());
+        self
+    }
+    fn none(self) -> Self {
+        self.op(0x04)
+    }
+    fn text(self, index: u16) -> Self {
+        self.op_u16(0x05, index)
+    }
+    fn state(self, slot: u8) -> Self {
+        self.op_byte(0x06, slot)
+    }
+    fn system(self, value: SystemValue) -> Self {
+        self.op_byte(0x07, value as u8)
+    }
+    fn event(self, field: u8) -> Self {
+        self.op_byte(0x08, field)
+    }
+    fn drop_value(self) -> Self {
+        self.op(0x0A)
+    }
+    fn add(self) -> Self {
+        self.op(0x10)
+    }
+    fn subtract(self) -> Self {
+        self.op(0x11)
+    }
+    fn multiply(self) -> Self {
+        self.op(0x12)
+    }
+    fn divide(self) -> Self {
+        self.op(0x13)
+    }
+    fn test_none(self) -> Self {
+        self.op(0x27)
+    }
+    fn jump(self, distance: u16) -> Self {
+        self.op_u16(0x28, distance)
+    }
+    fn jump_if_false(self, distance: u16) -> Self {
+        self.op_u16(0x29, distance)
+    }
+    fn time_part(self, part: u8) -> Self {
+        self.op_byte(0x30, part)
+    }
+    fn format_number(self, minimum_digits: u8) -> Self {
+        self.op_byte(0x40, minimum_digits)
+    }
+    fn format_duration(self, pattern: u8) -> Self {
+        self.op_byte(0x41, pattern)
+    }
+    fn format_time(self, pattern: u8) -> Self {
+        self.op_byte(0x42, pattern)
+    }
+    fn join(self) -> Self {
+        self.op(0x43)
+    }
+    fn write_state(self, slot: u8) -> Self {
+        self.op_byte(0x50, slot)
+    }
+    fn effect(self, kind: EffectKind) -> Self {
+        self.op_byte(0x51, kind as u8)
+    }
+    fn len(&self) -> u16 {
+        self.bytes.len() as u16
+    }
+}
+
+const MINUTES_SECONDS: u8 = 0;
+const MINUTES_SECONDS_HUNDREDTHS: u8 = 2;
+const CLOCK: u8 = 0;
+const CLOCK_WITH_SECONDS: u8 = 1;
+const DATE: u8 = 2;
+
+struct Variable {
+    key: &'static str,
+    value_type: u8,
+    persists: bool,
+    default_value: i64,
+}
+
+/// Lays out an image the way the compiler will.
+#[derive(Default)]
+struct ImageBuilder {
+    strings: Vec<String>,
+    state: Vec<Variable>,
+    expressions: Vec<Vec<u8>>,
+    handlers: Vec<Vec<u8>>,
+}
+
+impl ImageBuilder {
+    fn new() -> Self {
+        let mut builder = ImageBuilder::default();
+        builder.string("test-app");
+        builder.string("Test app");
+        builder
+    }
+
+    fn string(&mut self, text: &str) -> u16 {
+        self.strings.push(text.into());
+        (self.strings.len() - 1) as u16
+    }
+
+    fn variable(&mut self, key: &'static str, value_type: u8, persists: bool, default_value: i64) -> u8 {
+        self.string(key);
+        self.state.push(Variable {
+            key,
+            value_type,
+            persists,
+            default_value,
+        });
+        (self.state.len() - 1) as u8
+    }
+
+    fn expression(&mut self, code: Code) -> u16 {
+        self.expressions.push(code.bytes);
+        (self.expressions.len() - 1) as u16
+    }
+
+    fn handler(&mut self, code: Code) -> u16 {
+        self.handlers.push(code.bytes);
+        (self.handlers.len() - 1) as u16
+    }
+
+    fn table(entries: &[Vec<u8>]) -> Vec<u8> {
+        let mut table: Vec<u8> = Vec::new();
+        let mut data: Vec<u8> = Vec::new();
+        for entry in entries {
+            table.extend((data.len() as u16).to_le_bytes());
+            table.extend((entry.len() as u16).to_le_bytes());
+            data.extend(entry);
+        }
+        table.extend(data);
+        table
+    }
+
+    fn build(&self) -> Vec<u8> {
+        let strings: Vec<Vec<u8>> = self.strings.iter().map(|text| text.as_bytes().to_vec()).collect();
+        let mut state: Vec<u8> = Vec::new();
+        for variable in &self.state {
+            let key_string = self.strings.iter().position(|text| text == variable.key).unwrap() as u16;
+            state.extend(key_string.to_le_bytes());
+            state.push(variable.value_type);
+            state.push(variable.persists as u8);
+            state.extend(variable.default_value.to_le_bytes());
+        }
+        let sections: Vec<(u16, u16, Vec<u8>)> = vec![
+            (1, strings.len() as u16, Self::table(&strings)),
+            (2, self.state.len() as u16, state),
+            (3, self.expressions.len() as u16, Self::table(&self.expressions)),
+            (4, self.handlers.len() as u16, Self::table(&self.handlers)),
+        ];
+
+        let mut image: Vec<u8> = Vec::new();
+        image.extend(b"NTAP");
+        image.extend(1u16.to_le_bytes());
+        image.extend([0, 0]);
+        image.extend(1u16.to_le_bytes());
+        image.extend((sections.len() as u16).to_le_bytes());
+        image.extend([0; 4]);
+        image.extend(0u16.to_le_bytes());
+        image.extend(1u16.to_le_bytes());
+
+        let mut offset = 20 + sections.len() * 12;
+        for (number, count, bytes) in &sections {
+            image.extend(number.to_le_bytes());
+            image.extend(count.to_le_bytes());
+            image.extend((offset as u32).to_le_bytes());
+            image.extend((bytes.len() as u32).to_le_bytes());
+            offset += bytes.len();
+        }
+        for (_, _, bytes) in &sections {
+            image.extend(bytes);
+        }
+        seal(&mut image);
+        image
+    }
+}
+
+fn seal(image: &mut [u8]) {
+    let crc = image::crc32(&image[16..]);
+    image[12..16].copy_from_slice(&crc.to_le_bytes());
+}
+
+const INSTANT_TYPE: u8 = 2;
+const DURATION_TYPE: u8 = 3;
+const INT_TYPE: u8 = 0;
+
+// ============================================================================
+// A fake system
+// ============================================================================
+
+#[derive(Default)]
+struct FakeSystem {
+    now: i64,
+    utc_offset: i64,
+    uses_24_hour_clock: bool,
+}
+
+impl SystemValues for FakeSystem {
+    fn read(&self, value: SystemValue) -> Value {
+        match value {
+            SystemValue::Now => self.now,
+            SystemValue::UtcOffset => self.utc_offset,
+            SystemValue::Uses24HourClock => self.uses_24_hour_clock as Value,
+            SystemValue::BatteryPercent => 80,
+            _ => 0,
+        }
+    }
+
+    fn random_number(&self) -> u32 {
+        1_000_003
+    }
+}
+
+/// 2026-10-11 14:05:09 UTC, a Sunday.
+const SUNDAY_AFTERNOON: i64 = 1_791_727_509_000;
+
+fn evaluate(code: Code) -> Result<Value, Failure> {
+    let mut builder = ImageBuilder::new();
+    builder.expression(code);
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    Interpreter::new().evaluate_expression(&image, 0, &[], &FakeSystem::default())
+}
+
+fn evaluate_text(code: Code, system: &FakeSystem) -> String {
+    let mut builder = ImageBuilder::new();
+    builder.expression(code);
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut interpreter = Interpreter::new();
+    let value = interpreter.evaluate_expression(&image, 0, &[], system).unwrap();
+    interpreter.text(&image, value).unwrap().into()
+}
+
+fn verify_problem(builder: &ImageBuilder) -> Option<CodeProblem> {
+    let bytes = builder.build();
+    match verify(&AppImage::parse(&bytes).unwrap()) {
+        Err(ImageError::BadCode { problem, .. }) => Some(problem),
+        Err(other) => panic!("unexpected error {other:?}"),
+        Ok(()) => None,
+    }
+}
+
+// ============================================================================
+// The stopwatch from docs/app-runtime.md
+// ============================================================================
+
+struct Stopwatch {
+    bytes: Vec<u8>,
+    started_at: u8,
+    stopped_after: u8,
+}
+
+/// `started_at`, `stopped_after`, the elapsed-time label and the toggle handler.
+fn stopwatch() -> Stopwatch {
+    let mut builder = ImageBuilder::new();
+    let started_at = builder.variable("started_at", INSTANT_TYPE, true, NONE);
+    let stopped_after = builder.variable("stopped_after", DURATION_TYPE, true, 0);
+
+    // started_at is none ? stopped_after : now - started_at, then formatted as mm:ss.
+    let running = Code::new().system(SystemValue::Now).state(started_at).subtract();
+    let stopped = Code::new().state(stopped_after);
+    let stopped_branch = stopped.jump(running.len());
+    let label = Code {
+        bytes: [
+            Code::new()
+                .state(started_at)
+                .test_none()
+                .jump_if_false(stopped_branch.len())
+                .bytes,
+            stopped_branch.bytes,
+            running.bytes,
+            Code::new().format_duration(MINUTES_SECONDS).bytes,
+        ]
+        .concat(),
+    };
+    builder.expression(label);
+
+    // When running: stopped_after = now - started_at; started_at = none.
+    // When stopped: started_at = now - stopped_after.
+    let stop = Code::new()
+        .system(SystemValue::Now)
+        .state(started_at)
+        .subtract()
+        .write_state(stopped_after)
+        .none()
+        .write_state(started_at);
+    let start = Code::new()
+        .system(SystemValue::Now)
+        .state(stopped_after)
+        .subtract()
+        .write_state(started_at);
+    let start_branch = start.clone().jump(stop.len());
+    let toggle = Code {
+        bytes: [
+            Code::new()
+                .state(started_at)
+                .test_none()
+                .jump_if_false(start_branch.len())
+                .bytes,
+            start_branch.bytes,
+            stop.bytes,
+        ]
+        .concat(),
+    };
+    builder.handler(toggle);
+
+    Stopwatch {
+        bytes: builder.build(),
+        started_at,
+        stopped_after,
+    }
+}
+
+#[test]
+fn stopwatch_image_passes_verification() {
+    let stopwatch = stopwatch();
+    let image = AppImage::parse(&stopwatch.bytes).unwrap();
+
+    assert_eq!(verify(&image), Ok(()));
+}
+
+#[test]
+fn stopwatch_shows_the_time_since_it_started() {
+    let stopwatch = stopwatch();
+    let image = AppImage::parse(&stopwatch.bytes).unwrap();
+    let mut state = [NONE, 0];
+    state[stopwatch.started_at as usize] = 1_000_000;
+    let system = FakeSystem {
+        now: 1_000_000 + 75_400,
+        ..Default::default()
+    };
+    let mut interpreter = Interpreter::new();
+
+    let value = interpreter
+        .evaluate_expression(&image, 0, &state, &system)
+        .unwrap();
+
+    assert_eq!(interpreter.text(&image, value), Ok("01:15"));
+}
+
+#[test]
+fn stopped_stopwatch_shows_the_time_it_ran() {
+    let stopwatch = stopwatch();
+    let image = AppImage::parse(&stopwatch.bytes).unwrap();
+    let mut state = [NONE, 0];
+    state[stopwatch.stopped_after as usize] = 9_000;
+    let mut interpreter = Interpreter::new();
+
+    let value = interpreter
+        .evaluate_expression(&image, 0, &state, &FakeSystem::default())
+        .unwrap();
+
+    assert_eq!(interpreter.text(&image, value), Ok("00:09"));
+}
+
+#[test]
+fn toggling_a_stopped_stopwatch_starts_it_from_where_it_stopped() {
+    let stopwatch = stopwatch();
+    let image = AppImage::parse(&stopwatch.bytes).unwrap();
+    let state = [NONE, 9_000];
+    let system = FakeSystem {
+        now: 50_000,
+        ..Default::default()
+    };
+
+    let outcome = Interpreter::new()
+        .run_handler(&image, 0, &state, &[], &system)
+        .unwrap();
+
+    assert_eq!(
+        outcome.writes(),
+        &[StateWrite {
+            slot: stopwatch.started_at,
+            value: 41_000
+        }]
+    );
+}
+
+#[test]
+fn toggling_a_running_stopwatch_stops_it() {
+    let stopwatch = stopwatch();
+    let image = AppImage::parse(&stopwatch.bytes).unwrap();
+    let state = [41_000, 9_000];
+    let system = FakeSystem {
+        now: 60_000,
+        ..Default::default()
+    };
+
+    let outcome = Interpreter::new()
+        .run_handler(&image, 0, &state, &[], &system)
+        .unwrap();
+
+    assert_eq!(
+        outcome.writes(),
+        &[
+            StateWrite {
+                slot: stopwatch.stopped_after,
+                value: 19_000
+            },
+            StateWrite {
+                slot: stopwatch.started_at,
+                value: NONE
+            },
+        ]
+    );
+}
+
+#[test]
+fn stopwatch_label_redraws_each_second_from_its_inputs() {
+    let stopwatch = stopwatch();
+    let image = AppImage::parse(&stopwatch.bytes).unwrap();
+
+    let bindings = Bindings::load(&image).unwrap();
+    let info = bindings.info(0).unwrap();
+
+    assert_eq!(info.redraw_period_in_milliseconds, 1000);
+    assert_eq!(info.inputs.state_slots, 0b11);
+    assert!(info.inputs.reads_clock());
+}
+
+// ============================================================================
+// Parsing images
+// ============================================================================
+
+#[test]
+fn parses_the_header() {
+    let bytes = ImageBuilder::new().build();
+
+    let image = AppImage::parse(&bytes).unwrap();
+
+    assert_eq!(image.kind, AppKind::App);
+    assert_eq!(image.shared_library_version, 1);
+    assert_eq!(image.string(image.id_string), Some("test-app"));
+    assert_eq!(image.string(image.name_string), Some("Test app"));
+}
+
+#[test]
+fn reads_state_variables() {
+    let mut builder = ImageBuilder::new();
+    builder.variable("count", INT_TYPE, true, 7);
+    let bytes = builder.build();
+
+    let image = AppImage::parse(&bytes).unwrap();
+    let variable = image.state_variable(0).unwrap();
+
+    assert_eq!(image.string(variable.key_string), Some("count"));
+    assert_eq!(variable.value_type, ValueType::Int);
+    assert!(variable.persists);
+    assert_eq!(variable.default_value, 7);
+}
+
+#[test]
+fn refuses_the_wrong_magic() {
+    let mut bytes = ImageBuilder::new().build();
+    bytes[0] = b'X';
+
+    assert_eq!(AppImage::parse(&bytes).err(), Some(ImageError::WrongMagic));
+}
+
+#[test]
+fn refuses_a_corrupted_image() {
+    let mut bytes = ImageBuilder::new().build();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 0xFF;
+
+    assert_eq!(AppImage::parse(&bytes).err(), Some(ImageError::WrongCrc));
+}
+
+#[test]
+fn refuses_a_section_past_the_end() {
+    let mut bytes = ImageBuilder::new().build();
+    bytes[28..32].copy_from_slice(&10_000u32.to_le_bytes());
+    seal(&mut bytes);
+
+    assert_eq!(
+        AppImage::parse(&bytes).err(),
+        Some(ImageError::SectionOutOfBounds)
+    );
+}
+
+#[test]
+fn refuses_a_truncated_image() {
+    let bytes = ImageBuilder::new().build();
+
+    assert_eq!(AppImage::parse(&bytes[..10]).err(), Some(ImageError::TooShort));
+}
+
+#[test]
+fn refuses_a_bool_default_that_is_not_zero_or_one() {
+    let mut builder = ImageBuilder::new();
+    builder.variable("flag", 1, false, 2);
+    let bytes = builder.build();
+
+    assert_eq!(
+        AppImage::parse(&bytes).err(),
+        Some(ImageError::BadDefaultValue(0))
+    );
+}
+
+#[test]
+fn never_panics_on_any_single_corrupted_byte() {
+    let stopwatch = stopwatch();
+    for index in 0..stopwatch.bytes.len() {
+        for flip in [0x01, 0x80, 0xFF] {
+            let mut bytes = stopwatch.bytes.clone();
+            bytes[index] ^= flip;
+            seal(&mut bytes);
+            if let Ok(image) = AppImage::parse(&bytes) {
+                if verify(&image).is_ok() {
+                    let mut interpreter = Interpreter::new();
+                    let system = FakeSystem::default();
+                    let _ = interpreter.evaluate_expression(&image, 0, &[NONE, 0], &system);
+                    let _ = interpreter.run_handler(&image, 0, &[NONE, 0], &[], &system);
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Verifying code
+// ============================================================================
+
+#[test]
+fn refuses_an_unknown_instruction() {
+    let mut builder = ImageBuilder::new();
+    builder.expression(Code::new().op(0xEE));
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::Undecodable));
+}
+
+#[test]
+fn refuses_taking_from_an_empty_stack() {
+    let mut builder = ImageBuilder::new();
+    builder.expression(Code::new().small(1).add());
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::StackUnderflow));
+}
+
+#[test]
+fn refuses_a_stack_deeper_than_the_interpreter_has() {
+    let mut builder = ImageBuilder::new();
+    let mut code = Code::new();
+    for _ in 0..33 {
+        code = code.small(1);
+    }
+    builder.expression(code);
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::StackTooDeep));
+}
+
+#[test]
+fn refuses_an_expression_that_leaves_two_values() {
+    let mut builder = ImageBuilder::new();
+    builder.expression(Code::new().small(1).small(2));
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::WrongResultCount));
+}
+
+#[test]
+fn refuses_a_handler_that_leaves_a_value() {
+    let mut builder = ImageBuilder::new();
+    builder.handler(Code::new().small(1));
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::WrongResultCount));
+}
+
+#[test]
+fn refuses_a_state_write_in_an_expression() {
+    let mut builder = ImageBuilder::new();
+    builder.variable("count", INT_TYPE, false, 0);
+    builder.expression(Code::new().small(1).write_state(0).small(1));
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::WriteInExpression));
+}
+
+#[test]
+fn refuses_an_effect_in_an_expression() {
+    let mut builder = ImageBuilder::new();
+    builder.expression(Code::new().effect(EffectKind::Back).small(1));
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::EffectInExpression));
+}
+
+#[test]
+fn refuses_a_state_slot_the_app_does_not_have() {
+    let mut builder = ImageBuilder::new();
+    builder.expression(Code::new().state(3));
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::StateSlotOutOfRange));
+}
+
+#[test]
+fn refuses_a_string_the_app_does_not_have() {
+    let mut builder = ImageBuilder::new();
+    builder.expression(Code::new().text(40));
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::StringOutOfRange));
+}
+
+#[test]
+fn refuses_a_jump_into_the_middle_of_an_instruction() {
+    let mut builder = ImageBuilder::new();
+    builder.expression(Code::new().small(1).jump_if_false(1).int(5).small(1).add());
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::JumpIntoInstruction));
+}
+
+#[test]
+fn refuses_a_jump_past_the_end() {
+    let mut builder = ImageBuilder::new();
+    builder.expression(Code::new().small(1).jump(50));
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::JumpPastEnd));
+}
+
+#[test]
+fn refuses_branches_that_leave_different_stacks() {
+    let mut builder = ImageBuilder::new();
+    // When false, skip pushing a value, so the two paths meet with different depths.
+    let push = Code::new().small(9);
+    builder.expression(Code {
+        bytes: [Code::new().small(0).jump_if_false(push.len()).bytes, push.bytes].concat(),
+    });
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::MismatchedStackAtJump));
+}
+
+#[test]
+fn refuses_reading_an_event_in_an_expression() {
+    let mut builder = ImageBuilder::new();
+    builder.expression(Code::new().event(0));
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::EventInExpression));
+}
+
+#[test]
+fn reports_where_the_problem_is() {
+    let mut builder = ImageBuilder::new();
+    builder.expression(Code::new().small(1));
+    builder.handler(Code::new().small(1).small(2).add().op(0xEE));
+    let bytes = builder.build();
+
+    let error = verify(&AppImage::parse(&bytes).unwrap());
+
+    assert_eq!(
+        error,
+        Err(ImageError::BadCode {
+            block: CodeBlock::Handler(0),
+            offset: 5,
+            problem: CodeProblem::Undecodable
+        })
+    );
+}
+
+// ============================================================================
+// Running code
+// ============================================================================
+
+#[test]
+fn does_arithmetic() {
+    assert_eq!(
+        evaluate(Code::new().small(6).small(7).multiply().int(-2).add()),
+        Ok(40)
+    );
+}
+
+#[test]
+fn division_by_zero_fails() {
+    assert_eq!(
+        evaluate(Code::new().small(1).small(0).divide()),
+        Err(Failure::DivideByZero)
+    );
+}
+
+#[test]
+fn division_truncates_toward_zero() {
+    assert_eq!(evaluate(Code::new().small(-7).small(2).divide()), Ok(-3));
+}
+
+#[test]
+fn overflow_fails() {
+    assert_eq!(
+        evaluate(Code::new().long(i64::MAX).small(1).add()),
+        Err(Failure::Overflow)
+    );
+}
+
+#[test]
+fn takes_the_branch_the_condition_picks() {
+    let then_branch = Code::new().small(10);
+    let else_branch = Code::new().small(20);
+    let choose = |condition: i8| {
+        let then_with_jump = then_branch.clone().jump(else_branch.len());
+        Code {
+            bytes: [
+                Code::new()
+                    .small(condition)
+                    .jump_if_false(then_with_jump.len())
+                    .bytes,
+                then_with_jump.bytes,
+                else_branch.bytes.clone(),
+            ]
+            .concat(),
+        }
+    };
+
+    assert_eq!(evaluate(choose(1)), Ok(10));
+    assert_eq!(evaluate(choose(0)), Ok(20));
+}
+
+#[test]
+fn rolls_a_random_number_inside_the_range() {
+    let mut builder = ImageBuilder::new();
+    let roll = builder.variable("roll", INT_TYPE, false, 0);
+    builder.handler(Code::new().small(1).small(6).op(0x19).write_state(roll));
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+
+    let outcome = Interpreter::new()
+        .run_handler(&image, 0, &[0], &[], &FakeSystem::default())
+        .unwrap();
+
+    assert_eq!(
+        outcome.writes(),
+        &[StateWrite {
+            slot: roll,
+            value: 1 + 1_000_003 % 6
+        }]
+    );
+}
+
+#[test]
+fn refuses_randomness_in_an_expression() {
+    let mut builder = ImageBuilder::new();
+    builder.expression(Code::new().small(1).small(6).op(0x19));
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::RandomInExpression));
+}
+
+#[test]
+fn reads_system_values() {
+    assert_eq!(evaluate(Code::new().system(SystemValue::BatteryPercent)), Ok(80));
+}
+
+#[test]
+fn handler_reads_its_own_writes_and_reports_one_per_slot() {
+    let mut builder = ImageBuilder::new();
+    let count = builder.variable("count", INT_TYPE, false, 0);
+    builder.handler(
+        Code::new()
+            .state(count)
+            .small(1)
+            .add()
+            .write_state(count)
+            .state(count)
+            .small(1)
+            .add()
+            .write_state(count),
+    );
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+
+    let outcome = Interpreter::new()
+        .run_handler(&image, 0, &[5], &[], &FakeSystem::default())
+        .unwrap();
+
+    assert_eq!(
+        outcome.writes(),
+        &[StateWrite {
+            slot: count,
+            value: 7
+        }]
+    );
+}
+
+#[test]
+fn handler_reads_event_fields() {
+    let mut builder = ImageBuilder::new();
+    let total = builder.variable("total", INT_TYPE, false, 0);
+    builder.handler(Code::new().event(1).write_state(total));
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+
+    let outcome = Interpreter::new()
+        .run_handler(&image, 0, &[0], &[3, 42], &FakeSystem::default())
+        .unwrap();
+
+    assert_eq!(
+        outcome.writes(),
+        &[StateWrite {
+            slot: total,
+            value: 42
+        }]
+    );
+}
+
+#[test]
+fn handler_collects_effects_in_order() {
+    let mut builder = ImageBuilder::new();
+    let title = builder.string("Timer done");
+    builder.handler(
+        Code::new()
+            .int(200)
+            .effect(EffectKind::Vibrate)
+            .text(title)
+            .text(title)
+            .effect(EffectKind::Notify)
+            .effect(EffectKind::Close),
+    );
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+
+    let outcome = Interpreter::new()
+        .run_handler(&image, 0, &[], &[], &FakeSystem::default())
+        .unwrap();
+
+    let kinds: Vec<EffectKind> = outcome.effects().iter().map(|effect| effect.kind).collect();
+    assert_eq!(
+        kinds,
+        [EffectKind::Vibrate, EffectKind::Notify, EffectKind::Close]
+    );
+    assert_eq!(outcome.effects()[0].arguments[0], 200);
+}
+
+#[test]
+fn failing_handler_reports_nothing() {
+    let mut builder = ImageBuilder::new();
+    let count = builder.variable("count", INT_TYPE, false, 0);
+    builder.handler(
+        Code::new()
+            .small(1)
+            .write_state(count)
+            .small(100)
+            .effect(EffectKind::Vibrate)
+            .small(1)
+            .small(0)
+            .divide()
+            .drop_value(),
+    );
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+
+    let result = Interpreter::new().run_handler(&image, 0, &[0], &[], &FakeSystem::default());
+
+    assert_eq!(result.err(), Some(Failure::DivideByZero));
+}
+
+#[test]
+fn too_many_effects_fail() {
+    let mut builder = ImageBuilder::new();
+    let mut code = Code::new();
+    for _ in 0..9 {
+        code = code.effect(EffectKind::Back);
+    }
+    builder.handler(code);
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+
+    let result = Interpreter::new().run_handler(&image, 0, &[], &[], &FakeSystem::default());
+
+    assert_eq!(result.err(), Some(Failure::TooManyEffects));
+}
+
+// ============================================================================
+// Text and time
+// ============================================================================
+
+#[test]
+fn formats_numbers_with_leading_zeros() {
+    assert_eq!(
+        evaluate_text(Code::new().small(7).format_number(3), &FakeSystem::default()),
+        "007"
+    );
+    assert_eq!(
+        evaluate_text(Code::new().small(-42).format_number(0), &FakeSystem::default()),
+        "-42"
+    );
+}
+
+#[test]
+fn formats_hundredths_for_a_stopwatch() {
+    let code = Code::new()
+        .int(83_456)
+        .format_duration(MINUTES_SECONDS_HUNDREDTHS);
+
+    assert_eq!(evaluate_text(code, &FakeSystem::default()), "01:23.45");
+}
+
+#[test]
+fn formats_the_clock_in_24_and_12_hours() {
+    let clock = Code::new().system(SystemValue::Now).format_time(CLOCK);
+    let twenty_four = FakeSystem {
+        now: SUNDAY_AFTERNOON,
+        uses_24_hour_clock: true,
+        ..Default::default()
+    };
+    let twelve = FakeSystem {
+        now: SUNDAY_AFTERNOON,
+        uses_24_hour_clock: false,
+        ..Default::default()
+    };
+
+    assert_eq!(evaluate_text(clock.clone(), &twenty_four), "14:05");
+    assert_eq!(evaluate_text(clock, &twelve), "2:05");
+}
+
+#[test]
+fn applies_the_time_zone() {
+    let clock = Code::new()
+        .system(SystemValue::Now)
+        .format_time(CLOCK_WITH_SECONDS);
+    let system = FakeSystem {
+        now: SUNDAY_AFTERNOON,
+        utc_offset: -4 * 3_600_000,
+        uses_24_hour_clock: true,
+    };
+
+    assert_eq!(evaluate_text(clock, &system), "10:05:09");
+}
+
+#[test]
+fn formats_the_date() {
+    let date = Code::new().system(SystemValue::Now).format_time(DATE);
+    let system = FakeSystem {
+        now: SUNDAY_AFTERNOON,
+        ..Default::default()
+    };
+
+    assert_eq!(evaluate_text(date, &system), "2026-10-11");
+}
+
+#[test]
+fn splits_a_time_into_parts() {
+    let system = FakeSystem {
+        now: SUNDAY_AFTERNOON,
+        ..Default::default()
+    };
+    let part = |part: u8| {
+        let mut builder = ImageBuilder::new();
+        builder.expression(Code::new().system(SystemValue::Now).time_part(part));
+        let bytes = builder.build();
+        let image = AppImage::parse(&bytes).unwrap();
+        Interpreter::new()
+            .evaluate_expression(&image, 0, &[], &system)
+            .unwrap()
+    };
+
+    assert_eq!(
+        [part(0), part(1), part(2), part(3), part(4), part(5), part(6)],
+        [2026, 10, 11, 14, 5, 9, 6]
+    );
+}
+
+#[test]
+fn handles_dates_before_1970_and_leap_days() {
+    let leap_day = text::DateTime::from_local_milliseconds(951_782_400_000);
+    let before_1970 = text::DateTime::from_local_milliseconds(-86_400_000);
+
+    assert_eq!((leap_day.year, leap_day.month, leap_day.day), (2000, 2, 29));
+    assert_eq!(
+        (
+            before_1970.year,
+            before_1970.month,
+            before_1970.day,
+            before_1970.weekday
+        ),
+        (1969, 12, 31, 2)
+    );
+}
+
+#[test]
+fn joins_image_strings_and_formatted_text() {
+    let mut builder = ImageBuilder::new();
+    let steps = builder.string(" steps");
+    builder.expression(Code::new().int(8_421).format_number(0).text(steps).join());
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut interpreter = Interpreter::new();
+
+    let value = interpreter
+        .evaluate_expression(&image, 0, &[], &FakeSystem::default())
+        .unwrap();
+
+    assert_eq!(interpreter.text(&image, value), Ok("8421 steps"));
+}
+
+#[test]
+fn text_that_overflows_the_buffer_fails() {
+    let mut builder = ImageBuilder::new();
+    let long = builder.string(&"x".repeat(200));
+    builder.expression(Code::new().text(long).text(long).join());
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+
+    let result = Interpreter::new().evaluate_expression(&image, 0, &[], &FakeSystem::default());
+
+    assert_eq!(result, Err(Failure::TextBufferFull));
+}
+
+#[test]
+fn a_number_is_not_mistaken_for_text() {
+    let bytes = ImageBuilder::new().build();
+    let image = AppImage::parse(&bytes).unwrap();
+
+    assert_eq!(Interpreter::new().text(&image, 1 << 50), Err(Failure::BadText));
+}
+
+// ============================================================================
+// Bindings
+// ============================================================================
+
+fn bindings_for(expressions: &[Code]) -> (Vec<u8>, usize) {
+    let mut builder = ImageBuilder::new();
+    builder.variable("a", INT_TYPE, false, 0);
+    builder.variable("b", INT_TYPE, false, 0);
+    for code in expressions {
+        builder.expression(code.clone());
+    }
+    (builder.build(), expressions.len())
+}
+
+#[test]
+fn a_clock_face_redraws_once_a_minute() {
+    let (bytes, _) = bindings_for(&[Code::new().system(SystemValue::Now).format_time(CLOCK)]);
+    let bindings = Bindings::load(&AppImage::parse(&bytes).unwrap()).unwrap();
+
+    assert_eq!(
+        bindings.next_redraw_after(SUNDAY_AFTERNOON),
+        Some(1_791_727_560_000)
+    );
+}
+
+#[test]
+fn nothing_redraws_by_time_when_nothing_reads_the_clock() {
+    let (bytes, _) = bindings_for(&[Code::new().state(0).format_number(0)]);
+    let bindings = Bindings::load(&AppImage::parse(&bytes).unwrap()).unwrap();
+
+    assert_eq!(bindings.next_redraw_after(SUNDAY_AFTERNOON), None);
+}
+
+#[test]
+fn hundredths_redraw_ten_times_a_second() {
+    let code = Code::new()
+        .system(SystemValue::Now)
+        .format_duration(MINUTES_SECONDS_HUNDREDTHS);
+
+    assert_eq!(
+        analyse_expression(&code.bytes)
+            .unwrap()
+            .redraw_period_in_milliseconds,
+        100
+    );
+}
+
+#[test]
+fn a_changed_slot_marks_only_the_expressions_that_read_it() {
+    let (bytes, _) = bindings_for(&[
+        Code::new().state(0),
+        Code::new().state(1),
+        Code::new().state(0).state(1).add(),
+        Code::new().system(SystemValue::BatteryPercent),
+    ]);
+    let bindings = Bindings::load(&AppImage::parse(&bytes).unwrap()).unwrap();
+
+    let affected: Vec<usize> = bindings.affected_by(Inputs::state_slot(1)).collect();
+    let battery: Vec<usize> = bindings
+        .affected_by(Inputs::system_value(SystemValue::BatteryPercent))
+        .collect();
+
+    assert_eq!(affected, [1, 2]);
+    assert_eq!(battery, [3]);
+}
+
+#[test]
+fn only_expressions_whose_step_passed_are_due() {
+    let (bytes, _) = bindings_for(&[
+        Code::new()
+            .system(SystemValue::Now)
+            .format_time(CLOCK_WITH_SECONDS),
+        Code::new().system(SystemValue::Now).format_time(CLOCK),
+    ]);
+    let bindings = Bindings::load(&AppImage::parse(&bytes).unwrap()).unwrap();
+    let start_of_minute = 1_791_727_500_000;
+
+    let a_second_later: Vec<usize> = bindings
+        .due_between(start_of_minute, start_of_minute + 1_000)
+        .collect();
+    let a_minute_later: Vec<usize> = bindings
+        .due_between(start_of_minute, start_of_minute + 60_000)
+        .collect();
+
+    assert_eq!(a_second_later, [0]);
+    assert_eq!(a_minute_later, [0, 1]);
+}
+
+// ============================================================================
+// Memory
+// ============================================================================
+
+#[test]
+fn working_memory_stays_inside_the_budget() {
+    let interpreter = core::mem::size_of::<Interpreter>();
+    let handler_outcome = core::mem::size_of::<HandlerOutcome>();
+    let bindings = core::mem::size_of::<Bindings>();
+    std::println!("interpreter {interpreter} B, handler outcome {handler_outcome} B, bindings {bindings} B");
+
+    assert!(interpreter <= 600);
+    assert!(handler_outcome <= 600);
+    assert!(bindings <= 1000);
+}

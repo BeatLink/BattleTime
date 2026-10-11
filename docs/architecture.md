@@ -28,7 +28,7 @@ The PineTime is built around a Nordic nRF52832 chip: a 64 MHz Arm Cortex-M4F wit
 ```mermaid
 flowchart TB
     apps["Apps and watch faces<br/>(planned, loadable over BLE)"]
-    runtime["App runtime<br/>(planned)"]
+    runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>(planned: power, events, settings, notifications)"]
     services["Services<br/>(planned: BLE host on TrouBLE, time, steps, storage, updates)"]
@@ -66,7 +66,8 @@ Each layer uses only the layers below it.
   `embedded-graphics` onto the display driver. **(started: drawing works, nothing else yet)**
 - **App runtime** loads apps installed over BLE, starts and stops them, and passes them events.
   Apps are written as Preact components with signals and compiled on the computer into images
-  that a small bytecode interpreter runs; see [app-runtime.md](app-runtime.md). **(planned)**
+  that a small bytecode interpreter runs; see [app-runtime.md](app-runtime.md). **(started: the
+  image format, its checks, the interpreter and the bindings work; nothing runs apps yet)**
 
 ## Tasks
 
@@ -100,12 +101,13 @@ NeoTime/
 │   ├── display/      neotime-display: the ST7789 screen
 │   ├── touch/        neotime-touch: the CST816S touch panel
 │   └── vibrator/     neotime-vibrator: the vibration motor
+├── runtime/          neotime-runtime: app images, their checks, the interpreter and bindings
 ├── simulator/        neotime-simulator: the drivers in a desktop window
 ├── tools/            scripts for development, such as drawing the memory maps
 └── ui/               neotime-ui: draws rlvgl widgets on the screen
 ```
 
-Each driver, and the UI crate, is a `no_std` crate with its code in `src/lib.rs` and its tests in `src/tests.rs`. See
+Each driver, the runtime and the UI crate is a `no_std` crate with its code in `src/lib.rs` and its tests in `src/tests.rs`. See
 [coding-guidelines.md](coding-guidelines.md) for how the code is written.
 
 ## Drivers
@@ -236,6 +238,25 @@ Nordic's closed SoftDevice Controller and saves about 27 KB of flash and 5 KB of
 
 See [bluetooth.md](bluetooth.md) for the design, the timing, what it takes from the chip and what is
 missing.
+
+## App runtime (`runtime`)
+
+`neotime-runtime` is the core of the app runtime, with no hardware and no dependencies, so it is
+tested entirely on the computer. [app-runtime.md](app-runtime.md) gives the full design and the
+byte-level format.
+
+- **Images.** `AppImage::parse` reads an app image where it lies and checks its header, CRC,
+  sections, strings and state variables.
+- **Checks.** `verify` makes one pass over every expression and handler. Jumps only go forward, so
+  that pass proves the stack never underflows or overflows and every call ends.
+- **Interpreter.** `Interpreter` runs an expression to get a widget's value, or a handler to answer
+  an event. A handler's state writes and effects are returned, not applied, so a failure part way
+  changes nothing.
+- **Bindings.** `Bindings` works out from the code what each expression reads and how often the
+  clock changes it, so the runtime redraws only what changed and sleeps otherwise.
+
+It never allocates and never panics on bad input. Its working memory is 528 B for the interpreter
+and 904 B for the bindings of up to 64 expressions.
 
 ## UI toolkit (`ui`)
 

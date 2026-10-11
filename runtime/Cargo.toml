@@ -1,0 +1,8 @@
+[package]
+name = "neotime-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "NeoTime's app runtime core: app images, their checks, the bytecode interpreter and bindings"
+publish = false
+
+[dependencies]

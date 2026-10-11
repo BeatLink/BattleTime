@@ -22,7 +22,7 @@ lists the events, widgets and effects apps can use.
   firmware and its runtime, it keeps a shared library of images, fonts, components and functions
   that every app can use, so each app stays small.
 - **A broken app cannot break the watch.** Every app image is checked when it is installed, and
-  every call has a step limit.
+  every call ends: jumps only go forward, and loops will have a step limit.
 
 ## Choosing the format
 
@@ -184,7 +184,8 @@ calls to `neotime` functions and to the app's own functions (which it inlines), 
 over fixed-length arrays.
 
 Inside handlers, also: `let` locals, `if` and `else`, `for ... of` over fixed-length arrays,
-writes to `.value`, and effect calls.
+writes to `.value`, effect calls and `random_int`. Numbers are whole numbers, and the
+[app reference](app-reference.md#numbers) lists the `Math` functions accepted.
 
 It rejects anything whose running time or state the runtime cannot see, and the error message
 names the declarative form to use instead:
@@ -239,20 +240,37 @@ package. The compiler does not depend on it.
 
 ## The app image
 
-An image is little-endian and starts with a header, followed by sections that the header lists by
-offset and size. The runtime reads the sections it needs from the file and never copies a whole
-image into RAM.
+The `neotime-runtime` crate (`runtime/`) reads and checks images; see [Built so far](#built-so-far).
+An image is little-endian. It starts with a 20-byte header and a table of sections, and the runtime
+reads the sections it needs in place, never copying a whole image into RAM.
 
-| Section | Holds |
+| Bytes | Holds |
 |---|---|
-| Header | Magic `NTAP`, format version, app id, kind, the shared library version it was built against, the list of sections and a CRC32 of the image. |
-| Strings | Every string the app uses: its name, labels and format patterns. |
-| Resources | The app's own icon and images, RGB565 with run-length encoding. Anything from the shared library is referred to by number instead. |
-| State | Each variable's key, type, default value and whether it persists. |
-| Widgets | The widget tree in depth-first order. Each property is a constant or the number of an expression. |
-| Expressions | One entry per dynamic property: its bytecode, its inputs as a bit mask, and its redraw period. |
-| Handlers | Bytecode for each handler, and the event it answers. |
-| Subscriptions | Each period, sensor or time the app wants, and the handler to call. |
+| 0–3 | Magic `NTAP`. |
+| 4–5 | Format version, now 1. |
+| 6 | Kind: 0 for an app, 1 for a watch face. |
+| 7 | Reserved, 0. |
+| 8–9 | The shared library version the app was built against. |
+| 10–11 | How many sections follow. |
+| 12–15 | CRC-32 (IEEE) of every byte from 16 to the end. |
+| 16–17 | The string holding the app's id. |
+| 18–19 | The string holding the app's name. |
+| 20 on | One 12-byte entry per section: kind (2 bytes), entry count (2), offset from the start of the image (4), length (4). |
+
+Each kind of section appears at most once:
+
+| Kind | Section | Layout |
+|---|---|---|
+| 1 | Strings | A table of (offset, length) pairs, 2 bytes each, then the UTF-8 text they point into. |
+| 2 | State | 12 bytes per variable: key string (2), type (1), flags (1, bit 0 = persists), default value (8). At most 64 variables. |
+| 3 | Expressions | A table of (offset, length) pairs, then the bytecode they point into. |
+| 4 | Handlers | The same layout as expressions. |
+| 5 | Widgets | The widget tree. Its layout comes with the runtime's next step. |
+| 6 | Subscriptions | Each period, sensor or time the app wants, and the handler to call. Not laid out yet. |
+| 7 | Resources | The app's own icon and images, RGB565 with run-length encoding. Not laid out yet. |
+
+Expressions do not record what they read or how often they redraw. The runtime works both out from
+the code when the app opens, so a wrong compiler can never make a widget miss an update.
 
 ### Where images live
 
@@ -290,45 +308,83 @@ installed apps keep working.
 
 ## The bytecode
 
-The interpreter is a stack machine. Values are 8 bytes and carry no type tag, because the compiler
-has already checked every type.
+The interpreter is a stack machine with room for 32 values. Values are 64 bits and carry no type
+tag, because the compiler has already checked every type.
 
 | Type | Stored as |
 |---|---|
-| `Int` | 32-bit signed integer |
+| `Int` | a 64-bit signed integer; there are no fractions |
 | `Bool` | 0 or 1 |
-| `Instant` | milliseconds since 1970, 64-bit |
-| `Duration` | milliseconds, 64-bit |
+| `Instant` | milliseconds since 1970 in UTC; an empty optional, such as a stopwatch that has not started, is the smallest 64-bit number |
+| `Duration` | milliseconds |
 | `Color` | RGB565 |
-| `Text` | a string in the image, or a slice of the call's text buffer |
-| `Array` | a fixed-length list of one type, in the app's state |
+| `Text` | the number of a string in the image, or a slice of the call's 256-byte text buffer |
 
-Instructions fall into these groups:
+Each instruction is one opcode byte followed by its operands:
 
-| Group | Instructions |
-|---|---|
-| Values | push a constant, read a state slot, read a system value (`now`, `heart_rate`, `steps`, `battery`, `is_charging`, ...), read an event field |
-| Arithmetic | add, subtract, multiply, divide, remainder, negate, minimum, maximum, absolute value, with checked overflow |
-| Logic | compare, `and`, `or`, `not`, and a forward-only jump for `? :` |
-| Time | instant minus instant, instant plus duration, the parts of a duration, the date and time parts of an instant |
-| Text | format a number, format a duration or time with a pattern, join texts |
-| Arrays | read an element, the length, and a bounded loop for handlers |
-| Results | set a state slot, emit an effect |
+| Opcode | Instruction | Operands | Does |
+|---|---|---|---|
+| `01` | push small | 1 byte, signed | Pushes a number from -128 to 127. |
+| `02` | push int | 4 bytes, signed | Pushes a 32-bit number. |
+| `03` | push long | 8 bytes, signed | Pushes a 64-bit number, such as an instant. |
+| `04` | push none | | Pushes the empty optional. |
+| `05` | push text | string, 2 bytes | Pushes a string from the image. |
+| `06` | read state | slot, 1 byte | Pushes a state variable. In a handler, it sees the handler's own earlier writes. |
+| `07` | read system | value, 1 byte | Pushes a system value (see below). |
+| `08` | read event | field, 1 byte | Pushes one of the event's 8 fields. Handlers only. |
+| `09`, `0A`, `0B` | duplicate, drop, swap | | Stack housekeeping. |
+| `10`–`14` | add, subtract, multiply, divide, remainder | | Whole-number arithmetic. Overflow and division by zero fail the call; division rounds toward zero. |
+| `15`–`18` | negate, minimum, maximum, absolute | | |
+| `19` | random int | | Takes a lowest and a highest number and pushes a random one between them, both included. Handlers only, so expressions always give the same answer. |
+| `20`–`25` | equal, not equal, less, less or equal, greater, greater or equal | | Push 1 or 0. |
+| `26` | not | | 1 for 0, else 0. |
+| `27` | is none | | 1 if the value is the empty optional. |
+| `28` | jump | distance, 2 bytes | Skips forward that many bytes. There is no way to jump backward. |
+| `29` | jump if false | distance, 2 bytes | Takes a value and skips forward if it is 0. `? :`, `&&` and `\|\|` compile to this. |
+| `30` | time part | part, 1 byte | Takes an instant and pushes its local year, month, day, hour, minute, second or weekday (0 to 6, Monday first). |
+| `40` | format number | minimum digits, 1 byte | Takes a number and pushes it as text, padded with zeros. |
+| `41` | format duration | pattern, 1 byte | `mm:ss`, `h:mm:ss`, `mm:ss.cc` or `h:mm`. |
+| `42` | format time | pattern, 1 byte | Takes an instant and pushes the local clock, the clock with seconds, or `YYYY-MM-DD`. The clock follows the user's 12 or 24 hour setting. |
+| `43` | join | | Takes two texts and pushes them joined. |
+| `50` | write state | slot, 1 byte | Takes a value for a state variable. Handlers only. |
+| `51` | effect | effect, 1 byte | Takes the effect's arguments and records it. Handlers only. |
 
-Expressions may only jump forward, so they always finish. Handlers may also loop, but only over a
-fixed-length array. Each call also has a step limit.
+System values, in the order `read system` numbers them: `now`, `utc_offset`, `battery_percent`,
+`is_charging`, `steps_today`, `heart_rate`, `heart_rate_measured_at`, `is_phone_connected`,
+`unread_notifications`, `is_do_not_disturb`, `brightness`, `uses_24_hour_clock`,
+`uses_metric_units`, `step_goal`.
+
+Effects, in the order `effect` numbers them, with how many arguments each takes: `vibrate` (1),
+`vibrate_pattern` (1), `stop_vibrating`, `set_brightness` (1), `keep_screen_on` (1),
+`wake_screen`, `screen_off`, `go` (1), `back`, `open_app` (1), `close`, `show_toast` (1),
+`notify` (2), `dismiss_notification` (1), `mark_notifications_read`, `send_to_phone` (2),
+`music_control` (1), `call_control` (1), `find_phone`, `measure_heart_rate`, `start_heart_rate`,
+`stop_heart_rate`, `reset_steps`, `set_setting` (2), `set_do_not_disturb` (1), `log` (1).
+`vibrate_sequence` and `http_request` need arrays and more arguments, and come later.
+
+Every jump goes forward, so a call can never run longer than its own code. When handlers gain
+loops over fixed-length arrays, each call will also get a step limit.
 
 ### Checking an image
 
-The watch checks every image when it is installed and refuses one that fails. It checks that:
+The watch checks every image when it is installed and refuses one that fails. Reading the header
+checks:
 
-- the CRC and format version are right;
-- every instruction is known, every jump lands inside its code and expression jumps go forward;
-- every state slot, string, expression and handler number is in range;
-- the stack depth never goes above the limit at any instruction;
-- every widget's properties exist on that widget.
+- the magic, the format version and the CRC;
+- that every section and every table entry lies inside the image, and no section repeats;
+- that every string is UTF-8, and every state variable has a known type and a default that fits it.
 
-Once an image has passed, the interpreter does not need to repeat these checks while it runs.
+Then one pass over each expression and handler checks:
+
+- that every instruction and operand is known, and every state slot and string exists;
+- that every jump lands on the start of an instruction or the end of the code;
+- that the stack never goes below empty or above 32 values, and that every path into a jump
+  target arrives with the same depth;
+- that an expression ends with exactly one value and a handler with none;
+- that expressions do not read events, write state, cause effects or use random numbers.
+
+The interpreter still checks every step as it runs, so even an image that slipped past makes a call
+fail rather than crashing the watch.
 
 ## The runtime
 
@@ -343,7 +399,8 @@ flash; no runtime code is.
 2. Load the state: defaults, overlaid with the values saved in the key-value store.
 3. Copy the expressions into RAM, create the rlvgl widgets for the first screen and evaluate every
    expression once.
-4. Note which expressions depend on the clock, and when each next needs a redraw.
+4. Work out from the code which inputs each expression reads, and how often the clock changes
+   what it shows.
 
 ### Events
 
@@ -356,7 +413,10 @@ flash write.
 ### Time
 
 The runtime never ticks on an app's behalf. It knows from each expression's redraw period, such as
-"every second" for `mm:ss` or "every minute" for `HH:MM`, when the screen next changes. It sets one
+"every second" for `mm:ss` or "every minute" for `HH:MM`, when the screen next changes. The period
+is the finest step the expression's formatting shows; hundredths are capped at a tenth of a second,
+and an expression that reads the clock without formatting it redraws once a second. Steps are
+counted on the wall clock, so a minute display changes as each minute begins. It sets one
 timer for the earliest of those times, and none at all when the screen is off or nothing on it
 depends on the clock.
 
@@ -375,19 +435,37 @@ subscription that keeps failing is turned off until the app is opened again.
 
 ## Memory
 
-A rough budget for the open app, to be replaced by measurements:
+The working memory below is measured from `neotime-runtime`; the rest is still a budget.
 
 | Part | Size |
 |---|---|
+| Interpreter: a stack of 32 values and the 256-byte text buffer | 528 B, measured |
+| A handler's results: up to 16 state writes and 8 effects | 464 B, measured, only while a handler runs |
+| Bindings: what each of up to 64 expressions reads and its redraw period | 904 B, measured |
 | State: 32 slots of 8 bytes, plus small arrays | about 1 KB |
-| Expression table: inputs, next redraw and the widget it sets, 8 bytes each | about 0.5 KB for 64 bindings |
-| Interpreter stack, 32 values | 256 B |
-| Text buffer for formatting | 256 B |
 | Expression bytecode, copied in when the app opens | about 1 KB |
 | Section reader for the image on the external flash | 256 B |
 
-That is about 3.5 KB, which leaves most of the open app's 12 KB for larger arrays and for a second
+That is about 4 KB, which leaves most of the open app's 12 KB for larger arrays and for a second
 app's state while a subscription runs. The widgets themselves are allocated from the UI heap.
+
+## Built so far
+
+`neotime-runtime` in `runtime/` is a `no_std` crate with no dependencies. It never allocates, and it
+returns an error instead of panicking on any input. It has:
+
+- `image`: reads and checks the header, section table, strings and state variables in place;
+- `verifier`: the install-time pass over every expression and handler;
+- `interpreter`: runs expressions and handlers, holding a handler's writes and effects back until
+  it finishes;
+- `text`: the calendar and the number, duration and time formatting;
+- `bindings`: works out each expression's inputs and redraw period, which expressions a change
+  affects, which are due as the clock moves, and when the next clock-driven redraw is.
+
+Its tests build images by hand, including the stopwatch from [Writing an app](#writing-an-app), and
+check that flipping any single byte of an image never panics. Still to come: the widgets,
+subscriptions and resources sections, arrays and loops, the compiler, and the runtime loop that
+ties these to the UI toolkit and the system.
 
 ## Open questions
 
@@ -400,7 +478,7 @@ app's state while a subscription runs. The widgets themselves are allocated from
 ## Suggested order of work
 
 1. The image format, the verifier and the interpreter as a `no_std` crate, tested on the computer
-   with hand-written images.
+   with hand-written images. **Done:** `neotime-runtime`.
 2. The runtime in the simulator: open an app, draw its widgets, run handlers, redraw on time.
 3. The compiler, starting with the stopwatch and a simple watch face, then the browser preview.
 4. Persistence through the key-value store, then subscriptions.

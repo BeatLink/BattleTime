@@ -36,6 +36,7 @@
             ./Cargo.toml
             ./Cargo.lock
             ./drivers
+            ./runtime
             ./simulator
             ./ui
           ];

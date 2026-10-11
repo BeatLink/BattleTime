@@ -91,21 +91,23 @@ while the app is closed; see [Background work](app-runtime.md#background-work).
 |---|---|---|
 | `every(period, handler)` | `time` | Repeatedly. Periods shorter than a minute run only while the app is open. |
 | `at(instant, handler)` | `time` | Once, at an absolute time. The instant may be a signal, so changing it reschedules. |
-| `daily(time_of_day, handler)` | `time` | Every day at a local time, such as an alarm. |
+| `daily(time_of_day, handler, days?)` | `time` | At a local time of day, `{ hour, minute }`, on the weekdays in `days` (a 7-bit mask, Monday first; every day when left out). `time_of_day` may be a signal, and `null` turns the subscription off, as an alarm switch does. |
 | `clock_change(unit, handler)` | `time` | The local `minute`, `hour` or `day` changes, such as a reset at midnight. Also fires when the phone sets the clock. |
-| `heart_rate(period, handler)` | `beats_per_minute`, `confidence` | A measurement every `period`. Several apps asking share one measurement. |
+| `heart_rate_reading(period, handler)` | `beats_per_minute`, `confidence` | A measurement every `period`. Several apps asking share one measurement. |
 | `steps(handler)` | `steps_today` | The step count changes, at most once a minute. |
 | `step_goal(handler)` | `steps_today` | The day's step goal is reached. |
 | `motion(kind, handler)` | `kind` | The accelerometer sees `wrist_raise`, `shake`, `tap`, `double_tap`, `still` or `moving`. Which ones exist depends on the chip; the BMA425 has them all. |
+| `acceleration(period, handler)` | `x`, `y`, `z` in thousandths of g | Raw readings, such as for a spirit level. Only while the app is open, and at most 10 a second. |
 | `battery(kind, handler)` | `percent` | The battery goes `low`, or charging `starts`, `stops` or `completes`. |
 | `phone(kind, handler)` | `is_connected` | The phone `connects` or `disconnects`. |
 | `notification(handler)` | `id`, `app`, `title`, `body`, `time` | A notification arrives from the phone. |
 | `call(handler)` | `kind`, `caller` | A call is `incoming`, `answered` or `ended`. |
 | `music(handler)` | `is_playing`, `artist`, `track`, `position`, `length` | The phone's player changes. |
-| `weather(handler)` | `temperature`, `condition`, `low`, `high`, `location` | The phone sends a forecast. |
+| `weather(handler)` | `temperature`, `condition`, `low`, `high`, `location`, `days` | The phone sends a forecast. `days` holds up to 5 coming days, each with `condition`, `low` and `high`. |
+| `navigation(handler)` | `turn`, `instruction`, `distance`, `progress_percent` | The phone's navigation app gives the next step. |
 | `message(channel, handler)` | the message's fields | The companion app sends this app a message on its own channel. |
 | `http_response(handler)` | `request_id`, `status`, `body` | A reply to an `http_request` effect. |
-| `settings(handler)` | the changed keys | The user changes a setting in `settings`. |
+| `settings_change(handler)` | the changed keys | The user changes a setting in `settings`. |
 
 When several of the same event are waiting, the runtime delivers only the latest, so a slow handler
 never falls behind.
@@ -194,6 +196,17 @@ so they cost an app nothing to include.
 | `NumberPicker`, `TimePicker`, `DurationPicker` | Rollers set up for a number, a time of day or a duration. |
 | `Menu` | A list of named actions. |
 
+### Props beyond the common ones
+
+| Widget | Props |
+|---|---|
+| `Line` | `points`: a fixed-length array of `{ x, y }`. |
+| `Scale` | `ticks`, `major_every`, and `labels` for the major ticks. |
+| `AnalogClock` | `time` (normally `now`), `show_seconds`, `hour_color`, `minute_color`, `second_color`. |
+| `ButtonMatrix` | `rows`: an array of rows of labels. `onClick` receives `{ value }`, the number of the button counted across the rows. |
+| `Roller`, `Dropdown` | `options`, and `value` as the number of the chosen option. |
+| `Slider`, `Switch`, `Checkbox`, `Roller`, `Spinbox` | `value` may be a plain value or a signal. Given a signal, the widget writes changes back to it. |
+
 ### Left out
 
 - **Canvas.** It needs a buffer for its pixels, and a full screen is 115 KB, more than the watch's
@@ -211,7 +224,7 @@ finishes without failing, in the order they were called.
 | Effect | Does |
 |---|---|
 | `vibrate(milliseconds)` | Runs the motor once. Capped at 2 seconds. |
-| `vibrate_pattern(pattern)` | A named pattern: `tap`, `double_tap`, `notification`, `alarm`, `success` or `failure`. |
+| `vibrate_pattern(pattern)` | A named pattern: `tap`, `double_tap`, `notification`, `alarm`, `success` or `failure`. `alarm` repeats until `stop_vibrating()`, the app closes, or a minute passes. |
 | `vibrate_sequence([on, off, on, ...])` | A custom pattern in milliseconds, up to 16 steps. |
 | `stop_vibrating()` | Stops any pattern this app started. |
 
@@ -251,8 +264,8 @@ turn that off.
 |---|---|
 | `send_to_phone(channel, data)` | Sends a message to the companion app on this app's channel. |
 | `http_request(request_id, method, url, body)` | Asks the phone to make a web request. The reply arrives as an `http_response` event. |
-| `music(command)` | `play`, `pause`, `next`, `previous`, `volume_up` or `volume_down`. |
-| `call(command)` | `answer`, `reject` or `mute` the current call. |
+| `music_control(command)` | `play`, `pause`, `next`, `previous`, `volume_up` or `volume_down`. |
+| `call_control(command)` | `answer`, `reject` or `mute` the current call. |
 | `find_phone()` | Makes the phone ring. |
 
 ### Sensors
@@ -274,6 +287,58 @@ turn that off.
 Settings and other values that change often are stored on the external flash, never the internal
 flash; see the [memory map](memory-map.md).
 
+## Functions
+
+These are plain functions, usable in views, `computed` and handlers unless marked otherwise.
+
+### Numbers
+
+Every number is a whole number; there are no fractions. The compiler accepts `Math.floor`,
+`Math.trunc`, `Math.round`, `Math.min`, `Math.max` and `Math.abs`. A bare `/` is rejected,
+because JavaScript would give a fraction; write `Math.trunc(a / b)` or `Math.floor(a / b)` to say
+which way it rounds. Overflow and division by zero fail the call.
+
+| Function | Returns |
+|---|---|
+| `random_int(lowest, highest)` | A random whole number between the two, both included. Handlers only, so a view always shows the same thing for the same state. |
+| `clamp(value, lowest, highest)` | `value` kept between the two. |
+
+### Text
+
+Template literals, such as `` `${steps} steps` ``, join text and numbers.
+
+| Function | Returns |
+|---|---|
+| `format_number(number, minimum_digits?)` | The number as text, padded with zeros. |
+| `format_duration(duration, pattern)` | `"mm:ss"`, `"h:mm:ss"`, `"mm:ss.cc"` or `"h:mm"`. |
+| `format_time(instant, pattern)` | `"clock"` (following the 12 or 24 hour setting), `"clock_with_seconds"` or `"date"` (`YYYY-MM-DD`). |
+| `format_temperature(celsius)` | The temperature in the user's units, with its sign. |
+
+### Time
+
+All in local time, using `utc_offset`.
+
+| Function | Returns |
+|---|---|
+| `year_of`, `month_of`, `day_of`, `hour_of`, `minute_of`, `second_of` | That part of an instant. |
+| `weekday_of(instant)` | 0 to 6, Monday first. |
+| `start_of_day(instant)` | Local midnight at the start of that day. |
+| `next_time_of_day(after, time_of_day, days?)` | The first instant after `after` at that local time, on one of `days`. |
+
+### Shared library
+
+From `neotime/lib`; they live in the [shared library](app-runtime.md#the-shared-library).
+
+| Function | Returns |
+|---|---|
+| `sine(degrees)`, `cosine(degrees)` | In thousandths, from a table. |
+| `point_on_circle(center_x, center_y, radius, degrees)` | `{ x, y }`, with 0 degrees at the top and angles going clockwise, as on a clock face. |
+
+### Records
+
+State may hold objects of a fixed shape, and fixed-length arrays of them, such as a list of alarms
+`{ hour, minute, days, enabled }`. The compiler stores each field in a state slot of its own.
+
 ## Permissions
 
 An app lists what it needs in `define_app({ permissions: [...] })`. The watch asks the user once,
@@ -282,10 +347,10 @@ covered, so a missing permission is a compile error, not a surprise on the watch
 
 | Permission | Covers |
 |---|---|
-| `heart_rate` | The `heart_rate` subscription and the heart rate effects. |
-| `motion` | The `motion` subscription. |
+| `heart_rate` | The `heart_rate_reading` subscription and the heart rate effects. |
+| `motion` | The `motion` and `acceleration` subscriptions. |
 | `notifications` | Reading notifications, and the notification effects. |
-| `phone` | `call`, `music`, `find_phone` and their subscriptions. |
+| `phone` | `call_control`, `music_control`, `find_phone`, and the `call`, `music` and `navigation` subscriptions. |
 | `phone_messages` | `send_to_phone` and the `message` subscription. |
 | `internet` | `http_request`. |
 | `settings` | `set_setting` and `set_do_not_disturb`. |
