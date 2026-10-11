@@ -79,18 +79,12 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 | `read_me`, `test` | wasp-os | Developer tools, not apps. |
 | Launcher, settings, notifications, quick settings, firmware update | both | Part of the system, not apps. |
 
-## Limits and what is left
+## Limits
 
 The ports use the API in [app-reference.md](app-reference.md) as `sdk/neotime` provides it: one
 `CellGrid` for each game board, element writes, `range`, `count_where` and the text functions. They
 fit the runtime's limits on state, handler writes, locals and loop steps. Four-in-a-row's search runs
 a few steps a call on a 100 millisecond tick, so its hardest level thinks for up to about 3 seconds.
 
-Still open, each waiting on the compiler:
-
-- **`game-of-life`** does not compile, because the compiler gives each board cell 8 bytes when the
-  cell comes from a helper function, which puts the board over the 1 KB limit.
-- **`weather`** reads the forecast from `current_weather.forecast`, which the runtime does not have
-  yet.
-- **`paddle`** moves its ball every 20 milliseconds while open, under the compiler's present
-  100 millisecond minimum.
+On the watch, `weather` shows no forecast until the phone's weather reaches it; the simulator shows
+three days.
