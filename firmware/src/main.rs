@@ -22,6 +22,7 @@ use embassy_nrf::{
     bind_interrupts,
     config::LfclkSource,
     gpio::{Input, Level, Output, OutputDrive, Pull},
+    gpiote::{OutputChannel, OutputChannelPolarity},
     peripherals,
     spim::{self, Spim},
     twim,
@@ -159,9 +160,18 @@ async fn main(spawner: Spawner) {
         Output::new(chip.P0_26, Level::High, OutputDrive::Standard),
     );
     let backlight = backlight::Backlight::new(
-        Output::new(chip.P0_14, Level::High, OutputDrive::Standard),
+        OutputChannel::new(
+            chip.GPIOTE_CH0,
+            chip.P0_14,
+            Level::High,
+            OutputDrive::Standard,
+            OutputChannelPolarity::Toggle,
+        ),
         Output::new(chip.P0_22, Level::High, OutputDrive::Standard),
         Output::new(chip.P0_23, Level::High, OutputDrive::Standard),
+        chip.RTC2,
+        chip.PPI_CH1,
+        chip.PPI_CH2,
     );
     let mut title = heapless::String::<22>::new();
     let _ = core::fmt::write(&mut title, format_args!("NeoTime {FIRMWARE_VERSION}"));

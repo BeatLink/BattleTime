@@ -131,14 +131,13 @@ The full report is [NeoTime vs InfiniTime: feature coverage](https://claude.ai/c
 
 ### Display
 
-- [ ] **Backlight in the firmware.** The driver's `Backlight` has the off, low, medium and high
-  levels, but the firmware still drives only P0.14 itself. Use `Backlight` there, and back the
-  `brightness` input and `set_brightness`.
-- [ ] **A dim always-on level.** InfiniTime's always-on brightness is the low pin at 10 %, switched
-  by RTC2 and PPI so the CPU can sleep. That needs the chip's peripherals, so it belongs in the
-  firmware, not the driver.
-- [ ] **Use low-power mode.** The driver's `enter_low_power_mode` and `leave_low_power_mode` are
-  ready; nothing turns them on yet. An always-on screen setting would, with the dim level above.
+- [ ] **Try the always-on screen on the watch.** Build with `--features always-on-screen` and
+  check that the dim level is steady, without flicker, that the face keeps time, and how much
+  battery a night costs. It has only been built, not run.
+- [ ] **An always-on setting.** Replace the `always-on-screen` build feature with a setting once
+  settings exist.
+- [ ] **Wake the screen for an update's progress.** The status page draws over a dark or dimmed
+  screen, so an update's progress cannot be read until the screen is woken.
 - [ ] **Release the panel in sleep,** so the SPI bus can be turned off.
 - [ ] **DMA transfers,** so the CPU is free while a buffer is sent. EasyDMA reuses the buffer, so
   wait for the transfer to end before writing it again.

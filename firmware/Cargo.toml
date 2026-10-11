@@ -15,6 +15,8 @@ wasp-os-rehearsal = ["cortex-m-rt/set-vtor"]
 wasp-os-storage-rehearsal = ["wasp-os-rehearsal"]
 # The image for the recovery slot: its status page always says it is the recovery firmware.
 recovery = []
+# The screen dims to the panel's low-power mode instead of turning off, until settings can choose it.
+always-on-screen = []
 
 [dependencies]
 cortex-m = { version = "0.7", features = ["critical-section-single-core", "inline-asm"] }
@@ -33,6 +35,7 @@ embedded-storage = "0.3"
 embedded-storage-async = "0.4"
 heapless = "0.9"
 mipidsi = "0.10"
+nrf-pac = { version = "0.4", features = ["nrf52832"] }
 static_cell = "2.1"
 trouble-host = { version = "0.8", default-features = false, features = ["peripheral", "gatt", "derive", "default-packet-pool", "default-packet-pool-mtu-64", "default-packet-pool-size-8"] }
 

@@ -418,9 +418,14 @@ watch face, the launcher and the apps through `neotime-app-host`:
 - **Sleep.** After 15 seconds without input the backlight goes off, the display sleeps and the
   app gets `screen_off`, unless it called `keep_screen_on(true)`; the next touch or press turns
   them on without acting on it. The loop sleeps until the next input or until `next_wakeup`.
+- **Always-on screen.** Built with the `always-on-screen` feature, the screen dims instead of
+  turning off: the panel enters its 8-colour low-power mode, the backlight drops to a tenth of its
+  low level, and the face keeps drawing. It is a build feature until settings can choose it.
 - **Effects.** `vibrate`, `vibrate_pattern` and `stop_vibrating` go to the motor's own task
-  (`vibration.rs`), so a pattern never holds up the shell. `set_brightness` drives the three
-  backlight pins (`backlight.rs`) until the app closes.
+  (`vibration.rs`), so a pattern never holds up the shell. `set_brightness` sets the backlight
+  (`backlight.rs`) to level 1, 2 or 3 until the app closes, through the display driver's
+  `Backlight`. The dim always-on level pulses the low pin at 1 kHz, lit 3 ticks of every 32, with
+  RTC2, PPI channels 1 and 2 and GPIOTE channel 0, so it runs while the CPU sleeps.
 - **Steps.** `motion.rs` reads the accelerometer's own step counter every 30 seconds and resets it
   at midnight. It shares the I2C bus with the touch panel. A change redraws what shows the steps
   and goes to the app's `steps` subscriptions.

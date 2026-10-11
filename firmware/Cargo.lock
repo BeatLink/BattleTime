@@ -971,6 +971,7 @@ dependencies = [
  "neotime-touch",
  "neotime-updates",
  "neotime-vibrator",
+ "nrf-pac",
  "static_cell",
  "trouble-host",
 ]

@@ -273,13 +273,20 @@ impl Shell {
         }
     }
 
-    /// Turns the backlight off and puts the display to sleep, saving the app's state first.
+    /// Turns the backlight off and puts the display to sleep, or dims both for an always-on screen.
     fn turn_screen_off(&mut self) {
         self.lit = false;
-        self.backlight.turn_off();
-        self.display.lock(|display| {
-            let _ = display.borrow_mut().sleep(&mut Delay);
-        });
+        if backlight::ALWAYS_ON_SCREEN {
+            self.backlight.dim();
+            self.display.lock(|display| {
+                let _ = display.borrow_mut().enter_low_power_mode();
+            });
+        } else {
+            self.backlight.turn_off();
+            self.display.lock(|display| {
+                let _ = display.borrow_mut().sleep(&mut Delay);
+            });
+        }
         if let Some(mut host) = self.host.take() {
             host.screen_turned_off(clock::now(), &mut self.system);
             self.save_state_of(&mut host);
@@ -290,7 +297,12 @@ impl Shell {
     fn turn_screen_on(&mut self) {
         self.lit = true;
         self.display.lock(|display| {
-            let _ = display.borrow_mut().wake(&mut Delay);
+            let mut display = display.borrow_mut();
+            if backlight::ALWAYS_ON_SCREEN {
+                let _ = display.leave_low_power_mode();
+            } else {
+                let _ = display.wake(&mut Delay);
+            }
         });
         self.backlight.turn_on();
         if let Some(host) = &mut self.host {
@@ -319,7 +331,7 @@ impl Shell {
                 host.set_theme(*host.theme());
             }
         }
-        if !self.lit || status_is_shown() {
+        if (!self.lit && !backlight::ALWAYS_ON_SCREEN) || status_is_shown() {
             return;
         }
         if let Some(host) = &mut self.host {
