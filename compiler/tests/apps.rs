@@ -138,7 +138,10 @@ fn the_stopwatch_runs_on_the_runtime() {
 // ============================================================================
 
 /// The apps and faces that are expected to compile, so a change that breaks one is caught.
-const EXPECTED_TO_COMPILE: [&str; 35] = [
+/// metronome lacks the `background` permission its `at` needs, paddle asks for a 20 ms period
+/// under the runtime's 100 ms, and music and lite-weather read event fields the phone-data event
+/// does not carry; each needs a change to the app.
+const EXPECTED_TO_COMPILE: [&str; 32] = [
     "apps/alarm",
     "apps/calculator",
     "apps/dice",
@@ -147,11 +150,8 @@ const EXPECTED_TO_COMPILE: [&str; 35] = [
     "apps/heart",
     "apps/hello",
     "apps/level",
-    "apps/metronome",
     "apps/motion",
-    "apps/music",
     "apps/navigation",
-    "apps/paddle",
     "apps/phone-finder",
     "apps/pomodoro",
     "apps/puzzle15",
@@ -160,7 +160,7 @@ const EXPECTED_TO_COMPILE: [&str; 35] = [
     "apps/stopwatch",
     "apps/timer",
     "faces/analog",
-    // faces/casio returns once iso_week_of compiles.
+    "faces/casio",
     "faces/digital",
     "faces/dual-clock",
     "faces/fibonacci-clock",
@@ -168,7 +168,6 @@ const EXPECTED_TO_COMPILE: [&str; 35] = [
     "faces/lite-analog",
     "faces/lite-digital",
     "faces/lite-rings",
-    "faces/lite-weather",
     "faces/pinetime-style",
     "faces/pride-flag",
     "faces/resistor-clock",
@@ -203,8 +202,7 @@ fn every_app_and_face_compiles_or_reports_why() {
             .and_then(|folder| folder.strip_prefix(&root).ok())
             .map(|folder| folder.display().to_string())
             .unwrap_or_default();
-        let source = std::fs::read_to_string(path).expect("the source");
-        let output = compile_source(&source);
+        let (source, output) = neotime_compiler::compile_file(path).expect("the source");
         let first_error = output.errors().next().cloned();
         match first_error {
             None => {

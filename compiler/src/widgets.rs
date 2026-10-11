@@ -129,6 +129,7 @@ fn property_for(name: &str) -> Option<(Property, Type)> {
         "radius" => (Radius, number),
         "font" => (Font, Type::choice(ChoiceSet::Font)),
         "align" => (Align, Type::choice(ChoiceSet::Align)),
+        "text_align" => (Align, Type::choice(ChoiceSet::TextAlign)),
         "visible" => (Visible, Type::BOOL),
         "animate" => (Animate, number),
         "text" => (Text, Type::TEXT),
@@ -146,7 +147,7 @@ fn property_for(name: &str) -> Option<(Property, Type)> {
         "disabled" => (Disabled, Type::BOOL),
         "gap" => (Gap, number),
         "justify" => (Justify, Type::choice(ChoiceSet::Justify)),
-        "align_items" => (AlignItems, Type::choice(ChoiceSet::Justify)),
+        "align_items" => (AlignItems, Type::choice(ChoiceSet::AlignItems)),
         "columns" => (Columns, number),
         "rows" => (Rows, number),
         "cell_size" => (CellSize, number),
@@ -163,6 +164,7 @@ fn property_for(name: &str) -> Option<(Property, Type)> {
         "second_length" => (SecondLength, number),
         "hand_style" => (HandStyle, Type::choice(ChoiceSet::HandStyle)),
         "recolor" => (Recolor, Type::COLOR),
+        "major_color" => (MajorColor, Type::COLOR),
         "onClick" => (OnClick, number),
         "onLongPress" => (OnLongPress, number),
         "onDoubleClick" => (OnDoubleClick, number),
@@ -178,6 +180,35 @@ fn property_for(name: &str) -> Option<(Property, Type)> {
         "onHide" => (OnHide, number),
         _ => return None,
     })
+}
+
+/// Props that set other props: an Icon's `size` is its width and height, and so on.
+fn alias_targets(name: &str) -> Option<&'static [&'static str]> {
+    Some(match name {
+        "size" | "diameter" => &["width", "height"],
+        "thickness" => &["border_width"],
+        "track_color" => &["background"],
+        _ => return None,
+    })
+}
+
+/// The props written on a widget with each alias replaced by what it sets, unless that is written too.
+fn expand_aliases<'a>(attributes: Vec<(String, Reference<'a>)>) -> Vec<(String, Reference<'a>)> {
+    let written: Vec<String> = attributes.iter().map(|(name, _)| name.clone()).collect();
+    let mut expanded = Vec::new();
+    for (name, value) in attributes {
+        match alias_targets(&name) {
+            Some(targets) => {
+                for target in targets {
+                    if !written.iter().any(|written| written == target) {
+                        expanded.push((target.to_string(), value.clone()));
+                    }
+                }
+            }
+            None => expanded.push((name, value)),
+        }
+    }
+    expanded
 }
 
 /// How a prop given as an array is laid out in the state array a property names.
@@ -946,6 +977,7 @@ impl<'a> Compiler<'a> {
         let mut conditions = conditions.to_vec();
         let mut bound_value: Option<u8> = None;
         let mut change_handler: Option<Reference<'a>> = None;
+        let attributes = self.expand_series(expand_aliases(attributes), kind, span);
 
         for (prop, value) in attributes {
             if prop == "key" || prop == "children" {
@@ -963,14 +995,21 @@ impl<'a> Compiler<'a> {
                 return fail(span, "`direction` must be \"row\" or \"column\"");
             }
             if prop == "src" {
-                if let Some(Constant::Icon(icon)) = self.reference_constant(&value) {
-                    properties.push((Property::Image, PropertySource::Constant(icon as i32)));
-                    continue;
+                match self.reference_constant(&value) {
+                    Some(Constant::Icon(icon)) => {
+                        properties.push((Property::Image, PropertySource::Constant(icon as i32)));
+                    }
+                    Some(Constant::Text(path)) => {
+                        let number = self.app_image(&path, span)?;
+                        let reference = neotime_runtime::resources::ImageReference::App(number);
+                        properties.push((Property::Image, PropertySource::Constant(reference.to_value())));
+                    }
+                    _ => return fail(
+                        span,
+                        "`src` is a PNG file of the app's, such as \"./logo.png\", or a shared library icon",
+                    ),
                 }
-                return fail(
-                    span,
-                    "images of the app's own are not in the image format yet; use a shared library icon",
-                );
+                continue;
             }
             if let Some((property, element_type, layout)) = array_property_for(&prop, kind) {
                 if !property.belongs_to(kind) {
@@ -989,19 +1028,12 @@ impl<'a> Compiler<'a> {
                 }
                 continue;
             }
-            if prop == "align_items" || prop == "justify" {
+            if prop == "justify" {
                 if let Some(Constant::Text(text)) = self.reference_constant(&value) {
                     if ChoiceSet::Justify.number_of(&text).is_none() {
-                        if prop == "align_items" && &*text == "stretch" {
-                            self.warn(
-                                span,
-                                "`align_items=\"stretch\"` is left out: the runtime has no stretch alignment",
-                            );
-                            continue;
-                        }
                         return fail(
                             span,
-                            format!("`{prop}=\"{text}\"` is not supported; use start, center, end or space_between"),
+                            format!("`justify=\"{text}\"` is not supported; use start, center, end or space_between"),
                         );
                     }
                 }
@@ -1085,11 +1117,89 @@ impl<'a> Compiler<'a> {
         if let Some(source) = self.visibility_source(&conditions, span)? {
             properties.push((Property::Visible, source));
         }
+        // A property set twice, such as `align` and `text_align`, keeps the first.
+        let mut seen: Vec<Property> = Vec::new();
+        properties.retain(|(property, _)| {
+            let first = !seen.contains(property);
+            seen.push(*property);
+            first
+        });
         Ok(WidgetNode {
             kind,
             properties,
             children: rendered.widgets,
         })
+    }
+
+    /// A Chart's `series` as its first series' `values` and `color`, since the runtime draws one.
+    fn expand_series(
+        &mut self,
+        attributes: Vec<(String, Reference<'a>)>,
+        kind: WidgetKind,
+        span: Span,
+    ) -> Vec<(String, Reference<'a>)> {
+        if kind != WidgetKind::Chart {
+            return attributes;
+        }
+        let written: Vec<String> = attributes.iter().map(|(name, _)| name.clone()).collect();
+        let mut expanded = Vec::new();
+        for (name, value) in attributes {
+            if name != "series" {
+                expanded.push((name, value));
+                continue;
+            }
+            let mut series: Vec<Vec<(String, Reference<'a>)>> = Vec::new();
+            if let Some(Constant::Array(elements)) = self.reference_constant(&value) {
+                for element in elements.iter() {
+                    let fields = ["values", "color"]
+                        .iter()
+                        .filter_map(|field| {
+                            Some((field.to_string(), Reference::Constant(element.field(field)?)))
+                        })
+                        .collect();
+                    series.push(fields);
+                }
+            } else if let Reference::Expression { expression, scope } = &value {
+                if let Expression::ArrayExpression(array) = strip_parentheses(expression) {
+                    for element in &array.elements {
+                        let Some(Expression::ObjectExpression(object)) =
+                            element.as_expression().map(strip_parentheses)
+                        else {
+                            continue;
+                        };
+                        let mut fields = Vec::new();
+                        for property in &object.properties {
+                            let oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property) = property else {
+                                continue;
+                            };
+                            if let Some(field) = crate::constants::static_key(&property.key) {
+                                fields.push((field, self.attribute_reference(&property.value, scope)));
+                            }
+                        }
+                        series.push(fields);
+                    }
+                }
+            }
+            if series.len() > 1 {
+                self.warn(
+                    span,
+                    "only the first of a Chart's `series` is drawn: the runtime's Chart has one series",
+                );
+            }
+            let Some(first) = series.into_iter().next() else {
+                self.warn(
+                    span,
+                    "`series` on `Chart` is left out: write it as an array of `{ values, color }`",
+                );
+                continue;
+            };
+            for (field, reference) in first {
+                if matches!(field.as_str(), "values" | "color") && !written.contains(&field) {
+                    expanded.push((field, reference));
+                }
+            }
+        }
+        expanded
     }
 
     /// An array prop: the state array it names, made from a constant array if need be.
@@ -1116,9 +1226,22 @@ impl<'a> Compiler<'a> {
             Some(Constant::Undefined) => return Ok(None),
             Some(constant) => constant,
             None => {
+                // An array worked out while running is kept in a hidden array a derive handler fills.
+                let derived = match (&value, layout) {
+                    (Reference::Expression { expression, scope }, ArrayLayout::Plain) => {
+                        self.derived_array(expression, scope, element_type, span)?
+                    }
+                    (Reference::Expression { expression, scope }, ArrayLayout::Points) => {
+                        self.derived_points(expression, scope, span)?
+                    }
+                    _ => None,
+                };
+                if let Some(variable) = derived {
+                    return Ok(Some(PropertySource::Constant(variable as i32)));
+                }
                 self.warn(
                     span,
-                    format!("`{prop}` on `{widget}` is left out: it changes while the app runs, and only an array signal can be given for it"),
+                    format!("`{prop}` on `{widget}` is left out: it changes while the app runs, and the compiler cannot tell how long it is"),
                 );
                 return Ok(None);
             }
@@ -1154,7 +1277,7 @@ impl<'a> Compiler<'a> {
     }
 
     /// An event prop: the handler compiled from the function given, or nothing if none is given.
-    fn event_property(
+    pub fn event_property(
         &mut self,
         value: Reference<'a>,
         event: EventKind,
@@ -1169,6 +1292,11 @@ impl<'a> Compiler<'a> {
                 Some((effect, [])) => {
                     let mut emitter = Emitter::new(CodeKind::Handler);
                     emitter.emit(Instruction::Effect(effect), span)?;
+                    self.note_permission(
+                        crate::permissions::effect_permission(effect),
+                        format!("`{name}`"),
+                        span,
+                    );
                     let code = emitter.finish(span)?;
                     Ok(Some(self.add_handler(code)))
                 }

@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use neotime_compiler::compile_source;
+use neotime_compiler::compile_file;
 
 // ============================================================================
 // Command line
@@ -43,7 +43,35 @@ fn read_arguments() -> Result<Arguments, String> {
 // Main
 // ============================================================================
 
+/// `neotime-compiler library -o shared.ntlib`: writes the shared library image of every icon.
+fn write_library() -> ExitCode {
+    let arguments: Vec<String> = std::env::args().skip(2).collect();
+    let destination = match arguments.as_slice() {
+        [flag, path] if flag == "-o" || flag == "--output" => PathBuf::from(path),
+        [] => PathBuf::from("shared.ntlib"),
+        _ => {
+            eprintln!("usage: neotime-compiler library [-o <shared.ntlib>]");
+            return ExitCode::from(2);
+        }
+    };
+    let image = match neotime_compiler::library::build_library() {
+        Ok(image) => image,
+        Err(problem) => {
+            eprintln!("cannot build the shared library: {problem}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(error) = std::fs::write(&destination, &image) {
+        eprintln!("{}: cannot write the library: {error}", destination.display());
+        return ExitCode::FAILURE;
+    }
+    ExitCode::SUCCESS
+}
+
 fn main() -> ExitCode {
+    if std::env::args().nth(1).as_deref() == Some("library") {
+        return write_library();
+    }
     let arguments = match read_arguments() {
         Ok(arguments) => arguments,
         Err(message) => {
@@ -52,15 +80,13 @@ fn main() -> ExitCode {
         }
     };
     let file_name = arguments.source.display().to_string();
-    let source = match std::fs::read_to_string(&arguments.source) {
-        Ok(source) => source,
-        Err(error) => {
-            eprintln!("{file_name}: cannot read the file: {error}");
+    let (source, output) = match compile_file(&arguments.source) {
+        Ok(compiled) => compiled,
+        Err(problem) => {
+            eprintln!("{file_name}: {problem}");
             return ExitCode::from(2);
         }
     };
-
-    let output = compile_source(&source);
     for diagnostic in &output.diagnostics {
         eprintln!("{}", diagnostic.render(&file_name, &source));
     }

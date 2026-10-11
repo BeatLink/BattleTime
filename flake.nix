@@ -41,6 +41,8 @@
             ./runtime
             ./simulator
             ./ui
+            # The compiler draws the shared library icons from these fonts and pictures.
+            ./third_party
             # The compiler inlines the shared components, and its tests compile every app and face.
             ./sdk/neotime/src/components.tsx
             (lib.fileset.fileFilter (file: file.hasExt "tsx") ./apps)

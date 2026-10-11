@@ -2,6 +2,7 @@
 //! `define_app` call that ties the screens together into one image.
 
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use neotime_runtime::image::{MOST_STATE_BYTES, MOST_STATE_VARIABLES, MOST_VARIABLE_BYTES};
@@ -18,15 +19,17 @@ use oxc_span::{GetSpan, Span};
 use crate::constants::{static_key, strip_parentheses, Constant};
 use crate::diagnostics::{fail, Compiled, Diagnostic};
 use crate::scope::{FunctionBodyReference, FunctionReference, LibraryModule, Reference, Scope};
+use crate::subscriptions::lifecycle_kind;
 use crate::types::{ChoiceSet, Kind, NumberHint, Range, Type};
 use crate::widgets::WidgetNode;
+use neotime_runtime::subscriptions::SubscriptionKind;
 
 // ============================================================================
 // Limits and versions
 // ============================================================================
 
-/// The shared library version images are built against; there is no shared library yet.
-pub const SHARED_LIBRARY_VERSION: u16 = 0;
+/// The shared library version images are built against, which the library image carries too.
+pub const SHARED_LIBRARY_VERSION: u16 = 1;
 
 // ============================================================================
 // State variables
@@ -130,6 +133,18 @@ pub struct Compiler<'a> {
     pub constant_tables: Vec<((Type, Vec<i64>), u8)>,
     /// The loops being compiled, innermost last.
     pub loop_labels: Vec<crate::statements::LoopLabels>,
+    /// The folder of the source file, which the paths of the app's own images are relative to.
+    pub source_directory: Option<PathBuf>,
+    /// The app's own images already added, by file, with their image numbers.
+    pub image_numbers: Vec<(PathBuf, u16)>,
+    /// The hidden arrays derive subscriptions keep, by the expression they hold.
+    pub derived_arrays: Vec<((usize, usize), u8)>,
+    /// Every hidden array a derive handler writes, which needs no scratch copy.
+    pub derived_targets: Vec<u8>,
+    /// How many hidden derived variables there are, for their keys.
+    pub derived_count: usize,
+    /// The first use of each permission the app needs, to check against its `permissions`.
+    pub permission_uses: Vec<crate::permissions::PermissionUse>,
 }
 
 impl<'a> Compiler<'a> {
@@ -152,6 +167,12 @@ impl<'a> Compiler<'a> {
             loop_labels: Vec::new(),
             constant_tables: Vec::new(),
             components_module: None,
+            source_directory: None,
+            image_numbers: Vec::new(),
+            derived_arrays: Vec::new(),
+            derived_targets: Vec::new(),
+            derived_count: 0,
+            permission_uses: Vec::new(),
         }
     }
 
@@ -1007,6 +1028,7 @@ impl<'a> Compiler<'a> {
         };
         let root = Scope::module_root(module);
 
+        let mut lifecycle: Vec<(SubscriptionKind, &'a Expression<'a>)> = Vec::new();
         for property in &options.properties {
             let ObjectPropertyKind::ObjectProperty(property) = property else {
                 return fail(
@@ -1018,24 +1040,23 @@ impl<'a> Compiler<'a> {
                 return fail(property.span, "write define_app's options with plain names");
             };
             match name.as_str() {
-                "id" | "name" | "kind" | "screens" => {}
-                "icon" => self.warn(
-                    property.span,
-                    "the app's icon is left out: the image format has no resources section yet",
-                ),
-                "subscriptions" => self.warn_subscriptions(&property.value),
-                "permissions" => self.warn(
-                    property.span,
-                    "permissions are left out: the image format has no place for them yet",
-                ),
-                "onOpen" | "onClose" | "onScreenOff" | "onScreenOn" => self.warn(
-                    property.span,
-                    format!("`{name}` is left out: the image format has no app lifecycle handlers yet"),
-                ),
-                other => {
-                    return fail(property.span, format!("define_app has no option `{other}`"));
-                }
+                "id" | "name" | "kind" | "screens" | "icon" | "subscriptions" | "permissions" => {}
+                other => match lifecycle_kind(other) {
+                    Some(kind) => lifecycle.push((kind, &property.value)),
+                    None => return fail(property.span, format!("define_app has no option `{other}`")),
+                },
             }
+        }
+
+        // The icon is image 0, so it goes in before any image a screen shows.
+        if let Some(icon) = option(options, "icon") {
+            self.add_app_icon(icon, &root)?;
+        }
+        for (kind, handler) in lifecycle {
+            self.compile_lifecycle(kind, handler, &root)?;
+        }
+        if let Some(subscriptions) = option(options, "subscriptions") {
+            self.compile_subscriptions(subscriptions, &root)?;
         }
 
         let Some(screens) = option(options, "screens") else {
@@ -1092,7 +1113,7 @@ impl<'a> Compiler<'a> {
         for tree in &trees {
             self.write_widget(tree, screens.span)?;
         }
-        Ok(())
+        self.check_permissions(option(options, "permissions"), &root, options.span)
     }
 
     fn write_widget(&mut self, node: &WidgetNode, span: Span) -> Compiled<()> {
@@ -1105,33 +1126,6 @@ impl<'a> Compiler<'a> {
             self.write_widget(child, span)?;
         }
         Ok(())
-    }
-
-    fn warn_subscriptions(&mut self, value: &'a Expression<'a>) {
-        if let Expression::ArrayExpression(array) = strip_parentheses(value) {
-            for element in &array.elements {
-                let span = element.span();
-                let name = element
-                    .as_expression()
-                    .and_then(|expression| match strip_parentheses(expression) {
-                        Expression::CallExpression(call) => match strip_parentheses(&call.callee) {
-                            Expression::Identifier(identifier) => Some(identifier.name.as_str().to_string()),
-                            _ => None,
-                        },
-                        _ => None,
-                    })
-                    .unwrap_or_else(|| "subscription".to_string());
-                self.warn(
-                    span,
-                    format!("the `{name}` subscription is left out: the image format has no subscriptions section yet"),
-                );
-            }
-        } else {
-            self.warn(
-                value.span(),
-                "subscriptions are left out: the image format has no subscriptions section yet",
-            );
-        }
     }
 }
 

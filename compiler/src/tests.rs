@@ -316,15 +316,130 @@ fn a_font_chosen_at_run_time_is_an_expression() {
 
 #[test]
 fn props_the_format_has_no_place_for_are_left_out_with_a_warning() {
-    let source = app(
-        r#"function Main() { return <Screen><Row><Label text_align="center">Hi</Label></Row></Screen>; }"#,
-    );
+    let source =
+        app(r#"function Main() { return <Screen><Row><Label wobble={3}>Hi</Label></Row></Screen>; }"#);
     let output = compile_source(&source);
 
     assert!(output.image.is_some());
     assert!(output
         .warnings()
-        .any(|warning| warning.message.contains("`text_align`")));
+        .any(|warning| warning.message.contains("`wobble`")));
+}
+
+#[test]
+fn text_align_and_icon_size_map_to_their_properties() {
+    let image = compile(&app(r#"import { Icon, Label } from "neotime/widgets";
+        import { icons } from "neotime/icons";
+        function Main() { return <Screen><Label text_align="right">Hi</Label><Icon size={24} icon={icons.heart} /></Screen>; }"#));
+    let image = AppImage::parse(&image).unwrap();
+
+    assert_eq!(
+        property_of(&image, WidgetKind::Label, Property::Align, 0),
+        PropertySource::Constant(2)
+    );
+    assert_eq!(
+        property_of(&image, WidgetKind::Icon, Property::Width, 0),
+        PropertySource::Constant(24)
+    );
+    assert_eq!(
+        property_of(&image, WidgetKind::Icon, Property::Height, 0),
+        PropertySource::Constant(24)
+    );
+}
+
+/// The subscriptions an image lists.
+fn subscriptions_of(image: &AppImage) -> Vec<neotime_runtime::subscriptions::Subscription> {
+    (0..image.subscription_count())
+        .map(|index| image.subscription(index).unwrap())
+        .collect()
+}
+
+#[test]
+fn subscriptions_and_lifecycle_handlers_are_written() {
+    let source = format!(
+        "{HEADER}\nimport {{ every, motion }} from \"neotime\";\nconst count = signal(0);\nfunction tick() {{ count.value += 1; }}\nfunction Main() {{ return <Screen><Label>{{count.value}}</Label></Screen>; }}\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }}, onOpen: tick, permissions: [\"motion\"], subscriptions: [every({{ seconds: 1 }}, tick, {{ only_while_open: true }}), motion(\"shake\", tick, {{ only_while_open: true }})] }});"
+    );
+    let image = compile(&source);
+    let image = AppImage::parse(&image).unwrap();
+    let kinds: Vec<_> = subscriptions_of(&image)
+        .iter()
+        .map(|subscription| subscription.kind)
+        .collect();
+    use neotime_runtime::subscriptions::SubscriptionKind;
+
+    assert_eq!(
+        kinds,
+        [
+            SubscriptionKind::Open,
+            SubscriptionKind::Every,
+            SubscriptionKind::Motion
+        ]
+    );
+    assert_eq!(subscriptions_of(&image)[2].detail, 1);
+}
+
+#[test]
+fn a_short_background_period_and_a_missing_permission_are_errors() {
+    let short = format!(
+        "{HEADER}\nimport {{ every }} from \"neotime\";\nfunction Main() {{ return <Screen></Screen>; }}\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }}, permissions: [\"background\"], subscriptions: [every({{ seconds: 1 }}, () => {{}})] }});"
+    );
+    let output = compile_source(&short);
+    assert!(output
+        .errors()
+        .any(|error| error.message.contains("only_while_open")));
+
+    let missing = format!(
+        "{HEADER}\nimport {{ every }} from \"neotime\";\nfunction Main() {{ return <Screen></Screen>; }}\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }}, subscriptions: [every({{ minutes: 1 }}, () => {{}})] }});"
+    );
+    let output = compile_source(&missing);
+    assert!(output
+        .errors()
+        .any(|error| error.message.contains("`background` permission")));
+}
+
+#[test]
+fn a_computed_array_is_kept_by_a_derive_subscription() {
+    let image = compile(&app(r##"import { CellGrid } from "neotime/widgets";
+        const shift = signal(0);
+        const cells = computed(() => range(4).map((cell) => (cell + shift.value) % 2));
+        function Main() { return <Screen><CellGrid columns={2} rows={2} cell_size={20} cells={cells.value} palette={["#000000", "accent"]} /></Screen>; }"##));
+    let image = AppImage::parse(&image).unwrap();
+    use neotime_runtime::subscriptions::SubscriptionKind;
+
+    assert!(subscriptions_of(&image)
+        .iter()
+        .any(|subscription| subscription.kind == SubscriptionKind::Derive));
+    assert!(matches!(
+        property_of(&image, WidgetKind::CellGrid, Property::Cells, 0),
+        PropertySource::Constant(_)
+    ));
+}
+
+#[test]
+fn iso_week_and_day_of_year_are_worked_out() {
+    // 2021-01-03 at noon UTC is a Sunday in ISO week 53 of 2020, and day 3 of its year.
+    let declarations = "import { iso_week_of, day_of_year } from \"neotime\";\nconst week = signal(0);\nconst day = signal(0);\nconst when = signal<Instant>(1609675200000);";
+    let handler = "week.value = iso_week_of(when.value); day.value = day_of_year(when.value);";
+
+    assert_eq!(after_click(declarations, handler, "week.value"), "53");
+    assert_eq!(after_click(declarations, handler, "day.value"), "3");
+}
+
+#[test]
+fn the_shared_library_holds_every_icon() {
+    let image = crate::library::build_library().expect("the library builds");
+    let parsed = AppImage::parse(&image).expect("the library parses");
+    neotime_runtime::verify(&parsed).expect("the library passes the install checks");
+
+    assert_eq!(parsed.kind, neotime_runtime::AppKind::Library);
+    assert_eq!(parsed.resource_count() as usize, crate::types::ICON_NAMES.len());
+    for index in 0..parsed.resource_count() {
+        let icon = parsed.resource(index).unwrap();
+        assert_eq!(
+            (icon.width, icon.height),
+            (crate::library::ICON_SIDE, crate::library::ICON_SIDE)
+        );
+    }
 }
 
 // ============================================================================
@@ -856,8 +971,13 @@ fn an_exact_division_of_constants_is_allowed() {
 
 #[test]
 fn system_text_values_are_read_like_any_other() {
-    let image = compile(&app(r#"import { current_music } from "neotime";
-        function Main() { return <Screen><Label>{current_music.value.artist}</Label></Screen>; }"#));
+    let source = app(r#"import { current_music } from "neotime";
+        function Main() { return <Screen><Label>{current_music.value.artist}</Label></Screen>; }"#)
+    .replace(
+        "screens: { main: Main }",
+        "screens: { main: Main }, permissions: [\"phone\"]",
+    );
+    let image = compile(&source);
     let image = AppImage::parse(&image).unwrap();
 
     assert!(matches!(

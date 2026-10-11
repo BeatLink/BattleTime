@@ -346,13 +346,7 @@ impl<'a> Compiler<'a> {
             Reference::Event(kind) => match kind.field_index(name) {
                 Some(field) => Ok(Reference::EventField {
                     field,
-                    value_type: match (kind, name) {
-                        (EventKind::Swipe, "direction") => {
-                            Type::choice(crate::types::ChoiceSet::SwipeDirection)
-                        }
-                        (EventKind::Button, "kind") => Type::choice(crate::types::ChoiceSet::ButtonPress),
-                        _ => Type::NUMBER,
-                    },
+                    value_type: crate::expressions::event_field_type(*kind, name),
                 }),
                 None => fail(span, format!("this event has no field `{name}`")),
             },
@@ -1369,7 +1363,7 @@ impl<'a> Compiler<'a> {
     // ------------------------------------------------------------------------
 
     /// Assigns a whole new array. The new value is worked out from the old one, as in JavaScript.
-    fn compile_array_assignment(
+    pub fn compile_array_assignment(
         &mut self,
         emitter: &mut Emitter,
         target: u8,
@@ -1487,6 +1481,15 @@ impl<'a> Compiler<'a> {
                 emitter.place(end);
                 Ok(())
             }
+            Expression::StaticMemberExpression(member)
+                if member.property.name == "value"
+                    && matches!(self.resolve_reference(&member.object, scope), Some(Reference::Computed(_))) =>
+            {
+                let Some(Reference::Computed(function)) = self.resolve_reference(&member.object, scope) else {
+                    return fail(span, "this computed cannot be read");
+                };
+                self.inline_array_function(emitter, target, &function, Vec::new(), span)
+            }
             Expression::CallExpression(call) => {
                 if let Expression::StaticMemberExpression(member) = strip_parentheses(&call.callee) {
                     if member.property.name == "map" {
@@ -1525,6 +1528,19 @@ impl<'a> Compiler<'a> {
         span: Span,
     ) -> Compiled<()> {
         let slot = self.slots[target as usize].clone();
+        let padded;
+        let elements = match self.padding_for(target) {
+            Some(padding) if elements.len() < slot.length as usize => {
+                padded = elements
+                    .iter()
+                    .cloned()
+                    .chain(std::iter::repeat(padding))
+                    .take(slot.length as usize)
+                    .collect::<Vec<Constant>>();
+                &padded[..]
+            }
+            _ => elements,
+        };
         check_length(&slot, elements.len(), span)?;
         if Constant::is_uniform_array(elements) {
             let typed = self.emit_constant(emitter, &elements[0], Some(slot.value_type), span)?;
@@ -1661,6 +1677,9 @@ impl<'a> Compiler<'a> {
     }
 
     fn copy_rebuilt(&mut self, emitter: &mut Emitter, target: u8, rebuild: u8, span: Span) -> Compiled<()> {
+        if rebuild == target {
+            return Ok(());
+        }
         emitter.emit(
             Instruction::CopyArray {
                 destination: target,
@@ -1675,6 +1694,10 @@ impl<'a> Compiler<'a> {
 
     /// The scratch array a whole new value for `target` is built in, made the first time it is needed.
     fn rebuild_array(&mut self, target: u8, span: Span) -> Compiled<u8> {
+        // A derive handler never reads the hidden array it fills, so it can build it in place.
+        if self.derived_targets.contains(&target) {
+            return Ok(target);
+        }
         let slot = self.slots[target as usize].clone();
         let shape = ScratchShape {
             length: slot.length,

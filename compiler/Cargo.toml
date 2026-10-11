@@ -13,3 +13,7 @@ oxc_ast = "=0.151.0"
 oxc_parser = "=0.151.0"
 oxc_span = "=0.151.0"
 oxc_syntax = "=0.151.0"
+# Images: PNG decoding for an app's own pictures, and the shared library's icons drawn from fonts.
+png = "=0.18.1"
+ab_glyph = "=0.2.29"
+miniz_oxide = "=0.8.9"

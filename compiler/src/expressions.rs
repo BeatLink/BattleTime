@@ -107,10 +107,19 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
 }
 
 /// The type of one field of an event.
-fn event_field_type(kind: EventKind, field: &str) -> Type {
+pub fn event_field_type(kind: EventKind, field: &str) -> Type {
+    if kind
+        .field_index(field)
+        .is_some_and(|position| kind.is_text_field(position))
+    {
+        return Type::TEXT;
+    }
     match (kind, field) {
         (EventKind::Swipe, "direction") => Type::choice(ChoiceSet::SwipeDirection),
         (EventKind::Button, "kind") => Type::choice(ChoiceSet::ButtonPress),
+        (EventKind::Motion, "kind") => Type::choice(ChoiceSet::MotionKind),
+        (EventKind::Call, "kind") => Type::choice(ChoiceSet::CallKind),
+        (EventKind::Phone, "is_connected") => Type::BOOL,
         _ => Type::NUMBER,
     }
 }
@@ -558,7 +567,13 @@ impl<'a> Compiler<'a> {
                 if !emitter.is_handler() {
                     return fail(span, "events can only be read inside a handler");
                 }
-                emitter.emit(Instruction::ReadEvent(field), span)?;
+                // Text fields, such as a notification's title, have an instruction of their own.
+                let instruction = if value_type.kind == Kind::Text {
+                    Instruction::ReadEventText(field)
+                } else {
+                    Instruction::ReadEvent(field)
+                };
+                emitter.emit(instruction, span)?;
                 Ok(Typed::new(value_type))
             }
             Reference::Signal(_) | Reference::Computed(_) | Reference::System(_) => {
@@ -618,12 +633,14 @@ impl<'a> Compiler<'a> {
             }
             (Some(Reference::System(system)), "value") => {
                 emitter.emit(Instruction::ReadSystem(system.value), span)?;
+                self.note_system_read(system.value, span);
                 Ok(Typed::new(system.value_type))
             }
             (Some(Reference::SystemGroup(group) | Reference::SystemGroupValue(group)), field) => {
                 match system_signal(&format!("{group}.{field}")) {
                     Some(system) => {
                         emitter.emit(Instruction::ReadSystem(system.value), span)?;
+                        self.note_system_read(system.value, span);
                         Ok(Typed::new(system.value_type))
                     }
                     None => fail(span, format!("`{group}` has no value `{field}`")),

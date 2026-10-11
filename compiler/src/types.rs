@@ -215,16 +215,28 @@ pub enum ChoiceSet {
     CallCommand,
     WeatherCondition,
     NavigationTurn,
-    /// How a container spreads its children, for `justify` and `align_items`.
+    /// How a container spreads its children along it, for `justify`.
     Justify,
+    /// Where a container puts its children across it, for `align_items`.
+    AlignItems,
+    /// A Label's `text_align`, stored as the matching `align` number.
+    TextAlign,
     CellShape,
     HandStyle,
+    /// The `kind` of a motion event.
+    MotionKind,
+    /// The `kind` of a call event.
+    CallKind,
 }
 
 impl ChoiceSet {
     pub fn names(self) -> &'static [&'static str] {
         match self {
             ChoiceSet::Justify => &["start", "center", "end", "space_between"],
+            ChoiceSet::AlignItems => &["start", "center", "end", "space_between", "stretch"],
+            ChoiceSet::TextAlign => &["left", "center", "right"],
+            ChoiceSet::MotionKind => &["wrist_raise", "shake", "tap", "double_tap", "still", "moving"],
+            ChoiceSet::CallKind => &["incoming", "answered", "ended"],
             ChoiceSet::CellShape => &["square", "rounded", "round"],
             ChoiceSet::HandStyle => &["line", "tapered", "rounded"],
             ChoiceSet::Font => &[
@@ -274,7 +286,7 @@ impl ChoiceSet {
     }
 
     pub fn number_of(self, name: &str) -> Option<i64> {
-        if self == ChoiceSet::Justify && name == "between" {
+        if matches!(self, ChoiceSet::Justify | ChoiceSet::AlignItems) && name == "between" {
             return Some(3);
         }
         self.names()
@@ -296,6 +308,10 @@ impl ChoiceSet {
             ChoiceSet::WeatherCondition => "weather condition",
             ChoiceSet::NavigationTurn => "navigation turn",
             ChoiceSet::Justify => "way to spread children",
+            ChoiceSet::AlignItems => "way to align children",
+            ChoiceSet::TextAlign => "text alignment",
+            ChoiceSet::MotionKind => "kind of motion",
+            ChoiceSet::CallKind => "kind of call event",
             ChoiceSet::CellShape => "cell shape",
             ChoiceSet::HandStyle => "hand style",
         }
@@ -311,6 +327,7 @@ impl ChoiceSet {
             "CallCommand" => ChoiceSet::CallCommand,
             "WeatherCondition" => ChoiceSet::WeatherCondition,
             "NavigationTurn" => ChoiceSet::NavigationTurn,
+            "MotionKind" => ChoiceSet::MotionKind,
             _ => return None,
         })
     }

@@ -231,24 +231,43 @@ Swipe directions, button presses and every event's fields, such as the `value` a
 Effect arguments that are text may point into the call's text buffer, such as the text of
 `show_toast(\`${count} left\`)`, so the runtime must copy them before it runs the next call.
 
+## Subscriptions, images and permissions
+
+- `define_app`'s `subscriptions` become the image's subscriptions: `every`, `at`, `daily`,
+  `clock_change`, `heart_rate_reading`, `steps`, `step_goal`, `motion`, `acceleration`, `battery`,
+  `phone`, `notification`, `call`, `music`, `weather`, `navigation` and `settings_change`, each with
+  an optional `{ only_while_open }`. `onOpen`, `onClose`, `onScreenOn` and `onScreenOff` become the
+  Open, Close, ScreenOn and ScreenOff subscriptions. A period under 100 ms, a period under a minute
+  without `only_while_open`, and `acceleration` without it are errors, as the runtime's checks have it.
+- Handlers read event fields by name; text fields (a notification's `app`, `title` and `body`, a
+  call's `caller`, a setting's `key`) use `ReadEventText`. Motion and call `kind`s are choices
+  numbered as in `runtime/src/events.rs`'s docs; `is_connected` is a boolean.
+- `at` takes a signal holding an `Instant`; anything else, such as a `computed`, is kept in a hidden
+  `~derivedN` variable by a derive subscription. `daily` takes a constant `{ hour, minute }`, a
+  record signal (derived into a minute of the day) or a number signal; its days must be constant.
+- An array prop that changes while running (a `computed` array, a constant mapped with state, an
+  array literal of `{ x, y }` points) is a hidden `~derivedN` array that a Derive subscription
+  rebuilds. A `? :` between constant text arrays of different lengths is padded with `""`.
+- A Chart's `series` uses its first series' `values` and `color`, with a warning for the rest.
+- `<Image src="./file.png">` and `icon: "./icon.png"` read PNGs relative to the source file. One-colour
+  or alpha-only artwork is a mask; other artwork is a colour image blended onto black. The icon is
+  image 0 with the icon flag; a library icon given as `icon` is copied in as a 32 px mask.
+- `permissions` are checked against the effects, subscriptions and system values used, as
+  app-reference.md lists them; a missing one is an error. The image has no field for them.
+- `neotime-compiler library -o shared.ntlib` writes the shared library: every icon in `ICON_NAMES`
+  as a 32 by 32 mask, drawn from `third_party/` (see its README). Images record library version 1.
+
+Prop mappings: `size` and `diameter` set `width` and `height`; `thickness` sets `border_width`;
+`track_color` sets `background`; `text_align` (left, center, right) sets `align` (0, 1, 2);
+`align_items="stretch"` is 4; `major_color` sets `MajorColor`. `iso_week_of` and `day_of_year`
+compile to `TimePart` arithmetic; `sine`, `cosine` and `point_on_circle` work only with constant
+arguments.
+
 ## Not supported yet
 
-Left out with a warning, because the image format has no place for them yet:
-
-- `subscriptions`, the app's `icon` and other resources, `permissions`, and the `onOpen`,
-  `onClose`, `onScreenOff` and `onScreenOn` lifecycle handlers.
-- Props with no `Property`, such as `size`, `diameter`, `thickness`, `track_color`, `text_align`,
-  `major_color`, `highlighted`, `kind` on a `Chart` and `series`, and props a widget does not have
-  in `Property::belongs_to`.
-- `align_items="stretch"`, which the runtime has no number for. `justify="around"` is an error that
-  names start, center, end and space_between.
-
-Errors, until the compiler or the runtime grows them:
-
-- Assigning a whole array of records, objects other than records in state, and arrays in locals.
-- `vibrate_sequence`, `http_request` and `send_to_phone`, and `sine`, `cosine`
-  and `point_on_circle` unless their arguments are known when compiling.
-- More than 16 loops, or more than 16 branches waiting to join, in one handler or expression,
-  counting the functions it inlines; the runtime's checks allow no more.
+- `message` and `http_response` subscriptions, `daily` days from a signal, ButtonMatrix
+  `highlighted` (an array of labels, which `Value` cannot hold), and a Chart's second and third series.
+- `vibrate_sequence`, `http_request` and `send_to_phone`.
+- More than 16 loops, or more than 16 branches waiting to join, in one handler or expression.
 - A screen component that returns different roots, such as an early `return <Screen>`.
-- Fonts by name beyond the built-in set, and the app's own images.
+- Fonts by name beyond the built-in set.

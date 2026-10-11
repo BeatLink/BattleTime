@@ -15,6 +15,7 @@ use crate::constants::{strip_parentheses, Constant};
 use crate::diagnostics::{fail, Compiled};
 use crate::emitter::Emitter;
 use crate::expressions::{KeyValue, Typed};
+use crate::permissions::effect_permission;
 use crate::scope::{LibraryModule, Reference, Scope};
 use crate::statements::{ArgumentSource, Search};
 use crate::types::{icon_number, ChoiceSet, Kind, Range, Type, ICON_NAMES};
@@ -96,9 +97,8 @@ fn rejected_call_advice(name: &str) -> Option<&'static str> {
         "vibrate_sequence" | "http_request" | "send_to_phone" => {
             "is not in the bytecode yet, because it needs an array or object argument"
         }
-        "day_of_year" | "iso_week_of" => "is not supported by the compiler yet",
         "sine" | "cosine" | "point_on_circle" => {
-            "needs the shared library, which is not built yet; it works only with arguments known at compile time"
+            "needs arguments known when compiling: the shared library has no code yet to work it out on the watch"
         }
         _ => return None,
     })
@@ -251,6 +251,7 @@ impl<'a> Compiler<'a> {
                 return fail(span, format!("`{name}` takes {} arguments", argument_types.len()));
             }
             emitter.emit(Instruction::Effect(effect), span)?;
+            self.note_permission(effect_permission(effect), format!("`{name}`"), span);
             return Ok(None);
         }
 
@@ -358,6 +359,8 @@ impl<'a> Compiler<'a> {
                 self.compile_start_of(emitter, name, argument(0)?, scope, span)?
             }
             "icon_named" => self.compile_icon_named(emitter, argument(0)?, scope, span)?,
+            "day_of_year" => self.compile_day_of_year(emitter, argument(0)?, scope, span)?,
+            "iso_week_of" => self.compile_iso_week(emitter, argument(0)?, scope, span)?,
             "count_where" => self.compile_array_search(
                 emitter,
                 argument(0)?,
@@ -769,6 +772,115 @@ impl<'a> Compiler<'a> {
         self.compile_value_of_type(emitter, instant, scope, Type::NUMBER)?;
         emitter.emit(Instruction::StartOf(unit), span)?;
         Ok(Typed::new(Type::NUMBER))
+    }
+
+    /// `day_of_year(instant)`, 1 to 366, from the local month, day and year.
+    fn compile_day_of_year(
+        &mut self,
+        emitter: &mut Emitter,
+        instant: &'a Expression<'a>,
+        scope: &Rc<Scope<'a>>,
+        span: Span,
+    ) -> Compiled<Typed> {
+        let mark = emitter.locals_in_use();
+        let local = emitter.take_local(span)?;
+        self.compile_value_of_type(emitter, instant, scope, Type::NUMBER)?;
+        emitter.emit(Instruction::WriteLocal(local), span)?;
+        self.emit_day_of_year(emitter, local, span)?;
+        emitter.release_locals(mark);
+        Ok(Typed::with_range(
+            Type::NUMBER,
+            Range {
+                lowest: 1,
+                highest: 366,
+            },
+        ))
+    }
+
+    /// `iso_week_of(instant)`, 1 to 53: the week of the year that week's Thursday falls in.
+    fn compile_iso_week(
+        &mut self,
+        emitter: &mut Emitter,
+        instant: &'a Expression<'a>,
+        scope: &Rc<Scope<'a>>,
+        span: Span,
+    ) -> Compiled<Typed> {
+        const DAY: i64 = 86_400_000;
+        let mark = emitter.locals_in_use();
+        let local = emitter.take_local(span)?;
+        self.compile_value_of_type(emitter, instant, scope, Type::NUMBER)?;
+        emitter.emit(Instruction::WriteLocal(local), span)?;
+        // The Thursday of the week, at noon so a daylight saving change cannot move it a day.
+        emitter.emit(Instruction::ReadLocal(local), span)?;
+        emitter.emit(Instruction::StartOf(TimeUnit::Day), span)?;
+        self.emit_number(emitter, 3, span)?;
+        emitter.emit(Instruction::ReadLocal(local), span)?;
+        emitter.emit(Instruction::TimePart(TimePart::Weekday), span)?;
+        emitter.emit(Instruction::Subtract, span)?;
+        self.emit_number(emitter, DAY, span)?;
+        emitter.emit(Instruction::Multiply, span)?;
+        emitter.emit(Instruction::Add, span)?;
+        self.emit_number(emitter, DAY / 2, span)?;
+        emitter.emit(Instruction::Add, span)?;
+        emitter.emit(Instruction::WriteLocal(local), span)?;
+        // Weeks counted from 1 January of the Thursday's year.
+        self.emit_day_of_year(emitter, local, span)?;
+        self.emit_number(emitter, 1, span)?;
+        emitter.emit(Instruction::Subtract, span)?;
+        self.emit_number(emitter, 7, span)?;
+        emitter.emit(Instruction::Divide, span)?;
+        self.emit_number(emitter, 1, span)?;
+        emitter.emit(Instruction::Add, span)?;
+        emitter.release_locals(mark);
+        Ok(Typed::with_range(
+            Type::NUMBER,
+            Range {
+                lowest: 1,
+                highest: 53,
+            },
+        ))
+    }
+
+    /// Pushes the local day of the year of the instant in `local`, with the usual month formula:
+    /// `275 * month / 9 - (2 - leap) * ((month + 9) / 12) + day - 30`.
+    fn emit_day_of_year(&mut self, emitter: &mut Emitter, local: u8, span: Span) -> Compiled<()> {
+        let part = |emitter: &mut Emitter, part: TimePart| -> Compiled<()> {
+            emitter.emit(Instruction::ReadLocal(local), span)?;
+            emitter.emit(Instruction::TimePart(part), span)
+        };
+        // 275 * month / 9
+        part(emitter, TimePart::Month)?;
+        self.emit_number(emitter, 275, span)?;
+        emitter.emit(Instruction::Multiply, span)?;
+        self.emit_number(emitter, 9, span)?;
+        emitter.emit(Instruction::Divide, span)?;
+        // 2 - leap, where leap is (year % 4 == 0) - (year % 100 == 0) + (year % 400 == 0)
+        self.emit_number(emitter, 2, span)?;
+        for (divisor, sign) in [
+            (4, Instruction::Subtract),
+            (100, Instruction::Add),
+            (400, Instruction::Subtract),
+        ] {
+            part(emitter, TimePart::Year)?;
+            self.emit_number(emitter, divisor, span)?;
+            emitter.emit(Instruction::Remainder, span)?;
+            self.emit_number(emitter, 0, span)?;
+            emitter.emit(Instruction::Equal, span)?;
+            emitter.emit(sign, span)?;
+        }
+        // times (month + 9) / 12, which is 1 from March on
+        part(emitter, TimePart::Month)?;
+        self.emit_number(emitter, 9, span)?;
+        emitter.emit(Instruction::Add, span)?;
+        self.emit_number(emitter, 12, span)?;
+        emitter.emit(Instruction::Divide, span)?;
+        emitter.emit(Instruction::Multiply, span)?;
+        emitter.emit(Instruction::Subtract, span)?;
+        // plus the day of the month, less 30
+        part(emitter, TimePart::Day)?;
+        emitter.emit(Instruction::Add, span)?;
+        self.emit_number(emitter, 30, span)?;
+        emitter.emit(Instruction::Subtract, span)
     }
 
     /// Compiles a value that must be text, for the text functions.
