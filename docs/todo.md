@@ -75,6 +75,31 @@ See [bluetooth.md](bluetooth.md) for the details of each.
   real rlvgl screens there through `ScreenRenderer`.
 - [ ] **Touch input.** Turn `neotime-touch` gestures into rlvgl events.
 
+## App runtime
+
+- [ ] **Profiles.** Sets of apps such as work, gaming or comms, picked from the companion app. A
+  profile is a small file in external flash listing app ids, their order, the watch face and which
+  subscriptions are on. Switching profiles only reads files, so it writes nothing to flash.
+- [ ] **Temporary apps from the phone.** The companion sends an app image straight into the app's
+  RAM, such as a call screen or a game score display, and it exists only while the phone is
+  connected. Nothing is installed, so nothing is written to flash.
+- [ ] **Phone data as inputs.** Values the phone sends, such as the next calendar event, unread
+  count, music track or a game score, become inputs like steps, so many apps are only a layout
+  bound to phone data. Settles the open question in [app-runtime.md](app-runtime.md) about how
+  phone data reaches the runtime.
+- [ ] **Accelerometer configuration out of the firmware.** Bosch's configuration takes 6 KB of
+  internal flash for each chip, 12 KB with both. Store it on external flash and send it to the
+  sensor in small chunks at boot, turning step counting off if the file is missing. Other options:
+  build in only one chip, or keep it in the shared library.
+- [ ] **Internal flash writes while Bluetooth runs.** Erasing an internal flash page stops the CPU
+  for tens of milliseconds, so the radio can miss its connection events. Updating the shared
+  library or filling the internal-flash cache while the watch runs needs erases timed between
+  connection events, or Bluetooth paused for the write.
+- [ ] **Key-value store for app state.** Each app's state and settings are small values that
+  change often. A log-structured key-value store, such as Zephyr's NVS or ZMS, Nordic's FDS or
+  FlashDB, appends each change instead of rewriting a file, which suits that better than whole
+  files in littlefs. FlashDB also has a time-series mode that fits step and heart-rate logs.
+
 ## Gaps against InfiniTime
 
 What InfiniTime has for each feature NeoTime already has, compared with InfiniTime `6c119eb5`
@@ -251,3 +276,29 @@ The fork has these and NeoTime has nothing for them yet. Most also appear in the
 | Companion app | WaspOSCompanion: steps, alarms, settings, files, backup, weather, themes, face previews, firmware |
 | Developer tools | `wasptool`, `pkgpush.py`, `nus.py` |
 | Other watches | Colmi P8, Senbono K9, DS-D6, 96Boards Nitrogen |
+
+## Other firmware to study
+
+Not compared yet. Look through each for features worth bringing to NeoTime.
+
+| Firmware | What it is |
+|---|---|
+| Pinetime-Lite | An InfiniTime fork by Joaquimorg with many watch faces and extra features. |
+| Hypnos | A C firmware on the Zephyr RTOS, with basic watch features and BLE time sync. |
+| pinetime-rust-mynewt | Rust apps on Apache Mynewt, with many articles by Lup Yuen Lee. |
+| ATCwatch | Arduino firmware by Aaron Christophel, first written for the Colmi P8. |
+| Espruino | The JavaScript interpreter behind the Bangle.js watches, with its large app loader. |
+| TinyGo | Supports the PineTime as a target for firmware written in Go. |
+| RIOT OS | Has board support for the PineTime. |
+| Klok | A Rust clock firmware on Apache Mynewt by Casper Meijn. |
+| pinetime-rtic, pinetime-rtfm | Bare-metal Rust firmware and demos on RTIC, earlier called RTFM. |
+| watchful | Rust firmware and drivers by Ulf Lilleengen. |
+| timecake, Pyrus | Bare-metal firmware with no RTOS. |
+| pinetime-os | A FreeRTOS firmware by kaythe. |
+| pinetime-zephyr, Hermes, ztime | More Zephyr firmware, by najnesnaj, Dejvino and AlexXZero, plus SuperPrower's Zephyr sample. |
+| mbed-pinetime | Mbed OS ports by sethitow and geoffrey-vl, with a set of PineTime drivers. |
+| PineTime-apps | Apps on RIOT OS by bosmoment, with its own Bluetooth UUID and a Gadgetbridge fork. |
+| go-smartwatch | A Go firmware by aykevl on TinyGo. |
+| PineTimeSD | An InfiniTime fork that streams sensor data to OpenSeizureDetector. |
+| p8b-infinitime | An InfiniTime fork with 200 Hz accelerometer streaming, and clock calibration for watches without the 32 kHz crystal. |
+| Malila | Announced in 2021 as a new PineTime OS; no release found. |
