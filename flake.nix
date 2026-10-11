@@ -155,6 +155,7 @@
             pkgs.cargo-binutils
             pkgs.pkg-config
             pkgs.probe-rs-tools
+            pkgs.python3
             pkgs.SDL2
           ];
 
@@ -164,7 +165,7 @@
             echo "  cargo build --release --target thumbv7em-none-eabihf   build the drivers for the watch"
             echo "  cargo run -p neotime-simulator                         open the simulator"
             echo "  cargo run -p neotime-simulator -- --demo               run the built-in stopwatch app"
-            echo "  (cd bootloader && cargo build --release)               build the bootloader"
+            echo "  tools/build_images.sh                                  build the bootloader, firmware and reloaders into dist/"
             echo "  nix run .#infinisim                                    open InfiniTime's simulator to compare"
             echo "  nix flake check                                        run all of the above as checks"
           '';

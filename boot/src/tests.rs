@@ -178,3 +178,118 @@ fn external_slots_fit_before_the_file_system() {
     assert_eq!(RESERVED_FOR_GROWTH.start, 0x0C_9000);
     assert_eq!(FILE_SYSTEM.start, 0x10_0000);
 }
+
+// ============================================================================
+// Migration plan
+// ============================================================================
+
+mod migration {
+    use super::super::migration::*;
+    use super::super::*;
+
+    fn sizes(recovery: Option<u32>) -> PayloadSizes {
+        PayloadSizes {
+            bootloader_in_bytes: 7900,
+            firmware_in_bytes: 105_000,
+            recovery_in_bytes: recovery,
+        }
+    }
+
+    #[test]
+    fn external_flash_is_written_before_the_window_and_the_swap_mark_after() {
+        let (steps, count) = plan(sizes(Some(60_000)));
+        let steps = &steps[..count];
+
+        let window = steps.iter().position(|step| step.opens_the_window()).unwrap();
+        assert!(steps[..window].iter().all(|step| step.flash() == Flash::External));
+        assert_eq!(steps[window + 1..], [Step::MarkSwap { region: BOOT_STATE }]);
+    }
+
+    #[test]
+    fn only_the_bootloader_step_opens_the_window() {
+        let (steps, count) = plan(sizes(Some(60_000)));
+
+        assert_eq!(
+            steps[..count]
+                .iter()
+                .filter(|step| step.opens_the_window())
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn the_window_covers_only_the_bootloader_pages_in_use() {
+        let (steps, count) = plan(sizes(None));
+
+        let bootloader = steps[..count]
+            .iter()
+            .find(|step| step.opens_the_window())
+            .unwrap()
+            .region();
+        assert_eq!(
+            bootloader,
+            Region {
+                start: 0,
+                size: 2 * PAGE_SIZE
+            }
+        );
+    }
+
+    #[test]
+    fn no_step_writes_outside_its_slot() {
+        let (steps, count) = plan(sizes(Some(RECOVERY_FIRMWARE.size)));
+
+        for step in &steps[..count] {
+            let slot = match step {
+                Step::StageRecovery { .. } => RECOVERY_FIRMWARE,
+                Step::StageFirmware { .. } => FIRMWARE_UPDATE,
+                Step::WriteBootloader { .. } => BOOTLOADER,
+                Step::MarkSwap { .. } => BOOT_STATE,
+            };
+            assert!(
+                step.region().start >= slot.start && step.region().end() <= slot.end(),
+                "{step:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_plan_is_shorter_without_a_recovery_firmware() {
+        let (_, with) = plan(sizes(Some(100)));
+        let (_, without) = plan(sizes(None));
+
+        assert_eq!((with, without), (4, 3));
+    }
+
+    #[test]
+    fn oversized_payloads_are_refused() {
+        assert_eq!(sizes(None).check(), Ok(()));
+        assert_eq!(
+            PayloadSizes {
+                bootloader_in_bytes: BOOTLOADER.size + 1,
+                ..sizes(None)
+            }
+            .check(),
+            Err(PayloadProblem::BootloaderTooLarge)
+        );
+        assert_eq!(
+            PayloadSizes {
+                firmware_in_bytes: FIRMWARE.size + 1,
+                ..sizes(None)
+            }
+            .check(),
+            Err(PayloadProblem::FirmwareTooLarge)
+        );
+        assert_eq!(
+            sizes(Some(RECOVERY_FIRMWARE.size + 1)).check(),
+            Err(PayloadProblem::RecoveryTooLarge)
+        );
+    }
+
+    #[test]
+    fn crc32_matches_the_standard_check_value() {
+        assert_eq!(crc32(CRC32_INITIAL, b"123456789"), 0xCBF4_3926);
+        assert_eq!(crc32(crc32(CRC32_INITIAL, b"1234"), b"56789"), 0xCBF4_3926);
+    }
+}

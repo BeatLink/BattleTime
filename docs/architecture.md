@@ -60,6 +60,8 @@ flowchart TB
     bootloader --> drivers
     bootloader --> hal
     services -. flash layout .-> bootloader
+    reloader["Reloader<br/>reloader: moves a watch onto NeoTime once"]
+    reloader -. flash layout .-> bootloader
 ```
 
 Each layer uses only the layers below it.
@@ -116,7 +118,7 @@ NeoTime/
 ├── rustfmt.toml      formatting rules
 ├── flake.nix       development shell, simulator package and checks
 ├── rust-toolchain.toml  the Rust version and the watch's target
-├── boot/             neotime-boot: the flash layout, shared by every program
+├── boot/             neotime-boot: the flash layout and migration plan, shared by every program
 ├── bootloader/       neotime-bootloader: the bootloader program, built only for the watch
 ├── firmware/         neotime-firmware: the firmware program, built only for the watch
 ├── docs/
@@ -133,7 +135,7 @@ NeoTime/
 │   ├── simulator.md
 │   ├── storage.md
 │   ├── todo.md
-│   ├── updates.md    firmware updates over Bluetooth
+│   ├── updates.md    firmware updates over Bluetooth and moving a watch onto NeoTime
 │   └── images/       pictures for the docs
 ├── drivers/
 │   ├── accelerometer/  neotime-accelerometer: the BMA421 or BMA425 and its step counter
@@ -144,6 +146,7 @@ NeoTime/
 │   ├── touch/        neotime-touch: the CST816S touch panel
 │   └── vibrator/     neotime-vibrator: the vibration motor
 ├── faces/            neotime-faces: watch faces in the app language, one folder each; see faces.md
+├── reloader/         neotime-reloader: the one-time image that moves a watch over from InfiniTime or wasp-os
 ├── runtime/          neotime-runtime: app images, their checks, the interpreter and bindings
 ├── sdk/
 │   └── neotime/      the neotime package apps and faces import, as a stand-in for now
@@ -154,7 +157,7 @@ NeoTime/
 ├── simulator/        neotime-simulator: the drivers in a desktop window
 ├── third_party/
 │   └── littlefs-rust/  littlefs-rust with its panicking loop caps turned off
-├── tools/            scripts: drawing the memory maps and packaging update zips
+├── tools/            scripts: drawing the memory maps, packaging images, building every image
 └── ui/               neotime-ui: draws rlvgl widgets on the screen
 ```
 
@@ -396,6 +399,16 @@ service, and confirms itself to the bootloader once Bluetooth runs. 105 KB of fl
 static RAM, 16 KB of it heap. It is outside the workspace, like the bootloader, because it only
 builds for the watch. See [updates.md](updates.md).
 
+## Reloader (`reloader`)
+
+`neotime-reloader` moves a watch from InfiniTime or wasp-os onto NeoTime. It is an app for the old
+system, sent through that system's own update path, which stages the firmware and the recovery
+firmware in the external flash, writes NeoTime's bootloader over the first pages of internal
+flash, and marks the swap. The order, from `neotime_boot::migration`, keeps the time when a power
+cut would leave the watch unable to start to the bootloader write, about a quarter of a second.
+Two builds, `from-wasp-os` and `from-infinitime`, link where each old system starts apps. It has
+never run on a watch; see [updates.md](updates.md) for the emulator plan.
+
 ## Bootloader (`bootloader` and `boot`)
 
 The bootloader is built on [embassy-boot](https://embassy.dev). It swaps in a waiting firmware
@@ -532,7 +545,8 @@ The workspace's default members are the `no_std` crates only, so that build leav
 out. `nix flake check` runs the tests, the watch build, clippy and two headless simulator
 screenshots, one of them of the stopwatch app after a click, in a clean sandbox.
 
-The bootloader and the firmware are outside the workspace and build only for the watch:
+The bootloader, the firmware and the reloader are outside the workspace and build only for the
+watch. `tools/build_images.sh` builds all of them and packs the update zips into `dist/`; by hand:
 
 ```sh
 cd bootloader && cargo build --release

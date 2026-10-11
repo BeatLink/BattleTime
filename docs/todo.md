@@ -50,16 +50,22 @@ See [bluetooth.md](bluetooth.md) for the details of each.
 
 ## Firmware updates
 
-- [ ] **Update protocol over Bluetooth.** Not decided yet. The candidate is Nordic's legacy DFU
-  service, as InfiniTime uses, so Gadgetbridge, ITD and Siglo can update NeoTime without changes.
-  It would sit on the `services/updates` crate from the bootloader work.
-- [ ] **Reloader image.** A firmware image, sent as a wasp-os or InfiniTime update, that moves the
-  watch to NeoTime's bootloader. Stage NeoTime and the recovery firmware in external flash first,
-  keep the window where a power cut bricks the watch as short as possible, refuse to run unless
-  the watch is charging, and prove it in the Renode emulator (`PineTimeEmulator/`), power cuts
-  included, before it touches a watch. Without SWD, a mistake here cannot be undone.
-- [ ] **Feed the watchdog only while the button is up,** from the first firmware on. It is the only
-  way back to the bootloader without SWD.
+See [updates.md](updates.md). The protocol (legacy DFU, in `services/dfu`), the reloader and the
+button-gated watchdog feeding exist but have run only on the computer.
+
+- [ ] **Prove the reloader on the emulator** before it touches a watch: the boot chain, an update,
+  a recovery, both migrations, and power cuts spread through each migration. The plan is in
+  updates.md; the emulator is in `PineTimeEmulator/`. Without SWD, a mistake cannot be undone.
+- [ ] **Run the DFU service against a real client:** the companion app, then Gadgetbridge, on the
+  emulator's radio if it gets one, else on a watch once the controller has run there.
+- [ ] **A smaller recovery firmware.** The recovery slot holds the full firmware for now, which
+  is 105 KB; a build with only Bluetooth and DFU would leave more of the slot free.
+- [ ] **Async flash in the firmware.** Flash writes block the Bluetooth host for up to a sector
+  erase at a time, because the display shares the SPI bus and its driver is blocking.
+- [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.
+- [ ] **A Gadgetbridge entry for NeoTime.** Gadgetbridge recognises InfiniTime by its advertised
+  name; NeoTime advertises as "NeoTime" and needs a device coordinator of its own, or to be
+  matched by the PineTime one.
 
 ## UI toolkit
 

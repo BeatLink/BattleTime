@@ -198,5 +198,7 @@ pub fn copy_recovery_into_update_slot<Flash: NorFlash>(
 }
 
 
+pub mod migration;
+
 #[cfg(test)]
 mod tests;

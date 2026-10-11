@@ -21,8 +21,9 @@ It aims to combine the best parts of the two existing PineTime firmwares:
 
 ## Status
 
-Early work. The drivers, the bootloader and a first firmware that takes updates over Bluetooth
-exist, and all have run only on the computer. Nothing has run on a watch yet.
+Early work. The drivers, the bootloader, a first firmware that takes updates over Bluetooth, and the
+reloader that moves a watch over from InfiniTime or wasp-os all exist, and all have run only on the
+computer. Nothing has run on a watch yet.
 
 ## Documentation
 
@@ -31,7 +32,7 @@ exist, and all have run only on the computer. Nothing has run on a watch yet.
 - [Simulator](docs/simulator.md): running the drivers in a desktop window with `nix run`.
 - [To do](docs/todo.md): work that is known to be needed but not done yet.
 - [Memory map](docs/memory-map.md): how the RAM, internal flash and external flash are divided.
-- [Updates](docs/updates.md): firmware updates over Bluetooth.
+- [Updates](docs/updates.md): firmware updates over Bluetooth, and moving a watch onto NeoTime.
 
 ## License
 
