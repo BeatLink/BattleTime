@@ -75,7 +75,9 @@ impl DelayNs for FakeDelay {
 }
 
 fn new_on_off_vibrator() -> Vibrator<OnOffMotor<FakePin>> {
-    let motor = OnOffMotor { motor_pin: FakePin::default() };
+    let motor = OnOffMotor {
+        motor_pin: FakePin::default(),
+    };
     Vibrator::new(motor).unwrap()
 }
 
@@ -112,14 +114,20 @@ fn ring_buzzes_then_rests_for_the_rest_of_a_second() {
 
     block_on(vibrator.play(RING, &mut delay)).unwrap();
 
-    assert_eq!(pin_history(vibrator), vec![Level::High, Level::Low, Level::High, Level::High]);
+    assert_eq!(
+        pin_history(vibrator),
+        vec![Level::High, Level::Low, Level::High, Level::High]
+    );
     assert_eq!(delay.total_nanoseconds, 1_000_000_000);
 }
 
 #[test]
 fn cancelling_a_vibration_turns_the_motor_off() {
     let mut vibrator = new_on_off_vibrator();
-    let mut delay = FakeDelay { never_finishes: true, ..FakeDelay::default() };
+    let mut delay = FakeDelay {
+        never_finishes: true,
+        ..FakeDelay::default()
+    };
 
     let long_vibration = vibrator.vibrate(Strength::FULL, 1000, &mut delay);
     let cancel_right_away = core::future::ready(());
@@ -130,7 +138,9 @@ fn cancelling_a_vibration_turns_the_motor_off() {
 
 #[test]
 fn pwm_duty_is_the_share_of_time_the_motor_rests() {
-    let motor = PwmMotor { pwm_channel: FakePwmChannel::default() };
+    let motor = PwmMotor {
+        pwm_channel: FakePwmChannel::default(),
+    };
     let mut vibrator = Vibrator::new(motor).unwrap();
 
     vibrator.turn_on(Strength::from_percent(30)).unwrap();

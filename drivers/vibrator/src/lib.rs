@@ -72,7 +72,8 @@ impl<PwmChannel: SetDutyCycle> Motor for PwmMotor<PwmChannel> {
 
     fn set_strength(&mut self, strength: Strength) -> Result<(), Self::Error> {
         let percent_of_time_pin_is_high = 100 - strength.percent();
-        self.pwm_channel.set_duty_cycle_percent(percent_of_time_pin_is_high)
+        self.pwm_channel
+            .set_duty_cycle_percent(percent_of_time_pin_is_high)
     }
 }
 
@@ -88,11 +89,17 @@ pub struct Step {
 
 impl Step {
     pub const fn buzz(duration_in_milliseconds: u16) -> Step {
-        Step { strength: Strength::FULL, duration_in_milliseconds }
+        Step {
+            strength: Strength::FULL,
+            duration_in_milliseconds,
+        }
     }
 
     pub const fn pause(duration_in_milliseconds: u16) -> Step {
-        Step { strength: Strength::OFF, duration_in_milliseconds }
+        Step {
+            strength: Strength::OFF,
+            duration_in_milliseconds,
+        }
     }
 }
 
@@ -129,12 +136,21 @@ impl<MotorDriver: Motor> Vibrator<MotorDriver> {
         duration_in_milliseconds: u16,
         delay: &mut impl DelayNs,
     ) -> Result<(), MotorDriver::Error> {
-        let single_step = [Step { strength, duration_in_milliseconds }];
+        let single_step = [Step {
+            strength,
+            duration_in_milliseconds,
+        }];
         self.play(&single_step, delay).await
     }
 
-    pub async fn play(&mut self, pattern: &[Step], delay: &mut impl DelayNs) -> Result<(), MotorDriver::Error> {
-        let guard = TurnsMotorOffWhenDropped { motor: &mut self.motor };
+    pub async fn play(
+        &mut self,
+        pattern: &[Step],
+        delay: &mut impl DelayNs,
+    ) -> Result<(), MotorDriver::Error> {
+        let guard = TurnsMotorOffWhenDropped {
+            motor: &mut self.motor,
+        };
 
         for step in pattern {
             guard.motor.set_strength(step.strength)?;
