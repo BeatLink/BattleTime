@@ -215,8 +215,12 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   vector table.
 - [ ] **A progress screen** while an update is received.
 - [ ] **Confirm or reject a new firmware** from settings, as InfiniTime's firmware screen does.
-- [ ] **A bootloader screen** with a progress bar during a swap, and a sign that a held button
-  will revert or recover. The screen stays dark for up to 30 seconds now.
+- [ ] **A swap progress bar on the bootloader screen.** It says "Installing firmware" for up to 30
+  seconds with nothing moving. Its 16 KB has about 2 KB to spare.
+- [ ] **A bootloader updater,** so a watch already on NeoTime gets the bootloader's status screen.
+  Nothing can replace the bootloader once installed; the plan is an image installed on trial that
+  writes the new bootloader and resets without confirming, so the new bootloader rolls back to the
+  previous firmware.
 - [ ] **A setting to turn updates off,** or on until the next reset.
 - [ ] **The recovery firmware** itself.
 - [ ] **Show the bootloader version** in a system info screen.
