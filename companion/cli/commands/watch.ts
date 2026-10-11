@@ -4,7 +4,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 
-import type { WatchSettingValues } from '@/protocol/gadgetbridge';
+import type { SettingsMessage } from '@/protocol/gadgetbridge';
 import { createBackup, parseBackup, restoreBackup } from '@/protocol/backup';
 import { setWatchTime } from '@/protocol/neotime';
 import { encodeForWatch, decodeWatchLine } from '@/protocol/gadgetbridge';
@@ -28,8 +28,9 @@ neotime backup <file>
 neotime restore <file>
 neotime listen [line] [--allow <hosts>] [--wait <seconds>]
 
-  status prints the battery and today's steps. time sets the watch clock from this computer's. settings with no arguments prints them; brightness=3 face=<path> and the
-  like change them. alarms with no arguments lists them, otherwise replaces
+  status prints the battery and today's steps. time sets the watch clock from this computer's. settings with no arguments prints them;
+  brightness=3, theme=ocean, theme_colors='{"accent":"#ff8000"}' and the like
+  change them. alarms with no arguments lists them, otherwise replaces
   them all: 07:30/12345 rings on weekdays (1 is Monday), 06:00/67/off is a
   weekend alarm turned off, and a bare time rings once. files and apps use
   NeoTime's file service; paths are absolute, such as /settings. listen stays
@@ -44,7 +45,7 @@ function describeDays(rep: number): string {
 }
 
 // Turn a key=value argument into a setting, reading numbers and booleans as such.
-function parseSetting(arg: string): Partial<WatchSettingValues> {
+function parseSetting(arg: string): Omit<SettingsMessage, 't'> {
   const equals = arg.indexOf('=');
   if (equals < 1) {
     throw new Error(`Give settings as key=value, not ${arg}.`);
@@ -56,15 +57,15 @@ function parseSetting(arg: string): Partial<WatchSettingValues> {
     value = raw === 'true';
   } else if (/^-?\d+$/.test(raw)) {
     value = Number(raw);
-  } else if (raw.startsWith('[')) {
+  } else if (/^[[{]/.test(raw)) {
     value = JSON.parse(raw);
   }
-  return { [key]: value } as Partial<WatchSettingValues>;
+  return { [key]: value } as Omit<SettingsMessage, 't'>;
 }
 
 export async function status(session: WatchSession) {
   const reply = await readStatus(session.requests);
-  say(`Battery ${reply.battery}% (${(reply.mv / 1000).toFixed(2)} V)${reply.charging ? ', charging' : ''}`);
+  say(`Battery ${reply.bat}% (${(reply.mv / 1000).toFixed(2)} V)${reply.charging ? ', charging' : ''}`);
   say(reply.steps === null ? 'No step counter.' : `${reply.steps} steps today.`);
 }
 
@@ -78,14 +79,11 @@ export async function settings(session: WatchSession, args: string[]) {
   const reply = args.length
     ? await writeWatchSettings(session.requests, Object.assign({}, ...args.map(parseSetting)))
     : await readWatchSettings(session.requests);
-  const { t: _t, faces, ...values } = reply;
+  const { t: _t, themes, ...values } = reply;
   for (const [key, value] of Object.entries(values)) {
     say(`${key.padEnd(14)} ${JSON.stringify(value)}`);
   }
-  say('faces:');
-  for (const [path, label] of faces) {
-    say(`  ${path === reply.face ? '*' : ' '} ${label.padEnd(16)} ${path}`);
-  }
+  say(`themes         ${themes.join(', ')}`);
 }
 
 // HH:MM, then optionally /<day digits> and /off.

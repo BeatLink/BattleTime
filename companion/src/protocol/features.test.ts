@@ -8,7 +8,7 @@ import { FileService } from './file-service';
 import { decodeWatchLine, encodeForWatch, type PhoneToWatchMessage } from './gadgetbridge';
 import { readAlarms, readStatus, readWatchSettings, ReplyRouter, writeAlarms, writeWatchSettings } from './requests';
 import { hourlySteps, readStepHistory } from './steps';
-import { applyPreset, DEFAULT_THEME, hexToRgb565, rgb565ToHex, THEME_PRESETS, themeBytes, themeColours } from './theme';
+import { changedColors, normaliseHex } from './theme';
 
 // NeoTime's file service on a mock watch, as the provider opens it.
 function fileService(watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true)): Promise<FileService> {
@@ -50,10 +50,20 @@ describe('settings and alarms', () => {
   it('reads and changes watch settings', async () => {
     const channel = requestChannel();
     const before = await readWatchSettings(channel);
-    expect(before.faces.length).toBeGreaterThan(0);
-    const after = await writeWatchSettings(channel, { brightness: 3, face: before.faces[1][0] });
+    expect(before.themes).toContain('light');
+    const after = await writeWatchSettings(channel, { brightness: 3, theme: 'light' });
     expect(after.brightness).toBe(3);
-    expect(after.face).toBe(before.faces[1][0]);
+    expect(after.theme).toBe('light');
+    expect(after.theme_colors.background).toBe('#ffffff');
+  });
+
+  it('turns a changed colour into a custom theme, and refuses a bad value whole', async () => {
+    const channel = requestChannel();
+    const custom = await writeWatchSettings(channel, { theme_colors: { accent: '#ff8000' } });
+    expect(custom.theme).toBe('custom');
+    expect(custom.theme_colors.accent).toBe('#ff8000');
+    await expect(writeWatchSettings(channel, { brightness: 2, theme: 'neon' })).rejects.toThrow('unknown theme');
+    expect((await readWatchSettings(channel)).brightness).toBe(custom.brightness);
   });
 
   it('replaces the alarm list and fills in defaults', async () => {
@@ -137,13 +147,15 @@ describe('backup', () => {
 });
 
 describe('theme', () => {
-  it('round trips the default theme and converts colours', () => {
-    expect(themeBytes(themeColours(DEFAULT_THEME))).toEqual(DEFAULT_THEME);
-    expect(rgb565ToHex(0xffff)).toBe('#ffffff');
-    expect(rgb565ToHex(0x0000)).toBe('#000000');
-    expect(hexToRgb565('#ff0000')).toBe(0xf800);
-    expect(hexToRgb565('#0f0')).toBe(0x07e0);
-    expect(hexToRgb565('nope')).toBeNull();
+  it('normalises colours and sends only the ones that changed', () => {
+    expect(normaliseHex('#0F0')).toBe('#00ff00');
+    expect(normaliseHex('ff8000')).toBe('#ff8000');
+    expect(normaliseHex('nope')).toBeNull();
+    const base = {
+      background: '#000000', surface: '#292c31', text: '#ffffff', muted: '#8c929c',
+      accent: '#00aaa5', success: '#39be5a', warning: '#f7aa18', danger: '#e74539',
+    };
+    expect(changedColors(base, { ...base, accent: '#FF8000', text: '#FFFFFF' })).toEqual({ accent: '#FF8000' });
   });
 });
 
@@ -159,17 +171,6 @@ describe('ascii lines', () => {
 describe('status', () => {
   it('reads the battery and step count', async () => {
     const reply = await readStatus(requestChannel());
-    expect(reply).toEqual({ t: 'status', battery: 76, mv: 3912, charging: false, steps: 4321 });
-  });
-});
-
-describe('theme presets', () => {
-  it('leaves the default theme unchanged and only touches the accent slots', () => {
-    const colours = themeColours(DEFAULT_THEME);
-    const byName = Object.fromEntries(THEME_PRESETS.map((preset) => [preset.name, preset]));
-    expect(applyPreset(colours, byName.Default)).toEqual(colours);
-    const forest = applyPreset(colours, byName.Forest);
-    expect(forest.slice(0, 7)).toEqual(colours.slice(0, 7));
-    expect(forest[7]).toBe(hexToRgb565('#2fbf71'));
+    expect(reply).toEqual({ t: 'status', bat: 76, mv: 3912, charging: false, steps: 4321 });
   });
 });

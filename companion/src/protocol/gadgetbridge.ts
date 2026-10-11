@@ -25,22 +25,32 @@ export type FindWatchMessage = { t: 'find'; n: boolean };
 // The number of short buzzes, which the watch keeps between 1 and 5.
 export type VibrateMessage = { t: 'vibrate'; n: number };
 
-// The watch settings the phone can change.
+// The eight theme colours, each "#rrggbb".
+export const THEME_COLOR_KEYS = ['background', 'surface', 'text', 'muted', 'accent', 'success', 'warning', 'danger'] as const;
+export type ThemeColorKey = (typeof THEME_COLOR_KEYS)[number];
+export type ThemeColors = Record<ThemeColorKey, string>;
+
+// The watch settings the phone can change. The theme and brightness are always there; firmware older
+// than the settings store leaves the rest out.
 export type WatchSettingValues = {
   brightness: number;
-  notify_level: number;
-  units: 'Metric' | 'Imperial';
-  blank_after: number;
-  clock_24h: boolean;
-  step_goal: number;
-  // Firmware older than the launcher setting leaves this out.
-  launcher_style?: 'Grid' | 'List';
-  theme: number[];
-  face: string | null;
+  // A preset's name, or "custom" when the colours match none.
+  theme: string;
+  theme_colors: ThemeColors;
+  blank_after?: number;
+  clock_24h?: boolean;
+  units?: 'Metric' | 'Imperial';
+  step_goal?: number;
+  always_on?: boolean;
+  // 0 off, 1 hourly, 2 half-hourly.
+  chimes?: 0 | 1 | 2;
+  do_not_disturb?: boolean;
 };
 
-// With no other keys the watch only reports its settings.
-export type SettingsMessage = { t: 'settings' } & Partial<WatchSettingValues>;
+// With no other keys the watch only reports its settings. Colours given are applied after the preset.
+export type SettingsMessage = { t: 'settings' } & Partial<Omit<WatchSettingValues, 'theme_colors'>> & {
+  theme_colors?: Partial<ThemeColors>;
+};
 
 export type StepsRequestMessage = { t: 'steps'; y: number; m: number; d: number };
 
@@ -110,7 +120,8 @@ export type InfoMessage = { t: 'info'; msg: string };
 
 export type ErrorMessage = { t: 'error'; msg: string };
 
-export type SettingsReply = { t: 'settings'; faces: [string, string][] } & WatchSettingValues;
+// Every settings message is answered with all the settings, and the presets the watch offers.
+export type SettingsReply = { t: 'settings'; themes: string[] } & WatchSettingValues;
 
 export type AlarmReply = { t: 'alarm'; d: Alarm[] };
 
@@ -127,7 +138,7 @@ export type StepsReply = {
 // The battery level in percent and millivolts, and today's step count, null without a step counter.
 export type StatusReply = {
   t: 'status';
-  battery: number;
+  bat: number;
   mv: number;
   charging: boolean;
   steps: number | null;

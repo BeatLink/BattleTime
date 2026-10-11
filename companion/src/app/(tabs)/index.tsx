@@ -147,7 +147,7 @@ export default function WatchScreen() {
           {uartReady ? (
             <>
               <Row
-                label={status ? `Battery ${status.battery}%${status.charging ? ', charging' : ''}` : 'Battery'}
+                label={status ? `Battery ${status.bat}%${status.charging ? ', charging' : ''}` : 'Battery'}
                 detail={status ? `${(status.mv / 1000).toFixed(2)} V` : 'Not read yet'}
               />
               <Row
@@ -223,7 +223,7 @@ export default function WatchScreen() {
               <Row label="Alarms" detail="Set times and the days they repeat on" onPress={() => router.push('/alarms')} />
               <Row
                 label="Watch settings"
-                detail="Brightness, face, timeout, units, step goal and theme"
+                detail="Theme, brightness, timeout, chimes, units and step goal"
                 onPress={() => router.push('/watch-settings')}
               />
             </>

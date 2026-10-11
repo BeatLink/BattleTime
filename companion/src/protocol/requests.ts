@@ -8,7 +8,7 @@ import type {
   SettingsReply,
   StatusReply,
   StepsReply,
-  WatchSettingValues,
+  SettingsMessage,
   WatchToPhoneMessage,
 } from './gadgetbridge';
 
@@ -120,7 +120,7 @@ export async function readWatchSettings(channel: RequestChannel): Promise<Settin
 
 export async function writeWatchSettings(
   channel: RequestChannel,
-  patch: Partial<WatchSettingValues>,
+  patch: Omit<SettingsMessage, 't'>,
 ): Promise<SettingsReply> {
   return channel.request({ t: 'settings', ...patch }, 'settings');
 }
