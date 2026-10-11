@@ -238,7 +238,8 @@ struct StatusPage<'bus, 'd> {
     data_or_command: Option<Peri<'d, P0_18>>,
     reset: Option<Peri<'d, P0_26>>,
     backlight: Option<Peri<'d, P0_14>>,
-    screen: Option<(StatusScreen<'bus, 'd>, Output<'d>)>,
+    /// The screen, then the backlight and reset pins, kept driven: a dropped pin floats, and a floating reset blanks the panel.
+    screen: Option<(StatusScreen<'bus, 'd>, Output<'d>, Output<'d>)>,
 }
 
 impl<'bus, 'd> StatusPage<'bus, 'd> {
@@ -255,19 +256,20 @@ impl<'bus, 'd> StatusPage<'bus, 'd> {
             };
             let Ok(spi) = RefCellDevice::new_no_delay(self.spi_bus, chip_select);
             let background = Rgb565::from(RawU16::new(status_colour::BOOTLOADER));
+            let mut reset_pin = Output::new(reset, Level::High, OutputDrive::Standard);
             let Some(screen) = Screen::start(
                 spi,
                 Output::new(data_or_command, Level::Low, OutputDrive::Standard),
-                Output::new(reset, Level::High, OutputDrive::Standard),
+                &mut reset_pin,
                 background,
                 delay,
             ) else {
                 return;
             };
             let backlight_on = Output::new(backlight, Level::Low, OutputDrive::Standard);
-            self.screen = Some((screen, backlight_on));
+            self.screen = Some((screen, backlight_on, reset_pin));
         }
-        if let Some((screen, _)) = &mut self.screen {
+        if let Some((screen, _, _)) = &mut self.screen {
             for (index, text) in lines.iter().enumerate() {
                 screen.write_line(index as i32, &pad(text));
             }
