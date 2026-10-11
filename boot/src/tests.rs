@@ -96,6 +96,12 @@ fn firmware_starts_where_the_reloader_expects_it() {
 }
 
 #[test]
+fn the_replaced_firmware_fits_in_the_update_slot_one_page_up() {
+    assert_eq!(PREVIOUS_FIRMWARE.start, FIRMWARE_UPDATE.start + PAGE_SIZE);
+    assert_eq!(PREVIOUS_FIRMWARE.end(), FIRMWARE_UPDATE.end());
+}
+
+#[test]
 fn update_slot_has_one_spare_page_for_the_swap() {
     assert_eq!(FIRMWARE_UPDATE.size, FIRMWARE.size + PAGE_SIZE);
 }

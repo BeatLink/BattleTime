@@ -65,6 +65,11 @@ pub const FIRMWARE_UPDATE: Region = Region {
     start: 0x0000_0000,
     size: FIRMWARE.size + PAGE_SIZE,
 };
+/// Where the replaced firmware sits after the bootloader's swap: embassy-boot moves each page one page up.
+pub const PREVIOUS_FIRMWARE: Region = Region {
+    start: FIRMWARE_UPDATE.start + PAGE_SIZE,
+    size: FIRMWARE.size,
+};
 pub const RECOVERY_FIRMWARE: Region = Region {
     start: FIRMWARE_UPDATE.end(),
     size: FIRMWARE.size,
@@ -197,7 +202,6 @@ pub fn copy_recovery_into_update_slot<Flash: NorFlash>(
 
     Ok(RecoveryCopy::Copied)
 }
-
 
 pub mod migration;
 

@@ -2,7 +2,10 @@
 //!
 //! It takes over the bootloader's watchdog and feeds it only while the side button is up, shows a
 //! page on the screen, mounts the file system, advertises as "NeoTime", takes firmware updates over
-//! legacy DFU, and confirms itself to the bootloader once Bluetooth is running.
+//! legacy DFU, and confirms itself to the bootloader once a phone has exchanged data with it.
+//!
+//! The `wasp-os-rehearsal` feature builds it as an app for wasp-os instead, which touches no flash;
+//! see docs/updates.md.
 
 #![no_std]
 #![no_main]
@@ -11,18 +14,15 @@ extern crate alloc;
 
 use core::cell::RefCell;
 
-use embassy_embedded_hal::{
-    adapter::BlockingAsync, flash::partition::BlockingPartition, shared_bus::blocking::spi::SpiDevice,
-};
+use embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_nrf::{
     bind_interrupts,
     config::LfclkSource,
     gpio::{Input, Level, Output, OutputDrive, Pull},
-    nvmc::Nvmc,
     peripherals,
     spim::{self, Spim},
-    wdt::{self, HaltConfig, SleepConfig, Watchdog, WatchdogHandle},
+    wdt::{self, SleepConfig, Watchdog, WatchdogHandle},
 };
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
 use embassy_time::{Delay, Duration, Timer};
@@ -34,19 +34,17 @@ use embedded_graphics::{
     text::Text,
 };
 use mipidsi::interface::SpiInterface;
-use neotime_boot::{
-    BOOT_STATE, FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, FIRMWARE_UPDATE, RECOVERY_FIRMWARE,
-    WATCHDOG_TIMEOUT_IN_TICKS,
-};
+use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
 use neotime_button::Button;
 use neotime_dfu::{service::DfuWrite, service::LegacyDfuService, LegacyDfu};
 use neotime_display::Display;
-use neotime_external_flash::ExternalFlash;
-use neotime_storage::{prepare_file_system, FileSystemFlash, Preparation};
-use neotime_updates::{confirm_running_firmware, Receivers, RecoveryReceiver, UpdateReceiver};
-use panic_reset as _;
+use panic_halt as _;
 use static_cell::StaticCell;
 use trouble_host::prelude::*;
+
+#[cfg_attr(not(feature = "wasp-os-rehearsal"), path = "storage/watch.rs")]
+#[cfg_attr(feature = "wasp-os-rehearsal", path = "storage/rehearsal.rs")]
+mod storage;
 
 // ============================================================================
 // PineTime wiring
@@ -64,21 +62,11 @@ const DISPLAY_COMMAND_BUFFER_SIZE: usize = 512;
 const HEAP_SIZE: usize = 16 * 1024;
 
 type SpiBus = Mutex<NoopRawMutex, RefCell<Spim<'static>>>;
-type FlashOnBus = ExternalFlash<SpiDevice<'static, NoopRawMutex, Spim<'static>, Output<'static>>>;
-type SharedExternalFlash = Mutex<NoopRawMutex, RefCell<FlashOnBus>>;
-type SharedInternalFlash = Mutex<NoopRawMutex, RefCell<Nvmc<'static>>>;
-type ExternalSlot = BlockingAsync<BlockingPartition<'static, NoopRawMutex, FlashOnBus>>;
-type BootStatePage = BlockingAsync<BlockingPartition<'static, NoopRawMutex, Nvmc<'static>>>;
-type WatchReceivers = Receivers<'static, ExternalSlot, BootStatePage, ExternalSlot>;
 
 #[global_allocator]
 static HEAP: LlffHeap = LlffHeap::empty();
 
 static SPI_BUS: StaticCell<SpiBus> = StaticCell::new();
-static EXTERNAL_FLASH: StaticCell<SharedExternalFlash> = StaticCell::new();
-static INTERNAL_FLASH: StaticCell<SharedInternalFlash> = StaticCell::new();
-static STATE_ALIGNMENT: StaticCell<[u8; 4]> = StaticCell::new();
-static CONFIRM_ALIGNMENT: StaticCell<[u8; 4]> = StaticCell::new();
 static HOST_RESOURCES: StaticCell<HostResources<DefaultPacketPool, 1, 2>> = StaticCell::new();
 
 // ============================================================================
@@ -87,8 +75,11 @@ static HOST_RESOURCES: StaticCell<HostResources<DefaultPacketPool, 1, 2>> = Stat
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
+    storage::prepare_clocks();
     let mut config = embassy_nrf::config::Config::default();
     config.lfclk_source = LfclkSource::ExternalXtal;
+    // Leave the debug port's settings alone, so start-up never writes the protection word.
+    config.debug = embassy_nrf::config::Debug::NotConfigured;
     let chip = embassy_nrf::init(config);
 
     start_heap();
@@ -120,52 +111,15 @@ async fn main(spawner: Spawner) {
     let _backlight_on = Output::new(chip.P0_14, Level::Low, OutputDrive::Standard);
     screen.write_line(0, "NeoTime");
     screen.write_line(1, FIRMWARE_VERSION);
+    screen.write_line(6, storage::BUILD_NAME);
 
-    let flash_chip_select = Output::new(chip.P0_05, Level::High, OutputDrive::Standard);
-    let external_flash = match ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), &mut Delay) {
-        Ok(flash) => EXTERNAL_FLASH.init(Mutex::new(RefCell::new(flash))),
-        Err(_) => {
-            screen.write_line(2, "no flash chip");
-            return;
-        }
+    let storage_peripherals = storage::StoragePeripherals {
+        flash_chip_select: chip.P0_05,
+        flash_controller: chip.NVMC,
     };
-    let internal_flash = INTERNAL_FLASH.init(Mutex::new(RefCell::new(Nvmc::new(chip.NVMC))));
-
-    let file_system_flash = FileSystemFlash::new(BlockingPartition::new(
-        external_flash,
-        0,
-        neotime_external_flash::CAPACITY_IN_BYTES as u32,
-    ));
-    match prepare_file_system(file_system_flash) {
-        Ok(prepared) => screen.write_line(
-            2,
-            match prepared.preparation {
-                Preparation::AlreadyFormatted => "files ok",
-                Preparation::FormattedBlankFlash => "files formatted",
-            },
-        ),
-        Err(_) => screen.write_line(2, "files broken"),
-    }
-
-    let receivers = Receivers {
-        firmware: UpdateReceiver::new(
-            BlockingAsync::new(BlockingPartition::new(
-                external_flash,
-                FIRMWARE_UPDATE.start,
-                FIRMWARE_UPDATE.size,
-            )),
-            BlockingAsync::new(BlockingPartition::new(
-                internal_flash,
-                BOOT_STATE.start,
-                BOOT_STATE.size,
-            )),
-            STATE_ALIGNMENT.init([0; 4]),
-        ),
-        recovery: RecoveryReceiver::new(BlockingAsync::new(BlockingPartition::new(
-            external_flash,
-            RECOVERY_FIRMWARE.start,
-            RECOVERY_FIRMWARE.size,
-        ))),
+    let Some((targets, confirmation)) = storage::start(spi_bus, storage_peripherals, &mut screen).await
+    else {
+        return;
     };
 
     let controller = neotime_bluetooth::start(
@@ -181,12 +135,7 @@ async fn main(spawner: Spawner) {
         },
         Interrupts,
     );
-    let boot_state = BlockingAsync::new(BlockingPartition::new(
-        internal_flash,
-        BOOT_STATE.start,
-        BOOT_STATE.size,
-    ));
-    run_bluetooth(controller, receivers, boot_state, screen).await;
+    run_bluetooth(controller, targets, confirmation, screen).await;
 }
 
 fn start_heap() {
@@ -213,7 +162,7 @@ fn take_over_watchdog(watchdog_peripheral: embassy_nrf::Peri<'static, peripheral
     let mut config = wdt::Config::default();
     config.timeout_ticks = WATCHDOG_TIMEOUT_IN_TICKS;
     config.action_during_sleep = SleepConfig::Run;
-    config.action_during_debug_halt = HaltConfig::Pause;
+    config.action_during_debug_halt = storage::WATCHDOG_HALT;
 
     match Watchdog::try_new(watchdog_peripheral, config) {
         Ok((_watchdog, [handle])) => handle,
@@ -286,15 +235,26 @@ struct Server {
     dfu: LegacyDfuService,
 }
 
+/// The chip's factory address with its top two bits set, the same static random address the controller reports.
+fn device_address() -> [u8; 6] {
+    const FICR_DEVICE_ADDRESS_LOW: *const u32 = 0x1000_00A4 as *const u32;
+    const FICR_DEVICE_ADDRESS_HIGH: *const u32 = 0x1000_00A8 as *const u32;
+    let low = unsafe { FICR_DEVICE_ADDRESS_LOW.read_volatile() }.to_le_bytes();
+    let high = unsafe { FICR_DEVICE_ADDRESS_HIGH.read_volatile() }.to_le_bytes();
+    [low[0], low[1], low[2], low[3], high[0], high[1] | 0xC0]
+}
+
 async fn run_bluetooth(
     controller: neotime_bluetooth::BluetoothController<'static, neotime_bluetooth::NrfRadio>,
-    receivers: WatchReceivers,
-    mut boot_state: BootStatePage,
+    targets: storage::Targets,
+    mut confirmation: storage::Confirmation,
     mut screen: Screen,
 ) {
     let controller: ExternalController<_, 4> = ExternalController::new(controller);
     let resources = HOST_RESOURCES.init(HostResources::new());
-    let stack = trouble_host::new(controller, resources).build();
+    let stack = trouble_host::new(controller, resources)
+        .set_random_address(Address::random(device_address()))
+        .build();
     let mut runner = stack.runner();
     let mut peripheral = stack.peripheral();
     let server = Server::new_with_config(GapConfig::Peripheral(PeripheralConfig {
@@ -302,7 +262,7 @@ async fn run_bluetooth(
         appearance: &appearance::watch::GENERIC_WATCH,
     }))
     .unwrap();
-    let mut dfu = LegacyDfu::new(receivers);
+    let mut dfu = LegacyDfu::new(targets);
 
     let mut advertisement_data = [0; 31];
     let advertisement_length = AdStructure::encode_slice(
@@ -315,7 +275,8 @@ async fn run_bluetooth(
     .unwrap();
 
     let serve = async {
-        let mut first_connection = true;
+        let mut advertising_shown = false;
+        let mut confirmed = false;
         loop {
             let advertiser = peripheral
                 .advertise(
@@ -327,10 +288,9 @@ async fn run_bluetooth(
                 )
                 .await
                 .unwrap();
-            if first_connection {
-                screen.write_line(3, "bluetooth on");
-                let _ = confirm_running_firmware(&mut boot_state, CONFIRM_ALIGNMENT.init([0; 4])).await;
-                first_connection = false;
+            if !advertising_shown {
+                screen.write_line(3, "advertising");
+                advertising_shown = true;
             }
 
             let Ok(connection) = advertiser.accept().await else {
@@ -340,7 +300,15 @@ async fn run_bluetooth(
                 continue;
             };
             screen.write_line(4, "connected   ");
-            serve_connection(&connection, &server, &mut dfu, &mut screen).await;
+            serve_connection(
+                &connection,
+                &server,
+                &mut dfu,
+                &mut screen,
+                &mut confirmation,
+                &mut confirmed,
+            )
+            .await;
             screen.write_line(4, "disconnected");
         }
     };
@@ -348,11 +316,14 @@ async fn run_bluetooth(
     let _ = embassy_futures::join::join(runner.run(), serve).await;
 }
 
+/// The first data a phone exchanges proves the radio works end to end, so that is when the firmware confirms itself.
 async fn serve_connection(
     connection: &GattConnection<'_, '_, DefaultPacketPool>,
     server: &Server<'_>,
-    dfu: &mut LegacyDfu<WatchReceivers>,
+    dfu: &mut LegacyDfu<storage::Targets>,
     screen: &mut Screen,
+    confirmation: &mut storage::Confirmation,
+    confirmed: &mut bool,
 ) {
     loop {
         match connection.next().await {
@@ -373,6 +344,11 @@ async fn serve_connection(
                 };
                 if let Ok(reply) = event.accept() {
                     reply.send().await;
+                }
+                if !*confirmed {
+                    let status = confirmation.confirm().await;
+                    screen.write_line(3, status);
+                    *confirmed = true;
                 }
 
                 let outcome = match target {
@@ -396,8 +372,11 @@ async fn serve_connection(
                     screen.write_line(5, &progress);
                 }
                 if outcome.reset_requested {
-                    Timer::after(Duration::from_millis(200)).await;
-                    cortex_m::peripheral::SCB::sys_reset();
+                    if storage::RESET_AFTER_ACTIVATE {
+                        Timer::after(Duration::from_millis(200)).await;
+                        cortex_m::peripheral::SCB::sys_reset();
+                    }
+                    screen.write_line(5, "upload verified ");
                 }
             }
             _ => {}

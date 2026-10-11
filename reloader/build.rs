@@ -9,7 +9,7 @@ use std::{env, fs, path::PathBuf};
 use neotime_boot::{
     is_firmware_vector_table,
     migration::{crc32, PayloadSizes, CRC32_INITIAL},
-    BOOTLOADER, RAM, VECTOR_TABLE_CHECK_SIZE,
+    BOOTLOADER, FIRMWARE_ALIVE_MARKER, VECTOR_TABLE_CHECK_SIZE,
 };
 
 /// Where wasp-os's bootloader on S112 starts apps, up to where that bootloader itself begins.
@@ -45,7 +45,7 @@ fn main() {
         table_start,
         flash_end - table_start,
         RELOADER_RAM_START,
-        RAM.end() - RELOADER_RAM_START,
+        FIRMWARE_ALIVE_MARKER.start - RELOADER_RAM_START,
     );
     fs::write(output_directory.join("memory.x"), memory_map).unwrap();
     println!("cargo:rustc-link-search={}", output_directory.display());

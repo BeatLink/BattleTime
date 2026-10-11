@@ -246,6 +246,23 @@ fn confirming_the_running_firmware_keeps_it() {
 }
 
 #[test]
+fn a_freshly_swapped_firmware_is_on_trial_until_confirmed() {
+    let mut boot_state = BootStatePage::erased(PAGE_SIZE);
+    let mut alignment = [0; 4];
+
+    let before = block_on(running_firmware_is_on_trial(&mut boot_state, &mut alignment));
+    block_on(FirmwareState::new(&mut boot_state, &mut alignment).mark_updated()).unwrap();
+    let after_swap = block_on(running_firmware_is_on_trial(&mut boot_state, &mut alignment));
+    block_on(confirm_running_firmware(&mut boot_state, &mut alignment)).unwrap();
+    let after_confirm = block_on(running_firmware_is_on_trial(&mut boot_state, &mut alignment));
+
+    assert_eq!(
+        (before, after_swap, after_confirm),
+        (Ok(false), Ok(true), Ok(false))
+    );
+}
+
+#[test]
 fn confirming_an_already_confirmed_firmware_writes_nothing() {
     let mut boot_state = BootStatePage::erased(PAGE_SIZE);
     let mut alignment = [0; 4];

@@ -30,7 +30,7 @@ use embedded_graphics::{
     primitives::{PrimitiveStyle, Rectangle},
     text::Text,
 };
-use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
+use embedded_storage::nor_flash::{ErrorType, NorFlash, ReadNorFlash};
 use mipidsi::interface::SpiInterface;
 use neotime_boot::{
     migration::{crc32, plan, PayloadSizes, Step, CRC32_INITIAL},
@@ -38,7 +38,8 @@ use neotime_boot::{
 };
 use neotime_display::Display;
 use neotime_external_flash::ExternalFlash;
-use panic_reset as _;
+// A panic halts, so the watchdog resets into the old update mode instead of looping through this image.
+use panic_halt as _;
 use static_cell::StaticCell;
 
 mod payloads {
@@ -152,8 +153,12 @@ fn main() -> ! {
         screen.status("No flash chip");
         halt();
     };
-    let external_flash = Mutex::<NoopRawMutex, _>::new(RefCell::new(external_flash));
-    let internal_flash = Mutex::<NoopRawMutex, _>::new(RefCell::new(Nvmc::new(chip.NVMC)));
+    let external_flash = Mutex::<NoopRawMutex, _>::new(RefCell::new(FeedsWatchdog {
+        flash: external_flash,
+    }));
+    let internal_flash = Mutex::<NoopRawMutex, _>::new(RefCell::new(FeedsWatchdog {
+        flash: Nvmc::new(chip.NVMC),
+    }));
 
     let sizes = PayloadSizes {
         bootloader_in_bytes: BOOTLOADER.length_in_bytes as u32,
@@ -253,6 +258,19 @@ fn payloads_are_intact() -> bool {
 // Copying into flash
 // ============================================================================
 
+/// The SPI driver can send at most 255 bytes straight from flash, so every payload chunk goes through RAM first.
+struct RamChunk {
+    bytes: [u8; COPY_CHUNK_SIZE],
+}
+
+fn into_ram(chunk: &[u8]) -> RamChunk {
+    let mut ram_chunk = RamChunk {
+        bytes: [0xFF; COPY_CHUNK_SIZE],
+    };
+    ram_chunk.bytes[..chunk.len()].copy_from_slice(chunk);
+    ram_chunk
+}
+
 /// Erases the region, writes the payload a chunk at a time, and reads it back; tries again on a mismatch.
 fn copy_with_retries<Flash: NorFlash>(flash: &mut Flash, payload: &Payload, screen: &mut Screen) -> bool {
     for _ in 0..WRITE_RETRIES {
@@ -275,7 +293,8 @@ fn copy<Flash: NorFlash>(
 
     for (index, chunk) in padded.chunks(COPY_CHUNK_SIZE).enumerate() {
         feed_watchdog();
-        flash.write((index * COPY_CHUNK_SIZE) as u32, chunk)?;
+        let ram_chunk = into_ram(chunk);
+        flash.write((index * COPY_CHUNK_SIZE) as u32, &ram_chunk.bytes[..chunk.len()])?;
         screen.progress(index * COPY_CHUNK_SIZE, padded.len());
     }
     Ok(())
@@ -298,14 +317,11 @@ fn read_back_matches<Flash: ReadNorFlash>(flash: &mut Flash, payload: &Payload) 
 }
 
 /// The firmware goes through embassy-boot's own updater, so it lands exactly as a Bluetooth update would.
-fn stage_firmware<Spi>(
-    external_flash: &Mutex<NoopRawMutex, RefCell<ExternalFlash<Spi>>>,
-    internal_flash: &Mutex<NoopRawMutex, RefCell<Nvmc<'_>>>,
+fn stage_firmware<External: NorFlash, Internal: NorFlash>(
+    external_flash: &Mutex<NoopRawMutex, RefCell<External>>,
+    internal_flash: &Mutex<NoopRawMutex, RefCell<Internal>>,
     screen: &mut Screen,
-) -> bool
-where
-    Spi: embedded_hal::spi::SpiDevice,
-{
+) -> bool {
     let mut alignment = AlignedBuffer([0; 4]);
     let mut updater = BlockingFirmwareUpdater::new(
         FirmwareUpdaterConfig {
@@ -319,7 +335,11 @@ where
         let mut written = true;
         for (index, chunk) in FIRMWARE.padded().chunks(COPY_CHUNK_SIZE).enumerate() {
             feed_watchdog();
-            if updater.write_firmware(index * COPY_CHUNK_SIZE, chunk).is_err() {
+            let ram_chunk = into_ram(chunk);
+            if updater
+                .write_firmware(index * COPY_CHUNK_SIZE, &ram_chunk.bytes[..chunk.len()])
+                .is_err()
+            {
                 written = false;
                 break;
             }
@@ -333,13 +353,10 @@ where
     false
 }
 
-fn mark_swap<Spi>(
-    external_flash: &Mutex<NoopRawMutex, RefCell<ExternalFlash<Spi>>>,
-    internal_flash: &Mutex<NoopRawMutex, RefCell<Nvmc<'_>>>,
-) -> bool
-where
-    Spi: embedded_hal::spi::SpiDevice,
-{
+fn mark_swap<External: NorFlash, Internal: NorFlash>(
+    external_flash: &Mutex<NoopRawMutex, RefCell<External>>,
+    internal_flash: &Mutex<NoopRawMutex, RefCell<Internal>>,
+) -> bool {
     let mut alignment = AlignedBuffer([0; 4]);
     let mut updater = BlockingFirmwareUpdater::new(
         FirmwareUpdaterConfig {
@@ -350,6 +367,52 @@ where
     );
     feed_watchdog();
     updater.mark_updated().is_ok()
+}
+
+// ============================================================================
+// Feeding the watchdog through long flash work
+// ============================================================================
+
+/// A sector erase can take hundreds of milliseconds at worst, so the watchdog is fed around every one.
+struct FeedsWatchdog<Flash> {
+    flash: Flash,
+}
+
+impl<Flash: ErrorType> ErrorType for FeedsWatchdog<Flash> {
+    type Error = Flash::Error;
+}
+
+impl<Flash: ReadNorFlash> ReadNorFlash for FeedsWatchdog<Flash> {
+    const READ_SIZE: usize = Flash::READ_SIZE;
+
+    fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+        feed_watchdog();
+        self.flash.read(offset, bytes)
+    }
+
+    fn capacity(&self) -> usize {
+        self.flash.capacity()
+    }
+}
+
+impl<Flash: NorFlash> NorFlash for FeedsWatchdog<Flash> {
+    const WRITE_SIZE: usize = Flash::WRITE_SIZE;
+    const ERASE_SIZE: usize = Flash::ERASE_SIZE;
+
+    fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
+        for sector_start in (from..to).step_by(Flash::ERASE_SIZE) {
+            feed_watchdog();
+            self.flash
+                .erase(sector_start, sector_start + Flash::ERASE_SIZE as u32)?;
+        }
+        feed_watchdog();
+        Ok(())
+    }
+
+    fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+        feed_watchdog();
+        self.flash.write(offset, bytes)
+    }
 }
 
 // ============================================================================

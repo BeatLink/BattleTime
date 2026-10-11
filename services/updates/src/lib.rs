@@ -164,6 +164,15 @@ impl<'buffer, UpdateSlot: NorFlash, BootState: NorFlash> UpdateReceiver<'buffer,
     }
 }
 
+/// True right after the bootloader swapped this firmware in, until it is confirmed or rolled back.
+pub async fn running_firmware_is_on_trial<BootState: NorFlash>(
+    boot_state: BootState,
+    state_alignment_buffer: &mut [u8],
+) -> Result<bool, UpdateError> {
+    let mut firmware_state = FirmwareState::new(boot_state, state_alignment_buffer);
+    Ok(firmware_state.get_state().await? == State::Swap)
+}
+
 /// Tells the bootloader this firmware works, so it is kept and updates are accepted again.
 pub async fn confirm_running_firmware<BootState: NorFlash>(
     boot_state: BootState,

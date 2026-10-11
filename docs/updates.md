@@ -86,14 +86,20 @@ The first firmware (`firmware/`) does the little an update needs and not much mo
 
 - takes over the bootloader's watchdog with the same settings and feeds it only while the side
   button is up, so holding the button for about five seconds always gets back to the bootloader;
-- advertises as "NeoTime" with the DFU service, and once advertising works calls
-  `confirm_running_firmware`, so a firmware whose Bluetooth is broken rolls back by itself;
+- advertises as "NeoTime" with the DFU service, and confirms itself to the bootloader once a phone
+  has exchanged data with it, so a firmware whose radio does not really work rolls back by itself;
+  advertising alone proves nothing, since the host is told it started whether or not anything
+  went out on air;
+- confirms itself at start instead when a rollback could not help: when the replaced firmware,
+  which embassy-boot keeps one page into the update slot (`PREVIOUS_FIRMWARE`), is not a firmware
+  at all, as after a migration, or when the running image is the recovery image, which must stay;
 - serves the DFU service on every connection, shows progress on the screen, and resets when the
   protocol asks;
 - mounts the file system, so that an update which breaks storage is noticed on the screen;
 - writes an alive marker into the last words of RAM, which an emulator checks.
 
-It is 105 KB of flash and 25 KB of static RAM, 16 KB of that heap. Its screen writes and flash
+A panic halts rather than resets, so the watchdog brings the watch back to the bootloader instead of
+the firmware restarting in a loop. It is 105 KB of flash and 25 KB of static RAM, 16 KB of that heap. Its screen writes and flash
 writes are blocking, so the Bluetooth host waits while a flash sector erases; the link layer runs in
 an interrupt and keeps the connection up meanwhile. The async flash driver is there for when the
 display can share an async bus.
@@ -150,14 +156,47 @@ Without an SWD probe, a watch that cannot start cannot be brought back. The relo
 window to the bootloader write, about a quarter of a second, and only enters it on a charger. It
 cannot make the window zero: the old and the new bootloader want the same first page.
 
-Before it touches a watch, it runs on the PineTime emulator, with power cuts at many points,
-through both starting systems; see "Proving it" below. Nothing here has run on a watch yet.
+The larger risk is after it. Once the reloader has run, the only Bluetooth on the watch is
+NeoTime's own controller, and a controller that does not work on real hardware leaves a watch
+that starts but can never take another update. The emulator cannot rule that out, because it
+does not model the radio's timing. So the first step on a watch is the rehearsal below, which can
+always be undone.
+
+A panic in the reloader halts it rather than resetting: a reset would restart it under the old
+bootloader, which would feed the watchdog again, and the watch would loop with no way into the old
+update mode. Halting lets the watchdog reset the watch, which the old bootloader takes as a request
+for its update mode.
+
+### The rehearsal: proving Bluetooth first, under wasp-os
+
+`firmware` built with `--features wasp-os-rehearsal` is an app for wasp-os, linked at `0x19000`
+and sent through wasp-os's own update path. It runs NeoTime's whole Bluetooth path, the controller,
+TrouBLE and the DFU service, while wasp-os's bootloader and SoftDevice stay where they are. It writes
+to neither flash chip: NeoTime's boot state page sits inside wasp-os's SoftDevice, and the external
+flash holds wasp-os's files. An upload lands in a 16 KB RAM buffer and is only checked against its
+CRC. Its watchdog takeover matches wasp-os's settings, which keep counting under a debugger.
+
+On the watch, the rehearsal must show that the watch advertises as "NeoTime", that a phone or the
+computer connects, and that a 16 KB upload (`dist/rehearsal-upload.zip`) arrives with its CRC
+matching. Holding the button for five seconds, or any fault, ends in a watchdog reset, which wasp-os's
+bootloader takes as a request for its update mode, so wasp-os can be sent back at any time. Only
+after the rehearsal passes does the reloader go to the watch.
 
 ## Proving it on the emulator
 
 The emulator (`PineTimeEmulator/`, Renode) models the chip's flash controller, the external flash
-with real program and erase behaviour, the watchdog, the button and a battery pull. The test plan
-for this work:
+with real program and erase behaviour, the watchdog, the button and a battery pull. The suites are
+in `tests/emulator/`, one Robot file per area, run from the emulator's shell, each in its own
+process:
+
+```sh
+renode-test --variable EMULATOR:<emulator checkout> --exclude long tests/emulator/<suite>.robot
+```
+
+The `long` tag marks the power-cut sweeps, which take hours of wall-clock time. The emulator has
+already caught two faults that would have stranded a watch: the reloader sent 256-byte pages from
+its own flash, which embassy's SPI driver cannot do (it panics above 255 bytes), and the firmware
+read the replaced image from the wrong page after a swap. The plan:
 
 1. **Boot chain.** Flash the bootloader at 0 and the firmware at `FIRMWARE.start`. Run. The
    firmware's alive marker (`FIRMWARE_ALIVE_MARKER`) must hold `FIRMWARE_ALIVE_MAGIC`, and
@@ -176,3 +215,6 @@ for this work:
    length is reported.
 7. **Watchdog.** With the button held, the firmware must stop feeding the watchdog and the watch
    must reset into the bootloader within about five seconds.
+8. **Rehearsal.** Under wasp-os's bootloader the rehearsal must start, no write to the flash
+   controller may come from its code, both flashes must be unchanged while it runs, and the
+   button hold must end in wasp-os's update mode rather than another start of the rehearsal.

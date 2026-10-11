@@ -24,7 +24,7 @@ embedded-graphics = "0.8"
 embedded-hal = "1.0"
 embedded-storage = "0.3"
 mipidsi = "0.10"
-panic-reset = "0.1"
+panic-halt = "1.0"
 static_cell = "2.1"
 
 neotime-boot = { path = "../boot" }
