@@ -17,7 +17,7 @@ The PineTime is built around a Nordic nRF52832 chip: a 64 MHz Arm Cortex-M4F wit
 | Heart rate sensor | HRS3300 | I2C |
 | External flash, 4 MB | XTX XT25F32B SPI NOR | SPI, shared with the screen |
 | Vibration motor | | GPIO P0.16, on while low |
-| Backlight | | Three GPIO pins |
+| Backlight | | GPIO P0.14, P0.22 and P0.23, each lit while low |
 | Side button | | GPIO P0.13, high while held; powered by P0.15 |
 | Battery, charging | | GPIO and ADC |
 
@@ -184,6 +184,13 @@ PineTime needs on top:
 - **embedded-graphics.** `Display` is a `DrawTarget` for `Rgb565`, so any `embedded-graphics`
   shape, text or image draws on it.
 - **Power.** `sleep` and `wake` turn the panel off and on and keep its memory.
+- **Low-power mode.** `enter_low_power_mode` switches the panel to its idle mode, as InfiniTime
+  does for an always-on screen: only 8 colours, the top bit of each channel, refreshed at a quarter
+  of the rate. Memory keeps every colour, so `leave_low_power_mode` shows the screen as drawn, and
+  drawing works the same in either mode.
+- **Backlight.** `Backlight` drives the three backlight pins, P0.14, P0.22 and P0.23, which each
+  light while low. `BacklightLevel` is `Off`, `Low`, `Medium` or `High`, and each level lights one
+  more pin; `brighter` and `dimmer` step between them.
 
 The board passes in the SPI interface, the reset pin and a delay. The scrolling is what page
 slides will be built on: draw the next page into memory that is off screen, then scroll it in.

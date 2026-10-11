@@ -3,6 +3,9 @@
 //! The ST7789 holds 320 rows of memory but the panel shows only 240, and scrolling changes which
 //! memory row appears at the top of the screen. Drawing takes screen positions and lands on whichever
 //! memory rows are on screen, split in two where the memory wraps.
+//!
+//! The panel also has a low-power mode for an always-on screen, and `Backlight` drives the three
+//! backlight pins that light it.
 
 #![no_std]
 
@@ -26,6 +29,23 @@ pub const SCREEN_HEIGHT: u16 = 240;
 pub const MEMORY_ROWS: u16 = 320;
 
 // ============================================================================
+// Panel commands
+// ============================================================================
+
+const IDLE_MODE_OFF: u8 = 0x38;
+const IDLE_MODE_ON: u8 = 0x39;
+const SET_PORCHES: u8 = 0xB2;
+const SET_IDLE_FRAME_RATE: u8 = 0xB3;
+
+/// Normal porches as the panel starts, with long porches in idle mode to slow its refresh.
+const LOW_POWER_PORCHES: [u8; 5] = [0x0C, 0x0C, 0x01, 0xED, 0xED];
+const DEFAULT_PORCHES: [u8; 5] = [0x0C, 0x0C, 0x00, 0x33, 0x33];
+
+/// Divides the idle frame rate by four.
+const LOW_POWER_IDLE_FRAME_RATE: [u8; 3] = [0x12, 0x1E, 0x1E];
+const DEFAULT_IDLE_FRAME_RATE: [u8; 3] = [0x00, 0x0F, 0x0F];
+
+// ============================================================================
 // Display
 // ============================================================================
 
@@ -34,6 +54,7 @@ pub struct Display<DisplayInterface: Interface<Word = u8>, ResetPin: OutputPin> 
     top_fixed_rows: u16,
     scrolling_rows: u16,
     scroll_offset: u16,
+    in_low_power_mode: bool,
 }
 
 impl<DisplayInterface, ResetPin> Display<DisplayInterface, ResetPin>
@@ -58,6 +79,7 @@ where
             top_fixed_rows: 0,
             scrolling_rows: MEMORY_ROWS,
             scroll_offset: 0,
+            in_low_power_mode: false,
         };
         display.set_scroll_area(0, 0).map_err(InitError::Interface)?;
 
@@ -103,9 +125,35 @@ where
         self.panel.wake(delay)
     }
 
+    /// Shows only 8 colours at a slow refresh, for an always-on screen; memory keeps every colour.
+    pub fn enter_low_power_mode(&mut self) -> Result<(), DisplayInterface::Error> {
+        self.send_command(SET_PORCHES, &LOW_POWER_PORCHES)?;
+        self.send_command(SET_IDLE_FRAME_RATE, &LOW_POWER_IDLE_FRAME_RATE)?;
+        self.send_command(IDLE_MODE_ON, &[])?;
+        self.in_low_power_mode = true;
+        Ok(())
+    }
+
+    pub fn leave_low_power_mode(&mut self) -> Result<(), DisplayInterface::Error> {
+        self.send_command(IDLE_MODE_OFF, &[])?;
+        self.send_command(SET_IDLE_FRAME_RATE, &DEFAULT_IDLE_FRAME_RATE)?;
+        self.send_command(SET_PORCHES, &DEFAULT_PORCHES)?;
+        self.in_low_power_mode = false;
+        Ok(())
+    }
+
+    pub fn is_in_low_power_mode(&self) -> bool {
+        self.in_low_power_mode
+    }
+
     pub fn release(self) -> (DisplayInterface, Option<ResetPin>) {
         let (display_interface, _model, reset_pin) = self.panel.release();
         (display_interface, reset_pin)
+    }
+
+    fn send_command(&mut self, code: u8, arguments: &[u8]) -> Result<(), DisplayInterface::Error> {
+        // SAFETY: these commands change only how the panel shows its memory, which mipidsi does not track.
+        unsafe { self.panel.dcs() }.send_command(code, arguments)
     }
 
     fn fill_area<Colors>(&mut self, area: &Rectangle, colors: Colors) -> Result<(), DisplayInterface::Error>
@@ -275,6 +323,96 @@ where
         }
 
         self.fill_area(&visible_area, core::iter::repeat(color))
+    }
+}
+
+// ============================================================================
+// Backlight
+// ============================================================================
+
+/// The brightness levels the three backlight pins give on their own, darkest first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BacklightLevel {
+    Off,
+    Low,
+    Medium,
+    High,
+}
+
+/// Each pin lights the screen when it is driven low, and a brighter level lights more of them.
+pub struct Backlight<BacklightPin: OutputPin> {
+    low_pin: BacklightPin,
+    medium_pin: BacklightPin,
+    high_pin: BacklightPin,
+    level: BacklightLevel,
+}
+
+impl<BacklightPin: OutputPin> Backlight<BacklightPin> {
+    pub fn new(
+        low_pin: BacklightPin,
+        medium_pin: BacklightPin,
+        high_pin: BacklightPin,
+        level: BacklightLevel,
+    ) -> Result<Self, BacklightPin::Error> {
+        let mut backlight = Backlight {
+            low_pin,
+            medium_pin,
+            high_pin,
+            level,
+        };
+        backlight.set_level(level)?;
+        Ok(backlight)
+    }
+
+    pub fn set_level(&mut self, level: BacklightLevel) -> Result<(), BacklightPin::Error> {
+        let lit_pin_count = match level {
+            BacklightLevel::Off => 0,
+            BacklightLevel::Low => 1,
+            BacklightLevel::Medium => 2,
+            BacklightLevel::High => 3,
+        };
+
+        set_lit(&mut self.low_pin, lit_pin_count >= 1)?;
+        set_lit(&mut self.medium_pin, lit_pin_count >= 2)?;
+        set_lit(&mut self.high_pin, lit_pin_count >= 3)?;
+        self.level = level;
+        Ok(())
+    }
+
+    pub fn level(&self) -> BacklightLevel {
+        self.level
+    }
+
+    /// Goes one level up, staying at `High`.
+    pub fn brighter(&mut self) -> Result<(), BacklightPin::Error> {
+        let level = match self.level {
+            BacklightLevel::Off => BacklightLevel::Low,
+            BacklightLevel::Low => BacklightLevel::Medium,
+            BacklightLevel::Medium | BacklightLevel::High => BacklightLevel::High,
+        };
+        self.set_level(level)
+    }
+
+    /// Goes one level down, staying at `Off`.
+    pub fn dimmer(&mut self) -> Result<(), BacklightPin::Error> {
+        let level = match self.level {
+            BacklightLevel::High => BacklightLevel::Medium,
+            BacklightLevel::Medium => BacklightLevel::Low,
+            BacklightLevel::Low | BacklightLevel::Off => BacklightLevel::Off,
+        };
+        self.set_level(level)
+    }
+
+    pub fn release(self) -> [BacklightPin; 3] {
+        [self.low_pin, self.medium_pin, self.high_pin]
+    }
+}
+
+fn set_lit<BacklightPin: OutputPin>(pin: &mut BacklightPin, lit: bool) -> Result<(), BacklightPin::Error> {
+    if lit {
+        pin.set_low()
+    } else {
+        pin.set_high()
     }
 }
 

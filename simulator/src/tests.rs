@@ -151,3 +151,18 @@ fn effects_print_with_their_names() {
     assert_eq!(named_argument(EffectKind::CallControl, 2), Some("mute"));
     assert_eq!(named_argument(EffectKind::Vibrate, 0), None);
 }
+
+#[test]
+fn low_power_mode_shows_eight_colours_and_keeps_the_rest() {
+    let (panel, mut display) = started_display();
+    let area = Rectangle::new(Point::new(10, 20), Size::new(5, 5));
+    let dark_orange = Rgb565::new(20, 20, 4);
+    fill(&mut display, area, dark_orange);
+
+    display.enter_low_power_mode().unwrap();
+    let shown_in_low_power = panel.shown_pixel(12, 22);
+    display.leave_low_power_mode().unwrap();
+
+    assert_eq!(shown_in_low_power, Rgb565::new(Rgb565::MAX_R, 0, 0));
+    assert_eq!(panel.shown_pixel(12, 22), dark_orange);
+}

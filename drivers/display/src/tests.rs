@@ -79,6 +79,28 @@ impl OutputPin for FakePin {
     }
 }
 
+/// A backlight pin that remembers whether it was last driven low.
+#[derive(Default)]
+struct FakeBacklightPin {
+    driven_low: bool,
+}
+
+impl ErrorType for FakeBacklightPin {
+    type Error = core::convert::Infallible;
+}
+
+impl OutputPin for FakeBacklightPin {
+    fn set_low(&mut self) -> Result<(), Self::Error> {
+        self.driven_low = true;
+        Ok(())
+    }
+
+    fn set_high(&mut self) -> Result<(), Self::Error> {
+        self.driven_low = false;
+        Ok(())
+    }
+}
+
 struct FakeDelay;
 
 impl DelayNs for FakeDelay {
@@ -143,6 +165,30 @@ impl Display<FakeInterface, FakePin> {
     fn take_pixel_count(&mut self) -> usize {
         core::mem::take(&mut self.fake_interface().pixel_count)
     }
+}
+
+fn new_backlight(level: BacklightLevel) -> Backlight<FakeBacklightPin> {
+    Backlight::new(
+        FakeBacklightPin::default(),
+        FakeBacklightPin::default(),
+        FakeBacklightPin::default(),
+        level,
+    )
+    .unwrap()
+}
+
+/// Which of the low, medium and high pins light the screen.
+fn lit_pins(backlight: Backlight<FakeBacklightPin>) -> [bool; 3] {
+    backlight.release().map(|pin| pin.driven_low)
+}
+
+fn command_codes(display: &mut Display<FakeInterface, FakePin>) -> Vec<u8> {
+    display
+        .fake_interface()
+        .commands
+        .iter()
+        .map(|command| command.code)
+        .collect()
 }
 
 fn fill_rectangle(display: &mut Display<FakeInterface, FakePin>, top_left: Point, size: Size) {
@@ -263,4 +309,111 @@ fn single_pixels_follow_the_scroll() {
 
     assert_eq!(display.take_memory_writes(), vec![write(10, 10)]);
     assert_eq!(display.take_pixel_count(), 1);
+}
+
+// ============================================================================
+// Low-power mode
+// ============================================================================
+
+#[test]
+fn low_power_mode_slows_the_idle_refresh_then_turns_idle_on() {
+    let mut display = new_display_with_no_commands_recorded();
+
+    display.enter_low_power_mode().unwrap();
+
+    assert_eq!(
+        command_codes(&mut display),
+        vec![SET_PORCHES, SET_IDLE_FRAME_RATE, IDLE_MODE_ON]
+    );
+    assert!(display.is_in_low_power_mode());
+}
+
+#[test]
+fn leaving_low_power_mode_puts_back_the_panel_defaults() {
+    let mut display = new_display();
+    display.enter_low_power_mode().unwrap();
+    display.fake_interface().commands.clear();
+
+    display.leave_low_power_mode().unwrap();
+
+    let commands = &display.fake_interface().commands;
+    assert_eq!(
+        *commands,
+        vec![
+            Command {
+                code: IDLE_MODE_OFF,
+                arguments: vec![]
+            },
+            Command {
+                code: SET_IDLE_FRAME_RATE,
+                arguments: DEFAULT_IDLE_FRAME_RATE.to_vec()
+            },
+            Command {
+                code: SET_PORCHES,
+                arguments: DEFAULT_PORCHES.to_vec()
+            },
+        ]
+    );
+    assert!(!display.is_in_low_power_mode());
+}
+
+#[test]
+fn drawing_is_unchanged_in_low_power_mode() {
+    let mut display = new_display_with_no_commands_recorded();
+    display.scroll(300).unwrap();
+    display.enter_low_power_mode().unwrap();
+    display.take_memory_writes();
+
+    fill_rectangle(&mut display, Point::new(0, 0), Size::new(10, 40));
+
+    assert_eq!(display.take_memory_writes(), vec![write(300, 319), write(0, 19)]);
+}
+
+// ============================================================================
+// Backlight
+// ============================================================================
+
+#[test]
+fn each_level_lights_one_more_pin() {
+    assert_eq!(
+        lit_pins(new_backlight(BacklightLevel::Off)),
+        [false, false, false]
+    );
+    assert_eq!(lit_pins(new_backlight(BacklightLevel::Low)), [true, false, false]);
+    assert_eq!(
+        lit_pins(new_backlight(BacklightLevel::Medium)),
+        [true, true, false]
+    );
+    assert_eq!(lit_pins(new_backlight(BacklightLevel::High)), [true, true, true]);
+}
+
+#[test]
+fn dimming_turns_off_the_brightest_pin() {
+    let mut backlight = new_backlight(BacklightLevel::High);
+
+    backlight.dimmer().unwrap();
+
+    assert_eq!(backlight.level(), BacklightLevel::Medium);
+    assert_eq!(lit_pins(backlight), [true, true, false]);
+}
+
+#[test]
+fn brighter_stops_at_high() {
+    let mut backlight = new_backlight(BacklightLevel::Medium);
+
+    backlight.brighter().unwrap();
+    backlight.brighter().unwrap();
+
+    assert_eq!(backlight.level(), BacklightLevel::High);
+}
+
+#[test]
+fn dimmer_stops_at_off() {
+    let mut backlight = new_backlight(BacklightLevel::Low);
+
+    backlight.dimmer().unwrap();
+    backlight.dimmer().unwrap();
+
+    assert_eq!(backlight.level(), BacklightLevel::Off);
+    assert_eq!(lit_pins(backlight), [false, false, false]);
 }

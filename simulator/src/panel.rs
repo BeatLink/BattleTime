@@ -6,7 +6,10 @@
 
 use std::{cell::RefCell, convert::Infallible, rc::Rc};
 
-use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565};
+use embedded_graphics::{
+    pixelcolor::{raw::RawU16, Rgb565},
+    prelude::RgbColor,
+};
 use mipidsi::interface::{Interface, InterfaceKind};
 use neotime_display::{MEMORY_ROWS, SCREEN_HEIGHT, SCREEN_WIDTH};
 
@@ -25,6 +28,8 @@ const SET_ROW_ADDRESS: u8 = 0x2B;
 const WRITE_MEMORY_START: u8 = 0x2C;
 const SET_SCROLL_AREA: u8 = 0x33;
 const SET_SCROLL_START: u8 = 0x37;
+const IDLE_MODE_OFF: u8 = 0x38;
+const IDLE_MODE_ON: u8 = 0x39;
 
 const MEMORY_COLUMNS: u16 = 240;
 
@@ -52,6 +57,7 @@ struct PanelState {
     scrolling_rows: u16,
     scroll_start_row: u16,
     colours_inverted: bool,
+    in_idle_mode: bool,
     sleeping: bool,
     display_on: bool,
 }
@@ -71,6 +77,7 @@ impl PanelState {
             scrolling_rows: MEMORY_ROWS,
             scroll_start_row: 0,
             colours_inverted: false,
+            in_idle_mode: false,
             sleeping: true,
             display_on: false,
         }
@@ -103,6 +110,8 @@ impl PanelState {
                 self.scrolling_rows = read_u16(arguments, 2);
             }
             SET_SCROLL_START => self.scroll_start_row = read_u16(arguments, 0),
+            IDLE_MODE_OFF => self.in_idle_mode = false,
+            IDLE_MODE_ON => self.in_idle_mode = true,
             _ => {}
         }
     }
@@ -148,8 +157,24 @@ impl PanelState {
         } else {
             !raw_colour
         };
-        Rgb565::from(RawU16::new(raw_colour))
+        let colour = Rgb565::from(RawU16::new(raw_colour));
+
+        if self.in_idle_mode {
+            eight_colour_version(colour)
+        } else {
+            colour
+        }
     }
+}
+
+/// Idle mode keeps only the top bit of each channel, so each is fully on or fully off.
+fn eight_colour_version(colour: Rgb565) -> Rgb565 {
+    let channel = |value: u8, max_value: u8| if value > max_value / 2 { max_value } else { 0 };
+    Rgb565::new(
+        channel(colour.r(), Rgb565::MAX_R),
+        channel(colour.g(), Rgb565::MAX_G),
+        channel(colour.b(), Rgb565::MAX_B),
+    )
 }
 
 fn read_u16(arguments: &[u8], offset: usize) -> u16 {

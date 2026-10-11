@@ -67,8 +67,9 @@ hands them simulated parts in place of the chip's:
 
 - **The screen** is a model of the ST7789 (`simulator/src/panel.rs`). It keeps the panel's
   240x320 memory and follows the commands the driver sends, as the datasheet describes them:
-  the address window, memory writes, the scroll area and scroll start, sleep, and colour
-  inversion. Each frame, the window shows the 240 rows the panel would show. The PineTime's glass
+  the address window, memory writes, the scroll area and scroll start, sleep, idle mode and colour
+  inversion. In idle mode it shows each pixel in the nearest of the 8 colours the panel then
+  shows, so low-power screens can be checked here. Each frame, the window shows the 240 rows the panel would show. The PineTime's glass
   inverts colours, so the model does too, and a driver that forgot to turn inversion on would
   show wrong colours here as it would on the watch.
 - **The motor** is a pin that runs the motor while low, as P0.16 does. The vibrator driver runs on
