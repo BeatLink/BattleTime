@@ -32,7 +32,9 @@ use neotime_runtime::{
 
 use crate::{
     backlight::{self, Backlight},
-    battery, built_in_apps, clock, motion, storage, system_values,
+    battery, built_in_apps, clock,
+    diagnostics::{self, Counter},
+    motion, storage, system_values,
     touch::TOUCHES,
     vibration, SharedDisplay,
 };
@@ -355,6 +357,8 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
     let mut last_input = Instant::now();
 
     loop {
+        diagnostics::add_one(Counter::ShellLoops);
+        diagnostics::set(Counter::ScreenLit, shell.lit as u32);
         shell.draw();
 
         let now = clock::now();
@@ -376,6 +380,7 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
         .await
         {
             Either4::First(touch) => {
+                diagnostics::set(Counter::ShellLastWake, 1);
                 last_input = Instant::now();
                 if !shell.lit {
                     if matches!(touch, Touch::Release { .. }) {
@@ -386,6 +391,7 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
                 shell.touch(touch);
             }
             Either4::Second(press) => {
+                diagnostics::set(Counter::ShellLastWake, 2);
                 last_input = Instant::now();
                 if !shell.lit {
                     shell.turn_screen_on();
@@ -394,6 +400,7 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
                 shell.press_button(press);
             }
             Either4::Third(()) => {
+                diagnostics::set(Counter::ShellLastWake, 3);
                 let timed_out = Instant::now() >= last_input + SCREEN_TIMEOUT;
                 if shell.lit && timed_out && !shell.system.keep_screen_on {
                     shell.turn_screen_off();
@@ -402,7 +409,10 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
                     host.tick(clock::now(), &mut shell.system);
                 }
             }
-            Either4::Fourth(changed) => shell.system_values_changed(changed),
+            Either4::Fourth(changed) => {
+                diagnostics::set(Counter::ShellLastWake, 4);
+                shell.system_values_changed(changed);
+            }
         }
         shell.follow_requests();
     }

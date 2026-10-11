@@ -6,7 +6,11 @@ use embassy_time::{Delay, Duration, Timer};
 use neotime_accelerometer::{Accelerometer, Settings};
 use neotime_runtime::SystemValue;
 
-use crate::{clock, system_values, I2cDeviceOnBus};
+use crate::{
+    clock,
+    diagnostics::{self, Counter},
+    system_values, touch, I2cDeviceOnBus,
+};
 
 static STEPS_TODAY: AtomicU32 = AtomicU32::new(0);
 
@@ -19,10 +23,13 @@ pub fn steps_today() -> u32 {
 
 #[embassy_executor::task]
 pub async fn count_steps(i2c_device: I2cDeviceOnBus) {
+    touch::STARTED.wait().await;
     let mut accelerometer = Accelerometer::new(i2c_device);
     if accelerometer.start(Settings::DEFAULT, &mut Delay).await.is_err() {
+        diagnostics::set(Counter::AccelerometerState, 2);
         return;
     }
+    diagnostics::set(Counter::AccelerometerState, 1);
     let mut day = clock::now().div_euclid(MILLISECONDS_PER_DAY);
     loop {
         let today = clock::now().div_euclid(MILLISECONDS_PER_DAY);
@@ -30,7 +37,11 @@ pub async fn count_steps(i2c_device: I2cDeviceOnBus) {
             day = today;
             let _ = accelerometer.reset_step_count(&mut Delay).await;
         }
-        if let Ok(steps) = accelerometer.read_step_count().await {
+        let reading = accelerometer.read_step_count().await;
+        if reading.is_err() {
+            diagnostics::set(Counter::AccelerometerState, 3);
+        }
+        if let Ok(steps) = reading {
             if STEPS_TODAY.swap(steps, Ordering::Relaxed) != steps {
                 system_values::changed(&[SystemValue::StepsToday]);
             }

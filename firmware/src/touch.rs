@@ -1,16 +1,25 @@
 //! The touch panel, turned into the touches the app host takes.
 
 use embassy_nrf::gpio::{Input, Output};
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
-use embassy_time::Delay;
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, signal::Signal};
+use embassy_time::{Delay, Duration, Timer};
 use neotime_app_host::Touch;
 use neotime_runtime::events::SwipeDirection;
 use neotime_touch::{FingerEvent, Gesture, Settings, TouchPanel, TouchReport};
 
-use crate::I2cDeviceOnBus;
+use crate::{
+    diagnostics::{self, Counter},
+    I2cDeviceOnBus,
+};
 
 /// Touches waiting for the UI; when it falls behind, the newest are dropped.
 pub static TOUCHES: Channel<CriticalSectionRawMutex, Touch, 4> = Channel::new();
+
+/// Signalled once the panel has started, or given up starting.
+pub static STARTED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
+const START_ATTEMPTS: usize = 5;
+const RETRY_DELAY: Duration = Duration::from_millis(100);
 
 /// How far a finger moves before a touch counts as a drag.
 const DRAG_THRESHOLD_IN_PIXELS: i32 = 10;
@@ -69,15 +78,29 @@ impl Finger {
 pub async fn read_touches(i2c_bus: I2cDeviceOnBus, interrupt_pin: Input<'static>, reset_pin: Output<'static>) {
     let mut panel = TouchPanel::new(i2c_bus, interrupt_pin, reset_pin);
     // Double taps are left off, because the panel would hold back every single tap waiting for one.
-    if panel.start(Settings::DEFAULT, &mut Delay).await.is_err() {
+    let mut started = false;
+    for _ in 0..START_ATTEMPTS {
+        if panel.start(Settings::DEFAULT, &mut Delay).await.is_ok() {
+            started = true;
+            break;
+        }
+        Timer::after(RETRY_DELAY).await;
+    }
+    // The accelerometer shares the bus and its reset upsets the panel's start, so it waits for this.
+    STARTED.signal(());
+    if !started {
+        diagnostics::set(Counter::TouchState, 2);
         return;
     }
+    diagnostics::set(Counter::TouchState, 1);
     let mut finger = Finger::default();
     loop {
         let Ok(report) = panel.wait_for_report().await else {
             continue;
         };
+        diagnostics::add_one(Counter::TouchReports);
         finger.touches_for(&report, |touch| {
+            diagnostics::add_one(Counter::TouchesSent);
             let _ = TOUCHES.try_send(touch);
         });
     }

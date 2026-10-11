@@ -61,6 +61,7 @@ mod battery;
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod built_in_apps;
 mod clock;
+mod diagnostics;
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod shell;
 // Under wasp-os the firmware is never rolled back or installed as recovery.
@@ -350,11 +351,13 @@ async fn feed_watchdog_while_button_is_up(
             }
             (true, Some(since)) if !long_press_sent && since.elapsed() >= LONG_PRESS => {
                 long_press_sent = true;
+                diagnostics::add_one(diagnostics::Counter::ButtonPresses);
                 let _ = shell::BUTTON_PRESSES.try_send(ButtonPress::LongPress);
             }
             (false, Some(_)) => {
                 pressed_at = None;
                 if !long_press_sent {
+                    diagnostics::add_one(diagnostics::Counter::ButtonPresses);
                     let _ = shell::BUTTON_PRESSES.try_send(ButtonPress::Press);
                 }
             }
@@ -494,6 +497,14 @@ fn start_screen(
 struct Server {
     dfu: LegacyDfuService,
     time: CurrentTimeService,
+    diagnostics: DiagnosticsService,
+}
+
+/// NeoTime's own service: counters from `diagnostics`, read with any GATT client.
+#[gatt_service(uuid = "6e540001-0000-4000-8000-4e656f54696d")]
+struct DiagnosticsService {
+    #[characteristic(uuid = "6e540002-0000-4000-8000-4e656f54696d", read)]
+    counters: [u8; 32],
 }
 
 /// The standard Current Time service, which phones write the time to.
@@ -614,6 +625,12 @@ async fn serve_connection(
                             clock::set_from_current_time(&written);
                         }
                         server.dfu.classify(write.handle())
+                    }
+                    GattEvent::Read(read) => {
+                        if read.handle() == server.diagnostics.counters.handle {
+                            let _ = server.set(&server.diagnostics.counters, &diagnostics::snapshot());
+                        }
+                        None
                     }
                     _ => None,
                 };
