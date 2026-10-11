@@ -110,6 +110,36 @@ export const settings = {
   step_goal: signal(10000),
 };
 
+/** Whether the heart rate sensor is measuring for any app. */
+export const is_heart_rate_running = signal(false);
+
+/** The heart rate sensor's state: 0 stopped, 1 no skin, 2 settling, 3 measuring. */
+export const heart_rate_status = signal(0);
+
+/** Whether Bluetooth is on, whether or not the phone is connected. */
+export const is_bluetooth_enabled = signal(true);
+
+/** The next alarm any app has set to ring, or null. */
+export const next_alarm = signal<Instant | null>(null);
+
+export interface CurrentWeather {
+  temperature: number;
+  condition: WeatherCondition;
+  low: number;
+  high: number;
+  /** When the forecast arrived, or null before the first. */
+  received_at: Instant | null;
+}
+
+/** The last forecast the phone sent; reading it needs no permission. */
+export const current_weather = signal<CurrentWeather>({
+  temperature: 0,
+  condition: "clear",
+  low: 0,
+  high: 0,
+  received_at: null,
+});
+
 /** The name of the app's screen on display. */
 export const current_screen = signal("main");
 
@@ -277,7 +307,12 @@ export function period_in_milliseconds(period: Period): Duration {
 
 type Handler<Event> = (event: Event) => void;
 
-export type Subscription =
+export interface SubscriptionOptions {
+  /** Runs only while the app is open, which needs no `background` permission. */
+  only_while_open?: boolean;
+}
+
+export type Subscription = { only_while_open: boolean } & (
   | { kind: "every"; period: Period; handler: Handler<TimeEvent> }
   | { kind: "at"; when: ReadonlySignal<Instant | null>; handler: Handler<TimeEvent> }
   | {
@@ -301,16 +336,17 @@ export type Subscription =
   | { kind: "navigation"; handler: Handler<NavigationEvent> }
   | { kind: "message"; channel: string; handler: Handler<Record<string, unknown>> }
   | { kind: "http_response"; handler: Handler<HttpResponseEvent> }
-  | { kind: "settings_change"; handler: Handler<SettingsEvent> };
+  | { kind: "settings_change"; handler: Handler<SettingsEvent> }
+);
 
 /** Repeatedly; periods shorter than a minute run only while the app is open. */
-export function every(period: Period, handler: Handler<TimeEvent>): Subscription {
-  return { kind: "every", period, handler };
+export function every(period: Period, handler: Handler<TimeEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "every", period, handler, only_while_open: options.only_while_open ?? false };
 }
 
 /** Once, at an absolute time; changing the signal reschedules it, and null cancels it. */
-export function at(when: ReadonlySignal<Instant | null>, handler: Handler<TimeEvent>): Subscription {
-  return { kind: "at", when, handler };
+export function at(when: ReadonlySignal<Instant | null>, handler: Handler<TimeEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "at", when, handler, only_while_open: options.only_while_open ?? false };
 }
 
 /** At a local time on the weekdays in `days` (Monday first, every day when left out); null turns it off. */
@@ -318,82 +354,83 @@ export function daily(
   time_of_day: TimeOfDay | ReadonlySignal<TimeOfDay | null>,
   handler: Handler<TimeEvent>,
   days: number | ReadonlySignal<number> = EVERY_DAY,
+  options: SubscriptionOptions = {},
 ): Subscription {
-  return { kind: "daily", time_of_day, handler, days };
+  return { kind: "daily", time_of_day, handler, days, only_while_open: options.only_while_open ?? false };
 }
 
 /** Raw accelerometer readings, only while the app is open and at most 10 a second. */
-export function acceleration(period: Period, handler: Handler<AccelerationEvent>): Subscription {
-  return { kind: "acceleration", period, handler };
+export function acceleration(period: Period, handler: Handler<AccelerationEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "acceleration", period, handler, only_while_open: options.only_while_open ?? false };
 }
 
 /** When the local minute, hour or day changes, and when the phone sets the clock. */
-export function clock_change(unit: "minute" | "hour" | "day", handler: Handler<TimeEvent>): Subscription {
-  return { kind: "clock_change", unit, handler };
+export function clock_change(unit: "minute" | "hour" | "day", handler: Handler<TimeEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "clock_change", unit, handler, only_while_open: options.only_while_open ?? false };
 }
 
 /** A heart rate measurement every period, shared with any other app asking. */
-export function heart_rate_reading(period: Period, handler: Handler<HeartRateEvent>): Subscription {
-  return { kind: "heart_rate_reading", period, handler };
+export function heart_rate_reading(period: Period, handler: Handler<HeartRateEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "heart_rate_reading", period, handler, only_while_open: options.only_while_open ?? false };
 }
 
 /** The step count changes, at most once a minute. */
-export function steps(handler: Handler<StepsEvent>): Subscription {
-  return { kind: "steps", handler };
+export function steps(handler: Handler<StepsEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "steps", handler, only_while_open: options.only_while_open ?? false };
 }
 
 /** The day's step goal is reached. */
-export function step_goal(handler: Handler<StepsEvent>): Subscription {
-  return { kind: "step_goal", handler };
+export function step_goal(handler: Handler<StepsEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "step_goal", handler, only_while_open: options.only_while_open ?? false };
 }
 
-export function motion(kind: MotionKind, handler: Handler<MotionEvent>): Subscription {
-  return { kind: "motion", motion: kind, handler };
+export function motion(kind: MotionKind, handler: Handler<MotionEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "motion", motion: kind, handler, only_while_open: options.only_while_open ?? false };
 }
 
-export function battery(kind: BatteryKind, handler: Handler<BatteryEvent>): Subscription {
-  return { kind: "battery", battery: kind, handler };
+export function battery(kind: BatteryKind, handler: Handler<BatteryEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "battery", battery: kind, handler, only_while_open: options.only_while_open ?? false };
 }
 
-export function phone(kind: "connects" | "disconnects", handler: Handler<PhoneEvent>): Subscription {
-  return { kind: "phone", phone: kind, handler };
+export function phone(kind: "connects" | "disconnects", handler: Handler<PhoneEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "phone", phone: kind, handler, only_while_open: options.only_while_open ?? false };
 }
 
-export function notification(handler: Handler<NotificationEvent>): Subscription {
-  return { kind: "notification", handler };
+export function notification(handler: Handler<NotificationEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "notification", handler, only_while_open: options.only_while_open ?? false };
 }
 
-export function call(handler: Handler<CallEvent>): Subscription {
-  return { kind: "call", handler };
+export function call(handler: Handler<CallEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "call", handler, only_while_open: options.only_while_open ?? false };
 }
 
 /** The phone's music player changes. */
-export function music(handler: Handler<MusicEvent>): Subscription {
-  return { kind: "music", handler };
+export function music(handler: Handler<MusicEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "music", handler, only_while_open: options.only_while_open ?? false };
 }
 
 /** The phone sends a forecast. */
-export function weather(handler: Handler<WeatherEvent>): Subscription {
-  return { kind: "weather", handler };
+export function weather(handler: Handler<WeatherEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "weather", handler, only_while_open: options.only_while_open ?? false };
 }
 
 /** The phone's navigation app gives the next turn. */
-export function navigation(handler: Handler<NavigationEvent>): Subscription {
-  return { kind: "navigation", handler };
+export function navigation(handler: Handler<NavigationEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "navigation", handler, only_while_open: options.only_while_open ?? false };
 }
 
 /** The companion app sends this app a message on its own channel. */
-export function message(channel: string, handler: Handler<Record<string, unknown>>): Subscription {
-  return { kind: "message", channel, handler };
+export function message(channel: string, handler: Handler<Record<string, unknown>>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "message", channel, handler, only_while_open: options.only_while_open ?? false };
 }
 
-export function http_response(handler: Handler<HttpResponseEvent>): Subscription {
-  return { kind: "http_response", handler };
+export function http_response(handler: Handler<HttpResponseEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "http_response", handler, only_while_open: options.only_while_open ?? false };
 }
 
 /** The user changes a setting in `settings`. */
-export function settings_change(handler: Handler<SettingsEvent>): Subscription {
-  return { kind: "settings_change", handler };
+export function settings_change(handler: Handler<SettingsEvent>, options: SubscriptionOptions = {}): Subscription {
+  return { kind: "settings_change", handler, only_while_open: options.only_while_open ?? false };
 }
 
 // ============================================================================
@@ -491,8 +528,23 @@ export function call_control(command: CallCommand) {
   emit({ kind: "call_control", command });
 }
 
-export function find_phone() {
-  emit({ kind: "find_phone" });
+/** Makes the phone ring, or stops it. */
+export function find_phone(on: boolean) {
+  emit({ kind: "find_phone", on });
+}
+
+/** Asks the phone to send its player's state now, through the `music` subscription. */
+export function request_music_state() {
+  emit({ kind: "request_music_state" });
+}
+
+/** Drives the heart rate sensor's LED directly, until the app closes. */
+export function set_heart_rate_led(on: boolean, brightness: number, period: number) {
+  emit({ kind: "set_heart_rate_led", on, brightness, period });
+}
+
+export function set_bluetooth(on: boolean) {
+  emit({ kind: "set_bluetooth", on });
 }
 
 /** Takes one heart rate reading now. */
@@ -629,6 +681,40 @@ export function format_time(instant: Instant, pattern: string): string {
     A: hours < 12 ? "AM" : "PM",
   });
 }
+/** The text in capitals, such as `MON` from a pattern's names. */
+export function to_upper(text: string): string {
+  return text.toUpperCase();
+}
+
+/** The text with spaces, or the character given, added in front up to `width`. */
+export function pad_start(text: string, width: number, character = " "): string {
+  return text.padStart(width, character);
+}
+
+export function text_length(text: string): number {
+  return text.length;
+}
+
+/** Part of the text, counted in characters. */
+export function slice_text(text: string, start: number, end?: number): string {
+  return text.slice(start, end);
+}
+
+/** The texts of a fixed-length array joined together. */
+export function join(texts: string[], separator: string): string {
+  return texts.join(separator);
+}
+
+/** `0` to `count - 1`, where `count` is known when the app is compiled. */
+export function range(count: number): number[] {
+  return Array.from({ length: count }, (_, index) => index);
+}
+
+/** How many elements pass the test. */
+export function count_where<Element>(array: Element[], test: (element: Element) => boolean): number {
+  return array.filter(test).length;
+}
+
 /** A whole number padded with zeros to at least `width` digits. */
 export function format_number(value: number, width = 1): string {
   const sign = value < 0 ? "-" : "";
@@ -670,6 +756,33 @@ export function start_of_day(instant: Instant): Instant {
   const date = new Date(instant);
   date.setHours(0, 0, 0, 0);
   return date.getTime();
+}
+
+/** The start of the minute an instant falls in; a binding using it redraws once a minute. */
+export function start_of_minute(instant: Instant): Instant {
+  return Math.floor(instant / MINUTE) * MINUTE;
+}
+
+/** The start of the local hour an instant falls in; a binding using it redraws once an hour. */
+export function start_of_hour(instant: Instant): Instant {
+  const date = new Date(instant);
+  date.setMinutes(0, 0, 0);
+  return date.getTime();
+}
+
+/** The day of the year, 1 to 366. */
+export function day_of_year(instant: Instant): number {
+  const date = new Date(instant);
+  const first_of_january = new Date(date.getFullYear(), 0, 1);
+  return Math.round((start_of_day(instant) - first_of_january.getTime()) / DAY) + 1;
+}
+
+/** The ISO 8601 week number, 1 to 53. */
+export function iso_week_of(instant: Instant): number {
+  const date = new Date(start_of_day(instant));
+  date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
+  const first_thursday_week = new Date(date.getFullYear(), 0, 4);
+  return 1 + Math.round(((date.getTime() - first_thursday_week.getTime()) / DAY - 3 + ((first_thursday_week.getDay() + 6) % 7)) / 7);
 }
 
 /** Every weekday in a `days` mask, which has Monday as its lowest bit. */

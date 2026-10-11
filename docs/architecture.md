@@ -312,6 +312,8 @@ from the runtime.
   `faces/<id>/face.tsx`, with any behaviour tests beside it in `app.test.tsx` or `face.test.tsx`.
 - **`sdk/neotime`** is a stand-in for the `neotime` package both import, so they type-check and
   their screens render in tests. It is not the runtime and will be replaced by the real package.
+  The tests load its `signals.ts` in place of `@preact/signals`, so that writing one element of an
+  array signal, as in `board.value[cell] = 2`, notifies the way the runtime does.
 - **Checks.** From the repository root, `npm install`, then `npm run check` runs TypeScript over
   everything and `npm test` renders every screen of every app and face with Vitest. Each package's
   `tests/screens.test.tsx` also checks that apps declare `kind: "app"` and faces `kind: "face"`.

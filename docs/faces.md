@@ -28,20 +28,15 @@ sizes until the shared library has display fonts.
 A face that has settings, such as PineTimeStyle, Infineat and the pride flag, opens them on a long
 press as a second screen.
 
-## What the faces still need
+## Workarounds left
 
-- **Fonts:** a size of about 30 pixels, one of 110 to 150 pixels for big clocks, and display
-  fonts such as 7-segment, dot matrix and condensed.
-- **System values:** whether the heart rate sensor is running, whether Bluetooth is on, the next
-  alarm, and the weather the system last received with when it arrived, so faces need not each
-  subscribe and keep a copy. Weather is not covered by any permission yet; the faces use
-  `background`.
-- **Widgets:** `RichText` for several colours on one line, a battery icon with its percent, a
-  needle gauge, hand lengths and styles on `AnalogClock`, skipping ticks on `Scale`, and
-  `opacity` on `Line`.
-- **Images:** the pine logo in the shared library, a recolour prop on `Image`, and icons for alarm,
-  night weather and "none".
-- **Functions:** `day_of_year`, `iso_week_of`, padding with spaces, and upper-case weekday and month
-  names.
-- **Rules to confirm:** whether a face may have a settings screen, as app-runtime.md gives a face
-  one screen.
+The ports were written before the runtime's API settled, and work around what it lacked then. Every
+gap they found is now answered in [app-reference.md](app-reference.md) and provided by `sdk/neotime`,
+so the faces can drop their workarounds: the `medium`, `giant` and display fonts, `BatteryIcon`,
+`Scale` with `skip` and a needle, `AnalogClock` hand lengths and styles, `opacity`, `Image` with
+`recolor` and the `pine_logo`, the night weather and `none` icons, `current_weather` instead of
+each face's own copy and subscription, `is_heart_rate_running`, `heart_rate_status`,
+`is_bluetooth_enabled`, `next_alarm`, `day_of_year`, `iso_week_of`, `to_upper` and `pad_start`.
+
+The faces fit the runtime's limits. The analog face steps its hands by the minute with
+`start_of_minute` while its second hand is off, so it redraws once a minute.

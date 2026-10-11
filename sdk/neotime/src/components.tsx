@@ -89,9 +89,29 @@ export function StatusBar() {
       <Label font="small">{format_time(now.value, settings.uses_24_hour_clock.value ? "HH:mm" : "hh:mm")}</Label>
       <Row gap={4}>
         {is_phone_connected.value && <Icon icon={icons.bluetooth} size={18} color="accent" />}
-        {is_charging.value && <Icon icon={icons.charging} size={18} color="warning" />}
-        <Label font="small">{`${battery_percent.value}%`}</Label>
+        <BatteryIcon show_percent />
       </Row>
+    </Row>
+  );
+}
+
+export interface BatteryIconProps {
+  /** Shows the percentage beside the icon. */
+  show_percent?: boolean;
+  color?: CommonProps["color"];
+}
+
+/** The battery's charge and whether it is charging, drawn the way the system does. */
+export function BatteryIcon(props: BatteryIconProps) {
+  const percent = battery_percent.value;
+  const fill_color = is_charging.value ? "success" : percent <= 20 ? "danger" : props.color ?? "text";
+  return (
+    <Row gap={4}>
+      {is_charging.value && <Icon icon={icons.charging} size={16} color="warning" />}
+      <Row width={28} height={14} padding={2} border_color={props.color ?? "text"} border_width={2} radius={3}>
+        <Column width={Math.round((20 * percent) / 100)} height="100%" background={fill_color} />
+      </Row>
+      {props.show_percent && <Label font="small">{`${percent}%`}</Label>}
     </Row>
   );
 }

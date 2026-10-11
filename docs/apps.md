@@ -72,22 +72,17 @@ npm test        # renders every screen of every app and face, plus their own tes
 | `read_me`, `test` | wasp-os | Developer tools, not apps. |
 | Launcher, settings, notifications, quick settings, firmware update | both | Part of the system, not apps. |
 
-## What the apps still need
+## Workarounds left
 
-The ports were written against the API as it stands, and work around what it lacks. These are the
-gaps they found, roughly in order of how many apps they affect:
+The ports were written before the runtime's API settled, and work around what it lacked then. Every
+gap they found is now answered in [app-reference.md](app-reference.md) and provided by `sdk/neotime`,
+so the apps can drop their workarounds: `CellGrid` for the game boards (Life, InfiniPaint, snake,
+four-in-a-row, 2048 and 15 still make one widget per cell), element writes instead of rebuilding
+whole arrays, `range` instead of written-out index lists, `count_where`, a dragged `Arc` for the
+metronome, `Chart` series for motion, `find_phone(on)`, `request_music_state` for music,
+`only_while_open` for the dice's shake, and the text functions for morse. `beacon` and
+`disa_b_l_e` can now be ported with `set_heart_rate_led` and `set_bluetooth`.
 
-- **A board of cells as one widget,** such as `CellGrid({ columns, rows, cells, palette })`. The
-  games now make one widget per cell, up to 400, which will not fit the UI heap.
-- **Fonts:** a size between normal and large.
-- **Array and text helpers:** writing one element of an array, a compile-time `range(count)`,
-  loops or `includes` and `index_of` in a `computed`, and text length and slices.
-- **Widgets:** a `Chart` with several series, and an `Arc` that can be dragged.
-- **Effects:** stopping `find_phone`, asking the phone to resend the music state, the heart rate
-  sensor's LED, and turning Bluetooth off.
-- **Subscriptions only while open,** for `motion`, so a shake in the background does not roll the
-  dice.
-- **Rules to confirm:** whether a screen's `onSwipe` replaces the system swipes, whether an `at`
-  time already past fires at once, whether early `return` is allowed in app functions, which
-  bitwise operators are allowed, and how large the step limit is (four-in-a-row's search may need
-  about 100,000 steps a move).
+The ports fit the runtime's limits on state, handler writes, locals and loop steps. Four-in-a-row's
+search runs a few steps a call on a 100 millisecond tick, so its hardest level thinks for up to
+about 3 seconds.

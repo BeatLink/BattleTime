@@ -38,16 +38,37 @@ export function css_color(color: Color | undefined): string | undefined {
   return color.startsWith("#") ? color : theme[color as ThemeColorName];
 }
 
-export type Font = "small" | "normal" | "large" | "huge";
+/** Text sizes, plus `giant` and the display fonts, which hold digits and `:` only. */
+export type Font =
+  | "small"
+  | "normal"
+  | "medium"
+  | "large"
+  | "huge"
+  | "giant"
+  | "seven_segment"
+  | "dot_matrix"
+  | "condensed";
 
 const FONT_SIZES_IN_PIXELS: Record<Font, number> = {
   small: 16,
   normal: 20,
+  medium: 30,
   large: 42,
   huge: 76,
+  giant: 120,
+  seven_segment: 76,
+  dot_matrix: 76,
+  condensed: 76,
 };
 
 const FONT_FAMILY = "'JetBrains Mono', 'DejaVu Sans Mono', monospace";
+
+const DISPLAY_FONT_FAMILIES: Partial<Record<Font, string>> = {
+  seven_segment: "'DSEG7 Classic', 'JetBrains Mono', monospace",
+  dot_matrix: "'DotGothic16', 'JetBrains Mono', monospace",
+  condensed: "'Bebas Neue', 'Oswald', 'Arial Narrow', sans-serif",
+};
 
 export const SCREEN_SIZE = 240;
 
@@ -122,6 +143,8 @@ export interface CommonProps {
   align?: "start" | "center" | "end";
   /** Milliseconds a changed bound property takes to slide to its new value. */
   animate?: number;
+  /** 0 is see-through, 255 solid. */
+  opacity?: number;
 }
 
 function length_css(length: Length): string {
@@ -147,6 +170,8 @@ function common_style(props: CommonProps): JSX.CSSProperties {
   }
   if (props.radius !== undefined) style.borderRadius = `${props.radius}px`;
   if (props.font) style.fontSize = `${FONT_SIZES_IN_PIXELS[props.font]}px`;
+  if (props.font && DISPLAY_FONT_FAMILIES[props.font]) style.fontFamily = DISPLAY_FONT_FAMILIES[props.font];
+  if (props.opacity !== undefined) style.opacity = props.opacity / 255;
   if (props.align) style.alignSelf = { start: "flex-start", center: "center", end: "flex-end" }[props.align];
   if (props.animate) style.transition = `all ${props.animate}ms`;
   return style;
@@ -520,13 +545,16 @@ export function Icon(props: IconProps) {
 }
 
 export interface ImageProps extends CommonProps {
-  /** A file next to the app's source, or a shared library icon. */
+  /** A file next to the app's source, or a shared library image. */
   src: string | LibraryIcon;
+  /** Draws a one-colour image, such as a logo, in this colour. */
+  recolor?: Color;
+  size?: number;
 }
 
 /** A picture from the app or the shared library. */
 export function Image(props: ImageProps) {
-  if (is_icon(props.src)) return <Icon {...props} icon={props.src} />;
+  if (is_icon(props.src)) return <Icon {...props} icon={props.src} color={props.recolor ?? props.color} />;
   return <img data-widget="image" src={props.src} alt="" style={common_style(props)} />;
 }
 
@@ -558,7 +586,9 @@ export function Line(props: LineProps) {
 }
 
 export interface ArcProps extends CommonProps, TouchProps {
-  value: number;
+  /** Given a signal, the arc can be dragged and writes the new value back to it. */
+  value: Bindable<number>;
+  onChange?: (event: ChangeEvent<number>) => void;
   minimum?: number;
   maximum?: number;
   /** Degrees clockwise from twelve o'clock. */
@@ -588,10 +618,26 @@ export function Arc(props: ArcProps) {
   const start = props.start_angle ?? 225;
   const end = props.end_angle ?? 135;
   const span = (((end - start) % 360) + 360) % 360 || 360;
-  const share = Math.min(1, Math.max(0, (props.value - minimum) / (maximum - minimum || 1)));
+  const share = Math.min(1, Math.max(0, (read_bound(props.value) - minimum) / (maximum - minimum || 1)));
   const radius = (diameter - thickness) / 2;
   const center = diameter / 2;
-  const touch = use_touch(props);
+  const touch = use_touch(
+    is_signal(props.value)
+      ? {
+          ...props,
+          onDrag: (event) => {
+            const bounds_left = typeof props.x === "number" ? props.x : 0;
+            const bounds_top = typeof props.y === "number" ? props.y : 0;
+            const across = event.x - bounds_left - center;
+            const down = event.y - bounds_top - center;
+            const degrees = (((Math.atan2(across, -down) * 180) / Math.PI - start) % 360 + 360) % 360;
+            if (degrees > span) return;
+            const value = Math.round(minimum + ((maximum - minimum) * degrees) / span);
+            change_value(props.value, props.onChange, value);
+          },
+        }
+      : props,
+  );
   return (
     <div
       data-widget="arc"
@@ -707,44 +753,57 @@ export function Spinner(props: SpinnerProps) {
   );
 }
 
-export interface ChartProps extends CommonProps {
+export interface ChartSeries {
   values: number[];
+  color?: Color;
+}
+
+export interface ChartProps extends CommonProps {
+  /** One series, drawn in `color`. */
+  values?: number[];
+  /** Up to 3 series, each with its colour, in place of `values`. */
+  series?: ChartSeries[];
   minimum?: number;
   maximum?: number;
   kind?: "line" | "bars";
 }
 
-/** A line or bar chart of a fixed-length array. */
+/** A line or bar chart of one to three fixed-length arrays. */
 export function Chart(props: ChartProps) {
   const width = typeof props.width === "number" ? props.width : 220;
   const height = typeof props.height === "number" ? props.height : 100;
-  const minimum = props.minimum ?? Math.min(0, ...props.values);
-  const maximum = props.maximum ?? Math.max(1, ...props.values);
+  const series = (props.series ?? [{ values: props.values ?? [], color: props.color }]).slice(0, 3);
+  const every_value = series.flatMap((one) => one.values);
+  const minimum = props.minimum ?? Math.min(0, ...every_value);
+  const maximum = props.maximum ?? Math.max(1, ...every_value);
   const span = maximum - minimum || 1;
   const row_of = (value: number) => height - ((Math.min(maximum, Math.max(minimum, value)) - minimum) / span) * height;
-  const color = css_color(props.color) ?? theme.accent;
-  const bar_width = width / Math.max(1, props.values.length);
-  const step = props.values.length > 1 ? width / (props.values.length - 1) : width;
   return (
     <svg data-widget="chart" width={width} height={height} style={css_without_color(props)}>
-      {props.kind === "bars" ? (
-        props.values.map((value, index) => (
-          <rect
-            x={index * bar_width + 1}
-            y={row_of(value)}
-            width={Math.max(1, bar_width - 2)}
-            height={height - row_of(value)}
-            fill={color}
+      {series.map((one, series_index) => {
+        const color = css_color(one.color) ?? theme.accent;
+        const slot_width = width / Math.max(1, one.values.length);
+        const bar_width = slot_width / series.length;
+        const step = one.values.length > 1 ? width / (one.values.length - 1) : width;
+        return props.kind === "bars" ? (
+          one.values.map((value, index) => (
+            <rect
+              x={index * slot_width + series_index * bar_width + 1}
+              y={row_of(value)}
+              width={Math.max(1, bar_width - 2)}
+              height={height - row_of(value)}
+              fill={color}
+            />
+          ))
+        ) : (
+          <polyline
+            points={one.values.map((value, index) => `${index * step},${row_of(value)}`).join(" ")}
+            stroke={color}
+            stroke-width={2}
+            fill="none"
           />
-        ))
-      ) : (
-        <polyline
-          points={props.values.map((value, index) => `${index * step},${row_of(value)}`).join(" ")}
-          stroke={color}
-          stroke-width={2}
-          fill="none"
-        />
-      )}
+        );
+      })}
     </svg>
   );
 }
@@ -758,6 +817,11 @@ export interface ScaleProps extends CommonProps {
   /** Labels for the major ticks, starting at twelve o'clock. */
   labels?: string[];
   major_color?: Color;
+  /** Tick numbers to leave out, such as under a date window. */
+  skip?: number[];
+  /** Where a needle points, counted in ticks from twelve o'clock, for a gauge. */
+  value?: number;
+  needle_color?: Color;
 }
 
 /** Ticks and labels around a dial. */
@@ -767,6 +831,7 @@ export function Scale(props: ScaleProps) {
   const major_every = props.major_every ?? 1;
   const marks = [];
   for (let tick = 0; tick < props.ticks; tick++) {
+    if (props.skip?.includes(tick)) continue;
     const is_major = tick % major_every === 0;
     const radians = (tick * 2 * Math.PI) / props.ticks;
     const outer = center - 2;
@@ -807,6 +872,17 @@ export function Scale(props: ScaleProps) {
       style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none", ...css_without_color(props) }}
     >
       {marks}
+      {props.value !== undefined && (
+        <line
+          x1={center}
+          y1={center}
+          x2={center + Math.sin((props.value * 2 * Math.PI) / props.ticks) * (center - 20)}
+          y2={center - Math.cos((props.value * 2 * Math.PI) / props.ticks) * (center - 20)}
+          stroke={css_color(props.needle_color) ?? theme.danger}
+          stroke-width={3}
+          stroke-linecap="round"
+        />
+      )}
     </svg>
   );
 }
@@ -818,6 +894,11 @@ export interface AnalogClockProps extends CommonProps {
   hour_color?: Color;
   minute_color?: Color;
   second_color?: Color;
+  /** Hand lengths in pixels from the centre. */
+  hour_length?: number;
+  minute_length?: number;
+  second_length?: number;
+  hand_style?: "line" | "tapered" | "rounded";
 }
 
 /** Clock hands bound to a time, normally `now`. */
@@ -829,17 +910,31 @@ export function AnalogClock(props: AnalogClockProps) {
   const minutes = date.getMinutes() + seconds / 60;
   const hours = (date.getHours() % 12) + minutes / 60;
 
+  const hand_style = props.hand_style ?? "rounded";
+
   function hand(turns: number, length: number, thickness: number, color: string) {
     const radians = turns * 2 * Math.PI;
+    const tip_x = center + Math.sin(radians) * length;
+    const tip_y = center - Math.cos(radians) * length;
+    if (hand_style === "tapered") {
+      const side_x = Math.cos(radians) * thickness;
+      const side_y = Math.sin(radians) * thickness;
+      return (
+        <polygon
+          points={`${center + side_x},${center + side_y} ${tip_x},${tip_y} ${center - side_x},${center - side_y}`}
+          fill={color}
+        />
+      );
+    }
     return (
       <line
         x1={center - Math.sin(radians) * 12}
         y1={center + Math.cos(radians) * 12}
-        x2={center + Math.sin(radians) * length}
-        y2={center - Math.cos(radians) * length}
+        x2={tip_x}
+        y2={tip_y}
         stroke={color}
         stroke-width={thickness}
-        stroke-linecap="round"
+        stroke-linecap={hand_style === "line" ? "butt" : "round"}
       />
     );
   }
@@ -851,10 +946,58 @@ export function AnalogClock(props: AnalogClockProps) {
       height={diameter}
       style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none", ...css_without_color(props) }}
     >
-      {hand(hours / 12, diameter * 0.27, 7, css_color(props.hour_color) ?? theme.text)}
-      {hand(minutes / 60, diameter * 0.4, 5, css_color(props.minute_color) ?? theme.text)}
-      {props.show_seconds && hand(seconds / 60, diameter * 0.43, 2, css_color(props.second_color) ?? theme.danger)}
+      {hand(hours / 12, props.hour_length ?? diameter * 0.27, 7, css_color(props.hour_color) ?? theme.text)}
+      {hand(minutes / 60, props.minute_length ?? diameter * 0.4, 5, css_color(props.minute_color) ?? theme.text)}
+      {props.show_seconds &&
+        hand(seconds / 60, props.second_length ?? diameter * 0.43, 2, css_color(props.second_color) ?? theme.danger)}
       <circle cx={center} cy={center} r={6} fill={css_color(props.second_color) ?? theme.danger} />
+    </svg>
+  );
+}
+
+export interface CellGridProps extends CommonProps {
+  columns: number;
+  rows: number;
+  /** The side of one square cell, in pixels. */
+  cell_size: number;
+  /** One number per cell, read as a colour from `palette`. */
+  cells: number[];
+  palette: Color[];
+  /** Receives the number of the cell touched. */
+  onClick?: (event: ChangeEvent<number>) => void;
+}
+
+/** A board of coloured cells from one array, drawn as a single widget. */
+export function CellGrid(props: CellGridProps) {
+  const squares = [];
+  for (let cell = 0; cell < props.columns * props.rows; cell++) {
+    const color = css_color(props.palette[props.cells[cell] ?? 0]) ?? theme.background;
+    squares.push(
+      <rect
+        x={(cell % props.columns) * props.cell_size}
+        y={Math.floor(cell / props.columns) * props.cell_size}
+        width={props.cell_size}
+        height={props.cell_size}
+        fill={color}
+      />,
+    );
+  }
+  return (
+    <svg
+      data-widget="cell-grid"
+      width={props.columns * props.cell_size}
+      height={props.rows * props.cell_size}
+      onClick={(event) => {
+        if (!props.onClick) return;
+        const bounds = (event.currentTarget as SVGElement).getBoundingClientRect();
+        const scale = bounds.width / (props.columns * props.cell_size) || 1;
+        const column = Math.floor((event.clientX - bounds.left) / scale / props.cell_size);
+        const row = Math.floor((event.clientY - bounds.top) / scale / props.cell_size);
+        run_handler(props.onClick, { value: row * props.columns + column });
+      }}
+      style={css_without_color(props)}
+    >
+      {squares}
     </svg>
   );
 }

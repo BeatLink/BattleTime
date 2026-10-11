@@ -188,9 +188,10 @@ function time_of_day_of(subscription: Extract<Subscription, { kind: "daily" }>):
   return "hour" in value ? value : value.value;
 }
 
-/** Whether a subscription may run now: short periods only while its app is open. */
+/** Whether a subscription may run now: short periods and `only_while_open` ones only while its app is open. */
 function may_run(entry: Scheduled): boolean {
   const subscription = entry.subscription;
+  if (subscription.only_while_open) return open_app.peek() === entry.app;
   if (subscription.kind === "every" && period_in_milliseconds(subscription.period) < MINUTE) {
     return open_app.peek() === entry.app;
   }
@@ -272,6 +273,7 @@ export function deliver(kind: Subscription["kind"], event: object, filter?: (sub
   for (const entry of scheduled) {
     if (entry.subscription.kind !== kind) continue;
     if (filter && !filter(entry.subscription)) continue;
+    if (!may_run(entry)) continue;
     run_app_handler(entry.app, entry.subscription.handler as (event: object) => void, event);
   }
 }
