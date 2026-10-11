@@ -19,7 +19,6 @@ import {
   type Duration,
   type Instant,
   type MusicCommand,
-  type MusicEvent,
 } from "neotime";
 import { icons } from "neotime/icons";
 import { Bar, Button, Column, Icon, Label, Row, Screen } from "neotime/widgets";
@@ -65,9 +64,9 @@ const has_track = computed(() => current_music.value.length > 0 || current_music
 // ============================================================================
 
 /** Each report from the phone resets the position the display runs on from. */
-function receive(event: MusicEvent) {
-  is_playing.value = event.is_playing;
-  position.value = event.position;
+function receive() {
+  is_playing.value = current_music.value.is_playing;
+  position.value = current_music.value.position;
   position_at.value = now.value;
 }
 
