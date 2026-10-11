@@ -79,6 +79,7 @@ See [bluetooth.md](bluetooth.md) for the details of each.
 
 What InfiniTime has for each feature NeoTime already has, compared with InfiniTime `6c119eb5`
 on 2026-10-11. Items already listed in the sections above are not repeated.
+The full report is [NeoTime vs InfiniTime: feature coverage](https://claude.ai/code/artifact/4a70bc3f-2b66-4bdf-8ba9-c9233c2f28ea).
 
 ### Display
 
@@ -170,3 +171,83 @@ InfiniTime has these and NeoTime has nothing for them yet:
 | Other BLE services | Device Information, Music, Navigation, Simple Weather |
 | Watch faces | Digital, Analog, PineTimeStyle, Terminal, Infineat, Casio G7710, Pride Flag |
 | Apps | Alarm, Timer, Stopwatch, Music, Navigation, Weather, Calculator, Metronome, Flashlight, Paint, Paddle, 2048, Dice, System Info |
+
+## Gaps against the wasp-os fork
+
+What the BeatLink wasp-os fork has for each feature NeoTime already has, compared with its
+`development` branch at `4f065f7` on 2026-10-11. Items already listed above are not repeated. The
+full report is
+[NeoTime vs wasp-os: feature coverage](https://claude.ai/code/artifact/1676468a-1a4f-421b-ac54-345934b08570).
+
+### Display
+
+- [ ] **Mute while switching apps,** so a half-drawn screen is never shown.
+- [ ] **Measure the bus speed on the watch.** The fork found its SPI bus stuck at 1 Mbps instead of
+  8 Mbps, which made every redraw 4.4 times slower.
+
+### Touch panel
+
+- [ ] **Pass touch and swipe events to apps.**
+
+### Side button
+
+- [ ] **Click goes home,** and a second click on the home screen puts the watch to sleep, as the
+  fork does.
+
+### Accelerometer
+
+- [ ] **Write the axis remap to the chip,** so its own motion features see the watch the right way
+  up. The driver only remaps in software now.
+- [ ] **Log steps to the file system** every 6 minutes, one file a day, with no limit on history.
+- [ ] **Reset at midnight** without the steps app open.
+- [ ] **Per-day step graphs** in the steps app.
+- [ ] **Write raise to wake independently.** The fork's detector copies InfiniTime's GPL-3.0 rules.
+
+### Bluetooth
+
+- [ ] **Nordic UART Service,** the transport the fork's companion apps use.
+- [ ] **The Gadgetbridge Bangle.js protocol:** notifications, dismissals, music, weather, find
+  phone, time, alarms, steps, settings, calls and HTTP, plus watch status reports. Decide whether
+  NeoTime speaks this, InfiniTime's GATT services, or both.
+- [ ] **A developer console over BLE,** to replace the fork's Python REPL for uploads, time setting
+  and resets.
+
+### UI toolkit
+
+- [ ] **Cards:** rounded-rectangle cards as the layout every app uses.
+- [ ] **Widgets:** status bar, battery meter, clock, notification bar, scroll indicator, button,
+  toggle, checkbox, slider, spinner, stopwatch and confirmation view.
+- [ ] **App icons:** monochrome Font Awesome icons per app.
+- [ ] **Theme presets** set from the companion app.
+- [ ] **Grid and list launchers,** chosen in settings.
+
+### Simulator
+
+- [ ] **Run every app and face** in the simulator.
+- [ ] **A smoke test** that opens every app in the simulator and checks its screenshot.
+
+### External flash and storage
+
+- [ ] **Install apps as packages over BLE,** as the fork's `pkgmgr` does into `/flash/pkg`.
+- [ ] **File manager and backup** from the companion app.
+- [ ] **Updatable read-only image:** the fork keeps nearly all its code in a ROMFS image in
+  internal flash, updated without reflashing the firmware.
+
+### Firmware updates
+
+- [ ] **Keep the clock across a reset** in retained RAM.
+- [ ] **Firmware from GitHub releases** offered by the companion app.
+
+### Not started
+
+The fork has these and NeoTime has nothing for them yet. Most also appear in the InfiniTime table.
+
+| Area | What the fork has |
+|---|---|
+| App runtime | apps loaded when opened, state kept when left, a Software app to turn apps on and off, a crash screen |
+| Heart rate | filter-chain PPG (30 to 210 BPM), raw data logging |
+| Watch faces | Clock, Week clock, Chrono, Dual clock, Fibonacci, Resistor, Word clock, a Faces app with previews |
+| Apps | Alarm with 4 alarms and snooze, Pomodoro, Phone finder, Sports, Level, Gallery, Haiku, Morse, Snake, Four in a row, Puzzle 15, Game of Life, Beacon, Self test |
+| Companion app | WaspOSCompanion: steps, alarms, settings, files, backup, weather, themes, face previews, firmware |
+| Developer tools | `wasptool`, `pkgpush.py`, `nus.py` |
+| Other watches | Colmi P8, Senbono K9, DS-D6, 96Boards Nitrogen |
