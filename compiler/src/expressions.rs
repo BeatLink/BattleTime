@@ -329,6 +329,13 @@ impl<'a> Compiler<'a> {
                 }
                 let name = member.property.name.as_str();
                 let object = self.resolve_reference(&member.object, scope);
+                let is_text_length = name == "length"
+                    && matches!(object, None | Some(Reference::Expression { .. } | Reference::Local { .. }));
+                if is_text_length {
+                    self.compile_text_argument(emitter, &member.object, scope)?;
+                    emitter.emit(Instruction::TextLength, span)?;
+                    return Ok(Typed::with_range(Type::NUMBER, Range { lowest: 0, highest: 256 }));
+                }
                 self.compile_member_read(emitter, object, name, span, expected)
             }
             Expression::ChainExpression(chain) => match &chain.expression {

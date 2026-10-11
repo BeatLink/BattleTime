@@ -127,9 +127,13 @@ to locals, because a loop needs an empty stack.
 - `text_from_codes(codes, length)` with an array signal of character codes, as `TextFromCodes`.
 - `join(texts, separator)` over a constant array, an array literal or an array signal, unrolled
   into `Join`s, with a literal separator.
-- `to_upper`, `text_length`, `slice_text` and `pad_start`, and the methods `toUpperCase`, `slice`
-  and `padStart`, on text known when compiling. On text made while running they need runtime
-  instructions; see [Not supported yet](#not-supported-yet).
+- `to_upper`, `text_length`, `slice_text` and `pad_start`, the methods `toUpperCase`, `slice` and
+  `padStart`, and `.length` on text. On text known when compiling they are worked out then;
+  otherwise they compile to `ToUpper`, `TextLength`, `SliceText` and `PadStart`. A missing `end`
+  slices to the end, and `pad_start` pads with a space unless given one literal character.
+- `array.includes(value)`, `array.indexOf(value)` and `count_where(array, test)` over an array
+  signal or a constant array, compiled as a loop; with everything known when compiling they are
+  worked out then. Text elements must be fixed text.
 - `icon_named(name)` with a literal, a choice such as a weather condition, fixed text, or a
   template such as `` `turn_${turn.value}` ``.
 - A constant array or object indexed at run time: numbers that go up evenly are computed, other
@@ -236,16 +240,14 @@ Left out with a warning, because the image format has no place for them yet:
 - Props with no `Property`, such as `size`, `diameter`, `thickness`, `track_color`, `text_align`,
   `major_color`, `highlighted`, `kind` on a `Chart` and `series`, and props a widget does not have
   in `Property::belongs_to`.
-- `justify="around"` and `align_items="stretch"`, which the runtime has no number for.
+- `align_items="stretch"`, which the runtime has no number for. `justify="around"` is an error that
+  names start, center, end and space_between.
 
 Errors, until the compiler or the runtime grows them:
 
 - Assigning a whole array of records, objects other than records in state, and arrays in locals.
 - `vibrate_sequence`, `http_request` and `send_to_phone`, and `sine`, `cosine`
   and `point_on_circle` unless their arguments are known when compiling.
-- The text functions on text made while running, each of which needs a runtime instruction:
-  `to_upper` a `ToUpper`, `text_length` a `TextLength`, `slice_text` a `SliceText`, and `pad_start`
-  a `TextLength` or a `PadStart`.
 - More than 16 loops, or more than 16 branches waiting to join, in one handler or expression,
   counting the functions it inlines; the runtime's checks allow no more.
 - A screen component that returns different roots, such as an early `return <Screen>`.

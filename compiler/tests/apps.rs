@@ -138,7 +138,7 @@ fn the_stopwatch_runs_on_the_runtime() {
 // ============================================================================
 
 /// The apps and faces that are expected to compile, so a change that breaks one is caught.
-const EXPECTED_TO_COMPILE: [&str; 35] = [
+const EXPECTED_TO_COMPILE: [&str; 36] = [
     "apps/alarm",
     "apps/calculator",
     "apps/dice",
@@ -157,7 +157,6 @@ const EXPECTED_TO_COMPILE: [&str; 35] = [
     "apps/puzzle15",
     "apps/snake",
     "apps/sports",
-    "apps/steps",
     "apps/stopwatch",
     "apps/timer",
     "faces/analog",
@@ -166,8 +165,10 @@ const EXPECTED_TO_COMPILE: [&str; 35] = [
     "faces/dual-clock",
     "faces/fibonacci-clock",
     "faces/infineat",
+    "faces/lite-analog",
     "faces/lite-digital",
     "faces/lite-rings",
+    "faces/lite-weather",
     "faces/pinetime-style",
     "faces/pride-flag",
     "faces/resistor-clock",

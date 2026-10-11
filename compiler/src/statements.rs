@@ -1720,8 +1720,118 @@ impl<'a> Compiler<'a> {
     // Loops
     // ------------------------------------------------------------------------
 
+    /// `includes`, `indexOf` and `count_where`: a loop over an array signal or a constant array.
+    pub fn compile_array_search(
+        &mut self,
+        emitter: &mut Emitter,
+        array: &'a Expression<'a>,
+        argument: &'a Expression<'a>,
+        search: Search,
+        scope: &Rc<Scope<'a>>,
+        span: Span,
+    ) -> Compiled<Typed> {
+        let spill_mark = emitter.locals_in_use();
+        let spilled = self.spill_whole_stack(emitter, span)?;
+        let mark = emitter.locals_in_use();
+        let source = self.loop_source(array, scope, array.span())?;
+        let result_local = emitter.take_local(span)?;
+        let index_local = emitter.take_local(span)?;
+        let start_value = if search == Search::IndexOf { -1 } else { 0 };
+        self.emit_number(emitter, start_value, span)?;
+        emitter.emit(Instruction::WriteLocal(result_local), span)?;
+
+        let (value_local, test) = match search {
+            Search::CountWhere => match self.resolve_reference(argument, scope) {
+                Some(Reference::Function(function)) => (None, Some(function)),
+                _ => {
+                    return fail(
+                        argument.span(),
+                        "give `count_where` a test, such as `(cell) => cell === 1`",
+                    )
+                }
+            },
+            _ => {
+                let local = emitter.take_local(span)?;
+                self.compile_value(emitter, argument, scope, None)?;
+                emitter.emit(Instruction::WriteLocal(local), span)?;
+                (Some(local), None)
+            }
+        };
+
+        self.emit_number(emitter, 0, span)?;
+        emitter.emit(Instruction::WriteLocal(index_local), span)?;
+        let start = emitter.loop_start(span)?;
+        let exit = emitter.label();
+        let next = emitter.label();
+        emitter.emit(Instruction::ReadLocal(index_local), span)?;
+        self.emit_number(emitter, source.length() as i64, span)?;
+        emitter.emit(Instruction::Less, span)?;
+        emitter.jump_if_false(exit, span)?;
+        let element = self.loop_element(emitter, &source, index_local, span)?;
+        match (value_local, &test) {
+            (Some(value_local), _) => {
+                let typed = self.compile_reference_value(emitter, element, span, None)?;
+                if typed.value_type.kind == Kind::Text {
+                    return fail(span, "text made while running cannot be compared; search an array of numbers or fixed text");
+                }
+                emitter.emit(Instruction::ReadLocal(value_local), span)?;
+                emitter.emit(Instruction::Equal, span)?;
+                emitter.jump_if_false(next, span)?;
+                match search {
+                    Search::IndexOf => emitter.emit(Instruction::ReadLocal(index_local), span)?,
+                    _ => self.emit_number(emitter, 1, span)?,
+                }
+                emitter.emit(Instruction::WriteLocal(result_local), span)?;
+                emitter.jump(exit, span)?;
+            }
+            (None, Some(test)) => {
+                let arguments = vec![
+                    ArgumentSource::Reference(element),
+                    ArgumentSource::Reference(Reference::Local {
+                        index: index_local,
+                        value_type: Type::NUMBER,
+                        is_constant: true,
+                    }),
+                ];
+                let Some(typed) = self.inline_call(emitter, test, arguments, true, Some(Type::BOOL), span)?
+                else {
+                    return fail(argument.span(), "the test must give a value");
+                };
+                self.emit_truth_test(emitter, typed.value_type, span)?;
+                emitter.jump_if_false(next, span)?;
+                self.emit_increment(emitter, result_local, span)?;
+            }
+            (None, None) => {}
+        }
+        emitter.place(next);
+        self.emit_increment(emitter, index_local, span)?;
+        emitter.loop_back(start, span)?;
+        emitter.place(exit);
+        emitter.release_locals(mark);
+        self.restore_stack(emitter, &spilled, false, span)?;
+        emitter.emit(Instruction::ReadLocal(result_local), span)?;
+        emitter.release_locals(spill_mark);
+        Ok(match search {
+            Search::Includes => Typed::new(Type::BOOL),
+            Search::IndexOf => Typed::with_range(
+                Type::NUMBER,
+                Range {
+                    lowest: -1,
+                    highest: source.length() as i64,
+                },
+            ),
+            Search::CountWhere => Typed::with_range(
+                Type::NUMBER,
+                Range {
+                    lowest: 0,
+                    highest: source.length() as i64,
+                },
+            ),
+        })
+    }
+
     /// What a `for ... of` or `.map` runs over.
-    fn loop_source(
+    pub fn loop_source(
         &mut self,
         source: &'a Expression<'a>,
         scope: &Rc<Scope<'a>>,
@@ -1756,7 +1866,7 @@ impl<'a> Compiler<'a> {
     }
 
     /// What a loop's element stands for: worked out from the index, a record, or a new local.
-    fn loop_element(
+    pub fn loop_element(
         &mut self,
         emitter: &mut Emitter,
         source: &LoopSource,
@@ -1829,7 +1939,7 @@ impl<'a> Compiler<'a> {
         Ok(value_type)
     }
 
-    fn emit_increment(&mut self, emitter: &mut Emitter, local: u8, span: Span) -> Compiled<()> {
+    pub fn emit_increment(&mut self, emitter: &mut Emitter, local: u8, span: Span) -> Compiled<()> {
         emitter.emit(Instruction::ReadLocal(local), span)?;
         self.emit_number(emitter, 1, span)?;
         emitter.emit(Instruction::Add, span)?;
@@ -1898,7 +2008,7 @@ pub struct ScratchShape {
 }
 
 /// What a loop runs over.
-enum LoopSource {
+pub enum LoopSource {
     Constant(Vec<Constant>),
     State {
         variable: u8,
@@ -1912,12 +2022,20 @@ enum LoopSource {
 }
 
 impl LoopSource {
-    fn length(&self) -> usize {
+    pub fn length(&self) -> usize {
         match self {
             LoopSource::Constant(elements) => elements.len(),
             LoopSource::State { length, .. } | LoopSource::Records { length, .. } => *length,
         }
     }
+}
+
+/// What a search over an array works out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Search {
+    Includes,
+    IndexOf,
+    CountWhere,
 }
 
 /// Where a loop's `break` and `continue` go.

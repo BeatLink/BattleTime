@@ -16,7 +16,7 @@ use crate::diagnostics::{fail, Compiled};
 use crate::emitter::Emitter;
 use crate::expressions::{KeyValue, Typed};
 use crate::scope::{LibraryModule, Reference, Scope};
-use crate::statements::ArgumentSource;
+use crate::statements::{ArgumentSource, Search};
 use crate::types::{icon_number, ChoiceSet, Kind, Range, Type, ICON_NAMES};
 
 // ============================================================================
@@ -96,19 +96,7 @@ fn rejected_call_advice(name: &str) -> Option<&'static str> {
         "vibrate_sequence" | "http_request" | "send_to_phone" => {
             "is not in the bytecode yet, because it needs an array or object argument"
         }
-        "day_of_year" | "iso_week_of" | "count_where" => "is not supported by the compiler yet",
-        "to_upper" | "toUpperCase" => {
-            "works only on text known at compile time; text made while running needs a runtime ToUpper instruction"
-        }
-        "text_length" => {
-            "works only on text known at compile time; text made while running needs a runtime TextLength instruction"
-        }
-        "slice_text" | "slice" => {
-            "works only on text known at compile time; text made while running needs a runtime SliceText instruction"
-        }
-        "pad_start" | "padStart" => {
-            "works only on text known at compile time; text made while running needs a runtime TextLength or PadStart instruction"
-        }
+        "day_of_year" | "iso_week_of" => "is not supported by the compiler yet",
         "sine" | "cosine" | "point_on_circle" => {
             "needs the shared library, which is not built yet; it works only with arguments known at compile time"
         }
@@ -157,6 +145,42 @@ impl<'a> Compiler<'a> {
             Some(Reference::Computed(_)) => fail(span, "read a computed with `.value` instead of calling it"),
             Some(_) => fail(span, "this cannot be called"),
             None => {
+                // Text and array methods are the library's functions with the object first.
+                if let Expression::StaticMemberExpression(member) = strip_parentheses(&call.callee) {
+                    let method = member.property.name.as_str();
+                    if matches!(method, "includes" | "indexOf") {
+                        let Some(value) = arguments.first() else {
+                            return fail(span, format!("`{method}` needs a value to look for"));
+                        };
+                        let search = if method == "includes" {
+                            Search::Includes
+                        } else {
+                            Search::IndexOf
+                        };
+                        let typed =
+                            self.compile_array_search(emitter, &member.object, value, search, scope, span)?;
+                        return self.finish_value(emitter, typed, as_statement, span);
+                    }
+                    let function = match method {
+                        "toUpperCase" => Some("to_upper"),
+                        "slice" => Some("slice_text"),
+                        "padStart" => Some("pad_start"),
+                        _ => None,
+                    };
+                    if let Some(function) = function {
+                        let mut with_object = vec![&member.object];
+                        with_object.extend(arguments.iter().copied());
+                        return self.compile_library_call(
+                            emitter,
+                            LibraryModule::Neotime,
+                            function,
+                            &with_object,
+                            scope,
+                            as_statement,
+                            span,
+                        );
+                    }
+                }
                 let callee_text = match strip_parentheses(&call.callee) {
                     Expression::Identifier(identifier) => identifier.name.as_str().to_string(),
                     Expression::StaticMemberExpression(member) => member.property.name.as_str().to_string(),
@@ -334,6 +358,63 @@ impl<'a> Compiler<'a> {
                 self.compile_start_of(emitter, name, argument(0)?, scope, span)?
             }
             "icon_named" => self.compile_icon_named(emitter, argument(0)?, scope, span)?,
+            "count_where" => self.compile_array_search(
+                emitter,
+                argument(0)?,
+                argument(1)?,
+                Search::CountWhere,
+                scope,
+                span,
+            )?,
+            "to_upper" => {
+                self.compile_text_argument(emitter, argument(0)?, scope)?;
+                emitter.emit(Instruction::ToUpper, span)?;
+                Typed::new(Type::TEXT)
+            }
+            "text_length" => {
+                self.compile_text_argument(emitter, argument(0)?, scope)?;
+                emitter.emit(Instruction::TextLength, span)?;
+                Typed::with_range(
+                    Type::NUMBER,
+                    Range {
+                        lowest: 0,
+                        highest: 256,
+                    },
+                )
+            }
+            "slice_text" => {
+                self.compile_text_argument(emitter, argument(0)?, scope)?;
+                self.compile_value_of_type(emitter, argument(1)?, scope, Type::NUMBER)?;
+                match arguments.get(2) {
+                    Some(end) => {
+                        self.compile_value_of_type(emitter, end, scope, Type::NUMBER)?;
+                    }
+                    None => self.emit_number(emitter, i32::MAX as i64, span)?,
+                }
+                emitter.emit(Instruction::SliceText, span)?;
+                Typed::new(Type::TEXT)
+            }
+            "pad_start" => {
+                self.compile_text_argument(emitter, argument(0)?, scope)?;
+                self.compile_value_of_type(emitter, argument(1)?, scope, Type::NUMBER)?;
+                let code = match arguments.get(2) {
+                    Some(character) => match self.evaluate_constant(character, scope) {
+                        Some(Constant::Text(text)) if text.chars().count() == 1 => {
+                            text.chars().next().unwrap_or(' ')
+                        }
+                        _ => {
+                            return fail(
+                                character.span(),
+                                "the padding must be one literal character, such as \"0\"",
+                            )
+                        }
+                    },
+                    None => ' ',
+                };
+                self.emit_number(emitter, code as i64, span)?;
+                emitter.emit(Instruction::PadStart, span)?;
+                Typed::new(Type::TEXT)
+            }
             "next_time_of_day" => self.compile_next_time_of_day(
                 emitter,
                 argument(0)?,
@@ -688,6 +769,38 @@ impl<'a> Compiler<'a> {
         self.compile_value_of_type(emitter, instant, scope, Type::NUMBER)?;
         emitter.emit(Instruction::StartOf(unit), span)?;
         Ok(Typed::new(Type::NUMBER))
+    }
+
+    /// Compiles a value that must be text, for the text functions.
+    pub fn compile_text_argument(
+        &mut self,
+        emitter: &mut Emitter,
+        text: &'a Expression<'a>,
+        scope: &Rc<Scope<'a>>,
+    ) -> Compiled<()> {
+        let typed = self.compile_value(emitter, text, scope, None)?;
+        if !typed.value_type.is_text() {
+            return fail(
+                text.span(),
+                format!("expected text, but this is {}", typed.value_type.describe()),
+            );
+        }
+        Ok(())
+    }
+
+    /// Gives a call's value, or drops it when the call stands as a statement.
+    fn finish_value(
+        &mut self,
+        emitter: &mut Emitter,
+        typed: Typed,
+        as_statement: bool,
+        span: Span,
+    ) -> Compiled<Option<Typed>> {
+        if as_statement {
+            emitter.emit(Instruction::Drop, span)?;
+            return Ok(None);
+        }
+        Ok(Some(typed))
     }
 
     /// `next_time_of_day(after, { hour, minute }, days?)`: a loop over the next eight local days.

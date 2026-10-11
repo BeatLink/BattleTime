@@ -20,7 +20,7 @@ import { computed, signal } from "@preact/signals";
 import {
   define_app, format_duration, format_number, format_time, now, persisted, random_int, range, vibrate,
   vibrate_pattern, go, start_of_minute, start_of_hour, text_from_codes, join, to_upper, text_length,
-  slice_text, pad_start, next_time_of_day, HOUR, MINUTE, SECOND, type Duration, type Instant, type SwipeEvent, type Color,
+  slice_text, pad_start, next_time_of_day, count_where, HOUR, MINUTE, SECOND, type Duration, type Instant, type SwipeEvent, type Color,
 } from "neotime";
 import { icons } from "neotime/icons";
 import { Button, Column, Icon, Label, Row, Screen } from "neotime/widgets";
@@ -985,5 +985,91 @@ fn new_widget_props_use_their_number_mappings() {
     assert_eq!(
         property_of(&image, WidgetKind::Button, Property::Disabled, 0),
         PropertySource::Constant(1)
+    );
+}
+
+#[test]
+fn text_functions_work_on_text_made_while_running() {
+    let image = compile(&app(r#"const count = signal(42);
+        function Main() {
+          return (
+            <Screen>
+              <Label>{to_upper(format_time(0, "ddd"))}</Label>
+              <Label>{`${text_length(`${count.value}x`)}`}</Label>
+              <Label>{slice_text(`${count.value}789`, 1, -1)}</Label>
+              <Label>{pad_start(`${count.value}`, 5, "0")}</Label>
+              <Label>{`${count.value}`.padStart(3, "*").slice(1)}</Label>
+              <Label>{`${`${count.value}`.length}`}</Label>
+            </Screen>
+          );
+        }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(label_text(&image, &state, 0), "THU");
+    assert_eq!(label_text(&image, &state, 1), "3");
+    assert_eq!(label_text(&image, &state, 2), "278");
+    assert_eq!(label_text(&image, &state, 3), "00042");
+    assert_eq!(label_text(&image, &state, 4), "42");
+    assert_eq!(label_text(&image, &state, 5), "2");
+}
+
+#[test]
+fn includes_and_index_of_search_arrays() {
+    let declarations =
+        "const board = signal([0, 0, 7, 0, 7]);\nconst wanted = signal(7);\nconst PRIMES = [2, 3, 5, 7];";
+
+    assert_eq!(
+        number_shown(declarations, "board.value.indexOf(wanted.value)"),
+        "2"
+    );
+    assert_eq!(number_shown(declarations, "board.value.includes(9) ? 1 : 0"), "0");
+    assert_eq!(
+        number_shown(declarations, "PRIMES.includes(wanted.value) ? 1 : 0"),
+        "1"
+    );
+    assert_eq!(number_shown(declarations, "PRIMES.indexOf(wanted.value)"), "3");
+}
+
+#[test]
+fn count_where_counts_the_elements_that_pass() {
+    let declarations = "const board = signal([0, 1, 7, 0, 7]);\nconst limit = signal(0);";
+
+    assert_eq!(
+        number_shown(
+            declarations,
+            "count_where(board.value, (cell) => cell > limit.value)"
+        ),
+        "3"
+    );
+    assert_eq!(
+        after_click(
+            declarations,
+            "limit.value = count_where(board.value, (cell, place) => place < 2);",
+            "limit.value"
+        ),
+        "2"
+    );
+}
+
+#[test]
+fn join_works_on_a_text_array_signal() {
+    let image = compile(&app(r#"const words = signal(["a", "b", "c"]);
+        function Main() { return <Screen><Label>{join(words.value, "-")}</Label></Screen>; }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(label_text(&image, &state, 0), "a-b-c");
+}
+
+#[test]
+fn justify_around_is_an_error_naming_the_choices() {
+    let message = first_error(&app(
+        r#"function Main() { return <Screen justify="around"><Label>Hi</Label></Screen>; }"#,
+    ));
+
+    assert!(
+        message.contains("start, center, end or space_between"),
+        "{message}"
     );
 }

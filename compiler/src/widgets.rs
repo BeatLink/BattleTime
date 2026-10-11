@@ -992,8 +992,17 @@ impl<'a> Compiler<'a> {
             if prop == "align_items" || prop == "justify" {
                 if let Some(Constant::Text(text)) = self.reference_constant(&value) {
                     if ChoiceSet::Justify.number_of(&text).is_none() {
-                        self.warn(span, format!("`{prop}=\"{text}\"` is left out: the runtime has no such way to spread children"));
-                        continue;
+                        if prop == "align_items" && &*text == "stretch" {
+                            self.warn(
+                                span,
+                                "`align_items=\"stretch\"` is left out: the runtime has no stretch alignment",
+                            );
+                            continue;
+                        }
+                        return fail(
+                            span,
+                            format!("`{prop}=\"{text}\"` is not supported; use start, center, end or space_between"),
+                        );
                     }
                 }
             }
