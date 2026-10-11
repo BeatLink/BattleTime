@@ -13,5 +13,7 @@ embedded-graphics-simulator = "0.7"
 embedded-hal = "1.0"
 embedded-hal-async = "1.0"
 mipidsi = "0.10"
+neotime-app-host = { path = "../app-host", features = ["demo"] }
 neotime-display = { path = "../drivers/display" }
+neotime-runtime = { path = "../runtime" }
 neotime-vibrator = { path = "../drivers/vibrator" }

@@ -24,6 +24,37 @@ nix run . -- --screenshot out.png --page 3   # save one frame and exit, with no 
 
 A red border shows while the motor is running.
 
+## Running an app
+
+The simulator runs an app image through `neotime-app-host`, the same code the watch will use:
+
+```sh
+cargo run -p neotime-simulator -- --app path/to/app.ntapp   # an image file
+cargo run -p neotime-simulator -- --demo                    # the built-in stopwatch
+nix run . -- --demo --click 120,138 --screenshot out.png    # click Start, save one frame, exit
+```
+
+The built-in stopwatch is written with the runtime's image writer (`app-host/src/demo.rs`), so it
+runs before the compiler exists. `--click X,Y` taps the screen before a screenshot and may be
+given more than once.
+
+| Input | Does |
+|---|---|
+| Click | A tap; held for half a second, a long press |
+| Drag | Drag events while the button is down |
+| Drag 40 pixels or more | A swipe in that direction |
+| Space, L | Press or hold the side button |
+| T | Switch between the default theme and a light one |
+| Q or Escape | Quit |
+
+The clock is the computer's. A stand-in system gives fixed values for everything else, such as
+87% battery, a weather place and a playing track, and prints each effect the app asks for, such as
+`effect: Vibrate(30)` or `effect: VibratePattern(alarm)`, with text arguments as text and named
+numbers by name. A
+vibration also taps the simulated motor. A failing handler is printed too, where the watch would
+show its crash screen. A touch or button press the app does not take is printed, because there
+the system's own meaning would apply.
+
 ## How it works
 
 The drivers talk to hardware only through `embedded-hal` and `mipidsi` traits, so the simulator
@@ -39,13 +70,14 @@ hands them simulated parts in place of the chip's:
   its own thread, so a pattern waits without freezing the window.
 - **Delays** sleep the thread.
 
-There is no UI yet, so the simulator shows three demo pages (`simulator/src/pages.rs`). Moving
+Without an app, the simulator shows three demo pages (`simulator/src/pages.rs`). Moving
 between them uses the display driver's hardware scroll the way page slides on the watch will: each
 step scrolls 16 rows and draws only the 16 rows that have just come on screen. The demo pages are
 replaced once the UI toolkit exists.
 
 The simulator's tests (`simulator/src/tests.rs`) check the display driver against the panel model,
-including that a full slide leaves exactly the frame that drawing the page directly would.
+including that a full slide leaves exactly the frame that drawing the page directly would. They
+also run the stopwatch through the display driver, and check how mouse movements become touches.
 
 ## Why not InfiniSim itself
 

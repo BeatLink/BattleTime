@@ -28,6 +28,7 @@ The PineTime is built around a Nordic nRF52832 chip: a 64 MHz Arm Cortex-M4F wit
 ```mermaid
 flowchart TB
     apps["Apps and watch faces<br/>apps/, faces/: sources started, loadable over BLE planned"]
+    host["App host<br/>app-host: runs an open app, started"]
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>(planned: power, events, settings, notifications)"]
@@ -36,9 +37,10 @@ flowchart TB
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
 
-    apps --> runtime
-    runtime --> ui
-    runtime --> system
+    apps --> host
+    host --> runtime
+    host --> ui
+    host --> system
     ui --> drivers
     system --> services
     system --> drivers
@@ -67,7 +69,10 @@ Each layer uses only the layers below it.
 - **App runtime** loads apps installed over BLE, starts and stops them, and passes them events.
   Apps are written as Preact components with signals and compiled on the computer into images
   that a small bytecode interpreter runs; see [app-runtime.md](app-runtime.md). **(started: the
-  image format, its checks, the interpreter and the bindings work; nothing runs apps yet)**
+  image format, its checks, the interpreter and the bindings work)**
+- **App host** runs one open app on top of the runtime: it builds the screen's rlvgl widgets, sends
+  touches to handlers, hands effects to the system and redraws what changed. **(started: runs apps
+  in the simulator; not yet on the watch)**
 
 ## Tasks
 
@@ -82,6 +87,7 @@ vibration pattern, waits without blocking the others. **(planned)**
 NeoTime/
 ├── Cargo.toml        one Cargo workspace for every crate
 ├── package.json      the npm workspace for apps/, faces/ and sdk/neotime
+├── app-host/         neotime-app-host: runs an open app with rlvgl widgets
 ├── apps/             neotime-apps: apps in the app language, one folder each; see apps.md
 ├── rustfmt.toml      formatting rules
 ├── flake.nix       development shell, simulator package and checks
@@ -114,7 +120,7 @@ NeoTime/
 └── ui/               neotime-ui: draws rlvgl widgets on the screen
 ```
 
-Each driver, the runtime and the UI crate is a `no_std` crate with its code in `src/lib.rs` and its tests in `src/tests.rs`. See
+Each driver, the runtime, the app host and the UI crate is a `no_std` crate with its code in `src/lib.rs` and its tests in `src/tests.rs`. See
 [coding-guidelines.md](coding-guidelines.md) for how the code is written.
 
 ## Drivers
@@ -300,6 +306,33 @@ driver's `Display`, and carries out rlvgl's drawing calls on it:
 rlvgl needs a heap (`alloc`), which the firmware will have to provide. Still to do: sizing that heap,
 touch input, page slides on the hardware scroll, and a desktop simulator.
 
+## App host (`app-host`)
+
+`neotime-app-host` runs one open app. It ties the runtime to the UI toolkit and to whatever embeds
+it: the firmware's system layer on the watch, or the simulator on a computer. It is `no_std` with
+`alloc`, because rlvgl's widgets need a heap.
+
+- **Opening.** `AppHost::open` checks the image, sets up the state and bindings, and builds the
+  first screen: one node per widget, each drawn by an rlvgl widget, laid out by a small flexbox.
+- **Events.** A touch goes to the topmost widget under it that has a handler for it. The handler's
+  effects go to the embedder through the `System` trait, except `go` and `back`, which the host
+  carries out itself.
+- **Redrawing.** Only the expressions a change affects are worked out again, and only the widgets
+  whose value, place or visibility changed are drawn again, each region painted from the
+  background up. There is no screen buffer.
+- **Time.** `tick` redraws what the clock changed, and `next_wakeup` says when that next happens, so
+  the watch can sleep in between.
+- **Theme.** `set_theme` redraws every colour from the values already held, without running app
+  code.
+- **Failures.** A failing handler or expression is reported through `System::app_failed`, and the
+  app stays open with its state unchanged.
+- **Demo.** With the `demo` feature, `demo::stopwatch_image` builds a stopwatch image with the
+  runtime's writer, so the host runs before the compiler exists.
+
+On the watch, `AppHost` takes 5,544 B and each widget of the open screen 276 B of the UI heap plus
+its text; see [memory-map.md](memory-map.md). [app-runtime.md](app-runtime.md#the-app-host) describes
+the calls, the layout rules and what each property value means.
+
 ## Apps and watch faces (`apps`, `faces`, `sdk`)
 
 Apps and watch faces are Preact and Signals source, written to [app-reference.md](app-reference.md)
@@ -327,8 +360,9 @@ Nothing here runs on the watch yet. That needs the compiler and the runtime in
 `neotime-simulator` runs the drivers on a desktop in a 240x240 window, against simulated
 hardware: a model of the ST7789 that follows the commands the display driver sends, and a motor
 pin. It is a `std` program, so it sits beside the layers rather than in them and is never built
-for the watch. The mouse is the touch panel and the space bar is the side button. See
-[simulator.md](simulator.md).
+for the watch. The mouse is the touch panel and the space bar is the side button. With `--app` or
+`--demo` it runs an app image through `neotime-app-host`, with the computer's clock and a stand-in
+system that prints effects. See [simulator.md](simulator.md).
 
 ## Building and testing
 
@@ -350,7 +384,7 @@ cargo build --release --target thumbv7em-none-eabihf
 ```
 
 The workspace's default members are the `no_std` crates only, so that build leaves the simulator
-out. `nix flake check` runs the tests, the watch build, clippy and a headless simulator screenshot
-in a clean sandbox.
+out. `nix flake check` runs the tests, the watch build, clippy and two headless simulator
+screenshots, one of them of the stopwatch app after a click, in a clean sandbox.
 
 There is no firmware image to flash yet. That arrives with the board layer.

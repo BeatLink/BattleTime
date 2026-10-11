@@ -1,7 +1,7 @@
 # App runtime
 
-This page proposes how NeoTime apps are written, stored and run. Nothing here is built yet, and
-the details will change as the runtime is written and measured. [app-reference.md](app-reference.md)
+This page proposes how NeoTime apps are written, stored and run. Parts of it are built; see
+[Built so far](#built-so-far). The details will change as the runtime is written and measured. [app-reference.md](app-reference.md)
 lists the events, widgets and effects apps can use.
 
 ## Goals
@@ -502,6 +502,132 @@ A handler that overflows, divides by zero or runs past its step limit is stopped
 effects are dropped, and the runtime shows a crash screen naming the app and the handler. A
 subscription that keeps failing is turned off until the app is opened again.
 
+### The app host
+
+`neotime-app-host` (`app-host/`) is the loop that runs one open app. It is built and tested, and
+the [simulator](simulator.md) runs app images with it. It does not yet load saved state, run
+subscriptions, or read images a section at a time from the external flash; it takes the whole
+image as bytes.
+
+`AppHost::open` parses and verifies the image, sets up the state and the bindings, and opens the
+first screen:
+
+1. It makes one node for each widget of the screen, with an rlvgl widget to draw it.
+2. It reads every property once: constants straight from the image, expressions through the
+   interpreter. Text comes from `Interpreter::text`.
+3. It lays the screen out, as [Layout](#layout) describes.
+4. It runs the screen's `onShow`, if it has one.
+
+`open_with_saved_state` does the same, but lets the embedder put saved values over the defaults
+first.
+
+What happens next is driven by the embedder:
+
+| Call | Does |
+|---|---|
+| `touch(touch, now, system)` | Finds the topmost shown widget under the finger that has a handler for the event, and runs it. A swipe goes to the screen's `onSwipe`. A tap on a `Switch`, or a tap or drag on a `Slider`, sends `onChange` with the new value. |
+| `press_button(press, now, system)` | Runs the screen's `onButton`. |
+| `tick(now, system)` | Works out again the open screen's expressions that `Bindings::due_between_among` says the clock has changed. |
+| `next_wakeup(now)` | When the clock next changes something on the open screen, from `Bindings::next_redraw_after_among`, or none. The embedder sleeps until then. |
+| `system_values_changed(bits, now, system)` | Works out again what reads the system values that changed, such as the battery. `bits` is `SystemValue::bit` of each, or'd together; values the phone sends together, such as the weather, share one bit. |
+| `set_theme(theme)` | Resolves every colour again from the values already held. No app code runs. |
+| `draw(screen)` | Paints only the parts of the screen that changed. |
+| `take_changed_persistent_variables()` | Which persistent variables changed since the last call, one bit each, so the embedder can save them. |
+
+An event answers `Handled`, `NotHandled` or `Failed`. `NotHandled` means the system's own meaning
+applies, such as a swipe right going back.
+
+After a handler finishes, the host:
+
+1. carries out its effects in order;
+2. works out again only the expressions `Bindings::affected_by` names for the variables it changed;
+3. lays the screen out again, and marks every widget whose value, place or visibility changed;
+4. switches screen, if the handler called `go` or `back`.
+
+`go(screen)` and `back()` are handled by the host. It finds the screen with
+`WidgetTree::screen_named`, and keeps a history of up to 8 screens for `back()`. `back()` on the
+first screen, a `go` to a screen that does not exist, and a `go` or `back` from `onShow` or `onHide`
+are passed on to the embedder. Every other effect goes to the embedder's `System`, whose
+`carry_out` gets the effect with its arguments readable as numbers or text.
+
+Effects are carried out as soon as the handler returns, before the interpreter runs anything else,
+so a text argument the handler built, such as ``show_toast(`${count}`)``, is still readable
+through `AppEffect::text`. Text system values, such as the playing track, come from
+`SystemValues::read_text`.
+
+When a handler or an expression fails, the host calls `System::app_failed` and keeps the app open.
+A failed handler changes nothing, and a failed expression leaves its property as it was. Showing
+a crash screen is the embedder's job.
+
+Drawing needs no screen buffer. Each changed widget marks where it was last drawn and where it is
+now. The host paints each of those regions from the theme's background up, drawing every shown
+widget that overlaps it, clipped to the region. So a ticking label repaints only its own box.
+
+### Layout
+
+Layout is a small flexbox, worked out again whenever a value changes:
+
+- **`Column` and `Row`** place their children down or across, one after another. Spare space is
+  shared out between children with `grow`, in proportion. Across the flow, a child fills the space
+  unless it has a size or an `align`; then it takes that size, or the size it wants, and `align`
+  places it.
+- **`Stack` and `Button`** put their children on top of each other. Each fills the inside unless
+  it has a size or an `align`.
+- **`x` and `y`** take a widget out of the flow and place it at that offset inside its parent.
+- **A hidden widget** takes no space.
+- **`padding`** is space inside a widget on every side; **`margin`** is space outside it.
+- **The screen's root** fills the screen unless it has a size.
+- **`Grid`, `Scroll`, `List`, `Pages` and `Tabs`** are laid out like a `Column` for now.
+
+A widget with no size gets the size it wants: a label's text, a button's text plus room around it
+(at least 44 pixels high), and fixed sizes for the rest, such as 100 pixels for an arc.
+
+### Property values
+
+The image stores each property as one 32-bit number. The compiler and the host must agree on what
+the numbers mean. These are the meanings the host uses now:
+
+| Property | Value |
+|---|---|
+| `x`, `y` | Pixels from the parent's inside top-left corner. |
+| `width`, `height` | Pixels when 0 or more. A negative value is a percentage of the parent's inside, so `"100%"` is `-100`. |
+| `grow` | A weight, 0 or more. |
+| `padding`, `margin`, `border_width`, `radius` | Pixels. |
+| `background`, `color`, `border_color` | RGB565, or a theme reference; see [Theming](#theming). |
+| `font` | 0 `small`, 1 `normal`, 2 `medium`, 3 `large`, 4 `huge`, 5 `giant`, 6 `seven_segment`, 7 `dot_matrix`, 8 `condensed`, in the order of the [app reference](app-reference.md#common-props). Any other number is `normal`. |
+| `align` | 0 `start`, 1 `center`, 2 `end`. Any other number means not set. |
+| `visible` | 0 or 1. |
+| `value`, `minimum`, `maximum` | Whole numbers. `minimum` is 0 and `maximum` 100 unless set. |
+| `start_angle`, `end_angle` | Degrees clockwise from twelve o'clock, as everywhere in the app API. Used only when both are set; an arc otherwise runs from 225 to 135, leaving a gap at the bottom. The host turns them into rlvgl's angles, which start at three o'clock. |
+| `long_mode` | 0 `wrap`, 1 `scroll`, 2 `clip`. Read but not used yet: labels draw one line and clip it. |
+
+Event fields `x`, `y`, `start_x` and `start_y` are screen pixels.
+
+The fonts are stand-ins until the shared library has real ones. `small` is a 9x15 mono font,
+`normal` 10x20, `medium` 9x15 at twice the size, `large` 10x20 at twice, `huge` at four times and
+`giant` at six times. The display fonts are drawn as `large` for now.
+
+### Widgets in the host
+
+| Widget | Drawn with | Notes |
+|---|---|---|
+| `Column`, `Row`, `Stack` | rlvgl container | Transparent unless they have a `background`. |
+| `Label` | rlvgl label | One line, clipped to its box. `align` places the text across; it is centred down. Wrapping and `long_mode` are not done yet. |
+| `Button` | rlvgl button with a label | The text is centred. `background` defaults to the theme's `surface`, and `radius` to 12. |
+| `Arc` | rlvgl arc | `background` is the track and `color` the filled part; `border_width` is the ring's thickness, 10 by default. Angles are turned by 90 degrees with the arc's rotation, so `0` to `360` is a whole ring. |
+| `Bar` | rlvgl bar | `background` is the track and `color` the filled part. |
+| `ClickArea` | rlvgl click area | Draws nothing; takes touches. |
+| `Led` | rlvgl LED | `value` is the brightness, 0 to 255. |
+| `Switch` | rlvgl switch | On when `value` is not 0. A tap sends `onChange` with the flipped value. |
+| `Slider` | rlvgl slider | A tap or drag sends `onChange` with the value under the finger. |
+
+Every other widget is drawn as an empty box, with its `background` and border if it has them, and
+lays out its children like a `Column` if it holds any: `Grid`, `Scroll`, `List`, `Pages`, `Tabs`,
+`RichText`, `Image`, `Icon`, `AnimatedImage`, `Line`, `ArcLabel`, `Spinner`, `Chart`, `Scale`,
+`AnalogClock`, `Table`, `Calendar`, `ImageButton`, `Checkbox`, `Radio`, `Roller`, `Spinbox`,
+`Dropdown`, `ButtonMatrix`, `TextArea` and `Keyboard`. The `animate`, `step`, `image`, `icon`,
+`time`, `show_seconds` and `long_mode` properties are read but not used yet.
+
 ## Theming
 
 Every colour an app uses is either a fixed colour or the name of one of the theme's eight colours:
@@ -532,7 +658,14 @@ The working memory below is measured from `neotime-runtime`; the rest is still a
 | Section reader for the image on the external flash | 256 B |
 
 That is about 6.6 KB, which leaves the rest of the open app's 12 KB for a second app's state
-while a subscription runs. The widgets themselves are allocated from the UI heap.
+while a subscription runs. On the watch, `AppHost` holds the interpreter, the bindings and the
+state together in 5,544 B, measured with `size_of` for the watch's target.
+
+The widgets themselves are allocated from the UI heap. Each widget of the open screen is a 276 B
+node on the watch, measured the same way, plus its text. The stopwatch demo's screen of four widgets
+holds 1,327 B on the 64-bit computer, measured with a counting allocator in the host's tests, and
+peaks at 1,679 B while drawing. On the watch that screen is about 1.1 KB: four nodes and 15 bytes of
+text. At 276 B a widget, the 14 KB UI heap holds about 50 widgets, not the 128 an image may have.
 
 ## Built so far
 
@@ -556,9 +689,11 @@ returns an error instead of panicking on any input. It has:
   affects, which are due as the clock moves, and when the next clock-driven redraw is.
 
 Its tests build images by hand, including the stopwatch from [Writing an app](#writing-an-app), and
-check that flipping any single byte of an image never panics. Still to come: the subscriptions and
-resources sections, the compiler, and the runtime loop that ties these to the UI toolkit and the
-system.
+check that flipping any single byte of an image never panics.
+
+`neotime-app-host` in `app-host/` is the loop that runs an app on top of it; see
+[The app host](#the-app-host). Still to come: the subscriptions and resources sections, the
+compiler, persistence, and running the host on the watch.
 
 ## Open questions
 
@@ -575,6 +710,7 @@ system.
 1. The image format, the verifier and the interpreter as a `no_std` crate, tested on the computer
    with hand-written images. **Done:** `neotime-runtime`.
 2. The runtime in the simulator: open an app, draw its widgets, run handlers, redraw on time.
+   **Done:** `neotime-app-host`, with a hand-built stopwatch in the simulator.
 3. The compiler, starting with the stopwatch and a simple watch face, then the browser preview.
 4. Persistence through the key-value store, then subscriptions.
 5. Installing over BLE, the internal-flash cache, and running on the watch.

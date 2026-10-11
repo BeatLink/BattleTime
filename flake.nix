@@ -35,6 +35,7 @@
           fileset = lib.fileset.unions [
             ./Cargo.toml
             ./Cargo.lock
+            ./app-host
             ./drivers
             ./runtime
             ./simulator
@@ -131,6 +132,12 @@
             test -s $out.png
             mv $out.png $out
           '';
+          # The built-in stopwatch app, after a click on its start button.
+          simulator-app-screenshot = pkgs.runCommand "neotime-simulator-app-screenshot" { } ''
+            ${simulator}/bin/neotime-simulator --demo --click 120,138 --screenshot $out.png
+            test -s $out.png
+            mv $out.png $out
+          '';
         };
 
         devShells.default = pkgs.mkShell {
@@ -146,6 +153,7 @@
             echo "  cargo test --workspace                                 run every test, simulator included"
             echo "  cargo build --release --target thumbv7em-none-eabihf   build the drivers for the watch"
             echo "  cargo run -p neotime-simulator                         open the simulator"
+            echo "  cargo run -p neotime-simulator -- --demo               run the built-in stopwatch app"
             echo "  nix run .#infinisim                                    open InfiniTime's simulator to compare"
             echo "  nix flake check                                        run all of the above as checks"
           '';

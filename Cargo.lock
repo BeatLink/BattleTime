@@ -835,6 +835,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-app-host"
+version = "0.1.0"
+dependencies = [
+ "embedded-graphics",
+ "neotime-runtime",
+ "neotime-ui",
+ "rlvgl-core",
+ "rlvgl-widgets",
+]
+
+[[package]]
 name = "neotime-bluetooth"
 version = "0.1.0"
 dependencies = [
@@ -885,7 +896,9 @@ dependencies = [
  "embedded-hal 1.0.0",
  "embedded-hal-async",
  "mipidsi",
+ "neotime-app-host",
  "neotime-display",
+ "neotime-runtime",
  "neotime-vibrator",
 ]
 

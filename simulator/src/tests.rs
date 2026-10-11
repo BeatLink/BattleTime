@@ -105,3 +105,49 @@ fn sliding_down_shows_the_previous_page_as_if_drawn_directly() {
     draw_page(&mut expected_display, 0).unwrap();
     assert!(shown_frame(&panel) == shown_frame(&expected_panel));
 }
+
+#[test]
+fn the_demo_app_draws_through_the_display_driver() {
+    use neotime_app_host::{demo::stopwatch_image, AppHost, Touch};
+
+    let (panel, mut display) = started_display();
+    let image = stopwatch_image();
+    let mut system = crate::app::test_system();
+    let now = 1_000_000;
+    let mut host = AppHost::open(&image, neotime_runtime::DEFAULT_THEME, now, &mut system).unwrap();
+
+    host.touch(Touch::Click { x: 120, y: 138 }, now, &mut system);
+    host.draw(&mut display).unwrap();
+
+    assert_eq!(host.widget_text(2), Some("Stop"));
+    let accent = Rgb565::new(0, 170 >> 2, 160 >> 3);
+    assert_eq!(panel.shown_pixel(30, 180), accent);
+    assert_eq!(panel.shown_pixel(2, 2), Rgb565::BLACK);
+}
+
+#[test]
+fn mouse_gestures_become_touches() {
+    use crate::app::TouchTracker;
+    use neotime_app_host::Touch;
+    use neotime_runtime::events::SwipeDirection;
+
+    let mut tracker = TouchTracker::default();
+    tracker.press(Point::new(100, 100));
+    let click = tracker.release(Point::new(101, 100));
+    tracker.press(Point::new(100, 100));
+    let swipe = tracker.release(Point::new(190, 110));
+
+    assert_eq!(click, Some(Touch::Click { x: 101, y: 100 }));
+    assert_eq!(swipe, Some(Touch::Swipe(SwipeDirection::Right)));
+}
+
+#[test]
+fn effects_print_with_their_names() {
+    use crate::app::named_argument;
+    use neotime_runtime::EffectKind;
+
+    assert_eq!(named_argument(EffectKind::VibratePattern, 3), Some("alarm"));
+    assert_eq!(named_argument(EffectKind::MusicControl, 5), Some("volume_down"));
+    assert_eq!(named_argument(EffectKind::CallControl, 2), Some("mute"));
+    assert_eq!(named_argument(EffectKind::Vibrate, 0), None);
+}

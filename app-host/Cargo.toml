@@ -1,0 +1,21 @@
+[package]
+name = "neotime-app-host"
+version = "0.1.0"
+edition = "2021"
+description = "Runs a NeoTime app: builds its rlvgl widgets, sends it touches, redraws on change and on time"
+license.workspace = true
+publish = false
+
+[dependencies]
+embedded-graphics = "0.8"
+neotime-runtime = { path = "../runtime" }
+neotime-ui = { path = "../ui" }
+rlvgl-core = { version = "0.2.5", default-features = false }
+rlvgl-widgets = { version = "0.2.5", default-features = false }
+
+[dev-dependencies]
+neotime-runtime = { path = "../runtime", features = ["writer"] }
+
+[features]
+# The built-in stopwatch demo image, written with the runtime's image writer.
+demo = ["neotime-runtime/writer"]

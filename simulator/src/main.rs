@@ -2,8 +2,9 @@
 //!
 //! The real drivers run unchanged against simulated hardware: the display driver talks to a model
 //! of the ST7789 and the vibrator driver to a motor pin. The mouse is the touch panel and the space
-//! bar is the side button.
+//! bar is the side button. With `--app` or `--demo` it runs an app image instead of the demo pages.
 
+mod app;
 mod hardware;
 mod pages;
 mod panel;
@@ -31,6 +32,7 @@ use embedded_graphics_simulator::{
 use neotime_display::{Display, SCREEN_HEIGHT, SCREEN_WIDTH};
 use neotime_vibrator::{OnOffMotor, Step, Vibrator, RING, TAP};
 
+use app::{parse_click, Click};
 use hardware::{MotorPin, ThreadDelay, UnconnectedPin};
 use pages::{draw_page, slide_step, SlideDirection, PAGE_COUNT, SLIDE_STEP_ROWS};
 use panel::SimulatedPanel;
@@ -47,10 +49,18 @@ const MOTOR_BORDER_WIDTH: u32 = 6;
 
 type WatchDisplay = Display<SimulatedPanel, UnconnectedPin>;
 
+/// Where the app to run comes from.
+enum AppSource {
+    File(String),
+    Demo,
+}
+
 struct Options {
     screenshot_path: Option<String>,
     first_page: usize,
     window_scale: u32,
+    app: Option<AppSource>,
+    clicks: Vec<Click>,
 }
 
 // ============================================================================
@@ -66,6 +76,27 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let output_settings = OutputSettingsBuilder::new().scale(options.window_scale).build();
     let mut screen = SimulatorDisplay::<Rgb565>::new(Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32));
+
+    if let Some(source) = &options.app {
+        let image = match source {
+            AppSource::File(path) => {
+                std::fs::read(path).map_err(|error| format!("could not read {path}: {error}"))?
+            }
+            AppSource::Demo => neotime_app_host::demo::stopwatch_image(),
+        };
+        return match &options.screenshot_path {
+            Some(path) => app::save_screenshot(
+                &image,
+                &panel,
+                &mut display,
+                &mut screen,
+                &output_settings,
+                &options.clicks,
+                path,
+            ),
+            None => app::run(&image, panel, display, screen, output_settings),
+        };
+    }
 
     if let Some(screenshot_path) = options.screenshot_path {
         copy_panel_to_screen(&panel, &mut screen, false);
@@ -100,6 +131,8 @@ fn read_options() -> Result<Options, String> {
         screenshot_path: None,
         first_page: 0,
         window_scale: DEFAULT_WINDOW_SCALE,
+        app: None,
+        clicks: Vec::new(),
     };
     let mut arguments = std::env::args().skip(1);
 
@@ -109,9 +142,13 @@ fn read_options() -> Result<Options, String> {
             "--screenshot" => options.screenshot_path = Some(value()?),
             "--page" => options.first_page = parse_number(&value()?)?.saturating_sub(1).min(PAGE_COUNT - 1),
             "--scale" => options.window_scale = parse_number(&value()?)?.max(1) as u32,
+            "--app" => options.app = Some(AppSource::File(value()?)),
+            "--demo" => options.app = Some(AppSource::Demo),
+            "--click" => options.clicks.push(parse_click(&value()?)?),
             _ => {
                 return Err(format!(
-                    "unknown option {argument}; use --screenshot PATH, --page N, --scale N"
+                    "unknown option {argument}; use --screenshot PATH, --page N, --scale N, --app PATH, \
+                     --demo, --click X,Y"
                 ))
             }
         }
