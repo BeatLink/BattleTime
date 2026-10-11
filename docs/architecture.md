@@ -30,7 +30,7 @@ flowchart TB
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>(planned: power, events, settings, notifications)"]
     services["Services<br/>(planned: BLE, time, steps, storage, updates)"]
-    drivers["Drivers<br/>drivers/display, drivers/vibrator,<br/>drivers/button, ..."]
+    drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
 
@@ -80,6 +80,7 @@ NeoTime/
 ├── drivers/
 │   ├── button/       neotime-button: the side button
 │   ├── display/      neotime-display: the ST7789 screen
+│   ├── touch/        neotime-touch: the CST816S touch panel
 │   └── vibrator/     neotime-vibrator: the vibration motor
 └── ui/               neotime-ui: draws rlvgl widgets on the screen
 ```
@@ -107,6 +108,33 @@ PineTime needs on top:
 
 The board passes in the SPI interface, the reset pin and a delay. The scrolling is what page
 slides will be built on: draw the next page into memory that is off screen, then scroll it in.
+
+### Touch panel (`drivers/touch`)
+
+`neotime-touch` drives the CST816S touch panel over I2C at address 0x15. On the PineTime its
+interrupt is P0.28 and its reset P0.10, on the I2C bus at SDA P0.06 and SCL P0.07.
+
+- **Reports.** The panel pulses its interrupt pin low when a finger lands, moves or lifts and when
+  it sees a gesture, and keeps pulsing while the finger stays down. `wait_for_report` waits for the
+  next pulse and reads one `TouchReport`: the position in display columns and rows, the `Gesture`
+  (tap, long press, a slide in one of four directions, or a double tap), whether the finger went
+  down, lifted or is still touching, and whether anything is touching at all.
+- **Garbled reads are dropped.** A report with a position off the 240x240 panel or an unknown
+  gesture is skipped, as InfiniTime does.
+- **Double taps are off by default.** With them on, the panel holds back every single tap while it
+  waits to see if a second follows. `Settings { report_double_taps: true }` turns them on.
+- **Sleep.** `sleep` puts the panel into deep sleep, holding it in reset if it does not answer.
+  `sleep_until_double_tap` instead keeps it listening for a double tap only, so a double tap can
+  wake the watch. `wake` restarts it with the last settings.
+- **Resets.** The panel stops answering on I2C while it is idle, so `start`, `sleep` and
+  `sleep_until_double_tap` each begin with a reset: reset low for 5 ms, then 50 ms to settle.
+  `read_chip_info` works only right after one of these or right after a touch.
+
+The setup matches InfiniTime's: it turns off the panel's automatic reset after five seconds without
+a gesture, which would otherwise cut off a long drag.
+
+Ready-made crates were looked at first. `cst816s` is blocking, and `cst816s-async` reports only
+gestures, not finger movement, and forces `defmt` on every user, so NeoTime has its own.
 
 ### Vibrator (`drivers/vibrator`)
 

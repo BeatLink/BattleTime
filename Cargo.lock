@@ -141,6 +141,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-touch"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "embedded-graphics-core",
+ "embedded-hal",
+ "embedded-hal-async",
+]
+
+[[package]]
 name = "neotime-ui"
 version = "0.1.0"
 dependencies = [
