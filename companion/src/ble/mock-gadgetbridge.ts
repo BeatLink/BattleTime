@@ -27,6 +27,7 @@ export class MockGadgetbridge {
     blank_after: 15,
     clock_24h: true,
     step_goal: 10000,
+    launcher_style: 'Grid',
     theme: [0x7b, 0xef, 0x7b, 0xef],
     face: FACES[0][0],
   };

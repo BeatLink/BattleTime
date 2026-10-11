@@ -135,6 +135,18 @@ export default function WatchSettingsScreen() {
               disabled={busy}
               onChange={(clock_24h) => change({ clock_24h })}
             />
+            {current.launcher_style ? (
+              <ChoiceRow
+                label="Launcher"
+                options={[
+                  { value: 'Grid' as const, label: 'Grid' },
+                  { value: 'List' as const, label: 'List' },
+                ]}
+                value={current.launcher_style}
+                disabled={busy}
+                onChange={(launcher_style) => change({ launcher_style })}
+              />
+            ) : null}
           </Card>
 
           <Card title="Watch face">

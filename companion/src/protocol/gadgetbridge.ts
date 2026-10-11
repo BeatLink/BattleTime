@@ -33,6 +33,8 @@ export type WatchSettingValues = {
   blank_after: number;
   clock_24h: boolean;
   step_goal: number;
+  // Firmware older than the launcher setting leaves this out.
+  launcher_style?: 'Grid' | 'List';
   theme: number[];
   face: string | null;
 };
