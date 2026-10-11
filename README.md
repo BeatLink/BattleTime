@@ -21,7 +21,13 @@ It aims to combine the best parts of the two existing PineTime firmwares:
 
 ## Status
 
-Early design. There is no code yet.
+Early work. The first drivers exist, for the screen and the vibration motor, but there is no
+firmware to flash yet.
+
+## Documentation
+
+- [Architecture](docs/architecture.md): how the code is laid out and how the parts fit together.
+- [Coding guidelines](docs/coding-guidelines.md): how NeoTime code is written.
 
 ## License
 
