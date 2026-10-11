@@ -416,7 +416,7 @@ update from external flash, rolls back a new firmware that never marked itself b
 the recovery firmware when the button is held for about ten seconds. It is about 8 KB.
 
 `neotime-boot` holds the flash layout: in internal flash the bootloader, its state page, the
-running firmware and the shared library; in external flash the update slot, the
+running firmware and the shared library apps draw on; in external flash the update slot, the
 recovery firmware and the file system. The firmware will use the same crate, so both sides agree.
 
 See [bootloader.md](bootloader.md) for the layout, the start-up steps, recovery and what the firmware

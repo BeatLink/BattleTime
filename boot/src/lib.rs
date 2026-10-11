@@ -49,7 +49,8 @@ pub const FIRMWARE: Region = Region {
     start: BOOT_STATE.end(),
     size: 400 * 1024,
 };
-pub const INSTALLED_APPS: Region = Region {
+/// Images, fonts, components and common code that apps share; apps themselves live in /apps on the external flash.
+pub const SHARED_LIBRARY: Region = Region {
     start: FIRMWARE.end(),
     size: INTERNAL_FLASH_SIZE - FIRMWARE.end(),
 };
@@ -111,7 +112,7 @@ const _: () = {
         BOOTLOADER,
         BOOT_STATE,
         FIRMWARE,
-        INSTALLED_APPS,
+        SHARED_LIBRARY,
         FIRMWARE_UPDATE,
         RECOVERY_FIRMWARE,
         FILE_SYSTEM,
@@ -124,7 +125,7 @@ const _: () = {
         index += 1;
     }
 
-    assert!(INSTALLED_APPS.end() == INTERNAL_FLASH_SIZE);
+    assert!(SHARED_LIBRARY.end() == INTERNAL_FLASH_SIZE);
     assert!(FILE_SYSTEM.end() == EXTERNAL_FLASH_SIZE);
     assert!(RECOVERY_FIRMWARE.end() <= FILE_SYSTEM.start);
 

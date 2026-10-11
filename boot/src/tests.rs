@@ -85,7 +85,7 @@ fn valid_vector_table() -> Vec<u8> {
 fn internal_regions_follow_each_other_without_gaps() {
     assert_eq!(BOOT_STATE.start, BOOTLOADER.end());
     assert_eq!(FIRMWARE.start, BOOT_STATE.end());
-    assert_eq!(INSTALLED_APPS.start, FIRMWARE.end());
+    assert_eq!(SHARED_LIBRARY.start, FIRMWARE.end());
 }
 
 #[test]
@@ -122,7 +122,7 @@ fn rejects_erased_flash() {
 #[test]
 fn rejects_an_image_linked_for_another_address() {
     let mut flash = FakeFlash::erased(PAGE_SIZE);
-    flash.put(0, &vector_table(RAM.end(), INSTALLED_APPS.start + 0x101));
+    flash.put(0, &vector_table(RAM.end(), SHARED_LIBRARY.start + 0x101));
 
     assert_eq!(looks_like_firmware(&mut flash, 0), Ok(false));
 }

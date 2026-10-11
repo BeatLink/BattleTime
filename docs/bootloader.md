@@ -40,7 +40,7 @@ Internal flash, 512 KB:
 | `BOOTLOADER` | `0x00000` | 16 KB | this bootloader, the first code to run; there is no Nordic MBR or SoftDevice |
 | `BOOT_STATE` | `0x04000` | 4 KB | embassy-boot's record of what to do at the next start |
 | `FIRMWARE` | `0x05000` | 400 KB | the running firmware, which is linked to start here |
-| `INSTALLED_APPS` | `0x69000` | 92 KB | kept for apps installed over BLE; the app format is still open |
+| `SHARED_LIBRARY` | `0x69000` | 92 KB | images, fonts, components and common code that apps share; apps live on the external flash |
 
 External flash, 4 MB:
 
