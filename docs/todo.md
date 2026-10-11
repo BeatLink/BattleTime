@@ -74,3 +74,99 @@ See [bluetooth.md](bluetooth.md) for the details of each.
 - [ ] **rlvgl screens in the simulator.** The simulator still shows hand-drawn demo pages. Draw
   real rlvgl screens there through `ScreenRenderer`.
 - [ ] **Touch input.** Turn `neotime-touch` gestures into rlvgl events.
+
+## Gaps against InfiniTime
+
+What InfiniTime has for each feature NeoTime already has, compared with InfiniTime `6c119eb5`
+on 2026-10-11. Items already listed in the sections above are not repeated.
+
+### Display
+
+- [ ] **Backlight.** Drive the three backlight pins with InfiniTime's levels: off, low, medium,
+  high and always on.
+- [ ] **Low-power mode.** The panel's 8-colour idle mode at a reduced frame rate, for an always-on
+  display, as InfiniTime's `LowPowerOn` and `LowPowerOff` do.
+- [ ] **Release the panel in sleep,** so the SPI bus can be turned off.
+- [ ] **DMA transfers,** so the CPU is free while a buffer is sent. EasyDMA reuses the buffer, so
+  wait for the transfer to end before writing it again.
+
+### Touch panel
+
+- [ ] **Wake on tap.** Let a single tap or a double tap wake the watch, chosen in settings.
+  `sleep_until_double_tap` is the driver half.
+
+### Vibrator
+
+- [ ] **Callers.** Buzz for notifications, alarms, timers and hourly chimes.
+
+### Side button
+
+- [ ] **Actions.** Bind each gesture: wake, back, open notifications, go to the watch face.
+
+### Accelerometer
+
+- [ ] **Raise to wake and lower to sleep,** in software on `read_acceleration`.
+- [ ] **Shake to wake,** with an adjustable threshold.
+- [ ] **Step history:** today, yesterday, a resettable trip count, and the rollover at midnight.
+- [ ] **Daily step goal** and a steps app.
+- [ ] **Motion service over BLE,** sending steps and raw x, y and z to the phone.
+
+### Bluetooth
+
+- [ ] **Pairing with a passkey.** Secure Connections with a 6-digit passkey shown on screen, as
+  InfiniTime does. Needs encryption in the controller first.
+- [ ] **Bonding** saved to the file system and restored at start.
+- [ ] **Privacy:** resolvable private addresses.
+- [ ] **A BLE host in the firmware.** TrouBLE runs only in the tests so far.
+- [ ] **A setting to turn the radio off.**
+
+### UI toolkit
+
+- [ ] **Double line buffers with DMA,** so one is filled while the other is sent. InfiniTime uses
+  two of 240 x 4 pixels. This also fixes the text edges listed above.
+- [ ] **Fonts and pictures** built into the firmware, and more loaded from the external flash.
+- [ ] **A theme** and shared styles.
+
+### Simulator
+
+- [ ] **Simulated parts** for touch, the accelerometer, the battery and Bluetooth, plus
+  notifications and heart rate once those exist.
+- [ ] **GIF capture,** as InfiniSim has.
+
+### External flash and storage
+
+These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-updates` branches.
+
+- [ ] **Deep power-down in sleep.** Put the flash chip to sleep when the watch sleeps.
+- [ ] **Use the file system:** save settings, alarms and the BLE bond there.
+- [ ] **File transfer over BLE,** with the Adafruit protocol InfiniTime's `FSService` uses, so
+  companion apps can read, write and delete files.
+- [ ] **Resource packages:** fonts and pictures installed from a zip over BLE.
+
+### Firmware updates
+
+- [ ] **An image checksum.** InfiniTime's DFU init packet carries a CRC; NeoTime checks only the
+  vector table.
+- [ ] **A progress screen** while an update is received.
+- [ ] **Confirm or reject a new firmware** from settings, as InfiniTime's firmware screen does.
+- [ ] **A bootloader screen** with a progress bar during a swap, and a sign that a held button
+  will revert or recover. The screen stays dark for up to 30 seconds now.
+- [ ] **A setting to turn updates off,** or on until the next reset.
+- [ ] **The recovery firmware** itself.
+- [ ] **Show the bootloader version** in a system info screen.
+
+### Not started
+
+InfiniTime has these and NeoTime has nothing for them yet:
+
+| Area | What InfiniTime has |
+|---|---|
+| Board and system loop | pin setup, tasks, sleep and wake, wake locks, the watchdog, a system monitor |
+| Heart rate | HRS3300 driver, PPG processing, background measuring, the Heart Rate service |
+| Battery | voltage and percentage, charging and power-present pins, the Battery service |
+| Clock | RTC date and time, 12 or 24 hours, the Current Time service and client |
+| Settings | watch face, wake-up mode, chimes, screen timeout, step goal, weather units |
+| Notifications | Alert Notification service and client, Immediate Alert, notification list, calls |
+| Other BLE services | Device Information, Music, Navigation, Simple Weather |
+| Watch faces | Digital, Analog, PineTimeStyle, Terminal, Infineat, Casio G7710, Pride Flag |
+| Apps | Alarm, Timer, Stopwatch, Music, Navigation, Weather, Calculator, Metronome, Flashlight, Paint, Paddle, 2048, Dice, System Info |
