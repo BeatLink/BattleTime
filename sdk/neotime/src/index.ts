@@ -127,8 +127,11 @@ export interface CurrentWeather {
   condition: WeatherCondition;
   low: number;
   high: number;
+  location: string;
   /** When the forecast arrived, or null before the first. */
   received_at: Instant | null;
+  sunrise: Instant | null;
+  sunset: Instant | null;
 }
 
 /** The last forecast the phone sent; reading it needs no permission. */
@@ -137,7 +140,37 @@ export const current_weather = signal<CurrentWeather>({
   condition: "clear",
   low: 0,
   high: 0,
+  location: "",
   received_at: null,
+  sunrise: null,
+  sunset: null,
+});
+
+export interface CurrentMusic {
+  artist: string;
+  track: string;
+  is_playing: boolean;
+  position: Duration;
+  length: Duration;
+}
+
+/** What the phone's player last reported, kept by the system; needs the `phone` permission. */
+export const current_music = signal<CurrentMusic>({ artist: "", track: "", is_playing: false, position: 0, length: 0 });
+
+export interface CurrentNavigation {
+  turn: NavigationTurn;
+  instruction: string;
+  /** Metres to the turn. */
+  distance: number;
+  progress_percent: number;
+}
+
+/** The phone's latest navigation step, kept by the system; needs the `phone` permission. */
+export const current_navigation = signal<CurrentNavigation>({
+  turn: "straight",
+  instruction: "",
+  distance: 0,
+  progress_percent: 0,
 });
 
 /** The name of the app's screen on display. */
@@ -271,7 +304,8 @@ export type NavigationTurn =
 export interface NavigationEvent {
   turn: NavigationTurn;
   instruction: string;
-  distance: string;
+  /** Metres to the turn. */
+  distance: number;
   progress_percent: number;
 }
 
@@ -533,6 +567,11 @@ export function find_phone(on: boolean) {
   emit({ kind: "find_phone", on });
 }
 
+/** Asks the phone to send its navigation app's current step now. */
+export function request_navigation_state() {
+  emit({ kind: "request_navigation_state" });
+}
+
 /** Asks the phone to send its player's state now, through the `music` subscription. */
 export function request_music_state() {
   emit({ kind: "request_music_state" });
@@ -703,6 +742,11 @@ export function slice_text(text: string, start: number, end?: number): string {
 /** The texts of a fixed-length array joined together. */
 export function join(texts: string[], separator: string): string {
   return texts.join(separator);
+}
+
+/** Text from the first `length` character codes of an array, for text kept in state as numbers. */
+export function text_from_codes(codes: number[], length: number): string {
+  return String.fromCharCode(...codes.slice(0, length));
 }
 
 /** `0` to `count - 1`, where `count` is known when the app is compiled. */

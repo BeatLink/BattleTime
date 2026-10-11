@@ -28,7 +28,7 @@ npm test        # renders every screen of every app and face, plus their own tes
 | `timer` | InfiniTime Timer, wasp-os timer | Pause, resume and reset. A progress ring, and a count of time since it rang. |
 | `alarm` | InfiniTime Alarm, wasp-os alarm | 12 alarms with weekday repeats, a 10 minute snooze, and a ring that stops itself after a minute. |
 | `pomodoro` | wasp-os pomodoro | A queue of up to 6 lengths, with presets and the buzz length set by swiping. |
-| `calculator` | InfiniTime Calculator, wasp-os calculator | Fixed point with three decimals, up to 99999.999. wasp-os's brackets and powers are left out. |
+| `calculator` | InfiniTime Calculator, wasp-os calculator | Fixed point in millionths, up to 15 digits. wasp-os's brackets and powers are left out. |
 | `dice` | InfiniTime Dice | 1 to 9 dice of 2 to 99 sides; shake to roll. |
 | `flashlight` | InfiniTime FlashLight, wasp-os flashlight | Three brightness levels and a red light. |
 | `phone-finder` | wasp-os phone_finder | Rings the phone. It cannot yet stop the ring from the watch. |
@@ -46,6 +46,8 @@ npm test        # renders every screen of every app and face, plus their own tes
 | `metronome` | InfiniTime Metronome | Beats scheduled from the start time so they never drift; tap tempo. |
 | `motion` | InfiniTime Motion | Charts of the raw x, y and z acceleration. |
 | `level` | wasp-os level | A spirit level with a saved calibration. |
+| `beacon` | wasp-os beacon | Flashes the heart rate sensor's LED, while the app is in front. |
+| `disable-bluetooth` | wasp-os disa_b_l_e | Turns Bluetooth off and on again, without the reboot wasp-os needed. |
 
 ## Games and others
 
@@ -66,23 +68,24 @@ npm test        # renders every screen of every app and face, plus their own tes
 
 | App | From | Why |
 |---|---|---|
-| `beacon` | wasp-os | Needs control of the heart rate sensor's LED. |
-| `disa_b_l_e` | wasp-os | Needs to turn Bluetooth off and on. |
 | `demo`, `gallery` | wasp-os | Need full-screen images and reading files. |
 | `read_me`, `test` | wasp-os | Developer tools, not apps. |
 | Launcher, settings, notifications, quick settings, firmware update | both | Part of the system, not apps. |
 
-## Workarounds left
+## Limits and what is left
 
-The ports were written before the runtime's API settled, and work around what it lacked then. Every
-gap they found is now answered in [app-reference.md](app-reference.md) and provided by `sdk/neotime`,
-so the apps can drop their workarounds: `CellGrid` for the game boards (Life, InfiniPaint, snake,
-four-in-a-row, 2048 and 15 still make one widget per cell), element writes instead of rebuilding
-whole arrays, `range` instead of written-out index lists, `count_where`, a dragged `Arc` for the
-metronome, `Chart` series for motion, `find_phone(on)`, `request_music_state` for music,
-`only_while_open` for the dice's shake, and the text functions for morse. `beacon` and
-`disa_b_l_e` can now be ported with `set_heart_rate_led` and `set_bluetooth`.
+The ports use the API in [app-reference.md](app-reference.md) as `sdk/neotime` provides it: one
+`CellGrid` for each game board, element writes, `range`, `count_where` and the text functions. They
+fit the runtime's limits on state, handler writes, locals and loop steps. Four-in-a-row's search runs
+a few steps a call on a 100 millisecond tick, so its hardest level thinks for up to about 3 seconds.
 
-The ports fit the runtime's limits on state, handler writes, locals and loop steps. Four-in-a-row's
-search runs a few steps a call on a 100 millisecond tick, so its hardest level thinks for up to
-about 3 seconds.
+Still open:
+
+- **Record fields.** Writing one field of a record in an array, as in `alarms.value[i].enabled`, is
+  not settled, so the alarm keeps its alarms as parallel arrays.
+- **`CellGrid` looks.** Cells are flat touching squares, with no gap, rounding or text, and a touch
+  reports only the cell tapped, not a drag. Four-in-a-row's counters are squares, and 2048 and 15
+  draw their tiles as labels.
+- **The beacon stops when its app closes,** because the runtime turns the LED off then, and the
+  units of `set_heart_rate_led` are not documented.
+- **Navigation** cannot ask the phone for the current step on opening, as music can.

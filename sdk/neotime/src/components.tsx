@@ -85,7 +85,7 @@ export function ListRow(props: ListRowProps) {
 /** The time, battery and connection, as the system shows them. */
 export function StatusBar() {
   return (
-    <Row height={24} padding={2} justify="between">
+    <Row height={24} padding={2} justify="space_between">
       <Label font="small">{format_time(now.value, settings.uses_24_hour_clock.value ? "HH:mm" : "hh:mm")}</Label>
       <Row gap={4}>
         {is_phone_connected.value && <Icon icon={icons.bluetooth} size={18} color="accent" />}
@@ -99,15 +99,22 @@ export interface BatteryIconProps {
   /** Shows the percentage beside the icon. */
   show_percent?: boolean;
   color?: CommonProps["color"];
+  /** Draws the whole icon in `color`, without turning green while charging or red when low. */
+  single_color?: boolean;
+  /** Whether the charging bolt shows while charging; it does unless this is false. */
+  show_bolt?: boolean;
 }
 
 /** The battery's charge and whether it is charging, drawn the way the system does. */
 export function BatteryIcon(props: BatteryIconProps) {
   const percent = battery_percent.value;
-  const fill_color = is_charging.value ? "success" : percent <= 20 ? "danger" : props.color ?? "text";
+  const own_color = props.color ?? "text";
+  const fill_color = props.single_color ? own_color : is_charging.value ? "success" : percent <= 20 ? "danger" : own_color;
   return (
     <Row gap={4}>
-      {is_charging.value && <Icon icon={icons.charging} size={16} color="warning" />}
+      {is_charging.value && props.show_bolt !== false && (
+        <Icon icon={icons.charging} size={16} color={props.single_color ? own_color : "warning"} />
+      )}
       <Row width={28} height={14} padding={2} border_color={props.color ?? "text"} border_width={2} radius={3}>
         <Column width={Math.round((20 * percent) / 100)} height="100%" background={fill_color} />
       </Row>

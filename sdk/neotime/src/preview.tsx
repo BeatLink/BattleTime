@@ -5,7 +5,13 @@ import { batch, effect, signal } from "@preact/signals";
 import { clock, emit, listen_for_effects, now_milliseconds, start_clock, type Effect } from "./host.ts";
 import {
   current_screen,
+  current_music,
+  current_navigation,
+  current_weather,
   heart_rate,
+  heart_rate_status,
+  is_bluetooth_enabled,
+  is_heart_rate_running,
   heart_rate_measured_at,
   period_in_milliseconds,
   start_of_day,
@@ -138,9 +144,20 @@ function carry_out(effect: Effect) {
       if (vibration_timer) clearTimeout(vibration_timer);
       is_vibrating.value = false;
       break;
-    case "measure_heart_rate":
     case "start_heart_rate":
+      is_heart_rate_running.value = true;
+      heart_rate_status.value = 3;
       deliver("heart_rate_reading", { beats_per_minute: 60 + Math.floor(Math.random() * 30), confidence: 90 });
+      break;
+    case "measure_heart_rate":
+      deliver("heart_rate_reading", { beats_per_minute: 60 + Math.floor(Math.random() * 30), confidence: 90 });
+      break;
+    case "stop_heart_rate":
+      is_heart_rate_running.value = false;
+      heart_rate_status.value = 0;
+      break;
+    case "set_bluetooth":
+      is_bluetooth_enabled.value = effect.on as boolean;
       break;
     case "reset_steps":
       steps_today.value = 0;
@@ -270,6 +287,21 @@ export function deliver(kind: Subscription["kind"], event: object, filter?: (sub
     heart_rate.value = reading.beats_per_minute;
     heart_rate_measured_at.value = now_milliseconds.peek();
   }
+  if (kind === "weather") {
+    const forecast = event as { temperature: number; condition: never; low: number; high: number; location: string };
+    current_weather.value = {
+      temperature: forecast.temperature,
+      condition: forecast.condition,
+      low: forecast.low,
+      high: forecast.high,
+      location: forecast.location,
+      received_at: now_milliseconds.peek(),
+      sunrise: null,
+      sunset: null,
+    };
+  }
+  if (kind === "music") current_music.value = { ...(event as typeof current_music.value) };
+  if (kind === "navigation") current_navigation.value = { ...(event as typeof current_navigation.value) };
   for (const entry of scheduled) {
     if (entry.subscription.kind !== kind) continue;
     if (filter && !filter(entry.subscription)) continue;

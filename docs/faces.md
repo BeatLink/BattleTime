@@ -35,21 +35,21 @@ sizes until the shared library has display fonts.
 A face that has settings, such as PineTimeStyle, Infineat and the pride flag, opens them on a long
 press as a second screen.
 
-## Workarounds left
+## Limits and what is left
 
-The ports were written before the runtime's API settled, and work around what it lacked then. Every
-gap they found is now answered in [app-reference.md](app-reference.md) and provided by `sdk/neotime`,
-so the faces can drop their workarounds: the `medium`, `giant` and display fonts, `BatteryIcon`,
-`Scale` with `skip` and a needle, `AnalogClock` hand lengths and styles, `opacity`, `Image` with
-`recolor` and the `pine_logo`, the night weather and `none` icons, `current_weather` instead of
-each face's own copy and subscription, `is_heart_rate_running`, `heart_rate_status`,
-`is_bluetooth_enabled`, `next_alarm`, `day_of_year`, `iso_week_of`, `to_upper` and `pad_start`.
-
-The faces fit the runtime's limits. The analog face steps its hands by the minute with
-`start_of_minute` while its second hand is off, so it redraws once a minute.
+The faces use the API in [app-reference.md](app-reference.md) as `sdk/neotime` provides it: the
+`giant`, `seven_segment` and `dot_matrix` fonts, `BatteryIcon` (in one colour where the original
+keeps one), `Scale` with angles, skipped ticks and a needle, `AnalogClock` hand lengths, `opacity`,
+the `pine_logo`, `current_weather` with sunrise and sunset for night icons, and the heart rate,
+Bluetooth and alarm system values. They fit the runtime's limits, and only faces that
+show seconds redraw every second. The analog face steps its hands by the minute while its second
+hand is off.
 
 The PinetimeLite faces have workarounds of their own. `lite-digital` writes its seconds under the
 time band and `lite-weather` uses plain digits for PinetimeLite's striped ones, both for want of a
 condensed display font. `lite-analog` uses plain hands for PinetimeLite's thin stem and thick body,
 and `lite-photo` uses plain colours for PinetimeLite's three Pixabay photos; the user's own photo,
 sent from the phone, would be better than shipping those.
+
+Still open: each display font comes in one size (`seven_segment` about 76 pixels, `dot_matrix`
+about 40 and `condensed` about 48), so Casio's 7-segment date line stays on a standard font.

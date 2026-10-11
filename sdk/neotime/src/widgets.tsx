@@ -58,8 +58,8 @@ const FONT_SIZES_IN_PIXELS: Record<Font, number> = {
   huge: 76,
   giant: 120,
   seven_segment: 76,
-  dot_matrix: 76,
-  condensed: 76,
+  dot_matrix: 40,
+  condensed: 48,
 };
 
 const FONT_FAMILY = "'JetBrains Mono', 'DejaVu Sans Mono', monospace";
@@ -361,7 +361,7 @@ export function swipe(direction: SwipeDirection) {
 // Layout
 // ============================================================================
 
-export type Justification = "start" | "center" | "end" | "between" | "around";
+export type Justification = "start" | "center" | "end" | "space_between";
 
 function items_css(alignment: "start" | "center" | "end" | "stretch"): string {
   return { start: "flex-start", center: "center", end: "flex-end", stretch: "stretch" }[alignment];
@@ -372,8 +372,7 @@ function justification_css(justification: Justification): string {
     start: "flex-start",
     center: "center",
     end: "flex-end",
-    between: "space-between",
-    around: "space-around",
+    space_between: "space-between",
   }[justification];
 }
 
@@ -819,6 +818,9 @@ export interface ScaleProps extends CommonProps {
   major_color?: Color;
   /** Tick numbers to leave out, such as under a date window. */
   skip?: number[];
+  /** Where the ticks start and end, in degrees clockwise from twelve o'clock; a full circle by default. */
+  start_angle?: number;
+  end_angle?: number;
   /** Where a needle points, counted in ticks from twelve o'clock, for a gauge. */
   value?: number;
   needle_color?: Color;
@@ -829,11 +831,15 @@ export function Scale(props: ScaleProps) {
   const diameter = props.diameter ?? SCREEN_SIZE;
   const center = diameter / 2;
   const major_every = props.major_every ?? 1;
+  const start_angle = props.start_angle ?? 0;
+  const sweep = props.end_angle === undefined ? 360 : (((props.end_angle - start_angle) % 360) + 360) % 360 || 360;
+  const tick_spacing = sweep === 360 ? sweep / props.ticks : sweep / Math.max(1, props.ticks - 1);
+  const radians_of = (tick: number) => ((start_angle + tick * tick_spacing) * Math.PI) / 180;
   const marks = [];
   for (let tick = 0; tick < props.ticks; tick++) {
     if (props.skip?.includes(tick)) continue;
     const is_major = tick % major_every === 0;
-    const radians = (tick * 2 * Math.PI) / props.ticks;
+    const radians = radians_of(tick);
     const outer = center - 2;
     const inner = outer - (is_major ? 14 : 7);
     marks.push(
@@ -876,8 +882,8 @@ export function Scale(props: ScaleProps) {
         <line
           x1={center}
           y1={center}
-          x2={center + Math.sin((props.value * 2 * Math.PI) / props.ticks) * (center - 20)}
-          y2={center - Math.cos((props.value * 2 * Math.PI) / props.ticks) * (center - 20)}
+          x2={center + Math.sin(radians_of(props.value)) * center * 0.8}
+          y2={center - Math.cos(radians_of(props.value)) * center * 0.8}
           stroke={css_color(props.needle_color) ?? theme.danger}
           stroke-width={3}
           stroke-linecap="round"
@@ -963,39 +969,50 @@ export interface CellGridProps extends CommonProps {
   /** One number per cell, read as a colour from `palette`. */
   cells: number[];
   palette: Color[];
+  /** Pixels left empty between cells. */
+  cell_gap?: number;
+  cell_shape?: "square" | "rounded" | "round";
   /** Receives the number of the cell touched. */
   onClick?: (event: ChangeEvent<number>) => void;
+  /** Receives the number of each cell a finger moves over. */
+  onDrag?: (event: ChangeEvent<number>) => void;
 }
 
 /** A board of coloured cells from one array, drawn as a single widget. */
 export function CellGrid(props: CellGridProps) {
+  const gap = props.cell_gap ?? 0;
+  const corner = props.cell_shape === "round" ? props.cell_size / 2 : props.cell_shape === "rounded" ? props.cell_size / 5 : 0;
   const squares = [];
   for (let cell = 0; cell < props.columns * props.rows; cell++) {
     const color = css_color(props.palette[props.cells[cell] ?? 0]) ?? theme.background;
     squares.push(
       <rect
-        x={(cell % props.columns) * props.cell_size}
-        y={Math.floor(cell / props.columns) * props.cell_size}
-        width={props.cell_size}
-        height={props.cell_size}
+        x={(cell % props.columns) * props.cell_size + gap / 2}
+        y={Math.floor(cell / props.columns) * props.cell_size + gap / 2}
+        width={props.cell_size - gap}
+        height={props.cell_size - gap}
+        rx={corner}
         fill={color}
       />,
     );
   }
+
+  function cell_at(event: MouseEvent): number {
+    const bounds = (event.currentTarget as SVGElement).getBoundingClientRect();
+    const scale = bounds.width / (props.columns * props.cell_size) || 1;
+    const column = Math.floor((event.clientX - bounds.left) / scale / props.cell_size);
+    const row = Math.floor((event.clientY - bounds.top) / scale / props.cell_size);
+    return row * props.columns + column;
+  }
+
   return (
     <svg
       data-widget="cell-grid"
       width={props.columns * props.cell_size}
       height={props.rows * props.cell_size}
-      onClick={(event) => {
-        if (!props.onClick) return;
-        const bounds = (event.currentTarget as SVGElement).getBoundingClientRect();
-        const scale = bounds.width / (props.columns * props.cell_size) || 1;
-        const column = Math.floor((event.clientX - bounds.left) / scale / props.cell_size);
-        const row = Math.floor((event.clientY - bounds.top) / scale / props.cell_size);
-        run_handler(props.onClick, { value: row * props.columns + column });
-      }}
-      style={css_without_color(props)}
+      onClick={(event) => props.onClick && run_handler(props.onClick, { value: cell_at(event) })}
+      onPointerMove={(event) => props.onDrag && event.buttons && run_handler(props.onDrag, { value: cell_at(event) })}
+      style={{ touchAction: "none", ...css_without_color(props) }}
     >
       {squares}
     </svg>

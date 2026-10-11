@@ -30,6 +30,32 @@ describe("element writes", () => {
     expect(first).toBe(9);
   });
 
+  it("go to the signal written through when two signals hold one array", () => {
+    const board = signal([1, 2]);
+    const trial = signal([0, 0]);
+    trial.value = board.value;
+
+    trial.value[0] = 7;
+
+    expect(board.value[0]).toBe(1);
+    expect(trial.value[0]).toBe(7);
+  });
+
+  it("include record fields, which notify and leave the old record unchanged", () => {
+    const alarms = signal([
+      { hour: 7, enabled: false },
+      { hour: 8, enabled: false },
+    ]);
+    const second_before = alarms.peek()[1];
+    const enabled_count = computed(() => alarms.value.filter((alarm) => alarm.enabled).length);
+
+    alarms.value[1].enabled = true;
+
+    expect(enabled_count.value).toBe(1);
+    expect(alarms.value[1]).toEqual({ hour: 8, enabled: true });
+    expect(second_before).toEqual({ hour: 8, enabled: false });
+  });
+
   it("leave a copied array unshared", () => {
     const board = signal([1, 2]);
     const copy = signal(board.value);
