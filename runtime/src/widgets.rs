@@ -5,6 +5,7 @@
 //! expression that works the value out, or, for an event, the number of a handler.
 
 use crate::image::{AppImage, ImageError};
+use crate::resources::ImageReference;
 use crate::theme::ColorValue;
 
 // ============================================================================
@@ -141,6 +142,8 @@ pub enum PropertyValue {
     Event,
     /// The number of a state array, given as a constant.
     Array,
+    /// One of the app's images or a shared library image, as `ImageReference` numbers them.
+    Image,
 }
 
 /// Every property a widget can have, in the order their id byte numbers them.
@@ -318,6 +321,7 @@ impl Property {
             Background | Color | BorderColor | NeedleColor | HourColor | MinuteColor | SecondColor
             | Recolor => PropertyValue::Color,
             Cells | Palette | Options | Points | Series | Labels | Skip => PropertyValue::Array,
+            Image | Icon => PropertyValue::Image,
             Text | ScreenName => PropertyValue::Text,
             OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease | OnDrag | OnSwipe | OnButton
             | OnChange | OnPageChange | OnScrollEnd | OnShow | OnHide => PropertyValue::Event,
@@ -676,6 +680,11 @@ fn constant_fits(image: &AppImage, value_kind: PropertyValue, value: i32) -> boo
         PropertyValue::Bool => value == 0 || value == 1,
         PropertyValue::Color => ColorValue::from_value(value as i64).is_some(),
         PropertyValue::Text => as_string().is_some(),
+        PropertyValue::Image => match ImageReference::from_value(value) {
+            Some(ImageReference::App(index)) => index < image.resource_count(),
+            Some(ImageReference::SharedLibrary(_)) => true,
+            None => false,
+        },
         PropertyValue::Array => u16::try_from(value)
             .ok()
             .and_then(|variable| image.state_variable(variable))

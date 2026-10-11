@@ -251,7 +251,7 @@ reads the sections it needs in place, never copying a whole image into RAM.
 |---|---|
 | 0–3 | Magic `NTAP`. |
 | 4–5 | Format version, now 1. |
-| 6 | Kind: 0 for an app, 1 for a watch face. |
+| 6 | Kind: 0 for an app, 1 for a watch face, 2 for the shared library, which holds only images. |
 | 7 | Reserved, 0. |
 | 8–9 | The shared library version the app was built against. |
 | 10–11 | How many sections follow. |
@@ -269,8 +269,8 @@ Each kind of section appears at most once:
 | 3 | Expressions | A table of (offset, length) pairs, then the bytecode they point into. |
 | 4 | Handlers | The same layout as expressions. |
 | 5 | Widgets | A table of (offset, length) pairs, then one record per widget, described below. At most 128 widgets. |
-| 6 | Subscriptions | Each period, sensor or time the app wants, and the handler to call. Not laid out yet. |
-| 7 | Resources | The app's own icon and images, RGB565 with run-length encoding. Not laid out yet. |
+| 6 | Subscriptions | 16 bytes per subscription, described below. |
+| 7 | Resources | The app's own images, as a table of (offset, length) pairs followed by the images, described below. |
 | 8 | Initial values | Optional. For arrays whose elements do not all start the same: a table of (offset, length) pairs, then per array its number (1 byte) followed by its elements packed exactly as they are stored in RAM. Every element is checked against the array's type. |
 
 Widgets are stored depth first, so a widget's children follow it, each with everything inside
@@ -286,6 +286,48 @@ it. Each root is one screen, and the first is the screen the app opens on. A wid
 
 Expressions do not record what they read or how often they redraw. The runtime works both out from
 the code when the app opens, so a wrong compiler can never make a widget miss an update.
+
+### Subscriptions
+
+Each subscription is 16 bytes:
+
+| Bytes | Holds |
+|---|---|
+| 0 | The kind, numbered in the order of `SubscriptionKind` in `runtime/src/subscriptions.rs`: open, close, screen on, screen off, every, at, daily, clock change, heart rate, steps, step goal, motion, acceleration, battery, phone, notification, call, music, weather, navigation, settings change. |
+| 1 | Flags: bit 0 means it only runs while the app is open. |
+| 2–3 | The handler to call. |
+| 4 | Where the value comes from: 0 the constant in bytes 8–15, 1 the state variable those bytes name. |
+| 5 | Detail: the unit of a clock change (minute, hour, day), the kind of motion, battery or phone event. |
+| 6–7 | For a daily time, the weekdays it runs on, bit 0 for Monday. |
+| 8–15 | The value: a period in milliseconds, an instant, or a local minute of the day. |
+
+Open, close, screen on and screen off are the app's own life; the rest are what `subscriptions`
+in `define_app` lists. Every, heart rate and acceleration repeat with a period. A period under a
+minute, and any acceleration, must be marked only-while-open, so a closed app can never keep the
+watch busy. An `at` or daily value may name a state variable, so changing it, such as moving an
+alarm, reschedules without any other code. `Subscription::next_due` works out when a timer-like
+subscription next fires, in local time.
+
+### Images
+
+An image starts with its format (1 byte: 0 colour, 1 mask), a reserved byte, then its width and
+height (2 bytes each, at most 240). Then come runs: a colour image is runs of (count, RGB565
+colour), 3 bytes each; a mask is runs of (count, coverage from 0 to 255), 2 bytes each, drawn in
+the widget's colour, which is how icons follow the theme. Runs go left to right and top to bottom,
+and may continue onto the next row. The image check confirms the runs cover every pixel exactly.
+
+An `image` or `icon` property names an image by number: below 32768 it is one of the app's own
+images; 32768 and up is the shared library's image of that number less 32768. The shared library
+is itself an image file of kind 2, holding only images, so the same reader serves both.
+
+### Saving state
+
+`AppState::save_persistent` writes every variable marked as persisting into a buffer, and
+`load_persistent` reads it back. The saved form starts with `NTST`, a version byte and a count,
+then for each variable its key, type, array length, element width and stored bytes. Loading
+matches each saved variable to the app's by key, type, length and width, and skips any that no
+longer match, so a new version of an app keeps what still fits and starts the rest from their
+defaults. The firmware keeps the saved state in the app's folder on the external flash.
 
 ### Where images live
 
@@ -348,6 +390,7 @@ Each instruction is one opcode byte followed by its operands:
 | `06` | read state | slot, 1 byte | Pushes a state variable. In a handler, it sees the handler's own earlier writes. |
 | `07` | read system | value, 1 byte | Pushes a system value (see below). |
 | `08` | read event | field, 1 byte | Pushes one of the event's 8 fields. Handlers only. |
+| `0E` | read event text | field, 1 byte | Pushes a text field of the event, such as a notification's title; the runtime copies it into the call's text buffer. Handlers only. |
 | `09`, `0A`, `0B` | duplicate, drop, swap | | Stack housekeeping. |
 | `0C` | read local | local, 1 byte | Pushes one of the call's 16 locals, which all start at 0. |
 | `0D` | write local | local, 1 byte | Takes a value into a local. |
@@ -487,6 +530,20 @@ compiler and the runtime both follow it:
 | `onPageChange` | `page` |
 | `onScrollEnd` | `offset` |
 | `onShow`, `onHide` | none |
+| Timers, alarms, daily times and clock changes | `time` |
+| `heart_rate_reading` | `beats_per_minute`, `confidence` |
+| `steps`, `step_goal` | `steps_today` |
+| `motion` | `kind` |
+| `acceleration` | `x`, `y`, `z` |
+| `battery` | `percent` |
+| `phone` | `is_connected` |
+| `notification` | `id`, `app` (text), `title` (text), `body` (text), `time` |
+| `call` | `kind`, `caller` (text) |
+| `settings_change` | `key` (text) |
+| `music`, `weather`, `navigation`, and the app's open, close, screen on and screen off | none; the new values are system values |
+
+Text fields are read with `read event text`, not `read event`; the host passes them with
+`Interpreter::run_handler_with_text`.
 
 A touch's `value` is the number of the cell or button touched in a CellGrid or ButtonMatrix, and 0
 for any other widget. A screen's root may take `onDrag`, for drawing or steering across the whole

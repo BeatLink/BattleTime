@@ -2,6 +2,7 @@
 //! runtime's own checks, and runs its expressions and handlers with the runtime's interpreter.
 
 use neotime_runtime::instruction::EffectKind;
+use neotime_runtime::resources::ImageReference;
 use neotime_runtime::theme::rgb565;
 use neotime_runtime::{
     AppImage, AppState, ColorValue, Interpreter, Property, PropertySource, SystemValue, SystemValues,
@@ -298,7 +299,7 @@ fn fonts_icons_and_lengths_use_their_number_mappings() {
     );
     assert_eq!(
         property_of(&image, WidgetKind::Icon, Property::Icon, 0),
-        PropertySource::Constant(18)
+        PropertySource::Constant(ImageReference::SharedLibrary(18).to_value())
     );
 }
 

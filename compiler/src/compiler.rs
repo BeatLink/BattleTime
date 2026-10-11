@@ -1252,8 +1252,9 @@ pub fn type_range(value_type: Type) -> Range {
             highest: set.names().len() as i64 - 1,
         },
         Kind::Icon => Range {
-            lowest: 0,
-            highest: crate::types::ICON_NAMES.len() as i64 - 1,
+            lowest: crate::types::icon_number(crate::types::ICON_NAMES[0]).unwrap_or(0),
+            highest: crate::types::icon_number(crate::types::ICON_NAMES[crate::types::ICON_NAMES.len() - 1])
+                .unwrap_or(0),
         },
         Kind::Text | Kind::Name => Range {
             lowest: 0,

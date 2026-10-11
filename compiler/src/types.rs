@@ -4,6 +4,7 @@
 //! The bytecode carries no type tags, so every value's type is known here. docs/compiler.md lists
 //! each number mapping; the runtime must read them the same way.
 
+use neotime_runtime::resources::ImageReference;
 use neotime_runtime::ValueType;
 
 // ============================================================================
@@ -385,11 +386,12 @@ pub const ICON_NAMES: [&str; 62] = [
     "pine_logo",
 ];
 
+/// An icon's value: a reference to its image in the shared library, which numbers icons in this order.
 pub fn icon_number(name: &str) -> Option<i64> {
     ICON_NAMES
         .iter()
         .position(|candidate| *candidate == name)
-        .map(|position| position as i64)
+        .map(|position| ImageReference::SharedLibrary(position as u16).to_value() as i64)
 }
 
 /// A length written as a percentage of the parent, such as `"100%"`, is stored as minus the percentage.

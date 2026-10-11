@@ -165,3 +165,129 @@ impl AppState {
         Some(())
     }
 }
+
+// ============================================================================
+// Saving and loading
+// ============================================================================
+
+/// Starts saved state, so a stray file is never read as one.
+const SAVED_STATE_MAGIC: [u8; 4] = *b"NTST";
+const SAVED_STATE_VERSION: u8 = 1;
+const SAVED_HEADER_BYTES: usize = 6;
+
+/// The saved state did not fit the buffer it was given.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SaveBufferFull;
+
+/// What loading saved state did.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LoadReport {
+    /// Variables restored from the saved state.
+    pub loaded: u8,
+    /// Saved variables left out: the app no longer has them, or their type or length changed.
+    pub skipped: u8,
+    /// The bytes were not saved state at all, so every variable kept its default.
+    pub unreadable: bool,
+}
+
+impl AppState {
+    /// Writes every persistent variable, with its key, into `out`, and returns how many bytes it used.
+    ///
+    /// Each variable is saved as: key length (1), key, type (1), array length (2), element width (1),
+    /// then its bytes as stored. Keys rather than numbers let a new version of the app load it.
+    pub fn save_persistent(&self, image: &AppImage, out: &mut [u8]) -> Result<usize, SaveBufferFull> {
+        let mut used = SAVED_HEADER_BYTES;
+        let mut count: u8 = 0;
+        for index in 0..image.state_count() {
+            let Some(variable) = image.state_variable(index).filter(|variable| variable.persists) else {
+                continue;
+            };
+            let key = image.string(variable.key_string).unwrap_or("").as_bytes();
+            let data = self.variable_bytes(index as u8).unwrap_or(&[]);
+            let mut entry_header = [0u8; 5];
+            entry_header[0] = variable.value_type as u8;
+            entry_header[1..3].copy_from_slice(&variable.length.to_le_bytes());
+            entry_header[3] = variable.element_bytes;
+            let key_length = u8::try_from(key.len()).map_err(|_| SaveBufferFull)?;
+
+            for part in [&[key_length][..], key, &entry_header[..4], data] {
+                let end = used + part.len();
+                out.get_mut(used..end)
+                    .ok_or(SaveBufferFull)?
+                    .copy_from_slice(part);
+                used = end;
+            }
+            count += 1;
+        }
+        let header = out.get_mut(..SAVED_HEADER_BYTES).ok_or(SaveBufferFull)?;
+        header[..4].copy_from_slice(&SAVED_STATE_MAGIC);
+        header[4] = SAVED_STATE_VERSION;
+        header[5] = count;
+        Ok(used)
+    }
+
+    /// Restores persistent variables from saved state, matching them by key, type and length.
+    pub fn load_persistent(&mut self, image: &AppImage, saved: &[u8]) -> LoadReport {
+        let mut report = LoadReport::default();
+        let readable = saved.len() >= SAVED_HEADER_BYTES
+            && saved[..4] == SAVED_STATE_MAGIC
+            && saved[4] == SAVED_STATE_VERSION;
+        if !readable {
+            report.unreadable = true;
+            return report;
+        }
+
+        let mut position = SAVED_HEADER_BYTES;
+        for _ in 0..saved[5] {
+            let Some(entry) = read_saved_entry(saved, &mut position) else {
+                report.unreadable = true;
+                return report;
+            };
+            let found = (0..image.state_count()).find(|&index| {
+                image.state_variable(index).is_some_and(|variable| {
+                    variable.persists
+                        && image.string(variable.key_string).map(str::as_bytes) == Some(entry.key)
+                        && variable.value_type as u8 == entry.value_type
+                        && variable.length == entry.length
+                        && variable.element_bytes == entry.element_bytes
+                })
+            });
+            match found.and_then(|index| self.variable_bytes_mut(index as u8)) {
+                Some(stored) if stored.len() == entry.data.len() => {
+                    stored.copy_from_slice(entry.data);
+                    report.loaded += 1;
+                }
+                _ => report.skipped += 1,
+            }
+        }
+        report
+    }
+}
+
+struct SavedEntry<'saved> {
+    key: &'saved [u8],
+    value_type: u8,
+    length: u16,
+    element_bytes: u8,
+    data: &'saved [u8],
+}
+
+fn read_saved_entry<'saved>(saved: &'saved [u8], position: &mut usize) -> Option<SavedEntry<'saved>> {
+    let key_length = *saved.get(*position)? as usize;
+    let key = saved.get(*position + 1..*position + 1 + key_length)?;
+    let header = saved.get(*position + 1 + key_length..*position + 5 + key_length)?;
+    let value_type = header[0];
+    let length = u16::from_le_bytes([header[1], header[2]]);
+    let element_bytes = header[3];
+    let data_bytes = length.max(1) as usize * element_bytes as usize;
+    let data_start = *position + 5 + key_length;
+    let data = saved.get(data_start..data_start + data_bytes)?;
+    *position = data_start + data_bytes;
+    Some(SavedEntry {
+        key,
+        value_type,
+        length,
+        element_bytes,
+        data,
+    })
+}

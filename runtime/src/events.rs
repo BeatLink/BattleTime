@@ -25,6 +25,24 @@ pub enum EventKind {
     ScrollEnd,
     Show,
     Hide,
+    // Events from subscriptions and the app's life, which no widget sends.
+    /// A timer, an alarm, a daily time or a change of minute, hour or day.
+    Time,
+    HeartRate,
+    Steps,
+    Motion,
+    Acceleration,
+    Battery,
+    Phone,
+    Notification,
+    Call,
+    /// The phone's player, weather or navigation changed; the new values are system values.
+    PhoneData,
+    SettingsChange,
+    Open,
+    Close,
+    ScreenOn,
+    ScreenOff,
 }
 
 impl EventKind {
@@ -64,7 +82,27 @@ impl EventKind {
             PageChange => &["page"],
             ScrollEnd => &["offset"],
             Show | Hide => &[],
+            Time => &["time"],
+            HeartRate => &["beats_per_minute", "confidence"],
+            Steps => &["steps_today"],
+            Motion => &["kind"],
+            Acceleration => &["x", "y", "z"],
+            Battery => &["percent"],
+            Phone => &["is_connected"],
+            Notification => &["id", "app", "title", "body", "time"],
+            Call => &["kind", "caller"],
+            SettingsChange => &["key"],
+            PhoneData | Open | Close | ScreenOn | ScreenOff => &[],
         }
+    }
+
+    /// Whether a field is text, which a handler reads with `ReadEventText` rather than `ReadEvent`.
+    pub fn is_text_field(self, field: u8) -> bool {
+        use EventKind::*;
+        matches!(
+            (self, field),
+            (Notification, 1..=3) | (Call, 1) | (SettingsChange, 0)
+        )
     }
 
     /// The position of a named field, for the compiler.

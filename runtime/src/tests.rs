@@ -1832,6 +1832,7 @@ fn every_instruction_decodes_to_itself() {
         ReadState(7),
         ReadSystem(SystemValue::WeatherReceivedAt),
         ReadEvent(3),
+        ReadEventText(2),
         Duplicate,
         Drop,
         Swap,
@@ -2374,6 +2375,319 @@ fn pads_formatted_text_in_front() {
     );
 
     assert_eq!(text, "  7");
+}
+
+// ============================================================================
+// Subscriptions
+// ============================================================================
+
+use crate::resources::{ImageFormat, ImageReference, Run};
+use crate::subscriptions::{Subscription, SubscriptionKind, SubscriptionProblem, SubscriptionValue};
+
+fn subscription(kind: SubscriptionKind, value: SubscriptionValue) -> Subscription {
+    Subscription {
+        kind,
+        only_while_open: false,
+        handler: 0,
+        detail: 0,
+        days: 0b111_1111,
+        value,
+    }
+}
+
+fn with_subscription(subscription: Subscription) -> (Vec<u8>, Result<(), ImageError>) {
+    let mut writer = ImageWriter::new("timer", "Timer", AppKind::App, 1);
+    writer.variable("alarm_at", ValueType::Instant, true, NONE);
+    writer.handler(Vec::new());
+    writer.subscription(subscription);
+    let bytes = writer.build();
+    let result = verify(&AppImage::parse(&bytes).unwrap());
+    (bytes, result)
+}
+
+#[test]
+fn subscriptions_read_back_as_written() {
+    let written = Subscription {
+        kind: SubscriptionKind::Daily,
+        only_while_open: false,
+        handler: 0,
+        detail: 0,
+        days: 0b001_1111,
+        value: SubscriptionValue::Constant(7 * 60 + 30),
+    };
+    let (bytes, result) = with_subscription(written);
+    let image = AppImage::parse(&bytes).unwrap();
+
+    assert_eq!(result, Ok(()));
+    assert_eq!(image.subscription(0), Some(written));
+    assert_eq!(written.kind.event(), EventKind::Time);
+}
+
+#[test]
+fn works_out_when_timers_and_alarms_are_next_due() {
+    let (bytes, _) = with_subscription(subscription(
+        SubscriptionKind::Every,
+        SubscriptionValue::Constant(60_000),
+    ));
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut state = AppState::new(&image).unwrap();
+    let every_minute = subscription(SubscriptionKind::Every, SubscriptionValue::Constant(60_000));
+    let alarm = subscription(SubscriptionKind::At, SubscriptionValue::Variable(0));
+    let next_hour = Subscription {
+        detail: 1,
+        ..subscription(SubscriptionKind::ClockChange, SubscriptionValue::Constant(0))
+    };
+
+    assert_eq!(
+        every_minute.next_due(SUNDAY_AFTERNOON, &state, 0),
+        Some(1_791_727_560_000)
+    );
+    assert_eq!(alarm.next_due(SUNDAY_AFTERNOON, &state, 0), None);
+    state.set(0, 5_000).unwrap();
+    assert_eq!(alarm.next_due(SUNDAY_AFTERNOON, &state, 0), Some(5_000));
+    // 14:05 UTC is 19:35 in a zone 5 and a half hours ahead, so the next local hour is 20:00.
+    assert_eq!(
+        next_hour.next_due(SUNDAY_AFTERNOON, &state, 19_800_000),
+        Some(SUNDAY_AFTERNOON + 25 * 60_000 - 9_000)
+    );
+}
+
+#[test]
+fn a_daily_alarm_skips_days_it_is_not_set_for() {
+    let (bytes, _) = with_subscription(subscription(
+        SubscriptionKind::Every,
+        SubscriptionValue::Constant(60_000),
+    ));
+    let image = AppImage::parse(&bytes).unwrap();
+    let state = AppState::new(&image).unwrap();
+    // 07:00 on weekdays only; it is Sunday afternoon, so the next one is Monday morning.
+    let weekdays_at_seven = Subscription {
+        days: 0b001_1111,
+        ..subscription(SubscriptionKind::Daily, SubscriptionValue::Constant(7 * 60))
+    };
+    let monday_seven = 1_791_788_400_000;
+
+    assert_eq!(
+        weekdays_at_seven.next_due(SUNDAY_AFTERNOON, &state, 0),
+        Some(monday_seven)
+    );
+}
+
+#[test]
+fn refuses_subscriptions_that_would_keep_the_watch_busy_or_name_the_wrong_thing() {
+    let fast_background = subscription(SubscriptionKind::Every, SubscriptionValue::Constant(1_000));
+    let fast_while_open = Subscription {
+        only_while_open: true,
+        ..fast_background
+    };
+    let alarm_on_a_number = subscription(SubscriptionKind::Daily, SubscriptionValue::Variable(0));
+    let no_days = Subscription {
+        days: 0,
+        ..subscription(SubscriptionKind::Daily, SubscriptionValue::Constant(60))
+    };
+    let missing_handler = Subscription {
+        handler: 4,
+        ..fast_while_open
+    };
+
+    let problem = |subscription| match with_subscription(subscription).1 {
+        Err(ImageError::BadSubscription { problem, .. }) => Some(problem),
+        _ => None,
+    };
+    assert_eq!(
+        problem(fast_background),
+        Some(SubscriptionProblem::MustBeOnlyWhileOpen)
+    );
+    assert_eq!(problem(fast_while_open), None);
+    assert_eq!(problem(alarm_on_a_number), Some(SubscriptionProblem::BadVariable));
+    assert_eq!(problem(no_days), Some(SubscriptionProblem::BadDays));
+    assert_eq!(
+        problem(missing_handler),
+        Some(SubscriptionProblem::HandlerOutOfRange)
+    );
+}
+
+#[test]
+fn a_handler_reads_a_notifications_title() {
+    let mut writer = ImageWriter::new("notes", "Notes", AppKind::App, 1);
+    let title = writer.variable("title_length", ValueType::Int, false, 0);
+    let mut code = CodeWriter::new();
+    code.emit(Instruction::ReadEventText(2))
+        .emit(Instruction::TextLength)
+        .emit(Instruction::WriteState(title));
+    let handler = writer.handler(code.finish().unwrap());
+    let bytes = writer.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut state = AppState::new(&image).unwrap();
+
+    Interpreter::new()
+        .run_handler_with_text(
+            &image,
+            handler,
+            &mut state,
+            &[7, 0, 0, 0, 0],
+            &["", "Mail", "Lunch?", "", ""],
+            &FakeSystem::default(),
+        )
+        .unwrap();
+
+    assert_eq!(state.get(title), Some(6));
+    assert!(EventKind::Notification.is_text_field(2));
+    assert!(!EventKind::Notification.is_text_field(0));
+}
+
+// ============================================================================
+// Saving state
+// ============================================================================
+
+#[test]
+fn persistent_state_survives_a_save_and_load() {
+    let mut writer = ImageWriter::new("steps", "Steps", AppKind::App, 1);
+    let goal = writer.variable("goal", ValueType::Int, true, 8_000);
+    let scratch = writer.variable("scratch", ValueType::Int, false, 0);
+    let history = writer.array("history", ValueType::Int, true, 7, 2, 0);
+    let bytes = writer.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut state = AppState::new(&image).unwrap();
+    state.set(goal, 12_000).unwrap();
+    state.set(scratch, 99).unwrap();
+    state.set_element(history, 6, -1_234).unwrap();
+    let mut saved = [0u8; 256];
+
+    let used = state.save_persistent(&image, &mut saved).unwrap();
+    let mut reopened = AppState::new(&image).unwrap();
+    let report = reopened.load_persistent(&image, &saved[..used]);
+
+    assert_eq!(report.loaded, 2);
+    assert_eq!(reopened.get(goal), Some(12_000));
+    assert_eq!(reopened.get(scratch), Some(0));
+    assert_eq!(reopened.element(history, 6), Some(-1_234));
+}
+
+#[test]
+fn a_new_version_of_an_app_keeps_what_still_matches() {
+    let mut old = ImageWriter::new("steps", "Steps", AppKind::App, 1);
+    old.variable("goal", ValueType::Int, true, 8_000);
+    old.array("history", ValueType::Int, true, 7, 2, 5);
+    let old_bytes = old.build();
+    let old_image = AppImage::parse(&old_bytes).unwrap();
+    let mut old_state = AppState::new(&old_image).unwrap();
+    old_state.set(0, 10_000).unwrap();
+    let mut saved = [0u8; 256];
+    let used = old_state.save_persistent(&old_image, &mut saved).unwrap();
+
+    let mut new = ImageWriter::new("steps", "Steps", AppKind::App, 1);
+    let history = new.array("history", ValueType::Int, true, 30, 2, 0);
+    let goal = new.variable("goal", ValueType::Int, true, 8_000);
+    let new_bytes = new.build();
+    let new_image = AppImage::parse(&new_bytes).unwrap();
+    let mut new_state = AppState::new(&new_image).unwrap();
+
+    let report = new_state.load_persistent(&new_image, &saved[..used]);
+
+    assert_eq!((report.loaded, report.skipped), (1, 1));
+    assert_eq!(new_state.get(goal), Some(10_000));
+    assert_eq!(new_state.element(history, 0), Some(0));
+    assert!(new_state.load_persistent(&new_image, b"garbage").unreadable);
+}
+
+#[test]
+fn saving_into_too_small_a_buffer_fails() {
+    let mut writer = ImageWriter::new("steps", "Steps", AppKind::App, 1);
+    writer.array("history", ValueType::Int, true, 100, 8, 0);
+    let bytes = writer.build();
+    let image = AppImage::parse(&bytes).unwrap();
+
+    assert!(AppState::new(&image)
+        .unwrap()
+        .save_persistent(&image, &mut [0u8; 64])
+        .is_err());
+}
+
+// ============================================================================
+// Images
+// ============================================================================
+
+#[test]
+fn an_image_is_stored_as_runs_and_read_back() {
+    let mut writer = ImageWriter::new("logo", "Logo", AppKind::App, 1);
+    let pixels = [0xF800, 0xF800, 0xF800, 0x001F, 0x001F, 0x07E0];
+    let logo = writer.image_resource(ImageFormat::Color, 3, 2, &pixels);
+    writer.widget(
+        WidgetKind::Image,
+        0,
+        &[(Property::Image, Constant(ImageReference::App(logo).to_value()))],
+    );
+    let bytes = writer.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let resource = image.resource(logo).unwrap();
+
+    let runs: Vec<Run> = resource.runs().collect();
+
+    assert_eq!(verify(&image), Ok(()));
+    assert_eq!((resource.width, resource.height), (3, 2));
+    assert_eq!(
+        runs,
+        [
+            Run {
+                count: 3,
+                value: 0xF800
+            },
+            Run {
+                count: 2,
+                value: 0x001F
+            },
+            Run {
+                count: 1,
+                value: 0x07E0
+            }
+        ]
+    );
+}
+
+#[test]
+fn refuses_an_image_whose_runs_do_not_fill_it_and_a_missing_image() {
+    let mut short = ImageWriter::new("logo", "Logo", AppKind::App, 1);
+    short.image_resource(ImageFormat::Mask, 4, 4, &[255, 255]);
+    let mut missing = ImageWriter::new("logo", "Logo", AppKind::App, 1);
+    missing.widget(
+        WidgetKind::Image,
+        0,
+        &[(Property::Image, Constant(ImageReference::App(3).to_value()))],
+    );
+    let mut shared_icon = ImageWriter::new("logo", "Logo", AppKind::App, 1);
+    shared_icon.widget(
+        WidgetKind::Icon,
+        0,
+        &[(
+            Property::Icon,
+            Constant(ImageReference::SharedLibrary(42).to_value()),
+        )],
+    );
+
+    assert_eq!(
+        verify(&AppImage::parse(&short.build()).unwrap()),
+        Err(ImageError::BadResource(0))
+    );
+    assert!(matches!(
+        verify(&AppImage::parse(&missing.build()).unwrap()),
+        Err(ImageError::BadWidget {
+            problem: WidgetProblem::BadConstant,
+            ..
+        })
+    ));
+    assert_eq!(verify(&AppImage::parse(&shared_icon.build()).unwrap()), Ok(()));
+}
+
+#[test]
+fn the_shared_library_is_an_image_of_its_own_kind() {
+    let mut writer = ImageWriter::new("shared", "Shared library", AppKind::Library, 1);
+    writer.image_resource(ImageFormat::Mask, 2, 1, &[0, 255]);
+    let bytes = writer.build();
+    let image = AppImage::parse(&bytes).unwrap();
+
+    assert_eq!(image.kind, AppKind::Library);
+    assert_eq!(image.resource_count(), 1);
 }
 
 // ============================================================================

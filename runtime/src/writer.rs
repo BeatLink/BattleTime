@@ -9,6 +9,8 @@ use alloc::vec::Vec;
 
 use crate::image::{crc32, AppKind, ValueType, FORMAT_VERSION, MAGIC};
 use crate::instruction::Instruction;
+use crate::resources::ImageFormat;
+use crate::subscriptions::Subscription;
 use crate::widgets::{Property, PropertySource, WidgetKind};
 
 // ============================================================================
@@ -20,6 +22,8 @@ const STATE_SECTION: u16 = 2;
 const EXPRESSIONS_SECTION: u16 = 3;
 const HANDLERS_SECTION: u16 = 4;
 const WIDGETS_SECTION: u16 = 5;
+const SUBSCRIPTIONS_SECTION: u16 = 6;
+const RESOURCES_SECTION: u16 = 7;
 const INITIAL_VALUES_SECTION: u16 = 8;
 
 const HEADER_BYTES: usize = 20;
@@ -50,6 +54,8 @@ pub struct ImageWriter {
     handlers: Vec<Vec<u8>>,
     widgets: Vec<Vec<u8>>,
     initial_values: Vec<Vec<u8>>,
+    subscriptions: Vec<Subscription>,
+    resources: Vec<Vec<u8>>,
 }
 
 impl ImageWriter {
@@ -65,6 +71,8 @@ impl ImageWriter {
             handlers: Vec::new(),
             widgets: Vec::new(),
             initial_values: Vec::new(),
+            subscriptions: Vec::new(),
+            resources: Vec::new(),
         };
         writer.id_string = writer.string(id);
         writer.name_string = writer.string(name);
@@ -119,6 +127,42 @@ impl ImageWriter {
         }
         self.initial_values.push(entry);
         Some(variable)
+    }
+
+    /// Adds a subscription, such as a timer or `onOpen`, and returns its number.
+    pub fn subscription(&mut self, subscription: Subscription) -> u16 {
+        self.subscriptions.push(subscription);
+        (self.subscriptions.len() - 1) as u16
+    }
+
+    /// Adds an image from its pixels: RGB565 colours, or coverage from 0 to 255 for a mask.
+    /// Runs are found here, so the caller gives every pixel, left to right and top to bottom.
+    pub fn image_resource(&mut self, format: ImageFormat, width: u16, height: u16, pixels: &[u16]) -> u16 {
+        let mut bytes: Vec<u8> = alloc::vec![
+            match format {
+                ImageFormat::Color => 0,
+                ImageFormat::Mask => 1,
+            },
+            0
+        ];
+        bytes.extend(width.to_le_bytes());
+        bytes.extend(height.to_le_bytes());
+        let mut index = 0;
+        while index < pixels.len() {
+            let value = pixels[index];
+            let mut count = 1;
+            while count < u8::MAX as usize && index + count < pixels.len() && pixels[index + count] == value {
+                count += 1;
+            }
+            bytes.push(count as u8);
+            match format {
+                ImageFormat::Color => bytes.extend(value.to_le_bytes()),
+                ImageFormat::Mask => bytes.push(value.min(u8::MAX as u16) as u8),
+            }
+            index += count;
+        }
+        self.resources.push(bytes);
+        (self.resources.len() - 1) as u16
     }
 
     fn add_variable(
@@ -202,6 +246,19 @@ impl ImageWriter {
                 entry_table(&self.widgets),
             ),
             (
+                SUBSCRIPTIONS_SECTION,
+                self.subscriptions.len() as u16,
+                self.subscriptions
+                    .iter()
+                    .flat_map(|subscription| subscription.to_bytes())
+                    .collect(),
+            ),
+            (
+                RESOURCES_SECTION,
+                self.resources.len() as u16,
+                entry_table(&self.resources),
+            ),
+            (
                 INITIAL_VALUES_SECTION,
                 self.initial_values.len() as u16,
                 entry_table(&self.initial_values),
@@ -214,6 +271,7 @@ impl ImageWriter {
         image.push(match self.kind {
             AppKind::App => 0,
             AppKind::Face => 1,
+            AppKind::Library => 2,
         });
         image.push(0);
         image.extend(self.shared_library_version.to_le_bytes());

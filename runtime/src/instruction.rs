@@ -302,6 +302,8 @@ pub enum Instruction {
     ReadState(u8),
     ReadSystem(SystemValue),
     ReadEvent(u8),
+    /// Pushes a text field of the event, such as a notification's title. Handlers only.
+    ReadEventText(u8),
     Duplicate,
     Drop,
     Swap,
@@ -392,7 +394,7 @@ impl Instruction {
         use Instruction::*;
         let (taken, left) = match self {
             PushSmall(_) | PushInt(_) | PushLong(_) | PushNone | PushText(_) | ReadState(_)
-            | ReadSystem(_) | ReadEvent(_) => (0, 1),
+            | ReadSystem(_) | ReadEvent(_) | ReadEventText(_) => (0, 1),
             Duplicate => (1, 2),
             Drop | JumpIfFalse(_) | WriteState(_) | WriteLocal(_) | FillArray(_) => (1, 0),
             ReadLocal(_) => (0, 1),
@@ -455,6 +457,7 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
         0x0B => (Swap, 0),
         0x0C => (ReadLocal(byte()?), 1),
         0x0D => (WriteLocal(byte()?), 1),
+        0x0E => (ReadEventText(byte()?), 1),
         0x10 => (Add, 0),
         0x11 => (Subtract, 0),
         0x12 => (Multiply, 0),
@@ -589,6 +592,7 @@ impl Instruction {
             Swap => put(&[0x0B]),
             ReadLocal(local) => put(&[0x0C, local]),
             WriteLocal(local) => put(&[0x0D, local]),
+            ReadEventText(field) => put(&[0x0E, field]),
             Add => put(&[0x10]),
             Subtract => put(&[0x11]),
             Multiply => put(&[0x12]),

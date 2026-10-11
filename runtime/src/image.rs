@@ -3,6 +3,8 @@
 //! `AppImage::parse` checks the image's structure, so every later lookup stays inside the bytes.
 //! The code inside it is checked separately by `verify`.
 
+use crate::resources::ImageResource;
+use crate::subscriptions::{Subscription, SubscriptionProblem, SUBSCRIPTION_BYTES};
 use crate::theme::ColorValue;
 use crate::widgets::WidgetProblem;
 
@@ -32,6 +34,8 @@ pub const MOST_STATE_VARIABLES: usize = 64;
 pub enum AppKind {
     App,
     Face,
+    /// The shared library: images such as icons that every app can use, and no code.
+    Library,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -148,6 +152,11 @@ pub enum ImageError {
     TooManyStateVariables,
     StateTooLarge,
     BadInitialValues(u16),
+    BadSubscription {
+        subscription: u16,
+        problem: SubscriptionProblem,
+    },
+    BadResource(u16),
     BadDefaultValue(u8),
     BadCode {
         block: CodeBlock,
@@ -284,6 +293,9 @@ pub struct AppImage<'image> {
     handlers: EntryTable<'image>,
     widgets: EntryTable<'image>,
     initial_values: EntryTable<'image>,
+    subscription_count: u16,
+    subscriptions: &'image [u8],
+    resources: EntryTable<'image>,
 }
 
 impl<'image> AppImage<'image> {
@@ -303,6 +315,7 @@ impl<'image> AppImage<'image> {
         let kind = match bytes[6] {
             0 => AppKind::App,
             1 => AppKind::Face,
+            2 => AppKind::Library,
             other => return Err(ImageError::UnknownKind(other)),
         };
         let shared_library_version = read_u16(bytes, 8).ok_or(ImageError::TooShort)?;
@@ -326,6 +339,9 @@ impl<'image> AppImage<'image> {
             handlers: EntryTable::default(),
             widgets: EntryTable::default(),
             initial_values: EntryTable::default(),
+            subscription_count: 0,
+            subscriptions: &[],
+            resources: EntryTable::default(),
         };
 
         let mut seen_sections = 0u32;
@@ -353,7 +369,13 @@ impl<'image> AppImage<'image> {
                 SectionKind::Handlers => image.handlers = EntryTable::parse(count, section_bytes)?,
                 SectionKind::Widgets => image.widgets = EntryTable::parse(count, section_bytes)?,
                 SectionKind::InitialValues => image.initial_values = EntryTable::parse(count, section_bytes)?,
-                SectionKind::Subscriptions | SectionKind::Resources => {}
+                SectionKind::Subscriptions => {
+                    image.subscriptions = section_bytes
+                        .get(..count as usize * SUBSCRIPTION_BYTES)
+                        .ok_or(ImageError::TableOutOfBounds)?;
+                    image.subscription_count = count;
+                }
+                SectionKind::Resources => image.resources = EntryTable::parse(count, section_bytes)?,
             }
         }
 
@@ -479,6 +501,26 @@ impl<'image> AppImage<'image> {
 
     pub fn widget_bytes(&self, index: u16) -> Option<&'image [u8]> {
         self.widgets.get(index)
+    }
+
+    pub fn subscription_count(&self) -> u16 {
+        self.subscription_count
+    }
+
+    pub fn subscription(&self, index: u16) -> Option<Subscription> {
+        let start = index as usize * SUBSCRIPTION_BYTES;
+        if index >= self.subscription_count {
+            return None;
+        }
+        Subscription::parse(self.subscriptions.get(start..start + SUBSCRIPTION_BYTES)?)
+    }
+
+    pub fn resource_count(&self) -> u16 {
+        self.resources.count
+    }
+
+    pub fn resource(&self, index: u16) -> Option<ImageResource<'image>> {
+        ImageResource::parse(self.resources.get(index)?)
     }
 
     pub fn initial_values_count(&self) -> u16 {

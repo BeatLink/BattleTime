@@ -146,6 +146,7 @@ struct Call<'call, System: SystemValues> {
     image: &'call AppImage<'call>,
     state: &'call AppState,
     event: &'call [Value],
+    event_texts: &'call [&'call str],
     system: &'call System,
     outcome: Option<&'call mut HandlerOutcome>,
 }
@@ -201,6 +202,7 @@ impl Interpreter {
             image,
             state,
             event: &[],
+            event_texts: &[],
             system,
             outcome: None,
         };
@@ -221,12 +223,26 @@ impl Interpreter {
         event: &[Value],
         system: &impl SystemValues,
     ) -> Result<HandlerOutcome, Failure> {
+        self.run_handler_with_text(image, handler, state, event, &[], system)
+    }
+
+    /// Like `run_handler`, for an event with text fields; `event_texts` holds them by field number.
+    pub fn run_handler_with_text(
+        &mut self,
+        image: &AppImage,
+        handler: u16,
+        state: &mut AppState,
+        event: &[Value],
+        event_texts: &[&str],
+        system: &impl SystemValues,
+    ) -> Result<HandlerOutcome, Failure> {
         let code = image.handler_code(handler).ok_or(Failure::NoSuchCode)?;
         let mut outcome = HandlerOutcome::empty();
         let call = Call {
             image,
             state,
             event,
+            event_texts,
             system,
             outcome: Some(&mut outcome),
         };
@@ -322,6 +338,13 @@ impl Interpreter {
                     return Err(Failure::NotAllowedHere);
                 }
                 self.push(*call.event.get(field as usize).ok_or(Failure::BadEventField)?)?;
+            }
+            ReadEventText(field) => {
+                if call.outcome.is_none() {
+                    return Err(Failure::NotAllowedHere);
+                }
+                let text = *call.event_texts.get(field as usize).unwrap_or(&"");
+                self.write_text(|writer| writer.write_bytes(text.as_bytes()))?;
             }
             ReadLocal(local) => {
                 let value = *self.locals.get(local as usize).ok_or(Failure::BadLocal)?;

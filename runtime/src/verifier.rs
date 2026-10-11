@@ -9,6 +9,8 @@ use crate::image::{AppImage, CodeBlock, CodeProblem, ImageError};
 use crate::instruction::{decode, Instruction};
 use crate::interpreter::{MOST_EVENT_FIELDS, MOST_LOCALS, STACK_DEPTH};
 use crate::pattern;
+use crate::resources::verify_resources;
+use crate::subscriptions::verify_subscriptions;
 use crate::widgets::verify_widgets;
 
 // ============================================================================
@@ -35,7 +37,9 @@ pub fn verify(image: &AppImage) -> Result<(), ImageError> {
         let code = image.handler_code(index).unwrap_or_default();
         verify_code(image, code, CodeBlock::Handler(index))?;
     }
-    verify_widgets(image)
+    verify_widgets(image)?;
+    verify_subscriptions(image)?;
+    verify_resources(image)
 }
 
 #[derive(Clone, Copy)]
@@ -223,7 +227,12 @@ fn check_operands(
             Some(pattern) if !pattern::is_valid_duration_pattern(pattern) => Err(CodeProblem::BadPattern),
             Some(_) => Ok(()),
         },
-        Instruction::ReadEvent(_) if is_expression => Err(CodeProblem::EventInExpression),
+        Instruction::ReadEvent(_) | Instruction::ReadEventText(_) if is_expression => {
+            Err(CodeProblem::EventInExpression)
+        }
+        Instruction::ReadEventText(field) if field as usize >= MOST_EVENT_FIELDS => {
+            Err(CodeProblem::EventFieldOutOfRange)
+        }
         Instruction::ReadEvent(field) if field as usize >= MOST_EVENT_FIELDS => {
             Err(CodeProblem::EventFieldOutOfRange)
         }
