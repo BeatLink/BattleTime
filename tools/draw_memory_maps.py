@@ -18,7 +18,7 @@ MEMORIES = {
         "Internal flash, 512 KB",
         [
             ("Firmware", "0x09000", 384, "firmware"),
-            ("Installed apps", "0x69000", 92, "data"),
+            ("Shared library", "0x69000", 92, "data"),
             ("Bootloader", "0x00000", 32, "boot"),
             ("Boot state", "0x08000", 4, "boot"),
         ],

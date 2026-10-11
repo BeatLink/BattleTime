@@ -65,7 +65,8 @@ Each layer uses only the layers below it.
   [rlvgl](https://github.com/softoboros/rlvgl), a pure Rust rewrite of LVGL, and are drawn through
   `embedded-graphics` onto the display driver. **(started: drawing works, nothing else yet)**
 - **App runtime** loads apps installed over BLE, starts and stops them, and passes them events.
-  **(planned)**
+  Apps are written as Preact components with signals and compiled on the computer into images
+  that a small bytecode interpreter runs; see [app-runtime.md](app-runtime.md). **(planned)**
 
 ## Tasks
 
@@ -83,6 +84,7 @@ NeoTime/
 ├── flake.nix       development shell, simulator package and checks
 ├── rust-toolchain.toml  the Rust version and the watch's target
 ├── docs/
+│   ├── app-runtime.md the proposed app format and runtime
 │   ├── architecture.md
 │   ├── bluetooth.md  the Bluetooth controller
 │   ├── coding-guidelines.md

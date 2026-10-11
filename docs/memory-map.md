@@ -24,7 +24,7 @@ python3 tools/draw_memory_maps.py
 | Bootloader | `0x00000` | 32 KB | The `embassy-boot` bootloader. There is no SoftDevice and no MBR. |
 | Boot state | `0x08000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
 | Firmware | `0x09000` | 384 KB | The running firmware. It is linked to start here. |
-| Installed apps | `0x69000` | 92 KB | Reserved for apps installed over Bluetooth, up to the end of flash. The app format is still open. |
+| Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, fonts, components, common functions and notifications. No apps are kept here; they live in `/apps` on the external flash. See [app-runtime.md](app-runtime.md#the-shared-library). |
 
 Inside the firmware, the accelerometer's configuration files from Bosch take 6 KB for each chip
 built in, 12 KB with both the BMA421 and the BMA425 (see the `neotime-accelerometer` cargo
@@ -54,7 +54,7 @@ firmware, which then has the whole of RAM:
 |---|---|---|---|
 | UI heap | 14 KB | The heap that `rlvgl`'s widgets allocate from. The `neotime-ui` crate keeps no screen buffer of its own. | Planned, not yet measured |
 | Bluetooth | 12 KB | The controller and the TrouBLE host: connection state, packet buffers and the GATT tables. | Partly measured: the controller is 1.5 KB; TrouBLE's example with it is 12.0 KB in all, executor included |
-| Apps | 12 KB | Memory for the app that is open, loaded from the installed apps area. | Planned |
+| Apps | 12 KB | Memory for the app that is open, read from its file in `/apps`. | Planned |
 | Stack | 8 KB | The main stack, for interrupts and code that is not in a task. | Planned |
 | Tasks | 6 KB | Embassy's tasks. Each task's state is fixed in size when the firmware is built. | Planned |
 | Reserve | 4 KB | Left free, so a budget that runs over does not crash the watch. | Planned |

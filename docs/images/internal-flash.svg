@@ -6,7 +6,7 @@
 <text x="300.0" y="232.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">384 KB</text>
 <text x="300.0" y="252.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x09000</text>
 <rect x="603.0" y="37.0" width="194.0" height="271.4" rx="4" fill="#5a9e4b"/>
-<text x="700.0" y="158.1" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Installed apps</text>
+<text x="700.0" y="158.1" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Shared library</text>
 <text x="700.0" y="178.1" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">92 KB</text>
 <text x="700.0" y="198.1" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x69000</text>
 <rect x="603.0" y="314.4" width="171.8" height="102.6" rx="4" fill="#3b6fb6"/>
