@@ -93,7 +93,7 @@ NeoTime/
 │   ├── architecture.md
 │   ├── bluetooth.md  the Bluetooth controller
 │   ├── coding-guidelines.md
-│   ├── faces.md      the watch faces ported from InfiniTime and wasp-os
+│   ├── faces.md      the watch faces ported from InfiniTime, wasp-os and PinetimeLite
 │   ├── memory-map.md how RAM and both flashes are divided
 │   ├── simulator.md
 │   ├── todo.md
@@ -304,7 +304,8 @@ touch input, page slides on the hardware scroll, and a desktop simulator.
 
 Apps and watch faces are Preact and Signals source, written to [app-reference.md](app-reference.md)
 and kept as two npm packages: `apps/` (`neotime-apps`) and `faces/` (`neotime-faces`). The first
-ones are ports of InfiniTime's and wasp-os's, merged where both firmwares have the same one.
+ones are ports of InfiniTime's and wasp-os's, merged where both firmwares have the same one, and
+of PinetimeLite's watch faces.
 [apps.md](apps.md) and [faces.md](faces.md) list each, where it came from and what it still needs
 from the runtime.
 

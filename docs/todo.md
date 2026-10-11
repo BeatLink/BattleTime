@@ -277,13 +277,59 @@ The fork has these and NeoTime has nothing for them yet. Most also appear in the
 | Developer tools | `wasptool`, `pkgpush.py`, `nus.py` |
 | Other watches | Colmi P8, Senbono K9, DS-D6, 96Boards Nitrogen |
 
+## Gaps against PinetimeLite
+
+What [PinetimeLite](https://github.com/joaquimorg/PinetimeLite), an InfiniTime fork built for long
+battery life, has beyond the items above, compared with its `developLite` branch at `a91eeee`
+(version 0.7.0) on 2026-10-11. Its six watch face designs are already ported; see
+[faces.md](faces.md). Its apps (steps, weather, motion, flashlight) are covered by the ports in
+[apps.md](apps.md). Its weather in Alert Notification messages and its own file service are spoken
+only by its Gadgetbridge fork and web app, so they are not worth copying.
+
+### Watch faces
+
+- [ ] **Double tap on a watch face puts the watch to sleep,** whichever face is showing.
+- [ ] **Quick face switching.** PinetimeLite moves to the next face on a long press of any face.
+  Decide whether NeoTime has a gesture for this, since several faces use the long press for their
+  own settings.
+
+### Quick settings
+
+- [ ] **A quick settings screen** on a swipe down from the watch face, as
+  [app-reference.md](app-reference.md) already promises: the time and battery at the top, then
+  brightness, the flashlight, a switch that silences the vibration for notifications, and a
+  shortcut to settings.
+
+### Battery
+
+- [ ] **Charging screen.** Wake when the charger is plugged in or taken off, and show the charge
+  with a filling bar until the screen times out.
+- [ ] **Low battery alert.** Below 10 % and not charging, wake once and show a warning screen.
+
+### Notifications
+
+- [ ] **An icon and colour for each kind of notification:** email, missed call, message, calendar
+  and the rest, so the kind shows before the text is read.
+
+### Developer tools
+
+- [ ] **Screenshots over BLE.** PinetimeLite draws the current screen into the external flash and
+  lets the phone read it back as RGB565. It would let the docs and bug reports show the real watch.
+
+### Firmware updates
+
+- [ ] **Update from a web page** with Web Bluetooth, as PinetimeLite's web app does: set the clock
+  and send firmware and resources without installing anything.
+- [ ] **Update the bootloader over BLE.** PinetimeLite can replace its own bootloader. NeoTime will
+  need this once its bootloader changes, but a failed write leaves a watch without SWD unbootable,
+  so it needs the same care and emulator tests as the reloader image.
+
 ## Other firmware to study
 
 Not compared yet. Look through each for features worth bringing to NeoTime.
 
 | Firmware | What it is |
 |---|---|
-| Pinetime-Lite | An InfiniTime fork by Joaquimorg with many watch faces and extra features. |
 | Hypnos | A C firmware on the Zephyr RTOS, with basic watch features and BLE time sync. |
 | pinetime-rust-mynewt | Rust apps on Apache Mynewt, with many articles by Lup Yuen Lee. |
 | ATCwatch | Arduino firmware by Aaron Christophel, first written for the Colmi P8. |
