@@ -479,8 +479,13 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
 - **Redrawing.** Only the expressions a change affects are worked out again, and only the widgets
   whose value, place or visibility changed are drawn again, each region painted from the
   background up. There is no screen buffer.
-- **Time.** `tick` redraws what the clock changed, and `next_wakeup` says when that next happens, so
-  the watch can sleep in between.
+- **Time and subscriptions.** `tick` runs due timers and redraws what the clock changed, and
+  `next_wakeup` says when that next happens, so the watch can sleep in between. `deliver` hands
+  sensor and phone events to the app's subscriptions.
+- **Saved state.** `save_changed_state` writes the persistent variables when they change, and
+  `open_with_saved_state` puts them back.
+- **Images and fonts.** Images come from the app or the shared library (`set_library`). The fonts
+  are anti-aliased bitmaps built into the crate, made by `tools/generate_fonts.py`.
 - **Theme.** `set_theme` redraws every colour from the values already held, without running app
   code.
 - **Failures.** A failing handler or expression is reported through `System::app_failed`, and the
@@ -488,7 +493,7 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
 - **Demo.** With the `demo` feature, `demo::stopwatch_image` builds a stopwatch image with the
   runtime's writer, so the host runs before the compiler exists.
 
-On the watch, `AppHost` takes 5,544 B and each widget of the open screen 276 B of the UI heap plus
+On the watch, `AppHost` takes 5,888 B and each widget of the open screen 240 B of the UI heap plus
 its text; see [memory-map.md](memory-map.md). [app-runtime.md](app-runtime.md#the-app-host) describes
 the calls, the layout rules and what each property value means.
 

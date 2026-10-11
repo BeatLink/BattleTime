@@ -31,7 +31,7 @@ pub mod stopwatch_variables {
     pub const STOPPED_AFTER: u8 = 1;
 }
 
-const LABEL_FONT_HUGE: i32 = 4;
+const LABEL_FONT_LARGE: i32 = 3;
 const ALIGN_CENTER: i32 = 1;
 const SCREEN_PADDING: i32 = 12;
 const BUTTON_HEIGHT: i32 = 52;
@@ -151,7 +151,7 @@ pub fn stopwatch_image() -> Vec<u8> {
         &[
             (Property::Text, PropertySource::Expression(elapsed)),
             (Property::Color, PropertySource::Expression(time_color)),
-            (Property::Font, constant(LABEL_FONT_HUGE)),
+            (Property::Font, constant(LABEL_FONT_LARGE)),
             (Property::Align, constant(ALIGN_CENTER)),
             (Property::Grow, constant(1)),
         ],

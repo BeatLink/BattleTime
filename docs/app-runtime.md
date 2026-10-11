@@ -581,9 +581,8 @@ subscription that keeps failing is turned off until the app is opened again.
 ### The app host
 
 `neotime-app-host` (`app-host/`) is the loop that runs one open app. It is built and tested, and
-the [simulator](simulator.md) runs app images with it. It does not yet load saved state, run
-subscriptions, or read images a section at a time from the external flash; it takes the whole
-image as bytes.
+the [simulator](simulator.md) runs app images with it. It takes the whole image as bytes; it does
+not yet read an image a section at a time from the external flash.
 
 `AppHost::open` parses and verifies the image, sets up the state and the bindings, and opens the
 first screen:
@@ -594,8 +593,10 @@ first screen:
 3. It lays the screen out, as [Layout](#layout) describes.
 4. It runs the screen's `onShow`, if it has one.
 
-`open_with_saved_state` does the same, but lets the embedder put saved values over the defaults
-first.
+`open_with_saved_state` does the same, with the bytes `save_changed_state` once wrote put over the
+defaults first; saved state that does not fit, such as another app's, is ignored.
+`open_in_background` loads the state without opening a screen, so a closed app's subscriptions can
+run. `set_library(bytes)` gives the host the shared library, for images numbered 32768 and up.
 
 What happens next is driven by the embedder:
 
@@ -603,8 +604,11 @@ What happens next is driven by the embedder:
 |---|---|
 | `touch(touch, now, system)` | Finds the topmost shown widget under the finger that has a handler for the event, and runs it. A swipe goes to the screen's `onSwipe`. A tap on a `Switch`, or a tap or drag on a `Slider`, sends `onChange` with the new value. |
 | `press_button(press, now, system)` | Runs the screen's `onButton`. |
-| `tick(now, system)` | Works out again the open screen's expressions that `Bindings::due_between_among` says the clock has changed. |
-| `next_wakeup(now)` | When the clock next changes something on the open screen, from `Bindings::next_redraw_after_among`, or none. The embedder sleeps until then. |
+| `tick(now, system)` | Runs the timer-like subscriptions that are due, and works out again the open screen's expressions that `Bindings::due_between_among` says the clock has changed. |
+| `next_wakeup(now)` | The earliest of: when the clock next changes something on the open screen, the next due subscription, and the next step of a scrolling label. None means sleep until an event. |
+| `bring_to_front`, `close`, `screen_turned_on`, `screen_turned_off` | Run the `Open`, `Close`, `ScreenOn` and `ScreenOff` subscriptions. A closed app keeps only subscriptions without `only_while_open`. |
+| `deliver(event, now, system)` | Hands a `PushedEvent` to the subscriptions of its kind: steps, motion, heart rate, battery, phone, notifications and calls (with their text), music, weather, navigation and settings changes. Acceleration readings are kept and handed over at each subscription's period. |
+| `save_changed_state(out)` | Writes the persistent state when any of it changed since the last save, else returns `None`. `LARGEST_SAVED_STATE_BYTES` is always big enough. |
 | `system_values_changed(bits, now, system)` | Works out again what reads the system values that changed, such as the battery. `bits` is `SystemValue::bit` of each, or'd together; values the phone sends together, such as the weather, share one bit. |
 | `set_theme(theme)` | Resolves every colour again from the values already held. No app code runs. |
 | `draw(screen)` | Paints only the parts of the screen that changed. |
@@ -632,7 +636,14 @@ through `AppEffect::text`. Text system values, such as the playing track, come f
 `SystemValues::read_text`.
 
 When a handler or an expression fails, the host calls `System::app_failed` and keeps the app open.
-A failed handler changes nothing, and a failed expression leaves its property as it was. Showing
+A failed handler changes nothing, and a failed expression leaves its property as it was. A
+subscription that fails 3 times in a row is turned off until the app is next opened.
+
+Timer subscriptions line up with the clock: `every(60_000)` fires on each whole minute, not a
+minute after opening. An `At` time that has passed fires once and is remembered until its value
+changes, but that memory is not saved, so after a restart a passed `At` fires again unless its
+handler moved the time. `Derive` subscriptions run when the app opens and whenever what they read
+changes; their effects are ignored. Showing
 a crash screen is the embedder's job.
 
 Drawing needs no screen buffer. Each changed widget marks where it was last drawn and where it is
@@ -653,7 +664,13 @@ Layout is a small flexbox, worked out again whenever a value changes:
 - **A hidden widget** takes no space.
 - **`padding`** is space inside a widget on every side; **`margin`** is space outside it.
 - **The screen's root** fills the screen unless it has a size.
-- **`Grid`, `Scroll`, `List`, `Pages` and `Tabs`** are laid out like a `Column` for now.
+- **`gap`** is space between children, and **`justify`** spreads them along the flow: 0 `start`,
+  1 `center`, 2 `end`, 3 `space_between`. **`align_items`** places them across it, with 4
+  `stretch`.
+- **`opacity`** is multiplied down through parents; a **`disabled`** widget is drawn at half
+  opacity and ignores touches.
+- **`Grid`** places its children in rows; **`Scroll`** and **`List`** scroll by dragging and send
+  `onScrollEnd` when a drag ends. **`Pages`** and **`Tabs`** are laid out like a `Column` for now.
 
 A widget with no size gets the size it wants: a label's text, a button's text plus room around it
 (at least 44 pixels high), and fixed sizes for the rest, such as 100 pixels for an arc.
@@ -675,34 +692,44 @@ the numbers mean. These are the meanings the host uses now:
 | `visible` | 0 or 1. |
 | `value`, `minimum`, `maximum` | Whole numbers. `minimum` is 0 and `maximum` 100 unless set. |
 | `start_angle`, `end_angle` | Degrees clockwise from twelve o'clock, as everywhere in the app API. Used only when both are set; an arc otherwise runs from 225 to 135, leaving a gap at the bottom. The host turns them into rlvgl's angles, which start at three o'clock. |
-| `long_mode` | 0 `wrap`, 1 `scroll`, 2 `clip`. Read but not used yet: labels draw one line and clip it. |
+| `long_mode` | 0 `wrap`, 1 `scroll`, 2 `clip`. Labels wrap at spaces by default. |
+| `image`, `icon` | An image number: below 32768 the app's own, 32768 and up the shared library's. |
 
 Event fields `x`, `y`, `start_x` and `start_y` are screen pixels.
 
-The fonts are stand-ins until the shared library has real ones. `small` is a 9x15 mono font,
-`normal` 10x20, `medium` 9x15 at twice the size, `large` 10x20 at twice, `huge` at four times and
-`giant` at six times. The display fonts are drawn as `large` for now.
+The fonts are anti-aliased bitmaps with 4-bit coverage, made by `tools/generate_fonts.py` from the
+fonts in `third_party/fonts/` and kept in `app-host/fonts/`:
+
+| Font | Made from | Characters | Bytes |
+|---|---|---|---|
+| `small`, `normal`, `medium` | JetBrains Mono Bold at 16, 20 and 30 pixels | ASCII | 5,389, 6,254, 9,538 |
+| `large` | JetBrains Mono ExtraBold at 42 | ASCII | 13,526 |
+| `huge` | JetBrains Mono Light at 76 | Digits and clock characters | 5,344 |
+| `giant` | Open Sans Light at 120 | Digits and `:` | 6,018 |
+| `condensed` | JetBrains Mono Bold at 48, squeezed to 70% width | Digits and clock characters | 1,850 |
+
+`seven_segment` and `dot_matrix` are drawn from segments and dots, so they take no font data. The
+fonts are built into the firmware for now, 47,919 B in all; they belong in the shared library.
 
 ### Widgets in the host
 
 | Widget | Drawn with | Notes |
 |---|---|---|
-| `Column`, `Row`, `Stack` | rlvgl container | Transparent unless they have a `background`. |
-| `Label` | rlvgl label | One line, clipped to its box. `align` places the text across; it is centred down. Wrapping and `long_mode` are not done yet. |
-| `Button` | rlvgl button with a label | The text is centred. `background` defaults to the theme's `surface`, and `radius` to 12. |
-| `Arc` | rlvgl arc | `background` is the track and `color` the filled part; `border_width` is the ring's thickness, 10 by default. Angles are turned by 90 degrees with the arc's rotation, so `0` to `360` is a whole ring. |
-| `Bar` | rlvgl bar | `background` is the track and `color` the filled part. |
-| `ClickArea` | rlvgl click area | Draws nothing; takes touches. |
-| `Led` | rlvgl LED | `value` is the brightness, 0 to 255. |
-| `Switch` | rlvgl switch | On when `value` is not 0. A tap sends `onChange` with the flipped value. |
-| `Slider` | rlvgl slider | A tap or drag sends `onChange` with the value under the finger. |
+| `Column`, `Row`, `Stack`, `Grid` | rlvgl container | Transparent unless they have a `background`. |
+| `Scroll`, `List` | rlvgl container | Drag to scroll; `onScrollEnd` when the drag ends. |
+| `Label` | rlvgl label | Wraps at spaces; `long_mode` scroll and clip work. `align` places the text across. |
+| `Button` | rlvgl button with a label or icon | `background` defaults to the theme's `surface`, and `radius` to 12. |
+| `Image`, `Icon` | The host's image drawing | Colour images as they are, masks in `color`. A missing image draws a placeholder box. |
+| `Arc` | rlvgl arc | `background` is the track and `color` the filled part; `border_width` is the ring's thickness. Not draggable yet. |
+| `Bar`, `Slider`, `Switch`, `Led`, `ClickArea` | rlvgl | A tap on a `Switch`, or a tap or drag on a `Slider`, sends `onChange`. |
+| `CellGrid` | The host | Cells from an array and a palette, with `gap` and shape; click and drag send `{value}`, the cell's index. |
+| `Line`, `Chart`, `Scale`, `AnalogClock` | The host | `Chart` draws one series. |
+| `ButtonMatrix` | The host | `"\n"` breaks rows; a press sends `{value}`; the button numbered `value` is highlighted. |
+| `Roller`, `Dropdown`, `Checkbox`, `Radio` | The host | A dropdown opens its list on a tap. |
 
-Every other widget is drawn as an empty box, with its `background` and border if it has them, and
-lays out its children like a `Column` if it holds any: `Grid`, `Scroll`, `List`, `Pages`, `Tabs`,
-`RichText`, `Image`, `Icon`, `AnimatedImage`, `Line`, `ArcLabel`, `Spinner`, `Chart`, `Scale`,
-`AnalogClock`, `Table`, `Calendar`, `ImageButton`, `Checkbox`, `Radio`, `Roller`, `Spinbox`,
-`Dropdown`, `ButtonMatrix`, `TextArea` and `Keyboard`. The `animate`, `step`, `image`, `icon`,
-`time`, `show_seconds` and `long_mode` properties are read but not used yet.
+`Pages`, `Tabs`, `RichText`, `AnimatedImage`, `ArcLabel`, `Spinner`, `Table`, `Calendar`,
+`ImageButton`, `Spinbox`, `TextArea` and `Keyboard` are still drawn as an empty box, with their
+`background` and border, laying out any children like a `Column`.
 
 ## Theming
 
@@ -735,13 +762,13 @@ The working memory below is measured from `neotime-runtime`; the rest is still a
 
 That is about 6.6 KB, which leaves the rest of the open app's 12 KB for a second app's state
 while a subscription runs. On the watch, `AppHost` holds the interpreter, the bindings and the
-state together in 5,544 B, measured with `size_of` for the watch's target.
+state together in 5,888 B, measured with `size_of` for the watch's target.
 
-The widgets themselves are allocated from the UI heap. Each widget of the open screen is a 276 B
+The widgets themselves are allocated from the UI heap. Each widget of the open screen is a 240 B
 node on the watch, measured the same way, plus its text. The stopwatch demo's screen of four widgets
-holds 1,327 B on the 64-bit computer, measured with a counting allocator in the host's tests, and
-peaks at 1,679 B while drawing. On the watch that screen is about 1.1 KB: four nodes and 15 bytes of
-text. At 276 B a widget, the 14 KB UI heap holds about 50 widgets, not the 128 an image may have.
+holds 1,016 B on the 64-bit computer, measured with a counting allocator in the host's tests, and
+peaks at 1,080 B while drawing. Nodes hold only values; each rlvgl widget is built when it is drawn
+and dropped afterwards. At 240 B a widget, the 14 KB UI heap holds about 55 widgets, not the 128 an image may have.
 
 ## Built so far
 

@@ -1,23 +1,16 @@
-//! One node per widget of the open screen: the values its properties hold, where layout put it,
-//! and the rlvgl widget that draws it.
+//! One node per widget of the open screen: the values its properties hold and where layout put it.
 //!
-//! Colours are kept as the app gave them, fixed or a theme reference, and only resolved when the
-//! rlvgl widget is built, so a new theme needs no app code to run.
+//! A node keeps only values. The rlvgl widget that draws it is built from them each time it is
+//! drawn and dropped after, so a screen costs little UI heap between redraws. Colours are kept as
+//! the app gave them, fixed or a theme reference, and resolved only when drawn, so a new theme
+//! needs no app code to run.
 
 use alloc::string::String;
 
-use neotime_runtime::{widgets::Property, ColorValue, Theme, ThemeColor, WidgetKind};
-use rlvgl_core::{
-    renderer::Renderer,
-    style::Style,
-    widget::{Color, Rect, Widget},
-};
-use rlvgl_widgets::{
-    arc::Arc, bar::Bar, button::Button, click_area::ClickArea, container::Container, label::Label, led::Led,
-    slider::Slider, switch::Switch,
-};
+use neotime_runtime::{widgets::Property, ColorValue, Theme, ThemeColor, Value, WidgetKind};
+use rlvgl_core::widget::{Color, Rect};
 
-use crate::fonts::{line_height, text_width, FontName};
+use crate::fonts::FontName;
 
 // ============================================================================
 // Property values
@@ -75,13 +68,54 @@ impl Align {
     }
 }
 
+/// Where a container puts its children along its flow, or across it for `align_items`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Placement {
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+    Stretch,
+}
+
+impl Placement {
+    pub fn from_value(value: i32) -> Option<Placement> {
+        match value {
+            0 => Some(Placement::Start),
+            1 => Some(Placement::Center),
+            2 => Some(Placement::End),
+            3 => Some(Placement::SpaceBetween),
+            4 => Some(Placement::Stretch),
+            _ => None,
+        }
+    }
+}
+
+/// What a label does with text wider than its box.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LongMode {
+    Wrap,
+    Scroll,
+    Clip,
+}
+
+impl LongMode {
+    pub fn from_value(value: i32) -> LongMode {
+        match value {
+            1 => LongMode::Scroll,
+            2 => LongMode::Clip,
+            _ => LongMode::Wrap,
+        }
+    }
+}
+
 /// A property's value once read: a number, or text for `text`.
 pub enum PropertyValue<'text> {
     Number(i64),
     Text(&'text str),
 }
 
-/// What a widget's properties hold, apart from its text, which its rlvgl widget keeps.
+/// What the common properties of a widget hold.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Settings {
     pub x: Option<i32>,
@@ -91,6 +125,7 @@ pub struct Settings {
     pub grow: i32,
     pub padding: i32,
     pub margin: i32,
+    pub gap: i32,
     pub background: Option<ColorValue>,
     pub color: Option<ColorValue>,
     pub border_color: Option<ColorValue>,
@@ -98,15 +133,25 @@ pub struct Settings {
     pub radius: Option<i32>,
     pub font: FontName,
     pub align: Option<Align>,
+    pub justify: Placement,
+    pub align_items: Option<Placement>,
+    pub long_mode: LongMode,
     pub visible: bool,
+    pub disabled: bool,
+    pub opacity: u8,
     pub value: i32,
     pub minimum: i32,
     pub maximum: i32,
     pub start_angle: Option<i32>,
     pub end_angle: Option<i32>,
+    /// A Grid's or ButtonMatrix's columns, or a CellGrid's.
+    pub columns: u16,
+    /// The state array the widget's main array property names: cells, options, points, series or labels.
+    pub array: Option<u8>,
 }
 
 const DEFAULT_MAXIMUM: i32 = 100;
+pub const OPAQUE: u8 = 255;
 
 impl Default for Settings {
     fn default() -> Self {
@@ -118,6 +163,7 @@ impl Default for Settings {
             grow: 0,
             padding: 0,
             margin: 0,
+            gap: 0,
             background: None,
             color: None,
             border_color: None,
@@ -125,12 +171,95 @@ impl Default for Settings {
             radius: None,
             font: FontName::Normal,
             align: None,
+            justify: Placement::Start,
+            align_items: None,
+            long_mode: LongMode::Wrap,
             visible: true,
+            disabled: false,
+            opacity: OPAQUE,
             value: 0,
             minimum: 0,
             maximum: DEFAULT_MAXIMUM,
             start_angle: None,
             end_angle: None,
+            columns: 0,
+            array: None,
+        }
+    }
+}
+
+/// The properties only some kinds of widget have.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Extra {
+    None,
+    CellGrid {
+        rows: u16,
+        cell_size: u16,
+        cell_gap: u16,
+        cell_shape: u8,
+        palette: Option<u8>,
+    },
+    Scale {
+        ticks: u16,
+        major_every: u16,
+        skip: Option<u8>,
+        labels: Option<u8>,
+        needle_color: Option<ColorValue>,
+        major_color: Option<ColorValue>,
+    },
+    AnalogClock {
+        time: Value,
+        show_seconds: bool,
+        hand_style: u8,
+        hour_color: Option<ColorValue>,
+        minute_color: Option<ColorValue>,
+        second_color: Option<ColorValue>,
+        hour_length: Option<u16>,
+        minute_length: Option<u16>,
+        second_length: Option<u16>,
+    },
+    Image {
+        reference: Option<i32>,
+        recolor: Option<ColorValue>,
+    },
+}
+
+impl Extra {
+    pub fn for_kind(kind: WidgetKind) -> Extra {
+        match kind {
+            WidgetKind::CellGrid => Extra::CellGrid {
+                rows: 0,
+                cell_size: 0,
+                cell_gap: 0,
+                cell_shape: 0,
+                palette: None,
+            },
+            WidgetKind::Scale => Extra::Scale {
+                ticks: 0,
+                major_every: 0,
+                skip: None,
+                labels: None,
+                needle_color: None,
+                major_color: None,
+            },
+            WidgetKind::AnalogClock => Extra::AnalogClock {
+                time: 0,
+                show_seconds: false,
+                hand_style: 0,
+                hour_color: None,
+                minute_color: None,
+                second_color: None,
+                hour_length: None,
+                minute_length: None,
+                second_length: None,
+            },
+            WidgetKind::Image | WidgetKind::Icon | WidgetKind::Button | WidgetKind::ImageButton => {
+                Extra::Image {
+                    reference: None,
+                    recolor: None,
+                }
+            }
+            _ => Extra::None,
         }
     }
 }
@@ -138,6 +267,15 @@ impl Default for Settings {
 /// Clamps a 64-bit app value into the 32 bits a widget holds.
 fn to_i32(value: i64) -> i32 {
     value.clamp(i32::MIN as i64, i32::MAX as i64) as i32
+}
+
+fn to_u16(value: i64) -> u16 {
+    value.clamp(0, u16::MAX as i64) as u16
+}
+
+/// An array property's state variable, from the constant the image gives.
+fn to_variable(value: i64) -> Option<u8> {
+    u8::try_from(value).ok()
 }
 
 /// Stores `new` in `place` and says whether that changed it.
@@ -148,22 +286,10 @@ fn replace<Value: PartialEq>(place: &mut Value, new: Value) -> bool {
 }
 
 // ============================================================================
-// Default looks
+// Colours
 // ============================================================================
 
-const BUTTON_RADIUS: i32 = 12;
-const BAR_RADIUS: i32 = 4;
-const ARC_STROKE_WIDTH: i32 = 10;
-
-/// App angles count clockwise from twelve o'clock and rlvgl's from three, so arcs turn back 90 degrees.
-const TWELVE_TO_RIGHT_IN_DEGREES: i32 = -90;
-
-/// An arc's default gap at the bottom, in app degrees: from about eight o'clock round to four.
-const ARC_DEFAULT_START_ANGLE: i32 = 225;
-const ARC_DEFAULT_END_ANGLE: i32 = 135;
-const BORDER_WIDTH: i32 = 0;
-const OPAQUE: u8 = 255;
-const TRANSPARENT: Color = Color(0, 0, 0, 0);
+pub const TRANSPARENT: Color = Color(0, 0, 0, 0);
 
 /// Spreads an RGB565 colour to rlvgl's eight bits a channel.
 pub fn to_color(rgb565: u16) -> Color {
@@ -178,108 +304,12 @@ pub fn to_color(rgb565: u16) -> Color {
     )
 }
 
-fn resolve(color: Option<ColorValue>, fallback: ThemeColor, theme: &Theme) -> Color {
+pub fn resolve(color: Option<ColorValue>, fallback: ThemeColor, theme: &Theme) -> Color {
     to_color(color.unwrap_or(ColorValue::Theme(fallback)).resolve(theme))
 }
 
-fn resolve_or_clear(color: Option<ColorValue>, theme: &Theme) -> Color {
+pub fn resolve_or_clear(color: Option<ColorValue>, theme: &Theme) -> Color {
     color.map_or(TRANSPARENT, |color| to_color(color.resolve(theme)))
-}
-
-fn to_u8(value: i32) -> u8 {
-    value.clamp(0, u8::MAX as i32) as u8
-}
-
-// ============================================================================
-// Hosted widgets
-// ============================================================================
-
-/// The rlvgl widgets that draw one node.
-pub enum HostedWidget {
-    /// Column, Row, Stack and any widget not mapped yet: a box with an optional background.
-    Container(Container),
-    Label {
-        frame: Container,
-        label: Label,
-    },
-    Button {
-        body: Button,
-        caption: Label,
-    },
-    Arc(Arc),
-    Bar(Bar),
-    ClickArea(ClickArea),
-    Led(Led),
-    Switch(Switch),
-    Slider(Slider),
-}
-
-impl HostedWidget {
-    pub fn text(&self) -> &str {
-        match self {
-            HostedWidget::Label { label, .. } => label.text(),
-            HostedWidget::Button { caption, .. } => caption.text(),
-            _ => "",
-        }
-    }
-
-    fn set_text(&mut self, text: &str) {
-        match self {
-            HostedWidget::Label { label, .. } => label.set_text(text),
-            HostedWidget::Button { caption, .. } => caption.set_text(text),
-            _ => {}
-        }
-    }
-
-    pub fn draw(&self, renderer: &mut dyn Renderer) {
-        match self {
-            HostedWidget::Container(container) => container.draw(renderer),
-            HostedWidget::Label { frame, label } => {
-                frame.draw(renderer);
-                label.draw(renderer);
-            }
-            HostedWidget::Button { body, caption } => {
-                body.draw(renderer);
-                caption.draw(renderer);
-            }
-            HostedWidget::Arc(arc) => arc.draw(renderer),
-            HostedWidget::Bar(bar) => bar.draw(renderer),
-            HostedWidget::ClickArea(click_area) => click_area.draw(renderer),
-            HostedWidget::Led(led) => led.draw(renderer),
-            HostedWidget::Switch(switch) => switch.draw(renderer),
-            HostedWidget::Slider(slider) => slider.draw(renderer),
-        }
-    }
-}
-
-/// Whether a widget kind has an rlvgl widget of its own here, rather than a plain box.
-pub fn is_mapped(kind: WidgetKind) -> bool {
-    use WidgetKind::*;
-    matches!(
-        kind,
-        Column | Row | Stack | Label | Button | Arc | Bar | ClickArea | Led | Switch | Slider
-    )
-}
-
-/// A blank widget for a node, before its properties are read and layout places it.
-pub fn empty_widget(kind: WidgetKind) -> HostedWidget {
-    let nowhere = Rect {
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
-    };
-    match kind {
-        WidgetKind::Label => HostedWidget::Label {
-            frame: Container::new(nowhere),
-            label: Label::new(String::new(), nowhere),
-        },
-        WidgetKind::Button => HostedWidget::Button {
-            body: Button::new(String::new(), nowhere),
-            caption: Label::new(String::new(), nowhere),
-        },
-        _ => HostedWidget::Container(Container::new(nowhere)),
-    }
 }
 
 // ============================================================================
@@ -294,31 +324,86 @@ pub struct Node {
     pub subtree_end: u8,
     pub parent: Option<u8>,
     pub settings: Settings,
+    pub extra: Extra,
+    pub text: String,
+    /// The size the widget's content wants, worked out by the host from images and arrays.
+    pub content_width: i16,
+    pub content_height: i16,
     pub bounds: Rect,
+    /// The part of the screen the widget may draw on: its parents' boxes where they clip, such as a Scroll.
+    pub clip: Rect,
     /// Whether the widget and every widget around it is visible.
     pub shown: bool,
+    /// How far a Scroll or List has been scrolled down.
+    pub scroll_offset: i16,
+    /// Whether a Dropdown has its list open.
+    pub is_open: bool,
+    /// How many options a Dropdown offers, for the height of its open list.
+    pub option_count: u8,
     /// Where the widget was last drawn, so moving or hiding it can clear that area.
     pub drawn_bounds: Option<Rect>,
-    pub widget: HostedWidget,
 }
 
 impl Node {
+    pub fn new(
+        widget_index: u16,
+        kind: WidgetKind,
+        subtree_end: u8,
+        parent: Option<u8>,
+        screen: Rect,
+    ) -> Node {
+        Node {
+            widget_index,
+            kind,
+            subtree_end,
+            parent,
+            settings: Settings::default(),
+            extra: Extra::for_kind(kind),
+            text: String::new(),
+            content_width: 0,
+            content_height: 0,
+            bounds: screen,
+            clip: screen,
+            shown: false,
+            scroll_offset: 0,
+            is_open: false,
+            option_count: 0,
+            drawn_bounds: None,
+        }
+    }
+
     pub fn text(&self) -> &str {
-        self.widget.text()
+        &self.text
+    }
+
+    /// The area the widget covers on screen, which for an open Dropdown includes its list.
+    pub fn covered_area(&self) -> Option<Rect> {
+        if !self.shown {
+            return None;
+        }
+        let area = match self.is_open {
+            true => crate::drawing::open_list_area(self),
+            false => self.bounds,
+        };
+        area.intersect(self.clip)
     }
 
     /// Stores one property's value and says whether anything visible changed.
     pub fn apply(&mut self, property: Property, value: PropertyValue) -> bool {
         let number = match value {
             PropertyValue::Text(text) => {
-                if property != Property::Text || self.widget.text() == text {
+                if property != Property::Text || self.text == text {
                     return false;
                 }
-                self.widget.set_text(text);
+                self.text.clear();
+                self.text.push_str(text);
                 return true;
             }
             PropertyValue::Number(number) => number,
         };
+        if self.apply_extra(property, number) {
+            return true;
+        }
         let small = to_i32(number);
         let color = ColorValue::from_value(number);
         let settings = &mut self.settings;
@@ -331,6 +416,7 @@ impl Node {
             Property::Grow => replace(&mut settings.grow, small.max(0)),
             Property::Padding => replace(&mut settings.padding, small.max(0)),
             Property::Margin => replace(&mut settings.margin, small.max(0)),
+            Property::Gap => replace(&mut settings.gap, small.max(0)),
             Property::Background => color.is_some() && replace(&mut settings.background, color),
             Property::Color => color.is_some() && replace(&mut settings.color, color),
             Property::BorderColor => color.is_some() && replace(&mut settings.border_color, color),
@@ -338,26 +424,98 @@ impl Node {
             Property::Radius => replace(&mut settings.radius, Some(small.max(0))),
             Property::Font => replace(&mut settings.font, FontName::from_value(small)),
             Property::Align => replace(&mut settings.align, Align::from_value(small)),
+            Property::Justify => replace(
+                &mut settings.justify,
+                Placement::from_value(small).unwrap_or(Placement::Start),
+            ),
+            Property::AlignItems => replace(&mut settings.align_items, Placement::from_value(small)),
+            Property::LongMode => replace(&mut settings.long_mode, LongMode::from_value(small)),
             Property::Visible => replace(&mut settings.visible, number != 0),
+            Property::Disabled => replace(&mut settings.disabled, number != 0),
+            Property::Opacity => replace(&mut settings.opacity, number.clamp(0, OPAQUE as i64) as u8),
             Property::Value => replace(&mut settings.value, small),
             Property::Minimum => replace(&mut settings.minimum, small),
             Property::Maximum => replace(&mut settings.maximum, small),
             Property::StartAngle => replace(&mut settings.start_angle, Some(small)),
             Property::EndAngle => replace(&mut settings.end_angle, Some(small)),
+            Property::Columns => replace(&mut settings.columns, to_u16(number)),
+            Property::Cells | Property::Options | Property::Points | Property::Series => {
+                replace(&mut settings.array, to_variable(number))
+            }
             _ => false,
         }
     }
 
-    /// Builds the node's rlvgl widgets again from its values, its place and the theme.
-    pub fn rebuild_widget(&mut self, theme: &Theme) {
-        let text: String = self.widget.text().into();
-        self.widget = build_widget(self.kind, &self.settings, text, self.bounds, theme);
+    /// Stores a property only some kinds have; says whether it was one and changed.
+    fn apply_extra(&mut self, property: Property, number: i64) -> bool {
+        let color = ColorValue::from_value(number);
+        let length = Some(to_u16(number));
+        match &mut self.extra {
+            Extra::CellGrid {
+                rows,
+                cell_size,
+                cell_gap,
+                cell_shape,
+                palette,
+            } => match property {
+                Property::Rows => replace(rows, to_u16(number)),
+                Property::CellSize => replace(cell_size, to_u16(number)),
+                Property::CellGap => replace(cell_gap, to_u16(number)),
+                Property::CellShape => replace(cell_shape, number.clamp(0, 2) as u8),
+                Property::Palette => replace(palette, to_variable(number)),
+                _ => false,
+            },
+            Extra::Scale {
+                ticks,
+                major_every,
+                skip,
+                labels,
+                needle_color,
+                major_color,
+            } => match property {
+                Property::Ticks => replace(ticks, to_u16(number)),
+                Property::MajorEvery => replace(major_every, to_u16(number)),
+                Property::Skip => replace(skip, to_variable(number)),
+                Property::Labels => replace(labels, to_variable(number)),
+                Property::NeedleColor => color.is_some() && replace(needle_color, color),
+                Property::MajorColor => color.is_some() && replace(major_color, color),
+                _ => false,
+            },
+            Extra::AnalogClock {
+                time,
+                show_seconds,
+                hand_style,
+                hour_color,
+                minute_color,
+                second_color,
+                hour_length,
+                minute_length,
+                second_length,
+            } => match property {
+                Property::Time => replace(time, number),
+                Property::ShowSeconds => replace(show_seconds, number != 0),
+                Property::HandStyle => replace(hand_style, number.clamp(0, 2) as u8),
+                Property::HourColor => color.is_some() && replace(hour_color, color),
+                Property::MinuteColor => color.is_some() && replace(minute_color, color),
+                Property::SecondColor => color.is_some() && replace(second_color, color),
+                Property::HourLength => replace(hour_length, length),
+                Property::MinuteLength => replace(minute_length, length),
+                Property::SecondLength => replace(second_length, length),
+                _ => false,
+            },
+            Extra::Image { reference, recolor } => match property {
+                Property::Image | Property::Icon => replace(reference, Some(to_i32(number))),
+                Property::Recolor => color.is_some() && replace(recolor, color),
+                _ => false,
+            },
+            Extra::None => false,
+        }
     }
 
     /// The colour behind the node's own content, if it paints one.
     pub fn own_background(&self, theme: &Theme) -> Option<Color> {
         let default = match self.kind {
-            WidgetKind::Button => Some(ColorValue::Theme(ThemeColor::Surface)),
+            WidgetKind::Button | WidgetKind::Dropdown => Some(ColorValue::Theme(ThemeColor::Surface)),
             _ => None,
         };
         match self.kind {
@@ -371,30 +529,25 @@ impl Node {
                 .map(|color| to_color(color.resolve(theme))),
         }
     }
-}
 
-fn frame_style(settings: &Settings, background: Color, default_radius: i32, theme: &Theme) -> Style {
-    Style {
-        bg_color: background,
-        border_color: resolve(settings.border_color, ThemeColor::Muted, theme),
-        border_width: to_u8(settings.border_width.unwrap_or(BORDER_WIDTH)),
-        alpha: OPAQUE,
-        radius: to_u8(settings.radius.unwrap_or(default_radius)),
-    }
-}
-
-/// Where a line of text sits inside a box, by `align` across and centred down.
-pub fn text_box(bounds: Rect, settings: &Settings, text: &str, default_align: Align) -> Rect {
-    let font = settings.font.metrics();
-    let inner = inset(bounds, settings.padding);
-    let width = text_width(font, text).min(inner.width.max(0));
-    let height = line_height(font);
-    let align = settings.align.unwrap_or(default_align);
-    Rect {
-        x: inner.x + align.offset(inner.width, width),
-        y: inner.y + Align::Center.offset(inner.height, height),
-        width,
-        height,
+    /// The state arrays the widget shows, which redraw it when a handler changes them.
+    pub fn arrays_read(&self) -> u64 {
+        let mut variables = 0u64;
+        let mut add = |variable: Option<u8>| {
+            if let Some(variable) = variable.filter(|&variable| variable < 64) {
+                variables |= 1 << variable;
+            }
+        };
+        add(self.settings.array);
+        match self.extra {
+            Extra::CellGrid { palette, .. } => add(palette),
+            Extra::Scale { skip, labels, .. } => {
+                add(skip);
+                add(labels);
+            }
+            _ => {}
+        }
+        variables
     }
 }
 
@@ -408,96 +561,36 @@ pub fn inset(rect: Rect, amount: i32) -> Rect {
     }
 }
 
-fn caption_label(text: String, place: Rect, settings: &Settings, theme: &Theme) -> Label {
-    let mut label = Label::new(text, place);
-    label.style.bg_color = TRANSPARENT;
-    label.set_font(settings.font.metrics());
-    label.set_text_color(resolve(settings.color, ThemeColor::Text, theme));
-    label
-}
-
-fn build_widget(
-    kind: WidgetKind,
-    settings: &Settings,
-    text: String,
-    bounds: Rect,
-    theme: &Theme,
-) -> HostedWidget {
-    let accent = |color: Option<ColorValue>| resolve(color, ThemeColor::Accent, theme);
-    let track = |color: Option<ColorValue>| resolve(color, ThemeColor::Surface, theme);
-
-    match kind {
-        WidgetKind::Label => {
-            let mut frame = Container::new(bounds);
-            frame.style = frame_style(settings, resolve_or_clear(settings.background, theme), 0, theme);
-            let place = text_box(bounds, settings, &text, Align::Start);
-            HostedWidget::Label {
-                frame,
-                label: caption_label(text, place, settings, theme),
-            }
-        }
-        WidgetKind::Button => {
-            let mut body = Button::new(String::new(), bounds);
-            *body.style_mut() = frame_style(settings, track(settings.background), BUTTON_RADIUS, theme);
-            let place = text_box(bounds, settings, &text, Align::Center);
-            HostedWidget::Button {
-                body,
-                caption: caption_label(text, place, settings, theme),
-            }
-        }
-        WidgetKind::Arc => {
-            let mut arc = Arc::new(bounds, settings.minimum, settings.maximum);
-            let (start, end) = match (settings.start_angle, settings.end_angle) {
-                (Some(start), Some(end)) => (start, end),
-                _ => (ARC_DEFAULT_START_ANGLE, ARC_DEFAULT_END_ANGLE),
-            };
-            arc.set_bg_angles(start, end);
-            arc.set_rotation(TWELVE_TO_RIGHT_IN_DEGREES);
-            arc.set_value(settings.value);
-            arc.style.border_color = track(settings.background);
-            arc.style.border_width = to_u8(settings.border_width.unwrap_or(ARC_STROKE_WIDTH));
-            arc.indicator_color = accent(settings.color);
-            arc.knob_color = TRANSPARENT;
-            HostedWidget::Arc(arc)
-        }
-        WidgetKind::Bar => {
-            let mut bar = Bar::new(bounds, settings.minimum, settings.maximum);
-            bar.set_value(settings.value);
-            bar.style = frame_style(settings, track(settings.background), BAR_RADIUS, theme);
-            bar.indicator_color = accent(settings.color);
-            HostedWidget::Bar(bar)
-        }
-        WidgetKind::Led => {
-            let mut led = Led::new(bounds);
-            led.set_color(accent(settings.color));
-            led.set_brightness(to_u8(settings.value));
-            HostedWidget::Led(led)
-        }
-        WidgetKind::Switch => {
-            let mut switch = Switch::new(bounds);
-            let is_on = settings.value != 0;
-            let on_track = if is_on {
-                accent(settings.background)
-            } else {
-                track(settings.background)
-            };
-            switch.style = frame_style(settings, on_track, bounds.height / 2, theme);
-            switch.knob_color = resolve(settings.color, ThemeColor::Text, theme);
-            switch.set_on(is_on);
-            HostedWidget::Switch(switch)
-        }
-        WidgetKind::Slider => {
-            let mut slider = Slider::new(bounds, settings.minimum, settings.maximum);
-            slider.style = frame_style(settings, track(settings.background), bounds.height / 2, theme);
-            slider.knob_color = accent(settings.color);
-            slider.set_value(settings.value);
-            HostedWidget::Slider(slider)
-        }
-        WidgetKind::ClickArea => HostedWidget::ClickArea(ClickArea::new(bounds)),
-        _ => {
-            let mut container = Container::new(bounds);
-            container.style = frame_style(settings, resolve_or_clear(settings.background, theme), 0, theme);
-            HostedWidget::Container(container)
-        }
-    }
+/// Whether a widget kind is drawn as itself here, rather than as a plain box.
+pub fn is_mapped(kind: WidgetKind) -> bool {
+    use WidgetKind::*;
+    matches!(
+        kind,
+        Column
+            | Row
+            | Stack
+            | Grid
+            | Scroll
+            | List
+            | Label
+            | Button
+            | Arc
+            | Bar
+            | ClickArea
+            | Led
+            | Switch
+            | Slider
+            | CellGrid
+            | Line
+            | Scale
+            | AnalogClock
+            | Chart
+            | Image
+            | Icon
+            | ButtonMatrix
+            | Roller
+            | Dropdown
+            | Checkbox
+            | Radio
+    )
 }

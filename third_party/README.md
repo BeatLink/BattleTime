@@ -11,3 +11,13 @@ copied unchanged from a local checkout of InfiniTime (github.com/InfiniTimeOrg/I
 | `infinitime/pine_logo.png` | `src/resources/images/` | InfiniTime, GPL-3.0-or-later (`LICENSE`) |
 
 Despite its name, the Font Awesome file is a plain TrueType font.
+
+## Fonts
+
+`tools/generate_fonts.py` makes the app host's fonts (`app-host/fonts/*.ntfont`) from these, copied
+unchanged from InfiniTime's `src/displayapp/fonts/` at the same commit.
+
+| File | Licence |
+|---|---|
+| `fonts/JetBrainsMono-Bold.ttf`, `-ExtraBold.ttf`, `-Light.ttf` | SIL OFL 1.1 (`fonts/JetBrainsMono-OFL.txt`, from the JetBrains Mono source package) |
+| `fonts/OpenSans-Light.ttf` | Apache 2.0 (`fonts/OpenSans-LICENSE-2.0.txt`) |

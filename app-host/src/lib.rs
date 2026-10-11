@@ -10,19 +10,25 @@
 
 extern crate alloc;
 
+mod drawing;
 pub mod fonts;
 mod host;
 mod layout;
 mod nodes;
+mod subscriptions;
 mod system;
+mod text;
 
 #[cfg(any(test, feature = "demo"))]
 pub mod demo;
 
-pub use host::{AppHost, OpenError, SCREEN_AREA, SCREEN_HISTORY_DEPTH};
+pub use fonts::FontName;
+pub use host::{AppHost, OpenError, LARGEST_SAVED_STATE_BYTES, SCREEN_AREA, SCREEN_HISTORY_DEPTH};
 pub use nodes::{is_mapped, Align, Length};
 pub use rlvgl_core::widget::Rect;
+pub use subscriptions::{BatteryChange, CallKind, MotionKind, PushedEvent};
 pub use system::{AppEffect, AppFailure, EventResult, System, Touch};
+pub use text::WrappedLines;
 
 #[cfg(test)]
 mod tests;

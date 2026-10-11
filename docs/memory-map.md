@@ -32,6 +32,9 @@ firmware image, so it runs in place from the internal flash, with the chip's ins
 turned on, and never needs copying into RAM. The figure is a planned budget, to be replaced by
 the measured size once the runtime is built. See [app-runtime.md](app-runtime.md#the-runtime).
 
+Also inside the firmware, the app host's fonts take 47,919 B until they move to the shared library;
+see [app-runtime.md](app-runtime.md#property-values).
+
 Also inside the firmware, the accelerometer's configuration files from Bosch take 6 KB for each chip
 built in, 12 KB with both the BMA421 and the BMA425 (see the `neotime-accelerometer` cargo
 features).
@@ -66,9 +69,9 @@ the budget below is still planned:
 
 | Region | Budget | Holds | Status |
 |---|---|---|---|
-| UI heap | 14 KB | The heap that `rlvgl`'s widgets allocate from. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps one 276 B node per widget of the open screen here, plus its text, so about 50 widgets fit. The stopwatch demo's screen is about 1.1 KB on the watch; on the computer it holds 1,327 B and peaks at 1,679 B while drawing. | Partly measured: node size with `size_of` for the watch, the demo screen with a counting allocator on the computer |
+| UI heap | 14 KB | The heap that `rlvgl`'s widgets allocate from. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps one 240 B node per widget of the open screen here, plus its text, so about 55 widgets fit. The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. | Partly measured: node size with `size_of` for the watch, the demo screen with a counting allocator on the computer |
 | Bluetooth | 12 KB | The controller and the TrouBLE host: connection state, packet buffers and the GATT tables. | Partly measured: the controller is 1.5 KB; TrouBLE's example with it is 12.0 KB in all, executor included |
-| Apps | 12 KB | Memory for the app that is open, read from its file in `/apps`. The runtime's working memory in it is measured: 1,792 B for the interpreter, 1,032 B for the bindings and 2,440 B for the state. `AppHost`, which holds all three, is 5,544 B. | Partly measured |
+| Apps | 12 KB | Memory for the app that is open, read from its file in `/apps`. The runtime's working memory in it is measured: 1,792 B for the interpreter, 1,032 B for the bindings and 2,440 B for the state. `AppHost`, which holds all three, is 5,888 B. | Partly measured |
 | Stack | 8 KB | The main stack, for interrupts and code that is not in a task. | Planned |
 | Tasks | 6 KB | Embassy's tasks. Each task's state is fixed in size when the firmware is built. | Planned |
 | Reserve | 4 KB | Left free, so a budget that runs over does not crash the watch. | Planned |

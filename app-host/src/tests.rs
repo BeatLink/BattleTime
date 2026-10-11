@@ -684,7 +684,8 @@ fn every_property_value_kind_is_applied() {
     assert_eq!(Length::from_value(30).of(200), 30);
     assert_eq!(Align::from_value(2), Some(Align::End));
     assert!(is_mapped(WidgetKind::Arc));
-    assert!(!is_mapped(WidgetKind::Chart));
+    assert!(is_mapped(WidgetKind::Chart));
+    assert!(!is_mapped(WidgetKind::TextArea));
 }
 
 // ============================================================================
@@ -819,4 +820,202 @@ fn arc_angles_count_clockwise_from_twelve() {
     }
     assert!(screen.count_in(ring_at(default, 30, 4), track) > 0);
     assert_eq!(screen.count_in(ring_at(default, 30, 56), track), 0);
+}
+
+// ============================================================================
+// Subscriptions
+// ============================================================================
+
+/// Variable 0 counts ticks of a one-second timer, variable 1 counts opens and variable 2 holds steps.
+fn subscriber_image(only_while_open: bool) -> Vec<u8> {
+    use neotime_runtime::subscriptions::{Subscription, SubscriptionKind, SubscriptionValue};
+    use Instruction::*;
+
+    let mut writer = ImageWriter::new("subscriber", "Subscriber", AppKind::App, 1);
+    writer.variable("ticks", ValueType::Int, true, 0);
+    writer.variable("opens", ValueType::Int, false, 0);
+    writer.variable("steps", ValueType::Int, false, 0);
+    let add_one_to = |writer: &mut ImageWriter, variable: u8| {
+        writer.handler(code(|code| {
+            code.emit(ReadState(variable))
+                .emit(PushSmall(1))
+                .emit(Add)
+                .emit(WriteState(variable));
+        }))
+    };
+    let count_tick = add_one_to(&mut writer, 0);
+    let count_open = add_one_to(&mut writer, 1);
+    let store_steps = writer.handler(code(|code| {
+        code.emit(ReadEvent(0)).emit(WriteState(2));
+    }));
+    let subscription = |kind, handler, value| Subscription {
+        kind,
+        only_while_open,
+        handler,
+        detail: 0,
+        days: 0,
+        value: SubscriptionValue::Constant(value),
+    };
+    writer.subscription(subscription(SubscriptionKind::Every, count_tick, 60_000));
+    writer.subscription(subscription(SubscriptionKind::Open, count_open, 0));
+    writer.subscription(subscription(SubscriptionKind::Steps, store_steps, 0));
+    let ticks_text = writer.expression(code(|code| {
+        code.emit(ReadState(0)).emit(FormatNumber(1));
+    }));
+    writer.widget(WidgetKind::Column, 1, &[]);
+    writer.widget(
+        WidgetKind::Label,
+        0,
+        &[(Property::Text, PropertySource::Expression(ticks_text))],
+    );
+    writer.build()
+}
+
+#[test]
+fn an_every_subscription_fires_on_time_and_sets_the_next_wakeup() {
+    let image = subscriber_image(false);
+    let mut system = FakeSystem::default();
+    // Timers line up with the clock, so this starts on a whole minute.
+    const START_TIME: Value = 1_000_020_000;
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    assert_eq!(host.next_wakeup(START_TIME), Some(START_TIME + 60_000));
+
+    host.tick(START_TIME + 59_999, &mut system);
+    assert_eq!(host.state().get(0).unwrap(), 0);
+    host.tick(START_TIME + 60_000, &mut system);
+    assert_eq!(host.state().get(0).unwrap(), 1);
+    assert_eq!(host.next_wakeup(START_TIME + 60_000), Some(START_TIME + 120_000));
+    assert!(host.needs_drawing());
+}
+
+#[test]
+fn open_subscriptions_run_each_time_the_app_comes_to_the_front() {
+    let image = subscriber_image(false);
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    assert_eq!(host.state().get(1).unwrap(), 1);
+    host.close(START_TIME + 1, &mut system);
+    host.bring_to_front(START_TIME + 2, &mut system);
+    assert_eq!(host.state().get(1).unwrap(), 2);
+}
+
+#[test]
+fn a_closed_app_keeps_background_timers_but_drops_open_only_ones() {
+    let mut system = FakeSystem::default();
+
+    let background = subscriber_image(false);
+    let mut host = AppHost::open(&background, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    host.close(START_TIME + 1, &mut system);
+    host.tick(START_TIME + 60_000, &mut system);
+    assert_eq!(host.state().get(0).unwrap(), 1);
+
+    let open_only = subscriber_image(true);
+    let mut host = AppHost::open(&open_only, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    host.close(START_TIME + 1, &mut system);
+    assert_eq!(host.next_wakeup(START_TIME + 1), None);
+    host.tick(START_TIME + 60_000, &mut system);
+    assert_eq!(host.state().get(0).unwrap(), 0);
+}
+
+#[test]
+fn a_pushed_event_hands_its_fields_to_the_handler() {
+    let image = subscriber_image(false);
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    host.deliver(
+        PushedEvent::Steps { steps_today: 4321 },
+        START_TIME + 1,
+        &mut system,
+    );
+    assert_eq!(host.state().get(2).unwrap(), 4321);
+}
+
+// ============================================================================
+// Saved state
+// ============================================================================
+
+#[test]
+fn saved_state_comes_back_when_the_app_is_opened_again() {
+    const START_TIME: Value = 1_000_020_000;
+    let image = subscriber_image(false);
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    host.tick(START_TIME + 60_000, &mut system);
+    host.tick(START_TIME + 120_000, &mut system);
+
+    let mut saved = vec![0; LARGEST_SAVED_STATE_BYTES];
+    let length = host.save_changed_state(&mut saved).unwrap().expect("ticks changed");
+    assert_eq!(host.save_changed_state(&mut saved).unwrap(), None);
+
+    let host = AppHost::open_with_saved_state(&image, DEFAULT_THEME, &saved[..length], START_TIME, &mut system)
+        .unwrap();
+    assert_eq!(host.state().get(0).unwrap(), 2);
+    // Opens are not persistent, so the new host counts only its own.
+    assert_eq!(host.state().get(1).unwrap(), 1);
+}
+
+#[test]
+fn saved_state_from_another_app_is_ignored() {
+    let image = subscriber_image(false);
+    let mut system = FakeSystem::default();
+    let host =
+        AppHost::open_with_saved_state(&image, DEFAULT_THEME, b"not saved state", START_TIME, &mut system).unwrap();
+    assert_eq!(host.state().get(0).unwrap(), 0);
+}
+
+// ============================================================================
+// Images and text
+// ============================================================================
+
+const MASK_SIDE: u16 = 8;
+
+/// One 8x8 fully covered mask image drawn in red, and a long label under it.
+fn image_and_text_image() -> Vec<u8> {
+    use neotime_runtime::resources::ImageFormat;
+
+    let mut writer = ImageWriter::new("pictures", "Pictures", AppKind::App, 1);
+    let long_text = writer.string("one two three four five six seven eight nine ten eleven twelve");
+    let square = writer.image_resource(
+        ImageFormat::Mask,
+        MASK_SIDE,
+        MASK_SIDE,
+        &[255; (MASK_SIDE * MASK_SIDE) as usize],
+    );
+    let constant = PropertySource::Constant;
+    writer.widget(WidgetKind::Column, 2, &[]);
+    writer.widget(
+        WidgetKind::Image,
+        0,
+        &[
+            (Property::Image, constant(square as i32)),
+            (Property::Color, constant(0xF800)),
+        ],
+    );
+    writer.widget(WidgetKind::Label, 0, &[(Property::Text, constant(long_text as i32))]);
+    writer.build()
+}
+
+#[test]
+fn a_mask_image_is_drawn_in_its_colour() {
+    let image = image_and_text_image();
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+    host.draw(&mut screen).unwrap();
+    let (bounds, shown) = host.widget_bounds(1).unwrap();
+    assert!(shown);
+    let red = screen.count_in(bounds, Rgb565::RED);
+    assert_eq!(red, (MASK_SIDE * MASK_SIDE) as usize);
+}
+
+#[test]
+fn a_long_label_wraps_onto_several_lines_inside_the_screen() {
+    let image = image_and_text_image();
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+    host.draw(&mut screen).unwrap();
+    let (bounds, _) = host.widget_bounds(2).unwrap();
+    assert!(contains(SCREEN_AREA, bounds));
+    assert!(bounds.height > 40, "one line would be about 20 pixels, got {bounds:?}");
 }
