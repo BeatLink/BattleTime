@@ -26,7 +26,7 @@ The PineTime is built around a Nordic nRF52832 chip: a 64 MHz Arm Cortex-M4F wit
 flowchart TB
     apps["Apps and watch faces<br/>(planned, loadable over BLE)"]
     runtime["App runtime<br/>(planned)"]
-    ui["UI toolkit<br/>(planned)"]
+    ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>(planned: power, events, settings, notifications)"]
     services["Services<br/>(planned: BLE, time, steps, storage, updates)"]
     drivers["Drivers<br/>drivers/display, drivers/vibrator, ..."]
@@ -54,8 +54,9 @@ Each layer uses only the layers below it.
   clock, the step count, files on the external flash, and firmware updates. **(planned)**
 - **System** runs the watch: it sleeps and wakes, turns button, touch and motion into events, and
   holds settings and notifications. **(planned)**
-- **UI toolkit** gives apps widgets, fonts and page transitions, drawn with `embedded-graphics`.
-  **(planned)**
+- **UI toolkit** gives apps widgets, fonts and page transitions. Widgets come from
+  [rlvgl](https://github.com/softoboros/rlvgl), a pure Rust rewrite of LVGL, and are drawn through
+  `embedded-graphics` onto the display driver. **(started: drawing works, nothing else yet)**
 - **App runtime** loads apps installed over BLE, starts and stops them, and passes them events.
   **(planned)**
 
@@ -75,12 +76,13 @@ NeoTime/
 ├── docs/
 │   ├── architecture.md
 │   └── coding-guidelines.md
-└── drivers/
-    ├── display/      neotime-display: the ST7789 screen
-    └── vibrator/     neotime-vibrator: the vibration motor
+├── drivers/
+│   ├── display/      neotime-display: the ST7789 screen
+│   └── vibrator/     neotime-vibrator: the vibration motor
+└── ui/               neotime-ui: draws rlvgl widgets on the screen
 ```
 
-Each driver is a `no_std` crate with its code in `src/lib.rs` and its tests in `src/tests.rs`. See
+Each driver, and the UI crate, is a `no_std` crate with its code in `src/lib.rs` and its tests in `src/tests.rs`. See
 [coding-guidelines.md](coding-guidelines.md) for how the code is written.
 
 ## Drivers
@@ -114,6 +116,26 @@ slides will be built on: draw the next page into memory that is off screen, then
   buzz, and `RING` is one second of ringing that is played again to keep ringing.
 - **Async and safe to cancel.** `vibrate` and `play` wait with an async delay, so other tasks keep
   running. If a pattern is cancelled part way, the motor is turned off.
+
+## UI toolkit (`ui`)
+
+`neotime-ui` lets [rlvgl](https://github.com/softoboros/rlvgl) widgets draw on the watch.
+`ScreenRenderer` wraps any `embedded-graphics` `DrawTarget` for `Rgb565`, such as the display
+driver's `Display`, and carries out rlvgl's drawing calls on it:
+
+- **No screen buffer.** A full 240x240 picture takes 115 KB, more than the watch's 64 KB of RAM, so
+  each rectangle, text run and image row goes straight to the display.
+- **See-through colours.** The display cannot be read back, so a partly transparent colour, such as
+  the soft edge of a letter, is mixed with a set background colour (`with_background_color`, black
+  by default). Fully transparent pixels are skipped, so what is underneath stays.
+- **Plain text.** `draw_text` uses an `embedded-graphics` mono font, 10x20 by default
+  (`with_font`). Widgets that use rlvgl's own fonts draw through its anti-aliased glyph path.
+- **Errors.** rlvgl's drawing calls cannot fail, so the first error from the screen is kept and
+  returned by `finish`.
+- **Scrolling.** Drawing goes through the display driver, so it follows the hardware scroll.
+
+rlvgl needs a heap (`alloc`), which the firmware will have to provide. Still to do: sizing that heap,
+touch input, page slides on the hardware scroll, and a desktop simulator.
 
 ## Building and testing
 
