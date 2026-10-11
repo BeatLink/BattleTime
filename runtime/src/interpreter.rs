@@ -452,6 +452,61 @@ impl Interpreter {
                 self.write_text(|writer| pattern::write_time(writer, &time, pattern, uses_24_hour_clock))?;
             }
             Join => self.join(call.image)?,
+            ToUpper => {
+                let value = self.pop()?;
+                let (source, length) = self.copy_of_text(call.image, value)?;
+                let text = core::str::from_utf8(&source[..length]).map_err(|_| Failure::BadText)?;
+                self.write_text(|writer| {
+                    for character in text.chars().flat_map(char::to_uppercase) {
+                        let mut encoded = [0u8; 4];
+                        writer.write_bytes(character.encode_utf8(&mut encoded).as_bytes())?;
+                    }
+                    Ok(())
+                })?;
+            }
+            TextLength => {
+                let value = self.pop()?;
+                let (source, length) = self.copy_of_text(call.image, value)?;
+                let text = core::str::from_utf8(&source[..length]).map_err(|_| Failure::BadText)?;
+                self.push(text.chars().count() as Value)?;
+            }
+            SliceText => {
+                let end = self.pop()?;
+                let start = self.pop()?;
+                let value = self.pop()?;
+                let (source, length) = self.copy_of_text(call.image, value)?;
+                let text = core::str::from_utf8(&source[..length]).map_err(|_| Failure::BadText)?;
+                let count = text.chars().count() as Value;
+                let first = javascript_index(start, count);
+                let last = javascript_index(end, count).max(first);
+                self.write_text(|writer| {
+                    for character in text.chars().skip(first as usize).take((last - first) as usize) {
+                        let mut encoded = [0u8; 4];
+                        writer.write_bytes(character.encode_utf8(&mut encoded).as_bytes())?;
+                    }
+                    Ok(())
+                })?;
+            }
+            PadStart => {
+                let code = self.pop()?;
+                let width = self.pop()?;
+                let value = self.pop()?;
+                let padding = u32::try_from(code)
+                    .ok()
+                    .and_then(char::from_u32)
+                    .ok_or(Failure::BadText)?;
+                let (source, length) = self.copy_of_text(call.image, value)?;
+                let text = core::str::from_utf8(&source[..length]).map_err(|_| Failure::BadText)?;
+                let missing = (width - text.chars().count() as Value).clamp(0, TEXT_BUFFER_BYTES as Value);
+                self.write_text(|writer| {
+                    let mut encoded = [0u8; 4];
+                    let padding_bytes = padding.encode_utf8(&mut encoded).as_bytes();
+                    for _ in 0..missing {
+                        writer.write_bytes(padding_bytes)?;
+                    }
+                    writer.write_bytes(text.as_bytes())
+                })?;
+            }
             TextFromCodes(array) => {
                 let count = self.pop()?;
                 let length = Self::array_placement(call.state, array)?.length as Value;
@@ -647,6 +702,20 @@ impl Interpreter {
         ))
     }
 
+    /// A copy of a text value's bytes, so new text can be written while reading it.
+    fn copy_of_text(
+        &self,
+        image: &AppImage,
+        value: Value,
+    ) -> Result<([u8; TEXT_BUFFER_BYTES], usize), Failure> {
+        let text = self.text(image, value)?;
+        let mut copy = [0u8; TEXT_BUFFER_BYTES];
+        copy.get_mut(..text.len())
+            .ok_or(Failure::TextBufferFull)?
+            .copy_from_slice(text.as_bytes());
+        Ok((copy, text.len()))
+    }
+
     /// Writes new text at the end of the text buffer and pushes a reference to it.
     fn write_text(
         &mut self,
@@ -698,5 +767,13 @@ impl Interpreter {
             }
             .to_value(),
         )
+    }
+}
+
+/// Turns a JavaScript `slice` index, which counts from the end when negative, into a position.
+fn javascript_index(index: Value, count: Value) -> Value {
+    match index < 0 {
+        true => (count + index).max(0),
+        false => index.min(count),
     }
 }

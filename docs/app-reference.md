@@ -146,7 +146,7 @@ when a screen opens. Each one takes the common props below plus its own.
 | `padding`, `margin` | Space inside and outside the widget. |
 | `background`, `color`, `border_color` | Colours, as `"#rrggbb"` or a theme name: `background`, `surface`, `text`, `muted`, `accent`, `success`, `warning` or `danger`. A theme name follows the user's theme, and changes with it without the app doing anything. |
 | `border_width`, `radius` | The border and corner rounding. |
-| `font` | `small`, `normal`, `medium` (about 30 px), `large`, `huge` or `giant` (about 120 px, digits and `:` only), or a display font: `seven_segment` (digits only), `dot_matrix` (digits and capital letters A to Z) or `condensed` (digits only). All are in the shared library. |
+| `font` | `small`, `normal`, `medium` (about 30 px), `large`, `huge` or `giant` (about 120 px, digits and `:` only), or a display font: `seven_segment` (about 76 px, digits only), `dot_matrix` (about 40 px, digits and capital letters A to Z) or `condensed` (about 48 px, digits only). Each display font has one size; another size would be a new font name. All are in the shared library. |
 | `align` | `start`, `center` or `end`. |
 | `visible` | Whether the widget is shown. `{condition && <Widget/>}` sets it. |
 | `animate` | A duration in milliseconds. A bound property that changes slides to its new value instead of jumping. |

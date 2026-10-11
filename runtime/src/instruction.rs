@@ -355,6 +355,14 @@ pub enum Instruction {
     Join,
     /// Takes a count and pushes text made of the first `count` elements of an array of character codes.
     TextFromCodes(u8),
+    /// Takes text and pushes it in capitals.
+    ToUpper,
+    /// Takes text and pushes how many characters it has.
+    TextLength,
+    /// Takes text, a start and an end, and pushes the characters between them, as JavaScript's `slice`.
+    SliceText,
+    /// Takes text, a width and a character code, and pushes the text padded in front up to the width.
+    PadStart,
     WriteState(u8),
     /// Takes an index and pushes that element of an array variable.
     ReadElement(u8),
@@ -396,7 +404,8 @@ impl Instruction {
             | BitOr | BitXor | ShiftLeft | ShiftRight | Equal | NotEqual | Less | LessOrEqual | Greater
             | GreaterOrEqual | Join => (2, 1),
             Negate | Absolute | BitNot | Not | IsNone | TimePart(_) | StartOf(_) | TextFromCodes(_)
-            | FormatNumber(_) | FormatDuration(_) | FormatTime(_) => (1, 1),
+            | ToUpper | TextLength | FormatNumber(_) | FormatDuration(_) | FormatTime(_) => (1, 1),
+            SliceText | PadStart => (3, 1),
             Jump(_) => (0, 0),
             Effect(kind) => (kind.argument_count(), 0),
         };
@@ -499,6 +508,10 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
         ),
         0x43 => (Join, 0),
         0x44 => (TextFromCodes(byte()?), 1),
+        0x45 => (ToUpper, 0),
+        0x46 => (TextLength, 0),
+        0x47 => (SliceText, 0),
+        0x48 => (PadStart, 0),
         0x50 => (WriteState(byte()?), 1),
         0x51 => (Effect(EffectKind::from_byte(byte()?).ok_or(unknown(byte()?))?), 1),
         0x60 => (ReadElement(byte()?), 1),
@@ -626,6 +639,10 @@ impl Instruction {
             }
             Join => put(&[0x43]),
             TextFromCodes(array) => put(&[0x44, array]),
+            ToUpper => put(&[0x45]),
+            TextLength => put(&[0x46]),
+            SliceText => put(&[0x47]),
+            PadStart => put(&[0x48]),
             WriteState(variable) => put(&[0x50, variable]),
             Effect(kind) => put(&[0x51, kind as u8]),
             ReadElement(variable) => put(&[0x60, variable]),

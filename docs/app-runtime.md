@@ -367,6 +367,10 @@ Each instruction is one opcode byte followed by its operands:
 | `42` | format time | pattern string, 2 bytes | Takes an instant and pushes the local time as text in the pattern. |
 | `43` | join | | Takes two texts and pushes them joined. |
 | `44` | text from codes | array, 1 byte | Takes a count and pushes text made of that many character codes from the start of the array. |
+| `45` | to upper | | Takes text and pushes it in capitals. |
+| `46` | text length | | Takes text and pushes how many characters it has. |
+| `47` | slice text | | Takes text, a start and an end, and pushes the characters between them; a negative position counts from the end, as JavaScript's `slice` does. |
+| `48` | pad start | | Takes text, a width and a character code, and pushes the text with that character added in front up to the width. |
 | `50` | write state | slot, 1 byte | Takes a value for a state variable. Handlers only. |
 | `51` | effect | effect, 1 byte | Takes the effect's arguments and records it. Handlers only. |
 | `60` | read element | array, 1 byte | Takes an index and pushes that element. An index outside the array fails the call. |

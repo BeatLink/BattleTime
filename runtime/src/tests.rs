@@ -1868,6 +1868,10 @@ fn every_instruction_decodes_to_itself() {
         TimePart(Part::Weekday),
         StartOf(TimeUnit::Day),
         TextFromCodes(6),
+        ToUpper,
+        TextLength,
+        SliceText,
+        PadStart,
         FormatNumber(3),
         FormatDuration(9),
         FormatTime(258),
@@ -2292,6 +2296,84 @@ fn arcs_and_click_areas_can_hold_widgets() {
     writer.set_child_count(area, 1);
 
     assert_eq!(verify(&AppImage::parse(&writer.build()).unwrap()), Ok(()));
+}
+
+// ============================================================================
+// Text functions
+// ============================================================================
+
+fn evaluate_text_with(builder: &mut ImageBuilder, code: Code) -> String {
+    builder.expression(code);
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut interpreter = Interpreter::new();
+    let value = interpreter
+        .evaluate_expression(&image, 0, &AppState::new(&image).unwrap(), &FakeSystem::default())
+        .unwrap();
+    interpreter.text(&image, value).unwrap().into()
+}
+
+#[test]
+fn puts_text_made_while_running_in_capitals() {
+    let mut builder = ImageBuilder::new();
+    let pattern = builder.string("ddd");
+
+    let text = evaluate_text_with(
+        &mut builder,
+        Code::new().long(SUNDAY_AFTERNOON).format_time(pattern).op(0x45),
+    );
+
+    assert_eq!(text, "SUN");
+}
+
+#[test]
+fn counts_characters_not_bytes() {
+    let mut builder = ImageBuilder::new();
+    let word = builder.string("café");
+
+    assert_eq!(
+        evaluate_with_builder(&mut builder, Code::new().text(word).op(0x46)),
+        4
+    );
+}
+
+fn evaluate_with_builder(builder: &mut ImageBuilder, code: Code) -> Value {
+    builder.expression(code);
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    Interpreter::new()
+        .evaluate_expression(&image, 0, &AppState::new(&image).unwrap(), &FakeSystem::default())
+        .unwrap()
+}
+
+#[test]
+fn slices_text_as_javascript_does() {
+    let mut builder = ImageBuilder::new();
+    let word = builder.string("Saturday");
+    let first_three = evaluate_text_with(&mut builder, Code::new().text(word).small(0).small(3).op(0x47));
+    let mut builder = ImageBuilder::new();
+    let word = builder.string("Saturday");
+    let last_three = evaluate_text_with(&mut builder, Code::new().text(word).small(-3).small(100).op(0x47));
+
+    assert_eq!(first_three, "Sat");
+    assert_eq!(last_three, "day");
+}
+
+#[test]
+fn pads_formatted_text_in_front() {
+    let mut builder = ImageBuilder::new();
+
+    let text = evaluate_text_with(
+        &mut builder,
+        Code::new()
+            .small(7)
+            .format_number(0)
+            .small(3)
+            .small(b' ' as i8)
+            .op(0x48),
+    );
+
+    assert_eq!(text, "  7");
 }
 
 // ============================================================================
