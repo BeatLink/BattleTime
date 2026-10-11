@@ -1,0 +1,381 @@
+// PineTimeStyle watch face, ported from InfiniTime's WatchFacePineTimeStyle, itself styled after TimeStyle for Pebble.
+// A coloured time panel on the left and a sidebar on the right with status icons, weather, a calendar and a step gauge.
+// InfiniTime's pop-up colour and option buttons are a settings screen here, opened by a long press.
+
+import { computed } from "@preact/signals";
+import {
+  back,
+  battery_percent,
+  day_of,
+  define_app,
+  format_number,
+  go,
+  hour_of,
+  is_charging,
+  is_phone_connected,
+  minute_of,
+  month_of,
+  now,
+  persisted,
+  random_int,
+  second_of,
+  settings,
+  steps_today,
+  unread_notifications,
+  weather,
+  weekday_of,
+  type Color,
+  type WeatherCondition,
+  type WeatherEvent,
+} from "neotime";
+import { icon_named, icons } from "neotime/icons";
+import { Arc, Button, Column, Icon, Label, Row, Screen } from "neotime/widgets";
+
+// ============================================================================
+// State
+// ============================================================================
+
+/** InfiniTime's colour choices, in its order. */
+const COLORS: Color[] = [
+  "#ffffff",
+  "#c0c0c0",
+  "#808080",
+  "#000000",
+  "#ff0000",
+  "#b00000",
+  "#ffff00",
+  "#b0b000",
+  "#00ff00",
+  "#00b000",
+  "#00ffff",
+  "#00b0b0",
+  "#0000ff",
+  "#0000b0",
+  "#ff00ff",
+  "#b000b0",
+  "#ffa500",
+  "#ffaec9",
+];
+
+const COLOR_NAMES = [
+  "White",
+  "Silver",
+  "Gray",
+  "Black",
+  "Red",
+  "Maroon",
+  "Yellow",
+  "Olive",
+  "Lime",
+  "Green",
+  "Cyan",
+  "Teal",
+  "Blue",
+  "Navy",
+  "Magenta",
+  "Purple",
+  "Orange",
+  "Pink",
+];
+
+const COLOR_COUNT = 18;
+const WHITE = 0;
+const BLACK = 3;
+const TEAL = 11;
+
+const WEEKDAY_NAMES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+const MONTH_NAMES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+const GAUGE_STYLE_FULL = 0;
+const GAUGE_STYLE_HALF = 1;
+const GAUGE_STYLE_NUMERIC = 2;
+const GAUGE_STYLE_NAMES = ["Full", "Half", "Numeric"];
+
+/** Places in `COLORS` for the time digits, the sidebar and the time panel. */
+const time_color = persisted("time_color", TEAL);
+const bar_color = persisted("bar_color", TEAL);
+const background_color = persisted("background_color", BLACK);
+
+/** How the sidebar shows steps: a full ring, a half ring with seconds, or a number. */
+const gauge_style = persisted("gauge_style", GAUGE_STYLE_FULL);
+
+const shows_weather = persisted("shows_weather", true);
+
+/** The latest temperature from the phone, in degrees Celsius. */
+const weather_temperature = persisted("weather_temperature", 0);
+
+/** The latest condition from the phone, or "none" before any forecast arrives. */
+const weather_condition = persisted<WeatherCondition | "none">("weather_condition", "none");
+
+// ============================================================================
+// Derived values
+// ============================================================================
+
+const uses_24_hour_clock = computed(() => settings.uses_24_hour_clock.value);
+
+const display_hour = computed(() => {
+  const hour = hour_of(now.value);
+  return uses_24_hour_clock.value ? hour : hour % 12 === 0 ? 12 : hour % 12;
+});
+
+/** The steps as a share of the goal, wrapping past 100 as InfiniTime's gauge does. */
+const step_gauge_value = computed(
+  () => Math.floor(steps_today.value / Math.max(1, Math.floor(settings.step_goal.value / 100))) % 100,
+);
+
+/** The gauge is drawn black on a white sidebar and white on any other. */
+const needle_color = computed<Color>(() => (bar_color.value === WHITE ? "#000000" : "#ffffff"));
+
+const temperature_text = computed(() =>
+  weather_condition.value === "none"
+    ? "--"
+    : `${settings.uses_metric_units.value ? weather_temperature.value : Math.round((weather_temperature.value * 9) / 5) + 32}°`,
+);
+
+/** The calendar sits lower when the weather is shown above it. */
+const calendar_top = computed(() => (shows_weather.value ? 123 : 103));
+
+// ============================================================================
+// Handlers
+// ============================================================================
+
+function next_color(place: number): number {
+  return place + 1 < COLOR_COUNT ? place + 1 : 0;
+}
+
+function previous_color(place: number): number {
+  return place > 0 ? place - 1 : COLOR_COUNT - 1;
+}
+
+function change_time_color(is_forward: boolean) {
+  let place = is_forward ? next_color(time_color.value) : previous_color(time_color.value);
+  if (place === background_color.value) place = is_forward ? next_color(place) : previous_color(place);
+  time_color.value = place;
+}
+
+function change_bar_color(is_forward: boolean) {
+  let place = is_forward ? next_color(bar_color.value) : previous_color(bar_color.value);
+  if (place === BLACK) place = is_forward ? next_color(place) : previous_color(place);
+  bar_color.value = place;
+}
+
+function change_background_color(is_forward: boolean) {
+  let place = is_forward ? next_color(background_color.value) : previous_color(background_color.value);
+  if (place === time_color.value) place = is_forward ? next_color(place) : previous_color(place);
+  background_color.value = place;
+}
+
+function reset_colors() {
+  time_color.value = TEAL;
+  bar_color.value = TEAL;
+  background_color.value = BLACK;
+}
+
+function randomise_colors() {
+  const time = random_int(0, COLOR_COUNT - 1);
+  let bar = random_int(0, COLOR_COUNT - 1);
+  let background = random_int(0, COLOR_COUNT - 1);
+  if (time === background) background = next_color(background);
+  if (bar === BLACK) bar = previous_color(bar);
+  time_color.value = time;
+  bar_color.value = bar;
+  background_color.value = background;
+}
+
+function next_gauge_style() {
+  gauge_style.value = (gauge_style.value + 1) % 3;
+}
+
+function toggle_weather() {
+  shows_weather.value = !shows_weather.value;
+}
+
+function store_weather(event: WeatherEvent) {
+  weather_temperature.value = event.temperature;
+  weather_condition.value = event.condition;
+}
+
+// ============================================================================
+// Screens
+// ============================================================================
+
+function BatteryLevel() {
+  return (
+    <Row width={22} height={12} border_width={2} border_color="#000000" radius={2} padding={1}>
+      <Column width={Math.max(1, Math.floor((battery_percent.value * 16) / 100))} height={6} background="#000000" />
+    </Row>
+  );
+}
+
+function Calendar() {
+  const top = calendar_top.value;
+  return (
+    <>
+      <Label x={200} y={top - 24} width={40} text_align="center" font="small" color="#000000">
+        {WEEKDAY_NAMES[weekday_of(now.value)]}
+      </Label>
+      <Column x={203} y={top} width={34} height={34} background="#000000" />
+      <Column x={206} y={top + 3} width={28} height={28} background="#ffffff" />
+      <Column x={213} y={top - 3} width={3} height={12} background="#000000" />
+      <Column x={224} y={top - 3} width={3} height={12} background="#000000" />
+      <Label x={203} y={top + 8} width={34} text_align="center" font="small" color="#000000">
+        {`${day_of(now.value)}`}
+      </Label>
+      <Label x={200} y={top + 38} width={40} text_align="center" font="small" color="#000000">
+        {MONTH_NAMES[month_of(now.value) - 1]}
+      </Label>
+    </>
+  );
+}
+
+function StepGauge() {
+  return (
+    <>
+      {gauge_style.value === GAUGE_STYLE_FULL && (
+        <Arc
+          x={202}
+          y={200}
+          diameter={36}
+          thickness={4}
+          start_angle={180}
+          end_angle={180}
+          value={step_gauge_value.value}
+          color={needle_color.value}
+          track_color="#000000"
+        />
+      )}
+      {gauge_style.value === GAUGE_STYLE_HALF && (
+        <Arc
+          x={202}
+          y={186}
+          diameter={36}
+          thickness={4}
+          start_angle={270}
+          end_angle={90}
+          value={step_gauge_value.value}
+          color={needle_color.value}
+          track_color="#000000"
+        />
+      )}
+      {gauge_style.value === GAUGE_STYLE_HALF && (
+        <Label x={200} y={218} width={40} text_align="center" font="small" color="#000000">
+          {`:${format_number(second_of(now.value), 2)}`}
+        </Label>
+      )}
+      {gauge_style.value === GAUGE_STYLE_NUMERIC && (
+        <Icon x={208} y={192} icon={icons.steps} size={24} color="#000000" />
+      )}
+      {gauge_style.value === GAUGE_STYLE_NUMERIC && (
+        <Label x={200} y={218} width={40} text_align="center" font="small" color="#000000">
+          {`${Math.floor(steps_today.value / 1000)}K`}
+        </Label>
+      )}
+    </>
+  );
+}
+
+function PineTimeStyleFace() {
+  const digit_color = COLORS[time_color.value];
+  return (
+    <Screen background={COLORS[background_color.value]} onLongPress={() => go("settings")}>
+      {unread_notifications.value > 0 && (
+        <Icon x={5} y={5} icon={icons.notification} size={20} color={digit_color} />
+      )}
+      <Label x={5} y={14} width={200} text_align="center" font="huge" color={digit_color}>
+        {format_number(display_hour.value, 2)}
+      </Label>
+      <Label x={5} y={134} width={200} text_align="center" font="huge" color={digit_color}>
+        {format_number(minute_of(now.value), 2)}
+      </Label>
+      {!uses_24_hour_clock.value && (
+        <Label x={2} y={172} font="small" color={digit_color}>
+          {hour_of(now.value) >= 12 ? "P\nM" : "A\nM"}
+        </Label>
+      )}
+
+      <Column x={200} y={0} width={40} height={240} background={COLORS[bar_color.value]} />
+      {is_phone_connected.value && <Icon x={201} y={2} icon={icons.bluetooth} size={16} color="#000000" />}
+      {is_charging.value ? (
+        <Icon x={219} y={2} icon={icons.charging} size={16} color="#000000" />
+      ) : (
+        <Column x={216} y={4}>
+          <BatteryLevel />
+        </Column>
+      )}
+
+      {shows_weather.value && (
+        <Icon
+          x={206}
+          y={32}
+          icon={weather_condition.value === "none" ? icons.close : icon_named(weather_condition.value as WeatherCondition)}
+          size={28}
+          color="#000000"
+        />
+      )}
+      {shows_weather.value && (
+        <Label x={200} y={64} width={40} text_align="center" font="small" color="#000000">
+          {temperature_text.value}
+        </Label>
+      )}
+
+      <Calendar />
+      <StepGauge />
+    </Screen>
+  );
+}
+
+function ColorChooser(props: { title: string; place: number; onChange: (is_forward: boolean) => void }) {
+  return (
+    <Row gap={6} height={40}>
+      <Button width={48} height="100%" onClick={() => props.onChange(false)}>
+        {"<"}
+      </Button>
+      <Column grow={1} align_items="center">
+        <Label font="small" color="muted">{props.title}</Label>
+        <Label font="small" color={COLORS[props.place]}>{COLOR_NAMES[props.place]}</Label>
+      </Column>
+      <Button width={48} height="100%" onClick={() => props.onChange(true)}>
+        {">"}
+      </Button>
+    </Row>
+  );
+}
+
+function Settings() {
+  return (
+    <Screen padding={4} gap={4}>
+      <ColorChooser title="Time" place={time_color.value} onChange={change_time_color} />
+      <ColorChooser title="Bar" place={bar_color.value} onChange={change_bar_color} />
+      <ColorChooser title="Background" place={background_color.value} onChange={change_background_color} />
+      <Row gap={4} height={40}>
+        <Button grow={1} height="100%" font="small" onClick={next_gauge_style}>
+          {`Steps: ${GAUGE_STYLE_NAMES[gauge_style.value]}`}
+        </Button>
+        <Button grow={1} height="100%" font="small" onClick={toggle_weather}>
+          {shows_weather.value ? "Weather: On" : "Weather: Off"}
+        </Button>
+      </Row>
+      <Row gap={4} height={40}>
+        <Button grow={1} height="100%" onClick={reset_colors}>
+          Reset
+        </Button>
+        <Button grow={1} height="100%" onClick={randomise_colors}>
+          Random
+        </Button>
+        <Button grow={1} height="100%" background="accent" onClick={back}>
+          <Icon icon={icons.check} size={24} />
+        </Button>
+      </Row>
+    </Screen>
+  );
+}
+
+export default define_app({
+  id: "pinetime-style",
+  name: "PineTimeStyle",
+  icon: icons.clock,
+  kind: "face",
+  screens: { main: PineTimeStyleFace, settings: Settings },
+  subscriptions: [weather(store_weather)],
+  permissions: ["background"],
+});

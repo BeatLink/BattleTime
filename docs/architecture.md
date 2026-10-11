@@ -27,7 +27,7 @@ The PineTime is built around a Nordic nRF52832 chip: a 64 MHz Arm Cortex-M4F wit
 
 ```mermaid
 flowchart TB
-    apps["Apps and watch faces<br/>(planned, loadable over BLE)"]
+    apps["Apps and watch faces<br/>apps/, faces/: sources started, loadable over BLE planned"]
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>(planned: power, events, settings, notifications)"]
@@ -81,15 +81,19 @@ vibration pattern, waits without blocking the others. **(planned)**
 ```text
 NeoTime/
 ├── Cargo.toml        one Cargo workspace for every crate
+├── package.json      the npm workspace for apps/, faces/ and sdk/neotime
+├── apps/             neotime-apps: apps in the app language, one folder each; see apps.md
 ├── rustfmt.toml      formatting rules
 ├── flake.nix       development shell, simulator package and checks
 ├── rust-toolchain.toml  the Rust version and the watch's target
 ├── docs/
 │   ├── app-reference.md the events, widgets and effects apps can use
 │   ├── app-runtime.md the proposed app format and runtime
+│   ├── apps.md       the apps ported from InfiniTime and wasp-os
 │   ├── architecture.md
 │   ├── bluetooth.md  the Bluetooth controller
 │   ├── coding-guidelines.md
+│   ├── faces.md      the watch faces ported from InfiniTime and wasp-os
 │   ├── memory-map.md how RAM and both flashes are divided
 │   ├── simulator.md
 │   ├── todo.md
@@ -101,7 +105,10 @@ NeoTime/
 │   ├── display/      neotime-display: the ST7789 screen
 │   ├── touch/        neotime-touch: the CST816S touch panel
 │   └── vibrator/     neotime-vibrator: the vibration motor
+├── faces/            neotime-faces: watch faces in the app language, one folder each; see faces.md
 ├── runtime/          neotime-runtime: app images, their checks, the interpreter and bindings
+├── sdk/
+│   └── neotime/      the neotime package apps and faces import, as a stand-in for now
 ├── simulator/        neotime-simulator: the drivers in a desktop window
 ├── tools/            scripts for development, such as drawing the memory maps
 └── ui/               neotime-ui: draws rlvgl widgets on the screen
@@ -286,6 +293,25 @@ driver's `Display`, and carries out rlvgl's drawing calls on it:
 
 rlvgl needs a heap (`alloc`), which the firmware will have to provide. Still to do: sizing that heap,
 touch input, page slides on the hardware scroll, and a desktop simulator.
+
+## Apps and watch faces (`apps`, `faces`, `sdk`)
+
+Apps and watch faces are Preact and Signals source, written to [app-reference.md](app-reference.md)
+and kept as two npm packages: `apps/` (`neotime-apps`) and `faces/` (`neotime-faces`). The first
+ones are ports of InfiniTime's and wasp-os's, merged where both firmwares have the same one.
+[apps.md](apps.md) and [faces.md](faces.md) list each, where it came from and what it still needs
+from the runtime.
+
+- **One folder each,** named by its id: an app's source is `apps/<id>/app.tsx` and a face's is
+  `faces/<id>/face.tsx`, with any behaviour tests beside it in `app.test.tsx` or `face.test.tsx`.
+- **`sdk/neotime`** is a stand-in for the `neotime` package both import, so they type-check and
+  their screens render in tests. It is not the runtime and will be replaced by the real package.
+- **Checks.** From the repository root, `npm install`, then `npm run check` runs TypeScript over
+  everything and `npm test` renders every screen of every app and face with Vitest. Each package's
+  `tests/screens.test.tsx` also checks that apps declare `kind: "app"` and faces `kind: "face"`.
+
+Nothing here runs on the watch yet. That needs the compiler and the runtime in
+[app-runtime.md](app-runtime.md#suggested-order-of-work). **(started)**
 
 ## Simulator (`simulator`)
 

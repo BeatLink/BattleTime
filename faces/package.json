@@ -1,0 +1,11 @@
+{
+  "name": "neotime-faces",
+  "private": true,
+  "description": "NeoTime watch faces",
+  "type": "module",
+  "dependencies": {
+    "neotime": "*",
+    "@preact/signals": "1.3.0",
+    "preact": "10.24.3"
+  }
+}
