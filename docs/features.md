@@ -17,6 +17,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Step counting.** The accelerometer counts today's steps for the steps app and faces.
 - **Battery charge and charging state.**
 - **The time from the phone,** set through the Bluetooth Current Time service.
+- **The battery level on the phone,** through the standard Bluetooth Battery service, updated as it
+  changes.
 - **Themes from the companion app.** Six presets (dark, light, ocean, forest, sunset and contrast)
   or any colours, and the backlight level, set over Bluetooth and kept through a restart. The open
   app changes colour at once. See [companion-protocol.md](companion-protocol.md).

@@ -42,7 +42,7 @@ use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT
 use neotime_button::Button;
 use neotime_dfu::{service::DfuWrite, service::LegacyDfuService, LegacyDfu};
 use neotime_display::Display;
-use embassy_futures::select::{select, Either};
+use embassy_futures::select::{select3, Either3};
 use neotime_companion::LineAssembler;
 use neotime_runtime::events::ButtonPress;
 use static_cell::StaticCell;
@@ -513,6 +513,14 @@ struct Server {
     time: CurrentTimeService,
     diagnostics: DiagnosticsService,
     uart: NordicUartService,
+    battery: BatteryService,
+}
+
+/// The standard Battery service: the charge, 0 to 100, read or notified when it changes.
+#[gatt_service(uuid = "180f")]
+struct BatteryService {
+    #[characteristic(uuid = "2a19", read, notify)]
+    level: u8,
 }
 
 /// The Nordic UART service, which carries the companion app's JSON lines; see docs/companion-protocol.md.
@@ -654,12 +662,17 @@ async fn serve_connection(
         // Pinned where they are made, so the connection's large future is never copied across the stack.
         let next_event = core::pin::pin!(connection.next());
         let next_reply = core::pin::pin!(settings::REPLIES.receive());
-        let event = match select(next_event, next_reply).await {
-            Either::First(event) => event,
-            Either::Second(reply) => {
+        let battery_change = core::pin::pin!(battery::PERCENT_CHANGED.wait());
+        let event = match select3(next_event, next_reply, battery_change).await {
+            Either3::First(event) => event,
+            Either3::Second(reply) => {
                 for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
                     let _ = server.uart.transmit.notify_raw(connection, piece, false).await;
                 }
+                continue;
+            }
+            Either3::Third(()) => {
+                let _ = server.battery.level.notify(connection, &battery::percent(), true).await;
                 continue;
             }
         };
@@ -687,6 +700,9 @@ async fn serve_connection(
                     GattEvent::Read(read) => {
                         if read.handle() == server.diagnostics.counters.handle {
                             let _ = server.set(&server.diagnostics.counters, &diagnostics::snapshot());
+                        }
+                        if read.handle() == server.battery.level.handle {
+                            let _ = server.set(&server.battery.level, &battery::percent());
                         }
                         None
                     }

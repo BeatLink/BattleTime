@@ -19,7 +19,7 @@ whether the watch serves it yet.
 |---|---|---|---|---|
 | Legacy DFU | `00001530-1212-efde-1523-785feabcd123` | as Nordic's legacy DFU | Firmware updates; see [updates.md](updates.md). | Yes |
 | Current Time | `0x1805` | `0x2A2B`, read and write | Writing the 10-byte Current Time value sets the clock. The watch keeps local time, so write local time. | Yes |
-| Battery | `0x180F` | `0x2A19`, read and notify | The charge, 0 to 100. | Not yet |
+| Battery | `0x180F` | `0x2A19`, read and notify | The charge, 0 to 100, notified when it changes. | Yes |
 
 ## The message channel
 

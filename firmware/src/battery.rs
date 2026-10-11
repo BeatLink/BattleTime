@@ -6,6 +6,7 @@ use embassy_nrf::{
     gpio::Input,
     saadc::{ChannelConfig, Config, Saadc},
 };
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
 use neotime_runtime::SystemValue;
 
@@ -13,6 +14,9 @@ use crate::system_values;
 
 static PERCENT: AtomicU8 = AtomicU8::new(0);
 static IS_CHARGING: AtomicBool = AtomicBool::new(false);
+
+/// Raised when the charge changes, so the Battery service can notify a phone.
+pub static PERCENT_CHANGED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 const READ_INTERVAL: Duration = Duration::from_secs(60);
 
@@ -80,6 +84,9 @@ pub async fn watch_battery(
         let charging_changed = IS_CHARGING.swap(is_charging, Ordering::Relaxed) != is_charging;
         if percent_changed || charging_changed {
             system_values::changed(&[SystemValue::BatteryPercent, SystemValue::IsCharging]);
+        }
+        if percent_changed {
+            PERCENT_CHANGED.signal(());
         }
 
         embassy_futures::select::select3(

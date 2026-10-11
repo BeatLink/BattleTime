@@ -482,6 +482,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
   and the accelerometer waits for it.
 - **Saved state.** An app's persistent variables are written to `/apps/<id>/state` on the external
   flash when it closes or the screen turns off, only when one changed, and put back when it opens.
+- **Battery service.** The standard Battery service (0x180F) answers a read of 0x2A19 with the
+  charge `battery.rs` last measured, and notifies a subscribed phone whenever that changes.
 - **Clock.** `clock.rs` counts on from the time a phone last wrote to the Current Time
   characteristic (0x2A2B), or from the build time until one does. It holds local time, with an
   offset from UTC of 0.
