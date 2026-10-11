@@ -19,7 +19,7 @@ ${BANK_VALID_APP}         0x1
 ${INFINITIME}             ${PROJECTS}/InfiniTime
 # Copied to a plain name before loading, since Renode refuses the dots in the release file name.
 ${MCUBOOT_RELEASE}        ${INFINITIME}/bootloader/bootloader-5.0.4.bin
-${MCUBOOT_BIN}            ${OUTPUT DIR}/mcuboot.bin
+${MCUBOOT_BIN}            ${TEMPDIR}/neotime_mcuboot.bin
 ${INFINITIME_RELOADER}    ${DIST}/reloader-from-infinitime.mcuboot.bin
 ${MCUBOOT_SLOT}           0x8000
 
@@ -101,18 +101,20 @@ Moves A wasp-os Watch Onto NeoTime
 
     Run For                   ${RELOADER_SECONDS}
     Flash Should Hold File    0x0    ${BOOTLOADER_BIN}
-    Boot State Should Be      ${STATE_SWAP}
     Run For                   ${FIRST_BOOT_SECONDS}
     NeoTime Should Be Installed And Running
+    # Nothing valid to roll back to after a migration, so the firmware confirms itself at once.
+    Boot State Should Be      ${STATE_BOOTED}
 
 Moves An InfiniTime Watch Onto NeoTime
     Start A Watch Running InfiniTime's Bootloader With The Reloader As Its App
 
     Run For                   ${RELOADER_SECONDS}
     Flash Should Hold File    0x0    ${BOOTLOADER_BIN}
-    Boot State Should Be      ${STATE_SWAP}
     Run For                   ${FIRST_BOOT_SECONDS}
     NeoTime Should Be Installed And Running
+    # Nothing valid to roll back to after a migration, so the firmware confirms itself at once.
+    Boot State Should Be      ${STATE_BOOTED}
 
 The Reloader Waits For The Charger
     Create A PineTime

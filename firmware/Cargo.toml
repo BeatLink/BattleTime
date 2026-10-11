@@ -27,7 +27,6 @@ embedded-hal = "1.0"
 embedded-storage = "0.3"
 heapless = "0.9"
 mipidsi = "0.10"
-panic-halt = "1.0"
 static_cell = "2.1"
 trouble-host = { version = "0.8", default-features = false, features = ["peripheral", "gatt", "derive", "default-packet-pool", "default-packet-pool-mtu-64", "default-packet-pool-size-8"] }
 

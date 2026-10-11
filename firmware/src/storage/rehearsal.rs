@@ -24,15 +24,56 @@ pub const WATCHDOG_HALT: HaltConfig = HaltConfig::Run;
 /// Staying up after an upload leaves the result on the screen; a reset would only restart the rehearsal.
 pub const RESET_AFTER_ACTIVATE: bool = false;
 
-const CLOCK_TASKS_LOW_FREQUENCY_STOP: *mut u32 = 0x4000_000C as *mut u32;
-const CLOCK_LOW_FREQUENCY_STATUS: *const u32 = 0x4000_0418 as *const u32;
-const LOW_FREQUENCY_CLOCK_RUNNING: u32 = 1 << 16;
+/// The heap is unused here, since nothing mounts the file system.
+pub const HEAP_SIZE: usize = 4 * 1024;
 
-/// wasp-os's bootloader hands over with the low frequency clock running, and it must stop before it is reconfigured.
-pub fn prepare_clocks() {
+/// Nothing to prepare: wasp-os's watchdog keeps the low frequency clock running and a stop is ignored,
+/// so waiting for one would hang until the watchdog fires; embassy's start-up copes with a running clock.
+pub fn prepare_clocks() {}
+
+// ============================================================================
+// Breadcrumbs that survive a reset, for finding where a run stopped
+// ============================================================================
+
+/// Words in wasp-os's bootloader's retained RAM block that it leaves alone; the linker keeps the rehearsal clear of them.
+const BREADCRUMBS: *mut u32 = 0x2000_39CC as *mut u32;
+const BREADCRUMB_MAGIC: u32 = 0x4E54_4243;
+
+#[derive(Clone, Copy)]
+pub struct Breadcrumbs {
+    pub stage: u32,
+    pub detail: u32,
+    pub fault_status: u32,
+}
+
+/// What the previous run left, if it left anything; read before this run overwrites it.
+pub fn previous_breadcrumbs() -> Option<Breadcrumbs> {
     unsafe {
-        CLOCK_TASKS_LOW_FREQUENCY_STOP.write_volatile(1);
-        while CLOCK_LOW_FREQUENCY_STATUS.read_volatile() & LOW_FREQUENCY_CLOCK_RUNNING != 0 {}
+        if BREADCRUMBS.add(3).read_volatile() != BREADCRUMB_MAGIC {
+            return None;
+        }
+        Some(Breadcrumbs {
+            stage: BREADCRUMBS.read_volatile(),
+            detail: BREADCRUMBS.add(1).read_volatile(),
+            fault_status: BREADCRUMBS.add(2).read_volatile(),
+        })
+    }
+}
+
+pub fn leave_breadcrumb(stage: u32) {
+    record(Breadcrumbs {
+        stage,
+        detail: 0,
+        fault_status: 0,
+    });
+}
+
+pub fn record(breadcrumbs: Breadcrumbs) {
+    unsafe {
+        BREADCRUMBS.write_volatile(breadcrumbs.stage);
+        BREADCRUMBS.add(1).write_volatile(breadcrumbs.detail);
+        BREADCRUMBS.add(2).write_volatile(breadcrumbs.fault_status);
+        BREADCRUMBS.add(3).write_volatile(BREADCRUMB_MAGIC);
     }
 }
 

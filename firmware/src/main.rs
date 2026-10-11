@@ -38,7 +38,6 @@ use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT
 use neotime_button::Button;
 use neotime_dfu::{service::DfuWrite, service::LegacyDfuService, LegacyDfu};
 use neotime_display::Display;
-use panic_halt as _;
 use static_cell::StaticCell;
 use trouble_host::prelude::*;
 
@@ -59,7 +58,7 @@ const FIRMWARE_VERSION: &str = "0.1.0";
 const DEVICE_NAME: &str = "NeoTime";
 const WATCHDOG_FEED_INTERVAL: Duration = Duration::from_millis(1000);
 const DISPLAY_COMMAND_BUFFER_SIZE: usize = 512;
-const HEAP_SIZE: usize = 16 * 1024;
+const HEAP_SIZE: usize = storage::HEAP_SIZE;
 
 type SpiBus = Mutex<NoopRawMutex, RefCell<Spim<'static>>>;
 
@@ -75,7 +74,10 @@ static HOST_RESOURCES: StaticCell<HostResources<DefaultPacketPool, 1, 2>> = Stat
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
+    let previous_run = storage::previous_breadcrumbs();
+    storage::leave_breadcrumb(stage::ENTERED_MAIN);
     storage::prepare_clocks();
+    storage::leave_breadcrumb(stage::CLOCKS_PREPARED);
     let mut config = embassy_nrf::config::Config::default();
     config.lfclk_source = LfclkSource::ExternalXtal;
     // Leave the debug port's settings alone, so start-up never writes the protection word.
@@ -83,8 +85,10 @@ async fn main(spawner: Spawner) {
     let chip = embassy_nrf::init(config);
 
     start_heap();
+    storage::leave_breadcrumb(stage::CHIP_STARTED);
     mark_alive();
     let watchdog = take_over_watchdog(chip.WDT);
+    storage::leave_breadcrumb(stage::WATCHDOG_TAKEN_OVER);
 
     let button_pin = Input::new(chip.P0_13, Pull::Down);
     let power_pin = Output::new(chip.P0_15, Level::Low, OutputDrive::Standard);
@@ -112,6 +116,18 @@ async fn main(spawner: Spawner) {
     screen.write_line(0, "NeoTime");
     screen.write_line(1, FIRMWARE_VERSION);
     screen.write_line(6, storage::BUILD_NAME);
+    storage::leave_breadcrumb(stage::SCREEN_STARTED);
+    if let Some(previous) = previous_run {
+        let mut text = heapless::String::<24>::new();
+        let _ = core::fmt::write(
+            &mut text,
+            format_args!(
+                "last {:x} {:x} {:x}",
+                previous.stage, previous.detail, previous.fault_status
+            ),
+        );
+        screen.write_line(7, &text);
+    }
 
     let storage_peripherals = storage::StoragePeripherals {
         flash_chip_select: chip.P0_05,
@@ -122,6 +138,7 @@ async fn main(spawner: Spawner) {
         return;
     };
 
+    storage::leave_breadcrumb(stage::STORAGE_READY);
     let controller = neotime_bluetooth::start(
         neotime_bluetooth::RadioPeripherals {
             radio: chip.RADIO,
@@ -135,7 +152,55 @@ async fn main(spawner: Spawner) {
         },
         Interrupts,
     );
+    storage::leave_breadcrumb(stage::RADIO_STARTED);
     run_bluetooth(controller, targets, confirmation, screen).await;
+}
+
+// ============================================================================
+// Start-up stages, and what happens on a panic or a fault
+// ============================================================================
+
+mod stage {
+    pub const ENTERED_MAIN: u32 = 1;
+    pub const CLOCKS_PREPARED: u32 = 2;
+    pub const CHIP_STARTED: u32 = 3;
+    pub const WATCHDOG_TAKEN_OVER: u32 = 4;
+    pub const SCREEN_STARTED: u32 = 5;
+    pub const STORAGE_READY: u32 = 6;
+    pub const RADIO_STARTED: u32 = 7;
+    pub const ADVERTISING: u32 = 8;
+    pub const CONNECTED: u32 = 9;
+    pub const UPLOAD_VERIFIED: u32 = 10;
+    pub const PANICKED: u32 = 0xE0;
+    pub const FAULTED: u32 = 0xF0;
+}
+
+const CONFIGURABLE_FAULT_STATUS: *const u32 = 0xE000_ED28 as *const u32;
+
+/// Halting lets the watchdog reset the watch, which a reset loop would never do.
+#[panic_handler]
+fn halt_on_panic(information: &core::panic::PanicInfo) -> ! {
+    let line = information.location().map_or(0, |location| location.line());
+    storage::record(storage::Breadcrumbs {
+        stage: stage::PANICKED,
+        detail: line,
+        fault_status: 0,
+    });
+    loop {
+        cortex_m::asm::wfe();
+    }
+}
+
+#[cortex_m_rt::exception]
+unsafe fn HardFault(frame: &cortex_m_rt::ExceptionFrame) -> ! {
+    storage::record(storage::Breadcrumbs {
+        stage: stage::FAULTED,
+        detail: frame.pc(),
+        fault_status: unsafe { CONFIGURABLE_FAULT_STATUS.read_volatile() },
+    });
+    loop {
+        cortex_m::asm::wfe();
+    }
 }
 
 fn start_heap() {
@@ -290,6 +355,7 @@ async fn run_bluetooth(
                 .unwrap();
             if !advertising_shown {
                 screen.write_line(3, "advertising");
+                storage::leave_breadcrumb(stage::ADVERTISING);
                 advertising_shown = true;
             }
 
@@ -300,6 +366,7 @@ async fn run_bluetooth(
                 continue;
             };
             screen.write_line(4, "connected   ");
+            storage::leave_breadcrumb(stage::CONNECTED);
             serve_connection(
                 &connection,
                 &server,
@@ -377,6 +444,7 @@ async fn serve_connection(
                         cortex_m::peripheral::SCB::sys_reset();
                     }
                     screen.write_line(5, "upload verified ");
+                    storage::leave_breadcrumb(stage::UPLOAD_VERIFIED);
                 }
             }
             _ => {}

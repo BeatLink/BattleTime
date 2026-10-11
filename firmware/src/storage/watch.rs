@@ -37,7 +37,28 @@ pub const BUILD_NAME: &str = "";
 pub const WATCHDOG_HALT: HaltConfig = HaltConfig::Pause;
 pub const RESET_AFTER_ACTIVATE: bool = true;
 
+pub const HEAP_SIZE: usize = 16 * 1024;
+
 pub fn prepare_clocks() {}
+
+// ============================================================================
+// Breadcrumbs are only kept in the rehearsal
+// ============================================================================
+
+#[derive(Clone, Copy)]
+pub struct Breadcrumbs {
+    pub stage: u32,
+    pub detail: u32,
+    pub fault_status: u32,
+}
+
+pub fn previous_breadcrumbs() -> Option<Breadcrumbs> {
+    None
+}
+
+pub fn leave_breadcrumb(_stage: u32) {}
+
+pub fn record(_breadcrumbs: Breadcrumbs) {}
 
 // ============================================================================
 // Starting the storage

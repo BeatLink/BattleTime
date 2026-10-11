@@ -9,7 +9,8 @@ use neotime_boot::{FIRMWARE, FIRMWARE_ALIVE_MARKER, RAM};
 const WASP_OS_APP_START: u32 = 0x19000;
 /// wasp-os's bootloader starts at 0x78000 and keeps seven pages of app data below it.
 const WASP_OS_APP_END: u32 = 0x78000 - 7 * 0x1000;
-const WASP_OS_APP_RAM_START: u32 = 0x2000_1000;
+/// Above the SoftDevice's RAM and wasp-os's bootloader's retained block at 0x200039c0, where the rehearsal keeps breadcrumbs.
+const WASP_OS_APP_RAM_START: u32 = 0x2000_4000;
 
 fn main() {
     let output_directory = PathBuf::from(env::var("OUT_DIR").unwrap());

@@ -15,7 +15,7 @@ ${REHEARSAL_END}          0x71000
 ${WASP_SETTINGS}          0x7F000
 ${BANK_VALID_APP}         0x1
 ${FAULT_STATUS}           0xE000ED28
-${NVMC_WRITES}            ${OUTPUT DIR}/nvmc_writes.txt
+${NVMC_WRITES}            ${TEMPDIR}/neotime_nvmc_writes.txt
 
 *** Keywords ***
 Start wasp-os's Bootloader With The Rehearsal As Its App
@@ -39,7 +39,7 @@ Watch The Flash Controller
     [Documentation]           Records the CPU's position on every write to the flash controller's enable and erase registers.
     Remove File               ${NVMC_WRITES}
     FOR    ${register}    IN    0x4001E504    0x4001E508    0x4001E50C    0x4001E514
-        Execute Command       sysbus AddWatchpointHook ${register} DoubleWord Write "open('${NVMC_WRITES}', 'a').write('%x %x %x\\\\n' % (${register}, self.GetCurrentCPU().PC.RawValue, value))"
+        Execute Command       sysbus AddWatchpointHook ${register} DoubleWord Write "open('${NVMC_WRITES}', 'a').write('%x %x %x\\n' % (${register}, self.GetCurrentCPU().PC.RawValue, value))"
     END
 
 Flash Controller Writes From The Rehearsal
