@@ -43,6 +43,8 @@ pub enum EventKind {
     Close,
     ScreenOn,
     ScreenOff,
+    /// A derive subscription's handler rebuilding its array.
+    Derive,
 }
 
 impl EventKind {
@@ -92,7 +94,7 @@ impl EventKind {
             Notification => &["id", "app", "title", "body", "time"],
             Call => &["kind", "caller"],
             SettingsChange => &["key"],
-            PhoneData | Open | Close | ScreenOn | ScreenOff => &[],
+            PhoneData | Open | Close | ScreenOn | ScreenOff | Derive => &[],
         }
     }
 

@@ -66,10 +66,13 @@ pub enum SubscriptionKind {
     Weather,
     Navigation,
     SettingsChange,
+    /// Rebuilds a hidden array, such as a `computed` array a widget shows. The runtime runs the
+    /// handler when the app opens and whenever anything the handler reads changes.
+    Derive,
 }
 
 impl SubscriptionKind {
-    const ALL: [SubscriptionKind; 21] = {
+    const ALL: [SubscriptionKind; 22] = {
         use SubscriptionKind::*;
         [
             Open,
@@ -93,6 +96,7 @@ impl SubscriptionKind {
             Weather,
             Navigation,
             SettingsChange,
+            Derive,
         ]
     };
 
@@ -119,6 +123,7 @@ impl SubscriptionKind {
             Call => EventKind::Call,
             Music | Weather | Navigation => EventKind::PhoneData,
             SettingsChange => EventKind::SettingsChange,
+            Derive => EventKind::Derive,
         }
     }
 

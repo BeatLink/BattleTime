@@ -2705,6 +2705,33 @@ fn an_app_can_name_its_first_image_as_its_icon() {
     );
 }
 
+#[test]
+fn a_derive_subscription_rebuilds_a_hidden_array_and_a_scale_takes_a_value() {
+    let derive = subscription(SubscriptionKind::Derive, SubscriptionValue::Constant(0));
+    let (bytes, result) = with_subscription(derive);
+    let mut gauge = ImageWriter::new("gauge", "Gauge", AppKind::App, 1);
+    gauge.widget(
+        WidgetKind::Scale,
+        0,
+        &[
+            (Property::Value, Constant(40)),
+            (Property::MajorColor, Constant(0xFFFF)),
+        ],
+    );
+
+    assert_eq!(result, Ok(()));
+    assert_eq!(
+        AppImage::parse(&bytes)
+            .unwrap()
+            .subscription(0)
+            .unwrap()
+            .kind
+            .event(),
+        EventKind::Derive
+    );
+    assert_eq!(verify(&AppImage::parse(&gauge.build()).unwrap()), Ok(()));
+}
+
 // ============================================================================
 // Memory
 // ============================================================================

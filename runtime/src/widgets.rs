@@ -231,10 +231,12 @@ pub enum Property {
     SecondLength,
     HandStyle,
     Recolor,
+    /// The colour of a Scale's major ticks and labels.
+    MajorColor,
 }
 
 impl Property {
-    const ALL: [Property; 70] = {
+    const ALL: [Property; 71] = {
         use Property::*;
         [
             X,
@@ -307,6 +309,7 @@ impl Property {
             SecondLength,
             HandStyle,
             Recolor,
+            MajorColor,
         ]
     };
 
@@ -382,6 +385,8 @@ impl Property {
                     | Kind::Pages
                     | Kind::Tabs
                     | Kind::TextArea
+                    | Kind::Scale
+                    | Kind::ButtonMatrix
             ),
             Minimum | Maximum | Step => {
                 matches!(
@@ -402,7 +407,7 @@ impl Property {
             Options => matches!(kind, Kind::Roller | Kind::Dropdown | Kind::ButtonMatrix),
             Points => kind == Kind::Line,
             Series => kind == Kind::Chart,
-            Ticks | MajorEvery | Labels | Skip | NeedleColor => kind == Kind::Scale,
+            Ticks | MajorEvery | Labels | Skip | NeedleColor | MajorColor => kind == Kind::Scale,
             HourColor | MinuteColor | SecondColor | HourLength | MinuteLength | SecondLength | HandStyle => {
                 kind == Kind::AnalogClock
             }

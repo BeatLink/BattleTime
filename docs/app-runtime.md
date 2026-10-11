@@ -293,7 +293,7 @@ Each subscription is 16 bytes:
 
 | Bytes | Holds |
 |---|---|
-| 0 | The kind, numbered in the order of `SubscriptionKind` in `runtime/src/subscriptions.rs`: open, close, screen on, screen off, every, at, daily, clock change, heart rate, steps, step goal, motion, acceleration, battery, phone, notification, call, music, weather, navigation, settings change. |
+| 0 | The kind, numbered in the order of `SubscriptionKind` in `runtime/src/subscriptions.rs`: open, close, screen on, screen off, every, at, daily, clock change, heart rate, steps, step goal, motion, acceleration, battery, phone, notification, call, music, weather, navigation, settings change, derive. |
 | 1 | Flags: bit 0 means it only runs while the app is open. |
 | 2–3 | The handler to call. |
 | 4 | Where the value comes from: 0 the constant in bytes 8–15, 1 the state variable those bytes name. |
@@ -307,6 +307,11 @@ minute, and any acceleration, must be marked only-while-open, so a closed app ca
 watch busy. An `at` or daily value may name a state variable, so changing it, such as moving an
 alarm, reschedules without any other code. `Subscription::next_due` works out when a timer-like
 subscription next fires, in local time.
+
+A derive subscription keeps an array that is worked out from other state, such as a `computed`
+array a CellGrid or Chart shows. The compiler gives it a hidden array and a handler that rebuilds
+it; the runtime runs that handler when the app opens and again whenever anything the handler reads
+changes, found the same way as an expression's inputs. Its effects, if any, are ignored.
 
 ### Images
 
