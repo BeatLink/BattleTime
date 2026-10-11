@@ -86,7 +86,7 @@ pub async fn start(
     spi_bus: &'static SpiBus,
     peripherals: StoragePeripherals,
     screen: &mut Screen,
-) -> Option<(Targets, Confirmation, Mode)> {
+) -> Option<(Targets, Confirmation, Mode, Files)> {
     let _flash_controller_never_used = peripherals.flash_controller;
     let flash_chip_select = Output::new(peripherals.flash_chip_select, Level::High, OutputDrive::Standard);
     let mut flash = match ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), &mut Delay) {
@@ -152,7 +152,7 @@ pub async fn start(
             STATE_ALIGNMENT.init([0; 4]),
         ),
     };
-    Some((targets, Confirmation, Mode::Confirmed))
+    Some((targets, Confirmation, Mode::Confirmed, Files))
 }
 
 // ============================================================================
@@ -325,5 +325,22 @@ impl UpdateTargets for Targets {
 
     fn abort(&mut self, _kind: ImageKind) {
         self.firmware.abort();
+    }
+}
+
+// ============================================================================
+// Files for saved app state, which the rehearsal does not keep
+// ============================================================================
+
+/// The rehearsal has no shell, so it keeps no files for it.
+pub struct Files;
+
+impl Files {
+    pub fn read(&self, _path: &str) -> Option<alloc::vec::Vec<u8>> {
+        None
+    }
+
+    pub fn write(&self, _path: &str, _bytes: &[u8]) -> bool {
+        false
     }
 }

@@ -415,9 +415,17 @@ watch face, the launcher and the apps through `neotime-app-host`:
 - **Input.** `touch.rs` turns the panel's reports into the host's touches: press, drag and release
   from the finger, and one click, long press or swipe from each touch's gesture. The watchdog task
   reads the button every 20 ms and also reports short and long presses.
-- **Sleep.** After 15 seconds without input the backlight goes off and the app gets `screen_off`;
-  the next touch or press turns it on without acting on it. The loop sleeps until the next input
-  or until `next_wakeup`.
+- **Sleep.** After 15 seconds without input the backlight goes off, the display sleeps and the
+  app gets `screen_off`, unless it called `keep_screen_on(true)`; the next touch or press turns
+  them on without acting on it. The loop sleeps until the next input or until `next_wakeup`.
+- **Effects.** `vibrate`, `vibrate_pattern` and `stop_vibrating` go to the motor's own task
+  (`vibration.rs`), so a pattern never holds up the shell. `set_brightness` drives the three
+  backlight pins (`backlight.rs`) until the app closes.
+- **Steps.** `motion.rs` reads the accelerometer's own step counter every 30 seconds and resets it
+  at midnight. It shares the I2C bus with the touch panel. A change redraws what shows the steps
+  and goes to the app's `steps` subscriptions.
+- **Saved state.** An app's persistent variables are written to `/apps/<id>/state` on the external
+  flash when it closes or the screen turns off, only when one changed, and put back when it opens.
 - **Clock.** `clock.rs` counts on from the time a phone last wrote to the Current Time
   characteristic (0x2A2B), or from the build time until one does. It holds local time, with an
   offset from UTC of 0.
@@ -431,12 +439,11 @@ watch face, the launcher and the apps through `neotime-app-host`:
   once when power is plugged in or out, and turns it into a charge along a lithium discharge
   curve. P0.19 says power is present and P0.12 that it is charging.
 
-Not done yet: steps, heart rate and the other sensor values read as 0; effects such as
-vibration and brightness are ignored; saved state is not written; the screen only dims through the
-backlight, without sleeping the display or the touch panel.
+Not done yet: heart rate, notifications, music and weather read as 0 or empty; the touch panel stays
+awake while the screen is off; settings such as the 24 hour clock are fixed.
 
-It takes 322 KB of the 400 KB firmware slot (the fonts are 47 KB, the built-in apps 29 KB and the
-shared library 26 KB) and 46 KB of static RAM, 36 KB of it heap: 16 KB for storage and 20 KB for
+It takes 352 KB of the 400 KB firmware slot (the fonts are 47 KB, the built-in apps 29 KB, the
+shared library 26 KB and the two accelerometers' configuration files 12 KB) and 48 KB of static RAM, 36 KB of it heap: 16 KB for storage and 20 KB for
 the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
 the button and the backlight timeout all work.
 

@@ -1,14 +1,13 @@
 //! The touch panel, turned into the touches the app host takes.
 
-use embassy_nrf::{
-    gpio::{Input, Output},
-    twim::Twim,
-};
+use embassy_nrf::gpio::{Input, Output};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use embassy_time::Delay;
 use neotime_app_host::Touch;
 use neotime_runtime::events::SwipeDirection;
 use neotime_touch::{FingerEvent, Gesture, Settings, TouchPanel, TouchReport};
+
+use crate::I2cDeviceOnBus;
 
 /// Touches waiting for the UI; when it falls behind, the newest are dropped.
 pub static TOUCHES: Channel<CriticalSectionRawMutex, Touch, 4> = Channel::new();
@@ -67,7 +66,7 @@ impl Finger {
 }
 
 #[embassy_executor::task]
-pub async fn read_touches(i2c_bus: Twim<'static>, interrupt_pin: Input<'static>, reset_pin: Output<'static>) {
+pub async fn read_touches(i2c_bus: I2cDeviceOnBus, interrupt_pin: Input<'static>, reset_pin: Output<'static>) {
     let mut panel = TouchPanel::new(i2c_bus, interrupt_pin, reset_pin);
     // Double taps are left off, because the panel would hold back every single tap waiting for one.
     if panel.start(Settings::DEFAULT, &mut Delay).await.is_err() {

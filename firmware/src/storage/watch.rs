@@ -19,7 +19,7 @@ use neotime_boot::{
     VECTOR_TABLE_CHECK_SIZE,
 };
 use neotime_external_flash::ExternalFlash;
-use neotime_storage::{prepare_file_system, FileSystemFlash, Preparation};
+use neotime_storage::{prepare_file_system, FileSystem, FileSystemFlash, Preparation};
 use neotime_updates::{
     confirm_running_firmware, running_firmware_is_on_trial, running_firmware_was_rolled_back, Receivers,
     RecoveryReceiver, UpdateReceiver,
@@ -91,7 +91,7 @@ pub async fn start(
     spi_bus: &'static SpiBus,
     peripherals: StoragePeripherals,
     screen: &mut Screen,
-) -> Option<(Targets, Confirmation, Mode)> {
+) -> Option<(Targets, Confirmation, Mode, Files)> {
     let flash_chip_select = Output::new(peripherals.flash_chip_select, Level::High, OutputDrive::Standard);
     let external_flash = match ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), &mut Delay) {
         Ok(flash) => EXTERNAL_FLASH.init(Mutex::new(RefCell::new(flash))),
@@ -108,14 +108,18 @@ pub async fn start(
         0,
         neotime_external_flash::CAPACITY_IN_BYTES as u32,
     ));
+    let prepared = prepare_file_system(file_system_flash);
     screen.write_line(
         line::FILES,
-        match prepare_file_system(file_system_flash) {
+        match &prepared {
             Ok(prepared) if prepared.preparation == Preparation::AlreadyFormatted => "Files OK",
             Ok(_) => "Files set up",
             Err(_) => "Files damaged",
         },
     );
+    let files = Files {
+        file_system: prepared.ok().map(|prepared| prepared.file_system),
+    };
 
     let targets = Receivers {
         firmware: UpdateReceiver::new(
@@ -152,7 +156,7 @@ pub async fn start(
     if status::recovery_was_just_installed() || status::IS_RECOVERY_BUILD {
         mode = Mode::Recovery;
     }
-    Some((targets, confirmation, mode))
+    Some((targets, confirmation, mode, files))
 }
 
 /// A rollback restores the update slot, which after a migration holds the old system's leftovers and after
@@ -209,5 +213,33 @@ impl Confirmation {
     /// True once the bootloader will keep this firmware.
     pub async fn confirm(&mut self) -> bool {
         confirm_running_firmware(&mut self.boot_state, self.alignment).await.is_ok()
+    }
+}
+
+// ============================================================================
+// Files for saved app state
+// ============================================================================
+
+/// The mounted file system, or nothing when it would not mount.
+pub struct Files {
+    file_system: Option<FileSystem<BlockingPartition<'static, NoopRawMutex, FlashOnBus>>>,
+}
+
+impl Files {
+    pub fn read(&self, path: &str) -> Option<alloc::vec::Vec<u8>> {
+        self.file_system.as_ref()?.read_to_vec(path).ok()
+    }
+
+    /// Writes the whole file, making its folder first; false when the file system is missing or full.
+    pub fn write(&self, path: &str, bytes: &[u8]) -> bool {
+        let Some(file_system) = &self.file_system else {
+            return false;
+        };
+        if let Some((folder, _)) = path.rsplit_once('/') {
+            if !folder.is_empty() && !file_system.exists(folder) {
+                let _ = file_system.mkdir(folder);
+            }
+        }
+        file_system.write_file(path, bytes).is_ok()
     }
 }

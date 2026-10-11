@@ -2,8 +2,9 @@
 //!
 //! The face is shown at start and after the button from the launcher. A swipe up on the face opens
 //! the launcher, a tap there opens an app, and the button or a swipe right that the app does not
-//! use goes back a step. The backlight turns off after a while without input, and the next touch or
-//! press turns it on without acting on it.
+//! use goes back a step. The backlight and display turn off after a while without input, unless the
+//! app keeps the screen on, and the next touch or press turns them on without acting on it. Each
+//! app's persistent state is saved to `/apps/<id>/state` when it closes or the screen turns off.
 
 extern crate alloc;
 
@@ -13,18 +14,28 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+use alloc::vec;
+use core::fmt::Write;
+
 use embassy_futures::select::{select4, Either4};
-use embassy_nrf::gpio::Output;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
-use embassy_time::{Duration, Instant, Timer};
+use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
-use neotime_app_host::{launcher::launcher_image, AppEffect, AppFailure, AppHost, EventResult, System, Touch};
+use neotime_app_host::{
+    launcher::launcher_image, AppEffect, AppFailure, AppHost, EventResult, PushedEvent, System, Touch,
+    LARGEST_SAVED_STATE_BYTES,
+};
 use neotime_runtime::{
     events::{ButtonPress, SwipeDirection},
     AppImage, EffectKind, SystemValue, SystemValues, Value, DEFAULT_THEME,
 };
 
-use crate::{battery, built_in_apps, clock, touch::TOUCHES, SharedDisplay};
+use crate::{
+    backlight::{self, Backlight},
+    battery, built_in_apps, clock, motion, storage, system_values,
+    touch::TOUCHES,
+    vibration, SharedDisplay,
+};
 
 /// Presses of the side button, from the task that watches it.
 pub static BUTTON_PRESSES: Channel<CriticalSectionRawMutex, ButtonPress, 2> = Channel::new();
@@ -80,6 +91,10 @@ enum Request {
 struct WatchSystem {
     request: Request,
     random_state: Cell<u32>,
+    brightness: u8,
+    /// A brightness the open app asked for, applied once the host call returns.
+    brightness_request: Option<u8>,
+    keep_screen_on: bool,
 }
 
 impl SystemValues for WatchSystem {
@@ -88,9 +103,10 @@ impl SystemValues for WatchSystem {
             SystemValue::Now => clock::now(),
             SystemValue::BatteryPercent => battery::percent() as Value,
             SystemValue::IsCharging => battery::is_charging() as Value,
+            SystemValue::StepsToday => motion::steps_today() as Value,
             SystemValue::Uses24HourClock | SystemValue::UsesMetricUnits | SystemValue::IsBluetoothEnabled => 1,
             SystemValue::StepGoal => 10_000,
-            SystemValue::Brightness => 2,
+            SystemValue::Brightness => self.brightness as Value,
             SystemValue::NextAlarm => neotime_runtime::NONE,
             _ => 0,
         }
@@ -109,6 +125,16 @@ impl SystemValues for WatchSystem {
 
 impl System for WatchSystem {
     fn carry_out(&mut self, effect: &AppEffect) {
+        let vibration_request = match effect.kind {
+            EffectKind::Vibrate => Some(vibration::buzz(effect.number(0))),
+            EffectKind::VibratePattern => vibration::named_pattern(effect.number(0)),
+            EffectKind::StopVibrating => Some(vibration::Request::Stop),
+            _ => None,
+        };
+        if let Some(request) = vibration_request {
+            let _ = vibration::REQUESTS.try_send(request);
+            return;
+        }
         match effect.kind {
             EffectKind::OpenApp => {
                 if let Some(index) = effect.text(0).and_then(app_with_id) {
@@ -116,6 +142,8 @@ impl System for WatchSystem {
                 }
             }
             EffectKind::Back | EffectKind::Close => self.request = Request::Back,
+            EffectKind::SetBrightness => self.brightness_request = Some(effect.number(0).clamp(1, 3) as u8),
+            EffectKind::KeepScreenOn => self.keep_screen_on = effect.number(0) != 0,
             _ => {}
         }
     }
@@ -129,6 +157,13 @@ fn app_with_id(id: &str) -> Option<usize> {
     })
 }
 
+/// Where an app's saved state lives: `/apps/<id>/state`.
+fn state_path(id: &str) -> heapless::String<64> {
+    let mut path = heapless::String::new();
+    let _ = write!(path, "{}/{}/state", neotime_storage::APPS_DIRECTORY, id);
+    path
+}
+
 // ============================================================================
 // The loop
 // ============================================================================
@@ -138,6 +173,10 @@ struct Shell {
     host: Option<AppHost<'static>>,
     launcher: &'static [u8],
     system: WatchSystem,
+    files: storage::Files,
+    backlight: Backlight,
+    display: &'static SharedDisplay,
+    lit: bool,
 }
 
 impl Shell {
@@ -146,14 +185,24 @@ impl Shell {
         let now = clock::now();
         if let Some(mut host) = self.host.take() {
             host.close(now, &mut self.system);
+            self.save_state_of(&mut host);
         }
+        let _ = vibration::REQUESTS.try_send(vibration::Request::Stop);
+        self.system.keep_screen_on = false;
+        self.set_brightness(backlight::DEFAULT_LEVEL);
+
         let bytes = match showing {
             Showing::Face => built_in_apps::FACE,
             Showing::Launcher => self.launcher,
             Showing::App(index) => built_in_apps::APPS[index],
         };
         self.showing = showing;
-        match AppHost::open(bytes, DEFAULT_THEME, now, &mut self.system) {
+        let saved = AppImage::parse(bytes)
+            .ok()
+            .and_then(|image| image.string(image.id_string))
+            .and_then(|id| self.files.read(&state_path(id)))
+            .unwrap_or_default();
+        match AppHost::open_with_saved_state(bytes, DEFAULT_THEME, &saved, now, &mut self.system) {
             Ok(mut host) => {
                 let _ = host.set_library(built_in_apps::LIBRARY);
                 self.host = Some(host);
@@ -161,6 +210,22 @@ impl Shell {
             Err(_) if showing != Showing::Face => self.open(Showing::Face),
             Err(_) => {}
         }
+    }
+
+    /// Writes the app's persistent state when any of it changed since the last save.
+    fn save_state_of(&self, host: &mut AppHost<'static>) {
+        let Some(id) = host.image().string(host.image().id_string) else {
+            return;
+        };
+        let mut buffer = vec![0; LARGEST_SAVED_STATE_BYTES];
+        if let Ok(Some(length)) = host.save_changed_state(&mut buffer) {
+            self.files.write(&state_path(id), &buffer[..length]);
+        }
+    }
+
+    fn set_brightness(&mut self, level: u8) {
+        self.backlight.set_level(level);
+        self.system.brightness = self.backlight.level();
     }
 
     fn go_back(&mut self) {
@@ -194,18 +259,79 @@ impl Shell {
         }
     }
 
+    fn system_values_changed(&mut self, changed: u32) {
+        let Some(host) = &mut self.host else {
+            return;
+        };
+        let now = clock::now();
+        host.system_values_changed(changed, now, &mut self.system);
+        if changed & SystemValue::StepsToday.bit() != 0 {
+            let steps_today = motion::steps_today() as Value;
+            host.deliver(PushedEvent::Steps { steps_today }, now, &mut self.system);
+        }
+    }
+
+    /// Turns the backlight off and puts the display to sleep, saving the app's state first.
+    fn turn_screen_off(&mut self) {
+        self.lit = false;
+        self.backlight.turn_off();
+        self.display.lock(|display| {
+            let _ = display.borrow_mut().sleep(&mut Delay);
+        });
+        if let Some(mut host) = self.host.take() {
+            host.screen_turned_off(clock::now(), &mut self.system);
+            self.save_state_of(&mut host);
+            self.host = Some(host);
+        }
+    }
+
+    fn turn_screen_on(&mut self) {
+        self.lit = true;
+        self.display.lock(|display| {
+            let _ = display.borrow_mut().wake(&mut Delay);
+        });
+        self.backlight.turn_on();
+        if let Some(host) = &mut self.host {
+            host.screen_turned_on(clock::now(), &mut self.system);
+        }
+    }
+
     /// Carries out what the last host call's handlers asked for.
     fn follow_requests(&mut self) {
+        if let Some(level) = self.system.brightness_request.take() {
+            self.set_brightness(level);
+        }
         match core::mem::replace(&mut self.system.request, Request::Nothing) {
             Request::Nothing => {}
             Request::Open(showing) => self.open(showing),
             Request::Back => self.go_back(),
         }
     }
+
+    fn draw(&mut self) {
+        if REDRAW_EVERYTHING.swap(false, Ordering::Relaxed) {
+            self.display.lock(|display| {
+                let _ = display.borrow_mut().clear(Rgb565::BLACK);
+            });
+            if let Some(host) = &mut self.host {
+                host.set_theme(*host.theme());
+            }
+        }
+        if !self.lit || status_is_shown() {
+            return;
+        }
+        if let Some(host) = &mut self.host {
+            if host.needs_drawing() {
+                self.display.lock(|display| {
+                    let _ = host.draw(&mut *display.borrow_mut());
+                });
+            }
+        }
+    }
 }
 
 #[embassy_executor::task]
-pub async fn run_shell(display: &'static SharedDisplay, mut backlight: Output<'static>) {
+pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, files: storage::Files) {
     Timer::after(START_PAGE_TIME).await;
     hide_status();
 
@@ -216,30 +342,20 @@ pub async fn run_shell(display: &'static SharedDisplay, mut backlight: Output<'s
         system: WatchSystem {
             request: Request::Nothing,
             random_state: Cell::new(clock::now() as u32 | 1),
+            brightness: backlight::DEFAULT_LEVEL,
+            brightness_request: None,
+            keep_screen_on: false,
         },
+        files,
+        backlight,
+        display,
+        lit: true,
     };
     shell.open(Showing::Face);
     let mut last_input = Instant::now();
-    let mut lit = true;
 
     loop {
-        if REDRAW_EVERYTHING.swap(false, Ordering::Relaxed) {
-            display.lock(|display| {
-                let _ = display.borrow_mut().clear(Rgb565::BLACK);
-            });
-            if let Some(host) = &mut shell.host {
-                host.set_theme(*host.theme());
-            }
-        }
-        if lit && !status_is_shown() {
-            if let Some(host) = &mut shell.host {
-                if host.needs_drawing() {
-                    display.lock(|display| {
-                        let _ = host.draw(&mut *display.borrow_mut());
-                    });
-                }
-            }
-        }
+        shell.draw();
 
         let now = clock::now();
         let mut wake_at = shell
@@ -247,7 +363,7 @@ pub async fn run_shell(display: &'static SharedDisplay, mut backlight: Output<'s
             .as_ref()
             .and_then(|host| host.next_wakeup(now))
             .map_or(Instant::MAX, clock::instant_at);
-        if lit {
+        if shell.lit && !shell.system.keep_screen_on {
             wake_at = wake_at.min(last_input + SCREEN_TIMEOUT);
         }
 
@@ -255,15 +371,15 @@ pub async fn run_shell(display: &'static SharedDisplay, mut backlight: Output<'s
             TOUCHES.receive(),
             BUTTON_PRESSES.receive(),
             Timer::at(wake_at),
-            battery::CHANGED.wait(),
+            system_values::next_changes(),
         )
         .await
         {
             Either4::First(touch) => {
                 last_input = Instant::now();
-                if !lit {
+                if !shell.lit {
                     if matches!(touch, Touch::Release { .. }) {
-                        lit = wake_screen(&mut shell, &mut backlight);
+                        shell.turn_screen_on();
                     }
                     continue;
                 }
@@ -271,39 +387,23 @@ pub async fn run_shell(display: &'static SharedDisplay, mut backlight: Output<'s
             }
             Either4::Second(press) => {
                 last_input = Instant::now();
-                if !lit {
-                    lit = wake_screen(&mut shell, &mut backlight);
+                if !shell.lit {
+                    shell.turn_screen_on();
                     continue;
                 }
                 shell.press_button(press);
             }
             Either4::Third(()) => {
-                if lit && Instant::now() >= last_input + SCREEN_TIMEOUT {
-                    backlight.set_high();
-                    lit = false;
-                    if let Some(host) = &mut shell.host {
-                        host.screen_turned_off(clock::now(), &mut shell.system);
-                    }
+                let timed_out = Instant::now() >= last_input + SCREEN_TIMEOUT;
+                if shell.lit && timed_out && !shell.system.keep_screen_on {
+                    shell.turn_screen_off();
                 }
                 if let Some(host) = &mut shell.host {
                     host.tick(clock::now(), &mut shell.system);
                 }
             }
-            Either4::Fourth(()) => {
-                if let Some(host) = &mut shell.host {
-                    let changed = SystemValue::BatteryPercent.bit() | SystemValue::IsCharging.bit();
-                    host.system_values_changed(changed, clock::now(), &mut shell.system);
-                }
-            }
+            Either4::Fourth(changed) => shell.system_values_changed(changed),
         }
         shell.follow_requests();
     }
-}
-
-fn wake_screen(shell: &mut Shell, backlight: &mut Output<'static>) -> bool {
-    backlight.set_low();
-    if let Some(host) = &mut shell.host {
-        host.screen_turned_on(clock::now(), &mut shell.system);
-    }
-    true
 }

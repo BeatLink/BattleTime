@@ -23,7 +23,7 @@ python3 tools/draw_memory_maps.py
 |---|---|---|---|
 | Bootloader | `0x00000` | 16 KB | The `embassy-boot` bootloader with its status screen, about 14 KB of it used. There is no SoftDevice and no MBR. |
 | Boot state | `0x04000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
-| Firmware | `0x05000` | 400 KB | The running firmware. It is linked to start here. It uses 322 KB, with the app host's fonts, the built-in apps and, for now, the shared library inside it. |
+| Firmware | `0x05000` | 400 KB | The running firmware. It is linked to start here. It uses 352 KB, with the app host's fonts, the built-in apps and, for now, the shared library inside it. |
 | Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, fonts, components, common functions and the preset themes. No apps are kept here; they live in `/apps` on the external flash. See [app-runtime.md](app-runtime.md#the-shared-library). |
 
 Inside the firmware, 48 KB is set aside for the app runtime: the interpreter, the image verifier,
@@ -65,10 +65,10 @@ firmware, which then has the whole of RAM but its last 16 bytes, the alive marke
 (`FIRMWARE_ALIVE_MARKER`) an emulator reads; the bootloader and the reloader keep their stacks
 below it too, so the marker survives from one firmware start to the next. Its third word is the
 bootloader's note to the firmware (`BOOT_NOTE_ADDRESS`), which says whether the recovery firmware
-was just installed. The firmware measures 46 KB of static RAM:
+was just installed. The firmware measures 48 KB of static RAM:
 36 KB of heap (16 KB for storage and the 20 KB UI heap), and
-the Bluetooth host, controller, display buffer and task state. That leaves about 18 KB for the
-stack. The table below is the budget:
+the Bluetooth host, controller, display buffer and task state. That leaves about 16 KB for the
+stack; the deepest call, opening an app, needs 8 KB of it. The table below is the budget:
 
 | Region | Budget | Holds | Status |
 |---|---|---|---|

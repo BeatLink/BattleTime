@@ -863,6 +863,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d5439c4ad607c3c23abf66de8c8bf57ba8adcd1f129e699851a6e43935d339d"
 
 [[package]]
+name = "neotime-accelerometer"
+version = "0.1.0"
+dependencies = [
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+]
+
+[[package]]
 name = "neotime-app-host"
 version = "0.1.0"
 dependencies = [
@@ -950,6 +958,7 @@ dependencies = [
  "embedded-storage-async",
  "heapless 0.9.3",
  "mipidsi",
+ "neotime-accelerometer",
  "neotime-app-host",
  "neotime-bluetooth",
  "neotime-boot",
@@ -961,6 +970,7 @@ dependencies = [
  "neotime-storage",
  "neotime-touch",
  "neotime-updates",
+ "neotime-vibrator",
  "static_cell",
  "trouble-host",
 ]
@@ -1002,6 +1012,14 @@ dependencies = [
  "embassy-boot",
  "embedded-storage-async",
  "neotime-boot",
+]
+
+[[package]]
+name = "neotime-vibrator"
+version = "0.1.0"
+dependencies = [
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
 ]
 
 [[package]]

@@ -160,7 +160,7 @@ pub async fn start(
     _spi_bus: &'static SpiBus,
     peripherals: StoragePeripherals,
     screen: &mut Screen,
-) -> Option<(Targets, Confirmation, Mode)> {
+) -> Option<(Targets, Confirmation, Mode, Files)> {
     core::mem::forget(Output::new(
         peripherals.flash_chip_select,
         Level::High,
@@ -174,7 +174,7 @@ pub async fn start(
         image_size_in_bytes: 0,
         bytes_received: 0,
     };
-    Some((targets, Confirmation, Mode::Confirmed))
+    Some((targets, Confirmation, Mode::Confirmed, Files))
 }
 
 // ============================================================================
@@ -186,5 +186,22 @@ pub struct Confirmation;
 impl Confirmation {
     pub async fn confirm(&mut self) -> bool {
         true
+    }
+}
+
+// ============================================================================
+// Files for saved app state, which the rehearsal does not keep
+// ============================================================================
+
+/// The rehearsal has no shell, so it keeps no files for it.
+pub struct Files;
+
+impl Files {
+    pub fn read(&self, _path: &str) -> Option<alloc::vec::Vec<u8>> {
+        None
+    }
+
+    pub fn write(&self, _path: &str, _bytes: &[u8]) -> bool {
+        false
     }
 }

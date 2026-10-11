@@ -16,7 +16,7 @@ extern crate alloc;
 
 use core::cell::RefCell;
 
-use embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice;
+use embassy_embedded_hal::shared_bus::{asynch::i2c::I2cDevice, blocking::spi::SpiDevice};
 use embassy_executor::Spawner;
 use embassy_nrf::{
     bind_interrupts,
@@ -55,6 +55,8 @@ mod storage;
 
 // The rehearsals run under wasp-os without the shell, which leaves these unused there.
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+mod backlight;
+#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod battery;
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod built_in_apps;
@@ -65,7 +67,13 @@ mod shell;
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod status;
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+mod motion;
+#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+mod system_values;
+#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod touch;
+#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+mod vibration;
 
 // ============================================================================
 // PineTime wiring
@@ -94,6 +102,10 @@ const BUTTON_POLL_INTERVAL: Duration = Duration::from_millis(20);
 const LONG_PRESS: Duration = Duration::from_millis(400);
 
 type SpiBus = Mutex<NoopRawMutex, RefCell<Spim<'static>>>;
+#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+type I2cBus = embassy_sync::mutex::Mutex<NoopRawMutex, twim::Twim<'static>>;
+/// One user of the I2C bus the touch panel and the accelerometer share.
+type I2cDeviceOnBus = I2cDevice<'static, NoopRawMutex, twim::Twim<'static>>;
 
 #[global_allocator]
 static HEAP: LlffHeap = LlffHeap::empty();
@@ -145,7 +157,11 @@ async fn main(spawner: Spawner) {
         Output::new(chip.P0_18, Level::Low, OutputDrive::Standard),
         Output::new(chip.P0_26, Level::High, OutputDrive::Standard),
     );
-    let backlight = Output::new(chip.P0_14, Level::Low, OutputDrive::Standard);
+    let backlight = backlight::Backlight::new(
+        Output::new(chip.P0_14, Level::High, OutputDrive::Standard),
+        Output::new(chip.P0_22, Level::High, OutputDrive::Standard),
+        Output::new(chip.P0_23, Level::High, OutputDrive::Standard),
+    );
     let mut title = heapless::String::<22>::new();
     let _ = core::fmt::write(&mut title, format_args!("NeoTime {FIRMWARE_VERSION}"));
     screen.write_line(line::TITLE, &title);
@@ -167,7 +183,7 @@ async fn main(spawner: Spawner) {
         flash_chip_select: chip.P0_05,
         flash_controller: chip.NVMC,
     };
-    let Some((targets, confirmation, mode)) = storage::start(spi_bus, storage_peripherals, &mut screen).await
+    let Some((targets, confirmation, mode, files)) = storage::start(spi_bus, storage_peripherals, &mut screen).await
     else {
         return;
     };
@@ -176,20 +192,22 @@ async fn main(spawner: Spawner) {
     storage::leave_breadcrumb(stage::STORAGE_READY);
     #[cfg(not(feature = "wasp-os-rehearsal"))]
     {
-        static TOUCH_BUFFER: StaticCell<[u8; 16]> = StaticCell::new();
-        let mut touch_config = twim::Config::default();
-        touch_config.frequency = twim::Frequency::K400;
-        let touch_bus = twim::Twim::new(
+        // The touch panel and the accelerometer share one I2C bus; 32 bytes holds the largest write either makes.
+        static I2C_BUFFER: StaticCell<[u8; 32]> = StaticCell::new();
+        static I2C_BUS: StaticCell<I2cBus> = StaticCell::new();
+        let mut i2c_config = twim::Config::default();
+        i2c_config.frequency = twim::Frequency::K400;
+        let i2c_bus: &'static I2cBus = I2C_BUS.init(embassy_sync::mutex::Mutex::new(twim::Twim::new(
             chip.TWISPI1,
             Interrupts,
             chip.P0_06,
             chip.P0_07,
-            touch_config,
-            TOUCH_BUFFER.init([0; 16]),
-        );
+            i2c_config,
+            I2C_BUFFER.init([0; 32]),
+        )));
         spawner.spawn(
             touch::read_touches(
-                touch_bus,
+                I2cDevice::new(i2c_bus),
                 Input::new(chip.P0_28, Pull::Up),
                 Output::new(chip.P0_10, Level::High, OutputDrive::Standard),
             )
@@ -203,10 +221,12 @@ async fn main(spawner: Spawner) {
             )
             .unwrap(),
         );
-        spawner.spawn(shell::run_shell(screen.display, backlight).unwrap());
+        spawner.spawn(motion::count_steps(I2cDevice::new(i2c_bus)).unwrap());
+        spawner.spawn(vibration::run_vibrator(Output::new(chip.P0_16, Level::High, OutputDrive::Standard)).unwrap());
+        spawner.spawn(shell::run_shell(screen.display, backlight, files).unwrap());
     }
     #[cfg(feature = "wasp-os-rehearsal")]
-    let _backlight_on = backlight;
+    let _unused = (backlight, files);
     let controller = neotime_bluetooth::start(
         neotime_bluetooth::RadioPeripherals {
             radio: chip.RADIO,
