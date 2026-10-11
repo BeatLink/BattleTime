@@ -2,6 +2,10 @@
 
 Work that is known to be needed but not done yet.
 
+When an item is done, remove it here. If it is something the user sees, add it to
+[features.md](features.md); if not, describe it in [architecture.md](architecture.md) or the
+document for its part instead.
+
 ## Hardware tests
 
 - [ ] **Touch panel on the PineTime.** `neotime-touch` has only run against fake hardware. Once the
@@ -109,6 +113,16 @@ button-gated watchdog feeding exist but have run only on the computer.
   reused least recently used first. Each slot is filled by one DMA read of a whole resource, such
   as a font or picture from a resource package or a handler from `/apps`, so each costs one SPI
   transaction instead of many small reads.
+
+## Apps and faces
+
+- [ ] **alarm and twos do not open in the simulator.** Both compile, but the simulator stops with
+  `the app did not open: Image(TableOutOfBounds)`, so neither has been seen on screen, including
+  twos' new board layout. Waiting on the app runtime.
+- [ ] **The weather forecast shows wrong numbers in the simulator.** Each day reads a high of -922
+  and a low of 3372, while today's temperatures are right. The cause is either the simulator's
+  forecast data or how the compiler reads `current_weather.value.forecast[place].high` inside a
+  component. Waiting on the app runtime.
 
 ## Display and SPI bus
 

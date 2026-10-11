@@ -131,10 +131,11 @@ NeoTime/
 │   ├── coding-guidelines.md
 │   ├── compiler.md   the app compiler: the language subset, types and number mappings
 │   ├── faces.md      the watch faces ported from InfiniTime, wasp-os and PinetimeLite
+│   ├── features.md   what the watch can do, added as each feature is finished
 │   ├── memory-map.md how RAM and both flashes are divided
 │   ├── simulator.md
 │   ├── storage.md
-│   ├── todo.md
+│   ├── todo.md       work not done yet
 │   ├── updates.md    firmware updates over Bluetooth and moving a watch onto NeoTime
 │   └── images/       pictures for the docs
 ├── drivers/
