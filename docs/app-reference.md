@@ -34,7 +34,7 @@ time.
 | `next_alarm` | `Instant \| null` | The next alarm any app has set to ring, or `null` if none is set. In app code an empty optional is always `null`. |
 | `current_weather` | object | The last forecast the phone sent: `temperature`, `condition`, `low`, `high`, `sunrise`, `sunset`, `location` and `received_at` (each `null` until the phone sends it). Reading it needs no permission, so faces need no subscription of their own. |
 | `current_music` | object | The phone's player: `artist`, `track`, `is_playing`, `position` and `length`. Needs the `phone` permission. |
-| `current_navigation` | object | The phone's navigation: `turn`, `instruction`, `distance` and `progress_percent`. Needs the `phone` permission. |
+| `current_navigation` | object | The phone's navigation: `turn`, `instruction` (text), `distance` in metres and `progress_percent`. Needs the `phone` permission. |
 
 The system keeps the latest weather, music and navigation, including their text, and keeps them
 through a reboot, so an app shows them by reading these values rather than copying event text into
@@ -124,7 +124,7 @@ A handler run in the background may vibrate and notify without the `wake` permis
 | `call(handler)` | `kind`, `caller` | A call is `incoming`, `answered` or `ended`. |
 | `music(handler)` | `is_playing`, `artist`, `track`, `position`, `length` | The phone's player changes. |
 | `weather(handler)` | `temperature`, `condition`, `low`, `high`, `location`, `days` | The phone sends a forecast. `days` holds up to 5 coming days, each with `condition`, `low` and `high`. |
-| `navigation(handler)` | `turn`, `instruction`, `distance`, `progress_percent` | The phone's navigation app gives the next step. |
+| `navigation(handler)` | `turn`, `instruction`, `distance` (metres), `progress_percent` | The phone's navigation app gives the next step. |
 | `message(channel, handler)` | the message's fields | The companion app sends this app a message on its own channel. |
 | `http_response(handler)` | `request_id`, `status`, `body` | A reply to an `http_request` effect. |
 | `settings_change(handler)` | the changed keys | The user changes a setting in `settings`. |
@@ -151,6 +151,9 @@ when a screen opens. Each one takes the common props below plus its own.
 | `visible` | Whether the widget is shown. `{condition && <Widget/>}` sets it. |
 | `animate` | A duration in milliseconds. A bound property that changes slides to its new value instead of jumping. |
 | `opacity` | 0 to 255. |
+| `gap` | On a container, the space in pixels between its children. |
+| `justify`, `align_items` | On a container, where its children sit along and across it: `start`, `center`, `end` or `space_between`. |
+| `disabled` | On an input, shows it greyed out and ignores touches. |
 
 ### Layout
 
