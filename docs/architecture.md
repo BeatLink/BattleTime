@@ -74,14 +74,18 @@ vibration pattern, waits without blocking the others. **(planned)**
 NeoTime/
 ├── Cargo.toml        one Cargo workspace for every crate
 ├── rustfmt.toml      formatting rules
+├── flake.nix       development shell, simulator package and checks
+├── rust-toolchain.toml  the Rust version and the watch's target
 ├── docs/
 │   ├── architecture.md
-│   └── coding-guidelines.md
+│   ├── coding-guidelines.md
+│   └── simulator.md
 ├── drivers/
 │   ├── button/       neotime-button: the side button
 │   ├── display/      neotime-display: the ST7789 screen
 │   ├── touch/        neotime-touch: the CST816S touch panel
 │   └── vibrator/     neotime-vibrator: the vibration motor
+├── simulator/        neotime-simulator: the drivers in a desktop window
 └── ui/               neotime-ui: draws rlvgl widgets on the screen
 ```
 
@@ -186,19 +190,35 @@ driver's `Display`, and carries out rlvgl's drawing calls on it:
 rlvgl needs a heap (`alloc`), which the firmware will have to provide. Still to do: sizing that heap,
 touch input, page slides on the hardware scroll, and a desktop simulator.
 
+## Simulator (`simulator`)
+
+`neotime-simulator` runs the drivers on a desktop in a 240x240 window, against simulated
+hardware: a model of the ST7789 that follows the commands the display driver sends, and a motor
+pin. It is a `std` program, so it sits beside the layers rather than in them and is never built
+for the watch. The mouse is the touch panel and the space bar is the side button. See
+[simulator.md](simulator.md).
+
 ## Building and testing
 
-The drivers are tested on the computer against fake hardware:
+`flake.nix` holds everything needed. `nix develop` opens a shell with the Rust toolchain from
+`rust-toolchain.toml`, which includes the watch's `thumbv7em-none-eabihf` target, and SDL2 for the
+simulator.
+
+Every crate is tested on the computer, the drivers against fake hardware and the simulator against
+its panel model:
 
 ```sh
-cargo test
+cargo test --workspace
 ```
 
-To check that they build for the watch:
+To check that the drivers build for the watch:
 
 ```sh
-rustup target add thumbv7em-none-eabihf
 cargo build --release --target thumbv7em-none-eabihf
 ```
+
+The workspace's default members are the `no_std` crates only, so that build leaves the simulator
+out. `nix flake check` runs the tests, the watch build, clippy and a headless simulator screenshot
+in a clean sandbox.
 
 There is no firmware image to flash yet. That arrives with the board layer.

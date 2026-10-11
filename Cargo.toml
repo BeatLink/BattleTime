@@ -1,3 +1,5 @@
 [workspace]
 resolver = "2"
-members = ["drivers/*", "ui"]
+members = ["drivers/*", "ui", "simulator"]
+# The simulator needs std, so plain builds for the watch leave it out.
+default-members = ["drivers/*", "ui"]

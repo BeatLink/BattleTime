@@ -1,0 +1,16 @@
+[package]
+name = "neotime-simulator"
+version = "0.1.0"
+edition = "2021"
+description = "Runs the NeoTime drivers on the desktop against a simulated PineTime"
+publish = false
+
+[dependencies]
+embassy-futures = "0.1"
+embedded-graphics = "0.8"
+embedded-graphics-simulator = "0.7"
+embedded-hal = "1.0"
+embedded-hal-async = "1.0"
+mipidsi = "0.10"
+neotime-display = { path = "../drivers/display" }
+neotime-vibrator = { path = "../drivers/vibrator" }
