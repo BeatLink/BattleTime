@@ -130,14 +130,10 @@ const _: () = {
 // Firmware image check
 // ============================================================================
 
-/// Checks the vector table at the start of an image: a stack pointer in RAM and a reset handler in `FIRMWARE`.
-pub fn looks_like_firmware<Flash: NorFlash>(
-    flash: &mut Flash,
-    image_start: u32,
-) -> Result<bool, Flash::Error> {
-    let mut vector_table_start = [0; 8];
-    flash.read(image_start, &mut vector_table_start)?;
+pub const VECTOR_TABLE_CHECK_SIZE: usize = 8;
 
+/// Checks the vector table at the start of an image: a stack pointer in RAM and a reset handler in `FIRMWARE`.
+pub fn is_firmware_vector_table(vector_table_start: [u8; VECTOR_TABLE_CHECK_SIZE]) -> bool {
     let [stack_pointer, reset_handler] = [&vector_table_start[..4], &vector_table_start[4..]]
         .map(|word| u32::from_le_bytes(word.try_into().unwrap()));
     let reset_handler_address = reset_handler & !1;
@@ -146,7 +142,17 @@ pub fn looks_like_firmware<Flash: NorFlash>(
     let reset_handler_is_thumb_code = reset_handler & 1 == 1;
     let reset_handler_is_in_firmware = FIRMWARE.contains(reset_handler_address);
 
-    Ok(stack_pointer_is_in_ram && reset_handler_is_thumb_code && reset_handler_is_in_firmware)
+    stack_pointer_is_in_ram && reset_handler_is_thumb_code && reset_handler_is_in_firmware
+}
+
+pub fn looks_like_firmware<Flash: NorFlash>(
+    flash: &mut Flash,
+    image_start: u32,
+) -> Result<bool, Flash::Error> {
+    let mut vector_table_start = [0; VECTOR_TABLE_CHECK_SIZE];
+    flash.read(image_start, &mut vector_table_start)?;
+
+    Ok(is_firmware_vector_table(vector_table_start))
 }
 
 // ============================================================================

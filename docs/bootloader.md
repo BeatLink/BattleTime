@@ -74,14 +74,16 @@ Every flash read, write and erase feeds the watchdog, so a long swap does not tr
 
 ## What the firmware must do
 
-- **Mark itself booted** with embassy-boot's `FirmwareUpdater::mark_booted` once it is sure it works,
-  for example after the BLE stack and screen have started. Otherwise the next reset rolls it back.
+- **Mark itself booted** with `neotime_updates::confirm_running_firmware` once it is sure it works,
+  for example after the BLE stack and screen have started. Otherwise the next reset rolls it back,
+  and no new update is accepted until it does.
 - **Feed the watchdog.** It is still running when the firmware starts. Take it over with the
   same timeout, `WATCHDOG_TIMEOUT_IN_TICKS`, and feed it from the system loop.
-- **Install updates** by writing the new image, a raw `.bin` linked at `FIRMWARE`, to
-  `FIRMWARE_UPDATE` with `FirmwareUpdater`, checking that it arrived whole, calling `mark_updated`,
-  and resetting.
-- **Keep a recovery firmware** in `RECOVERY_FIRMWARE`. Nothing writes it yet.
+- **Install updates** by feeding the new image, a raw `.bin` linked at `FIRMWARE`, to
+  `neotime_updates::UpdateReceiver`, which stores it in `FIRMWARE_UPDATE` and marks the swap, then
+  resetting.
+- **Keep a recovery firmware** in `RECOVERY_FIRMWARE`, written with
+  `neotime_updates::RecoveryReceiver`.
 
 ## Recovery
 
@@ -123,6 +125,7 @@ cargo build --release
   written against `neotime-boot`'s layout, and can be tried first in the Renode emulator in
   `PineTimeEmulator/`. Rewriting address 0 is the one step with no way back: a power cut or a bug
   there leaves the watch unable to start until it is reflashed over SWD.
-- **The recovery firmware** itself, and the firmware's side of updates.
-- **Signed updates.** embassy-boot can check an ed25519 signature before installing; nothing uses
-  it yet.
+- **The recovery firmware** itself.
+- **Signed updates.** embassy-boot's updater can check an ed25519 signature before marking a swap.
+  That check runs in the firmware, in `neotime-updates`, so it costs the bootloader nothing; it is
+  not used yet.

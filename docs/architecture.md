@@ -33,7 +33,7 @@ flowchart TB
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>(planned: power, events, settings, notifications)"]
-    services["Services<br/>services/storage; planned: BLE host on TrouBLE, time, steps, updates"]
+    services["Services<br/>services/storage, services/updates;<br/>planned: BLE host on TrouBLE, time, steps"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth,<br/>drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
@@ -67,7 +67,8 @@ Each layer uses only the layers below it.
 - **Services** keep the watch's state: the BLE link and the GATT services companion apps use, the
   clock, the step count, files on the external flash, and firmware updates. The BLE link will run
   the [TrouBLE](https://github.com/embassy-rs/trouble) host on NeoTime's own controller in
-  `drivers/bluetooth`. **(started: files on the external flash)**
+  `drivers/bluetooth`. **(started: files on the external flash, and the on-watch half of firmware
+  updates)**
 - **System** runs the watch: it sleeps and wakes, turns button, touch and motion into events, and
   holds settings and notifications. **(planned)**
 - **UI toolkit** gives apps widgets, fonts and page transitions. Widgets come from
@@ -135,7 +136,8 @@ NeoTime/
 ├── sdk/
 │   └── neotime/      the neotime package apps and faces import, as a stand-in for now
 ├── services/
-│   └── storage/      neotime-storage: the littlefs file system in the external flash
+│   ├── storage/      neotime-storage: the littlefs file system in the external flash
+│   └── updates/      neotime-updates: stores an uploaded firmware and hands it to the bootloader
 ├── simulator/        neotime-simulator: the drivers in a desktop window
 ├── third_party/
 │   └── littlefs-rust/  littlefs-rust with its panicking loop caps turned off
@@ -348,6 +350,22 @@ across the flash; InfiniTime uses it on the same chip.
   systems written by the C littlefs.
 
 See [storage.md](storage.md).
+
+## Updates (`services/updates`)
+
+`neotime-updates` is the on-watch half of a firmware update, between the Bluetooth layer that
+uploads an image and the bootloader that installs it. It knows nothing of the upload protocol:
+
+- **`UpdateReceiver`** takes a firmware image with `begin(size)`, then `receive(chunk)` in order,
+  then `finish()`. It writes through embassy-boot's `FirmwareUpdater` into the update slot, erasing
+  each sector just before writing it. `finish` checks that every byte arrived and that the image
+  starts with a firmware vector table, then marks a swap for the next reset. `read_back` lets the
+  protocol above check its own checksum first.
+- **`confirm_running_firmware`** tells the bootloader the running firmware works. Until it is called
+  the next reset rolls back, and no new update is accepted.
+- **`RecoveryReceiver`** writes the recovery firmware into its own slot the same way. It erases the
+  start of the slot first and writes the vector table last, so the bootloader never sees a
+  half-written recovery firmware.
 
 ## Bootloader (`bootloader` and `boot`)
 
