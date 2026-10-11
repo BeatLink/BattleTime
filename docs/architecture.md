@@ -424,6 +424,12 @@ watch face, the launcher and the apps through `neotime-app-host`:
 - **Steps.** `motion.rs` reads the accelerometer's own step counter every 30 seconds and resets it
   at midnight. It shares the I2C bus with the touch panel. A change redraws what shows the steps
   and goes to the app's `steps` subscriptions.
+- **Diagnostics.** A NeoTime GATT service (`6e540001-…`) has one readable characteristic
+  (`6e540002-…`) of eight little-endian `u32` counters from `diagnostics.rs`: shell loops, what
+  last woke the shell, whether the screen is lit, the touch panel's state, touch reports, touches
+  sent, button presses and the accelerometer's state. It showed that the touch panel failed to
+  start while the accelerometer reset on the same bus, so the panel now starts first, with retries,
+  and the accelerometer waits for it.
 - **Saved state.** An app's persistent variables are written to `/apps/<id>/state` on the external
   flash when it closes or the screen turns off, only when one changed, and put back when it opens.
 - **Clock.** `clock.rs` counts on from the time a phone last wrote to the Current Time

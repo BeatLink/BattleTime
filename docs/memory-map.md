@@ -67,7 +67,7 @@ below it too, so the marker survives from one firmware start to the next. Its th
 bootloader's note to the firmware (`BOOT_NOTE_ADDRESS`), which says whether the recovery firmware
 was just installed. The firmware measures 48 KB of static RAM:
 36 KB of heap (16 KB for storage and the 20 KB UI heap), and
-the Bluetooth host, controller, display buffer and task state. That leaves about 16 KB for the
+the Bluetooth host, controller, display buffer and task state. That leaves about 15 KB for the
 stack; the deepest call, opening an app, needs 8 KB of it. The table below is the budget:
 
 | Region | Budget | Holds | Status |
