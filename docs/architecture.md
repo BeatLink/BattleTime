@@ -15,7 +15,7 @@ The PineTime is built around a Nordic nRF52832 chip: a 64 MHz Arm Cortex-M4F wit
 | Touch panel | Hynitron CST816S | I2C |
 | Accelerometer and step counter | Bosch BMA421 or BMA425 | I2C |
 | Heart rate sensor | HRS3300 | I2C |
-| External flash, 4 MB | SPI NOR | SPI, shared with the screen |
+| External flash, 4 MB | XTX XT25F32B SPI NOR | SPI, shared with the screen |
 | Vibration motor | | GPIO P0.16, on while low |
 | Backlight | | Three GPIO pins |
 | Side button | | GPIO P0.13, high while held; powered by P0.15 |
@@ -33,8 +33,8 @@ flowchart TB
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>(planned: power, events, settings, notifications)"]
-    services["Services<br/>(planned: BLE host on TrouBLE, time, steps, storage, updates)"]
-    drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth, ..."]
+    services["Services<br/>services/storage; planned: BLE host on TrouBLE, time, steps, updates"]
+    drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth,<br/>drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
 
@@ -49,6 +49,11 @@ flowchart TB
     services --> drivers
     drivers -. embedded-hal traits .-> board
     board --> hal
+
+    bootloader["Bootloader<br/>bootloader, boot<br/>(runs before the firmware)"]
+    bootloader --> drivers
+    bootloader --> hal
+    services -. flash layout .-> bootloader
 ```
 
 Each layer uses only the layers below it.
@@ -62,7 +67,7 @@ Each layer uses only the layers below it.
 - **Services** keep the watch's state: the BLE link and the GATT services companion apps use, the
   clock, the step count, files on the external flash, and firmware updates. The BLE link will run
   the [TrouBLE](https://github.com/embassy-rs/trouble) host on NeoTime's own controller in
-  `drivers/bluetooth`. **(planned)**
+  `drivers/bluetooth`. **(started: files on the external flash)**
 - **System** runs the watch: it sleeps and wakes, turns button, touch and motion into events, and
   holds settings and notifications. **(planned)**
 - **UI toolkit** gives apps widgets, fonts and page transitions. Widgets come from
@@ -77,6 +82,9 @@ Each layer uses only the layers below it.
   in the simulator; not yet on the watch)**
 - **App compiler** runs on the computer, not the watch. It turns an app's source into an image
   and checks it with the runtime's own checks. **(started)**
+- **Bootloader** is a separate program that runs before the firmware. It installs updates and the
+  recovery firmware, then starts the firmware. The firmware shares its flash layout through the
+  `neotime-boot` crate. See [Bootloader](#bootloader-bootloader-and-boot).
 
 ## Tasks
 
@@ -89,7 +97,7 @@ vibration pattern, waits without blocking the others. **(planned)**
 
 ```text
 NeoTime/
-├── Cargo.toml        one Cargo workspace for every crate
+├── Cargo.toml        one Cargo workspace for every crate except the bootloader
 ├── package.json      the npm workspace for apps/, faces/ and sdk/neotime
 ├── app-host/         neotime-app-host: runs an open app with rlvgl widgets
 ├── apps/             neotime-apps: apps in the app language, one folder each; see apps.md
@@ -97,17 +105,21 @@ NeoTime/
 ├── rustfmt.toml      formatting rules
 ├── flake.nix       development shell, simulator package and checks
 ├── rust-toolchain.toml  the Rust version and the watch's target
+├── boot/             neotime-boot: the flash layout, shared by the bootloader and the firmware
+├── bootloader/       neotime-bootloader: the bootloader program, built only for the watch
 ├── docs/
 │   ├── app-reference.md the events, widgets and effects apps can use
 │   ├── app-runtime.md the proposed app format and runtime
 │   ├── apps.md       the apps ported from InfiniTime and wasp-os
 │   ├── architecture.md
 │   ├── bluetooth.md  the Bluetooth controller
+│   ├── bootloader.md
 │   ├── coding-guidelines.md
 │   ├── compiler.md   the app compiler: the language subset, types and number mappings
 │   ├── faces.md      the watch faces ported from InfiniTime, wasp-os and PinetimeLite
 │   ├── memory-map.md how RAM and both flashes are divided
 │   ├── simulator.md
+│   ├── storage.md
 │   ├── todo.md
 │   └── images/       pictures for the docs
 ├── drivers/
@@ -115,13 +127,18 @@ NeoTime/
 │   ├── bluetooth/    neotime-bluetooth: the Bluetooth LE controller for the chip's radio
 │   ├── button/       neotime-button: the side button
 │   ├── display/      neotime-display: the ST7789 screen
+│   ├── external_flash/  neotime-external-flash: the 4 MB SPI NOR flash
 │   ├── touch/        neotime-touch: the CST816S touch panel
 │   └── vibrator/     neotime-vibrator: the vibration motor
 ├── faces/            neotime-faces: watch faces in the app language, one folder each; see faces.md
 ├── runtime/          neotime-runtime: app images, their checks, the interpreter and bindings
 ├── sdk/
 │   └── neotime/      the neotime package apps and faces import, as a stand-in for now
+├── services/
+│   └── storage/      neotime-storage: the littlefs file system in the external flash
 ├── simulator/        neotime-simulator: the drivers in a desktop window
+├── third_party/
+│   └── littlefs-rust/  littlefs-rust with its panicking loop caps turned off
 ├── tools/            scripts for development, such as drawing the memory maps
 └── ui/               neotime-ui: draws rlvgl widgets on the screen
 ```
@@ -293,6 +310,52 @@ byte-level format.
 
 It never allocates and never panics on bad input. Its working memory is 1,792 B for the
 interpreter, 1,032 B for the bindings of up to 64 expressions and 2,440 B for the state.
+### External flash (`drivers/external_flash`)
+
+`neotime-external-flash` drives the 4 MB SPI NOR flash as an `embedded-storage` `NorFlash`, the
+trait embassy-boot and littlefs are reached through:
+
+- **Any 4 MB chip.** `ExternalFlash::new` wakes the chip from deep power-down, since the firmware
+  may have left it asleep before a reset, then checks that it answers as a 4 MB chip. Only standard
+  SPI NOR commands are used, so a second-source part works as well as the XT25F32B.
+- **Writes of any length.** The chip programs at most 256 bytes at a time, within one page, so
+  `write` splits at page boundaries. `erase` takes whole 4 KB sectors.
+- **Power.** `sleep` puts the chip in deep power-down, and `wake` brings it back.
+
+It is blocking for now, which is what the bootloader needs; the firmware will want an async version.
+It keeps no buffers.
+
+## Storage (`services/storage`)
+
+`neotime-storage` puts a [littlefs](https://github.com/littlefs-project/littlefs) file system in
+the 3 MB `FILE_SYSTEM` region of the external flash, through
+[`littlefs-rust`](https://github.com/light-player/littlefs-rust), a pure Rust translation of the C
+littlefs with the same on-disk format. littlefs survives a power cut at any point and spreads wear
+across the flash; InfiniTime uses it on the same chip.
+
+- **First start.** `prepare_file_system` formats blank flash and makes the top-level folders:
+  `/apps`, `/settings` and `/resources`.
+- **Never formats by mistake.** It formats only when littlefs finds no file system at all. A read
+  error from the flash is returned instead, so a bus fault cannot wipe the watch.
+- **Cost.** The buffers live on the heap: under 1 KB while mounted and about 400 bytes per open file.
+- **Two fixes.** `littlefs-rust-core` is built without overflow checks, as C behaves, and a patched
+  copy of the wrapper in `third_party/littlefs-rust` turns off a 256-entry cap that panics on file
+  systems written by the C littlefs.
+
+See [storage.md](storage.md).
+
+## Bootloader (`bootloader` and `boot`)
+
+The bootloader is built on [embassy-boot](https://embassy.dev). It swaps in a waiting firmware
+update from external flash, rolls back a new firmware that never marked itself booted, and installs
+the recovery firmware when the button is held for about ten seconds. It is about 8 KB.
+
+`neotime-boot` holds the flash layout: in internal flash the bootloader, its state page, the
+running firmware and the shared library; in external flash the update slot, the
+recovery firmware and the file system. The firmware will use the same crate, so both sides agree.
+
+See [bootloader.md](bootloader.md) for the layout, the start-up steps, recovery and what the firmware
+must do.
 
 ## App compiler (`compiler`)
 
@@ -397,8 +460,8 @@ system that prints effects. See [simulator.md](simulator.md).
 ## Building and testing
 
 `flake.nix` holds everything needed. `nix develop` opens a shell with the Rust toolchain from
-`rust-toolchain.toml`, which includes the watch's `thumbv7em-none-eabihf` target, and SDL2 for the
-simulator.
+`rust-toolchain.toml`, which includes the watch's `thumbv7em-none-eabihf` target, SDL2 for the
+simulator, and probe-rs for flashing.
 
 Every crate is tested on the computer, the drivers against fake hardware and the simulator against
 its panel model:
@@ -416,5 +479,12 @@ cargo build --release --target thumbv7em-none-eabihf
 The workspace's default members are the `no_std` crates only, so that build leaves the simulator
 out. `nix flake check` runs the tests, the watch build, clippy and two headless simulator
 screenshots, one of them of the stopwatch app after a click, in a clean sandbox.
+
+The bootloader is outside the workspace and builds only for the watch:
+
+```sh
+cd bootloader
+cargo build --release
+```
 
 There is no firmware image to flash yet. That arrives with the board layer.

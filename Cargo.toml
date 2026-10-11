@@ -1,8 +1,18 @@
 [workspace]
 resolver = "2"
-members = ["drivers/*", "runtime", "ui", "app-host", "simulator", "compiler"]
+members = ["boot", "drivers/*", "services/*", "runtime", "ui", "app-host", "simulator", "compiler"]
 # The simulator needs std, so plain builds for the watch leave it out.
-default-members = ["drivers/*", "runtime", "ui", "app-host"]
+default-members = ["boot", "drivers/*", "services/*", "runtime", "ui", "app-host"]
+# The bootloader builds only for the watch, with its own settings.
+exclude = ["bootloader", "third_party/littlefs-rust"]
 
 [workspace.package]
 license = "GPL-3.0-or-later"
+
+# littlefs-rust with the core's panicking loop caps turned off; see third_party/littlefs-rust/NEOTIME.md.
+[patch.crates-io]
+littlefs-rust = { path = "third_party/littlefs-rust" }
+
+# littlefs-rust-core is translated from C and relies on unsigned numbers wrapping, as C's do.
+[profile.dev.package.littlefs-rust-core]
+overflow-checks = false

@@ -17,19 +17,19 @@ MEMORIES = {
     "internal-flash": (
         "Internal flash, 512 KB",
         [
-            ("Firmware", "0x09000", 384, "firmware"),
+            ("Firmware", "0x05000", 400, "firmware"),
             ("Shared library", "0x69000", 92, "data"),
-            ("Bootloader", "0x00000", 32, "boot"),
-            ("Boot state", "0x08000", 4, "boot"),
+            ("Bootloader", "0x00000", 16, "boot"),
+            ("Boot state", "0x04000", 4, "boot"),
         ],
     ),
     "external-flash": (
         "External SPI flash, 4 MB",
         [
             ("File system", "0x100000", 3072, "data"),
-            ("Firmware update", "0x000000", 388, "firmware"),
-            ("Recovery firmware", "0x061000", 384, "boot"),
-            ("Reserved for growth", "0x0C1000", 252, "spare"),
+            ("Firmware update", "0x000000", 404, "firmware"),
+            ("Recovery firmware", "0x065000", 400, "boot"),
+            ("Reserved for growth", "0x0C9000", 220, "spare"),
         ],
     ),
     "ram": (

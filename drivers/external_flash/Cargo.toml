@@ -1,0 +1,10 @@
+[package]
+name = "neotime-external-flash"
+version = "0.1.0"
+edition = "2021"
+description = "PineTime 4 MB XT25F32B SPI NOR flash driver"
+publish = false
+
+[dependencies]
+embedded-hal = "1.0"
+embedded-storage = "0.3"

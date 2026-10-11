@@ -1,18 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420" font-family="Helvetica, Arial, sans-serif">
 <rect width="800" height="420" rx="6" fill="#1f2328"/>
 <text x="12" y="23" font-size="17" font-weight="bold" fill="#ffffff">Internal flash, 512 KB</text>
-<rect x="3.0" y="37.0" width="594.0" height="380.0" rx="4" fill="#2a9d8f"/>
-<text x="300.0" y="212.3" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Firmware</text>
-<text x="300.0" y="232.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">384 KB</text>
-<text x="300.0" y="252.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x09000</text>
-<rect x="603.0" y="37.0" width="194.0" height="271.4" rx="4" fill="#5a9e4b"/>
-<text x="700.0" y="158.1" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Shared library</text>
-<text x="700.0" y="178.1" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">92 KB</text>
-<text x="700.0" y="198.1" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x69000</text>
-<rect x="603.0" y="314.4" width="171.8" height="102.6" rx="4" fill="#3b6fb6"/>
-<text x="688.9" y="351.1" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Bootloader</text>
-<text x="688.9" y="371.1" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">32 KB</text>
-<text x="688.9" y="391.1" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x00000</text>
-<rect x="780.8" y="314.4" width="16.2" height="102.6" rx="4" fill="#3b6fb6"/>
-<text x="788" y="23" font-size="13" fill="#c9d1d9" text-anchor="end">Too small to label: Boot state 4 KB 0x08000</text>
+<rect x="3.0" y="37.0" width="619.0" height="380.0" rx="4" fill="#2a9d8f"/>
+<text x="312.5" y="212.3" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Firmware</text>
+<text x="312.5" y="232.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">400 KB</text>
+<text x="312.5" y="252.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x05000</text>
+<rect x="628.0" y="37.0" width="169.0" height="311.1" rx="4" fill="#5a9e4b"/>
+<text x="712.5" y="177.9" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Shared library</text>
+<text x="712.5" y="197.9" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">92 KB</text>
+<text x="712.5" y="217.9" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x69000</text>
+<rect x="628.0" y="354.1" width="134.0" height="62.9" rx="4" fill="#3b6fb6"/>
+<text x="695.0" y="372.7" font-size="14.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Bootloader</text>
+<text x="695.0" y="390.2" font-size="14.0" font-weight="normal" fill="#ffffff" text-anchor="middle">16 KB</text>
+<text x="695.0" y="407.7" font-size="14.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x00000</text>
+<rect x="768.0" y="354.1" width="29.0" height="62.9" rx="4" fill="#3b6fb6"/>
+<text x="788" y="23" font-size="13" fill="#c9d1d9" text-anchor="end">Too small to label: Boot state 4 KB 0x04000</text>
 </svg>

@@ -5,16 +5,16 @@
 <text x="300.0" y="212.3" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">File system</text>
 <text x="300.0" y="232.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">3 MB</text>
 <text x="300.0" y="252.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x100000</text>
-<rect x="603.0" y="37.0" width="194.0" height="140.3" rx="4" fill="#2a9d8f"/>
-<text x="700.0" y="92.5" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Firmware update</text>
-<text x="700.0" y="112.5" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">388 KB</text>
-<text x="700.0" y="132.5" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x000000</text>
-<rect x="603.0" y="183.3" width="194.0" height="138.8" rx="4" fill="#3b6fb6"/>
-<text x="700.0" y="238.0" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Recovery firmware</text>
-<text x="700.0" y="258.0" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">384 KB</text>
-<text x="700.0" y="278.0" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x061000</text>
-<rect x="603.0" y="328.0" width="194.0" height="89.0" rx="4" fill="#8a8f98"/>
-<text x="700.0" y="358.6" font-size="15.2" font-weight="bold" fill="#ffffff" text-anchor="middle">Reserved for growth</text>
-<text x="700.0" y="377.6" font-size="15.2" font-weight="normal" fill="#ffffff" text-anchor="middle">252 KB</text>
-<text x="700.0" y="396.5" font-size="15.2" font-weight="normal" fill="#ffffff" text-anchor="middle">0x0C1000</text>
+<rect x="603.0" y="37.0" width="194.0" height="146.3" rx="4" fill="#2a9d8f"/>
+<text x="700.0" y="95.5" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Firmware update</text>
+<text x="700.0" y="115.5" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">404 KB</text>
+<text x="700.0" y="135.5" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x000000</text>
+<rect x="603.0" y="189.3" width="194.0" height="144.8" rx="4" fill="#3b6fb6"/>
+<text x="700.0" y="247.0" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Recovery firmware</text>
+<text x="700.0" y="267.0" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">400 KB</text>
+<text x="700.0" y="287.0" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x065000</text>
+<rect x="603.0" y="340.1" width="194.0" height="76.9" rx="4" fill="#8a8f98"/>
+<text x="700.0" y="364.6" font-size="15.2" font-weight="bold" fill="#ffffff" text-anchor="middle">Reserved for growth</text>
+<text x="700.0" y="383.6" font-size="15.2" font-weight="normal" fill="#ffffff" text-anchor="middle">220 KB</text>
+<text x="700.0" y="402.6" font-size="15.2" font-weight="normal" fill="#ffffff" text-anchor="middle">0x0C9000</text>
 </svg>
