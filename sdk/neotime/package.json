@@ -1,0 +1,17 @@
+{
+  "name": "neotime",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./widgets": "./src/widgets.tsx",
+    "./components": "./src/components.tsx",
+    "./icons": "./src/icons.ts",
+    "./lib": "./src/lib.ts",
+    "./preview": "./src/preview.tsx"
+  },
+  "peerDependencies": {
+    "@preact/signals": "*",
+    "preact": "*"
+  }
+}
