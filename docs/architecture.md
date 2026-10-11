@@ -33,7 +33,7 @@ flowchart TB
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>(planned: power, events, settings, notifications)"]
-    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/companion; planned: time, steps"]
+    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/companion,<br/>services/packages; planned: time, steps"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth,<br/>drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
@@ -155,6 +155,7 @@ NeoTime/
 ├── services/
 │   ├── companion/    neotime-companion: the companion app's JSON lines over the UART service
 │   ├── dfu/          neotime-dfu: the legacy DFU update protocol over Bluetooth
+│   ├── packages/     neotime-packages: the apps installed in /apps and the shared library's install
 │   ├── storage/      neotime-storage: the littlefs file system in the external flash
 │   └── updates/      neotime-updates: stores an uploaded firmware and hands it to the bootloader
 ├── simulator/        neotime-simulator: the drivers in a desktop window
@@ -403,6 +404,30 @@ Gadgetbridge sends them or bare. `LineAssembler` joins writes into lines and dro
 `settings_report` writes the `settings` reply. It knows nothing of Bluetooth, so its tests run on
 a computer. So far it reads `settings` (a preset theme, single colours and the brightness) and
 names every other message by its `t`.
+
+## Packages (`services/packages`)
+
+`neotime-packages` is the package manager for the apps and watch faces on the external flash. Each
+app has a folder, `/apps/<id>/`, with `app.ntapp`, its compiled image, and `state`, what it saved.
+The folders are the whole record: there is no list of installed apps to fall out of step with them.
+
+- **`Packages`** works on the mounted file system. `install` checks an image already written to the
+  app's folder with the same `AppImage::parse` and `verify` the app host uses, refuses the shared
+  library, and refuses an image whose id is not the folder's name; a bad image is left where it is
+  so the phone can send it again. `remove` deletes the folder with the saved state. `set_enabled`
+  hides an app from the launcher with a `disabled` marker, without deleting it. `list` returns
+  every valid app in id order, and `enabled` the ones the launcher shows. `read_image` hands the
+  shell an image to load into RAM.
+- **`commands`** answers the packages characteristic's JSON lines (`apps`, `install`, `remove`,
+  `enable`, `install_library`) and says whether the apps or the library changed, so the shell can
+  read them again.
+- **`library`** copies a checked shared library from `/resources/shared.ntlib` into the internal
+  `SHARED_LIBRARY` region behind an 8-byte header, `NTLB` and the image's length, since the erased
+  tail of the region would spoil the image's CRC. It erases only the pages it needs inside the
+  region and writes the header last. `installed_library` finds the image again.
+
+It knows nothing of Bluetooth, so its tests run on a computer against littlefs in RAM and a fake
+internal flash.
 
 ## Firmware updates over Bluetooth (`services/dfu`)
 

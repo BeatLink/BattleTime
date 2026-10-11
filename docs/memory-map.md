@@ -24,7 +24,7 @@ python3 tools/draw_memory_maps.py
 | Bootloader | `0x00000` | 16 KB | The `embassy-boot` bootloader with its status screen, about 14 KB of it used. There is no SoftDevice and no MBR. |
 | Boot state | `0x04000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
 | Firmware | `0x05000` | 400 KB | The running firmware. It is linked to start here. It uses 368 KB, with the app host's fonts, the built-in apps and, for now, the shared library inside it. |
-| Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, fonts, components, common functions and the preset themes. No apps are kept here; they live in `/apps` on the external flash. See [app-runtime.md](app-runtime.md#the-shared-library). |
+| Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, fonts, components, common functions and the preset themes. No apps are kept here; they live in `/apps` on the external flash. An installed library starts with an 8-byte header, `NTLB` and its length, which `neotime-packages` writes. See [app-runtime.md](app-runtime.md#the-shared-library). |
 
 Inside the firmware, 48 KB is set aside for the app runtime: the interpreter, the image verifier,
 the scheduler and the code that turns an app's widget tree into rlvgl widgets. It is part of the

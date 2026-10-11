@@ -1199,6 +1199,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-packages"
+version = "0.1.0"
+dependencies = [
+ "embedded-storage",
+ "heapless 0.9.3",
+ "littlefs-rust",
+ "neotime-boot",
+ "neotime-runtime",
+ "neotime-storage",
+ "serde",
+ "serde-json-core",
+]
+
+[[package]]
 name = "neotime-runtime"
 version = "0.1.0"
 
