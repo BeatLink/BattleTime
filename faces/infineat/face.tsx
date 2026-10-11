@@ -73,19 +73,19 @@ const display_hour = computed(() => {
   return uses_24_hour_clock.value ? hour : hour % 12 === 0 ? 12 : hour % 12;
 });
 
-/** While charging the logo fills up again and again, a quarter of the way each second. */
-const shown_battery_percent = computed(() =>
-  is_charging.value
-    ? Math.min(
-        100,
-        battery_percent.value + Math.floor(((100 - battery_percent.value) * (second_of(now.value) % 5)) / 4),
-      )
-    : battery_percent.value,
-);
+/** The bottom of the dark bar that hides the drained part of the logo for a given charge. */
+function cover_bottom_for(percent: number): number {
+  return LOGO_TOP + 1 + Math.floor((LOGO_HEIGHT * (100 - percent)) / 100);
+}
 
-/** The bottom of the dark bar that hides the drained part of the logo. */
-const battery_cover_bottom = computed(
-  () => LOGO_TOP + 1 + Math.floor((LOGO_HEIGHT * (100 - shown_battery_percent.value)) / 100),
+/** The cover off the charger, which reads no clock, so it redraws only when the charge changes. */
+const resting_cover_bottom = computed(() => cover_bottom_for(battery_percent.value));
+
+/** While charging the logo fills up again and again, a quarter of the way each second. */
+const charging_cover_bottom = computed(() =>
+  cover_bottom_for(
+    Math.min(100, battery_percent.value + Math.floor(((100 - battery_percent.value) * (second_of(now.value) % 5)) / 4)),
+  ),
 );
 
 /** The notification dot takes the palette's accent, or white without the side cover. */
@@ -131,12 +131,21 @@ function PineLogo() {
         color="#ffffff"
       />
       <Line points={[{ x: 27, y: 133 }, { x: 27, y: 138 }]} thickness={4} color="#ffffff" />
-      <Line
-        points={[{ x: 27, y: LOGO_TOP }, { x: 27, y: battery_cover_bottom.value }]}
-        thickness={26}
-        rounded={false}
-        color="#000000"
-      />
+      {is_charging.value ? (
+        <Line
+          points={[{ x: 27, y: LOGO_TOP }, { x: 27, y: charging_cover_bottom.value }]}
+          thickness={26}
+          rounded={false}
+          color="#000000"
+        />
+      ) : (
+        <Line
+          points={[{ x: 27, y: LOGO_TOP }, { x: 27, y: resting_cover_bottom.value }]}
+          thickness={26}
+          rounded={false}
+          color="#000000"
+        />
+      )}
     </>
   );
 }

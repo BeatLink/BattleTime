@@ -25,32 +25,20 @@ import { Column, Icon, Label, Row, Screen } from "neotime/widgets";
 /** White for neither, red for hours, green for minutes and blue for both. */
 const SQUARE_COLORS: Color[] = ["#ffffff", "#ff0000", "#00ff00", "#0000ff"];
 
+/**
+ * How each number from 0 to 12 splits into the squares 5, 3, 2, 1 and 1, largest first,
+ * as a mask with 1 for the 5, 2 for the 3, 4 for the 2, 8 for the first 1 and 16 for the second.
+ */
+const FIBONACCI_MASKS = [0, 8, 4, 2, 10, 1, 9, 5, 3, 11, 7, 15, 31];
+
 // ============================================================================
 // Derived values
 // ============================================================================
 
-/**
- * Splits a number from 0 to 12 into the squares 5, 3, 2, 1 and 1, largest first,
- * as a mask with 1 for the 5, 2 for the 3, 4 for the 2, 8 for the first 1 and 16 for the second.
- */
-function fibonacci_mask(value: number): number {
-  const after_five = value >= 5 ? value - 5 : value;
-  const after_three = after_five >= 3 ? after_five - 3 : after_five;
-  const after_two = after_three >= 2 ? after_three - 2 : after_three;
-  const after_first_one = after_two >= 1 ? after_two - 1 : after_two;
-  return (
-    (value >= 5 ? 1 : 0) +
-    (after_five >= 3 ? 2 : 0) +
-    (after_three >= 2 ? 4 : 0) +
-    (after_two >= 1 ? 8 : 0) +
-    (after_first_one >= 1 ? 16 : 0)
-  );
-}
-
-const hour_mask = computed(() => fibonacci_mask(hour_of(now.value) % 12));
+const hour_mask = computed(() => FIBONACCI_MASKS[hour_of(now.value) % 12]);
 
 /** The clock shows minutes in steps of five. */
-const minute_mask = computed(() => fibonacci_mask(Math.floor(minute_of(now.value) / 5)));
+const minute_mask = computed(() => FIBONACCI_MASKS[Math.floor(minute_of(now.value) / 5)]);
 
 /** Green when well charged, then yellow, then red, as wasp-os's battery meter. */
 const battery_color = computed<Color>(() =>

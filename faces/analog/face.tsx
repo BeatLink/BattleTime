@@ -11,6 +11,7 @@ import {
   is_charging,
   is_phone_connected,
   now,
+  start_of_minute,
   persisted,
   unread_notifications,
   weekday_of,
@@ -83,7 +84,7 @@ function AnalogFace() {
       </Label>
 
       <AnalogClock
-        time={now.value}
+        time={shows_seconds.value ? now.value : start_of_minute(now.value)}
         show_seconds={shows_seconds.value}
         hour_color="#ffffff"
         minute_color="#ffffff"
