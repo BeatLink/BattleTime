@@ -8,8 +8,7 @@ written in the app language described in [app-runtime.md](app-runtime.md) and
 [apps.md](apps.md). Each face lives in `faces/<id>/face.tsx`, which names its sources at the top,
 and declares `kind: "face"`.
 
-None of them runs on the watch yet; see [apps.md](apps.md#checking-the-apps) for how they are
-checked.
+They compile with the apps; see [apps.md](apps.md#checking-the-apps) for how they are checked.
 
 | Face | From | Notes |
 |---|---|---|
@@ -29,9 +28,6 @@ checked.
 | `lite-photo` | PinetimeLite WatchFaceCustom | The time over a backdrop with a blinking colon; a long press picks the backdrop. |
 | `lite-weather` | PinetimeLite WatchFaceWeather | Big stacked digits beside the weather icon. |
 
-InfiniTime's own fonts, such as the 7-segment and dot matrix ones, are replaced by the four standard
-sizes until the shared library has display fonts.
-
 A face that has settings, such as PineTimeStyle, Infineat and the pride flag, opens them on a long
 press as a second screen.
 
@@ -45,9 +41,9 @@ Bluetooth and alarm system values. They fit the runtime's limits, and only faces
 show seconds redraw every second. The analog face steps its hands by the minute while its second
 hand is off.
 
-The PinetimeLite faces have workarounds of their own. `lite-digital` writes its seconds under the
-time band and `lite-weather` uses plain digits for PinetimeLite's striped ones, both for want of a
-condensed display font. `lite-analog` uses plain hands for PinetimeLite's thin stem and thick body,
+The PinetimeLite faces have workarounds of their own. `lite-digital` and `lite-weather` use the
+`condensed` display font for their smaller numbers, and `lite-weather` draws its big digits plain in
+`huge` rather than striped. `lite-analog` uses plain hands for PinetimeLite's thin stem and thick body,
 and `lite-photo` uses plain colours for PinetimeLite's three Pixabay photos; the user's own photo,
 sent from the phone, would be better than shipping those.
 

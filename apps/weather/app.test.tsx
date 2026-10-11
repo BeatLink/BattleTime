@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen } from "@testing-library/preact";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { deliver, freeze_clock, install_apps, open, OpenScreen, start_scheduler } from "neotime/preview";
+import { freeze_clock, install_apps, open, OpenScreen, start_scheduler } from "neotime/preview";
 import { current_weather, now } from "neotime";
 import weather from "./app.tsx";
 
@@ -17,7 +17,7 @@ describe("weather", () => {
     open(weather);
     render(<OpenScreen />);
     act(() => {
-      // The system keeps today's weather and place itself; the subscription brings the coming days.
+      // The system keeps the weather, the coming days included, so the app has nothing to store.
       current_weather.value = {
         temperature: 21,
         condition: "few_clouds",
@@ -27,18 +27,11 @@ describe("weather", () => {
         received_at: now.value,
         sunrise: null,
         sunset: null,
-      };
-      deliver("weather", {
-        temperature: 21,
-        condition: "few_clouds",
-        low: 12,
-        high: 24,
-        location: "Somewhere",
-        days: [
+        forecast: [
           { condition: "rain", low: 9, high: 17 },
           { condition: "snow", low: -3, high: 1 },
         ],
-      });
+      };
     });
     expect(screen.getByText("Somewhere")).toBeTruthy();
     expect(screen.getByText("21°C")).toBeTruthy();

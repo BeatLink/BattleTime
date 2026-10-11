@@ -6,9 +6,8 @@ and [wasp-os](https://github.com/wasp-os/wasp-os), written in the app language d
 the same app, the port merges them into one. Each app lives in `apps/<id>/app.tsx`, which names its
 sources at the top. Watch faces are a separate package, listed in [faces.md](faces.md).
 
-None of them runs on the watch yet. They type-check against `sdk/neotime`, a stand-in for the
-`neotime` package, and every screen renders in a test. They will be compiled once the compiler
-exists.
+They compile to app images with `neotime-compiler`. They also type-check against `sdk/neotime`, a
+stand-in for the `neotime` package, and every screen renders in a test.
 
 ## Checking the apps
 
@@ -19,6 +18,14 @@ npm install
 npm run check   # TypeScript over every app and face
 npm test        # renders every screen of every app and face, plus their own tests
 ```
+
+To compile them, inside `nix develop`:
+
+```sh
+for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler -- --check "$f"; done
+```
+
+`-o <file>.ntapp` in place of `--check` writes the image, which the simulator opens with `--app`.
 
 ## Tools
 
@@ -41,7 +48,7 @@ npm test        # renders every screen of every app and face, plus their own tes
 | `steps` | InfiniTime Steps, wasp-os step_counter and steplogger | Goal ring, trip meter, and a history screen of the week and today by hour, which the app logs itself. |
 | `sports` | wasp-os sports | A stopwatch with the steps taken since it started. |
 | `music` | InfiniTime Music, wasp-os music_player | Track, progress, play and skip by swipe, and a volume row. |
-| `weather` | InfiniTime Weather, wasp-os weather | Conditions, low and high, and a 5 day forecast. |
+| `weather` | InfiniTime Weather, wasp-os weather | Conditions, low and high, and a 5 day forecast, all read from `current_weather`. |
 | `navigation` | InfiniTime Navigation | The next turn, its distance and the trip's progress. |
 | `metronome` | InfiniTime Metronome | Beats scheduled from the start time so they never drift; tap tempo. |
 | `motion` | InfiniTime Motion | Charts of the raw x, y and z acceleration. |
@@ -79,13 +86,11 @@ The ports use the API in [app-reference.md](app-reference.md) as `sdk/neotime` p
 fit the runtime's limits on state, handler writes, locals and loop steps. Four-in-a-row's search runs
 a few steps a call on a 100 millisecond tick, so its hardest level thinks for up to about 3 seconds.
 
-Still open:
+Still open, each waiting on the compiler:
 
-- **Record fields.** Writing one field of a record in an array, as in `alarms.value[i].enabled`, is
-  not settled, so the alarm keeps its alarms as parallel arrays.
-- **`CellGrid` looks.** Cells are flat touching squares, with no gap, rounding or text, and a touch
-  reports only the cell tapped, not a drag. Four-in-a-row's counters are squares, and 2048 and 15
-  draw their tiles as labels.
-- **The beacon stops when its app closes,** because the runtime turns the LED off then, and the
-  units of `set_heart_rate_led` are not documented.
-- **Navigation** cannot ask the phone for the current step on opening, as music can.
+- **`game-of-life`** does not compile, because the compiler gives each board cell 8 bytes when the
+  cell comes from a helper function, which puts the board over the 1 KB limit.
+- **`weather`** reads the forecast from `current_weather.forecast`, which the runtime does not have
+  yet.
+- **`paddle`** moves its ball every 20 milliseconds while open, under the compiler's present
+  100 millisecond minimum.

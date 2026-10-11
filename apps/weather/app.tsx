@@ -9,15 +9,11 @@ import {
   format_temperature,
   format_time,
   now,
-  persisted,
   range,
   settings,
-  weather,
   DAY,
   HOUR,
   type Color,
-  type WeatherCondition,
-  type WeatherEvent,
 } from "neotime";
 import { icon_named, icons } from "neotime/icons";
 import { Column, Icon, Label, Row, Screen } from "neotime/widgets";
@@ -28,21 +24,6 @@ import { Column, Icon, Label, Row, Screen } from "neotime/widgets";
 
 /** How many coming days the forecast holds. */
 const FORECAST_LENGTH = 5;
-
-/** How many coming days the phone sent, up to five; the system's `current_weather` holds today. */
-const forecast_days = persisted("forecast_days", 0);
-
-const forecast_conditions = persisted<WeatherCondition[]>("forecast_conditions", [
-  "clear",
-  "clear",
-  "clear",
-  "clear",
-  "clear",
-]);
-
-const forecast_lows = persisted<number[]>("forecast_lows", [0, 0, 0, 0, 0]);
-
-const forecast_highs = persisted<number[]>("forecast_highs", [0, 0, 0, 0, 0]);
 
 // ============================================================================
 // Derived values
@@ -83,38 +64,21 @@ const condition_text = computed(() => {
 const is_stale = computed(() => now.value - received_at.value > 3 * HOUR);
 
 // ============================================================================
-// Handlers
-// ============================================================================
-
-/** The coming days arrive only with the forecast event, so they are kept here. */
-function receive(event: WeatherEvent) {
-  const day_count = Math.min(event.days.length, FORECAST_LENGTH);
-  forecast_days.value = day_count;
-  for (const place of range(FORECAST_LENGTH)) {
-    if (place < day_count) {
-      forecast_conditions.value[place] = event.days[place].condition;
-      forecast_lows.value[place] = event.days[place].low;
-      forecast_highs.value[place] = event.days[place].high;
-    }
-  }
-}
-
-// ============================================================================
 // Screen
 // ============================================================================
 
 function ForecastDay(props: { place: number }) {
   return (
     <>
-      {props.place < forecast_days.value && (
+      {props.place < current_weather.value.forecast.length && (
         <Column align_items="center" width={46}>
           <Label font="small" color="#b0b0b0">{format_time(now.value + (props.place + 1) * DAY, "ddd")}</Label>
-          <Icon icon={icon_named(forecast_conditions.value[props.place])} size={24} />
-          <Label font="small" color={color_of(forecast_highs.value[props.place])}>
-            {`${in_chosen_unit(forecast_highs.value[props.place])}`}
+          <Icon icon={icon_named(current_weather.value.forecast[props.place].condition)} size={24} />
+          <Label font="small" color={color_of(current_weather.value.forecast[props.place].high)}>
+            {`${in_chosen_unit(current_weather.value.forecast[props.place].high)}`}
           </Label>
-          <Label font="small" color={color_of(forecast_lows.value[props.place])}>
-            {`${in_chosen_unit(forecast_lows.value[props.place])}`}
+          <Label font="small" color={color_of(current_weather.value.forecast[props.place].low)}>
+            {`${in_chosen_unit(current_weather.value.forecast[props.place].low)}`}
           </Label>
         </Column>
       )}
@@ -167,6 +131,4 @@ export default define_app({
   name: "Weather",
   icon: icons.weather,
   screens: { main: Weather },
-  subscriptions: [weather(receive)],
-  permissions: ["background"],
 });

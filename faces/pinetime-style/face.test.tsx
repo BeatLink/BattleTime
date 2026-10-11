@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import { afterEach, describe, expect, it } from "vitest";
-import { current_weather, reset_persisted, settings, steps_today } from "neotime";
+import { current_weather, reset_persisted, settings, steps_today, type CurrentWeather } from "neotime";
 import { freeze_clock, unfreeze_clock } from "neotime/preview";
 import face, { step_gauge_value } from "./face.tsx";
 
@@ -10,7 +10,7 @@ import face, { step_gauge_value } from "./face.tsx";
 // Helpers
 // ============================================================================
 
-const NO_WEATHER = {
+const NO_WEATHER: CurrentWeather = {
   temperature: 0,
   condition: "clear",
   low: 0,
@@ -19,7 +19,8 @@ const NO_WEATHER = {
   received_at: null,
   sunrise: null,
   sunset: null,
-} as const;
+  forecast: [],
+};
 
 /** An instant on the test day at an hour and minute. */
 function instant_at(hour: number, minute = 0): number {

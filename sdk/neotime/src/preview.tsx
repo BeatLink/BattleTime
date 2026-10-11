@@ -23,6 +23,7 @@ import {
   type Instant,
   type Subscription,
   type TimeOfDay,
+  type WeatherDay,
 } from "./index.ts";
 import { active_screen, run_handler, swipe_fallback, type ScreenHandlers } from "./widgets.tsx";
 
@@ -288,7 +289,14 @@ export function deliver(kind: Subscription["kind"], event: object, filter?: (sub
     heart_rate_measured_at.value = now_milliseconds.peek();
   }
   if (kind === "weather") {
-    const forecast = event as { temperature: number; condition: never; low: number; high: number; location: string };
+    const forecast = event as {
+      temperature: number;
+      condition: never;
+      low: number;
+      high: number;
+      location: string;
+      forecast?: WeatherDay[];
+    };
     current_weather.value = {
       temperature: forecast.temperature,
       condition: forecast.condition,
@@ -298,6 +306,7 @@ export function deliver(kind: Subscription["kind"], event: object, filter?: (sub
       received_at: now_milliseconds.peek(),
       sunrise: null,
       sunset: null,
+      forecast: forecast.forecast ?? [],
     };
   }
   if (kind === "music") current_music.value = { ...(event as typeof current_music.value) };

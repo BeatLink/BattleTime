@@ -132,6 +132,8 @@ export interface CurrentWeather {
   received_at: Instant | null;
   sunrise: Instant | null;
   sunset: Instant | null;
+  /** Up to 5 coming days, tomorrow first. */
+  forecast: WeatherDay[];
 }
 
 /** The last forecast the phone sent; reading it needs no permission. */
@@ -144,6 +146,7 @@ export const current_weather = signal<CurrentWeather>({
   received_at: null,
   sunrise: null,
   sunset: null,
+  forecast: [],
 });
 
 export interface CurrentMusic {
@@ -285,8 +288,6 @@ export interface WeatherEvent {
   low: number;
   high: number;
   location: string;
-  /** Up to 5 coming days. */
-  days: WeatherDay[];
 }
 
 export type NavigationTurn =

@@ -16,13 +16,7 @@ const BALL_SIZE = 16;
 const PADDLE_HEIGHT = 60;
 const PADDLE_WIDTH = 4;
 const HALF_PADDLE = 30;
-const FASTEST_DROP = 25;
-
-/** How often the ball moves; the runtime ticks at most every 100 milliseconds, five times InfiniTime's period. */
-const STEP_PERIOD = 100;
-
-/** How far the ball moves across each step, five times InfiniTime's 2 pixels to keep its speed. */
-const STEP_ACROSS = 10;
+const FASTEST_DROP = 5;
 
 const BALL_START = Math.floor((SCREEN_SIZE - BALL_SIZE) / 2);
 
@@ -30,8 +24,8 @@ const ball_x = signal(BALL_START);
 const ball_y = signal(BALL_START);
 
 /** How far the ball moves each step, across and down. */
-const step_across = signal(STEP_ACROSS);
-const step_down = signal(15);
+const step_across = signal(2);
+const step_down = signal(3);
 
 /** The paddle's centre, where the finger last touched. */
 const paddle_center = signal(30);
@@ -52,14 +46,14 @@ export function step() {
   if (y <= 1 || y >= SCREEN_SIZE - BALL_SIZE - 2) step_down.value = -step_down.value;
   if (x >= SCREEN_SIZE - BALL_SIZE - 1) {
     step_across.value = -step_across.value;
-    step_down.value = clamp(step_down.value + random_int(-5, 5), -FASTEST_DROP, FASTEST_DROP);
+    step_down.value = clamp(step_down.value + random_int(-1, 1), -FASTEST_DROP, FASTEST_DROP);
   }
   if (step_across.value < 0 && x <= PADDLE_WIDTH) {
     const quarter_ball = Math.floor(BALL_SIZE / 4);
     const is_level_with_paddle =
       y <= paddle_center.value + HALF_PADDLE - quarter_ball &&
       y >= paddle_center.value - HALF_PADDLE - BALL_SIZE + quarter_ball;
-    if (x >= -quarter_ball - STEP_ACROSS && is_level_with_paddle) {
+    if (x >= -quarter_ball && is_level_with_paddle) {
       step_across.value = -step_across.value;
       score.value = score.value + 1;
       if (score.value > best_score.value) best_score.value = score.value;
@@ -112,5 +106,5 @@ export default define_app({
   name: "Paddle",
   icon: icons.game,
   screens: { main: Paddle },
-  subscriptions: [every({ milliseconds: STEP_PERIOD }, step, { only_while_open: true })],
+  subscriptions: [every({ milliseconds: 20 }, step, { only_while_open: true })],
 });
