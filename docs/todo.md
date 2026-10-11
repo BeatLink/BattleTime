@@ -99,6 +99,23 @@ See [bluetooth.md](bluetooth.md) for the details of each.
   change often. A log-structured key-value store, such as Zephyr's NVS or ZMS, Nordic's FDS or
   FlashDB, appends each change instead of rewriting a file, which suits that better than whole
   files in littlefs. FlashDB also has a time-series mode that fits step and heart-rate logs.
+- [ ] **Resource cache for external flash.** A small fixed area of RAM with two or three slots,
+  reused least recently used first. Each slot is filled by one DMA read of a whole resource, such
+  as a font or picture from a resource package or a handler from `/apps`, so each costs one SPI
+  transaction instead of many small reads.
+
+## Display and SPI bus
+
+- [ ] **Share the SPI bus between the screen and the flash.** The XT25F32B is on the same bus as
+  the screen, and the runtime reads handlers and images from external flash while screens are
+  drawn. Both drivers need a shared-bus wrapper, such as the shared SPI in
+  `embassy-embedded-hal`, so neither can cut into the other's transfer.
+- [ ] **Draw one band while sending the last.** After DMA transfers work, use two band buffers,
+  such as 240 by 16 pixels at 7.5 KB each, so drawing the next band hides behind sending the
+  previous one.
+- [ ] **12-bit colour mode.** The ST7789 can take 12 bits a pixel, which cuts the time to send a
+  full screen by a quarter, from about 115 ms to 86 ms at 8 MHz. It costs banding in gradients and
+  packing pixels in pairs. Measure it once real screens run on the watch.
 
 ## Gaps against InfiniTime
 
