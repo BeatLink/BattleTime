@@ -1,7 +1,8 @@
 # App runtime
 
 This page proposes how NeoTime apps are written, stored and run. Nothing here is built yet, and
-the details will change as the runtime is written and measured.
+the details will change as the runtime is written and measured. [app-reference.md](app-reference.md)
+lists the events, widgets and effects apps can use.
 
 ## Goals
 
@@ -272,12 +273,16 @@ using it costs no RAM.
 | Fonts | The UI fonts at each size, so apps never carry their own. |
 | Components | Ready-made widget trees with their bindings, such as a card, a list row, a header, a number picker and a confirm dialog. |
 | Functions | Bytecode for common work: date and time formatting, unit conversion, small maths such as trigonometry from tables, sorting a fixed-length array. |
-| Notifications | The notifications the phone has sent, and the screens that show them. |
+| Notification screens | The layouts that show a notification and the list of them. The notifications themselves are on the external flash. |
 
 In the source, apps import these from the `neotime` package, for example
 `import { Card } from "neotime/components"` or `icons.heart`. The compiler refers to them by number
 instead of copying them into the image, and records the library version in the image's header. The
 watch refuses an app built against a library it does not have.
+
+The library changes only when it is updated, never in everyday use. Anything that changes often,
+such as notifications, settings and app state, is stored on the external flash, whose file system
+spreads writes across the chip. The internal flash wears out after about 10,000 erases.
 
 The library is checked by the same verifier as an app image. It can be updated together with the
 firmware or on its own, and a new version keeps the numbers of everything the old one had, so
@@ -326,6 +331,11 @@ The watch checks every image when it is installed and refuses one that fails. It
 Once an image has passed, the interpreter does not need to repeat these checks while it runs.
 
 ## The runtime
+
+The runtime is part of the firmware, not a separate image. It runs in place from the internal flash
+with the instruction cache on, as the rest of the firmware does, and the [memory map](memory-map.md)
+sets aside 48 KB of the firmware's 384 KB for it. Only app data is ever read from the external
+flash; no runtime code is.
 
 ### Opening an app
 
@@ -384,8 +394,7 @@ app's state while a subscription runs. The widgets themselves are allocated from
 - Whether to build the Preact front end first, or start with KDL to get the runtime running.
 - How closely the browser preview must match rlvgl's layout before it is useful.
 - How screens slide in and out, once the UI toolkit has page transitions.
-- How companion apps on the phone send data to an app, such as the weather or music controls.
-- Which permissions an app must declare, for example to read heart rate in the background.
+- Which Bluetooth protocol carries phone data, such as the weather, music and app messages, to the runtime.
 - Whether the step limit should be one number or depend on the event.
 
 ## Suggested order of work

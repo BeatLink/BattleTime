@@ -84,6 +84,7 @@ NeoTime/
 ├── flake.nix       development shell, simulator package and checks
 ├── rust-toolchain.toml  the Rust version and the watch's target
 ├── docs/
+│   ├── app-reference.md the events, widgets and effects apps can use
 │   ├── app-runtime.md the proposed app format and runtime
 │   ├── architecture.md
 │   ├── bluetooth.md  the Bluetooth controller
