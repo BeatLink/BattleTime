@@ -1,0 +1,14 @@
+[package]
+name = "neotime-display"
+version = "0.1.0"
+edition = "2021"
+description = "PineTime ST7789 display driver with hardware vertical scrolling"
+publish = false
+
+[dependencies]
+embedded-graphics-core = "0.4"
+embedded-hal = "1.0"
+mipidsi = "0.10"
+
+[dev-dependencies]
+embedded-graphics = "0.8"
