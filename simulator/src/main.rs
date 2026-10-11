@@ -61,6 +61,7 @@ struct Options {
     window_scale: u32,
     app: Option<AppSource>,
     library_path: Option<String>,
+    installed_paths: Vec<String>,
     clicks: Vec<Click>,
 }
 
@@ -89,9 +90,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             Some(path) => std::fs::read(path).map_err(|error| format!("could not read {path}: {error}"))?,
             None => Vec::new(),
         };
+        let installed: Vec<Vec<u8>> = options
+            .installed_paths
+            .iter()
+            .map(|path| std::fs::read(path).map_err(|error| format!("could not read {path}: {error}")))
+            .collect::<Result<_, _>>()?;
+        let installed_apps: Vec<&[u8]> = installed.iter().map(Vec::as_slice).collect();
         let files = app::AppFiles {
             image: &image,
             library: &library,
+            installed_apps: &installed_apps,
         };
         return match &options.screenshot_path {
             Some(path) => app::save_screenshot(
@@ -142,6 +150,7 @@ fn read_options() -> Result<Options, String> {
         window_scale: DEFAULT_WINDOW_SCALE,
         app: None,
         library_path: None,
+        installed_paths: Vec::new(),
         clicks: Vec::new(),
     };
     let mut arguments = std::env::args().skip(1);
@@ -155,6 +164,7 @@ fn read_options() -> Result<Options, String> {
             "--app" => options.app = Some(AppSource::File(value()?)),
             "--demo" => options.app = Some(AppSource::Demo),
             "--library" => options.library_path = Some(value()?),
+            "--installed" => options.installed_paths.push(value()?),
             "--click" => options.clicks.push(parse_click(&value()?)?),
             _ => {
                 return Err(format!(

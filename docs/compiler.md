@@ -192,7 +192,7 @@ The bytecode has no type tags, so the compiler gives every value one of these ty
   assuming only the starting values, then again with what it found, until nothing new turns up,
   at most six times; after that every array is 8 bytes. `Instant` and `Duration` arrays are always
   8 bytes.
-- The limits are the runtime's: at most 64 variables, 2 KB of state and 1 KB for one variable, and
+- The limits are the runtime's: at most 128 values that change on screen, 64 variables, 2 KB of state and 1 KB for one variable, and
   128 widgets.
 
 ## Number mappings

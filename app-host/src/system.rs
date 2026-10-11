@@ -137,6 +137,14 @@ impl<Values: SystemValues + ?Sized> SystemValues for Clocked<'_, Values> {
         self.values.read_text(value)
     }
 
+    fn read_element(&self, value: SystemValue, index: Value) -> Value {
+        self.values.read_element(value, index)
+    }
+
+    fn read_element_text(&self, value: SystemValue, index: Value) -> &str {
+        self.values.read_element_text(value, index)
+    }
+
     fn random_number(&self) -> u32 {
         self.values.random_number()
     }

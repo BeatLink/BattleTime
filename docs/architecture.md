@@ -335,7 +335,7 @@ byte-level format.
   way changes nothing, and loops stop after 200,000 steps.
 
 It never allocates and never panics on bad input. Its working memory is 1,792 B for the
-interpreter, 1,032 B for the bindings of up to 64 expressions and 2,440 B for the state.
+interpreter, 2,056 B for the bindings of up to 128 expressions and 2,440 B for the state.
 ### External flash (`drivers/external_flash`)
 
 `neotime-external-flash` drives the 4 MB SPI NOR flash as an `embedded-storage` `NorFlash`, the
@@ -409,8 +409,10 @@ like the bootloader, because it only builds for the watch. See [updates.md](upda
 Two seconds after start-up the **shell** (`firmware/src/shell.rs`) takes the screen and runs the
 watch face, the launcher and the apps through `neotime-app-host`:
 
-- **Navigation.** The face shows first. A swipe up the face does not use opens the launcher, a list
-  written with `neotime_app_host::launcher` from the built-in apps; a tap opens one. The button,
+- **Navigation.** The face shows first. A swipe up the face does not use opens the launcher, an
+  ordinary app (`apps/launcher`) that lists `installed_apps` with their icons; a tap opens one.
+  The shell answers `installed_apps` from the built-in list and gives the host every app's image,
+  so the launcher can show their icons. The button,
   or a swipe right the app does not use, goes back a step: app to launcher, launcher to face.
 - **Input.** `touch.rs` turns the panel's reports into the host's touches: press, drag and release
   from the finger, and one click, long press or swipe from each touch's gesture. The watchdog task
@@ -552,7 +554,7 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
 - **Demo.** With the `demo` feature, `demo::stopwatch_image` builds a stopwatch image with the
   runtime's writer, so the host runs before the compiler exists.
 
-On the watch, `AppHost` keeps its state, interpreter and bindings on the UI heap, 5,264 B, so
+On the watch, `AppHost` keeps its state, interpreter and bindings on the UI heap, 6,288 B, so
 opening an app needs only 6.4 KB of stack; each widget of the open screen takes 240 B more plus its
 text; see [memory-map.md](memory-map.md). [app-runtime.md](app-runtime.md#the-app-host) describes
 the calls, the layout rules and what each property value means.

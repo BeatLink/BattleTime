@@ -128,7 +128,7 @@ pub fn analyse_expression(image: &AppImage, code: &[u8]) -> Option<ExpressionInf
 // ============================================================================
 
 /// The most expressions an open app may have.
-pub const MOST_EXPRESSIONS: usize = 64;
+pub const MOST_EXPRESSIONS: usize = 128;
 
 /// What every expression of the open app reads, kept in RAM while the app is open.
 ///
@@ -194,14 +194,14 @@ impl Bindings {
         &self,
         last_redraw: i64,
         now: i64,
-        expressions: u64,
+        expressions: u128,
     ) -> impl Iterator<Item = usize> + '_ {
         self.due_between(last_redraw, now)
             .filter(move |&index| expressions & (1 << index) != 0)
     }
 
     /// Like `next_redraw_after`, but only among the expressions whose bits are set in `expressions`.
-    pub fn next_redraw_after_among(&self, now: i64, expressions: u64) -> Option<i64> {
+    pub fn next_redraw_after_among(&self, now: i64, expressions: u128) -> Option<i64> {
         self.redraw_periods_in_milliseconds[..self.count]
             .iter()
             .enumerate()

@@ -43,7 +43,7 @@ pub fn effect_signature(name: &str) -> Option<(EffectKind, &'static [Type])> {
         "screen_off" => (EffectKind::ScreenOff, &[]),
         "go" => (EffectKind::Go, &[NAME]),
         "back" => (EffectKind::Back, &[]),
-        "open_app" => (EffectKind::OpenApp, &[NAME]),
+        "open_app" => (EffectKind::OpenApp, &[TEXT]),
         "close" => (EffectKind::Close, &[]),
         "show_toast" => (EffectKind::ShowToast, &[TEXT]),
         "notify" => (EffectKind::Notify, &[TEXT, TEXT]),

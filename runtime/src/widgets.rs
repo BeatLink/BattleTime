@@ -687,7 +687,7 @@ fn constant_fits(image: &AppImage, value_kind: PropertyValue, value: i32) -> boo
         PropertyValue::Text => as_string().is_some(),
         PropertyValue::Image => match ImageReference::from_value(value) {
             Some(ImageReference::App(index)) => index < image.resource_count(),
-            Some(ImageReference::SharedLibrary(_)) => true,
+            Some(ImageReference::SharedLibrary(_) | ImageReference::InstalledApp(_)) => true,
             None => false,
         },
         PropertyValue::Array => u16::try_from(value)

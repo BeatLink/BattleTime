@@ -8,7 +8,6 @@
 
 extern crate alloc;
 
-use alloc::boxed::Box;
 use core::{
     cell::Cell,
     sync::atomic::{AtomicBool, Ordering},
@@ -22,12 +21,12 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channe
 use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_app_host::{
-    launcher::launcher_image, AppEffect, AppFailure, AppHost, EventResult, PushedEvent, System, Touch,
+    AppEffect, AppFailure, AppHost, EventResult, PushedEvent, System, Touch,
     LARGEST_SAVED_STATE_BYTES,
 };
 use neotime_runtime::{
     events::{ButtonPress, SwipeDirection},
-    AppImage, EffectKind, SystemValue, SystemValues, Value, DEFAULT_THEME,
+    resources::ImageReference, AppImage, EffectKind, SystemValue, SystemValues, Value, DEFAULT_THEME,
 };
 
 use crate::{
@@ -110,8 +109,39 @@ impl SystemValues for WatchSystem {
             SystemValue::StepGoal => 10_000,
             SystemValue::Brightness => self.brightness as Value,
             SystemValue::NextAlarm => neotime_runtime::NONE,
+            SystemValue::InstalledAppCount => built_in_apps::APPS.len() as Value,
             _ => 0,
         }
+    }
+
+    /// Each installed app's icon, drawn by the host from the app's own first image.
+    fn read_element(&self, value: SystemValue, index: Value) -> Value {
+        match value {
+            SystemValue::InstalledAppIcon => match u16::try_from(index) {
+                Ok(place) if (place as usize) < built_in_apps::APPS.len() => {
+                    ImageReference::InstalledApp(place).to_value() as Value
+                }
+                _ => neotime_runtime::NONE,
+            },
+            _ => neotime_runtime::NONE,
+        }
+    }
+
+    /// Each installed app's name and id, read from its image.
+    fn read_element_text(&self, value: SystemValue, index: Value) -> &str {
+        let Some(image) = usize::try_from(index)
+            .ok()
+            .and_then(|place| built_in_apps::APPS.get(place))
+            .and_then(|bytes| AppImage::parse(bytes).ok())
+        else {
+            return "";
+        };
+        let string = match value {
+            SystemValue::InstalledAppName => image.name_string,
+            SystemValue::InstalledAppId => image.id_string,
+            _ => return "",
+        };
+        image.string(string).unwrap_or("")
     }
 
     /// Xorshift, seeded from the clock when the shell starts; enough for dice and games.
@@ -173,7 +203,6 @@ fn state_path(id: &str) -> heapless::String<64> {
 struct Shell {
     showing: Showing,
     host: Option<AppHost<'static>>,
-    launcher: &'static [u8],
     system: WatchSystem,
     files: storage::Files,
     backlight: Backlight,
@@ -195,7 +224,7 @@ impl Shell {
 
         let bytes = match showing {
             Showing::Face => built_in_apps::FACE,
-            Showing::Launcher => self.launcher,
+            Showing::Launcher => built_in_apps::LAUNCHER,
             Showing::App(index) => built_in_apps::APPS[index],
         };
         self.showing = showing;
@@ -207,6 +236,7 @@ impl Shell {
         match AppHost::open_with_saved_state(bytes, DEFAULT_THEME, &saved, now, &mut self.system) {
             Ok(mut host) => {
                 let _ = host.set_library(built_in_apps::LIBRARY);
+                host.set_installed_apps(&built_in_apps::APPS);
                 self.host = Some(host);
             }
             Err(_) if showing != Showing::Face => self.open(Showing::Face),
@@ -352,7 +382,6 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
     let mut shell = Shell {
         showing: Showing::Face,
         host: None,
-        launcher: Box::leak(launcher_image(&built_in_apps::APPS).into_boxed_slice()),
         system: WatchSystem {
             request: Request::Nothing,
             random_state: Cell::new(clock::now() as u32 | 1),

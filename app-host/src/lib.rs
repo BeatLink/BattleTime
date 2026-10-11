@@ -21,8 +21,6 @@ mod text;
 
 #[cfg(any(test, feature = "demo"))]
 pub mod demo;
-#[cfg(any(test, feature = "launcher"))]
-pub mod launcher;
 
 pub use fonts::FontName;
 pub use host::{AppHost, OpenError, LARGEST_SAVED_STATE_BYTES, SCREEN_AREA, SCREEN_HISTORY_DEPTH};

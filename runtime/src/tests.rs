@@ -2757,9 +2757,9 @@ fn working_memory_stays_inside_the_budget() {
 
     assert!(interpreter <= 1_800);
     assert!(handler_outcome <= 300);
-    assert!(bindings <= 1_100);
+    assert!(bindings <= 2_100);
     assert!(state <= 2_600);
-    assert!(interpreter + bindings + state <= 6 * 1024);
+    assert!(interpreter + bindings + state <= 6_400);
 }
 
 #[test]

@@ -99,11 +99,14 @@ pub enum Reference<'a> {
     SystemGroupValue(&'static str),
     /// A system value read where it is used, such as `current_weather.value.forecast.length`.
     SystemRead(SystemSignal),
-    /// `current_weather.value.forecast`: a list whose elements are records of system values.
-    SystemList,
-    /// One day of the forecast; each field is read with `ReadSystemElement`.
-    SystemListElement(ElementIndex<'a>),
-    /// One field of one day of the forecast, read where it is used.
+    /// A list whose elements are records of system values: `current_weather.value.forecast` or `installed_apps.value`.
+    SystemList(&'static str),
+    /// One element of such a list; each field is read with `ReadSystemElement`.
+    SystemListElement {
+        list: &'static str,
+        index: ElementIndex<'a>,
+    },
+    /// One field of one element of such a list, read where it is used.
     SystemElement {
         system: SystemSignal,
         index: ElementIndex<'a>,

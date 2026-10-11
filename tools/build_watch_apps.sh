@@ -15,6 +15,7 @@ cargo build -q -p neotime-compiler
 compiler=target/debug/neotime-compiler
 
 "$compiler" "faces/$face/face.tsx" -o "$out/face.ntapp"
+"$compiler" "apps/launcher/app.tsx" -o "$out/launcher.ntapp"
 for app in "${apps[@]}"; do
   "$compiler" "apps/$app/app.tsx" -o "$out/$app.ntapp"
 done
@@ -24,6 +25,7 @@ done
 {
   echo "// Written by tools/build_watch_apps.sh."
   echo "pub static FACE: &[u8] = include_bytes!(\"../apps/face.ntapp\");"
+  echo "pub static LAUNCHER: &[u8] = include_bytes!(\"../apps/launcher.ntapp\");"
   echo "pub static LIBRARY: &[u8] = include_bytes!(\"../apps/shared.ntlib\");"
   echo "pub static APPS: [&[u8]; ${#apps[@]}] = ["
   for app in "${apps[@]}"; do

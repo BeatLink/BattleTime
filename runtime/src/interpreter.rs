@@ -51,6 +51,11 @@ pub trait SystemValues {
         NONE
     }
 
+    /// One element of a text list, such as an installed app's name; empty past its end.
+    fn read_element_text(&self, _value: SystemValue, _index: Value) -> &str {
+        ""
+    }
+
     /// A fresh random number, such as one from the chip's random number generator.
     fn random_number(&self) -> u32;
 }
@@ -338,6 +343,11 @@ impl Interpreter {
                 self.write_text(|writer| writer.write_bytes(text.as_bytes()))?;
             }
             ReadSystem(value) => self.push(call.system.read(value))?,
+            ReadSystemElement(value) if value.is_text() => {
+                let index = self.pop()?;
+                let text = call.system.read_element_text(value, index);
+                self.write_text(|writer| writer.write_bytes(text.as_bytes()))?;
+            }
             ReadSystemElement(value) => {
                 let index = self.pop()?;
                 self.push(call.system.read_element(value, index))?;

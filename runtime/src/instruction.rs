@@ -59,14 +59,23 @@ pub enum SystemValue {
     WeatherForecastCondition,
     WeatherForecastLow,
     WeatherForecastHigh,
+    /// How many apps the launcher lists.
+    InstalledAppCount,
+    /// Text list: each app's name, then each app's id, for `open_app`.
+    InstalledAppName,
+    InstalledAppId,
+    /// List: each app's icon, as an image reference from `ImageReference::InstalledApp`.
+    InstalledAppIcon,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
 const MUSIC_BIT: u32 = 19;
 const NAVIGATION_BIT: u32 = 20;
+/// Bit 21 is free too, as every value numbered 21 to 31 is in a group.
+const INSTALLED_APPS_BIT: u32 = 21;
 
 impl SystemValue {
-    pub const COUNT: usize = 39;
+    pub const COUNT: usize = 43;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -110,6 +119,10 @@ impl SystemValue {
             36 => WeatherForecastCondition,
             37 => WeatherForecastLow,
             38 => WeatherForecastHigh,
+            39 => InstalledAppCount,
+            40 => InstalledAppName,
+            41 => InstalledAppId,
+            42 => InstalledAppIcon,
             _ => return None,
         })
     }
@@ -126,6 +139,7 @@ impl SystemValue {
             NavigationTurn | NavigationInstruction | NavigationDistance | NavigationProgressPercent => {
                 NAVIGATION_BIT
             }
+            InstalledAppCount | InstalledAppName | InstalledAppId | InstalledAppIcon => INSTALLED_APPS_BIT,
             other => other as u32,
         };
         1 << group
@@ -134,7 +148,15 @@ impl SystemValue {
     /// Whether the value is a list, read one element at a time with `ReadSystemElement`.
     pub fn is_list(self) -> bool {
         use SystemValue::*;
-        matches!(self, WeatherForecastCondition | WeatherForecastLow | WeatherForecastHigh)
+        matches!(
+            self,
+            WeatherForecastCondition
+                | WeatherForecastLow
+                | WeatherForecastHigh
+                | InstalledAppName
+                | InstalledAppId
+                | InstalledAppIcon
+        )
     }
 
     /// Whether the value is text, which the system gives through `SystemValues::read_text`.
@@ -142,7 +164,7 @@ impl SystemValue {
         use SystemValue::*;
         matches!(
             self,
-            WeatherLocation | MusicArtist | MusicTrack | NavigationInstruction
+            WeatherLocation | MusicArtist | MusicTrack | NavigationInstruction | InstalledAppName | InstalledAppId
         )
     }
 }

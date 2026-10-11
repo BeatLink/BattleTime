@@ -106,15 +106,27 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
     Some(SystemSignal { value, value_type })
 }
 
-/// One field of a day of `current_weather.value.forecast`.
-fn forecast_field(name: &str) -> Option<SystemSignal> {
-    let (value, value_type) = match name {
-        "condition" => (
+/// The system value holding a list's length.
+fn list_length(list: &str) -> Option<SystemValue> {
+    match list {
+        "current_weather.forecast" => Some(SystemValue::WeatherForecastLength),
+        "installed_apps" => Some(SystemValue::InstalledAppCount),
+        _ => None,
+    }
+}
+
+/// One field of an element of a system list: a day of the forecast, or an installed app.
+fn list_field(list: &str, name: &str) -> Option<SystemSignal> {
+    let (value, value_type) = match (list, name) {
+        ("current_weather.forecast", "condition") => (
             SystemValue::WeatherForecastCondition,
             Type::choice(ChoiceSet::WeatherCondition).or_null(),
         ),
-        "low" => (SystemValue::WeatherForecastLow, Type::NUMBER.or_null()),
-        "high" => (SystemValue::WeatherForecastHigh, Type::NUMBER.or_null()),
+        ("current_weather.forecast", "low") => (SystemValue::WeatherForecastLow, Type::NUMBER.or_null()),
+        ("current_weather.forecast", "high") => (SystemValue::WeatherForecastHigh, Type::NUMBER.or_null()),
+        ("installed_apps", "name") => (SystemValue::InstalledAppName, Type::TEXT),
+        ("installed_apps", "id") => (SystemValue::InstalledAppId, Type::TEXT),
+        ("installed_apps", "icon") => (SystemValue::InstalledAppIcon, Type::ICON),
         _ => return None,
     };
     Some(SystemSignal { value, value_type })
@@ -208,8 +220,9 @@ impl<'a> Compiler<'a> {
             },
             Expression::ComputedMemberExpression(member) => {
                 let object = self.resolve_reference(&member.object, scope)?;
-                if matches!(object, Reference::SystemList) {
-                    return Some(Reference::SystemListElement(self.element_index(&member.expression, scope)));
+                if let Reference::SystemList(list) = object {
+                    let index = self.element_index(&member.expression, scope);
+                    return Some(Reference::SystemListElement { list, index });
                 }
                 if let Reference::RecordArrayValue(fields) = &object {
                     return Some(Reference::RecordElement {
@@ -268,19 +281,22 @@ impl<'a> Compiler<'a> {
                 module,
                 name: format!("Math.{name}"),
             }),
+            Reference::SystemGroup("installed_apps") if name == "value" => Some(Reference::SystemList("installed_apps")),
             Reference::SystemGroup(group) => {
                 if name == "value" {
                     return Some(Reference::SystemGroupValue(group));
                 }
                 system_signal(&format!("{group}.{name}")).map(Reference::System)
             }
-            Reference::SystemGroupValue("current_weather") if name == "forecast" => Some(Reference::SystemList),
-            Reference::SystemList if name == "length" => Some(Reference::SystemRead(SystemSignal {
-                value: SystemValue::WeatherForecastLength,
+            Reference::SystemGroupValue("current_weather") if name == "forecast" => {
+                Some(Reference::SystemList("current_weather.forecast"))
+            }
+            Reference::SystemList(list) if name == "length" => Some(Reference::SystemRead(SystemSignal {
+                value: list_length(list)?,
                 value_type: Type::NUMBER,
             })),
-            Reference::SystemListElement(index) => {
-                let system = forecast_field(name)?;
+            Reference::SystemListElement { list, index } => {
+                let system = list_field(list, name)?;
                 Some(Reference::SystemElement { system, index })
             }
             Reference::Record(fields) if name == "value" => Some(Reference::RecordValue(fields)),
@@ -625,8 +641,8 @@ impl<'a> Compiler<'a> {
                 self.note_system_read(system.value, span);
                 Ok(Typed::new(system.value_type))
             }
-            Reference::SystemList | Reference::SystemListElement(_) => {
-                fail(span, "the forecast is not one value; read one day's `condition`, `low` or `high`")
+            Reference::SystemList(_) | Reference::SystemListElement { .. } => {
+                fail(span, "a list is not one value; read one field of one element, such as `forecast[0].high`")
             }
             Reference::StateArray(_) => fail(
                 span,
@@ -1238,6 +1254,7 @@ fn library_reference<'a>(module: LibraryModule, name: &str) -> Reference<'a> {
                 "current_weather" => Some("current_weather"),
                 "current_music" => Some("current_music"),
                 "current_navigation" => Some("current_navigation"),
+                "installed_apps" => Some("installed_apps"),
                 _ => None,
             };
             if let Some(group) = group {

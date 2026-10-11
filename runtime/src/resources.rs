@@ -19,6 +19,7 @@ pub const LARGEST_IMAGE_SIDE: u16 = 240;
 
 /// Marks an image property that names a shared library image rather than one of the app's own.
 const SHARED_LIBRARY_FLAG: i32 = 0x8000;
+const INSTALLED_APP_FLAG: i32 = 0x10000;
 
 // ============================================================================
 // Images
@@ -110,6 +111,8 @@ pub enum ImageReference {
     App(u16),
     /// One of the shared library's images, such as an icon, by number.
     SharedLibrary(u16),
+    /// The launcher icon of an installed app, by its place in `installed_apps`.
+    InstalledApp(u16),
 }
 
 impl ImageReference {
@@ -119,6 +122,7 @@ impl ImageReference {
             SHARED_LIBRARY_FLAG..=0xFFFF => Some(ImageReference::SharedLibrary(
                 (value - SHARED_LIBRARY_FLAG) as u16,
             )),
+            INSTALLED_APP_FLAG..=0x1FFFF => Some(ImageReference::InstalledApp((value - INSTALLED_APP_FLAG) as u16)),
             _ => None,
         }
     }
@@ -127,6 +131,7 @@ impl ImageReference {
         match self {
             ImageReference::App(index) => index as i32,
             ImageReference::SharedLibrary(index) => SHARED_LIBRARY_FLAG + index as i32,
+            ImageReference::InstalledApp(index) => INSTALLED_APP_FLAG + index as i32,
         }
     }
 }

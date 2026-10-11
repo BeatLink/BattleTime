@@ -17,7 +17,7 @@ use embedded_graphics_simulator::{sdl2::Keycode, OutputSettings, SimulatorDispla
 use neotime_app_host::{AppEffect, AppFailure, AppHost, EventResult, System, Touch};
 use neotime_runtime::{
     events::{ButtonPress, SwipeDirection},
-    EffectKind, SystemValue, SystemValues, Theme, Value, DEFAULT_THEME, NONE,
+    resources::ImageReference, AppImage, EffectKind, SystemValue, SystemValues, Theme, Value, DEFAULT_THEME, NONE,
 };
 use neotime_vibrator::{Step, TAP};
 
@@ -70,6 +70,27 @@ fn wall_clock_in_milliseconds() -> Value {
 pub struct SimulatedSystem {
     vibrator_requests: Option<mpsc::Sender<&'static [Step]>>,
     random_state: Cell<u32>,
+    /// Each installed app's name and id, for a launcher.
+    installed_apps: Vec<(String, String)>,
+}
+
+impl SimulatedSystem {
+    fn new(vibrator_requests: Option<mpsc::Sender<&'static [Step]>>, random_seed: u32, files: &AppFiles) -> Self {
+        let installed_apps = files
+            .installed_apps
+            .iter()
+            .filter_map(|bytes| AppImage::parse(bytes).ok())
+            .map(|image| {
+                let text = |string| image.string(string).unwrap_or("").to_string();
+                (text(image.name_string), text(image.id_string))
+            })
+            .collect();
+        SimulatedSystem {
+            vibrator_requests,
+            random_state: Cell::new(random_seed),
+            installed_apps,
+        }
+    }
 }
 
 impl SystemValues for SimulatedSystem {
@@ -97,12 +118,32 @@ impl SystemValues for SimulatedSystem {
             NavigationProgressPercent => 40,
             NextAlarm => NONE,
             WeatherForecastLength => SIMULATED_FORECAST.len() as Value,
+            InstalledAppCount => self.installed_apps.len() as Value,
             _ => 0,
         }
     }
 
-    /// A three-day forecast: each day's condition, low and high.
+    fn read_element_text(&self, value: SystemValue, index: Value) -> &str {
+        let Some((name, id)) = usize::try_from(index).ok().and_then(|place| self.installed_apps.get(place)) else {
+            return "";
+        };
+        match value {
+            SystemValue::InstalledAppName => name,
+            SystemValue::InstalledAppId => id,
+            _ => "",
+        }
+    }
+
+    /// A three-day forecast: each day's condition, low and high; and the installed apps' icons.
     fn read_element(&self, value: SystemValue, index: Value) -> Value {
+        if value == SystemValue::InstalledAppIcon {
+            return match u16::try_from(index) {
+                Ok(place) if (place as usize) < self.installed_apps.len() => {
+                    ImageReference::InstalledApp(place).to_value() as Value
+                }
+                _ => NONE,
+            };
+        }
         let Some(&(condition, low, high)) = usize::try_from(index).ok().and_then(|day| SIMULATED_FORECAST.get(day))
         else {
             return NONE;
@@ -210,6 +251,7 @@ pub fn test_system() -> SimulatedSystem {
     SimulatedSystem {
         vibrator_requests: None,
         random_state: Cell::new(1),
+        installed_apps: Vec::new(),
     }
 }
 
@@ -227,10 +269,7 @@ pub fn save_screenshot(
     clicks: &[Click],
     screenshot_path: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let mut system = SimulatedSystem {
-        vibrator_requests: None,
-        random_state: Cell::new(1),
-    };
+    let mut system = SimulatedSystem::new(None, 1, &files);
     let now = wall_clock_in_milliseconds();
     let mut host = open(files, now, &mut system)?;
     for click in clicks {
@@ -258,6 +297,8 @@ pub fn save_screenshot(
 pub struct AppFiles<'image> {
     pub image: &'image [u8],
     pub library: &'image [u8],
+    /// Other apps' images, which a launcher lists.
+    pub installed_apps: &'image [&'image [u8]],
 }
 
 /// Opens the app, with the shared library when one was given.
@@ -272,6 +313,7 @@ fn open<'image>(
         host.set_library(files.library)
             .map_err(|error| format!("the shared library did not open: {error:?}"))?;
     }
+    host.set_installed_apps(files.installed_apps);
     Ok(host)
 }
 
@@ -284,10 +326,11 @@ pub fn run(
     output_settings: OutputSettings,
 ) -> Result<(), Box<dyn Error>> {
     let motor_running = Arc::new(AtomicBool::new(false));
-    let mut system = SimulatedSystem {
-        vibrator_requests: Some(start_vibrator(motor_running.clone())),
-        random_state: Cell::new(wall_clock_in_milliseconds() as u32 | 1),
-    };
+    let mut system = SimulatedSystem::new(
+        Some(start_vibrator(motor_running.clone())),
+        wall_clock_in_milliseconds() as u32 | 1,
+        &files,
+    );
     let mut host = open(files, wall_clock_in_milliseconds(), &mut system)?;
     let mut window = Window::new("NeoTime simulator", &output_settings);
     let mut touch = TouchTracker::default();

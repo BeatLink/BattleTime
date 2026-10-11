@@ -1,5 +1,6 @@
 // Written by tools/build_watch_apps.sh.
 pub static FACE: &[u8] = include_bytes!("../apps/face.ntapp");
+pub static LAUNCHER: &[u8] = include_bytes!("../apps/launcher.ntapp");
 pub static LIBRARY: &[u8] = include_bytes!("../apps/shared.ntlib");
 pub static APPS: [&[u8]; 9] = [
     include_bytes!("../apps/stopwatch.ntapp"),

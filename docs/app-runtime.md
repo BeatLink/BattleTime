@@ -322,7 +322,8 @@ the widget's colour, which is how icons follow the theme. Runs go left to right 
 and may continue onto the next row. The image check confirms the runs cover every pixel exactly.
 
 An `image` or `icon` property names an image by number: below 32768 it is one of the app's own
-images; 32768 and up is the shared library's image of that number less 32768. The shared library
+images; 32768 to 65535 is the shared library's image of that number less 32768; and 65536 and up is
+the launcher icon of the installed app of that number less 65536, image 0 of that app's own image. The shared library
 is itself an image file of kind 2, holding only images, so the same reader serves both.
 
 ### Saving state
@@ -438,7 +439,9 @@ System values, in the order `read system` numbers them: `now`, `utc_offset`, `ba
 `received_at`, `sunrise`, `sunset` and `location`, the music's `is_playing`, `artist`, `track`,
 `position` and `length`, the navigation's `turn`, `instruction`, `distance` and
 `progress_percent`, and the forecast's length followed by its lists of each day's `condition`,
-`low` and `high`, which `read system element` reads through `SystemValues::read_element`. The location, artist, track and instruction are text: the system hands them
+`low` and `high`, and the installed apps' count followed by their lists of `name`, `id` and `icon`.
+`read system element` reads a list's elements through `SystemValues::read_element`, or
+`read_element_text` for the names and ids. The location, artist, track and instruction are text: the system hands them
 over through `SystemValues::read_text`, and `read system` copies them into the call's text buffer.
 Values the phone sends together share one bit of an input mask, so all the weather values redraw
 together; that keeps the mask in 32 bits.
@@ -598,7 +601,8 @@ first screen:
 `open_with_saved_state` does the same, with the bytes `save_changed_state` once wrote put over the
 defaults first; saved state that does not fit, such as another app's, is ignored.
 `open_in_background` loads the state without opening a screen, so a closed app's subscriptions can
-run. `set_library(bytes)` gives the host the shared library, for images numbered 32768 and up.
+run. `set_library(bytes)` gives the host the shared library, for images numbered 32768 and up, and
+`set_installed_apps(images)` gives it the installed apps, whose icons are numbered 65536 and up.
 
 What happens next is driven by the embedder:
 
@@ -695,7 +699,7 @@ the numbers mean. These are the meanings the host uses now:
 | `value`, `minimum`, `maximum` | Whole numbers. `minimum` is 0 and `maximum` 100 unless set. |
 | `start_angle`, `end_angle` | Degrees clockwise from twelve o'clock, as everywhere in the app API. Used only when both are set; an arc otherwise runs from 225 to 135, leaving a gap at the bottom. The host turns them into rlvgl's angles, which start at three o'clock. |
 | `long_mode` | 0 `wrap`, 1 `scroll`, 2 `clip`. Labels wrap at spaces by default. |
-| `image`, `icon` | An image number: below 32768 the app's own, 32768 and up the shared library's. |
+| `image`, `icon` | An image number: below 32768 the app's own, 32768 to 65535 the shared library's, 65536 and up an installed app's icon. |
 
 Event fields `x`, `y`, `start_x` and `start_y` are screen pixels.
 
@@ -757,14 +761,14 @@ The working memory below is measured from `neotime-runtime`; the rest is still a
 |---|---|
 | Interpreter: a stack of 32 values, 16 locals, the 256-byte text buffer and the 1 KB scratch area | 1,792 B, measured |
 | A handler's results: which variables changed and up to 8 effects | 272 B, measured, only while a handler runs |
-| Bindings: what each of up to 64 expressions reads and its redraw period | 1,032 B, measured |
+| Bindings: what each of up to 128 expressions reads and its redraw period | 2,056 B, measured |
 | State: up to 2 KB of variables and arrays, and where each lies | 2,440 B, measured |
 | Expression bytecode, copied in when the app opens | about 1 KB |
 | Section reader for the image on the external flash | 256 B |
 
 That is about 6.6 KB, which leaves the rest of the open app's 12 KB for a second app's state
 while a subscription runs. On the watch, the interpreter, the bindings and the
-state take 5,264 B together, measured with `size_of` for the watch's target. `AppHost` keeps each
+state take 6,288 B together, measured with `size_of` for the watch's target. `AppHost` keeps each
 on the heap: built in place on the stack, they made opening an app need a 23 KB stack frame,
 more than the watch's whole stack. Opening now needs 6.4 KB of stack.
 

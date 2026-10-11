@@ -148,6 +148,20 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
         Ok(compiler) => {
             let image = compiler.writer.build();
             let mut diagnostics = compiler.warnings;
+            let expressions = compiler.writer.expression_count();
+            if expressions > neotime_runtime::bindings::MOST_EXPRESSIONS {
+                diagnostics.push(Diagnostic::error(
+                    Span::default(),
+                    format!(
+                        "the app shows {expressions} values that change, and the watch keeps track of at most {}; show fewer at once",
+                        neotime_runtime::bindings::MOST_EXPRESSIONS
+                    ),
+                ));
+                return Output {
+                    image: None,
+                    diagnostics,
+                };
+            }
             match check_image(&image) {
                 Ok(()) => Output {
                     image: Some(image),
@@ -198,6 +212,7 @@ fn run_pass<'a>(
 /// Runs the checks the watch runs when an image is installed.
 pub fn check_image(image: &[u8]) -> Result<(), String> {
     let parsed = neotime_runtime::AppImage::parse(image).map_err(|error| format!("{error:?}"))?;
+
     neotime_runtime::verify(&parsed).map_err(|error| format!("{error:?}"))
 }
 

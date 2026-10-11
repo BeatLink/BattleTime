@@ -33,6 +33,7 @@ time.
 | `is_bluetooth_enabled` | `Bool` | Whether Bluetooth is on, whether or not the phone is connected. |
 | `next_alarm` | `Instant \| null` | The next alarm any app has set to ring, or `null` if none is set. In app code an empty optional is always `null`. |
 | `current_weather` | object | The last forecast the phone sent: `temperature`, `condition`, `low`, `high`, `sunrise`, `sunset`, `location` and `received_at` (each `null` until the phone sends it), and `forecast`, up to 5 coming days, each with `condition`, `low` and `high`: read `current_weather.value.forecast.length` and `current_weather.value.forecast[day].high`. Reading it needs no permission, so faces need no subscription of their own. |
+| `installed_apps` | list | Every app a launcher lists, in order: `installed_apps.value.length`, and `installed_apps.value[i].name`, `.id` (for `open_app`) and `.icon` (for an `Icon`). `apps/launcher` is a launcher written this way. |
 | `current_music` | object | The phone's player: `artist`, `track`, `is_playing`, `position` and `length`. Needs the `phone` permission. |
 | `current_navigation` | object | The phone's navigation: `turn`, `instruction` (text), `distance` in metres and `progress_percent`. Needs the `phone` permission. |
 
@@ -167,6 +168,12 @@ when a screen opens. Each one takes the common props below plus its own.
 | `Pages` | tile view | Full-screen pages the user swipes between. |
 | `Tabs` | tab view | Pages with a row of tabs. |
 
+Nothing adds space by itself: `padding` and `gap` start at 0. Keep 8 pixels between content and
+the screen's edges, with `padding={8}` on the screen's outer container, and 6 to 8 pixels between
+buttons and other controls, with `gap`. Leave the padding out only for content meant to fill the
+screen, such as a game board or a full-width picture. A widget placed with `x` and `y` is measured
+from inside its parent's padding.
+
 ### Showing things
 
 | Widget | rlvgl | Use |
@@ -285,7 +292,7 @@ turn that off.
 |---|---|
 | `go(screen)` | Shows another of this app's screens. |
 | `back()` | Returns to the previous screen, or leaves the app from its first one. |
-| `open_app(id)` | Opens another installed app. |
+| `open_app(id)` | Opens another installed app; the id may be text made while running, such as `installed_apps.value[i].id`. |
 | `close()` | Leaves the app for the watch face. |
 | `show_toast(text)` | Shows a short message over the screen for two seconds. |
 

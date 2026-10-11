@@ -19,5 +19,3 @@ neotime-runtime = { path = "../runtime", features = ["writer"] }
 [features]
 # The built-in stopwatch demo image, written with the runtime's image writer.
 demo = ["neotime-runtime/writer"]
-# The launcher, written as an app image when the watch starts.
-launcher = ["neotime-runtime/writer"]

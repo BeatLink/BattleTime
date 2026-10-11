@@ -49,7 +49,9 @@ pub const SCREEN_AREA: Rect = Rect {
 pub const SCREEN_HISTORY_DEPTH: usize = 8;
 
 /// How many expressions an app may bind, one bit each in a mask.
-const MOST_BOUND_EXPRESSIONS: usize = 64;
+const MOST_BOUND_EXPRESSIONS: usize = neotime_runtime::bindings::MOST_EXPRESSIONS;
+/// Persistent variables are tracked one bit each in a `u64`.
+const MOST_TRACKED_VARIABLES: u16 = 64;
 
 /// The most bytes `save_changed_state` can need: every byte of state, plus each variable's key and header.
 pub const LARGEST_SAVED_STATE_BYTES: usize =
@@ -86,10 +88,10 @@ struct ScrollDrag {
     start_offset: i32,
 }
 
-fn mask_of(expressions: impl Iterator<Item = usize>) -> u64 {
+fn mask_of(expressions: impl Iterator<Item = usize>) -> u128 {
     expressions
         .filter(|&expression| expression < MOST_BOUND_EXPRESSIONS)
-        .fold(0u64, |mask, expression| mask | 1 << expression)
+        .fold(0u128, |mask, expression| mask | 1 << expression)
 }
 
 // ============================================================================
@@ -101,6 +103,7 @@ pub struct AppHost<'image> {
     image: AppImage<'image>,
     tree: WidgetTree<'image>,
     library: Option<AppImage<'image>>,
+    installed_apps: &'image [&'image [u8]],
     // The three big parts live on the heap, so opening an app never copies kilobytes across the stack.
     state: Box<AppState>,
     interpreter: Box<Interpreter>,
@@ -111,7 +114,7 @@ pub struct AppHost<'image> {
     screen_history: [u16; SCREEN_HISTORY_DEPTH],
     screen_history_length: usize,
     /// One bit for each expression the open screen's widgets read.
-    screen_expressions: u64,
+    screen_expressions: u128,
     nodes: Vec<Node>,
     /// One bit for each node to draw again.
     dirty_nodes: u128,
@@ -186,7 +189,7 @@ impl<'image> AppHost<'image> {
         let first_screen = tree.screens().next().ok_or(OpenError::NoScreens)?;
 
         let mut persistent_variables = 0;
-        for variable in 0..image.state_count().min(MOST_BOUND_EXPRESSIONS as u16) {
+        for variable in 0..image.state_count().min(MOST_TRACKED_VARIABLES) {
             if image
                 .state_variable(variable)
                 .is_some_and(|variable| variable.persists)
@@ -199,6 +202,7 @@ impl<'image> AppHost<'image> {
             image,
             tree,
             library: None,
+            installed_apps: &[],
             state,
             interpreter: Box::new(Interpreter::new()),
             bindings,
@@ -225,6 +229,12 @@ impl<'image> AppHost<'image> {
         };
         host.run_derives(Inputs::NOTHING, true, now, system);
         Ok(host)
+    }
+
+    /// Gives the host every installed app's image, for the icons a launcher shows.
+    pub fn set_installed_apps(&mut self, installed_apps: &'image [&'image [u8]]) {
+        self.installed_apps = installed_apps;
+        self.whole_screen_dirty = true;
     }
 
     /// Gives the host the shared library, whose images apps name from 32768 up.
@@ -437,6 +447,7 @@ impl<'image> AppHost<'image> {
         DrawContext {
             image: &self.image,
             library: self.library.as_ref(),
+            installed_apps: self.installed_apps,
             state: &self.state,
             theme: &self.theme,
             utc_offset: self.utc_offset,
@@ -491,7 +502,7 @@ impl<'image> AppHost<'image> {
 
     /// Works out again every property bound to one of `expressions`, marks widgets showing a changed
     /// array, then redoes the layout.
-    fn refresh(&mut self, expressions: u64, changed_variables: u64, now: Value, system: &mut impl System) {
+    fn refresh(&mut self, expressions: u128, changed_variables: u64, now: Value, system: &mut impl System) {
         if !self.is_open {
             return;
         }

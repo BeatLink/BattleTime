@@ -1278,3 +1278,12 @@ export default define_app({{
     compile(&source(20));
     assert!(first_error(&source(10)).contains("at most every 20 milliseconds"));
 }
+
+#[test]
+fn an_app_with_too_many_changing_values_is_refused() {
+    let labels: String = (0..140).map(|place| format!("<Label>{{`${{ticks.value + {place}}}`}}</Label>")).collect();
+    let source = app(&format!(
+        "const ticks = signal(0);\nfunction Main() {{ return <Screen>{labels}</Screen>; }}"
+    ));
+    assert!(first_error(&source).contains("at most 128"));
+}

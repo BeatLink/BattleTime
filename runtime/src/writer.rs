@@ -193,6 +193,11 @@ impl ImageWriter {
         (self.variables.len() - 1) as u8
     }
 
+    /// How many expressions the image holds so far.
+    pub fn expression_count(&self) -> usize {
+        self.expressions.len()
+    }
+
     pub fn expression(&mut self, code: Vec<u8>) -> u16 {
         self.expressions.push(code);
         (self.expressions.len() - 1) as u16

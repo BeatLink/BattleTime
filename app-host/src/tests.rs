@@ -1019,24 +1019,3 @@ fn a_long_label_wraps_onto_several_lines_inside_the_screen() {
     assert!(contains(SCREEN_AREA, bounds));
     assert!(bounds.height > 40, "one line would be about 20 pixels, got {bounds:?}");
 }
-
-// ============================================================================
-// The launcher
-// ============================================================================
-
-#[test]
-fn the_launcher_opens_an_app_by_its_id() {
-    let counter = counter_image();
-    let toast = toast_image();
-    let launcher = crate::launcher::launcher_image(&[&counter, b"not an image", &toast]);
-    let mut system = FakeSystem::default();
-    let mut host = AppHost::open(&launcher, DEFAULT_THEME, START_TIME, &mut system).unwrap();
-    assert_eq!(host.node_count(), 3);
-
-    let mut screen = FakeScreen::new();
-    host.draw(&mut screen).unwrap();
-    assert_eq!(host.widget_text(2), Some("Toast"));
-    click_on(&mut host, 2, START_TIME, &mut system);
-    let (kind, _, id) = system.effects.last().unwrap();
-    assert_eq!((*kind, id.as_deref()), (EffectKind::OpenApp, Some("toast")));
-}

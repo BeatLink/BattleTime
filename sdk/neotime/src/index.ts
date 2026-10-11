@@ -149,6 +149,17 @@ export const current_weather = signal<CurrentWeather>({
   forecast: [],
 });
 
+export interface InstalledApp {
+  /** What `open_app` takes. */
+  id: string;
+  name: string;
+  /** The app's launcher icon, or the shared library's default when it has none. */
+  icon: LibraryIcon;
+}
+
+/** Every app a launcher lists, in order; kept by the system. */
+export const installed_apps = signal<InstalledApp[]>([]);
+
 export interface CurrentMusic {
   artist: string;
   track: string;

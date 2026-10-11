@@ -40,7 +40,7 @@ static_cell = "2.1"
 trouble-host = { version = "0.8", default-features = false, features = ["peripheral", "gatt", "derive", "default-packet-pool", "default-packet-pool-mtu-64", "default-packet-pool-size-8"] }
 
 neotime-accelerometer = { path = "../drivers/accelerometer" }
-neotime-app-host = { path = "../app-host", features = ["launcher"] }
+neotime-app-host = { path = "../app-host" }
 neotime-bluetooth = { path = "../drivers/bluetooth" }
 neotime-boot = { path = "../boot" }
 neotime-button = { path = "../drivers/button" }

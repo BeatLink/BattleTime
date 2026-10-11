@@ -31,6 +31,8 @@ use crate::text::{draw_line, WrappedLines};
 pub struct DrawContext<'context, 'image> {
     pub image: &'context AppImage<'image>,
     pub library: Option<&'context AppImage<'image>>,
+    /// The installed apps' images, whose icons a launcher shows.
+    pub installed_apps: &'image [&'image [u8]],
     pub state: &'context AppState,
     pub theme: &'context Theme,
     /// Milliseconds the local time is ahead of UTC.
@@ -39,7 +41,7 @@ pub struct DrawContext<'context, 'image> {
     pub now: Value,
 }
 
-impl DrawContext<'_, '_> {
+impl<'image> DrawContext<'_, 'image> {
     /// An array's length and its elements, or nothing if the variable is not an array.
     fn array(&self, variable: Option<u8>) -> Option<(u8, usize)> {
         let variable = variable?;
@@ -60,10 +62,14 @@ impl DrawContext<'_, '_> {
     }
 
     /// The image an `image` or `icon` value names, from the app or the shared library.
-    pub fn image_resource(&self, value: i32) -> Option<ImageResource<'_>> {
+    pub fn image_resource(&self, value: i32) -> Option<ImageResource<'image>> {
         match ImageReference::from_value(value)? {
             ImageReference::App(index) => self.image.resource(index),
             ImageReference::SharedLibrary(index) => self.library?.resource(index),
+            ImageReference::InstalledApp(index) => {
+                let app = AppImage::parse(self.installed_apps.get(index as usize)?).ok()?;
+                app.has_icon.then(|| app.resource(0)).flatten()
+            }
         }
     }
 }
