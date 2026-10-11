@@ -5,8 +5,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 
 ## On the watch
 
-- **A watch face, a launcher and apps.** The firmware starts on the digital face. A launcher lists
-  the built-in apps: stopwatch, timer, flashlight, dice, calculator, snake, puzzle 15, steps and
+- **A watch face, a launcher and apps.** The firmware starts on the digital face. A launcher,
+  itself an ordinary app that another could replace, lists the built-in apps with their icons: stopwatch, timer, flashlight, dice, calculator, snake, puzzle 15, steps and
   heart rate. Touches and the side button reach the open app.
 - **The screen sleeps on its own.** It turns off after 15 seconds, unless the open app keeps it on.
 - **Brightness.** The backlight has off, low, medium and high levels.
@@ -17,6 +17,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Step counting.** The accelerometer counts today's steps for the steps app and faces.
 - **Battery charge and charging state.**
 - **The time from the phone,** set through the Bluetooth Current Time service.
+- **Themes from the companion app.** Six presets (dark, light, ocean, forest, sunset and contrast)
+  or any colours, and the backlight level, set over Bluetooth and kept through a restart. The open
+  app changes colour at once. See [companion-protocol.md](companion-protocol.md).
 - **Apps remember where they were.** An app's saved state is written to the watch's storage when
   it closes or the screen turns off, and put back when it opens.
 - **Text in clear, smooth fonts** made from JetBrains Mono and Open Sans.

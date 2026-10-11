@@ -749,9 +749,10 @@ So changing the theme costs one redraw of the open screen: no app code runs agai
 stored by an app changes. Apps that use theme names follow the user's choice automatically;
 a watch face that wants its own look uses fixed colours.
 
-The preset themes live in the shared library. The user's chosen theme, or one they made in the
-companion app, is eight RGB565 colours in `/settings` on the external flash. `DEFAULT_THEME` in
-`runtime/src/theme.rs` is the one the watch starts with.
+`PRESET_THEMES` in `runtime/src/theme.rs` holds six named presets: `dark` (`DEFAULT_THEME`, the
+one the watch starts with), `light`, `ocean`, `forest`, `sunset` and `contrast`. The companion app
+picks one or sets single colours; see [companion-protocol.md](companion-protocol.md). The chosen
+theme is eight RGB565 colours in `/settings/theme` on the external flash.
 
 ## Memory
 

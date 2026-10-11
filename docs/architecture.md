@@ -33,7 +33,7 @@ flowchart TB
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>(planned: power, events, settings, notifications)"]
-    services["Services<br/>services/storage, services/updates,<br/>services/dfu; planned: time, steps"]
+    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/companion; planned: time, steps"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth,<br/>drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
@@ -129,6 +129,7 @@ NeoTime/
 │   ├── bluetooth.md  the Bluetooth controller
 │   ├── bootloader.md
 │   ├── coding-guidelines.md
+│   ├── companion-protocol.md how a phone talks to the watch: services, JSON lines, files
 │   ├── compiler.md   the app compiler: the language subset, types and number mappings
 │   ├── faces.md      the watch faces ported from InfiniTime, wasp-os and PinetimeLite
 │   ├── features.md   what the watch can do, added as each feature is finished
@@ -152,6 +153,7 @@ NeoTime/
 ├── sdk/
 │   └── neotime/      the neotime package apps and faces import, as a stand-in for now
 ├── services/
+│   ├── companion/    neotime-companion: the companion app's JSON lines over the UART service
 │   ├── dfu/          neotime-dfu: the legacy DFU update protocol over Bluetooth
 │   ├── storage/      neotime-storage: the littlefs file system in the external flash
 │   └── updates/      neotime-updates: stores an uploaded firmware and hands it to the bootloader
@@ -392,6 +394,16 @@ uploads an image and the bootloader that installs it. It knows nothing of the up
   start of the slot first and writes the vector table last, so the bootloader never sees a
   half-written recovery firmware.
 
+## Companion messages (`services/companion`)
+
+`neotime-companion` reads the companion app's messages and writes the watch's replies, as
+[companion-protocol.md](companion-protocol.md) sets out: newline-ended JSON lines, `GB({...})` as
+Gadgetbridge sends them or bare. `LineAssembler` joins writes into lines and drops one longer than
+512 bytes; `parse_line` reads a message with `serde-json-core`, without allocating; and
+`settings_report` writes the `settings` reply. It knows nothing of Bluetooth, so its tests run on
+a computer. So far it reads `settings` (a preset theme, single colours and the brightness) and
+names every other message by its `t`.
+
 ## Firmware updates over Bluetooth (`services/dfu`)
 
 `neotime-dfu` speaks Nordic's legacy DFU, the protocol InfiniTime uses, so Gadgetbridge, ITD, Siglo
@@ -432,6 +444,11 @@ watch face, the launcher and the apps through `neotime-app-host`:
 - **Steps.** `motion.rs` reads the accelerometer's own step counter every 30 seconds and resets it
   at midnight. It shares the I2C bus with the touch panel. A change redraws what shows the steps
   and goes to the app's `steps` subscriptions.
+- **Companion app.** The Nordic UART service carries the companion's JSON lines. The Bluetooth
+  task hands each write to `neotime-companion`; a `settings` message goes to the shell, which
+  applies the theme to the open app at once, sets the backlight level, keeps both in `/settings`
+  (`settings.rs`) and sends the settings back as a reply. Bluetooth runs as a task of its own, so
+  its stack frame (5.7 KB) is never added to start-up's.
 - **Diagnostics.** A NeoTime GATT service (`6e540001-…`) has one readable characteristic
   (`6e540002-…`) of eight little-endian `u32` counters from `diagnostics.rs`: shell loops, what
   last woke the shell, whether the screen is lit, the touch panel's state, touch reports, touches
@@ -456,8 +473,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
 Not done yet: heart rate, notifications, music and weather read as 0 or empty; the touch panel stays
 awake while the screen is off; settings such as the 24 hour clock are fixed.
 
-It takes 352 KB of the 400 KB firmware slot (the fonts are 47 KB, the built-in apps 29 KB, the
-shared library 26 KB and the two accelerometers' configuration files 12 KB) and 48 KB of static RAM, 36 KB of it heap: 16 KB for storage and 20 KB for
+It takes 368 KB of the 400 KB firmware slot (the fonts are 47 KB, the built-in apps 29 KB, the
+shared library 26 KB and the two accelerometers' configuration files 12 KB) and 52 KB of static RAM, 36 KB of it heap: 16 KB for storage and 20 KB for
 the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
 the button and the backlight timeout all work.
 

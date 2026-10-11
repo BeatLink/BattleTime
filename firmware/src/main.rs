@@ -42,6 +42,8 @@ use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT
 use neotime_button::Button;
 use neotime_dfu::{service::DfuWrite, service::LegacyDfuService, LegacyDfu};
 use neotime_display::Display;
+use embassy_futures::select::{select, Either};
+use neotime_companion::LineAssembler;
 use neotime_runtime::events::ButtonPress;
 use static_cell::StaticCell;
 use trouble_host::prelude::*;
@@ -63,6 +65,8 @@ mod battery;
 mod built_in_apps;
 mod clock;
 mod diagnostics;
+#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+mod settings;
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod shell;
 // Under wasp-os the firmware is never rolled back or installed as recovery.
@@ -252,7 +256,7 @@ async fn main(spawner: Spawner) {
         Interrupts,
     );
     storage::leave_breadcrumb(stage::RADIO_STARTED);
-    run_bluetooth(controller, targets, confirmation, screen).await;
+    spawner.spawn(run_bluetooth(controller, targets, confirmation, screen).unwrap());
 }
 
 // ============================================================================
@@ -508,7 +512,20 @@ struct Server {
     dfu: LegacyDfuService,
     time: CurrentTimeService,
     diagnostics: DiagnosticsService,
+    uart: NordicUartService,
 }
+
+/// The Nordic UART service, which carries the companion app's JSON lines; see docs/companion-protocol.md.
+#[gatt_service(uuid = "6e400001-b5a3-f393-e0a9-e50e24dcca9e")]
+struct NordicUartService {
+    #[characteristic(uuid = "6e400002-b5a3-f393-e0a9-e50e24dcca9e", write, write_without_response)]
+    receive: [u8; 20],
+    #[characteristic(uuid = "6e400003-b5a3-f393-e0a9-e50e24dcca9e", notify)]
+    transmit: [u8; 20],
+}
+
+/// The bytes one notification carries at the smallest MTU, 23, less the 3-byte header.
+const NOTIFICATION_BYTES: usize = 20;
 
 /// NeoTime's own service: counters from `diagnostics`, read with any GATT client.
 #[gatt_service(uuid = "6e540001-0000-4000-8000-4e656f54696d")]
@@ -533,6 +550,8 @@ fn device_address() -> [u8; 6] {
     [low[0], low[1], low[2], low[3], high[0], high[1] | 0xC0]
 }
 
+/// Its own task, so the Bluetooth loop's stack frame is not added to start-up's.
+#[embassy_executor::task]
 async fn run_bluetooth(
     controller: neotime_bluetooth::BluetoothController<'static, neotime_bluetooth::NrfRadio>,
     targets: storage::Targets,
@@ -607,6 +626,19 @@ async fn run_bluetooth(
     let _ = embassy_futures::join::join(runner.run(), serve).await;
 }
 
+/// Hands a `settings` message to the shell; other messages wait for the features that use them.
+fn read_companion_line(line: &[u8]) {
+    match neotime_companion::parse_line(line) {
+        Ok(neotime_companion::Message::Settings(change)) => {
+            let _ = settings::CHANGES.try_send(change);
+        }
+        Ok(neotime_companion::Message::Unknown { .. }) => {}
+        Err(_) => {
+            let _ = settings::REPLIES.try_send(neotime_companion::error_report("could not read that message"));
+        }
+    }
+}
+
 /// The first data a phone exchanges proves the radio works end to end, so that is when the firmware confirms itself.
 async fn serve_connection(
     connection: &GattConnection<'_, '_, DefaultPacketPool>,
@@ -617,8 +649,21 @@ async fn serve_connection(
     confirmed: &mut bool,
 ) {
     let mut shown_kilobytes = u32::MAX;
+    let mut companion_lines = LineAssembler::new();
     loop {
-        match connection.next().await {
+        // Pinned where they are made, so the connection's large future is never copied across the stack.
+        let next_event = core::pin::pin!(connection.next());
+        let next_reply = core::pin::pin!(settings::REPLIES.receive());
+        let event = match select(next_event, next_reply).await {
+            Either::First(event) => event,
+            Either::Second(reply) => {
+                for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
+                    let _ = server.uart.transmit.notify_raw(connection, piece, false).await;
+                }
+                continue;
+            }
+        };
+        match event {
             GattConnectionEvent::Disconnected { .. } => {
                 dfu.abort();
                 screen.hide_status();
@@ -633,6 +678,9 @@ async fn serve_connection(
                         });
                         if write.handle() == server.time.current_time.handle {
                             clock::set_from_current_time(&written);
+                        }
+                        if write.handle() == server.uart.receive.handle {
+                            companion_lines.push(&written, read_companion_line);
                         }
                         server.dfu.classify(write.handle())
                     }

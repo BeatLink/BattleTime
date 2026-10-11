@@ -148,3 +148,97 @@ pub const DEFAULT_THEME: Theme = Theme::new([
     rgb565(240, 170, 30),
     rgb565(230, 70, 60),
 ]);
+
+// ============================================================================
+// Preset themes
+// ============================================================================
+
+/// A theme the user can pick by name, such as from the companion app.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PresetTheme {
+    pub name: &'static str,
+    pub theme: Theme,
+}
+
+/// Every preset, the default first, in the order a settings screen lists them.
+pub const PRESET_THEMES: [PresetTheme; 6] = [
+    PresetTheme {
+        name: "dark",
+        theme: DEFAULT_THEME,
+    },
+    PresetTheme {
+        name: "light",
+        theme: Theme::new([
+            rgb565(255, 255, 255),
+            rgb565(222, 226, 230),
+            rgb565(0, 0, 0),
+            rgb565(104, 110, 120),
+            rgb565(0, 128, 150),
+            rgb565(30, 150, 70),
+            rgb565(200, 120, 0),
+            rgb565(210, 40, 40),
+        ]),
+    },
+    PresetTheme {
+        name: "ocean",
+        theme: Theme::new([
+            rgb565(0, 10, 30),
+            rgb565(10, 40, 80),
+            rgb565(220, 240, 255),
+            rgb565(110, 150, 190),
+            rgb565(40, 160, 255),
+            rgb565(40, 210, 170),
+            rgb565(250, 200, 60),
+            rgb565(255, 90, 90),
+        ]),
+    },
+    PresetTheme {
+        name: "forest",
+        theme: Theme::new([
+            rgb565(8, 20, 10),
+            rgb565(30, 60, 36),
+            rgb565(230, 240, 220),
+            rgb565(140, 160, 130),
+            rgb565(120, 200, 80),
+            rgb565(90, 210, 120),
+            rgb565(230, 190, 60),
+            rgb565(230, 90, 60),
+        ]),
+    },
+    PresetTheme {
+        name: "sunset",
+        theme: Theme::new([
+            rgb565(24, 8, 16),
+            rgb565(70, 30, 50),
+            rgb565(255, 236, 220),
+            rgb565(190, 140, 140),
+            rgb565(255, 120, 60),
+            rgb565(120, 210, 120),
+            rgb565(255, 200, 60),
+            rgb565(240, 60, 90),
+        ]),
+    },
+    PresetTheme {
+        name: "contrast",
+        theme: Theme::new([
+            rgb565(0, 0, 0),
+            rgb565(40, 40, 40),
+            rgb565(255, 255, 255),
+            rgb565(200, 200, 200),
+            rgb565(255, 220, 0),
+            rgb565(0, 255, 0),
+            rgb565(255, 160, 0),
+            rgb565(255, 0, 0),
+        ]),
+    },
+];
+
+/// The preset with this name, if there is one.
+pub fn preset_named(name: &str) -> Option<&'static PresetTheme> {
+    PRESET_THEMES.iter().find(|preset| preset.name == name)
+}
+
+/// The preset whose colours these are, so a theme picked by name is reported by name.
+pub fn preset_matching(theme: &Theme) -> Option<&'static PresetTheme> {
+    PRESET_THEMES.iter().find(|preset| preset.theme == *theme)
+}

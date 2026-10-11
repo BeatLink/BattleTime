@@ -122,13 +122,7 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 
 ## Apps and faces
 
-- [ ] **alarm and twos do not open in the simulator.** Both compile, but the simulator stops with
-  `the app did not open: Image(TableOutOfBounds)`, so neither has been seen on screen, including
-  twos' new board layout. Waiting on the app runtime.
-- [ ] **The weather forecast shows wrong numbers in the simulator.** Each day reads a high of -922
-  and a low of 3372, while today's temperatures are right. The cause is either the simulator's
-  forecast data or how the compiler reads `current_weather.value.forecast[place].high` inside a
-  component. Waiting on the app runtime.
+Nothing open.
 
 ## Display and SPI bus
 
@@ -197,7 +191,6 @@ The full report is [NeoTime vs InfiniTime: feature coverage](https://claude.ai/c
 - [ ] **Double line buffers with DMA,** so one is filled while the other is sent. InfiniTime uses
   two of 240 x 4 pixels. This also fixes the text edges listed above.
 - [ ] **Fonts and pictures** built into the firmware, and more loaded from the external flash.
-- [ ] **A theme** and shared styles.
 
 ### Simulator
 
@@ -276,10 +269,11 @@ full report is
 
 ### Bluetooth
 
-- [ ] **Nordic UART Service,** the transport the fork's companion apps use.
-- [ ] **The Gadgetbridge Bangle.js protocol:** notifications, dismissals, music, weather, find
-  phone, time, alarms, steps, settings, calls and HTTP, plus watch status reports. Decide whether
-  NeoTime speaks this, InfiniTime's GATT services, or both.
+- [ ] **The rest of the Gadgetbridge Bangle.js messages** in
+  [companion-protocol.md](companion-protocol.md): notifications, dismissals, music, weather, find
+  phone, alarms, steps, status, calls and HTTP. `settings` is served.
+- [ ] **The Battery service** (`0x180F`) and **the file service** (`6e540003`, `6e540004`) from
+  [companion-protocol.md](companion-protocol.md), for installing apps from the phone.
 - [ ] **A developer console over BLE,** to replace the fork's Python REPL for uploads, time setting
   and resets.
 
@@ -289,7 +283,6 @@ full report is
 - [ ] **Widgets:** status bar, battery meter, clock, notification bar, scroll indicator, button,
   toggle, checkbox, slider, spinner, stopwatch and confirmation view.
 - [ ] **App icons:** monochrome Font Awesome icons per app.
-- [ ] **Theme presets** set from the companion app.
 - [ ] **Grid and list launchers,** chosen in settings.
 
 ### Simulator

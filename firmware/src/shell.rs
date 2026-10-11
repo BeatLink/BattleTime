@@ -16,7 +16,7 @@ use core::{
 use alloc::vec;
 use core::fmt::Write;
 
-use embassy_futures::select::{select4, Either4};
+use embassy_futures::select::{select, select4, Either, Either4};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
@@ -24,16 +24,19 @@ use neotime_app_host::{
     AppEffect, AppFailure, AppHost, EventResult, PushedEvent, System, Touch,
     LARGEST_SAVED_STATE_BYTES,
 };
+use neotime_companion::SettingsChange;
 use neotime_runtime::{
     events::{ButtonPress, SwipeDirection},
-    resources::ImageReference, AppImage, EffectKind, SystemValue, SystemValues, Value, DEFAULT_THEME,
+    resources::ImageReference, AppImage, EffectKind, SystemValue, SystemValues, Value,
 };
 
 use crate::{
     backlight::{self, Backlight},
     battery, built_in_apps, clock,
     diagnostics::{self, Counter},
-    motion, storage, system_values,
+    motion,
+    settings::{self, Settings},
+    storage, system_values,
     touch::TOUCHES,
     vibration, SharedDisplay,
 };
@@ -205,6 +208,7 @@ struct Shell {
     host: Option<AppHost<'static>>,
     system: WatchSystem,
     files: storage::Files,
+    settings: Settings,
     backlight: Backlight,
     display: &'static SharedDisplay,
     lit: bool,
@@ -220,7 +224,7 @@ impl Shell {
         }
         let _ = vibration::REQUESTS.try_send(vibration::Request::Stop);
         self.system.keep_screen_on = false;
-        self.set_brightness(backlight::DEFAULT_LEVEL);
+        self.set_brightness(self.settings.brightness);
 
         let bytes = match showing {
             Showing::Face => built_in_apps::FACE,
@@ -233,7 +237,7 @@ impl Shell {
             .and_then(|image| image.string(image.id_string))
             .and_then(|id| self.files.read(&state_path(id)))
             .unwrap_or_default();
-        match AppHost::open_with_saved_state(bytes, DEFAULT_THEME, &saved, now, &mut self.system) {
+        match AppHost::open_with_saved_state(bytes, self.settings.theme, &saved, now, &mut self.system) {
             Ok(mut host) => {
                 let _ = host.set_library(built_in_apps::LIBRARY);
                 host.set_installed_apps(&built_in_apps::APPS);
@@ -253,6 +257,21 @@ impl Shell {
         if let Ok(Some(length)) = host.save_changed_state(&mut buffer) {
             self.files.write(&state_path(id), &buffer[..length]);
         }
+    }
+
+    /// Applies a change from the companion app, then tells it the settings as they now are.
+    fn change_settings(&mut self, change: &SettingsChange) {
+        let old_brightness = self.settings.brightness;
+        self.settings.apply(change, &self.files);
+        if let Some(host) = &mut self.host {
+            host.set_theme(self.settings.theme);
+        }
+        // An app's own brightness stays until it closes; otherwise the new level shows at once.
+        if self.system.brightness == old_brightness {
+            self.set_brightness(self.settings.brightness);
+        }
+        let report = neotime_companion::settings_report(&self.settings.theme, self.settings.brightness);
+        let _ = settings::REPLIES.try_send(report);
     }
 
     fn set_brightness(&mut self, level: u8) {
@@ -389,6 +408,7 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
             brightness_request: None,
             keep_screen_on: false,
         },
+        settings: Settings::load(&files),
         files,
         backlight,
         display,
@@ -416,7 +436,7 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
             TOUCHES.receive(),
             BUTTON_PRESSES.receive(),
             Timer::at(wake_at),
-            system_values::next_changes(),
+            select(system_values::next_changes(), settings::CHANGES.receive()),
         )
         .await
         {
@@ -450,9 +470,13 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
                     host.tick(clock::now(), &mut shell.system);
                 }
             }
-            Either4::Fourth(changed) => {
+            Either4::Fourth(Either::First(changed)) => {
                 diagnostics::set(Counter::ShellLastWake, 4);
                 shell.system_values_changed(changed);
+            }
+            Either4::Fourth(Either::Second(change)) => {
+                diagnostics::set(Counter::ShellLastWake, 5);
+                shell.change_settings(&change);
             }
         }
         shell.follow_requests();
