@@ -1,4 +1,4 @@
-// Colours follow the wasp-os design schema: an accent on black with white text.
+// Colours follow the watch's own look: an accent on black with white text.
 
 import { Platform } from 'react-native';
 

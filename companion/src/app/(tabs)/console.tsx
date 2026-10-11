@@ -3,15 +3,13 @@ import { StyleSheet, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
-import { Row } from '@/components/row';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
-import { QUICK_COMMANDS } from '@/protocol/diagnostics';
 
-// Shows raw traffic in both directions and lets you type a line straight into the watch REPL.
+// Shows the UART traffic in both directions and sends a typed line to the watch as it is.
 export default function ConsoleScreen() {
   const theme = useTheme();
   const { console: entries, connection, sendRaw, clearConsole } = useWatch();
@@ -21,29 +19,12 @@ export default function ConsoleScreen() {
   const submit = () => {
     const line = draft.trim();
     if (!line) return;
-    sendRaw(`${line}\r\n`);
+    sendRaw(`${line}\n`);
     setDraft('');
   };
 
   return (
     <Screen title="Console">
-      <Card title="Quick commands">
-        {QUICK_COMMANDS.map((command) => (
-          <Row
-            key={command.label}
-            label={command.label}
-            detail={command.detail}
-            onPress={connected ? () => sendRaw(`${command.line}\r\n`) : undefined}
-            right={
-              command.restarts ? (
-                <ThemedText type="small" themeColor="textSecondary">
-                  disconnects
-                </ThemedText>
-              ) : null
-            }
-          />
-        ))}
-      </Card>
       <Card>
         {entries.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
@@ -66,7 +47,7 @@ export default function ConsoleScreen() {
           value={draft}
           onChangeText={setDraft}
           onSubmitEditing={submit}
-          placeholder="Send a line to the REPL"
+          placeholder={'Send a line, such as GB({"t":"status"})'}
           placeholderTextColor={theme.textSecondary}
           autoCapitalize="none"
           autoCorrect={false}

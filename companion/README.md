@@ -1,17 +1,32 @@
-# WaspOS Companion
+# NeoTime Companion
 
-A React Native (Expo) phone app for watches running [wasp-os](https://github.com/wasp-os/wasp-os),
-the MicroPython firmware for the PineTime. It talks to the watch over the Nordic UART Service using
-the same Gadgetbridge-style JSON messages the firmware already understands.
+A React Native (Expo) phone, desktop and command line companion for watches running
+[NeoTime](https://github.com/BeatLink/NeoTime), the Rust firmware for the PineTime. It started as
+the wasp-os companion and keeps its screens, but talks to the watch through the services NeoTime
+serves.
 
 ## Status
 
-Early. The app scans for a watch, connects, installs app packages and flashes firmware, from a
-file or from a GitHub build. It shows the battery, today's steps and what the phone is playing,
-reads the step history, edits alarms and the watch's own settings (faces with previews, theme
-presets), browses and backs up the watch's files, pushes the weather, and makes web requests for
-watch apps, any method, to hosts the user allows. On Android it forwards notifications, calls and now playing, and obeys Do
-Not Disturb. The Android bridge has not been compiled yet; see
+Early. What works today against NeoTime's firmware:
+
+- scanning, connecting, and telling a running NeoTime from a watch waiting in a bootloader;
+- firmware updates over Nordic legacy DFU, from a file or a GitHub release, then reconnecting so
+  the watch keeps the new firmware instead of rolling it back;
+- setting the clock over the standard Current Time service on every connection;
+- reading NeoTime's diagnostic counters.
+
+Built and tested against the mock watch, waiting for the firmware side
+([docs/companion-protocol.md](https://github.com/BeatLink/NeoTime/blob/master/docs/companion-protocol.md)
+in the NeoTime tree):
+
+- the battery level from the standard Battery service;
+- the Gadgetbridge-style messages over the Nordic UART Service: notifications, calls, music,
+  weather, find, status, steps, alarms, watch settings and web requests for watch apps;
+- the file service: browsing files, backups, and installing compiled `.ntapp` apps.
+
+Each feature is offered only when the connected watch serves what it needs, so nothing breaks while
+the firmware catches up. On Android the app forwards notifications, calls and now playing, and obeys
+Do Not Disturb; that bridge has not been compiled yet, see
 [src/services/phone/README.md](src/services/phone/README.md).
 
 ## Getting started
@@ -46,25 +61,21 @@ Everything the app does to a watch can be done from a terminal on Linux, over th
 transport the desktop app uses:
 
 ```bash
-npm run waspos -- scan
-npm run waspos -- flash path/to/micropython.zip
-npm run waspos -- apps list
-npm run waspos -- apps install path/to/wasp-os/build-packages/calculator
-npm run waspos -- notify "Build finished" "All tests passed"
-npm run waspos -- repl "wasp.system.brightness"
-npm run waspos -- diag
-npm run waspos -- reset --ota
-npm run waspos -- status
-npm run waspos -- steps
-npm run waspos -- settings brightness=3
-npm run waspos -- alarms 07:30/12345 09:00/67/off
-npm run waspos -- weather Kingston
-npm run waspos -- files get settings.json
-npm run waspos -- backup watch-backup.json
+npm run neotime -- scan
+npm run neotime -- flash path/to/firmware.zip
+npm run neotime -- time
+npm run neotime -- diag
+npm run neotime -- files ls /settings
+npm run neotime -- apps install path/to/timer.ntapp timer
+npm run neotime -- backup watch-backup.json
+npm run neotime -- notify "Build finished" "All tests passed"
+npm run neotime -- status
+npm run neotime -- settings brightness=3
+npm run neotime -- weather Kingston
 ```
 
-The first scan remembers the watch in `~/.config/waspos-companion/cli.json`, so later commands
-need no address; `--address` and `WASPOS_ADDRESS` override it. `npm run waspos -- help` lists
+The first scan remembers the watch in `~/.config/neotime-companion/cli.json`, so later commands
+need no address; `--address` and `NEOTIME_ADDRESS` override it. `npm run neotime -- help` lists
 every command. The tool runs the same code the screens run, with node-ble in place of the phone's
 Bluetooth library, so each protocol exists only once.
 
@@ -74,7 +85,7 @@ The desktop build is the same interface, rendered by React Native for Web and wr
 Only the transport differs. `electron/ble.js` runs in the main process and talks to BlueZ through
 node-ble, and `electron/preload.js` exposes a narrow bridge to the window, so the interface never
 touches Node. `src/ble/electron-transport.ts` implements the same `WatchTransport` interface the
-phone uses, which is why every screen, the package protocol and the tests are shared unchanged.
+phone uses, which is why every screen, every protocol and the tests are shared unchanged.
 
 Electron comes from the flake rather than npm, because the binary npm downloads does not run on
 NixOS. `npm run desktop` starts it through [scripts/electron.mjs](scripts/electron.mjs), which
@@ -85,8 +96,7 @@ unwrapped binary, which dies with SIGILL. Run it inside `nix develop`, or the sc
 
 The command line tool connects to a remembered address without scanning. BlueZ forgets an unpaired
 watch soon after it last saw one, so when it does not know the address the tool runs discovery
-until the watch appears, and says so if it never does. The command line path has installed,
-enabled and removed a package on a PineTime this way; the desktop app uses the same Bluetooth
+until the watch appears, and says so if it never does. The desktop app uses the same Bluetooth
 layer.
 
 This and the rest of what is unfinished are listed in [TODO.md](TODO.md).
@@ -95,114 +105,101 @@ This and the rest of what is unfinished are listed in [TODO.md](TODO.md).
 
 ```
 src/app/                 Expo Router screens
-  (tabs)/index.tsx       Watch: connection status and quick actions
-  (tabs)/packages        Install, remove, enable and configure watch apps
+  (tabs)/index.tsx       Watch: connection, status, diagnostics and quick actions
   (tabs)/firmware.tsx    Send a firmware package to the watch over DFU
   (tabs)/notifications   Forwarding toggles
-  (tabs)/console.tsx     Raw traffic, quick commands and a line into the watch REPL
+  (tabs)/console.tsx     Raw UART traffic and a line to send as it is
   (tabs)/settings.tsx    App settings: weather place, hosts watch apps may fetch, GitHub builds
   scan.tsx               Modal that lists nearby watches
+  apps.tsx               Install a compiled .ntapp app, or remove one
+  files.tsx              The watch's file system: browse, send, read, delete, free space
+  backup.tsx             Copy the watch's settings and app state off and back
   steps.tsx              The last week of steps, by day and by hour
   alarms.tsx             The watch's alarms and the days they repeat on
   watch-settings.tsx     Brightness, face, timeout, units, step goal and theme on the watch
-  files.tsx              The watch's flash: browse, send, read, delete, and free memory
-  backup.tsx             Copy the watch's settings, alarms and logs off and back
-src/app/configure.tsx    Settings form generated from a package's own schema
 electron/                Desktop app: main process, preload bridge and file server
 src/ble/                 Transport layer: react-native-ble-plx, Electron, and a mock for browsers
-src/dfu/                 Firmware updates: the Nordic DFU protocols and the package reader
+src/dfu/                 Firmware updates: Nordic legacy DFU and the package reader
 cli/                     The command line tool, which runs the same code as the screens
 node/                    BlueZ over node-ble, shared by the desktop app and the tool
-src/packages/            Bundled app packages and the catalogue that joins them to the watch
-src/protocol/            Gadgetbridge and package manager messages, the transfer driver, files,
+src/protocol/            NeoTime's GATT services, the file service, the Gadgetbridge messages,
                          backups and the requests the watch answers
 src/services/            Weather, the watch apps' http proxy and GitHub firmware builds
 src/services/phone/      Notifications, calls, media and Do Not Disturb from the phone
 modules/phone-bridge/    The Android native module behind it
-src/state/               Watch provider (connection, traffic, settings) and persisted settings
+src/state/               Watch provider (connection, capabilities, traffic, settings)
 src/components/          Themed building blocks
-src/constants/theme.ts   Colours from the wasp-os design schema
 ```
 
-## App packages
+## What the watch serves
 
-Watch apps are installed over Bluetooth without reflashing the firmware. Packages are built from
-the wasp-os tree by its `tools/mkpkg.py`, then embedded in this app:
+The app reads which services the watch serves right after connecting, in
+[src/protocol/neotime.ts](src/protocol/neotime.ts), and offers each feature only where it works:
 
-```bash
-# in the wasp-os checkout
-python3 tools/mkpkg.py apps/calculator apps/snake --out build-packages
-# back here
-npm run import-packages path/to/wasp-os/build-packages
-```
+| Service | UUID | Gives |
+| --- | --- | --- |
+| Legacy DFU | `00001530-1212-efde-1523-785feabcd123` | firmware updates |
+| Current Time | `0x1805` / `0x2A2B` | the clock, set on every connection |
+| Battery | `0x180F` / `0x2A19` | the battery level |
+| NeoTime diagnostics | `6e540001-…` / `6e540002-…` | eight 32-bit counters |
+| NeoTime file service | `6e540001-…` / `6e540003-…`, `6e540004-…` | files, backups, apps |
+| Nordic UART | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` | the Gadgetbridge messages |
 
-The watch side is `wasp/pkgmgr.py` in the wasp-os tree, and the design is in its
-`docs/app-packaging-design.md`. The mock watch answers package commands too, so the Apps tab can
-be exercised on web with no hardware.
-
-## What each state shows
-
-A screen that needs a watch is left out of the tab bar rather than shown as something that does
-not work, so the app only ever offers what it can actually do:
+The NeoTime UUIDs share the base `6e54xxxx-0000-4000-8000-4e656f54696d`. The full description,
+which the firmware and this app both follow, is `docs/companion-protocol.md` in the NeoTime tree.
 
 | State | Tabs |
 | --- | --- |
 | No watch connected | Watch, Settings |
-| Connected, firmware running | all of them |
-| Connected, waiting in a bootloader | Watch, Firmware, Settings |
+| NeoTime without the UART channel | Watch, Firmware, Settings |
+| A watch with the UART channel | all of them |
+| Waiting in a bootloader | Watch, Firmware, Settings |
 
-A watch in its bootloader runs no firmware, so it answers no Gadgetbridge message and has no
-package manager and no REPL. Both transports notice it the same way: the scan looks for a DFU
-service as well as the UART one and marks what it finds, and a connection that asks for the UART
-service and does not get one reports `bootloader` rather than failing. That is what makes an
-interrupted update recoverable, because the watch is left exactly there.
+A watch counts as running firmware when it serves the UART or NeoTime's own service, and as a
+bootloader when it serves only DFU. NeoTime's advertisement has no room for its own 128-bit UUID,
+so a scan recognises it by the name "NeoTime".
 
-The mock watch has a bootloader twin, `DfuTarg (mock)`, so both states can be worked on with no
-hardware.
+The mock watch comes as a NeoTime watch serving everything and a wasp-os watch waiting in its
+bootloader, `DfuTarg (mock)`, so both states can be worked on with no hardware.
 
 ## Firmware updates
 
-Firmware is sent as the Nordic DFU zip the wasp-os build produces, which holds an init packet and
-an image for each part of the firmware. The Firmware tab reads the package, resets the watch into
-its bootloader with `machine.enter_ota_dfu()`, reconnects, and sends the images.
+Firmware is sent as a Nordic DFU zip, the one NeoTime's `tools/package_dfu.py` makes from
+`firmware.bin`. NeoTime takes the update in its running firmware, at the watch's own address, so
+there is no reset into a bootloader first. After the image is activated the watch restarts, the
+bootloader swaps it in, and the app reconnects and writes the time. That exchange is what makes
+NeoTime keep the new firmware; without it the next reset rolls back to the old one.
 
-Both Nordic protocols are implemented, because which one answers depends on the bootloader the
-watch was flashed with:
+A watch still on wasp-os is moved over by sending it NeoTime's `reloader-from-wasp-os.zip`. The
+app restarts wasp-os into its bootloader with `machine.enter_ota_dfu()` over the UART, finds the
+bootloader at the watch's address or the one above it, and sends the image there.
 
-- **Legacy** (`src/dfu/legacy.ts`) is what the PineTime's own bootloader speaks. The controller
-  reconnects at the watch's address.
-- **Secure** (`src/dfu/secure.ts`) is the nRF5 SDK 12 and later protocol. Its bootloader advertises
-  one address above the watch, and every object is checked against a CRC-32 before it is executed.
+The controller in `src/dfu/legacy.ts` is a port of `tools/ota-dfu` from the wasp-os tree. The whole
+flow runs against the stand-in watch in `src/dfu/mock-legacy-target.ts`, which is what the tests use
+and what the Firmware tab talks to on web.
 
-`src/dfu/flash.ts` picks between them by looking for each control point, and only falls back to the
-buttonless characteristic when the watch cannot be reset over the UART line. The whole flow runs
-against the stand-in bootloaders in `src/dfu/mock-target.ts` and `src/dfu/mock-legacy-target.ts`,
-which is what the tests use and what the Firmware tab talks to on web.
+## Messages
 
-The reference implementation is `tools/ota-dfu` in the wasp-os tree; these controllers are a port
-of it.
-
-## Protocol
-
-Messages to the watch are sent as the line of Python `GB({...})`, which the watch REPL evaluates
-against `wasp/gadgetbridge.py` in the wasp-os tree. Gadgetbridge prefixes that line with `\x10`,
-an Espruino convention that wasp-os does not use and that is unsafe to copy; see
-`docs/app-packaging-references.md` in the wasp-os repo.
-
-The watch replies with one JSON object per line, for example `{"t":"music","n":"play"}` or
-`{"t":"findPhone","n":"true"}`. The full list of supported messages is in
+Messages to the watch are the line `GB({...})`, as Gadgetbridge's Bangle.js driver sends them, so
+the watch can serve this app and Gadgetbridge alike. The JSON is ASCII only, with anything else
+escaped as `\uXXXX`. The watch replies with one JSON object per line, for example
+`{"t":"music","n":"play"}`. The full list is in
 [src/protocol/gadgetbridge.ts](src/protocol/gadgetbridge.ts).
 
-Four messages are answered: `settings`, `alarm`, `steps` and `status` (the battery and the live
-step count) each come back with a reply of the same name, which
-[src/protocol/requests.ts](src/protocol/requests.ts) matches to the request waiting for it. A
-watch app asks for a page with `{"t":"http","url":..,"id":..}`, adding `method` and `body` for
-anything but a GET, and gets
-`GB({"t":"http","id":..,"resp":..})` back, cut to 1024 characters, but only from the hosts listed
-in Settings. Files move through the package manager: `pkg.ls_dir`, `pkg.send`, `pkg.rm_file` and
-`pkg.mem` beside the existing `pkg.recv`.
+Four messages are answered: `settings`, `alarm`, `steps` and `status` each come back with a reply of
+the same name, which [src/protocol/requests.ts](src/protocol/requests.ts) matches to the request
+waiting for it. A watch app asks for a page with `{"t":"http","url":..,"id":..}` and gets
+`GB({"t":"http","id":..,"resp":..})` back, but only from the hosts listed in Settings.
+
+## The file service
+
+[src/protocol/file-service.ts](src/protocol/file-service.ts) sends JSON commands, one per line, on
+the control characteristic: `ls`, `get`, `put`, `rm`, `df`, `install` and `remove`. File contents
+travel as raw bytes on the data characteristic. During a `put` the watch reports how far it has got
+every 4 KB, and the app waits for each report, so it never runs ahead of the flash. An app is
+installed by writing its compiled image to `/apps/<id>/app.ntapp` and then asking the watch to check
+and add it; removing it deletes the whole folder, saved state included.
 
 ## License
 
-LGPL v3 or later, the same licence as wasp-os. See [COPYING](COPYING) and
-[COPYING.LGPL](COPYING.LGPL).
+LGPL v3 or later. See [COPYING](COPYING) and [COPYING.LGPL](COPYING.LGPL).

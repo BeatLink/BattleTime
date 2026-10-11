@@ -2,13 +2,12 @@ import { describe, expect, it } from '@jest/globals';
 
 import { zipSync } from 'fflate';
 
-import { crc32, nextAddress, readU32le, u32le } from './bytes';
+import { nextAddress, readU32le, u32le } from './bytes';
+import { encodeCurrentTime, setWatchTime } from '@/protocol/neotime';
 import { flashFirmware, type FlashStep } from './flash';
 import { parseNotification } from './legacy';
 import { MockLegacyDfuTarget } from './mock-legacy-target';
-import { MockDfuTarget } from './mock-target';
 import { FirmwarePackageError, readFirmwarePackage } from './package';
-import { parseResponse } from './secure';
 
 function firmwareZip(init: Uint8Array, image: Uint8Array): Uint8Array {
   return zipSync({
@@ -35,9 +34,6 @@ describe('bytes', () => {
     expect(readU32le(u32le(0xdeadbeef), 0)).toBe(0xdeadbeef);
   });
 
-  it('matches the reference CRC-32', () => {
-    expect(crc32(new TextEncoder().encode('123456789'))).toBe(0xcbf43926);
-  });
 
   it('finds the bootloader address, carrying where it must', () => {
     expect(nextAddress('AA:BB:CC:DD:EE:01')).toBe('AA:BB:CC:DD:EE:02');
@@ -51,8 +47,8 @@ describe('bytes', () => {
 
 describe('the firmware package', () => {
   it('reads the images the manifest names', () => {
-    const firmware = readFirmwarePackage(firmwareZip(pattern(20), pattern(300)), 'micropython.zip');
-    expect(firmware.name).toBe('micropython.zip');
+    const firmware = readFirmwarePackage(firmwareZip(pattern(20), pattern(300)), 'firmware.zip');
+    expect(firmware.name).toBe('firmware.zip');
     expect(firmware.images).toHaveLength(1);
     expect(firmware.images[0].part).toBe('application');
     expect(firmware.images[0].image).toEqual(pattern(300));
@@ -111,30 +107,13 @@ describe('notification parsing', () => {
     });
   });
 
-  it('reads what a secure SELECT reports', () => {
-    const value = new Uint8Array([0x60, 0x06, 0x01, ...u32le(4096), ...u32le(64), ...u32le(99)]);
-    expect(parseResponse(value)).toEqual({
-      procedure: 6,
-      result: 1,
-      maxSize: 4096,
-      offset: 64,
-      crc: 99,
-    });
-  });
-
-  it('keeps a failure result without reading past it', () => {
-    expect(parseResponse(Uint8Array.from([0x60, 0x01, 0x0a]))).toEqual({
-      procedure: 1,
-      result: 0x0a,
-    });
-  });
 });
 
-describe('flashing a watch', () => {
-  it('jumps into the bootloader and sends the whole image', async () => {
+describe('flashing a NeoTime watch', () => {
+  it('sends the image straight to the running firmware', async () => {
     const init = pattern(141);
     const image = pattern(9000);
-    const target = new MockDfuTarget();
+    const target = new MockLegacyDfuTarget();
     const steps: FlashStep[] = [];
 
     await flashFirmware(target, readFirmwarePackage(firmwareZip(init, image)), {
@@ -143,15 +122,26 @@ describe('flashing a watch', () => {
 
     expect(target.received.init).toEqual(init);
     expect(target.received.image).toEqual(image);
-    expect(steps.map((step) => step.step)).toContain('resetting');
-    expect(steps.at(-1)).toEqual({ step: 'finished' });
-    expect(steps).toContainEqual({ step: 'detected', flavour: 'secure' });
+    expect(target.finished).toBe(true);
+    expect(steps.map((step) => step.step)).not.toContain('resetting');
+    expect(steps.at(-1)).toEqual({ step: 'finished', confirmed: false });
+  });
+
+  it('writes the time once the new firmware is back, so the watch keeps it', async () => {
+    const target = new MockLegacyDfuTarget();
+    const steps: FlashStep[] = [];
+    await flashFirmware(target, readFirmwarePackage(firmwareZip(pattern(16), pattern(64))), {
+      confirm: (link) => setWatchTime(link),
+      onStep: (step) => steps.push(step),
+    });
+    expect(target.timeWrites).toHaveLength(1);
+    expect(steps.at(-1)).toEqual({ step: 'finished', confirmed: true });
   });
 
   it('reports progress that ends at the image size', async () => {
     const image = pattern(5000);
     const sent: number[] = [];
-    await flashFirmware(new MockDfuTarget(), readFirmwarePackage(firmwareZip(pattern(64), image)), {
+    await flashFirmware(new MockLegacyDfuTarget(), readFirmwarePackage(firmwareZip(pattern(64), image)), {
       onStep: (step) => {
         if (step.step === 'progress' && step.progress.phase === 'sending') {
           sent.push(step.progress.sent);
@@ -161,47 +151,40 @@ describe('flashing a watch', () => {
     expect(sent.at(-1)).toBe(image.length);
     expect(sent.every((value, index) => index === 0 || value >= sent[index - 1])).toBe(true);
   });
-
-  it('uses the reset command when one is given', async () => {
-    const target = new MockDfuTarget();
-    let reset = false;
-    await flashFirmware(target, readFirmwarePackage(firmwareZip(pattern(16), pattern(64))), {
-      enterDfu: async () => {
-        reset = true;
-        target.enterBootloader();
-      },
-    });
-    expect(reset).toBe(true);
-    expect(target.received.image).toEqual(pattern(64));
-  });
 });
 
-describe('flashing a legacy bootloader', () => {
-  it('sends the init packet and the image, then activates', async () => {
-    const init = pattern(64);
+describe('flashing a watch still on wasp-os', () => {
+  it('resets it into its bootloader first, then sends the image', async () => {
     const image = pattern(3333);
-    const target = new MockLegacyDfuTarget();
+    const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'wasp-os');
+    let reset = false;
 
-    await flashFirmware(target, readFirmwarePackage(firmwareZip(init, image)), {
-      enterDfu: async () => target.enterBootloader(),
+    await flashFirmware(target, readFirmwarePackage(firmwareZip(pattern(64), image)), {
+      enterDfu: async () => {
+        reset = true;
+      },
     });
 
-    expect(target.received.init).toEqual(init);
+    expect(reset).toBe(true);
     expect(target.received.image).toEqual(image);
     expect(target.finished).toBe(true);
   });
 
-  it('reports the bootloader flavour it found', async () => {
-    const target = new MockLegacyDfuTarget();
-    const flavours: string[] = [];
-    await flashFirmware(target, readFirmwarePackage(firmwareZip(pattern(20), pattern(100))), {
-      enterDfu: async () => target.enterBootloader(),
-      onStep: (step) => {
-        if (step.step === 'detected') {
-          flavours.push(step.flavour);
-        }
-      },
-    });
-    expect(flavours).toEqual(['legacy']);
+  it('refuses when there is no way into a bootloader', async () => {
+    const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'wasp-os');
+    await expect(
+      flashFirmware(target, readFirmwarePackage(firmwareZip(pattern(16), pattern(64)))),
+    ).rejects.toThrow(/no way into a bootloader/);
+  });
+});
+
+describe('the Current Time value', () => {
+  it('holds the local date and time, Monday as weekday 1', () => {
+    const value = encodeCurrentTime(new Date(2026, 9, 12, 13, 45, 30, 500));
+    expect(Array.from(value)).toEqual([0xea, 0x07, 10, 12, 13, 45, 30, 1, 128, 1]);
+  });
+
+  it('gives Sunday weekday 7', () => {
+    expect(encodeCurrentTime(new Date(2026, 9, 11, 0, 0, 0))[7]).toBe(7);
   });
 });

@@ -1,4 +1,5 @@
-// The watch theme: eleven RGB565 colours, two bytes each, in the order wasp.py's Manager keeps them.
+// The watch theme: eleven RGB565 colours, two bytes each, sent in the settings message.
+// NeoTime's theme keys are being settled in docs/companion-protocol.md; this follows the earlier layout until then.
 
 export const THEME_SLOTS = [
   'Bluetooth icon',
@@ -14,7 +15,7 @@ export const THEME_SLOTS = [
   'Contrast',
 ];
 
-// The firmware's own defaults, from wasp.py.
+// The firmware's own defaults.
 export const DEFAULT_THEME = [
   0x7b, 0xef, 0x7b, 0xef, 0x7b, 0xef, 0xe7, 0x3c, 0x7b, 0xef, 0xff, 0xff, 0xbd, 0xb6, 0x39, 0xff, 0xff, 0x00,
   0xdd, 0xd0, 0x00, 0x0f,

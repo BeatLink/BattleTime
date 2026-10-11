@@ -1,29 +1,18 @@
 import { describe, expect, it } from '@jest/globals';
 
 import { MockGadgetbridge } from '@/ble/mock-gadgetbridge';
-import { MockPackages } from '@/ble/mock-packages';
-import { ReplyQueue } from '@/state/reply-queue';
+import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
 
 import { createBackup, parseBackup, restoreBackup } from './backup';
-import { encodeSetTime } from './clock';
-import { deleteFile, listDirectory, readFile, readMemory } from './files';
+import { FileService } from './file-service';
 import { decodeWatchLine, encodeForWatch, type PhoneToWatchMessage } from './gadgetbridge';
-import type { PackageReply } from './packages';
 import { readAlarms, readStatus, readWatchSettings, ReplyRouter, writeAlarms, writeWatchSettings } from './requests';
 import { hourlySteps, readStepHistory } from './steps';
 import { applyPreset, DEFAULT_THEME, hexToRgb565, rgb565ToHex, THEME_PRESETS, themeBytes, themeColours } from './theme';
-import { facePreview } from '@/constants/face-previews';
-import type { PackageChannel } from './transfer';
 
-// The mock package manager behind the same channel the app uses.
-function packageChannel(mock = new MockPackages()): PackageChannel {
-  const replies = new ReplyQueue<PackageReply>(1000);
-  const deliver = (lines: string[] | null) => lines?.forEach((line) => replies.push(JSON.parse(line)));
-  return {
-    send: async (text) => deliver(mock.handle(text)),
-    sendBytes: async (data) => deliver(mock.handleBytes(data)),
-    next: () => replies.next(),
-  };
+// NeoTime's file service on a mock watch, as the provider opens it.
+function fileService(watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true)): Promise<FileService> {
+  return FileService.open(watch);
 }
 
 // The mock Gadgetbridge handler behind a reply router, as the provider wires it.
@@ -98,34 +87,51 @@ describe('steps', () => {
 });
 
 describe('files', () => {
-  it('lists, reads, deletes and reports memory', async () => {
-    const channel = packageChannel();
-    const top = await listDirectory(channel, '');
-    expect(top.map((file) => file.name)).toEqual(['alarms.txt', 'settings.json']);
-    const data = await readFile(channel, 'alarms.txt');
-    expect(new TextDecoder().decode(data)).toBe('7,30,159;');
-    await deleteFile(channel, 'alarms.txt');
-    await expect(readFile(channel, 'alarms.txt')).rejects.toThrow('no such file');
-    expect((await readMemory(channel)).free).toBeGreaterThan(0);
+  it('lists, reads, writes, deletes and reports free space', async () => {
+    const service = await fileService();
+    expect((await service.list('/')).map((file) => file.name)).toEqual(['apps', 'resources', 'settings']);
+    expect(new TextDecoder().decode(await service.read('/settings/theme.json'))).toBe('{"accent":"#00a0ff"}');
+
+    // Larger than one 4 KB pacing step, so the write waits for the watch along the way.
+    const big = Uint8Array.from({ length: 9000 }, (_value, index) => index & 0xff);
+    const sent: number[] = [];
+    await service.write('/resources/big.bin', big, (progress) => sent.push(progress.sent));
+    expect(await service.read('/resources/big.bin')).toEqual(big);
+    expect(sent.at(-1)).toBe(big.length);
+
+    await service.remove('/settings/theme.json');
+    await expect(service.read('/settings/theme.json')).rejects.toThrow('does not exist');
+    expect((await service.storage()).free).toBeGreaterThan(0);
   });
 
-  it('refuses paths that climb out of the flash', async () => {
-    await expect(readFile(packageChannel(), '../etc')).rejects.toThrow('Unsafe path');
-    await expect(readFile(packageChannel(), '/main.py')).rejects.toThrow('Unsafe path');
+  it('refuses paths that are relative or climb', async () => {
+    const service = await fileService();
+    await expect(service.read('settings')).rejects.toThrow('absolute path');
+    await expect(service.read('/apps/../x')).rejects.toThrow('absolute path');
+  });
+
+  it('installs an app into its own folder and removes it again', async () => {
+    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+    const service = await fileService(watch);
+    await service.installApp('timer', new Uint8Array(300));
+    expect(watch.fileService.installed.has('timer')).toBe(true);
+    expect(watch.fileService.files.get('/apps/timer/app.ntapp')).toHaveLength(300);
+    await service.removeApp('timer');
+    expect(watch.fileService.installed.has('timer')).toBe(false);
+    await expect(service.installApp('../evil', new Uint8Array(1))).rejects.toThrow('app id');
   });
 });
 
 describe('backup', () => {
-  it('copies the watch data off and puts it back', async () => {
-    const backup = await createBackup(packageChannel());
-    expect(Object.keys(backup.files).sort()).toEqual(['alarms.txt', 'settings.json']);
+  it('copies the settings and app state off and puts them back', async () => {
+    const backup = await createBackup(await fileService());
+    expect(Object.keys(backup.files).sort()).toEqual(['/apps/clock/state', '/settings/theme.json']);
     const copy = parseBackup(JSON.stringify(backup));
 
-    const fresh = new MockPackages();
-    const channel = packageChannel(fresh);
-    await deleteFile(channel, 'alarms.txt');
-    await restoreBackup(channel, copy);
-    expect(new TextDecoder().decode(await readFile(channel, 'alarms.txt'))).toBe('7,30,159;');
+    const service = await fileService();
+    await service.remove('/settings/theme.json');
+    await restoreBackup(service, copy);
+    expect(new TextDecoder().decode(await service.read('/settings/theme.json'))).toBe('{"accent":"#00a0ff"}');
     expect(() => parseBackup('{"hello": 1}')).toThrow('not a watch backup');
   });
 });
@@ -141,20 +147,12 @@ describe('theme', () => {
   });
 });
 
-describe('clock', () => {
-  it('sets the watch to local time', () => {
-    expect(encodeSetTime(new Date(2026, 9, 10, 7, 5, 9))).toBe(
-      'import watch; watch.rtc.set_localtime((2026, 10, 10, 7, 5, 9))\r\n',
-    );
-  });
-});
-
 describe('ascii lines', () => {
   it('escapes what the watch line editor would drop, and the watch reads it back', () => {
     const line = encodeForWatch({ t: 'notify', id: 1, title: '32\u00b0C caf\u00e9 \u{1f600}' });
-    expect(/^[\x20-\x7e]*\r\n$/.test(line)).toBe(true);
+    expect(/^[\x20-\x7e]*\n$/.test(line)).toBe(true);
     expect(line).toContain('32\\u00b0C caf\\u00e9 \\ud83d\\ude00');
-    expect(JSON.parse(line.slice(3, -3)).title).toBe('32\u00b0C caf\u00e9 \u{1f600}');
+    expect(JSON.parse(line.slice(3, -2)).title).toBe('32\u00b0C caf\u00e9 \u{1f600}');
   });
 });
 
@@ -173,12 +171,5 @@ describe('theme presets', () => {
     const forest = applyPreset(colours, byName.Forest);
     expect(forest.slice(0, 7)).toEqual(colours.slice(0, 7));
     expect(forest[7]).toBe(hexToRgb565('#2fbf71'));
-  });
-});
-
-describe('face previews', () => {
-  it('finds a built-in face by the class at the end of its path', () => {
-    expect(facePreview('apps.user.clock.ClockApp')).toBeDefined();
-    expect(facePreview('pkg.someface.app.SomeFaceApp')).toBeUndefined();
   });
 });

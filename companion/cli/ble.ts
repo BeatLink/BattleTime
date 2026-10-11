@@ -4,12 +4,11 @@
 
 import type { WatchMode } from '@/ble/transport';
 import { NUS_SERVICE } from '@/ble/uuids';
+import { LEGACY_DFU_SERVICE } from '@/dfu/uuids';
 import type { DfuLink, WriteMode } from '@/dfu/link';
 import { decodeWatchLine, encodeForWatch, LineBuffer } from '@/protocol/gadgetbridge';
-import { isPackageReply, type PackageReply } from '@/protocol/packages';
+import { FileService } from '@/protocol/file-service';
 import { ReplyRouter, type RequestChannel } from '@/protocol/requests';
-import type { PackageChannel } from '@/protocol/transfer';
-import { ReplyQueue } from '@/state/reply-queue';
 
 import { WatchBle, type ScannedDevice, type WatchBleEvent } from '../node/ble';
 
@@ -19,7 +18,7 @@ export const DEFAULT_SCAN_MS = 6000;
 export class WatchSession implements DfuLink {
   private readonly ble: WatchBle;
   private readonly lines = new LineBuffer();
-  private readonly replies = new ReplyQueue<PackageReply>();
+  private fileService: Promise<FileService> | null = null;
   private readonly router = new ReplyRouter((message) => this.send(encodeForWatch(message)));
   private readonly notifyListeners = new Map<string, (value: Uint8Array) => void>();
   private readonly found = new Map<string, ScannedDevice>();
@@ -38,11 +37,6 @@ export class WatchSession implements DfuLink {
         for (const line of this.lines.push(payload as string)) {
           if (this.verbose) {
             process.stderr.write(`< ${line}\n`);
-          }
-          const parsed = parse(line);
-          if (isPackageReply(parsed)) {
-            this.replies.push(parsed);
-            continue;
           }
           const message = decodeWatchLine(line);
           if (message && this.router.push(message)) {
@@ -71,10 +65,9 @@ export class WatchSession implements DfuLink {
     return this.id;
   }
 
-  // Look for watches for a while and report what turned up. A watch
-  // advertises the UART service, or a DFU service while it waits in its
-  // bootloader; when nothing does either, everything found is reported,
-  // because BlueZ may not have read the services yet.
+  // Look for watches for a while and report what turned up. A watch advertises the UART service or
+  // the DFU service; when nothing does either, everything found is reported, because BlueZ may not
+  // have read the services yet.
   async scan(ms = DEFAULT_SCAN_MS): Promise<ScannedDevice[]> {
     this.found.clear();
     await this.ble.startScan();
@@ -83,7 +76,7 @@ export class WatchSession implements DfuLink {
 
     const all = [...this.found.values()];
     const watches = all.filter(
-      (device) => device.uuids.includes(NUS_SERVICE) || device.bootloader,
+      (device) => device.uuids.includes(NUS_SERVICE) || device.uuids.includes(LEGACY_DFU_SERVICE),
     );
     return watches.length > 0 ? watches : all;
   }
@@ -102,7 +95,7 @@ export class WatchSession implements DfuLink {
     await this.ble.destroy().catch(() => undefined);
   }
 
-  // Raw text to the watch REPL, which is what every protocol here is built on.
+  // Raw text over the UART channel, which the Gadgetbridge messages are built on.
   async send(text: string): Promise<void> {
     if (this.verbose) {
       process.stderr.write(`> ${text.trimEnd()}\n`);
@@ -110,25 +103,15 @@ export class WatchSession implements DfuLink {
     await this.ble.write(text);
   }
 
-  // Bytes as they are, for a raw file transfer.
-  async sendBytes(data: Uint8Array): Promise<void> {
-    if (this.verbose) {
-      process.stderr.write(`> [${data.length} raw bytes]\n`);
-    }
-    await this.ble.writeBytes(data);
-  }
-
-  // Lines the watch sends that are not package replies.
+  // Lines the watch sends that are not replies to a request.
   listen(onLine: (line: string) => void) {
     this.onLine = onLine;
   }
 
-  get packageChannel(): PackageChannel {
-    return {
-      send: (text: string) => this.send(text),
-      sendBytes: (data: Uint8Array) => this.sendBytes(data),
-      next: () => this.replies.next(),
-    };
+  // NeoTime's file service, opened on first use.
+  files(): Promise<FileService> {
+    this.fileService ??= FileService.open(this);
+    return this.fileService;
   }
 
   // The Gadgetbridge messages the watch answers: settings, alarms and steps.
@@ -167,17 +150,5 @@ export class WatchSession implements DfuLink {
   async reconnect(deviceId: string): Promise<void> {
     await this.ble.reconnect(deviceId);
     this.id = deviceId;
-  }
-}
-
-function parse(line: string): unknown {
-  const trimmed = line.trim();
-  if (!trimmed.startsWith('{')) {
-    return null;
-  }
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return null;
   }
 }

@@ -119,7 +119,7 @@ function SettingsForm() {
       <Card title="About">
         <Row label="Version" detail={Constants.expoConfig?.version ?? 'dev'} />
         <Row label="Transport" detail={transportLabel(transportKind)} />
-        <Row label="Firmware" detail="wasp-os on the PineTime" />
+        <Row label="Firmware" detail="NeoTime on the PineTime" />
       </Card>
     </Screen>
   );

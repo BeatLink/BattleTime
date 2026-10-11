@@ -1,4 +1,4 @@
-// Finds wasp-os firmware builds on GitHub: zip assets on releases, and the
+// Finds NeoTime firmware builds on GitHub: DFU zips on releases, and the
 // artifacts each Actions run uploads. An artifact can only be downloaded with
 // a GitHub token, even from a public repository.
 
@@ -21,8 +21,11 @@ type Fetch = typeof fetch;
 
 const API = 'https://api.github.com';
 
-// The firmware a build carries for the watch; the rest of an artifact is bootloaders.
-const FIRMWARE_FILE = 'micropython.zip';
+// The firmware a build carries for the watch, as tools/build_images.sh names it; the rest of an artifact is other images.
+const FIRMWARE_FILE = 'firmware.zip';
+
+// The DFU zips a release may carry: the firmware, and the reloader that moves a watch off wasp-os.
+const RELEASE_FILES = [FIRMWARE_FILE, 'reloader-from-wasp-os.zip'];
 
 function headers(token?: string): Record<string, string> {
   const base: Record<string, string> = { Accept: 'application/vnd.github+json' };
@@ -32,7 +35,7 @@ function headers(token?: string): Record<string, string> {
 export function checkRepo(repo: string): string {
   const trimmed = repo.trim();
   if (!/^[\w.-]+\/[\w.-]+$/.test(trimmed)) {
-    throw new Error('Give the repository as owner/name, for example wasp-os/wasp-os.');
+    throw new Error('Give the repository as owner/name, for example BeatLink/NeoTime.');
   }
   return trimmed;
 }
@@ -78,7 +81,7 @@ export async function listFirmwareBuilds(
   for (const release of releases) {
     for (const asset of release.assets) {
       const lower = asset.name.toLowerCase();
-      if (!lower.endsWith('.zip') || !(lower.includes(board) || lower === FIRMWARE_FILE)) {
+      if (!RELEASE_FILES.some((file) => lower === file || lower === `${board}-${file}`)) {
         continue;
       }
       builds.push({

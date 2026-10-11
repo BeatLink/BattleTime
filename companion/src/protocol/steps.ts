@@ -2,7 +2,7 @@
 
 import { readSteps, type RequestChannel } from './requests';
 
-// Minutes covered by one value in the log, set by TICK_PERIOD in wasp's steplogger.
+// Minutes covered by one value in the step log.
 export const SLOT_MINUTES = 6;
 const SLOTS_PER_HOUR = 60 / SLOT_MINUTES;
 

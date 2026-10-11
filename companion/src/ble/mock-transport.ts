@@ -1,8 +1,7 @@
 import type { DfuLink } from '@/dfu/link';
-import { MockDfuTarget } from '@/dfu/mock-target';
+import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
 
 import { MockGadgetbridge } from './mock-gadgetbridge';
-import { MockPackages } from './mock-packages';
 import type {
   ConnectionState,
   DiscoveredWatch,
@@ -11,8 +10,8 @@ import type {
   WatchTransport,
 } from './transport';
 
-const MOCK_WATCH = 'mock-pinetime';
-const MOCK_BOOTLOADER = 'mock-dfutarg';
+const MOCK_WATCH = 'AA:BB:CC:DD:EE:00';
+const MOCK_BOOTLOADER = 'AA:BB:CC:DD:EE:11';
 
 // A fake watch so the UI runs on web and in Expo Go, where the BLE native module is unavailable.
 export class MockTransport implements WatchTransport {
@@ -21,16 +20,14 @@ export class MockTransport implements WatchTransport {
   private listener: TransportListener = {};
   private state: ConnectionState = 'disconnected';
   private scanTimer: ReturnType<typeof setTimeout> | null = null;
-  private packages = new MockPackages();
   private gadgetbridge = new MockGadgetbridge();
-  private dfu: MockDfuTarget | null = null;
+  private dfu: MockLegacyDfuTarget | null = null;
   private mode: WatchMode = 'application';
 
   async startScan(onFound: (watch: DiscoveredWatch) => void) {
     this.scanTimer = setTimeout(() => {
-      onFound({ id: MOCK_WATCH, name: 'PineTime (mock)', rssi: -58 });
-      // A second mock watch waiting in its bootloader, so that half of the
-      // app can be worked on without holding a half-flashed watch.
+      onFound({ id: MOCK_WATCH, name: 'NeoTime (mock)', rssi: -58 });
+      // A second mock watch, still on wasp-os and waiting in its bootloader, for the move onto NeoTime.
       onFound({ id: MOCK_BOOTLOADER, name: 'DfuTarg (mock)', rssi: -61, bootloader: true });
     }, 600);
   }
@@ -46,6 +43,13 @@ export class MockTransport implements WatchTransport {
     this.setState('connecting');
     await new Promise((resolve) => setTimeout(resolve, 500));
     this.mode = id === MOCK_BOOTLOADER ? 'bootloader' : 'application';
+    this.dfu =
+      this.mode === 'bootloader'
+        ? new MockLegacyDfuTarget(id, 'wasp-os')
+        : new MockLegacyDfuTarget(id, 'neotime', true);
+    if (this.mode === 'bootloader') {
+      this.dfu.enterBootloader();
+    }
     this.setState('connected');
     this.listener.onMode?.(this.mode);
     if (this.mode === 'application') {
@@ -58,12 +62,7 @@ export class MockTransport implements WatchTransport {
   }
 
   async writeBytes(data: Uint8Array) {
-    if (this.state !== 'connected') {
-      throw new Error('Not connected');
-    }
-    for (const line of this.packages.handleBytes(data)) {
-      this.listener.onLine?.(`${line}\r\n`);
-    }
+    await this.write(new TextDecoder().decode(data));
   }
 
   async write(text: string) {
@@ -75,10 +74,9 @@ export class MockTransport implements WatchTransport {
       return;
     }
 
-    // The mock watch answers package commands and the Gadgetbridge messages
-    // that expect a reply, so those screens work without hardware. Anything
-    // else is echoed so the console shows traffic.
-    const replies = this.packages.handle(text) ?? this.gadgetbridge.handle(text);
+    // The mock watch answers the messages that expect a reply, so those screens work without
+    // hardware. Anything else is echoed so the console shows traffic.
+    const replies = this.gadgetbridge.handle(text);
     if (replies) {
       for (const line of replies) {
         this.listener.onLine?.(`${line}\r\n`);
@@ -97,7 +95,6 @@ export class MockTransport implements WatchTransport {
     if (this.state !== 'connected') {
       return null;
     }
-    this.dfu ??= new MockDfuTarget();
     return this.dfu;
   }
 

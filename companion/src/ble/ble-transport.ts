@@ -11,11 +11,12 @@ import type {
   WatchTransport,
 } from './transport';
 import { ATT_OVERHEAD, DEFAULT_MTU, NUS_RX, NUS_SERVICE, NUS_TX } from './uuids';
-import { LEGACY_DFU_SERVICE, SECURE_DFU_SERVICE } from '@/dfu/uuids';
+import { LEGACY_DFU_SERVICE } from '@/dfu/uuids';
+import { NEOTIME_NAME, NEOTIME_SERVICE } from '@/protocol/neotime';
 
-// What a watch advertises: the UART service while its firmware runs, and a
-// DFU service while it sits in its bootloader.
-const WATCH_SERVICES = [NUS_SERVICE, LEGACY_DFU_SERVICE, SECURE_DFU_SERVICE];
+// What a watch advertises: the DFU service, which NeoTime serves from its firmware and wasp-os only
+// from its bootloader, and the UART service.
+const WATCH_SERVICES = [NUS_SERVICE, LEGACY_DFU_SERVICE];
 
 // Talks to a real watch over the Nordic UART Service using react-native-ble-plx.
 export class BleTransport implements WatchTransport {
@@ -37,11 +38,13 @@ export class BleTransport implements WatchTransport {
       }
       if (device) {
         const advertised = (device.serviceUUIDs ?? []).map((uuid) => uuid.toLowerCase());
+        const name = device.name ?? device.localName ?? 'Unknown watch';
         onFound({
           id: device.id,
-          name: device.name ?? device.localName ?? 'Unknown watch',
+          name,
           rssi: device.rssi,
-          bootloader: !advertised.includes(NUS_SERVICE) && advertised.length > 0,
+          bootloader:
+            !advertised.includes(NUS_SERVICE) && advertised.length > 0 && !name.startsWith(NEOTIME_NAME),
         });
       }
     });
@@ -55,9 +58,8 @@ export class BleTransport implements WatchTransport {
     return this.connectTo(id, true);
   }
 
-  // A bootloader has no UART service. When one is asked for and is not there,
-  // the watch is in its bootloader, and the link is kept for a firmware
-  // update rather than dropped.
+  // A bootloader serves neither the UART nor NeoTime's own service. When neither is there, the watch
+  // is in its bootloader, and the link is kept for a firmware update rather than dropped.
   private async connectTo(id: string, uart: boolean) {
     this.setState('connecting');
     try {
@@ -71,12 +73,18 @@ export class BleTransport implements WatchTransport {
         this.setState('disconnected');
       });
 
-      if (!uart || !(await this.hasUart(id))) {
+      const hasUart = uart && (await this.hasService(id, NUS_SERVICE));
+      const hasNeoTime = uart && (await this.hasService(id, NEOTIME_SERVICE));
+      if (!hasUart && !hasNeoTime) {
         this.setMode('bootloader');
         this.setState('connected');
         return;
       }
       this.setMode('application');
+      if (!hasUart) {
+        this.setState('connected');
+        return;
+      }
 
       this.txSubscription = this.manager.monitorCharacteristicForDevice(
         id,
@@ -157,9 +165,9 @@ export class BleTransport implements WatchTransport {
     this.mtu = DEFAULT_MTU;
   }
 
-  private async hasUart(id: string): Promise<boolean> {
+  private async hasService(id: string, service: string): Promise<boolean> {
     try {
-      const found = await this.manager.characteristicsForDevice(id, NUS_SERVICE);
+      const found = await this.manager.characteristicsForDevice(id, service);
       return found.length > 0;
     } catch {
       return false;

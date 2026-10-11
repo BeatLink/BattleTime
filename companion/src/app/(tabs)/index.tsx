@@ -10,7 +10,9 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
+import type { DiagnosticCounter } from '@/protocol/neotime';
 import { phoneBridge } from '@/services/phone';
+import { useTask } from '@/state/use-task';
 
 // How long ago a moment was, in the coarse words a status line needs.
 function ago(at: number, now: number): string {
@@ -51,7 +53,12 @@ export default function WatchScreen() {
     lastSynced,
     refreshStatus,
     nowPlaying,
+    capabilities,
+    batteryLevel,
+    readDiagnostics,
   } = useWatch();
+  const diagnostics = useTask();
+  const [counters, setCounters] = useState<DiagnosticCounter[] | null>(null);
   // A clock for the "last synced" line, moved on twice a minute.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -61,6 +68,9 @@ export default function WatchScreen() {
 
   const connected = connection === 'connected';
   const inBootloader = connected && watchMode === 'bootloader';
+  // The features that ride the UART message channel, which early NeoTime builds do not serve yet.
+  const uartReady = watchReady && capabilities.uart;
+  const showStatus = uartReady || (watchReady && capabilities.battery);
   const dotColor =
     connection === 'connected' ? theme.success : connection === 'connecting' ? theme.warning : theme.textSecondary;
   const remembered =
@@ -109,7 +119,7 @@ export default function WatchScreen() {
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             It is running no firmware, so nothing else here can reach it. Send it a firmware package
-            from the Firmware tab and it will restart into it.
+            from the Firmware tab, such as the NeoTime reloader, and it will restart into it.
           </ThemedText>
           <Button title="Go to Firmware" onPress={() => router.push('/firmware')} />
         </Card>
@@ -123,17 +133,32 @@ export default function WatchScreen() {
         </Card>
       ) : null}
 
-      {watchReady ? (
+      {watchReady && !capabilities.uart ? (
+        <Card>
+          <ThemedText type="small" themeColor="textSecondary">
+            This firmware serves updates, the clock and diagnostics. Notifications, steps, alarms and
+            watch settings appear here once it serves the UART message channel.
+          </ThemedText>
+        </Card>
+      ) : null}
+
+      {showStatus ? (
         <Card title="Status">
-          <Row
-            label={status ? `Battery ${status.battery}%${status.charging ? ', charging' : ''}` : 'Battery'}
-            detail={status ? `${(status.mv / 1000).toFixed(2)} V` : 'Not read yet'}
-          />
-          <Row
-            label={status?.steps != null ? `${status.steps.toLocaleString()} steps today` : 'Steps today'}
-            detail={status && status.steps == null ? 'This watch has no step counter' : 'As the step counter has it now'}
-            onPress={() => router.push('/steps')}
-          />
+          {uartReady ? (
+            <>
+              <Row
+                label={status ? `Battery ${status.battery}%${status.charging ? ', charging' : ''}` : 'Battery'}
+                detail={status ? `${(status.mv / 1000).toFixed(2)} V` : 'Not read yet'}
+              />
+              <Row
+                label={status?.steps != null ? `${status.steps.toLocaleString()} steps today` : 'Steps today'}
+                detail={status && status.steps == null ? 'This watch has no step counter' : 'As the step counter has it now'}
+                onPress={() => router.push('/steps')}
+              />
+            </>
+          ) : (
+            <Row label={batteryLevel != null ? `Battery ${batteryLevel}%` : 'Battery'} detail={batteryLevel != null ? 'From the Battery service' : 'Not read yet'} />
+          )}
           <Row
             label="Last synced"
             detail={lastSynced ? ago(lastSynced, now) : 'Not yet'}
@@ -169,21 +194,51 @@ export default function WatchScreen() {
         </Card>
       ) : null}
 
-      {watchReady ? (
-        <Card title="On the watch">
-          <Row label="Steps" detail="The last week, day by day and hour by hour" onPress={() => router.push('/steps')} />
-          <Row label="Alarms" detail="Set times and the days they repeat on" onPress={() => router.push('/alarms')} />
-          <Row
-            label="Watch settings"
-            detail="Brightness, face, timeout, units, step goal and theme"
-            onPress={() => router.push('/watch-settings')}
+      {watchReady && capabilities.diagnostics ? (
+        <Card title="Diagnostics">
+          {counters?.map((counter) => (
+            <Row key={counter.key} label={counter.label} detail={counter.value.toLocaleString()} />
+          ))}
+          {diagnostics.error ? (
+            <ThemedText type="small" style={{ color: theme.danger }}>
+              {diagnostics.error}
+            </ThemedText>
+          ) : null}
+          <Button
+            title={counters ? 'Read again' : 'Read the counters'}
+            variant="secondary"
+            disabled={diagnostics.busy !== null}
+            onPress={() =>
+              void diagnostics.run('Reading', readDiagnostics).then((read) => read && setCounters(read))
+            }
           />
-          <Row label="Files" detail="Browse, send and delete files, and check memory" onPress={() => router.push('/files')} />
-          <Row label="Backup" detail="Save the watch's settings and alarms, and put them back" onPress={() => router.push('/backup')} />
         </Card>
       ) : null}
 
-      {watchReady ? (
+      {uartReady || (watchReady && capabilities.files) ? (
+        <Card title="On the watch">
+          {uartReady ? (
+            <>
+              <Row label="Steps" detail="The last week, day by day and hour by hour" onPress={() => router.push('/steps')} />
+              <Row label="Alarms" detail="Set times and the days they repeat on" onPress={() => router.push('/alarms')} />
+              <Row
+                label="Watch settings"
+                detail="Brightness, face, timeout, units, step goal and theme"
+                onPress={() => router.push('/watch-settings')}
+              />
+            </>
+          ) : null}
+          {capabilities.files ? (
+            <>
+              <Row label="Apps" detail="Install a compiled app, or remove one" onPress={() => router.push('/apps')} />
+              <Row label="Files" detail="Browse, send and delete files, and check free space" onPress={() => router.push('/files')} />
+              <Row label="Backup" detail="Save the watch's settings and app state, and put them back" onPress={() => router.push('/backup')} />
+            </>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {uartReady ? (
         <Card title="Quick actions">
           <Row
             label="Find watch"
@@ -197,7 +252,7 @@ export default function WatchScreen() {
               send({
                 t: 'notify',
                 id: Date.now() % 100000,
-                src: 'WaspOS Companion',
+                src: 'NeoTime Companion',
                 title: 'Hello from your phone',
                 body: 'Notifications are working.',
               })

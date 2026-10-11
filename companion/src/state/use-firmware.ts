@@ -7,6 +7,7 @@ import { useCallback, useState } from 'react';
 import { ENTER_DFU_COMMAND, flashFirmware, type FlashStep } from '@/dfu/flash';
 import type { DfuLink } from '@/dfu/link';
 import { readFirmwarePackage, type FirmwarePackage } from '@/dfu/package';
+import { setWatchTime } from '@/protocol/neotime';
 
 export type FirmwareState = {
   firmware: FirmwarePackage | null;
@@ -27,13 +28,11 @@ export type FirmwareState = {
 function describe(step: FlashStep): string {
   switch (step.step) {
     case 'resetting':
-      return 'Restarting the watch in its bootloader';
+      return 'Restarting wasp-os in its bootloader';
     case 'connecting':
       return 'Waiting for the bootloader';
     case 'detected':
-      return step.flavour === 'secure'
-        ? 'Talking to a secure bootloader'
-        : 'Talking to a legacy bootloader';
+      return 'Talking to the watch';
     case 'progress': {
       const part = step.images > 1 ? `${step.progress.part} (${step.image} of ${step.images})` : step.progress.part;
       switch (step.progress.phase) {
@@ -48,8 +47,12 @@ function describe(step: FlashStep): string {
       }
       return `Sending ${part}`;
     }
+    case 'confirming':
+      return 'Waiting for the new firmware to start';
     case 'finished':
-      return 'The watch is restarting on the new firmware';
+      return step.confirmed
+        ? 'The new firmware is running and kept'
+        : 'Sent. Connect once the watch restarts, or it goes back to the old firmware';
   }
 }
 
@@ -111,6 +114,7 @@ export function useFirmware(link: () => DfuLink | null, sendRaw: (text: string) 
     try {
       await flashFirmware(dfu, firmware, {
         enterDfu: () => sendRaw(ENTER_DFU_COMMAND),
+        confirm: (dfu) => setWatchTime(dfu),
         onStep: (step) => {
           setStatus(describe(step));
           if (step.step === 'progress') {

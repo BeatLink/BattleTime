@@ -1,15 +1,14 @@
 #!/usr/bin/env node
-// The WaspOS Companion command line tool.
+// The NeoTime Companion command line tool.
 //
 // Every command runs the same code the app does; only the Bluetooth layer
 // differs, which is node-ble talking to BlueZ.
 
 import { WatchSession, DEFAULT_SCAN_MS } from './ble';
-import { apps, appsUsage } from './commands/apps';
 import { flash, flashUsage } from './commands/flash';
 import { scan, scanUsage } from './commands/scan';
-import { diag, repl, reset, send, sendUsage } from './commands/send';
-import { alarms, backup, files, listen, restore, settings, setTime, status, steps, watchUsage, weather } from './commands/watch';
+import { diag, line, send, sendUsage } from './commands/send';
+import { alarms, apps, backup, files, listen, restore, settings, setTime, status, steps, watchUsage, weather } from './commands/watch';
 import { say, warn } from './output';
 import { resolveAddress } from './target';
 
@@ -18,19 +17,16 @@ type Options = {
   sender?: string;
   timeout?: number;
   wait?: number;
-  ota: boolean;
-  logs: boolean;
   allow?: string;
   verbose: boolean;
 };
 
-const USAGE = `waspos <command> [options]
+const USAGE = `neotime <command> [options]
 
 ${scanUsage}
 
 ${flashUsage}
 
-${appsUsage}
 
 ${sendUsage}
 
@@ -38,7 +34,7 @@ ${watchUsage}
 
 Options:
   --address <mac>   Which watch to talk to. Otherwise the last one used, or
-                    the only one in range. WASPOS_ADDRESS works too.
+                    the only one in range. NEOTIME_ADDRESS works too.
   --timeout <s>     How long to scan for.
   --verbose         Print every line to and from the watch.
 `;
@@ -46,7 +42,7 @@ Options:
 // Pull the named options out, leaving the positional arguments behind.
 function parse(argv: string[]): { args: string[]; options: Options } {
   const args: string[] = [];
-  const options: Options = { ota: false, logs: false, verbose: false };
+  const options: Options = { verbose: false };
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -62,12 +58,6 @@ function parse(argv: string[]): { args: string[]; options: Options } {
         break;
       case '--wait':
         options.wait = Number(argv[++i]) * 1000;
-        break;
-      case '--ota':
-        options.ota = true;
-        break;
-      case '--logs':
-        options.logs = true;
         break;
       case '--allow':
         options.allow = argv[++i];
@@ -86,14 +76,12 @@ function parse(argv: string[]): { args: string[]; options: Options } {
 // Whether a command needs a connected watch, as opposed to only the adapter.
 const NEEDS_WATCH = new Set([
   'flash',
-  'apps',
   'notify',
   'find',
   'vibrate',
   'send',
-  'repl',
+  'line',
   'diag',
-  'reset',
   'status',
   'time',
   'settings',
@@ -101,6 +89,7 @@ const NEEDS_WATCH = new Set([
   'steps',
   'weather',
   'files',
+  'apps',
   'backup',
   'restore',
   'listen',
@@ -140,7 +129,7 @@ async function main(argv: string[]): Promise<number> {
       say('This watch is waiting in its bootloader.');
       if (!WORKS_IN_BOOTLOADER.has(command)) {
         throw new Error(
-          `It runs no firmware, so ${command} has nothing to talk to. Send it a firmware package with \`waspos flash\`.`,
+          `It runs no firmware, so ${command} has nothing to talk to. Send it a firmware package with \`neotime flash\`.`,
         );
       }
     }
@@ -153,10 +142,6 @@ async function main(argv: string[]): Promise<number> {
         await flash(session, rest[0]);
         break;
 
-      case 'apps':
-        await apps(session, rest);
-        break;
-
       case 'notify':
         if (!rest[0]) {
           throw new Error('Give the notification title.');
@@ -164,7 +149,7 @@ async function main(argv: string[]): Promise<number> {
         await send(session, {
           t: 'notify',
           id: Date.now() % 100000,
-          src: options.sender ?? 'WaspOS Companion',
+          src: options.sender ?? 'NeoTime Companion',
           title: rest[0],
           body: rest[1] ?? '',
         });
@@ -189,19 +174,15 @@ async function main(argv: string[]): Promise<number> {
         say('Sent.');
         break;
 
-      case 'repl':
+      case 'line':
         if (!rest[0]) {
-          throw new Error('Give the line to run.');
+          throw new Error('Give the line to send.');
         }
-        await repl(session, rest[0], options.wait ?? 2000);
+        await line(session, rest[0], options.wait ?? 2000);
         break;
 
       case 'diag':
-        await diag(session, rest[0], options.wait ?? 2000);
-        break;
-
-      case 'reset':
-        await reset(session, options.ota);
+        await diag(session);
         break;
 
       case 'status':
@@ -235,11 +216,15 @@ async function main(argv: string[]): Promise<number> {
         await files(session, rest);
         break;
 
+      case 'apps':
+        await apps(session, rest);
+        break;
+
       case 'backup':
         if (!rest[0]) {
           throw new Error('Give the file to save the backup in.');
         }
-        await backup(session, rest[0], options.logs);
+        await backup(session, rest[0]);
         break;
 
       case 'restore':

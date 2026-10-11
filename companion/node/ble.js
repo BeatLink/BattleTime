@@ -9,11 +9,14 @@ const NUS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const NUS_RX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
 const NUS_TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
-// A watch sitting in its bootloader advertises one of these instead.
-const DFU_SERVICES = [
-  '00001530-1212-efde-1523-785feabcd123',
-  '0000fe59-0000-1000-8000-00805f9b34fb',
-];
+// NeoTime advertises the legacy DFU service while its firmware runs; wasp-os advertises it only from its bootloader.
+const DFU_SERVICE = '00001530-1212-efde-1523-785feabcd123';
+
+// NeoTime's own service, which only its running firmware serves.
+const NEOTIME_SERVICE = '6e540001-0000-4000-8000-4e656f54696d';
+
+// NeoTime has no room left in its advertisement for its own service, so it is recognised by name.
+const NEOTIME_NAME = 'NeoTime';
 
 // BlueZ splits a write itself only up to the negotiated MTU, so stay at the
 // size every connection supports.
@@ -113,7 +116,9 @@ class WatchBle {
             rssi: rssi === null ? null : Number(rssi),
             uuids,
             bootloader:
-              !uuids.includes(NUS_SERVICE) && uuids.some((uuid) => DFU_SERVICES.includes(uuid)),
+              !uuids.includes(NUS_SERVICE) &&
+              uuids.includes(DFU_SERVICE) &&
+              !name.startsWith(NEOTIME_NAME),
           });
         }
       } catch (error) {
@@ -234,11 +239,13 @@ class WatchBle {
     this.pending = device;
     this.gatt = await this.resolveServices(device);
 
-    // A bootloader has no UART service. When one is asked for and is not
-    // there, the watch is in its bootloader: keep the link, because that is
-    // what a firmware update needs, and say so.
+    // A bootloader serves neither the UART nor NeoTime's own service. When neither is there, keep the
+    // link, because that is what a firmware update needs, and say so.
     let mode = 'bootloader';
     if (uart) {
+      if (await this.gatt.getPrimaryService(NEOTIME_SERVICE).catch(() => null)) {
+        mode = 'application';
+      }
       const service = await this.gatt.getPrimaryService(NUS_SERVICE).catch(() => null);
       if (service) {
         this.rx = await service.getCharacteristic(NUS_RX);
@@ -347,7 +354,7 @@ class WatchBle {
 
   async writeBytes(data) {
     if (!this.rx) {
-      throw new Error('Not connected');
+      throw new Error(this.gatt ? 'This watch has no UART message channel.' : 'Not connected');
     }
     const bytes = Buffer.from(data);
     for (let offset = 0; offset < bytes.length; offset += CHUNK) {

@@ -1,4 +1,4 @@
-package com.waspos.companion.phonebridge
+package com.neotime.companion.phonebridge
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -67,7 +67,7 @@ class KeepAliveService : Service() {
 
   companion object {
     private const val TAG = "PhoneBridge"
-    private const val CHANNEL_ID = "waspos-watch-link"
+    private const val CHANNEL_ID = "neotime-watch-link"
     private const val NOTIFICATION_ID = 0x5741
     private const val EXTRA_WATCH_NAME = "watchName"
 

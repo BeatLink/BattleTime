@@ -1,4 +1,4 @@
-package com.waspos.companion.phonebridge
+package com.neotime.companion.phonebridge
 
 import android.Manifest
 import android.annotation.SuppressLint

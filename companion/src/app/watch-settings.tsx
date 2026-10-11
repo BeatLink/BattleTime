@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ChoiceRow, ErrorNote } from '@/components/fields';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { facePreview } from '@/constants/face-previews';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
@@ -25,7 +24,7 @@ import {
 } from '@/protocol/theme';
 import { useTask } from '@/state/use-task';
 
-// The choices the watch's own Settings app offers, from wasp.py.
+// The choices the watch's own Settings app offers.
 const BLANK_AFTER = [5, 10, 15, 30, 60];
 const STEP_GOALS = [2000, 4000, 6000, 8000, 10000, 12000, 15000, 20000];
 
@@ -41,7 +40,7 @@ const NOTIFY_LEVELS = [
   { value: 3, label: 'High' },
 ];
 
-// A tile per watch face, showing its screenshot where one is bundled.
+// A tile per watch face, named as the watch names it.
 function FacePicker({ faces, value, disabled, onChange }: {
   faces: [string, string][];
   value: string | null;
@@ -53,7 +52,6 @@ function FacePicker({ faces, value, disabled, onChange }: {
     <View style={styles.faces}>
       {faces.map(([path, label]) => {
         const selected = path === value;
-        const preview = facePreview(path);
         return (
           <Pressable
             key={path}
@@ -66,15 +64,6 @@ function FacePicker({ faces, value, disabled, onChange }: {
               styles.face,
               { borderColor: selected ? theme.accent : theme.backgroundSelected, opacity: disabled ? 0.5 : 1 },
             ]}>
-            {preview ? (
-              <Image source={preview} style={styles.facePreview} resizeMode="contain" />
-            ) : (
-              <View style={[styles.facePreview, styles.faceBlank, { backgroundColor: theme.backgroundSelected }]}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  No preview
-                </ThemedText>
-              </View>
-            )}
             <ThemedText type="small" style={{ color: selected ? theme.accent : theme.text }}>
               {label}
             </ThemedText>
@@ -361,15 +350,6 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
     padding: Spacing.one,
     borderWidth: 2,
-    borderRadius: Radius.small,
-  },
-  facePreview: {
-    width: 88,
-    height: 100,
-  },
-  faceBlank: {
-    alignItems: 'center',
-    justifyContent: 'center',
     borderRadius: Radius.small,
   },
   palette: {

@@ -18,14 +18,20 @@ import {
   type WatchToPhoneMessage,
 } from '@/protocol/gadgetbridge';
 import type { DfuLink } from '@/dfu/link';
-import { isPackageReply, type PackageReply } from '@/protocol/packages';
-import { encodeSetTime } from '@/protocol/clock';
+import { FileService } from '@/protocol/file-service';
+import {
+  NO_CAPABILITIES,
+  readBatteryLevel,
+  readCapabilities,
+  readDiagnostics,
+  setWatchTime,
+  type DiagnosticCounter,
+  type WatchCapabilities,
+} from '@/protocol/neotime';
 import { readStatus, ReplyRouter, type RequestChannel } from '@/protocol/requests';
-import type { PackageChannel } from '@/protocol/transfer';
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
 import { phoneBridge, type PhoneEvent } from '@/services/phone';
 import { currentWeather } from '@/services/weather';
-import { ReplyQueue } from '@/state/reply-queue';
 import { defaultSettings, loadSettings, saveSettings, type Settings } from '@/state/settings';
 
 export type ConsoleEntry = {
@@ -46,6 +52,10 @@ type WatchContextValue = {
   // True only for a watch that is connected and running its firmware, which
   // is what every feature but the firmware update needs.
   watchReady: boolean;
+  // Which services the connected watch serves; the UART features need `uart`.
+  capabilities: WatchCapabilities;
+  // NeoTime's diagnostic counters, read now.
+  readDiagnostics: () => Promise<DiagnosticCounter[]>;
   watch: DiscoveredWatch | null;
   scanning: boolean;
   found: DiscoveredWatch[];
@@ -62,8 +72,8 @@ type WatchContextValue = {
   sendRaw: (text: string) => Promise<void>;
   updateSettings: (patch: Partial<Settings>) => Promise<void>;
   clearConsole: () => void;
-  // Channel for the package manager commands, which need their replies back.
-  packageChannel: PackageChannel;
+  // NeoTime's file service on the connected watch, opened on first use.
+  files: () => Promise<FileService>;
   // Raw GATT for a firmware update, or null where the transport has no watch
   // or cannot reach past the UART service.
   dfuLink: () => DfuLink | null;
@@ -73,6 +83,8 @@ type WatchContextValue = {
   sendWeather: () => Promise<void>;
   // The watch's battery and step count as last read, and when that was.
   status: StatusReply | null;
+  // The battery level from the standard Battery service, for a watch without the UART channel.
+  batteryLevel: number | null;
   lastSynced: number | null;
   refreshStatus: () => Promise<void>;
   // What the phone is playing, as its media session last reported it.
@@ -97,24 +109,11 @@ const WEATHER_INTERVAL_MS = 30 * 60 * 1000;
 
 const WatchContext = createContext<WatchContextValue | null>(null);
 
-// Parse a line of watch output as JSON, or return null when it is console text.
-function parseLine(line: string): unknown {
-  const trimmed = line.trim();
-  if (!trimmed.startsWith('{')) {
-    return null;
-  }
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return null;
-  }
-}
-
 // Owns the single transport for the app and exposes connection, traffic and settings to every screen.
 export function WatchProvider({ children }: { children: ReactNode }) {
   const transportRef = useRef<WatchTransport | null>(null);
   const bufferRef = useRef(new LineBuffer());
-  const packageRepliesRef = useRef(new ReplyQueue<PackageReply>());
+  const filesRef = useRef<Promise<FileService> | null>(null);
   const nextId = useRef(1);
 
   const [connection, setConnection] = useState<ConnectionState>('disconnected');
@@ -130,6 +129,8 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<StatusReply | null>(null);
   const [lastSynced, setLastSynced] = useState<number | null>(null);
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
+  const [capabilities, setCapabilities] = useState<WatchCapabilities>(NO_CAPABILITIES);
+  const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
   // Callbacks that outlive a render read the settings from here.
   const settingsRef = useRef(settings);
   useEffect(() => {
@@ -195,8 +196,11 @@ export function WatchProvider({ children }: { children: ReactNode }) {
         setConnection(state);
         if (state === 'disconnected') {
           setWatchMode('application');
+          setCapabilities(NO_CAPABILITIES);
+          setBatteryLevel(null);
           bufferRef.current.reset();
-          packageRepliesRef.current.reset();
+          void filesRef.current?.then((service) => service.close()).catch(() => {});
+          filesRef.current = null;
           router.reset();
         }
       },
@@ -204,11 +208,6 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       onLine: (chunk) => {
         for (const line of bufferRef.current.push(chunk)) {
           log('in', line);
-          const parsed = parseLine(line);
-          if (isPackageReply(parsed)) {
-            packageRepliesRef.current.push(parsed);
-            continue;
-          }
           const message = decodeWatchLine(line);
           if (message) {
             handleMessage(message);
@@ -287,18 +286,6 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     [log],
   );
 
-  const sendBytes = useCallback(
-    async (data: Uint8Array) => {
-      log('out', `[${data.length} raw bytes]`);
-      try {
-        await transportRef.current?.writeBytes(data);
-      } catch (error) {
-        setLastError((error as Error).message);
-      }
-    },
-    [log],
-  );
-
   const send = useCallback((message: PhoneToWatchMessage) => sendRaw(encodeForWatch(message)), [sendRaw]);
   useEffect(() => {
     sendMessageRef.current = send;
@@ -306,11 +293,13 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   }, [send, router]);
 
   const watchReady = connection === 'connected' && watchMode === 'application';
+  // The UART features need the message channel as well as running firmware.
+  const uartReady = watchReady && capabilities.uart;
   // Phone events arrive whenever the platform sends them, so they check the link themselves.
-  const readyRef = useRef(watchReady);
+  const readyRef = useRef(uartReady);
   useEffect(() => {
-    readyRef.current = watchReady;
-  }, [watchReady]);
+    readyRef.current = uartReady;
+  }, [uartReady]);
 
   // Forward what the phone reports, unless the user turned it off or the phone is in Do Not Disturb.
   useEffect(() => {
@@ -369,25 +358,60 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     return phoneBridge.subscribe((event) => void forward(event));
   }, [send]);
 
-  // Set the watch clock each time a watch connects, as Gadgetbridge does.
+  // Find out what the watch serves, then set its clock, as Gadgetbridge does. Writing the time is also
+  // the exchange that makes NeoTime keep a firmware it is trying out.
   useEffect(() => {
     if (!watchReady) {
       return;
     }
-    // Sent once the connection has settled, outside the render that noticed it.
-    const timer = setTimeout(() => void sendRaw(encodeSetTime()), 500);
-    return () => clearTimeout(timer);
-  }, [watchReady, sendRaw]);
+    let cancelled = false;
+    // Run once the connection has settled, outside the render that noticed it.
+    const timer = setTimeout(async () => {
+      const link = transportRef.current?.dfuLink();
+      if (!link) {
+        return;
+      }
+      try {
+        const found = await readCapabilities(link);
+        if (cancelled) {
+          return;
+        }
+        setCapabilities(found);
+        if (found.time) {
+          await setWatchTime(link);
+        }
+      } catch (error) {
+        setLastError((error as Error).message);
+      }
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [watchReady]);
+
+  const readBattery = useCallback(async () => {
+    const link = transportRef.current?.dfuLink();
+    if (link) {
+      setBatteryLevel(await readBatteryLevel(link));
+      setLastSynced(Date.now());
+    }
+  }, []);
 
   const refreshStatus = useCallback(async () => {
+    if (!capabilities.uart) {
+      await readBattery();
+      return;
+    }
     const reply = await readStatus(router);
     setStatus(reply);
     setLastSynced(Date.now());
-  }, [router]);
+  }, [router, capabilities.uart, readBattery]);
 
   // Read the battery and step count once the clock is set, then every few minutes.
+  const statusOn = uartReady || (watchReady && capabilities.battery);
   useEffect(() => {
-    if (!watchReady) {
+    if (!statusOn) {
       return;
     }
     const read = () => refreshStatus().catch(() => {});
@@ -397,7 +421,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       clearTimeout(first);
       clearInterval(timer);
     };
-  }, [watchReady, refreshStatus]);
+  }, [statusOn, refreshStatus]);
 
   // Keep the app running in the background while a watch is connected, so the link survives.
   const watchName = watch?.name ?? 'watch';
@@ -420,7 +444,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   }, [send]);
 
   // Send the weather when a watch connects and every half hour after that.
-  const weatherOn = watchReady && settings.forwardWeather && settings.weatherPlace !== null;
+  const weatherOn = uartReady && settings.forwardWeather && settings.weatherPlace !== null;
   useEffect(() => {
     if (!weatherOn) {
       return;
@@ -435,14 +459,29 @@ export function WatchProvider({ children }: { children: ReactNode }) {
 
   const dfuLink = useCallback(() => transportRef.current?.dfuLink() ?? null, []);
 
-  const packageChannel = useMemo<PackageChannel>(
-    () => ({
-      send: (text: string) => sendRaw(text),
-      sendBytes: (data: Uint8Array) => sendBytes(data),
-      next: () => packageRepliesRef.current.next(),
-    }),
-    [sendRaw, sendBytes],
-  );
+  const readWatchDiagnostics = useCallback(async () => {
+    const link = transportRef.current?.dfuLink();
+    if (!link) {
+      throw new Error('Connect to a watch first.');
+    }
+    return readDiagnostics(link);
+  }, []);
+
+  const files = useCallback(() => {
+    if (!filesRef.current) {
+      const link = transportRef.current?.dfuLink();
+      if (!link) {
+        return Promise.reject(new Error('Connect to a watch first.'));
+      }
+      const opening = FileService.open(link);
+      // A failed open is forgotten, so the next use tries again.
+      opening.catch(() => {
+        if (filesRef.current === opening) filesRef.current = null;
+      });
+      filesRef.current = opening;
+    }
+    return filesRef.current;
+  }, []);
 
   const value = useMemo<WatchContextValue>(
     () => ({
@@ -450,6 +489,9 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       connection,
       watchMode,
       watchReady,
+      capabilities,
+      readDiagnostics: readWatchDiagnostics,
+      batteryLevel,
       watch,
       scanning,
       found,
@@ -466,11 +508,11 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       sendRaw,
       updateSettings,
       clearConsole,
-      packageChannel,
+      files,
       dfuLink,
       requests: router,
       sendWeather,
-      status: watchReady ? status : null,
+      status: uartReady ? status : null,
       lastSynced,
       refreshStatus,
       nowPlaying,
@@ -481,6 +523,10 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       refreshStatus,
       nowPlaying,
       watchReady,
+      uartReady,
+      capabilities,
+      readWatchDiagnostics,
+      batteryLevel,
       sendWeather,
       router,
       transportKind,
@@ -502,7 +548,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       sendRaw,
       updateSettings,
       clearConsole,
-      packageChannel,
+      files,
       dfuLink,
     ],
   );

@@ -39,7 +39,7 @@ type Notification = { key: string; value: number[] };
 type BridgeResult = { ok: boolean; error?: string; value?: unknown };
 
 export function desktopBridge(): DesktopBridge | null {
-  const bridge = (globalThis as { waspos?: DesktopBridge }).waspos;
+  const bridge = (globalThis as { neotime?: DesktopBridge }).neotime;
   return bridge ?? null;
 }
 

@@ -1,5 +1,5 @@
 // Gadgetbridge messages that the watch answers: settings, alarms, step history and status.
-// The watch side lives in wasp/gadgetbridge.py; keep the two in step.
+// The watch side is described in docs/companion-protocol.md in the NeoTime tree; keep the two in step.
 
 import type {
   Alarm,
@@ -108,7 +108,7 @@ export class ReplyRouter implements RequestChannel {
   }
 }
 
-// A MicroPython traceback ends with the line that says what went wrong.
+// A multi-line error ends with the line that says what went wrong.
 function lastLine(text: string): string {
   const lines = text.trim().split(/\r?\n/);
   return lines[lines.length - 1] || 'The watch reported an error.';

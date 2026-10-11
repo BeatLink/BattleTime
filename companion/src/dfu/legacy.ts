@@ -1,5 +1,4 @@
-// Nordic legacy DFU, the protocol the bootloader the PineTime ships with
-// speaks. Ported from wasp-os's tools/ota-dfu.
+// Nordic legacy DFU, which NeoTime's firmware and wasp-os's bootloader speak. Ported from wasp-os's tools/ota-dfu.
 
 import { concat, u16le, u32le, readU32le } from './bytes';
 import { DfuError, NotifyQueue, sleep, type DfuLink } from './link';
@@ -9,7 +8,6 @@ import {
   LEGACY_CONTROL_POINT,
   LEGACY_DFU_SERVICE,
   LEGACY_PACKET,
-  LEGACY_VERSION,
 } from './uuids';
 
 export const Procedure = {
@@ -88,30 +86,6 @@ export class LegacyDfuController {
   private unsubscribe: (() => void) | null = null;
 
   constructor(private readonly link: DfuLink) {}
-
-  // The bootloader reports version 8 on the version characteristic; the
-  // application does not expose it at all.
-  static async inDfuMode(link: DfuLink): Promise<boolean> {
-    try {
-      const version = await link.read(LEGACY_DFU_SERVICE, LEGACY_VERSION);
-      return version.length >= 2 && version[0] === 0x08;
-    } catch {
-      return false;
-    }
-  }
-
-  // Ask a legacy application to reset into its bootloader. It comes back at
-  // the same address, so the caller only has to reconnect.
-  static async switchToDfuMode(link: DfuLink): Promise<void> {
-    await link.write(
-      LEGACY_DFU_SERVICE,
-      LEGACY_CONTROL_POINT,
-      Uint8Array.from([Procedure.START_DFU, 0x04]),
-      'request',
-    );
-    await sleep(500);
-    await link.reconnect(link.deviceId);
-  }
 
   async run(image: FirmwareImage, onProgress?: (progress: DfuProgress) => void): Promise<void> {
     const total = image.image.length;

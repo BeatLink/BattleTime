@@ -38,12 +38,12 @@ export const defaultSettings: Settings = {
   weatherPlace: null,
   httpEnabled: false,
   httpAllowedHosts: '',
-  githubRepo: 'wasp-os/wasp-os',
+  githubRepo: 'BeatLink/NeoTime',
   githubToken: '',
   firmwareBoard: 'pinetime',
 };
 
-const STORAGE_KEY = 'waspos.settings.v1';
+const STORAGE_KEY = 'neotime.settings.v1';
 
 export async function loadSettings(): Promise<Settings> {
   try {

@@ -1,4 +1,4 @@
-// The WaspOS Companion desktop app.
+// The NeoTime Companion desktop app.
 //
 // It runs the same interface as the phone app, served from the web export,
 // with Bluetooth handled here in the main process.
@@ -23,7 +23,7 @@ function emit(name, payload) {
 
 async function createWindow() {
   // In development the Expo dev server is used, so the interface reloads.
-  const devUrl = process.env.WASPOS_DEV_URL;
+  const devUrl = process.env.NEOTIME_DEV_URL;
   let url = devUrl;
   if (!url) {
     const started = await serve(DIST);
@@ -35,7 +35,7 @@ async function createWindow() {
     width: 480,
     height: 860,
     backgroundColor: '#000000',
-    title: 'WaspOS Companion',
+    title: 'NeoTime Companion',
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),

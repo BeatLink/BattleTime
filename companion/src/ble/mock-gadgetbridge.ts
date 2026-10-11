@@ -1,4 +1,4 @@
-// A small stand-in for wasp/gadgetbridge.py, so the settings, alarm and steps
+// A small stand-in for NeoTime's message handling, so the settings, alarm and steps
 // screens work against the mock watch. It answers with the same JSON the
 // firmware sends.
 

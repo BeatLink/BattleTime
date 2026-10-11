@@ -18,12 +18,12 @@ function tabIcon(name: IconName) {
 
 export default function TabLayout() {
   const theme = useTheme();
-  const { connection, watchMode } = useWatch();
+  const { connection, watchMode, capabilities } = useWatch();
 
   // A tab whose screen has nothing to do is left out of the bar rather than
   // shown as something that does not work.
   const shown = (tab: TabName) =>
-    isTabVisible(tab, connection, watchMode) ? {} : { href: null as never };
+    isTabVisible(tab, connection, watchMode, capabilities) ? {} : { href: null as never };
 
   return (
     <Tabs
@@ -34,14 +34,6 @@ export default function TabLayout() {
         tabBarStyle: { backgroundColor: theme.background, borderTopColor: theme.backgroundSelected },
       }}>
       <Tabs.Screen name="index" options={{ title: 'Watch', tabBarIcon: tabIcon('watch-outline') }} />
-      <Tabs.Screen
-        name="packages"
-        options={{
-          title: 'Apps',
-          tabBarIcon: tabIcon('grid-outline'),
-          ...shown('packages'),
-        }}
-      />
       <Tabs.Screen
         name="firmware"
         options={{

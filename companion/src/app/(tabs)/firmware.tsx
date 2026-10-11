@@ -32,8 +32,9 @@ export default function FirmwareScreen() {
     <Screen title="Firmware">
       <Card>
         <ThemedText type="small" themeColor="textSecondary">
-          A firmware update is sent as a Nordic DFU package, the zip the wasp-os build produces. The
-          watch restarts into its bootloader, takes the new image and restarts again.
+          A firmware update is sent as a Nordic DFU package, the zip NeoTime&apos;s tools/package_dfu.py
+          makes. NeoTime takes it while running, restarts into it, and keeps it once this app
+          reconnects. A watch still on wasp-os takes the NeoTime reloader through its bootloader.
         </ThemedText>
       </Card>
 

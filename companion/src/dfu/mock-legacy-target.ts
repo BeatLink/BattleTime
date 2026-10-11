@@ -1,9 +1,20 @@
-// A stand-in legacy DFU bootloader, the protocol the PineTime's own
-// bootloader speaks, so that path is exercised without hardware too.
+// A stand-in watch that takes updates over legacy DFU: NeoTime, which serves DFU in its firmware,
+// or wasp-os, which serves it only from its bootloader.
 
 import { concat, readU32le, u32le } from './bytes';
 import type { DfuLink, WriteMode } from './link';
 import { Procedure } from './legacy';
+import { NUS_SERVICE } from '@/ble/uuids';
+import { MockFileService } from '@/protocol/mock-file-service';
+import {
+  CURRENT_TIME,
+  CURRENT_TIME_SERVICE,
+  NEOTIME_DIAGNOSTICS,
+  NEOTIME_FILE_CONTROL,
+  NEOTIME_FILE_DATA,
+  NEOTIME_SERVICE,
+} from '@/protocol/neotime';
+
 import {
   LEGACY_CONTROL_POINT,
   LEGACY_DFU_SERVICE,
@@ -18,17 +29,35 @@ type Stage = 'idle' | 'size' | 'init' | 'image';
 
 type Received = { init: Uint8Array; image: Uint8Array };
 
+export type MockFirmware = 'neotime' | 'wasp-os';
+
 export class MockLegacyDfuTarget implements DfuLink {
   readonly received: Received = { init: new Uint8Array(0), image: new Uint8Array(0) };
 
   private mode: 'application' | 'bootloader' = 'application';
-  private notify: ((value: Uint8Array) => void) | null = null;
+  // Who is listening on each characteristic.
+  private readonly listeners = new Map<string, (value: Uint8Array) => void>();
   private stage: Stage = 'idle';
   private expected = 0;
   private packets = 0;
   private activated = false;
+  // Every Current Time value written, which is what keeps a NeoTime update.
+  readonly timeWrites: Uint8Array[] = [];
 
-  constructor(private id = 'AA:BB:CC:DD:EE:00') {}
+  constructor(
+    private id = 'AA:BB:CC:DD:EE:00',
+    readonly firmware: MockFirmware = 'neotime',
+    // Whether the firmware also serves the UART message channel and the file service.
+    private readonly uart = false,
+  ) {
+    this.fileService = new MockFileService(
+      (value) => this.listeners.get(NEOTIME_FILE_CONTROL)?.(value),
+      (value) => this.listeners.get(NEOTIME_FILE_DATA)?.(value),
+    );
+  }
+
+  // NeoTime's files, which tests read back.
+  readonly fileService: MockFileService;
 
   get deviceId() {
     return this.id;
@@ -43,15 +72,33 @@ export class MockLegacyDfuTarget implements DfuLink {
     this.mode = 'bootloader';
   }
 
-  // The DFU service belongs to the bootloader; the application it starts
-  // does not carry it.
-  async hasCharacteristic(service: string, _characteristic: string): Promise<boolean> {
-    return service === LEGACY_DFU_SERVICE && this.mode === 'bootloader';
+  private get neotime() {
+    return this.firmware === 'neotime';
+  }
+
+  // NeoTime's firmware serves DFU, time and diagnostics; wasp-os serves DFU only from its bootloader.
+  async hasCharacteristic(service: string, characteristic: string): Promise<boolean> {
+    if (service === LEGACY_DFU_SERVICE) {
+      return this.neotime || this.mode === 'bootloader';
+    }
+    if (characteristic === NEOTIME_FILE_CONTROL) {
+      return this.neotime && this.uart && this.mode === 'application';
+    }
+    if (service === CURRENT_TIME_SERVICE || service === NEOTIME_SERVICE) {
+      return this.neotime && this.mode === 'application';
+    }
+    if (service === NUS_SERVICE) {
+      return this.uart && this.mode === 'application';
+    }
+    return false;
   }
 
   async read(_service: string, characteristic: string): Promise<Uint8Array> {
-    if (characteristic === LEGACY_VERSION && this.mode === 'bootloader') {
+    if (characteristic === LEGACY_VERSION && (this.neotime || this.mode === 'bootloader')) {
       return Uint8Array.from([0x08, 0x00]);
+    }
+    if (characteristic === NEOTIME_DIAGNOSTICS && this.neotime) {
+      return concat(u32le(1234), u32le(1), u32le(1), u32le(1), u32le(56), u32le(7), u32le(3), u32le(1));
     }
     return new Uint8Array(0);
   }
@@ -61,19 +108,16 @@ export class MockLegacyDfuTarget implements DfuLink {
     characteristic: string,
     onValue: (value: Uint8Array) => void,
   ): Promise<() => void> {
-    if (characteristic === LEGACY_CONTROL_POINT) {
-      this.notify = onValue;
-    }
+    this.listeners.set(characteristic, onValue);
     return () => {
-      if (characteristic === LEGACY_CONTROL_POINT) {
-        this.notify = null;
-      }
+      this.listeners.delete(characteristic);
     };
   }
 
+  // A watch that activated an update comes back on its firmware; wasp-os otherwise comes back in its bootloader.
   async reconnect(deviceId: string): Promise<void> {
     this.id = deviceId;
-    this.mode = 'bootloader';
+    this.mode = this.activated || this.neotime ? 'application' : 'bootloader';
   }
 
   async write(
@@ -82,6 +126,18 @@ export class MockLegacyDfuTarget implements DfuLink {
     data: Uint8Array,
     _mode: WriteMode,
   ): Promise<void> {
+    if (characteristic === CURRENT_TIME) {
+      this.timeWrites.push(data);
+      return;
+    }
+    if (characteristic === NEOTIME_FILE_CONTROL) {
+      this.fileService.control(data);
+      return;
+    }
+    if (characteristic === NEOTIME_FILE_DATA) {
+      this.fileService.data(data);
+      return;
+    }
     if (characteristic === LEGACY_PACKET) {
       this.packet(data);
       return;
@@ -92,7 +148,7 @@ export class MockLegacyDfuTarget implements DfuLink {
   }
 
   private respond(procedure: number) {
-    this.notify?.(Uint8Array.from([Procedure.RESPONSE, procedure, SUCCESS]));
+    this.listeners.get(LEGACY_CONTROL_POINT)?.(Uint8Array.from([Procedure.RESPONSE, procedure, SUCCESS]));
   }
 
   private control(data: Uint8Array) {
@@ -122,7 +178,7 @@ export class MockLegacyDfuTarget implements DfuLink {
         this.activated = true;
         return;
       default:
-        this.notify?.(Uint8Array.from([Procedure.RESPONSE, data[0], 2]));
+        this.listeners.get(LEGACY_CONTROL_POINT)?.(Uint8Array.from([Procedure.RESPONSE, data[0], 2]));
     }
   }
 
@@ -145,7 +201,7 @@ export class MockLegacyDfuTarget implements DfuLink {
     this.received.image = concat(this.received.image, chunk);
     this.packets += 1;
     if (this.packets % RECEIPT_INTERVAL === 0) {
-      this.notify?.(
+      this.listeners.get(LEGACY_CONTROL_POINT)?.(
         concat([Procedure.PACKET_RECEIPT_NOTIFICATION], u32le(this.received.image.length)),
       );
     }

@@ -1,27 +1,27 @@
 # Open items
 
-What is known to be unfinished in this app. Features live in the watch repo's
-`ROADMAP.md`, and the app package design and its task list live in that repo's
-`docs/app-packaging-design.md`; only this app's own loose ends are here.
+What is known to be unfinished in this app. Remove an item in the same change that finishes it.
 
-## Firmware support
+## Waiting for the firmware
 
-wasp-os branch `21-freeze-pkgmgr` carries the manager, raw transfer and face packages. The
-command line tool has installed, enabled and removed a package on a PineTime over raw transfer.
-Firmware older than that has no manager, and every package command times out.
+The firmware side is described in `docs/companion-protocol.md` in the NeoTime repo and is being
+built in this order: the UART channel with the settings message, the Battery service, the remaining
+Gadgetbridge messages, then the file service. Each of these is built and tested here against the
+mock watch only.
 
-- **The phone and desktop builds are untried on a watch.** They share the protocol code the
-  command line tool ran, but not its Bluetooth layer on a phone, and the desktop app has not been
-  opened against the watch.
+- **Theme and settings keys.** `src/protocol/theme.ts` and the watch settings screen still use the
+  earlier eleven-colour layout. Switch them to NeoTime's keys once they are in the protocol doc.
+- **Watch face list.** The settings reply names the faces; previews of NeoTime's faces could come
+  from its `docs/images`.
 
-## Not started
+## Untried on a watch
 
-- **A package repository.** The app only installs what it ships. A repository needs an index
-  format, hosting, an update story and a decision on whether packages are signed.
-- **Installing a package from the phone's own files**, picked with the system file picker. Little
-  work, and the natural loop for someone developing their own watch app.
-
-Both reuse the existing ABI check and transfer driver, so only the source of the bundle changes.
+- **Firmware updates against NeoTime.** The DFU flow and the reconnect that keeps the update run
+  against the mock watch only; NeoTime's own Bluetooth controller has not run on hardware yet.
+- **The phone and desktop builds.** They share the protocol code with the command line tool, but
+  not its Bluetooth layer on a phone, and the desktop app has not been opened against a watch.
+- **The NeoTime name check in scans.** A running NeoTime is told from a bootloader by its advertised
+  name; check what a phone and BlueZ report for it.
 
 ## Notification forwarding
 
@@ -30,8 +30,9 @@ Notifications tab and the watch provider, but has never been compiled. It needs 
 build to prove it, and the keep-alive notification needs `POST_NOTIFICATIONS` asked for on Android
 13 and later.
 
-## Untried on a watch
+## Not started
 
-The settings, alarm, steps, file, call, vibrate and http messages pass the firmware's simulator
-tests and this app's tests against the mock watch, but have not yet run against a PineTime with
-the matching firmware.
+- **Firmware from GitHub Actions builds.** NeoTime has no CI yet; the finder already reads
+  `firmware.zip` from releases and artifacts once there are some.
+- **Recovery images.** NeoTime takes an image for its recovery slot with DFU image type `0x08`;
+  nothing here sends one yet.

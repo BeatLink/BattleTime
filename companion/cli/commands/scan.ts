@@ -4,7 +4,7 @@ import type { WatchSession } from '../ble';
 import { say } from '../output';
 import { remember } from '../target';
 
-export const scanUsage = `waspos scan [--timeout <seconds>]
+export const scanUsage = `neotime scan [--timeout <seconds>]
 
   Lists the watches in range. A single watch is remembered, so later
   commands need no address.`;

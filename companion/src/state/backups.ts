@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { Backup } from '@/protocol/backup';
 
-const STORAGE_KEY = 'waspos.backups.v1';
+const STORAGE_KEY = 'neotime.backups.v1';
 
 // Older backups are dropped beyond this many.
 const KEEP = 10;

@@ -1,4 +1,4 @@
-package com.waspos.companion.phonebridge
+package com.neotime.companion.phonebridge
 
 import android.app.Notification
 import android.content.pm.PackageManager

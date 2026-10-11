@@ -6,33 +6,33 @@ import { basename, dirname } from 'node:path';
 
 import type { WatchSettingValues } from '@/protocol/gadgetbridge';
 import { createBackup, parseBackup, restoreBackup } from '@/protocol/backup';
-import { deleteFile, listDirectory, readFile, readMemory } from '@/protocol/files';
-import { encodeSetTime } from '@/protocol/clock';
+import { setWatchTime } from '@/protocol/neotime';
 import { encodeForWatch, decodeWatchLine } from '@/protocol/gadgetbridge';
 import { readAlarms, readStatus, readWatchSettings, writeAlarms, writeWatchSettings } from '@/protocol/requests';
 import { readStepHistory } from '@/protocol/steps';
-import { readAbi, sendFile } from '@/protocol/transfer';
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
 import { currentWeather, findPlace } from '@/services/weather';
 
 import type { WatchSession } from '../ble';
 import { ProgressBar, say } from '../output';
 
-export const watchUsage = `waspos status
-waspos time
-waspos settings [key=value ...]
-waspos alarms [HH:MM[/days][/off] ...|none]
-waspos steps [days]
-waspos weather <place>
-waspos files [ls [dir]|get <path> [dest]|put <file> <path>|rm <path>|mem]
-waspos backup <file> [--logs]
-waspos restore <file>
-waspos listen [python] [--allow <hosts>] [--wait <seconds>]
+export const watchUsage = `neotime status
+neotime time
+neotime settings [key=value ...]
+neotime alarms [HH:MM[/days][/off] ...|none]
+neotime steps [days]
+neotime weather <place>
+neotime files [ls [dir]|get <path> [dest]|put <file> <path>|rm <path>|df]
+neotime apps [list|install <app.ntapp> <id>|remove <id>]
+neotime backup <file>
+neotime restore <file>
+neotime listen [line] [--allow <hosts>] [--wait <seconds>]
 
   status prints the battery and today's steps. time sets the watch clock from this computer's. settings with no arguments prints them; brightness=3 face=<path> and the
   like change them. alarms with no arguments lists them, otherwise replaces
   them all: 07:30/12345 rings on weekdays (1 is Monday), 06:00/67/off is a
-  weekend alarm turned off, and a bare time rings once. listen stays
+  weekend alarm turned off, and a bare time rings once. files and apps use
+  NeoTime's file service; paths are absolute, such as /settings. listen stays
   connected and prints what the watch sends, answering its apps' http
   requests for the hosts given; it runs the line given first, and stops
   after --wait seconds or at Ctrl+C.`;
@@ -70,7 +70,7 @@ export async function status(session: WatchSession) {
 
 export async function setTime(session: WatchSession) {
   const now = new Date();
-  await session.send(encodeSetTime(now));
+  await setWatchTime(session, now);
   say(`Set the watch clock to ${now.toLocaleString()}.`);
 }
 
@@ -130,10 +130,10 @@ export async function weather(session: WatchSession, place: string) {
 
 export async function files(session: WatchSession, args: string[]) {
   const [action = 'ls', first, second] = args;
-  const channel = session.packageChannel;
+  const service = await session.files();
   switch (action) {
     case 'ls': {
-      for (const entry of await listDirectory(channel, first ?? '')) {
+      for (const entry of await service.list(first ?? '/')) {
         say(`${entry.directory ? 'dir ' : String(entry.size).padStart(6) + ' '} ${entry.path}${entry.directory ? '/' : ''}`);
       }
       return;
@@ -141,7 +141,7 @@ export async function files(session: WatchSession, args: string[]) {
     case 'get': {
       if (!first) throw new Error('Give the file to fetch.');
       const bar = new ProgressBar();
-      const data = await readFile(channel, first, (p) => bar.update(p.sent, p.total, p.file));
+      const data = await service.read(first, (p) => bar.update(p.sent, p.total, p.file));
       bar.done();
       const dest = second ?? basename(first);
       writeFileSync(dest, data);
@@ -152,22 +152,19 @@ export async function files(session: WatchSession, args: string[]) {
       if (!first || !second) throw new Error('Give the local file and the path on the watch.');
       const data = new Uint8Array(readFileSync(first));
       const bar = new ProgressBar();
-      await sendFile(channel, second, data, {
-        abi: await readAbi(channel),
-        onProgress: (p) => bar.update(p.sent, p.total, p.file),
-      });
+      await service.write(second, data, (p) => bar.update(p.sent, p.total, p.file));
       bar.done();
       say(`Sent ${data.length} bytes to ${second}.`);
       return;
     }
     case 'rm':
       if (!first) throw new Error('Give the file to delete.');
-      await deleteFile(channel, first);
+      await service.remove(first);
       say(`Deleted ${first}.`);
       return;
-    case 'mem': {
-      const memory = await readMemory(channel);
-      say(`${memory.free} bytes free, ${memory.alloc} in use.`);
+    case 'df': {
+      const storage = await service.storage();
+      say(`${storage.free} bytes free of ${storage.total}.`);
       return;
     }
     default:
@@ -175,10 +172,37 @@ export async function files(session: WatchSession, args: string[]) {
   }
 }
 
-export async function backup(session: WatchSession, file: string, stepLogs: boolean) {
+export async function apps(session: WatchSession, args: string[]) {
+  const [action = 'list', first, second] = args;
+  const service = await session.files();
+  switch (action) {
+    case 'list':
+      for (const entry of await service.list('/apps')) {
+        if (entry.directory) say(entry.name);
+      }
+      return;
+    case 'install': {
+      if (!first || !second) throw new Error('Give the compiled app and its id.');
+      const image = new Uint8Array(readFileSync(first));
+      const bar = new ProgressBar();
+      await service.installApp(second, image, (p) => bar.update(p.sent, p.total, p.file));
+      bar.done();
+      say(`Installed ${second}.`);
+      return;
+    }
+    case 'remove':
+      if (!first) throw new Error('Give the id of the app to remove.');
+      await service.removeApp(first);
+      say(`Removed ${first}.`);
+      return;
+    default:
+      throw new Error(`Unknown apps action: ${action}`);
+  }
+}
+
+export async function backup(session: WatchSession, file: string) {
   const bar = new ProgressBar();
-  const result = await createBackup(session.packageChannel, {
-    stepLogs,
+  const result = await createBackup(await session.files(), {
     onProgress: (done, total, path) => bar.update(done, total, path),
   });
   bar.done();
@@ -190,12 +214,11 @@ export async function backup(session: WatchSession, file: string, stepLogs: bool
 export async function restore(session: WatchSession, file: string) {
   const saved = parseBackup(readFileSync(file, 'utf8'));
   const bar = new ProgressBar();
-  await restoreBackup(session.packageChannel, saved, {
-    abi: await readAbi(session.packageChannel),
+  await restoreBackup(await session.files(), saved, {
     onProgress: (done, total, path) => bar.update(done, total, path),
   });
   bar.done();
-  say(`Restored ${Object.keys(saved.files).length} files. Restart the watch with \`waspos reset\` to use them.`);
+  say(`Restored ${Object.keys(saved.files).length} files. Restart the watch to use them.`);
 }
 
 // Stay connected, print what the watch says and answer its http requests, until interrupted or out of time.
@@ -218,7 +241,7 @@ export async function listen(
   });
   say(`Listening${hosts.length ? `, answering http for ${hosts.join(', ')}` : ''}. Press Ctrl+C to stop.`);
   if (line) {
-    await session.send(`${line}\r\n`);
+    await session.send(`${line}\n`);
   }
   await new Promise<void>((resolve) => {
     process.once('SIGINT', () => resolve());

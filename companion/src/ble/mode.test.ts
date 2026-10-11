@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { QUICK_COMMANDS } from '@/protocol/diagnostics';
+import { NO_CAPABILITIES, type WatchCapabilities } from '@/protocol/neotime';
 import { isTabVisible, visibleTabs } from '@/state/visible-tabs';
 
 import { MockTransport } from './mock-transport';
@@ -21,7 +21,7 @@ function watch(transport: MockTransport): { modes: WatchMode[]; lines: string[] 
   return { modes, lines };
 }
 
-describe('a watch in its bootloader', () => {
+describe('the mock watches', () => {
   it('turns up in a scan, marked as a bootloader', async () => {
     const found = await scan(new MockTransport());
     expect(found).toHaveLength(2);
@@ -42,7 +42,7 @@ describe('a watch in its bootloader', () => {
     expect(seen.lines).toEqual([]);
   });
 
-  it('reports application mode for a watch running its firmware', async () => {
+  it('reports application mode for a NeoTime watch, which serves its own services', async () => {
     const transport = new MockTransport();
     const seen = watch(transport);
     const found = await scan(transport);
@@ -61,51 +61,39 @@ describe('a watch in its bootloader', () => {
   });
 });
 
-describe('the console quick commands', () => {
-  it('import every module they use', () => {
-    for (const command of QUICK_COMMANDS) {
-      const imported = command.line.match(/^import ([\w, ]+);/)?.[1] ?? '';
-      const modules = imported.split(',').map((name) => name.trim());
-      for (const module of ['watch', 'gc', 'wasp', 'machine']) {
-        if (new RegExp(`\\b${module}\\.`).test(command.line)) {
-          expect(modules).toContain(module);
-        }
-      }
-    }
-  });
-
-  it('gives each command a name the tool can be asked for', () => {
-    const names = QUICK_COMMANDS.map((command) => command.label.toLowerCase().replace(/ /g, '-'));
-    expect(new Set(names).size).toBe(names.length);
-  });
-});
+const NEOTIME: WatchCapabilities = { dfu: true, time: true, battery: false, diagnostics: true, files: false, uart: false };
+const WITH_UART: WatchCapabilities = { ...NEOTIME, uart: true };
 
 describe('which tabs are offered', () => {
   it('offers only the connection screen and settings with no watch', () => {
-    expect(visibleTabs('disconnected', 'application')).toEqual(['index', 'settings']);
-    expect(visibleTabs('connecting', 'application')).toEqual(['index', 'settings']);
+    expect(visibleTabs('disconnected', 'application', NO_CAPABILITIES)).toEqual(['index', 'settings']);
+    expect(visibleTabs('connecting', 'application', NO_CAPABILITIES)).toEqual(['index', 'settings']);
   });
 
   it('offers only the firmware update to a watch in its bootloader', () => {
-    expect(visibleTabs('connected', 'bootloader')).toEqual(['index', 'settings', 'firmware']);
+    expect(visibleTabs('connected', 'bootloader', NO_CAPABILITIES)).toEqual(['index', 'settings', 'firmware']);
   });
 
-  it('offers everything to a watch running its firmware', () => {
-    const tabs = visibleTabs('connected', 'application');
-    for (const tab of ['index', 'settings', 'firmware', 'packages', 'notifications', 'console']) {
+  it('offers the firmware update to NeoTime without a UART channel, and nothing that needs one', () => {
+    expect(visibleTabs('connected', 'application', NEOTIME)).toEqual(['index', 'settings', 'firmware']);
+  });
+
+  it('offers everything to a watch with a UART channel', () => {
+    const tabs = visibleTabs('connected', 'application', WITH_UART);
+    for (const tab of ['index', 'settings', 'firmware', 'notifications', 'console']) {
       expect(tabs).toContain(tab);
     }
   });
 
-  it('never offers the REPL or the package manager to a bootloader', () => {
-    for (const tab of ['console', 'packages', 'notifications'] as const) {
-      expect(isTabVisible(tab, 'connected', 'bootloader')).toBe(false);
-      expect(isTabVisible(tab, 'disconnected', 'application')).toBe(false);
+  it('never offers the message tabs to a bootloader', () => {
+    for (const tab of ['console', 'notifications'] as const) {
+      expect(isTabVisible(tab, 'connected', 'bootloader', WITH_UART)).toBe(false);
+      expect(isTabVisible(tab, 'disconnected', 'application', WITH_UART)).toBe(false);
     }
   });
 
   it('never offers a firmware update without a watch to send it to', () => {
-    expect(isTabVisible('firmware', 'disconnected', 'application')).toBe(false);
-    expect(isTabVisible('firmware', 'connecting', 'bootloader')).toBe(false);
+    expect(isTabVisible('firmware', 'disconnected', 'application', NEOTIME)).toBe(false);
+    expect(isTabVisible('firmware', 'connecting', 'bootloader', NEOTIME)).toBe(false);
   });
 });

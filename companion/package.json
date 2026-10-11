@@ -1,5 +1,5 @@
 {
-  "name": "waspos-companion",
+  "name": "neotime-companion",
   "main": "expo-router/entry",
   "version": "0.1.0",
   "private": true,
@@ -11,11 +11,10 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "import-packages": "node scripts/import-packages.mjs",
     "desktop": "expo export --platform web --output-dir dist && node scripts/electron.mjs",
     "desktop:dev": "node scripts/electron.mjs",
-    "build:cli": "esbuild cli/waspos.ts --bundle --platform=node --target=node20 --format=cjs --external:node-ble --alias:@=./src --outfile=build/waspos.cjs",
-    "waspos": "npm run build:cli --silent && node build/waspos.cjs"
+    "build:cli": "esbuild cli/neotime.ts --bundle --platform=node --target=node20 --format=cjs --external:node-ble --alias:@=./src --outfile=build/neotime.cjs",
+    "neotime": "npm run build:cli --silent && node build/neotime.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -62,6 +61,6 @@
     ]
   },
   "bin": {
-    "waspos": "./build/waspos.cjs"
+    "neotime": "./build/neotime.cjs"
   }
 }

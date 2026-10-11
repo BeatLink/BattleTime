@@ -6,19 +6,17 @@ import { join } from 'node:path';
 
 import { zipSync } from 'fflate';
 
-import { MockDfuTarget } from '@/dfu/mock-target';
+import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
 
 import type { WatchSession } from './ble';
 import { flash } from './commands/flash';
 
-// The flash command only needs the DFU link and a way to reset the watch,
-// which is what a session gives it.
-class FakeSession extends MockDfuTarget {
+// The flash command only needs the DFU link and a way to reset the watch, which is what a session gives it.
+class FakeSession extends MockLegacyDfuTarget {
   readonly sent: string[] = [];
 
   async send(text: string) {
     this.sent.push(text);
-    this.enterBootloader();
   }
 }
 
@@ -30,24 +28,36 @@ function packageFile(image: Uint8Array): string {
     'a.dat': Uint8Array.from([1, 2, 3, 4]),
     'a.bin': image,
   });
-  const path = join(mkdtempSync(join(tmpdir(), 'waspos-')), 'firmware.zip');
+  const path = join(mkdtempSync(join(tmpdir(), 'neotime-')), 'firmware.zip');
   writeFileSync(path, zip);
   return path;
 }
 
 describe('the flash command', () => {
-  it('reads the package off disk and sends it to the watch', async () => {
+  it('reads the package off disk, sends it to the watch and sets the time to keep it', async () => {
     const image = Uint8Array.from({ length: 2048 }, (_value, index) => index & 0xff);
     const session = new FakeSession();
 
     await flash(session as unknown as WatchSession, packageFile(image));
 
-    expect(session.sent[0]).toContain('enter_ota_dfu');
+    expect(session.sent).toEqual([]);
     expect(session.received.image).toEqual(image);
+    expect(session.timeWrites).toHaveLength(1);
   });
 
+  it('restarts a watch still on wasp-os into its bootloader first', async () => {
+    const image = Uint8Array.from({ length: 512 }, (_value, index) => index & 0xff);
+    const session = new FakeSession('AA:BB:CC:DD:EE:00', 'wasp-os');
+
+    await flash(session as unknown as WatchSession, packageFile(image));
+
+    expect(session.sent[0]).toContain('enter_ota_dfu');
+    expect(session.received.image).toEqual(image);
+    // Waits out a real reset into the bootloader and another into the new firmware.
+  }, 20000);
+
   it('refuses a file that is not a firmware package', async () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'waspos-')), 'not-firmware.zip');
+    const path = join(mkdtempSync(join(tmpdir(), 'neotime-')), 'not-firmware.zip');
     writeFileSync(path, 'hello');
     await expect(flash(new FakeSession() as unknown as WatchSession, path)).rejects.toThrow(
       /not a zip archive/,

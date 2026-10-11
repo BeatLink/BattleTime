@@ -1,5 +1,5 @@
-// Message types for the Gadgetbridge (Bangle.js style) JSON protocol that wasp-os speaks over the Nordic UART Service.
-// The watch side lives in wasp/gadgetbridge.py in the firmware tree; keep the two in step.
+// Message types for the Gadgetbridge (Bangle.js style) JSON lines NeoTime speaks over the Nordic UART Service.
+// The watch side is described in docs/companion-protocol.md in the NeoTime tree; keep the two in step.
 
 export type NotificationMessage = {
   t: 'notify';
@@ -160,11 +160,10 @@ export function asciiJson(value: unknown): string {
   );
 }
 
-// Send the message as a line of Python, which the watch REPL evaluates as a call to GB().
-// Gadgetbridge prefixes this line with \x10, but that is an Espruino convention the watch
-// ignores, and it would corrupt the line on a firmware built with the REPL history keys enabled.
+// Send the message as the line GB({...}), as Gadgetbridge's Bangle.js driver does, so the watch serves both.
+// Gadgetbridge also prefixes the line with \x10, an Espruino convention the watch does not need.
 export function encodeForWatch(message: PhoneToWatchMessage): string {
-  return `GB(${asciiJson(message)})\r\n`;
+  return `GB(${asciiJson(message)})\n`;
 }
 
 // Turn one line of watch output into a message, or null when the line is not JSON.

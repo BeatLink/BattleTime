@@ -12,18 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Fonts, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
-import {
-  deleteFile,
-  joinPath,
-  listDirectory,
-  parentPath,
-  readFile,
-  readMemory,
-  type WatchFile,
-  type WatchMemory,
-} from '@/protocol/files';
-import { checkPath } from '@/protocol/packages';
-import { readAbi, sendFile } from '@/protocol/transfer';
+import { checkPath, joinPath, parentPath, type WatchFile, type WatchStorage } from '@/protocol/file-service';
 import { useTask } from '@/state/use-task';
 
 // Longest file shown as text; anything bigger is only offered as a download.
@@ -55,28 +44,28 @@ function saveInBrowser(name: string, data: Uint8Array) {
 
 export default function FilesScreen() {
   const theme = useTheme();
-  const { packageChannel, watchReady } = useWatch();
+  const { files, watchReady } = useWatch();
   const task = useTask();
-  const [dir, setDir] = useState('');
+  const [dir, setDir] = useState('/');
   const [entries, setEntries] = useState<WatchFile[] | null>(null);
   const [opened, setOpened] = useState<{ file: WatchFile; data: Uint8Array } | null>(null);
   const [armed, setArmed] = useState<string | null>(null);
-  const [memory, setMemory] = useState<WatchMemory | null>(null);
+  const [storage, setStorage] = useState<WatchStorage | null>(null);
 
   const open = useCallback(
     (path: string) =>
-      task.run(`Listing ${path || 'the flash'}`, async () => {
-        setEntries(await listDirectory(packageChannel, path));
+      task.run(`Listing ${path}`, async () => {
+        setEntries(await (await files()).list(path));
         setDir(path);
         setOpened(null);
         setArmed(null);
       }),
-    [packageChannel, task],
+    [files, task],
   );
 
   useEffect(() => {
     if (watchReady) {
-      void open('');
+      void open('/');
     }
     // List the top once per connection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,8 +80,9 @@ export default function FilesScreen() {
       }
       const path = checkPath(joinPath(dir, asset.name.replace(/[^A-Za-z0-9_.-]/g, '_')));
       const data = new Uint8Array(await (await fetch(asset.uri)).arrayBuffer());
-      await sendFile(packageChannel, path, data, { abi: await readAbi(packageChannel) });
-      setEntries(await listDirectory(packageChannel, dir));
+      const service = await files();
+      await service.write(path, data);
+      setEntries(await service.list(dir));
     });
 
   const text = opened ? asText(opened.data) : null;
@@ -108,8 +98,8 @@ export default function FilesScreen() {
       ) : null}
 
       {entries ? (
-        <Card title={`/${dir}`}>
-          {dir ? <Row label=".." detail="Up one folder" onPress={() => void open(parentPath(dir))} /> : null}
+        <Card title={dir}>
+          {dir !== '/' ? <Row label=".." detail="Up one folder" onPress={() => void open(parentPath(dir))} /> : null}
           {entries.length === 0 ? (
             <ThemedText type="small" themeColor="textSecondary">
               This folder is empty.
@@ -124,7 +114,7 @@ export default function FilesScreen() {
                 entry.directory
                   ? void open(entry.path)
                   : void task.run(`Reading ${entry.name}`, async () => {
-                      setOpened({ file: entry, data: await readFile(packageChannel, entry.path) });
+                      setOpened({ file: entry, data: await (await files()).read(entry.path) });
                       setArmed(null);
                     })
               }
@@ -164,10 +154,11 @@ export default function FilesScreen() {
                 return;
               }
               void task.run(`Deleting ${opened.file.name}`, async () => {
-                await deleteFile(packageChannel, opened.file.path);
+                const service = await files();
+                await service.remove(opened.file.path);
                 setOpened(null);
                 setArmed(null);
-                setEntries(await listDirectory(packageChannel, dir));
+                setEntries(await service.list(dir));
               });
             }}>
             <ThemedText type="smallBold" style={[styles.delete, { color: theme.danger }]}>
@@ -178,16 +169,16 @@ export default function FilesScreen() {
       ) : null}
 
       {watchReady ? (
-        <Card title="Memory">
+        <Card title="Storage">
           <Row
-            label={memory ? `${size(memory.free)} free` : 'Heap'}
-            detail={memory ? `${size(memory.alloc)} in use, after collecting garbage` : 'Collect garbage and read what is left'}
+            label={storage ? `${size(storage.free)} free` : 'File system'}
+            detail={storage ? `of ${size(storage.total)} on the external flash` : 'Read how much room is left'}
           />
           <Button
-            title="Collect garbage"
+            title="Check free space"
             variant="secondary"
             disabled={task.busy !== null}
-            onPress={() => void task.run('Collecting garbage', async () => setMemory(await readMemory(packageChannel)))}
+            onPress={() => void task.run('Checking free space', async () => setStorage(await (await files()).storage()))}
           />
         </Card>
       ) : null}

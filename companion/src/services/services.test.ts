@@ -85,10 +85,10 @@ describe('GitHub firmware', () => {
     'a.bin': new Uint8Array([1, 2, 3]),
     'a.dat': new Uint8Array([4]),
   });
-  const artifactZip = zipSync({ 'micropython.zip': firmwareZip, 'bootloader.hex': strToU8(':00') });
+  const artifactZip = zipSync({ 'firmware.zip': firmwareZip, 'bootloader.bin': strToU8(':00') });
 
   const fetcher = fakeFetch({
-    'https://api.github.com/repos/wasp-os/wasp-os/releases': [
+    'https://api.github.com/repos/BeatLink/NeoTime/releases': [
       {
         id: 1,
         tag_name: 'v0.5',
@@ -96,12 +96,12 @@ describe('GitHub firmware', () => {
         published_at: '2026-01-01T00:00:00Z',
         prerelease: false,
         assets: [
-          { id: 7, name: 'pinetime-micropython.zip', size: 300, browser_download_url: 'https://dl/release.zip' },
-          { id: 8, name: 'p8-micropython.zip', size: 300, browser_download_url: 'https://dl/p8.zip' },
+          { id: 7, name: 'firmware.zip', size: 300, browser_download_url: 'https://dl/release.zip' },
+          { id: 8, name: 'rehearsal-upload.zip', size: 300, browser_download_url: 'https://dl/rehearsal.zip' },
         ],
       },
     ],
-    'https://api.github.com/repos/wasp-os/wasp-os/actions/artifacts': {
+    'https://api.github.com/repos/BeatLink/NeoTime/actions/artifacts': {
       artifacts: [
         {
           id: 9,
@@ -120,13 +120,13 @@ describe('GitHub firmware', () => {
   });
 
   it('lists builds for the board, newest first', async () => {
-    const builds = await listFirmwareBuilds('wasp-os/wasp-os', 'pinetime', { fetcher });
+    const builds = await listFirmwareBuilds('BeatLink/NeoTime', 'pinetime', { fetcher });
     expect(builds.map((build) => build.title)).toEqual(['master at 9128cdb', 'v0.5']);
     expect(builds[0].needsToken).toBe(true);
   });
 
   it('unpacks the firmware from a release and from an artifact', async () => {
-    const [artifact, release] = await listFirmwareBuilds('wasp-os/wasp-os', 'pinetime', { fetcher });
+    const [artifact, release] = await listFirmwareBuilds('BeatLink/NeoTime', 'pinetime', { fetcher });
     expect((await downloadFirmware(release, { fetcher })).images[0].image).toEqual(new Uint8Array([1, 2, 3]));
     await expect(downloadFirmware(artifact, { fetcher })).rejects.toThrow('token');
     const fromArtifact = await downloadFirmware(artifact, { fetcher, token: 't' });

@@ -12,7 +12,7 @@ type Remembered = { address?: string; name?: string };
 
 function configPath(): string {
   const base = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
-  return join(base, 'waspos-companion', 'cli.json');
+  return join(base, 'neotime-companion', 'cli.json');
 }
 
 export function remembered(): Remembered {
@@ -39,7 +39,7 @@ export async function resolveAddress(
   session: WatchSession,
   given: string | undefined,
 ): Promise<string> {
-  const address = given ?? process.env.WASPOS_ADDRESS ?? remembered().address;
+  const address = given ?? process.env.NEOTIME_ADDRESS ?? remembered().address;
   if (address) {
     return address;
   }

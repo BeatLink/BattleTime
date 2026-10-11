@@ -1,5 +1,4 @@
-// Little-endian helpers and the CRC-32 the secure bootloader checks every
-// object against.
+// Little-endian helpers and Bluetooth address arithmetic for the DFU controller.
 
 export function u16le(value: number): Uint8Array {
   return Uint8Array.from([value & 0xff, (value >> 8) & 0xff]);
@@ -35,28 +34,7 @@ export function concat(...parts: (Uint8Array | number[])[]): Uint8Array {
   return out;
 }
 
-const CRC_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
-    let value = i;
-    for (let bit = 0; bit < 8; bit++) {
-      value = value & 1 ? (value >>> 1) ^ 0xedb88320 : value >>> 1;
-    }
-    table[i] = value >>> 0;
-  }
-  return table;
-})();
-
-export function crc32(bytes: Uint8Array): number {
-  let crc = 0xffffffff;
-  for (const byte of bytes) {
-    crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-// The bootloader address is the watch address plus one, which is how the
-// secure bootloader advertises itself after a buttonless jump.
+// wasp-os's bootloader answers at the watch address plus one.
 export function nextAddress(address: string): string {
   const parts = address.split(':');
   if (parts.length !== 6 || parts.some((part) => !/^[0-9a-fA-F]{2}$/.test(part))) {

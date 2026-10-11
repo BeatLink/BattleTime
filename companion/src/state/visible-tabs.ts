@@ -5,10 +5,10 @@
 // shown as something that does not work.
 
 import type { ConnectionState, WatchMode } from '@/ble/transport';
+import type { WatchCapabilities } from '@/protocol/neotime';
 
 export type TabName =
   | 'index'
-  | 'packages'
   | 'firmware'
   | 'notifications'
   | 'console'
@@ -17,11 +17,14 @@ export type TabName =
 // The connection screen and the app's own settings never depend on a watch.
 const ALWAYS: TabName[] = ['index', 'settings'];
 
-// These need a watch that is running its firmware: they speak Gadgetbridge,
-// the package manager or the REPL, and a bootloader answers none of them.
-const NEEDS_FIRMWARE: TabName[] = ['packages', 'notifications', 'console'];
+// These speak messages over the UART channel, which a bootloader and an early NeoTime lack.
+const NEEDS_UART: TabName[] = ['notifications', 'console'];
 
-export function visibleTabs(connection: ConnectionState, mode: WatchMode): TabName[] {
+export function visibleTabs(
+  connection: ConnectionState,
+  mode: WatchMode,
+  capabilities: WatchCapabilities,
+): TabName[] {
   if (connection !== 'connected') {
     return [...ALWAYS];
   }
@@ -29,13 +32,14 @@ export function visibleTabs(connection: ConnectionState, mode: WatchMode): TabNa
   if (mode === 'bootloader') {
     return [...ALWAYS, 'firmware'];
   }
-  return [...ALWAYS, 'firmware', ...NEEDS_FIRMWARE];
+  return [...ALWAYS, 'firmware', ...(capabilities.uart ? NEEDS_UART : [])];
 }
 
 export function isTabVisible(
   tab: TabName,
   connection: ConnectionState,
   mode: WatchMode,
+  capabilities: WatchCapabilities,
 ): boolean {
-  return visibleTabs(connection, mode).includes(tab);
+  return visibleTabs(connection, mode, capabilities).includes(tab);
 }

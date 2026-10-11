@@ -1,6 +1,6 @@
 {
   "platforms": ["android"],
   "android": {
-    "modules": ["com.waspos.companion.phonebridge.PhoneBridgeModule"]
+    "modules": ["com.neotime.companion.phonebridge.PhoneBridgeModule"]
   }
 }

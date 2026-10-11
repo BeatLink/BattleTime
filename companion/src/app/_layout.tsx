@@ -37,15 +37,12 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="scan" options={{ presentation: 'modal', headerShown: true, title: 'Find a watch' }} />
-          <Stack.Screen
-            name="configure"
-            options={{ presentation: 'modal', headerShown: true, title: 'App settings' }}
-          />
           <Stack.Screen name="steps" options={{ headerShown: true, title: 'Steps' }} />
           <Stack.Screen name="alarms" options={{ headerShown: true, title: 'Alarms' }} />
           <Stack.Screen name="watch-settings" options={{ headerShown: true, title: 'Watch settings' }} />
           <Stack.Screen name="files" options={{ headerShown: true, title: 'Files' }} />
           <Stack.Screen name="backup" options={{ headerShown: true, title: 'Backup' }} />
+          <Stack.Screen name="apps" options={{ headerShown: true, title: 'Apps' }} />
         </Stack>
       </WatchProvider>
     </ThemeProvider>
