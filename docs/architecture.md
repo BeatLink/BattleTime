@@ -420,13 +420,18 @@ watch face, the launcher and the apps through `neotime-app-host`:
   library into `firmware/apps/`, and the firmware builds them in. They move to the external flash
   once there is a way to send files to the watch.
 
-Not done yet: battery, steps, heart rate and the other sensor values read as 0; effects such as
+- **Battery.** `battery.rs` reads the battery's voltage through the SAADC once a minute, and at
+  once when power is plugged in or out, and turns it into a charge along a lithium discharge
+  curve. P0.19 says power is present and P0.12 that it is charging.
+
+Not done yet: steps, heart rate and the other sensor values read as 0; effects such as
 vibration and brightness are ignored; saved state is not written; the screen only dims through the
 backlight, without sleeping the display or the touch panel.
 
 It takes 322 KB of the 400 KB firmware slot (the fonts are 47 KB, the built-in apps 29 KB and the
-shared library 26 KB) and 46 KB of static RAM, 30 KB of it heap: 16 KB for storage and 14 KB for
-the open app's widgets.
+shared library 26 KB) and 46 KB of static RAM, 36 KB of it heap: 16 KB for storage and 20 KB for
+the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
+the button and the backlight timeout all work.
 
 ## Reloader (`reloader`)
 
@@ -521,8 +526,9 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
 - **Demo.** With the `demo` feature, `demo::stopwatch_image` builds a stopwatch image with the
   runtime's writer, so the host runs before the compiler exists.
 
-On the watch, `AppHost` takes 5,888 B and each widget of the open screen 240 B of the UI heap plus
-its text; see [memory-map.md](memory-map.md). [app-runtime.md](app-runtime.md#the-app-host) describes
+On the watch, `AppHost` keeps its state, interpreter and bindings on the UI heap, 5,264 B, so
+opening an app needs only 6.4 KB of stack; each widget of the open screen takes 240 B more plus its
+text; see [memory-map.md](memory-map.md). [app-runtime.md](app-runtime.md#the-app-host) describes
 the calls, the layout rules and what each property value means.
 
 ## Apps and watch faces (`apps`, `faces`, `sdk`)

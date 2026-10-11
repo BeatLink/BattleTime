@@ -35,9 +35,9 @@ MEMORIES = {
     "ram": (
         "RAM, 64 KB (planned budget)",
         [
-            ("UI heap", "", 14, "runtime"),
+            ("UI heap", "", 20, "runtime"),
             ("Bluetooth", "", 12, "runtime"),
-            ("Apps", "", 12, "runtime"),
+            ("Apps", "", 6, "runtime"),
             ("Stack", "", 8, "boot"),
             ("Tasks", "", 6, "boot"),
             ("Reserve", "", 4, "spare"),

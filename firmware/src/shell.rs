@@ -13,7 +13,7 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use embassy_futures::select::{select3, Either3};
+use embassy_futures::select::{select4, Either4};
 use embassy_nrf::gpio::Output;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use embassy_time::{Duration, Instant, Timer};
@@ -24,7 +24,7 @@ use neotime_runtime::{
     AppImage, EffectKind, SystemValue, SystemValues, Value, DEFAULT_THEME,
 };
 
-use crate::{built_in_apps, clock, touch::TOUCHES, SharedDisplay};
+use crate::{battery, built_in_apps, clock, touch::TOUCHES, SharedDisplay};
 
 /// Presses of the side button, from the task that watches it.
 pub static BUTTON_PRESSES: Channel<CriticalSectionRawMutex, ButtonPress, 2> = Channel::new();
@@ -86,6 +86,8 @@ impl SystemValues for WatchSystem {
     fn read(&self, value: SystemValue) -> Value {
         match value {
             SystemValue::Now => clock::now(),
+            SystemValue::BatteryPercent => battery::percent() as Value,
+            SystemValue::IsCharging => battery::is_charging() as Value,
             SystemValue::Uses24HourClock | SystemValue::UsesMetricUnits | SystemValue::IsBluetoothEnabled => 1,
             SystemValue::StepGoal => 10_000,
             SystemValue::Brightness => 2,
@@ -249,8 +251,15 @@ pub async fn run_shell(display: &'static SharedDisplay, mut backlight: Output<'s
             wake_at = wake_at.min(last_input + SCREEN_TIMEOUT);
         }
 
-        match select3(TOUCHES.receive(), BUTTON_PRESSES.receive(), Timer::at(wake_at)).await {
-            Either3::First(touch) => {
+        match select4(
+            TOUCHES.receive(),
+            BUTTON_PRESSES.receive(),
+            Timer::at(wake_at),
+            battery::CHANGED.wait(),
+        )
+        .await
+        {
+            Either4::First(touch) => {
                 last_input = Instant::now();
                 if !lit {
                     if matches!(touch, Touch::Release { .. }) {
@@ -260,7 +269,7 @@ pub async fn run_shell(display: &'static SharedDisplay, mut backlight: Output<'s
                 }
                 shell.touch(touch);
             }
-            Either3::Second(press) => {
+            Either4::Second(press) => {
                 last_input = Instant::now();
                 if !lit {
                     lit = wake_screen(&mut shell, &mut backlight);
@@ -268,7 +277,7 @@ pub async fn run_shell(display: &'static SharedDisplay, mut backlight: Output<'s
                 }
                 shell.press_button(press);
             }
-            Either3::Third(()) => {
+            Either4::Third(()) => {
                 if lit && Instant::now() >= last_input + SCREEN_TIMEOUT {
                     backlight.set_high();
                     lit = false;
@@ -278,6 +287,12 @@ pub async fn run_shell(display: &'static SharedDisplay, mut backlight: Output<'s
                 }
                 if let Some(host) = &mut shell.host {
                     host.tick(clock::now(), &mut shell.system);
+                }
+            }
+            Either4::Fourth(()) => {
+                if let Some(host) = &mut shell.host {
+                    let changed = SystemValue::BatteryPercent.bit() | SystemValue::IsCharging.bit();
+                    host.system_values_changed(changed, clock::now(), &mut shell.system);
                 }
             }
         }

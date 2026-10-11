@@ -55,6 +55,8 @@ mod storage;
 
 // The rehearsals run under wasp-os without the shell, which leaves these unused there.
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+mod battery;
+#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod built_in_apps;
 mod clock;
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
@@ -69,6 +71,7 @@ mod touch;
 bind_interrupts!(struct Interrupts {
     TWISPI0 => spim::InterruptHandler<peripherals::TWISPI0>;
     TWISPI1 => twim::InterruptHandler<peripherals::TWISPI1>;
+    SAADC => embassy_nrf::saadc::InterruptHandler;
     RADIO => neotime_bluetooth::RadioInterruptHandler;
 });
 
@@ -184,6 +187,14 @@ async fn main(spawner: Spawner) {
                 touch_bus,
                 Input::new(chip.P0_28, Pull::Up),
                 Output::new(chip.P0_10, Level::High, OutputDrive::Standard),
+            )
+            .unwrap(),
+        );
+        spawner.spawn(
+            battery::watch_battery(
+                battery::battery_adc(chip.SAADC, chip.P0_31),
+                Input::new(chip.P0_12, Pull::None),
+                Input::new(chip.P0_19, Pull::None),
             )
             .unwrap(),
         );

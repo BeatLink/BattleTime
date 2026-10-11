@@ -761,14 +761,16 @@ The working memory below is measured from `neotime-runtime`; the rest is still a
 | Section reader for the image on the external flash | 256 B |
 
 That is about 6.6 KB, which leaves the rest of the open app's 12 KB for a second app's state
-while a subscription runs. On the watch, `AppHost` holds the interpreter, the bindings and the
-state together in 5,888 B, measured with `size_of` for the watch's target.
+while a subscription runs. On the watch, the interpreter, the bindings and the
+state take 5,264 B together, measured with `size_of` for the watch's target. `AppHost` keeps each
+on the heap: built in place on the stack, they made opening an app need a 23 KB stack frame,
+more than the watch's whole stack. Opening now needs 6.4 KB of stack.
 
 The widgets themselves are allocated from the UI heap. Each widget of the open screen is a 240 B
 node on the watch, measured the same way, plus its text. The stopwatch demo's screen of four widgets
 holds 1,016 B on the 64-bit computer, measured with a counting allocator in the host's tests, and
 peaks at 1,080 B while drawing. Nodes hold only values; each rlvgl widget is built when it is drawn
-and dropped afterwards. At 240 B a widget, the 14 KB UI heap holds about 55 widgets, not the 128 an image may have.
+and dropped afterwards. With those three parts in it, the 20 KB UI heap leaves room for about 55 widgets at 240 B each, not the 128 an image may have.
 
 ## Built so far
 
