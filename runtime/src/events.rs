@@ -50,11 +50,14 @@ impl EventKind {
     }
 
     /// The event's fields, in the order `ReadEvent` numbers them.
+    ///
+    /// A touch's `value` is the number of the cell or button touched in a CellGrid or ButtonMatrix,
+    /// and 0 on any other widget.
     pub fn fields(self) -> &'static [&'static str] {
         use EventKind::*;
         match self {
-            Click | LongPress | DoubleClick | Press | Release => &["x", "y"],
-            Drag => &["x", "y", "start_x", "start_y"],
+            Click | LongPress | DoubleClick | Press | Release => &["x", "y", "value"],
+            Drag => &["x", "y", "start_x", "start_y", "value"],
             Swipe => &["direction"],
             Button => &["kind"],
             Change => &["value"],

@@ -268,6 +268,7 @@ Each kind of section appears at most once:
 | 5 | Widgets | A table of (offset, length) pairs, then one record per widget, described below. At most 128 widgets. |
 | 6 | Subscriptions | Each period, sensor or time the app wants, and the handler to call. Not laid out yet. |
 | 7 | Resources | The app's own icon and images, RGB565 with run-length encoding. Not laid out yet. |
+| 8 | Initial values | Optional. For arrays whose elements do not all start the same: a table of (offset, length) pairs, then per array its number (1 byte) followed by its elements packed exactly as they are stored in RAM. Every element is checked against the array's type. |
 
 Widgets are stored depth first, so a widget's children follow it, each with everything inside
 it. Each root is one screen, and the first is the screen the app opens on. A widget record is:
@@ -275,10 +276,10 @@ it. Each root is one screen, and the first is the screen the app opens on. A wid
 | Bytes | Holds |
 |---|---|
 | 0 | The kind, numbered in the order of `WidgetKind` in `runtime/src/widgets.rs`. |
-| 1 | How many children it has. Only containers and buttons may have any. |
+| 1 | How many children it has. Only containers, buttons, arcs and click areas may have any. |
 | 2 | How many properties follow. |
 | 3 | Reserved, 0. |
-| 4 on | 6 bytes per property: its id (1), where its value comes from (1: 0 a constant, 1 an expression, 2 a handler), and the value (4): the constant itself, a string number for text, or the expression or handler number. |
+| 4 on | 6 bytes per property: its id (1), numbered in the order of `Property` in `runtime/src/widgets.rs`, where its value comes from (1: 0 a constant, 1 an expression, 2 a handler), and the value (4): the constant itself, a string number for text, an array's variable number for an array property, or the expression or handler number. |
 
 Expressions do not record what they read or how often they redraw. The runtime works both out from
 the code when the app opens, so a wrong compiler can never make a widget miss an update.
@@ -428,13 +429,15 @@ Then one pass over each expression and handler checks:
 
 Last, a pass over the widgets checks:
 
-- that they form whole trees no deeper than 16 levels, and only containers and buttons have
-  children;
+- that they form whole trees no deeper than 16 levels, and only containers, buttons, arcs and
+  click areas have children;
 - that every property exists on its widget, appears once, and screen-wide ones such as `onSwipe`
   are only on a screen's root;
 - that every event names a handler, every other property is a constant or an expression, and every
   expression, handler and string named exists;
-- that constants fit: a flag is 0 or 1, a colour fits RGB565, and text names a string.
+- that constants fit: a flag is 0 or 1, a colour is RGB565 or a theme colour, text names a string,
+  and an array property, such as a CellGrid's `cells`, names an array variable directly rather than
+  through an expression.
 
 The interpreter still checks every step as it runs, so even an image that slipped past makes a call
 fail rather than crashing the watch.
@@ -469,14 +472,18 @@ compiler and the runtime both follow it:
 
 | Event | Fields |
 |---|---|
-| `onClick`, `onLongPress`, `onDoubleClick`, `onPress`, `onRelease` | `x`, `y` |
-| `onDrag` | `x`, `y`, `start_x`, `start_y` |
+| `onClick`, `onLongPress`, `onDoubleClick`, `onPress`, `onRelease` | `x`, `y`, `value` |
+| `onDrag` | `x`, `y`, `start_x`, `start_y`, `value` |
 | `onSwipe` | `direction`: 0 up, 1 down, 2 left, 3 right |
 | `onButton` | `kind`: 0 press, 1 long press |
 | `onChange` | `value` |
 | `onPageChange` | `page` |
 | `onScrollEnd` | `offset` |
 | `onShow`, `onHide` | none |
+
+A touch's `value` is the number of the cell or button touched in a CellGrid or ButtonMatrix, and 0
+for any other widget. A screen's root may take `onDrag`, for drawing or steering across the whole
+screen.
 
 ### Time
 

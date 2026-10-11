@@ -20,6 +20,7 @@ const STATE_SECTION: u16 = 2;
 const EXPRESSIONS_SECTION: u16 = 3;
 const HANDLERS_SECTION: u16 = 4;
 const WIDGETS_SECTION: u16 = 5;
+const INITIAL_VALUES_SECTION: u16 = 8;
 
 const HEADER_BYTES: usize = 20;
 const SECTION_ENTRY_BYTES: usize = 12;
@@ -48,6 +49,7 @@ pub struct ImageWriter {
     expressions: Vec<Vec<u8>>,
     handlers: Vec<Vec<u8>>,
     widgets: Vec<Vec<u8>>,
+    initial_values: Vec<Vec<u8>>,
 }
 
 impl ImageWriter {
@@ -62,6 +64,7 @@ impl ImageWriter {
             expressions: Vec::new(),
             handlers: Vec::new(),
             widgets: Vec::new(),
+            initial_values: Vec::new(),
         };
         writer.id_string = writer.string(id);
         writer.name_string = writer.string(name);
@@ -93,6 +96,29 @@ impl ImageWriter {
         default_value: i64,
     ) -> u8 {
         self.add_variable(key, value_type, persists, length, element_bytes, default_value)
+    }
+
+    /// Adds an array whose elements start with the given values, each stored in `element_bytes`.
+    ///
+    /// Returns `None` if a value does not fit that width.
+    pub fn array_with_values(
+        &mut self,
+        key: &str,
+        value_type: ValueType,
+        persists: bool,
+        element_bytes: u8,
+        values: &[i64],
+    ) -> Option<u8> {
+        let mut entry: Vec<u8> = Vec::new();
+        let variable = self.add_variable(key, value_type, persists, values.len() as u16, element_bytes, 0);
+        entry.push(variable);
+        for &value in values {
+            let mut element = [0u8; 8];
+            crate::state::write_packed(&mut element[..element_bytes as usize], value)?;
+            entry.extend_from_slice(&element[..element_bytes as usize]);
+        }
+        self.initial_values.push(entry);
+        Some(variable)
     }
 
     fn add_variable(
@@ -174,6 +200,11 @@ impl ImageWriter {
                 WIDGETS_SECTION,
                 self.widgets.len() as u16,
                 entry_table(&self.widgets),
+            ),
+            (
+                INITIAL_VALUES_SECTION,
+                self.initial_values.len() as u16,
+                entry_table(&self.initial_values),
             ),
         ];
 

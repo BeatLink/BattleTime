@@ -43,6 +43,8 @@ pub enum SectionKind {
     Widgets,
     Subscriptions,
     Resources,
+    /// The starting elements of arrays whose elements do not all start the same.
+    InitialValues,
 }
 
 impl SectionKind {
@@ -56,6 +58,7 @@ impl SectionKind {
             5 => Widgets,
             6 => Subscriptions,
             7 => Resources,
+            8 => InitialValues,
             _ => return None,
         })
     }
@@ -144,6 +147,7 @@ pub enum ImageError {
     UnknownValueType(u8),
     TooManyStateVariables,
     StateTooLarge,
+    BadInitialValues(u16),
     BadDefaultValue(u8),
     BadCode {
         block: CodeBlock,
@@ -279,6 +283,7 @@ pub struct AppImage<'image> {
     expressions: EntryTable<'image>,
     handlers: EntryTable<'image>,
     widgets: EntryTable<'image>,
+    initial_values: EntryTable<'image>,
 }
 
 impl<'image> AppImage<'image> {
@@ -320,6 +325,7 @@ impl<'image> AppImage<'image> {
             expressions: EntryTable::default(),
             handlers: EntryTable::default(),
             widgets: EntryTable::default(),
+            initial_values: EntryTable::default(),
         };
 
         let mut seen_sections = 0u32;
@@ -346,6 +352,7 @@ impl<'image> AppImage<'image> {
                 SectionKind::Expressions => image.expressions = EntryTable::parse(count, section_bytes)?,
                 SectionKind::Handlers => image.handlers = EntryTable::parse(count, section_bytes)?,
                 SectionKind::Widgets => image.widgets = EntryTable::parse(count, section_bytes)?,
+                SectionKind::InitialValues => image.initial_values = EntryTable::parse(count, section_bytes)?,
                 SectionKind::Subscriptions | SectionKind::Resources => {}
             }
         }
@@ -358,6 +365,9 @@ impl<'image> AppImage<'image> {
         }
         for index in 0..image.state_count {
             image.check_state_variable(index)?;
+        }
+        for index in 0..image.initial_values.count {
+            image.check_initial_values(index)?;
         }
         let state_bytes: usize = (0..image.state_count)
             .filter_map(|index| image.state_variable(index))
@@ -395,16 +405,21 @@ impl<'image> AppImage<'image> {
             .ok_or(ImageError::BadString(variable.key_string))?;
 
         let value = variable.default_value;
-        let default_is_valid = match variable.value_type {
-            ValueType::Bool => value == 0 || value == 1,
-            ValueType::Color => ColorValue::from_value(value).is_some(),
-            ValueType::Text => (0..self.strings.count as i64).contains(&value),
-            ValueType::Int | ValueType::Instant | ValueType::Duration => true,
-        } && variable.fits(value);
+        let default_is_valid = self.value_fits_type(variable.value_type, value) && variable.fits(value);
         if !default_is_valid {
             return Err(ImageError::BadDefaultValue(index as u8));
         }
         Ok(())
+    }
+
+    /// Whether a value is valid for its type, such as a flag being 0 or 1.
+    fn value_fits_type(&self, value_type: ValueType, value: i64) -> bool {
+        match value_type {
+            ValueType::Bool => value == 0 || value == 1,
+            ValueType::Color => ColorValue::from_value(value).is_some(),
+            ValueType::Text => (0..self.strings.count as i64).contains(&value),
+            ValueType::Int | ValueType::Instant | ValueType::Duration => true,
+        }
     }
 
     pub fn string(&self, index: u16) -> Option<&'image str> {
@@ -464,5 +479,32 @@ impl<'image> AppImage<'image> {
 
     pub fn widget_bytes(&self, index: u16) -> Option<&'image [u8]> {
         self.widgets.get(index)
+    }
+
+    pub fn initial_values_count(&self) -> u16 {
+        self.initial_values.count
+    }
+
+    /// One array's starting elements: the array's number, and its bytes as they are stored in RAM.
+    pub fn initial_values(&self, index: u16) -> Option<(u8, &'image [u8])> {
+        let entry = self.initial_values.get(index)?;
+        Some((*entry.first()?, &entry[1..]))
+    }
+
+    fn check_initial_values(&self, index: u16) -> Result<(), ImageError> {
+        let (variable_number, bytes) = self
+            .initial_values(index)
+            .ok_or(ImageError::BadInitialValues(index))?;
+        let variable = self
+            .state_variable(variable_number as u16)
+            .filter(|variable| variable.is_array() && variable.stored_bytes() == bytes.len())
+            .ok_or(ImageError::BadInitialValues(index))?;
+        for element in bytes.chunks(variable.element_bytes as usize) {
+            let value = crate::state::read_packed(element).ok_or(ImageError::BadInitialValues(index))?;
+            if !self.value_fits_type(variable.value_type, value) {
+                return Err(ImageError::BadInitialValues(index));
+            }
+        }
+        Ok(())
     }
 }

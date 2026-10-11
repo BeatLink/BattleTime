@@ -2007,7 +2007,7 @@ fn event_fields_are_in_their_agreed_places() {
     assert_eq!(EventKind::Drag.field_index("start_y"), Some(3));
     assert_eq!(EventKind::Click.field_index("y"), Some(1));
     assert_eq!(EventKind::Change.field_index("value"), Some(0));
-    assert_eq!(EventKind::Click.field_index("value"), None);
+    assert_eq!(EventKind::Change.field_index("x"), None);
     assert_eq!(EventKind::for_property(Property::Text), None);
 }
 
@@ -2189,6 +2189,109 @@ fn every_system_value_has_a_bit_in_the_mask_and_related_values_share_one() {
         SystemValue::NavigationInstruction.bit()
     );
     assert_ne!(SystemValue::MusicTrack.bit(), SystemValue::BatteryPercent.bit());
+}
+
+// ============================================================================
+// Boards, cell grids and starting values
+// ============================================================================
+
+#[test]
+fn an_array_can_start_with_different_values() {
+    let mut writer = ImageWriter::new("puzzle", "Puzzle", AppKind::App, 1);
+    let tiles = writer
+        .array_with_values("tiles", ValueType::Int, false, 1, &[1, 2, 3, 0, -4])
+        .unwrap();
+    let bytes = writer.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(verify(&image), Ok(()));
+    assert_eq!(state.element(tiles, 1), Some(2));
+    assert_eq!(state.element(tiles, 4), Some(-4));
+    assert!(writer
+        .array_with_values("too_wide", ValueType::Int, false, 1, &[300])
+        .is_none());
+}
+
+#[test]
+fn refuses_starting_values_that_do_not_fit_their_type() {
+    let mut writer = ImageWriter::new("flags", "Flags", AppKind::App, 1);
+    writer
+        .array_with_values("flags", ValueType::Bool, false, 1, &[0, 1, 2])
+        .unwrap();
+
+    assert_eq!(
+        AppImage::parse(&writer.build()).err(),
+        Some(ImageError::BadInitialValues(0))
+    );
+}
+
+#[test]
+fn a_cell_grid_names_its_arrays_and_takes_touches() {
+    let mut writer = ImageWriter::new("life", "Life", AppKind::App, 1);
+    let cells = writer.array("cells", ValueType::Int, false, 256, 1, 0);
+    let palette = writer
+        .array_with_values("palette", ValueType::Color, false, 4, &[0, 0xFFFF])
+        .unwrap();
+    let toggle = writer.handler(Vec::new());
+    writer.widget(WidgetKind::Column, 1, &[(Property::OnDrag, Handler(toggle))]);
+    writer.widget(
+        WidgetKind::CellGrid,
+        0,
+        &[
+            (Property::Columns, Constant(16)),
+            (Property::Rows, Constant(16)),
+            (Property::Cells, Constant(cells as i32)),
+            (Property::Palette, Constant(palette as i32)),
+            (Property::OnClick, Handler(toggle)),
+        ],
+    );
+    let bytes = writer.build();
+
+    assert_eq!(verify(&AppImage::parse(&bytes).unwrap()), Ok(()));
+    assert_eq!(EventKind::Click.field_index("value"), Some(2));
+}
+
+#[test]
+fn an_array_property_must_name_an_array_directly() {
+    let mut not_an_array = ImageWriter::new("grid", "Grid", AppKind::App, 1);
+    let count = not_an_array.variable("count", ValueType::Int, false, 0);
+    not_an_array.widget(
+        WidgetKind::CellGrid,
+        0,
+        &[(Property::Cells, Constant(count as i32))],
+    );
+    let mut through_expression = ImageWriter::new("grid", "Grid", AppKind::App, 1);
+    through_expression.array("cells", ValueType::Int, false, 4, 1, 0);
+    let expression = through_expression.expression(Code::new().small(0).bytes);
+    through_expression.widget(
+        WidgetKind::CellGrid,
+        0,
+        &[(Property::Cells, Expression(expression))],
+    );
+
+    let problem = |writer: &ImageWriter| match verify(&AppImage::parse(&writer.build()).unwrap()) {
+        Err(ImageError::BadWidget { problem, .. }) => Some(problem),
+        _ => None,
+    };
+    assert_eq!(problem(&not_an_array), Some(WidgetProblem::BadConstant));
+    assert_eq!(
+        problem(&through_expression),
+        Some(WidgetProblem::ArrayNotConstant)
+    );
+}
+
+#[test]
+fn arcs_and_click_areas_can_hold_widgets() {
+    let mut writer = ImageWriter::new("timer", "Timer", AppKind::App, 1);
+    let arc = writer.widget(WidgetKind::Arc, 0, &[]);
+    writer.widget(WidgetKind::Label, 0, &[]);
+    writer.set_child_count(arc, 1);
+    let area = writer.widget(WidgetKind::ClickArea, 0, &[]);
+    writer.widget(WidgetKind::Label, 0, &[]);
+    writer.set_child_count(area, 1);
+
+    assert_eq!(verify(&AppImage::parse(&writer.build()).unwrap()), Ok(()));
 }
 
 // ============================================================================

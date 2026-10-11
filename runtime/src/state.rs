@@ -104,6 +104,18 @@ impl AppState {
                 .fill(index as u8, variable.default_value)
                 .ok_or(ImageError::BadDefaultValue(index as u8))?;
         }
+        for index in 0..image.initial_values_count() {
+            let (variable, bytes) = image
+                .initial_values(index)
+                .ok_or(ImageError::BadInitialValues(index))?;
+            let stored = state
+                .variable_bytes_mut(variable)
+                .ok_or(ImageError::BadInitialValues(index))?;
+            if stored.len() != bytes.len() {
+                return Err(ImageError::BadInitialValues(index));
+            }
+            stored.copy_from_slice(bytes);
+        }
         Ok(state)
     }
 

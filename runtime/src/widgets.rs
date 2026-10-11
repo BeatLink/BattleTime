@@ -64,10 +64,12 @@ pub enum WidgetKind {
     ButtonMatrix,
     TextArea,
     Keyboard,
+    /// A board of coloured cells drawn from one array, such as Life or Snake.
+    CellGrid,
 }
 
 impl WidgetKind {
-    const ALL: [WidgetKind; 37] = {
+    const ALL: [WidgetKind; 38] = {
         use WidgetKind::*;
         [
             Column,
@@ -107,6 +109,7 @@ impl WidgetKind {
             ButtonMatrix,
             TextArea,
             Keyboard,
+            CellGrid,
         ]
     };
 
@@ -119,7 +122,7 @@ impl WidgetKind {
         use WidgetKind::*;
         matches!(
             self,
-            Column | Row | Grid | Stack | Scroll | List | Pages | Tabs | Button
+            Column | Row | Grid | Stack | Scroll | List | Pages | Tabs | Button | Arc | ClickArea
         )
     }
 }
@@ -136,6 +139,8 @@ pub enum PropertyValue {
     Color,
     Text,
     Event,
+    /// The number of a state array, given as a constant.
+    Array,
 }
 
 /// Every property a widget can have, in the order their id byte numbers them.
@@ -187,10 +192,46 @@ pub enum Property {
     OnScrollEnd,
     OnShow,
     OnHide,
+    // Added after the events, so earlier numbers stay the same.
+    Opacity,
+    Disabled,
+    Gap,
+    Justify,
+    AlignItems,
+    Columns,
+    Rows,
+    CellSize,
+    CellGap,
+    CellShape,
+    /// The state array holding a CellGrid's cells.
+    Cells,
+    /// The state array holding a CellGrid's colours.
+    Palette,
+    /// The state array of text a Roller, Dropdown or ButtonMatrix offers.
+    Options,
+    /// The state array of x, y pairs a Line joins.
+    Points,
+    /// The state array of values a Chart draws.
+    Series,
+    Ticks,
+    MajorEvery,
+    /// The state array of text a Scale writes at its major ticks.
+    Labels,
+    /// The state array of tick numbers a Scale leaves out.
+    Skip,
+    NeedleColor,
+    HourColor,
+    MinuteColor,
+    SecondColor,
+    HourLength,
+    MinuteLength,
+    SecondLength,
+    HandStyle,
+    Recolor,
 }
 
 impl Property {
-    const ALL: [Property; 42] = {
+    const ALL: [Property; 70] = {
         use Property::*;
         [
             X,
@@ -235,6 +276,34 @@ impl Property {
             OnScrollEnd,
             OnShow,
             OnHide,
+            Opacity,
+            Disabled,
+            Gap,
+            Justify,
+            AlignItems,
+            Columns,
+            Rows,
+            CellSize,
+            CellGap,
+            CellShape,
+            Cells,
+            Palette,
+            Options,
+            Points,
+            Series,
+            Ticks,
+            MajorEvery,
+            Labels,
+            Skip,
+            NeedleColor,
+            HourColor,
+            MinuteColor,
+            SecondColor,
+            HourLength,
+            MinuteLength,
+            SecondLength,
+            HandStyle,
+            Recolor,
         ]
     };
 
@@ -246,7 +315,9 @@ impl Property {
         use Property::*;
         match self {
             Visible | ShowSeconds => PropertyValue::Bool,
-            Background | Color | BorderColor => PropertyValue::Color,
+            Background | Color | BorderColor | NeedleColor | HourColor | MinuteColor | SecondColor
+            | Recolor => PropertyValue::Color,
+            Cells | Palette | Options | Points | Series | Labels | Skip => PropertyValue::Array,
             Text | ScreenName => PropertyValue::Text,
             OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease | OnDrag | OnSwipe | OnButton
             | OnChange | OnPageChange | OnScrollEnd | OnShow | OnHide => PropertyValue::Event,
@@ -319,8 +390,23 @@ impl Property {
             Time | ShowSeconds => kind == Kind::AnalogClock,
             StartAngle | EndAngle => matches!(kind, Kind::Arc | Kind::ArcLabel | Kind::Scale),
             LongMode => kind == Kind::Label,
-            OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease => is_input || kind.holds_children(),
-            OnDrag => matches!(kind, Kind::Slider | Kind::ClickArea | Kind::Arc),
+            Opacity => true,
+            Disabled => is_input,
+            Gap | Justify | AlignItems => kind.holds_children(),
+            Columns => matches!(kind, Kind::Grid | Kind::ButtonMatrix | Kind::CellGrid),
+            Rows | CellSize | CellGap | CellShape | Cells | Palette => kind == Kind::CellGrid,
+            Options => matches!(kind, Kind::Roller | Kind::Dropdown | Kind::ButtonMatrix),
+            Points => kind == Kind::Line,
+            Series => kind == Kind::Chart,
+            Ticks | MajorEvery | Labels | Skip | NeedleColor => kind == Kind::Scale,
+            HourColor | MinuteColor | SecondColor | HourLength | MinuteLength | SecondLength | HandStyle => {
+                kind == Kind::AnalogClock
+            }
+            Recolor => matches!(kind, Kind::Image | Kind::Icon),
+            OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease => {
+                is_input || kind.holds_children() || kind == Kind::CellGrid
+            }
+            OnDrag => matches!(kind, Kind::Slider | Kind::Arc | Kind::CellGrid) || kind.holds_children(),
             OnChange => is_input || kind == Kind::Arc,
             OnPageChange => matches!(kind, Kind::Pages | Kind::Tabs),
             OnScrollEnd => matches!(kind, Kind::Scroll | Kind::List),
@@ -496,6 +582,7 @@ pub enum WidgetProblem {
     HandlerOnNonEvent,
     EventWithoutHandler,
     BadConstant,
+    ArrayNotConstant,
 }
 
 /// Checks that the widgets form whole trees and every property fits its widget.
@@ -540,11 +627,11 @@ pub fn verify_widgets(image: &AppImage) -> Result<(), ImageError> {
 }
 
 fn check_properties(image: &AppImage, widget: &Widget, is_root: bool) -> Result<(), WidgetProblem> {
-    let mut seen = 0u64;
+    let mut seen = 0u128;
     for entry in widget.properties() {
         let entry = entry.ok_or(WidgetProblem::UnknownProperty)?;
         let property = entry.property;
-        let bit = 1u64 << (property as u8);
+        let bit = 1u128 << (property as u8);
         if seen & bit != 0 {
             return Err(WidgetProblem::RepeatedProperty);
         }
@@ -565,6 +652,9 @@ fn check_properties(image: &AppImage, widget: &Widget, is_root: bool) -> Result<
             }
             PropertySource::Handler(_) => {}
             _ if is_event => return Err(WidgetProblem::EventWithoutHandler),
+            PropertySource::Expression(_) if property.value() == PropertyValue::Array => {
+                return Err(WidgetProblem::ArrayNotConstant)
+            }
             PropertySource::Expression(expression) if expression >= image.expression_count() => {
                 return Err(WidgetProblem::ExpressionOutOfRange)
             }
@@ -586,5 +676,9 @@ fn constant_fits(image: &AppImage, value_kind: PropertyValue, value: i32) -> boo
         PropertyValue::Bool => value == 0 || value == 1,
         PropertyValue::Color => ColorValue::from_value(value as i64).is_some(),
         PropertyValue::Text => as_string().is_some(),
+        PropertyValue::Array => u16::try_from(value)
+            .ok()
+            .and_then(|variable| image.state_variable(variable))
+            .is_some_and(|variable| variable.is_array()),
     }
 }
