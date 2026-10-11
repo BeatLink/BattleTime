@@ -9,9 +9,10 @@ import { encodeSetTime } from './clock';
 import { deleteFile, listDirectory, readFile, readMemory } from './files';
 import { decodeWatchLine, encodeForWatch, type PhoneToWatchMessage } from './gadgetbridge';
 import type { PackageReply } from './packages';
-import { readAlarms, readWatchSettings, ReplyRouter, writeAlarms, writeWatchSettings } from './requests';
+import { readAlarms, readStatus, readWatchSettings, ReplyRouter, writeAlarms, writeWatchSettings } from './requests';
 import { hourlySteps, readStepHistory } from './steps';
-import { DEFAULT_THEME, hexToRgb565, rgb565ToHex, themeBytes, themeColours } from './theme';
+import { applyPreset, DEFAULT_THEME, hexToRgb565, rgb565ToHex, THEME_PRESETS, themeBytes, themeColours } from './theme';
+import { facePreview } from '@/constants/face-previews';
 import type { PackageChannel } from './transfer';
 
 // The mock package manager behind the same channel the app uses.
@@ -154,5 +155,30 @@ describe('ascii lines', () => {
     expect(/^[\x20-\x7e]*\r\n$/.test(line)).toBe(true);
     expect(line).toContain('32\\u00b0C caf\\u00e9 \\ud83d\\ude00');
     expect(JSON.parse(line.slice(3, -3)).title).toBe('32\u00b0C caf\u00e9 \u{1f600}');
+  });
+});
+
+describe('status', () => {
+  it('reads the battery and step count', async () => {
+    const reply = await readStatus(requestChannel());
+    expect(reply).toEqual({ t: 'status', battery: 76, mv: 3912, charging: false, steps: 4321 });
+  });
+});
+
+describe('theme presets', () => {
+  it('leaves the default theme unchanged and only touches the accent slots', () => {
+    const colours = themeColours(DEFAULT_THEME);
+    const byName = Object.fromEntries(THEME_PRESETS.map((preset) => [preset.name, preset]));
+    expect(applyPreset(colours, byName.Default)).toEqual(colours);
+    const forest = applyPreset(colours, byName.Forest);
+    expect(forest.slice(0, 7)).toEqual(colours.slice(0, 7));
+    expect(forest[7]).toBe(hexToRgb565('#2fbf71'));
+  });
+});
+
+describe('face previews', () => {
+  it('finds a built-in face by the class at the end of its path', () => {
+    expect(facePreview('apps.user.clock.ClockApp')).toBeDefined();
+    expect(facePreview('pkg.someface.app.SomeFaceApp')).toBeUndefined();
   });
 });

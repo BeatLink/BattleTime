@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -9,6 +10,20 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
+import { phoneBridge } from '@/services/phone';
+
+// How long ago a moment was, in the coarse words a status line needs.
+function ago(at: number, now: number): string {
+  const minutes = Math.floor((now - at) / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  return hours < 24 ? `${hours} h ago` : new Date(at).toLocaleString();
+}
+
+function duration(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+}
 
 const stateLabel = {
   disconnected: 'Not connected',
@@ -32,7 +47,17 @@ export default function WatchScreen() {
     disconnect,
     send,
     sendWeather,
+    status,
+    lastSynced,
+    refreshStatus,
+    nowPlaying,
   } = useWatch();
+  // A clock for the "last synced" line, moved on twice a minute.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const connected = connection === 'connected';
   const inBootloader = connected && watchMode === 'bootloader';
@@ -95,6 +120,52 @@ export default function WatchScreen() {
           <ThemedText type="smallBold" style={{ color: theme.accent }}>
             The watch is looking for this phone.
           </ThemedText>
+        </Card>
+      ) : null}
+
+      {watchReady ? (
+        <Card title="Status">
+          <Row
+            label={status ? `Battery ${status.battery}%${status.charging ? ', charging' : ''}` : 'Battery'}
+            detail={status ? `${(status.mv / 1000).toFixed(2)} V` : 'Not read yet'}
+          />
+          <Row
+            label={status?.steps != null ? `${status.steps.toLocaleString()} steps today` : 'Steps today'}
+            detail={status && status.steps == null ? 'This watch has no step counter' : 'As the step counter has it now'}
+            onPress={() => router.push('/steps')}
+          />
+          <Row
+            label="Last synced"
+            detail={lastSynced ? ago(lastSynced, now) : 'Not yet'}
+            onPress={() => void refreshStatus().catch(() => {})}
+            right={
+              <ThemedText type="smallBold" style={{ color: theme.accent }}>
+                Sync now
+              </ThemedText>
+            }
+          />
+        </Card>
+      ) : null}
+
+      {nowPlaying && (nowPlaying.track || nowPlaying.artist) ? (
+        <Card title="Now playing">
+          <Row
+            label={nowPlaying.track ?? 'Unknown track'}
+            detail={[nowPlaying.artist, nowPlaying.album, nowPlaying.durationSec ? duration(nowPlaying.durationSec) : null]
+              .filter(Boolean)
+              .join(' · ')}
+          />
+          {phoneBridge.available ? (
+            <View style={styles.media}>
+              <Button title="Previous" variant="secondary" style={styles.mediaButton} onPress={() => void phoneBridge.mediaCommand('previous')} />
+              <Button
+                title={nowPlaying.playing ? 'Pause' : 'Play'}
+                style={styles.mediaButton}
+                onPress={() => void phoneBridge.mediaCommand(nowPlaying.playing ? 'pause' : 'play')}
+              />
+              <Button title="Next" variant="secondary" style={styles.mediaButton} onPress={() => void phoneBridge.mediaCommand('next')} />
+            </View>
+          ) : null}
         </Card>
       ) : null}
 
@@ -167,5 +238,13 @@ const styles = StyleSheet.create({
   actions: {
     gap: Spacing.two,
     marginTop: Spacing.two,
+  },
+  media: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  mediaButton: {
+    flex: 1,
+    paddingHorizontal: Spacing.two,
   },
 });

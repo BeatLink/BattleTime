@@ -30,6 +30,23 @@ describe('http proxy', () => {
     expect(isHostAllowed('other.org', allowed)).toBe(false);
   });
 
+  it('passes the method and body on, and leaves the body off a GET', async () => {
+    const calls: { method?: string; body?: unknown }[] = [];
+    const fetcher = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ method: init?.method, body: init?.body });
+      return new Response('ok');
+    }) as typeof fetch;
+    const allowed = ['example.com'];
+    await answerHttpRequest({ t: 'http', id: '1', url: 'https://example.com/', method: 'post', body: 'x=1' }, allowed, fetcher);
+    await answerHttpRequest({ t: 'http', id: '2', url: 'https://example.com/', body: 'ignored' }, allowed, fetcher);
+    const odd = await answerHttpRequest({ t: 'http', id: '3', url: 'https://example.com/', method: 'TRACE' }, allowed, fetcher);
+    expect(calls).toEqual([
+      { method: 'POST', body: 'x=1' },
+      { method: 'GET', body: undefined },
+    ]);
+    expect(odd.err).toBe('TRACE is not supported');
+  });
+
   it('answers with the page, cut short, or with an error', async () => {
     const fetcher = fakeFetch({ 'https://example.com/': 'x'.repeat(5000) });
     const ok = await answerHttpRequest({ t: 'http', id: '1', url: 'https://example.com/a' }, ['example.com'], fetcher);

@@ -3,6 +3,7 @@
 // firmware sends.
 
 import type { Alarm, SettingsReply, WatchSettingValues } from '@/protocol/gadgetbridge';
+import { DEFAULT_THEME } from '@/protocol/theme';
 
 const FACES: [string, string][] = [
   ['faces.clock.ClockApp', 'Clock'],
@@ -28,7 +29,7 @@ export class MockGadgetbridge {
     clock_24h: true,
     step_goal: 10000,
     launcher_style: 'Grid',
-    theme: [0x7b, 0xef, 0x7b, 0xef],
+    theme: [...DEFAULT_THEME],
     face: FACES[0][0],
   };
   private alarms: Required<Alarm>[] = [{ h: 7, m: 30, on: true, rep: 31 }];
@@ -63,6 +64,8 @@ export class MockGadgetbridge {
         const v = day % 5 === 0 ? null : sampleDay(day);
         return [JSON.stringify({ t: 'steps', y: message.y, m: message.m, d: message.d, v, now: 4321 })];
       }
+      case 'status':
+        return [JSON.stringify({ t: 'status', battery: 76, mv: 3912, charging: false, steps: 4321 })];
       default:
         // Messages the watch does not answer fall through to the transport's echo.
         return null;

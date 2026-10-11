@@ -1,5 +1,5 @@
 // Copies the watch's own data off it and back again: settings, alarms, app
-// settings and, if asked, the step logs. Firmware and app code are not
+// settings, game high scores and, if asked, the step logs. Firmware and app code are not
 // included, since both can be installed again.
 
 import { base64ToBytes, bytesToBase64 } from '@/ble/encoding';
@@ -17,7 +17,7 @@ export type Backup = {
 };
 
 // Files at the top of the flash that hold what the user set up on the watch.
-const TOP_LEVEL = ['settings.json', 'alarms.txt', 'Morse.txt'];
+const TOP_LEVEL = ['settings.json', 'alarms.txt', 'Morse.txt', 'snake.txt'];
 
 async function listOrEmpty(channel: PackageChannel, dir: string): Promise<WatchFile[]> {
   try {

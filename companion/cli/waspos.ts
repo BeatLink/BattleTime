@@ -9,7 +9,7 @@ import { apps, appsUsage } from './commands/apps';
 import { flash, flashUsage } from './commands/flash';
 import { scan, scanUsage } from './commands/scan';
 import { diag, repl, reset, send, sendUsage } from './commands/send';
-import { alarms, backup, files, listen, restore, settings, setTime, steps, watchUsage, weather } from './commands/watch';
+import { alarms, backup, files, listen, restore, settings, setTime, status, steps, watchUsage, weather } from './commands/watch';
 import { say, warn } from './output';
 import { resolveAddress } from './target';
 
@@ -94,6 +94,7 @@ const NEEDS_WATCH = new Set([
   'repl',
   'diag',
   'reset',
+  'status',
   'time',
   'settings',
   'alarms',
@@ -201,6 +202,10 @@ async function main(argv: string[]): Promise<number> {
 
       case 'reset':
         await reset(session, options.ota);
+        break;
+
+      case 'status':
+        await status(session);
         break;
 
       case 'time':

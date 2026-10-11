@@ -7,9 +7,10 @@ the same Gadgetbridge-style JSON messages the firmware already understands.
 ## Status
 
 Early. The app scans for a watch, connects, installs app packages and flashes firmware, from a
-file or from a GitHub build. It reads the step history, edits alarms and the watch's own settings,
-browses and backs up the watch's files, pushes the weather, and fetches pages for watch apps from
-hosts the user allows. On Android it forwards notifications, calls and now playing, and obeys Do
+file or from a GitHub build. It shows the battery, today's steps and what the phone is playing,
+reads the step history, edits alarms and the watch's own settings (faces with previews, theme
+presets), browses and backs up the watch's files, pushes the weather, and makes web requests for
+watch apps, any method, to hosts the user allows. On Android it forwards notifications, calls and now playing, and obeys Do
 Not Disturb. The Android bridge has not been compiled yet; see
 [src/services/phone/README.md](src/services/phone/README.md).
 
@@ -53,6 +54,7 @@ npm run waspos -- notify "Build finished" "All tests passed"
 npm run waspos -- repl "wasp.system.brightness"
 npm run waspos -- diag
 npm run waspos -- reset --ota
+npm run waspos -- status
 npm run waspos -- steps
 npm run waspos -- settings brightness=3
 npm run waspos -- alarms 07:30/12345 09:00/67/off
@@ -191,9 +193,11 @@ The watch replies with one JSON object per line, for example `{"t":"music","n":"
 `{"t":"findPhone","n":"true"}`. The full list of supported messages is in
 [src/protocol/gadgetbridge.ts](src/protocol/gadgetbridge.ts).
 
-Three messages are answered: `settings`, `alarm` and `steps` each come back with a reply of the
-same name, which [src/protocol/requests.ts](src/protocol/requests.ts) matches to the request
-waiting for it. A watch app asks for a page with `{"t":"http","url":..,"id":..}` and gets
+Four messages are answered: `settings`, `alarm`, `steps` and `status` (the battery and the live
+step count) each come back with a reply of the same name, which
+[src/protocol/requests.ts](src/protocol/requests.ts) matches to the request waiting for it. A
+watch app asks for a page with `{"t":"http","url":..,"id":..}`, adding `method` and `body` for
+anything but a GET, and gets
 `GB({"t":"http","id":..,"resp":..})` back, cut to 1024 characters, but only from the hosts listed
 in Settings. Files move through the package manager: `pkg.ls_dir`, `pkg.send`, `pkg.rm_file` and
 `pkg.mem` beside the existing `pkg.recv`.

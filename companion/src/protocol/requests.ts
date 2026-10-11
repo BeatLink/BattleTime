@@ -1,4 +1,4 @@
-// Gadgetbridge messages that the watch answers: settings, alarms and step history.
+// Gadgetbridge messages that the watch answers: settings, alarms, step history and status.
 // The watch side lives in wasp/gadgetbridge.py; keep the two in step.
 
 import type {
@@ -6,13 +6,14 @@ import type {
   AlarmReply,
   PhoneToWatchMessage,
   SettingsReply,
+  StatusReply,
   StepsReply,
   WatchSettingValues,
   WatchToPhoneMessage,
 } from './gadgetbridge';
 
 // Message types that come back as the answer to a request.
-export type ReplyType = 'settings' | 'alarm' | 'steps';
+export type ReplyType = 'settings' | 'alarm' | 'steps' | 'status';
 
 type ReplyOf<T extends ReplyType> = Extract<WatchToPhoneMessage, { t: T }>;
 
@@ -156,4 +157,8 @@ export async function readSteps(channel: RequestChannel, day: Date): Promise<Ste
     { t: 'steps', y: day.getFullYear(), m: day.getMonth() + 1, d: day.getDate() },
     'steps',
   );
+}
+
+export async function readStatus(channel: RequestChannel): Promise<StatusReply> {
+  return channel.request({ t: 'status' }, 'status');
 }

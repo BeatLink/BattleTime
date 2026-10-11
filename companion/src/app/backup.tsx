@@ -58,8 +58,8 @@ export default function BackupScreen() {
     <Screen title="Backup">
       <Card>
         <ThemedText type="small" themeColor="textSecondary">
-          A backup holds the watch&apos;s settings, alarms and app settings, and its step logs if you
-          include them. Firmware and apps are not included, since they can be installed again.
+          A backup holds the watch&apos;s settings, alarms, app settings and Snake high score, and its
+          step logs if you include them. Firmware and apps are not included, since they can be installed again.
         </ThemedText>
       </Card>
 

@@ -44,6 +44,8 @@ export type SettingsMessage = { t: 'settings' } & Partial<WatchSettingValues>;
 
 export type StepsRequestMessage = { t: 'steps'; y: number; m: number; d: number };
 
+export type StatusRequestMessage = { t: 'status' };
+
 // The answer to a watch app's http request, matched by id.
 export type HttpResponseMessage = { t: 'http'; id: string; resp?: string; err?: string };
 
@@ -94,6 +96,7 @@ export type PhoneToWatchMessage =
   | CallMessage
   | SettingsMessage
   | StepsRequestMessage
+  | StatusRequestMessage
   | HttpResponseMessage;
 
 export type MusicControlMessage = {
@@ -121,11 +124,20 @@ export type StepsReply = {
   now: number;
 };
 
+// The battery level in percent and millivolts, and today's step count, null without a step counter.
+export type StatusReply = {
+  t: 'status';
+  battery: number;
+  mv: number;
+  charging: boolean;
+  steps: number | null;
+};
+
 // The watch's answer to an incoming call: pick up, hang up, or only stop buzzing.
 export type CallControlMessage = { t: 'call'; n: 'ACCEPT' | 'REJECT' | 'IGNORE' };
 
-// A watch app asking the phone to fetch a URL for it.
-export type HttpRequestMessage = { t: 'http'; url: string; id: string };
+// A watch app asking the phone to fetch a URL for it; a plain GET carries no method or body.
+export type HttpRequestMessage = { t: 'http'; url: string; id: string; method?: string; body?: string };
 
 // Everything the watch can send to the phone.
 export type WatchToPhoneMessage =
@@ -136,6 +148,7 @@ export type WatchToPhoneMessage =
   | SettingsReply
   | AlarmReply
   | StepsReply
+  | StatusReply
   | CallControlMessage
   | HttpRequestMessage;
 

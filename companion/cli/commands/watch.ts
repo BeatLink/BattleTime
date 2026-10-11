@@ -9,7 +9,7 @@ import { createBackup, parseBackup, restoreBackup } from '@/protocol/backup';
 import { deleteFile, listDirectory, readFile, readMemory } from '@/protocol/files';
 import { encodeSetTime } from '@/protocol/clock';
 import { encodeForWatch, decodeWatchLine } from '@/protocol/gadgetbridge';
-import { readAlarms, readWatchSettings, writeAlarms, writeWatchSettings } from '@/protocol/requests';
+import { readAlarms, readStatus, readWatchSettings, writeAlarms, writeWatchSettings } from '@/protocol/requests';
 import { readStepHistory } from '@/protocol/steps';
 import { readAbi, sendFile } from '@/protocol/transfer';
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
@@ -18,7 +18,8 @@ import { currentWeather, findPlace } from '@/services/weather';
 import type { WatchSession } from '../ble';
 import { ProgressBar, say } from '../output';
 
-export const watchUsage = `waspos time
+export const watchUsage = `waspos status
+waspos time
 waspos settings [key=value ...]
 waspos alarms [HH:MM[/days][/off] ...|none]
 waspos steps [days]
@@ -28,7 +29,7 @@ waspos backup <file> [--logs]
 waspos restore <file>
 waspos listen [python] [--allow <hosts>] [--wait <seconds>]
 
-  time sets the watch clock from this computer's. settings with no arguments prints them; brightness=3 face=<path> and the
+  status prints the battery and today's steps. time sets the watch clock from this computer's. settings with no arguments prints them; brightness=3 face=<path> and the
   like change them. alarms with no arguments lists them, otherwise replaces
   them all: 07:30/12345 rings on weekdays (1 is Monday), 06:00/67/off is a
   weekend alarm turned off, and a bare time rings once. listen stays
@@ -59,6 +60,12 @@ function parseSetting(arg: string): Partial<WatchSettingValues> {
     value = JSON.parse(raw);
   }
   return { [key]: value } as Partial<WatchSettingValues>;
+}
+
+export async function status(session: WatchSession) {
+  const reply = await readStatus(session.requests);
+  say(`Battery ${reply.battery}% (${(reply.mv / 1000).toFixed(2)} V)${reply.charging ? ', charging' : ''}`);
+  say(reply.steps === null ? 'No step counter.' : `${reply.steps} steps today.`);
 }
 
 export async function setTime(session: WatchSession) {

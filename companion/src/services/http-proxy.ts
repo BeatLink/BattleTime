@@ -5,6 +5,8 @@ import type { HttpRequestMessage, HttpResponseMessage } from '@/protocol/gadgetb
 // Longest answer sent back, since the watch has only a few kilobytes of heap.
 export const MAX_RESPONSE = 1024;
 
+export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+
 type Fetch = typeof fetch;
 
 // A host is allowed when it, or a domain it belongs to, is on the list.
@@ -40,8 +42,14 @@ export async function answerHttpRequest(
   if (!isHostAllowed(url.hostname, allowed)) {
     return { t: 'http', id: request.id, err: `${url.hostname} is not allowed` };
   }
+  const method = (request.method ?? 'GET').toUpperCase();
+  if (!HTTP_METHODS.includes(method)) {
+    return { t: 'http', id: request.id, err: `${method} is not supported` };
+  }
+  // GET and HEAD carry no body.
+  const body = method === 'GET' || method === 'HEAD' ? undefined : request.body;
   try {
-    const response = await fetcher(url.toString());
+    const response = await fetcher(url.toString(), { method, body });
     if (!response.ok) {
       return { t: 'http', id: request.id, err: `HTTP ${response.status}` };
     }

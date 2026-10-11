@@ -1,20 +1,24 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ChoiceRow, ErrorNote } from '@/components/fields';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
+import { facePreview } from '@/constants/face-previews';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
 import type { SettingsReply, WatchSettingValues } from '@/protocol/gadgetbridge';
 import { readWatchSettings, writeWatchSettings } from '@/protocol/requests';
 import {
+  applyPreset,
   DEFAULT_THEME,
   hexToRgb565,
+  PALETTE,
   rgb565ToHex,
+  THEME_PRESETS,
   THEME_SLOTS,
   themeBytes,
   themeColours,
@@ -37,37 +41,114 @@ const NOTIFY_LEVELS = [
   { value: 3, label: 'High' },
 ];
 
+// A tile per watch face, showing its screenshot where one is bundled.
+function FacePicker({ faces, value, disabled, onChange }: {
+  faces: [string, string][];
+  value: string | null;
+  disabled: boolean;
+  onChange: (path: string) => void;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={styles.faces}>
+      {faces.map(([path, label]) => {
+        const selected = path === value;
+        const preview = facePreview(path);
+        return (
+          <Pressable
+            key={path}
+            disabled={disabled}
+            accessibilityRole="button"
+            accessibilityLabel={label}
+            accessibilityState={{ selected }}
+            onPress={() => onChange(path)}
+            style={[
+              styles.face,
+              { borderColor: selected ? theme.accent : theme.backgroundSelected, opacity: disabled ? 0.5 : 1 },
+            ]}>
+            {preview ? (
+              <Image source={preview} style={styles.facePreview} resizeMode="contain" />
+            ) : (
+              <View style={[styles.facePreview, styles.faceBlank, { backgroundColor: theme.backgroundSelected }]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  No preview
+                </ThemedText>
+              </View>
+            )}
+            <ThemedText type="small" style={{ color: selected ? theme.accent : theme.text }}>
+              {label}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function ColourRow({ label, colour, onChange }: { label: string; colour: number; onChange: (colour: number) => void }) {
   const theme = useTheme();
   const hex = rgb565ToHex(colour);
   const [text, setText] = useState(hex);
+  const [picking, setPicking] = useState(false);
+
+  const commit = () => {
+    const parsed = hexToRgb565(text);
+    if (parsed === null) {
+      setText(hex);
+    } else if (parsed !== colour) {
+      onChange(parsed);
+    }
+  };
+
+  const pick = (choice: string) => {
+    const parsed = hexToRgb565(choice);
+    if (parsed !== null) {
+      onChange(parsed);
+    }
+    setPicking(false);
+  };
 
   return (
-    <View style={styles.colour}>
-      <View style={[styles.swatch, { backgroundColor: hex, borderColor: theme.backgroundSelected }]} />
-      <ThemedText style={styles.colourLabel}>{label}</ThemedText>
-      <TextInput
-        value={text}
-        onChangeText={setText}
-        onEndEditing={() => {
-          const parsed = hexToRgb565(text);
-          if (parsed === null) {
-            setText(hex);
-          } else {
-            onChange(parsed);
-          }
-        }}
-        autoCapitalize="none"
-        autoCorrect={false}
-        maxLength={7}
-        accessibilityLabel={`${label} colour`}
-        style={[styles.hex, { color: theme.text, backgroundColor: theme.backgroundSelected }]}
-      />
+    <View>
+      <View style={styles.colour}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Pick a colour for ${label}`}
+          onPress={() => setPicking(!picking)}
+          style={[styles.swatch, { backgroundColor: hex, borderColor: picking ? theme.accent : theme.backgroundSelected }]}
+        />
+        <ThemedText style={styles.colourLabel}>{label}</ThemedText>
+        <TextInput
+          value={text}
+          onChangeText={setText}
+          onBlur={commit}
+          onSubmitEditing={commit}
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={7}
+          accessibilityLabel={`${label} colour`}
+          style={[styles.hex, { color: theme.text, backgroundColor: theme.backgroundSelected }]}
+        />
+      </View>
+      {picking ? (
+        <View style={styles.palette}>
+          {PALETTE.map((choice) => (
+            <Pressable
+              key={choice}
+              accessibilityRole="button"
+              accessibilityLabel={choice}
+              onPress={() => pick(choice)}
+              style={[styles.paletteSwatch, { backgroundColor: choice, borderColor: theme.backgroundSelected }]}
+            />
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 export default function WatchSettingsScreen() {
+  const theme = useTheme();
   const { requests, watchReady } = useWatch();
   const task = useTask();
   const [current, setCurrent] = useState<SettingsReply | null>(null);
@@ -150,12 +231,11 @@ export default function WatchSettingsScreen() {
           </Card>
 
           <Card title="Watch face">
-            <ChoiceRow
-              label="Face"
-              options={current.faces.map(([path, label]) => ({ value: path, label }))}
-              value={current.face ?? undefined}
+            <FacePicker
+              faces={current.faces}
+              value={current.face}
               disabled={busy}
-              onChange={(face) => change({ face })}
+              onChange={(face) => void change({ face })}
             />
           </Card>
 
@@ -189,9 +269,27 @@ export default function WatchSettingsScreen() {
 
           {colours ? (
             <Card title="Theme">
+              <View style={styles.presets}>
+                {THEME_PRESETS.map((preset) => (
+                  <Pressable
+                    key={preset.name}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${preset.name} theme`}
+                    onPress={() => setColours(applyPreset(colours, preset))}
+                    style={[styles.preset, { backgroundColor: theme.backgroundSelected }]}>
+                    <View style={styles.presetSwatches}>
+                      {preset.accents.map((accent) => (
+                        <View key={accent} style={[styles.presetSwatch, { backgroundColor: accent }]} />
+                      ))}
+                    </View>
+                    <ThemedText type="small">{preset.name}</ThemedText>
+                  </Pressable>
+                ))}
+              </View>
               <ThemedText type="small" themeColor="textSecondary">
-                Colours as #rrggbb. The watch stores fewer shades, so a colour may come back slightly
-                changed.
+                A preset sets the interface and highlight colours. Tap a swatch to pick a colour, or
+                type one as #rrggbb. The watch stores fewer shades, so a colour may come back slightly
+                changed. Nothing changes on the watch until you save.
               </ThemedText>
               {colours.map((colour, index) => (
                 <ColourRow
@@ -251,5 +349,60 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: Spacing.two,
+  },
+  faces: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  face: {
+    width: 100,
+    alignItems: 'center',
+    gap: Spacing.one,
+    padding: Spacing.one,
+    borderWidth: 2,
+    borderRadius: Radius.small,
+  },
+  facePreview: {
+    width: 88,
+    height: 100,
+  },
+  faceBlank: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.small,
+  },
+  palette: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+    paddingVertical: Spacing.two,
+  },
+  paletteSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: Radius.small,
+    borderWidth: 1,
+  },
+  presets: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  preset: {
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.small,
+    alignItems: 'center',
+    gap: Spacing.one,
+  },
+  presetSwatches: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  presetSwatch: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
   },
 });

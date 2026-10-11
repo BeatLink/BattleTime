@@ -14,12 +14,13 @@ import {
   isFindPhoneOn,
   LineBuffer,
   type PhoneToWatchMessage,
+  type StatusReply,
   type WatchToPhoneMessage,
 } from '@/protocol/gadgetbridge';
 import type { DfuLink } from '@/dfu/link';
 import { isPackageReply, type PackageReply } from '@/protocol/packages';
 import { encodeSetTime } from '@/protocol/clock';
-import { ReplyRouter, type RequestChannel } from '@/protocol/requests';
+import { readStatus, ReplyRouter, type RequestChannel } from '@/protocol/requests';
 import type { PackageChannel } from '@/protocol/transfer';
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
 import { phoneBridge, type PhoneEvent } from '@/services/phone';
@@ -70,7 +71,18 @@ type WatchContextValue = {
   requests: RequestChannel;
   // Fetch the weather for the chosen place and send it now.
   sendWeather: () => Promise<void>;
+  // The watch's battery and step count as last read, and when that was.
+  status: StatusReply | null;
+  lastSynced: number | null;
+  refreshStatus: () => Promise<void>;
+  // What the phone is playing, as its media session last reported it.
+  nowPlaying: NowPlaying | null;
 };
+
+export type NowPlaying = Extract<PhoneEvent, { type: 'media' }>;
+
+// How often the battery and step count are read while a watch is connected.
+const STATUS_INTERVAL_MS = 5 * 60 * 1000;
 
 // Longest notification text sent, since the watch keeps notifications in a few kilobytes of heap.
 const NOTIFY_TITLE_LIMIT = 60;
@@ -115,6 +127,9 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   const [findPhoneActive, setFindPhoneActive] = useState(false);
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [status, setStatus] = useState<StatusReply | null>(null);
+  const [lastSynced, setLastSynced] = useState<number | null>(null);
+  const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
   // Callbacks that outlive a render read the settings from here.
   const settingsRef = useRef(settings);
   useEffect(() => {
@@ -306,6 +321,9 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     const sent = new Map<number, string>();
 
     const forward = async (event: PhoneEvent) => {
+      if (event.type === 'media') {
+        setNowPlaying(event);
+      }
       const current = settingsRef.current;
       if (!readyRef.current) {
         return;
@@ -360,6 +378,26 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     const timer = setTimeout(() => void sendRaw(encodeSetTime()), 500);
     return () => clearTimeout(timer);
   }, [watchReady, sendRaw]);
+
+  const refreshStatus = useCallback(async () => {
+    const reply = await readStatus(router);
+    setStatus(reply);
+    setLastSynced(Date.now());
+  }, [router]);
+
+  // Read the battery and step count once the clock is set, then every few minutes.
+  useEffect(() => {
+    if (!watchReady) {
+      return;
+    }
+    const read = () => refreshStatus().catch(() => {});
+    const first = setTimeout(read, 1500);
+    const timer = setInterval(read, STATUS_INTERVAL_MS);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, [watchReady, refreshStatus]);
 
   // Keep the app running in the background while a watch is connected, so the link survives.
   const watchName = watch?.name ?? 'watch';
@@ -432,8 +470,16 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       dfuLink,
       requests: router,
       sendWeather,
+      status: watchReady ? status : null,
+      lastSynced,
+      refreshStatus,
+      nowPlaying,
     }),
     [
+      status,
+      lastSynced,
+      refreshStatus,
+      nowPlaying,
       watchReady,
       sendWeather,
       router,
