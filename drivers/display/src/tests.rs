@@ -1,162 +1,266 @@
 extern crate std;
 
-use std::vec::Vec;
+use std::{vec, vec::Vec};
 
 use embedded_graphics::{prelude::*, primitives::PrimitiveStyle};
+use embedded_hal::digital::ErrorType;
 use mipidsi::interface::InterfaceKind;
 
 use super::*;
 
-const RASET: u8 = 0x2B;
-const VSCRDEF: u8 = 0x33;
-const VSCSAD: u8 = 0x37;
+// ============================================================================
+// Panel commands
+// ============================================================================
 
-/// Records what the driver sends to the panel.
-#[derive(Default)]
-struct Recorder {
-    commands: Vec<(u8, Vec<u8>)>,
-    pixels: usize,
+const SET_ROW_ADDRESS: u8 = 0x2B;
+const SET_SCROLL_AREA: u8 = 0x33;
+const SET_SCROLL_START: u8 = 0x37;
+
+// ============================================================================
+// Fake hardware
+// ============================================================================
+
+#[derive(Debug, PartialEq)]
+struct Command {
+    code: u8,
+    arguments: Vec<u8>,
 }
 
-impl Interface for Recorder {
+#[derive(Default)]
+struct FakeInterface {
+    commands: Vec<Command>,
+    pixel_count: usize,
+}
+
+impl Interface for FakeInterface {
     type Word = u8;
     type Error = ();
     const KIND: InterfaceKind = InterfaceKind::Serial4Line;
 
-    fn send_command(&mut self, command: u8, args: &[u8]) -> Result<(), ()> {
-        self.commands.push((command, args.to_vec()));
+    fn send_command(&mut self, code: u8, arguments: &[u8]) -> Result<(), ()> {
+        self.commands.push(Command {
+            code,
+            arguments: arguments.to_vec(),
+        });
         Ok(())
     }
 
-    fn send_pixels<const N: usize>(&mut self, pixels: impl IntoIterator<Item = [u8; N]>) -> Result<(), ()> {
-        self.pixels += pixels.into_iter().count();
+    fn send_pixels<const BYTES_PER_PIXEL: usize>(
+        &mut self,
+        pixels: impl IntoIterator<Item = [u8; BYTES_PER_PIXEL]>,
+    ) -> Result<(), ()> {
+        self.pixel_count += pixels.into_iter().count();
         Ok(())
     }
 
-    fn send_repeated_pixel<const N: usize>(&mut self, _: [u8; N], count: u32) -> Result<(), ()> {
-        self.pixels += count as usize;
+    fn send_repeated_pixel<const BYTES_PER_PIXEL: usize>(
+        &mut self,
+        _pixel: [u8; BYTES_PER_PIXEL],
+        repeat_count: u32,
+    ) -> Result<(), ()> {
+        self.pixel_count += repeat_count as usize;
         Ok(())
     }
 }
 
-struct Pin;
+struct FakePin;
 
-impl embedded_hal::digital::ErrorType for Pin {
+impl ErrorType for FakePin {
     type Error = core::convert::Infallible;
 }
 
-impl OutputPin for Pin {
+impl OutputPin for FakePin {
     fn set_low(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
+
     fn set_high(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
 }
 
-struct Delay;
+struct FakeDelay;
 
-impl DelayNs for Delay {
-    fn delay_ns(&mut self, _: u32) {}
+impl DelayNs for FakeDelay {
+    fn delay_ns(&mut self, _nanoseconds: u32) {}
 }
 
-fn display() -> Display<Recorder, Pin> {
-    let mut display = Display::new(Recorder::default(), Pin, &mut Delay).unwrap();
-    display.inner_interface().commands.clear();
+// ============================================================================
+// Helpers
+// ============================================================================
+
+#[derive(Debug, PartialEq)]
+struct MemoryWrite {
+    first_memory_row: u16,
+    last_memory_row: u16,
+}
+
+fn write(first_memory_row: u16, last_memory_row: u16) -> MemoryWrite {
+    MemoryWrite {
+        first_memory_row,
+        last_memory_row,
+    }
+}
+
+fn new_display() -> Display<FakeInterface, FakePin> {
+    Display::new(FakeInterface::default(), FakePin, &mut FakeDelay).unwrap()
+}
+
+fn new_display_with_no_commands_recorded() -> Display<FakeInterface, FakePin> {
+    let mut display = new_display();
+    display.fake_interface().commands.clear();
     display
 }
 
-impl Display<Recorder, Pin> {
-    fn inner_interface(&mut self) -> &mut Recorder {
-        // SAFETY: the tests only read and clear the recording.
-        unsafe { self.inner.dcs() }
+impl Display<FakeInterface, FakePin> {
+    fn fake_interface(&mut self) -> &mut FakeInterface {
+        // SAFETY: the tests only read and clear what the fake interface recorded.
+        unsafe { self.panel.dcs() }
     }
 
-    /// The row ranges of every memory write, and the pixels sent.
-    fn writes(&mut self) -> (Vec<(u16, u16)>, usize) {
-        let recorder = self.inner_interface();
-        let rows = recorder
+    fn last_command(&mut self) -> Option<&Command> {
+        self.fake_interface().commands.last()
+    }
+
+    fn take_memory_writes(&mut self) -> Vec<MemoryWrite> {
+        let fake_interface = self.fake_interface();
+
+        let memory_writes = fake_interface
             .commands
             .iter()
-            .filter(|(command, _)| *command == RASET)
-            .map(|(_, a)| (u16::from_be_bytes([a[0], a[1]]), u16::from_be_bytes([a[2], a[3]])))
+            .filter(|command| command.code == SET_ROW_ADDRESS)
+            .map(|command| {
+                let first_memory_row = u16::from_be_bytes([command.arguments[0], command.arguments[1]]);
+                let last_memory_row = u16::from_be_bytes([command.arguments[2], command.arguments[3]]);
+                write(first_memory_row, last_memory_row)
+            })
             .collect();
-        let pixels = recorder.pixels;
-        recorder.commands.clear();
-        recorder.pixels = 0;
-        (rows, pixels)
+        fake_interface.commands.clear();
+
+        memory_writes
+    }
+
+    fn take_pixel_count(&mut self) -> usize {
+        core::mem::take(&mut self.fake_interface().pixel_count)
     }
 }
 
-fn fill(display: &mut Display<Recorder, Pin>, x: i32, y: i32, w: u32, h: u32) {
-    Rectangle::new(Point::new(x, y), Size::new(w, h))
+fn fill_rectangle(display: &mut Display<FakeInterface, FakePin>, top_left: Point, size: Size) {
+    Rectangle::new(top_left, size)
         .into_styled(PrimitiveStyle::with_fill(Rgb565::RED))
         .draw(display)
         .unwrap();
 }
 
+// ============================================================================
+// Scroll area
+// ============================================================================
+
 #[test]
 fn starts_with_all_memory_scrolling() {
-    let mut display = Display::new(Recorder::default(), Pin, &mut Delay).unwrap();
-    let commands = &display.inner_interface().commands;
-    assert!(commands.contains(&(VSCRDEF, std::vec![0, 0, 1, 64, 0, 0])));
-    assert_eq!(commands.last(), Some(&(VSCSAD, std::vec![0, 0])));
-}
+    let mut display = new_display();
 
-#[test]
-fn draws_in_place_when_not_scrolled() {
-    let mut display = display();
-    fill(&mut display, 10, 10, 20, 5);
-    assert_eq!(display.writes(), (std::vec![(10, 14)], 100));
-}
+    let commands = &display.fake_interface().commands;
 
-#[test]
-fn follows_the_scroll() {
-    let mut display = display();
-    display.scroll(100).unwrap();
-    fill(&mut display, 0, 0, 240, 10);
-    assert_eq!(display.writes(), (std::vec![(100, 109)], 2400));
-}
-
-#[test]
-fn splits_where_memory_wraps() {
-    let mut display = display();
-    display.scroll(300).unwrap();
-    fill(&mut display, 0, 0, 10, 40);
-    assert_eq!(display.writes(), (std::vec![(300, 319), (0, 19)], 400));
-}
-
-#[test]
-fn keeps_the_fixed_area_still() {
-    let mut display = display();
-    display.set_scroll_area(20, 0).unwrap();
-    display.scroll(10).unwrap();
-    assert_eq!(
-        display.inner_interface().commands.last(),
-        Some(&(VSCSAD, std::vec![0, 30]))
-    );
-    fill(&mut display, 0, 15, 1, 10);
-    assert_eq!(display.writes(), (std::vec![(15, 19), (30, 34)], 10));
+    let whole_memory_scrolls = Command {
+        code: SET_SCROLL_AREA,
+        arguments: vec![0, 0, 1, 64, 0, 0],
+    };
+    let scroll_starts_at_row_zero = Command {
+        code: SET_SCROLL_START,
+        arguments: vec![0, 0],
+    };
+    assert!(commands.contains(&whole_memory_scrolls));
+    assert_eq!(commands.last(), Some(&scroll_starts_at_row_zero));
 }
 
 #[test]
 fn scroll_wraps_round_the_area() {
-    let mut display = display();
+    let mut display = new_display_with_no_commands_recorded();
+
     display.scroll(MEMORY_ROWS + 5).unwrap();
+
     assert_eq!(display.scroll_offset(), 5);
 }
 
 #[test]
+fn keeps_the_fixed_area_still() {
+    let mut display = new_display_with_no_commands_recorded();
+    display.set_scroll_area(20, 0).unwrap();
+
+    display.scroll(10).unwrap();
+    let scroll_command = display.last_command();
+    assert_eq!(
+        scroll_command,
+        Some(&Command {
+            code: SET_SCROLL_START,
+            arguments: vec![0, 30]
+        })
+    );
+
+    display.take_memory_writes();
+    fill_rectangle(&mut display, Point::new(0, 15), Size::new(1, 10));
+
+    assert_eq!(display.take_memory_writes(), vec![write(15, 19), write(30, 34)]);
+    assert_eq!(display.take_pixel_count(), 10);
+}
+
+// ============================================================================
+// Drawing
+// ============================================================================
+
+#[test]
+fn draws_in_place_when_not_scrolled() {
+    let mut display = new_display_with_no_commands_recorded();
+
+    fill_rectangle(&mut display, Point::new(10, 10), Size::new(20, 5));
+
+    assert_eq!(display.take_memory_writes(), vec![write(10, 14)]);
+    assert_eq!(display.take_pixel_count(), 100);
+}
+
+#[test]
+fn follows_the_scroll() {
+    let mut display = new_display_with_no_commands_recorded();
+    display.scroll(100).unwrap();
+    display.take_memory_writes();
+
+    fill_rectangle(&mut display, Point::new(0, 0), Size::new(240, 10));
+
+    assert_eq!(display.take_memory_writes(), vec![write(100, 109)]);
+    assert_eq!(display.take_pixel_count(), 2400);
+}
+
+#[test]
+fn splits_where_memory_wraps() {
+    let mut display = new_display_with_no_commands_recorded();
+    display.scroll(300).unwrap();
+    display.take_memory_writes();
+
+    fill_rectangle(&mut display, Point::new(0, 0), Size::new(10, 40));
+
+    assert_eq!(display.take_memory_writes(), vec![write(300, 319), write(0, 19)]);
+    assert_eq!(display.take_pixel_count(), 400);
+}
+
+#[test]
 fn clips_to_the_screen() {
-    let mut display = display();
-    fill(&mut display, 230, 235, 20, 20);
-    assert_eq!(display.writes(), (std::vec![(235, 239)], 50));
+    let mut display = new_display_with_no_commands_recorded();
+
+    fill_rectangle(&mut display, Point::new(230, 235), Size::new(20, 20));
+
+    assert_eq!(display.take_memory_writes(), vec![write(235, 239)]);
+    assert_eq!(display.take_pixel_count(), 50);
 }
 
 #[test]
 fn single_pixels_follow_the_scroll() {
-    let mut display = display();
+    let mut display = new_display_with_no_commands_recorded();
     display.scroll(310).unwrap();
+    display.take_memory_writes();
+
     Pixel(Point::new(3, 20), Rgb565::BLUE).draw(&mut display).unwrap();
-    assert_eq!(display.writes(), (std::vec![(10, 10)], 1));
+
+    assert_eq!(display.take_memory_writes(), vec![write(10, 10)]);
+    assert_eq!(display.take_pixel_count(), 1);
 }
