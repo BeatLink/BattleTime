@@ -31,8 +31,14 @@ time.
 | `is_heart_rate_running` | `Bool` | Whether the heart rate sensor is measuring for any app. |
 | `heart_rate_status` | `Int` | The sensor's state: 0 stopped, 1 no skin, 2 settling, 3 measuring. |
 | `is_bluetooth_enabled` | `Bool` | Whether Bluetooth is on, whether or not the phone is connected. |
-| `next_alarm` | `Instant` or none | The next alarm any app has set to ring. |
-| `weather` | object | The last forecast the phone sent: `temperature`, `condition`, `low`, `high` and `received_at` (none until the first). Reading it needs no permission, so faces need no subscription of their own. |
+| `next_alarm` | `Instant \| null` | The next alarm any app has set to ring, or `null` if none is set. In app code an empty optional is always `null`. |
+| `current_weather` | object | The last forecast the phone sent: `temperature`, `condition`, `low`, `high`, `sunrise`, `sunset`, `location` and `received_at` (each `null` until the phone sends it). Reading it needs no permission, so faces need no subscription of their own. |
+| `current_music` | object | The phone's player: `artist`, `track`, `is_playing`, `position` and `length`. Needs the `phone` permission. |
+| `current_navigation` | object | The phone's navigation: `turn`, `instruction`, `distance` and `progress_percent`. Needs the `phone` permission. |
+
+The system keeps the latest weather, music and navigation, including their text, and keeps them
+through a reboot, so an app shows them by reading these values rather than copying event text into
+its own state. The `weather`, `music` and `navigation` subscriptions are for reacting when they change.
 
 ## Events
 
@@ -140,7 +146,7 @@ when a screen opens. Each one takes the common props below plus its own.
 | `padding`, `margin` | Space inside and outside the widget. |
 | `background`, `color`, `border_color` | Colours, as `"#rrggbb"` or a theme name: `background`, `surface`, `text`, `muted`, `accent`, `success`, `warning` or `danger`. A theme name follows the user's theme, and changes with it without the app doing anything. |
 | `border_width`, `radius` | The border and corner rounding. |
-| `font` | `small`, `normal`, `medium` (about 30 px), `large`, `huge` or `giant` (about 120 px, digits and `:` only), or a display font: `seven_segment`, `dot_matrix` or `condensed`, digits only. All are in the shared library. |
+| `font` | `small`, `normal`, `medium` (about 30 px), `large`, `huge` or `giant` (about 120 px, digits and `:` only), or a display font: `seven_segment` (digits only), `dot_matrix` (digits and capital letters A to Z) or `condensed` (digits only). All are in the shared library. |
 | `align` | `start`, `center` or `end`. |
 | `visible` | Whether the widget is shown. `{condition && <Widget/>}` sets it. |
 | `animate` | A duration in milliseconds. A bound property that changes slides to its new value instead of jumping. |
@@ -208,18 +214,22 @@ so they cost an app nothing to include.
 | `Header` | A screen's title row, with an optional icon. |
 | `ListRow` | A list entry: icon, title, subtitle and a value or switch on the right. |
 | `StatusBar` | The time, battery and connection, as the system shows them. |
-| `BatteryIcon` | The battery's charge and whether it is charging, drawn the way the system does, with an optional percentage. |
+| `BatteryIcon` | The battery's charge and whether it is charging, drawn the way the system does, with an optional percentage. `single_color` draws it all in `color`, and `show_bolt={false}` hides the charging bolt. |
 | `ConfirmDialog` | A question with two buttons, shown while a signal is true. |
 | `NumberPicker`, `TimePicker`, `DurationPicker` | Rollers set up for a number, a time of day or a duration. |
 | `Menu` | A list of named actions. |
 
 ### Props beyond the common ones
 
+Every angle, in every widget and function, is in degrees clockwise from twelve o'clock.
+
+
 | Widget | Props |
 |---|---|
 | `Line` | `points`: a fixed-length array of `{ x, y }`. |
-| `Scale` | `ticks`, `major_every`, `labels` for the major ticks, `skip` for tick numbers to leave out (such as under a date window), and `value` and `needle_color` for a gauge. |
-| `CellGrid` | `columns`, `rows`, `cell_size`, `cells` (one number per cell, read as a colour from `palette`), `palette`, and `onClick` receiving `{ value }`, the cell's number. |
+| `Scale` | `ticks`, `major_every`, `labels` for the major ticks, `skip` for tick numbers to leave out (such as under a date window), and `value` and `needle_color` for a gauge. `start_angle` and `end_angle` make a part dial, such as a half gauge. |
+| `CellGrid` | `columns`, `rows`, `cell_size`, `cell_gap`, `cell_shape` (`square`, `rounded` or `round`), `cells` (one number per cell, read as a colour from `palette`), `palette` (a fixed array, or a state array to change colours as the app runs), and `onClick` and `onDrag` receiving `{ value }`, the cell's number. |
+| `Image` | `width` and `height`, from the common props, for an image that is not square. |
 | `Chart` | `series`: up to 3 arrays, each with its colour. |
 | `Arc` | `value`, `minimum` and `maximum`. Given a signal, the arc can be dragged and writes back to it, with `onChange`. |
 | `Image` | `recolor`: draws a one-colour image, such as a logo, in this colour. |
@@ -294,6 +304,7 @@ turn that off.
 | `call_control(command)` | `answer`, `reject` or `mute` the current call. |
 | `find_phone(on)` | Makes the phone ring, or stops it. |
 | `request_music_state()` | Asks the phone to send its player's state now, which arrives through the `music` subscription. |
+| `request_navigation_state()` | Asks the phone for the current navigation step, which arrives through the `navigation` subscription. |
 
 ### Sensors
 
@@ -301,6 +312,12 @@ turn that off.
 |---|---|
 | `measure_heart_rate()` | Takes one reading now. The result arrives through the `heart_rate` subscription and updates `heart_rate`. |
 | `start_heart_rate()`, `stop_heart_rate()` | Measures continuously while the app is open, such as during a workout. The runtime stops it when the app closes. |
+
+The sensor runs while anything needs it: an app that called `start_heart_rate()` and has not
+stopped or closed, a `heart_rate_reading` subscription when its next reading is due, or a
+`measure_heart_rate()` call. `stop_heart_rate()` ends only that app's own continuous measuring;
+subscriptions keep their schedules. A subscription period under a minute needs
+`{ only_while_open: true }`, so a background app cannot keep the sensor on all the time.
 | `reset_steps()` | Starts today's step count from zero. |
 
 ### System
@@ -311,7 +328,7 @@ turn that off.
 | `set_do_not_disturb(on)` | Turns do not disturb on or off. |
 | `log(text)` | Writes a line to the debug log the companion app can read. |
 | `set_bluetooth(on)` | Turns Bluetooth on or off. |
-| `set_heart_rate_led(on, brightness, period)` | Drives the heart rate sensor's LED directly, such as for a beacon. The runtime turns it off when the app closes. |
+| `set_heart_rate_led(on, brightness, period)` | Drives the heart rate sensor's LED directly, such as for a beacon. `brightness` is the drive level, 0 to 3, and `period` the flash period in milliseconds, 0 for steady. The runtime turns it off when the app closes, even with the `background` permission, to save the battery. |
 
 Settings and other values that change often are stored on the external flash, never the internal
 flash; see the [memory map](memory-map.md).
@@ -351,6 +368,7 @@ Template literals, such as `` `${steps} steps` ``, join text and numbers.
 | `text_length(text)` | The number of characters. |
 | `slice_text(text, start, end?)` | Part of the text, counted in characters. |
 | `join(texts, separator)` | The texts of a fixed-length array joined together. |
+| `text_from_codes(codes, length)` | Text made from the first `length` character codes of an array, for text built while the app runs. |
 
 ### Format patterns
 
@@ -395,7 +413,7 @@ All in local time, using `utc_offset`.
 |---|---|
 | `year_of`, `month_of`, `day_of`, `hour_of`, `minute_of`, `second_of` | That part of an instant. |
 | `weekday_of(instant)` | 0 to 6, Monday first. |
-| `start_of_day(instant)` | Local midnight at the start of that day. |
+| `start_of_minute(instant)`, `start_of_hour(instant)`, `start_of_day(instant)` | The start of that local minute, hour or day. A view that shows only these redraws once a minute, not once a second, such as an analog clock without a second hand. |
 | `next_time_of_day(after, time_of_day, days?)` | The first instant after `after` at that local time, on one of `days`. |
 | `day_of_year(instant)` | 1 to 366. |
 | `iso_week_of(instant)` | The ISO 8601 week number, 1 to 53. |
@@ -414,7 +432,21 @@ From `neotime/lib`; they live in the [shared library](app-runtime.md#the-shared-
 State may hold objects of a fixed shape, and fixed-length arrays of numbers or of such objects,
 such as a list of alarms `{ hour, minute, days, enabled }`. The compiler stores each field in a
 state slot of its own. A handler may write one element, as in `board.value[cell] = 2`; the write is
-applied with the handler's other writes when it finishes.
+applied with the handler's other writes when it finishes, and later reads in the same handler see it.
+The same holds for single values: after `count.value = 3`, reading `count.value` in that handler gives 3.
+
+A field of a record in an array can be written the same way, as in `alarms.value[i].enabled = true`.
+The compiler keeps each field of such an array as an array of its own, so this is one element write.
+
+A text value held in state can only be one of the app's own literal strings. Text made while the app
+runs, such as typed or joined text, cannot be stored as text. Keep its characters as an array of
+character codes instead, and show it with `text_from_codes(codes, length)`; at 1 byte per code for
+plain ASCII, 96 characters take 96 bytes.
+
+Assigning a whole array, as in `board.value = CELLS.map((cell) => next_state(board.value, cell))`,
+follows JavaScript: the right side reads the old array throughout. The compiler builds the result in
+a hidden array of its own and then copies it in, so that hidden array counts toward the limits
+below. A local holds one value, so an array cannot be kept in a handler's `const` or `let`.
 
 An app's state is at most 2 KB, and one array at most 1 KB. Each array stores its elements in 1, 2,
 4 or 8 bytes, whichever the compiler finds fits, so a 400-cell board of small numbers takes
@@ -431,7 +463,7 @@ Loops over fixed-length arrays are allowed in `computed` and handlers as well as
 
 ### Control flow
 
-An early `return` is allowed in any function. A call that loops runs at most 200,000 steps, which
+An early `return` is allowed in any function, and `break` and `continue` in any loop. A call that loops runs at most 200,000 steps, which
 should be roughly a fifth of a second; a game search should stop well inside that, or split its work across
 several calls.
 

@@ -7,7 +7,7 @@
 //! verified code, so a bad image fails a call instead of crashing the watch.
 
 use crate::image::AppImage;
-use crate::instruction::{decode, EffectKind, Instruction, SystemValue, MOST_EFFECT_ARGUMENTS};
+use crate::instruction::{decode, EffectKind, Instruction, SystemValue, TimeUnit, MOST_EFFECT_ARGUMENTS};
 use crate::pattern;
 use crate::state::{read_packed, write_packed, AppState, Placement};
 use crate::text::{DateTime, TextReference, TextWriter};
@@ -40,6 +40,11 @@ pub const MOST_STEPS: u32 = 200_000;
 /// Where the interpreter reads the values the system keeps current.
 pub trait SystemValues {
     fn read(&self, value: SystemValue) -> Value;
+
+    /// A system value that is text, such as the playing track's title; empty when there is none.
+    fn read_text(&self, _value: SystemValue) -> &str {
+        ""
+    }
 
     /// A fresh random number, such as one from the chip's random number generator.
     fn random_number(&self) -> u32;
@@ -307,6 +312,10 @@ impl Interpreter {
                 let value = self.read_element(call.state, variable, index, true)?;
                 self.push(value)?;
             }
+            ReadSystem(value) if value.is_text() => {
+                let text = call.system.read_text(value);
+                self.write_text(|writer| writer.write_bytes(text.as_bytes()))?;
+            }
             ReadSystem(value) => self.push(call.system.read(value))?,
             ReadEvent(field) => {
                 if call.outcome.is_none() {
@@ -416,6 +425,17 @@ impl Interpreter {
                 let time = self.local_time(call)?;
                 self.push(time.part(part))?;
             }
+            StartOf(unit) => {
+                let instant = self.pop()?;
+                let utc_offset = call.system.read(SystemValue::UtcOffset);
+                let local = instant.checked_add(utc_offset).ok_or(Failure::Overflow)?;
+                let unit_in_milliseconds: Value = match unit {
+                    TimeUnit::Minute => 60_000,
+                    TimeUnit::Hour => 3_600_000,
+                    TimeUnit::Day => 86_400_000,
+                };
+                self.push(instant - local.rem_euclid(unit_in_milliseconds))?;
+            }
             FormatNumber(minimum_digits) => {
                 let number = self.pop()?;
                 self.write_text(|writer| writer.write_number(number, minimum_digits))?;
@@ -432,6 +452,33 @@ impl Interpreter {
                 self.write_text(|writer| pattern::write_time(writer, &time, pattern, uses_24_hour_clock))?;
             }
             Join => self.join(call.image)?,
+            TextFromCodes(array) => {
+                let count = self.pop()?;
+                let length = Self::array_placement(call.state, array)?.length as Value;
+                if !(0..=length).contains(&count) {
+                    return Err(Failure::IndexOutOfRange);
+                }
+                let start = self.text_used;
+                for index in 0..count {
+                    let code = self.read_element(call.state, array, index, true)?;
+                    let character = u32::try_from(code)
+                        .ok()
+                        .and_then(char::from_u32)
+                        .ok_or(Failure::BadText)?;
+                    let mut encoded = [0u8; 4];
+                    let bytes = character.encode_utf8(&mut encoded).as_bytes();
+                    let mut writer = TextWriter::new(&mut self.text_buffer, self.text_used);
+                    writer.write_bytes(bytes).map_err(|_| Failure::TextBufferFull)?;
+                    self.text_used = writer.position();
+                }
+                self.push(
+                    TextReference::Buffer {
+                        start,
+                        length: self.text_used - start,
+                    }
+                    .to_value(),
+                )?;
+            }
 
             WriteState(variable) => {
                 Self::require_handler(call)?;

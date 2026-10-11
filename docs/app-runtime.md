@@ -360,10 +360,12 @@ Each instruction is one opcode byte followed by its operands:
 | `2A` | loop start | | Marks where a loop begins. The stack must be empty here. |
 | `2B` | loop back | distance, 2 bytes | Goes back that many bytes, counted from the end of this instruction, to a loop start. The stack must be empty here too. |
 | `30` | time part | part, 1 byte | Takes an instant and pushes its local year, month, day, hour, minute, second or weekday (0 to 6, Monday first). |
+| `31` | start of | unit, 1 byte | Takes an instant and pushes the start of its local minute, hour or day. A binding that uses it redraws once a minute. |
 | `40` | format number | minimum digits, 1 byte | Takes a number and pushes it as text, padded with zeros. |
 | `41` | format duration | pattern string, 2 bytes | Takes a duration and pushes it as text in the pattern. |
 | `42` | format time | pattern string, 2 bytes | Takes an instant and pushes the local time as text in the pattern. |
 | `43` | join | | Takes two texts and pushes them joined. |
+| `44` | text from codes | array, 1 byte | Takes a count and pushes text made of that many character codes from the start of the array. |
 | `50` | write state | slot, 1 byte | Takes a value for a state variable. Handlers only. |
 | `51` | effect | effect, 1 byte | Takes the effect's arguments and records it. Handlers only. |
 | `60` | read element | array, 1 byte | Takes an index and pushes that element. An index outside the array fails the call. |
@@ -375,8 +377,13 @@ System values, in the order `read system` numbers them: `now`, `utc_offset`, `ba
 `is_charging`, `steps_today`, `heart_rate`, `heart_rate_measured_at`, `is_phone_connected`,
 `unread_notifications`, `is_do_not_disturb`, `brightness`, `uses_24_hour_clock`,
 `uses_metric_units`, `step_goal`, `is_heart_rate_running`, `is_bluetooth_enabled`, `next_alarm`,
-`heart_rate_status`, and the weather's `temperature`, `condition`, `low`, `high` and
-`received_at`.
+`heart_rate_status`, and the weather's `temperature`, `condition`, `low`, `high`,
+`received_at`, `sunrise`, `sunset` and `location`, the music's `is_playing`, `artist`, `track`,
+`position` and `length`, and the navigation's `turn`, `instruction`, `distance` and
+`progress_percent`. The location, artist, track and instruction are text: the system hands them
+over through `SystemValues::read_text`, and `read system` copies them into the call's text buffer.
+Values the phone sends together share one bit of an input mask, so all the weather values redraw
+together; that keeps the mask in 32 bits.
 
 Effects, in the order `effect` numbers them, with how many arguments each takes: `vibrate` (1),
 `vibrate_pattern` (1), `stop_vibrating`, `set_brightness` (1), `keep_screen_on` (1),
@@ -384,7 +391,8 @@ Effects, in the order `effect` numbers them, with how many arguments each takes:
 `notify` (2), `dismiss_notification` (1), `mark_notifications_read`, `send_to_phone` (2),
 `music_control` (1), `call_control` (1), `find_phone` (1), `measure_heart_rate`,
 `start_heart_rate`, `stop_heart_rate`, `reset_steps`, `set_setting` (2), `set_do_not_disturb` (1),
-`log` (1), `request_music_state`, `set_heart_rate_led` (3), `set_bluetooth` (1).
+`log` (1), `request_music_state`, `set_heart_rate_led` (3), `set_bluetooth` (1),
+`request_navigation_state`.
 `vibrate_sequence` and `http_request` need arrays and more arguments, and come later.
 
 Only `loop back` goes backward. A call stops with a failure after 200,000 instructions, which

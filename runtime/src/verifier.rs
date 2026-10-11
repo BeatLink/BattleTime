@@ -195,7 +195,8 @@ fn check_operands(
         },
         Instruction::ReadElement(variable)
         | Instruction::WriteElement(variable)
-        | Instruction::FillArray(variable) => match is_array(variable) {
+        | Instruction::FillArray(variable)
+        | Instruction::TextFromCodes(variable) => match is_array(variable) {
             None => Err(CodeProblem::StateSlotOutOfRange),
             Some(false) => Err(CodeProblem::WrongVariableKind),
             Some(true) => Ok(()),

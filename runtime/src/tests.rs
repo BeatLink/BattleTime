@@ -340,6 +340,13 @@ impl SystemValues for FakeSystem {
     fn random_number(&self) -> u32 {
         1_000_003
     }
+
+    fn read_text(&self, value: SystemValue) -> &str {
+        match value {
+            SystemValue::MusicTrack => "Blue Monday",
+            _ => "",
+        }
+    }
 }
 
 /// 2026-10-11 14:05:09 UTC, a Sunday.
@@ -1810,7 +1817,7 @@ fn an_expression_reading_an_array_redraws_when_it_changes() {
 // ============================================================================
 
 use crate::events::EventKind;
-use crate::instruction::{decode, Instruction, TimePart as Part};
+use crate::instruction::{decode, Instruction, TimePart as Part, TimeUnit};
 use crate::writer::{CodeError, CodeWriter, ImageWriter};
 
 #[test]
@@ -1859,6 +1866,8 @@ fn every_instruction_decodes_to_itself() {
         LoopStart,
         LoopBack(1_000),
         TimePart(Part::Weekday),
+        StartOf(TimeUnit::Day),
+        TextFromCodes(6),
         FormatNumber(3),
         FormatDuration(9),
         FormatTime(258),
@@ -2037,6 +2046,149 @@ fn widgets_and_state_accept_theme_colours_but_not_other_numbers() {
 
     assert_eq!(widget_problem(&themed), None);
     assert_eq!(widget_problem(&not_a_colour), Some(WidgetProblem::BadConstant));
+}
+
+// ============================================================================
+// Start of a minute, hour or day
+// ============================================================================
+
+fn start_of(unit: TimeUnit, system: &FakeSystem) -> Value {
+    evaluate_with(
+        Code::new().system(SystemValue::Now).op_byte(0x31, unit as u8),
+        system,
+    )
+}
+
+fn evaluate_with(code: Code, system: &FakeSystem) -> Value {
+    let mut builder = ImageBuilder::new();
+    builder.expression(code);
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    Interpreter::new()
+        .evaluate_expression(&image, 0, &AppState::new(&image).unwrap(), system)
+        .unwrap()
+}
+
+#[test]
+fn cuts_a_time_back_to_the_start_of_its_minute_hour_and_day() {
+    // 14:05:09 UTC is 19:35:09 in a time zone 5 and a half hours ahead.
+    let system = FakeSystem {
+        now: SUNDAY_AFTERNOON,
+        utc_offset: 19_800_000,
+        ..Default::default()
+    };
+
+    assert_eq!(start_of(TimeUnit::Minute, &system), SUNDAY_AFTERNOON - 9_000);
+    assert_eq!(
+        start_of(TimeUnit::Hour, &system),
+        SUNDAY_AFTERNOON - (35 * 60_000 + 9_000)
+    );
+    assert_eq!(
+        start_of(TimeUnit::Day, &system),
+        SUNDAY_AFTERNOON - (19 * 3_600_000 + 35 * 60_000 + 9_000)
+    );
+}
+
+#[test]
+fn a_clock_cut_to_the_minute_redraws_once_a_minute() {
+    let (bytes, _) = bindings_for(&[Code::new()
+        .system(SystemValue::Now)
+        .op_byte(0x31, TimeUnit::Minute as u8)]);
+    let bindings = Bindings::load(&AppImage::parse(&bytes).unwrap()).unwrap();
+
+    assert_eq!(bindings.info(0).unwrap().redraw_period_in_milliseconds, 60_000);
+}
+
+// ============================================================================
+// Text from character codes
+// ============================================================================
+
+#[test]
+fn shows_text_kept_as_character_codes() {
+    let mut builder = ImageBuilder::new();
+    let message = builder.array("message", 96, 4, 0);
+    let length = builder.variable("length", INT_TYPE, false, 0);
+    builder.expression(Code::new().state(length).op_byte(0x44, message));
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut state = AppState::new(&image).unwrap();
+    for (index, character) in "SOS é".chars().enumerate() {
+        state
+            .set_element(message, index as Value, character as Value)
+            .unwrap();
+    }
+    state.set(length, 5).unwrap();
+    let mut interpreter = Interpreter::new();
+
+    let value = interpreter
+        .evaluate_expression(&image, 0, &state, &FakeSystem::default())
+        .unwrap();
+
+    assert_eq!(verify(&image), Ok(()));
+    assert_eq!(interpreter.text(&image, value), Ok("SOS é"));
+}
+
+#[test]
+fn only_the_open_screens_clocks_wake_the_watch() {
+    let (bytes, _) = bindings_for(&[
+        Code::new()
+            .system(SystemValue::Now)
+            .format_time(CLOCK_WITH_SECONDS),
+        Code::new().system(SystemValue::Now).format_time(CLOCK),
+    ]);
+    let bindings = Bindings::load(&AppImage::parse(&bytes).unwrap()).unwrap();
+    let start_of_minute = 1_791_727_500_000;
+
+    assert_eq!(
+        bindings.next_redraw_after_among(start_of_minute, 0b10),
+        Some(start_of_minute + 60_000)
+    );
+    assert_eq!(bindings.next_redraw_after_among(start_of_minute, 0), None);
+    assert_eq!(
+        bindings
+            .due_between_among(start_of_minute, start_of_minute + 1_000, 0b10)
+            .count(),
+        0
+    );
+}
+
+// ============================================================================
+// System text
+// ============================================================================
+
+#[test]
+fn shows_and_joins_text_the_system_keeps() {
+    let mut builder = ImageBuilder::new();
+    let prefix = builder.string("Now playing: ");
+    builder.expression(Code::new().text(prefix).system(SystemValue::MusicTrack).join());
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut interpreter = Interpreter::new();
+
+    let value = interpreter
+        .evaluate_expression(&image, 0, &AppState::new(&image).unwrap(), &FakeSystem::default())
+        .unwrap();
+
+    assert_eq!(interpreter.text(&image, value), Ok("Now playing: Blue Monday"));
+}
+
+#[test]
+fn every_system_value_has_a_bit_in_the_mask_and_related_values_share_one() {
+    let values = (0..SystemValue::COUNT as u8).map(|byte| SystemValue::from_byte(byte).unwrap());
+
+    for value in values {
+        assert!(value.bit().trailing_zeros() < 32);
+    }
+    assert_eq!(SystemValue::MusicArtist.bit(), SystemValue::MusicLength.bit());
+    assert_eq!(
+        SystemValue::WeatherLocation.bit(),
+        SystemValue::WeatherTemperature.bit()
+    );
+    assert_ne!(
+        SystemValue::MusicTrack.bit(),
+        SystemValue::NavigationInstruction.bit()
+    );
+    assert_ne!(SystemValue::MusicTrack.bit(), SystemValue::BatteryPercent.bit());
 }
 
 // ============================================================================

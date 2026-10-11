@@ -36,10 +36,31 @@ pub enum SystemValue {
     WeatherHigh,
     /// When the phone last sent the weather, or none.
     WeatherReceivedAt,
+    /// Today's sunrise and sunset from the last forecast, or none.
+    WeatherSunrise,
+    WeatherSunset,
+    /// Text: the place the forecast is for.
+    WeatherLocation,
+    MusicIsPlaying,
+    /// Text: the playing track's artist.
+    MusicArtist,
+    /// Text: the playing track's title.
+    MusicTrack,
+    MusicPosition,
+    MusicLength,
+    NavigationTurn,
+    /// Text: what the next step says, such as a street name.
+    NavigationInstruction,
+    NavigationDistance,
+    NavigationProgressPercent,
 }
 
+/// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
+const MUSIC_BIT: u32 = 19;
+const NAVIGATION_BIT: u32 = 20;
+
 impl SystemValue {
-    pub const COUNT: usize = 23;
+    pub const COUNT: usize = 35;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -67,18 +88,70 @@ impl SystemValue {
             20 => WeatherLow,
             21 => WeatherHigh,
             22 => WeatherReceivedAt,
+            23 => WeatherSunrise,
+            24 => WeatherSunset,
+            25 => WeatherLocation,
+            26 => MusicIsPlaying,
+            27 => MusicArtist,
+            28 => MusicTrack,
+            29 => MusicPosition,
+            30 => MusicLength,
+            31 => NavigationTurn,
+            32 => NavigationInstruction,
+            33 => NavigationDistance,
+            34 => NavigationProgressPercent,
             _ => return None,
         })
     }
 
+    /// The value's bit in an input mask. Values that the phone sends together share one bit.
     pub fn bit(self) -> u32 {
-        1 << (self as u32)
+        use SystemValue::*;
+        let group = match self {
+            HeartRate | HeartRateMeasuredAt => HeartRate as u32,
+            WeatherTemperature | WeatherCondition | WeatherLow | WeatherHigh | WeatherReceivedAt
+            | WeatherSunrise | WeatherSunset | WeatherLocation => WeatherTemperature as u32,
+            MusicIsPlaying | MusicArtist | MusicTrack | MusicPosition | MusicLength => MUSIC_BIT,
+            NavigationTurn | NavigationInstruction | NavigationDistance | NavigationProgressPercent => {
+                NAVIGATION_BIT
+            }
+            other => other as u32,
+        };
+        1 << group
+    }
+
+    /// Whether the value is text, which the system gives through `SystemValues::read_text`.
+    pub fn is_text(self) -> bool {
+        use SystemValue::*;
+        matches!(
+            self,
+            WeatherLocation | MusicArtist | MusicTrack | NavigationInstruction
+        )
     }
 }
 
 // ============================================================================
 // Time parts
 // ============================================================================
+
+/// A unit a local time is cut back to, with `StartOf`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TimeUnit {
+    Minute,
+    Hour,
+    Day,
+}
+
+impl TimeUnit {
+    pub fn from_byte(byte: u8) -> Option<TimeUnit> {
+        Some(match byte {
+            0 => TimeUnit::Minute,
+            1 => TimeUnit::Hour,
+            2 => TimeUnit::Day,
+            _ => return None,
+        })
+    }
+}
 
 /// A part of a local date and time, read with `TimePart`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -145,6 +218,7 @@ pub enum EffectKind {
     RequestMusicState,
     SetHeartRateLed,
     SetBluetooth,
+    RequestNavigationState,
 }
 
 impl EffectKind {
@@ -180,6 +254,7 @@ impl EffectKind {
             26 => RequestMusicState,
             27 => SetHeartRateLed,
             28 => SetBluetooth,
+            29 => RequestNavigationState,
             _ => return None,
         })
     }
@@ -195,6 +270,7 @@ impl EffectKind {
             | Close
             | MarkNotificationsRead
             | RequestMusicState
+            | RequestNavigationState
             | MeasureHeartRate
             | StartHeartRate
             | StopHeartRate
@@ -269,12 +345,16 @@ pub enum Instruction {
     /// Goes back this many bytes, counted from the end of this instruction, to a `LoopStart`.
     LoopBack(u16),
     TimePart(TimePart),
+    /// Takes an instant and pushes the start of its local minute, hour or day.
+    StartOf(TimeUnit),
     FormatNumber(u8),
     /// Formats a duration with the pattern in this string; see `pattern`.
     FormatDuration(u16),
     /// Formats a local time with the pattern in this string; see `pattern`.
     FormatTime(u16),
     Join,
+    /// Takes a count and pushes text made of the first `count` elements of an array of character codes.
+    TextFromCodes(u8),
     WriteState(u8),
     /// Takes an index and pushes that element of an array variable.
     ReadElement(u8),
@@ -315,8 +395,8 @@ impl Instruction {
             Add | Subtract | Multiply | Divide | Remainder | Minimum | Maximum | RandomInt | BitAnd
             | BitOr | BitXor | ShiftLeft | ShiftRight | Equal | NotEqual | Less | LessOrEqual | Greater
             | GreaterOrEqual | Join => (2, 1),
-            Negate | Absolute | BitNot | Not | IsNone | TimePart(_) | FormatNumber(_) | FormatDuration(_)
-            | FormatTime(_) => (1, 1),
+            Negate | Absolute | BitNot | Not | IsNone | TimePart(_) | StartOf(_) | TextFromCodes(_)
+            | FormatNumber(_) | FormatDuration(_) | FormatTime(_) => (1, 1),
             Jump(_) => (0, 0),
             Effect(kind) => (kind.argument_count(), 0),
         };
@@ -407,6 +487,7 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
             TimePart(self::TimePart::from_byte(byte()?).ok_or(unknown(byte()?))?),
             1,
         ),
+        0x31 => (StartOf(TimeUnit::from_byte(byte()?).ok_or(unknown(byte()?))?), 1),
         0x40 => (FormatNumber(byte()?), 1),
         0x41 => (
             FormatDuration(u16::from_le_bytes(bytes(2)?.try_into().unwrap_or_default())),
@@ -417,6 +498,7 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
             2,
         ),
         0x43 => (Join, 0),
+        0x44 => (TextFromCodes(byte()?), 1),
         0x50 => (WriteState(byte()?), 1),
         0x51 => (Effect(EffectKind::from_byte(byte()?).ok_or(unknown(byte()?))?), 1),
         0x60 => (ReadElement(byte()?), 1),
@@ -532,6 +614,7 @@ impl Instruction {
                 put(&distance.to_le_bytes());
             }
             TimePart(part) => put(&[0x30, part as u8]),
+            StartOf(unit) => put(&[0x31, unit as u8]),
             FormatNumber(minimum_digits) => put(&[0x40, minimum_digits]),
             FormatDuration(pattern) => {
                 put(&[0x41]);
@@ -542,6 +625,7 @@ impl Instruction {
                 put(&pattern.to_le_bytes());
             }
             Join => put(&[0x43]),
+            TextFromCodes(array) => put(&[0x44, array]),
             WriteState(variable) => put(&[0x50, variable]),
             Effect(kind) => put(&[0x51, kind as u8]),
             ReadElement(variable) => put(&[0x60, variable]),

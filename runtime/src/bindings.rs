@@ -61,7 +61,6 @@ impl Inputs {
 
 const SECOND_IN_MILLISECONDS: u32 = 1000;
 const MINUTE_IN_MILLISECONDS: u32 = 60 * SECOND_IN_MILLISECONDS;
-const HOUR_IN_MILLISECONDS: u32 = 60 * MINUTE_IN_MILLISECONDS;
 
 /// How often a value shown through this instruction can change, if it depends on the clock.
 fn smallest_visible_step(image: &AppImage, instruction: Instruction) -> Option<u32> {
@@ -70,8 +69,8 @@ fn smallest_visible_step(image: &AppImage, instruction: Instruction) -> Option<u
         FormatDuration(pattern) => pattern::duration_pattern_step_in_milliseconds(image.string(pattern)?),
         FormatTime(pattern) => pattern::time_pattern_step_in_milliseconds(image.string(pattern)?),
         TimePart(self::TimePart::Second) => SECOND_IN_MILLISECONDS,
-        TimePart(self::TimePart::Hour) => HOUR_IN_MILLISECONDS,
-        TimePart(_) => MINUTE_IN_MILLISECONDS,
+        // Coarser parts and starts still step on the minute, because time zones can be half an hour off.
+        TimePart(_) | StartOf(_) => MINUTE_IN_MILLISECONDS,
         _ => return None,
     })
 }
@@ -96,7 +95,11 @@ pub fn analyse_expression(image: &AppImage, code: &[u8]) -> Option<ExpressionInf
     while offset < code.len() {
         let (instruction, next_offset) = decode(code, offset).ok()?;
         match instruction {
-            Instruction::ReadState(slot) | Instruction::ReadElement(slot) if (slot as usize) < 64 => {
+            Instruction::ReadState(slot)
+            | Instruction::ReadElement(slot)
+            | Instruction::TextFromCodes(slot)
+                if (slot as usize) < 64 =>
+            {
                 inputs = inputs.union(Inputs::state_slot(slot))
             }
             Instruction::ReadSystem(value) => inputs = inputs.union(Inputs::system_value(value)),
@@ -181,6 +184,28 @@ impl Bindings {
         self.infos()
             .filter(move |(_, info)| info.inputs.overlaps(changed))
             .map(|(index, _)| index)
+    }
+
+    /// Like `due_between`, but only among the expressions whose bits are set in `expressions`, such
+    /// as those on the screen that is open.
+    pub fn due_between_among(
+        &self,
+        last_redraw: i64,
+        now: i64,
+        expressions: u64,
+    ) -> impl Iterator<Item = usize> + '_ {
+        self.due_between(last_redraw, now)
+            .filter(move |&index| expressions & (1 << index) != 0)
+    }
+
+    /// Like `next_redraw_after`, but only among the expressions whose bits are set in `expressions`.
+    pub fn next_redraw_after_among(&self, now: i64, expressions: u64) -> Option<i64> {
+        self.redraw_periods_in_milliseconds[..self.count]
+            .iter()
+            .enumerate()
+            .filter(|(index, &period)| period != 0 && expressions & (1 << index) != 0)
+            .map(|(_, &period)| (now.div_euclid(period as i64) + 1) * period as i64)
+            .min()
     }
 
     /// The clock-driven expressions whose shown value may have changed between two redraws.
