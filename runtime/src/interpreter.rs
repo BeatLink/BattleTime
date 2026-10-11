@@ -1,13 +1,15 @@
 //! Runs an app's expressions and handlers.
 //!
-//! An expression works out one value for a widget. A handler answers an event: its state writes are
-//! held back and applied together when it finishes, and its effects are only collected, so a
-//! handler that fails part way changes nothing. Every check is repeated here even for verified
-//! code, so a bad image fails a call instead of crashing the watch.
+//! An expression works out one value for a widget. A handler answers an event. The first time a
+//! handler writes to a variable, the variable is copied into a scratch area and the handler works
+//! on the copy; the copies are written back only when it finishes, so a handler that fails part
+//! way changes nothing. Its effects are only collected. Every check is repeated here even for
+//! verified code, so a bad image fails a call instead of crashing the watch.
 
 use crate::image::AppImage;
 use crate::instruction::{decode, EffectKind, Instruction, SystemValue, MOST_EFFECT_ARGUMENTS};
 use crate::pattern;
+use crate::state::{read_packed, write_packed, AppState, Placement};
 use crate::text::{DateTime, TextReference, TextWriter};
 
 // ============================================================================
@@ -23,8 +25,17 @@ pub const NONE: Value = i64::MIN;
 pub const STACK_DEPTH: usize = 32;
 pub const TEXT_BUFFER_BYTES: usize = 256;
 pub const MOST_EVENT_FIELDS: usize = 8;
-pub const MOST_STATE_WRITES: usize = 16;
+pub const MOST_LOCALS: usize = 16;
 pub const MOST_EFFECTS: usize = 8;
+
+/// How many variables one handler may change.
+pub const MOST_CHANGED_VARIABLES: usize = 16;
+
+/// Room for the copies of the variables a handler changes; it holds the largest variable allowed.
+pub const SCRATCH_BYTES: usize = crate::image::MOST_VARIABLE_BYTES;
+
+/// The most instructions one call may run, about a fifth of a second on the watch.
+pub const MOST_STEPS: u32 = 200_000;
 
 /// Where the interpreter reads the values the system keeps current.
 pub trait SystemValues {
@@ -43,12 +54,16 @@ pub enum Failure {
     StackOverflow,
     Overflow,
     DivideByZero,
-    BadStateSlot,
+    BadVariable,
+    IndexOutOfRange,
+    BadLocal,
     BadEventField,
     BadText,
     TextBufferFull,
-    TooManyStateWrites,
+    TooManyChangedVariables,
+    ScratchFull,
     TooManyEffects,
+    TooManySteps,
     WrongResultCount,
     NotAllowedHere,
 }
@@ -58,22 +73,15 @@ pub enum Failure {
 // ============================================================================
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct StateWrite {
-    pub slot: u8,
-    pub value: Value,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Effect {
     pub kind: EffectKind,
     pub arguments: [Value; MOST_EFFECT_ARGUMENTS],
 }
 
-/// What a handler asked for: state writes, at most one per slot, and effects in call order.
+/// What a finished handler did: which variables it changed, and the effects it asked for in order.
 #[derive(Clone, Copy, Debug)]
 pub struct HandlerOutcome {
-    writes: [StateWrite; MOST_STATE_WRITES],
-    write_count: usize,
+    changed_variables: u64,
     effects: [Effect; MOST_EFFECTS],
     effect_count: usize,
 }
@@ -81,8 +89,7 @@ pub struct HandlerOutcome {
 impl HandlerOutcome {
     const fn empty() -> Self {
         HandlerOutcome {
-            writes: [StateWrite { slot: 0, value: 0 }; MOST_STATE_WRITES],
-            write_count: 0,
+            changed_variables: 0,
             effects: [Effect {
                 kind: EffectKind::Back,
                 arguments: [0; MOST_EFFECT_ARGUMENTS],
@@ -91,36 +98,13 @@ impl HandlerOutcome {
         }
     }
 
-    pub fn writes(&self) -> &[StateWrite] {
-        &self.writes[..self.write_count]
+    /// One bit per state variable the handler wrote to, for working out what to redraw.
+    pub fn changed_variables(&self) -> u64 {
+        self.changed_variables
     }
 
     pub fn effects(&self) -> &[Effect] {
         &self.effects[..self.effect_count]
-    }
-
-    fn pending_value(&self, slot: u8) -> Option<Value> {
-        self.writes()
-            .iter()
-            .find(|write| write.slot == slot)
-            .map(|write| write.value)
-    }
-
-    fn write(&mut self, slot: u8, value: Value) -> Result<(), Failure> {
-        if let Some(existing) = self.writes[..self.write_count]
-            .iter_mut()
-            .find(|write| write.slot == slot)
-        {
-            existing.value = value;
-            return Ok(());
-        }
-        let free = self
-            .writes
-            .get_mut(self.write_count)
-            .ok_or(Failure::TooManyStateWrites)?;
-        *free = StateWrite { slot, value };
-        self.write_count += 1;
-        Ok(())
     }
 
     fn add_effect(&mut self, effect: Effect) -> Result<(), Failure> {
@@ -134,6 +118,20 @@ impl HandlerOutcome {
     }
 }
 
+/// A variable a handler has written to, and where its working copy is in the scratch area.
+#[derive(Clone, Copy, Debug, Default)]
+struct WorkingCopy {
+    variable: u8,
+    offset: u16,
+    length: u16,
+}
+
+/// Where the next instruction is, after a jump.
+enum JumpTo {
+    Forward(u16),
+    Back(u16),
+}
+
 // ============================================================================
 // Interpreter
 // ============================================================================
@@ -141,7 +139,7 @@ impl HandlerOutcome {
 /// What a call may read and where its handler results go.
 struct Call<'call, System: SystemValues> {
     image: &'call AppImage<'call>,
-    state: &'call [Value],
+    state: &'call AppState,
     event: &'call [Value],
     system: &'call System,
     outcome: Option<&'call mut HandlerOutcome>,
@@ -151,8 +149,13 @@ struct Call<'call, System: SystemValues> {
 pub struct Interpreter {
     stack: [Value; STACK_DEPTH],
     depth: usize,
+    locals: [Value; MOST_LOCALS],
     text_buffer: [u8; TEXT_BUFFER_BYTES],
     text_used: usize,
+    scratch: [u8; SCRATCH_BYTES],
+    scratch_used: usize,
+    copies: [WorkingCopy; MOST_CHANGED_VARIABLES],
+    copy_count: usize,
 }
 
 impl Default for Interpreter {
@@ -166,8 +169,17 @@ impl Interpreter {
         Interpreter {
             stack: [0; STACK_DEPTH],
             depth: 0,
+            locals: [0; MOST_LOCALS],
             text_buffer: [0; TEXT_BUFFER_BYTES],
             text_used: 0,
+            scratch: [0; SCRATCH_BYTES],
+            scratch_used: 0,
+            copies: [WorkingCopy {
+                variable: 0,
+                offset: 0,
+                length: 0,
+            }; MOST_CHANGED_VARIABLES],
+            copy_count: 0,
         }
     }
 
@@ -176,7 +188,7 @@ impl Interpreter {
         &mut self,
         image: &AppImage,
         expression: u16,
-        state: &[Value],
+        state: &AppState,
         system: &impl SystemValues,
     ) -> Result<Value, Failure> {
         let code = image.expression_code(expression).ok_or(Failure::NoSuchCode)?;
@@ -195,12 +207,12 @@ impl Interpreter {
         Ok(self.stack[0])
     }
 
-    /// Runs a handler for an event and returns its writes and effects without applying them.
+    /// Runs a handler for an event. Only if it finishes are its writes applied to `state`.
     pub fn run_handler(
         &mut self,
         image: &AppImage,
         handler: u16,
-        state: &[Value],
+        state: &mut AppState,
         event: &[Value],
         system: &impl SystemValues,
     ) -> Result<HandlerOutcome, Failure> {
@@ -217,6 +229,14 @@ impl Interpreter {
 
         if self.depth != 0 {
             return Err(Failure::WrongResultCount);
+        }
+        for copy in &self.copies[..self.copy_count] {
+            let source = &self.scratch[copy.offset as usize..(copy.offset + copy.length) as usize];
+            state
+                .variable_bytes_mut(copy.variable)
+                .ok_or(Failure::BadVariable)?
+                .copy_from_slice(source);
+            outcome.changed_variables |= 1 << copy.variable;
         }
         Ok(outcome)
     }
@@ -241,24 +261,35 @@ impl Interpreter {
     fn run<System: SystemValues>(&mut self, code: &[u8], mut call: Call<System>) -> Result<(), Failure> {
         self.depth = 0;
         self.text_used = 0;
+        self.scratch_used = 0;
+        self.copy_count = 0;
+        self.locals = [0; MOST_LOCALS];
         let mut offset = 0;
+        let mut steps: u32 = 0;
 
         while offset < code.len() {
-            let (instruction, next_offset) = decode(code, offset).map_err(|_| Failure::BadInstruction)?;
-            offset = next_offset;
-            if let Some(distance) = self.execute(instruction, &mut call)? {
-                offset += distance as usize;
+            steps += 1;
+            if steps > MOST_STEPS {
+                return Err(Failure::TooManySteps);
             }
+            let (instruction, next_offset) = decode(code, offset).map_err(|_| Failure::BadInstruction)?;
+            offset = match self.execute(instruction, &mut call)? {
+                None => next_offset,
+                Some(JumpTo::Forward(distance)) => next_offset + distance as usize,
+                Some(JumpTo::Back(distance)) => next_offset
+                    .checked_sub(distance as usize)
+                    .ok_or(Failure::BadInstruction)?,
+            };
         }
         Ok(())
     }
 
-    /// Carries out one instruction, and returns the distance to skip when it jumps.
+    /// Carries out one instruction, and says where to go next when it jumps.
     fn execute<System: SystemValues>(
         &mut self,
         instruction: Instruction,
         call: &mut Call<System>,
-    ) -> Result<Option<u16>, Failure> {
+    ) -> Result<Option<JumpTo>, Failure> {
         use Instruction::*;
 
         match instruction {
@@ -267,15 +298,13 @@ impl Interpreter {
             PushLong(value) => self.push(value)?,
             PushNone => self.push(NONE)?,
             PushText(index) => self.push(TextReference::ImageString(index).to_value())?,
-            ReadState(slot) => {
-                let pending = call
-                    .outcome
-                    .as_ref()
-                    .and_then(|outcome| outcome.pending_value(slot));
-                let value = match pending {
-                    Some(value) => value,
-                    None => *call.state.get(slot as usize).ok_or(Failure::BadStateSlot)?,
-                };
+            ReadState(variable) => {
+                let value = self.read_element(call.state, variable, 0, false)?;
+                self.push(value)?;
+            }
+            ReadElement(variable) => {
+                let index = self.pop()?;
+                let value = self.read_element(call.state, variable, index, true)?;
                 self.push(value)?;
             }
             ReadSystem(value) => self.push(call.system.read(value))?,
@@ -284,6 +313,14 @@ impl Interpreter {
                     return Err(Failure::NotAllowedHere);
                 }
                 self.push(*call.event.get(field as usize).ok_or(Failure::BadEventField)?)?;
+            }
+            ReadLocal(local) => {
+                let value = *self.locals.get(local as usize).ok_or(Failure::BadLocal)?;
+                self.push(value)?;
+            }
+            WriteLocal(local) => {
+                let value = self.pop()?;
+                *self.locals.get_mut(local as usize).ok_or(Failure::BadLocal)? = value;
             }
 
             Duplicate => {
@@ -366,12 +403,14 @@ impl Interpreter {
                 self.push((value == NONE) as Value)?;
             }
 
-            Jump(distance) => return Ok(Some(distance)),
+            Jump(distance) => return Ok(Some(JumpTo::Forward(distance))),
             JumpIfFalse(distance) => {
                 if self.pop()? == 0 {
-                    return Ok(Some(distance));
+                    return Ok(Some(JumpTo::Forward(distance)));
                 }
             }
+            LoopStart => {}
+            LoopBack(distance) => return Ok(Some(JumpTo::Back(distance))),
 
             TimePart(part) => {
                 let time = self.local_time(call)?;
@@ -394,15 +433,37 @@ impl Interpreter {
             }
             Join => self.join(call.image)?,
 
-            WriteState(slot) => {
+            WriteState(variable) => {
+                Self::require_handler(call)?;
                 let value = self.pop()?;
-                if slot as usize >= call.state.len() {
-                    return Err(Failure::BadStateSlot);
+                self.write_element(call.state, variable, 0, value, false)?;
+            }
+            WriteElement(variable) => {
+                Self::require_handler(call)?;
+                let value = self.pop()?;
+                let index = self.pop()?;
+                self.write_element(call.state, variable, index, value, true)?;
+            }
+            FillArray(variable) => {
+                Self::require_handler(call)?;
+                let value = self.pop()?;
+                let length = Self::array_placement(call.state, variable)?.length;
+                for index in 0..length as Value {
+                    self.write_element(call.state, variable, index, value, true)?;
                 }
-                call.outcome
-                    .as_mut()
-                    .ok_or(Failure::NotAllowedHere)?
-                    .write(slot, value)?;
+            }
+            CopyArray { destination, source } => {
+                Self::require_handler(call)?;
+                let length = Self::array_placement(call.state, destination)?.length;
+                if Self::array_placement(call.state, source)?.length != length {
+                    return Err(Failure::IndexOutOfRange);
+                }
+                if destination != source {
+                    for index in 0..length as Value {
+                        let value = self.read_element(call.state, source, index, true)?;
+                        self.write_element(call.state, destination, index, value, true)?;
+                    }
+                }
             }
             Effect(kind) => {
                 let mut arguments = [0; MOST_EFFECT_ARGUMENTS];
@@ -415,6 +476,99 @@ impl Interpreter {
         }
         Ok(None)
     }
+
+    fn require_handler<System: SystemValues>(call: &Call<System>) -> Result<(), Failure> {
+        match call.outcome {
+            Some(_) => Ok(()),
+            None => Err(Failure::NotAllowedHere),
+        }
+    }
+
+    fn array_placement(state: &AppState, variable: u8) -> Result<Placement, Failure> {
+        let placement = state.placement(variable).ok_or(Failure::BadVariable)?;
+        match placement.is_array() {
+            true => Ok(placement),
+            false => Err(Failure::BadVariable),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Variables
+    // ------------------------------------------------------------------------
+
+    fn working_copy(&self, variable: u8) -> Option<WorkingCopy> {
+        self.copies[..self.copy_count]
+            .iter()
+            .find(|copy| copy.variable == variable)
+            .copied()
+    }
+
+    /// Reads a single value, or an array element when `is_array` is set.
+    fn read_element(
+        &self,
+        state: &AppState,
+        variable: u8,
+        index: Value,
+        is_array: bool,
+    ) -> Result<Value, Failure> {
+        let placement = state.placement(variable).ok_or(Failure::BadVariable)?;
+        if placement.is_array() != is_array {
+            return Err(Failure::BadVariable);
+        }
+        let range = placement.element_range(index).ok_or(Failure::IndexOutOfRange)?;
+        let bytes = match self.working_copy(variable) {
+            Some(copy) => &self.scratch[copy.offset as usize..(copy.offset + copy.length) as usize],
+            None => state.variable_bytes(variable).ok_or(Failure::BadVariable)?,
+        };
+        read_packed(bytes.get(range).ok_or(Failure::BadVariable)?).ok_or(Failure::BadVariable)
+    }
+
+    /// Writes a single value, or an array element when `is_array` is set, into the working copy.
+    fn write_element(
+        &mut self,
+        state: &AppState,
+        variable: u8,
+        index: Value,
+        value: Value,
+        is_array: bool,
+    ) -> Result<(), Failure> {
+        let placement = state.placement(variable).ok_or(Failure::BadVariable)?;
+        if placement.is_array() != is_array {
+            return Err(Failure::BadVariable);
+        }
+        let range = placement.element_range(index).ok_or(Failure::IndexOutOfRange)?;
+        let copy = match self.working_copy(variable) {
+            Some(copy) => copy,
+            None => self.make_working_copy(state, variable)?,
+        };
+        let bytes = &mut self.scratch[copy.offset as usize..(copy.offset + copy.length) as usize];
+        write_packed(&mut bytes[range], value).ok_or(Failure::Overflow)
+    }
+
+    fn make_working_copy(&mut self, state: &AppState, variable: u8) -> Result<WorkingCopy, Failure> {
+        let original = state.variable_bytes(variable).ok_or(Failure::BadVariable)?;
+        if self.copy_count == MOST_CHANGED_VARIABLES {
+            return Err(Failure::TooManyChangedVariables);
+        }
+        let end = self.scratch_used + original.len();
+        if end > SCRATCH_BYTES {
+            return Err(Failure::ScratchFull);
+        }
+        self.scratch[self.scratch_used..end].copy_from_slice(original);
+        let copy = WorkingCopy {
+            variable,
+            offset: self.scratch_used as u16,
+            length: original.len() as u16,
+        };
+        self.copies[self.copy_count] = copy;
+        self.copy_count += 1;
+        self.scratch_used = end;
+        Ok(copy)
+    }
+
+    // ------------------------------------------------------------------------
+    // Stack, time and text
+    // ------------------------------------------------------------------------
 
     fn push(&mut self, value: Value) -> Result<(), Failure> {
         let free = self.stack.get_mut(self.depth).ok_or(Failure::StackOverflow)?;

@@ -11,6 +11,7 @@ pub mod image;
 pub mod instruction;
 pub mod interpreter;
 pub mod pattern;
+pub mod state;
 pub mod text;
 pub mod verifier;
 pub mod widgets;
@@ -18,7 +19,8 @@ pub mod widgets;
 pub use bindings::{analyse_expression, Bindings, ExpressionInfo, Inputs};
 pub use image::{AppImage, AppKind, ImageError, StateVariable, ValueType};
 pub use instruction::{EffectKind, SystemValue};
-pub use interpreter::{Effect, Failure, HandlerOutcome, Interpreter, StateWrite, SystemValues, Value, NONE};
+pub use interpreter::{Effect, Failure, HandlerOutcome, Interpreter, SystemValues, Value, NONE};
+pub use state::AppState;
 pub use verifier::verify;
 pub use widgets::{Property, PropertySource, Widget, WidgetKind, WidgetTree};
 

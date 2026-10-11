@@ -22,7 +22,7 @@ lists the events, widgets and effects apps can use.
   firmware and its runtime, it keeps a shared library of images, fonts, components and functions
   that every app can use, so each app stays small.
 - **A broken app cannot break the watch.** Every app image is checked when it is installed, and
-  every call ends: jumps only go forward, and loops will have a step limit.
+  every call ends: a call that loops is stopped after 200,000 steps.
 
 ## Choosing the format
 
@@ -262,7 +262,7 @@ Each kind of section appears at most once:
 | Kind | Section | Layout |
 |---|---|---|
 | 1 | Strings | A table of (offset, length) pairs, 2 bytes each, then the UTF-8 text they point into. |
-| 2 | State | 12 bytes per variable: key string (2), type (1), flags (1, bit 0 = persists), default value (8). At most 64 variables. |
+| 2 | State | 16 bytes per variable: key string (2), type (1), flags (1), array length (2, 0 for a single value), reserved (2), default value (8). Flags bit 0 means the variable persists; bits 1–2 give an array's element width: 0 for 8 bytes, 1 for 1, 2 for 2, 3 for 4. An array starts with every element at the default. At most 64 variables, 2 KB in all and 1 KB for any one. |
 | 3 | Expressions | A table of (offset, length) pairs, then the bytecode they point into. |
 | 4 | Handlers | The same layout as expressions. |
 | 5 | Widgets | A table of (offset, length) pairs, then one record per widget, described below. At most 128 widgets. |
@@ -344,6 +344,8 @@ Each instruction is one opcode byte followed by its operands:
 | `07` | read system | value, 1 byte | Pushes a system value (see below). |
 | `08` | read event | field, 1 byte | Pushes one of the event's 8 fields. Handlers only. |
 | `09`, `0A`, `0B` | duplicate, drop, swap | | Stack housekeeping. |
+| `0C` | read local | local, 1 byte | Pushes one of the call's 16 locals, which all start at 0. |
+| `0D` | write local | local, 1 byte | Takes a value into a local. |
 | `10`–`14` | add, subtract, multiply, divide, remainder | | Whole-number arithmetic. Overflow and division by zero fail the call; division rounds toward zero. |
 | `15`–`18` | negate, minimum, maximum, absolute | | |
 | `1A`–`1D` | bit and, bit or, bit xor, bit not | | For masks, such as the days an alarm rings. |
@@ -354,6 +356,8 @@ Each instruction is one opcode byte followed by its operands:
 | `27` | is none | | 1 if the value is the empty optional. |
 | `28` | jump | distance, 2 bytes | Skips forward that many bytes. There is no way to jump backward. |
 | `29` | jump if false | distance, 2 bytes | Takes a value and skips forward if it is 0. `? :`, `&&` and `\|\|` compile to this. |
+| `2A` | loop start | | Marks where a loop begins. The stack must be empty here. |
+| `2B` | loop back | distance, 2 bytes | Goes back that many bytes, counted from the end of this instruction, to a loop start. The stack must be empty here too. |
 | `30` | time part | part, 1 byte | Takes an instant and pushes its local year, month, day, hour, minute, second or weekday (0 to 6, Monday first). |
 | `40` | format number | minimum digits, 1 byte | Takes a number and pushes it as text, padded with zeros. |
 | `41` | format duration | pattern string, 2 bytes | Takes a duration and pushes it as text in the pattern. |
@@ -361,6 +365,10 @@ Each instruction is one opcode byte followed by its operands:
 | `43` | join | | Takes two texts and pushes them joined. |
 | `50` | write state | slot, 1 byte | Takes a value for a state variable. Handlers only. |
 | `51` | effect | effect, 1 byte | Takes the effect's arguments and records it. Handlers only. |
+| `60` | read element | array, 1 byte | Takes an index and pushes that element. An index outside the array fails the call. |
+| `61` | write element | array, 1 byte | Takes an index and a value and writes that element. A value too wide for the element fails the call. Handlers only. |
+| `62` | copy array | destination and source arrays, 1 byte each | Copies every element; the two must be the same length. Handlers only. |
+| `63` | fill array | array, 1 byte | Takes a value and writes it to every element. Handlers only. |
 
 System values, in the order `read system` numbers them: `now`, `utc_offset`, `battery_percent`,
 `is_charging`, `steps_today`, `heart_rate`, `heart_rate_measured_at`, `is_phone_connected`,
@@ -378,9 +386,14 @@ Effects, in the order `effect` numbers them, with how many arguments each takes:
 `log` (1), `request_music_state`, `set_heart_rate_led` (3), `set_bluetooth` (1).
 `vibrate_sequence` and `http_request` need arrays and more arguments, and come later.
 
-Every jump goes forward, so a call can never run longer than its own code. When loops over
-fixed-length arrays arrive, each call will also get a limit of 200,000 steps, about a fifth of a
-second.
+Only `loop back` goes backward. A call stops with a failure after 200,000 instructions, which
+should be roughly a fifth of a second on the watch; that figure is not yet measured.
+
+A handler never writes to the app's state directly. The first time it writes to a variable, the
+interpreter copies the whole variable into a 1 KB scratch area, and every later read and write of
+that variable uses the copy. When the handler finishes, the copies are written back and the
+outcome lists which variables changed; when it fails, the copies are dropped. So one handler can
+change at most 16 variables and 1 KB of state.
 
 ### Checking an image
 
@@ -396,6 +409,9 @@ Then one pass over each expression and handler checks:
 - that every instruction and operand is known, and every state slot and string exists;
 - that every format pattern is valid, so a typo in one is caught at install;
 - that every jump lands on the start of an instruction or the end of the code;
+- that single-value instructions only name single values and array instructions only arrays, that
+  copied arrays have the same length, and that locals are within the 16;
+- that every loop back lands on a loop start, and the stack is empty at both;
 - that the stack never goes below empty or above 32 values, and that every path into a jump
   target arrives with the same depth;
 - that an expression ends with exactly one value and a handler with none;
@@ -432,9 +448,10 @@ flash; no runtime code is.
 
 ### Events
 
-Touches, buttons and swipes reach the handlers the widgets name. A handler runs to the end and
-returns its state changes and effects. The runtime applies the changes, marks every expression
-whose input mask includes a changed slot as dirty, and redraws only those properties. Persistent
+Touches, buttons and swipes reach the handlers the widgets name. A handler runs to the end, its
+changes are written back to the state, and it returns which variables changed and its effects.
+The runtime marks every expression whose input mask includes a changed variable as dirty, and
+redraws only those properties. Persistent
 slots that changed are written to the key-value store a moment later, so a burst of taps costs one
 flash write.
 
@@ -468,15 +485,15 @@ The working memory below is measured from `neotime-runtime`; the rest is still a
 
 | Part | Size |
 |---|---|
-| Interpreter: a stack of 32 values and the 256-byte text buffer | 528 B, measured |
-| A handler's results: up to 16 state writes and 8 effects | 528 B, measured, only while a handler runs |
+| Interpreter: a stack of 32 values, 16 locals, the 256-byte text buffer and the 1 KB scratch area | 1,792 B, measured |
+| A handler's results: which variables changed and up to 8 effects | 272 B, measured, only while a handler runs |
 | Bindings: what each of up to 64 expressions reads and its redraw period | 1,032 B, measured |
-| State: 32 slots of 8 bytes, plus small arrays | about 1 KB |
+| State: up to 2 KB of variables and arrays, and where each lies | 2,440 B, measured |
 | Expression bytecode, copied in when the app opens | about 1 KB |
 | Section reader for the image on the external flash | 256 B |
 
-That is about 4 KB, which leaves most of the open app's 12 KB for larger arrays and for a second
-app's state while a subscription runs. The widgets themselves are allocated from the UI heap.
+That is about 6.6 KB, which leaves the rest of the open app's 12 KB for a second app's state
+while a subscription runs. The widgets themselves are allocated from the UI heap.
 
 ## Built so far
 
@@ -485,8 +502,10 @@ returns an error instead of panicking on any input. It has:
 
 - `image`: reads and checks the header, section table, strings and state variables in place;
 - `verifier`: the install-time pass over every expression and handler;
-- `interpreter`: runs expressions and handlers, holding a handler's writes and effects back until
-  it finishes;
+- `state`: lays out an app's variables and arrays in one buffer, each element as wide as the image
+  asks;
+- `interpreter`: runs expressions and handlers, with locals and loops, keeping a handler's changes
+  in working copies until it finishes;
 - `text`: the calendar and number formatting;
 - `pattern`: the time and duration format patterns;
 - `widgets`: reads the widget tree in place, walks screens and children, and checks it;
@@ -495,8 +514,8 @@ returns an error instead of panicking on any input. It has:
 
 Its tests build images by hand, including the stopwatch from [Writing an app](#writing-an-app), and
 check that flipping any single byte of an image never panics. Still to come: the subscriptions and
-resources sections, arrays and loops, the compiler, and the runtime loop that
-ties these to the UI toolkit and the system.
+resources sections, the compiler, and the runtime loop that ties these to the UI toolkit and the
+system.
 
 ## Open questions
 

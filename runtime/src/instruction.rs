@@ -229,6 +229,10 @@ pub enum Instruction {
     Duplicate,
     Drop,
     Swap,
+    /// Pushes one of the call's local values, which all start at zero.
+    ReadLocal(u8),
+    /// Takes a value and keeps it in a local.
+    WriteLocal(u8),
     Add,
     Subtract,
     Multiply,
@@ -260,6 +264,10 @@ pub enum Instruction {
     Jump(u16),
     /// Takes a value and skips forward like `Jump` when it is false.
     JumpIfFalse(u16),
+    /// Marks the start of a loop. The stack must be empty here.
+    LoopStart,
+    /// Goes back this many bytes, counted from the end of this instruction, to a `LoopStart`.
+    LoopBack(u16),
     TimePart(TimePart),
     FormatNumber(u8),
     /// Formats a duration with the pattern in this string; see `pattern`.
@@ -268,6 +276,17 @@ pub enum Instruction {
     FormatTime(u16),
     Join,
     WriteState(u8),
+    /// Takes an index and pushes that element of an array variable.
+    ReadElement(u8),
+    /// Takes an index and a value and writes that element. Handlers only.
+    WriteElement(u8),
+    /// Copies every element of the second array into the first. Handlers only.
+    CopyArray {
+        destination: u8,
+        source: u8,
+    },
+    /// Takes a value and writes it to every element. Handlers only.
+    FillArray(u8),
     Effect(EffectKind),
 }
 
@@ -287,7 +306,11 @@ impl Instruction {
             PushSmall(_) | PushInt(_) | PushLong(_) | PushNone | PushText(_) | ReadState(_)
             | ReadSystem(_) | ReadEvent(_) => (0, 1),
             Duplicate => (1, 2),
-            Drop | JumpIfFalse(_) | WriteState(_) => (1, 0),
+            Drop | JumpIfFalse(_) | WriteState(_) | WriteLocal(_) | FillArray(_) => (1, 0),
+            ReadLocal(_) => (0, 1),
+            ReadElement(_) => (1, 1),
+            WriteElement(_) => (2, 0),
+            LoopStart | LoopBack(_) | CopyArray { .. } => (0, 0),
             Swap => (2, 2),
             Add | Subtract | Multiply | Divide | Remainder | Minimum | Maximum | RandomInt | BitAnd
             | BitOr | BitXor | ShiftLeft | ShiftRight | Equal | NotEqual | Less | LessOrEqual | Greater
@@ -341,6 +364,8 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
         0x09 => (Duplicate, 0),
         0x0A => (Drop, 0),
         0x0B => (Swap, 0),
+        0x0C => (ReadLocal(byte()?), 1),
+        0x0D => (WriteLocal(byte()?), 1),
         0x10 => (Add, 0),
         0x11 => (Subtract, 0),
         0x12 => (Multiply, 0),
@@ -373,6 +398,11 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
             JumpIfFalse(u16::from_le_bytes(bytes(2)?.try_into().unwrap_or_default())),
             2,
         ),
+        0x2A => (LoopStart, 0),
+        0x2B => (
+            LoopBack(u16::from_le_bytes(bytes(2)?.try_into().unwrap_or_default())),
+            2,
+        ),
         0x30 => (
             TimePart(self::TimePart::from_byte(byte()?).ok_or(unknown(byte()?))?),
             1,
@@ -389,6 +419,19 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
         0x43 => (Join, 0),
         0x50 => (WriteState(byte()?), 1),
         0x51 => (Effect(EffectKind::from_byte(byte()?).ok_or(unknown(byte()?))?), 1),
+        0x60 => (ReadElement(byte()?), 1),
+        0x61 => (WriteElement(byte()?), 1),
+        0x62 => {
+            let variables = bytes(2)?;
+            (
+                CopyArray {
+                    destination: variables[0],
+                    source: variables[1],
+                },
+                2,
+            )
+        }
+        0x63 => (FillArray(byte()?), 1),
         other => return Err(DecodeError::UnknownOpcode(other)),
     };
     Ok((instruction, offset + 1 + operand_bytes))

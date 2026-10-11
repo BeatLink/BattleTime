@@ -15,7 +15,7 @@ pub const FORMAT_VERSION: u16 = 1;
 const HEADER_BYTES: usize = 20;
 const SECTION_ENTRY_BYTES: usize = 12;
 const TABLE_ENTRY_BYTES: usize = 4;
-const STATE_ENTRY_BYTES: usize = 12;
+const STATE_ENTRY_BYTES: usize = 16;
 
 /// The bytes the CRC covers start after the CRC field itself.
 const CRC_COVERS_FROM: usize = 16;
@@ -86,13 +86,46 @@ impl ValueType {
     }
 }
 
+/// One state variable: a single value, or a fixed-length array of them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StateVariable {
     pub key_string: u16,
     pub value_type: ValueType,
     pub persists: bool,
+    /// Zero for a single value, otherwise how many elements the array has.
+    pub length: u16,
+    /// How many bytes each value is stored in: 8 for a single value, 1, 2, 4 or 8 in an array.
+    pub element_bytes: u8,
+    /// The starting value, or for an array the value every element starts as.
     pub default_value: i64,
 }
+
+impl StateVariable {
+    pub fn is_array(&self) -> bool {
+        self.length > 0
+    }
+
+    /// How many bytes the variable takes in RAM.
+    pub fn stored_bytes(&self) -> usize {
+        self.length.max(1) as usize * self.element_bytes as usize
+    }
+
+    /// Whether a value fits the variable's element width.
+    pub fn fits(&self, value: i64) -> bool {
+        match self.element_bytes {
+            1 => i8::try_from(value).is_ok(),
+            2 => i16::try_from(value).is_ok(),
+            4 => i32::try_from(value).is_ok(),
+            _ => true,
+        }
+    }
+}
+
+/// The most RAM an app's state may take, single values and arrays together.
+pub const MOST_STATE_BYTES: usize = 2048;
+
+/// The most RAM one variable may take, so that a handler can always copy it to change it.
+pub const MOST_VARIABLE_BYTES: usize = 1024;
 
 /// Why an image was refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -109,6 +142,7 @@ pub enum ImageError {
     BadString(u16),
     UnknownValueType(u8),
     TooManyStateVariables,
+    StateTooLarge,
     BadDefaultValue(u8),
     BadCode {
         block: CodeBlock,
@@ -146,6 +180,11 @@ pub enum CodeProblem {
     EffectInExpression,
     RandomInExpression,
     BadPattern,
+    WrongVariableKind,
+    LocalOutOfRange,
+    LoopWithStack,
+    BadLoop,
+    TooManyLoops,
 }
 
 // ============================================================================
@@ -319,6 +358,18 @@ impl<'image> AppImage<'image> {
         for index in 0..image.state_count {
             image.check_state_variable(index)?;
         }
+        let state_bytes: usize = (0..image.state_count)
+            .filter_map(|index| image.state_variable(index))
+            .map(|variable| variable.stored_bytes())
+            .sum();
+        let largest_variable = (0..image.state_count())
+            .filter_map(|index| image.state_variable(index))
+            .map(|variable| variable.stored_bytes())
+            .max()
+            .unwrap_or(0);
+        if state_bytes > MOST_STATE_BYTES || largest_variable > MOST_VARIABLE_BYTES {
+            return Err(ImageError::StateTooLarge);
+        }
         Ok(image)
     }
 
@@ -348,7 +399,7 @@ impl<'image> AppImage<'image> {
             ValueType::Color => (0..=0xFFFF).contains(&value),
             ValueType::Text => (0..self.strings.count as i64).contains(&value),
             ValueType::Int | ValueType::Instant | ValueType::Duration => true,
-        };
+        } && variable.fits(value);
         if !default_is_valid {
             return Err(ImageError::BadDefaultValue(index as u8));
         }
@@ -372,11 +423,21 @@ impl<'image> AppImage<'image> {
             return None;
         }
         let entry = index as usize * STATE_ENTRY_BYTES;
+        let flags = self.state_entries[entry + 3];
+        let length = read_u16(self.state_entries, entry + 4)?;
+        let element_bytes = match (length, (flags >> 1) & 0b11) {
+            (0, _) | (_, 0) => 8,
+            (_, 1) => 1,
+            (_, 2) => 2,
+            _ => 4,
+        };
         Some(StateVariable {
             key_string: read_u16(self.state_entries, entry)?,
             value_type: ValueType::from_byte(self.state_entries[entry + 2])?,
-            persists: self.state_entries[entry + 3] & 1 != 0,
-            default_value: read_i64(self.state_entries, entry + 4)?,
+            persists: flags & 1 != 0,
+            length,
+            element_bytes,
+            default_value: read_i64(self.state_entries, entry + 8)?,
         })
     }
 

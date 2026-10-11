@@ -7,7 +7,7 @@
 
 use crate::image::{AppImage, CodeBlock, CodeProblem, ImageError};
 use crate::instruction::{decode, Instruction};
-use crate::interpreter::{MOST_EVENT_FIELDS, STACK_DEPTH};
+use crate::interpreter::{MOST_EVENT_FIELDS, MOST_LOCALS, STACK_DEPTH};
 use crate::pattern;
 use crate::widgets::verify_widgets;
 
@@ -17,6 +17,9 @@ use crate::widgets::verify_widgets;
 
 /// How many forward jumps may be waiting for their target at once.
 const MOST_OPEN_JUMPS: usize = 16;
+
+/// How many loops one piece of code may have.
+const MOST_LOOPS: usize = 16;
 
 // ============================================================================
 // Verifying an image
@@ -45,6 +48,8 @@ fn verify_code(image: &AppImage, code: &[u8], block: CodeBlock) -> Result<(), Im
     let is_expression = matches!(block, CodeBlock::Expression(_));
     let mut open_jumps = [OpenJump { target: 0, depth: 0 }; MOST_OPEN_JUMPS];
     let mut open_jump_count = 0;
+    let mut loop_starts = [0usize; MOST_LOOPS];
+    let mut loop_start_count = 0;
 
     // None means no path reaches this point.
     let mut depth: Option<usize> = Some(0);
@@ -91,6 +96,30 @@ fn verify_code(image: &AppImage, code: &[u8], block: CodeBlock) -> Result<(), Im
         }
         check_operands(image, instruction, is_expression).map_err(|problem| fail(offset, problem))?;
 
+        match instruction {
+            Instruction::LoopStart if depth.is_some() => {
+                if depth != Some(0) {
+                    return Err(fail(offset, CodeProblem::LoopWithStack));
+                }
+                if loop_start_count == MOST_LOOPS {
+                    return Err(fail(offset, CodeProblem::TooManyLoops));
+                }
+                loop_starts[loop_start_count] = offset;
+                loop_start_count += 1;
+            }
+            Instruction::LoopBack(distance) if depth.is_some() => {
+                if depth != Some(0) {
+                    return Err(fail(offset, CodeProblem::LoopWithStack));
+                }
+                let target = next_offset.checked_sub(distance as usize);
+                if !target.is_some_and(|target| loop_starts[..loop_start_count].contains(&target)) {
+                    return Err(fail(offset, CodeProblem::BadLoop));
+                }
+                depth = None;
+            }
+            _ => {}
+        }
+
         if let Some(current) = depth {
             let effect = instruction.stack_effect();
             let after_taking = current
@@ -127,6 +156,8 @@ fn verify_code(image: &AppImage, code: &[u8], block: CodeBlock) -> Result<(), Im
     let expected_results = if is_expression { 1 } else { 0 };
     match depth {
         Some(results) if results == expected_results => Ok(()),
+        // No path reaches the end, so the call can only stop by failing, such as at the step limit.
+        None => Ok(()),
         _ => Err(fail(code.len(), CodeProblem::WrongResultCount)),
     }
 }
@@ -136,11 +167,49 @@ fn check_operands(
     instruction: Instruction,
     is_expression: bool,
 ) -> Result<(), CodeProblem> {
+    let is_array = |variable: u8| {
+        image
+            .state_variable(variable as u16)
+            .map(|variable| variable.is_array())
+    };
+    let array_length = |variable: u8| {
+        image
+            .state_variable(variable as u16)
+            .filter(|variable| variable.is_array())
+            .map(|variable| variable.length)
+    };
+    let writes_state = matches!(
+        instruction,
+        Instruction::WriteState(_)
+            | Instruction::WriteElement(_)
+            | Instruction::FillArray(_)
+            | Instruction::CopyArray { .. }
+    );
+
     match instruction {
-        Instruction::ReadState(slot) | Instruction::WriteState(slot)
-            if slot as u16 >= image.state_count() =>
-        {
-            Err(CodeProblem::StateSlotOutOfRange)
+        _ if writes_state && is_expression => Err(CodeProblem::WriteInExpression),
+        Instruction::ReadState(variable) | Instruction::WriteState(variable) => match is_array(variable) {
+            None => Err(CodeProblem::StateSlotOutOfRange),
+            Some(true) => Err(CodeProblem::WrongVariableKind),
+            Some(false) => Ok(()),
+        },
+        Instruction::ReadElement(variable)
+        | Instruction::WriteElement(variable)
+        | Instruction::FillArray(variable) => match is_array(variable) {
+            None => Err(CodeProblem::StateSlotOutOfRange),
+            Some(false) => Err(CodeProblem::WrongVariableKind),
+            Some(true) => Ok(()),
+        },
+        Instruction::CopyArray { destination, source } => {
+            match (array_length(destination), array_length(source)) {
+                (Some(destination_length), Some(source_length)) if destination_length == source_length => {
+                    Ok(())
+                }
+                _ => Err(CodeProblem::WrongVariableKind),
+            }
+        }
+        Instruction::ReadLocal(local) | Instruction::WriteLocal(local) if local as usize >= MOST_LOCALS => {
+            Err(CodeProblem::LocalOutOfRange)
         }
         Instruction::PushText(index) if index >= image.string_count() => Err(CodeProblem::StringOutOfRange),
         Instruction::FormatTime(index) => match image.string(index) {
@@ -157,7 +226,6 @@ fn check_operands(
         Instruction::ReadEvent(field) if field as usize >= MOST_EVENT_FIELDS => {
             Err(CodeProblem::EventFieldOutOfRange)
         }
-        Instruction::WriteState(_) if is_expression => Err(CodeProblem::WriteInExpression),
         Instruction::Effect(_) if is_expression => Err(CodeProblem::EffectInExpression),
         Instruction::RandomInt if is_expression => Err(CodeProblem::RandomInExpression),
         _ => Ok(()),

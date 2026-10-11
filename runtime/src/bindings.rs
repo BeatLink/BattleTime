@@ -96,7 +96,7 @@ pub fn analyse_expression(image: &AppImage, code: &[u8]) -> Option<ExpressionInf
     while offset < code.len() {
         let (instruction, next_offset) = decode(code, offset).ok()?;
         match instruction {
-            Instruction::ReadState(slot) if (slot as usize) < 64 => {
+            Instruction::ReadState(slot) | Instruction::ReadElement(slot) if (slot as usize) < 64 => {
                 inputs = inputs.union(Inputs::state_slot(slot))
             }
             Instruction::ReadSystem(value) => inputs = inputs.union(Inputs::system_value(value)),

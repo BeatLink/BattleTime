@@ -389,17 +389,21 @@ impl<'image> Widget<'image> {
 
     /// The widget's properties; an entry that cannot be read comes back as `None`.
     pub fn properties(&self) -> impl Iterator<Item = Option<PropertyEntry>> + 'image {
-        self.properties.as_chunks::<PROPERTY_BYTES>().0.iter().map(|bytes| {
-            let property = Property::from_byte(bytes[0])?;
-            let value = i32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]);
-            let source = match bytes[1] {
-                0 => PropertySource::Constant(value),
-                1 => PropertySource::Expression(u16::try_from(value).ok()?),
-                2 => PropertySource::Handler(u16::try_from(value).ok()?),
-                _ => return None,
-            };
-            Some(PropertyEntry { property, source })
-        })
+        self.properties
+            .as_chunks::<PROPERTY_BYTES>()
+            .0
+            .iter()
+            .map(|bytes| {
+                let property = Property::from_byte(bytes[0])?;
+                let value = i32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]);
+                let source = match bytes[1] {
+                    0 => PropertySource::Constant(value),
+                    1 => PropertySource::Expression(u16::try_from(value).ok()?),
+                    2 => PropertySource::Handler(u16::try_from(value).ok()?),
+                    _ => return None,
+                };
+                Some(PropertyEntry { property, source })
+            })
     }
 
     pub fn property(&self, wanted: Property) -> Option<PropertySource> {

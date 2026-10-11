@@ -247,11 +247,12 @@ byte-level format.
 
 - **Images.** `AppImage::parse` reads an app image where it lies and checks its header, CRC,
   sections, strings and state variables.
-- **Checks.** `verify` makes one pass over every expression and handler. Jumps only go forward, so
-  that pass proves the stack never underflows or overflows and every call ends.
+- **Checks.** `verify` makes one pass over every expression and handler. Ordinary jumps only go
+  forward, and a loop must start and end with an empty stack, so that one pass proves the stack
+  never underflows or overflows.
 - **Interpreter.** `Interpreter` runs an expression to get a widget's value, or a handler to answer
-  an event. A handler's state writes and effects are returned, not applied, so a failure part way
-  changes nothing.
+  an event. A handler's changes are applied only when it finishes, and its effects are returned,
+  so a failure part way changes nothing.
 - **Widgets.** `WidgetTree` reads an app's widgets in place: its screens, each widget's children,
   and each property as a constant, an expression or a handler.
 - **Format patterns.** Times and durations are written with patterns such as `dddd D MMMM`, checked
@@ -259,8 +260,12 @@ byte-level format.
 - **Bindings.** `Bindings` works out from the code what each expression reads and how often the
   clock changes it, so the runtime redraws only what changed and sleeps otherwise.
 
-It never allocates and never panics on bad input. Its working memory is 528 B for the interpreter
-and 1,032 B for the bindings of up to 64 expressions.
+- **State and arrays.** `AppState` packs an app's variables and arrays into 2 KB, each array element
+  in as few bytes as the image asks. Handlers change copies of what they write, so a failure part
+  way changes nothing, and loops stop after 200,000 steps.
+
+It never allocates and never panics on bad input. Its working memory is 1,792 B for the
+interpreter, 1,032 B for the bindings of up to 64 expressions and 2,440 B for the state.
 
 ## UI toolkit (`ui`)
 

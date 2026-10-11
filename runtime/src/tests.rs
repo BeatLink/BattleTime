@@ -100,6 +100,35 @@ impl Code {
     fn join(self) -> Self {
         self.op(0x43)
     }
+    fn read_local(self, local: u8) -> Self {
+        self.op_byte(0x0C, local)
+    }
+    fn write_local(self, local: u8) -> Self {
+        self.op_byte(0x0D, local)
+    }
+    fn loop_start(self) -> Self {
+        self.op(0x2A)
+    }
+    fn loop_back(self, distance: u16) -> Self {
+        self.op_u16(0x2B, distance)
+    }
+    fn element(self, array: u8) -> Self {
+        self.op_byte(0x60, array)
+    }
+    fn write_element(self, array: u8) -> Self {
+        self.op_byte(0x61, array)
+    }
+    fn copy_array(mut self, destination: u8, source: u8) -> Self {
+        self.bytes.extend([0x62, destination, source]);
+        self
+    }
+    fn fill(self, array: u8) -> Self {
+        self.op_byte(0x63, array)
+    }
+    fn then(mut self, other: Code) -> Self {
+        self.bytes.extend(other.bytes);
+        self
+    }
     fn write_state(self, slot: u8) -> Self {
         self.op_byte(0x50, slot)
     }
@@ -123,6 +152,9 @@ struct Variable {
     key: &'static str,
     value_type: u8,
     persists: bool,
+    length: u16,
+    /// 0 for 8 bytes, 1 for 1, 2 for 2 and 3 for 4.
+    width_code: u8,
     default_value: i64,
 }
 
@@ -158,6 +190,28 @@ impl ImageBuilder {
             key,
             value_type,
             persists,
+            length: 0,
+            width_code: 0,
+            default_value,
+        });
+        (self.state.len() - 1) as u8
+    }
+
+    /// An array of `length` elements, each `element_bytes` wide.
+    fn array(&mut self, key: &'static str, length: u16, element_bytes: u8, default_value: i64) -> u8 {
+        let width_code = match element_bytes {
+            1 => 1,
+            2 => 2,
+            4 => 3,
+            _ => 0,
+        };
+        self.string(key);
+        self.state.push(Variable {
+            key,
+            value_type: INT_TYPE,
+            persists: false,
+            length,
+            width_code,
             default_value,
         });
         (self.state.len() - 1) as u8
@@ -213,7 +267,9 @@ impl ImageBuilder {
             let key_string = self.strings.iter().position(|text| text == variable.key).unwrap() as u16;
             state.extend(key_string.to_le_bytes());
             state.push(variable.value_type);
-            state.push(variable.persists as u8);
+            state.push(variable.persists as u8 | variable.width_code << 1);
+            state.extend(variable.length.to_le_bytes());
+            state.extend([0, 0]);
             state.extend(variable.default_value.to_le_bytes());
         }
         let sections: Vec<(u16, u16, Vec<u8>)> = vec![
@@ -289,12 +345,21 @@ impl SystemValues for FakeSystem {
 /// 2026-10-11 14:05:09 UTC, a Sunday.
 const SUNDAY_AFTERNOON: i64 = 1_791_727_509_000;
 
+/// The image's state with the first variables set to `values`.
+fn state_with(image: &AppImage, values: &[Value]) -> AppState {
+    let mut state = AppState::new(image).unwrap();
+    for (variable, value) in values.iter().enumerate() {
+        state.set(variable as u8, *value).unwrap();
+    }
+    state
+}
+
 fn evaluate(code: Code) -> Result<Value, Failure> {
     let mut builder = ImageBuilder::new();
     builder.expression(code);
     let bytes = builder.build();
     let image = AppImage::parse(&bytes).unwrap();
-    Interpreter::new().evaluate_expression(&image, 0, &[], &FakeSystem::default())
+    Interpreter::new().evaluate_expression(&image, 0, &AppState::new(&image).unwrap(), &FakeSystem::default())
 }
 
 fn evaluate_text(code: Code, system: &FakeSystem) -> String {
@@ -303,7 +368,9 @@ fn evaluate_text(code: Code, system: &FakeSystem) -> String {
     let bytes = builder.build();
     let image = AppImage::parse(&bytes).unwrap();
     let mut interpreter = Interpreter::new();
-    let value = interpreter.evaluate_expression(&image, 0, &[], system).unwrap();
+    let value = interpreter
+        .evaluate_expression(&image, 0, &AppState::new(&image).unwrap(), system)
+        .unwrap();
     interpreter.text(&image, value).unwrap().into()
 }
 
@@ -399,8 +466,7 @@ fn stopwatch_image_passes_verification() {
 fn stopwatch_shows_the_time_since_it_started() {
     let stopwatch = stopwatch();
     let image = AppImage::parse(&stopwatch.bytes).unwrap();
-    let mut state = [NONE, 0];
-    state[stopwatch.started_at as usize] = 1_000_000;
+    let state = state_with(&image, &[1_000_000, 0]);
     let system = FakeSystem {
         now: 1_000_000 + 75_400,
         ..Default::default()
@@ -418,8 +484,7 @@ fn stopwatch_shows_the_time_since_it_started() {
 fn stopped_stopwatch_shows_the_time_it_ran() {
     let stopwatch = stopwatch();
     let image = AppImage::parse(&stopwatch.bytes).unwrap();
-    let mut state = [NONE, 0];
-    state[stopwatch.stopped_after as usize] = 9_000;
+    let state = state_with(&image, &[NONE, 9_000]);
     let mut interpreter = Interpreter::new();
 
     let value = interpreter
@@ -433,52 +498,37 @@ fn stopped_stopwatch_shows_the_time_it_ran() {
 fn toggling_a_stopped_stopwatch_starts_it_from_where_it_stopped() {
     let stopwatch = stopwatch();
     let image = AppImage::parse(&stopwatch.bytes).unwrap();
-    let state = [NONE, 9_000];
+    let mut state = state_with(&image, &[NONE, 9_000]);
     let system = FakeSystem {
         now: 50_000,
         ..Default::default()
     };
 
     let outcome = Interpreter::new()
-        .run_handler(&image, 0, &state, &[], &system)
+        .run_handler(&image, 0, &mut state, &[], &system)
         .unwrap();
 
-    assert_eq!(
-        outcome.writes(),
-        &[StateWrite {
-            slot: stopwatch.started_at,
-            value: 41_000
-        }]
-    );
+    assert_eq!(state.get(stopwatch.started_at), Some(41_000));
+    assert_eq!(outcome.changed_variables(), 1 << stopwatch.started_at);
 }
 
 #[test]
 fn toggling_a_running_stopwatch_stops_it() {
     let stopwatch = stopwatch();
     let image = AppImage::parse(&stopwatch.bytes).unwrap();
-    let state = [41_000, 9_000];
+    let mut state = state_with(&image, &[41_000, 9_000]);
     let system = FakeSystem {
         now: 60_000,
         ..Default::default()
     };
 
     let outcome = Interpreter::new()
-        .run_handler(&image, 0, &state, &[], &system)
+        .run_handler(&image, 0, &mut state, &[], &system)
         .unwrap();
 
-    assert_eq!(
-        outcome.writes(),
-        &[
-            StateWrite {
-                slot: stopwatch.stopped_after,
-                value: 19_000
-            },
-            StateWrite {
-                slot: stopwatch.started_at,
-                value: NONE
-            },
-        ]
-    );
+    assert_eq!(state.get(stopwatch.stopped_after), Some(19_000));
+    assert_eq!(state.get(stopwatch.started_at), Some(NONE));
+    assert_eq!(outcome.changed_variables(), 0b11);
 }
 
 #[test]
@@ -585,8 +635,10 @@ fn never_panics_on_any_single_corrupted_byte() {
                 if verify(&image).is_ok() {
                     let mut interpreter = Interpreter::new();
                     let system = FakeSystem::default();
-                    let _ = interpreter.evaluate_expression(&image, 0, &[NONE, 0], &system);
-                    let _ = interpreter.run_handler(&image, 0, &[NONE, 0], &[], &system);
+                    if let Ok(mut state) = AppState::new(&image) {
+                        let _ = interpreter.evaluate_expression(&image, 0, &state, &system);
+                        let _ = interpreter.run_handler(&image, 0, &mut state, &[], &system);
+                    }
                 }
             }
         }
@@ -793,17 +845,13 @@ fn rolls_a_random_number_inside_the_range() {
     let bytes = builder.build();
     let image = AppImage::parse(&bytes).unwrap();
 
-    let outcome = Interpreter::new()
-        .run_handler(&image, 0, &[0], &[], &FakeSystem::default())
+    let mut state = state_with(&image, &[0]);
+
+    Interpreter::new()
+        .run_handler(&image, 0, &mut state, &[], &FakeSystem::default())
         .unwrap();
 
-    assert_eq!(
-        outcome.writes(),
-        &[StateWrite {
-            slot: roll,
-            value: 1 + 1_000_003 % 6
-        }]
-    );
+    assert_eq!(state.get(roll), Some(1 + 1_000_003 % 6));
 }
 
 #[test]
@@ -834,7 +882,7 @@ fn reads_system_values() {
 }
 
 #[test]
-fn handler_reads_its_own_writes_and_reports_one_per_slot() {
+fn handler_reads_its_own_writes() {
     let mut builder = ImageBuilder::new();
     let count = builder.variable("count", INT_TYPE, false, 0);
     builder.handler(
@@ -851,17 +899,13 @@ fn handler_reads_its_own_writes_and_reports_one_per_slot() {
     let bytes = builder.build();
     let image = AppImage::parse(&bytes).unwrap();
 
-    let outcome = Interpreter::new()
-        .run_handler(&image, 0, &[5], &[], &FakeSystem::default())
+    let mut state = state_with(&image, &[5]);
+
+    Interpreter::new()
+        .run_handler(&image, 0, &mut state, &[], &FakeSystem::default())
         .unwrap();
 
-    assert_eq!(
-        outcome.writes(),
-        &[StateWrite {
-            slot: count,
-            value: 7
-        }]
-    );
+    assert_eq!(state.get(count), Some(7));
 }
 
 #[test]
@@ -872,17 +916,13 @@ fn handler_reads_event_fields() {
     let bytes = builder.build();
     let image = AppImage::parse(&bytes).unwrap();
 
-    let outcome = Interpreter::new()
-        .run_handler(&image, 0, &[0], &[3, 42], &FakeSystem::default())
+    let mut state = state_with(&image, &[0]);
+
+    Interpreter::new()
+        .run_handler(&image, 0, &mut state, &[3, 42], &FakeSystem::default())
         .unwrap();
 
-    assert_eq!(
-        outcome.writes(),
-        &[StateWrite {
-            slot: total,
-            value: 42
-        }]
-    );
+    assert_eq!(state.get(total), Some(42));
 }
 
 #[test]
@@ -901,8 +941,10 @@ fn handler_collects_effects_in_order() {
     let bytes = builder.build();
     let image = AppImage::parse(&bytes).unwrap();
 
+    let mut state = state_with(&image, &[]);
+
     let outcome = Interpreter::new()
-        .run_handler(&image, 0, &[], &[], &FakeSystem::default())
+        .run_handler(&image, 0, &mut state, &[], &FakeSystem::default())
         .unwrap();
 
     let kinds: Vec<EffectKind> = outcome.effects().iter().map(|effect| effect.kind).collect();
@@ -914,7 +956,7 @@ fn handler_collects_effects_in_order() {
 }
 
 #[test]
-fn failing_handler_reports_nothing() {
+fn failing_handler_changes_nothing() {
     let mut builder = ImageBuilder::new();
     let count = builder.variable("count", INT_TYPE, false, 0);
     builder.handler(
@@ -931,9 +973,12 @@ fn failing_handler_reports_nothing() {
     let bytes = builder.build();
     let image = AppImage::parse(&bytes).unwrap();
 
-    let result = Interpreter::new().run_handler(&image, 0, &[0], &[], &FakeSystem::default());
+    let mut state = state_with(&image, &[0]);
+
+    let result = Interpreter::new().run_handler(&image, 0, &mut state, &[], &FakeSystem::default());
 
     assert_eq!(result.err(), Some(Failure::DivideByZero));
+    assert_eq!(state.get(count), Some(0));
 }
 
 #[test]
@@ -947,7 +992,9 @@ fn too_many_effects_fail() {
     let bytes = builder.build();
     let image = AppImage::parse(&bytes).unwrap();
 
-    let result = Interpreter::new().run_handler(&image, 0, &[], &[], &FakeSystem::default());
+    let mut state = state_with(&image, &[]);
+
+    let result = Interpreter::new().run_handler(&image, 0, &mut state, &[], &FakeSystem::default());
 
     assert_eq!(result.err(), Some(Failure::TooManyEffects));
 }
@@ -1032,7 +1079,7 @@ fn splits_a_time_into_parts() {
         let bytes = builder.build();
         let image = AppImage::parse(&bytes).unwrap();
         Interpreter::new()
-            .evaluate_expression(&image, 0, &[], &system)
+            .evaluate_expression(&image, 0, &AppState::new(&image).unwrap(), &system)
             .unwrap()
     };
 
@@ -1069,7 +1116,7 @@ fn joins_image_strings_and_formatted_text() {
     let mut interpreter = Interpreter::new();
 
     let value = interpreter
-        .evaluate_expression(&image, 0, &[], &FakeSystem::default())
+        .evaluate_expression(&image, 0, &AppState::new(&image).unwrap(), &FakeSystem::default())
         .unwrap();
 
     assert_eq!(interpreter.text(&image, value), Ok("8421 steps"));
@@ -1083,7 +1130,12 @@ fn text_that_overflows_the_buffer_fails() {
     let bytes = builder.build();
     let image = AppImage::parse(&bytes).unwrap();
 
-    let result = Interpreter::new().evaluate_expression(&image, 0, &[], &FakeSystem::default());
+    let result = Interpreter::new().evaluate_expression(
+        &image,
+        0,
+        &AppState::new(&image).unwrap(),
+        &FakeSystem::default(),
+    );
 
     assert_eq!(result, Err(Failure::TextBufferFull));
 }
@@ -1191,7 +1243,9 @@ fn format_time_with(pattern: &str, system: &FakeSystem) -> String {
     let bytes = builder.build();
     let image = AppImage::parse(&bytes).unwrap();
     let mut interpreter = Interpreter::new();
-    let value = interpreter.evaluate_expression(&image, 0, &[], system).unwrap();
+    let value = interpreter
+        .evaluate_expression(&image, 0, &AppState::new(&image).unwrap(), system)
+        .unwrap();
     interpreter.text(&image, value).unwrap().into()
 }
 
@@ -1203,7 +1257,7 @@ fn format_duration_with(pattern: &str, milliseconds: i64) -> String {
     let image = AppImage::parse(&bytes).unwrap();
     let mut interpreter = Interpreter::new();
     let value = interpreter
-        .evaluate_expression(&image, 0, &[], &FakeSystem::default())
+        .evaluate_expression(&image, 0, &AppState::new(&image).unwrap(), &FakeSystem::default())
         .unwrap();
     interpreter.text(&image, value).unwrap().into()
 }
@@ -1486,6 +1540,272 @@ fn refuses_a_property_given_twice() {
 }
 
 // ============================================================================
+// Arrays and loops
+// ============================================================================
+
+/// `for (local 0 = 0; local 0 < count; local 0 += 1) { body }`, with an empty stack around the body.
+fn counting_loop(count: i8, body: Code) -> Code {
+    let step = Code::new().read_local(0).small(1).add().write_local(0);
+    let body = body.then(step);
+    // The loop back covers the test, the jump out, the body and itself.
+    let test = Code::new().read_local(0).small(count).op(0x22);
+    let exit_distance = body.len() + 3;
+    let back_distance = 1 + test.len() + 3 + body.len() + 3;
+    Code::new()
+        .small(0)
+        .write_local(0)
+        .loop_start()
+        .then(test)
+        .jump_if_false(exit_distance)
+        .then(body)
+        .loop_back(back_distance)
+}
+
+#[test]
+fn a_loop_sums_the_numbers_below_ten() {
+    let sum_into_local_1 = Code::new().read_local(1).read_local(0).add().write_local(1);
+    let code = counting_loop(10, sum_into_local_1).read_local(1);
+
+    assert_eq!(evaluate(code), Ok(45));
+}
+
+#[test]
+fn a_loop_that_never_ends_is_stopped() {
+    let mut builder = ImageBuilder::new();
+    builder.handler(Code::new().loop_start().loop_back(4));
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut state = state_with(&image, &[]);
+
+    assert_eq!(verify(&image), Ok(()));
+    assert_eq!(
+        Interpreter::new()
+            .run_handler(&image, 0, &mut state, &[], &FakeSystem::default())
+            .err(),
+        Some(Failure::TooManySteps)
+    );
+}
+
+#[test]
+fn a_handler_writes_every_cell_of_a_board() {
+    let mut builder = ImageBuilder::new();
+    let board = builder.array("board", 400, 1, 0);
+    // board[i] = i % 7, for every cell.
+    let set_cell = Code::new()
+        .read_local(0)
+        .read_local(0)
+        .small(7)
+        .op(0x14)
+        .write_element(board);
+    builder.handler(counting_loop(127, set_cell.clone()));
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut state = state_with(&image, &[]);
+
+    let outcome = Interpreter::new()
+        .run_handler(&image, 0, &mut state, &[], &FakeSystem::default())
+        .unwrap();
+
+    assert_eq!(state.placement(board).unwrap().stored_bytes(), 400);
+    assert_eq!(state.element(board, 10), Some(3));
+    assert_eq!(state.element(board, 126), Some(0));
+    assert_eq!(state.element(board, 127), Some(0));
+    assert_eq!(outcome.changed_variables(), 1 << board);
+}
+
+#[test]
+fn reads_elements_and_fills_and_copies_arrays() {
+    let mut builder = ImageBuilder::new();
+    let first = builder.array("first", 16, 2, 0);
+    let second = builder.array("second", 16, 4, 0);
+    let total = builder.variable("total", INT_TYPE, false, 0);
+    builder.handler(
+        Code::new()
+            .int(-300)
+            .fill(first)
+            .copy_array(second, first)
+            .small(5)
+            .element(second)
+            .write_state(total),
+    );
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut state = state_with(&image, &[]);
+
+    let outcome = Interpreter::new()
+        .run_handler(&image, 0, &mut state, &[], &FakeSystem::default())
+        .unwrap();
+
+    assert_eq!(state.element(second, 15), Some(-300));
+    assert_eq!(state.get(total), Some(-300));
+    assert_eq!(outcome.changed_variables(), 0b111);
+}
+
+#[test]
+fn an_element_past_the_end_fails_and_changes_nothing() {
+    let mut builder = ImageBuilder::new();
+    let board = builder.array("board", 4, 1, 9);
+    builder.handler(
+        Code::new()
+            .small(0)
+            .small(1)
+            .write_element(board)
+            .small(4)
+            .small(1)
+            .write_element(board),
+    );
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut state = state_with(&image, &[]);
+
+    let result = Interpreter::new().run_handler(&image, 0, &mut state, &[], &FakeSystem::default());
+
+    assert_eq!(result.err(), Some(Failure::IndexOutOfRange));
+    assert_eq!(state.element(board, 0), Some(9));
+}
+
+#[test]
+fn a_value_too_big_for_its_element_fails() {
+    let mut builder = ImageBuilder::new();
+    let board = builder.array("board", 4, 1, 0);
+    builder.handler(Code::new().small(0).int(300).write_element(board));
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut state = state_with(&image, &[]);
+
+    let result = Interpreter::new().run_handler(&image, 0, &mut state, &[], &FakeSystem::default());
+
+    assert_eq!(result.err(), Some(Failure::Overflow));
+}
+
+#[test]
+fn a_handler_cannot_change_more_than_the_scratch_area_holds() {
+    let mut builder = ImageBuilder::new();
+    let big = builder.array("big", 1000, 1, 0);
+    let other = builder.array("other", 100, 1, 0);
+    builder.handler(
+        Code::new()
+            .small(0)
+            .small(1)
+            .write_element(big)
+            .small(0)
+            .small(1)
+            .write_element(other),
+    );
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut state = state_with(&image, &[]);
+
+    let result = Interpreter::new().run_handler(&image, 0, &mut state, &[], &FakeSystem::default());
+
+    assert_eq!(result.err(), Some(Failure::ScratchFull));
+}
+
+#[test]
+fn refuses_state_too_large_for_ram() {
+    let mut too_much = ImageBuilder::new();
+    too_much.array("first", 1000, 1, 0);
+    too_much.array("second", 1000, 1, 0);
+    too_much.array("third", 100, 1, 0);
+    let mut one_too_big = ImageBuilder::new();
+    one_too_big.array("board", 1100, 1, 0);
+
+    assert_eq!(
+        AppImage::parse(&too_much.build()).err(),
+        Some(ImageError::StateTooLarge)
+    );
+    assert_eq!(
+        AppImage::parse(&one_too_big.build()).err(),
+        Some(ImageError::StateTooLarge)
+    );
+}
+
+#[test]
+fn refuses_an_array_default_that_does_not_fit() {
+    let mut builder = ImageBuilder::new();
+    builder.array("board", 4, 1, 1000);
+
+    assert_eq!(
+        AppImage::parse(&builder.build()).err(),
+        Some(ImageError::BadDefaultValue(0))
+    );
+}
+
+#[test]
+fn refuses_a_loop_entered_with_values_on_the_stack() {
+    let mut builder = ImageBuilder::new();
+    builder.handler(Code::new().small(1).loop_start().drop_value());
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::LoopWithStack));
+}
+
+#[test]
+fn refuses_a_loop_back_that_misses_its_start() {
+    let mut builder = ImageBuilder::new();
+    builder.handler(Code::new().loop_start().small(1).drop_value().loop_back(3));
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::BadLoop));
+}
+
+#[test]
+fn refuses_using_an_array_as_a_value_and_a_value_as_an_array() {
+    let mut array_as_value = ImageBuilder::new();
+    let board = array_as_value.array("board", 4, 1, 0);
+    array_as_value.expression(Code::new().state(board));
+    let mut value_as_array = ImageBuilder::new();
+    let count = value_as_array.variable("count", INT_TYPE, false, 0);
+    value_as_array.expression(Code::new().small(0).element(count));
+
+    assert_eq!(
+        verify_problem(&array_as_value),
+        Some(CodeProblem::WrongVariableKind)
+    );
+    assert_eq!(
+        verify_problem(&value_as_array),
+        Some(CodeProblem::WrongVariableKind)
+    );
+}
+
+#[test]
+fn refuses_copying_arrays_of_different_lengths() {
+    let mut builder = ImageBuilder::new();
+    let short = builder.array("short", 4, 1, 0);
+    let long = builder.array("long", 8, 1, 0);
+    builder.handler(Code::new().copy_array(long, short));
+
+    assert_eq!(verify_problem(&builder), Some(CodeProblem::WrongVariableKind));
+}
+
+#[test]
+fn refuses_array_writes_in_an_expression_and_locals_past_the_limit() {
+    let mut write_in_expression = ImageBuilder::new();
+    let board = write_in_expression.array("board", 4, 1, 0);
+    write_in_expression.expression(Code::new().small(0).small(1).write_element(board).small(1));
+    let mut local_too_far = ImageBuilder::new();
+    local_too_far.expression(Code::new().read_local(16));
+
+    assert_eq!(
+        verify_problem(&write_in_expression),
+        Some(CodeProblem::WriteInExpression)
+    );
+    assert_eq!(verify_problem(&local_too_far), Some(CodeProblem::LocalOutOfRange));
+}
+
+#[test]
+fn an_expression_reading_an_array_redraws_when_it_changes() {
+    let mut builder = ImageBuilder::new();
+    builder.variable("score", INT_TYPE, false, 0);
+    let board = builder.array("board", 16, 1, 0);
+    builder.expression(Code::new().small(3).element(board));
+    let bytes = builder.build();
+    let bindings = Bindings::load(&AppImage::parse(&bytes).unwrap()).unwrap();
+
+    let affected: Vec<usize> = bindings.affected_by(Inputs::state_slot(board)).collect();
+
+    assert_eq!(affected, [0]);
+}
+
+// ============================================================================
 // Memory
 // ============================================================================
 
@@ -1494,9 +1814,14 @@ fn working_memory_stays_inside_the_budget() {
     let interpreter = core::mem::size_of::<Interpreter>();
     let handler_outcome = core::mem::size_of::<HandlerOutcome>();
     let bindings = core::mem::size_of::<Bindings>();
-    std::println!("interpreter {interpreter} B, handler outcome {handler_outcome} B, bindings {bindings} B");
+    let state = core::mem::size_of::<AppState>();
+    std::println!(
+        "interpreter {interpreter} B, handler outcome {handler_outcome} B, bindings {bindings} B, state {state} B"
+    );
 
-    assert!(interpreter <= 600);
-    assert!(handler_outcome <= 600);
-    assert!(bindings <= 1100);
+    assert!(interpreter <= 1_800);
+    assert!(handler_outcome <= 300);
+    assert!(bindings <= 1_100);
+    assert!(state <= 2_600);
+    assert!(interpreter + bindings + state <= 6 * 1024);
 }

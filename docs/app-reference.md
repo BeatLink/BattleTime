@@ -416,6 +416,10 @@ such as a list of alarms `{ hour, minute, days, enabled }`. The compiler stores 
 state slot of its own. A handler may write one element, as in `board.value[cell] = 2`; the write is
 applied with the handler's other writes when it finishes.
 
+An app's state is at most 2 KB, and one array at most 1 KB. Each array stores its elements in 1, 2,
+4 or 8 bytes, whichever the compiler finds fits, so a 400-cell board of small numbers takes
+400 bytes. One handler may change at most 16 variables and 1 KB of state.
+
 | Function | Returns |
 |---|---|
 | `range(count)` | `0` to `count - 1`, where `count` is known when the app is compiled. |
@@ -428,7 +432,7 @@ Loops over fixed-length arrays are allowed in `computed` and handlers as well as
 ### Control flow
 
 An early `return` is allowed in any function. A call that loops runs at most 200,000 steps, which
-is about a fifth of a second; a game search should stop well inside that, or split its work across
+should be roughly a fifth of a second; a game search should stop well inside that, or split its work across
 several calls.
 
 ## Permissions
