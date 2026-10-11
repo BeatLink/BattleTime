@@ -279,6 +279,52 @@ fn stores_a_recovery_image_with_its_vector_table_written_last() {
 }
 
 #[test]
+fn recovery_read_back_shows_the_held_vector_table() {
+    let mut recovery_slot = ExternalSlot::erased(RECOVERY_FIRMWARE.size);
+    let image = firmware_image(300);
+    let mut receiver = RecoveryReceiver::new(&mut recovery_slot);
+
+    block_on(async {
+        receiver.begin(image.len() as u32).await.unwrap();
+        receiver.receive(&image).await.unwrap();
+    });
+    let mut read_back = vec![0; 300];
+    block_on(receiver.read_back(0, &mut read_back)).unwrap();
+    let mut tail = vec![0; 10];
+    block_on(receiver.read_back(4, &mut tail)).unwrap();
+
+    assert_eq!(read_back, image);
+    assert_eq!(tail, &image[4..14]);
+}
+
+#[test]
+fn receivers_route_each_image_kind_to_its_slot() {
+    let mut update_slot = ExternalSlot::erased(FIRMWARE_UPDATE.size);
+    let mut boot_state = BootStatePage::erased(PAGE_SIZE);
+    let mut recovery_slot = ExternalSlot::erased(RECOVERY_FIRMWARE.size);
+    let mut alignment = [0; 4];
+    let firmware = firmware_image(500);
+    let recovery = firmware_image(700);
+
+    let mut receivers = Receivers {
+        firmware: UpdateReceiver::new(&mut update_slot, &mut boot_state, &mut alignment),
+        recovery: RecoveryReceiver::new(&mut recovery_slot),
+    };
+    block_on(async {
+        receivers.begin(ImageKind::Recovery, 700).await.unwrap();
+        receivers.receive(ImageKind::Recovery, &recovery).await.unwrap();
+        receivers.finish(ImageKind::Recovery).await.unwrap();
+        receivers.begin(ImageKind::Firmware, 500).await.unwrap();
+        receivers.receive(ImageKind::Firmware, &firmware).await.unwrap();
+        receivers.finish(ImageKind::Firmware).await.unwrap();
+    });
+
+    assert_eq!(update_slot.bytes_at(0, 500), &firmware[..]);
+    assert_eq!(recovery_slot.bytes_at(0, 700), &recovery[..]);
+    assert_eq!(boot_state_of(&mut boot_state), State::Swap);
+}
+
+#[test]
 fn starting_a_recovery_upload_invalidates_the_old_image_at_once() {
     let mut recovery_slot = ExternalSlot::erased(RECOVERY_FIRMWARE.size);
     recovery_slot.memory[..8].copy_from_slice(&firmware_image(8));

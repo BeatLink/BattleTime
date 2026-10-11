@@ -1156,6 +1156,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-dfu"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "heapless 0.9.3",
+ "neotime-updates",
+ "static_cell",
+ "trouble-host",
+]
+
+[[package]]
 name = "neotime-display"
 version = "0.1.0"
 dependencies = [

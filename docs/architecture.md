@@ -33,7 +33,7 @@ flowchart TB
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>(planned: power, events, settings, notifications)"]
-    services["Services<br/>services/storage, services/updates;<br/>planned: BLE host on TrouBLE, time, steps"]
+    services["Services<br/>services/storage, services/updates,<br/>services/dfu; planned: time, steps"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth,<br/>drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
@@ -49,6 +49,12 @@ flowchart TB
     services --> drivers
     drivers -. embedded-hal traits .-> board
     board --> hal
+
+    firmware["Firmware<br/>firmware: the program that runs it all, started"]
+    firmware --> system
+    firmware --> services
+    firmware --> drivers
+    firmware --> hal
 
     bootloader["Bootloader<br/>bootloader, boot<br/>(runs before the firmware)"]
     bootloader --> drivers
@@ -83,6 +89,10 @@ Each layer uses only the layers below it.
   in the simulator; not yet on the watch)**
 - **App compiler** runs on the computer, not the watch. It turns an app's source into an image
   and checks it with the runtime's own checks. **(started)**
+- **Firmware** is the program the watch runs: it starts the drivers and services on Embassy and
+  spawns the tasks. For now it does what an update needs: watchdog, screen, file system, Bluetooth
+  with the DFU service. It stands in for the board layer until there is more than one board.
+  **(started)**
 - **Bootloader** is a separate program that runs before the firmware. It installs updates and the
   recovery firmware, then starts the firmware. The firmware shares its flash layout through the
   `neotime-boot` crate. See [Bootloader](#bootloader-bootloader-and-boot).
@@ -106,8 +116,9 @@ NeoTime/
 ├── rustfmt.toml      formatting rules
 ├── flake.nix       development shell, simulator package and checks
 ├── rust-toolchain.toml  the Rust version and the watch's target
-├── boot/             neotime-boot: the flash layout, shared by the bootloader and the firmware
+├── boot/             neotime-boot: the flash layout, shared by every program
 ├── bootloader/       neotime-bootloader: the bootloader program, built only for the watch
+├── firmware/         neotime-firmware: the firmware program, built only for the watch
 ├── docs/
 │   ├── app-reference.md the events, widgets and effects apps can use
 │   ├── app-runtime.md the proposed app format and runtime
@@ -122,6 +133,7 @@ NeoTime/
 │   ├── simulator.md
 │   ├── storage.md
 │   ├── todo.md
+│   ├── updates.md    firmware updates over Bluetooth
 │   └── images/       pictures for the docs
 ├── drivers/
 │   ├── accelerometer/  neotime-accelerometer: the BMA421 or BMA425 and its step counter
@@ -136,12 +148,13 @@ NeoTime/
 ├── sdk/
 │   └── neotime/      the neotime package apps and faces import, as a stand-in for now
 ├── services/
+│   ├── dfu/          neotime-dfu: the legacy DFU update protocol over Bluetooth
 │   ├── storage/      neotime-storage: the littlefs file system in the external flash
 │   └── updates/      neotime-updates: stores an uploaded firmware and hands it to the bootloader
 ├── simulator/        neotime-simulator: the drivers in a desktop window
 ├── third_party/
 │   └── littlefs-rust/  littlefs-rust with its panicking loop caps turned off
-├── tools/            scripts for development, such as drawing the memory maps
+├── tools/            scripts: drawing the memory maps and packaging update zips
 └── ui/               neotime-ui: draws rlvgl widgets on the screen
 ```
 
@@ -367,6 +380,22 @@ uploads an image and the bootloader that installs it. It knows nothing of the up
   start of the slot first and writes the vector table last, so the bootloader never sees a
   half-written recovery firmware.
 
+## Firmware updates over Bluetooth (`services/dfu`)
+
+`neotime-dfu` speaks Nordic's legacy DFU, the protocol InfiniTime uses, so Gadgetbridge, ITD, Siglo
+and NeoTime's tools update NeoTime without changes. `LegacyDfu` is the state machine, with no
+Bluetooth in it: control point commands and packet writes go in, notifications and a reset request
+come out, and the bytes go to `neotime-updates`. Its tests run a whole update through it. The
+`trouble` feature adds the GATT service for TrouBLE. See [updates.md](updates.md).
+
+## Firmware (`firmware`)
+
+`neotime-firmware` is the first firmware: it takes over the bootloader's watchdog and feeds it only
+while the button is up, shows a page, mounts the file system, advertises as "NeoTime" with the DFU
+service, and confirms itself to the bootloader once Bluetooth runs. 105 KB of flash and 25 KB of
+static RAM, 16 KB of it heap. It is outside the workspace, like the bootloader, because it only
+builds for the watch. See [updates.md](updates.md).
+
 ## Bootloader (`bootloader` and `boot`)
 
 The bootloader is built on [embassy-boot](https://embassy.dev). It swaps in a waiting firmware
@@ -503,11 +532,11 @@ The workspace's default members are the `no_std` crates only, so that build leav
 out. `nix flake check` runs the tests, the watch build, clippy and two headless simulator
 screenshots, one of them of the stopwatch app after a click, in a clean sandbox.
 
-The bootloader is outside the workspace and builds only for the watch:
+The bootloader and the firmware are outside the workspace and build only for the watch:
 
 ```sh
-cd bootloader
-cargo build --release
+cd bootloader && cargo build --release
+cd firmware && cargo build --release
 ```
 
 There is no firmware image to flash yet. That arrives with the board layer.

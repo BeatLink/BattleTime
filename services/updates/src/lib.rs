@@ -142,6 +142,11 @@ impl<'buffer, UpdateSlot: NorFlash, BootState: NorFlash> UpdateReceiver<'buffer,
         Ok(())
     }
 
+    /// Forgets a half-received image; the next `begin` starts over.
+    pub fn abort(&mut self) {
+        self.progress = None;
+    }
+
     /// Checks the image is whole and looks like firmware, then asks the bootloader to swap it in at the next reset.
     pub async fn finish(&mut self) -> Result<(), UpdateError> {
         let progress = started(&mut self.progress)?;
@@ -258,6 +263,26 @@ impl<RecoverySlot: NorFlash> RecoveryReceiver<RecoverySlot> {
         Ok(())
     }
 
+    /// Reads the image as it will be once finished, with the held-back vector table in place.
+    pub async fn read_back(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), UpdateError> {
+        self.recovery_slot
+            .read(offset, bytes)
+            .await
+            .map_err(|_| UpdateError::Flash)?;
+
+        let held_end = VECTOR_TABLE_CHECK_SIZE as u32;
+        if offset < held_end {
+            let held_byte_count = (held_end - offset).min(bytes.len() as u32) as usize;
+            let held_range = offset as usize..offset as usize + held_byte_count;
+            bytes[..held_byte_count].copy_from_slice(&self.held_vector_table_start[held_range]);
+        }
+        Ok(())
+    }
+
+    pub fn abort(&mut self) {
+        self.progress = None;
+    }
+
     pub fn release(self) -> RecoverySlot {
         self.recovery_slot
     }
@@ -270,6 +295,70 @@ impl<RecoverySlot: NorFlash> RecoveryReceiver<RecoverySlot> {
             .map_err(|_| UpdateError::Flash)?;
         self.last_erased_sector = Some(sector);
         Ok(())
+    }
+}
+
+// ============================================================================
+// Both receivers behind one door, for the upload protocol
+// ============================================================================
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImageKind {
+    Firmware,
+    Recovery,
+}
+
+/// What an upload protocol needs from the watch, whichever slot an image is for.
+#[allow(async_fn_in_trait)]
+pub trait UpdateTargets {
+    async fn begin(&mut self, kind: ImageKind, image_size_in_bytes: u32) -> Result<(), UpdateError>;
+    async fn receive(&mut self, kind: ImageKind, chunk: &[u8]) -> Result<(), UpdateError>;
+    async fn read_back(&mut self, kind: ImageKind, offset: u32, bytes: &mut [u8]) -> Result<(), UpdateError>;
+    async fn finish(&mut self, kind: ImageKind) -> Result<(), UpdateError>;
+    fn abort(&mut self, kind: ImageKind);
+}
+
+pub struct Receivers<'buffer, UpdateSlot: NorFlash, BootState: NorFlash, RecoverySlot: NorFlash> {
+    pub firmware: UpdateReceiver<'buffer, UpdateSlot, BootState>,
+    pub recovery: RecoveryReceiver<RecoverySlot>,
+}
+
+impl<UpdateSlot: NorFlash, BootState: NorFlash, RecoverySlot: NorFlash> UpdateTargets
+    for Receivers<'_, UpdateSlot, BootState, RecoverySlot>
+{
+    async fn begin(&mut self, kind: ImageKind, image_size_in_bytes: u32) -> Result<(), UpdateError> {
+        match kind {
+            ImageKind::Firmware => self.firmware.begin(image_size_in_bytes),
+            ImageKind::Recovery => self.recovery.begin(image_size_in_bytes).await,
+        }
+    }
+
+    async fn receive(&mut self, kind: ImageKind, chunk: &[u8]) -> Result<(), UpdateError> {
+        match kind {
+            ImageKind::Firmware => self.firmware.receive(chunk).await,
+            ImageKind::Recovery => self.recovery.receive(chunk).await,
+        }
+    }
+
+    async fn read_back(&mut self, kind: ImageKind, offset: u32, bytes: &mut [u8]) -> Result<(), UpdateError> {
+        match kind {
+            ImageKind::Firmware => self.firmware.read_back(offset, bytes).await,
+            ImageKind::Recovery => self.recovery.read_back(offset, bytes).await,
+        }
+    }
+
+    async fn finish(&mut self, kind: ImageKind) -> Result<(), UpdateError> {
+        match kind {
+            ImageKind::Firmware => self.firmware.finish().await,
+            ImageKind::Recovery => self.recovery.finish().await,
+        }
+    }
+
+    fn abort(&mut self, kind: ImageKind) {
+        match kind {
+            ImageKind::Firmware => self.firmware.abort(),
+            ImageKind::Recovery => self.recovery.abort(),
+        }
     }
 }
 

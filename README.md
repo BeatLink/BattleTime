@@ -21,8 +21,8 @@ It aims to combine the best parts of the two existing PineTime firmwares:
 
 ## Status
 
-Early work. The first drivers exist, for the screen, the touch panel, the vibration motor and the side button, but there is no
-firmware to flash yet.
+Early work. The drivers, the bootloader and a first firmware that takes updates over Bluetooth
+exist, and all have run only on the computer. Nothing has run on a watch yet.
 
 ## Documentation
 
@@ -31,6 +31,7 @@ firmware to flash yet.
 - [Simulator](docs/simulator.md): running the drivers in a desktop window with `nix run`.
 - [To do](docs/todo.md): work that is known to be needed but not done yet.
 - [Memory map](docs/memory-map.md): how the RAM, internal flash and external flash are divided.
+- [Updates](docs/updates.md): firmware updates over Bluetooth.
 
 ## License
 

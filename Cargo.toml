@@ -4,7 +4,7 @@ members = ["boot", "drivers/*", "services/*", "runtime", "ui", "app-host", "simu
 # The simulator needs std, so plain builds for the watch leave it out.
 default-members = ["boot", "drivers/*", "services/*", "runtime", "ui", "app-host"]
 # The bootloader builds only for the watch, with its own settings.
-exclude = ["bootloader", "third_party/littlefs-rust"]
+exclude = ["bootloader", "firmware", "third_party/littlefs-rust"]
 
 [workspace.package]
 license = "GPL-3.0-or-later"

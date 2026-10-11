@@ -86,6 +86,13 @@ pub const RAM: Region = Region {
     size: 64 * 1024,
 };
 
+/// The last words of RAM, where a running firmware writes `FIRMWARE_ALIVE_MAGIC` so an emulator can see it started.
+pub const FIRMWARE_ALIVE_MARKER: Region = Region {
+    start: RAM.end() - 16,
+    size: 16,
+};
+pub const FIRMWARE_ALIVE_MAGIC: u32 = 0x4E45_4F54;
+
 /// The firmware must start the watchdog with this same timeout, or it cannot take the running one over.
 pub const WATCHDOG_TIMEOUT_IN_TICKS: u32 = 5 * WATCHDOG_TICKS_PER_SECOND;
 pub const WATCHDOG_TICKS_PER_SECOND: u32 = 32768;
@@ -189,6 +196,7 @@ pub fn copy_recovery_into_update_slot<Flash: NorFlash>(
 
     Ok(RecoveryCopy::Copied)
 }
+
 
 #[cfg(test)]
 mod tests;

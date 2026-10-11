@@ -1,0 +1,20 @@
+[package]
+name = "neotime-dfu"
+version = "0.1.0"
+edition = "2021"
+description = "Nordic legacy DFU over Bluetooth, the firmware update protocol companion apps already speak"
+publish = false
+
+[features]
+# The GATT service macro needs static_cell in scope.
+trouble = ["dep:trouble-host", "dep:static_cell"]
+
+[dependencies]
+heapless = "0.9"
+static_cell = { version = "2.1", optional = true }
+trouble-host = { version = "0.8", default-features = false, features = ["peripheral", "gatt", "derive"], optional = true }
+
+neotime-updates = { path = "../updates" }
+
+[dev-dependencies]
+embassy-futures = "0.1"

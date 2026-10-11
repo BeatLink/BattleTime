@@ -58,7 +58,10 @@ the shared library is updated.
 ![RAM treemap](images/ram.svg)
 
 While the bootloader runs it uses all 64 KB from `0x20000000`. Nothing is kept when it jumps to the
-firmware, which then has the whole of RAM:
+firmware, which then has the whole of RAM but its last 16 bytes, the alive marker
+(`FIRMWARE_ALIVE_MARKER`) an emulator reads. The first firmware measures 25 KB of static RAM:
+16 KB of heap, and 9 KB of Bluetooth host, controller, display buffer and task state; the rest of
+the budget below is still planned:
 
 | Region | Budget | Holds | Status |
 |---|---|---|---|
