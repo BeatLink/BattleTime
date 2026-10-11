@@ -34,4 +34,5 @@ firmware to flash yet.
 
 ## License
 
-To be decided.
+NeoTime is free software under the GNU General Public License, version 3 or (at your option)
+any later version. The full text is in [LICENSE](LICENSE).

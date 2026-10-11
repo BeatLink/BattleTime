@@ -226,7 +226,6 @@ full report is
 - [ ] **Log steps to the file system** every 6 minutes, one file a day, with no limit on history.
 - [ ] **Reset at midnight** without the steps app open.
 - [ ] **Per-day step graphs** in the steps app.
-- [ ] **Write raise to wake independently.** The fork's detector copies InfiniTime's GPL-3.0 rules.
 
 ### Bluetooth
 
