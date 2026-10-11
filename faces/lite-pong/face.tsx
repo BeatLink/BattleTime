@@ -4,21 +4,20 @@
 
 import { signal } from "@preact/signals";
 import {
-  battery_percent,
   define_app,
   every,
   format_number,
   format_time,
   hour_of,
-  is_charging,
   minute_of,
   now,
   random_int,
   settings,
   type Color,
 } from "neotime";
+import { BatteryIcon } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Column, Icon, Label, Row, Screen } from "neotime/widgets";
+import { Column, Label, Row, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -47,13 +46,14 @@ const left_racket_y = signal(120);
 const right_racket_y = signal(120);
 
 /** Whether the ball moves right, and whether it moves down, up or straight across. */
-let moves_right = true;
-let vertical: "up" | "down" | "level" = "down";
+const moves_right = signal(true);
+const vertical = signal<"up" | "down" | "level">("down");
 
 /** How steeply the ball climbs or falls, from 1 (steep) to 4 (shallow). */
-let shallowness = 1;
+const shallowness = signal(1);
 
-let serve_delay = 0;
+/** Game steps left before the next serve. */
+const serve_delay = signal(0);
 
 // ============================================================================
 // Game
@@ -62,8 +62,8 @@ let serve_delay = 0;
 /** Picks a new direction and slope for the ball after a hit or a serve. */
 function pick_bounce() {
   const roll = random_int(0, 359);
-  vertical = roll < 100 ? "up" : roll < 240 ? "down" : "level";
-  shallowness = Math.max(1, random_int(0, 359) % 5);
+  vertical.value = roll < 100 ? "up" : roll < 240 ? "down" : "level";
+  shallowness.value = Math.max(1, random_int(0, 359) % 5);
 }
 
 /** Moves a racket one step toward a target height, keeping it on the screen. */
@@ -75,60 +75,52 @@ function chase(racket: typeof left_racket_y, target: number) {
 }
 
 function step() {
-  if (serve_delay > 0) {
-    serve_delay -= 1;
+  if (serve_delay.value > 0) {
+    serve_delay.value -= 1;
   } else {
-    ball_x.value += moves_right ? BALL_STEP : -BALL_STEP;
-    if (vertical === "down") ball_y.value += Math.floor(BALL_STEP / shallowness);
-    if (vertical === "up") ball_y.value -= Math.floor(BALL_STEP / shallowness);
+    ball_x.value += moves_right.value ? BALL_STEP : -BALL_STEP;
+    if (vertical.value === "down") ball_y.value += Math.floor(BALL_STEP / shallowness.value);
+    if (vertical.value === "up") ball_y.value -= Math.floor(BALL_STEP / shallowness.value);
   }
 
   let missed_by: "left" | "right" | null = null;
   const near_left = Math.abs(ball_y.value - left_racket_y.value) <= RACKET_REACH;
   const near_right = Math.abs(ball_y.value - right_racket_y.value) <= RACKET_REACH;
   if (ball_x.value <= 2 * BALL_STEP && near_left) {
-    moves_right = true;
+    moves_right.value = true;
     pick_bounce();
   } else if (ball_x.value <= 0) {
     missed_by = "left";
   }
   if (ball_x.value >= 240 - 2 * BALL_STEP && near_right) {
-    moves_right = false;
+    moves_right.value = false;
     pick_bounce();
   } else if (ball_x.value >= 240 - BALL_STEP) {
     missed_by = "right";
   }
 
-  if (serve_delay === 0) {
-    if (!moves_right && ball_x.value < 160) chase(left_racket_y, ball_y.value);
-    if (moves_right && ball_x.value > 80) chase(right_racket_y, ball_y.value);
+  if (serve_delay.value === 0) {
+    if (!moves_right.value && ball_x.value < 160) chase(left_racket_y, ball_y.value);
+    if (moves_right.value && ball_x.value > 80) chase(right_racket_y, ball_y.value);
   }
 
-  if (ball_y.value <= BALL_STEP) vertical = "down";
-  if (ball_y.value >= 240 - BALL_STEP) vertical = "up";
+  if (ball_y.value <= BALL_STEP) vertical.value = "down";
+  if (ball_y.value >= 240 - BALL_STEP) vertical.value = "up";
 
-  if (missed_by) {
+  if (missed_by !== null) {
     pick_bounce();
     const right_serves = missed_by === "left";
-    moves_right = !right_serves;
-    vertical = right_serves ? "down" : "up";
+    moves_right.value = !right_serves;
+    vertical.value = right_serves ? "down" : "up";
     ball_x.value = right_serves ? 228 : 12;
     ball_y.value = right_serves ? right_racket_y.value : left_racket_y.value;
-    serve_delay = SERVE_DELAY_STEPS;
+    serve_delay.value = SERVE_DELAY_STEPS;
   }
 }
 
 // ============================================================================
 // Screen
 // ============================================================================
-
-function BatteryLevel() {
-  return (
-    <Row width={26} height={14} border_width={2} border_color="text" radius={2} padding={1}>
-      <Column width={Math.max(1, Math.floor((battery_percent.value * 20) / 100))} height={8} background="text" />
-    </Row>
-  );
-}
 
 function Racket(props: { x: number; center_y: number }) {
   return (
@@ -182,7 +174,7 @@ function LitePongFace() {
 
       <Label x={4} y={216}>{format_time(now.value, "ddd, DD MMM")}</Label>
       <Row x={200} y={218} width={36} justify="end">
-        {is_charging.value ? <Icon icon={icons.charging} size={20} /> : <BatteryLevel />}
+        <BatteryIcon single_color show_bolt={false} />
       </Row>
     </Screen>
   );
@@ -194,5 +186,5 @@ export default define_app({
   icon: icons.game,
   kind: "face",
   screens: { main: LitePongFace },
-  subscriptions: [every({ milliseconds: STEP_MILLISECONDS }, step)],
+  subscriptions: [every({ milliseconds: STEP_MILLISECONDS }, step, { only_while_open: true })],
 });

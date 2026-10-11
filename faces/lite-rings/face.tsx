@@ -15,8 +15,9 @@ import {
   unread_notifications,
   type Color,
 } from "neotime";
+import { BatteryIcon } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Arc, Icon, Label, Screen } from "neotime/widgets";
+import { Arc, Icon, Label, Row, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -87,7 +88,9 @@ function LiteRingsFace() {
         {format_number(minute_of(now.value), 2)}
       </Label>
 
-      <Icon x={4} y={216} icon={icons.battery} size={20} color={ICON_COLOR} />
+      <Row x={4} y={218}>
+        <BatteryIcon color={ICON_COLOR} single_color show_bolt={false} />
+      </Row>
       {unread_notifications.value > 0 && <Icon x={216} y={216} icon={icons.notification} size={20} color={ICON_COLOR} />}
     </Screen>
   );
