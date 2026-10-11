@@ -7,6 +7,7 @@
 
 use crate::image::AppImage;
 use crate::instruction::{decode, EffectKind, Instruction, SystemValue, MOST_EFFECT_ARGUMENTS};
+use crate::pattern;
 use crate::text::{DateTime, TextReference, TextWriter};
 
 // ============================================================================
@@ -326,6 +327,21 @@ impl Interpreter {
                 let random = call.system.random_number() as u128;
                 self.push((lowest as i128 + (random % span) as i128) as Value)?;
             }
+            BitAnd => self.arithmetic(|left, right| Ok(left & right))?,
+            BitOr => self.arithmetic(|left, right| Ok(left | right))?,
+            BitXor => self.arithmetic(|left, right| Ok(left ^ right))?,
+            BitNot => {
+                let value = self.pop()?;
+                self.push(!value)?;
+            }
+            ShiftLeft => self.arithmetic(|value, places| match u32::try_from(places) {
+                Ok(places) if places < 64 => Ok(value << places),
+                _ => Err(Failure::Overflow),
+            })?,
+            ShiftRight => self.arithmetic(|value, places| match u32::try_from(places) {
+                Ok(places) if places < 64 => Ok(value >> places),
+                _ => Err(Failure::Overflow),
+            })?,
             Negate => {
                 let value = self.pop()?;
                 self.push(value.checked_neg().ok_or(Failure::Overflow)?)?;
@@ -365,14 +381,16 @@ impl Interpreter {
                 let number = self.pop()?;
                 self.write_text(|writer| writer.write_number(number, minimum_digits))?;
             }
-            FormatDuration(pattern) => {
+            FormatDuration(pattern_string) => {
                 let milliseconds = self.pop()?;
-                self.write_text(|writer| writer.write_duration(milliseconds, pattern))?;
+                let pattern = call.image.string(pattern_string).ok_or(Failure::BadText)?;
+                self.write_text(|writer| pattern::write_duration(writer, milliseconds, pattern))?;
             }
-            FormatTime(pattern) => {
+            FormatTime(pattern_string) => {
                 let time = self.local_time(call)?;
+                let pattern = call.image.string(pattern_string).ok_or(Failure::BadText)?;
                 let uses_24_hour_clock = call.system.read(SystemValue::Uses24HourClock) != 0;
-                self.write_text(|writer| writer.write_time(&time, pattern, uses_24_hour_clock))?;
+                self.write_text(|writer| pattern::write_time(writer, &time, pattern, uses_24_hour_clock))?;
             }
             Join => self.join(call.image)?,
 

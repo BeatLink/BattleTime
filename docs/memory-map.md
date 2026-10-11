@@ -64,7 +64,7 @@ firmware, which then has the whole of RAM:
 |---|---|---|---|
 | UI heap | 14 KB | The heap that `rlvgl`'s widgets allocate from. The `neotime-ui` crate keeps no screen buffer of its own. | Planned, not yet measured |
 | Bluetooth | 12 KB | The controller and the TrouBLE host: connection state, packet buffers and the GATT tables. | Partly measured: the controller is 1.5 KB; TrouBLE's example with it is 12.0 KB in all, executor included |
-| Apps | 12 KB | Memory for the app that is open, read from its file in `/apps`. The runtime's working memory in it is measured: 528 B for the interpreter and 904 B for the bindings. | Partly measured |
+| Apps | 12 KB | Memory for the app that is open, read from its file in `/apps`. The runtime's working memory in it is measured: 528 B for the interpreter and 1,032 B for the bindings. | Partly measured |
 | Stack | 8 KB | The main stack, for interrupts and code that is not in a task. | Planned |
 | Tasks | 6 KB | Embassy's tasks. Each task's state is fixed in size when the firmware is built. | Planned |
 | Reserve | 4 KB | Left free, so a budget that runs over does not crash the watch. | Planned |

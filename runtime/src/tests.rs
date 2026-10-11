@@ -4,6 +4,7 @@ use std::{string::String, vec, vec::Vec};
 
 use super::*;
 use crate::image::{CodeBlock, CodeProblem};
+use crate::widgets::WidgetProblem;
 
 // ============================================================================
 // Building images by hand
@@ -90,11 +91,11 @@ impl Code {
     fn format_number(self, minimum_digits: u8) -> Self {
         self.op_byte(0x40, minimum_digits)
     }
-    fn format_duration(self, pattern: u8) -> Self {
-        self.op_byte(0x41, pattern)
+    fn format_duration(self, pattern: u16) -> Self {
+        self.op_u16(0x41, pattern)
     }
-    fn format_time(self, pattern: u8) -> Self {
-        self.op_byte(0x42, pattern)
+    fn format_time(self, pattern: u16) -> Self {
+        self.op_u16(0x42, pattern)
     }
     fn join(self) -> Self {
         self.op(0x43)
@@ -110,11 +111,13 @@ impl Code {
     }
 }
 
-const MINUTES_SECONDS: u8 = 0;
-const MINUTES_SECONDS_HUNDREDTHS: u8 = 2;
-const CLOCK: u8 = 0;
-const CLOCK_WITH_SECONDS: u8 = 1;
-const DATE: u8 = 2;
+/// Patterns every test image holds, at these string numbers.
+const MINUTES_SECONDS: u16 = 2;
+const MINUTES_SECONDS_HUNDREDTHS: u16 = 3;
+const CLOCK: u16 = 4;
+const CLOCK_WITH_SECONDS: u16 = 5;
+const DATE: u16 = 6;
+const COMMON_PATTERNS: [&str; 5] = ["mm:ss", "mm:ss.cc", "clock", "clock_with_seconds", "date"];
 
 struct Variable {
     key: &'static str,
@@ -130,6 +133,7 @@ struct ImageBuilder {
     state: Vec<Variable>,
     expressions: Vec<Vec<u8>>,
     handlers: Vec<Vec<u8>>,
+    widgets: Vec<Vec<u8>>,
 }
 
 impl ImageBuilder {
@@ -137,6 +141,9 @@ impl ImageBuilder {
         let mut builder = ImageBuilder::default();
         builder.string("test-app");
         builder.string("Test app");
+        for pattern in COMMON_PATTERNS {
+            builder.string(pattern);
+        }
         builder
     }
 
@@ -159,6 +166,27 @@ impl ImageBuilder {
     fn expression(&mut self, code: Code) -> u16 {
         self.expressions.push(code.bytes);
         (self.expressions.len() - 1) as u16
+    }
+
+    fn widget(
+        &mut self,
+        kind: WidgetKind,
+        child_count: u8,
+        properties: &[(Property, PropertySource)],
+    ) -> u16 {
+        let mut bytes = vec![kind as u8, child_count, properties.len() as u8, 0];
+        for (property, source) in properties {
+            let (source_byte, value) = match *source {
+                PropertySource::Constant(value) => (0u8, value),
+                PropertySource::Expression(index) => (1, index as i32),
+                PropertySource::Handler(index) => (2, index as i32),
+            };
+            bytes.push(*property as u8);
+            bytes.push(source_byte);
+            bytes.extend(value.to_le_bytes());
+        }
+        self.widgets.push(bytes);
+        (self.widgets.len() - 1) as u16
     }
 
     fn handler(&mut self, code: Code) -> u16 {
@@ -193,6 +221,7 @@ impl ImageBuilder {
             (2, self.state.len() as u16, state),
             (3, self.expressions.len() as u16, Self::table(&self.expressions)),
             (4, self.handlers.len() as u16, Self::table(&self.handlers)),
+            (5, self.widgets.len() as u16, Self::table(&self.widgets)),
         ];
 
         let mut image: Vec<u8> = Vec::new();
@@ -786,6 +815,20 @@ fn refuses_randomness_in_an_expression() {
 }
 
 #[test]
+fn does_bitwise_arithmetic_for_day_masks() {
+    // Is Wednesday (2) in the mask for Monday, Wednesday and Friday?
+    let wednesday_set = Code::new().small(0b10101).small(1).small(2).op(0x1E).op(0x1A);
+    let all_but_one = Code::new().small(1).op(0x1D);
+
+    assert_eq!(evaluate(wednesday_set), Ok(4));
+    assert_eq!(evaluate(all_but_one), Ok(-2));
+    assert_eq!(
+        evaluate(Code::new().small(1).small(64).op(0x1E)),
+        Err(Failure::Overflow)
+    );
+}
+
+#[test]
 fn reads_system_values() {
     assert_eq!(evaluate(Code::new().system(SystemValue::BatteryPercent)), Ok(80));
 }
@@ -1088,16 +1131,12 @@ fn nothing_redraws_by_time_when_nothing_reads_the_clock() {
 
 #[test]
 fn hundredths_redraw_ten_times_a_second() {
-    let code = Code::new()
+    let (bytes, _) = bindings_for(&[Code::new()
         .system(SystemValue::Now)
-        .format_duration(MINUTES_SECONDS_HUNDREDTHS);
+        .format_duration(MINUTES_SECONDS_HUNDREDTHS)]);
+    let bindings = Bindings::load(&AppImage::parse(&bytes).unwrap()).unwrap();
 
-    assert_eq!(
-        analyse_expression(&code.bytes)
-            .unwrap()
-            .redraw_period_in_milliseconds,
-        100
-    );
+    assert_eq!(bindings.info(0).unwrap().redraw_period_in_milliseconds, 100);
 }
 
 #[test]
@@ -1142,6 +1181,311 @@ fn only_expressions_whose_step_passed_are_due() {
 }
 
 // ============================================================================
+// Format patterns
+// ============================================================================
+
+fn format_time_with(pattern: &str, system: &FakeSystem) -> String {
+    let mut builder = ImageBuilder::new();
+    let pattern = builder.string(pattern);
+    builder.expression(Code::new().system(SystemValue::Now).format_time(pattern));
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut interpreter = Interpreter::new();
+    let value = interpreter.evaluate_expression(&image, 0, &[], system).unwrap();
+    interpreter.text(&image, value).unwrap().into()
+}
+
+fn format_duration_with(pattern: &str, milliseconds: i64) -> String {
+    let mut builder = ImageBuilder::new();
+    let pattern = builder.string(pattern);
+    builder.expression(Code::new().long(milliseconds).format_duration(pattern));
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut interpreter = Interpreter::new();
+    let value = interpreter
+        .evaluate_expression(&image, 0, &[], &FakeSystem::default())
+        .unwrap();
+    interpreter.text(&image, value).unwrap().into()
+}
+
+fn pattern_problem(pattern: &str, is_time: bool) -> Option<CodeProblem> {
+    let mut builder = ImageBuilder::new();
+    let pattern = builder.string(pattern);
+    let code = Code::new().system(SystemValue::Now);
+    builder.expression(if is_time {
+        code.format_time(pattern)
+    } else {
+        code.format_duration(pattern)
+    });
+    verify_problem(&builder)
+}
+
+#[test]
+fn writes_weekday_and_month_names() {
+    let system = FakeSystem {
+        now: SUNDAY_AFTERNOON,
+        ..Default::default()
+    };
+
+    assert_eq!(
+        format_time_with("dddd D MMMM YYYY", &system),
+        "Sunday 11 October 2026"
+    );
+    assert_eq!(format_time_with("ddd DD MMM", &system), "Sun 11 Oct");
+    assert_eq!(format_time_with("D/M", &system), "11/10");
+}
+
+#[test]
+fn writes_a_12_hour_clock_with_and_without_am_and_pm() {
+    let system = FakeSystem {
+        now: SUNDAY_AFTERNOON,
+        uses_24_hour_clock: true,
+        ..Default::default()
+    };
+
+    assert_eq!(format_time_with("hh:mm", &system), "02:05");
+    assert_eq!(format_time_with("h:mm a", &system), "2:05 pm");
+    assert_eq!(format_time_with("h:mm A", &system), "2:05 PM");
+    assert_eq!(format_time_with("H:mm:ss", &system), "14:05:09");
+}
+
+#[test]
+fn copies_bracketed_text_as_it_is() {
+    let system = FakeSystem {
+        now: SUNDAY_AFTERNOON,
+        uses_24_hour_clock: true,
+        ..Default::default()
+    };
+
+    assert_eq!(format_time_with("[Day] D", &system), "Day 11");
+}
+
+#[test]
+fn the_largest_duration_unit_shows_the_whole_amount() {
+    assert_eq!(format_duration_with("mm:ss", 75 * 60_000 + 3_000), "75:03");
+    assert_eq!(format_duration_with("h:mm:ss", 75 * 60_000 + 3_000), "1:15:03");
+    assert_eq!(format_duration_with("s.cc", 83_456), "83.45");
+    assert_eq!(format_duration_with("m[ min]", 125_000), "2 min");
+}
+
+#[test]
+fn refuses_a_pattern_with_an_unknown_letter() {
+    assert_eq!(pattern_problem("HH:mm x", true), Some(CodeProblem::BadPattern));
+    assert_eq!(pattern_problem("mm:ss.c", false), Some(CodeProblem::BadPattern));
+    assert_eq!(pattern_problem("[unclosed", true), Some(CodeProblem::BadPattern));
+    assert_eq!(pattern_problem("dddd, D MMMM", true), None);
+}
+
+#[test]
+fn a_pattern_redraws_as_often_as_its_smallest_unit() {
+    let step = |pattern: &str| {
+        let mut builder = ImageBuilder::new();
+        let pattern = builder.string(pattern);
+        builder.expression(Code::new().system(SystemValue::Now).format_time(pattern));
+        let bytes = builder.build();
+        let bindings = Bindings::load(&AppImage::parse(&bytes).unwrap()).unwrap();
+        bindings.info(0).unwrap().redraw_period_in_milliseconds
+    };
+
+    assert_eq!(step("dddd"), 60_000);
+    assert_eq!(step("h:mm:ss a"), 1_000);
+}
+
+// ============================================================================
+// Widgets
+// ============================================================================
+
+use PropertySource::{Constant, Expression, Handler};
+
+fn widget_problem(builder: &ImageBuilder) -> Option<WidgetProblem> {
+    let bytes = builder.build();
+    match verify(&AppImage::parse(&bytes).unwrap()) {
+        Err(ImageError::BadWidget { problem, .. }) => Some(problem),
+        Err(other) => panic!("unexpected error {other:?}"),
+        Ok(()) => None,
+    }
+}
+
+/// The stopwatch's screen: a column holding its time label and its start button.
+fn stopwatch_screen() -> ImageBuilder {
+    let mut builder = ImageBuilder::new();
+    let start = builder.string("Start");
+    let elapsed = builder.expression(Code::new().small(0).format_duration(MINUTES_SECONDS));
+    let toggle = builder.handler(Code::new());
+    builder.widget(WidgetKind::Column, 2, &[]);
+    builder.widget(
+        WidgetKind::Label,
+        0,
+        &[
+            (Property::Text, Expression(elapsed)),
+            (Property::Font, Constant(2)),
+        ],
+    );
+    builder.widget(
+        WidgetKind::Button,
+        0,
+        &[
+            (Property::Text, Constant(start as i32)),
+            (Property::OnClick, Handler(toggle)),
+        ],
+    );
+    builder
+}
+
+#[test]
+fn a_screen_passes_its_checks() {
+    assert_eq!(widget_problem(&stopwatch_screen()), None);
+}
+
+#[test]
+fn walks_the_tree_and_reads_properties() {
+    let bytes = stopwatch_screen().build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let tree = WidgetTree::new(image);
+
+    let screens: Vec<u16> = tree.screens().collect();
+    let children: Vec<u16> = tree.children(0).collect();
+    let button = tree.widget(2).unwrap();
+
+    assert_eq!(screens, [0]);
+    assert_eq!(children, [1, 2]);
+    assert_eq!(button.kind, WidgetKind::Button);
+    assert_eq!(button.property(Property::OnClick), Some(Handler(0)));
+    assert_eq!(
+        tree.widget(1).unwrap().property(Property::Text),
+        Some(Expression(0))
+    );
+}
+
+#[test]
+fn finds_a_screen_by_name() {
+    let mut builder = ImageBuilder::new();
+    let main = builder.string("main");
+    let settings = builder.string("settings");
+    builder.widget(
+        WidgetKind::Column,
+        1,
+        &[(Property::ScreenName, Constant(main as i32))],
+    );
+    builder.widget(WidgetKind::Label, 0, &[]);
+    builder.widget(
+        WidgetKind::Column,
+        0,
+        &[(Property::ScreenName, Constant(settings as i32))],
+    );
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let tree = WidgetTree::new(image);
+
+    let screens: Vec<u16> = tree.screens().collect();
+
+    assert_eq!(widget_problem(&builder), None);
+    assert_eq!(screens, [0, 2]);
+    assert_eq!(tree.screen_named("settings"), Some(2));
+    assert_eq!(tree.screen_named("missing"), None);
+}
+
+#[test]
+fn refuses_children_inside_a_label() {
+    let mut builder = ImageBuilder::new();
+    builder.widget(WidgetKind::Label, 1, &[]);
+    builder.widget(WidgetKind::Label, 0, &[]);
+
+    assert_eq!(widget_problem(&builder), Some(WidgetProblem::ChildrenNotAllowed));
+}
+
+#[test]
+fn refuses_a_tree_that_ends_early() {
+    let mut builder = ImageBuilder::new();
+    builder.widget(WidgetKind::Column, 2, &[]);
+    builder.widget(WidgetKind::Label, 0, &[]);
+
+    assert_eq!(widget_problem(&builder), Some(WidgetProblem::Unreadable));
+}
+
+#[test]
+fn refuses_nesting_deeper_than_the_limit() {
+    let mut builder = ImageBuilder::new();
+    for _ in 0..17 {
+        builder.widget(WidgetKind::Column, 1, &[]);
+    }
+    builder.widget(WidgetKind::Label, 0, &[]);
+
+    assert_eq!(widget_problem(&builder), Some(WidgetProblem::TooDeep));
+}
+
+#[test]
+fn refuses_a_property_the_widget_does_not_have() {
+    let mut builder = ImageBuilder::new();
+    builder.widget(WidgetKind::Label, 0, &[(Property::ShowSeconds, Constant(1))]);
+
+    assert_eq!(widget_problem(&builder), Some(WidgetProblem::PropertyNotOnWidget));
+}
+
+#[test]
+fn refuses_a_screen_event_below_the_screen_root() {
+    let mut builder = ImageBuilder::new();
+    let handler = builder.handler(Code::new());
+    builder.widget(WidgetKind::Column, 1, &[]);
+    builder.widget(WidgetKind::Column, 0, &[(Property::OnSwipe, Handler(handler))]);
+
+    assert_eq!(
+        widget_problem(&builder),
+        Some(WidgetProblem::ScreenPropertyBelowRoot)
+    );
+}
+
+#[test]
+fn refuses_an_event_without_a_handler_and_a_handler_on_a_value() {
+    let mut event_as_constant = ImageBuilder::new();
+    event_as_constant.widget(WidgetKind::Button, 0, &[(Property::OnClick, Constant(0))]);
+    let mut handler_as_value = ImageBuilder::new();
+    handler_as_value.handler(Code::new());
+    handler_as_value.widget(WidgetKind::Label, 0, &[(Property::Text, Handler(0))]);
+
+    assert_eq!(
+        widget_problem(&event_as_constant),
+        Some(WidgetProblem::EventWithoutHandler)
+    );
+    assert_eq!(
+        widget_problem(&handler_as_value),
+        Some(WidgetProblem::HandlerOnNonEvent)
+    );
+}
+
+#[test]
+fn refuses_missing_expressions_handlers_and_strings() {
+    let mut missing_expression = ImageBuilder::new();
+    missing_expression.widget(WidgetKind::Label, 0, &[(Property::Text, Expression(3))]);
+    let mut missing_handler = ImageBuilder::new();
+    missing_handler.widget(WidgetKind::Button, 0, &[(Property::OnClick, Handler(3))]);
+    let mut missing_string = ImageBuilder::new();
+    missing_string.widget(WidgetKind::Label, 0, &[(Property::Text, Constant(900))]);
+
+    assert_eq!(
+        widget_problem(&missing_expression),
+        Some(WidgetProblem::ExpressionOutOfRange)
+    );
+    assert_eq!(
+        widget_problem(&missing_handler),
+        Some(WidgetProblem::HandlerOutOfRange)
+    );
+    assert_eq!(widget_problem(&missing_string), Some(WidgetProblem::BadConstant));
+}
+
+#[test]
+fn refuses_a_property_given_twice() {
+    let mut builder = ImageBuilder::new();
+    builder.widget(
+        WidgetKind::Label,
+        0,
+        &[(Property::Font, Constant(1)), (Property::Font, Constant(2))],
+    );
+
+    assert_eq!(widget_problem(&builder), Some(WidgetProblem::RepeatedProperty));
+}
+
+// ============================================================================
 // Memory
 // ============================================================================
 
@@ -1154,5 +1498,5 @@ fn working_memory_stays_inside_the_budget() {
 
     assert!(interpreter <= 600);
     assert!(handler_outcome <= 600);
-    assert!(bindings <= 1000);
+    assert!(bindings <= 1100);
 }

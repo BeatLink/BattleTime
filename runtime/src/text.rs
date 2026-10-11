@@ -1,6 +1,6 @@
 //! Text values, the calendar, and the formatting instructions that turn numbers into text.
 
-use crate::instruction::{DurationPattern, TimePart, TimePattern};
+use crate::instruction::TimePart;
 
 // ============================================================================
 // Text references
@@ -159,81 +159,5 @@ impl<'buffer> TextWriter<'buffer> {
             self.write_bytes(&digits[index..index + 1])?;
         }
         Ok(())
-    }
-
-    /// Writes a duration in milliseconds; a negative duration is shown as zero.
-    pub fn write_duration(&mut self, milliseconds: i64, pattern: DurationPattern) -> Result<(), BufferFull> {
-        let milliseconds = milliseconds.max(0);
-        let hours = milliseconds / MILLISECONDS_PER_HOUR;
-        let total_minutes = milliseconds / MILLISECONDS_PER_MINUTE;
-        let minutes = total_minutes % 60;
-        let seconds = milliseconds % MILLISECONDS_PER_MINUTE / MILLISECONDS_PER_SECOND;
-        let hundredths = milliseconds % MILLISECONDS_PER_SECOND / 10;
-
-        match pattern {
-            DurationPattern::MinutesSeconds => {
-                self.write_number(total_minutes, 2)?;
-                self.write_bytes(b":")?;
-                self.write_number(seconds, 2)
-            }
-            DurationPattern::HoursMinutesSeconds => {
-                self.write_number(hours, 1)?;
-                self.write_bytes(b":")?;
-                self.write_number(minutes, 2)?;
-                self.write_bytes(b":")?;
-                self.write_number(seconds, 2)
-            }
-            DurationPattern::MinutesSecondsHundredths => {
-                self.write_number(total_minutes, 2)?;
-                self.write_bytes(b":")?;
-                self.write_number(seconds, 2)?;
-                self.write_bytes(b".")?;
-                self.write_number(hundredths, 2)
-            }
-            DurationPattern::HoursMinutes => {
-                self.write_number(hours, 1)?;
-                self.write_bytes(b":")?;
-                self.write_number(minutes, 2)
-            }
-        }
-    }
-
-    /// Writes a local time; `uses_24_hour_clock` decides between `HH:MM` and `h:MM`.
-    pub fn write_time(
-        &mut self,
-        time: &DateTime,
-        pattern: TimePattern,
-        uses_24_hour_clock: bool,
-    ) -> Result<(), BufferFull> {
-        let write_hours = |writer: &mut Self| {
-            if uses_24_hour_clock {
-                writer.write_number(time.hour, 2)
-            } else {
-                let twelve_hour = if time.hour % 12 == 0 { 12 } else { time.hour % 12 };
-                writer.write_number(twelve_hour, 1)
-            }
-        };
-
-        match pattern {
-            TimePattern::Clock => {
-                write_hours(self)?;
-                self.write_bytes(b":")?;
-                self.write_number(time.minute, 2)
-            }
-            TimePattern::ClockWithSeconds => {
-                write_hours(self)?;
-                self.write_bytes(b":")?;
-                self.write_number(time.minute, 2)?;
-                self.write_bytes(b":")?;
-                self.write_number(time.second, 2)
-            }
-            TimePattern::Date => {
-                self.write_number(time.year, 4)?;
-                self.write_bytes(b"-")?;
-                self.write_number(time.month, 2)?;
-                self.write_bytes(b"-")?;
-                self.write_number(time.day, 2)
-            }
-        }
     }
 }

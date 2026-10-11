@@ -8,6 +8,8 @@
 use crate::image::{AppImage, CodeBlock, CodeProblem, ImageError};
 use crate::instruction::{decode, Instruction};
 use crate::interpreter::{MOST_EVENT_FIELDS, STACK_DEPTH};
+use crate::pattern;
+use crate::widgets::verify_widgets;
 
 // ============================================================================
 // Limits
@@ -30,7 +32,7 @@ pub fn verify(image: &AppImage) -> Result<(), ImageError> {
         let code = image.handler_code(index).unwrap_or_default();
         verify_code(image, code, CodeBlock::Handler(index))?;
     }
-    Ok(())
+    verify_widgets(image)
 }
 
 #[derive(Clone, Copy)]
@@ -141,6 +143,16 @@ fn check_operands(
             Err(CodeProblem::StateSlotOutOfRange)
         }
         Instruction::PushText(index) if index >= image.string_count() => Err(CodeProblem::StringOutOfRange),
+        Instruction::FormatTime(index) => match image.string(index) {
+            None => Err(CodeProblem::StringOutOfRange),
+            Some(pattern) if !pattern::is_valid_time_pattern(pattern) => Err(CodeProblem::BadPattern),
+            Some(_) => Ok(()),
+        },
+        Instruction::FormatDuration(index) => match image.string(index) {
+            None => Err(CodeProblem::StringOutOfRange),
+            Some(pattern) if !pattern::is_valid_duration_pattern(pattern) => Err(CodeProblem::BadPattern),
+            Some(_) => Ok(()),
+        },
         Instruction::ReadEvent(_) if is_expression => Err(CodeProblem::EventInExpression),
         Instruction::ReadEvent(field) if field as usize >= MOST_EVENT_FIELDS => {
             Err(CodeProblem::EventFieldOutOfRange)

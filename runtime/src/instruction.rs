@@ -24,10 +24,22 @@ pub enum SystemValue {
     Uses24HourClock,
     UsesMetricUnits,
     StepGoal,
+    IsHeartRateRunning,
+    IsBluetoothEnabled,
+    /// The next alarm that will ring, or none.
+    NextAlarm,
+    /// 0 stopped, 1 no skin, 2 settling, 3 measuring.
+    HeartRateStatus,
+    WeatherTemperature,
+    WeatherCondition,
+    WeatherLow,
+    WeatherHigh,
+    /// When the phone last sent the weather, or none.
+    WeatherReceivedAt,
 }
 
 impl SystemValue {
-    pub const COUNT: usize = 14;
+    pub const COUNT: usize = 23;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -46,17 +58,26 @@ impl SystemValue {
             11 => Uses24HourClock,
             12 => UsesMetricUnits,
             13 => StepGoal,
+            14 => IsHeartRateRunning,
+            15 => IsBluetoothEnabled,
+            16 => NextAlarm,
+            17 => HeartRateStatus,
+            18 => WeatherTemperature,
+            19 => WeatherCondition,
+            20 => WeatherLow,
+            21 => WeatherHigh,
+            22 => WeatherReceivedAt,
             _ => return None,
         })
     }
 
-    pub fn bit(self) -> u16 {
-        1 << (self as u16)
+    pub fn bit(self) -> u32 {
+        1 << (self as u32)
     }
 }
 
 // ============================================================================
-// Time and text patterns
+// Time parts
 // ============================================================================
 
 /// A part of a local date and time, read with `TimePart`.
@@ -88,55 +109,6 @@ impl TimePart {
     }
 }
 
-/// How `FormatDuration` writes a duration.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DurationPattern {
-    /// `mm:ss`, with the minutes going past 59.
-    MinutesSeconds,
-    /// `h:mm:ss`.
-    HoursMinutesSeconds,
-    /// `mm:ss.cc`, with hundredths of a second.
-    MinutesSecondsHundredths,
-    /// `h:mm`.
-    HoursMinutes,
-}
-
-impl DurationPattern {
-    pub fn from_byte(byte: u8) -> Option<DurationPattern> {
-        use DurationPattern::*;
-        Some(match byte {
-            0 => MinutesSeconds,
-            1 => HoursMinutesSeconds,
-            2 => MinutesSecondsHundredths,
-            3 => HoursMinutes,
-            _ => return None,
-        })
-    }
-}
-
-/// How `FormatTime` writes a local time.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TimePattern {
-    /// `HH:MM`, or `h:MM` when the user prefers a 12 hour clock.
-    Clock,
-    /// `HH:MM:SS`, or `h:MM:SS` when the user prefers a 12 hour clock.
-    ClockWithSeconds,
-    /// `YYYY-MM-DD`.
-    Date,
-}
-
-impl TimePattern {
-    pub fn from_byte(byte: u8) -> Option<TimePattern> {
-        use TimePattern::*;
-        Some(match byte {
-            0 => Clock,
-            1 => ClockWithSeconds,
-            2 => Date,
-            _ => return None,
-        })
-    }
-}
-
 // ============================================================================
 // Effects
 // ============================================================================
@@ -160,8 +132,8 @@ pub enum EffectKind {
     DismissNotification,
     MarkNotificationsRead,
     SendToPhone,
-    Music,
-    Call,
+    MusicControl,
+    CallControl,
     FindPhone,
     MeasureHeartRate,
     StartHeartRate,
@@ -170,6 +142,9 @@ pub enum EffectKind {
     SetSetting,
     SetDoNotDisturb,
     Log,
+    RequestMusicState,
+    SetHeartRateLed,
+    SetBluetooth,
 }
 
 impl EffectKind {
@@ -192,8 +167,8 @@ impl EffectKind {
             13 => DismissNotification,
             14 => MarkNotificationsRead,
             15 => SendToPhone,
-            16 => Music,
-            17 => Call,
+            16 => MusicControl,
+            17 => CallControl,
             18 => FindPhone,
             19 => MeasureHeartRate,
             20 => StartHeartRate,
@@ -202,6 +177,9 @@ impl EffectKind {
             23 => SetSetting,
             24 => SetDoNotDisturb,
             25 => Log,
+            26 => RequestMusicState,
+            27 => SetHeartRateLed,
+            28 => SetBluetooth,
             _ => return None,
         })
     }
@@ -216,20 +194,22 @@ impl EffectKind {
             | Back
             | Close
             | MarkNotificationsRead
-            | FindPhone
+            | RequestMusicState
             | MeasureHeartRate
             | StartHeartRate
             | StopHeartRate
             | ResetSteps => 0,
             Vibrate | VibratePattern | SetBrightness | KeepScreenOn | Go | OpenApp | ShowToast
-            | DismissNotification | Music | Call | SetDoNotDisturb | Log => 1,
+            | DismissNotification | MusicControl | CallControl | SetDoNotDisturb | Log | FindPhone
+            | SetBluetooth => 1,
             Notify | SendToPhone | SetSetting => 2,
+            SetHeartRateLed => 3,
         }
     }
 }
 
 /// The most arguments any effect takes.
-pub const MOST_EFFECT_ARGUMENTS: usize = 2;
+pub const MOST_EFFECT_ARGUMENTS: usize = 3;
 
 // ============================================================================
 // Instructions
@@ -260,6 +240,14 @@ pub enum Instruction {
     Absolute,
     /// Takes a lowest and a highest value and leaves a random number between them, both included.
     RandomInt,
+    BitAnd,
+    BitOr,
+    BitXor,
+    BitNot,
+    /// Shifts left by 0 to 63 places; any other amount fails the call.
+    ShiftLeft,
+    /// Shifts right by 0 to 63 places, keeping the sign.
+    ShiftRight,
     Equal,
     NotEqual,
     Less,
@@ -274,8 +262,10 @@ pub enum Instruction {
     JumpIfFalse(u16),
     TimePart(TimePart),
     FormatNumber(u8),
-    FormatDuration(DurationPattern),
-    FormatTime(TimePattern),
+    /// Formats a duration with the pattern in this string; see `pattern`.
+    FormatDuration(u16),
+    /// Formats a local time with the pattern in this string; see `pattern`.
+    FormatTime(u16),
     Join,
     WriteState(u8),
     Effect(EffectKind),
@@ -299,9 +289,10 @@ impl Instruction {
             Duplicate => (1, 2),
             Drop | JumpIfFalse(_) | WriteState(_) => (1, 0),
             Swap => (2, 2),
-            Add | Subtract | Multiply | Divide | Remainder | Minimum | Maximum | RandomInt | Equal
-            | NotEqual | Less | LessOrEqual | Greater | GreaterOrEqual | Join => (2, 1),
-            Negate | Absolute | Not | IsNone | TimePart(_) | FormatNumber(_) | FormatDuration(_)
+            Add | Subtract | Multiply | Divide | Remainder | Minimum | Maximum | RandomInt | BitAnd
+            | BitOr | BitXor | ShiftLeft | ShiftRight | Equal | NotEqual | Less | LessOrEqual | Greater
+            | GreaterOrEqual | Join => (2, 1),
+            Negate | Absolute | BitNot | Not | IsNone | TimePart(_) | FormatNumber(_) | FormatDuration(_)
             | FormatTime(_) => (1, 1),
             Jump(_) => (0, 0),
             Effect(kind) => (kind.argument_count(), 0),
@@ -360,6 +351,12 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
         0x17 => (Maximum, 0),
         0x18 => (Absolute, 0),
         0x19 => (RandomInt, 0),
+        0x1A => (BitAnd, 0),
+        0x1B => (BitOr, 0),
+        0x1C => (BitXor, 0),
+        0x1D => (BitNot, 0),
+        0x1E => (ShiftLeft, 0),
+        0x1F => (ShiftRight, 0),
         0x20 => (Equal, 0),
         0x21 => (NotEqual, 0),
         0x22 => (Less, 0),
@@ -382,12 +379,12 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
         ),
         0x40 => (FormatNumber(byte()?), 1),
         0x41 => (
-            FormatDuration(DurationPattern::from_byte(byte()?).ok_or(unknown(byte()?))?),
-            1,
+            FormatDuration(u16::from_le_bytes(bytes(2)?.try_into().unwrap_or_default())),
+            2,
         ),
         0x42 => (
-            FormatTime(TimePattern::from_byte(byte()?).ok_or(unknown(byte()?))?),
-            1,
+            FormatTime(u16::from_le_bytes(bytes(2)?.try_into().unwrap_or_default())),
+            2,
         ),
         0x43 => (Join, 0),
         0x50 => (WriteState(byte()?), 1),

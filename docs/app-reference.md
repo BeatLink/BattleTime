@@ -28,6 +28,11 @@ time.
 | `brightness` | `Int` | The backlight level, 1 to 3. |
 | `settings` | object | The user's choices apps should follow: `uses_24_hour_clock`, `uses_metric_units`, `step_goal`, `theme` colours. |
 | `current_screen` | `Text` | The name of the app's screen on display. |
+| `is_heart_rate_running` | `Bool` | Whether the heart rate sensor is measuring for any app. |
+| `heart_rate_status` | `Int` | The sensor's state: 0 stopped, 1 no skin, 2 settling, 3 measuring. |
+| `is_bluetooth_enabled` | `Bool` | Whether Bluetooth is on, whether or not the phone is connected. |
+| `next_alarm` | `Instant` or none | The next alarm any app has set to ring. |
+| `weather` | object | The last forecast the phone sent: `temperature`, `condition`, `low`, `high` and `received_at` (none until the first). Reading it needs no permission, so faces need no subscription of their own. |
 
 ## Events
 
@@ -48,8 +53,10 @@ pass to the widget behind it, and then to the screen.
 | `onDrag` | `x`, `y`, `start_x`, `start_y` | A finger moving while down, for sliders and drawing. At most once per redraw. |
 | `onSwipe` | `direction` | A slide `up`, `down`, `left` or `right`, set on a screen. |
 
-Swipes the screen does not take keep their system meaning. By default, right goes back and down
-opens the quick settings.
+Without an `onSwipe`, swipes keep their system meaning: right goes back and down opens the quick
+settings. A screen with an `onSwipe` receives every swipe instead, and the system meanings no
+longer apply, so the handler calls `back()` itself if right should still go back. An empty
+`onSwipe` therefore blocks swipes, as an alarm's ringing screen needs.
 
 ### Side button
 
@@ -58,7 +65,8 @@ opens the quick settings.
 | `onButton` | `kind`: `press` or `long_press` | The side button, set on a screen. |
 
 Without a handler the button goes back, and from the watch face it turns the screen off. Watch faces
-cannot take the button. Holding it for 5 seconds always resets the watch, whatever the app does.
+cannot take the button. A watch face may still have more screens, such as its settings opened with
+a long press and `go("settings")`. Holding it for 5 seconds always resets the watch, whatever the app does.
 
 ### Widget values
 
@@ -85,7 +93,13 @@ Most apps need none of these, because state persists and bindings redraw themsel
 ### Subscriptions
 
 Subscriptions are declared in `define_app({ subscriptions: [...] })`. They call their handler even
-while the app is closed; see [Background work](app-runtime.md#background-work).
+while the app is closed; see [Background work](app-runtime.md#background-work). Any subscription
+takes a last argument `{ only_while_open: true }`, which needs no `background` permission and
+stops when the app closes, such as for shaking to roll dice.
+
+An `at` time that has already passed, for example because the watch was off, fires once at once.
+A handler run in the background may vibrate and notify without the `wake` permission; it needs
+`wake` only to turn the screen on or to vibrate during do not disturb.
 
 | Subscription | Fields | When |
 |---|---|---|
@@ -126,10 +140,11 @@ when a screen opens. Each one takes the common props below plus its own.
 | `padding`, `margin` | Space inside and outside the widget. |
 | `background`, `color`, `border_color` | Colours, as `"#rrggbb"` or a theme name such as `"accent"`. |
 | `border_width`, `radius` | The border and corner rounding. |
-| `font` | `small`, `normal`, `large` or `huge`, from the shared library. |
+| `font` | `small`, `normal`, `medium` (about 30 px), `large`, `huge` or `giant` (about 120 px, digits and `:` only), or a display font: `seven_segment`, `dot_matrix` or `condensed`, digits only. All are in the shared library. |
 | `align` | `start`, `center` or `end`. |
 | `visible` | Whether the widget is shown. `{condition && <Widget/>}` sets it. |
 | `animate` | A duration in milliseconds. A bound property that changes slides to its new value instead of jumping. |
+| `opacity` | 0 to 255. |
 
 ### Layout
 
@@ -158,8 +173,9 @@ when a screen opens. Each one takes the common props below plus its own.
 | `Bar` | bar | A straight progress bar. |
 | `Spinner` | spinner | Shows that something is in progress. |
 | `Led` | led | A dot that is on, off or dimmed. |
-| `Chart` | chart | A line or bar chart from a fixed-length array, such as heart rate over a day. |
-| `Scale` | scale | Ticks and labels around a dial or along a ruler. |
+| `Chart` | chart | A line or bar chart from one or more fixed-length arrays, such as heart rate over a day. |
+| `CellGrid` | drawn by the runtime | A board of coloured cells from one array, such as Life, Snake or 2048. One widget however many cells, so a 400-cell board costs no more UI heap than a label. |
+| `Scale` | scale | Ticks and labels around a dial or along a ruler, with an optional needle at `value`. |
 | `AnalogClock` | clock | Clock hands bound to a time, normally `now`. |
 | `Table` | table | Rows and columns of text. |
 | `Calendar` | calendar | A month, with chosen days marked. |
@@ -192,6 +208,7 @@ so they cost an app nothing to include.
 | `Header` | A screen's title row, with an optional icon. |
 | `ListRow` | A list entry: icon, title, subtitle and a value or switch on the right. |
 | `StatusBar` | The time, battery and connection, as the system shows them. |
+| `BatteryIcon` | The battery's charge and whether it is charging, drawn the way the system does, with an optional percentage. |
 | `ConfirmDialog` | A question with two buttons, shown while a signal is true. |
 | `NumberPicker`, `TimePicker`, `DurationPicker` | Rollers set up for a number, a time of day or a duration. |
 | `Menu` | A list of named actions. |
@@ -201,11 +218,20 @@ so they cost an app nothing to include.
 | Widget | Props |
 |---|---|
 | `Line` | `points`: a fixed-length array of `{ x, y }`. |
-| `Scale` | `ticks`, `major_every`, and `labels` for the major ticks. |
-| `AnalogClock` | `time` (normally `now`), `show_seconds`, `hour_color`, `minute_color`, `second_color`. |
+| `Scale` | `ticks`, `major_every`, `labels` for the major ticks, `skip` for tick numbers to leave out (such as under a date window), and `value` and `needle_color` for a gauge. |
+| `CellGrid` | `columns`, `rows`, `cell_size`, `cells` (one number per cell, read as a colour from `palette`), `palette`, and `onClick` receiving `{ value }`, the cell's number. |
+| `Chart` | `series`: up to 3 arrays, each with its colour. |
+| `Arc` | `value`, `minimum` and `maximum`. Given a signal, the arc can be dragged and writes back to it, with `onChange`. |
+| `Image` | `recolor`: draws a one-colour image, such as a logo, in this colour. |
+| `AnalogClock` | `time` (normally `now`), `show_seconds`, `hour_color`, `minute_color`, `second_color`, `hour_length`, `minute_length`, `second_length`, and `hand_style`: `line`, `tapered` or `rounded`. |
 | `ButtonMatrix` | `rows`: an array of rows of labels. `onClick` receives `{ value }`, the number of the button counted across the rows. |
 | `Roller`, `Dropdown` | `options`, and `value` as the number of the chosen option. |
 | `Slider`, `Switch`, `Checkbox`, `Roller`, `Spinbox` | `value` may be a plain value or a signal. Given a signal, the widget writes changes back to it. |
+
+### Shared library images and icons
+
+Besides the system icons, the shared library holds a `pine_logo` image and icons for `alarm`,
+`weather_night_clear`, `weather_night_cloudy` and `none`, the empty icon.
 
 ### Left out
 
@@ -266,7 +292,8 @@ turn that off.
 | `http_request(request_id, method, url, body)` | Asks the phone to make a web request. The reply arrives as an `http_response` event. |
 | `music_control(command)` | `play`, `pause`, `next`, `previous`, `volume_up` or `volume_down`. |
 | `call_control(command)` | `answer`, `reject` or `mute` the current call. |
-| `find_phone()` | Makes the phone ring. |
+| `find_phone(on)` | Makes the phone ring, or stops it. |
+| `request_music_state()` | Asks the phone to send its player's state now, which arrives through the `music` subscription. |
 
 ### Sensors
 
@@ -283,6 +310,8 @@ turn that off.
 | `set_setting(key, value)` | Changes one of the user's `settings`, such as the step goal. |
 | `set_do_not_disturb(on)` | Turns do not disturb on or off. |
 | `log(text)` | Writes a line to the debug log the companion app can read. |
+| `set_bluetooth(on)` | Turns Bluetooth on or off. |
+| `set_heart_rate_led(on, brightness, period)` | Drives the heart rate sensor's LED directly, such as for a beacon. The runtime turns it off when the app closes. |
 
 Settings and other values that change often are stored on the external flash, never the internal
 flash; see the [memory map](memory-map.md).
@@ -293,10 +322,14 @@ These are plain functions, usable in views, `computed` and handlers unless marke
 
 ### Numbers
 
-Every number is a whole number; there are no fractions. The compiler accepts `Math.floor`,
-`Math.trunc`, `Math.round`, `Math.min`, `Math.max` and `Math.abs`. A bare `/` is rejected,
-because JavaScript would give a fraction; write `Math.trunc(a / b)` or `Math.floor(a / b)` to say
-which way it rounds. Overflow and division by zero fail the call.
+Every number is a 64-bit whole number, from about -9.2 × 10¹⁸ to 9.2 × 10¹⁸; there are no
+fractions. For decimals, keep a fixed number of places, such as millionths, in a whole number. The
+compiler accepts `Math.floor`, `Math.trunc`, `Math.round`, `Math.min`, `Math.max` and `Math.abs`.
+A bare `/` is rejected, because JavaScript would give a fraction; write `Math.trunc(a / b)` or
+`Math.floor(a / b)` to say which way it rounds. Overflow and division by zero fail the call.
+
+The bitwise operators `&`, `|`, `^`, `~`, `<<` and `>>` are accepted, such as for day masks. A shift
+by less than 0 or more than 63 places fails the call.
 
 | Function | Returns |
 |---|---|
@@ -310,9 +343,49 @@ Template literals, such as `` `${steps} steps` ``, join text and numbers.
 | Function | Returns |
 |---|---|
 | `format_number(number, minimum_digits?)` | The number as text, padded with zeros. |
-| `format_duration(duration, pattern)` | `"mm:ss"`, `"h:mm:ss"`, `"mm:ss.cc"` or `"h:mm"`. |
-| `format_time(instant, pattern)` | `"clock"` (following the 12 or 24 hour setting), `"clock_with_seconds"` or `"date"` (`YYYY-MM-DD`). |
+| `format_duration(duration, pattern)` | The duration in a pattern, such as `"mm:ss"` or `"h:mm:ss"`. |
+| `format_time(instant, pattern)` | The local time in a pattern, such as `"dddd D MMMM"`, or one of the named patterns below. |
 | `format_temperature(celsius)` | The temperature in the user's units, with its sign. |
+| `to_upper(text)` | The text in capitals, such as `MON` or `OCT` from a pattern's names. |
+| `pad_start(text, width, character?)` | The text with spaces, or the character given, added in front up to `width`. |
+| `text_length(text)` | The number of characters. |
+| `slice_text(text, start, end?)` | Part of the text, counted in characters. |
+| `join(texts, separator)` | The texts of a fixed-length array joined together. |
+
+### Format patterns
+
+A pattern is always a literal string, so the compiler checks it, and the watch checks it again at
+install. Text inside `[brackets]` is copied as it is, and so is any character that is not a letter.
+Any other letter is an error.
+
+| Time token | Shows |
+|---|---|
+| `YYYY` | The year, such as `2026`. |
+| `MMMM`, `MMM` | The month's name, such as `October` or `Oct`. |
+| `MM`, `M` | The month's number, as `01` to `12` or `1` to `12`. |
+| `DD`, `D` | The day of the month, as `01` to `31` or `1` to `31`. |
+| `dddd`, `ddd` | The weekday's name, such as `Sunday` or `Sun`. |
+| `HH`, `H` | The hour on a 24 hour clock, as `00` to `23` or `0` to `23`. |
+| `hh`, `h` | The hour on a 12 hour clock, as `01` to `12` or `1` to `12`. |
+| `mm`, `m` | The minute. |
+| `ss`, `s` | The second. |
+| `a`, `A` | `am` or `pm`, `AM` or `PM`. |
+
+The named time patterns follow the user's 12 or 24 hour setting: `"clock"` is `HH:mm` or `h:mm`,
+`"clock_with_seconds"` adds `:ss`, and `"date"` is `YYYY-MM-DD`.
+
+| Duration token | Shows |
+|---|---|
+| `hh`, `h` | Hours. |
+| `mm`, `m` | Minutes. |
+| `ss`, `s` | Seconds. |
+| `cc` | Hundredths of a second, always two digits. |
+
+The largest unit in a duration pattern shows the whole amount, so `mm:ss` shows 75 minutes as
+`75:03`, and `h:mm:ss` shows it as `1:15:03`.
+
+A binding redraws as often as the smallest unit its pattern shows: every second with `ss`, ten
+times a second with `cc`, and otherwise once a minute.
 
 ### Time
 
@@ -324,6 +397,8 @@ All in local time, using `utc_offset`.
 | `weekday_of(instant)` | 0 to 6, Monday first. |
 | `start_of_day(instant)` | Local midnight at the start of that day. |
 | `next_time_of_day(after, time_of_day, days?)` | The first instant after `after` at that local time, on one of `days`. |
+| `day_of_year(instant)` | 1 to 366. |
+| `iso_week_of(instant)` | The ISO 8601 week number, 1 to 53. |
 
 ### Shared library
 
@@ -334,10 +409,27 @@ From `neotime/lib`; they live in the [shared library](app-runtime.md#the-shared-
 | `sine(degrees)`, `cosine(degrees)` | In thousandths, from a table. |
 | `point_on_circle(center_x, center_y, radius, degrees)` | `{ x, y }`, with 0 degrees at the top and angles going clockwise, as on a clock face. |
 
-### Records
+### Records and arrays
 
-State may hold objects of a fixed shape, and fixed-length arrays of them, such as a list of alarms
-`{ hour, minute, days, enabled }`. The compiler stores each field in a state slot of its own.
+State may hold objects of a fixed shape, and fixed-length arrays of numbers or of such objects,
+such as a list of alarms `{ hour, minute, days, enabled }`. The compiler stores each field in a
+state slot of its own. A handler may write one element, as in `board.value[cell] = 2`; the write is
+applied with the handler's other writes when it finishes.
+
+| Function | Returns |
+|---|---|
+| `range(count)` | `0` to `count - 1`, where `count` is known when the app is compiled. |
+| `array.includes(value)`, `array.indexOf(value)` | Whether the value is there, and where (or -1). |
+| `count_where(array, test)` | How many elements pass the test. |
+| `array.map(...)` | A new array of the same length. Allowed in views, `computed` and handlers. |
+
+Loops over fixed-length arrays are allowed in `computed` and handlers as well as views.
+
+### Control flow
+
+An early `return` is allowed in any function. A call that loops runs at most 200,000 steps, which
+is about a fifth of a second; a game search should stop well inside that, or split its work across
+several calls.
 
 ## Permissions
 
@@ -347,13 +439,13 @@ covered, so a missing permission is a compile error, not a surprise on the watch
 
 | Permission | Covers |
 |---|---|
-| `heart_rate` | The `heart_rate_reading` subscription and the heart rate effects. |
+| `heart_rate` | The `heart_rate_reading` subscription, the heart rate effects and `set_heart_rate_led`. |
 | `motion` | The `motion` and `acceleration` subscriptions. |
 | `notifications` | Reading notifications, and the notification effects. |
 | `phone` | `call_control`, `music_control`, `find_phone`, and the `call`, `music` and `navigation` subscriptions. |
 | `phone_messages` | `send_to_phone` and the `message` subscription. |
 | `internet` | `http_request`. |
-| `settings` | `set_setting` and `set_do_not_disturb`. |
+| `settings` | `set_setting`, `set_do_not_disturb` and `set_bluetooth`. |
 | `wake` | `wake_screen`, and vibration during do not disturb. |
 | `background` | Subscriptions that run while the app is closed. |
 

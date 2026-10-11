@@ -5,7 +5,8 @@
 //! make a widget miss an update.
 
 use crate::image::{AppImage, ImageError};
-use crate::instruction::{decode, DurationPattern, Instruction, SystemValue, TimePart, TimePattern};
+use crate::instruction::{decode, Instruction, SystemValue, TimePart};
+use crate::pattern;
 
 // ============================================================================
 // Inputs
@@ -15,7 +16,7 @@ use crate::instruction::{decode, DurationPattern, Instruction, SystemValue, Time
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Inputs {
     pub state_slots: u64,
-    pub system_values: u16,
+    pub system_values: u32,
 }
 
 impl Inputs {
@@ -62,22 +63,13 @@ const SECOND_IN_MILLISECONDS: u32 = 1000;
 const MINUTE_IN_MILLISECONDS: u32 = 60 * SECOND_IN_MILLISECONDS;
 const HOUR_IN_MILLISECONDS: u32 = 60 * MINUTE_IN_MILLISECONDS;
 
-/// The fastest any binding redraws; hundredths of a second change faster than the screen can show.
-const FASTEST_REDRAW_IN_MILLISECONDS: u32 = 100;
-
 /// How often a value shown through this instruction can change, if it depends on the clock.
-fn smallest_visible_step(instruction: Instruction) -> Option<u32> {
+fn smallest_visible_step(image: &AppImage, instruction: Instruction) -> Option<u32> {
     use Instruction::*;
     Some(match instruction {
-        FormatDuration(DurationPattern::MinutesSecondsHundredths) => FASTEST_REDRAW_IN_MILLISECONDS,
-        FormatDuration(DurationPattern::MinutesSeconds | DurationPattern::HoursMinutesSeconds) => {
-            SECOND_IN_MILLISECONDS
-        }
-        FormatDuration(DurationPattern::HoursMinutes) => MINUTE_IN_MILLISECONDS,
-        FormatTime(TimePattern::ClockWithSeconds) => SECOND_IN_MILLISECONDS,
-        FormatTime(TimePattern::Clock | TimePattern::Date) => MINUTE_IN_MILLISECONDS,
+        FormatDuration(pattern) => pattern::duration_pattern_step_in_milliseconds(image.string(pattern)?),
+        FormatTime(pattern) => pattern::time_pattern_step_in_milliseconds(image.string(pattern)?),
         TimePart(self::TimePart::Second) => SECOND_IN_MILLISECONDS,
-        TimePart(self::TimePart::Minute) => MINUTE_IN_MILLISECONDS,
         TimePart(self::TimePart::Hour) => HOUR_IN_MILLISECONDS,
         TimePart(_) => MINUTE_IN_MILLISECONDS,
         _ => return None,
@@ -96,7 +88,7 @@ pub struct ExpressionInfo {
 ///
 /// An expression that reads the clock without formatting it, such as a comparison, redraws once a
 /// second.
-pub fn analyse_expression(code: &[u8]) -> Option<ExpressionInfo> {
+pub fn analyse_expression(image: &AppImage, code: &[u8]) -> Option<ExpressionInfo> {
     let mut inputs = Inputs::NOTHING;
     let mut finest_step: Option<u32> = None;
     let mut offset = 0;
@@ -110,7 +102,7 @@ pub fn analyse_expression(code: &[u8]) -> Option<ExpressionInfo> {
             Instruction::ReadSystem(value) => inputs = inputs.union(Inputs::system_value(value)),
             _ => {}
         }
-        if let Some(step) = smallest_visible_step(instruction) {
+        if let Some(step) = smallest_visible_step(image, instruction) {
             finest_step = Some(finest_step.map_or(step, |finest| finest.min(step)));
         }
         offset = next_offset;
@@ -135,10 +127,10 @@ pub const MOST_EXPRESSIONS: usize = 64;
 
 /// What every expression of the open app reads, kept in RAM while the app is open.
 ///
-/// The parts are kept in separate arrays, which avoids padding and makes each entry 14 bytes.
+/// The parts are kept in separate arrays, which avoids padding and makes each entry 16 bytes.
 pub struct Bindings {
     state_slots: [u64; MOST_EXPRESSIONS],
-    system_values: [u16; MOST_EXPRESSIONS],
+    system_values: [u32; MOST_EXPRESSIONS],
     redraw_periods_in_milliseconds: [u32; MOST_EXPRESSIONS],
     count: usize,
 }
@@ -159,7 +151,7 @@ impl Bindings {
             let code = image
                 .expression_code(index as u16)
                 .ok_or(ImageError::TableOutOfBounds)?;
-            let info = analyse_expression(code).ok_or(ImageError::TableOutOfBounds)?;
+            let info = analyse_expression(image, code).ok_or(ImageError::TableOutOfBounds)?;
             bindings.state_slots[index] = info.inputs.state_slots;
             bindings.system_values[index] = info.inputs.system_values;
             bindings.redraw_periods_in_milliseconds[index] = info.redraw_period_in_milliseconds;

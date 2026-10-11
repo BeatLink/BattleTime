@@ -265,9 +265,20 @@ Each kind of section appears at most once:
 | 2 | State | 12 bytes per variable: key string (2), type (1), flags (1, bit 0 = persists), default value (8). At most 64 variables. |
 | 3 | Expressions | A table of (offset, length) pairs, then the bytecode they point into. |
 | 4 | Handlers | The same layout as expressions. |
-| 5 | Widgets | The widget tree. Its layout comes with the runtime's next step. |
+| 5 | Widgets | A table of (offset, length) pairs, then one record per widget, described below. At most 128 widgets. |
 | 6 | Subscriptions | Each period, sensor or time the app wants, and the handler to call. Not laid out yet. |
 | 7 | Resources | The app's own icon and images, RGB565 with run-length encoding. Not laid out yet. |
+
+Widgets are stored depth first, so a widget's children follow it, each with everything inside
+it. Each root is one screen, and the first is the screen the app opens on. A widget record is:
+
+| Bytes | Holds |
+|---|---|
+| 0 | The kind, numbered in the order of `WidgetKind` in `runtime/src/widgets.rs`. |
+| 1 | How many children it has. Only containers and buttons may have any. |
+| 2 | How many properties follow. |
+| 3 | Reserved, 0. |
+| 4 on | 6 bytes per property: its id (1), where its value comes from (1: 0 a constant, 1 an expression, 2 a handler), and the value (4): the constant itself, a string number for text, or the expression or handler number. |
 
 Expressions do not record what they read or how often they redraw. The runtime works both out from
 the code when the app opens, so a wrong compiler can never make a widget miss an update.
@@ -335,6 +346,8 @@ Each instruction is one opcode byte followed by its operands:
 | `09`, `0A`, `0B` | duplicate, drop, swap | | Stack housekeeping. |
 | `10`–`14` | add, subtract, multiply, divide, remainder | | Whole-number arithmetic. Overflow and division by zero fail the call; division rounds toward zero. |
 | `15`–`18` | negate, minimum, maximum, absolute | | |
+| `1A`–`1D` | bit and, bit or, bit xor, bit not | | For masks, such as the days an alarm rings. |
+| `1E`, `1F` | shift left, shift right | | By 0 to 63 places; any other amount fails the call. Shifting right keeps the sign. |
 | `19` | random int | | Takes a lowest and a highest number and pushes a random one between them, both included. Handlers only, so expressions always give the same answer. |
 | `20`–`25` | equal, not equal, less, less or equal, greater, greater or equal | | Push 1 or 0. |
 | `26` | not | | 1 for 0, else 0. |
@@ -343,8 +356,8 @@ Each instruction is one opcode byte followed by its operands:
 | `29` | jump if false | distance, 2 bytes | Takes a value and skips forward if it is 0. `? :`, `&&` and `\|\|` compile to this. |
 | `30` | time part | part, 1 byte | Takes an instant and pushes its local year, month, day, hour, minute, second or weekday (0 to 6, Monday first). |
 | `40` | format number | minimum digits, 1 byte | Takes a number and pushes it as text, padded with zeros. |
-| `41` | format duration | pattern, 1 byte | `mm:ss`, `h:mm:ss`, `mm:ss.cc` or `h:mm`. |
-| `42` | format time | pattern, 1 byte | Takes an instant and pushes the local clock, the clock with seconds, or `YYYY-MM-DD`. The clock follows the user's 12 or 24 hour setting. |
+| `41` | format duration | pattern string, 2 bytes | Takes a duration and pushes it as text in the pattern. |
+| `42` | format time | pattern string, 2 bytes | Takes an instant and pushes the local time as text in the pattern. |
 | `43` | join | | Takes two texts and pushes them joined. |
 | `50` | write state | slot, 1 byte | Takes a value for a state variable. Handlers only. |
 | `51` | effect | effect, 1 byte | Takes the effect's arguments and records it. Handlers only. |
@@ -352,18 +365,22 @@ Each instruction is one opcode byte followed by its operands:
 System values, in the order `read system` numbers them: `now`, `utc_offset`, `battery_percent`,
 `is_charging`, `steps_today`, `heart_rate`, `heart_rate_measured_at`, `is_phone_connected`,
 `unread_notifications`, `is_do_not_disturb`, `brightness`, `uses_24_hour_clock`,
-`uses_metric_units`, `step_goal`.
+`uses_metric_units`, `step_goal`, `is_heart_rate_running`, `is_bluetooth_enabled`, `next_alarm`,
+`heart_rate_status`, and the weather's `temperature`, `condition`, `low`, `high` and
+`received_at`.
 
 Effects, in the order `effect` numbers them, with how many arguments each takes: `vibrate` (1),
 `vibrate_pattern` (1), `stop_vibrating`, `set_brightness` (1), `keep_screen_on` (1),
 `wake_screen`, `screen_off`, `go` (1), `back`, `open_app` (1), `close`, `show_toast` (1),
 `notify` (2), `dismiss_notification` (1), `mark_notifications_read`, `send_to_phone` (2),
-`music_control` (1), `call_control` (1), `find_phone`, `measure_heart_rate`, `start_heart_rate`,
-`stop_heart_rate`, `reset_steps`, `set_setting` (2), `set_do_not_disturb` (1), `log` (1).
+`music_control` (1), `call_control` (1), `find_phone` (1), `measure_heart_rate`,
+`start_heart_rate`, `stop_heart_rate`, `reset_steps`, `set_setting` (2), `set_do_not_disturb` (1),
+`log` (1), `request_music_state`, `set_heart_rate_led` (3), `set_bluetooth` (1).
 `vibrate_sequence` and `http_request` need arrays and more arguments, and come later.
 
-Every jump goes forward, so a call can never run longer than its own code. When handlers gain
-loops over fixed-length arrays, each call will also get a step limit.
+Every jump goes forward, so a call can never run longer than its own code. When loops over
+fixed-length arrays arrive, each call will also get a limit of 200,000 steps, about a fifth of a
+second.
 
 ### Checking an image
 
@@ -377,11 +394,22 @@ checks:
 Then one pass over each expression and handler checks:
 
 - that every instruction and operand is known, and every state slot and string exists;
+- that every format pattern is valid, so a typo in one is caught at install;
 - that every jump lands on the start of an instruction or the end of the code;
 - that the stack never goes below empty or above 32 values, and that every path into a jump
   target arrives with the same depth;
 - that an expression ends with exactly one value and a handler with none;
 - that expressions do not read events, write state, cause effects or use random numbers.
+
+Last, a pass over the widgets checks:
+
+- that they form whole trees no deeper than 16 levels, and only containers and buttons have
+  children;
+- that every property exists on its widget, appears once, and screen-wide ones such as `onSwipe`
+  are only on a screen's root;
+- that every event names a handler, every other property is a constant or an expression, and every
+  expression, handler and string named exists;
+- that constants fit: a flag is 0 or 1, a colour fits RGB565, and text names a string.
 
 The interpreter still checks every step as it runs, so even an image that slipped past makes a call
 fail rather than crashing the watch.
@@ -414,7 +442,8 @@ flash write.
 
 The runtime never ticks on an app's behalf. It knows from each expression's redraw period, such as
 "every second" for `mm:ss` or "every minute" for `HH:MM`, when the screen next changes. The period
-is the finest step the expression's formatting shows; hundredths are capped at a tenth of a second,
+is the smallest unit the expression's format patterns show, such as a second for `ss` and a minute
+for anything coarser; hundredths are capped at a tenth of a second,
 and an expression that reads the clock without formatting it redraws once a second. Steps are
 counted on the wall clock, so a minute display changes as each minute begins. It sets one
 timer for the earliest of those times, and none at all when the screen is off or nothing on it
@@ -440,8 +469,8 @@ The working memory below is measured from `neotime-runtime`; the rest is still a
 | Part | Size |
 |---|---|
 | Interpreter: a stack of 32 values and the 256-byte text buffer | 528 B, measured |
-| A handler's results: up to 16 state writes and 8 effects | 464 B, measured, only while a handler runs |
-| Bindings: what each of up to 64 expressions reads and its redraw period | 904 B, measured |
+| A handler's results: up to 16 state writes and 8 effects | 528 B, measured, only while a handler runs |
+| Bindings: what each of up to 64 expressions reads and its redraw period | 1,032 B, measured |
 | State: 32 slots of 8 bytes, plus small arrays | about 1 KB |
 | Expression bytecode, copied in when the app opens | about 1 KB |
 | Section reader for the image on the external flash | 256 B |
@@ -458,13 +487,15 @@ returns an error instead of panicking on any input. It has:
 - `verifier`: the install-time pass over every expression and handler;
 - `interpreter`: runs expressions and handlers, holding a handler's writes and effects back until
   it finishes;
-- `text`: the calendar and the number, duration and time formatting;
+- `text`: the calendar and number formatting;
+- `pattern`: the time and duration format patterns;
+- `widgets`: reads the widget tree in place, walks screens and children, and checks it;
 - `bindings`: works out each expression's inputs and redraw period, which expressions a change
   affects, which are due as the clock moves, and when the next clock-driven redraw is.
 
 Its tests build images by hand, including the stopwatch from [Writing an app](#writing-an-app), and
-check that flipping any single byte of an image never panics. Still to come: the widgets,
-subscriptions and resources sections, arrays and loops, the compiler, and the runtime loop that
+check that flipping any single byte of an image never panics. Still to come: the subscriptions and
+resources sections, arrays and loops, the compiler, and the runtime loop that
 ties these to the UI toolkit and the system.
 
 ## Open questions

@@ -252,11 +252,15 @@ byte-level format.
 - **Interpreter.** `Interpreter` runs an expression to get a widget's value, or a handler to answer
   an event. A handler's state writes and effects are returned, not applied, so a failure part way
   changes nothing.
+- **Widgets.** `WidgetTree` reads an app's widgets in place: its screens, each widget's children,
+  and each property as a constant, an expression or a handler.
+- **Format patterns.** Times and durations are written with patterns such as `dddd D MMMM`, checked
+  at install.
 - **Bindings.** `Bindings` works out from the code what each expression reads and how often the
   clock changes it, so the runtime redraws only what changed and sleeps otherwise.
 
 It never allocates and never panics on bad input. Its working memory is 528 B for the interpreter
-and 904 B for the bindings of up to 64 expressions.
+and 1,032 B for the bindings of up to 64 expressions.
 
 ## UI toolkit (`ui`)
 

@@ -3,6 +3,8 @@
 //! `AppImage::parse` checks the image's structure, so every later lookup stays inside the bytes.
 //! The code inside it is checked separately by `verify`.
 
+use crate::widgets::WidgetProblem;
+
 // ============================================================================
 // Layout
 // ============================================================================
@@ -113,6 +115,10 @@ pub enum ImageError {
         offset: usize,
         problem: CodeProblem,
     },
+    BadWidget {
+        widget: u16,
+        problem: WidgetProblem,
+    },
 }
 
 /// Which piece of code a problem was found in.
@@ -139,6 +145,7 @@ pub enum CodeProblem {
     WriteInExpression,
     EffectInExpression,
     RandomInExpression,
+    BadPattern,
 }
 
 // ============================================================================
@@ -231,6 +238,7 @@ pub struct AppImage<'image> {
     state_entries: &'image [u8],
     expressions: EntryTable<'image>,
     handlers: EntryTable<'image>,
+    widgets: EntryTable<'image>,
 }
 
 impl<'image> AppImage<'image> {
@@ -271,6 +279,7 @@ impl<'image> AppImage<'image> {
             state_entries: &[],
             expressions: EntryTable::default(),
             handlers: EntryTable::default(),
+            widgets: EntryTable::default(),
         };
 
         let mut seen_sections = 0u32;
@@ -296,7 +305,8 @@ impl<'image> AppImage<'image> {
                 SectionKind::State => image.read_state_section(count, section_bytes)?,
                 SectionKind::Expressions => image.expressions = EntryTable::parse(count, section_bytes)?,
                 SectionKind::Handlers => image.handlers = EntryTable::parse(count, section_bytes)?,
-                SectionKind::Widgets | SectionKind::Subscriptions | SectionKind::Resources => {}
+                SectionKind::Widgets => image.widgets = EntryTable::parse(count, section_bytes)?,
+                SectionKind::Subscriptions | SectionKind::Resources => {}
             }
         }
 
@@ -384,5 +394,13 @@ impl<'image> AppImage<'image> {
 
     pub fn handler_code(&self, index: u16) -> Option<&'image [u8]> {
         self.handlers.get(index)
+    }
+
+    pub fn widget_count(&self) -> u16 {
+        self.widgets.count
+    }
+
+    pub fn widget_bytes(&self, index: u16) -> Option<&'image [u8]> {
+        self.widgets.get(index)
     }
 }
