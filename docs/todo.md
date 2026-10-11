@@ -60,3 +60,17 @@ See [bluetooth.md](bluetooth.md) for the details of each.
   included, before it touches a watch. Without SWD, a mistake here cannot be undone.
 - [ ] **Feed the watchdog only while the button is up,** from the first firmware on. It is the only
   way back to the bootloader without SWD.
+
+## UI toolkit
+
+- [ ] **Measure the UI heap.** The memory map gives `rlvgl` a 14 KB heap, but that is a guess. Count
+  what a typical screen allocates, then update the "UI heap" row in
+  [memory-map.md](memory-map.md) and the size in `tools/draw_memory_maps.py`, and rerun the script.
+- [ ] **Text edges over colour.** The display cannot be read back, so the soft edges of letters are
+  mixed with one set background colour. Text on a coloured button gets dark fringes. A small line
+  buffer would let edges mix with what is really underneath.
+- [ ] **Page slides in the UI.** The simulator's demo pages already slide in with the hardware
+  scroll. Move that into `neotime-ui` so rlvgl screens slide the same way.
+- [ ] **rlvgl screens in the simulator.** The simulator still shows hand-drawn demo pages. Draw
+  real rlvgl screens there through `ScreenRenderer`.
+- [ ] **Touch input.** Turn `neotime-touch` gestures into rlvgl events.
