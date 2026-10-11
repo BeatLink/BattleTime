@@ -30,6 +30,7 @@ firmware to flash yet.
 - [Coding guidelines](docs/coding-guidelines.md): how NeoTime code is written.
 - [Simulator](docs/simulator.md): running the drivers in a desktop window with `nix run`.
 - [To do](docs/todo.md): work that is known to be needed but not done yet.
+- [Memory map](docs/memory-map.md): how the RAM, internal flash and external flash are divided.
 
 ## License
 

@@ -21,6 +21,8 @@ The PineTime is built around a Nordic nRF52832 chip: a 64 MHz Arm Cortex-M4F wit
 | Side button | | GPIO P0.13, high while held; powered by P0.15 |
 | Battery, charging | | GPIO and ADC |
 
+[memory-map.md](memory-map.md) shows how the RAM and both flashes are divided.
+
 ## Layers
 
 ```mermaid
@@ -79,13 +81,17 @@ NeoTime/
 ├── docs/
 │   ├── architecture.md
 │   ├── coding-guidelines.md
-│   └── simulator.md
+│   ├── memory-map.md how RAM and both flashes are divided
+│   ├── simulator.md
+│   ├── todo.md
+│   └── images/       pictures for the docs
 ├── drivers/
 │   ├── button/       neotime-button: the side button
 │   ├── display/      neotime-display: the ST7789 screen
 │   ├── touch/        neotime-touch: the CST816S touch panel
 │   └── vibrator/     neotime-vibrator: the vibration motor
 ├── simulator/        neotime-simulator: the drivers in a desktop window
+├── tools/            scripts for development, such as drawing the memory maps
 └── ui/               neotime-ui: draws rlvgl widgets on the screen
 ```
 
