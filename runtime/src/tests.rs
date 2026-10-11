@@ -2690,6 +2690,21 @@ fn the_shared_library_is_an_image_of_its_own_kind() {
     assert_eq!(image.resource_count(), 1);
 }
 
+#[test]
+fn an_app_can_name_its_first_image_as_its_icon() {
+    let mut with_icon = ImageWriter::new("dice", "Dice", AppKind::App, 1);
+    with_icon.image_resource(ImageFormat::Mask, 1, 1, &[255]);
+    with_icon.set_has_icon();
+    let mut icon_missing = ImageWriter::new("dice", "Dice", AppKind::App, 1);
+    icon_missing.set_has_icon();
+
+    assert!(AppImage::parse(&with_icon.build()).unwrap().has_icon);
+    assert_eq!(
+        AppImage::parse(&icon_missing.build()).err(),
+        Some(ImageError::BadResource(0))
+    );
+}
+
 // ============================================================================
 // Memory
 // ============================================================================

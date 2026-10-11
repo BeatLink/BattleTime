@@ -252,7 +252,7 @@ reads the sections it needs in place, never copying a whole image into RAM.
 | 0–3 | Magic `NTAP`. |
 | 4–5 | Format version, now 1. |
 | 6 | Kind: 0 for an app, 1 for a watch face, 2 for the shared library, which holds only images. |
-| 7 | Reserved, 0. |
+| 7 | Flags: bit 0 means the app's image 0 is its icon for the launcher. |
 | 8–9 | The shared library version the app was built against. |
 | 10–11 | How many sections follow. |
 | 12–15 | CRC-32 (IEEE) of every byte from 16 to the end. |

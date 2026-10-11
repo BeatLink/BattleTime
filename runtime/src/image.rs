@@ -284,6 +284,8 @@ impl<'image> EntryTable<'image> {
 pub struct AppImage<'image> {
     pub kind: AppKind,
     pub shared_library_version: u16,
+    /// Whether the app's first image, number 0, is its icon for the launcher.
+    pub has_icon: bool,
     pub id_string: u16,
     pub name_string: u16,
     strings: EntryTable<'image>,
@@ -319,6 +321,7 @@ impl<'image> AppImage<'image> {
             other => return Err(ImageError::UnknownKind(other)),
         };
         let shared_library_version = read_u16(bytes, 8).ok_or(ImageError::TooShort)?;
+        let has_icon = bytes[7] & 1 != 0;
         let section_count = read_u16(bytes, 10).ok_or(ImageError::TooShort)?;
         let stored_crc = read_u32(bytes, 12).ok_or(ImageError::TooShort)?;
         if crc32(&bytes[CRC_COVERS_FROM..]) != stored_crc {
@@ -330,6 +333,7 @@ impl<'image> AppImage<'image> {
         let mut image = AppImage {
             kind,
             shared_library_version,
+            has_icon,
             id_string,
             name_string,
             strings: EntryTable::default(),
@@ -387,6 +391,9 @@ impl<'image> AppImage<'image> {
         }
         for index in 0..image.state_count {
             image.check_state_variable(index)?;
+        }
+        if image.has_icon && image.resources.count == 0 {
+            return Err(ImageError::BadResource(0));
         }
         for index in 0..image.initial_values.count {
             image.check_initial_values(index)?;

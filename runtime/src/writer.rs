@@ -44,6 +44,7 @@ struct VariableEntry {
 
 /// Collects an app's parts and writes them out as one image.
 pub struct ImageWriter {
+    has_icon: bool,
     kind: AppKind,
     shared_library_version: u16,
     id_string: u16,
@@ -63,6 +64,7 @@ impl ImageWriter {
         let mut writer = ImageWriter {
             kind,
             shared_library_version,
+            has_icon: false,
             id_string: 0,
             name_string: 0,
             strings: Vec::new(),
@@ -127,6 +129,11 @@ impl ImageWriter {
         }
         self.initial_values.push(entry);
         Some(variable)
+    }
+
+    /// Marks image 0 as the app's icon for the launcher; add that image first.
+    pub fn set_has_icon(&mut self) {
+        self.has_icon = true;
     }
 
     /// Adds a subscription, such as a timer or `onOpen`, and returns its number.
@@ -273,7 +280,7 @@ impl ImageWriter {
             AppKind::Face => 1,
             AppKind::Library => 2,
         });
-        image.push(0);
+        image.push(self.has_icon as u8);
         image.extend(self.shared_library_version.to_le_bytes());
         image.extend((sections.len() as u16).to_le_bytes());
         image.extend([0; 4]);
