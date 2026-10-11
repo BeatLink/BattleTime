@@ -21,13 +21,14 @@ use neotime_boot::{
 use neotime_external_flash::ExternalFlash;
 use neotime_storage::{prepare_file_system, FileSystemFlash, Preparation};
 use neotime_updates::{
-    confirm_running_firmware, running_firmware_is_on_trial, Receivers, RecoveryReceiver, UpdateReceiver,
+    confirm_running_firmware, running_firmware_is_on_trial, running_firmware_was_rolled_back, Receivers,
+    RecoveryReceiver, UpdateReceiver,
 };
 use static_cell::StaticCell;
 
 use core::cell::RefCell;
 
-use crate::{Screen, SpiBus};
+use crate::{line, status::{self, Mode}, Screen, SpiBus};
 
 // ============================================================================
 // What this build is
@@ -90,12 +91,12 @@ pub async fn start(
     spi_bus: &'static SpiBus,
     peripherals: StoragePeripherals,
     screen: &mut Screen,
-) -> Option<(Targets, Confirmation)> {
+) -> Option<(Targets, Confirmation, Mode)> {
     let flash_chip_select = Output::new(peripherals.flash_chip_select, Level::High, OutputDrive::Standard);
     let external_flash = match ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), &mut Delay) {
         Ok(flash) => EXTERNAL_FLASH.init(Mutex::new(RefCell::new(flash))),
         Err(_) => {
-            screen.write_line(2, "no flash chip");
+            screen.write_line(line::FILES, "No flash chip found");
             return None;
         }
     };
@@ -108,11 +109,11 @@ pub async fn start(
         neotime_external_flash::CAPACITY_IN_BYTES as u32,
     ));
     screen.write_line(
-        2,
+        line::FILES,
         match prepare_file_system(file_system_flash) {
-            Ok(prepared) if prepared.preparation == Preparation::AlreadyFormatted => "files ok",
-            Ok(_) => "files formatted",
-            Err(_) => "files broken",
+            Ok(prepared) if prepared.preparation == Preparation::AlreadyFormatted => "Files OK",
+            Ok(_) => "Files set up",
+            Err(_) => "Files damaged",
         },
     );
 
@@ -144,10 +145,14 @@ pub async fn start(
         )),
         alignment: CONFIRM_ALIGNMENT.init([0; 4]),
     };
-    if confirmation.is_on_trial().await && !rolling_back_would_help(external_flash) {
-        screen.write_line(3, confirmation.confirm().await);
+    let mut mode = confirmation.mode().await;
+    if mode == Mode::OnTrial && !rolling_back_would_help(external_flash) && confirmation.confirm().await {
+        mode = Mode::Confirmed;
     }
-    Some((targets, confirmation))
+    if status::recovery_was_just_installed() || status::IS_RECOVERY_BUILD {
+        mode = Mode::Recovery;
+    }
+    Some((targets, confirmation, mode))
 }
 
 /// A rollback restores the update slot, which after a migration holds the old system's leftovers and after
@@ -190,14 +195,19 @@ pub struct Confirmation {
 }
 
 impl Confirmation {
-    async fn is_on_trial(&mut self) -> bool {
-        running_firmware_is_on_trial(&mut self.boot_state, self.alignment).await == Ok(true)
+    /// What the boot state says: on trial after a swap, rolled back after a revert, confirmed otherwise.
+    async fn mode(&mut self) -> Mode {
+        if running_firmware_is_on_trial(&mut self.boot_state, self.alignment).await == Ok(true) {
+            Mode::OnTrial
+        } else if running_firmware_was_rolled_back(&mut self.boot_state, self.alignment).await == Ok(true) {
+            Mode::RolledBack
+        } else {
+            Mode::Confirmed
+        }
     }
 
-    pub async fn confirm(&mut self) -> &'static str {
-        match confirm_running_firmware(&mut self.boot_state, self.alignment).await {
-            Ok(()) => "confirmed",
-            Err(_) => "confirm failed",
-        }
+    /// True once the bootloader will keep this firmware.
+    pub async fn confirm(&mut self) -> bool {
+        confirm_running_firmware(&mut self.boot_state, self.alignment).await.is_ok()
     }
 }

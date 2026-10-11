@@ -299,3 +299,27 @@ mod migration {
         assert_eq!(crc32(crc32(CRC32_INITIAL, b"1234"), b"56789"), 0xCBF4_3926);
     }
 }
+
+mod boot_note {
+    use crate::BootNote;
+
+    #[test]
+    fn a_note_reads_back_as_itself() {
+        for note in [BootNote::Normal, BootNote::RecoveryInstalled] {
+            assert_eq!(BootNote::from_word(note.to_word()), Some(note));
+        }
+    }
+
+    #[test]
+    fn power_on_noise_is_not_a_note() {
+        for word in [0, u32::MAX, 0xB007_0000, 0xB007_0003, 0x0000_0002] {
+            assert_eq!(BootNote::from_word(word), None);
+        }
+    }
+
+    #[test]
+    fn the_note_sits_in_the_words_both_linkers_keep_free() {
+        assert!(crate::FIRMWARE_ALIVE_MARKER.contains(crate::BOOT_NOTE_ADDRESS));
+        assert!(crate::FIRMWARE_ALIVE_MARKER.contains(crate::BOOT_NOTE_ADDRESS + 3));
+    }
+}

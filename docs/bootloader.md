@@ -5,7 +5,7 @@ update or the recovery firmware, then starts the firmware. It is built on
 [embassy-boot](https://embassy.dev/book/#_bootloader), so updates survive a power cut part way, and
 a new firmware that fails to start is rolled back by itself.
 
-It is about 8 KB, in a 16 KB region. The rest is room for signature checks later.
+It is about 14 KB, in a 16 KB region; its status screen takes about 6 KB of that.
 
 The work of an update is split three ways:
 
@@ -59,24 +59,51 @@ Growing `FIRMWARE` later needs a new bootloader, since the bootloader is built w
    has turned NFC back on, embassy-nrf turns it off and resets the watch.
 2. Start the watchdog with a 5 second timeout. If the firmware left it running with a different
    timeout, it cannot be changed, so wait for it to reset the watch.
-3. If the button is held, keep watching it for 5 seconds. If it is still held, buzz once and
-   install the recovery firmware (below).
+3. If the button is held, show "Keep holding for recovery firmware" and keep watching it for 5
+   seconds. If it is still held, buzz once and install the recovery firmware (below).
 4. Wake the external flash and check that it answers as a 4 MB chip. If it does not, skip
    straight to step 6 rather than leave the watch unable to start.
 5. Let embassy-boot act on `BOOT_STATE`:
    - **Boot**: nothing to do.
-   - **Swap**: swap `FIRMWARE` with `FIRMWARE_UPDATE` page by page, recording progress in
-     `BOOT_STATE`, so a power cut resumes where it stopped.
+   - **Swap**: show "Installing firmware, Do not unplug", then swap `FIRMWARE` with
+     `FIRMWARE_UPDATE` page by page, recording progress in `BOOT_STATE`, so a power cut resumes
+     where it stopped.
    - **Revert**: the last swapped-in firmware never marked itself booted, so swap the old one back.
-6. Turn off every interrupt, then jump to the firmware at `FIRMWARE`.
+6. Leave a note for the firmware in RAM (below), turn off every interrupt, then jump to the
+   firmware at `FIRMWARE`.
 
 Every flash read, write and erase feeds the watchdog, so a long swap does not trip it.
+
+## The status screen
+
+On an ordinary start the screen stays dark and the firmware starts at once. Whenever the bootloader
+has work to do, it turns the screen blue (`status_colour::BOOTLOADER`) and says what it is doing in
+white. The screen code is its own small ST7789 driver in `bootloader/src/screen.rs`, since the
+firmware's mipidsi-based driver does not fit. Text uses the 6x10 font drawn at double size.
+
+| When | Lines |
+|---|---|
+| The button is held at start | NeoTime bootloader / Keep holding for / recovery firmware |
+| Installing the recovery firmware | NeoTime bootloader / Installing recovery / Do not unplug |
+| No valid recovery firmware | NeoTime bootloader / No recovery found / Starting firmware |
+| Swapping in an update, or rolling one back | NeoTime bootloader / Installing firmware / Do not unplug |
+
+## The note to the firmware
+
+The firmware cannot tell from `BOOT_STATE` alone that it was just installed as the recovery
+firmware, so the bootloader leaves a note in RAM at `BOOT_NOTE_ADDRESS`, the third word of the
+alive marker, which every program's linker keeps free. `BootNote::RecoveryInstalled` means the
+button hold installed the recovery firmware on this start, and `BootNote::Normal` means anything
+else. The top half of the word is a fixed pattern, so whatever RAM held at power-on never reads
+as a note.
 
 ## What the firmware must do
 
 - **Mark itself booted** with `neotime_updates::confirm_running_firmware` once it is sure it works,
   for example after the BLE stack and screen have started. Otherwise the next reset rolls it back,
-  and no new update is accepted until it does.
+  and no new update is accepted until it does. It only writes when the firmware is on trial, so
+  after a rollback the Revert mark stays until the next update, and the status page can keep saying
+  so.
 - **Feed the watchdog.** It is still running when the firmware starts. Take it over with the
   same timeout, `WATCHDOG_TIMEOUT_IN_TICKS`, and feed it from the system loop.
 - **Install updates** by feeding the new image, a raw `.bin` linked at `FIRMWARE`, to
@@ -98,8 +125,8 @@ The system loop feeds the watchdog only while the button is up (see the button d
    stack pointer in RAM and a reset handler inside `FIRMWARE`. If they are not, the watch buzzes
    three times and starts the old firmware.
 4. It copies the recovery firmware into `FIRMWARE_UPDATE` and marks a swap, so the recovery firmware
-   is installed by the same power-cut-safe swap as any update. The screen stays dark meanwhile,
-   for up to about 30 seconds.
+   is installed by the same power-cut-safe swap as any update. The screen stays blue with
+   "Installing recovery" meanwhile, for up to about 30 seconds.
 
 The broken firmware ends up in `FIRMWARE_UPDATE`. The recovery firmware must mark itself booted,
 or the next reset swaps the broken firmware back in.

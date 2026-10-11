@@ -447,7 +447,8 @@ never run on a watch; see [updates.md](updates.md) for the emulator plan.
 
 The bootloader is built on [embassy-boot](https://embassy.dev). It swaps in a waiting firmware
 update from external flash, rolls back a new firmware that never marked itself booted, and installs
-the recovery firmware when the button is held for about ten seconds. It is about 8 KB.
+the recovery firmware when the button is held for about ten seconds. While it works it shows a blue
+status screen, and it leaves the firmware a note in RAM. It is about 14 KB.
 
 `neotime-boot` holds the flash layout: in internal flash the bootloader, its state page, the
 running firmware and the shared library apps draw on; in external flash the update slot, the

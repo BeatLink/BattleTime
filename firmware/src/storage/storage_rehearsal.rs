@@ -33,7 +33,7 @@ use neotime_storage::{prepare_file_system, FileSystemFlash, Preparation};
 use neotime_updates::{ImageKind, UpdateError, UpdateReceiver, UpdateTargets};
 use static_cell::StaticCell;
 
-use crate::{Screen, SpiBus};
+use crate::{line, status::Mode, Screen, SpiBus};
 
 pub use wasp_os::{
     leave_breadcrumb, prepare_clocks, previous_breadcrumbs, record, reset, Breadcrumbs, Confirmation,
@@ -86,13 +86,13 @@ pub async fn start(
     spi_bus: &'static SpiBus,
     peripherals: StoragePeripherals,
     screen: &mut Screen,
-) -> Option<(Targets, Confirmation)> {
+) -> Option<(Targets, Confirmation, Mode)> {
     let _flash_controller_never_used = peripherals.flash_controller;
     let flash_chip_select = Output::new(peripherals.flash_chip_select, Level::High, OutputDrive::Standard);
     let mut flash = match ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), &mut Delay) {
         Ok(flash) => flash,
         Err(_) => {
-            screen.write_line(2, "no flash chip");
+            screen.write_line(line::FILES, "no flash chip");
             leave_breadcrumb(STAGE_FLASH_FAILED);
             return None;
         }
@@ -106,18 +106,18 @@ pub async fn start(
             chip_id.manufacturer, chip_id.memory_type, chip_id.capacity
         ),
     );
-    screen.write_line(2, &text);
+    screen.write_line(line::FILES, &text);
     leave_breadcrumb(STAGE_FLASH_FOUND);
 
     match exercise_the_flash(&mut flash) {
         Ok(()) => {
-            screen.write_line(2, "flash write ok");
+            screen.write_line(line::FILES, "flash write ok");
             leave_breadcrumb(STAGE_FLASH_WRITTEN);
         }
         Err(offset) => {
             let mut text = heapless::String::<24>::new();
             let _ = core::fmt::write(&mut text, format_args!("flash bad {:x}", offset));
-            screen.write_line(2, &text);
+            screen.write_line(line::FILES, &text);
             record(Breadcrumbs {
                 stage: STAGE_FLASH_FAILED,
                 detail: offset,
@@ -129,11 +129,11 @@ pub async fn start(
     let external_flash = EXTERNAL_FLASH.init(Mutex::new(RefCell::new(flash)));
     match exercise_the_file_system(external_flash) {
         Ok(()) => {
-            screen.write_line(2, "flash, files ok");
+            screen.write_line(line::FILES, "flash, files ok");
             leave_breadcrumb(STAGE_FILES_CHECKED);
         }
         Err(step) => {
-            screen.write_line(2, step);
+            screen.write_line(line::FILES, step);
             leave_breadcrumb(STAGE_FILES_FAILED);
         }
     }
@@ -152,7 +152,7 @@ pub async fn start(
             STATE_ALIGNMENT.init([0; 4]),
         ),
     };
-    Some((targets, Confirmation))
+    Some((targets, Confirmation, Mode::Confirmed))
 }
 
 // ============================================================================

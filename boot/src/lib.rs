@@ -106,6 +106,51 @@ pub const WATCHDOG_TICKS_PER_SECOND: u32 = 32768;
 pub const RECOVERY_BUTTON_HOLD_IN_MILLISECONDS: u32 = 5000;
 
 // ============================================================================
+// What the bootloader tells the firmware, and the status colours
+// ============================================================================
+
+/// The third word of `FIRMWARE_ALIVE_MARKER`, where the bootloader notes why it started the firmware this time.
+pub const BOOT_NOTE_ADDRESS: u32 = FIRMWARE_ALIVE_MARKER.start + 8;
+/// The top half tells a real note from whatever RAM held at power-on.
+const BOOT_NOTE_MAGIC: u32 = 0xB007_0000;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BootNote {
+    /// Nothing special: the firmware's own boot state says the rest.
+    Normal = 1,
+    /// The button hold installed the recovery firmware just now.
+    RecoveryInstalled = 2,
+}
+
+impl BootNote {
+    pub const fn to_word(self) -> u32 {
+        BOOT_NOTE_MAGIC | self as u32
+    }
+
+    pub const fn from_word(word: u32) -> Option<BootNote> {
+        match word {
+            word if word == BootNote::Normal.to_word() => Some(BootNote::Normal),
+            word if word == BootNote::RecoveryInstalled.to_word() => Some(BootNote::RecoveryInstalled),
+            _ => None,
+        }
+    }
+}
+
+/// Screen backgrounds as RGB565, one for each mode, so the mode shows from across the room.
+pub mod status_colour {
+    /// The bootloader at work: installing, rolling back or waiting for the recovery hold.
+    pub const BOOTLOADER: u16 = 0x00EB;
+    /// A firmware that has confirmed itself.
+    pub const CONFIRMED: u16 = 0x0000;
+    /// A new firmware that has not confirmed itself yet; the next reset rolls it back.
+    pub const ON_TRIAL: u16 = 0x6A00;
+    /// The previous firmware, back because an update never confirmed itself.
+    pub const ROLLED_BACK: u16 = 0x6800;
+    /// The recovery firmware.
+    pub const RECOVERY: u16 = 0x480C;
+}
+
+// ============================================================================
 // Layout checks
 // ============================================================================
 

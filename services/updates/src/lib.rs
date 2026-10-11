@@ -173,16 +173,25 @@ pub async fn running_firmware_is_on_trial<BootState: NorFlash>(
     Ok(firmware_state.get_state().await? == State::Swap)
 }
 
-/// Tells the bootloader this firmware works, so it is kept and updates are accepted again.
+/// Tells the bootloader a firmware on trial works, so it is kept; a rollback's mark is left, so the screen can still say so.
 pub async fn confirm_running_firmware<BootState: NorFlash>(
     boot_state: BootState,
     state_alignment_buffer: &mut [u8],
 ) -> Result<(), UpdateError> {
     let mut firmware_state = FirmwareState::new(boot_state, state_alignment_buffer);
-    if firmware_state.get_state().await? != State::Boot {
+    if firmware_state.get_state().await? == State::Swap {
         firmware_state.mark_booted().await?;
     }
     Ok(())
+}
+
+/// Whether the bootloader rolled back the last update; true until the next update is marked.
+pub async fn running_firmware_was_rolled_back<BootState: NorFlash>(
+    boot_state: BootState,
+    state_alignment_buffer: &mut [u8],
+) -> Result<bool, UpdateError> {
+    let mut firmware_state = FirmwareState::new(boot_state, state_alignment_buffer);
+    Ok(firmware_state.get_state().await? == State::Revert)
 }
 
 // ============================================================================

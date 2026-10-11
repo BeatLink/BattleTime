@@ -98,6 +98,28 @@ The first firmware (`firmware/`) does the little an update needs and not much mo
 - mounts the file system, so that an update which breaks storage is noticed on the screen;
 - writes an alive marker into the last words of RAM, which an emulator checks.
 
+### The status page
+
+At start, and again while an update arrives, the firmware shows a status page. Its background
+colour and second and third lines say which mode the firmware is in (`firmware/src/status.rs`,
+colours in `neotime_boot::status_colour`):
+
+| Mode | Background | Lines | How the firmware knows |
+|---|---|---|---|
+| Confirmed | black | Firmware OK | `BOOT_STATE` says booted |
+| On trial | dark amber | New firmware on trial / Connect to keep it | `BOOT_STATE` says swap; after the first Bluetooth exchange it turns black with "Update kept" |
+| Rolled back | dark red | Update failed / Previous one restored | `BOOT_STATE` says revert, which stays until the next update |
+| Recovery | purple | Recovery firmware / Send a new firmware | the bootloader's note, or a build with the `recovery` feature |
+
+The other lines are the version, the file system ("Files OK", "Files set up", "Files damaged"
+or "No flash chip found"), Bluetooth ("Ready for updates" or "Phone connected") and the size received
+during an update. The bootloader's own blue screen is described in
+[bootloader.md](bootloader.md#the-status-screen).
+
+A recovery firmware installed by the button hold shows as recovery only until its next restart,
+because the note is not kept. A firmware built with `--features recovery` always does, and it is
+the image meant for `RECOVERY_FIRMWARE`.
+
 A panic halts rather than resets, so the watchdog brings the watch back to the bootloader instead of
 the firmware restarting in a loop. It is 105 KB of flash and 25 KB of static RAM, 16 KB of that heap. Its screen writes and flash
 writes are blocking, so the Bluetooth host waits while a flash sector erases; the link layer runs in

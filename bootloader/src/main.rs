@@ -1,37 +1,44 @@
 //! NeoTime's bootloader: swaps in a waiting update or the recovery firmware, then starts the firmware.
 //!
 //! Holding the button for five seconds at power-on installs the recovery firmware from external
-//! flash. A firmware that does not mark itself booted before its first reset is rolled back.
+//! flash. A firmware that does not mark itself booted before its first reset is rolled back. The
+//! screen stays dark on an ordinary start and turns blue with a few words while the bootloader works.
 
 #![no_std]
 #![no_main]
+
+mod screen;
 
 use core::cell::RefCell;
 
 use cortex_m::{delay::Delay, peripheral::NVIC};
 use cortex_m_rt::entry;
+use embassy_boot::State;
 use embassy_boot_nrf::{AlignedBuffer, BlockingFirmwareState, BootLoader, BootLoaderConfig};
 use embassy_embedded_hal::flash::partition::BlockingPartition;
 use embassy_nrf::{
     bind_interrupts,
     gpio::{Input, Level, Output, OutputDrive, Pull},
     nvmc::Nvmc,
-    peripherals::{self, P0_02, P0_03, P0_04, P0_05, P0_13, P0_15, P0_16, P0_25, TWISPI0},
+    peripherals::{self, P0_02, P0_03, P0_04, P0_05, P0_13, P0_14, P0_15, P0_16, P0_18, P0_25, P0_26, TWISPI0},
     spim::{self, Spim},
     wdt::{self, HaltConfig, SleepConfig, Watchdog, WatchdogHandle},
     Peri,
 };
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
-use embedded_hal_bus::spi::ExclusiveDevice;
+use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565};
+use embedded_hal_bus::spi::RefCellDevice;
 use embedded_storage::nor_flash::{ErrorType, NorFlash, ReadNorFlash};
 use neotime_boot::{
-    copy_recovery_into_update_slot, RecoveryCopy, BOOT_STATE, FIRMWARE, FIRMWARE_UPDATE, PAGE_SIZE,
-    RECOVERY_BUTTON_HOLD_IN_MILLISECONDS, WATCHDOG_TIMEOUT_IN_TICKS,
+    copy_recovery_into_update_slot, status_colour, BootNote, RecoveryCopy, BOOT_NOTE_ADDRESS, BOOT_STATE, FIRMWARE,
+    FIRMWARE_UPDATE, PAGE_SIZE, RECOVERY_BUTTON_HOLD_IN_MILLISECONDS, WATCHDOG_TIMEOUT_IN_TICKS,
 };
 use neotime_button::Button;
 use neotime_external_flash::ExternalFlash;
 use neotime_vibrator::{OnOffMotor, Strength, Vibrator};
 use panic_reset as _;
+
+use crate::screen::Screen;
 
 // ============================================================================
 // PineTime wiring
@@ -48,6 +55,9 @@ struct Pins<'a> {
     spi_data_in: Peri<'a, P0_04>,
     flash_chip_select: Peri<'a, P0_05>,
     display_chip_select: Peri<'a, P0_25>,
+    display_data_or_command: Peri<'a, P0_18>,
+    display_reset: Peri<'a, P0_26>,
+    backlight: Peri<'a, P0_14>,
 }
 
 bind_interrupts!(struct Interrupts {
@@ -74,9 +84,13 @@ fn main() -> ! {
         spi_data_in: chip.P0_04,
         flash_chip_select: chip.P0_05,
         display_chip_select: chip.P0_25,
+        display_data_or_command: chip.P0_18,
+        display_reset: chip.P0_26,
+        backlight: chip.P0_14,
     };
 
-    prepare_firmware(pins, chip.TWISPI0, chip.NVMC, &watchdog, &mut delay);
+    let note = prepare_firmware(pins, chip.TWISPI0, chip.NVMC, &watchdog, &mut delay);
+    leave_note(note);
     hand_over_to_firmware()
 }
 
@@ -99,41 +113,50 @@ fn start_watchdog(watchdog_peripheral: Peri<'static, peripherals::WDT>) -> Watch
 // Preparing the firmware
 // ============================================================================
 
-fn prepare_firmware(
-    pins: Pins<'_>,
-    spi_peripheral: Peri<'_, TWISPI0>,
+fn prepare_firmware<'d>(
+    pins: Pins<'d>,
+    spi_peripheral: Peri<'d, TWISPI0>,
     flash_controller: Peri<'_, peripherals::NVMC>,
     watchdog: &RefCell<WatchdogHandle>,
     delay: &mut Delay,
-) {
-    let recovery_requested = button_held_for(
-        RECOVERY_BUTTON_HOLD_IN_MILLISECONDS,
-        pins.button_input,
-        pins.button_enable,
-        watchdog,
-        delay,
-    );
-    let mut vibrator = Vibrator::new(OnOffMotor {
-        motor_pin: Output::new(pins.motor, Level::High, OutputDrive::Standard),
-    })
-    .unwrap();
-
-    let _display_kept_off_the_bus = Output::new(pins.display_chip_select, Level::High, OutputDrive::Standard);
+) -> BootNote {
     let mut spi_config = spim::Config::default();
     spi_config.frequency = spim::Frequency::M8;
-    let spi_bus = Spim::new(
+    let spi_bus = RefCell::new(Spim::new(
         spi_peripheral,
         Interrupts,
         pins.spi_clock,
         pins.spi_data_in,
         pins.spi_data_out,
         spi_config,
-    );
+    ));
+    let display_chip_select = Output::new(pins.display_chip_select, Level::High, OutputDrive::Standard);
     let flash_chip_select = Output::new(pins.flash_chip_select, Level::High, OutputDrive::Standard);
-    let flash_spi = ExclusiveDevice::new_no_delay(spi_bus, flash_chip_select).unwrap();
+    let mut status_page = StatusPage {
+        spi_bus: &spi_bus,
+        chip_select: Some(display_chip_select),
+        data_or_command: Some(pins.display_data_or_command),
+        reset: Some(pins.display_reset),
+        backlight: Some(pins.backlight),
+        screen: None,
+    };
 
+    let button_pin = Input::new(pins.button_input, Pull::Down);
+    let power_pin = Output::new(pins.button_enable, Level::Low, OutputDrive::Standard);
+    let Ok(mut button) = Button::new(button_pin, power_pin);
+    delay.delay_ms(BUTTON_SETTLE_TIME_IN_MILLISECONDS);
+    let recovery_requested = button.is_pressed() == Ok(true) && {
+        status_page.show(&["NeoTime bootloader", "Keep holding for", "recovery firmware"], delay);
+        button_held_for(RECOVERY_BUTTON_HOLD_IN_MILLISECONDS, &mut button, watchdog, delay)
+    };
+    let mut vibrator = Vibrator::new(OnOffMotor {
+        motor_pin: Output::new(pins.motor, Level::High, OutputDrive::Standard),
+    })
+    .unwrap();
+
+    let Ok(flash_spi) = RefCellDevice::new_no_delay(&spi_bus, flash_chip_select);
     let Ok(external_flash) = ExternalFlash::new(flash_spi, delay) else {
-        return;
+        return BootNote::Normal;
     };
 
     let internal_flash = Mutex::<NoopRawMutex, _>::new(RefCell::new(PetsWatchdog {
@@ -145,8 +168,10 @@ fn prepare_firmware(
         watchdog,
     }));
 
+    let mut recovery_marked = false;
     if recovery_requested {
         buzz(&mut vibrator, 200, delay);
+        status_page.show(&["NeoTime bootloader", "Installing recovery", "Do not unplug"], delay);
         let recovery_copy =
             external_flash.lock(|flash| copy_recovery_into_update_slot(&mut *flash.borrow_mut()));
 
@@ -155,15 +180,18 @@ fn prepare_firmware(
             BlockingPartition::new(&internal_flash, BOOT_STATE.start, BOOT_STATE.size),
             &mut state_alignment.0,
         );
-        let swap_marked =
+        recovery_marked =
             matches!(recovery_copy, Ok(RecoveryCopy::Copied)) && boot_state.mark_updated().is_ok();
 
-        if !swap_marked {
+        if !recovery_marked {
+            status_page.show(&["NeoTime bootloader", "No recovery found", "Starting firmware"], delay);
             for _ in 0..3 {
                 buzz(&mut vibrator, 60, delay);
                 delay.delay_ms(120);
             }
         }
+    } else if boot_state_is(&internal_flash, State::Swap) {
+        status_page.show(&["NeoTime bootloader", "Installing firmware", "Do not unplug"], delay);
     }
 
     let config = BootLoaderConfig {
@@ -172,22 +200,98 @@ fn prepare_firmware(
         state: BlockingPartition::new(&internal_flash, BOOT_STATE.start, BOOT_STATE.size),
     };
     let _ = BootLoader::<{ PAGE_SIZE as usize }>::try_prepare(config);
+
+    if recovery_marked {
+        BootNote::RecoveryInstalled
+    } else {
+        BootNote::Normal
+    }
+}
+
+fn boot_state_is<Flash: NorFlash>(internal_flash: &Mutex<NoopRawMutex, RefCell<Flash>>, state: State) -> bool {
+    let mut state_alignment = AlignedBuffer([0; 4]);
+    let mut boot_state = BlockingFirmwareState::new(
+        BlockingPartition::new(internal_flash, BOOT_STATE.start, BOOT_STATE.size),
+        &mut state_alignment.0,
+    );
+    boot_state.get_state().map(|current| current == state).unwrap_or(false)
+}
+
+/// Tells the firmware why it was started this time, in RAM the bootloader's own linker keeps free.
+fn leave_note(note: BootNote) {
+    unsafe { (BOOT_NOTE_ADDRESS as *mut u32).write_volatile(note.to_word()) };
+}
+
+// ============================================================================
+// The status page, started only when there is something to say
+// ============================================================================
+
+const BUTTON_SETTLE_TIME_IN_MILLISECONDS: u32 = 1;
+
+type StatusScreen<'bus, 'd> =
+    Screen<RefCellDevice<'bus, Spim<'d>, Output<'d>, embedded_hal_bus::spi::NoDelay>, Output<'d>>;
+
+/// `'bus` is the borrow of the shared SPI bus, `'d` the pins and peripherals it was built from.
+struct StatusPage<'bus, 'd> {
+    spi_bus: &'bus RefCell<Spim<'d>>,
+    chip_select: Option<Output<'d>>,
+    data_or_command: Option<Peri<'d, P0_18>>,
+    reset: Option<Peri<'d, P0_26>>,
+    backlight: Option<Peri<'d, P0_14>>,
+    screen: Option<(StatusScreen<'bus, 'd>, Output<'d>)>,
+}
+
+impl<'bus, 'd> StatusPage<'bus, 'd> {
+    /// Starts the panel the first time, then replaces the three lines.
+    fn show(&mut self, lines: &[&str; 3], delay: &mut Delay) {
+        if self.screen.is_none() {
+            let (Some(chip_select), Some(data_or_command), Some(reset), Some(backlight)) = (
+                self.chip_select.take(),
+                self.data_or_command.take(),
+                self.reset.take(),
+                self.backlight.take(),
+            ) else {
+                return;
+            };
+            let Ok(spi) = RefCellDevice::new_no_delay(self.spi_bus, chip_select);
+            let background = Rgb565::from(RawU16::new(status_colour::BOOTLOADER));
+            let Some(screen) = Screen::start(
+                spi,
+                Output::new(data_or_command, Level::Low, OutputDrive::Standard),
+                Output::new(reset, Level::High, OutputDrive::Standard),
+                background,
+                delay,
+            ) else {
+                return;
+            };
+            let backlight_on = Output::new(backlight, Level::Low, OutputDrive::Standard);
+            self.screen = Some((screen, backlight_on));
+        }
+        if let Some((screen, _)) = &mut self.screen {
+            for (index, text) in lines.iter().enumerate() {
+                screen.write_line(index as i32, &pad(text));
+            }
+        }
+    }
+}
+
+/// Pads a line to the screen's width, so it covers whatever the line said before.
+fn pad(text: &str) -> heapless::String<{ screen::LINE_CHARACTERS }> {
+    let mut padded = heapless::String::new();
+    let _ = core::fmt::write(
+        &mut padded,
+        format_args!("{:<width$.width$}", text, width = screen::LINE_CHARACTERS),
+    );
+    padded
 }
 
 fn button_held_for(
     duration_in_milliseconds: u32,
-    button_input: Peri<'_, P0_13>,
-    button_enable: Peri<'_, P0_15>,
+    button: &mut Button<Input<'_>, Output<'_>>,
     watchdog: &RefCell<WatchdogHandle>,
     delay: &mut Delay,
 ) -> bool {
     const POLL_INTERVAL_IN_MILLISECONDS: u32 = 10;
-    const BUTTON_SETTLE_TIME_IN_MILLISECONDS: u32 = 1;
-
-    let button_pin = Input::new(button_input, Pull::Down);
-    let power_pin = Output::new(button_enable, Level::Low, OutputDrive::Standard);
-    let Ok(mut button) = Button::new(button_pin, power_pin);
-    delay.delay_ms(BUTTON_SETTLE_TIME_IN_MILLISECONDS);
 
     for _ in 0..duration_in_milliseconds / POLL_INTERVAL_IN_MILLISECONDS {
         if button.is_pressed() != Ok(true) {

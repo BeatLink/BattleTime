@@ -12,7 +12,7 @@ use embassy_nrf::{
 use neotime_updates::{ImageKind, UpdateError, UpdateTargets};
 use static_cell::StaticCell;
 
-use crate::{Screen, SpiBus};
+use crate::{line, status::Mode, Screen, SpiBus};
 
 // ============================================================================
 // What this build is
@@ -27,7 +27,7 @@ const WASP_OS_ENTER_UPDATE_MODE: u32 = 0xA8;
 
 /// Shows the result, then restarts into wasp-os's update mode, so the next image can be sent without the button.
 pub async fn reset(screen: &mut Screen) -> ! {
-    screen.write_line(5, "done, to wasp-os");
+    screen.write_line(line::UPDATE, "Done, back to wasp-os");
     embassy_time::Timer::after(embassy_time::Duration::from_millis(2000)).await;
     unsafe { POWER_GENERAL_PURPOSE_RETAINED.write_volatile(WASP_OS_ENTER_UPDATE_MODE) };
     cortex_m::peripheral::SCB::sys_reset()
@@ -160,21 +160,21 @@ pub async fn start(
     _spi_bus: &'static SpiBus,
     peripherals: StoragePeripherals,
     screen: &mut Screen,
-) -> Option<(Targets, Confirmation)> {
+) -> Option<(Targets, Confirmation, Mode)> {
     core::mem::forget(Output::new(
         peripherals.flash_chip_select,
         Level::High,
         OutputDrive::Standard,
     ));
     let _flash_controller_never_used = peripherals.flash_controller;
-    screen.write_line(2, "no flash writes");
+    screen.write_line(line::FILES, "No flash writes");
 
     let targets = Targets {
         buffer: REHEARSAL_BUFFER.init([0; LARGEST_REHEARSAL_IMAGE]),
         image_size_in_bytes: 0,
         bytes_received: 0,
     };
-    Some((targets, Confirmation))
+    Some((targets, Confirmation, Mode::Confirmed))
 }
 
 // ============================================================================
@@ -184,7 +184,7 @@ pub async fn start(
 pub struct Confirmation;
 
 impl Confirmation {
-    pub async fn confirm(&mut self) -> &'static str {
-        "phone exchanged data"
+    pub async fn confirm(&mut self) -> bool {
+        true
     }
 }

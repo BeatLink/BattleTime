@@ -273,6 +273,45 @@ fn confirming_an_already_confirmed_firmware_writes_nothing() {
     assert!(boot_state.memory.iter().all(|byte| *byte == 0xFF));
 }
 
+/// The page as the bootloader leaves it after rolling an update back.
+fn rolled_back_boot_state() -> BootStatePage {
+    let mut boot_state = BootStatePage::erased(PAGE_SIZE);
+    boot_state.memory[..4].fill(0xC0);
+    boot_state
+}
+
+#[test]
+fn confirming_after_a_rollback_keeps_the_rollback_mark() {
+    let mut boot_state = rolled_back_boot_state();
+    let mut alignment = [0; 4];
+
+    block_on(confirm_running_firmware(&mut boot_state, &mut alignment)).unwrap();
+
+    assert_eq!(boot_state.erase_count, 0);
+    assert_eq!(block_on(running_firmware_was_rolled_back(&mut boot_state, &mut alignment)), Ok(true));
+}
+
+#[test]
+fn an_update_is_accepted_after_a_rollback_and_clears_the_mark() {
+    let mut update_slot = ExternalSlot::erased(FIRMWARE_UPDATE.size);
+    let mut boot_state = rolled_back_boot_state();
+    let mut alignment = [0; 4];
+    let image = firmware_image(5000);
+
+    let mut receiver = UpdateReceiver::new(&mut update_slot, &mut boot_state, &mut alignment);
+    send_in_chunks(&mut receiver, &image, 1000);
+    assert_eq!(block_on(receiver.finish()), Ok(()));
+
+    assert_eq!(boot_state_of(&mut boot_state), State::Swap);
+}
+
+#[test]
+fn a_fresh_watch_was_not_rolled_back() {
+    let mut boot_state = BootStatePage::erased(PAGE_SIZE);
+    let mut alignment = [0; 4];
+    assert_eq!(block_on(running_firmware_was_rolled_back(&mut boot_state, &mut alignment)), Ok(false));
+}
+
 // ============================================================================
 // Recovery firmware
 // ============================================================================

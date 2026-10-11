@@ -61,6 +61,9 @@ mod built_in_apps;
 mod clock;
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod shell;
+// Under wasp-os the firmware is never rolled back or installed as recovery.
+#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+mod status;
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod touch;
 
@@ -143,9 +146,10 @@ async fn main(spawner: Spawner) {
         Output::new(chip.P0_26, Level::High, OutputDrive::Standard),
     );
     let backlight = Output::new(chip.P0_14, Level::Low, OutputDrive::Standard);
-    screen.write_line(0, "NeoTime");
-    screen.write_line(1, FIRMWARE_VERSION);
-    screen.write_line(6, storage::BUILD_NAME);
+    let mut title = heapless::String::<22>::new();
+    let _ = core::fmt::write(&mut title, format_args!("NeoTime {FIRMWARE_VERSION}"));
+    screen.write_line(line::TITLE, &title);
+    screen.write_line(line::BUILD, storage::BUILD_NAME);
     storage::leave_breadcrumb(stage::SCREEN_STARTED);
     if let Some(previous) = previous_run {
         let mut text = heapless::String::<24>::new();
@@ -156,17 +160,18 @@ async fn main(spawner: Spawner) {
                 previous.stage, previous.detail, previous.fault_status
             ),
         );
-        screen.write_line(7, &text);
+        screen.write_line(line::LAST_RUN, &text);
     }
 
     let storage_peripherals = storage::StoragePeripherals {
         flash_chip_select: chip.P0_05,
         flash_controller: chip.NVMC,
     };
-    let Some((targets, confirmation)) = storage::start(spi_bus, storage_peripherals, &mut screen).await
+    let Some((targets, confirmation, mode)) = storage::start(spi_bus, storage_peripherals, &mut screen).await
     else {
         return;
     };
+    screen.set_mode(mode);
 
     storage::leave_breadcrumb(stage::STORAGE_READY);
     #[cfg(not(feature = "wasp-os-rehearsal"))]
@@ -351,42 +356,85 @@ type ScreenDisplay = Display<DisplayInterfaceOnBus, Output<'static>>;
 /// The display, shared between the status page and the shell; a lock is never held across an await.
 type SharedDisplay = Mutex<NoopRawMutex, RefCell<ScreenDisplay>>;
 
-/// The start-up and update status page; its lines are dropped while the shell has the screen.
+/// Where each kind of status sits on the page.
+mod line {
+    pub const TITLE: usize = 0;
+    pub const MODE: usize = 1;
+    pub const MODE_DETAIL: usize = 2;
+    pub const FILES: usize = 3;
+    pub const BLUETOOTH: usize = 4;
+    pub const UPDATE: usize = 5;
+    pub const BUILD: usize = 6;
+    pub const LAST_RUN: usize = 7;
+    pub const COUNT: usize = 8;
+}
+
+/// Characters that fit between the left margin and the right edge.
+const LINE_CHARACTERS: usize = 22;
+
+type StatusLine = heapless::String<LINE_CHARACTERS>;
+
+/// The start-up and update status page, coloured by the firmware's mode; it keeps its lines while the shell has the screen.
 struct Screen {
     display: &'static SharedDisplay,
+    mode: status::Mode,
+    lines: [StatusLine; line::COUNT],
 }
 
 impl Screen {
     const LINE_HEIGHT: i32 = 24;
     const FIRST_BASELINE: i32 = 40;
 
-    /// Characters that fit between the left margin and the right edge.
-    const LINE_CHARACTERS: usize = 22;
-
-    /// Draws the text on a black background padded to the full line, so it replaces the old line in one pass.
-    fn write_line(&mut self, line: i32, text: &str) {
-        if !shell::status_is_shown() {
-            return;
+    fn write_line(&mut self, line: usize, text: &str) {
+        let mut stored = StatusLine::new();
+        let _ = core::fmt::write(&mut stored, format_args!("{:.width$}", text, width = LINE_CHARACTERS));
+        self.lines[line] = stored;
+        if shell::status_is_shown() {
+            self.draw_line(line);
         }
-        let baseline = Self::FIRST_BASELINE + line * Self::LINE_HEIGHT;
-        let mut padded = heapless::String::<{ Self::LINE_CHARACTERS }>::new();
-        let _ = core::fmt::write(&mut padded, format_args!("{:<width$.width$}", text, width = Self::LINE_CHARACTERS));
+    }
+
+    /// Draws a line padded to the full width on the mode's background, so it replaces the old line in one pass.
+    fn draw_line(&self, line: usize) {
+        let baseline = Self::FIRST_BASELINE + line as i32 * Self::LINE_HEIGHT;
+        let mut padded = StatusLine::new();
+        let _ = core::fmt::write(
+            &mut padded,
+            format_args!("{:<width$}", self.lines[line], width = LINE_CHARACTERS),
+        );
         let style = MonoTextStyleBuilder::new()
             .font(&FONT_10X20)
             .text_color(Rgb565::WHITE)
-            .background_color(Rgb565::BLACK)
+            .background_color(self.mode.background())
             .build();
         self.display.lock(|display| {
             let _ = Text::new(&padded, Point::new(12, baseline), style).draw(&mut *display.borrow_mut());
         });
     }
 
+    fn redraw(&self) {
+        self.display.lock(|display| {
+            let _ = display.borrow_mut().clear(self.mode.background());
+        });
+        for line in 0..line::COUNT {
+            self.draw_line(line);
+        }
+    }
+
+    /// Shows the mode as the page's colour and its two lines of words.
+    fn set_mode(&mut self, mode: status::Mode) {
+        self.mode = mode;
+        self.write_line(line::MODE, mode.title());
+        self.write_line(line::MODE_DETAIL, mode.detail());
+        if shell::status_is_shown() {
+            self.redraw();
+        }
+    }
+
     /// Takes the screen back from the shell, such as for an update's progress.
     fn show_status(&mut self) {
         if shell::show_status() {
-            self.display.lock(|display| {
-                let _ = display.borrow_mut().clear(Rgb565::BLACK);
-            });
+            self.redraw();
         }
     }
 
@@ -413,6 +461,8 @@ fn start_screen(
     let _ = display.clear(Rgb565::BLACK);
     Screen {
         display: DISPLAY.init(Mutex::new(RefCell::new(display))),
+        mode: status::Mode::Confirmed,
+        lines: Default::default(),
     }
 }
 
@@ -487,7 +537,7 @@ async fn run_bluetooth(
                 .await
                 .unwrap();
             if !advertising_shown {
-                screen.write_line(3, "advertising");
+                screen.write_line(line::BLUETOOTH, "Ready for updates");
                 storage::leave_breadcrumb(stage::ADVERTISING);
                 advertising_shown = true;
             }
@@ -498,7 +548,7 @@ async fn run_bluetooth(
             let Ok(connection) = connection.with_attribute_server(&server) else {
                 continue;
             };
-            screen.write_line(4, "connected   ");
+            screen.write_line(line::BLUETOOTH, "Phone connected");
             storage::leave_breadcrumb(stage::CONNECTED);
             serve_connection(
                 &connection,
@@ -509,7 +559,7 @@ async fn run_bluetooth(
                 &mut confirmed,
             )
             .await;
-            screen.write_line(4, "disconnected");
+            screen.write_line(line::BLUETOOTH, "Ready for updates");
         }
     };
 
@@ -551,8 +601,15 @@ async fn serve_connection(
                     reply.send().await;
                 }
                 if !*confirmed {
-                    let status = confirmation.confirm().await;
-                    screen.write_line(3, status);
+                    let kept = confirmation.confirm().await;
+                    if screen.mode == status::Mode::OnTrial {
+                        if kept {
+                            screen.set_mode(status::Mode::Confirmed);
+                            screen.write_line(line::MODE_DETAIL, "Update kept");
+                        } else {
+                            screen.write_line(line::MODE_DETAIL, "Could not keep it");
+                        }
+                    }
                     *confirmed = true;
                 }
 
@@ -572,9 +629,9 @@ async fn serve_connection(
                 if dfu.is_updating() && kilobytes_received != shown_kilobytes {
                     shown_kilobytes = kilobytes_received;
                     screen.show_status();
-                    let mut progress = heapless::String::<20>::new();
-                    let _ = core::fmt::write(&mut progress, format_args!("update {:>3} KB", kilobytes_received));
-                    screen.write_line(5, &progress);
+                    let mut progress = StatusLine::new();
+                    let _ = core::fmt::write(&mut progress, format_args!("Receiving {:>3} KB", kilobytes_received));
+                    screen.write_line(line::UPDATE, &progress);
                 }
                 if outcome.reset_requested {
                     storage::leave_breadcrumb(stage::RESET_REQUESTED);
