@@ -29,6 +29,7 @@ firmware to flash yet.
 - [Architecture](docs/architecture.md): how the code is laid out and how the parts fit together.
 - [Coding guidelines](docs/coding-guidelines.md): how NeoTime code is written.
 - [Simulator](docs/simulator.md): running the drivers in a desktop window with `nix run`.
+- [To do](docs/todo.md): work that is known to be needed but not done yet.
 
 ## License
 
