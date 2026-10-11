@@ -12,9 +12,9 @@ It aims to combine the best parts of the two existing PineTime firmwares:
 ## Goals
 
 - **Loadable apps.** Apps and watch faces install over BLE, with no reflash.
-- **Pure Rust.** The whole firmware is Rust, including the Bluetooth stack
-  ([TrouBLE](https://github.com/embassy-rs/trouble)), built on
-  [Embassy](https://embassy.dev).
+- **Pure Rust.** The whole firmware is Rust, including the Bluetooth stack: the
+  [TrouBLE](https://github.com/embassy-rs/trouble) host on NeoTime's own radio controller,
+  built on [Embassy](https://embassy.dev).
 - **Safe updates.** A bad firmware image rolls back by itself.
 - **Battery life.** The watch sleeps whenever it can.
 - **Companion apps.** It works with Gadgetbridge and the other apps InfiniTime supports.

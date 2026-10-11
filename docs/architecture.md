@@ -31,8 +31,8 @@ flowchart TB
     runtime["App runtime<br/>(planned)"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>(planned: power, events, settings, notifications)"]
-    services["Services<br/>(planned: BLE, time, steps, storage, updates)"]
-    drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, ..."]
+    services["Services<br/>(planned: BLE host on TrouBLE, time, steps, storage, updates)"]
+    drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
 
@@ -50,11 +50,15 @@ flowchart TB
 Each layer uses only the layers below it.
 
 - **Drivers** speak to one part each through the `embedded-hal` traits and never touch the chip
-  directly. That lets the same driver run on the watch, in tests and in a desktop simulator.
+  directly. That lets the same driver run on the watch, in tests and in a desktop simulator. The
+  one exception is the Bluetooth controller, because the radio is inside the chip; it keeps all
+  register access in one file behind a small trait.
 - **Board** is the one place that knows the PineTime's wiring. It sets up the chip's SPI, I2C and
   pins with `embassy-nrf`, then hands them to the drivers. **(planned)**
 - **Services** keep the watch's state: the BLE link and the GATT services companion apps use, the
-  clock, the step count, files on the external flash, and firmware updates. **(planned)**
+  clock, the step count, files on the external flash, and firmware updates. The BLE link will run
+  the [TrouBLE](https://github.com/embassy-rs/trouble) host on NeoTime's own controller in
+  `drivers/bluetooth`. **(planned)**
 - **System** runs the watch: it sleeps and wakes, turns button, touch and motion into events, and
   holds settings and notifications. **(planned)**
 - **UI toolkit** gives apps widgets, fonts and page transitions. Widgets come from
@@ -80,6 +84,7 @@ NeoTime/
 ├── rust-toolchain.toml  the Rust version and the watch's target
 ├── docs/
 │   ├── architecture.md
+│   ├── bluetooth.md  the Bluetooth controller
 │   ├── coding-guidelines.md
 │   ├── memory-map.md how RAM and both flashes are divided
 │   ├── simulator.md
@@ -87,6 +92,7 @@ NeoTime/
 │   └── images/       pictures for the docs
 ├── drivers/
 │   ├── accelerometer/  neotime-accelerometer: the BMA421 or BMA425 and its step counter
+│   ├── bluetooth/    neotime-bluetooth: the Bluetooth LE controller for the chip's radio
 │   ├── button/       neotime-button: the side button
 │   ├── display/      neotime-display: the ST7789 screen
 │   ├── touch/        neotime-touch: the CST816S touch panel
@@ -209,6 +215,24 @@ so the chip's own tap and wrist-wear detectors are not set up.
 
 The `bma423` crate was looked at first. It is blocking, accepts only chip ID 0x13, and has no step
 counter, so NeoTime has its own.
+
+### Bluetooth controller (`drivers/bluetooth`)
+
+`neotime-bluetooth` is NeoTime's own Bluetooth LE controller: the half of a Bluetooth stack that
+drives the radio. The [TrouBLE](https://github.com/embassy-rs/trouble) host runs on top of it,
+connected through `bt-hci`'s `ExternalController` as if it were a separate chip. It replaces
+Nordic's closed SoftDevice Controller and saves about 27 KB of flash and 5 KB of RAM.
+
+- **What it does.** Advertising with scan responses, and one connection as the peripheral on the
+  1 Mbit PHY, with acknowledgements, flow control, and parameter and channel map updates. There is
+  no encryption yet.
+- **How it is split.** The HCI interface and the link layer are plain logic that runs in tests on
+  a computer, including TrouBLE itself on a fake radio. Only `nrf_radio.rs` touches the chip: the
+  radio, TIMER0, the random number generator and five fixed PPI channels.
+- **Status.** Tested on the computer only; it has never run on a watch.
+
+See [bluetooth.md](bluetooth.md) for the design, the timing, what it takes from the chip and what is
+missing.
 
 ## UI toolkit (`ui`)
 

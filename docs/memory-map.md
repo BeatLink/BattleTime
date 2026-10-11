@@ -53,7 +53,7 @@ firmware, which then has the whole of RAM:
 | Region | Budget | Holds | Status |
 |---|---|---|---|
 | UI heap | 14 KB | The heap that `rlvgl`'s widgets allocate from. The `neotime-ui` crate keeps no screen buffer of its own. | Planned, not yet measured |
-| Bluetooth | 12 KB | The link layer and host: connection state, packet buffers and the GATT tables. | Planned |
+| Bluetooth | 12 KB | The controller and the TrouBLE host: connection state, packet buffers and the GATT tables. | Partly measured: the controller is 1.5 KB; TrouBLE's example with it is 12.0 KB in all, executor included |
 | Apps | 12 KB | Memory for the app that is open, loaded from the installed apps area. | Planned |
 | Stack | 8 KB | The main stack, for interrupts and code that is not in a task. | Planned |
 | Tasks | 6 KB | Embassy's tasks. Each task's state is fixed in size when the firmware is built. | Planned |
