@@ -321,8 +321,13 @@ trait embassy-boot and littlefs are reached through:
 - **Writes of any length.** The chip programs at most 256 bytes at a time, within one page, so
   `write` splits at page boundaries. `erase` takes whole 4 KB sectors.
 - **Power.** `sleep` puts the chip in deep power-down, and `wake` brings it back.
+- **Blocking and async.** `ExternalFlash` blocks, which is what the bootloader needs.
+  `AsyncExternalFlash` implements the `embedded-storage-async` traits for the firmware: while an
+  erase or a write is in progress it checks the chip every 100 microseconds and waits on an async
+  delay in between, so other tasks run. Both share their commands, range checks and page splitting.
+- **Rewrites.** Both mark themselves `MultiwriteNorFlash`, since NOR flash can be written again
+  without an erase as long as bits only change from 1 to 0.
 
-It is blocking for now, which is what the bootloader needs; the firmware will want an async version.
 It keeps no buffers.
 
 ## Storage (`services/storage`)

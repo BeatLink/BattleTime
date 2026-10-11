@@ -7,4 +7,9 @@ publish = false
 
 [dependencies]
 embedded-hal = "1.0"
+embedded-hal-async = "1.0"
 embedded-storage = "0.3"
+embedded-storage-async = "0.4"
+
+[dev-dependencies]
+embassy-futures = "0.1"

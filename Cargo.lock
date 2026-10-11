@@ -1115,8 +1115,11 @@ dependencies = [
 name = "neotime-external-flash"
 version = "0.1.0"
 dependencies = [
+ "embassy-futures",
  "embedded-hal 1.0.0",
+ "embedded-hal-async",
  "embedded-storage",
+ "embedded-storage-async",
 ]
 
 [[package]]

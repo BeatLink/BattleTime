@@ -2,6 +2,9 @@ extern crate std;
 
 use std::{vec, vec::Vec};
 
+use embassy_futures::block_on;
+use embedded_storage_async::nor_flash::{NorFlash as AsyncNorFlash, ReadNorFlash as AsyncReadNorFlash};
+
 use embedded_hal::spi::ErrorType as SpiErrorType;
 
 use super::*;
@@ -130,6 +133,23 @@ impl SpiDevice for FakeChip {
             (unknown, _) => panic!("unexpected command {unknown:#04x}"),
         }
         Ok(())
+    }
+}
+
+impl embedded_hal_async::spi::SpiDevice for FakeChip {
+    async fn transaction(&mut self, operations: &mut [Operation<'_, u8>]) -> Result<(), Self::Error> {
+        <FakeChip as SpiDevice>::transaction(self, operations)
+    }
+}
+
+#[derive(Default)]
+struct CountingDelay {
+    microseconds_waited: u32,
+}
+
+impl embedded_hal_async::delay::DelayNs for CountingDelay {
+    async fn delay_ns(&mut self, nanoseconds: u32) {
+        self.microseconds_waited += nanoseconds / 1000;
     }
 }
 
@@ -286,4 +306,87 @@ fn rejects_an_erase_that_is_not_sector_aligned() {
     let result = flash.erase(0x100, 0x1000);
 
     assert_eq!(result, Err(Error::BadRange(NorFlashErrorKind::NotAligned)));
+}
+
+// ============================================================================
+// Async driver
+// ============================================================================
+
+fn started_async_flash(chip: FakeChip) -> AsyncExternalFlash<FakeChip, CountingDelay> {
+    block_on(AsyncExternalFlash::new(chip, CountingDelay::default())).unwrap()
+}
+
+#[test]
+fn async_starting_wakes_the_chip_and_waits_for_it() {
+    let flash = started_async_flash(FakeChip::new());
+
+    let parts = flash.release();
+
+    assert!(!parts.spi.asleep);
+    assert_eq!(parts.delay.microseconds_waited, WAKE_UP_TIME_IN_MICROSECONDS);
+}
+
+#[test]
+fn async_driver_refuses_a_chip_of_another_size() {
+    let mut chip = FakeChip::new();
+    chip.chip_id = ChipId {
+        manufacturer: 0x0B,
+        memory_type: 0x40,
+        capacity: 0x15,
+    };
+
+    let result = block_on(AsyncExternalFlash::new(chip, CountingDelay::default()));
+
+    assert!(matches!(result, Err(Error::UnknownChip(_))));
+}
+
+#[test]
+fn async_driver_splits_writes_at_program_pages_and_reads_them_back() {
+    let mut flash = started_async_flash(FakeChip::new());
+    let written: Vec<u8> = (0..600).map(|index| index as u8).collect();
+
+    block_on(flash.write(0x10F0, &written)).unwrap();
+    let mut read_back = vec![0; 600];
+    block_on(flash.read(0x10F0, &mut read_back)).unwrap();
+
+    assert_eq!(read_back, written);
+    assert_eq!(
+        flash.release().spi.programmed_addresses,
+        [0x10F0, 0x1100, 0x1200, 0x1300]
+    );
+}
+
+#[test]
+fn async_driver_waits_between_polls_while_the_chip_is_busy() {
+    let mut chip = FakeChip::new();
+    chip.busy_polls_after_each_write = 3;
+    let mut flash = started_async_flash(chip);
+
+    block_on(flash.erase(0x2000, 0x3000)).unwrap();
+    let parts = flash.release();
+
+    assert_eq!(parts.spi.erased_addresses, [0x2000]);
+    assert_eq!(parts.spi.status_polls, 4);
+    assert_eq!(
+        parts.delay.microseconds_waited,
+        WAKE_UP_TIME_IN_MICROSECONDS + 3 * BUSY_POLL_INTERVAL_IN_MICROSECONDS
+    );
+}
+
+#[test]
+fn async_driver_rejects_an_erase_that_is_not_sector_aligned() {
+    let mut flash = started_async_flash(FakeChip::new());
+
+    let result = block_on(flash.erase(0x100, 0x1000));
+
+    assert_eq!(result, Err(Error::BadRange(NorFlashErrorKind::NotAligned)));
+}
+
+#[test]
+fn async_driver_rejects_a_write_beyond_the_end() {
+    let mut flash = started_async_flash(FakeChip::new());
+
+    let result = block_on(flash.write(CAPACITY_IN_BYTES as u32 - 1, &[0, 0]));
+
+    assert_eq!(result, Err(Error::BadRange(NorFlashErrorKind::OutOfBounds)));
 }

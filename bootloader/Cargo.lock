@@ -484,7 +484,9 @@ name = "neotime-external-flash"
 version = "0.1.0"
 dependencies = [
  "embedded-hal 1.0.0",
+ "embedded-hal-async",
  "embedded-storage",
+ "embedded-storage-async",
 ]
 
 [[package]]
