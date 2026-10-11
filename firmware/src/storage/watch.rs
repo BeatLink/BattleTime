@@ -35,7 +35,11 @@ use crate::{Screen, SpiBus};
 
 pub const BUILD_NAME: &str = "";
 pub const WATCHDOG_HALT: HaltConfig = HaltConfig::Pause;
-pub const RESET_AFTER_ACTIVATE: bool = true;
+/// The bootloader takes over at the next start, swapping in an update if one was marked.
+pub async fn reset(_screen: &mut Screen) -> ! {
+    embassy_time::Timer::after(embassy_time::Duration::from_millis(200)).await;
+    cortex_m::peripheral::SCB::sys_reset()
+}
 
 pub const HEAP_SIZE: usize = 16 * 1024;
 

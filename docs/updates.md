@@ -178,7 +178,23 @@ CRC. Its watchdog takeover matches wasp-os's settings, which keep counting under
 
 On the watch, the rehearsal must show that the watch advertises as "NeoTime", that a phone or the
 computer connects, and that a 16 KB upload (`dist/rehearsal-upload.zip`) arrives with its CRC
-matching. Holding the button for five seconds, or any fault, ends in a watchdog reset, which wasp-os's
+matching. When an upload finishes, or the phone sends the reset command, the rehearsal writes 0xA8
+to `GPREGRET`, which wasp-os's bootloader reads as a request for its update mode, and restarts; so
+one rehearsal can follow another without the button.
+
+The first runs on the watch found three things the emulator could not:
+
+- **The 32 kHz clock.** The rehearsal stopped the low-frequency clock and waited for it to stop,
+  but while the watchdog runs the chip keeps it going, so the wait never ended and the watchdog
+  sent the watch back to wasp-os. The rehearsal now leaves the clock alone. It also records each
+  start-up stage, and any panic or fault, in words of wasp-os's bootloader's retained RAM at
+  `0x200039CC`, and shows the previous run's record on screen.
+- **The controller works.** NeoTime's own controller advertised, accepted connections, answered GATT
+  reads and carried a whole 16 KB upload, every progress receipt matching and the CRC verified on
+  the watch, in 48 seconds.
+- **Discovery cut a UUID short.** TrouBLE sent the control point's 128-bit UUID cut to 16 bits, so
+  the update tools could not find it. `third_party/trouble-host` carries the fix (see its
+  `NEOTIME.md`), and a controller test reproduces the watch's exact layout. Holding the button for five seconds, or any fault, ends in a watchdog reset, which wasp-os's
 bootloader takes as a request for its update mode, so wasp-os can be sent back at any time. Only
 after the rehearsal passes does the reloader go to the watch.
 

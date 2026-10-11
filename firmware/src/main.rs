@@ -31,13 +31,14 @@ use embedded_graphics::{
     mono_font::{ascii::FONT_10X20, MonoTextStyle},
     pixelcolor::Rgb565,
     prelude::*,
+    primitives::{PrimitiveStyle, Rectangle},
     text::Text,
 };
 use mipidsi::interface::SpiInterface;
 use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
 use neotime_button::Button;
 use neotime_dfu::{service::DfuWrite, service::LegacyDfuService, LegacyDfu};
-use neotime_display::Display;
+use neotime_display::{Display, SCREEN_WIDTH};
 use static_cell::StaticCell;
 use trouble_host::prelude::*;
 
@@ -170,7 +171,7 @@ mod stage {
     pub const RADIO_STARTED: u32 = 7;
     pub const ADVERTISING: u32 = 8;
     pub const CONNECTED: u32 = 9;
-    pub const UPLOAD_VERIFIED: u32 = 10;
+    pub const RESET_REQUESTED: u32 = 10;
     pub const PANICKED: u32 = 0xE0;
     pub const FAULTED: u32 = 0xF0;
 }
@@ -265,10 +266,21 @@ struct Screen {
 impl Screen {
     const LINE_HEIGHT: i32 = 24;
     const FIRST_BASELINE: i32 = 40;
+    /// How far the 10x20 font reaches above its baseline, with a pixel to spare.
+    const ASCENT: i32 = 17;
 
+    /// Clears the line first, so a shorter or changed text never draws over the old one.
     fn write_line(&mut self, line: i32, text: &str) {
-        let style = MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE);
         let baseline = Self::FIRST_BASELINE + line * Self::LINE_HEIGHT;
+        let line_area = Rectangle::new(
+            Point::new(0, baseline - Self::ASCENT),
+            Size::new(SCREEN_WIDTH as u32, Self::LINE_HEIGHT as u32),
+        );
+        let _ = line_area
+            .into_styled(PrimitiveStyle::with_fill(Rgb565::BLACK))
+            .draw(&mut self.display);
+
+        let style = MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE);
         let _ = Text::new(text, Point::new(12, baseline), style).draw(&mut self.display);
     }
 }
@@ -439,12 +451,8 @@ async fn serve_connection(
                     screen.write_line(5, &progress);
                 }
                 if outcome.reset_requested {
-                    if storage::RESET_AFTER_ACTIVATE {
-                        Timer::after(Duration::from_millis(200)).await;
-                        cortex_m::peripheral::SCB::sys_reset();
-                    }
-                    screen.write_line(5, "upload verified ");
-                    storage::leave_breadcrumb(stage::UPLOAD_VERIFIED);
+                    storage::leave_breadcrumb(stage::RESET_REQUESTED);
+                    storage::reset(screen).await;
                 }
             }
             _ => {}

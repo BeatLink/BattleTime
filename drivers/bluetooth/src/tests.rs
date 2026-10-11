@@ -1459,4 +1459,151 @@ mod end_to_end {
             ]]
         );
     }
+
+    /// Its own module, since a second GATT server would clash with the first one's generated names.
+    mod discovery {
+        use super::*;
+
+        // ------------------------------------------------------------------------
+        // Characteristic discovery across 16-bit and 128-bit UUIDs
+        // ------------------------------------------------------------------------
+
+        const READ_BY_TYPE_REQUEST: u8 = 0x08;
+        const READ_BY_TYPE_RESPONSE: u8 = 0x09;
+        const CHARACTERISTIC_DECLARATION: u16 = 0x2803;
+        const SHORT_DECLARATION_ENTRY: u8 = 2 + 1 + 2 + 2;
+        const LONG_DECLARATION_ENTRY: u8 = 2 + 1 + 2 + 16;
+        const CONTROL_POINT_UUID: [u8; 16] = [
+            0x23, 0xd1, 0xbc, 0xea, 0x5f, 0x78, 0x23, 0x15, 0xde, 0xef, 0x12, 0x12, 0x31, 0x15, 0x00, 0x00,
+        ];
+
+        #[gatt_server]
+        struct DiscoveryServer {
+            update_service: UpdateService,
+        }
+
+        /// The watch's layout: the GAP service's two 16-bit characteristics, then a 128-bit one.
+        #[gatt_service(uuid = "00001530-1212-efde-1523-785feabcd123")]
+        struct UpdateService {
+            #[characteristic(uuid = "00001531-1212-efde-1523-785feabcd123", write, notify)]
+            control_point: [u8; 20],
+            #[characteristic(uuid = "00001534-1212-efde-1523-785feabcd123", read, value = [8, 0])]
+            version: [u8; 2],
+        }
+
+        fn read_by_type_request(start: u16) -> Vec<u8> {
+            let mut request = Vec::new();
+            request.extend_from_slice(&7u16.to_le_bytes());
+            request.extend_from_slice(&ATTRIBUTE_PROTOCOL_CHANNEL.to_le_bytes());
+            request.push(READ_BY_TYPE_REQUEST);
+            request.extend_from_slice(&start.to_le_bytes());
+            request.extend_from_slice(&0xFFFFu16.to_le_bytes());
+            request.extend_from_slice(&CHARACTERISTIC_DECLARATION.to_le_bytes());
+            request
+        }
+
+        #[test]
+        fn discovery_never_cuts_a_128_bit_uuid_after_16_bit_ones() {
+            let radio = FakeRadio::new();
+            let state = ControllerState::new();
+            state.start(HostInterface::new(OWN_ADDRESS, fake_random_bytes));
+            let controller: ExternalController<_, 4> =
+                ExternalController::new(BluetoothController::new(&state, &radio));
+            let mut resources: HostResources<DefaultPacketPool, 1, 2> = HostResources::new();
+            let stack = trouble_host::new(controller, &mut resources)
+                .set_random_address(Address::random(OWN_ADDRESS))
+                .build();
+            let mut runner = stack.runner();
+            let mut peripheral = stack.peripheral();
+            let server = DiscoveryServer::new_with_config(GapConfig::Peripheral(PeripheralConfig {
+                name: "NeoTime",
+                appearance: &appearance::watch::GENERIC_WATCH,
+            }))
+            .unwrap();
+            let control_point_declaration = server.update_service.control_point.handle - 1;
+
+            let watch = async {
+                let advertisement = Advertisement::ConnectableScannableUndirected {
+                    adv_data: &[2, 1, 6],
+                    scan_data: &[],
+                };
+                let advertiser = peripheral
+                    .advertise(&AdvertisementParameters::default(), advertisement)
+                    .await
+                    .unwrap();
+                central_connects(&state, &radio);
+                let connection = advertiser
+                    .accept()
+                    .await
+                    .unwrap()
+                    .with_attribute_server(&server)
+                    .unwrap();
+
+                let answer_requests = async {
+                    loop {
+                        if let GattConnectionEvent::Gatt { event } = connection.next().await {
+                            event.accept().unwrap().send().await;
+                        }
+                    }
+                };
+
+                let mut central = Central {
+                    state: &state,
+                    radio: &radio,
+                    sequence_number: false,
+                    next_expected_sequence_number: false,
+                    received: Vec::new(),
+                };
+                let discover = async {
+                    let mut responses = Vec::new();
+                    let mut start = 0x0001;
+                    for _ in 0..2 {
+                        central.received.clear();
+                        while !central.exchange(DataKind::Start, &read_by_type_request(start)) {}
+                        for _ in 0..100 {
+                            embassy_futures::yield_now().await;
+                            central.exchange(DataKind::Continuation, &[]);
+                            if !central.received.is_empty() {
+                                break;
+                            }
+                        }
+                        let response = central.received.last().cloned().unwrap_or_default();
+                        let entry_length = response.get(5).copied().unwrap_or(1).max(1) as usize;
+                        let last_entry = response.len().saturating_sub(entry_length);
+                        let last_handle =
+                            u16::from_le_bytes([response[last_entry], response[last_entry + 1]]);
+                        responses.push(response);
+                        start = last_handle + 1;
+                    }
+                    responses
+                };
+
+                match select(answer_requests, discover).await {
+                    Either::Second(responses) => responses,
+                    Either::First(()) => unreachable!(),
+                }
+            };
+            let outcome = block_on(select(runner.run(), watch));
+
+            let Either::Second(responses) = outcome else {
+                panic!("the host stopped: {outcome:?}")
+            };
+            let first = &responses[0];
+            assert_eq!(first[4], READ_BY_TYPE_RESPONSE);
+            assert_eq!(first[5], SHORT_DECLARATION_ENTRY);
+            assert_eq!(
+                (first.len() - 6) / SHORT_DECLARATION_ENTRY as usize,
+                2,
+                "the 16-bit response holds only the GAP service's two characteristics"
+            );
+            let second = &responses[1];
+            assert_eq!(second[4], READ_BY_TYPE_RESPONSE);
+            assert_eq!(second[5], LONG_DECLARATION_ENTRY);
+            assert_eq!(
+                u16::from_le_bytes([second[6], second[7]]),
+                control_point_declaration
+            );
+            assert_eq!(second[11..27], CONTROL_POINT_UUID);
+        }
+    }
 }

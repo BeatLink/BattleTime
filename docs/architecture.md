@@ -156,7 +156,8 @@ NeoTime/
 │   └── updates/      neotime-updates: stores an uploaded firmware and hands it to the bootloader
 ├── simulator/        neotime-simulator: the drivers in a desktop window
 ├── third_party/
-│   └── littlefs-rust/  littlefs-rust with its panicking loop caps turned off
+│   ├── littlefs-rust/  littlefs-rust with its panicking loop caps turned off
+│   └── trouble-host/   TrouBLE with discovery responses that never cut a 128-bit UUID short
 ├── tools/            scripts: drawing the memory maps, packaging images, building every image
 └── ui/               neotime-ui: draws rlvgl widgets on the screen
 ```

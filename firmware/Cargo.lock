@@ -1264,8 +1264,6 @@ dependencies = [
 [[package]]
 name = "trouble-host"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19a566cc37ceaff5cc2a6ff8cc02debd1ee6b95d59ced8830d005da8b080cbe9"
 dependencies = [
  "bt-hci",
  "embassy-futures",

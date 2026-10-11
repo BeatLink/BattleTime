@@ -21,8 +21,17 @@ use crate::{Screen, SpiBus};
 pub const BUILD_NAME: &str = "rehearsal";
 /// wasp-os's bootloader keeps its watchdog running under a debugger, and the takeover must match it exactly.
 pub const WATCHDOG_HALT: HaltConfig = HaltConfig::Run;
-/// Staying up after an upload leaves the result on the screen; a reset would only restart the rehearsal.
-pub const RESET_AFTER_ACTIVATE: bool = false;
+const POWER_GENERAL_PURPOSE_RETAINED: *mut u32 = 0x4000_051C as *mut u32;
+/// The value wasp-os's bootloader takes as a request to start its Bluetooth update mode.
+const WASP_OS_ENTER_UPDATE_MODE: u32 = 0xA8;
+
+/// Shows the result, then restarts into wasp-os's update mode, so the next image can be sent without the button.
+pub async fn reset(screen: &mut Screen) -> ! {
+    screen.write_line(5, "done, to wasp-os");
+    embassy_time::Timer::after(embassy_time::Duration::from_millis(2000)).await;
+    unsafe { POWER_GENERAL_PURPOSE_RETAINED.write_volatile(WASP_OS_ENTER_UPDATE_MODE) };
+    cortex_m::peripheral::SCB::sys_reset()
+}
 
 /// The heap is unused here, since nothing mounts the file system.
 pub const HEAP_SIZE: usize = 4 * 1024;
