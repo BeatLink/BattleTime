@@ -229,6 +229,10 @@ with its file system found and the firmware confirmed. A firmware update sent to
 took 1 minute 51 seconds to upload. The bootloader swapped it in, it started, and it confirmed
 itself after its first Bluetooth exchange.
 
+Recovery works on the watch as well. Holding the button reset the watch into the bootloader, which
+buzzed after five more seconds. It swapped in the recovery firmware, which started, and that
+firmware confirmed itself after its first Bluetooth exchange.
+
 ## Proving it on the emulator
 
 The emulator (`PineTimeEmulator/`, Renode) models the chip's flash controller, the external flash
