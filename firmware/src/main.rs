@@ -78,7 +78,7 @@ const WATCHDOG_FEED_INTERVAL: Duration = Duration::from_millis(1000);
 const DISPLAY_COMMAND_BUFFER_SIZE: usize = 512;
 /// The shell's share of the heap, which the open app's widgets and text are allocated from.
 #[cfg(not(feature = "wasp-os-rehearsal"))]
-const UI_HEAP_SIZE: usize = 14 * 1024;
+const UI_HEAP_SIZE: usize = 20 * 1024;
 #[cfg(feature = "wasp-os-rehearsal")]
 const UI_HEAP_SIZE: usize = 0;
 const HEAP_SIZE: usize = storage::HEAP_SIZE + UI_HEAP_SIZE;

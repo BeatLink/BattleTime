@@ -4,7 +4,7 @@
 //! An app is open, with a screen, or closed, with only its state, so subscriptions can run in the
 //! background without any widgets.
 
-use alloc::vec::Vec;
+use alloc::{boxed::Box, vec::Vec};
 
 use embedded_graphics::{pixelcolor::Rgb565, prelude::DrawTarget};
 use neotime_runtime::{
@@ -101,9 +101,10 @@ pub struct AppHost<'image> {
     image: AppImage<'image>,
     tree: WidgetTree<'image>,
     library: Option<AppImage<'image>>,
-    state: AppState,
-    interpreter: Interpreter,
-    bindings: Bindings,
+    // The three big parts live on the heap, so opening an app never copies kilobytes across the stack.
+    state: Box<AppState>,
+    interpreter: Box<Interpreter>,
+    bindings: Box<Bindings>,
     theme: Theme,
     is_open: bool,
     screen_root: u16,
@@ -176,11 +177,11 @@ impl<'image> AppHost<'image> {
     ) -> Result<Self, OpenError> {
         let image = AppImage::parse(image_bytes)?;
         verify(&image)?;
-        let mut state = AppState::new(&image)?;
+        let mut state = Box::new(AppState::new(&image)?);
         if !saved_state.is_empty() {
             state.load_persistent(&image, saved_state);
         }
-        let bindings = Bindings::load(&image)?;
+        let bindings = Box::new(Bindings::load(&image)?);
         let tree = WidgetTree::new(image);
         let first_screen = tree.screens().next().ok_or(OpenError::NoScreens)?;
 
@@ -199,7 +200,7 @@ impl<'image> AppHost<'image> {
             tree,
             library: None,
             state,
-            interpreter: Interpreter::new(),
+            interpreter: Box::new(Interpreter::new()),
             bindings,
             theme,
             is_open: false,
