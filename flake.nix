@@ -36,10 +36,15 @@
             ./Cargo.toml
             ./Cargo.lock
             ./app-host
+            ./compiler
             ./drivers
             ./runtime
             ./simulator
             ./ui
+            # The compiler inlines the shared components, and its tests compile every app and face.
+            ./sdk/neotime/src/components.tsx
+            (lib.fileset.fileFilter (file: file.hasExt "tsx") ./apps)
+            (lib.fileset.fileFilter (file: file.hasExt "tsx") ./faces)
           ];
         };
 

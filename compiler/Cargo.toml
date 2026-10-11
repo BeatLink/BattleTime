@@ -1,0 +1,15 @@
+[package]
+name = "neotime-compiler"
+version = "0.1.0"
+edition = "2021"
+description = "Compiles NeoTime apps written as Preact components into app images"
+license.workspace = true
+publish = false
+
+[dependencies]
+neotime-runtime = { path = "../runtime", features = ["writer"] }
+oxc_allocator = "=0.151.0"
+oxc_ast = "=0.151.0"
+oxc_parser = "=0.151.0"
+oxc_span = "=0.151.0"
+oxc_syntax = "=0.151.0"

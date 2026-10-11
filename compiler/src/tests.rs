@@ -1,0 +1,989 @@
+//! Tests for each part of the language: each compiles a small app, checks the image with the
+//! runtime's own checks, and runs its expressions and handlers with the runtime's interpreter.
+
+use neotime_runtime::instruction::EffectKind;
+use neotime_runtime::theme::rgb565;
+use neotime_runtime::{
+    AppImage, AppState, ColorValue, Interpreter, Property, PropertySource, SystemValue, SystemValues,
+    ThemeColor, Value, WidgetKind, WidgetTree,
+};
+
+use crate::compile_source;
+use crate::diagnostics::Severity;
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+const HEADER: &str = r#"
+import { computed, signal } from "@preact/signals";
+import {
+  define_app, format_duration, format_number, format_time, now, persisted, random_int, range, vibrate,
+  vibrate_pattern, go, start_of_minute, start_of_hour, text_from_codes, join, to_upper, text_length,
+  slice_text, pad_start, next_time_of_day, HOUR, MINUTE, SECOND, type Duration, type Instant, type SwipeEvent, type Color,
+} from "neotime";
+import { icons } from "neotime/icons";
+import { Button, Column, Icon, Label, Row, Screen } from "neotime/widgets";
+"#;
+
+const FOOTER: &str = r#"
+export default define_app({ id: "test", name: "Test", screens: { main: Main } });
+"#;
+
+/// A whole app made of the header, the code given and the footer.
+fn app(body: &str) -> String {
+    format!("{HEADER}\n{body}\n{FOOTER}")
+}
+
+fn compile(source: &str) -> Vec<u8> {
+    let output = compile_source(source);
+    let errors: Vec<String> = output
+        .errors()
+        .map(|error| error.render("test.tsx", source))
+        .collect();
+    assert!(errors.is_empty(), "{}", errors.join("\n"));
+    output.image.expect("an image")
+}
+
+fn first_error(source: &str) -> String {
+    let output = compile_source(source);
+    let error = output.errors().next().expect("an error");
+    error.message.clone()
+}
+
+struct FakeSystem {
+    now: Value,
+}
+
+impl SystemValues for FakeSystem {
+    fn read(&self, value: SystemValue) -> Value {
+        match value {
+            SystemValue::Now => self.now,
+            SystemValue::Uses24HourClock => 1,
+            SystemValue::UsesMetricUnits => 1,
+            _ => 0,
+        }
+    }
+
+    fn random_number(&self) -> u32 {
+        7
+    }
+}
+
+const SYSTEM: FakeSystem = FakeSystem { now: 0 };
+
+/// Every widget in the order the image stores them.
+fn widgets(image: &AppImage) -> Vec<(WidgetKind, Vec<(Property, PropertySource)>)> {
+    let tree = WidgetTree::new(*image);
+    (0..tree.widget_count())
+        .map(|index| {
+            let widget = tree.widget(index).expect("a widget");
+            let properties = widget
+                .properties()
+                .map(|entry| entry.expect("a property"))
+                .map(|entry| (entry.property, entry.source))
+                .collect();
+            (widget.kind, properties)
+        })
+        .collect()
+}
+
+/// The source of a property on the first widget of a kind that has it.
+fn property_of(image: &AppImage, kind: WidgetKind, wanted: Property, nth: usize) -> PropertySource {
+    widgets(image)
+        .into_iter()
+        .filter(|(widget_kind, _)| *widget_kind == kind)
+        .filter_map(|(_, properties)| {
+            properties
+                .into_iter()
+                .find(|(property, _)| *property == wanted)
+                .map(|(_, source)| source)
+        })
+        .nth(nth)
+        .unwrap_or_else(|| panic!("no {kind:?} with {wanted:?}"))
+}
+
+/// What a property shows now: a constant, or its expression worked out.
+fn value_of(image: &AppImage, state: &AppState, source: PropertySource, system: &FakeSystem) -> Value {
+    match source {
+        PropertySource::Constant(value) => value as Value,
+        PropertySource::Expression(expression) => Interpreter::new()
+            .evaluate_expression(image, expression, state, system)
+            .expect("the expression runs"),
+        PropertySource::Handler(_) => panic!("a handler is not a value"),
+    }
+}
+
+/// The text a property shows now.
+fn text_of(image: &AppImage, state: &AppState, source: PropertySource, system: &FakeSystem) -> String {
+    let mut interpreter = Interpreter::new();
+    match source {
+        PropertySource::Constant(string) => image.string(string as u16).expect("a string").to_string(),
+        PropertySource::Expression(expression) => {
+            let value = interpreter
+                .evaluate_expression(image, expression, state, system)
+                .expect("the expression runs");
+            interpreter.text(image, value).expect("text").to_string()
+        }
+        PropertySource::Handler(_) => panic!("a handler is not text"),
+    }
+}
+
+fn label_text(image: &AppImage, state: &AppState, nth: usize) -> String {
+    text_of(
+        image,
+        state,
+        property_of(image, WidgetKind::Label, Property::Text, nth),
+        &SYSTEM,
+    )
+}
+
+fn run(image: &AppImage, state: &mut AppState, kind: WidgetKind, event: Property, event_fields: &[Value]) {
+    let PropertySource::Handler(handler) = property_of(image, kind, event, 0) else {
+        panic!("not a handler");
+    };
+    Interpreter::new()
+        .run_handler(image, handler, state, event_fields, &SYSTEM)
+        .expect("the handler runs");
+}
+
+fn variable_named(image: &AppImage, key: &str) -> u8 {
+    (0..image.state_count())
+        .find(|&index| {
+            let variable = image.state_variable(index).expect("a variable");
+            image.string(variable.key_string) == Some(key)
+        })
+        .unwrap_or_else(|| panic!("no variable {key}")) as u8
+}
+
+// ============================================================================
+// Widgets and text
+// ============================================================================
+
+#[test]
+fn literal_text_becomes_a_constant_string() {
+    let image = compile(&app(
+        "function Main() { return <Screen><Label>Hello, world</Label></Screen>; }",
+    ));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(label_text(&image, &state, 0), "Hello, world");
+    assert!(matches!(
+        property_of(&image, WidgetKind::Label, Property::Text, 0),
+        PropertySource::Constant(_)
+    ));
+}
+
+#[test]
+fn the_screen_root_carries_its_name() {
+    let image = compile(&app(
+        "function Main() { return <Screen><Label>Hi</Label></Screen>; }",
+    ));
+    let image = AppImage::parse(&image).unwrap();
+
+    assert_eq!(WidgetTree::new(image).screen_named("main"), Some(0));
+}
+
+#[test]
+fn template_literals_join_text_and_numbers() {
+    let image = compile(&app(
+        "const count = signal(3);\nfunction Main() { return <Screen><Label>{`${count.value} steps`}</Label></Screen>; }",
+    ));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(label_text(&image, &state, 0), "3 steps");
+}
+
+#[test]
+fn numbers_in_jsx_text_are_shown_as_text() {
+    let image = compile(&app(
+        "const count = signal(-12);\nfunction Main() { return <Screen><Label>Count: {count.value}</Label></Screen>; }",
+    ));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(label_text(&image, &state, 0), "Count: -12");
+}
+
+#[test]
+fn a_condition_around_a_widget_sets_its_visibility() {
+    let image = compile(&app(r#"const shown = signal(false);
+        function Main() {
+          return (
+            <Screen>
+              {shown.value && <Label>Hi</Label>}
+              <Button onClick={() => { shown.value = !shown.value; }}>Toggle</Button>
+            </Screen>
+          );
+        }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let mut state = AppState::new(&image).unwrap();
+    let visible = property_of(&image, WidgetKind::Label, Property::Visible, 0);
+
+    assert_eq!(value_of(&image, &state, visible, &SYSTEM), 0);
+    run(&image, &mut state, WidgetKind::Button, Property::OnClick, &[0, 0]);
+    assert_eq!(value_of(&image, &state, visible, &SYSTEM), 1);
+}
+
+#[test]
+fn a_ternary_between_widgets_shows_one_or_the_other() {
+    let image = compile(&app(r#"const on = signal(true);
+        function Main() { return <Screen>{on.value ? <Label>On</Label> : <Label>Off</Label>}</Screen>; }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    let first = property_of(&image, WidgetKind::Label, Property::Visible, 0);
+    let second = property_of(&image, WidgetKind::Label, Property::Visible, 1);
+    assert_eq!(value_of(&image, &state, first, &SYSTEM), 1);
+    assert_eq!(value_of(&image, &state, second, &SYSTEM), 0);
+}
+
+#[test]
+fn components_are_inlined_with_their_props() {
+    let image = compile(&app(
+        r#"function Place(props: { place: number }) { return <Label>{`#${props.place + 1}`}</Label>; }
+        function Main() { return <Screen><Place place={0} /><Place place={1} /></Screen>; }"#,
+    ));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(label_text(&image, &state, 0), "#1");
+    assert_eq!(label_text(&image, &state, 1), "#2");
+}
+
+#[test]
+fn map_over_a_constant_array_repeats_widgets() {
+    let image = compile(&app(r#"const NAMES = ["a", "b", "c"];
+        function Main() { return <Screen>{NAMES.map((name) => <Label>{name}</Label>)}</Screen>; }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(label_text(&image, &state, 2), "c");
+    assert_eq!(widgets(&image).len(), 4);
+}
+
+#[test]
+fn colours_become_theme_references_or_rgb565() {
+    let image = compile(&app(
+        r##"function Main() { return <Screen><Label color="accent" background="#ff0000">Hi</Label></Screen>; }"##,
+    ));
+    let image = AppImage::parse(&image).unwrap();
+
+    assert_eq!(
+        property_of(&image, WidgetKind::Label, Property::Color, 0),
+        PropertySource::Constant(ColorValue::Theme(ThemeColor::Accent).to_value() as i32)
+    );
+    assert_eq!(
+        property_of(&image, WidgetKind::Label, Property::Background, 0),
+        PropertySource::Constant(rgb565(255, 0, 0) as i32)
+    );
+}
+
+#[test]
+fn fonts_icons_and_lengths_use_their_number_mappings() {
+    let image = compile(&app(
+        r#"function Main() { return <Screen><Label font="huge" width="100%">Hi</Label><Icon icon={icons.heart} /></Screen>; }"#,
+    ));
+    let image = AppImage::parse(&image).unwrap();
+
+    assert_eq!(
+        property_of(&image, WidgetKind::Label, Property::Font, 0),
+        PropertySource::Constant(4)
+    );
+    assert_eq!(
+        property_of(&image, WidgetKind::Label, Property::Width, 0),
+        PropertySource::Constant(-100)
+    );
+    assert_eq!(
+        property_of(&image, WidgetKind::Icon, Property::Icon, 0),
+        PropertySource::Constant(18)
+    );
+}
+
+#[test]
+fn a_font_chosen_at_run_time_is_an_expression() {
+    let image = compile(&app(r#"const big = signal(true);
+        function Main() { return <Screen><Label font={big.value ? "large" : "small"}>Hi</Label></Screen>; }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+    let font = property_of(&image, WidgetKind::Label, Property::Font, 0);
+
+    assert_eq!(value_of(&image, &state, font, &SYSTEM), 3);
+}
+
+#[test]
+fn props_the_format_has_no_place_for_are_left_out_with_a_warning() {
+    let source = app(
+        r#"function Main() { return <Screen><Row><Label text_align="center">Hi</Label></Row></Screen>; }"#,
+    );
+    let output = compile_source(&source);
+
+    assert!(output.image.is_some());
+    assert!(output
+        .warnings()
+        .any(|warning| warning.message.contains("`text_align`")));
+}
+
+// ============================================================================
+// Expressions
+// ============================================================================
+
+/// Compiles `expression` as a label's text through `format_number` and returns what it shows.
+fn number_shown(declarations: &str, expression: &str) -> String {
+    let image = compile(&app(&format!(
+        "{declarations}\nfunction Main() {{ return <Screen><Label>{{format_number({expression})}}</Label></Screen>; }}"
+    )));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+    label_text(&image, &state, 0)
+}
+
+#[test]
+fn division_rounds_the_way_the_math_function_says() {
+    let declarations = "const minus_five = signal(-5);\nconst seven = signal(7);";
+
+    assert_eq!(
+        number_shown(declarations, "Math.floor(minus_five.value / 4)"),
+        "-2"
+    );
+    assert_eq!(
+        number_shown(declarations, "Math.trunc(minus_five.value / 4)"),
+        "-1"
+    );
+    assert_eq!(number_shown(declarations, "Math.ceil(seven.value / 4)"), "2");
+    assert_eq!(number_shown(declarations, "Math.round(seven.value / 2)"), "4");
+    assert_eq!(
+        number_shown(declarations, "Math.round(minus_five.value / 2)"),
+        "-2"
+    );
+    assert_eq!(
+        number_shown(declarations, "Math.floor(seven.value / minus_five.value)"),
+        "-2"
+    );
+}
+
+#[test]
+fn arithmetic_bitwise_and_math_functions_work() {
+    let declarations = "const six = signal(6);";
+
+    assert_eq!(number_shown(declarations, "six.value * 7 - 2"), "40");
+    assert_eq!(number_shown(declarations, "(six.value & 3) | 8"), "10");
+    assert_eq!(number_shown(declarations, "six.value << 2"), "24");
+    assert_eq!(number_shown(declarations, "Math.max(1, six.value, 4)"), "6");
+    assert_eq!(number_shown(declarations, "Math.abs(-six.value)"), "6");
+    assert_eq!(number_shown(declarations, "six.value % 4"), "2");
+}
+
+#[test]
+fn constants_are_worked_out_when_compiling() {
+    let image = compile(&app(
+        "const TOTAL = 3 * HOUR + Math.floor(90 / 60) * MINUTE;\nfunction Main() { return <Screen><Label>{`${TOTAL}`}</Label></Screen>; }",
+    ));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert!(matches!(
+        property_of(&image, WidgetKind::Label, Property::Text, 0),
+        PropertySource::Constant(_)
+    ));
+    assert_eq!(label_text(&image, &state, 0), "10860000");
+}
+
+#[test]
+fn comparing_with_null_tests_for_the_empty_optional() {
+    let declarations = "const started = signal<Instant | null>(null);";
+
+    assert_eq!(number_shown(declarations, "started.value === null ? 1 : 0"), "1");
+    assert_eq!(number_shown(declarations, "started.value !== null ? 1 : 0"), "0");
+    assert_eq!(number_shown(declarations, "started.value ?? 42"), "42");
+}
+
+#[test]
+fn logical_operators_and_ternaries_choose_values() {
+    let declarations = "const yes = signal(true);\nconst no = signal(false);";
+
+    assert_eq!(number_shown(declarations, "yes.value && !no.value ? 1 : 2"), "1");
+    assert_eq!(number_shown(declarations, "no.value || yes.value ? 3 : 4"), "3");
+}
+
+#[test]
+fn computed_values_are_inlined() {
+    let declarations = "const base = signal(4);\nconst doubled = computed(() => base.value * 2);\nconst plus = computed(() => { const extra = 1; return doubled.value + extra; });";
+
+    assert_eq!(number_shown(declarations, "plus.value"), "9");
+}
+
+#[test]
+fn a_constant_table_is_read_at_a_run_time_index() {
+    let declarations = "const TABLE = [5, 9, 2, 7];\nconst place = signal(2);\nconst EVEN = [10, 20, 30];";
+
+    assert_eq!(number_shown(declarations, "TABLE[place.value]"), "2");
+    assert_eq!(number_shown(declarations, "EVEN[place.value]"), "30");
+}
+
+#[test]
+fn format_patterns_are_checked_and_formatted() {
+    let image = compile(&app(r#"const elapsed = signal<Duration>(75_000);
+        const moment = signal<Instant>(0);
+        function Main() {
+          return (
+            <Screen>
+              <Label>{format_duration(elapsed.value, "mm:ss")}</Label>
+              <Label>{format_time(moment.value, "YYYY-MM-DD HH:mm")}</Label>
+              <Label>{format_duration(elapsed.value, elapsed.value > HOUR ? "h:mm:ss" : "m:ss")}</Label>
+            </Screen>
+          );
+        }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(label_text(&image, &state, 0), "01:15");
+    assert_eq!(label_text(&image, &state, 1), "1970-01-01 00:00");
+    assert_eq!(label_text(&image, &state, 2), "1:15");
+}
+
+#[test]
+fn a_bad_format_pattern_is_an_error() {
+    let message = first_error(&app(r#"const elapsed = signal(0);
+        function Main() { return <Screen><Label>{format_duration(elapsed.value, "mm:qq")}</Label></Screen>; }"#));
+
+    assert!(message.contains("not a valid pattern"), "{message}");
+}
+
+#[test]
+fn system_values_are_read_with_value() {
+    let image = compile(&app(
+        "function Main() { return <Screen><Label>{format_time(now.value, \"HH:mm\")}</Label></Screen>; }",
+    ));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+    let source = property_of(&image, WidgetKind::Label, Property::Text, 0);
+
+    let system = FakeSystem {
+        now: (13 * 3600 + 5 * 60) * 1000,
+    };
+    assert_eq!(text_of(&image, &state, source, &system), "13:05");
+}
+
+#[test]
+fn swipe_directions_are_shown_as_their_names() {
+    let image = compile(&app(r#"const direction = signal<SwipeEvent["direction"]>("up");
+        function Main() { return <Screen><Label>{`${direction.value}`}</Label></Screen>; }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(label_text(&image, &state, 0), "up");
+}
+
+// ============================================================================
+// Handlers
+// ============================================================================
+
+/// Compiles an app with one button whose handler is `handler`, presses it and returns the state.
+fn after_click(declarations: &str, handler: &str, shown: &str) -> String {
+    let source = app(&format!(
+        "{declarations}\nfunction Main() {{ return <Screen><Button onClick={{() => {{ {handler} }}}}>Go</Button><Label>{{format_number({shown})}}</Label></Screen>; }}"
+    ));
+    let image = compile(&source);
+    let image = AppImage::parse(&image).unwrap();
+    let mut state = AppState::new(&image).unwrap();
+    run(&image, &mut state, WidgetKind::Button, Property::OnClick, &[0, 0]);
+    label_text(&image, &state, 0)
+}
+
+#[test]
+fn handlers_write_state_and_see_their_own_writes() {
+    let declarations = "const count = signal(1);\nconst copy = signal(0);";
+    let handler = "count.value = count.value + 1; copy.value = count.value * 10;";
+
+    assert_eq!(after_click(declarations, handler, "copy.value"), "20");
+}
+
+#[test]
+fn locals_if_else_and_early_return_work() {
+    let declarations = "const count = signal(5);";
+    let handler = "let next = count.value; if (next > 3) { next = next - 3; } else { next = 0; } count.value = next; if (next === 2) return; count.value = 99;";
+
+    assert_eq!(after_click(declarations, handler, "count.value"), "2");
+}
+
+#[test]
+fn compound_assignments_and_updates_work() {
+    let declarations = "const count = signal(5);";
+
+    assert_eq!(
+        after_click(
+            declarations,
+            "count.value += 3; count.value *= 2; count.value++;",
+            "count.value"
+        ),
+        "17"
+    );
+}
+
+#[test]
+fn for_of_loops_over_ranges_and_constant_arrays() {
+    let declarations = "const total = signal(0);\nconst PRIMES = [2, 3, 5, 7];";
+    let handler = "let sum = 0; for (const n of range(5)) { sum = sum + n; } for (const prime of PRIMES) { if (prime === 5) continue; sum = sum + prime; } total.value = sum;";
+
+    assert_eq!(after_click(declarations, handler, "total.value"), "22");
+}
+
+#[test]
+fn break_leaves_a_loop() {
+    let declarations = "const found = signal(-1);\nconst VALUES = [4, 8, 15, 16];";
+    let handler = "for (const value of VALUES) { if (value > 10) { found.value = value; break; } }";
+
+    assert_eq!(after_click(declarations, handler, "found.value"), "15");
+}
+
+#[test]
+fn functions_called_from_handlers_are_inlined() {
+    let declarations = "const count = signal(2);\nfunction triple(value: number): number { if (value < 0) return 0; return value * 3; }\nfunction bump() { count.value = triple(count.value) + 1; }";
+
+    assert_eq!(after_click(declarations, "bump();", "count.value"), "7");
+}
+
+#[test]
+fn a_whole_array_assignment_reads_the_old_array() {
+    let declarations = "const board = signal([0, 0, 0, 0]);\nconst PLACES = [0, 1, 2, 3];";
+    let handler = "board.value[0] = 1; board.value[1] = 2; board.value = PLACES.map((place) => board.value[(place + 1) % 4] + 10);";
+
+    assert_eq!(
+        after_click(declarations, handler, "board.value[0] * 1000 + board.value[3]"),
+        "12011"
+    );
+}
+
+#[test]
+fn an_array_literal_assignment_shifts_elements() {
+    let declarations = "const laps = signal<number[]>([1, 1, 1]);";
+    let handler = "laps.value = [7, laps.value[0] + 1, laps.value[1] + 2];";
+
+    assert_eq!(
+        after_click(
+            declarations,
+            handler,
+            "laps.value[0] * 100 + laps.value[1] * 10 + laps.value[2]"
+        ),
+        "723"
+    );
+}
+
+#[test]
+fn records_are_kept_field_by_field() {
+    let declarations = "const time = signal({ hour: 8, minute: 30 });";
+    let handler = "time.value = { ...time.value, hour: time.value.hour + 1 };";
+
+    assert_eq!(
+        after_click(declarations, handler, "time.value.hour * 100 + time.value.minute"),
+        "930"
+    );
+}
+
+#[test]
+fn effects_are_recorded_with_their_arguments() {
+    let image = compile(&app(
+        r#"function Main() { return <Screen><Button onClick={() => { vibrate(200); vibrate_pattern("alarm"); go("main"); }}>Go</Button></Screen>; }"#,
+    ));
+    let image = AppImage::parse(&image).unwrap();
+    let mut state = AppState::new(&image).unwrap();
+    let PropertySource::Handler(handler) = property_of(&image, WidgetKind::Button, Property::OnClick, 0)
+    else {
+        panic!("not a handler");
+    };
+
+    let outcome = Interpreter::new()
+        .run_handler(&image, handler, &mut state, &[0, 0], &SYSTEM)
+        .unwrap();
+    let effects = outcome.effects();
+    assert_eq!(effects[0].kind, EffectKind::Vibrate);
+    assert_eq!(effects[0].arguments[0], 200);
+    assert_eq!(effects[1].kind, EffectKind::VibratePattern);
+    assert_eq!(effects[1].arguments[0], 3);
+    assert_eq!(effects[2].kind, EffectKind::Go);
+    assert_eq!(image.string(effects[2].arguments[0] as u16), Some("main"));
+}
+
+#[test]
+fn event_fields_are_read_by_name() {
+    let image = compile(&app(r#"const last = signal(0);
+        function Main() {
+          return (
+            <Screen onSwipe={(event) => { if (event.direction === "left") last.value = 1; else last.value = 2; }}>
+              <Button onClick={(event) => { last.value = event.y; }}>Go</Button>
+            </Screen>
+          );
+        }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let mut state = AppState::new(&image).unwrap();
+    let last = variable_named(&image, "last");
+
+    run(&image, &mut state, WidgetKind::Column, Property::OnSwipe, &[2]);
+    assert_eq!(state.get(last), Some(1));
+    run(
+        &image,
+        &mut state,
+        WidgetKind::Button,
+        Property::OnClick,
+        &[10, 33],
+    );
+    assert_eq!(state.get(last), Some(33));
+}
+
+#[test]
+fn random_numbers_are_allowed_in_handlers() {
+    let declarations = "const rolled = signal(0);";
+
+    assert_eq!(
+        after_click(declarations, "rolled.value = random_int(1, 6);", "rolled.value"),
+        "2"
+    );
+}
+
+// ============================================================================
+// State layout
+// ============================================================================
+
+#[test]
+fn arrays_take_the_narrowest_width_their_values_fit() {
+    let image = compile(&app(r#"const small = signal([0, 0, 0, 0]);
+        const medium = signal([0, 0]);
+        const times = signal<Duration[]>([0, 0]);
+        function Main() {
+          return (
+            <Screen>
+              <Button onClick={() => { small.value[1] = 1; medium.value[0] = 1000; times.value[0] = 5; }}>Go</Button>
+            </Screen>
+          );
+        }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let width = |key: &str| {
+        image
+            .state_variable(variable_named(&image, key) as u16)
+            .unwrap()
+            .element_bytes
+    };
+
+    assert_eq!(width("small"), 1);
+    assert_eq!(width("medium"), 2);
+    assert_eq!(width("times"), 8);
+}
+
+#[test]
+fn persisted_signals_keep_their_key() {
+    let image = compile(&app(
+        "const best = persisted(\"best_score\", 0);\nfunction Main() { return <Screen><Label>{`${best.value}`}</Label></Screen>; }",
+    ));
+    let image = AppImage::parse(&image).unwrap();
+    let variable = image
+        .state_variable(variable_named(&image, "best_score") as u16)
+        .unwrap();
+
+    assert!(variable.persists);
+}
+
+#[test]
+fn too_many_state_variables_is_an_error() {
+    let declarations: String = (0..65)
+        .map(|index| format!("const value_{index} = signal(0);\n"))
+        .collect();
+    let message = first_error(&app(&format!(
+        "{declarations}function Main() {{ return <Screen><Label>Hi</Label></Screen>; }}"
+    )));
+
+    assert!(message.contains("at most 64 state variables"), "{message}");
+}
+
+#[test]
+fn an_array_too_large_for_state_is_an_error() {
+    let message = first_error(&app(
+        "const big = signal<Instant[]>(range(200).map(() => 0));\nfunction Main() { return <Screen><Label>Hi</Label></Screen>; }",
+    ));
+
+    assert!(message.contains("at most 1024"), "{message}");
+}
+
+// ============================================================================
+// What the compiler rejects
+// ============================================================================
+
+#[test]
+fn rejected_forms_name_the_declarative_alternative() {
+    let cases = [
+        ("const half = signal(4);\nfunction Main() { return <Screen><Label>{`${half.value / 2}`}</Label></Screen>; }", "Math.trunc"),
+        ("const n = signal(0);\nfunction Main() { return <Screen><Button onClick={() => { while (n.value < 3) n.value++; }}>Go</Button></Screen>; }", "for ... of"),
+        ("import { useState } from \"preact/hooks\";\nfunction Main() { const [a, b] = useState(0); return <Screen><Label>Hi</Label></Screen>; }", "signal"),
+        ("import { thing } from \"lodash\";\nfunction Main() { return <Screen><Label>Hi</Label></Screen>; }", "copy the code into the app"),
+        ("const n = signal(0);\nfunction Main() { return <Screen><Button onClick={() => { const s = signal(0); }}>Go</Button></Screen>; }", "top of the file"),
+        ("const n = signal(0);\nfunction Main() { return <Screen><Button onClick={() => { setTimeout(() => {}, 5); }}>Go</Button></Screen>; }", "subscriptions"),
+        ("const n = signal(0);\nfunction Main() { return <Screen><Label>{`${n.value}`}</Label><Button onClick={() => { n.value = 1.5; }}>Go</Button></Screen>; }", "whole"),
+        ("const name = signal(\"a\");\nconst count = signal(0);\nfunction Main() { return <Screen><Button onClick={() => { name.value = `${count.value}`; }}>Go</Button></Screen>; }", "fixed text"),
+        ("function count(n: number): number { return n === 0 ? 0 : count(n - 1); }\nconst value = signal(0);\nfunction Main() { return <Screen><Button onClick={() => { value.value = count(3); }}>Go</Button></Screen>; }", "recursion"),
+        ("const board = signal([0, 0]);\nfunction Main() { return <Screen><Button onClick={() => { let copy = [1, 2]; }}>Go</Button></Screen>; }", "one value"),
+    ];
+    for (body, advice) in cases {
+        let output = compile_source(&app(body));
+        let message = output
+            .errors()
+            .next()
+            .map(|error| error.message.clone())
+            .unwrap_or_else(|| panic!("no error for: {body}"));
+        assert!(message.contains(advice), "expected `{advice}` in: {message}");
+    }
+}
+
+#[test]
+fn errors_are_printed_with_the_file_line_and_column() {
+    let source = "const x = 1;\nconst y = x / 2;\n";
+    let output = compile_source(&format!("{HEADER}{source}"));
+    let error = output
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.severity == Severity::Error)
+        .unwrap();
+    let rendered = error.render("app.tsx", &format!("{HEADER}{source}"));
+
+    assert!(rendered.starts_with("app.tsx:"), "{rendered}");
+    assert!(rendered.split(':').count() >= 4, "{rendered}");
+}
+
+#[test]
+fn effects_are_rejected_outside_handlers() {
+    let message = first_error(&app(
+        "const n = computed(() => { vibrate(10); return 1; });\nfunction Main() { return <Screen><Label>{`${n.value}`}</Label></Screen>; }",
+    ));
+
+    assert!(message.contains("only be asked for in a handler"), "{message}");
+}
+
+// ============================================================================
+// Newer runtime features
+// ============================================================================
+
+#[test]
+fn start_of_minute_uses_the_runtime_instruction() {
+    let declarations = "const moment = signal<Instant>(125_000);";
+
+    assert_eq!(
+        number_shown(declarations, "start_of_minute(moment.value)"),
+        "120000"
+    );
+    assert_eq!(number_shown(declarations, "start_of_hour(moment.value)"), "0");
+}
+
+#[test]
+fn text_from_codes_shows_an_array_of_character_codes() {
+    let image = compile(&app(r#"const codes = signal([72, 72, 72, 72]);
+        const length = signal(3);
+        function Main() { return <Screen><Label>{text_from_codes(codes.value, length.value)}</Label></Screen>; }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(label_text(&image, &state, 0), "HHH");
+}
+
+#[test]
+fn join_unrolls_over_a_fixed_length_array() {
+    let image = compile(&app(r#"const hours = signal(7);
+        function Main() { return <Screen><Label>{join([`${hours.value}`, "30", "00"], ":")}</Label></Screen>; }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(label_text(&image, &state, 0), "7:30:00");
+}
+
+#[test]
+fn text_functions_work_on_text_known_when_compiling() {
+    let image = compile(&app(r#"const NAME = "watch";
+        function Main() {
+          return (
+            <Screen>
+              <Label>{`${to_upper(NAME)} ${text_length(NAME)} ${slice_text(NAME, 1, 3)} ${pad_start("7", 3, "0")} ${"ab".toUpperCase()}`}</Label>
+            </Screen>
+          );
+        }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(label_text(&image, &state, 0), "WATCH 5 at 007 AB");
+}
+
+#[test]
+fn records_in_an_array_are_kept_as_one_array_per_field() {
+    let declarations = "const alarms = signal([{ hour: 7, enabled: false }, { hour: 7, enabled: false }, { hour: 7, enabled: false }]);\nconst place = signal(1);";
+    let handler =
+        "alarms.value[place.value].enabled = true; alarms.value[2] = { ...alarms.value[1], hour: 9 };";
+
+    assert_eq!(
+        after_click(
+            declarations,
+            handler,
+            "(alarms.value[1].enabled ? 100 : 0) + (alarms.value[2].enabled ? 10 : 0) + alarms.value[2].hour - alarms.value[0].hour"
+        ),
+        "112"
+    );
+}
+
+#[test]
+fn records_in_an_array_can_be_counted_in_a_loop() {
+    let declarations =
+        "const alarms = signal([{ enabled: true }, { enabled: true }]);\nconst on = signal(0);";
+    let handler =
+        "let count = 0; for (const alarm of alarms.value) { if (alarm.enabled) count++; } on.value = count;";
+
+    assert_eq!(after_click(declarations, handler, "on.value"), "2");
+}
+
+#[test]
+fn array_from_with_a_length_repeats_widgets() {
+    let image = compile(&app(
+        "function Main() { return <Screen>{Array.from({ length: 5 }, (_, hour) => <Label>{`${hour * 30}`}</Label>)}</Screen>; }",
+    ));
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(label_text(&image, &state, 4), "120");
+}
+
+#[test]
+fn an_exact_division_of_constants_is_allowed() {
+    assert_eq!(number_shown("const WIDTH = 240;", "(WIDTH - 40) / 2"), "100");
+}
+
+#[test]
+fn system_text_values_are_read_like_any_other() {
+    let image = compile(&app(r#"import { current_music } from "neotime";
+        function Main() { return <Screen><Label>{current_music.value.artist}</Label></Screen>; }"#));
+    let image = AppImage::parse(&image).unwrap();
+
+    assert!(matches!(
+        property_of(&image, WidgetKind::Label, Property::Text, 0),
+        PropertySource::Expression(_)
+    ));
+}
+
+#[test]
+fn next_time_of_day_finds_the_next_matching_weekday() {
+    // 1970-01-01 was a Thursday, weekday 3; ask for 07:30 on Saturdays only, bit 5.
+    let declarations = "const found = signal<Instant>(0);\nconst start = signal<Instant>(10 * HOUR);";
+    let handler = "found.value = next_time_of_day(start.value, { hour: 7, minute: 30 }, 1 << 5);";
+
+    let expected = (2 * 86_400_000 + 7 * 3_600_000 + 30 * 60_000).to_string();
+    assert_eq!(after_click(declarations, handler, "found.value"), expected);
+}
+
+#[test]
+fn a_cell_grid_takes_its_cells_and_palette_as_state_arrays() {
+    let image = compile(&app(r##"import { CellGrid } from "neotime/widgets";
+        const board = signal([0, 1, 1, 0]);
+        function Main() {
+          return (
+            <Screen>
+              <CellGrid columns={2} rows={2} cell_size={20} cells={board.value} palette={["#000000", "accent"]} onClick={(event) => { board.value[event.value] = 1; }} />
+            </Screen>
+          );
+        }"##));
+    let image = AppImage::parse(&image).unwrap();
+    let board = variable_named(&image, "board");
+    let PropertySource::Constant(cells) = property_of(&image, WidgetKind::CellGrid, Property::Cells, 0)
+    else {
+        panic!("cells is a constant");
+    };
+    let PropertySource::Constant(palette) = property_of(&image, WidgetKind::CellGrid, Property::Palette, 0)
+    else {
+        panic!("palette is a constant");
+    };
+    let mut state = AppState::new(&image).unwrap();
+
+    assert_eq!(cells as u8, board);
+    assert_eq!(
+        state.element(palette as u8, 1),
+        Some(ColorValue::Theme(ThemeColor::Accent).to_value())
+    );
+    assert_eq!(state.element(board, 2), Some(1));
+    run(
+        &image,
+        &mut state,
+        WidgetKind::CellGrid,
+        Property::OnClick,
+        &[0, 0, 3],
+    );
+    assert_eq!(state.element(board, 3), Some(1));
+}
+
+#[test]
+fn button_matrix_rows_become_options_with_row_breaks() {
+    let image = compile(&app(r#"import { ButtonMatrix } from "neotime/widgets";
+        const pressed = signal(0);
+        function Main() {
+          return <Screen><ButtonMatrix rows={[["1", "2"], ["3"]]} onClick={(event) => { pressed.value = event.value; }} /></Screen>;
+        }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let PropertySource::Constant(options) =
+        property_of(&image, WidgetKind::ButtonMatrix, Property::Options, 0)
+    else {
+        panic!("options is a constant");
+    };
+    let state = AppState::new(&image).unwrap();
+    let labels: Vec<&str> = (0..4)
+        .map(|index| {
+            image
+                .string(state.element(options as u8, index).unwrap() as u16)
+                .unwrap()
+        })
+        .collect();
+
+    assert_eq!(labels, ["1", "2", "\n", "3"]);
+}
+
+#[test]
+fn arrays_may_start_with_different_values() {
+    let declarations = "const tiles = signal([3, 1, 2, 0]);";
+
+    assert_eq!(
+        after_click(
+            declarations,
+            "tiles.value[3] = tiles.value[0];",
+            "tiles.value[1] * 10 + tiles.value[3]"
+        ),
+        "13"
+    );
+}
+
+#[test]
+fn new_widget_props_use_their_number_mappings() {
+    let image = compile(&app(r#"import { AnalogClock } from "neotime/widgets";
+        function Main() {
+          return (
+            <Screen justify="between" align_items="center" gap={6}>
+              <AnalogClock time={now.value} hand_style="tapered" hour_color="accent" />
+              <Button disabled={true}>Go</Button>
+            </Screen>
+          );
+        }"#));
+    let image = AppImage::parse(&image).unwrap();
+
+    assert_eq!(
+        property_of(&image, WidgetKind::Column, Property::Justify, 0),
+        PropertySource::Constant(3)
+    );
+    assert_eq!(
+        property_of(&image, WidgetKind::Column, Property::AlignItems, 0),
+        PropertySource::Constant(1)
+    );
+    assert_eq!(
+        property_of(&image, WidgetKind::Column, Property::Gap, 0),
+        PropertySource::Constant(6)
+    );
+    assert_eq!(
+        property_of(&image, WidgetKind::AnalogClock, Property::HandStyle, 0),
+        PropertySource::Constant(1)
+    );
+    assert_eq!(
+        property_of(&image, WidgetKind::Button, Property::Disabled, 0),
+        PropertySource::Constant(1)
+    );
+}

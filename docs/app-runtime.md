@@ -53,7 +53,7 @@ The closest existing designs evaluate the screen's bindings in the renderer, not
 flowchart LR
     source["app.tsx<br/>Preact components and signals"]
     preview["browser preview<br/>real Preact"]
-    compiler["neotime-app-compiler<br/>checks and compiles"]
+    compiler["neotime-compiler<br/>checks and compiles"]
     image["app image<br/>(.ntapp)"]
     install["install over BLE<br/>verified on the watch"]
     store["/apps on external flash,<br/>cached in internal flash"]
@@ -222,21 +222,24 @@ The image format does not depend on the source language, so another front end ca
 
 ## The compiler
 
-`neotime-app-compiler` is a `std` command-line tool in the workspace, never built for the watch.
+`neotime-compiler` in `compiler/` is a `std` command-line tool in the workspace, never built for the
+watch; [compiler.md](compiler.md) describes it in full. It works straight from the syntax tree:
 
-1. Parse the source with [oxc](https://oxc.rs), a TypeScript and JSX parser written in Rust.
-2. Check that it stays inside the accepted subset, and resolve names against the `neotime` types.
-3. Infer the type of every value. The bytecode carries no type tags, so types must be known here.
-4. Give every signal, `persisted` and `useSignal` a state slot.
-5. Inline the components of each screen into a widget tree, and turn every `computed` and every
-   property that reads a signal into an expression.
-6. Lift inline event functions out into handlers, and compile expressions and handlers to bytecode.
-7. Work out each expression's inputs and redraw period.
-8. Convert the icon and images to RGB565 with run-length encoding.
-9. Write the image, and run the same verifier the watch uses.
+1. Parse the source with [oxc](https://oxc.rs), a TypeScript and JSX parser written in Rust,
+   together with the shared components in `sdk/neotime/src/components.tsx`.
+2. Read the imports and top-level names, and give every signal, `persisted` and `useSignal` a
+   state slot; a record gets one slot per field.
+3. Render each screen once at compile time: inline every component, turn `&&` and `? :` around
+   widgets into `visible`, unroll `.map`, and work out everything that reads no state.
+4. Compile each property that changes into an expression and each event function into a handler,
+   inlining `computed` and the app's functions, with the type of every value known.
+5. Compile again until the values each variable may hold stop growing, to choose array widths.
+6. Write the image, and run the same checks the watch runs at install.
 
-Editors get type errors from TypeScript itself, through the type declarations in the `neotime`
-package. The compiler does not depend on it.
+What the image format cannot hold yet, such as subscriptions, lifecycle handlers and the icon, is
+left out with a warning. Expressions do not record their inputs or redraw period, and an icon or
+image is not converted yet. Editors get type errors from TypeScript itself, through the type
+declarations in the `neotime` package. The compiler does not depend on it.
 
 ## The app image
 
@@ -703,8 +706,10 @@ Its tests build images by hand, including the stopwatch from [Writing an app](#w
 check that flipping any single byte of an image never panics.
 
 `neotime-app-host` in `app-host/` is the loop that runs an app on top of it; see
-[The app host](#the-app-host). Still to come: the subscriptions and resources sections, the
-compiler, persistence, and running the host on the watch.
+[The app host](#the-app-host). `neotime-compiler` in `compiler/` compiles apps and faces into
+images; see [compiler.md](compiler.md). Its tests run the compiled stopwatch on the interpreter.
+Still to come: the subscriptions and resources sections, persistence, and running the host on the
+watch.
 
 ## Open questions
 
@@ -723,5 +728,6 @@ compiler, persistence, and running the host on the watch.
 2. The runtime in the simulator: open an app, draw its widgets, run handlers, redraw on time.
    **Done:** `neotime-app-host`, with a hand-built stopwatch in the simulator.
 3. The compiler, starting with the stopwatch and a simple watch face, then the browser preview.
+   **Started:** `neotime-compiler` compiles the stopwatch and most faces.
 4. Persistence through the key-value store, then subscriptions.
 5. Installing over BLE, the internal-flash cache, and running on the watch.

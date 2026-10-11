@@ -29,6 +29,7 @@ The PineTime is built around a Nordic nRF52832 chip: a 64 MHz Arm Cortex-M4F wit
 flowchart TB
     apps["Apps and watch faces<br/>apps/, faces/: sources started, loadable over BLE planned"]
     host["App host<br/>app-host: runs an open app, started"]
+    compiler["App compiler, on the computer<br/>compiler: TSX to app images, started"]
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>(planned: power, events, settings, notifications)"]
@@ -37,7 +38,8 @@ flowchart TB
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
 
-    apps --> host
+    apps --> compiler
+    compiler -. app images .-> host
     host --> runtime
     host --> ui
     host --> system
@@ -73,6 +75,8 @@ Each layer uses only the layers below it.
 - **App host** runs one open app on top of the runtime: it builds the screen's rlvgl widgets, sends
   touches to handlers, hands effects to the system and redraws what changed. **(started: runs apps
   in the simulator; not yet on the watch)**
+- **App compiler** runs on the computer, not the watch. It turns an app's source into an image
+  and checks it with the runtime's own checks. **(started)**
 
 ## Tasks
 
@@ -89,6 +93,7 @@ NeoTime/
 ├── package.json      the npm workspace for apps/, faces/ and sdk/neotime
 ├── app-host/         neotime-app-host: runs an open app with rlvgl widgets
 ├── apps/             neotime-apps: apps in the app language, one folder each; see apps.md
+├── compiler/         neotime-compiler: compiles apps and faces into app images; see compiler.md
 ├── rustfmt.toml      formatting rules
 ├── flake.nix       development shell, simulator package and checks
 ├── rust-toolchain.toml  the Rust version and the watch's target
@@ -99,6 +104,7 @@ NeoTime/
 │   ├── architecture.md
 │   ├── bluetooth.md  the Bluetooth controller
 │   ├── coding-guidelines.md
+│   ├── compiler.md   the app compiler: the language subset, types and number mappings
 │   ├── faces.md      the watch faces ported from InfiniTime, wasp-os and PinetimeLite
 │   ├── memory-map.md how RAM and both flashes are divided
 │   ├── simulator.md
@@ -120,7 +126,9 @@ NeoTime/
 └── ui/               neotime-ui: draws rlvgl widgets on the screen
 ```
 
-Each driver, the runtime, the app host and the UI crate is a `no_std` crate with its code in `src/lib.rs` and its tests in `src/tests.rs`. See
+Each driver, the runtime, the app host and the UI crate is a `no_std` crate with its code in
+`src/lib.rs` and its tests in `src/tests.rs`. The compiler is a `std` crate, with its tests in
+`src/tests.rs` and `tests/`. See
 [coding-guidelines.md](coding-guidelines.md) for how the code is written.
 
 ## Drivers
@@ -285,6 +293,28 @@ byte-level format.
 
 It never allocates and never panics on bad input. Its working memory is 1,792 B for the
 interpreter, 1,032 B for the bindings of up to 64 expressions and 2,440 B for the state.
+
+## App compiler (`compiler`)
+
+`neotime-compiler` turns an app or watch face, written as Preact components with signals, into an
+app image. It is a `std` library and command, so it sits beside the layers and is never built for
+the watch; the workspace leaves it out of `default-members`. [compiler.md](compiler.md) describes
+the language it accepts.
+
+- **Parsing.** [oxc](https://oxc.rs) reads the TSX. The shared components in
+  `sdk/neotime/src/components.tsx` are built into the compiler and inlined like the app's own.
+- **Constants.** Anything that reads no state, clock or event is worked out while compiling.
+- **Widgets.** Each screen's component is run once while compiling, into a fixed widget tree.
+- **Code.** Properties that change become expressions and event functions become handlers, written
+  with the runtime's `CodeWriter`; functions and `computed` are inlined.
+- **Types.** Every value has a type the compiler knows, and names such as fonts and colours are
+  stored as the numbers [compiler.md](compiler.md#number-mappings) lists.
+- **State.** Signals become state variables, and each array gets the narrowest element width its
+  values fit.
+- **Checks.** Every image is parsed and verified with the runtime's own checks before it is written.
+
+Its tests compile small apps and run them on the runtime's interpreter, run the compiled stopwatch,
+and compile every app and face to report which compile.
 
 ## UI toolkit (`ui`)
 
