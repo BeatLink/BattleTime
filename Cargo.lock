@@ -122,6 +122,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-button"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "embedded-hal",
+ "embedded-hal-async",
+]
+
+[[package]]
 name = "neotime-display"
 version = "0.1.0"
 dependencies = [

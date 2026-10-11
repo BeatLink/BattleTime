@@ -21,7 +21,7 @@ It aims to combine the best parts of the two existing PineTime firmwares:
 
 ## Status
 
-Early work. The first drivers exist, for the screen and the vibration motor, but there is no
+Early work. The first drivers exist, for the screen, the vibration motor and the side button, but there is no
 firmware to flash yet.
 
 ## Documentation

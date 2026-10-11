@@ -18,7 +18,8 @@ The PineTime is built around a Nordic nRF52832 chip: a 64 MHz Arm Cortex-M4F wit
 | External flash, 4 MB | SPI NOR | SPI, shared with the screen |
 | Vibration motor | | GPIO P0.16, on while low |
 | Backlight | | Three GPIO pins |
-| Button, battery, charging | | GPIO and ADC |
+| Side button | | GPIO P0.13, high while held; powered by P0.15 |
+| Battery, charging | | GPIO and ADC |
 
 ## Layers
 
@@ -29,7 +30,7 @@ flowchart TB
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>(planned: power, events, settings, notifications)"]
     services["Services<br/>(planned: BLE, time, steps, storage, updates)"]
-    drivers["Drivers<br/>drivers/display, drivers/vibrator, ..."]
+    drivers["Drivers<br/>drivers/display, drivers/vibrator,<br/>drivers/button, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
 
@@ -77,6 +78,7 @@ NeoTime/
 │   ├── architecture.md
 │   └── coding-guidelines.md
 ├── drivers/
+│   ├── button/       neotime-button: the side button
 │   ├── display/      neotime-display: the ST7789 screen
 │   └── vibrator/     neotime-vibrator: the vibration motor
 └── ui/               neotime-ui: draws rlvgl widgets on the screen
@@ -116,6 +118,25 @@ slides will be built on: draw the next page into memory that is off screen, then
   buzz, and `RING` is one second of ringing that is played again to keep ringing.
 - **Async and safe to cancel.** `vibrate` and `play` wait with an async delay, so other tasks keep
   running. If a pattern is cancelled part way, the motor is turned off.
+
+### Button (`drivers/button`)
+
+`neotime-button` drives the side button:
+
+- **Power.** The button only reads while P0.15 is high, so `Button::new` drives it high. The board
+  passes P0.13 as an input with its pull-down on.
+- **Debouncing.** A change of level counts only if it still holds 10 ms later, so contact bounce
+  and short glitches are ignored.
+- **Gestures.** `next_gesture` reports a `Click`, a `DoubleClick` (a second press within 200 ms of
+  letting go), a `LongPress` (held 400 ms) and a `LongerPress` (held 2 s), the same timings as
+  InfiniTime. A click is reported only once the double click window closes; callers that want
+  presses straight away use `wait_for_press` and `wait_for_release`. Long presses are reported
+  while the button is still held, and letting go afterwards is not a click. `Timing` changes the
+  thresholds.
+- **Recovery.** `is_pressed` reads the pin at once. The system loop feeds the watchdog only while it
+  returns false, so holding the button lets the watchdog reset the watch into the bootloader.
+
+The driver keeps no buffers: it uses a few bytes of RAM in the task that owns it.
 
 ## UI toolkit (`ui`)
 
