@@ -114,9 +114,9 @@ function next_bar_length() {
 function Metronome() {
   return (
     <Screen
-      padding={4}
+      padding={8}
       align_items="center"
-      gap={4}
+      gap={6}
       onButton={(event) => {
         if (event.kind === "press") start_or_stop();
       }}
@@ -140,7 +140,7 @@ function Metronome() {
           </Label>
         </ClickArea>
       </Arc>
-      <Row gap={6} width={232}>
+      <Row gap={6} width={224}>
         <Button grow={1} height={50} onClick={next_bar_length}>
           {`${beats_per_bar.value} bpb`}
         </Button>

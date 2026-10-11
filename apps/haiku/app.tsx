@@ -70,7 +70,7 @@ function swipe(event: SwipeEvent) {
 
 function VerseLine(props: { text: string }) {
   return (
-    <Column grow={1} justify="center" background="surface" radius={12} padding={10}>
+    <Column grow={1} justify="center" background="surface" radius={12} padding={6}>
       <Label text_align="center">{props.text}</Label>
     </Column>
   );
@@ -78,7 +78,7 @@ function VerseLine(props: { text: string }) {
 
 function Haiku() {
   return (
-    <Screen onSwipe={swipe} onClick={next_verse} padding={6} gap={6}>
+    <Screen onSwipe={swipe} onClick={next_verse} padding={8} gap={6}>
       <VerseLine text={first_line.value} />
       <VerseLine text={second_line.value} />
       <VerseLine text={third_line.value} />

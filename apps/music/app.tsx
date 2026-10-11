@@ -95,8 +95,8 @@ function Music() {
   const shows_volume = useSignal(false);
   return (
     <Screen
-      padding={6}
-      gap={4}
+      padding={8}
+      gap={6}
       // This takes every swipe, so right skips back a track and down leaves once the volume row is hidden.
       onSwipe={(event) => {
         if (event.direction === "left") send("next");
@@ -115,20 +115,20 @@ function Music() {
         {has_track.value ? (
           <>
             <Label font="small" color="#b0b0b0" long_mode="scroll">{current_music.value.artist}</Label>
-            <Label height={92}>{current_music.value.track}</Label>
+            <Label height={76}>{current_music.value.track}</Label>
           </>
         ) : (
           <Label color="muted" text_align="center">Nothing playing</Label>
         )}
       </Column>
       <Row gap={6} justify="space_between">
-        <Button width={72} height={72} radius={20} onClick={() => send(shows_volume.value ? "volume_down" : "previous")}>
+        <Button width={68} height={64} radius={20} onClick={() => send(shows_volume.value ? "volume_down" : "previous")}>
           <Icon icon={shows_volume.value ? icons.volume_down : icons.previous} />
         </Button>
-        <Button width={72} height={72} radius={20} background="accent" onClick={play_or_pause}>
+        <Button width={68} height={64} radius={20} background="accent" onClick={play_or_pause}>
           <Icon icon={is_playing.value ? icons.pause : icons.play} />
         </Button>
-        <Button width={72} height={72} radius={20} onClick={() => send(shows_volume.value ? "volume_up" : "next")}>
+        <Button width={68} height={64} radius={20} onClick={() => send(shows_volume.value ? "volume_up" : "next")}>
           <Icon icon={shows_volume.value ? icons.volume_up : icons.next} />
         </Button>
       </Row>

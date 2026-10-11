@@ -233,8 +233,10 @@ function Tile(props: { cell: number }) {
   return (
     <Label
       background={TILE_BACKGROUNDS[level]}
+      width="100%"
+      height="100%"
       radius={6}
-      padding={12}
+      padding={8}
       text_align="center"
       font={level >= 14 ? "small" : "normal"}
       color={level <= 2 ? DARK_TILE_TEXT : LIGHT_TILE_TEXT}
@@ -246,8 +248,8 @@ function Tile(props: { cell: number }) {
 
 function Twos() {
   return (
-    <Screen onSwipe={move} onClick={tap}>
-      <Row justify="space_between" height={28} padding={4}>
+    <Screen padding={8} gap={6} onSwipe={move} onClick={tap}>
+      <Row justify="space_between" height={20}>
         <Row gap={6}>
           <Label font="small" color="muted">Score</Label>
           <Label font="small" color="warning">{`${score.value}`}</Label>
@@ -256,7 +258,7 @@ function Twos() {
           {is_game_over.value ? "Game over, tap" : `Best ${best_score.value}`}
         </Label>
       </Row>
-      <Grid columns={4} gap={4} padding={4} width={240} height={212}>
+      <Grid columns={4} gap={6} grow={1}>
         {CELLS.map((cell) => (
           <Tile cell={cell} />
         ))}

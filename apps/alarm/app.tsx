@@ -311,7 +311,7 @@ function AlarmRow(props: { place: number }) {
 
 function AlarmList() {
   return (
-    <Screen padding={4} gap={4}>
+    <Screen padding={8} gap={6}>
       <Row gap={6} height={28} padding={2}>
         <Icon icon={icons.alarm} size={22} color="accent" />
         <Label font="small" color="muted" long_mode="scroll">
@@ -334,7 +334,7 @@ function AlarmList() {
 
 function EditTime() {
   return (
-    <Screen padding={4} gap={6}>
+    <Screen padding={8} gap={6}>
       <Column grow={1} justify="center">
         <TimePicker value={editing_time} />
       </Column>
@@ -361,7 +361,7 @@ function DayButton(props: { place: number }) {
 
 function EditDays() {
   return (
-    <Screen padding={4} gap={6}>
+    <Screen padding={8} gap={6}>
       <Label text_align="center">
         {format_time_of_day(editing_time.value.hour, editing_time.value.minute, uses_24_hour_clock.value)}
       </Label>
@@ -387,7 +387,7 @@ function EditDays() {
 
 function Ringing() {
   return (
-    <Screen padding={4} gap={6} onButton={dismiss} onSwipe={() => {}}>
+    <Screen padding={8} gap={6} onButton={dismiss} onSwipe={() => {}}>
       <Column grow={1} align_items="center" justify="center" gap={4}>
         <Icon icon={icons.alarm} size={48} color="warning" />
         <Label font="large">{format_time(now.value, "clock")}</Label>

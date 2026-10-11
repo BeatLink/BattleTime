@@ -153,11 +153,11 @@ function Today() {
 
 function History() {
   return (
-    <Screen padding={6} gap={4} onSwipe={swipe_on_history}>
+    <Screen padding={8} gap={6} onSwipe={swipe_on_history}>
       <Header title="Step history" icon={icons.steps} />
       <Label font="small" color="muted">Last 7 days</Label>
-      <Chart kind="bars" width={228} height={64} values={week_totals.value} color="accent" />
-      <Row justify="space_between" width={228}>
+      <Chart kind="bars" width={224} height={64} values={week_totals.value} color="accent" />
+      <Row justify="space_between" width={224}>
         {DAYS_SHOWN.map((days_back) => (
           <Label font="small" color="muted" width={32} text_align="center">
             {format_time(now.value - days_back * DAY, "ddd")}
@@ -166,7 +166,7 @@ function History() {
       </Row>
       <Column grow={1} justify="end" gap={2}>
         <Label font="small" color="muted">Today by hour</Label>
-        <Chart kind="bars" width={228} height={52} values={hourly_with_unrecorded.value} color="success" />
+        <Chart kind="bars" width={224} height={52} values={hourly_with_unrecorded.value} color="success" />
       </Column>
     </Screen>
   );

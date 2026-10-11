@@ -69,18 +69,18 @@ function turn_off() {
 
 function Beacon() {
   return (
-    <Screen padding={4} gap={4}>
-      <Card>
+    <Screen padding={8} gap={6}>
+      <Card padding={6}>
         <Row justify="space_between" align_items="center">
           <Label>Beacon</Label>
           <Switch value={is_on} onChange={apply_led} />
         </Row>
       </Card>
-      <Card>
+      <Card padding={6}>
         <Label font="small" color="muted">Intensity</Label>
         <Slider value={intensity} minimum={0} maximum={HIGHEST_INTENSITY} onChange={apply_led} />
       </Card>
-      <Card>
+      <Card padding={6}>
         <Label font="small" color="muted">Frequency</Label>
         <Slider value={frequency} minimum={0} maximum={HIGHEST_FREQUENCY} onChange={apply_led} />
       </Card>
@@ -88,7 +88,7 @@ function Beacon() {
         <CellGrid
           columns={PREVIEW_COLUMNS}
           rows={PREVIEW_ROWS}
-          cell_size={8}
+          cell_size={6}
           cells={preview_cells.value}
           palette={["surface", LED_COLOR]}
         />

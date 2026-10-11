@@ -227,7 +227,7 @@ function start_next_entry(event: TimeEvent) {
 
 function Pomodoro() {
   return (
-    <Screen padding={4} gap={6} onSwipe={swipe}>
+    <Screen padding={8} gap={6} onSwipe={swipe}>
       <Row justify="space_between" height={44} padding={8} background="surface" radius={12}>
         <Label color="muted">{is_stopped.value ? `V${buzz_seconds.value}` : progress_text.value}</Label>
         {is_stopped.value && <Label long_mode="clip">{queue_text.value}</Label>}

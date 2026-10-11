@@ -51,9 +51,9 @@ function open() {
 
 function Navigation() {
   return (
-    <Screen padding={6} align_items="center" gap={4}>
+    <Screen padding={8} align_items="center" gap={6}>
       <Icon icon={icon_named(`turn_${current_navigation.value.turn}`)} size={80} color="#00ffff" />
-      <Label height={72} width={228} text_align="center">
+      <Label height={56} width={224} text_align="center">
         {has_step.value ? current_navigation.value.instruction : "Navigation"}
       </Label>
       <Label font="large" color="#00b000" text_align="center">

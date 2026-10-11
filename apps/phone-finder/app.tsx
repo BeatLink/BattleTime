@@ -33,7 +33,7 @@ function stop_when_closed() {
 
 function PhoneFinder() {
   return (
-    <Screen padding={4} gap={6}>
+    <Screen padding={8} gap={6}>
       <Column grow={1} align_items="center" justify="center" gap={6} background="surface" radius={12}>
         <Icon icon={icons.phone} size={40} />
         <Label>Find phone</Label>

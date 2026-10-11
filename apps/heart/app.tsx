@@ -92,7 +92,7 @@ function record(event: HeartRateEvent) {
 function HeartRate() {
   return (
     <Screen
-      padding={6}
+      padding={8} gap={6}
       align_items="center"
       onButton={(event) => {
         if (event.kind === "press") start_or_stop();
@@ -110,10 +110,10 @@ function HeartRate() {
       </Label>
       <Row grow={1} align_items="end" justify="center">
         {has_history.value && (
-          <Chart width={228} height={48} values={readings.value} minimum={40} maximum={180} color="danger" />
+          <Chart width={224} height={48} values={readings.value} minimum={40} maximum={180} color="danger" />
         )}
       </Row>
-      <Button width={228} height={50} background={is_measuring.value ? "surface" : "accent"} onClick={start_or_stop}>
+      <Button width={224} height={50} background={is_measuring.value ? "surface" : "accent"} onClick={start_or_stop}>
         {is_measuring.value ? "Stop" : "Start"}
       </Button>
     </Screen>

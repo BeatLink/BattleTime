@@ -107,7 +107,7 @@ function open() {
 
 function Dice() {
   return (
-    <Screen padding={4} gap={4}>
+    <Screen padding={8} gap={6}>
       <Row grow={1} gap={4} align_items="start">
         <Column align_items="center">
           <Label font="small" color="muted">count</Label>

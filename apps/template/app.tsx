@@ -76,7 +76,7 @@ function TextCard(props: { text: string }) {
 
 function Template() {
   return (
-    <Screen onButton={button} onSwipe={swipe} onClick={touch} padding={6} gap={6}>
+    <Screen onButton={button} onSwipe={swipe} onClick={touch} padding={8} gap={6}>
       <TextCard text={APP_NAME} />
       <TextCard text={last_event_text.value} />
     </Screen>

@@ -102,13 +102,13 @@ function LapRow(props: { place: number }) {
 
 function Stopwatch() {
   return (
-    <Screen
+    <Screen padding={8} gap={6}
       onButton={(event) => {
         if (event.kind === "press") start_or_pause();
       }}
     >
-      <Column align_items="center" padding={4}>
-        <Label font={shows_hours.value ? "large" : "huge"} color={is_dimmed.value ? "muted" : "text"}>
+      <Column align_items="center">
+        <Label font={shows_hours.value ? "large" : "seven_segment"} color={is_dimmed.value ? "muted" : "text"}>
           {format_duration(elapsed.value, shows_hours.value ? "h:mm:ss" : "mm:ss")}
         </Label>
         <Label color={is_dimmed.value ? "muted" : "text"}>{format_number(Math.floor(elapsed.value / 10) % 100, 2)}</Label>
@@ -119,7 +119,7 @@ function Stopwatch() {
         <LapRow place={2} />
         {!shows_hours.value && <LapRow place={3} />}
       </Column>
-      <Row gap={6} height={80}>
+      <Row gap={6} height={64}>
         <Button
           grow={1}
           height="100%"

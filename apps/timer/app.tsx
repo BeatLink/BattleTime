@@ -116,7 +116,7 @@ function silence() {
 
 function Timer() {
   return (
-    <Screen
+    <Screen padding={8} gap={6}
       onButton={() => {
         if (is_ringing.value) dismiss();
         else back();

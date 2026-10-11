@@ -284,8 +284,8 @@ export function press_key(event: ChangeEvent<number>) {
 
 function Calculator() {
   return (
-    <Screen padding={2} gap={2}>
-      <Column height={58} padding={4} justify="center">
+    <Screen padding={8} gap={6}>
+      <Column height={52} padding={4} justify="center">
         <Label font="small" color="muted" text_align="right" long_mode="clip">
           {result_text.value}
         </Label>
@@ -293,7 +293,7 @@ function Calculator() {
           {entry_text.value}
         </Label>
       </Column>
-      <ButtonMatrix grow={1} rows={KEYPAD_ROWS} highlighted={[operation_symbol.value]} onClick={press_key} />
+      <ButtonMatrix height={166} rows={KEYPAD_ROWS} highlighted={[operation_symbol.value]} onClick={press_key} />
     </Screen>
   );
 }

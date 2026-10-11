@@ -29,7 +29,7 @@ function toggle_bluetooth() {
 
 function DisableBluetooth() {
   return (
-    <Screen padding={4} gap={6}>
+    <Screen padding={8} gap={6}>
       <Column grow={1} align_items="center" justify="center" gap={6} background="surface" radius={12}>
         <Icon icon={icons.bluetooth} size={40} color={is_bluetooth_enabled.value ? "accent" : "muted"} />
         <Label>{status_text.value}</Label>

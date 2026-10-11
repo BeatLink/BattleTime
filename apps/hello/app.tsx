@@ -13,7 +13,7 @@ const GREETING = "Hello, world!";
 
 function Hello() {
   return (
-    <Screen padding={6}>
+    <Screen padding={8} gap={6}>
       <Card grow={1} gap={16}>
         <Icon icon={icons.check} size={48} align="center" margin={24} />
         <Label text_align="center">{GREETING}</Label>

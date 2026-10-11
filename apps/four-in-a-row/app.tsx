@@ -369,17 +369,18 @@ const PIECE_COLORS: Color[] = [BOARD_COLOR, "#f80000", "#f8f800"];
 
 function Menu() {
   return (
-    <Screen onSwipe={menu_swipe} padding={6} gap={6}>
-      <Card onClick={start_game}>
+    <Screen onSwipe={menu_swipe} padding={8} gap={6}>
+      <Card padding={8} onClick={start_game}>
         <Label>Four in a Row</Label>
         <Label font="small" color="muted">Swipe down to play</Label>
       </Card>
-      <Card>
+      <Card padding={8}>
         <Label font="small" color="muted">Level</Label>
         <Row gap={6}>
           {LEVELS.map((choice) => (
             <Button
               grow={1}
+              height={36}
               background={choice === level.value ? "accent" : "background"}
               onClick={() => (level.value = choice)}
             >
@@ -388,7 +389,7 @@ function Menu() {
           ))}
         </Row>
       </Card>
-      <Card grow={1}>
+      <Card grow={1} padding={8}>
         <Label>{`Won ${won_percent.value}%`}</Label>
         <Label font="small" color="muted">{`at level ${level.value}`}</Label>
       </Card>

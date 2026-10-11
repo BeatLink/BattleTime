@@ -78,25 +78,25 @@ function clear() {
 function Sports() {
   return (
     <Screen
-      padding={6}
+      padding={8}
       gap={6}
       onClick={clear}
       onButton={(event) => {
         if (event.kind === "press") start_or_stop();
       }}
     >
-      <Card grow={1}>
+      <Card grow={1} padding={6}>
         <Column grow={1} align_items="center" justify="center">
           <Label font="large">{format_duration(elapsed.value, elapsed.value >= HOUR ? "h:mm:ss" : "mm:ss.cc")}</Label>
         </Column>
       </Card>
-      <Card grow={1}>
+      <Card grow={1} padding={6}>
         <Column grow={1} align_items="center" justify="center">
           <Label font="large">{`${session_steps.value}`}</Label>
           <Label font="small" color="muted">steps</Label>
         </Column>
       </Card>
-      <Button height={50} background={is_running.value ? "surface" : "accent"} onClick={start_or_stop}>
+      <Button height={44} background={is_running.value ? "surface" : "accent"} onClick={start_or_stop}>
         <Icon icon={is_running.value ? icons.pause : icons.play} />
       </Button>
     </Screen>

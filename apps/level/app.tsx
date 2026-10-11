@@ -91,7 +91,7 @@ function Level() {
 
 function Menu() {
   return (
-    <Screen padding={6} gap={6}>
+    <Screen padding={8} gap={6}>
       <Button grow={1} onClick={calibrate}>
         Calibrate
       </Button>

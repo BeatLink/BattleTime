@@ -121,7 +121,7 @@ function tap() {
 function Tile(props: { cell: number }) {
   const tile = board.value[props.cell];
   return (
-    <Label background={tile === 0 ? "background" : "surface"} radius={8} padding={12} text_align="center" font="normal">
+    <Label width="100%" height="100%" background={tile === 0 ? "background" : "surface"} radius={8} padding={8} text_align="center" font="normal">
       {tile === 0 ? "" : `${tile}`}
     </Label>
   );
@@ -129,8 +129,8 @@ function Tile(props: { cell: number }) {
 
 function Puzzle15() {
   return (
-    <Screen onSwipe={slide} onClick={tap}>
-      <Row justify="space_between" height={28} padding={4}>
+    <Screen padding={8} gap={6} onSwipe={slide} onClick={tap}>
+      <Row justify="space_between" height={20}>
         <Label font="small" color={solved.value ? "success" : "muted"}>
           {solved.value ? `Solved in ${move_count.value}` : `${move_count.value} moves`}
         </Label>
@@ -138,7 +138,7 @@ function Puzzle15() {
           {solved.value ? "Tap to play" : fewest_moves.value > 0 ? `Best ${fewest_moves.value}` : ""}
         </Label>
       </Row>
-      <Grid columns={4} gap={4} padding={4} width={240} height={212}>
+      <Grid columns={4} gap={6} grow={1}>
         {CELLS.map((cell) => (
           <Tile cell={cell} />
         ))}

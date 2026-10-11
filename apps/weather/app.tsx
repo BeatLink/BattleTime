@@ -89,7 +89,7 @@ function ForecastDay(props: { place: number }) {
 function Weather() {
   return (
     <Screen
-      padding={4}
+      padding={8}
       align_items="center"
       justify={has_weather.value ? "start" : "center"}
       gap={has_weather.value ? 0 : 12}
@@ -97,7 +97,7 @@ function Weather() {
       {!has_weather.value && <Icon icon={icons.weather} size={64} color="muted" />}
       {!has_weather.value && <Label color="muted" text_align="center">No weather data.</Label>}
       {has_weather.value && (
-        <Row justify="space_between" width={232}>
+        <Row justify="space_between" width={224}>
           <Label font="small" color="muted" long_mode="scroll" grow={1}>{current_weather.value.location}</Label>
           <Label font="small" color="muted">{format_time(received_at.value, "clock")}</Label>
         </Row>
@@ -116,7 +116,7 @@ function Weather() {
         </Row>
       )}
       {has_weather.value && (
-        <Row grow={1} align_items="end" justify="space_between" width={232}>
+        <Row grow={1} align_items="end" justify="space_between" width={224}>
           {range(FORECAST_LENGTH).map((place) => (
             <ForecastDay place={place} />
           ))}

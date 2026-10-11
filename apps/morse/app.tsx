@@ -253,7 +253,7 @@ function Morse() {
       onSwipe={swipe}
       onClick={end_letter}
       onLongPress={() => (is_asking_to_clear.value = true)}
-      padding={6}
+      padding={8}
       gap={6}
     >
       <Card grow={1} gap={0}>
