@@ -284,6 +284,7 @@ impl<'a> Compiler<'a> {
         Ok(Reference::Local {
             index: local,
             value_type,
+            range: typed.range,
             is_constant: true,
         })
     }
@@ -403,16 +404,18 @@ impl<'a> Compiler<'a> {
             end,
             result_local,
             result_type: None,
+            result_range: None,
             expected,
         });
         let compiled = self.compile_statements(emitter, statements, scope);
         let frame = emitter.inline_frames.pop();
         compiled?;
         emitter.place(end);
+        let result_range = frame.as_ref().and_then(|frame| frame.result_range).unwrap_or(Range::ANY);
         match (result_local, frame.and_then(|frame| frame.result_type)) {
             (Some(local), Some(result_type)) => {
                 emitter.emit(Instruction::ReadLocal(local), span)?;
-                Ok(Some(Typed::new(result_type)))
+                Ok(Some(Typed::with_range(result_type, result_range)))
             }
             (Some(_), None) => fail(span, "this function returns no value"),
             (None, _) => Ok(None),
@@ -517,6 +520,9 @@ impl<'a> Compiler<'a> {
                         };
                         if let Some(frame) = emitter.inline_frames.last_mut() {
                             frame.result_type = Some(unified);
+                            // Every `return` widens the range the call can give.
+                            frame.result_range =
+                                Some(frame.result_range.map_or(typed.range, |range| range.union(typed.range)));
                         }
                         emitter.emit(Instruction::WriteLocal(local), span)?;
                     }
@@ -694,6 +700,7 @@ impl<'a> Compiler<'a> {
                 Reference::Local {
                     index: local,
                     value_type,
+                    range: if is_constant { typed.range } else { Range::ANY },
                     is_constant,
                 },
             );
@@ -873,6 +880,7 @@ impl<'a> Compiler<'a> {
                         index,
                         value_type,
                         is_constant: false,
+                        ..
                     }) if value_type.kind == Kind::Number => {
                         emitter.emit(Instruction::ReadLocal(index), span)?;
                         self.emit_constant(emitter, &one, None, span)?;
@@ -979,6 +987,7 @@ impl<'a> Compiler<'a> {
                         index,
                         value_type,
                         is_constant: false,
+                        ..
                     }) => {
                         if let Some(instruction) = compound_instruction {
                             emitter.emit(Instruction::ReadLocal(index), span)?;
@@ -1655,6 +1664,7 @@ impl<'a> Compiler<'a> {
             ArgumentSource::Reference(Reference::Local {
                 index: index_local,
                 value_type: Type::NUMBER,
+                range: Range::ANY,
                 is_constant: true,
             }),
         ];
@@ -1813,6 +1823,7 @@ impl<'a> Compiler<'a> {
                     ArgumentSource::Reference(Reference::Local {
                         index: index_local,
                         value_type: Type::NUMBER,
+                        range: Range::ANY,
                         is_constant: true,
                     }),
                 ];
@@ -1916,6 +1927,7 @@ impl<'a> Compiler<'a> {
         Ok(Reference::Local {
             index: element_local,
             value_type,
+            range: Range::ANY,
             is_constant: true,
         })
     }

@@ -39,6 +39,8 @@ pub use crate::diagnostics::Diagnostic as CompileDiagnostic;
 
 /// How many passes may refine the ranges of values before every array is made 8 bytes wide.
 const MOST_PASSES: usize = 6;
+/// How many times the passes start again after giving up on the variables still growing.
+const MOST_ROUNDS: usize = 3;
 
 /// The shared library's components, written in the app subset; they are inlined like the app's own.
 const SDK_COMPONENTS: &str = include_str!("../../sdk/neotime/src/components.tsx");
@@ -99,30 +101,42 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
     let components = &components.program;
 
     // Each pass assumes what the pass before found each variable holds, until nothing new turns up.
+    // A variable still growing when the passes run out, such as a counter, is taken to hold anything,
+    // and the passes start again, so it does not widen every other array with it.
     let mut assumed: HashMap<String, Range> = HashMap::new();
     let mut converged = false;
-    for _ in 0..MOST_PASSES {
-        let observed = match run_pass(program, components, assumed.clone(), &directory) {
-            Ok(compiler) => compiler.observed_ranges(),
-            Err(error) => {
-                return Output {
-                    image: None,
-                    diagnostics: vec![error],
+    'rounds: for _ in 0..MOST_ROUNDS {
+        let mut still_growing: Vec<String> = Vec::new();
+        for _ in 0..MOST_PASSES {
+            let observed = match run_pass(program, components, assumed.clone(), &directory) {
+                Ok(compiler) => compiler.observed_ranges(),
+                Err(error) => {
+                    return Output {
+                        image: None,
+                        diagnostics: vec![error],
+                    }
                 }
+            };
+            still_growing = observed
+                .iter()
+                .filter(|(key, range)| {
+                    !assumed
+                        .get(*key)
+                        .is_some_and(|assumed| assumed.lowest <= range.lowest && assumed.highest >= range.highest)
+                })
+                .map(|(key, _)| key.clone())
+                .collect();
+            if still_growing.is_empty() {
+                converged = true;
+                break 'rounds;
             }
-        };
-        let is_covered = observed.iter().all(|(key, range)| {
-            assumed
-                .get(key)
-                .is_some_and(|assumed| assumed.lowest <= range.lowest && assumed.highest >= range.highest)
-        });
-        if is_covered {
-            converged = true;
-            break;
+            for (key, range) in observed {
+                let entry = assumed.entry(key).or_insert(range);
+                *entry = entry.union(range);
+            }
         }
-        for (key, range) in observed {
-            let entry = assumed.entry(key).or_insert(range);
-            *entry = entry.union(range);
+        for key in still_growing {
+            assumed.insert(key, Range::ANY);
         }
     }
     if !converged {

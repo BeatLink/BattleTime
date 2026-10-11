@@ -102,7 +102,9 @@ pub fn analyse_expression(image: &AppImage, code: &[u8]) -> Option<ExpressionInf
             {
                 inputs = inputs.union(Inputs::state_slot(slot))
             }
-            Instruction::ReadSystem(value) => inputs = inputs.union(Inputs::system_value(value)),
+            Instruction::ReadSystem(value) | Instruction::ReadSystemElement(value) => {
+                inputs = inputs.union(Inputs::system_value(value))
+            }
             _ => {}
         }
         if let Some(step) = smallest_visible_step(image, instruction) {

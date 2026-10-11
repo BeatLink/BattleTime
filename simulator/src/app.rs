@@ -32,6 +32,9 @@ const FRAME_PAUSE: Duration = Duration::from_millis(16);
 const LONG_PRESS: Duration = Duration::from_millis(500);
 const DRAG_DISTANCE_IN_PIXELS: i32 = 4;
 const MINUTE_IN_MILLISECONDS: Value = 60_000;
+
+/// The coming days the simulated phone forecasts: condition number, low and high in °C.
+const SIMULATED_FORECAST: [(Value, Value, Value); 3] = [(0, 12, 22), (2, 10, 17), (5, 8, 14)];
 const HOUR_IN_MILLISECONDS: Value = 60 * MINUTE_IN_MILLISECONDS;
 
 /// A light theme, for trying `set_theme` with the T key.
@@ -93,7 +96,22 @@ impl SystemValues for SimulatedSystem {
             NavigationDistance => 350,
             NavigationProgressPercent => 40,
             NextAlarm => NONE,
+            WeatherForecastLength => SIMULATED_FORECAST.len() as Value,
             _ => 0,
+        }
+    }
+
+    /// A three-day forecast: each day's condition, low and high.
+    fn read_element(&self, value: SystemValue, index: Value) -> Value {
+        let Some(&(condition, low, high)) = usize::try_from(index).ok().and_then(|day| SIMULATED_FORECAST.get(day))
+        else {
+            return NONE;
+        };
+        match value {
+            SystemValue::WeatherForecastCondition => condition,
+            SystemValue::WeatherForecastLow => low,
+            SystemValue::WeatherForecastHigh => high,
+            _ => NONE,
         }
     }
 

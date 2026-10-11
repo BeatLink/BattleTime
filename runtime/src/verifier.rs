@@ -236,6 +236,8 @@ fn check_operands(
         Instruction::ReadEvent(field) if field as usize >= MOST_EVENT_FIELDS => {
             Err(CodeProblem::EventFieldOutOfRange)
         }
+        Instruction::ReadSystem(value) if value.is_list() => Err(CodeProblem::WrongSystemValueKind),
+        Instruction::ReadSystemElement(value) if !value.is_list() => Err(CodeProblem::WrongSystemValueKind),
         Instruction::Effect(_) if is_expression => Err(CodeProblem::EffectInExpression),
         Instruction::RandomInt if is_expression => Err(CodeProblem::RandomInExpression),
         _ => Ok(()),

@@ -12,7 +12,7 @@ use oxc_ast::ast::{Expression, FormalParameters, FunctionBody, JSXChild};
 use oxc_span::Span;
 
 use crate::constants::Constant;
-use crate::types::Type;
+use crate::types::{Range, Type};
 
 // ============================================================================
 // References
@@ -97,6 +97,17 @@ pub enum Reference<'a> {
     SystemGroup(&'static str),
     /// `current_weather.value` and the like, whose fields are values to read.
     SystemGroupValue(&'static str),
+    /// A system value read where it is used, such as `current_weather.value.forecast.length`.
+    SystemRead(SystemSignal),
+    /// `current_weather.value.forecast`: a list whose elements are records of system values.
+    SystemList,
+    /// One day of the forecast; each field is read with `ReadSystemElement`.
+    SystemListElement(ElementIndex<'a>),
+    /// One field of one day of the forecast, read where it is used.
+    SystemElement {
+        system: SystemSignal,
+        index: ElementIndex<'a>,
+    },
     /// A signal holding a record, as an object; each field has a state variable of its own.
     Record(Rc<Vec<(String, u8)>>),
     /// The value of a record signal: its fields, each read from its own state variable.
@@ -134,6 +145,8 @@ pub enum Reference<'a> {
     Local {
         index: u8,
         value_type: Type,
+        /// What a `const` local can hold; `Range::ANY` for one that can change.
+        range: Range,
         is_constant: bool,
     },
     /// A loop's element over constant numbers that go up evenly: `start + step * index`.

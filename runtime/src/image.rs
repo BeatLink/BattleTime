@@ -199,6 +199,8 @@ pub enum CodeProblem {
     LoopWithStack,
     BadLoop,
     TooManyLoops,
+    /// A list system value read whole, or a single one read by element.
+    WrongSystemValueKind,
 }
 
 // ============================================================================

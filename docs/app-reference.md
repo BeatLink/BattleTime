@@ -32,7 +32,7 @@ time.
 | `heart_rate_status` | `Int` | The sensor's state: 0 stopped, 1 no skin, 2 settling, 3 measuring. |
 | `is_bluetooth_enabled` | `Bool` | Whether Bluetooth is on, whether or not the phone is connected. |
 | `next_alarm` | `Instant \| null` | The next alarm any app has set to ring, or `null` if none is set. In app code an empty optional is always `null`. |
-| `current_weather` | object | The last forecast the phone sent: `temperature`, `condition`, `low`, `high`, `sunrise`, `sunset`, `location` and `received_at` (each `null` until the phone sends it). Reading it needs no permission, so faces need no subscription of their own. |
+| `current_weather` | object | The last forecast the phone sent: `temperature`, `condition`, `low`, `high`, `sunrise`, `sunset`, `location` and `received_at` (each `null` until the phone sends it), and `forecast`, up to 5 coming days, each with `condition`, `low` and `high`: read `current_weather.value.forecast.length` and `current_weather.value.forecast[day].high`. Reading it needs no permission, so faces need no subscription of their own. |
 | `current_music` | object | The phone's player: `artist`, `track`, `is_playing`, `position` and `length`. Needs the `phone` permission. |
 | `current_navigation` | object | The phone's navigation: `turn`, `instruction` (text), `distance` in metres and `progress_percent`. Needs the `phone` permission. |
 
@@ -109,7 +109,7 @@ A handler run in the background may vibrate and notify without the `wake` permis
 
 | Subscription | Fields | When |
 |---|---|---|
-| `every(period, handler)` | `time` | Repeatedly. Periods shorter than a minute run only while the app is open. |
+| `every(period, handler)` | `time` | Repeatedly, at most every 20 milliseconds. Periods shorter than a minute need `{ only_while_open: true }`, so they never run in the background. |
 | `at(instant, handler)` | `time` | Once, at an absolute time. The instant may be a signal, so changing it reschedules. |
 | `daily(time_of_day, handler, days?)` | `time` | At a local time of day, `{ hour, minute }`, on the weekdays in `days` (a 7-bit mask, Monday first; every day when left out). `time_of_day` may be a signal, and `null` turns the subscription off, as an alarm switch does. |
 | `clock_change(unit, handler)` | `time` | The local `minute`, `hour` or `day` changes, such as a reset at midnight. Also fires when the phone sets the clock. |
@@ -122,9 +122,9 @@ A handler run in the background may vibrate and notify without the `wake` permis
 | `phone(kind, handler)` | `is_connected` | The phone `connects` or `disconnects`. |
 | `notification(handler)` | `id`, `app`, `title`, `body`, `time` | A notification arrives from the phone. |
 | `call(handler)` | `kind`, `caller` | A call is `incoming`, `answered` or `ended`. |
-| `music(handler)` | `is_playing`, `artist`, `track`, `position`, `length` | The phone's player changes. |
-| `weather(handler)` | `temperature`, `condition`, `low`, `high`, `location`, `days` | The phone sends a forecast. `days` holds up to 5 coming days, each with `condition`, `low` and `high`. |
-| `navigation(handler)` | `turn`, `instruction`, `distance` (metres), `progress_percent` | The phone's navigation app gives the next step. |
+| `music(handler)` | none | The phone's player changes; read the new state from `current_music`. |
+| `weather(handler)` | none | The phone sends a forecast; read it from `current_weather`, coming days included. |
+| `navigation(handler)` | none | The phone's navigation app gives the next step; read it from `current_navigation`. |
 | `message(channel, handler)` | the message's fields | The companion app sends this app a message on its own channel. |
 | `http_response(handler)` | `request_id`, `status`, `body` | A reply to an `http_request` effect. |
 | `settings_change(handler)` | the changed keys | The user changes a setting in `settings`. |

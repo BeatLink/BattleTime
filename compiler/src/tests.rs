@@ -1194,3 +1194,87 @@ fn justify_around_is_an_error_naming_the_choices() {
         "{message}"
     );
 }
+
+#[test]
+/// A helper's return, a `.map` result and arithmetic on a counter all keep their ranges, so arrays stay narrow.
+fn array_widths_follow_ranges_through_helpers_and_counters() {
+    let image = compile(&app(r#"const CELLS = range(8);
+        function helper(board: number[], cell: number, live: number): number {
+          const n = board[cell] === 0 ? 0 : 1;
+          return n === 1 ? live : 0;
+        }
+        function next(board: number[], live: number): number[] {
+          return CELLS.map((cell) => helper(board, cell, live));
+        }
+        const a = signal<number[]>([0, 0, 0, 0, 0, 0, 0, 0]);
+        const b = signal<number[]>([0, 0, 0, 0, 0, 0, 0, 0]);
+        const c = signal<number[]>([0, 0, 0, 0, 0, 0, 0, 0]);
+        const d = signal<number[]>([0, 0, 0, 0, 0, 0, 0, 0]);
+        const generation = signal(0);
+        function Main() {
+          return (
+            <Screen>
+              <Button onClick={() => {
+                const g = generation.value + 1;
+                a.value = CELLS.map((cell) => (a.value[cell] === 0 ? 1 : 0));
+                b.value = CELLS.map((cell) => helper(b.value, cell, 1));
+                c.value = CELLS.map((cell) => helper(c.value, cell, 1 + (g % 9)));
+                d.value = next(d.value, 1 + (g % 9));
+                generation.value = g;
+              }}>Go</Button>
+            </Screen>
+          );
+        }"#));
+    let image = AppImage::parse(&image).unwrap();
+    for key in ["a", "b", "c", "d"] {
+        let width = image.state_variable(variable_named(&image, key) as u16).unwrap().element_bytes;
+        assert_eq!(width, 1, "`{key}`");
+    }
+}
+
+#[test]
+fn the_forecast_is_read_one_day_at_a_time() {
+    let image = compile(&app(r#"import { current_weather } from "neotime";
+        function Day(props: { place: number }) {
+          return props.place < current_weather.value.forecast.length
+            ? <Label>{`${current_weather.value.forecast[props.place].high}`}</Label>
+            : <Label>-</Label>;
+        }
+        function Main() {
+          return <Screen><Day place={1} /></Screen>;
+        }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let reads_element = (0..image.expression_count()).any(|expression| {
+        let code = image.expression_code(expression).unwrap();
+        let mut offset = 0;
+        while offset < code.len() {
+            let (instruction, next) = neotime_runtime::instruction::decode(code, offset).unwrap();
+            if instruction == neotime_runtime::instruction::Instruction::ReadSystemElement(SystemValue::WeatherForecastHigh) {
+                return true;
+            }
+            offset = next;
+        }
+        false
+    });
+    assert!(reads_element);
+}
+
+#[test]
+fn a_twenty_millisecond_timer_needs_only_while_open() {
+    let source = |period: u32| {
+        format!(
+            r#"{HEADER}
+import {{ every }} from "neotime";
+const ticks = signal(0);
+function tick() {{ ticks.value = ticks.value + 1; }}
+function Main() {{ return <Screen><Label>{{`${{ticks.value}}`}}</Label></Screen>; }}
+export default define_app({{
+  id: "test", name: "Test", screens: {{ main: Main }},
+  subscriptions: [every({{ milliseconds: {period} }}, tick, {{ only_while_open: true }})],
+}});
+"#
+        )
+    };
+    compile(&source(20));
+    assert!(first_error(&source(10)).contains("at most every 20 milliseconds"));
+}

@@ -53,6 +53,12 @@ pub enum SystemValue {
     NavigationInstruction,
     NavigationDistance,
     NavigationProgressPercent,
+    /// How many coming days the forecast holds, up to 5.
+    WeatherForecastLength,
+    /// One coming day of the forecast, read with `ReadSystemElement` and the day's number.
+    WeatherForecastCondition,
+    WeatherForecastLow,
+    WeatherForecastHigh,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -60,7 +66,7 @@ const MUSIC_BIT: u32 = 19;
 const NAVIGATION_BIT: u32 = 20;
 
 impl SystemValue {
-    pub const COUNT: usize = 35;
+    pub const COUNT: usize = 39;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -100,6 +106,10 @@ impl SystemValue {
             32 => NavigationInstruction,
             33 => NavigationDistance,
             34 => NavigationProgressPercent,
+            35 => WeatherForecastLength,
+            36 => WeatherForecastCondition,
+            37 => WeatherForecastLow,
+            38 => WeatherForecastHigh,
             _ => return None,
         })
     }
@@ -110,7 +120,8 @@ impl SystemValue {
         let group = match self {
             HeartRate | HeartRateMeasuredAt => HeartRate as u32,
             WeatherTemperature | WeatherCondition | WeatherLow | WeatherHigh | WeatherReceivedAt
-            | WeatherSunrise | WeatherSunset | WeatherLocation => WeatherTemperature as u32,
+            | WeatherSunrise | WeatherSunset | WeatherLocation | WeatherForecastLength
+            | WeatherForecastCondition | WeatherForecastLow | WeatherForecastHigh => WeatherTemperature as u32,
             MusicIsPlaying | MusicArtist | MusicTrack | MusicPosition | MusicLength => MUSIC_BIT,
             NavigationTurn | NavigationInstruction | NavigationDistance | NavigationProgressPercent => {
                 NAVIGATION_BIT
@@ -118,6 +129,12 @@ impl SystemValue {
             other => other as u32,
         };
         1 << group
+    }
+
+    /// Whether the value is a list, read one element at a time with `ReadSystemElement`.
+    pub fn is_list(self) -> bool {
+        use SystemValue::*;
+        matches!(self, WeatherForecastCondition | WeatherForecastLow | WeatherForecastHigh)
     }
 
     /// Whether the value is text, which the system gives through `SystemValues::read_text`.
@@ -301,6 +318,8 @@ pub enum Instruction {
     PushText(u16),
     ReadState(u8),
     ReadSystem(SystemValue),
+    /// Pops an index and pushes that element of a list value, such as one day of the forecast, or none.
+    ReadSystemElement(SystemValue),
     ReadEvent(u8),
     /// Pushes a text field of the event, such as a notification's title. Handlers only.
     ReadEventText(u8),
@@ -395,6 +414,7 @@ impl Instruction {
         let (taken, left) = match self {
             PushSmall(_) | PushInt(_) | PushLong(_) | PushNone | PushText(_) | ReadState(_)
             | ReadSystem(_) | ReadEvent(_) | ReadEventText(_) => (0, 1),
+            ReadSystemElement(_) => (1, 1),
             Duplicate => (1, 2),
             Drop | JumpIfFalse(_) | WriteState(_) | WriteLocal(_) | FillArray(_) => (1, 0),
             ReadLocal(_) => (0, 1),
@@ -458,6 +478,10 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
         0x0C => (ReadLocal(byte()?), 1),
         0x0D => (WriteLocal(byte()?), 1),
         0x0E => (ReadEventText(byte()?), 1),
+        0x0F => (
+            ReadSystemElement(SystemValue::from_byte(byte()?).ok_or(unknown(byte()?))?),
+            1,
+        ),
         0x10 => (Add, 0),
         0x11 => (Subtract, 0),
         0x12 => (Multiply, 0),
@@ -593,6 +617,7 @@ impl Instruction {
             ReadLocal(local) => put(&[0x0C, local]),
             WriteLocal(local) => put(&[0x0D, local]),
             ReadEventText(field) => put(&[0x0E, field]),
+            ReadSystemElement(value) => put(&[0x0F, value as u8]),
             Add => put(&[0x10]),
             Subtract => put(&[0x11]),
             Multiply => put(&[0x12]),

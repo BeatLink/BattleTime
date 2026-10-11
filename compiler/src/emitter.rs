@@ -31,6 +31,8 @@ pub struct InlineFrame {
     pub end: Label,
     pub result_local: Option<u8>,
     pub result_type: Option<Type>,
+    /// The range of every value returned so far.
+    pub result_range: Option<crate::types::Range>,
     /// The type the caller expects, which turns names such as colours into numbers.
     pub expected: Option<Type>,
 }

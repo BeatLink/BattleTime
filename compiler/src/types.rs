@@ -164,6 +164,41 @@ impl Range {
         }
     }
 
+    /// The range of a sum; any when either side is unknown or the ends overflow.
+    pub fn sum_with(self, other: Range) -> Range {
+        self.combine(other, |a, b| a.checked_add(b))
+    }
+
+    pub fn difference_with(self, other: Range) -> Range {
+        let negated = match (other.highest.checked_neg(), other.lowest.checked_neg()) {
+            (Some(lowest), Some(highest)) => Range { lowest, highest },
+            _ => return Range::ANY,
+        };
+        self.sum_with(negated)
+    }
+
+    pub fn product_with(self, other: Range) -> Range {
+        self.combine(other, |a, b| a.checked_mul(b))
+    }
+
+    /// Applies an operation to every pair of ends, and spans the results.
+    fn combine(self, other: Range, operation: impl Fn(i64, i64) -> Option<i64>) -> Range {
+        if self == Range::ANY || other == Range::ANY {
+            return Range::ANY;
+        }
+        let mut result: Option<Range> = None;
+        for a in [self.lowest, self.highest] {
+            for b in [other.lowest, other.highest] {
+                let Some(value) = operation(a, b) else {
+                    return Range::ANY;
+                };
+                let end = Range::exactly(value);
+                result = Some(result.map_or(end, |range| range.union(end)));
+            }
+        }
+        result.unwrap_or(Range::ANY)
+    }
+
     /// The fewest bytes, 1, 2, 4 or 8, that hold every value in the range.
     pub fn element_bytes(self) -> u8 {
         let fits = |lowest: i64, highest: i64| self.lowest >= lowest && self.highest <= highest;

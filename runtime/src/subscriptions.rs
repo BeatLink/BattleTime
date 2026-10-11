@@ -20,8 +20,8 @@ pub const SUBSCRIPTION_BYTES: usize = 16;
 /// The shortest period a subscription may have while the app is closed.
 pub const SHORTEST_BACKGROUND_PERIOD_IN_MILLISECONDS: Value = 60_000;
 
-/// The shortest period any subscription may have.
-pub const SHORTEST_PERIOD_IN_MILLISECONDS: Value = 100;
+/// The shortest period any subscription may have; under a minute it must also be `only_while_open`.
+pub const SHORTEST_PERIOD_IN_MILLISECONDS: Value = 20;
 
 const MILLISECONDS_PER_MINUTE: Value = 60_000;
 const MILLISECONDS_PER_DAY: Value = 86_400_000;

@@ -46,6 +46,11 @@ pub trait SystemValues {
         ""
     }
 
+    /// One element of a list value, such as one day of the forecast; none past its end.
+    fn read_element(&self, _value: SystemValue, _index: Value) -> Value {
+        NONE
+    }
+
     /// A fresh random number, such as one from the chip's random number generator.
     fn random_number(&self) -> u32;
 }
@@ -333,6 +338,10 @@ impl Interpreter {
                 self.write_text(|writer| writer.write_bytes(text.as_bytes()))?;
             }
             ReadSystem(value) => self.push(call.system.read(value))?,
+            ReadSystemElement(value) => {
+                let index = self.pop()?;
+                self.push(call.system.read_element(value, index))?;
+            }
             ReadEvent(field) => {
                 if call.outcome.is_none() {
                     return Err(Failure::NotAllowedHere);

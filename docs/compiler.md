@@ -31,7 +31,10 @@ and `verify`.
 4. **Compile** each property that changes into an expression, and each event function into a
    handler. Identical code is stored once.
 5. **Choose array widths** by running steps 2 to 4 again until the values each variable may hold
-   stop growing (see [State](#state)).
+   stop growing (see [State](#state)). Ranges follow values through `+`, `-`, `*`, `%` with a
+   constant, `? :`, `const` locals, function results and `.map` callbacks. A variable still growing
+   after six passes, such as a counter, is taken to hold anything, and the passes start again, so
+   it does not widen the other arrays.
 6. **Write** the image with the runtime's `ImageWriter`, then check it with the runtime's checks.
 
 Anything known at compile time is worked out then: constants, tables such as `CELLS.map(...)`,
@@ -237,7 +240,7 @@ Effect arguments that are text may point into the call's text buffer, such as th
   `clock_change`, `heart_rate_reading`, `steps`, `step_goal`, `motion`, `acceleration`, `battery`,
   `phone`, `notification`, `call`, `music`, `weather`, `navigation` and `settings_change`, each with
   an optional `{ only_while_open }`. `onOpen`, `onClose`, `onScreenOn` and `onScreenOff` become the
-  Open, Close, ScreenOn and ScreenOff subscriptions. A period under 100 ms, a period under a minute
+  Open, Close, ScreenOn and ScreenOff subscriptions. A period under 20 ms, a period under a minute
   without `only_while_open`, and `acceleration` without it are errors, as the runtime's checks have it.
 - Handlers read event fields by name; text fields (a notification's `app`, `title` and `body`, a
   call's `caller`, a setting's `key`) use `ReadEventText`. Motion and call `kind`s are choices

@@ -395,6 +395,7 @@ Each instruction is one opcode byte followed by its operands:
 | `06` | read state | slot, 1 byte | Pushes a state variable. In a handler, it sees the handler's own earlier writes. |
 | `07` | read system | value, 1 byte | Pushes a system value (see below). |
 | `08` | read event | field, 1 byte | Pushes one of the event's 8 fields. Handlers only. |
+| `0F` | read system element | value, 1 byte | Takes an index and pushes that element of a list value, such as one day of the forecast, or none past its end. The verifier rejects a list read whole and a single value read by element. |
 | `0E` | read event text | field, 1 byte | Pushes a text field of the event, such as a notification's title; the runtime copies it into the call's text buffer. Handlers only. |
 | `09`, `0A`, `0B` | duplicate, drop, swap | | Stack housekeeping. |
 | `0C` | read local | local, 1 byte | Pushes one of the call's 16 locals, which all start at 0. |
@@ -435,8 +436,9 @@ System values, in the order `read system` numbers them: `now`, `utc_offset`, `ba
 `uses_metric_units`, `step_goal`, `is_heart_rate_running`, `is_bluetooth_enabled`, `next_alarm`,
 `heart_rate_status`, and the weather's `temperature`, `condition`, `low`, `high`,
 `received_at`, `sunrise`, `sunset` and `location`, the music's `is_playing`, `artist`, `track`,
-`position` and `length`, and the navigation's `turn`, `instruction`, `distance` and
-`progress_percent`. The location, artist, track and instruction are text: the system hands them
+`position` and `length`, the navigation's `turn`, `instruction`, `distance` and
+`progress_percent`, and the forecast's length followed by its lists of each day's `condition`,
+`low` and `high`, which `read system element` reads through `SystemValues::read_element`. The location, artist, track and instruction are text: the system hands them
 over through `SystemValues::read_text`, and `read system` copies them into the call's text buffer.
 Values the phone sends together share one bit of an input mask, so all the weather values redraw
 together; that keeps the mask in 32 bits.

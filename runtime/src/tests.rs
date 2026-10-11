@@ -347,6 +347,15 @@ impl SystemValues for FakeSystem {
             _ => "",
         }
     }
+
+    /// A two-day forecast whose highs are 21 and 23.
+    fn read_element(&self, value: SystemValue, index: Value) -> Value {
+        match (value, index) {
+            (SystemValue::WeatherForecastHigh, 0) => 21,
+            (SystemValue::WeatherForecastHigh, 1) => 23,
+            _ => NONE,
+        }
+    }
 }
 
 /// 2026-10-11 14:05:09 UTC, a Sunday.
@@ -2751,4 +2760,19 @@ fn working_memory_stays_inside_the_budget() {
     assert!(bindings <= 1_100);
     assert!(state <= 2_600);
     assert!(interpreter + bindings + state <= 6 * 1024);
+}
+
+#[test]
+fn a_list_system_value_is_read_one_element_at_a_time() {
+    let high = SystemValue::WeatherForecastHigh as u8;
+    assert_eq!(evaluate(Code::new().small(1).op_byte(0x0F, high)), Ok(23));
+    assert_eq!(evaluate(Code::new().small(5).op_byte(0x0F, high)), Ok(NONE));
+
+    let mut whole_list = ImageBuilder::new();
+    whole_list.expression(Code::new().op_byte(0x07, high));
+    assert_eq!(verify_problem(&whole_list), Some(CodeProblem::WrongSystemValueKind));
+
+    let mut element_of_single = ImageBuilder::new();
+    element_of_single.expression(Code::new().small(0).op_byte(0x0F, SystemValue::BatteryPercent as u8));
+    assert_eq!(verify_problem(&element_of_single), Some(CodeProblem::WrongSystemValueKind));
 }

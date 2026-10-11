@@ -137,28 +137,38 @@ fn the_stopwatch_runs_on_the_runtime() {
 // Every app and face
 // ============================================================================
 
-/// The apps and faces that are expected to compile, so a change that breaks one is caught.
-/// metronome lacks the `background` permission its `at` needs, paddle asks for a 20 ms period
-/// under the runtime's 100 ms, and music and lite-weather read event fields the phone-data event
-/// does not carry; each needs a change to the app.
-const EXPECTED_TO_COMPILE: [&str; 32] = [
+/// The apps and faces that are expected to compile, so a change that breaks one is caught: all of them.
+const EXPECTED_TO_COMPILE: [&str; 48] = [
     "apps/alarm",
+    "apps/beacon",
     "apps/calculator",
     "apps/dice",
+    "apps/disable-bluetooth",
     "apps/flashlight",
+    "apps/four-in-a-row",
+    "apps/game-of-life",
     "apps/haiku",
     "apps/heart",
     "apps/hello",
+    "apps/infinipaint",
     "apps/level",
+    "apps/metronome",
+    "apps/morse",
     "apps/motion",
+    "apps/music",
     "apps/navigation",
+    "apps/paddle",
     "apps/phone-finder",
     "apps/pomodoro",
     "apps/puzzle15",
     "apps/snake",
     "apps/sports",
+    "apps/steps",
     "apps/stopwatch",
+    "apps/template",
     "apps/timer",
+    "apps/twos",
+    "apps/weather",
     "faces/analog",
     "faces/casio",
     "faces/digital",
@@ -167,7 +177,10 @@ const EXPECTED_TO_COMPILE: [&str; 32] = [
     "faces/infineat",
     "faces/lite-analog",
     "faces/lite-digital",
+    "faces/lite-photo",
+    "faces/lite-pong",
     "faces/lite-rings",
+    "faces/lite-weather",
     "faces/pinetime-style",
     "faces/pride-flag",
     "faces/resistor-clock",

@@ -106,6 +106,20 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
     Some(SystemSignal { value, value_type })
 }
 
+/// One field of a day of `current_weather.value.forecast`.
+fn forecast_field(name: &str) -> Option<SystemSignal> {
+    let (value, value_type) = match name {
+        "condition" => (
+            SystemValue::WeatherForecastCondition,
+            Type::choice(ChoiceSet::WeatherCondition).or_null(),
+        ),
+        "low" => (SystemValue::WeatherForecastLow, Type::NUMBER.or_null()),
+        "high" => (SystemValue::WeatherForecastHigh, Type::NUMBER.or_null()),
+        _ => return None,
+    };
+    Some(SystemSignal { value, value_type })
+}
+
 /// The type of one field of an event.
 pub fn event_field_type(kind: EventKind, field: &str) -> Type {
     if kind
@@ -194,20 +208,13 @@ impl<'a> Compiler<'a> {
             },
             Expression::ComputedMemberExpression(member) => {
                 let object = self.resolve_reference(&member.object, scope)?;
+                if matches!(object, Reference::SystemList) {
+                    return Some(Reference::SystemListElement(self.element_index(&member.expression, scope)));
+                }
                 if let Reference::RecordArrayValue(fields) = &object {
-                    let index = match self.evaluate_constant(&member.expression, scope) {
-                        Some(Constant::Number(index)) => ElementIndex::Constant(index),
-                        _ => match self.resolve_reference(&member.expression, scope) {
-                            Some(Reference::Local { index, .. }) => ElementIndex::Local(index),
-                            _ => ElementIndex::Expression {
-                                expression: &member.expression,
-                                scope: scope.clone(),
-                            },
-                        },
-                    };
                     return Some(Reference::RecordElement {
                         fields: fields.clone(),
-                        index,
+                        index: self.element_index(&member.expression, scope),
                     });
                 }
                 let index = self.evaluate_constant(&member.expression, scope)?;
@@ -220,6 +227,20 @@ impl<'a> Compiler<'a> {
                 }
             }
             _ => None,
+        }
+    }
+
+    /// An index written in `array[index]`: a number known now, a local, or code to run.
+    fn element_index(&self, expression: &'a Expression<'a>, scope: &Rc<Scope<'a>>) -> ElementIndex<'a> {
+        match self.evaluate_constant(expression, scope) {
+            Some(Constant::Number(index)) => ElementIndex::Constant(index),
+            _ => match self.resolve_reference(expression, scope) {
+                Some(Reference::Local { index, .. }) => ElementIndex::Local(index),
+                _ => ElementIndex::Expression {
+                    expression,
+                    scope: scope.clone(),
+                },
+            },
         }
     }
 
@@ -252,6 +273,15 @@ impl<'a> Compiler<'a> {
                     return Some(Reference::SystemGroupValue(group));
                 }
                 system_signal(&format!("{group}.{name}")).map(Reference::System)
+            }
+            Reference::SystemGroupValue("current_weather") if name == "forecast" => Some(Reference::SystemList),
+            Reference::SystemList if name == "length" => Some(Reference::SystemRead(SystemSignal {
+                value: SystemValue::WeatherForecastLength,
+                value_type: Type::NUMBER,
+            })),
+            Reference::SystemListElement(index) => {
+                let system = forecast_field(name)?;
+                Some(Reference::SystemElement { system, index })
             }
             Reference::Record(fields) if name == "value" => Some(Reference::RecordValue(fields)),
             Reference::RecordArray(fields) if name == "value" => Some(Reference::RecordArrayValue(fields)),
@@ -528,9 +558,14 @@ impl<'a> Compiler<'a> {
             }
             Reference::Constant(constant) => self.emit_constant(emitter, &constant, expected, span),
             Reference::Expression { expression, scope } => self.compile_value(emitter, expression, &scope, expected),
-            Reference::Local { index, value_type, .. } => {
+            Reference::Local {
+                index,
+                value_type,
+                range,
+                ..
+            } => {
                 emitter.emit(Instruction::ReadLocal(index), span)?;
-                Ok(Typed::new(value_type))
+                Ok(Typed::with_range(value_type, range))
             }
             Reference::StateElementAt { variable, index } => {
                 self.emit_element_index(emitter, &index, span)?;
@@ -578,6 +613,20 @@ impl<'a> Compiler<'a> {
             }
             Reference::Signal(_) | Reference::Computed(_) | Reference::System(_) => {
                 fail(span, "read a signal's value with `.value`")
+            }
+            Reference::SystemRead(system) => {
+                emitter.emit(Instruction::ReadSystem(system.value), span)?;
+                self.note_system_read(system.value, span);
+                Ok(Typed::new(system.value_type))
+            }
+            Reference::SystemElement { system, index } => {
+                self.emit_element_index(emitter, &index, span)?;
+                emitter.emit(Instruction::ReadSystemElement(system.value), span)?;
+                self.note_system_read(system.value, span);
+                Ok(Typed::new(system.value_type))
+            }
+            Reference::SystemList | Reference::SystemListElement(_) => {
+                fail(span, "the forecast is not one value; read one day's `condition`, `low` or `high`")
             }
             Reference::StateArray(_) => fail(
                 span,
@@ -901,7 +950,7 @@ impl<'a> Compiler<'a> {
                 self.require_number(first, left.span())?;
                 self.require_number(second, right.span())?;
                 emitter.emit(Instruction::Add, span)?;
-                Ok(Typed::new(Type::NUMBER))
+                Ok(Typed::with_range(Type::NUMBER, first.range.sum_with(second.range)))
             }
             _ => {
                 let instruction = match operator {
@@ -941,6 +990,8 @@ impl<'a> Compiler<'a> {
                         }
                     }
                     (Instruction::BitAnd, Some(Constant::Number(mask))) if mask >= 0 => Range { lowest: 0, highest: mask },
+                    (Instruction::Subtract, _) => first.range.difference_with(second.range),
+                    (Instruction::Multiply, _) => first.range.product_with(second.range),
                     _ => Range::ANY,
                 };
                 Ok(Typed::with_range(Type::NUMBER, range))
