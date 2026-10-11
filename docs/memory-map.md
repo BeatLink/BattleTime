@@ -26,6 +26,10 @@ python3 tools/draw_memory_maps.py
 | Firmware | `0x09000` | 384 KB | The running firmware. It is linked to start here. |
 | Installed apps | `0x69000` | 92 KB | Reserved for apps installed over Bluetooth, up to the end of flash. The app format is still open. |
 
+Inside the firmware, the accelerometer's configuration files from Bosch take 6 KB for each chip
+built in, 12 KB with both the BMA421 and the BMA425 (see the `neotime-accelerometer` cargo
+features).
+
 ## External SPI flash (4 MB)
 
 ![External flash treemap](images/external-flash.svg)

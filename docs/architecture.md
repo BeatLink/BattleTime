@@ -32,7 +32,7 @@ flowchart TB
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>(planned: power, events, settings, notifications)"]
     services["Services<br/>(planned: BLE, time, steps, storage, updates)"]
-    drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button, ..."]
+    drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
 
@@ -86,6 +86,7 @@ NeoTime/
 │   ├── todo.md
 │   └── images/       pictures for the docs
 ├── drivers/
+│   ├── accelerometer/  neotime-accelerometer: the BMA421 or BMA425 and its step counter
 │   ├── button/       neotime-button: the side button
 │   ├── display/      neotime-display: the ST7789 screen
 │   ├── touch/        neotime-touch: the CST816S touch panel
@@ -175,6 +176,39 @@ gestures, not finger movement, and forces `defmt` on every user, so NeoTime has 
   returns false, so holding the button lets the watchdog reset the watch into the bootloader.
 
 The driver keeps no buffers: it uses a few bytes of RAM in the task that owns it.
+
+### Accelerometer (`drivers/accelerometer`)
+
+`neotime-accelerometer` drives the Bosch accelerometer over I2C at address 0x18, on the same bus as
+the touch panel. PineTimes carry either a BMA421 (chip ID 0x11) or a BMA425 (chip ID 0x13).
+
+- **Configuration file.** The chip counts steps with its own small processor, which runs a 6 KB
+  program from Bosch. `start` resets the chip, reads its ID, uploads that chip's file 16 bytes at
+  a time, and fails with `ConfigurationRejected` if the chip does not report it ready 150 ms later.
+  Starting takes a few tenths of a second.
+- **Steps.** `start` turns the step counter on. `read_step_count` reads the count since the last
+  `reset_step_count`. The count lives in the chip, so the firmware only reads it.
+- **Acceleration.** `read_acceleration` gives the latest sample in milli-g, sampled at 100 Hz with
+  4-sample averaging. `Settings.range` picks ±2 g (the default), 4, 8 or 16 g.
+- **Watch axes.** The chip is turned on the board, so `Orientation::PINETIME` swaps its x and y
+  axes and reverses one, the same as wasp-os. `Orientation::CHIP` gives the chip's own axes.
+- **Power saving.** The chip runs in Bosch's advanced power saving mode while counting. Its
+  feature memory only takes writes with that mode off, so the driver pauses it around each one.
+- **Bus watchdog.** The chip's I2C watchdog is on, so a transfer cut off part way frees the bus
+  after 40 ms instead of holding it.
+
+Each chip's file costs 6 KB of firmware flash. The cargo features `bma421` and `bma425` are both on
+by default; a build for one known watch can keep just its chip's. A watch whose chip was left out
+fails `start` with `ChipLeftOutOfBuild`.
+
+The configuration files are Bosch's, under the BSD-3-Clause licence in
+`src/configuration/LICENSE`, taken from the `BMA42X-Sensor-API` that wasp-os uses.
+
+Wrist raise is planned in software on top of `read_acceleration`, as InfiniTime and wasp-os do it,
+so the chip's own tap and wrist-wear detectors are not set up.
+
+The `bma423` crate was looked at first. It is blocking, accepts only chip ID 0x13, and has no step
+counter, so NeoTime has its own.
 
 ## UI toolkit (`ui`)
 

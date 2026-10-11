@@ -267,6 +267,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-accelerometer"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "embedded-hal",
+ "embedded-hal-async",
+]
+
+[[package]]
 name = "neotime-button"
 version = "0.1.0"
 dependencies = [
