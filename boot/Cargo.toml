@@ -3,6 +3,7 @@ name = "neotime-boot"
 version = "0.1.0"
 edition = "2021"
 description = "NeoTime's flash layout and recovery install, shared by the bootloader and the firmware"
+license.workspace = true
 publish = false
 
 [dependencies]

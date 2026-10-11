@@ -3,6 +3,7 @@ name = "neotime-firmware"
 version = "0.1.0"
 edition = "2021"
 description = "NeoTime's firmware for the PineTime: starts the drivers, advertises over Bluetooth and takes updates"
+license = "GPL-3.0-or-later"
 publish = false
 
 [workspace]

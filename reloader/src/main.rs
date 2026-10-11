@@ -116,6 +116,9 @@ fn main() -> ! {
     let chip = embassy_nrf::init(Default::default());
     let core = cortex_m::Peripherals::take().unwrap();
     let mut delay = Delay::new(core.SYST, CPU_FREQUENCY_IN_HERTZ);
+    // The button reads high while held, and only while its power pin is driven high.
+    let _button_power = Output::new(chip.P0_15, Level::High, OutputDrive::Standard);
+    let button = Input::new(chip.P0_13, Pull::Down);
 
     static SPI_BUS: StaticCell<SpiBus> = StaticCell::new();
     let mut spi_config = spim::Config::default();
@@ -128,30 +131,32 @@ fn main() -> ! {
         chip.P0_03,
         spi_config,
     ))));
-    let mut screen = Screen::start(
+    let Some(mut screen) = Screen::start(
         spi_bus,
         Output::new(chip.P0_25, Level::High, OutputDrive::Standard),
         Output::new(chip.P0_18, Level::Low, OutputDrive::Standard),
         Output::new(chip.P0_26, Level::High, OutputDrive::Standard),
         &mut delay,
-    );
+    ) else {
+        halt(&button);
+    };
     let _backlight_on = Output::new(chip.P0_14, Level::Low, OutputDrive::Standard);
     screen.title("NeoTime installer");
 
     let power_present = Input::new(chip.P0_19, Pull::Up);
-    wait_for_the_charger(&power_present, &mut screen, &mut delay);
+    wait_for_the_charger(&power_present, &button, &mut screen, &mut delay);
 
     screen.status("Checking");
     if !payloads_are_intact() {
         screen.status("Damaged download");
-        halt();
+        halt(&button);
     }
 
     let flash_chip_select = Output::new(chip.P0_05, Level::High, OutputDrive::Standard);
     let Ok(external_flash) = ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), &mut delay)
     else {
         screen.status("No flash chip");
-        halt();
+        halt(&button);
     };
     let external_flash = Mutex::<NoopRawMutex, _>::new(RefCell::new(FeedsWatchdog {
         flash: external_flash,
@@ -190,7 +195,7 @@ fn main() -> ! {
         };
         if !done {
             screen.status("Failed, hold the button");
-            halt();
+            halt(&button);
         }
     }
 
@@ -225,21 +230,29 @@ fn feed_watchdog() {
     unsafe { WATCHDOG_RELOAD_REGISTER_0.write_volatile(WATCHDOG_RELOAD) };
 }
 
-fn halt() -> ! {
-    loop {
+/// Holding the button lets the watchdog reset the watch: into the old update mode before the bootloader write, into NeoTime's bootloader after it.
+fn feed_watchdog_while_button_is_up(button: &Input<'_>) {
+    if button.is_low() {
         feed_watchdog();
-        cortex_m::asm::wfe();
     }
 }
 
-fn wait_for_the_charger(power_present: &Input<'_>, screen: &mut Screen, delay: &mut Delay) {
+/// Stops here for good, until the button is held.
+fn halt(button: &Input<'_>) -> ! {
+    loop {
+        feed_watchdog_while_button_is_up(button);
+        cortex_m::asm::delay(CPU_FREQUENCY_IN_HERTZ / 10);
+    }
+}
+
+fn wait_for_the_charger(power_present: &Input<'_>, button: &Input<'_>, screen: &mut Screen, delay: &mut Delay) {
     let mut asked = false;
     while power_present.is_high() {
         if !asked {
             screen.status("Plug in the charger");
             asked = true;
         }
-        feed_watchdog();
+        feed_watchdog_while_button_is_up(button);
         delay.delay_ms(100);
     }
 }
@@ -439,24 +452,22 @@ impl Screen {
         data_or_command: Output<'static>,
         reset: Output<'static>,
         delay: &mut Delay,
-    ) -> Screen {
+    ) -> Option<Screen> {
         static COMMAND_BUFFER: StaticCell<[u8; 512]> = StaticCell::new();
         let interface = SpiInterface::new(
             SpiDevice::new(spi_bus, chip_select),
             data_or_command,
             COMMAND_BUFFER.init([0; 512]),
         );
-        let Ok(mut display) = Display::new(interface, reset, delay) else {
-            halt();
-        };
+        let mut display = Display::new(interface, reset, delay).ok()?;
         let _ = display.clear(Rgb565::BLACK);
         let _ = Self::BAR
             .into_styled(PrimitiveStyle::with_stroke(Rgb565::WHITE, 1))
             .draw(&mut display);
-        Screen {
+        Some(Screen {
             display,
             last_progress_width: 0,
-        }
+        })
     }
 
     fn title(&mut self, text: &str) {

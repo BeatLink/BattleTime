@@ -167,6 +167,12 @@ bootloader, which would feed the watchdog again, and the watch would loop with n
 update mode. Halting lets the watchdog reset the watch, which the old bootloader takes as a request
 for its update mode.
 
+When the reloader stops on purpose, for a damaged download, a missing flash chip or a write that
+fails three times, it says so on the screen and keeps feeding the watchdog only while the button is
+up, as it does while it waits for the charger. Holding the button for a few seconds then lets the
+watchdog reset the watch: into the old update mode before the bootloader write, or into NeoTime's
+bootloader after it, where holding on installs the recovery firmware.
+
 ### The rehearsal: proving Bluetooth first, under wasp-os
 
 `firmware` built with `--features wasp-os-rehearsal` is an app for wasp-os, linked at `0x19000`
@@ -194,9 +200,26 @@ The first runs on the watch found three things the emulator could not:
   the watch, in 48 seconds.
 - **Discovery cut a UUID short.** TrouBLE sent the control point's 128-bit UUID cut to 16 bits, so
   the update tools could not find it. `third_party/trouble-host` carries the fix (see its
-  `NEOTIME.md`), and a controller test reproduces the watch's exact layout. Holding the button for five seconds, or any fault, ends in a watchdog reset, which wasp-os's
+  `NEOTIME.md`), and a controller test reproduces the watch's exact layout. With the fix, wasp-os's
+  own `dfu.py` carried the same upload in 61 seconds.
+
+Holding the button for five seconds, or any fault, ends in a watchdog reset, which wasp-os's
 bootloader takes as a request for its update mode, so wasp-os can be sent back at any time. Only
 after the rehearsal passes does the reloader go to the watch.
+
+### The storage rehearsal: the external flash and a real update
+
+`firmware` built with `--features wasp-os-storage-rehearsal` is the same app with one difference:
+it uses the external flash, which erases wasp-os's files there. At start-up it writes, reads back
+and erases 32 KB of the update slot, then formats a littlefs file system, writes a file, remounts
+and reads it back, and shows "flash, files ok" when all of it passes. An upload then goes through
+the real `UpdateReceiver` into the real update slot, with the boot state kept in RAM, since
+NeoTime's boot state page still lies inside wasp-os's SoftDevice. The internal flash is never
+written.
+
+On the watch it showed "flash, files ok", and the real firmware, 107 KB, went into the update
+slot through wasp-os's own `dfu.py` in 6 minutes 57 seconds, its CRC checked by reading the image
+back from the chip.
 
 ## Proving it on the emulator
 
@@ -234,3 +257,5 @@ read the replaced image from the wrong page after a swap. The plan:
 8. **Rehearsal.** Under wasp-os's bootloader the rehearsal must start, no write to the flash
    controller may come from its code, both flashes must be unchanged while it runs, and the
    button hold must end in wasp-os's update mode rather than another start of the rehearsal.
+9. **Storage rehearsal.** The same, except the external flash may change; no write to the flash
+   controller may come from its code, so the internal flash stays as wasp-os left it.

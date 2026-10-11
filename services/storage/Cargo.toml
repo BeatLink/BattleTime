@@ -3,6 +3,7 @@ name = "neotime-storage"
 version = "0.1.0"
 edition = "2021"
 description = "NeoTime's littlefs file system in the external flash, in pure Rust"
+license.workspace = true
 publish = false
 
 [dependencies]

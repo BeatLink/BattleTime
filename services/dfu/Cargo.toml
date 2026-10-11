@@ -3,6 +3,7 @@ name = "neotime-dfu"
 version = "0.1.0"
 edition = "2021"
 description = "Nordic legacy DFU over Bluetooth, the firmware update protocol companion apps already speak"
+license.workspace = true
 publish = false
 
 [features]

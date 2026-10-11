@@ -3,6 +3,7 @@ name = "neotime-bootloader"
 version = "0.1.0"
 edition = "2021"
 description = "NeoTime's bootloader: embassy-boot with the update and recovery slots in external flash"
+license = "GPL-3.0-or-later"
 publish = false
 
 [workspace]

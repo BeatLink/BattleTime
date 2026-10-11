@@ -3,6 +3,7 @@ name = "neotime-reloader"
 version = "0.1.0"
 edition = "2021"
 description = "Moves a PineTime from InfiniTime or wasp-os onto NeoTime: a one-shot app that installs the bootloader and stages the firmware"
+license = "GPL-3.0-or-later"
 publish = false
 
 [workspace]

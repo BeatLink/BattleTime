@@ -3,6 +3,7 @@ name = "neotime-updates"
 version = "0.1.0"
 edition = "2021"
 description = "The on-watch half of a firmware update: storing the uploaded image and handing it to the bootloader"
+license.workspace = true
 publish = false
 
 [dependencies]
