@@ -34,13 +34,16 @@ mipidsi = "0.10"
 static_cell = "2.1"
 trouble-host = { version = "0.8", default-features = false, features = ["peripheral", "gatt", "derive", "default-packet-pool", "default-packet-pool-mtu-64", "default-packet-pool-size-8"] }
 
+neotime-app-host = { path = "../app-host", features = ["launcher"] }
 neotime-bluetooth = { path = "../drivers/bluetooth" }
 neotime-boot = { path = "../boot" }
 neotime-button = { path = "../drivers/button" }
 neotime-dfu = { path = "../services/dfu", features = ["trouble"] }
 neotime-display = { path = "../drivers/display" }
 neotime-external-flash = { path = "../drivers/external_flash" }
+neotime-runtime = { path = "../runtime" }
 neotime-storage = { path = "../services/storage" }
+neotime-touch = { path = "../drivers/touch" }
 neotime-updates = { path = "../services/updates" }
 
 [build-dependencies]

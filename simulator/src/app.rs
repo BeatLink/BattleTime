@@ -201,7 +201,7 @@ pub fn test_system() -> SimulatedSystem {
 
 /// Opens the app, applies `clicks`, and saves one frame to `screenshot_path`.
 pub fn save_screenshot(
-    image: &[u8],
+    files: AppFiles,
     panel: &SimulatedPanel,
     display: &mut WatchDisplay,
     screen: &mut SimulatorDisplay<Rgb565>,
@@ -214,8 +214,7 @@ pub fn save_screenshot(
         random_state: Cell::new(1),
     };
     let now = wall_clock_in_milliseconds();
-    let mut host = AppHost::open(image, DEFAULT_THEME, now, &mut system)
-        .map_err(|error| format!("the app did not open: {error:?}"))?;
+    let mut host = open(files, now, &mut system)?;
     for click in clicks {
         host.touch(
             Touch::Click {
@@ -236,9 +235,31 @@ pub fn save_screenshot(
     Ok(())
 }
 
+/// An app image, and the shared library's bytes or nothing.
+#[derive(Clone, Copy)]
+pub struct AppFiles<'image> {
+    pub image: &'image [u8],
+    pub library: &'image [u8],
+}
+
+/// Opens the app, with the shared library when one was given.
+fn open<'image>(
+    files: AppFiles<'image>,
+    now: Value,
+    system: &mut SimulatedSystem,
+) -> Result<AppHost<'image>, Box<dyn Error>> {
+    let mut host = AppHost::open(files.image, DEFAULT_THEME, now, system)
+        .map_err(|error| format!("the app did not open: {error:?}"))?;
+    if !files.library.is_empty() {
+        host.set_library(files.library)
+            .map_err(|error| format!("the shared library did not open: {error:?}"))?;
+    }
+    Ok(host)
+}
+
 /// Runs the app in the window until it is closed.
 pub fn run(
-    image: &[u8],
+    files: AppFiles,
     panel: SimulatedPanel,
     mut display: WatchDisplay,
     mut screen: SimulatorDisplay<Rgb565>,
@@ -249,8 +270,7 @@ pub fn run(
         vibrator_requests: Some(start_vibrator(motor_running.clone())),
         random_state: Cell::new(wall_clock_in_milliseconds() as u32 | 1),
     };
-    let mut host = AppHost::open(image, DEFAULT_THEME, wall_clock_in_milliseconds(), &mut system)
-        .map_err(|error| format!("the app did not open: {error:?}"))?;
+    let mut host = open(files, wall_clock_in_milliseconds(), &mut system)?;
     let mut window = Window::new("NeoTime simulator", &output_settings);
     let mut touch = TouchTracker::default();
     let mut is_light = false;

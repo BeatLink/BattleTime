@@ -23,7 +23,7 @@ python3 tools/draw_memory_maps.py
 |---|---|---|---|
 | Bootloader | `0x00000` | 16 KB | The `embassy-boot` bootloader, about 8 KB of it used. There is no SoftDevice and no MBR. |
 | Boot state | `0x04000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
-| Firmware | `0x05000` | 400 KB | The running firmware. It is linked to start here. |
+| Firmware | `0x05000` | 400 KB | The running firmware. It is linked to start here. It uses 322 KB, with the app host's fonts, the built-in apps and, for now, the shared library inside it. |
 | Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, fonts, components, common functions and the preset themes. No apps are kept here; they live in `/apps` on the external flash. See [app-runtime.md](app-runtime.md#the-shared-library). |
 
 Inside the firmware, 48 KB is set aside for the app runtime: the interpreter, the image verifier,
@@ -32,7 +32,7 @@ firmware image, so it runs in place from the internal flash, with the chip's ins
 turned on, and never needs copying into RAM. The figure is a planned budget, to be replaced by
 the measured size once the runtime is built. See [app-runtime.md](app-runtime.md#the-runtime).
 
-Also inside the firmware, the app host's fonts take 47,919 B until they move to the shared library;
+Also inside the firmware, until they move to the shared library or the external flash, are the app host's fonts at 47,919 B, the built-in watch face and apps at 29 KB and the shared library's icons at 26 KB;
 see [app-runtime.md](app-runtime.md#property-values).
 
 Also inside the firmware, the accelerometer's configuration files from Bosch take 6 KB for each chip
@@ -63,9 +63,10 @@ the shared library is updated.
 While the bootloader runs it uses all 64 KB from `0x20000000`. Nothing is kept when it jumps to the
 firmware, which then has the whole of RAM but its last 16 bytes, the alive marker
 (`FIRMWARE_ALIVE_MARKER`) an emulator reads; the bootloader and the reloader keep their stacks
-below it too, so the marker survives from one firmware start to the next. The first firmware measures 25 KB of static RAM:
-16 KB of heap, and 9 KB of Bluetooth host, controller, display buffer and task state; the rest of
-the budget below is still planned:
+below it too, so the marker survives from one firmware start to the next. The firmware measures 46 KB of static RAM:
+30 KB of heap (16 KB for storage and the 14 KB UI heap), the app host inside the shell's task, and
+the Bluetooth host, controller, display buffer and task state. That leaves about 18 KB for the
+stack. The table below is the budget:
 
 | Region | Budget | Holds | Status |
 |---|---|---|---|

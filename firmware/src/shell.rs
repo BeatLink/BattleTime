@@ -1,0 +1,294 @@
+//! The shell: shows the watch face, the launcher and the open app through the app host.
+//!
+//! The face is shown at start and after the button from the launcher. A swipe up on the face opens
+//! the launcher, a tap there opens an app, and the button or a swipe right that the app does not
+//! use goes back a step. The backlight turns off after a while without input, and the next touch or
+//! press turns it on without acting on it.
+
+extern crate alloc;
+
+use alloc::boxed::Box;
+use core::{
+    cell::Cell,
+    sync::atomic::{AtomicBool, Ordering},
+};
+
+use embassy_futures::select::{select3, Either3};
+use embassy_nrf::gpio::Output;
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
+use embassy_time::{Duration, Instant, Timer};
+use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
+use neotime_app_host::{launcher::launcher_image, AppEffect, AppFailure, AppHost, EventResult, System, Touch};
+use neotime_runtime::{
+    events::{ButtonPress, SwipeDirection},
+    AppImage, EffectKind, SystemValue, SystemValues, Value, DEFAULT_THEME,
+};
+
+use crate::{built_in_apps, clock, touch::TOUCHES, SharedDisplay};
+
+/// Presses of the side button, from the task that watches it.
+pub static BUTTON_PRESSES: Channel<CriticalSectionRawMutex, ButtonPress, 2> = Channel::new();
+
+/// While set, the screen shows the start-up or update status page and the shell draws nothing.
+static SHOWING_STATUS: AtomicBool = AtomicBool::new(true);
+
+/// Set when the status page goes away, so the shell paints the whole screen again.
+static REDRAW_EVERYTHING: AtomicBool = AtomicBool::new(false);
+
+const SCREEN_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// How long the start-up page stays up, so its lines can be read.
+const START_PAGE_TIME: Duration = Duration::from_secs(2);
+
+
+pub fn status_is_shown() -> bool {
+    SHOWING_STATUS.load(Ordering::Relaxed)
+}
+
+/// Puts the status page up; true when it was not already showing, so the caller clears the screen.
+pub fn show_status() -> bool {
+    !SHOWING_STATUS.swap(true, Ordering::Relaxed)
+}
+
+/// Takes the status page down, and has the shell paint its screen again.
+pub fn hide_status() {
+    if SHOWING_STATUS.swap(false, Ordering::Relaxed) {
+        REDRAW_EVERYTHING.store(true, Ordering::Relaxed);
+    }
+}
+
+// ============================================================================
+// What is open
+// ============================================================================
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Showing {
+    Face,
+    Launcher,
+    App(usize),
+}
+
+/// What a handler asked the shell to do, carried out once the host call returns.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Request {
+    Nothing,
+    Open(Showing),
+    Back,
+}
+
+/// The system values apps read, and the effects the shell carries out.
+struct WatchSystem {
+    request: Request,
+    random_state: Cell<u32>,
+}
+
+impl SystemValues for WatchSystem {
+    fn read(&self, value: SystemValue) -> Value {
+        match value {
+            SystemValue::Now => clock::now(),
+            SystemValue::Uses24HourClock | SystemValue::UsesMetricUnits | SystemValue::IsBluetoothEnabled => 1,
+            SystemValue::StepGoal => 10_000,
+            SystemValue::Brightness => 2,
+            SystemValue::NextAlarm => neotime_runtime::NONE,
+            _ => 0,
+        }
+    }
+
+    /// Xorshift, seeded from the clock when the shell starts; enough for dice and games.
+    fn random_number(&self) -> u32 {
+        let mut state = self.random_state.get();
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        self.random_state.set(state);
+        state
+    }
+}
+
+impl System for WatchSystem {
+    fn carry_out(&mut self, effect: &AppEffect) {
+        match effect.kind {
+            EffectKind::OpenApp => {
+                if let Some(index) = effect.text(0).and_then(app_with_id) {
+                    self.request = Request::Open(Showing::App(index));
+                }
+            }
+            EffectKind::Back | EffectKind::Close => self.request = Request::Back,
+            _ => {}
+        }
+    }
+
+    fn app_failed(&mut self, _failure: AppFailure) {}
+}
+
+fn app_with_id(id: &str) -> Option<usize> {
+    built_in_apps::APPS.iter().position(|bytes| {
+        AppImage::parse(bytes).is_ok_and(|image| image.string(image.id_string) == Some(id))
+    })
+}
+
+// ============================================================================
+// The loop
+// ============================================================================
+
+struct Shell {
+    showing: Showing,
+    host: Option<AppHost<'static>>,
+    launcher: &'static [u8],
+    system: WatchSystem,
+}
+
+impl Shell {
+    /// Closes what is open and opens another; the face is the fallback when an image will not open.
+    fn open(&mut self, showing: Showing) {
+        let now = clock::now();
+        if let Some(mut host) = self.host.take() {
+            host.close(now, &mut self.system);
+        }
+        let bytes = match showing {
+            Showing::Face => built_in_apps::FACE,
+            Showing::Launcher => self.launcher,
+            Showing::App(index) => built_in_apps::APPS[index],
+        };
+        self.showing = showing;
+        match AppHost::open(bytes, DEFAULT_THEME, now, &mut self.system) {
+            Ok(mut host) => {
+                let _ = host.set_library(built_in_apps::LIBRARY);
+                self.host = Some(host);
+            }
+            Err(_) if showing != Showing::Face => self.open(Showing::Face),
+            Err(_) => {}
+        }
+    }
+
+    fn go_back(&mut self) {
+        match self.showing {
+            Showing::Face => {}
+            Showing::Launcher => self.open(Showing::Face),
+            Showing::App(_) => self.open(Showing::Launcher),
+        }
+    }
+
+    fn touch(&mut self, touch: Touch) {
+        let Some(host) = &mut self.host else {
+            return;
+        };
+        let result = host.touch(touch, clock::now(), &mut self.system);
+        if result == EventResult::NotHandled {
+            match (touch, self.showing) {
+                (Touch::Swipe(SwipeDirection::Up), Showing::Face) => self.open(Showing::Launcher),
+                (Touch::Swipe(SwipeDirection::Right), _) => self.go_back(),
+                _ => {}
+            }
+        }
+    }
+
+    fn press_button(&mut self, press: ButtonPress) {
+        let Some(host) = &mut self.host else {
+            return;
+        };
+        if host.press_button(press, clock::now(), &mut self.system) == EventResult::NotHandled {
+            self.go_back();
+        }
+    }
+
+    /// Carries out what the last host call's handlers asked for.
+    fn follow_requests(&mut self) {
+        match core::mem::replace(&mut self.system.request, Request::Nothing) {
+            Request::Nothing => {}
+            Request::Open(showing) => self.open(showing),
+            Request::Back => self.go_back(),
+        }
+    }
+}
+
+#[embassy_executor::task]
+pub async fn run_shell(display: &'static SharedDisplay, mut backlight: Output<'static>) {
+    Timer::after(START_PAGE_TIME).await;
+    hide_status();
+
+    let mut shell = Shell {
+        showing: Showing::Face,
+        host: None,
+        launcher: Box::leak(launcher_image(&built_in_apps::APPS).into_boxed_slice()),
+        system: WatchSystem {
+            request: Request::Nothing,
+            random_state: Cell::new(clock::now() as u32 | 1),
+        },
+    };
+    shell.open(Showing::Face);
+    let mut last_input = Instant::now();
+    let mut lit = true;
+
+    loop {
+        if REDRAW_EVERYTHING.swap(false, Ordering::Relaxed) {
+            display.lock(|display| {
+                let _ = display.borrow_mut().clear(Rgb565::BLACK);
+            });
+            if let Some(host) = &mut shell.host {
+                host.set_theme(*host.theme());
+            }
+        }
+        if lit && !status_is_shown() {
+            if let Some(host) = &mut shell.host {
+                if host.needs_drawing() {
+                    display.lock(|display| {
+                        let _ = host.draw(&mut *display.borrow_mut());
+                    });
+                }
+            }
+        }
+
+        let now = clock::now();
+        let mut wake_at = shell
+            .host
+            .as_ref()
+            .and_then(|host| host.next_wakeup(now))
+            .map_or(Instant::MAX, clock::instant_at);
+        if lit {
+            wake_at = wake_at.min(last_input + SCREEN_TIMEOUT);
+        }
+
+        match select3(TOUCHES.receive(), BUTTON_PRESSES.receive(), Timer::at(wake_at)).await {
+            Either3::First(touch) => {
+                last_input = Instant::now();
+                if !lit {
+                    if matches!(touch, Touch::Release { .. }) {
+                        lit = wake_screen(&mut shell, &mut backlight);
+                    }
+                    continue;
+                }
+                shell.touch(touch);
+            }
+            Either3::Second(press) => {
+                last_input = Instant::now();
+                if !lit {
+                    lit = wake_screen(&mut shell, &mut backlight);
+                    continue;
+                }
+                shell.press_button(press);
+            }
+            Either3::Third(()) => {
+                if lit && Instant::now() >= last_input + SCREEN_TIMEOUT {
+                    backlight.set_high();
+                    lit = false;
+                    if let Some(host) = &mut shell.host {
+                        host.screen_turned_off(clock::now(), &mut shell.system);
+                    }
+                }
+                if let Some(host) = &mut shell.host {
+                    host.tick(clock::now(), &mut shell.system);
+                }
+            }
+        }
+        shell.follow_requests();
+    }
+}
+
+fn wake_screen(shell: &mut Shell, backlight: &mut Output<'static>) -> bool {
+    backlight.set_low();
+    if let Some(host) = &mut shell.host {
+        host.screen_turned_on(clock::now(), &mut shell.system);
+    }
+    true
+}

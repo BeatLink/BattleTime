@@ -1,0 +1,85 @@
+//! The touch panel, turned into the touches the app host takes.
+
+use embassy_nrf::{
+    gpio::{Input, Output},
+    twim::Twim,
+};
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
+use embassy_time::Delay;
+use neotime_app_host::Touch;
+use neotime_runtime::events::SwipeDirection;
+use neotime_touch::{FingerEvent, Gesture, Settings, TouchPanel, TouchReport};
+
+/// Touches waiting for the UI; when it falls behind, the newest are dropped.
+pub static TOUCHES: Channel<CriticalSectionRawMutex, Touch, 4> = Channel::new();
+
+/// How far a finger moves before a touch counts as a drag.
+const DRAG_THRESHOLD_IN_PIXELS: i32 = 10;
+
+/// Follows one finger from press to lift, so each touch gives at most one gesture.
+#[derive(Default)]
+struct Finger {
+    start: Option<(i32, i32)>,
+    dragging: bool,
+    gesture_sent: bool,
+}
+
+impl Finger {
+    fn touches_for(&mut self, report: &TouchReport, mut send: impl FnMut(Touch)) {
+        let x = report.position.column as i32;
+        let y = report.position.row as i32;
+        match report.finger_event {
+            FingerEvent::PressedDown => {
+                *self = Finger {
+                    start: Some((x, y)),
+                    ..Finger::default()
+                };
+                send(Touch::Press { x, y });
+            }
+            FingerEvent::StillTouching => {
+                let (start_x, start_y) = *self.start.get_or_insert((x, y));
+                let moved = (x - start_x).abs().max((y - start_y).abs());
+                if self.dragging || moved > DRAG_THRESHOLD_IN_PIXELS {
+                    self.dragging = true;
+                    send(Touch::Drag { x, y, start_x, start_y });
+                }
+            }
+            FingerEvent::LiftedUp => send(Touch::Release { x, y }),
+            FingerEvent::NoEvent => {}
+        }
+
+        if self.gesture_sent {
+            return;
+        }
+        let gesture = match report.gesture {
+            Gesture::Tap if !self.dragging => Touch::Click { x, y },
+            Gesture::DoubleTap => Touch::DoubleClick { x, y },
+            Gesture::LongPress if !self.dragging => Touch::LongPress { x, y },
+            Gesture::SlideUp => Touch::Swipe(SwipeDirection::Up),
+            Gesture::SlideDown => Touch::Swipe(SwipeDirection::Down),
+            Gesture::SlideLeft => Touch::Swipe(SwipeDirection::Left),
+            Gesture::SlideRight => Touch::Swipe(SwipeDirection::Right),
+            _ => return,
+        };
+        self.gesture_sent = true;
+        send(gesture);
+    }
+}
+
+#[embassy_executor::task]
+pub async fn read_touches(i2c_bus: Twim<'static>, interrupt_pin: Input<'static>, reset_pin: Output<'static>) {
+    let mut panel = TouchPanel::new(i2c_bus, interrupt_pin, reset_pin);
+    // Double taps are left off, because the panel would hold back every single tap waiting for one.
+    if panel.start(Settings::DEFAULT, &mut Delay).await.is_err() {
+        return;
+    }
+    let mut finger = Finger::default();
+    loop {
+        let Ok(report) = panel.wait_for_report().await else {
+            continue;
+        };
+        finger.touches_for(&report, |touch| {
+            let _ = TOUCHES.try_send(touch);
+        });
+    }
+}

@@ -37,6 +37,12 @@ fn main() {
 
     println!("cargo:rustc-link-search={}", output_directory.display());
     println!("cargo:rerun-if-changed=build.rs");
+
+    // The clock starts from the build time until a phone sets it.
+    let build_time = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_millis());
+    println!("cargo:rustc-env=NEOTIME_BUILD_TIME_MS={build_time}");
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_WASP_OS_REHEARSAL");
     println!("cargo:rerun-if-changed=../boot/src/lib.rs");
 }

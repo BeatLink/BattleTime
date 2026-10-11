@@ -60,6 +60,7 @@ struct Options {
     first_page: usize,
     window_scale: u32,
     app: Option<AppSource>,
+    library_path: Option<String>,
     clicks: Vec<Click>,
 }
 
@@ -84,9 +85,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             AppSource::Demo => neotime_app_host::demo::stopwatch_image(),
         };
+        let library = match &options.library_path {
+            Some(path) => std::fs::read(path).map_err(|error| format!("could not read {path}: {error}"))?,
+            None => Vec::new(),
+        };
+        let files = app::AppFiles {
+            image: &image,
+            library: &library,
+        };
         return match &options.screenshot_path {
             Some(path) => app::save_screenshot(
-                &image,
+                files,
                 &panel,
                 &mut display,
                 &mut screen,
@@ -94,7 +103,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 &options.clicks,
                 path,
             ),
-            None => app::run(&image, panel, display, screen, output_settings),
+            None => app::run(files, panel, display, screen, output_settings),
         };
     }
 
@@ -132,6 +141,7 @@ fn read_options() -> Result<Options, String> {
         first_page: 0,
         window_scale: DEFAULT_WINDOW_SCALE,
         app: None,
+        library_path: None,
         clicks: Vec::new(),
     };
     let mut arguments = std::env::args().skip(1);
@@ -144,6 +154,7 @@ fn read_options() -> Result<Options, String> {
             "--scale" => options.window_scale = parse_number(&value()?)?.max(1) as u32,
             "--app" => options.app = Some(AppSource::File(value()?)),
             "--demo" => options.app = Some(AppSource::Demo),
+            "--library" => options.library_path = Some(value()?),
             "--click" => options.clicks.push(parse_click(&value()?)?),
             _ => {
                 return Err(format!(

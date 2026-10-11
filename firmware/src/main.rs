@@ -3,6 +3,8 @@
 //! It takes over the bootloader's watchdog and feeds it only while the side button is up, shows a
 //! page on the screen, mounts the file system, advertises as "NeoTime", takes firmware updates over
 //! legacy DFU, and confirms itself to the bootloader once a phone has exchanged data with it.
+//! After start-up the shell takes the screen and runs the watch face, the launcher and the apps built
+//! in by `tools/build_watch_apps.sh`; a phone sets the clock through the Current Time service.
 //!
 //! The `wasp-os-rehearsal` feature builds it as an app for wasp-os instead, which touches no flash;
 //! see docs/updates.md.
@@ -22,10 +24,11 @@ use embassy_nrf::{
     gpio::{Input, Level, Output, OutputDrive, Pull},
     peripherals,
     spim::{self, Spim},
+    twim,
     wdt::{self, SleepConfig, Watchdog, WatchdogHandle},
 };
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
-use embassy_time::{Delay, Duration, Timer};
+use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_alloc::LlffHeap;
 use embedded_graphics::{
     mono_font::{ascii::FONT_10X20, MonoTextStyleBuilder},
@@ -38,6 +41,7 @@ use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT
 use neotime_button::Button;
 use neotime_dfu::{service::DfuWrite, service::LegacyDfuService, LegacyDfu};
 use neotime_display::Display;
+use neotime_runtime::events::ButtonPress;
 use static_cell::StaticCell;
 use trouble_host::prelude::*;
 
@@ -49,12 +53,22 @@ use trouble_host::prelude::*;
 #[cfg_attr(feature = "wasp-os-storage-rehearsal", path = "storage/storage_rehearsal.rs")]
 mod storage;
 
+// The rehearsals run under wasp-os without the shell, which leaves these unused there.
+#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+mod built_in_apps;
+mod clock;
+#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+mod shell;
+#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+mod touch;
+
 // ============================================================================
 // PineTime wiring
 // ============================================================================
 
 bind_interrupts!(struct Interrupts {
     TWISPI0 => spim::InterruptHandler<peripherals::TWISPI0>;
+    TWISPI1 => twim::InterruptHandler<peripherals::TWISPI1>;
     RADIO => neotime_bluetooth::RadioInterruptHandler;
 });
 
@@ -62,7 +76,16 @@ const FIRMWARE_VERSION: &str = "0.1.0";
 const DEVICE_NAME: &str = "NeoTime";
 const WATCHDOG_FEED_INTERVAL: Duration = Duration::from_millis(1000);
 const DISPLAY_COMMAND_BUFFER_SIZE: usize = 512;
-const HEAP_SIZE: usize = storage::HEAP_SIZE;
+/// The shell's share of the heap, which the open app's widgets and text are allocated from.
+#[cfg(not(feature = "wasp-os-rehearsal"))]
+const UI_HEAP_SIZE: usize = 14 * 1024;
+#[cfg(feature = "wasp-os-rehearsal")]
+const UI_HEAP_SIZE: usize = 0;
+const HEAP_SIZE: usize = storage::HEAP_SIZE + UI_HEAP_SIZE;
+/// How often the button is read, for presses and for feeding the watchdog.
+const BUTTON_POLL_INTERVAL: Duration = Duration::from_millis(20);
+/// A press held this long is a long press.
+const LONG_PRESS: Duration = Duration::from_millis(400);
 
 type SpiBus = Mutex<NoopRawMutex, RefCell<Spim<'static>>>;
 
@@ -116,7 +139,7 @@ async fn main(spawner: Spawner) {
         Output::new(chip.P0_18, Level::Low, OutputDrive::Standard),
         Output::new(chip.P0_26, Level::High, OutputDrive::Standard),
     );
-    let _backlight_on = Output::new(chip.P0_14, Level::Low, OutputDrive::Standard);
+    let backlight = Output::new(chip.P0_14, Level::Low, OutputDrive::Standard);
     screen.write_line(0, "NeoTime");
     screen.write_line(1, FIRMWARE_VERSION);
     screen.write_line(6, storage::BUILD_NAME);
@@ -143,6 +166,31 @@ async fn main(spawner: Spawner) {
     };
 
     storage::leave_breadcrumb(stage::STORAGE_READY);
+    #[cfg(not(feature = "wasp-os-rehearsal"))]
+    {
+        static TOUCH_BUFFER: StaticCell<[u8; 16]> = StaticCell::new();
+        let mut touch_config = twim::Config::default();
+        touch_config.frequency = twim::Frequency::K400;
+        let touch_bus = twim::Twim::new(
+            chip.TWISPI1,
+            Interrupts,
+            chip.P0_06,
+            chip.P0_07,
+            touch_config,
+            TOUCH_BUFFER.init([0; 16]),
+        );
+        spawner.spawn(
+            touch::read_touches(
+                touch_bus,
+                Input::new(chip.P0_28, Pull::Up),
+                Output::new(chip.P0_10, Level::High, OutputDrive::Standard),
+            )
+            .unwrap(),
+        );
+        spawner.spawn(shell::run_shell(screen.display, backlight).unwrap());
+    }
+    #[cfg(feature = "wasp-os-rehearsal")]
+    let _backlight_on = backlight;
     let controller = neotime_bluetooth::start(
         neotime_bluetooth::RadioPeripherals {
             radio: chip.RADIO,
@@ -242,16 +290,41 @@ fn take_over_watchdog(watchdog_peripheral: embassy_nrf::Peri<'static, peripheral
 }
 
 /// Holding the button lets the watchdog reset the watch into the bootloader; see docs/bootloader.md.
+///
+/// The same reads give the shell its presses: a short one when the button comes up, and a long one
+/// once while it is held.
 #[embassy_executor::task]
 async fn feed_watchdog_while_button_is_up(
     mut watchdog: WatchdogHandle,
     mut button: Button<Input<'static>, Output<'static>>,
 ) {
+    let mut last_fed = Instant::now();
+    let mut pressed_at: Option<Instant> = None;
+    let mut long_press_sent = false;
     loop {
-        if button.is_pressed() != Ok(true) {
+        let is_pressed = button.is_pressed() == Ok(true);
+        if !is_pressed && last_fed.elapsed() >= WATCHDOG_FEED_INTERVAL {
             watchdog.pet();
+            last_fed = Instant::now();
         }
-        Timer::after(WATCHDOG_FEED_INTERVAL).await;
+        match (is_pressed, pressed_at) {
+            (true, None) => {
+                pressed_at = Some(Instant::now());
+                long_press_sent = false;
+            }
+            (true, Some(since)) if !long_press_sent && since.elapsed() >= LONG_PRESS => {
+                long_press_sent = true;
+                let _ = shell::BUTTON_PRESSES.try_send(ButtonPress::LongPress);
+            }
+            (false, Some(_)) => {
+                pressed_at = None;
+                if !long_press_sent {
+                    let _ = shell::BUTTON_PRESSES.try_send(ButtonPress::Press);
+                }
+            }
+            _ => {}
+        }
+        Timer::after(BUTTON_POLL_INTERVAL).await;
     }
 }
 
@@ -262,8 +335,14 @@ async fn feed_watchdog_while_button_is_up(
 type DisplayInterfaceOnBus =
     SpiInterface<'static, SpiDevice<'static, NoopRawMutex, Spim<'static>, Output<'static>>, Output<'static>>;
 
+type ScreenDisplay = Display<DisplayInterfaceOnBus, Output<'static>>;
+
+/// The display, shared between the status page and the shell; a lock is never held across an await.
+type SharedDisplay = Mutex<NoopRawMutex, RefCell<ScreenDisplay>>;
+
+/// The start-up and update status page; its lines are dropped while the shell has the screen.
 struct Screen {
-    display: Display<DisplayInterfaceOnBus, Output<'static>>,
+    display: &'static SharedDisplay,
 }
 
 impl Screen {
@@ -275,6 +354,9 @@ impl Screen {
 
     /// Draws the text on a black background padded to the full line, so it replaces the old line in one pass.
     fn write_line(&mut self, line: i32, text: &str) {
+        if !shell::status_is_shown() {
+            return;
+        }
         let baseline = Self::FIRST_BASELINE + line * Self::LINE_HEIGHT;
         let mut padded = heapless::String::<{ Self::LINE_CHARACTERS }>::new();
         let _ = core::fmt::write(&mut padded, format_args!("{:<width$.width$}", text, width = Self::LINE_CHARACTERS));
@@ -283,7 +365,22 @@ impl Screen {
             .text_color(Rgb565::WHITE)
             .background_color(Rgb565::BLACK)
             .build();
-        let _ = Text::new(&padded, Point::new(12, baseline), style).draw(&mut self.display);
+        self.display.lock(|display| {
+            let _ = Text::new(&padded, Point::new(12, baseline), style).draw(&mut *display.borrow_mut());
+        });
+    }
+
+    /// Takes the screen back from the shell, such as for an update's progress.
+    fn show_status(&mut self) {
+        if shell::show_status() {
+            self.display.lock(|display| {
+                let _ = display.borrow_mut().clear(Rgb565::BLACK);
+            });
+        }
+    }
+
+    fn hide_status(&mut self) {
+        shell::hide_status();
     }
 }
 
@@ -294,6 +391,7 @@ fn start_screen(
     reset: Output<'static>,
 ) -> Screen {
     static COMMAND_BUFFER: StaticCell<[u8; DISPLAY_COMMAND_BUFFER_SIZE]> = StaticCell::new();
+    static DISPLAY: StaticCell<SharedDisplay> = StaticCell::new();
     let interface = SpiInterface::new(
         SpiDevice::new(spi_bus, chip_select),
         data_or_command,
@@ -302,7 +400,9 @@ fn start_screen(
 
     let mut display = Display::new(interface, reset, &mut Delay).unwrap_or_else(|_| panic!("display"));
     let _ = display.clear(Rgb565::BLACK);
-    Screen { display }
+    Screen {
+        display: DISPLAY.init(Mutex::new(RefCell::new(display))),
+    }
 }
 
 // ============================================================================
@@ -312,6 +412,14 @@ fn start_screen(
 #[gatt_server]
 struct Server {
     dfu: LegacyDfuService,
+    time: CurrentTimeService,
+}
+
+/// The standard Current Time service, which phones write the time to.
+#[gatt_service(uuid = "1805")]
+struct CurrentTimeService {
+    #[characteristic(uuid = "2a2b", read, write)]
+    current_time: [u8; 10],
 }
 
 /// The chip's factory address with its top two bits set, the same static random address the controller reports.
@@ -411,6 +519,7 @@ async fn serve_connection(
         match connection.next().await {
             GattConnectionEvent::Disconnected { .. } => {
                 dfu.abort();
+                screen.hide_status();
                 return;
             }
             GattConnectionEvent::Gatt { event } => {
@@ -420,6 +529,9 @@ async fn serve_connection(
                         write.with_data(|_, bytes| {
                             let _ = written.extend_from_slice(&bytes[..bytes.len().min(64)]);
                         });
+                        if write.handle() == server.time.current_time.handle {
+                            clock::set_from_current_time(&written);
+                        }
                         server.dfu.classify(write.handle())
                     }
                     _ => None,
@@ -448,6 +560,7 @@ async fn serve_connection(
                 let kilobytes_received = dfu.bytes_received() / 1024;
                 if dfu.is_updating() && kilobytes_received != shown_kilobytes {
                     shown_kilobytes = kilobytes_received;
+                    screen.show_status();
                     let mut progress = heapless::String::<20>::new();
                     let _ = core::fmt::write(&mut progress, format_args!("update {:>3} KB", kilobytes_received));
                     screen.write_line(5, &progress);

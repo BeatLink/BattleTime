@@ -394,11 +394,39 @@ come out, and the bytes go to `neotime-updates`. Its tests run a whole update th
 
 ## Firmware (`firmware`)
 
-`neotime-firmware` is the first firmware: it takes over the bootloader's watchdog and feeds it only
-while the button is up, shows a page, mounts the file system, advertises as "NeoTime" with the DFU
-service, and confirms itself to the bootloader once Bluetooth runs. 105 KB of flash and 25 KB of
-static RAM, 16 KB of it heap. It is outside the workspace, like the bootloader, because it only
-builds for the watch. See [updates.md](updates.md).
+`neotime-firmware` takes over the bootloader's watchdog and feeds it only while the button is up,
+shows a status page, mounts the file system, advertises as "NeoTime" with the DFU and Current Time
+services, and confirms itself to the bootloader once Bluetooth runs. It is outside the workspace,
+like the bootloader, because it only builds for the watch. See [updates.md](updates.md).
+
+Two seconds after start-up the **shell** (`firmware/src/shell.rs`) takes the screen and runs the
+watch face, the launcher and the apps through `neotime-app-host`:
+
+- **Navigation.** The face shows first. A swipe up the face does not use opens the launcher, a list
+  written with `neotime_app_host::launcher` from the built-in apps; a tap opens one. The button,
+  or a swipe right the app does not use, goes back a step: app to launcher, launcher to face.
+- **Input.** `touch.rs` turns the panel's reports into the host's touches: press, drag and release
+  from the finger, and one click, long press or swipe from each touch's gesture. The watchdog task
+  reads the button every 20 ms and also reports short and long presses.
+- **Sleep.** After 15 seconds without input the backlight goes off and the app gets `screen_off`;
+  the next touch or press turns it on without acting on it. The loop sleeps until the next input
+  or until `next_wakeup`.
+- **Clock.** `clock.rs` counts on from the time a phone last wrote to the Current Time
+  characteristic (0x2A2B), or from the build time until one does. It holds local time, with an
+  offset from UTC of 0.
+- **Status page.** The start-up lines and an update's progress share the display with the shell;
+  while the page is up the shell draws nothing, and when the update ends it paints again.
+- **Apps.** `tools/build_watch_apps.sh` compiles the face (`digital`), nine apps and the shared
+  library into `firmware/apps/`, and the firmware builds them in. They move to the external flash
+  once there is a way to send files to the watch.
+
+Not done yet: battery, steps, heart rate and the other sensor values read as 0; effects such as
+vibration and brightness are ignored; saved state is not written; the screen only dims through the
+backlight, without sleeping the display or the touch panel.
+
+It takes 322 KB of the 400 KB firmware slot (the fonts are 47 KB, the built-in apps 29 KB and the
+shared library 26 KB) and 46 KB of static RAM, 30 KB of it heap: 16 KB for storage and 14 KB for
+the open app's widgets.
 
 ## Reloader (`reloader`)
 

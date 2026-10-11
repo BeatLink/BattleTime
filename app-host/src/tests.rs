@@ -190,7 +190,7 @@ impl SystemValues for FakeSystem {
 impl System for FakeSystem {
     fn carry_out(&mut self, effect: &AppEffect) {
         let text = match effect.kind {
-            EffectKind::Go | EffectKind::ShowToast | EffectKind::Log => {
+            EffectKind::Go | EffectKind::OpenApp | EffectKind::ShowToast | EffectKind::Log => {
                 effect.text(0).map(ToString::to_string)
             }
             _ => None,
@@ -1018,4 +1018,25 @@ fn a_long_label_wraps_onto_several_lines_inside_the_screen() {
     let (bounds, _) = host.widget_bounds(2).unwrap();
     assert!(contains(SCREEN_AREA, bounds));
     assert!(bounds.height > 40, "one line would be about 20 pixels, got {bounds:?}");
+}
+
+// ============================================================================
+// The launcher
+// ============================================================================
+
+#[test]
+fn the_launcher_opens_an_app_by_its_id() {
+    let counter = counter_image();
+    let toast = toast_image();
+    let launcher = crate::launcher::launcher_image(&[&counter, b"not an image", &toast]);
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&launcher, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    assert_eq!(host.node_count(), 3);
+
+    let mut screen = FakeScreen::new();
+    host.draw(&mut screen).unwrap();
+    assert_eq!(host.widget_text(2), Some("Toast"));
+    click_on(&mut host, 2, START_TIME, &mut system);
+    let (kind, _, id) = system.effects.last().unwrap();
+    assert_eq!((*kind, id.as_deref()), (EffectKind::OpenApp, Some("toast")));
 }
