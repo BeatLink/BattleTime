@@ -10,6 +10,8 @@ publish = false
 [features]
 # An app for wasp-os that proves Bluetooth on the watch and writes no flash; see docs/updates.md.
 wasp-os-rehearsal = ["cortex-m-rt/set-vtor"]
+# The rehearsal plus NeoTime's flash driver and littlefs on the real chip; erases wasp-os's files.
+wasp-os-storage-rehearsal = ["wasp-os-rehearsal"]
 
 [dependencies]
 cortex-m = { version = "0.7", features = ["critical-section-single-core", "inline-asm"] }
@@ -25,6 +27,7 @@ embedded-alloc = "0.7"
 embedded-graphics = "0.8"
 embedded-hal = "1.0"
 embedded-storage = "0.3"
+embedded-storage-async = "0.4"
 heapless = "0.9"
 mipidsi = "0.10"
 static_cell = "2.1"

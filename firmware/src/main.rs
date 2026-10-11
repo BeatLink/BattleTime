@@ -28,22 +28,25 @@ use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
 use embassy_time::{Delay, Duration, Timer};
 use embedded_alloc::LlffHeap;
 use embedded_graphics::{
-    mono_font::{ascii::FONT_10X20, MonoTextStyle},
+    mono_font::{ascii::FONT_10X20, MonoTextStyleBuilder},
     pixelcolor::Rgb565,
     prelude::*,
-    primitives::{PrimitiveStyle, Rectangle},
     text::Text,
 };
 use mipidsi::interface::SpiInterface;
 use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
 use neotime_button::Button;
 use neotime_dfu::{service::DfuWrite, service::LegacyDfuService, LegacyDfu};
-use neotime_display::{Display, SCREEN_WIDTH};
+use neotime_display::Display;
 use static_cell::StaticCell;
 use trouble_host::prelude::*;
 
 #[cfg_attr(not(feature = "wasp-os-rehearsal"), path = "storage/watch.rs")]
-#[cfg_attr(feature = "wasp-os-rehearsal", path = "storage/rehearsal.rs")]
+#[cfg_attr(
+    all(feature = "wasp-os-rehearsal", not(feature = "wasp-os-storage-rehearsal")),
+    path = "storage/rehearsal.rs"
+)]
+#[cfg_attr(feature = "wasp-os-storage-rehearsal", path = "storage/storage_rehearsal.rs")]
 mod storage;
 
 // ============================================================================
@@ -266,22 +269,21 @@ struct Screen {
 impl Screen {
     const LINE_HEIGHT: i32 = 24;
     const FIRST_BASELINE: i32 = 40;
-    /// How far the 10x20 font reaches above its baseline, with a pixel to spare.
-    const ASCENT: i32 = 17;
 
-    /// Clears the line first, so a shorter or changed text never draws over the old one.
+    /// Characters that fit between the left margin and the right edge.
+    const LINE_CHARACTERS: usize = 22;
+
+    /// Draws the text on a black background padded to the full line, so it replaces the old line in one pass.
     fn write_line(&mut self, line: i32, text: &str) {
         let baseline = Self::FIRST_BASELINE + line * Self::LINE_HEIGHT;
-        let line_area = Rectangle::new(
-            Point::new(0, baseline - Self::ASCENT),
-            Size::new(SCREEN_WIDTH as u32, Self::LINE_HEIGHT as u32),
-        );
-        let _ = line_area
-            .into_styled(PrimitiveStyle::with_fill(Rgb565::BLACK))
-            .draw(&mut self.display);
-
-        let style = MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE);
-        let _ = Text::new(text, Point::new(12, baseline), style).draw(&mut self.display);
+        let mut padded = heapless::String::<{ Self::LINE_CHARACTERS }>::new();
+        let _ = core::fmt::write(&mut padded, format_args!("{:<width$.width$}", text, width = Self::LINE_CHARACTERS));
+        let style = MonoTextStyleBuilder::new()
+            .font(&FONT_10X20)
+            .text_color(Rgb565::WHITE)
+            .background_color(Rgb565::BLACK)
+            .build();
+        let _ = Text::new(&padded, Point::new(12, baseline), style).draw(&mut self.display);
     }
 }
 
@@ -404,6 +406,7 @@ async fn serve_connection(
     confirmation: &mut storage::Confirmation,
     confirmed: &mut bool,
 ) {
+    let mut shown_kilobytes = u32::MAX;
     loop {
         match connection.next().await {
             GattConnectionEvent::Disconnected { .. } => {
@@ -442,12 +445,11 @@ async fn serve_connection(
                         .notify_raw(connection, notification, false)
                         .await;
                 }
-                if dfu.is_updating() {
+                let kilobytes_received = dfu.bytes_received() / 1024;
+                if dfu.is_updating() && kilobytes_received != shown_kilobytes {
+                    shown_kilobytes = kilobytes_received;
                     let mut progress = heapless::String::<20>::new();
-                    let _ = core::fmt::write(
-                        &mut progress,
-                        format_args!("update {:>3} KB  ", dfu.bytes_received() / 1024),
-                    );
+                    let _ = core::fmt::write(&mut progress, format_args!("update {:>3} KB", kilobytes_received));
                     screen.write_line(5, &progress);
                 }
                 if outcome.reset_requested {

@@ -930,6 +930,7 @@ dependencies = [
  "embedded-graphics",
  "embedded-hal 1.0.0",
  "embedded-storage",
+ "embedded-storage-async",
  "heapless 0.9.3",
  "mipidsi",
  "neotime-bluetooth",
