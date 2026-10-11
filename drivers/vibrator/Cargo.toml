@@ -3,6 +3,7 @@ name = "neotime-vibrator"
 version = "0.1.0"
 edition = "2021"
 description = "PineTime vibration motor driver, on a plain pin or PWM"
+license.workspace = true
 publish = false
 
 [dependencies]

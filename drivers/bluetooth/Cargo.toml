@@ -3,6 +3,7 @@ name = "neotime-bluetooth"
 version = "0.1.0"
 edition = "2021"
 description = "Bluetooth LE controller for the PineTime's nRF52832 radio, in Rust, for the TrouBLE host"
+license.workspace = true
 publish = false
 
 [features]

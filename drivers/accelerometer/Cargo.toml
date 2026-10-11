@@ -3,6 +3,7 @@ name = "neotime-accelerometer"
 version = "0.1.0"
 edition = "2021"
 description = "PineTime BMA421 and BMA425 accelerometer and step counter driver, async over I2C"
+license.workspace = true
 publish = false
 
 [features]

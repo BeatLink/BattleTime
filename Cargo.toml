@@ -3,3 +3,6 @@ resolver = "2"
 members = ["drivers/*", "runtime", "ui", "simulator"]
 # The simulator needs std, so plain builds for the watch leave it out.
 default-members = ["drivers/*", "runtime", "ui"]
+
+[workspace.package]
+license = "GPL-3.0-or-later"

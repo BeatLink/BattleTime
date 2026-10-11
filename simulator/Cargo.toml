@@ -3,6 +3,7 @@ name = "neotime-simulator"
 version = "0.1.0"
 edition = "2021"
 description = "Runs the NeoTime drivers on the desktop against a simulated PineTime"
+license.workspace = true
 publish = false
 
 [dependencies]

@@ -1,6 +1,7 @@
 {
   "name": "neotime-faces",
   "private": true,
+  "license": "GPL-3.0-or-later",
   "description": "NeoTime watch faces",
   "type": "module",
   "dependencies": {

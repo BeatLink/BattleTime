@@ -1,6 +1,7 @@
 {
   "name": "neotime-apps",
   "private": true,
+  "license": "GPL-3.0-or-later",
   "description": "NeoTime apps",
   "type": "module",
   "dependencies": {
