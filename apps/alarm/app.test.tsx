@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { reset_persisted, MINUTE } from "neotime";
 import { advance_clock, freeze_clock, install_apps, is_vibrating, open, screen_stack, start_scheduler } from "neotime/preview";
 import app, {
-  alarm_enabled,
+  alarms,
   dismiss,
   editing_days,
   editing_time,
@@ -53,7 +53,7 @@ describe("alarm", () => {
     expect(rang_at.value).not.toBeNull();
     expect(is_vibrating.value).toBe(true);
     expect(screen_stack.value.at(-1)).toBe("ring");
-    expect(alarm_enabled.value[0]).toBe(false);
+    expect(alarms.value[0].enabled).toBe(false);
 
     snooze();
     expect(is_vibrating.value).toBe(false);

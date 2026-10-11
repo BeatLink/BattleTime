@@ -4,17 +4,18 @@
 
 import { computed } from "@preact/signals";
 import {
+  current_weather,
   define_app,
   format_temperature,
   format_time,
   now,
   persisted,
+  range,
   settings,
   weather,
   DAY,
   HOUR,
   type Color,
-  type Instant,
   type WeatherCondition,
   type WeatherEvent,
 } from "neotime";
@@ -25,23 +26,10 @@ import { Column, Icon, Label, Row, Screen } from "neotime/widgets";
 // State
 // ============================================================================
 
-/** Places in the forecast, one per coming day. */
-const FORECAST_PLACES = [0, 1, 2, 3, 4];
+/** How many coming days the forecast holds. */
+const FORECAST_LENGTH = 5;
 
-/** When the phone last sent the weather, or 0 if it never has. */
-const received_at = persisted<Instant>("received_at", 0);
-
-const temperature = persisted("temperature", 0);
-
-const low = persisted("low", 0);
-
-const high = persisted("high", 0);
-
-const condition = persisted<WeatherCondition>("condition", "clear");
-
-const location = persisted("location", "");
-
-/** How many coming days the phone sent, up to five. */
+/** How many coming days the phone sent, up to five; the system's `current_weather` holds today. */
 const forecast_days = persisted("forecast_days", 0);
 
 const forecast_conditions = persisted<WeatherCondition[]>("forecast_conditions", [
@@ -60,7 +48,10 @@ const forecast_highs = persisted<number[]>("forecast_highs", [0, 0, 0, 0, 0]);
 // Derived values
 // ============================================================================
 
-const has_weather = computed(() => received_at.value !== 0);
+const has_weather = computed(() => current_weather.value.received_at !== null);
+
+/** When the phone last sent the weather, or 0 if it never has. */
+const received_at = computed(() => current_weather.value.received_at ?? 0);
 
 /** Degrees in the user's unit, rounded to the nearest, without the unit. */
 function in_chosen_unit(celsius: number): number {
@@ -76,7 +67,7 @@ function color_of(celsius: number): Color {
 }
 
 const condition_text = computed(() => {
-  const sky = condition.value;
+  const sky = current_weather.value.condition;
   if (sky === "clear") return "Clear sky";
   if (sky === "few_clouds") return "Few clouds";
   if (sky === "clouds") return "Scattered clouds";
@@ -95,18 +86,17 @@ const is_stale = computed(() => now.value - received_at.value > 3 * HOUR);
 // Handlers
 // ============================================================================
 
+/** The coming days arrive only with the forecast event, so they are kept here. */
 function receive(event: WeatherEvent) {
-  const day_count = Math.min(event.days.length, FORECAST_PLACES.length);
-  received_at.value = now.value;
-  temperature.value = event.temperature;
-  low.value = event.low;
-  high.value = event.high;
-  condition.value = event.condition;
-  location.value = event.location;
+  const day_count = Math.min(event.days.length, FORECAST_LENGTH);
   forecast_days.value = day_count;
-  forecast_conditions.value = FORECAST_PLACES.map((place) => (place < day_count ? event.days[place].condition : "clear"));
-  forecast_lows.value = FORECAST_PLACES.map((place) => (place < day_count ? event.days[place].low : 0));
-  forecast_highs.value = FORECAST_PLACES.map((place) => (place < day_count ? event.days[place].high : 0));
+  for (const place of range(FORECAST_LENGTH)) {
+    if (place < day_count) {
+      forecast_conditions.value[place] = event.days[place].condition;
+      forecast_lows.value[place] = event.days[place].low;
+      forecast_highs.value[place] = event.days[place].high;
+    }
+  }
 }
 
 // ============================================================================
@@ -133,34 +123,41 @@ function ForecastDay(props: { place: number }) {
 }
 
 function Weather() {
-  if (!has_weather.value) {
-    return (
-      <Screen padding={16} align_items="center" justify="center" gap={12}>
-        <Icon icon={icons.weather} size={64} color="muted" />
-        <Label color="muted" text_align="center">No weather data.</Label>
-      </Screen>
-    );
-  }
   return (
-    <Screen padding={4} align_items="center">
-      <Row justify="between" width={232}>
-        <Label font="small" color="muted" long_mode="scroll" grow={1}>{location.value}</Label>
-        <Label font="small" color="muted">{format_time(received_at.value, "clock")}</Label>
-      </Row>
-      <Icon icon={icon_named(condition.value)} size={44} color={is_stale.value ? "muted" : "text"} />
-      <Label font="small" color="#b0b0b0">{condition_text.value}</Label>
-      <Row gap={10} justify="center">
-        <Label color={color_of(low.value)}>{`${in_chosen_unit(low.value)}°`}</Label>
-        <Label font="large" color={is_stale.value ? "muted" : color_of(temperature.value)}>
-          {format_temperature(temperature.value)}
-        </Label>
-        <Label color={color_of(high.value)}>{`${in_chosen_unit(high.value)}°`}</Label>
-      </Row>
-      <Row grow={1} align_items="end" justify="around" width={232}>
-        {FORECAST_PLACES.map((place) => (
-          <ForecastDay place={place} />
-        ))}
-      </Row>
+    <Screen
+      padding={4}
+      align_items="center"
+      justify={has_weather.value ? "start" : "center"}
+      gap={has_weather.value ? 0 : 12}
+    >
+      {!has_weather.value && <Icon icon={icons.weather} size={64} color="muted" />}
+      {!has_weather.value && <Label color="muted" text_align="center">No weather data.</Label>}
+      {has_weather.value && (
+        <Row justify="space_between" width={232}>
+          <Label font="small" color="muted" long_mode="scroll" grow={1}>{current_weather.value.location}</Label>
+          <Label font="small" color="muted">{format_time(received_at.value, "clock")}</Label>
+        </Row>
+      )}
+      {has_weather.value && (
+        <Icon icon={icon_named(current_weather.value.condition)} size={44} color={is_stale.value ? "muted" : "text"} />
+      )}
+      {has_weather.value && <Label font="small" color="#b0b0b0">{condition_text.value}</Label>}
+      {has_weather.value && (
+        <Row gap={10} justify="center">
+          <Label color={color_of(current_weather.value.low)}>{`${in_chosen_unit(current_weather.value.low)}°`}</Label>
+          <Label font="large" color={is_stale.value ? "muted" : color_of(current_weather.value.temperature)}>
+            {format_temperature(current_weather.value.temperature)}
+          </Label>
+          <Label color={color_of(current_weather.value.high)}>{`${in_chosen_unit(current_weather.value.high)}°`}</Label>
+        </Row>
+      )}
+      {has_weather.value && (
+        <Row grow={1} align_items="end" justify="space_between" width={232}>
+          {range(FORECAST_LENGTH).map((place) => (
+            <ForecastDay place={place} />
+          ))}
+        </Row>
+      )}
     </Screen>
   );
 }

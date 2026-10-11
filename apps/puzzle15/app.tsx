@@ -3,28 +3,22 @@
 // count and the fewest moves to a solution persist, and a solved board says so.
 
 import { computed, signal } from "@preact/signals";
-import { define_app, persisted, random_int, vibrate_pattern, type SwipeEvent } from "neotime";
+import { define_app, persisted, random_int, range, vibrate_pattern, type SwipeEvent } from "neotime";
 import { ConfirmDialog } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Grid, Label, Row, Screen, Stack } from "neotime/widgets";
+import { Grid, Label, Row, Screen } from "neotime/widgets";
 
 // ============================================================================
 // Rules
 // ============================================================================
 
-const CELLS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+const CELLS = range(16);
 
 /** The places the shuffle visits; the gap stays in the last cell. */
-const SHUFFLED_PLACES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+const SHUFFLED_PLACES = range(15);
 
 /** Tiles in order with the gap, written 0, in the bottom right corner. */
 export const SOLVED_BOARD = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0];
-
-const GAP_WHEN_SOLVED = 15;
-
-function swapped(board: number[], first: number, second: number): number[] {
-  return CELLS.map((cell) => (cell === first ? board[second] : cell === second ? board[first] : board[cell]));
-}
 
 /** The cell whose tile a swipe moves into the gap, or -1 if the gap is against that edge. */
 export function tile_moved_by(gap: number, direction: SwipeEvent["direction"]): number {
@@ -39,11 +33,11 @@ export function tile_moved_by(gap: number, direction: SwipeEvent["direction"]): 
 }
 
 export function is_solved(board: number[]): boolean {
-  let solved = true;
+  let is_in_order = true;
   for (const cell of CELLS) {
-    if (board[cell] !== SOLVED_BOARD[cell]) solved = false;
+    if (board[cell] !== SOLVED_BOARD[cell]) is_in_order = false;
   }
-  return solved;
+  return is_in_order;
 }
 
 // ============================================================================
@@ -51,8 +45,6 @@ export function is_solved(board: number[]): boolean {
 // ============================================================================
 
 export const board = persisted<number[]>("board", SOLVED_BOARD);
-
-const gap = persisted("gap", GAP_WHEN_SOLVED);
 
 const move_count = persisted("move_count", 0);
 
@@ -71,6 +63,13 @@ const solved = computed(() => is_solved(board.value));
 // Handlers
 // ============================================================================
 
+/** Swaps the tiles in two cells of the board. */
+function swap_cells(first: number, second: number) {
+  const first_tile = board.value[first];
+  board.value[first] = board.value[second];
+  board.value[second] = first_tile;
+}
+
 /** Deals a random solvable board: an even shuffle of the fifteen tiles, made even by one more swap if needed. */
 export function start_game() {
   board.value = SOLVED_BOARD;
@@ -78,20 +77,29 @@ export function start_game() {
   for (const place of SHUFFLED_PLACES) {
     const other = random_int(place, 14);
     if (other !== place) {
-      board.value = swapped(board.value, place, other);
+      swap_cells(place, other);
       swap_count = swap_count + 1;
     }
   }
-  if (swap_count % 2 === 1) board.value = swapped(board.value, 13, 14);
-  gap.value = GAP_WHEN_SOLVED;
+  if (swap_count % 2 === 1) swap_cells(13, 14);
   move_count.value = 0;
 }
 
-function slide(event: SwipeEvent) {
-  const tile = tile_moved_by(gap.value, event.direction);
+/** The cell of the gap, which is wherever the board holds 0. */
+function gap_cell(): number {
+  let gap = 0;
+  for (const cell of CELLS) {
+    if (board.value[cell] === 0) gap = cell;
+  }
+  return gap;
+}
+
+/** Moves the tile beside the gap into it. */
+export function slide(event: SwipeEvent) {
+  const gap = gap_cell();
+  const tile = tile_moved_by(gap, event.direction);
   if (tile >= 0 && !solved.value && !is_asking_to_restart.value) {
-    board.value = swapped(board.value, gap.value, tile);
-    gap.value = tile;
+    swap_cells(gap, tile);
     move_count.value = move_count.value + 1;
     if (is_solved(board.value)) {
       vibrate_pattern("success");
@@ -109,19 +117,20 @@ function tap() {
 // Screen
 // ============================================================================
 
+/** One tile is one label, its own background drawn behind its centred number. */
 function Tile(props: { cell: number }) {
   const tile = board.value[props.cell];
   return (
-    <Stack background={tile === 0 ? "background" : "surface"} radius={8}>
-      <Label font="normal">{tile === 0 ? "" : `${tile}`}</Label>
-    </Stack>
+    <Label background={tile === 0 ? "background" : "surface"} radius={8} padding={12} text_align="center" font="normal">
+      {tile === 0 ? "" : `${tile}`}
+    </Label>
   );
 }
 
 function Puzzle15() {
   return (
     <Screen onSwipe={slide} onClick={tap}>
-      <Row justify="between" height={28} padding={4}>
+      <Row justify="space_between" height={28} padding={4}>
         <Label font="small" color={solved.value ? "success" : "muted"}>
           {solved.value ? `Solved in ${move_count.value}` : `${move_count.value} moves`}
         </Label>

@@ -15,6 +15,7 @@ import {
   go,
   now,
   persisted,
+  range,
   settings,
   stop_vibrating,
   vibrate_pattern,
@@ -37,15 +38,11 @@ import { Button, ClickArea, Column, Grid, Icon, Label, Row, Screen, Scroll, Swit
 
 const MAXIMUM_ALARMS = 12;
 
-/** Every place in the alarm arrays, for loops and repeated rows. */
-const ALARM_PLACES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-
 const SNOOZE_LENGTH = 10 * MINUTE;
 
 const RING_LIMIT = MINUTE;
 
-/** The days in mask order, Monday first, so a day's place is also its bit. */
-const DAY_PLACES = [0, 1, 2, 3, 4, 5, 6];
+/** The day letters in mask order, Monday first, so a day's place is also its bit. */
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 
 const MONDAY_TO_FRIDAY = 0b0011111;
@@ -53,16 +50,32 @@ const WEEKEND = 0b1100000;
 
 /** The patterns the repeat button cycles through, in order; 0 rings once. */
 const REPEAT_PRESETS = [0, EVERY_DAY, MONDAY_TO_FRIDAY, WEEKEND];
+const REPEAT_PRESET_COUNT = 4;
+
+/** One alarm: its time, its repeat days as a mask with Monday as bit 0 (0 rings once), and its switch. */
+interface Alarm {
+  hour: number;
+  minute: number;
+  days: number;
+  enabled: boolean;
+}
 
 const alarm_count = persisted("alarm_count", 0);
-const alarm_hours = persisted<number[]>("alarm_hours", [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8]);
-const alarm_minutes = persisted<number[]>("alarm_minutes", [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 
-/** Each alarm's repeat days as a mask with Monday as bit 0; 0 rings once. */
-const alarm_days = persisted<number[]>("alarm_days", [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-
-export const alarm_enabled = persisted<boolean[]>("alarm_enabled", [
-  false, false, false, false, false, false, false, false, false, false, false, false,
+/** Every alarm place; only the first `alarm_count` are in use. */
+export const alarms = persisted<Alarm[]>("alarms", [
+  { hour: 8, minute: 0, days: 0, enabled: false },
+  { hour: 8, minute: 0, days: 0, enabled: false },
+  { hour: 8, minute: 0, days: 0, enabled: false },
+  { hour: 8, minute: 0, days: 0, enabled: false },
+  { hour: 8, minute: 0, days: 0, enabled: false },
+  { hour: 8, minute: 0, days: 0, enabled: false },
+  { hour: 8, minute: 0, days: 0, enabled: false },
+  { hour: 8, minute: 0, days: 0, enabled: false },
+  { hour: 8, minute: 0, days: 0, enabled: false },
+  { hour: 8, minute: 0, days: 0, enabled: false },
+  { hour: 8, minute: 0, days: 0, enabled: false },
+  { hour: 8, minute: 0, days: 0, enabled: false },
 ]);
 
 /** When the next alarm or snooze rings, or null if none is set. */
@@ -126,30 +139,6 @@ const next_alarm_summary = computed(() =>
 const ring_ends_at = computed(() => (rang_at.value !== null ? rang_at.value + RING_LIMIT : null));
 
 // ============================================================================
-// Array updates
-// ============================================================================
-
-function with_number(values: number[], place: number, value: number): number[] {
-  return ALARM_PLACES.map((each) => (each === place ? value : values[each]));
-}
-
-function with_flag(values: boolean[], place: number, value: boolean): boolean[] {
-  return ALARM_PLACES.map((each) => (each === place ? value : values[each]));
-}
-
-function without_number(values: number[], place: number, filler: number): number[] {
-  return ALARM_PLACES.map((each) =>
-    each < place ? values[each] : each + 1 < MAXIMUM_ALARMS ? values[each + 1] : filler,
-  );
-}
-
-function without_flag(values: boolean[], place: number): boolean[] {
-  return ALARM_PLACES.map((each) =>
-    each < place ? values[each] : each + 1 < MAXIMUM_ALARMS ? values[each + 1] : false,
-  );
-}
-
-// ============================================================================
 // Handlers
 // ============================================================================
 
@@ -157,12 +146,12 @@ function without_flag(values: boolean[], place: number): boolean[] {
 function schedule() {
   let soonest: Instant | null = snoozed_until.value;
   let soonest_place = snoozed_until.value !== null ? snoozed_place.value : -1;
-  for (const place of ALARM_PLACES) {
-    if (place < alarm_count.value && alarm_enabled.value[place]) {
+  for (const place of range(MAXIMUM_ALARMS)) {
+    if (place < alarm_count.value && alarms.value[place].enabled) {
       const candidate = next_time_of_day(
         now.value,
-        { hour: alarm_hours.value[place], minute: alarm_minutes.value[place] },
-        alarm_days.value[place] === 0 ? EVERY_DAY : alarm_days.value[place],
+        { hour: alarms.value[place].hour, minute: alarms.value[place].minute },
+        alarms.value[place].days === 0 ? EVERY_DAY : alarms.value[place].days,
       );
       if (soonest === null || candidate < soonest) {
         soonest = candidate;
@@ -174,9 +163,10 @@ function schedule() {
   next_ring_place.value = soonest_place;
 }
 
-function set_enabled(place: number, enabled: boolean) {
-  alarm_enabled.value = with_flag(alarm_enabled.value, place, enabled);
-  if (!enabled && snoozed_place.value === place) {
+/** Flips an alarm's switch; a snooze of an alarm switched off is dropped. */
+function toggle_enabled(place: number) {
+  alarms.value[place].enabled = !alarms.value[place].enabled;
+  if (!alarms.value[place].enabled && snoozed_place.value === place) {
     snoozed_until.value = null;
   }
   schedule();
@@ -192,8 +182,8 @@ export function open_new_alarm() {
 
 function open_alarm(place: number) {
   editing_place.value = place;
-  editing_time.value = { hour: alarm_hours.value[place], minute: alarm_minutes.value[place] };
-  editing_days.value = alarm_days.value[place];
+  editing_time.value = { hour: alarms.value[place].hour, minute: alarms.value[place].minute };
+  editing_days.value = alarms.value[place].days;
   go("edit_time");
 }
 
@@ -201,14 +191,15 @@ function toggle_day(place: number) {
   editing_days.value = editing_days.value ^ (1 << place);
 }
 
+/** Moves to the next preset, or to the first when the days are a pattern of their own. */
 function cycle_repeat() {
-  let next = REPEAT_PRESETS[0];
-  for (const place of [0, 1, 2, 3]) {
-    if (editing_days.value === REPEAT_PRESETS[place]) {
-      next = REPEAT_PRESETS[(place + 1) % 4];
+  let next_preset = REPEAT_PRESETS[0];
+  for (const preset_place of range(REPEAT_PRESET_COUNT)) {
+    if (REPEAT_PRESETS[preset_place] === editing_days.value) {
+      next_preset = REPEAT_PRESETS[(preset_place + 1) % REPEAT_PRESET_COUNT];
     }
   }
-  editing_days.value = next;
+  editing_days.value = next_preset;
 }
 
 export function save_alarm() {
@@ -216,10 +207,10 @@ export function save_alarm() {
   if (editing_place.value < 0) {
     alarm_count.value = alarm_count.value + 1;
   }
-  alarm_hours.value = with_number(alarm_hours.value, place, editing_time.value.hour);
-  alarm_minutes.value = with_number(alarm_minutes.value, place, editing_time.value.minute);
-  alarm_days.value = with_number(alarm_days.value, place, editing_days.value);
-  alarm_enabled.value = with_flag(alarm_enabled.value, place, true);
+  alarms.value[place].hour = editing_time.value.hour;
+  alarms.value[place].minute = editing_time.value.minute;
+  alarms.value[place].days = editing_days.value;
+  alarms.value[place].enabled = true;
   if (snoozed_place.value === place) {
     snoozed_until.value = null;
   }
@@ -231,10 +222,16 @@ export function save_alarm() {
 function delete_alarm() {
   const place = editing_place.value;
   if (place >= 0) {
-    alarm_hours.value = without_number(alarm_hours.value, place, 8);
-    alarm_minutes.value = without_number(alarm_minutes.value, place, 0);
-    alarm_days.value = without_number(alarm_days.value, place, 0);
-    alarm_enabled.value = without_flag(alarm_enabled.value, place);
+    // The alarms after the deleted one move up a place, and the last place goes back to its default.
+    for (const each of range(MAXIMUM_ALARMS)) {
+      if (each >= place) {
+        const is_last = each + 1 === MAXIMUM_ALARMS;
+        alarms.value[each].hour = is_last ? 8 : alarms.value[each + 1].hour;
+        alarms.value[each].minute = is_last ? 0 : alarms.value[each + 1].minute;
+        alarms.value[each].days = is_last ? 0 : alarms.value[each + 1].days;
+        alarms.value[each].enabled = is_last ? false : alarms.value[each + 1].enabled;
+      }
+    }
     alarm_count.value = alarm_count.value - 1;
     if (snoozed_place.value === place) {
       snoozed_until.value = null;
@@ -254,8 +251,8 @@ function ring(event: TimeEvent) {
   rang_at.value = event.time;
   if (is_snooze) {
     snoozed_until.value = null;
-  } else if (place >= 0 && alarm_days.value[place] === 0) {
-    alarm_enabled.value = with_flag(alarm_enabled.value, place, false);
+  } else if (place >= 0 && alarms.value[place].days === 0) {
+    alarms.value[place].enabled = false;
   }
   schedule();
   wake_screen();
@@ -292,20 +289,20 @@ function ring_timed_out() {
 
 function AlarmRow(props: { place: number }) {
   const place = props.place;
-  const enabled = alarm_enabled.value[place];
+  const enabled = alarms.value[place].enabled;
   return (
     <>
       {place < alarm_count.value && (
         <Row gap={6} padding={6} height={56} background="surface" radius={12}>
           <ClickArea grow={1} onClick={() => open_alarm(place)}>
             <Label color={enabled ? "text" : "muted"}>
-              {format_time_of_day(alarm_hours.value[place], alarm_minutes.value[place], uses_24_hour_clock.value)}
+              {format_time_of_day(alarms.value[place].hour, alarms.value[place].minute, uses_24_hour_clock.value)}
             </Label>
             <Label font="small" color="muted">
-              {repeat_name(alarm_days.value[place])}
+              {repeat_name(alarms.value[place].days)}
             </Label>
           </ClickArea>
-          <Switch value={enabled} onChange={(event) => set_enabled(place, event.value)} />
+          <Switch value={enabled} onChange={() => toggle_enabled(place)} />
         </Row>
       )}
     </>
@@ -322,7 +319,7 @@ function AlarmList() {
         </Label>
       </Row>
       <Scroll grow={1} gap={6}>
-        {ALARM_PLACES.map((place) => (
+        {range(MAXIMUM_ALARMS).map((place) => (
           <AlarmRow place={place} />
         ))}
         {has_room.value && (
@@ -369,7 +366,7 @@ function EditDays() {
         {format_time_of_day(editing_time.value.hour, editing_time.value.minute, uses_24_hour_clock.value)}
       </Label>
       <Grid columns={4} gap={4} height={96}>
-        {DAY_PLACES.map((place) => (
+        {range(7).map((place) => (
           <DayButton place={place} />
         ))}
       </Grid>

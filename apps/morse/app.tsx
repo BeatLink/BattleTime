@@ -5,7 +5,7 @@
 // persists, and a long press asks to clear it.
 
 import { computed, signal } from "@preact/signals";
-import { define_app, persisted, type SwipeEvent } from "neotime";
+import { clamp, define_app, persisted, range, text_from_codes, type SwipeEvent } from "neotime";
 import { Card, ConfirmDialog } from "neotime/components";
 import { icons } from "neotime/icons";
 import { Label, Row, Screen } from "neotime/widgets";
@@ -18,17 +18,21 @@ import { Label, Row, Screen } from "neotime/widgets";
  * The code as a binary tree laid out flat: each node is followed by the half for a dot and then the half
  * for a line, so a node's two subtrees each take half of what follows it.
  */
-const CODE = [
+export const CODE_LETTERS = [
   " ", "e", "i", "s", "h", "5", "4", "v", "?", "3", "u", "f", "?", "?", "?", "?", "2", "a", "r", "l", "?", "?",
   "?", "?", "?", "w", "p", "?", "?", "j", "?", "1", "t", "n", "d", "b", "6", "?", "x", "?", "?", "k", "c", "?",
   "?", "y", "?", "?", "m", "g", "z", "7", "?", "q", "?", "?", "o", "?", "8", "?", "?", "9", "0",
 ];
 
-const SPACE = 0;
-const UNKNOWN = 8;
+/** The same tree as character codes, which is how the text is kept. */
+export const CODE = [
+  32, 101, 105, 115, 104, 53, 52, 118, 63, 51, 117, 102, 63, 63, 63, 63, 50, 97, 114, 108, 63, 63, 63, 63, 63, 119,
+  112, 63, 63, 106, 63, 49, 116, 110, 100, 98, 54, 63, 120, 63, 63, 107, 99, 63, 63, 121, 63, 63, 109, 103, 122, 55,
+  63, 113, 63, 63, 111, 63, 56, 63, 63, 57, 48,
+];
 
-/** A character code past the end of the tree, which starts a new line. */
-const NEW_LINE = 63;
+const UNKNOWN_LETTER = "?";
+const UNKNOWN = 63;
 
 const TREE_SIZE = 63;
 
@@ -47,84 +51,47 @@ export function next_span(span: number): number {
 }
 
 // ============================================================================
-// Text layout
-// ============================================================================
-
-const CAPACITY = 96;
-const LINE_LENGTH = 16;
-
-const POSITIONS = [
-  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-  32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
-  61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
-  90, 91, 92, 93, 94, 95,
-];
-
-const EMPTY_LINES = ["", "", "", "", "", ""];
-
-/** The six lines on show, oldest first. */
-const LINE_PLACES = [0, 1, 2, 3, 4, 5];
-
-/** How many lines the text takes, counting the unfinished last one. */
-function line_count(characters: number[], count: number): number {
-  let finished_lines = 0;
-  let column = 0;
-  for (const position of POSITIONS) {
-    if (position < count) {
-      const code = characters[position];
-      if (code === NEW_LINE || column === LINE_LENGTH) {
-        finished_lines = finished_lines + 1;
-        column = 0;
-      }
-      if (code !== NEW_LINE) column = column + 1;
-    }
-  }
-  return finished_lines + 1;
-}
-
-/** One line of the text, counting from 0 for the first; a line before the first is empty. */
-function line_text(characters: number[], count: number, wanted: number): string {
-  let line = 0;
-  let column = 0;
-  let text = "";
-  for (const position of POSITIONS) {
-    if (position < count) {
-      const code = characters[position];
-      if (code === NEW_LINE || column === LINE_LENGTH) {
-        line = line + 1;
-        column = 0;
-      }
-      if (code !== NEW_LINE) {
-        if (line === wanted) text = text + CODE[code];
-        column = column + 1;
-      }
-    }
-  }
-  return text;
-}
-
-/** The last six lines of the text, wrapping long lines and breaking at each new line. */
-export function layout(characters: number[], count: number): string[] {
-  const total = line_count(characters, count);
-  return LINE_PLACES.map((place) => line_text(characters, count, total - LINE_PLACES.length + place));
-}
-
-// ============================================================================
 // State
 // ============================================================================
 
-/** The text as character codes, oldest first; only the first `character_count` count. */
-const characters = persisted<number[]>(
-  "characters",
+/** The most characters the text keeps; adding one more drops the oldest. */
+const CAPACITY = 96;
+const LINE_LENGTH = 16;
+
+const POSITIONS = range(CAPACITY);
+const KEYED_PLACES = range(LONGEST_LETTER);
+const LINE_COLUMNS = range(LINE_LENGTH);
+
+/** The six lines on show, oldest first. */
+const LINE_PLACES = range(6);
+
+/** Character codes for a new line, a space, and the dot and line keyed. */
+const NEW_LINE = 10;
+const SPACE = 32;
+const DOT = 46;
+const DASH = 45;
+
+/** The text as character codes, oldest first; only the first `text_count` count. */
+export const text_codes = persisted<number[]>(
+  "text_codes",
   POSITIONS.map(() => SPACE),
 );
+export const text_count = persisted("text_count", 0);
 
-const character_count = persisted("character_count", 0);
+/** The six lines on show, oldest first, as character codes copied from the text after each change. */
+export const line_0 = signal<number[]>(LINE_COLUMNS.map(() => SPACE));
+export const line_1 = signal<number[]>(LINE_COLUMNS.map(() => SPACE));
+export const line_2 = signal<number[]>(LINE_COLUMNS.map(() => SPACE));
+export const line_3 = signal<number[]>(LINE_COLUMNS.map(() => SPACE));
+export const line_4 = signal<number[]>(LINE_COLUMNS.map(() => SPACE));
+export const line_5 = signal<number[]>(LINE_COLUMNS.map(() => SPACE));
+export const line_lengths = signal<number[]>(LINE_PLACES.map(() => 0));
 
-const lines = signal<string[]>(EMPTY_LINES);
+/** Where each line on show starts in the text. */
+const line_starts = signal<number[]>(LINE_PLACES.map(() => 0));
 
-/** The dots and lines keyed for the letter in progress. */
-const keyed = signal("");
+/** The dots and lines keyed for the letter in progress, as character codes. */
+const keyed_codes = signal<number[]>(KEYED_PLACES.map(() => DOT));
 const keyed_count = signal(0);
 
 /** Where the keyed symbols lead in the tree, and the size of the subtree there. */
@@ -134,21 +101,83 @@ const span = signal(TREE_SIZE);
 const is_asking_to_clear = signal(false);
 
 // ============================================================================
+// Text layout
+// ============================================================================
+
+/** How many lines the text takes, counting the unfinished last one. */
+function count_lines(): number {
+  let finished_lines = 0;
+  let column = 0;
+  for (const position of POSITIONS) {
+    if (position < text_count.value) {
+      const character = text_codes.value[position];
+      if (character === NEW_LINE || column === LINE_LENGTH) {
+        finished_lines = finished_lines + 1;
+        column = 0;
+      }
+      if (character !== NEW_LINE) column = column + 1;
+    }
+  }
+  return finished_lines + 1;
+}
+
+/** Finds where each line on show starts in the text and how long it is, the first on show being `first_shown`. */
+function measure_lines(first_shown: number) {
+  for (const place of LINE_PLACES) {
+    line_starts.value[place] = 0;
+    line_lengths.value[place] = 0;
+  }
+  let line = 0;
+  let column = 0;
+  for (const position of POSITIONS) {
+    if (position < text_count.value) {
+      const character = text_codes.value[position];
+      if (character === NEW_LINE || column === LINE_LENGTH) {
+        line = line + 1;
+        column = 0;
+        if (line >= first_shown) line_starts.value[line - first_shown] = character === NEW_LINE ? position + 1 : position;
+      }
+      if (character !== NEW_LINE) {
+        if (line >= first_shown) {
+          line_lengths.value[line - first_shown] = position + 1 - line_starts.value[line - first_shown];
+        }
+        column = column + 1;
+      }
+    }
+  }
+}
+
+/** The character at a column of the line on show at a place; past the line's end it is unused. */
+function shown_code(place: number, column: number): number {
+  return text_codes.value[clamp(line_starts.value[place] + column, 0, CAPACITY - 1)];
+}
+
+/** Lays out the last six lines of the text, wrapping long lines and breaking at each new line. */
+export function refresh_lines() {
+  measure_lines(count_lines() - LINE_PLACES.length);
+  for (const column of LINE_COLUMNS) {
+    line_0.value[column] = shown_code(0, column);
+    line_1.value[column] = shown_code(1, column);
+    line_2.value[column] = shown_code(2, column);
+    line_3.value[column] = shown_code(3, column);
+    line_4.value[column] = shown_code(4, column);
+    line_5.value[column] = shown_code(5, column);
+  }
+}
+
+// ============================================================================
 // Derived values
 // ============================================================================
 
-const keyed_letter = computed(() => (node.value < 0 ? "?" : CODE[node.value]));
+export const keyed_text = computed(() => text_from_codes(keyed_codes.value, keyed_count.value));
+
+const keyed_letter = computed(() => (node.value < 0 ? UNKNOWN_LETTER : CODE_LETTERS[node.value]));
 
 // ============================================================================
 // Handlers
 // ============================================================================
 
-function refresh_lines() {
-  lines.value = layout(characters.value, character_count.value);
-}
-
 function forget_keyed() {
-  keyed.value = "";
   keyed_count.value = 0;
   node.value = 0;
   span.value = TREE_SIZE;
@@ -156,60 +185,60 @@ function forget_keyed() {
 
 /** Adds a character, dropping the oldest when the text is full. */
 function append(code: number) {
-  const count = character_count.value;
-  if (count < CAPACITY) {
-    characters.value = POSITIONS.map((position) => (position === count ? code : characters.value[position]));
-    character_count.value = count + 1;
+  if (text_count.value < CAPACITY) {
+    text_codes.value[text_count.value] = code;
+    text_count.value = text_count.value + 1;
   } else {
-    characters.value = POSITIONS.map((position) =>
-      position < CAPACITY - 1 ? characters.value[position + 1] : code,
-    );
+    for (const position of POSITIONS) {
+      if (position < CAPACITY - 1) text_codes.value[position] = text_codes.value[position + 1];
+    }
+    text_codes.value[CAPACITY - 1] = code;
   }
-  refresh_lines();
 }
 
 function key_symbol(is_line: boolean) {
   if (keyed_count.value < LONGEST_LETTER) {
     node.value = next_node(node.value, span.value, is_line);
     span.value = next_span(span.value);
-    keyed.value = keyed.value + (is_line ? "-" : ".");
+    keyed_codes.value[keyed_count.value] = is_line ? DASH : DOT;
     keyed_count.value = keyed_count.value + 1;
   }
 }
 
-function end_letter() {
-  append(node.value < 0 ? UNKNOWN : node.value);
+export function end_letter() {
+  append(node.value < 0 ? UNKNOWN : CODE[node.value]);
   forget_keyed();
+  refresh_lines();
 }
 
+/** Adds a space, or turns a space just before into a new line. */
 function add_space_or_new_line() {
-  const count = character_count.value;
-  if (count > 0 && characters.value[count - 1] === SPACE) {
-    characters.value = POSITIONS.map((position) => (position === count - 1 ? NEW_LINE : characters.value[position]));
-    refresh_lines();
+  if (text_count.value > 0 && text_codes.value[text_count.value - 1] === SPACE) {
+    text_codes.value[text_count.value - 1] = NEW_LINE;
   } else {
     append(SPACE);
   }
+  refresh_lines();
 }
 
 function delete_back() {
   if (keyed_count.value > 0) {
     forget_keyed();
   } else {
-    character_count.value = Math.max(0, character_count.value - 1);
+    text_count.value = Math.max(0, text_count.value - 1);
     refresh_lines();
   }
 }
 
-function swipe(event: SwipeEvent) {
+export function swipe(event: SwipeEvent) {
   if (event.direction === "up") key_symbol(true);
   else if (event.direction === "down") key_symbol(false);
   else if (event.direction === "right") add_space_or_new_line();
   else delete_back();
 }
 
-function clear_text() {
-  character_count.value = 0;
+export function clear_text() {
+  text_count.value = 0;
   forget_keyed();
   refresh_lines();
 }
@@ -228,13 +257,16 @@ function Morse() {
       gap={6}
     >
       <Card grow={1} gap={0}>
-        {lines.value.map((line) => (
-          <Label height={23} long_mode="clip">{line}</Label>
-        ))}
+        <Label height={23} long_mode="clip">{text_from_codes(line_0.value, line_lengths.value[0])}</Label>
+        <Label height={23} long_mode="clip">{text_from_codes(line_1.value, line_lengths.value[1])}</Label>
+        <Label height={23} long_mode="clip">{text_from_codes(line_2.value, line_lengths.value[2])}</Label>
+        <Label height={23} long_mode="clip">{text_from_codes(line_3.value, line_lengths.value[3])}</Label>
+        <Label height={23} long_mode="clip">{text_from_codes(line_4.value, line_lengths.value[4])}</Label>
+        <Label height={23} long_mode="clip">{text_from_codes(line_5.value, line_lengths.value[5])}</Label>
       </Card>
       <Card height={48}>
-        <Row justify="between">
-          <Label color="muted" long_mode="clip">{keyed.value}</Label>
+        <Row justify="space_between">
+          <Label color="muted" long_mode="clip">{keyed_text.value}</Label>
           <Label>{keyed_letter.value}</Label>
         </Row>
       </Card>

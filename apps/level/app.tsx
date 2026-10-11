@@ -113,6 +113,6 @@ export default define_app({
   name: "Level",
   icon: icons.level,
   screens: { main: Level, menu: Menu },
-  subscriptions: [acceleration({ milliseconds: 125 }, record)],
+  subscriptions: [acceleration({ milliseconds: 125 }, record, { only_while_open: true })],
   permissions: ["motion"],
 });

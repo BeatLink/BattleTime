@@ -12,6 +12,7 @@ import {
   hour_of,
   now,
   persisted,
+  range,
   settings,
   steps,
   steps_today,
@@ -86,7 +87,7 @@ function record_steps(event: StepsEvent) {
   const new_steps =
     event.steps_today >= recorded_steps.value ? event.steps_today - recorded_steps.value : event.steps_today;
   const current_hour = hour_of(now.value);
-  hourly_steps.value = hourly_steps.value.map((count, hour) => (hour === current_hour ? count + new_steps : count));
+  hourly_steps.value[current_hour] = hourly_steps.value[current_hour] + new_steps;
   trip_steps.value = trip_steps.value + new_steps;
   recorded_steps.value = event.steps_today;
 }
@@ -94,8 +95,9 @@ function record_steps(event: StepsEvent) {
 /** The day's count may or may not have started again yet, and recording from it works either way. */
 function start_new_day() {
   let total = unrecorded_steps.value;
-  for (const count of hourly_steps.value) {
-    total = total + count;
+  for (const hour of range(24)) {
+    total = total + hourly_steps.value[hour];
+    hourly_steps.value[hour] = 0;
   }
   daily_totals.value = [
     total,
@@ -105,7 +107,6 @@ function start_new_day() {
     daily_totals.value[3],
     daily_totals.value[4],
   ];
-  hourly_steps.value = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   trip_steps.value = trip_steps.value + unrecorded_steps.value;
   recorded_steps.value = steps_today.value;
 }
@@ -156,9 +157,9 @@ function History() {
       <Header title="Step history" icon={icons.steps} />
       <Label font="small" color="muted">Last 7 days</Label>
       <Chart kind="bars" width={228} height={64} values={week_totals.value} color="accent" />
-      <Row justify="around">
+      <Row justify="space_between" width={228}>
         {DAYS_SHOWN.map((days_back) => (
-          <Label font="small" color="muted">
+          <Label font="small" color="muted" width={32} text_align="center">
             {format_time(now.value - days_back * DAY, "ddd")}
           </Label>
         ))}

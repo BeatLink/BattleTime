@@ -2,7 +2,7 @@
 // One card shows the app's name and the card below it the last event it received. Swipe right or hold
 // the button to leave.
 
-import { signal } from "@preact/signals";
+import { computed, signal } from "@preact/signals";
 import { back, define_app, type ButtonEvent, type ClickEvent, type SwipeEvent } from "neotime";
 import { icons } from "neotime/icons";
 import { Column, Label, Screen } from "neotime/widgets";
@@ -13,7 +13,31 @@ import { Column, Label, Screen } from "neotime/widgets";
 
 const APP_NAME = "Template";
 
-const last_event = signal("");
+/** What the last event was: none, the button, a swipe or a touch. */
+const last_event_kind = signal<"none" | "button" | "swipe" | "touch">("none");
+
+/** The last swipe's direction, as a place in `DIRECTION_NAMES`. */
+const last_direction = signal(0);
+
+const DIRECTION_NAMES = ["up", "down", "left"];
+
+/** Where the last touch landed. */
+const last_x = signal(0);
+const last_y = signal(0);
+
+// ============================================================================
+// Derived values
+// ============================================================================
+
+const last_event_text = computed(() =>
+  last_event_kind.value === "button"
+    ? "Button"
+    : last_event_kind.value === "swipe"
+      ? `Swipe ${DIRECTION_NAMES[last_direction.value]}`
+      : last_event_kind.value === "touch"
+        ? `(${last_x.value}, ${last_y.value})`
+        : "",
+);
 
 // ============================================================================
 // Handlers
@@ -21,16 +45,21 @@ const last_event = signal("");
 
 function button(event: ButtonEvent) {
   if (event.kind === "long_press") back();
-  else last_event.value = "Button";
+  else last_event_kind.value = "button";
 }
 
 function swipe(event: SwipeEvent) {
   if (event.direction === "right") back();
-  else last_event.value = `Swipe ${event.direction}`;
+  else {
+    last_event_kind.value = "swipe";
+    last_direction.value = event.direction === "up" ? 0 : event.direction === "down" ? 1 : 2;
+  }
 }
 
 function touch(event: ClickEvent) {
-  last_event.value = `(${event.x}, ${event.y})`;
+  last_event_kind.value = "touch";
+  last_x.value = event.x;
+  last_y.value = event.y;
 }
 
 // ============================================================================
@@ -49,7 +78,7 @@ function Template() {
   return (
     <Screen onButton={button} onSwipe={swipe} onClick={touch} padding={6} gap={6}>
       <TextCard text={APP_NAME} />
-      <TextCard text={last_event.value} />
+      <TextCard text={last_event_text.value} />
     </Screen>
   );
 }
@@ -60,6 +89,6 @@ export default define_app({
   icon: icons.settings,
   screens: { main: Template },
   onOpen: () => {
-    last_event.value = "";
+    last_event_kind.value = "none";
   },
 });

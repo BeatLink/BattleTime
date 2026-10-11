@@ -90,7 +90,7 @@ function LapRow(props: { place: number }) {
   return (
     <>
       {lap_time > 0 && (
-        <Row justify="between" padding={2}>
+        <Row justify="space_between" padding={2}>
           <Label font="small" color="muted">{`#${lap_count.value - props.place}`}</Label>
           <Label font="small" color="muted">{format_duration(lap_time - previous, "mm:ss.cc")}</Label>
           <Label font="small">{format_duration(lap_time, "mm:ss.cc")}</Label>

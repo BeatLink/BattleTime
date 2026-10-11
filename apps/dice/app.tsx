@@ -3,7 +3,18 @@
 // A single two-sided die shows heads or tails, and each roll changes colour so a repeat is noticed.
 
 import { computed, signal } from "@preact/signals";
-import { define_app, format_number, motion, now, persisted, random_int, vibrate, SECOND, type Instant } from "neotime";
+import {
+  define_app,
+  format_number,
+  motion,
+  now,
+  persisted,
+  random_int,
+  range,
+  vibrate,
+  SECOND,
+  type Instant,
+} from "neotime";
 import { NumberPicker } from "neotime/components";
 import { icons } from "neotime/icons";
 import { Button, Column, Icon, Label, Row, Screen } from "neotime/widgets";
@@ -12,7 +23,7 @@ import { Button, Column, Icon, Label, Row, Screen } from "neotime/widgets";
 // State
 // ============================================================================
 
-const DIE_PLACES = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+const MOST_DICE = 9;
 
 /** The colours a roll cycles through: yellow, magenta and aqua. */
 const RESULT_COLORS: `#${string}`[] = ["#ffff00", "#ff00ff", "#00ffff"];
@@ -30,15 +41,21 @@ const rolled_sides = signal(6);
 const total = signal(0);
 const color_place = signal(0);
 const last_rolled_at = signal<Instant>(0);
-const is_open = signal(false);
 
 // ============================================================================
 // Derived values
 // ============================================================================
 
-function face_text(place: number, count: number, values: number[]): string {
-  return place < count ? `${place > 0 ? "+" : ""}${format_number(values[place])}` : "";
+/** One die of the last roll as text, with a plus before all but the first, or nothing past the dice rolled. */
+function face_text(place: number): string {
+  return place < rolled_count.value ? `${place > 0 ? "+" : ""}${format_number(faces.value[place])}` : "";
 }
+
+/** Every die of the last roll, such as `3+5+1`. */
+const faces_text = computed(
+  () =>
+    `${face_text(0)}${face_text(1)}${face_text(2)}${face_text(3)}${face_text(4)}${face_text(5)}${face_text(6)}${face_text(7)}${face_text(8)}`,
+);
 
 const breakdown = computed(() =>
   rolled_count.value === 1
@@ -47,7 +64,7 @@ const breakdown = computed(() =>
         ? "HEADS"
         : "TAILS"
       : ""
-    : `${face_text(0, rolled_count.value, faces.value)}${face_text(1, rolled_count.value, faces.value)}${face_text(2, rolled_count.value, faces.value)}${face_text(3, rolled_count.value, faces.value)}${face_text(4, rolled_count.value, faces.value)}${face_text(5, rolled_count.value, faces.value)}${face_text(6, rolled_count.value, faces.value)}${face_text(7, rolled_count.value, faces.value)}${face_text(8, rolled_count.value, faces.value)}`,
+    : faces_text.value,
 );
 
 const result_color = computed(() => RESULT_COLORS[color_place.value]);
@@ -57,10 +74,11 @@ const result_color = computed(() => RESULT_COLORS[color_place.value]);
 // ============================================================================
 
 function throw_dice() {
-  faces.value = DIE_PLACES.map(() => random_int(1, side_count.value));
   let sum = 0;
-  for (const place of DIE_PLACES) {
-    if (place < die_count.value) sum = sum + faces.value[place];
+  for (const place of range(MOST_DICE)) {
+    const face = random_int(1, side_count.value);
+    faces.value[place] = face;
+    if (place < die_count.value) sum = sum + face;
   }
   total.value = sum;
   rolled_count.value = die_count.value;
@@ -75,11 +93,10 @@ function roll() {
 }
 
 function roll_on_shake() {
-  if (is_open.value && now.value - last_rolled_at.value >= SHAKE_PAUSE) roll();
+  if (now.value - last_rolled_at.value >= SHAKE_PAUSE) roll();
 }
 
 function open() {
-  is_open.value = true;
   throw_dice();
   color_place.value = random_int(0, RESULT_COLORS.length - 1);
 }
@@ -119,10 +136,7 @@ export default define_app({
   name: "Dice",
   icon: icons.dice,
   screens: { main: Dice },
-  subscriptions: [motion("shake", roll_on_shake)],
+  subscriptions: [motion("shake", roll_on_shake, { only_while_open: true })],
   permissions: ["motion"],
   onOpen: open,
-  onClose: () => {
-    is_open.value = false;
-  },
 });

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { cell_at } from "./app.tsx";
+import { canvas, paint } from "./app.tsx";
 
 describe("infinipaint", () => {
-  it("finds the cell under the finger, even at the edges", () => {
-    expect(cell_at(0, 0)).toBe(0);
-    expect(cell_at(13, 0)).toBe(1);
-    expect(cell_at(0, 13)).toBe(20);
-    expect(cell_at(239, 239)).toBe(399);
-    expect(cell_at(260, -5)).toBe(19);
+  it("paints only the cell under the finger with the brush", () => {
+    const before = [...canvas.value];
+    paint({ value: 22 });
+    const changed = canvas.value.flatMap((colour, cell) => (colour !== before[cell] ? [cell] : []));
+    expect(changed).toEqual([22]);
+    expect(canvas.value[22]).toBe(2);
   });
 });

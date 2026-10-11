@@ -4,7 +4,7 @@
 import { signal } from "@preact/signals";
 import { acceleration, define_app, steps_today, type AccelerationEvent } from "neotime";
 import { icons } from "neotime/icons";
-import { Chart, Label, Row, Screen, Stack } from "neotime/widgets";
+import { Chart, Label, Row, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -43,11 +43,19 @@ function record(event: AccelerationEvent) {
 function Motion() {
   return (
     <Screen>
-      <Stack x={0} y={0} width={240} height={240}>
-        <Chart x={0} y={0} width={240} height={240} values={x_readings.value} minimum={LOWEST_READING} maximum={HIGHEST_READING} color={X_COLOR} />
-        <Chart x={0} y={0} width={240} height={240} values={y_readings.value} minimum={LOWEST_READING} maximum={HIGHEST_READING} color={Y_COLOR} />
-        <Chart x={0} y={0} width={240} height={240} values={z_readings.value} minimum={LOWEST_READING} maximum={HIGHEST_READING} color={Z_COLOR} />
-      </Stack>
+      <Chart
+        x={0}
+        y={0}
+        width={240}
+        height={240}
+        minimum={LOWEST_READING}
+        maximum={HIGHEST_READING}
+        series={[
+          { values: x_readings.value, color: X_COLOR },
+          { values: y_readings.value, color: Y_COLOR },
+          { values: z_readings.value, color: Z_COLOR },
+        ]}
+      />
       <Row x={0} y={10} width={240} gap={6} justify="center">
         <Label font="small">X</Label>
         <Label font="small" color={X_COLOR}>{`${x_readings.value[9]}`}</Label>
@@ -67,6 +75,6 @@ export default define_app({
   name: "Motion",
   icon: icons.level,
   screens: { main: Motion },
-  subscriptions: [acceleration({ milliseconds: 100 }, record)],
+  subscriptions: [acceleration({ milliseconds: 100 }, record, { only_while_open: true })],
   permissions: ["motion"],
 });

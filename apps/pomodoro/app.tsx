@@ -11,6 +11,7 @@ import {
   format_number,
   now,
   persisted,
+  range,
   stop_vibrating,
   vibrate,
   vibrate_pattern,
@@ -28,7 +29,6 @@ import { Button, ButtonMatrix, Column, Icon, Label, Row, Screen } from "neotime/
 // State
 // ============================================================================
 
-const QUEUE_PLACES = [0, 1, 2, 3, 4, 5];
 const QUEUE_LENGTH_LIMIT = 6;
 
 /** The largest length one entry may have, in minutes. */
@@ -37,14 +37,17 @@ const LONGEST_ENTRY_MINUTES = 999;
 const ROUND_LIMIT = 99;
 const LONGEST_BUZZ_SECONDS = 15;
 
-/** Preset queues, padded with zeros, and how many entries each has. */
+/** The places of a queue's entries. */
+const QUEUE_PLACES = range(QUEUE_LENGTH_LIMIT);
+
+/** Preset queues one after another, each padded with zeros to six entries, and how many entries each has. */
 const PRESETS = [
-  [25, 5, 0, 0, 0, 0],
-  [50, 10, 0, 0, 0, 0],
-  [25, 5, 25, 5, 25, 15],
+  25, 5, 0, 0, 0, 0,
+  50, 10, 0, 0, 0, 0,
+  25, 5, 25, 5, 25, 15,
 ];
 const PRESET_LENGTHS = [2, 2, 6];
-const PRESET_PLACES = [0, 1, 2];
+const PRESET_COUNT = 3;
 
 const KEYPAD_ROWS = [
   ["1", "2", "3", "4", "5"],
@@ -91,13 +94,14 @@ const is_stopped = computed(() => !is_running.value && !is_ringing.value);
 
 const can_start = computed(() => queue_length.value > 0 && !awaits_next_entry.value);
 
-function queue_entry_text(place: number, length: number, minutes: number[]): string {
-  return place < length ? `${place > 0 ? "," : ""}${format_number(minutes[place])}` : "";
+/** One entry of the queue as text, with a comma before all but the first, or nothing past the queue's end. */
+function queue_entry_text(place: number): string {
+  return place < queue_length.value ? `${place > 0 ? "," : ""}${format_number(queue_minutes.value[place])}` : "";
 }
 
 export const queue_text = computed(
   () =>
-    `${queue_entry_text(0, queue_length.value, queue_minutes.value)}${queue_entry_text(1, queue_length.value, queue_minutes.value)}${queue_entry_text(2, queue_length.value, queue_minutes.value)}${queue_entry_text(3, queue_length.value, queue_minutes.value)}${queue_entry_text(4, queue_length.value, queue_minutes.value)}${queue_entry_text(5, queue_length.value, queue_minutes.value)}${awaits_next_entry.value ? "," : ""}`,
+    `${queue_entry_text(0)}${queue_entry_text(1)}${queue_entry_text(2)}${queue_entry_text(3)}${queue_entry_text(4)}${queue_entry_text(5)}${awaits_next_entry.value ? "," : ""}`,
 );
 
 const remaining = computed(() =>
@@ -117,13 +121,11 @@ function type_digit(digit: number) {
   const last = queue_length.value - 1;
   if (awaits_next_entry.value || queue_length.value === 0) {
     if (digit === 0 || queue_length.value >= QUEUE_LENGTH_LIMIT) return;
-    queue_minutes.value = QUEUE_PLACES.map((place) => (place === queue_length.value ? digit : queue_minutes.value[place]));
+    queue_minutes.value[queue_length.value] = digit;
     queue_length.value = queue_length.value + 1;
     awaits_next_entry.value = false;
   } else if (queue_minutes.value[last] * 10 + digit <= LONGEST_ENTRY_MINUTES) {
-    queue_minutes.value = QUEUE_PLACES.map((place) =>
-      place === last ? queue_minutes.value[place] * 10 + digit : queue_minutes.value[place],
-    );
+    queue_minutes.value[last] = queue_minutes.value[last] * 10 + digit;
   }
 }
 
@@ -133,7 +135,7 @@ function delete_key() {
     awaits_next_entry.value = false;
   } else if (queue_length.value > 0) {
     const shortened = Math.floor(queue_minutes.value[last] / 10);
-    queue_minutes.value = QUEUE_PLACES.map((place) => (place === last ? shortened : queue_minutes.value[place]));
+    queue_minutes.value[last] = shortened;
     if (shortened === 0) {
       queue_length.value = last;
       awaits_next_entry.value = last > 0;
@@ -156,7 +158,9 @@ export function press_key(event: { value: number }) {
 
 function load_preset(place: number) {
   preset_place.value = place;
-  queue_minutes.value = PRESETS[place];
+  for (const entry of QUEUE_PLACES) {
+    queue_minutes.value[entry] = PRESETS[place * QUEUE_LENGTH_LIMIT + entry];
+  }
   queue_length.value = PRESET_LENGTHS[place];
   awaits_next_entry.value = false;
 }
@@ -168,8 +172,8 @@ function swipe(event: SwipeEvent) {
   } else if (event.direction === "down") {
     buzz_seconds.value = buzz_seconds.value <= 1 ? LONGEST_BUZZ_SECONDS : buzz_seconds.value - 1;
   } else {
-    const step = event.direction === "right" ? 1 : PRESET_PLACES.length - 1;
-    load_preset((preset_place.value + step) % PRESET_PLACES.length);
+    const step = event.direction === "right" ? 1 : PRESET_COUNT - 1;
+    load_preset((preset_place.value + step) % PRESET_COUNT);
   }
 }
 
@@ -224,7 +228,7 @@ function start_next_entry(event: TimeEvent) {
 function Pomodoro() {
   return (
     <Screen padding={4} gap={6} onSwipe={swipe}>
-      <Row justify="between" height={44} padding={8} background="surface" radius={12}>
+      <Row justify="space_between" height={44} padding={8} background="surface" radius={12}>
         <Label color="muted">{is_stopped.value ? `V${buzz_seconds.value}` : progress_text.value}</Label>
         {is_stopped.value && <Label long_mode="clip">{queue_text.value}</Label>}
       </Row>

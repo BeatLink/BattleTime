@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { board as dealt_board, is_solved, start_game, tile_moved_by, SOLVED_BOARD } from "./app.tsx";
+import { board as dealt_board, is_solved, slide, start_game, tile_moved_by, SOLVED_BOARD } from "./app.tsx";
 
 function inversions(board: number[]): number {
   const tiles = board.filter((tile) => tile !== 0);
@@ -31,5 +31,21 @@ describe("15 puzzle rules", () => {
   it("knows a solved board", () => {
     expect(is_solved(SOLVED_BOARD)).toBe(true);
     expect(is_solved([2, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0])).toBe(false);
+  });
+});
+
+describe("15 puzzle moves", () => {
+  it("slides the tile beside the gap into it, and stops once solved", () => {
+    dealt_board.value = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 0, 15];
+    slide({ direction: "left" });
+    expect(dealt_board.value).toEqual(SOLVED_BOARD);
+    slide({ direction: "right" });
+    expect(dealt_board.value).toEqual(SOLVED_BOARD);
+  });
+
+  it("swaps only the two cells", () => {
+    dealt_board.value = [1, 2, 3, 4, 5, 0, 7, 8, 9, 6, 11, 12, 13, 10, 14, 15];
+    slide({ direction: "up" });
+    expect(dealt_board.value).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 11, 12, 13, 10, 14, 15]);
   });
 });

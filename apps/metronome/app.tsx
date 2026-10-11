@@ -1,6 +1,6 @@
 // Metronome that beats on the motor, ported from InfiniTime's Metronome.
 // Each beat is scheduled at its exact time from the start, a long buzz opening every bar and a
-// short one for the other beats; tap the tempo to set it from the beat of a song.
+// short one for the other beats; drag the ring to set the tempo, or tap it from the beat of a song.
 
 import { computed, signal } from "@preact/signals";
 import {
@@ -17,7 +17,7 @@ import {
   type Instant,
 } from "neotime";
 import { icons } from "neotime/icons";
-import { Arc, Button, ClickArea, Icon, Label, Row, Screen, Slider } from "neotime/widgets";
+import { Arc, Button, ClickArea, Icon, Label, Row, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -42,6 +42,9 @@ const started_at = signal<Instant | null>(null);
 /** Beats sounded since the start. */
 const beats_played = signal(0);
 
+/** When the latest beat was due, so a new tempo can carry on from it. */
+const latest_beat_at = signal<Instant>(0);
+
 /** When the tempo was last tapped, or 0. */
 const tapped_at = signal<Instant>(0);
 
@@ -62,6 +65,7 @@ const next_beat = computed(() =>
 // ============================================================================
 
 function beat() {
+  latest_beat_at.value = next_beat.value ?? now.value;
   vibrate(beats_played.value % beats_per_bar.value === 0 ? DOWNBEAT_BUZZ : BEAT_BUZZ);
   beats_played.value = beats_played.value + 1;
 }
@@ -86,9 +90,7 @@ function stop() {
 function set_tempo(tempo: number) {
   const tempo_in_range = clamp(tempo, SLOWEST_TEMPO, FASTEST_TEMPO);
   if (started_at.value !== null) {
-    const beats_before_latest = beats_played.value - 1;
-    const latest_beat = started_at.value + Math.floor((beats_before_latest * MINUTE) / beats_per_minute.value);
-    started_at.value = latest_beat - Math.floor((beats_before_latest * MINUTE) / tempo_in_range);
+    started_at.value = latest_beat_at.value - Math.floor(((beats_played.value - 1) * MINUTE) / tempo_in_range);
   }
   beats_per_minute.value = tempo_in_range;
 }
@@ -124,9 +126,10 @@ function Metronome() {
         thickness={10}
         start_angle={225}
         end_angle={135}
-        value={beats_per_minute.value}
+        value={beats_per_minute}
         minimum={SLOWEST_TEMPO}
         maximum={FASTEST_TEMPO}
+        onChange={(event) => set_tempo(event.value)}
       >
         <ClickArea onPress={tap_tempo}>
           <Label font="large" color="#b0b0b0" text_align="center">
@@ -137,13 +140,6 @@ function Metronome() {
           </Label>
         </ClickArea>
       </Arc>
-      <Slider
-        width={220}
-        value={beats_per_minute.value}
-        minimum={SLOWEST_TEMPO}
-        maximum={FASTEST_TEMPO}
-        onChange={(event) => set_tempo(event.value)}
-      />
       <Row gap={6} width={232}>
         <Button grow={1} height={50} onClick={next_bar_length}>
           {`${beats_per_bar.value} bpb`}

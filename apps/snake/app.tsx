@@ -4,9 +4,9 @@
 // back into itself, and its first meal makes it grow like every other.
 
 import { computed, signal } from "@preact/signals";
-import { back, define_app, every, persisted, random_int, vibrate, type SwipeEvent } from "neotime";
+import { back, define_app, every, persisted, random_int, range, vibrate, type Color, type SwipeEvent } from "neotime";
 import { icons } from "neotime/icons";
-import { Column, Label, Screen } from "neotime/widgets";
+import { CellGrid, Column, Label, Screen } from "neotime/widgets";
 
 // ============================================================================
 // Rules
@@ -16,24 +16,28 @@ const BOARD_SIZE = 16;
 const CELL_SIZE = 15;
 const LAST_CELL = BOARD_SIZE * BOARD_SIZE - 1;
 const START_CELL = 8 * BOARD_SIZE + 8;
+const START_FOOD = START_CELL + 3 * BOARD_SIZE;
 
-/** The longest the snake can grow, one widget for each part of it. */
-const LONGEST_SNAKE = 64;
-
-/** Segments of the snake counting from the head, and also the places of the body ring. */
-const SEGMENTS = [
-  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
-  31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58,
-  59, 60, 61, 62, 63,
-];
-
-/** Further places to try when the food would land on the snake. */
-const FOOD_ATTEMPTS = [0, 1, 2, 3, 4, 5, 6, 7];
-
-const STARTING_BODY = SEGMENTS.map(() => START_CELL);
+/** What a board cell holds: nothing, a part of the snake pointing the way to the next part towards the head, or food. */
+const EMPTY = 0;
+const POINTS_UP = 1;
+const POINTS_DOWN = 2;
+const POINTS_LEFT = 3;
+const POINTS_RIGHT = 4;
+const FOOD = 5;
 
 /** How far one step moves the head, in cells numbered across each row. */
 const STEP_FOR_DIRECTION = { up: -BOARD_SIZE, down: BOARD_SIZE, left: -1, right: 1 };
+
+/** Further places to try when the food would land on the snake. */
+const FOOD_ATTEMPTS = range(8);
+
+/** Every cell of the board, numbered across each row from the top left. */
+const CELLS = range(BOARD_SIZE * BOARD_SIZE);
+
+export const STARTING_BOARD = range(BOARD_SIZE * BOARD_SIZE).map((cell) =>
+  cell === START_CELL ? POINTS_UP : cell === START_FOOD ? FOOD : EMPTY,
+);
 
 /** Whether moving one step from a cell runs into a wall. */
 export function hits_wall(cell: number, step: number): boolean {
@@ -46,15 +50,30 @@ export function hits_wall(cell: number, step: number): boolean {
   );
 }
 
+/** The cell value for a part of the snake that points along a step. */
+export function pointer_for_step(step: number): number {
+  return step === -BOARD_SIZE ? POINTS_UP : step === BOARD_SIZE ? POINTS_DOWN : step === -1 ? POINTS_LEFT : POINTS_RIGHT;
+}
+
+/** The step a part of the snake points along. */
+export function step_for_pointer(pointer: number): number {
+  return pointer === POINTS_UP ? -BOARD_SIZE : pointer === POINTS_DOWN ? BOARD_SIZE : pointer === POINTS_LEFT ? -1 : 1;
+}
+
+function is_snake(value: number): boolean {
+  return value >= POINTS_UP && value <= POINTS_RIGHT;
+}
+
 // ============================================================================
 // State
 // ============================================================================
 
-/** Cells the snake covers as a ring: the head is at `head_place` and later segments follow it round. */
-const body = signal<number[]>(STARTING_BODY);
-const head_place = signal(0);
+/** The whole board; following the pointers from the tail leads along the snake to the head. */
+export const board = signal<number[]>(STARTING_BOARD);
+const head = signal(START_CELL);
+const tail = signal(START_CELL);
 
-const length = signal(1);
+export const length = signal(1);
 
 /** The step the head takes each tick, 0 until the first swipe. */
 const step_size = signal(0);
@@ -62,39 +81,10 @@ const step_size = signal(0);
 /** The step chosen since the last tick, so two quick swipes cannot reverse the snake. */
 const next_step_size = signal(0);
 
-const food = signal(START_CELL + 3 * BOARD_SIZE);
-
-const is_running = signal(true);
+export const is_running = signal(true);
 
 /** The longest snake so far. */
 const best_length = persisted("best_length", 1);
-
-// ============================================================================
-// Snake body
-// ============================================================================
-
-/** The cell under one segment of the snake, counting from 0 at the head. */
-function segment_cell(segment: number): number {
-  return body.value[(head_place.value + segment) % LONGEST_SNAKE];
-}
-
-/** Whether a cell is under one of the first `length` segments of the snake. */
-function is_on_snake(length: number, cell: number): boolean {
-  let found = false;
-  for (const segment of SEGMENTS) {
-    if (segment < length && segment_cell(segment) === cell) found = true;
-  }
-  return found;
-}
-
-/** A random cell off the snake, giving up after a few tries on a crowded board. */
-function food_cell(length: number): number {
-  let cell = random_int(0, LAST_CELL);
-  for (const attempt of FOOD_ATTEMPTS) {
-    if (is_on_snake(length, cell)) cell = random_int(0, LAST_CELL);
-  }
-  return cell;
-}
 
 // ============================================================================
 // Derived values
@@ -106,13 +96,34 @@ const score = computed(() => length.value - 1);
 // Handlers
 // ============================================================================
 
-function restart() {
-  body.value = STARTING_BODY;
-  head_place.value = 0;
+/** The first empty cell on the board, or -1 when the snake fills it. */
+function first_empty_cell(): number {
+  let found = -1;
+  for (const cell of CELLS) {
+    if (found < 0 && board.value[cell] === EMPTY) found = cell;
+  }
+  return found;
+}
+
+/** Puts food on a random empty cell, or on the first empty one when a few random tries all land on the snake. */
+function place_food() {
+  let cell = random_int(0, LAST_CELL);
+  for (const _attempt of FOOD_ATTEMPTS) {
+    if (board.value[cell] !== EMPTY) cell = random_int(0, LAST_CELL);
+  }
+  if (board.value[cell] !== EMPTY) cell = first_empty_cell();
+  if (cell >= 0) board.value[cell] = FOOD;
+}
+
+export function restart() {
+  board.value = STARTING_BOARD;
+  board.value[START_FOOD] = EMPTY;
+  place_food();
+  head.value = START_CELL;
+  tail.value = START_CELL;
   length.value = 1;
   step_size.value = 0;
   next_step_size.value = 0;
-  food.value = food_cell(1);
   is_running.value = true;
 }
 
@@ -122,27 +133,33 @@ function end_game() {
   vibrate(200);
 }
 
+/** Moves the head on a step; the tail follows unless the snake eats, and moving into the tail's old cell is safe. */
 export function tick() {
   const step = next_step_size.value;
-  const head = segment_cell(0);
-  if (is_running.value && step !== 0) {
-    step_size.value = step;
-    const next_head = head + step;
-    const eats = next_head === food.value;
-    const next_length = eats ? Math.min(length.value + 1, LONGEST_SNAKE) : length.value;
-    if (hits_wall(head, step) || is_on_snake(length.value - (eats ? 0 : 1), next_head)) {
-      end_game();
-    } else {
-      const next_head_place = (head_place.value + LONGEST_SNAKE - 1) % LONGEST_SNAKE;
-      body.value = SEGMENTS.map((place) => (place === next_head_place ? next_head : body.value[place]));
-      head_place.value = next_head_place;
-      length.value = next_length;
-      if (eats) food.value = food_cell(next_length);
-    }
+  if (!is_running.value || step === 0) return;
+  step_size.value = step;
+  const next_head = head.value + step;
+  const ahead = hits_wall(head.value, step) ? EMPTY : board.value[next_head];
+  const eats = ahead === FOOD;
+  if (hits_wall(head.value, step) || (is_snake(ahead) && (eats || next_head !== tail.value))) {
+    end_game();
+    return;
+  }
+  board.value[head.value] = pointer_for_step(step);
+  if (!eats) {
+    const old_tail = tail.value;
+    tail.value = old_tail + step_for_pointer(board.value[old_tail]);
+    board.value[old_tail] = EMPTY;
+  }
+  board.value[next_head] = pointer_for_step(step);
+  head.value = next_head;
+  if (eats) {
+    length.value = length.value + 1;
+    place_food();
   }
 }
 
-function steer(event: SwipeEvent) {
+export function steer(event: SwipeEvent) {
   const step = STEP_FOR_DIRECTION[event.direction];
   if (!is_running.value) back();
   else if (length.value === 1 || step !== -step_size.value) next_step_size.value = step;
@@ -156,24 +173,22 @@ function tap() {
 // Screen
 // ============================================================================
 
-function Square(props: { cell: number; color: "text" | "accent" }) {
-  return (
-    <Column
-      x={(props.cell % BOARD_SIZE) * CELL_SIZE + 1}
-      y={Math.floor(props.cell / BOARD_SIZE) * CELL_SIZE + 1}
-      width={CELL_SIZE - 2}
-      height={CELL_SIZE - 2}
-      background={props.color}
-    />
-  );
-}
+/** Empty cells, the four pointing parts of the snake, then food. */
+const PALETTE: Color[] = ["background", "text", "text", "text", "text", "accent"];
 
 function Snake() {
   return (
     <Screen onSwipe={steer} onClick={tap}>
-      {is_running.value && <Square cell={food.value} color="accent" />}
-      {SEGMENTS.map(
-        (segment) => is_running.value && segment < length.value && <Square cell={segment_cell(segment)} color="text" />,
+      {is_running.value && (
+        <CellGrid
+          x={0}
+          y={0}
+          columns={BOARD_SIZE}
+          rows={BOARD_SIZE}
+          cell_size={CELL_SIZE}
+          cells={board.value}
+          palette={PALETTE}
+        />
       )}
       {!is_running.value && (
         <Column x={0} y={50} width={240} align_items="center" gap={4}>
@@ -193,5 +208,5 @@ export default define_app({
   name: "Snake",
   icon: icons.game,
   screens: { main: Snake },
-  subscriptions: [every({ milliseconds: 250 }, tick)],
+  subscriptions: [every({ milliseconds: 250 }, tick, { only_while_open: true })],
 });

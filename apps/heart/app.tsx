@@ -7,6 +7,8 @@ import {
   define_app,
   format_number,
   heart_rate_reading,
+  heart_rate_status,
+  is_heart_rate_running,
   keep_screen_on,
   start_heart_rate,
   stop_heart_rate,
@@ -19,16 +21,16 @@ import { Button, Chart, Icon, Label, Row, Screen } from "neotime/widgets";
 // State
 // ============================================================================
 
-/** Readings below this confidence are shown as still settling. */
-const SETTLED_CONFIDENCE = 50;
+/** The sensor states in `heart_rate_status`. */
+const SENSOR_NO_SKIN = 1;
+const SENSOR_SETTLING = 2;
+const SENSOR_MEASURING = 3;
 
+/** Whether this app asked for readings, which the button turns on and off. */
 const is_measuring = signal(false);
 
 /** The latest reading this session, or 0 before the first. */
 const beats_per_minute = signal(0);
-
-/** How sure the sensor was of the latest reading, 0 when it sees no skin. */
-const confidence = signal(-1);
 
 /** The latest readings, oldest first; 0 marks an empty place. */
 const readings = signal<number[]>([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
@@ -38,16 +40,17 @@ const readings = signal<number[]>([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 // ============================================================================
 
 const has_reading = computed(
-  () => is_measuring.value && confidence.value >= SETTLED_CONFIDENCE && beats_per_minute.value > 0,
+  () => is_measuring.value && heart_rate_status.value === SENSOR_MEASURING && beats_per_minute.value > 0,
 );
 
 const reading_text = computed(() => (has_reading.value ? format_number(beats_per_minute.value, 3) : "---"));
 
 const status_text = computed(() => {
   if (!is_measuring.value) return "Stopped";
-  if (confidence.value === 0) return "No touch detected";
-  if (confidence.value < SETTLED_CONFIDENCE) return "Not enough data, please wait...";
-  return "Measuring...";
+  if (heart_rate_status.value === SENSOR_NO_SKIN) return "No touch detected";
+  if (heart_rate_status.value === SENSOR_SETTLING) return "Not enough data, please wait...";
+  if (heart_rate_status.value === SENSOR_MEASURING) return "Measuring...";
+  return "Starting...";
 });
 
 const has_history = computed(() => readings.value[readings.value.length - 1] > 0);
@@ -58,7 +61,6 @@ const has_history = computed(() => readings.value[readings.value.length - 1] > 0
 
 function start() {
   is_measuring.value = true;
-  confidence.value = -1;
   start_heart_rate();
   keep_screen_on(true);
 }
@@ -76,9 +78,8 @@ function start_or_stop() {
 
 function record(event: HeartRateEvent) {
   if (!is_measuring.value) return;
-  confidence.value = event.confidence;
   beats_per_minute.value = event.beats_per_minute;
-  if (event.confidence < SETTLED_CONFIDENCE || event.beats_per_minute === 0) return;
+  if (heart_rate_status.value !== SENSOR_MEASURING || event.beats_per_minute === 0) return;
   readings.value = readings.value.map((_reading, place) =>
     place + 1 < readings.value.length ? readings.value[place + 1] : event.beats_per_minute,
   );
@@ -98,7 +99,7 @@ function HeartRate() {
       }}
     >
       <Row gap={6} justify="center">
-        <Icon icon={icons.heart} size={20} color={is_measuring.value ? "danger" : "muted"} />
+        <Icon icon={icons.heart} size={20} color={is_heart_rate_running.value ? "danger" : "muted"} />
         <Label font="small" color="muted">Heart rate BPM</Label>
       </Row>
       <Label font="huge" color={is_measuring.value ? "#00b000" : "#b0b0b0"}>
@@ -124,7 +125,7 @@ export default define_app({
   name: "Heart",
   icon: icons.heart,
   screens: { main: HeartRate },
-  subscriptions: [heart_rate_reading({ seconds: 1 }, record)],
+  subscriptions: [heart_rate_reading({ seconds: 1 }, record, { only_while_open: true })],
   permissions: ["heart_rate"],
   onOpen: start,
   onClose: stop,

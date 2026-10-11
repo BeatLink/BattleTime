@@ -21,11 +21,18 @@ describe("calculator", () => {
     expect(result_text.value).toBe("3.75 +");
   });
 
-  it("multiplies and divides in thousandths", () => {
+  it("multiplies and divides in millionths", () => {
     press("1", "2", ".", "5", "*", "4", "=");
     expect(result_text.value).toBe("50 ×");
     press("/", "3", "=");
-    expect(result_text.value).toBe("16.666 ÷");
+    expect(result_text.value).toBe("16.666666 ÷");
+  });
+
+  it("holds nine whole digits and six decimals", () => {
+    press("1", "2", "3", "4", "5", "6", "7", "8", "9", "9", ".", "0", "0", "0", "0", "0", "1", "2");
+    expect(entry_text.value).toBe("123456789.000001");
+    press("+", "1", "=");
+    expect(result_text.value).toBe("123456790.000001 +");
   });
 
   it("repeats the last operation on a second equals", () => {
