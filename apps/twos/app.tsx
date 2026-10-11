@@ -37,56 +37,83 @@ const TILE_VALUES = [
   0, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072,
 ];
 
-function with_value(values: number[], place: number, value: number): number[] {
-  return PLACES_IN_LINE.map((other) => (other === place ? value : values[other]));
+/** One of four values, picked by its place. */
+function one_of_four(first: number, second: number, third: number, fourth: number, place: number): number {
+  return place === 0 ? first : place === 1 ? second : place === 2 ? third : fourth;
+}
+
+/** The level at one place of a line of four after it slides towards its start, merging each pair once. */
+function slid_level(first: number, second: number, third: number, fourth: number, wanted: number): number {
+  let waiting = 0;
+  let placed = 0;
+  let found = 0;
+  for (const place of PLACES_IN_LINE) {
+    const level = one_of_four(first, second, third, fourth, place);
+    if (level !== 0 && waiting === 0) {
+      waiting = level;
+    } else if (level !== 0) {
+      if (placed === wanted) found = waiting === level ? level + 1 : waiting;
+      placed = placed + 1;
+      waiting = waiting === level ? 0 : level;
+    }
+  }
+  return placed === wanted && waiting !== 0 ? waiting : found;
+}
+
+/** The points one line of four scores when it slides. */
+function line_points(first: number, second: number, third: number, fourth: number): number {
+  let waiting = 0;
+  let points = 0;
+  for (const place of PLACES_IN_LINE) {
+    const level = one_of_four(first, second, third, fourth, place);
+    if (level !== 0 && waiting === level) {
+      points = points + TILE_VALUES[level + 1];
+      waiting = 0;
+    } else if (level !== 0) {
+      waiting = level;
+    }
+  }
+  return points;
 }
 
 /** Slides one line of four levels towards its start, merging each pair once; the fifth value is the points scored. */
 export function slide_line(line: number[]): number[] {
-  let packed = [0, 0, 0, 0];
-  let packed_count = 0;
-  for (const level of line) {
-    if (level !== 0) {
-      packed = with_value(packed, packed_count, level);
-      packed_count = packed_count + 1;
-    }
-  }
-  let result = [0, 0, 0, 0];
-  let result_count = 0;
+  return [0, 1, 2, 3, 4].map((place) =>
+    place < 4
+      ? slid_level(line[0], line[1], line[2], line[3], place)
+      : line_points(line[0], line[1], line[2], line[3]),
+  );
+}
+
+/** A cell's level after a slide, from its own line in the direction's list. */
+function slid_cell(board: number[], lines: number[], place_of_cell: number[], cell: number): number {
+  const place = place_of_cell[cell];
+  const start = place - (place % 4);
+  return slid_level(
+    board[lines[start]],
+    board[lines[start + 1]],
+    board[lines[start + 2]],
+    board[lines[start + 3]],
+    place - start,
+  );
+}
+
+/** The points all four lines score in a slide. */
+function board_points(board: number[], lines: number[]): number {
   let points = 0;
-  let merged_with_previous = false;
-  for (const place of PLACES_IN_LINE) {
-    const level = packed[place];
-    const next_level = place < 3 ? packed[place + 1] : 0;
-    if (merged_with_previous) {
-      merged_with_previous = false;
-    } else if (level !== 0 && level === next_level) {
-      result = with_value(result, result_count, level + 1);
-      result_count = result_count + 1;
-      points = points + TILE_VALUES[level + 1];
-      merged_with_previous = true;
-    } else if (level !== 0) {
-      result = with_value(result, result_count, level);
-      result_count = result_count + 1;
-    }
+  for (const line of PLACES_IN_LINE) {
+    const start = line * 4;
+    points =
+      points + line_points(board[lines[start]], board[lines[start + 1]], board[lines[start + 2]], board[lines[start + 3]]);
   }
-  return [result[0], result[1], result[2], result[3], points];
+  return points;
 }
 
 /** The board after a slide, followed by the points it scored as a seventeenth value. */
 function slide_board(board: number[], lines: number[], place_of_cell: number[]): number[] {
-  const first = slide_line([board[lines[0]], board[lines[1]], board[lines[2]], board[lines[3]]]);
-  const second = slide_line([board[lines[4]], board[lines[5]], board[lines[6]], board[lines[7]]]);
-  const third = slide_line([board[lines[8]], board[lines[9]], board[lines[10]], board[lines[11]]]);
-  const fourth = slide_line([board[lines[12]], board[lines[13]], board[lines[14]], board[lines[15]]]);
-  const in_line_order = [
-    first[0], first[1], first[2], first[3],
-    second[0], second[1], second[2], second[3],
-    third[0], third[1], third[2], third[3],
-    fourth[0], fourth[1], fourth[2], fourth[3],
-  ];
-  const points = first[4] + second[4] + third[4] + fourth[4];
-  return CELLS_AND_POINTS.map((cell) => (cell < 16 ? in_line_order[place_of_cell[cell]] : points));
+  return CELLS_AND_POINTS.map((cell) =>
+    cell < 16 ? slid_cell(board, lines, place_of_cell, cell) : board_points(board, lines),
+  );
 }
 
 export function slide(board: number[], direction: SwipeEvent["direction"]): number[] {
@@ -126,13 +153,19 @@ function with_new_tile(board: number[]): number[] {
   return CELLS.map((cell) => (cell === target ? level : board[cell]));
 }
 
+/** Whether any slide would change the board: a tile with an empty cell somewhere, or two equal tiles side by side. */
 export function can_move(board: number[]): boolean {
-  return (
-    !boards_match(slide(board, "left"), board) ||
-    !boards_match(slide(board, "right"), board) ||
-    !boards_match(slide(board, "up"), board) ||
-    !boards_match(slide(board, "down"), board)
-  );
+  let has_empty = false;
+  let has_tile = false;
+  let has_pair = false;
+  for (const cell of CELLS) {
+    const level = board[cell];
+    if (level === 0) has_empty = true;
+    else has_tile = true;
+    if (level !== 0 && cell % 4 < 3 && board[cell + 1] === level) has_pair = true;
+    if (level !== 0 && cell < 12 && board[cell + 4] === level) has_pair = true;
+  }
+  return (has_empty && has_tile) || has_pair;
 }
 
 // ============================================================================
@@ -142,6 +175,9 @@ export function can_move(board: number[]): boolean {
 const EMPTY_BOARD = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 const board = persisted<number[]>("board", EMPTY_BOARD);
+
+/** The board after the latest swipe's slide, followed by the points it scored. */
+const slid = signal<number[]>([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 
 const score = persisted("score", 0);
 
@@ -160,19 +196,21 @@ const is_game_over = computed(() => !can_move(board.value));
 // ============================================================================
 
 export function start_game() {
-  board.value = with_new_tile(with_new_tile(EMPTY_BOARD));
+  board.value = EMPTY_BOARD;
+  board.value = with_new_tile(board.value);
+  board.value = with_new_tile(board.value);
   score.value = 0;
 }
 
 function move(event: SwipeEvent) {
-  const moved = slide(board.value, event.direction);
-  const next_board = CELLS.map((cell) => moved[cell]);
-  if (!is_asking_to_restart.value && !boards_match(next_board, board.value)) {
-    board.value = with_new_tile(next_board);
-    score.value = score.value + moved[16];
-    if (score.value > best_score.value) best_score.value = score.value;
-    if (!can_move(board.value)) vibrate(200);
-  }
+  if (is_asking_to_restart.value) return;
+  slid.value = slide(board.value, event.direction);
+  if (boards_match(slid.value, board.value)) return;
+  board.value = CELLS.map((cell) => slid.value[cell]);
+  board.value = with_new_tile(board.value);
+  score.value = score.value + slid.value[16];
+  if (score.value > best_score.value) best_score.value = score.value;
+  if (!can_move(board.value)) vibrate(200);
 }
 
 function tap() {

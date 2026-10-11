@@ -14,7 +14,6 @@ import {
   stop_vibrating,
   vibrate,
   vibrate_pattern,
-  vibrate_sequence,
   wake_screen,
   MINUTE,
   SECOND,
@@ -200,15 +199,7 @@ function ring(event: TimeEvent) {
   rang_at.value = event.time;
   ends_at.value = null;
   wake_screen();
-  if (buzz_seconds.value === 1) {
-    vibrate_sequence([650, 350]);
-  } else if (buzz_seconds.value === 2) {
-    vibrate_sequence([650, 350, 650, 350]);
-  } else if (buzz_seconds.value === 3) {
-    vibrate_sequence([650, 350, 650, 350, 650, 350]);
-  } else {
-    vibrate_pattern("alarm");
-  }
+  vibrate_pattern("alarm");
 }
 
 function start_next_entry(event: TimeEvent) {

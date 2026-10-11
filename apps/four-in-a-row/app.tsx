@@ -2,12 +2,14 @@
 // The menu picks a level and shows the share of games won at it; swipe down to play. Tap a column to
 // aim your red counter and swipe down to drop it; the watch answers with yellow, looking ahead one
 // move more for each level, taking any win and blocking any threat. Swipe down after the game ends.
+// The watch's search runs a few steps per call, carried on by a fast tick, so no call runs long.
 
 import { computed, signal } from "@preact/signals";
 import {
   back,
   clamp,
   define_app,
+  every,
   go,
   persisted,
   random_int,
@@ -28,22 +30,42 @@ const COLUMN_COUNT = 7;
 const ROW_COUNT = 6;
 const CELL_COUNT = 42;
 
+/** Each row holds the seven columns and an eighth that stays empty, so a line running off a side stops there. */
+export const ROW_WIDTH = 8;
+const BOARD_SIZE = 48;
+
 const EMPTY = 0;
 const PLAYER = 1;
 const COMPUTER = 2;
 
-/** Cells are numbered across each row, starting from the bottom row. */
-const CELLS = [
+/** Every place on the board, the empty eighth column included, numbered from the bottom row. */
+const BOARD_PLACES = [
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-  32, 33, 34, 35, 36, 37, 38, 39, 40, 41,
+  32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+];
+
+/** The 42 places a counter can fill. */
+const CELLS = [
+  0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 32, 33, 34, 35,
+  36, 37, 38, 40, 41, 42, 43, 44, 45, 46,
 ];
 
 const COLUMNS = [0, 1, 2, 3, 4, 5, 6];
 
 /** Columns from the middle outwards, so ties go to the stronger central moves. */
 const SEARCH_ORDER = [3, 2, 4, 1, 5, 0, 6];
+const REVERSED_SEARCH_ORDER = [6, 0, 5, 1, 4, 2, 3];
 
 const STEPS_ALONG_LINE = [1, 2, 3];
+
+/** How far one step along a line moves on the board, in places. */
+const RIGHT = 1;
+const LEFT = -1;
+const DOWN = -ROW_WIDTH;
+const UP_RIGHT = ROW_WIDTH + 1;
+const DOWN_LEFT = -ROW_WIDTH - 1;
+const UP_LEFT = ROW_WIDTH - 1;
+const DOWN_RIGHT = -ROW_WIDTH + 1;
 
 /** The board is drawn in cells of this size, the top row holding the counter being aimed. */
 const CELL_SIZE = 34;
@@ -52,50 +74,42 @@ const BORDER = 1;
 const WIN_SCORE = 100;
 const WORST_SCORE = -1000;
 
-export const EMPTY_BOARD = CELLS.map(() => EMPTY);
+export const EMPTY_BOARD = BOARD_PLACES.map(() => EMPTY);
 export const EMPTY_HEIGHTS = [0, 0, 0, 0, 0, 0, 0];
 
 /** How many of a piece lie in a row from a cell, not counting the cell itself, up to three. */
-function count_along(
-  board: number[],
-  column: number,
-  row: number,
-  column_step: number,
-  row_step: number,
-  piece: number,
-): number {
-  let count = 0;
-  let still_counting = true;
+function run_length(board: number[], cell: number, step: number, piece: number): number {
   for (const distance of STEPS_ALONG_LINE) {
-    const next_column = column + column_step * distance;
-    const next_row = row + row_step * distance;
-    const is_on_board = next_column >= 0 && next_column < COLUMN_COUNT && next_row >= 0 && next_row < ROW_COUNT;
-    if (still_counting && is_on_board && board[next_row * COLUMN_COUNT + next_column] === piece) {
-      count = count + 1;
-    } else {
-      still_counting = false;
-    }
+    const next = cell + step * distance;
+    if (next < 0 || next >= BOARD_SIZE || board[next] !== piece) return distance - 1;
   }
-  return count;
+  return 3;
 }
 
 /** Whether putting a piece on a cell would make four in a row through it. */
-export function wins_at(board: number[], column: number, row: number, piece: number): boolean {
+export function wins_at(board: number[], cell: number, piece: number): boolean {
   return (
-    count_along(board, column, row, 1, 0, piece) + count_along(board, column, row, -1, 0, piece) >= 3 ||
-    count_along(board, column, row, 0, -1, piece) >= 3 ||
-    count_along(board, column, row, 1, 1, piece) + count_along(board, column, row, -1, -1, piece) >= 3 ||
-    count_along(board, column, row, 1, -1, piece) + count_along(board, column, row, -1, 1, piece) >= 3
+    run_length(board, cell, RIGHT, piece) + run_length(board, cell, LEFT, piece) >= 3 ||
+    run_length(board, cell, DOWN, piece) >= 3 ||
+    run_length(board, cell, UP_RIGHT, piece) + run_length(board, cell, DOWN_LEFT, piece) >= 3 ||
+    run_length(board, cell, UP_LEFT, piece) + run_length(board, cell, DOWN_RIGHT, piece) >= 3
   );
 }
 
-function dropped(board: number[], column: number, row: number, piece: number): number[] {
-  const target = row * COLUMN_COUNT + column;
-  return CELLS.map((cell) => (cell === target ? piece : board[cell]));
+/** The first column in the order given where a piece would win at once, or -1. */
+function winning_column(board: number[], heights: number[], piece: number, order: number[]): number {
+  for (const column of order) {
+    if (heights[column] < ROW_COUNT && wins_at(board, heights[column] * ROW_WIDTH + column, piece)) return column;
+  }
+  return -1;
 }
 
-function raised(heights: number[], column: number): number[] {
-  return COLUMNS.map((other) => (other === column ? heights[other] + 1 : heights[other]));
+function with_cell(board: number[], target: number, piece: number): number[] {
+  return BOARD_PLACES.map((place) => (place === target ? piece : board[place]));
+}
+
+function with_height(heights: number[], column: number, height: number): number[] {
+  return COLUMNS.map((other) => (other === column ? height : heights[other]));
 }
 
 /** A sooner win is worth more. */
@@ -103,104 +117,9 @@ function win_score(filled: number): number {
   return WIN_SCORE + CELL_COUNT - filled;
 }
 
-/** The column the other side must block, or -1 if it has no immediate win. */
-function threat_column(board: number[], heights: number[], piece: number): number {
-  let threat = -1;
-  for (const column of SEARCH_ORDER) {
-    if (heights[column] < ROW_COUNT && wins_at(board, column, heights[column], 3 - piece)) threat = column;
-  }
-  return threat;
-}
-
-function can_win_now(board: number[], heights: number[], piece: number): boolean {
-  let can_win = false;
-  for (const column of SEARCH_ORDER) {
-    if (heights[column] < ROW_COUNT && wins_at(board, column, heights[column], piece)) can_win = true;
-  }
-  return can_win;
-}
-
-/** How good the board is for the side to move, looking one move ahead. */
-function search_one(board: number[], heights: number[], filled: number, piece: number): number {
-  return can_win_now(board, heights, piece) ? win_score(filled) : 0;
-}
-
-/** How good the board is for the side to move, looking two moves ahead. */
-function search_two(board: number[], heights: number[], filled: number, piece: number): number {
-  const winning = can_win_now(board, heights, piece);
-  const threat = threat_column(board, heights, piece);
-  let best = WORST_SCORE;
-  if (!winning && filled < CELL_COUNT) {
-    for (const column of SEARCH_ORDER) {
-      if (heights[column] < ROW_COUNT && (threat < 0 || column === threat)) {
-        const value = -search_one(
-          dropped(board, column, heights[column], piece),
-          raised(heights, column),
-          filled + 1,
-          3 - piece,
-        );
-        best = Math.max(best, value);
-      }
-    }
-  }
-  return winning ? win_score(filled) : best === WORST_SCORE ? 0 : best;
-}
-
-/** How good the board is for the side to move, looking three moves ahead. */
-function search_three(board: number[], heights: number[], filled: number, piece: number): number {
-  const winning = can_win_now(board, heights, piece);
-  const threat = threat_column(board, heights, piece);
-  let best = WORST_SCORE;
-  if (!winning && filled < CELL_COUNT) {
-    for (const column of SEARCH_ORDER) {
-      if (heights[column] < ROW_COUNT && (threat < 0 || column === threat)) {
-        const value = -search_two(
-          dropped(board, column, heights[column], piece),
-          raised(heights, column),
-          filled + 1,
-          3 - piece,
-        );
-        best = Math.max(best, value);
-      }
-    }
-  }
-  return winning ? win_score(filled) : best === WORST_SCORE ? 0 : best;
-}
-
-/** How good a board is for the side to move after a move, searching `depth` moves further. */
-function value_after(board: number[], heights: number[], filled: number, piece: number, depth: number): number {
-  return depth === 3
-    ? search_three(board, heights, filled, piece)
-    : depth === 2
-      ? search_two(board, heights, filled, piece)
-      : depth === 1
-        ? search_one(board, heights, filled, piece)
-        : 0;
-}
-
-/** The best column for a piece, looking `depth` moves ahead in all. */
-export function choose_column(board: number[], heights: number[], filled: number, piece: number, depth: number): number {
-  const threat = threat_column(board, heights, piece);
-  let best = WORST_SCORE;
-  let best_column = -1;
-  for (const column of SEARCH_ORDER) {
-    if (heights[column] < ROW_COUNT && (threat < 0 || column === threat)) {
-      const value = wins_at(board, column, heights[column], piece)
-        ? win_score(filled)
-        : -value_after(
-            dropped(board, column, heights[column], piece),
-            raised(heights, column),
-            filled + 1,
-            3 - piece,
-            depth - 1,
-          );
-      if (value > best) {
-        best = value;
-        best_column = column;
-      }
-    }
-  }
-  return best_column;
+/** The watch moves at even depths of the search and the player at odd ones. */
+function piece_at_depth(depth: number): number {
+  return depth % 2 === 0 ? COMPUTER : PLAYER;
 }
 
 // ============================================================================
@@ -215,9 +134,9 @@ const level = persisted("level", 0);
 const wins = persisted<number[]>("wins", [0, 0, 0, 0]);
 const games = persisted<number[]>("games", [0, 0, 0, 0]);
 
-const board = signal<number[]>(EMPTY_BOARD);
-const heights = signal<number[]>(EMPTY_HEIGHTS);
-const filled = signal(0);
+export const board = signal<number[]>(EMPTY_BOARD);
+export const heights = signal<number[]>(EMPTY_HEIGHTS);
+export const filled = signal(0);
 
 /** The column the player's counter hangs over. */
 const aimed_column = signal(3);
@@ -225,8 +144,38 @@ const aimed_column = signal(3);
 const outcome = signal<"playing" | "won" | "lost" | "draw">("playing");
 
 // ============================================================================
+// Search state
+// ============================================================================
+
+/** Search steps one call may take; each costs at most about 7,000 interpreter steps. */
+const STEPS_PER_CALL = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+
+/** One place per depth of the search, which looks at most four moves ahead. */
+const DEPTHS = [0, 1, 2, 3];
+
+/** The board and column heights the search tries its moves on. */
+const trial = signal<number[]>(EMPTY_BOARD);
+const trial_heights = signal<number[]>(EMPTY_HEIGHTS);
+
+/** For each depth: the next place in the search order to try, the best score so far and the column to block, or -1. */
+const depth_next = signal<number[]>([0, 0, 0, 0]);
+const depth_best = signal<number[]>([0, 0, 0, 0]);
+const depth_threat = signal<number[]>([-1, -1, -1, -1]);
+
+/** The depth the search is working at, or -1 while it is not searching. */
+export const search_depth = signal(-1);
+
+/** How many moves ahead the search looks in all. */
+const search_reach = signal(1);
+
+/** The best column found so far, or -1 while no move is waiting to be played. */
+export const chosen_column = signal(-1);
+
+// ============================================================================
 // Derived values
 // ============================================================================
+
+const is_thinking = computed(() => search_depth.value >= 0);
 
 const won_percent = computed(() => {
   const played = games.value[level.value];
@@ -236,6 +185,101 @@ const won_percent = computed(() => {
 const outcome_text = computed(() =>
   outcome.value === "won" ? "You win!" : outcome.value === "lost" ? "You lose!" : outcome.value === "draw" ? "Draw" : "",
 );
+
+// ============================================================================
+// Search
+// ============================================================================
+
+function with_depth_value(values: number[], depth: number, value: number): number[] {
+  return DEPTHS.map((other) => (other === depth ? value : values[other]));
+}
+
+function play_trial(column: number, piece: number) {
+  const row = trial_heights.value[column];
+  trial.value = with_cell(trial.value, row * ROW_WIDTH + column, piece);
+  trial_heights.value = with_height(trial_heights.value, column, row + 1);
+}
+
+function take_back_trial(column: number) {
+  const row = trial_heights.value[column] - 1;
+  trial.value = with_cell(trial.value, row * ROW_WIDTH + column, EMPTY);
+  trial_heights.value = with_height(trial_heights.value, column, row);
+}
+
+/** Keeps a column's score at a depth if it beats the best so far; at the top it becomes the choice. */
+function record_score(depth: number, column: number, score: number) {
+  if (score > depth_best.value[depth]) {
+    depth_best.value = with_depth_value(depth_best.value, depth, score);
+    if (depth === 0) chosen_column.value = column;
+  }
+}
+
+/** Takes back the move into a depth and scores it for the side that made it. */
+function leave_depth(depth: number, value: number) {
+  const column = SEARCH_ORDER[depth_next.value[depth - 1] - 1];
+  take_back_trial(column);
+  search_depth.value = depth - 1;
+  record_score(depth - 1, column, -value);
+}
+
+/** Starts work on the position after a move: scored at once if the side to move wins or the search ends here. */
+function enter_depth(depth: number) {
+  const win = winning_column(trial.value, trial_heights.value, piece_at_depth(depth), SEARCH_ORDER);
+  if (win >= 0) {
+    leave_depth(depth, win_score(filled.value + depth));
+  } else if (search_reach.value - depth === 1) {
+    leave_depth(depth, 0);
+  } else {
+    depth_next.value = with_depth_value(depth_next.value, depth, 0);
+    depth_best.value = with_depth_value(depth_best.value, depth, WORST_SCORE);
+    depth_threat.value = with_depth_value(
+      depth_threat.value,
+      depth,
+      winning_column(trial.value, trial_heights.value, piece_at_depth(depth + 1), REVERSED_SEARCH_ORDER),
+    );
+    search_depth.value = depth;
+  }
+}
+
+/** Starts a search for the watch's move, looking `reach` moves ahead; a winning move is chosen at once. */
+export function begin_search(reach: number) {
+  trial.value = board.value;
+  trial_heights.value = heights.value;
+  search_reach.value = reach;
+  chosen_column.value = winning_column(board.value, heights.value, COMPUTER, SEARCH_ORDER);
+  if (chosen_column.value < 0) {
+    depth_next.value = with_depth_value(depth_next.value, 0, 0);
+    depth_best.value = with_depth_value(depth_best.value, 0, WORST_SCORE);
+    depth_threat.value = with_depth_value(
+      depth_threat.value,
+      0,
+      winning_column(board.value, heights.value, PLAYER, REVERSED_SEARCH_ORDER),
+    );
+    search_depth.value = 0;
+  }
+}
+
+/** Tries the next column at the current depth, or finishes the depth once every column is tried. */
+export function search_step() {
+  const depth = search_depth.value;
+  const place = depth_next.value[depth];
+  if (place >= COLUMN_COUNT) {
+    const value = depth_best.value[depth] === WORST_SCORE ? 0 : depth_best.value[depth];
+    if (depth === 0) search_depth.value = -1;
+    else leave_depth(depth, value);
+    return;
+  }
+  depth_next.value = with_depth_value(depth_next.value, depth, place + 1);
+  const column = SEARCH_ORDER[place];
+  if (trial_heights.value[column] >= ROW_COUNT) return;
+  if (depth_threat.value[depth] >= 0 && depth_threat.value[depth] !== column) return;
+  if (search_reach.value - depth === 1) {
+    record_score(depth, column, 0);
+  } else {
+    play_trial(column, piece_at_depth(depth));
+    enter_depth(depth + 1);
+  }
+}
 
 // ============================================================================
 // Handlers
@@ -248,10 +292,10 @@ function count_game(won: boolean) {
 
 /** Drops a piece into a column with room, and ends the game if it wins or fills the board. */
 function place(column: number, piece: number) {
-  const row = heights.value[column];
-  const wins_game = wins_at(board.value, column, row, piece);
-  board.value = dropped(board.value, column, row, piece);
-  heights.value = raised(heights.value, column);
+  const cell = heights.value[column] * ROW_WIDTH + column;
+  const wins_game = wins_at(board.value, cell, piece);
+  board.value = with_cell(board.value, cell, piece);
+  heights.value = with_height(heights.value, column, heights.value[column] + 1);
   filled.value = filled.value + 1;
   if (wins_game) {
     outcome.value = piece === PLAYER ? "won" : "lost";
@@ -263,12 +307,25 @@ function place(column: number, piece: number) {
   }
 }
 
+/** Carries the search on for a few steps, and plays the chosen column once it is done. */
+function think() {
+  if (search_depth.value < 0 && chosen_column.value < 0) return;
+  for (const _step of STEPS_PER_CALL) {
+    if (search_depth.value >= 0) search_step();
+  }
+  if (search_depth.value < 0 && chosen_column.value >= 0) {
+    place(chosen_column.value, COMPUTER);
+    chosen_column.value = -1;
+  }
+}
+
 function computer_move() {
-  const column =
-    filled.value < 3
-      ? random_int(0, COLUMN_COUNT - 1)
-      : choose_column(board.value, heights.value, filled.value, COMPUTER, level.value + 1);
-  if (column >= 0) place(column, COMPUTER);
+  if (filled.value < 3) {
+    place(random_int(0, COLUMN_COUNT - 1), COMPUTER);
+  } else {
+    begin_search(level.value + 1);
+    think();
+  }
 }
 
 function start_game() {
@@ -277,6 +334,8 @@ function start_game() {
   filled.value = 0;
   aimed_column.value = 3;
   outcome.value = "playing";
+  search_depth.value = -1;
+  chosen_column.value = -1;
   if (games.value[level.value] % 2 === 1) computer_move();
   go("game");
 }
@@ -291,7 +350,7 @@ function game_swipe(event: SwipeEvent) {
     back();
   } else if (outcome.value !== "playing") {
     back();
-  } else if (heights.value[aimed_column.value] === ROW_COUNT) {
+  } else if (is_thinking.value || heights.value[aimed_column.value] === ROW_COUNT) {
     vibrate(50);
   } else {
     place(aimed_column.value, PLAYER);
@@ -343,7 +402,7 @@ function Game() {
   return (
     <Screen onSwipe={game_swipe} onClick={aim}>
       <Column x={0} y={BORDER + CELL_SIZE} width={240} height={240 - BORDER - CELL_SIZE} background="#000080" />
-      {outcome.value === "playing" && (
+      {outcome.value === "playing" && !is_thinking.value && (
         <Column
           x={BORDER + aimed_column.value * CELL_SIZE + 2}
           y={BORDER + 2}
@@ -353,15 +412,15 @@ function Game() {
           background={PIECE_COLORS[PLAYER]}
         />
       )}
-      {outcome.value !== "playing" && (
+      {(outcome.value !== "playing" || is_thinking.value) && (
         <Label x={0} y={6} width={240} text_align="center">
-          {outcome_text.value}
+          {is_thinking.value ? "Thinking..." : outcome_text.value}
         </Label>
       )}
       {CELLS.map((cell) => (
         <Column
-          x={BORDER + (cell % COLUMN_COUNT) * CELL_SIZE + 2}
-          y={BORDER + (ROW_COUNT - Math.floor(cell / COLUMN_COUNT)) * CELL_SIZE + 2}
+          x={BORDER + (cell % ROW_WIDTH) * CELL_SIZE + 2}
+          y={BORDER + (ROW_COUNT - Math.floor(cell / ROW_WIDTH)) * CELL_SIZE + 2}
           width={PIECE_SIZE}
           height={PIECE_SIZE}
           radius={15}
@@ -377,4 +436,5 @@ export default define_app({
   name: "4 in a row",
   icon: icons.game,
   screens: { main: Menu, game: Game },
+  subscriptions: [every({ milliseconds: 100 }, think)],
 });

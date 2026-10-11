@@ -62,30 +62,51 @@ const POSITIONS = [
 
 const EMPTY_LINES = ["", "", "", "", "", ""];
 
-function scrolled(lines: string[], newest: string): string[] {
-  return [lines[1], lines[2], lines[3], lines[4], lines[5], newest];
-}
+/** The six lines on show, oldest first. */
+const LINE_PLACES = [0, 1, 2, 3, 4, 5];
 
-/** The last six lines of the text, wrapping long lines and breaking at each new line. */
-export function layout(characters: number[], count: number): string[] {
-  let lines = EMPTY_LINES;
-  let current = "";
+/** How many lines the text takes, counting the unfinished last one. */
+function line_count(characters: number[], count: number): number {
+  let finished_lines = 0;
   let column = 0;
   for (const position of POSITIONS) {
     if (position < count) {
       const code = characters[position];
       if (code === NEW_LINE || column === LINE_LENGTH) {
-        lines = scrolled(lines, current);
-        current = "";
+        finished_lines = finished_lines + 1;
+        column = 0;
+      }
+      if (code !== NEW_LINE) column = column + 1;
+    }
+  }
+  return finished_lines + 1;
+}
+
+/** One line of the text, counting from 0 for the first; a line before the first is empty. */
+function line_text(characters: number[], count: number, wanted: number): string {
+  let line = 0;
+  let column = 0;
+  let text = "";
+  for (const position of POSITIONS) {
+    if (position < count) {
+      const code = characters[position];
+      if (code === NEW_LINE || column === LINE_LENGTH) {
+        line = line + 1;
         column = 0;
       }
       if (code !== NEW_LINE) {
-        current = current + CODE[code];
+        if (line === wanted) text = text + CODE[code];
         column = column + 1;
       }
     }
   }
-  return scrolled(lines, current);
+  return text;
+}
+
+/** The last six lines of the text, wrapping long lines and breaking at each new line. */
+export function layout(characters: number[], count: number): string[] {
+  const total = line_count(characters, count);
+  return LINE_PLACES.map((place) => line_text(characters, count, total - LINE_PLACES.length + place));
 }
 
 // ============================================================================

@@ -79,6 +79,9 @@ const GENERATION_COLORS: Color[] = [
 
 const board = signal<number[]>(ACORN);
 
+/** The next generation is built here first, because each cell reads its neighbours on the board as it was. */
+const next_board = signal<number[]>(ACORN);
+
 const generation = signal(0);
 
 // ============================================================================
@@ -86,7 +89,8 @@ const generation = signal(0);
 // ============================================================================
 
 function step() {
-  board.value = next_generation(board.value);
+  next_board.value = next_generation(board.value);
+  board.value = next_board.value;
   generation.value = generation.value + 1;
 }
 

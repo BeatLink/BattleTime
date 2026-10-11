@@ -26,20 +26,6 @@ function swapped(board: number[], first: number, second: number): number[] {
   return CELLS.map((cell) => (cell === first ? board[second] : cell === second ? board[first] : board[cell]));
 }
 
-/** A random solvable board: an even shuffle of the fifteen tiles, made even by one more swap if needed. */
-export function shuffled_board(): number[] {
-  let board = SOLVED_BOARD;
-  let swap_count = 0;
-  for (const place of SHUFFLED_PLACES) {
-    const other = random_int(place, 14);
-    if (other !== place) {
-      board = swapped(board, place, other);
-      swap_count = swap_count + 1;
-    }
-  }
-  return swap_count % 2 === 1 ? swapped(board, 13, 14) : board;
-}
-
 /** The cell whose tile a swipe moves into the gap, or -1 if the gap is against that edge. */
 export function tile_moved_by(gap: number, direction: SwipeEvent["direction"]): number {
   const column = gap % 4;
@@ -64,7 +50,7 @@ export function is_solved(board: number[]): boolean {
 // State
 // ============================================================================
 
-const board = persisted<number[]>("board", SOLVED_BOARD);
+export const board = persisted<number[]>("board", SOLVED_BOARD);
 
 const gap = persisted("gap", GAP_WHEN_SOLVED);
 
@@ -85,8 +71,18 @@ const solved = computed(() => is_solved(board.value));
 // Handlers
 // ============================================================================
 
-function start_game() {
-  board.value = shuffled_board();
+/** Deals a random solvable board: an even shuffle of the fifteen tiles, made even by one more swap if needed. */
+export function start_game() {
+  board.value = SOLVED_BOARD;
+  let swap_count = 0;
+  for (const place of SHUFFLED_PLACES) {
+    const other = random_int(place, 14);
+    if (other !== place) {
+      board.value = swapped(board.value, place, other);
+      swap_count = swap_count + 1;
+    }
+  }
+  if (swap_count % 2 === 1) board.value = swapped(board.value, 13, 14);
   gap.value = GAP_WHEN_SOLVED;
   move_count.value = 0;
 }

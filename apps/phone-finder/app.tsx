@@ -1,17 +1,30 @@
 // Phone finder, ported from wasp-os's phone_finder.
-// A title card above a large button that makes the connected phone ring.
+// A title card above a large button that makes the connected phone ring, and stops it again.
 
+import { signal } from "@preact/signals";
 import { define_app, find_phone, is_phone_connected, show_toast } from "neotime";
 import { icons } from "neotime/icons";
 import { Button, Column, Icon, Label, Screen } from "neotime/widgets";
 
 // ============================================================================
+// State
+// ============================================================================
+
+const is_ringing = signal(false);
+
+// ============================================================================
 // Handlers
 // ============================================================================
 
-function ring_phone() {
-  find_phone();
-  show_toast("Ringing your phone");
+function ring_or_stop() {
+  is_ringing.value = !is_ringing.value;
+  find_phone(is_ringing.value);
+  if (is_ringing.value) show_toast("Ringing your phone");
+}
+
+function stop_when_closed() {
+  if (is_ringing.value) find_phone(false);
+  is_ringing.value = false;
 }
 
 // ============================================================================
@@ -30,8 +43,13 @@ function PhoneFinder() {
           </Label>
         )}
       </Column>
-      <Button grow={1} background="accent" disabled={!is_phone_connected.value} onClick={ring_phone}>
-        Ring
+      <Button
+        grow={1}
+        background={is_ringing.value ? "danger" : "accent"}
+        disabled={!is_phone_connected.value}
+        onClick={ring_or_stop}
+      >
+        {is_ringing.value ? "Stop" : "Ring"}
       </Button>
     </Screen>
   );
@@ -43,4 +61,5 @@ export default define_app({
   icon: icons.phone,
   screens: { main: PhoneFinder },
   permissions: ["phone"],
+  onClose: stop_when_closed,
 });

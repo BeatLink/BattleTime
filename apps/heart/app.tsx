@@ -79,9 +79,8 @@ function record(event: HeartRateEvent) {
   confidence.value = event.confidence;
   beats_per_minute.value = event.beats_per_minute;
   if (event.confidence < SETTLED_CONFIDENCE || event.beats_per_minute === 0) return;
-  const previous = readings.value;
-  readings.value = previous.map((_reading, place) =>
-    place + 1 < previous.length ? previous[place + 1] : event.beats_per_minute,
+  readings.value = readings.value.map((_reading, place) =>
+    place + 1 < readings.value.length ? readings.value[place + 1] : event.beats_per_minute,
   );
 }
 

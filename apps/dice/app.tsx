@@ -57,12 +57,11 @@ const result_color = computed(() => RESULT_COLORS[color_place.value]);
 // ============================================================================
 
 function throw_dice() {
-  const thrown = DIE_PLACES.map(() => random_int(1, side_count.value));
+  faces.value = DIE_PLACES.map(() => random_int(1, side_count.value));
   let sum = 0;
   for (const place of DIE_PLACES) {
-    if (place < die_count.value) sum = sum + thrown[place];
+    if (place < die_count.value) sum = sum + faces.value[place];
   }
-  faces.value = thrown;
   total.value = sum;
   rolled_count.value = die_count.value;
   rolled_sides.value = side_count.value;

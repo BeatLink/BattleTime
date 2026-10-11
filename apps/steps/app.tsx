@@ -97,8 +97,14 @@ function start_new_day() {
   for (const count of hourly_steps.value) {
     total = total + count;
   }
-  const earlier = daily_totals.value;
-  daily_totals.value = [total, earlier[0], earlier[1], earlier[2], earlier[3], earlier[4]];
+  daily_totals.value = [
+    total,
+    daily_totals.value[0],
+    daily_totals.value[1],
+    daily_totals.value[2],
+    daily_totals.value[3],
+    daily_totals.value[4],
+  ];
   hourly_steps.value = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   trip_steps.value = trip_steps.value + unrecorded_steps.value;
   recorded_steps.value = steps_today.value;

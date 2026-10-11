@@ -20,7 +20,7 @@ const START_CELL = 8 * BOARD_SIZE + 8;
 /** The longest the snake can grow, one widget for each part of it. */
 const LONGEST_SNAKE = 64;
 
-/** Places along the snake, head first. */
+/** Segments of the snake counting from the head, and also the places of the body ring. */
 const SEGMENTS = [
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
   31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58,
@@ -35,15 +35,6 @@ const STARTING_BODY = SEGMENTS.map(() => START_CELL);
 /** How far one step moves the head, in cells numbered across each row. */
 const STEP_FOR_DIRECTION = { up: -BOARD_SIZE, down: BOARD_SIZE, left: -1, right: 1 };
 
-/** Whether a cell is one of the first `length` places of the snake. */
-function is_on_snake(body: number[], length: number, cell: number): boolean {
-  let found = false;
-  for (const segment of SEGMENTS) {
-    if (segment < length && body[segment] === cell) found = true;
-  }
-  return found;
-}
-
 /** Whether moving one step from a cell runs into a wall. */
 export function hits_wall(cell: number, step: number): boolean {
   const column = cell % BOARD_SIZE;
@@ -55,21 +46,13 @@ export function hits_wall(cell: number, step: number): boolean {
   );
 }
 
-/** A random cell off the snake, giving up after a few tries on a crowded board. */
-function food_cell(body: number[], length: number): number {
-  let cell = random_int(0, LAST_CELL);
-  for (const attempt of FOOD_ATTEMPTS) {
-    if (is_on_snake(body, length, cell)) cell = random_int(0, LAST_CELL);
-  }
-  return cell;
-}
-
 // ============================================================================
 // State
 // ============================================================================
 
-/** Cells the snake covers, head first; only the first `length` count. */
+/** Cells the snake covers as a ring: the head is at `head_place` and later segments follow it round. */
 const body = signal<number[]>(STARTING_BODY);
+const head_place = signal(0);
 
 const length = signal(1);
 
@@ -87,6 +70,33 @@ const is_running = signal(true);
 const best_length = persisted("best_length", 1);
 
 // ============================================================================
+// Snake body
+// ============================================================================
+
+/** The cell under one segment of the snake, counting from 0 at the head. */
+function segment_cell(segment: number): number {
+  return body.value[(head_place.value + segment) % LONGEST_SNAKE];
+}
+
+/** Whether a cell is under one of the first `length` segments of the snake. */
+function is_on_snake(length: number, cell: number): boolean {
+  let found = false;
+  for (const segment of SEGMENTS) {
+    if (segment < length && segment_cell(segment) === cell) found = true;
+  }
+  return found;
+}
+
+/** A random cell off the snake, giving up after a few tries on a crowded board. */
+function food_cell(length: number): number {
+  let cell = random_int(0, LAST_CELL);
+  for (const attempt of FOOD_ATTEMPTS) {
+    if (is_on_snake(length, cell)) cell = random_int(0, LAST_CELL);
+  }
+  return cell;
+}
+
+// ============================================================================
 // Derived values
 // ============================================================================
 
@@ -98,10 +108,11 @@ const score = computed(() => length.value - 1);
 
 function restart() {
   body.value = STARTING_BODY;
+  head_place.value = 0;
   length.value = 1;
   step_size.value = 0;
   next_step_size.value = 0;
-  food.value = food_cell(body.value, 1);
+  food.value = food_cell(1);
   is_running.value = true;
 }
 
@@ -113,18 +124,20 @@ function end_game() {
 
 export function tick() {
   const step = next_step_size.value;
-  const head = body.value[0];
+  const head = segment_cell(0);
   if (is_running.value && step !== 0) {
     step_size.value = step;
     const next_head = head + step;
     const eats = next_head === food.value;
     const next_length = eats ? Math.min(length.value + 1, LONGEST_SNAKE) : length.value;
-    if (hits_wall(head, step) || is_on_snake(body.value, length.value - (eats ? 0 : 1), next_head)) {
+    if (hits_wall(head, step) || is_on_snake(length.value - (eats ? 0 : 1), next_head)) {
       end_game();
     } else {
-      body.value = SEGMENTS.map((segment) => (segment === 0 ? next_head : body.value[segment - 1]));
+      const next_head_place = (head_place.value + LONGEST_SNAKE - 1) % LONGEST_SNAKE;
+      body.value = SEGMENTS.map((place) => (place === next_head_place ? next_head : body.value[place]));
+      head_place.value = next_head_place;
       length.value = next_length;
-      if (eats) food.value = food_cell(body.value, next_length);
+      if (eats) food.value = food_cell(next_length);
     }
   }
 }
@@ -160,7 +173,7 @@ function Snake() {
     <Screen onSwipe={steer} onClick={tap}>
       {is_running.value && <Square cell={food.value} color="accent" />}
       {SEGMENTS.map(
-        (segment) => is_running.value && segment < length.value && <Square cell={body.value[segment]} color="text" />,
+        (segment) => is_running.value && segment < length.value && <Square cell={segment_cell(segment)} color="text" />,
       )}
       {!is_running.value && (
         <Column x={0} y={50} width={240} align_items="center" gap={4}>

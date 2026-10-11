@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { is_solved, shuffled_board, tile_moved_by, SOLVED_BOARD } from "./app.tsx";
+import { board as dealt_board, is_solved, start_game, tile_moved_by, SOLVED_BOARD } from "./app.tsx";
 
 function inversions(board: number[]): number {
   const tiles = board.filter((tile) => tile !== 0);
@@ -11,7 +11,8 @@ function inversions(board: number[]): number {
 describe("15 puzzle rules", () => {
   it("only deals solvable boards", () => {
     for (let round = 0; round < 200; round++) {
-      const board = shuffled_board();
+      start_game();
+      const board = dealt_board.value;
       expect(board[15]).toBe(0);
       expect([...board].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
       expect(inversions(board) % 2).toBe(0);
