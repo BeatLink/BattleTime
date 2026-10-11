@@ -221,6 +221,14 @@ On the watch it showed "flash, files ok", and the real firmware, 107 KB, went in
 slot through wasp-os's own `dfu.py` in 6 minutes 57 seconds, its CRC checked by reading the image
 back from the chip.
 
+### On the watch
+
+On 2026-10-11 the reloader went to a PineTime running wasp-os on S112, through wasp-os's own
+update mode (238 KB in 4 minutes 7 seconds), and the watch came up running NeoTime seconds later,
+with its file system found and the firmware confirmed. A firmware update sent to NeoTime itself then
+took 1 minute 51 seconds to upload. The bootloader swapped it in, it started, and it confirmed
+itself after its first Bluetooth exchange.
+
 ## Proving it on the emulator
 
 The emulator (`PineTimeEmulator/`, Renode) models the chip's flash controller, the external flash
