@@ -8,13 +8,13 @@ import {
   define_app,
   format_time,
   hour_of,
-  is_charging,
   is_phone_connected,
   minute_of,
   now,
   unread_notifications,
   type Color,
 } from "neotime";
+import { BatteryIcon } from "neotime/components";
 import { icons } from "neotime/icons";
 import { Column, Icon, Label, Row, Screen } from "neotime/widgets";
 
@@ -54,17 +54,7 @@ function StatusBar() {
     <Row x={0} y={0} width={240} height={32} justify="end" gap={6} padding={4}>
       {unread_notifications.value > 0 && <Icon icon={icons.notification} size={22} color="accent" />}
       {is_phone_connected.value && <Icon icon={icons.bluetooth} size={22} color="accent" />}
-      {is_charging.value ? (
-        <Icon icon={icons.charging} size={22} color="warning" />
-      ) : (
-        <Row width={26} height={14} border_width={2} border_color={battery_color.value} radius={2} padding={1}>
-          <Column
-            width={Math.max(1, Math.floor((battery_percent.value * 20) / 100))}
-            height={8}
-            background={battery_color.value}
-          />
-        </Row>
-      )}
+      <BatteryIcon color={battery_color.value} />
     </Row>
   );
 }

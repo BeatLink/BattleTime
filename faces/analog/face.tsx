@@ -4,21 +4,20 @@
 
 import { computed } from "@preact/signals";
 import {
-  battery_percent,
   define_app,
-  day_of,
-  format_number,
+  format_time,
   is_charging,
   is_phone_connected,
   now,
   start_of_minute,
   persisted,
+  to_upper,
   unread_notifications,
-  weekday_of,
   type Color,
 } from "neotime";
+import { BatteryIcon } from "neotime/components";
 import { icons } from "neotime/icons";
-import { AnalogClock, Column, Icon, Label, Line, Row, Scale, Screen } from "neotime/widgets";
+import { AnalogClock, Icon, Label, Line, Row, Scale, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -28,7 +27,13 @@ const AQUA: Color = "#00ffff";
 const ORANGE: Color = "#ffb000";
 const GRAY: Color = "#808080";
 
-const WEEKDAY_NAMES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+/** InfiniTime's hand lengths in pixels from the centre. */
+const HOUR_LENGTH = 70;
+const MINUTE_LENGTH = 90;
+const SECOND_LENGTH = 110;
+
+/** The gap around the "12" and the ticks under the aqua marks at 3, 6 and 9, counted in minutes. */
+const SKIPPED_TICKS = [56, 57, 58, 59, 0, 1, 2, 3, 4, 15, 30, 45];
 
 /** Whether the second hand is drawn; InfiniTime shows it, wasp-os does not. */
 const shows_seconds = persisted("shows_seconds", true);
@@ -37,10 +42,8 @@ const shows_seconds = persisted("shows_seconds", true);
 // Derived values
 // ============================================================================
 
-/** The short weekday over the day of the month, as InfiniTime shows it. */
-const date_text = computed(
-  () => `${WEEKDAY_NAMES[weekday_of(now.value)]}\n${format_number(day_of(now.value), 2)}`,
-);
+/** The short weekday in capitals over the day of the month, as InfiniTime shows it. */
+const date_text = computed(() => to_upper(format_time(now.value, "ddd\nDD")));
 
 // ============================================================================
 // Handlers
@@ -54,29 +57,21 @@ function toggle_seconds() {
 // Screen
 // ============================================================================
 
-function BatteryLevel() {
-  return (
-    <Row width={26} height={14} border_width={2} border_color="text" radius={2} padding={1}>
-      <Column width={Math.max(1, Math.floor((battery_percent.value * 20) / 100))} height={8} background="text" />
-    </Row>
-  );
-}
-
 function AnalogFace() {
   return (
     <Screen onLongPress={toggle_seconds}>
-      <Scale ticks={60} major_every={5} color={GRAY} major_color="#ffffff" />
+      <Scale ticks={60} major_every={5} skip={SKIPPED_TICKS} color={GRAY} major_color="#ffffff" />
       <Line points={[{ x: 220, y: 120 }, { x: 238, y: 120 }]} thickness={4} color={AQUA} rounded={false} />
       <Line points={[{ x: 120, y: 220 }, { x: 120, y: 238 }]} thickness={4} color={AQUA} rounded={false} />
       <Line points={[{ x: 2, y: 120 }, { x: 20, y: 120 }]} thickness={4} color={AQUA} rounded={false} />
-      <Label x={0} y={20} width={240} text_align="center" color={AQUA}>
+      <Label x={0} y={10} width={240} text_align="center" color={AQUA}>
         12
       </Label>
 
       {unread_notifications.value > 0 && <Icon x={0} y={0} icon={icons.notification} size={24} color="#00ff00" />}
-      <Row x={150} y={0} width={90} height={24} justify="end" gap={8}>
+      <Row x={130} y={0} width={110} height={24} justify="end" gap={8}>
         {is_phone_connected.value && <Icon icon={icons.bluetooth} size={20} />}
-        {is_charging.value ? <Icon icon={icons.charging} size={20} /> : <BatteryLevel />}
+        {is_charging.value ? <Icon icon={icons.charging} size={20} /> : <BatteryIcon single_color />}
       </Row>
 
       <Label x={145} y={97} width={50} text_align="center" color={ORANGE}>
@@ -86,6 +81,10 @@ function AnalogFace() {
       <AnalogClock
         time={shows_seconds.value ? now.value : start_of_minute(now.value)}
         show_seconds={shows_seconds.value}
+        hour_length={HOUR_LENGTH}
+        minute_length={MINUTE_LENGTH}
+        second_length={SECOND_LENGTH}
+        hand_style="rounded"
         hour_color="#ffffff"
         minute_color="#ffffff"
         second_color="#ff0000"

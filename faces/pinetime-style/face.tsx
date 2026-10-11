@@ -1,35 +1,33 @@
 // PineTimeStyle watch face, ported from InfiniTime's WatchFacePineTimeStyle, itself styled after TimeStyle for Pebble.
-// A coloured time panel on the left and a sidebar on the right with status icons, weather, a calendar and a step gauge.
+// A coloured time panel of giant digits on the left and a sidebar with status icons, weather, a calendar and a step gauge with a needle.
 // InfiniTime's pop-up colour and option buttons are a settings screen here, opened by a long press.
 
 import { computed } from "@preact/signals";
 import {
   back,
-  battery_percent,
+  current_weather,
   day_of,
   define_app,
   format_number,
+  format_time,
   go,
   hour_of,
   is_charging,
   is_phone_connected,
   minute_of,
-  month_of,
   now,
   persisted,
   random_int,
-  second_of,
   settings,
   steps_today,
+  to_upper,
   unread_notifications,
-  weather,
-  weekday_of,
   type Color,
-  type WeatherCondition,
-  type WeatherEvent,
+  type Instant,
 } from "neotime";
+import { BatteryIcon } from "neotime/components";
 import { icon_named, icons } from "neotime/icons";
-import { Arc, Button, Column, Icon, Label, Row, Screen } from "neotime/widgets";
+import { Button, Column, Icon, Label, Row, Scale, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -83,9 +81,6 @@ const WHITE = 0;
 const BLACK = 3;
 const TEAL = 11;
 
-const WEEKDAY_NAMES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
-const MONTH_NAMES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-
 const GAUGE_STYLE_FULL = 0;
 const GAUGE_STYLE_HALF = 1;
 const GAUGE_STYLE_NUMERIC = 2;
@@ -96,16 +91,10 @@ const time_color = persisted("time_color", TEAL);
 const bar_color = persisted("bar_color", TEAL);
 const background_color = persisted("background_color", BLACK);
 
-/** How the sidebar shows steps: a full ring, a half ring with seconds, or a number. */
+/** How the sidebar shows steps: a full gauge, a half gauge with seconds, or a number. */
 const gauge_style = persisted("gauge_style", GAUGE_STYLE_FULL);
 
 const shows_weather = persisted("shows_weather", true);
-
-/** The latest temperature from the phone, in degrees Celsius. */
-const weather_temperature = persisted("weather_temperature", 0);
-
-/** The latest condition from the phone, or "none" before any forecast arrives. */
-const weather_condition = persisted<WeatherCondition | "none">("weather_condition", "none");
 
 // ============================================================================
 // Derived values
@@ -119,18 +108,49 @@ const display_hour = computed(() => {
 });
 
 /** The steps as a share of the goal, wrapping past 100 as InfiniTime's gauge does. */
-const step_gauge_value = computed(
+export const step_gauge_value = computed(
   () => Math.floor(steps_today.value / Math.max(1, Math.floor(settings.step_goal.value / 100))) % 100,
 );
 
-/** The gauge is drawn black on a white sidebar and white on any other. */
+/** The needle is black on a white sidebar and white on any other. */
 const needle_color = computed<Color>(() => (bar_color.value === WHITE ? "#000000" : "#ffffff"));
 
-const temperature_text = computed(() =>
-  weather_condition.value === "none"
-    ? "--"
-    : `${settings.uses_metric_units.value ? weather_temperature.value : Math.round((weather_temperature.value * 9) / 5) + 32}°`,
+/** The gauge's marks are black until the step goal is passed, then white. */
+const gauge_mark_color = computed<Color>(() =>
+  steps_today.value > settings.step_goal.value ? "#ffffff" : "#000000",
 );
+
+const has_weather = computed(() => current_weather.value.received_at !== null);
+
+const temperature_text = computed(() => {
+  const celsius = current_weather.value.temperature;
+  if (!has_weather.value) return "--";
+  return `${settings.uses_metric_units.value ? celsius : Math.round((celsius * 9) / 5) + 32}°`;
+});
+
+function minute_of_day(instant: Instant): number {
+  return hour_of(instant) * 60 + minute_of(instant);
+}
+
+/** Night runs from sunset to sunrise, or from 18:00 to 06:00 until the phone sends them. */
+const is_night = computed(() => {
+  if (current_weather.value.sunrise === null || current_weather.value.sunset === null) {
+    return hour_of(now.value) < 6 || hour_of(now.value) >= 18;
+  }
+  return (
+    minute_of_day(now.value) < minute_of_day(current_weather.value.sunrise) ||
+    minute_of_day(now.value) >= minute_of_day(current_weather.value.sunset)
+  );
+});
+
+/** The condition's icon, the moon in place of the sun at night, and a cross before any forecast, as InfiniTime does. */
+const weather_icon = computed(() => {
+  const condition = current_weather.value.condition;
+  if (!has_weather.value) return icons.close;
+  if (is_night.value && condition === "clear") return icons.weather_night_clear;
+  if (is_night.value && condition === "few_clouds") return icons.weather_night_cloudy;
+  return icon_named(condition);
+});
 
 /** The calendar sits lower when the weather is shown above it. */
 const calendar_top = computed(() => (shows_weather.value ? 123 : 103));
@@ -190,29 +210,16 @@ function toggle_weather() {
   shows_weather.value = !shows_weather.value;
 }
 
-function store_weather(event: WeatherEvent) {
-  weather_temperature.value = event.temperature;
-  weather_condition.value = event.condition;
-}
-
 // ============================================================================
 // Screens
 // ============================================================================
-
-function BatteryLevel() {
-  return (
-    <Row width={22} height={12} border_width={2} border_color="#000000" radius={2} padding={1}>
-      <Column width={Math.max(1, Math.floor((battery_percent.value * 16) / 100))} height={6} background="#000000" />
-    </Row>
-  );
-}
 
 function Calendar() {
   const top = calendar_top.value;
   return (
     <>
       <Label x={200} y={top - 24} width={40} text_align="center" font="small" color="#000000">
-        {WEEKDAY_NAMES[weekday_of(now.value)]}
+        {to_upper(format_time(now.value, "ddd"))}
       </Label>
       <Column x={203} y={top} width={34} height={34} background="#000000" />
       <Column x={206} y={top + 3} width={28} height={28} background="#ffffff" />
@@ -222,44 +229,47 @@ function Calendar() {
         {`${day_of(now.value)}`}
       </Label>
       <Label x={200} y={top + 38} width={40} text_align="center" font="small" color="#000000">
-        {MONTH_NAMES[month_of(now.value) - 1]}
+        {to_upper(format_time(now.value, "MMM"))}
       </Label>
     </>
   );
 }
 
+/** InfiniTime's needle gauges, the half one over the top from nine to three o'clock; minor ticks match the sidebar so only the marks show. */
 function StepGauge() {
   return (
     <>
       {gauge_style.value === GAUGE_STYLE_FULL && (
-        <Arc
-          x={202}
+        <Scale
+          x={200}
           y={200}
-          diameter={36}
-          thickness={4}
-          start_angle={180}
-          end_angle={180}
+          diameter={40}
+          ticks={100}
+          major_every={10}
+          color={COLORS[bar_color.value]}
+          major_color={gauge_mark_color.value}
           value={step_gauge_value.value}
-          color={needle_color.value}
-          track_color="#000000"
+          needle_color={needle_color.value}
         />
       )}
       {gauge_style.value === GAUGE_STYLE_HALF && (
-        <Arc
-          x={202}
+        <Scale
+          x={201}
           y={186}
-          diameter={36}
-          thickness={4}
+          diameter={37}
+          ticks={101}
+          major_every={25}
           start_angle={270}
           end_angle={90}
+          color={COLORS[bar_color.value]}
+          major_color={gauge_mark_color.value}
           value={step_gauge_value.value}
-          color={needle_color.value}
-          track_color="#000000"
+          needle_color={needle_color.value}
         />
       )}
       {gauge_style.value === GAUGE_STYLE_HALF && (
         <Label x={200} y={218} width={40} text_align="center" font="small" color="#000000">
-          {`:${format_number(second_of(now.value), 2)}`}
+          {format_time(now.value, "[:]ss")}
         </Label>
       )}
       {gauge_style.value === GAUGE_STYLE_NUMERIC && (
@@ -281,10 +291,10 @@ function PineTimeStyleFace() {
       {unread_notifications.value > 0 && (
         <Icon x={5} y={5} icon={icons.notification} size={20} color={digit_color} />
       )}
-      <Label x={5} y={14} width={200} text_align="center" font="huge" color={digit_color}>
+      <Label x={5} y={0} width={200} text_align="center" font="giant" color={digit_color}>
         {format_number(display_hour.value, 2)}
       </Label>
-      <Label x={5} y={134} width={200} text_align="center" font="huge" color={digit_color}>
+      <Label x={5} y={110} width={200} text_align="center" font="giant" color={digit_color}>
         {format_number(minute_of(now.value), 2)}
       </Label>
       {!uses_24_hour_clock.value && (
@@ -298,8 +308,8 @@ function PineTimeStyleFace() {
       {is_charging.value ? (
         <Icon x={219} y={2} icon={icons.charging} size={16} color="#000000" />
       ) : (
-        <Column x={216} y={4}>
-          <BatteryLevel />
+        <Column x={208} y={2}>
+          <BatteryIcon color="#000000" single_color />
         </Column>
       )}
 
@@ -307,7 +317,7 @@ function PineTimeStyleFace() {
         <Icon
           x={206}
           y={32}
-          icon={weather_condition.value === "none" ? icons.close : icon_named(weather_condition.value as WeatherCondition)}
+          icon={weather_icon.value}
           size={28}
           color="#000000"
         />
@@ -376,6 +386,4 @@ export default define_app({
   icon: icons.clock,
   kind: "face",
   screens: { main: PineTimeStyleFace, settings: Settings },
-  subscriptions: [weather(store_weather)],
-  permissions: ["background"],
 });

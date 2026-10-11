@@ -4,20 +4,20 @@
 import { computed } from "@preact/signals";
 import {
   battery_percent,
+  current_weather,
   define_app,
   format_temperature,
   format_time,
   heart_rate,
+  is_bluetooth_enabled,
   is_charging,
+  is_heart_rate_running,
   is_phone_connected,
   now,
-  persisted,
+  settings,
   steps_today,
   unread_notifications,
-  weather,
   type Color,
-  type WeatherCondition,
-  type WeatherEvent,
 } from "neotime";
 import { icons } from "neotime/icons";
 import { Column, Label, Row, Screen } from "neotime/widgets";
@@ -35,40 +35,32 @@ const DEEP_ORANGE: Color = "#ff4000";
 const YELLOW: Color = "#ffdd00";
 const CONNECTED_BLUE: Color = "#0050ff";
 
-const WEATHER_CONDITIONS: WeatherCondition[] = [
-  "clear",
-  "few_clouds",
-  "clouds",
-  "heavy_clouds",
-  "rain",
-  "showers",
-  "thunderstorm",
-  "snow",
-  "mist",
-];
-
-/** InfiniTime's one-word name for each condition, in the order of `WEATHER_CONDITIONS`. */
-const WEATHER_CONDITION_NAMES = ["Clear", "Clear", "Cloudy", "Cloudy", "Rain", "Showers", "Thunder", "Snow", "Mist"];
-
-/** The latest temperature from the phone, in degrees Celsius. */
-const weather_temperature = persisted("weather_temperature", 0);
-
-/** The one-word condition of the latest forecast, or empty before any arrives. */
-const weather_condition_name = persisted("weather_condition_name", "");
 
 // ============================================================================
 // Derived values
 // ============================================================================
 
+/** InfiniTime always shows two hour digits, with AM or PM after them on a 12 hour clock. */
 const time_text = computed(() =>
-  format_time(now.value, "clock_with_seconds"),
+  format_time(now.value, settings.uses_24_hour_clock.value ? "HH:mm:ss" : "hh:mm:ss A"),
 );
 
-const weather_text = computed(() =>
-  weather_condition_name.value === ""
-    ? "---"
-    : `${format_temperature(weather_temperature.value)} ${weather_condition_name.value}`,
-);
+/** InfiniTime's one-word name for the condition. */
+const condition_name = computed(() => {
+  const condition = current_weather.value.condition;
+  if (condition === "clear" || condition === "few_clouds") return "Clear";
+  if (condition === "clouds" || condition === "heavy_clouds") return "Cloudy";
+  if (condition === "rain") return "Rain";
+  if (condition === "showers") return "Showers";
+  if (condition === "thunderstorm") return "Thunder";
+  if (condition === "snow") return "Snow";
+  return "Mist";
+});
+
+const weather_text = computed(() => {
+  if (current_weather.value.received_at === null) return "---";
+  return `${format_temperature(current_weather.value.temperature)} ${condition_name.value}`;
+});
 
 /** Red when empty through yellow to green when full, close to InfiniTime's battery colours. */
 const battery_color = computed<Color>(() => {
@@ -76,18 +68,10 @@ const battery_color = computed<Color>(() => {
   return percent < 5 ? "#ff2000" : percent < 12 ? "#ff8000" : percent < 20 ? "#ffd000" : percent < 35 ? "#c0ff00" : "#40ff00";
 });
 
-// ============================================================================
-// Handlers
-// ============================================================================
-
-function store_weather(event: WeatherEvent) {
-  weather_temperature.value = event.temperature;
-  let place = 0;
-  for (const condition of WEATHER_CONDITIONS) {
-    if (condition === event.condition) weather_condition_name.value = WEATHER_CONDITION_NAMES[place];
-    place = place + 1;
-  }
-}
+/** Disabled when Bluetooth is off, otherwise whether the phone is connected. */
+const status_text = computed(() =>
+  !is_bluetooth_enabled.value ? "Disabled" : is_phone_connected.value ? "Connected" : "Disconnected",
+);
 
 // ============================================================================
 // Screen
@@ -103,7 +87,6 @@ function TaggedLine(props: { tag: string; value: string; color: Color }) {
 }
 
 function TerminalFace() {
-  const is_heart_rate_shown = heart_rate.value > 0;
   return (
     <Screen>
       <Column x={0} y={7} width={240}>
@@ -119,14 +102,14 @@ function TerminalFace() {
         <TaggedLine tag="[STEP]" value={`${steps_today.value} steps`} color={ORANGE} />
         <TaggedLine
           tag="[L_HR]"
-          value={is_heart_rate_shown ? `${heart_rate.value} bpm` : "---"}
-          color={is_heart_rate_shown ? DEEP_ORANGE : GRAY}
+          value={is_heart_rate_running.value ? `${heart_rate.value} bpm` : "---"}
+          color={is_heart_rate_running.value ? DEEP_ORANGE : GRAY}
         />
         <TaggedLine tag="[WTHR]" value={weather_text.value} color={YELLOW} />
         <TaggedLine
           tag="[STAT]"
-          value={is_phone_connected.value ? "Connected" : "Disconnected"}
-          color={is_phone_connected.value ? CONNECTED_BLUE : GRAY}
+          value={status_text.value}
+          color={is_bluetooth_enabled.value && is_phone_connected.value ? CONNECTED_BLUE : GRAY}
         />
         <Label color={LIGHT_GRAY}>user@watch:~ $</Label>
       </Column>
@@ -140,6 +123,4 @@ export default define_app({
   icon: icons.clock,
   kind: "face",
   screens: { main: TerminalFace },
-  subscriptions: [weather(store_weather)],
-  permissions: ["background"],
 });

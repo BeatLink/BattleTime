@@ -1,29 +1,33 @@
 // Casio G-7710 style watch face, ported from InfiniTime's WatchFaceCasioStyleG7710.
-// Green-grey text on black: weekday and week number in a box, day of the year and days left, the date and a big time.
+// Green-grey text on black: weekday and week number in a box, day of the year and days left, the date and a big 7-segment time.
 // On a 24 hour clock the date is day-month and weeks start on Monday; on a 12 hour clock it is month-day and weeks start on Sunday.
 
 import { computed } from "@preact/signals";
 import {
   battery_percent,
   day_of,
+  day_of_year,
   define_app,
-  format_number,
+  format_time,
   heart_rate,
   hour_of,
-  is_charging,
+  is_heart_rate_running,
   is_phone_connected,
-  minute_of,
+  iso_week_of,
   month_of,
   now,
+  pad_start,
   settings,
   steps_today,
+  to_upper,
   unread_notifications,
   weekday_of,
   year_of,
   type Color,
 } from "neotime";
+import { BatteryIcon } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Column, Icon, Label, Line, Row, Screen } from "neotime/widgets";
+import { Icon, Label, Line, Row, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -31,11 +35,6 @@ import { Column, Icon, Label, Line, Row, Screen } from "neotime/widgets";
 
 const TEXT_COLOR: Color = "#98b69a";
 const HEART_OFF_COLOR: Color = "#1b1b1b";
-
-const WEEKDAY_NAMES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
-
-/** Days in the months before each month of a common year. */
-const DAYS_BEFORE_MONTH = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
 
 // ============================================================================
 // Derived values
@@ -45,78 +44,35 @@ function is_leap_year(year: number): boolean {
   return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
 
-/** The weekday of 31 December of a year, 0 for Sunday, used to count ISO weeks. */
-function year_end_weekday(year: number): number {
-  return (year + Math.floor(year / 4) - Math.floor(year / 100) + Math.floor(year / 400)) % 7;
+/** The week counted from the first Sunday of the year, as strftime's `%U` gives, so the days before it are week 0. */
+export function sunday_week_of(instant: number): number {
+  return Math.floor((day_of_year(instant) + 6 - ((weekday_of(instant) + 1) % 7)) / 7);
 }
 
-function iso_weeks_in_year(year: number): number {
-  return year_end_weekday(year) === 4 || year_end_weekday(year - 1) === 3 ? 53 : 52;
-}
-
-/** A whole number padded with spaces to a width of up to three, as printf's `%3d` does. */
-function pad_with_spaces(value: number, width: number): string {
-  const padding = width >= 3 && value < 100 ? (value < 10 ? "  " : " ") : width === 2 && value < 10 ? " " : "";
-  return `${padding}${value}`;
+/** The ISO week on a 24 hour clock and the Sunday week on a 12 hour clock, as InfiniTime picks. */
+export function week_number_of(instant: number, uses_24_hour_clock: boolean): number {
+  return uses_24_hour_clock ? iso_week_of(instant) : sunday_week_of(instant);
 }
 
 const uses_24_hour_clock = computed(() => settings.uses_24_hour_clock.value);
 
-const year = computed(() => year_of(now.value));
+const day_number = computed(() => day_of_year(now.value));
 
-const day_of_year = computed(
-  () =>
-    DAYS_BEFORE_MONTH[month_of(now.value) - 1] +
-    day_of(now.value) +
-    (month_of(now.value) > 2 && is_leap_year(year.value) ? 1 : 0),
-);
+const days_left_in_year = computed(() => (is_leap_year(year_of(now.value)) ? 366 : 365) - day_number.value);
 
-const days_left_in_year = computed(() => (is_leap_year(year.value) ? 366 : 365) - day_of_year.value);
-
-/** The ISO 8601 week, with Monday as the first day, as strftime's `%V` gives. */
-const iso_week = computed(() => {
-  const week = Math.floor((day_of_year.value - (weekday_of(now.value) + 1) + 10) / 7);
-  return week < 1 ? iso_weeks_in_year(year.value - 1) : week > iso_weeks_in_year(year.value) ? 1 : week;
+/** The day and month as printf's `%3d-%2d`, day first on a 24 hour clock and month first on a 12 hour one. */
+const date_text = computed(() => {
+  const first = uses_24_hour_clock.value ? day_of(now.value) : month_of(now.value);
+  const second = uses_24_hour_clock.value ? month_of(now.value) : day_of(now.value);
+  return `${pad_start(`${first}`, 3)}-${pad_start(`${second}`, 2)}`;
 });
 
-/** The week counted from the first Sunday of the year, as strftime's `%U` gives. */
-const sunday_week = computed(() => Math.floor((day_of_year.value + 6 - ((weekday_of(now.value) + 1) % 7)) / 7));
-
-const week_number = computed(() => (uses_24_hour_clock.value ? iso_week.value : sunday_week.value));
-
-const date_text = computed(() =>
-  uses_24_hour_clock.value
-    ? `${pad_with_spaces(day_of(now.value), 3)}-${pad_with_spaces(month_of(now.value), 2)}`
-    : `${pad_with_spaces(month_of(now.value), 3)}-${pad_with_spaces(day_of(now.value), 2)}`,
-);
-
-const display_hour = computed(() => {
-  const hour = hour_of(now.value);
-  return uses_24_hour_clock.value ? hour : hour % 12 === 0 ? 12 : hour % 12;
-});
-
-const time_text = computed(
-  () =>
-    `${uses_24_hour_clock.value ? format_number(display_hour.value, 2) : pad_with_spaces(display_hour.value, 2)}:${format_number(minute_of(now.value), 2)}`,
-);
-
-const is_heart_rate_shown = computed(() => heart_rate.value > 0);
+/** InfiniTime pads a 12 hour clock's hour with a space, which the digit-only font lacks, so it is left out. */
+const time_text = computed(() => format_time(now.value, uses_24_hour_clock.value ? "HH:mm" : "h:mm"));
 
 // ============================================================================
 // Screen
 // ============================================================================
-
-function BatteryLevel() {
-  return (
-    <Row width={26} height={14} border_width={2} border_color={TEXT_COLOR} radius={2} padding={1}>
-      <Column
-        width={Math.max(1, Math.floor((battery_percent.value * 20) / 100))}
-        height={8}
-        background={TEXT_COLOR}
-      />
-    </Row>
-  );
-}
 
 function CasioFace() {
   return (
@@ -124,8 +80,7 @@ function CasioFace() {
       <Row x={60} y={0} width={180} height={20} justify="end" gap={5}>
         {unread_notifications.value > 0 && <Icon icon={icons.notification} size={18} color={TEXT_COLOR} />}
         {is_phone_connected.value && <Icon icon={icons.bluetooth} size={18} color={TEXT_COLOR} />}
-        {is_charging.value && <Icon icon={icons.charging} size={18} color={TEXT_COLOR} />}
-        <BatteryLevel />
+        <BatteryIcon color={TEXT_COLOR} single_color />
         <Label font="small" color={TEXT_COLOR}>{`${battery_percent.value}%`}</Label>
       </Row>
       <Line points={[{ x: 107, y: 23 }, { x: 224, y: 23 }, { x: 229, y: 18 }]} color={TEXT_COLOR} />
@@ -135,15 +90,15 @@ function CasioFace() {
         thickness={6}
         color={TEXT_COLOR}
       />
-      <Label x={5} y={22} font="large" color={TEXT_COLOR}>
-        {`WK${format_number(week_number.value, 2)}`}
+      <Label x={5} y={22} font="dot_matrix" color={TEXT_COLOR}>
+        {`WK${pad_start(`${week_number_of(now.value, uses_24_hour_clock.value)}`, 2, "0")}`}
       </Label>
-      <Label x={10} y={60} font="large" color={TEXT_COLOR}>
-        {WEEKDAY_NAMES[weekday_of(now.value)]}
+      <Label x={10} y={60} font="dot_matrix" color={TEXT_COLOR}>
+        {to_upper(format_time(now.value, "ddd"))}
       </Label>
 
       <Label x={110} y={40} color={TEXT_COLOR}>
-        {`${pad_with_spaces(day_of_year.value, 3)}-${pad_with_spaces(days_left_in_year.value, 3)}`}
+        {`${pad_start(`${day_number.value}`, 3)}-${pad_start(`${days_left_in_year.value}`, 3)}`}
       </Label>
       <Line points={[{ x: 104, y: 65 }, { x: 234, y: 65 }, { x: 239, y: 60 }]} color={TEXT_COLOR} />
 
@@ -157,14 +112,14 @@ function CasioFace() {
           {hour_of(now.value) >= 12 ? "P" : "A"}
         </Label>
       )}
-      <Label x={0} y={118} width={240} text_align="center" font="huge" color={TEXT_COLOR}>
+      <Label x={0} y={118} width={240} text_align="center" font="seven_segment" color={TEXT_COLOR}>
         {time_text.value}
       </Label>
       <Line points={[{ x: 4, y: 209 }, { x: 234, y: 209 }, { x: 239, y: 214 }]} color={TEXT_COLOR} />
 
       <Row x={5} y={214} height={24} gap={5}>
-        <Icon icon={icons.heart} size={20} color={is_heart_rate_shown.value ? TEXT_COLOR : HEART_OFF_COLOR} />
-        {is_heart_rate_shown.value && <Label color={TEXT_COLOR}>{`${heart_rate.value}`}</Label>}
+        <Icon icon={icons.heart} size={20} color={is_heart_rate_running.value ? TEXT_COLOR : HEART_OFF_COLOR} />
+        {is_heart_rate_running.value && <Label color={TEXT_COLOR}>{`${heart_rate.value}`}</Label>}
       </Row>
       <Row x={120} y={214} width={115} height={24} justify="end" gap={5}>
         <Icon icon={icons.steps} size={20} color={TEXT_COLOR} />

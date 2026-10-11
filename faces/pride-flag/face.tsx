@@ -9,7 +9,6 @@ import {
   define_app,
   format_time,
   go,
-  hour_of,
   is_charging,
   is_phone_connected,
   now,
@@ -17,7 +16,6 @@ import {
   settings,
   steps_today,
   unread_notifications,
-  weekday_of,
   type Color,
 } from "neotime";
 import { icons } from "neotime/icons";
@@ -30,8 +28,6 @@ import { Button, Column, Icon, Label, Row, Screen } from "neotime/widgets";
 const FLAG_NAMES = ["Gay", "Trans", "Bi", "Lesbian"];
 const FLAG_COUNT = 4;
 const MOST_STRIPES = 7;
-
-const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 /** How many stripes each flag has. */
 const STRIPE_COUNTS = [7, 5, 5, 7];
@@ -65,11 +61,8 @@ const time_text = computed(() =>
   format_time(now.value, settings.uses_24_hour_clock.value ? "HH:mm:ss" : "hh:mm:ss"),
 );
 
-const day_text = computed(() =>
-  settings.uses_24_hour_clock.value
-    ? WEEKDAY_NAMES[weekday_of(now.value)]
-    : `${WEEKDAY_NAMES[weekday_of(now.value)]} ${hour_of(now.value) >= 12 ? "PM" : "AM"}`,
-);
+/** The weekday's full name, with AM or PM after it on a 12 hour clock, as InfiniTime shows it. */
+const day_text = computed(() => format_time(now.value, settings.uses_24_hour_clock.value ? "dddd" : "dddd A"));
 
 // ============================================================================
 // Handlers

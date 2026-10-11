@@ -7,7 +7,6 @@ import {
   define_app,
   format_time,
   hour_of,
-  is_charging,
   is_phone_connected,
   minute_of,
   now,
@@ -15,8 +14,19 @@ import {
   unread_notifications,
   type Color,
 } from "neotime";
+import { BatteryIcon } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Column, Icon, Label, Row, Screen } from "neotime/widgets";
+import { Icon, Label, Row, Screen } from "neotime/widgets";
+
+// ============================================================================
+// State
+// ============================================================================
+
+/** wasp-os draws the tens in its theme's mid shade, about this much of the bright one on black. */
+const TENS_OPACITY = 185;
+
+/** wasp-os lightens the mid shade one step for the colon and the AM or PM. */
+const COLON_OPACITY = 195;
 
 // ============================================================================
 // Derived values
@@ -48,17 +58,7 @@ function StatusBar() {
     <Row x={0} y={0} width={240} height={32} justify="end" gap={6} padding={4}>
       {unread_notifications.value > 0 && <Icon icon={icons.notification} size={22} color="accent" />}
       {is_phone_connected.value && <Icon icon={icons.bluetooth} size={22} color="accent" />}
-      {is_charging.value ? (
-        <Icon icon={icons.charging} size={22} color="warning" />
-      ) : (
-        <Row width={26} height={14} border_width={2} border_color={battery_color.value} radius={2} padding={1}>
-          <Column
-            width={Math.max(1, Math.floor((battery_percent.value * 20) / 100))}
-            height={8}
-            background={battery_color.value}
-          />
-        </Row>
-      )}
+      <BatteryIcon color={battery_color.value} />
     </Row>
   );
 }
@@ -68,15 +68,15 @@ function WeekClockFace() {
     <Screen>
       <StatusBar />
       {!uses_24_hour_clock.value && (
-        <Label x={192} y={52} width={48} text_align="center" color="muted">
-          {hour_of(now.value) >= 12 ? "PM" : "AM"}
+        <Label x={192} y={52} width={48} text_align="center" opacity={COLON_OPACITY}>
+          {format_time(now.value, "A")}
         </Label>
       )}
       <Row x={0} y={80} width={240} justify="center">
-        <Label font="huge" color="muted">{hour_tens.value}</Label>
+        <Label font="huge" opacity={TENS_OPACITY}>{hour_tens.value}</Label>
         <Label font="huge">{`${display_hour.value % 10}`}</Label>
-        <Label font="huge" color="muted">:</Label>
-        <Label font="huge" color="muted">{`${Math.floor(minute_of(now.value) / 10)}`}</Label>
+        <Label font="huge" opacity={COLON_OPACITY}>:</Label>
+        <Label font="huge" opacity={TENS_OPACITY}>{`${Math.floor(minute_of(now.value) / 10)}`}</Label>
         <Label font="huge">{`${minute_of(now.value) % 10}`}</Label>
       </Row>
       <Label x={0} y={180} width={240} text_align="center">
