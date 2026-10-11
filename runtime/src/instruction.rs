@@ -436,3 +436,119 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
     };
     Ok((instruction, offset + 1 + operand_bytes))
 }
+
+// ============================================================================
+// Encoding
+// ============================================================================
+
+/// The longest an instruction can be: an opcode and an 8-byte number.
+pub const LONGEST_INSTRUCTION_BYTES: usize = 9;
+
+/// The bytes of one encoded instruction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EncodedInstruction {
+    bytes: [u8; LONGEST_INSTRUCTION_BYTES],
+    length: usize,
+}
+
+impl EncodedInstruction {
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes[..self.length]
+    }
+}
+
+impl Instruction {
+    /// The instruction's bytes, which `decode` reads back as the same instruction.
+    pub fn encode(self) -> EncodedInstruction {
+        use Instruction::*;
+
+        let mut encoded = EncodedInstruction {
+            bytes: [0; LONGEST_INSTRUCTION_BYTES],
+            length: 0,
+        };
+        let mut put = |bytes: &[u8]| {
+            encoded.bytes[encoded.length..encoded.length + bytes.len()].copy_from_slice(bytes);
+            encoded.length += bytes.len();
+        };
+
+        match self {
+            PushSmall(value) => put(&[0x01, value as u8]),
+            PushInt(value) => {
+                put(&[0x02]);
+                put(&value.to_le_bytes());
+            }
+            PushLong(value) => {
+                put(&[0x03]);
+                put(&value.to_le_bytes());
+            }
+            PushNone => put(&[0x04]),
+            PushText(index) => {
+                put(&[0x05]);
+                put(&index.to_le_bytes());
+            }
+            ReadState(variable) => put(&[0x06, variable]),
+            ReadSystem(value) => put(&[0x07, value as u8]),
+            ReadEvent(field) => put(&[0x08, field]),
+            Duplicate => put(&[0x09]),
+            Drop => put(&[0x0A]),
+            Swap => put(&[0x0B]),
+            ReadLocal(local) => put(&[0x0C, local]),
+            WriteLocal(local) => put(&[0x0D, local]),
+            Add => put(&[0x10]),
+            Subtract => put(&[0x11]),
+            Multiply => put(&[0x12]),
+            Divide => put(&[0x13]),
+            Remainder => put(&[0x14]),
+            Negate => put(&[0x15]),
+            Minimum => put(&[0x16]),
+            Maximum => put(&[0x17]),
+            Absolute => put(&[0x18]),
+            RandomInt => put(&[0x19]),
+            BitAnd => put(&[0x1A]),
+            BitOr => put(&[0x1B]),
+            BitXor => put(&[0x1C]),
+            BitNot => put(&[0x1D]),
+            ShiftLeft => put(&[0x1E]),
+            ShiftRight => put(&[0x1F]),
+            Equal => put(&[0x20]),
+            NotEqual => put(&[0x21]),
+            Less => put(&[0x22]),
+            LessOrEqual => put(&[0x23]),
+            Greater => put(&[0x24]),
+            GreaterOrEqual => put(&[0x25]),
+            Not => put(&[0x26]),
+            IsNone => put(&[0x27]),
+            Jump(distance) => {
+                put(&[0x28]);
+                put(&distance.to_le_bytes());
+            }
+            JumpIfFalse(distance) => {
+                put(&[0x29]);
+                put(&distance.to_le_bytes());
+            }
+            LoopStart => put(&[0x2A]),
+            LoopBack(distance) => {
+                put(&[0x2B]);
+                put(&distance.to_le_bytes());
+            }
+            TimePart(part) => put(&[0x30, part as u8]),
+            FormatNumber(minimum_digits) => put(&[0x40, minimum_digits]),
+            FormatDuration(pattern) => {
+                put(&[0x41]);
+                put(&pattern.to_le_bytes());
+            }
+            FormatTime(pattern) => {
+                put(&[0x42]);
+                put(&pattern.to_le_bytes());
+            }
+            Join => put(&[0x43]),
+            WriteState(variable) => put(&[0x50, variable]),
+            Effect(kind) => put(&[0x51, kind as u8]),
+            ReadElement(variable) => put(&[0x60, variable]),
+            WriteElement(variable) => put(&[0x61, variable]),
+            CopyArray { destination, source } => put(&[0x62, destination, source]),
+            FillArray(variable) => put(&[0x63, variable]),
+        }
+        encoded
+    }
+}

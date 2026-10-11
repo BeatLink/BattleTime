@@ -6,3 +6,7 @@ description = "NeoTime's app runtime core: app images, their checks, the bytecod
 publish = false
 
 [dependencies]
+
+[features]
+# Writing images, for the compiler and tests; the watch only reads them.
+writer = []

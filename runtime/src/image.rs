@@ -3,6 +3,7 @@
 //! `AppImage::parse` checks the image's structure, so every later lookup stays inside the bytes.
 //! The code inside it is checked separately by `verify`.
 
+use crate::theme::ColorValue;
 use crate::widgets::WidgetProblem;
 
 // ============================================================================
@@ -396,7 +397,7 @@ impl<'image> AppImage<'image> {
         let value = variable.default_value;
         let default_is_valid = match variable.value_type {
             ValueType::Bool => value == 0 || value == 1,
-            ValueType::Color => (0..=0xFFFF).contains(&value),
+            ValueType::Color => ColorValue::from_value(value).is_some(),
             ValueType::Text => (0..self.strings.count as i64).contains(&value),
             ValueType::Int | ValueType::Instant | ValueType::Duration => true,
         } && variable.fits(value);

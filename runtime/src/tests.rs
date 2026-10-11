@@ -1806,6 +1806,240 @@ fn an_expression_reading_an_array_redraws_when_it_changes() {
 }
 
 // ============================================================================
+// Writing images
+// ============================================================================
+
+use crate::events::EventKind;
+use crate::instruction::{decode, Instruction, TimePart as Part};
+use crate::writer::{CodeError, CodeWriter, ImageWriter};
+
+#[test]
+fn every_instruction_decodes_to_itself() {
+    use Instruction::*;
+    let instructions = [
+        PushSmall(-5),
+        PushInt(-70_000),
+        PushLong(i64::MIN + 3),
+        PushNone,
+        PushText(513),
+        ReadState(7),
+        ReadSystem(SystemValue::WeatherReceivedAt),
+        ReadEvent(3),
+        Duplicate,
+        Drop,
+        Swap,
+        ReadLocal(15),
+        WriteLocal(2),
+        Add,
+        Subtract,
+        Multiply,
+        Divide,
+        Remainder,
+        Negate,
+        Minimum,
+        Maximum,
+        Absolute,
+        RandomInt,
+        BitAnd,
+        BitOr,
+        BitXor,
+        BitNot,
+        ShiftLeft,
+        ShiftRight,
+        Equal,
+        NotEqual,
+        Less,
+        LessOrEqual,
+        Greater,
+        GreaterOrEqual,
+        Not,
+        IsNone,
+        Jump(300),
+        JumpIfFalse(2),
+        LoopStart,
+        LoopBack(1_000),
+        TimePart(Part::Weekday),
+        FormatNumber(3),
+        FormatDuration(9),
+        FormatTime(258),
+        Join,
+        WriteState(4),
+        Effect(EffectKind::SetHeartRateLed),
+        ReadElement(1),
+        WriteElement(2),
+        CopyArray {
+            destination: 3,
+            source: 4,
+        },
+        FillArray(5),
+    ];
+
+    for instruction in instructions {
+        let encoded = instruction.encode();
+        let (decoded, next_offset) = decode(encoded.as_bytes(), 0).unwrap();
+
+        assert_eq!(decoded, instruction);
+        assert_eq!(next_offset, encoded.as_bytes().len());
+    }
+}
+
+#[test]
+fn the_writer_builds_a_stopwatch_that_runs() {
+    let mut writer = ImageWriter::new("stopwatch", "Stopwatch", AppKind::App, 1);
+    let started_at = writer.variable("started_at", ValueType::Instant, true, NONE);
+    let stopped_after = writer.variable("stopped_after", ValueType::Duration, true, 0);
+    let pattern = writer.string("mm:ss");
+
+    // started_at is none ? stopped_after : now - started_at, as mm:ss.
+    let mut label = CodeWriter::new();
+    let running = label.label();
+    let done = label.label();
+    label
+        .emit(Instruction::ReadState(started_at))
+        .emit(Instruction::IsNone)
+        .jump_if_false(running);
+    label.emit(Instruction::ReadState(stopped_after)).jump(done);
+    label
+        .place(running)
+        .emit(Instruction::ReadSystem(SystemValue::Now))
+        .emit(Instruction::ReadState(started_at));
+    label.emit(Instruction::Subtract);
+    label.place(done).emit(Instruction::FormatDuration(pattern));
+    let elapsed = writer.expression(label.finish().unwrap());
+
+    let mut toggle = CodeWriter::new();
+    toggle
+        .emit(Instruction::ReadSystem(SystemValue::Now))
+        .emit(Instruction::ReadState(stopped_after));
+    toggle
+        .emit(Instruction::Subtract)
+        .emit(Instruction::WriteState(started_at));
+    let start = writer.handler(toggle.finish().unwrap());
+
+    let column = writer.widget(WidgetKind::Column, 0, &[]);
+    writer.widget(
+        WidgetKind::Label,
+        0,
+        &[(Property::Text, PropertySource::Expression(elapsed))],
+    );
+    writer.widget(
+        WidgetKind::Button,
+        0,
+        &[(Property::OnClick, PropertySource::Handler(start))],
+    );
+    writer.set_child_count(column, 2);
+    let bytes = writer.build();
+
+    let image = AppImage::parse(&bytes).unwrap();
+    assert_eq!(verify(&image), Ok(()));
+    assert_eq!(image.string(image.name_string), Some("Stopwatch"));
+
+    let mut state = AppState::new(&image).unwrap();
+    let system = FakeSystem {
+        now: 90_000,
+        ..Default::default()
+    };
+    let mut interpreter = Interpreter::new();
+    interpreter
+        .run_handler(&image, start, &mut state, &[], &system)
+        .unwrap();
+    let later = FakeSystem {
+        now: 155_000,
+        ..Default::default()
+    };
+    let value = interpreter
+        .evaluate_expression(&image, elapsed, &state, &later)
+        .unwrap();
+
+    assert_eq!(interpreter.text(&image, value), Ok("01:05"));
+}
+
+#[test]
+fn the_code_writer_fills_in_loops_and_refuses_unplaced_labels() {
+    let mut summing = CodeWriter::new();
+    let done = summing.label();
+    summing
+        .emit(Instruction::PushSmall(0))
+        .emit(Instruction::WriteLocal(0));
+    let top = summing.loop_start();
+    summing
+        .emit(Instruction::ReadLocal(0))
+        .emit(Instruction::PushSmall(5))
+        .emit(Instruction::Less);
+    summing.jump_if_false(done);
+    summing
+        .emit(Instruction::ReadLocal(1))
+        .emit(Instruction::ReadLocal(0))
+        .emit(Instruction::Add);
+    summing.emit(Instruction::WriteLocal(1));
+    summing
+        .emit(Instruction::ReadLocal(0))
+        .emit(Instruction::PushSmall(1))
+        .emit(Instruction::Add);
+    summing.emit(Instruction::WriteLocal(0)).loop_back(top);
+    summing.place(done).emit(Instruction::ReadLocal(1));
+
+    let mut unplaced = CodeWriter::new();
+    let nowhere = unplaced.label();
+    unplaced.jump(nowhere);
+
+    assert_eq!(
+        evaluate(Code {
+            bytes: summing.finish().unwrap()
+        }),
+        Ok(10)
+    );
+    assert_eq!(unplaced.finish(), Err(CodeError::LabelNeverPlaced(nowhere)));
+}
+
+#[test]
+fn event_fields_are_in_their_agreed_places() {
+    assert_eq!(EventKind::for_property(Property::OnDrag), Some(EventKind::Drag));
+    assert_eq!(EventKind::Drag.field_index("start_y"), Some(3));
+    assert_eq!(EventKind::Click.field_index("y"), Some(1));
+    assert_eq!(EventKind::Change.field_index("value"), Some(0));
+    assert_eq!(EventKind::Click.field_index("value"), None);
+    assert_eq!(EventKind::for_property(Property::Text), None);
+}
+
+// ============================================================================
+// Theming
+// ============================================================================
+
+#[test]
+fn a_theme_colour_is_looked_up_only_when_drawn() {
+    let accent = ColorValue::Theme(ThemeColor::Accent);
+    let mut theme = DEFAULT_THEME;
+    theme.set_color(ThemeColor::Accent, 0xF800);
+
+    assert_eq!(ColorValue::from_value(accent.to_value()), Some(accent));
+    assert_eq!(
+        accent.resolve(&DEFAULT_THEME),
+        DEFAULT_THEME.color(ThemeColor::Accent)
+    );
+    assert_eq!(accent.resolve(&theme), 0xF800);
+    assert_eq!(ColorValue::Fixed(0x07E0).resolve(&theme), 0x07E0);
+    assert_eq!(ThemeColor::from_name("muted"), Some(ThemeColor::Muted));
+}
+
+#[test]
+fn widgets_and_state_accept_theme_colours_but_not_other_numbers() {
+    let accent = ColorValue::Theme(ThemeColor::Accent).to_value();
+    let mut themed = ImageBuilder::new();
+    themed.variable("highlight", 4, false, accent);
+    themed.widget(
+        WidgetKind::Label,
+        0,
+        &[(Property::Color, Constant(accent as i32))],
+    );
+    let mut not_a_colour = ImageBuilder::new();
+    not_a_colour.widget(WidgetKind::Label, 0, &[(Property::Color, Constant(1 << 20))]);
+
+    assert_eq!(widget_problem(&themed), None);
+    assert_eq!(widget_problem(&not_a_colour), Some(WidgetProblem::BadConstant));
+}
+
+// ============================================================================
 // Memory
 // ============================================================================
 

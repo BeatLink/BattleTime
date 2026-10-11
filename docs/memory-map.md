@@ -24,7 +24,7 @@ python3 tools/draw_memory_maps.py
 | Bootloader | `0x00000` | 32 KB | The `embassy-boot` bootloader. There is no SoftDevice and no MBR. |
 | Boot state | `0x08000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
 | Firmware | `0x09000` | 384 KB | The running firmware. It is linked to start here. |
-| Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, fonts, components and common functions. No apps are kept here; they live in `/apps` on the external flash. See [app-runtime.md](app-runtime.md#the-shared-library). |
+| Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, fonts, components, common functions and the preset themes. No apps are kept here; they live in `/apps` on the external flash. See [app-runtime.md](app-runtime.md#the-shared-library). |
 
 Inside the firmware, 48 KB is set aside for the app runtime: the interpreter, the image verifier,
 the scheduler and the code that turns an app's widget tree into rlvgl widgets. It is part of the

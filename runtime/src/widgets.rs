@@ -5,6 +5,7 @@
 //! expression that works the value out, or, for an event, the number of a handler.
 
 use crate::image::{AppImage, ImageError};
+use crate::theme::ColorValue;
 
 // ============================================================================
 // Layout
@@ -583,7 +584,7 @@ fn constant_fits(image: &AppImage, value_kind: PropertyValue, value: i32) -> boo
     match value_kind {
         PropertyValue::Number | PropertyValue::Event => true,
         PropertyValue::Bool => value == 0 || value == 1,
-        PropertyValue::Color => (0..=0xFFFF).contains(&value),
+        PropertyValue::Color => ColorValue::from_value(value as i64).is_some(),
         PropertyValue::Text => as_string().is_some(),
     }
 }

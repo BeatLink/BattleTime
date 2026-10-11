@@ -267,6 +267,12 @@ byte-level format.
 - **Bindings.** `Bindings` works out from the code what each expression reads and how often the
   clock changes it, so the runtime redraws only what changed and sleeps otherwise.
 
+- **Theming.** A colour is a fixed RGB565 value or a reference to one of the theme's eight named
+  colours, looked up only when drawn, so changing the theme is one redraw.
+- **Events.** `events` fixes which fields each event carries and in what order, for the compiler
+  and the runtime alike.
+- **Writer.** With the `writer` feature, `ImageWriter` and `CodeWriter` write images and assemble
+  bytecode with labels, for the compiler and tests.
 - **State and arrays.** `AppState` packs an app's variables and arrays into 2 KB, each array element
   in as few bytes as the image asks. Handlers change copies of what they write, so a failure part
   way changes nothing, and loops stop after 200,000 steps.

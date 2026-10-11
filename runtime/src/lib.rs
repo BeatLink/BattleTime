@@ -2,25 +2,34 @@
 //! interpreter, and the bindings that decide which widgets to redraw and when.
 //!
 //! Nothing here touches hardware, allocates or panics on bad input, so the same code runs on the
-//! watch, in tests and in the simulator. docs/app-runtime.md describes the design.
+//! watch, in tests and in the simulator. The one exception is `writer`, which allocates and is only
+//! built for the compiler and tests. docs/app-runtime.md describes the design.
 
 #![no_std]
 
+#[cfg(any(test, feature = "writer"))]
+extern crate alloc;
+
 pub mod bindings;
+pub mod events;
 pub mod image;
 pub mod instruction;
 pub mod interpreter;
 pub mod pattern;
 pub mod state;
 pub mod text;
+pub mod theme;
 pub mod verifier;
 pub mod widgets;
+#[cfg(any(test, feature = "writer"))]
+pub mod writer;
 
 pub use bindings::{analyse_expression, Bindings, ExpressionInfo, Inputs};
 pub use image::{AppImage, AppKind, ImageError, StateVariable, ValueType};
 pub use instruction::{EffectKind, SystemValue};
 pub use interpreter::{Effect, Failure, HandlerOutcome, Interpreter, SystemValues, Value, NONE};
 pub use state::AppState;
+pub use theme::{ColorValue, Theme, ThemeColor, DEFAULT_THEME};
 pub use verifier::verify;
 pub use widgets::{Property, PropertySource, Widget, WidgetKind, WidgetTree};
 

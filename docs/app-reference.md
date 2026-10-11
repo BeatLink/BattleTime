@@ -138,7 +138,7 @@ when a screen opens. Each one takes the common props below plus its own.
 | `x`, `y`, `width`, `height` | Position and size in pixels, or `"100%"`, or left out to let the parent's layout decide. |
 | `grow` | The share of spare space this widget takes in a `Row` or `Column`. |
 | `padding`, `margin` | Space inside and outside the widget. |
-| `background`, `color`, `border_color` | Colours, as `"#rrggbb"` or a theme name such as `"accent"`. |
+| `background`, `color`, `border_color` | Colours, as `"#rrggbb"` or a theme name: `background`, `surface`, `text`, `muted`, `accent`, `success`, `warning` or `danger`. A theme name follows the user's theme, and changes with it without the app doing anything. |
 | `border_width`, `radius` | The border and corner rounding. |
 | `font` | `small`, `normal`, `medium` (about 30 px), `large`, `huge` or `giant` (about 120 px, digits and `:` only), or a display font: `seven_segment`, `dot_matrix` or `condensed`, digits only. All are in the shared library. |
 | `align` | `start`, `center` or `end`. |

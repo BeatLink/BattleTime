@@ -300,6 +300,7 @@ using it costs no RAM.
 |---|---|
 | Images | System icons, such as the battery, Bluetooth, heart and steps, and the icons of the built-in apps. |
 | Fonts | The UI fonts at each size, so apps never carry their own. |
+| Themes | The preset [themes](#theming) the user can choose from. |
 | Components | Ready-made widget trees with their bindings, such as a card, a list row, a header, a number picker and a confirm dialog. |
 | Functions | Bytecode for common work: date and time formatting, unit conversion, small maths such as trigonometry from tables, sorting a fixed-length array. |
 | Notification screens | The layouts that show a notification and the list of them. The notifications themselves are on the external flash. |
@@ -328,7 +329,7 @@ tag, because the compiler has already checked every type.
 | `Bool` | 0 or 1 |
 | `Instant` | milliseconds since 1970 in UTC; an empty optional, such as a stopwatch that has not started, is the smallest 64-bit number |
 | `Duration` | milliseconds |
-| `Color` | RGB565 |
+| `Color` | RGB565, or a reference to a [theme colour](#theming) |
 | `Text` | the number of a string in the image, or a slice of the call's 256-byte text buffer |
 
 Each instruction is one opcode byte followed by its operands:
@@ -455,6 +456,20 @@ redraws only those properties. Persistent
 slots that changed are written to the key-value store a moment later, so a burst of taps costs one
 flash write.
 
+A handler reads its event's fields by position. `runtime/src/events.rs` fixes the order, and the
+compiler and the runtime both follow it:
+
+| Event | Fields |
+|---|---|
+| `onClick`, `onLongPress`, `onDoubleClick`, `onPress`, `onRelease` | `x`, `y` |
+| `onDrag` | `x`, `y`, `start_x`, `start_y` |
+| `onSwipe` | `direction`: 0 up, 1 down, 2 left, 3 right |
+| `onButton` | `kind`: 0 press, 1 long press |
+| `onChange` | `value` |
+| `onPageChange` | `page` |
+| `onScrollEnd` | `offset` |
+| `onShow`, `onHide` | none |
+
 ### Time
 
 The runtime never ticks on an app's behalf. It knows from each expression's redraw period, such as
@@ -478,6 +493,22 @@ subscriptions with an absolute time, so a reboot or a clock change cannot lose t
 A handler that overflows, divides by zero or runs past its step limit is stopped. Its changes and
 effects are dropped, and the runtime shows a crash screen naming the app and the handler. A
 subscription that keeps failing is turned off until the app is opened again.
+
+## Theming
+
+Every colour an app uses is either a fixed colour or the name of one of the theme's eight colours:
+`background`, `surface`, `text`, `muted`, `accent`, `success`, `warning` and `danger`. A name is
+stored as a reference, 65536 plus the colour's number in that order, in constants, state and
+expression results alike, and the image checks accept either form. The runtime looks a reference
+up in the active theme only when it draws a widget.
+
+So changing the theme costs one redraw of the open screen: no app code runs again, and nothing
+stored by an app changes. Apps that use theme names follow the user's choice automatically;
+a watch face that wants its own look uses fixed colours.
+
+The preset themes live in the shared library. The user's chosen theme, or one they made in the
+companion app, is eight RGB565 colours in `/settings` on the external flash. `DEFAULT_THEME` in
+`runtime/src/theme.rs` is the one the watch starts with.
 
 ## Memory
 
@@ -509,6 +540,10 @@ returns an error instead of panicking on any input. It has:
 - `text`: the calendar and number formatting;
 - `pattern`: the time and duration format patterns;
 - `widgets`: reads the widget tree in place, walks screens and children, and checks it;
+- `events`: the fields each event carries, in the order handlers read them;
+- `theme`: theme colours, colour references and the default theme;
+- `writer`: writes images and assembles bytecode with labels, for the compiler and tests; built
+  only with the `writer` feature;
 - `bindings`: works out each expression's inputs and redraw period, which expressions a change
   affects, which are due as the clock moves, and when the next clock-driven redraw is.
 
@@ -518,6 +553,8 @@ resources sections, the compiler, and the runtime loop that ties these to the UI
 system.
 
 ## Open questions
+
+- Whether themes should also set fonts and corner rounding, not only colours.
 
 - Whether to build the Preact front end first, or start with KDL to get the runtime running.
 - How closely the browser preview must match rlvgl's layout before it is useful.
