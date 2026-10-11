@@ -54,16 +54,22 @@ See [bluetooth.md](bluetooth.md) for the details of each.
 
 ## Firmware updates
 
-See [updates.md](updates.md). The protocol (legacy DFU, in `services/dfu`), the reloader and the
-button-gated watchdog feeding exist but have run only on the computer.
+See [updates.md](updates.md). The reloader moved a watch from wasp-os onto NeoTime, and an update
+over Bluetooth and the button-hold recovery have both worked on that watch.
 
-- [ ] **Prove the reloader on the emulator** before it touches a watch: the boot chain, an update,
-  a recovery, both migrations, and power cuts spread through each migration. The plan is in
-  updates.md; the emulator is in `PineTimeEmulator/`. Without SWD, a mistake cannot be undone.
-- [ ] **Run the DFU service against a real client:** the companion app, then Gadgetbridge, on the
-  emulator's radio if it gets one, else on a watch once the controller has run there.
-- [ ] **A smaller recovery firmware.** The recovery slot holds the full firmware for now, which
-  is 105 KB; a build with only Bluetooth and DFU would leave more of the slot free.
+- [ ] **Roll back a firmware on the watch.** A firmware that never confirms is put back at the next
+  reset in the emulator; it has not been tried on a watch.
+- [ ] **Run the power-cut sweeps** in `tests/emulator/migration.robot` (tagged `long`), which have
+  never run on the final reloader. They take hours, so check the runner's memory early.
+- [ ] **Fix the reloader's button-escape test.** "Holding The Button Leaves The Reloader For The Old
+  Update Mode" fails in the emulator, likely in its button model; wasp-os's bootloader does start a
+  5 second watchdog and enters its update mode on a held button.
+- [ ] **Run the DFU service against more clients:** wasp-os's `dfu.py` works on the watch; the
+  companion app and Gadgetbridge are next.
+- [ ] **A smaller recovery firmware.** The recovery slot holds the full firmware, now about 317 KB
+  with the app host, and the reloader carries it twice, so `tools/build_images.sh` fails at the
+  reloader. A build with only the screen, Bluetooth and DFU would fit, and is what the `recovery`
+  feature should build.
 - [ ] **Async flash in the firmware.** Flash writes block the Bluetooth host for up to a sector
   erase at a time, because the display shares the SPI bus and its driver is blocking.
 - [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.
@@ -211,18 +217,15 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 
 ### Firmware updates
 
-- [ ] **An image checksum.** InfiniTime's DFU init packet carries a CRC; NeoTime checks only the
-  vector table.
-- [ ] **A progress screen** while an update is received.
 - [ ] **Confirm or reject a new firmware** from settings, as InfiniTime's firmware screen does.
 - [ ] **A swap progress bar on the bootloader screen.** It says "Installing firmware" for up to 30
   seconds with nothing moving. Its 16 KB has about 2 KB to spare.
 - [ ] **A bootloader updater,** so a watch already on NeoTime gets the bootloader's status screen.
   Nothing can replace the bootloader once installed; the plan is an image installed on trial that
   writes the new bootloader and resets without confirming, so the new bootloader rolls back to the
-  previous firmware.
+  previous firmware. A failed write leaves a watch without SWD unbootable, so it needs the same
+  care and emulator tests as the reloader.
 - [ ] **A setting to turn updates off,** or on until the next reset.
-- [ ] **The recovery firmware** itself.
 - [ ] **Show the bootloader version** in a system info screen.
 
 ### Not started
@@ -363,9 +366,6 @@ only by its Gadgetbridge fork and web app, so they are not worth copying.
 
 - [ ] **Update from a web page** with Web Bluetooth, as PinetimeLite's web app does: set the clock
   and send firmware and resources without installing anything.
-- [ ] **Update the bootloader over BLE.** PinetimeLite can replace its own bootloader. NeoTime will
-  need this once its bootloader changes, but a failed write leaves a watch without SWD unbootable,
-  so it needs the same care and emulator tests as the reloader image.
 
 ## Other firmware to study
 

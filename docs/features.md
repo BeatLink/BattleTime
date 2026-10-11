@@ -38,7 +38,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 
 - **Firmware updates over Bluetooth** with Nordic's legacy DFU, the protocol InfiniTime uses, so
   Gadgetbridge, ITD, Siglo and NeoTime's own tools can update the watch unchanged. See
-  [updates.md](updates.md).
+  [updates.md](updates.md). The image's CRC is checked by reading it back from the flash, and the
+  status page shows the kilobytes received.
 - **A bad update rolls itself back.** A new firmware runs on trial until it confirms itself; if it
   never does, the bootloader puts the previous firmware back.
 - **A recovery firmware** kept in external flash, installed by holding the side button at start.
@@ -49,7 +50,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   black when confirmed, amber on trial, red after a rollback and purple for the recovery firmware.
   The bootloader turns the screen blue while it waits for a recovery hold or installs an update.
 - **Moving a watch from InfiniTime or wasp-os onto NeoTime** through that system's own update
-  path, with the reloader. It has not run on a watch yet.
+  path, with the reloader. It moved a watch from wasp-os on 2026-10-11; the InfiniTime path has
+  run only in the emulator.
 
 ## For app makers
 
