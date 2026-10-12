@@ -45,6 +45,12 @@ pub struct Placement {
 }
 
 impl Placement {
+    const EMPTY: Placement = Placement {
+        offset: 0,
+        length: 0,
+        element_bytes: 0,
+    };
+
     fn new(offset: usize, variable: &StateVariable) -> Placement {
         Placement {
             offset: offset as u16,
@@ -84,13 +90,27 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// A state holding no variables, to be laid out in place with `load_layout`.
+    pub const EMPTY: AppState = AppState {
+        bytes: [0; MOST_STATE_BYTES],
+        placements: [Placement::EMPTY; MOST_STATE_VARIABLES],
+        count: 0,
+    };
+
     /// Lays out the image's variables and fills each with its default value.
     pub fn new(image: &AppImage) -> Result<AppState, ImageError> {
-        let mut state = AppState {
-            bytes: [0; MOST_STATE_BYTES],
-            placements: [Placement::default(); MOST_STATE_VARIABLES],
+        let mut state = AppState::EMPTY;
+        state.load_layout(image)?;
+        Ok(state)
+    }
+
+    /// Does what `new` does in place, so a state kept on the heap is never built on the stack.
+    pub fn load_layout(&mut self, image: &AppImage) -> Result<(), ImageError> {
+        *self = AppState {
             count: image.state_count() as usize,
+            ..AppState::EMPTY
         };
+        let state = self;
         let mut offset = 0;
         for index in 0..image.state_count() {
             let variable = image.state_variable(index).ok_or(ImageError::TableOutOfBounds)?;
@@ -116,7 +136,7 @@ impl AppState {
             }
             stored.copy_from_slice(bytes);
         }
-        Ok(state)
+        Ok(())
     }
 
     pub fn placement(&self, variable: u8) -> Option<Placement> {

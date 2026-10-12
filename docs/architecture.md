@@ -597,8 +597,9 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
 - **Demo.** With the `demo` feature, `demo::stopwatch_image` builds a stopwatch image with the
   runtime's writer, so the host runs before the compiler exists.
 
-On the watch, `AppHost` keeps its state, interpreter and bindings on the UI heap, 6,288 B, so
-opening an app needs only 6.4 KB of stack; each widget of the open screen takes 240 B more plus its
+On the watch, `AppHost` keeps its state, interpreter and bindings on the UI heap, 6,288 B. Each is
+boxed empty (`AppState::EMPTY`, `Bindings::EMPTY`) and filled in place, never built on the stack, so
+opening an app needs under 1 KB of stack; each widget of the open screen takes 240 B more plus its
 text; see [memory-map.md](memory-map.md). [app-runtime.md](app-runtime.md#the-app-host) describes
 the calls, the layout rules and what each property value means.
 

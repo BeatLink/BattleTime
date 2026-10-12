@@ -180,11 +180,14 @@ impl<'image> AppHost<'image> {
     ) -> Result<Self, OpenError> {
         let image = AppImage::parse(image_bytes)?;
         verify(&image)?;
-        let mut state = Box::new(AppState::new(&image)?);
+        // Each big part is boxed empty and filled in place, so none is ever built on the stack.
+        let mut state = Box::new(AppState::EMPTY);
+        state.load_layout(&image)?;
         if !saved_state.is_empty() {
             state.load_persistent(&image, saved_state);
         }
-        let bindings = Box::new(Bindings::load(&image)?);
+        let mut bindings = Box::new(Bindings::EMPTY);
+        bindings.load_into(&image)?;
         let tree = WidgetTree::new(image);
         let first_screen = tree.screens().next().ok_or(OpenError::NoScreens)?;
 

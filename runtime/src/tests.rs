@@ -2776,3 +2776,24 @@ fn a_list_system_value_is_read_one_element_at_a_time() {
     element_of_single.expression(Code::new().small(0).op_byte(0x0F, SystemValue::BatteryPercent as u8));
     assert_eq!(verify_problem(&element_of_single), Some(CodeProblem::WrongSystemValueKind));
 }
+
+#[test]
+fn state_and_bindings_load_in_place_as_they_do_when_made() {
+    let stopwatch = stopwatch();
+    let image = AppImage::parse(&stopwatch.bytes).unwrap();
+
+    let mut state = AppState::EMPTY;
+    state.load_layout(&image).unwrap();
+    let mut bindings = Bindings::EMPTY;
+    bindings.load_into(&image).unwrap();
+
+    let made = AppState::new(&image).unwrap();
+    for variable in 0..image.state_count() as u8 {
+        assert_eq!(state.placement(variable), made.placement(variable));
+        assert_eq!(state.get(variable), made.get(variable));
+    }
+    let loaded = Bindings::load(&image).unwrap();
+    for expression in 0..image.expression_count() as usize {
+        assert_eq!(bindings.info(expression), loaded.info(expression));
+    }
+}

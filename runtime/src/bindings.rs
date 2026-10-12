@@ -141,17 +141,31 @@ pub struct Bindings {
 }
 
 impl Bindings {
+    /// Bindings for no expressions, to be filled in place with `load_into`.
+    pub const EMPTY: Bindings = Bindings {
+        state_slots: [0; MOST_EXPRESSIONS],
+        system_values: [0; MOST_EXPRESSIONS],
+        redraw_periods_in_milliseconds: [0; MOST_EXPRESSIONS],
+        count: 0,
+    };
+
     pub fn load(image: &AppImage) -> Result<Bindings, ImageError> {
+        let mut bindings = Bindings::EMPTY;
+        bindings.load_into(image)?;
+        Ok(bindings)
+    }
+
+    /// Does what `load` does in place, so bindings kept on the heap are never built on the stack.
+    pub fn load_into(&mut self, image: &AppImage) -> Result<(), ImageError> {
         let count = image.expression_count() as usize;
         if count > MOST_EXPRESSIONS {
             return Err(ImageError::TableOutOfBounds);
         }
-        let mut bindings = Bindings {
-            state_slots: [0; MOST_EXPRESSIONS],
-            system_values: [0; MOST_EXPRESSIONS],
-            redraw_periods_in_milliseconds: [0; MOST_EXPRESSIONS],
+        *self = Bindings {
             count,
+            ..Bindings::EMPTY
         };
+        let bindings = self;
         for index in 0..count {
             let code = image
                 .expression_code(index as u16)
@@ -161,7 +175,7 @@ impl Bindings {
             bindings.system_values[index] = info.inputs.system_values;
             bindings.redraw_periods_in_milliseconds[index] = info.redraw_period_in_milliseconds;
         }
-        Ok(bindings)
+        Ok(())
     }
 
     pub fn info(&self, expression: usize) -> Option<ExpressionInfo> {

@@ -770,8 +770,8 @@ The working memory below is measured from `neotime-runtime`; the rest is still a
 That is about 6.6 KB, which leaves the rest of the open app's 12 KB for a second app's state
 while a subscription runs. On the watch, the interpreter, the bindings and the
 state take 6,288 B together, measured with `size_of` for the watch's target. `AppHost` keeps each
-on the heap: built in place on the stack, they made opening an app need a 23 KB stack frame,
-more than the watch's whole stack. Opening now needs 6.4 KB of stack.
+on the heap, boxed empty and filled in place with `AppState::load_layout` and
+`Bindings::load_into`, so opening an app needs under 1 KB of stack.
 
 The widgets themselves are allocated from the UI heap. Each widget of the open screen is a 240 B
 node on the watch, measured the same way, plus its text. The stopwatch demo's screen of four widgets
