@@ -13,6 +13,7 @@ import {
   type Duration,
   type Instant,
 } from "neotime";
+import { steps_since } from "neotime/lib";
 import { Card } from "neotime/components";
 import { icons } from "neotime/icons";
 import { Button, Column, Icon, Label, Screen } from "neotime/widgets";
@@ -42,9 +43,7 @@ const is_running = computed(() => started_at.value !== null);
 const elapsed = computed(() => (started_at.value !== null ? now.value - started_at.value : stopped_after.value));
 
 /** A run that passes midnight keeps counting, because the day's count starts again from zero. */
-const steps_this_run = computed(() =>
-  steps_today.value >= steps_at_start.value ? steps_today.value - steps_at_start.value : steps_today.value,
-);
+const steps_this_run = computed(() => steps_since(steps_at_start.value));
 
 const session_steps = computed(() => steps_before.value + (is_running.value ? steps_this_run.value : 0));
 

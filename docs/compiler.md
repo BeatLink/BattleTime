@@ -281,7 +281,10 @@ Effect arguments that are text may point into the call's text buffer, such as th
 - `permissions` are checked against the effects, subscriptions and system values used, as
   app-reference.md lists them; a missing one is an error. The image has no field for them.
 - `neotime-compiler library -o shared.ntlib` writes the shared library: every icon in `ICON_NAMES`
-  as a 32 by 32 mask, drawn from `third_party/` (see its README). Images record library version 1.
+  as a 32 by 32 mask, drawn from `third_party/` (see its README), and the functions in
+  `LIBRARY_FUNCTIONS` compiled from `sdk/neotime/src/lib.ts`. Images record library version 2.
+- A call to one of those functions from `neotime/lib` compiles to `CallLibrary` with its arguments;
+  the function's number and types come from compiling the library's own source.
 
 Prop mappings: `size` and `diameter` set `width` and `height`; `thickness` sets `border_width`;
 `track_color` sets `background`; `text_align` (left, center, right) sets `align` (0, 1, 2);

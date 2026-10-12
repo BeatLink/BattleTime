@@ -16,6 +16,7 @@ pub mod images;
 pub mod library;
 pub mod permissions;
 pub mod scope;
+pub mod shared_functions;
 pub mod statements;
 pub mod subscriptions;
 pub mod types;

@@ -9,14 +9,13 @@ import {
   define_app,
   format_number,
   format_time,
-  hour_of,
   minute_of,
   now,
   second_of,
-  settings,
   to_upper,
   type Color,
 } from "neotime";
+import { display_hour } from "neotime/lib";
 import { icon_named, icons } from "neotime/icons";
 import { Icon, Label, Row, Screen } from "neotime/widgets";
 
@@ -33,10 +32,7 @@ const DAY_COLOR: Color = "#ce1b1b";
 // Derived values
 // ============================================================================
 
-const hour_text = computed(() => {
-  const hour = hour_of(now.value);
-  return format_number(settings.uses_24_hour_clock.value ? hour : hour % 12 === 0 ? 12 : hour % 12, 2);
-});
+const hour_text = computed(() => format_number(display_hour(now.value), 2));
 
 /** The icon shows once the phone has sent a forecast. */
 const has_weather = computed(() => current_weather.value.received_at !== null);

@@ -221,11 +221,14 @@ about 4 KB, so sharing between apps pays only as library functions that take arg
 code is read in place from the internal flash and costs no RAM. The items run in order; each needs
 the ones above it.
 
-- [ ] **Calls into the shared library.** `call_library` runs a function from a functions section
-  in the library image, checked by the same verifier, with numbers that never change between
-  library versions. A function that changes state takes the variables by number, as `copy array`
-  names its arrays. One-line helpers such as `(x + 1) % n` stay inlined, since a call costs as
-  many bytes.
+- [ ] **More of the shared library's functions.** `CallLibrary` runs the pure functions in
+  `LIBRARY_FUNCTIONS`. Still open:
+  - The host does not yet refuse an app whose `shared_library_version` is newer than the installed
+    library's; such an app runs until it calls a function that is missing, then shows nothing.
+  - Functions that change state, taking the variables by number as `copy array` names its arrays.
+  - Calls from the faces and apps that still compute the same things by hand, such as
+    `steps_since` in steps and sports. One-line helpers such as `(x + 1) % n` stay inlined, since a
+    call costs as many bytes.
 - [ ] **Native widgets with their logic built in.** Every widget node costs 160 to 240 B of the UI
   heap wherever its record lives, so a composite drawn by the firmware as one node saves more RAM
   than a library component. In the firmware, which has 112 KB free:

@@ -10,11 +10,11 @@ import {
   format_time,
   now,
   range,
-  settings,
   DAY,
   HOUR,
   type Color,
 } from "neotime";
+import { temperature_in_unit } from "neotime/lib";
 import { icon_named, icons } from "neotime/icons";
 import { Column, Icon, Label, Row, Screen } from "neotime/widgets";
 
@@ -33,11 +33,6 @@ const has_weather = computed(() => current_weather.value.received_at !== null);
 
 /** When the phone last sent the weather, or 0 if it never has. */
 const received_at = computed(() => current_weather.value.received_at ?? 0);
-
-/** Degrees in the user's unit, rounded to the nearest, without the unit. */
-function in_chosen_unit(celsius: number): number {
-  return settings.uses_metric_units.value ? celsius : Math.floor((celsius * 18 + 5) / 10) + 32;
-}
 
 /** The colour InfiniTime gives a temperature, from blue when freezing to deep orange when hot. */
 function color_of(celsius: number): Color {
@@ -75,10 +70,10 @@ function ForecastDay(props: { place: number }) {
           <Label font="small" color="#b0b0b0">{format_time(now.value + (props.place + 1) * DAY, "ddd")}</Label>
           <Icon icon={icon_named(current_weather.value.forecast[props.place].condition)} size={24} />
           <Label font="small" color={color_of(current_weather.value.forecast[props.place].high)}>
-            {`${in_chosen_unit(current_weather.value.forecast[props.place].high)}`}
+            {`${temperature_in_unit(current_weather.value.forecast[props.place].high)}`}
           </Label>
           <Label font="small" color={color_of(current_weather.value.forecast[props.place].low)}>
-            {`${in_chosen_unit(current_weather.value.forecast[props.place].low)}`}
+            {`${temperature_in_unit(current_weather.value.forecast[props.place].low)}`}
           </Label>
         </Column>
       )}
@@ -108,11 +103,11 @@ function Weather() {
       {has_weather.value && <Label font="small" color="#b0b0b0">{condition_text.value}</Label>}
       {has_weather.value && (
         <Row gap={10} justify="center">
-          <Label color={color_of(current_weather.value.low)}>{`${in_chosen_unit(current_weather.value.low)}°`}</Label>
+          <Label color={color_of(current_weather.value.low)}>{`${temperature_in_unit(current_weather.value.low)}°`}</Label>
           <Label font="large" color={is_stale.value ? "muted" : color_of(current_weather.value.temperature)}>
             {format_temperature(current_weather.value.temperature)}
           </Label>
-          <Label color={color_of(current_weather.value.high)}>{`${in_chosen_unit(current_weather.value.high)}°`}</Label>
+          <Label color={color_of(current_weather.value.high)}>{`${temperature_in_unit(current_weather.value.high)}°`}</Label>
         </Row>
       )}
       {has_weather.value && (

@@ -233,6 +233,9 @@ pub enum CodeProblem {
     HandlerFunctionInExpression,
     /// Calls nested deeper than the interpreter keeps room for.
     CallsTooDeep,
+    /// A shared library function that changes state, reads an event, causes effects, draws a random
+    /// number, or calls the library from inside it; library functions are the same for every app.
+    LibraryFunctionNotPure,
 }
 
 // ============================================================================

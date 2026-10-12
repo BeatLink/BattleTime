@@ -8,7 +8,6 @@ import {
   define_app,
   format_temperature,
   format_time,
-  hour_of,
   is_heart_rate_running,
   is_phone_connected,
   minute_of,
@@ -17,8 +16,8 @@ import {
   settings,
   unread_notifications,
   type Color,
-  type Instant,
 } from "neotime";
+import { display_hour, is_night } from "neotime/lib";
 import { BatteryIcon, HeartRateBadge, StepsBadge } from "neotime/components";
 import { icon_named, icons } from "neotime/icons";
 import { Icon, Label, Row, Screen } from "neotime/widgets";
@@ -44,14 +43,11 @@ const COLON_OPACITY = 195;
 
 const uses_24_hour_clock = computed(() => settings.uses_24_hour_clock.value);
 
-const display_hour = computed(() => {
-  const hour = hour_of(now.value);
-  return uses_24_hour_clock.value ? hour : hour % 12 === 0 ? 12 : hour % 12;
-});
+const shown_hour = computed(() => display_hour(now.value));
 
 /** A 12 hour clock shows 9:30, not 09:30, so the tens place holds a space. */
 const hour_tens = computed(() =>
-  uses_24_hour_clock.value || display_hour.value >= 10 ? `${Math.floor(display_hour.value / 10)}` : " ",
+  uses_24_hour_clock.value || shown_hour.value >= 10 ? `${Math.floor(shown_hour.value / 10)}` : " ",
 );
 
 const date_text = computed(() =>
@@ -60,26 +56,13 @@ const date_text = computed(() =>
 
 const has_weather = computed(() => current_weather.value.received_at !== null);
 
-function minute_of_day(instant: Instant): number {
-  return hour_of(instant) * 60 + minute_of(instant);
-}
-
-/** Night runs from sunset to sunrise, or from 18:00 to 06:00 until the phone sends them. */
-const is_night = computed(() => {
-  if (current_weather.value.sunrise === null || current_weather.value.sunset === null) {
-    return hour_of(now.value) < 6 || hour_of(now.value) >= 18;
-  }
-  return (
-    minute_of_day(now.value) < minute_of_day(current_weather.value.sunrise) ||
-    minute_of_day(now.value) >= minute_of_day(current_weather.value.sunset)
-  );
-});
+const is_night_now = computed(() => is_night(now.value));
 
 /** The condition's icon, with the moon in place of the sun at night as InfiniTime does. */
 const weather_icon = computed(() => {
   const condition = current_weather.value.condition;
-  if (is_night.value && condition === "clear") return icons.weather_night_clear;
-  if (is_night.value && condition === "few_clouds") return icons.weather_night_cloudy;
+  if (is_night_now.value && condition === "clear") return icons.weather_night_clear;
+  if (is_night_now.value && condition === "few_clouds") return icons.weather_night_cloudy;
   return icon_named(condition);
 });
 
@@ -113,7 +96,7 @@ function DigitalFace() {
 
       <Row x={0} y={80} width={240} justify="center">
         <Label font="huge" opacity={TENS_OPACITY}>{hour_tens.value}</Label>
-        <Label font="huge">{`${display_hour.value % 10}`}</Label>
+        <Label font="huge">{`${shown_hour.value % 10}`}</Label>
         <Label font="huge" opacity={COLON_OPACITY}>:</Label>
         <Label font="huge" opacity={TENS_OPACITY}>{`${Math.floor(minute_of(now.value) / 10)}`}</Label>
         <Label font="huge">{`${minute_of(now.value) % 10}`}</Label>

@@ -225,6 +225,29 @@ impl<'a> Compiler<'a> {
             })
         };
 
+        if module == LibraryModule::Lib {
+            if let Some(signature) = crate::shared_functions::library_signature(name) {
+                if arguments.len() != signature.parameters.len() {
+                    return fail(
+                        span,
+                        format!("`{name}` takes {} arguments", signature.parameters.len()),
+                    );
+                }
+                for (argument, parameter) in arguments.iter().zip(&signature.parameters) {
+                    self.compile_value_of_type(emitter, argument, scope, *parameter)?;
+                }
+                emitter.emit(
+                    Instruction::CallLibrary {
+                        function: signature.number,
+                        arguments: arguments.len() as u8,
+                        results: 1,
+                    },
+                    span,
+                )?;
+                return self.finish_value(emitter, Typed::new(signature.result), as_statement, span);
+            }
+        }
+
         if let Some((effect, argument_types)) = effect_signature(name) {
             if module != LibraryModule::Neotime {
                 return fail(span, format!("`{name}` is not a function here"));

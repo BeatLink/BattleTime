@@ -20,29 +20,63 @@ pub fn for_each_reached_instruction(
     code: &[u8],
     mut visit: impl FnMut(Instruction),
 ) -> Option<()> {
-    let mut called = [0u64; MOST_FUNCTIONS / 64];
-    let mut scanned = [0u64; MOST_FUNCTIONS / 64];
-    let mut next_code = Some(code);
+    for_each_reached_instruction_in(image, None, code, |instruction, _| visit(instruction))
+}
 
-    while let Some(code) = next_code {
+/// Like `for_each_reached_instruction`, following calls into the shared library too, and showing
+/// `visit` which image each instruction's strings are in. Without the library, its functions are
+/// left out.
+pub fn for_each_reached_instruction_in<'image>(
+    image: &AppImage<'image>,
+    library: Option<&AppImage<'image>>,
+    code: &[u8],
+    mut visit: impl FnMut(Instruction, &AppImage<'image>),
+) -> Option<()> {
+    const WORDS: usize = MOST_FUNCTIONS / 64;
+    let mark = |set: &mut [u64; WORDS], function: usize| {
+        if function < MOST_FUNCTIONS {
+            set[function / 64] |= 1 << (function % 64);
+        }
+    };
+    let (mut app_called, mut app_scanned) = ([0u64; WORDS], [0u64; WORDS]);
+    let (mut library_called, mut library_scanned) = ([0u64; WORDS], [0u64; WORDS]);
+    let mut next: Option<(&[u8], bool)> = Some((code, false));
+
+    while let Some((code, in_library)) = next {
+        let code_image = match in_library {
+            true => library?,
+            false => image,
+        };
         let mut offset = 0;
         while offset < code.len() {
             let (instruction, next_offset) = decode(code, offset).ok()?;
-            if let Instruction::Call(function) = instruction {
-                called[function as usize / 64] |= 1 << (function % 64);
+            match (instruction, in_library) {
+                (Instruction::Call(function), false) => mark(&mut app_called, function as usize),
+                (Instruction::Call(function), true) => mark(&mut library_called, function as usize),
+                (Instruction::CallLibrary { function, .. }, _) => {
+                    mark(&mut library_called, function as usize)
+                }
+                _ => {}
             }
-            visit(instruction);
+            visit(instruction, code_image);
             offset = next_offset;
         }
 
-        next_code = None;
-        for function in 0..MOST_FUNCTIONS {
-            let bit = 1u64 << (function % 64);
-            if called[function / 64] & bit != 0 && scanned[function / 64] & bit == 0 {
-                scanned[function / 64] |= bit;
-                next_code = Some(image.function(function as u16)?.code);
-                break;
-            }
+        next = None;
+        let unscanned = |called: &[u64; WORDS], scanned: &[u64; WORDS]| {
+            (0..MOST_FUNCTIONS).find(|&function| {
+                let bit = 1u64 << (function % 64);
+                called[function / 64] & bit != 0 && scanned[function / 64] & bit == 0
+            })
+        };
+        if let Some(function) = unscanned(&app_called, &app_scanned) {
+            mark(&mut app_scanned, function);
+            next = Some((image.function(function as u16)?.code, false));
+        } else if let (Some(library), Some(function)) =
+            (library, unscanned(&library_called, &library_scanned))
+        {
+            mark(&mut library_scanned, function);
+            next = Some((library.function(function as u16)?.code, true));
         }
     }
     Some(())
@@ -128,10 +162,19 @@ pub struct ExpressionInfo {
 /// An expression that reads the clock without formatting it, such as a comparison, redraws once a
 /// second.
 pub fn analyse_expression(image: &AppImage, code: &[u8]) -> Option<ExpressionInfo> {
+    analyse_expression_in(image, None, code)
+}
+
+/// Like `analyse_expression`, looking into the shared library's functions the code calls.
+pub fn analyse_expression_in(
+    image: &AppImage,
+    library: Option<&AppImage>,
+    code: &[u8],
+) -> Option<ExpressionInfo> {
     let mut inputs = Inputs::NOTHING;
     let mut finest_step: Option<u32> = None;
 
-    for_each_reached_instruction(image, code, |instruction| {
+    for_each_reached_instruction_in(image, library, code, |instruction, code_image| {
         match instruction {
             Instruction::ReadState(slot)
             | Instruction::ReadElement(slot)
@@ -145,7 +188,7 @@ pub fn analyse_expression(image: &AppImage, code: &[u8]) -> Option<ExpressionInf
             }
             _ => {}
         }
-        if let Some(step) = smallest_visible_step(image, instruction) {
+        if let Some(step) = smallest_visible_step(code_image, instruction) {
             finest_step = Some(finest_step.map_or(step, |finest| finest.min(step)));
         }
     })?;
@@ -194,6 +237,15 @@ impl Bindings {
 
     /// Does what `load` does in place, so bindings kept on the heap are never built on the stack.
     pub fn load_into(&mut self, image: &AppImage) -> Result<(), ImageError> {
+        self.load_into_with_library(image, None)
+    }
+
+    /// Like `load_into`, looking into the shared library's functions the expressions call.
+    pub fn load_into_with_library(
+        &mut self,
+        image: &AppImage,
+        library: Option<&AppImage>,
+    ) -> Result<(), ImageError> {
         let count = image.expression_count() as usize;
         if count > MOST_EXPRESSIONS {
             return Err(ImageError::TableOutOfBounds);
@@ -207,7 +259,7 @@ impl Bindings {
             let code = image
                 .expression_code(index as u16)
                 .ok_or(ImageError::TableOutOfBounds)?;
-            let info = analyse_expression(image, code).ok_or(ImageError::TableOutOfBounds)?;
+            let info = analyse_expression_in(image, library, code).ok_or(ImageError::TableOutOfBounds)?;
             bindings.state_slots[index] = info.inputs.state_slots;
             bindings.system_values[index] = info.inputs.system_values;
             bindings.redraw_periods_in_milliseconds[index] = info.redraw_period_in_milliseconds;

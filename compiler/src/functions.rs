@@ -120,8 +120,8 @@ struct CallShape {
 #[derive(Clone, Debug)]
 pub struct CompiledFunction {
     shape: CallShape,
-    number: u8,
-    result: Option<Typed>,
+    pub(crate) number: u8,
+    pub(crate) result: Option<Typed>,
     needs: CallNeeds,
 }
 
@@ -294,6 +294,35 @@ impl<'a> Compiler<'a> {
         )?;
         self.restore_stack(emitter, &spilled, compiled.result.is_some(), span)?;
         Ok(CallOutcome::Called(compiled.result))
+    }
+
+    /// Compiles a shared library function on its own: a pure function, every parameter a value of the
+    /// type its annotation names.
+    pub(crate) fn compile_library_function(
+        &mut self,
+        function: &FunctionReference<'a>,
+        parameter_types: &[Type],
+        span: Span,
+    ) -> Compiled<CompiledFunction> {
+        let shape = CallShape {
+            identity: function.identity(),
+            kind: CodeKind::Expression,
+            wants_value: true,
+            expected: None,
+            parameters: parameter_types
+                .iter()
+                .map(|value_type| ParameterKind::Runtime(*value_type))
+                .collect(),
+        };
+        let references: Vec<Reference<'a>> = parameter_types
+            .iter()
+            .map(|_| Reference::Constant(Constant::Undefined))
+            .collect();
+        let argument_types: Vec<Option<Typed>> = parameter_types
+            .iter()
+            .map(|value_type| Some(Typed::with_range(*value_type, crate::types::Range::ANY)))
+            .collect();
+        self.compile_function(function, &shape, &references, &argument_types, span)
     }
 
     /// Compiles a function for one way of calling it, with its runtime arguments as its first locals.

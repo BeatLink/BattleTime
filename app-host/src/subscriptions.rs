@@ -8,7 +8,7 @@
 use alloc::vec::Vec;
 
 use neotime_runtime::{
-    for_each_reached_instruction,
+    for_each_reached_instruction_in,
     instruction::Instruction,
     subscriptions::{Subscription, SubscriptionKind},
     AppImage, Inputs, SystemValue, Value, NONE,
@@ -245,13 +245,18 @@ pub fn load_subscriptions(image: &AppImage) -> Vec<SubscriptionMemory> {
 
 /// What a derive handler reads, leaving out the variables it writes itself.
 pub fn derive_inputs(image: &AppImage, handler: u16) -> Inputs {
+    derive_inputs_in(image, None, handler)
+}
+
+/// Like `derive_inputs`, looking into the shared library's functions the handler calls.
+pub fn derive_inputs_in(image: &AppImage, library: Option<&AppImage>, handler: u16) -> Inputs {
     let Some(code) = image.handler_code(handler) else {
         return Inputs::NOTHING;
     };
     let mut reads = Inputs::NOTHING;
     let mut writes = 0u64;
     let bit = |slot: u8| if slot < 64 { 1u64 << slot } else { 0 };
-    for_each_reached_instruction(image, code, |instruction| match instruction {
+    for_each_reached_instruction_in(image, library, code, |instruction, _| match instruction {
         Instruction::ReadState(slot) | Instruction::ReadElement(slot) | Instruction::TextFromCodes(slot) => {
             reads.state_slots |= bit(slot)
         }

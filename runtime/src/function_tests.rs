@@ -5,7 +5,7 @@ extern crate std;
 use std::vec::Vec;
 
 use super::*;
-use crate::bindings::for_each_reached_instruction;
+use crate::bindings::{analyse_expression_in, for_each_reached_instruction, for_each_reached_instruction_in};
 use crate::image::{CodeBlock, CodeProblem};
 use crate::instruction::{decode, Instruction, TimePart as Part};
 use crate::interpreter::{LOCAL_POOL, MOST_CALL_DEPTH, MOST_LOCALS};
@@ -486,6 +486,209 @@ fn the_walker_gives_up_on_a_missing_function() {
     let walked = for_each_reached_instruction(&image, &code(&[Instruction::Call(0)]), |_| {});
 
     assert_eq!(walked, None);
+}
+
+// ============================================================================
+// Calls into the shared library
+// ============================================================================
+
+fn new_library_writer() -> ImageWriter {
+    ImageWriter::new("library", "Library", AppKind::Library, 1)
+}
+
+fn evaluate_with_library(bytes: &[u8], library: Option<&[u8]>, expression: u16) -> Result<Value, Failure> {
+    let image = AppImage::parse(bytes).unwrap();
+    let library = library.map(|bytes| AppImage::parse(bytes).unwrap());
+    let state = AppState::new(&image).unwrap();
+    Interpreter::new().evaluate_expression_with_library(
+        &image,
+        library.as_ref(),
+        expression,
+        &state,
+        &System::default(),
+    )
+}
+
+/// An app whose only expression gives `call_library(3, 4)`.
+fn app_calling_the_library(function: u16, arguments: u8, results: u8) -> Vec<u8> {
+    use Instruction::*;
+    let mut writer = new_writer();
+    writer.expression(code(&[
+        PushSmall(3),
+        PushSmall(4),
+        CallLibrary {
+            function,
+            arguments,
+            results,
+        },
+    ]));
+    writer.build()
+}
+
+#[test]
+fn an_app_runs_a_library_function_that_calls_another() {
+    use Instruction::*;
+    let mut library = new_library_writer();
+    let tens = add_tens_and_units(&mut library);
+    library.function(
+        2,
+        1,
+        2,
+        code(&[ReadLocal(0), ReadLocal(1), Call(tens), PushSmall(1), Add]),
+    );
+    let library = library.build();
+    let app = app_calling_the_library(1, 2, 1);
+
+    assert_eq!(verify_bytes(&library), Ok(()));
+    assert_eq!(verify_bytes(&app), Ok(()));
+    assert_eq!(evaluate_with_library(&app, Some(&library), 0), Ok(35));
+}
+
+#[test]
+fn a_library_call_without_a_library_fails() {
+    let app = app_calling_the_library(0, 2, 1);
+
+    assert_eq!(evaluate_with_library(&app, None, 0), Err(Failure::NoLibrary));
+}
+
+#[test]
+fn a_library_call_whose_shape_does_not_match_the_function_fails() {
+    let mut library = new_library_writer();
+    add_tens_and_units(&mut library);
+    let library = library.build();
+
+    assert_eq!(
+        evaluate_with_library(&app_calling_the_library(0, 1, 1), Some(&library), 0),
+        Err(Failure::NoSuchCode)
+    );
+    assert_eq!(
+        evaluate_with_library(&app_calling_the_library(5, 2, 1), Some(&library), 0),
+        Err(Failure::NoSuchCode)
+    );
+}
+
+#[test]
+fn library_text_is_copied_out_for_the_app() {
+    use Instruction::*;
+    let mut library = new_library_writer();
+    let greeting = library.string("hello");
+    library.function(0, 1, 0, code(&[PushText(greeting)]));
+    let library_bytes = library.build();
+    let mut app = new_writer();
+    app.expression(code(&[CallLibrary {
+        function: 0,
+        arguments: 0,
+        results: 1,
+    }]));
+    let app_bytes = app.build();
+    let image = AppImage::parse(&app_bytes).unwrap();
+    let library = AppImage::parse(&library_bytes).unwrap();
+    let state = AppState::new(&image).unwrap();
+    let mut interpreter = Interpreter::new();
+
+    let value = interpreter
+        .evaluate_expression_with_library(&image, Some(&library), 0, &state, &System::default())
+        .unwrap();
+
+    assert_eq!(interpreter.text(&image, value), Ok("hello"));
+}
+
+#[test]
+fn library_code_may_not_touch_the_app() {
+    use Instruction::*;
+    let mut library = new_library_writer();
+    library.function(0, 1, 0, code(&[ReadState(0)]));
+    let library = library.build();
+    let mut app = new_writer();
+    app.variable("count", ValueType::Int, false, 0);
+    app.expression(code(&[CallLibrary {
+        function: 0,
+        arguments: 0,
+        results: 1,
+    }]));
+    let app = app.build();
+
+    assert_eq!(
+        evaluate_with_library(&app, Some(&library), 0),
+        Err(Failure::NotAllowedHere)
+    );
+}
+
+#[test]
+fn a_library_refuses_functions_that_are_not_pure() {
+    use Instruction::*;
+    let mut draws_random_numbers = new_library_writer();
+    draws_random_numbers.function(0, 1, 0, code(&[PushSmall(1), PushSmall(6), RandomInt]));
+    let mut calls_the_library = new_library_writer();
+    calls_the_library.function(
+        0,
+        1,
+        0,
+        code(&[CallLibrary {
+            function: 0,
+            arguments: 0,
+            results: 1,
+        }]),
+    );
+
+    let refused = |bytes: &[u8]| {
+        verify_bytes(bytes).err().is_some_and(|error| {
+            matches!(
+                error,
+                ImageError::BadCode {
+                    problem: CodeProblem::LibraryFunctionNotPure,
+                    ..
+                }
+            )
+        })
+    };
+    assert!(refused(&draws_random_numbers.build()));
+    assert!(refused(&calls_the_library.build()));
+}
+
+#[test]
+fn a_library_call_encodes_as_five_bytes() {
+    let call = Instruction::CallLibrary {
+        function: 0x0102,
+        arguments: 2,
+        results: 1,
+    };
+    let encoded = call.encode();
+
+    assert_eq!(encoded.as_bytes(), &[0x2E, 0x02, 0x01, 2, 1]);
+    assert_eq!(decode(encoded.as_bytes(), 0), Ok((call, 5)));
+}
+
+#[test]
+fn the_walker_follows_calls_into_the_library() {
+    use Instruction::*;
+    let mut library = new_library_writer();
+    library.function(0, 1, 0, code(&[ReadSystem(SystemValue::Now)]));
+    let library_bytes = library.build();
+    let app_bytes = new_writer().build();
+    let image = AppImage::parse(&app_bytes).unwrap();
+    let library = AppImage::parse(&library_bytes).unwrap();
+    let top = code(&[CallLibrary {
+        function: 0,
+        arguments: 0,
+        results: 1,
+    }]);
+    let mut clock_reads = 0;
+
+    let walked = for_each_reached_instruction_in(&image, Some(&library), &top, |instruction, _| {
+        if instruction == ReadSystem(SystemValue::Now) {
+            clock_reads += 1;
+        }
+    });
+    let without_library = for_each_reached_instruction_in(&image, None, &top, |_, _| {});
+
+    assert_eq!(walked, Some(()));
+    assert_eq!(clock_reads, 1);
+    assert_eq!(without_library, Some(()));
+    assert!(analyse_expression_in(&image, Some(&library), &top)
+        .unwrap()
+        .inputs
+        .reads_clock());
 }
 
 // ============================================================================

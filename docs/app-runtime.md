@@ -375,6 +375,13 @@ The library changes only when it is updated, never in everyday use. Anything tha
 such as notifications, settings and app state, is stored on the external flash, whose file system
 spreads writes across the chip. The internal flash wears out after about 10,000 erases.
 
+Library functions are bytecode in the library image's functions section, numbered in the order of
+`LIBRARY_FUNCTIONS` in `compiler/src/shared_functions.rs`, and compiled from the TypeScript in
+`sdk/neotime/src/lib.ts`, so the browser preview runs the same code. An app calls one with
+`call library`, which costs 5 bytes in place of the function's whole body. Library code takes only
+its arguments and system values; text it gives back is copied into the app's text buffer. Without
+an installed library the call fails and the property it feeds is left as it was.
+
 The library is checked by the same verifier as an app image. It can be updated together with the
 firmware or on its own, and a new version keeps the numbers of everything the old one had, so
 installed apps keep working.
@@ -465,6 +472,7 @@ Each instruction is one opcode byte followed by its operands:
 | `2B` | loop back | distance, 2 bytes | Goes back that many bytes, counted from the end of this instruction, to a loop start. The stack must be empty here too. |
 | `2C` | call | function, 1 byte | Takes the function's arguments into its first locals, runs it, and leaves its result, if it has one. The function sees only the stack above what the caller had, and its own locals. |
 | `2D` | read row | | Pushes the number of the row of a `Repeat` the code runs for, or 0 outside one. |
+| `2E` | call library | function, 2 bytes; arguments, 1 byte; results, 1 byte | Runs a function of the shared library as `call` runs one of the app's. The call fails unless the library is installed and the function takes that many arguments and gives that many results. |
 | `30` | time part | part, 1 byte | Takes an instant and pushes its local year, month, day, hour, minute, second or weekday (0 to 6, Monday first). |
 | `31` | start of | unit, 1 byte | Takes an instant and pushes the start of its local minute, hour or day. A binding that uses it redraws once a minute. |
 | `40` | format number | minimum digits, 1 byte | Takes a number and pushes it as text, padded with zeros. |
@@ -550,7 +558,9 @@ Then one pass over each expression and handler checks:
   target arrives with the same depth;
 - that an expression ends with exactly one value and a handler with none;
 - that expressions do not read events, write state, cause effects or use random numbers, nor call
-  a function that does.
+  a function that does;
+- in the shared library, that no function reads or writes state, reads the event, causes an
+  effect, draws a random number or calls the library, since its code runs for every app.
 
 Last, a pass over the widgets checks:
 
@@ -839,7 +849,7 @@ The working memory below is measured from `neotime-runtime`; the rest is still a
 
 | Part | Size |
 |---|---|
-| Interpreter: a stack of 32 values, 48 locals shared by the code and the functions it calls, 8 call frames, the 256-byte text buffer and the 1 KB scratch area | 2,152 B, measured |
+| Interpreter: a stack of 32 values, 48 locals shared by the code and the functions it calls, 8 call frames, the 256-byte text buffer and the 1 KB scratch area | 2,168 B, measured |
 | A handler's results: which variables changed and up to 8 effects | 272 B, measured, only while a handler runs |
 | Bindings: what each of up to 128 expressions reads and its redraw period | 2,056 B, measured |
 | State: up to 2 KB of variables and arrays, and where each lies | 2,440 B, measured |
@@ -848,7 +858,7 @@ The working memory below is measured from `neotime-runtime`; the rest is still a
 
 That is about 7.9 KB, which leaves the rest of the open app's 12 KB for a second app's state
 while a subscription runs. On the watch, the interpreter, the bindings and the
-state take 6,612 B together, measured with `size_of` for the watch's target. `AppHost` keeps each
+state take 6,628 B together, measured with `size_of` for the watch's target. `AppHost` keeps each
 on the heap, boxed empty and filled in place with `AppState::load_layout` and
 `Bindings::load_into`, so opening an app needs under 1 KB of stack.
 

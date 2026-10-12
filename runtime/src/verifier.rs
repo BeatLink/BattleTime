@@ -55,6 +55,14 @@ pub fn verify(image: &AppImage) -> Result<(), ImageError> {
             callable_functions: index,
         };
         let summary = verify_code(image, function.code, unit, &functions)?;
+        let in_library = image.kind == crate::image::AppKind::Library;
+        if in_library && (summary.acts_like_handler || summary.touches_the_app) {
+            return Err(ImageError::BadCode {
+                block,
+                offset: 0,
+                problem: CodeProblem::LibraryFunctionNotPure,
+            });
+        }
         let locals_needed = function.local_count as usize + summary.callee_locals as usize;
         if summary.call_depth as usize >= MOST_CALL_DEPTH || locals_needed > LOCAL_POOL - MOST_LOCALS {
             return Err(ImageError::BadCode {
@@ -117,6 +125,8 @@ struct CodeSummary {
     callee_locals: u8,
     /// The deepest the stack goes, counted from where this code starts, inside calls too.
     stack_needed: u8,
+    /// It uses an instruction that library code may not run, such as reading state or calling the library.
+    touches_the_app: bool,
 }
 
 /// What the functions checked so far do, by number.
@@ -219,6 +229,7 @@ fn verify_code(
             }
         }
         summary.acts_like_handler |= is_handler_only(instruction);
+        summary.touches_the_app |= crate::interpreter::touches_the_app(instruction);
         let mut stack_effect = instruction.stack_effect();
         if let Instruction::Call(callee) = instruction {
             let function = image

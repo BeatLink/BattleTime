@@ -17,7 +17,7 @@ const MOST_ID_BYTES: usize = 32;
 const OPEN_APP_BYTES: usize = 12 * 1024;
 
 /// The runtime's measured working memory in that RAM: interpreter, bindings, state and section reader.
-const RUNTIME_WORKING_BYTES: usize = 2_152 + 2_056 + 2_440 + 256;
+const RUNTIME_WORKING_BYTES: usize = 2_168 + 2_056 + 2_440 + 256;
 
 /// The expression bytecode that fits beside the runtime's working memory.
 const MOST_EXPRESSION_BYTES: usize = OPEN_APP_BYTES - RUNTIME_WORKING_BYTES;

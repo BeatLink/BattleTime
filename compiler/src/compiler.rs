@@ -29,7 +29,7 @@ use neotime_runtime::subscriptions::SubscriptionKind;
 // ============================================================================
 
 /// The shared library version images are built against, which the library image carries too.
-pub const SHARED_LIBRARY_VERSION: u16 = 1;
+pub const SHARED_LIBRARY_VERSION: u16 = 2;
 
 // ============================================================================
 // State variables

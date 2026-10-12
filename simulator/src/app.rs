@@ -415,7 +415,7 @@ fn open<'image>(
     let mut host = AppHost::open(files.image, DEFAULT_THEME, now, system)
         .map_err(|error| format!("the app did not open: {error:?}"))?;
     if !files.library.is_empty() {
-        host.set_library(files.library)
+        host.set_library(files.library, now, system)
             .map_err(|error| format!("the shared library did not open: {error:?}"))?;
     }
     host.set_installed_app_icons(files.installed_app_icons);

@@ -170,7 +170,7 @@ impl<'a> Compiler<'a> {
     }
 
     /// The type a parameter's annotation asks for, when it names one single value.
-    fn parameter_type(
+    pub(crate) fn parameter_type(
         &mut self,
         function: &FunctionReference<'a>,
         parameter: &'a oxc_ast::ast::FormalParameter<'a>,

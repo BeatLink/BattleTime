@@ -82,7 +82,8 @@ impl TestWatch {
         let now = system.now_in_milliseconds;
         let mut host =
             AppHost::open(image, DEFAULT_THEME, now, &mut system).map_err(OpenFailure::CannotOpen)?;
-        host.set_library(library).map_err(OpenFailure::CannotOpen)?;
+        host.set_library(library, now, &mut system)
+            .map_err(OpenFailure::CannotOpen)?;
         system.app_name = host
             .image()
             .string(host.image().name_string)

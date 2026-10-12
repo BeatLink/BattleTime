@@ -12,7 +12,7 @@ use neotime_runtime::{
     subscriptions::{Subscription, SubscriptionKind},
     verify,
     widgets::{Property, PropertyValue as ValueKind, MOST_WIDGETS},
-    AppImage, AppKind, AppState, Bindings, EffectKind, ImageError, Inputs, Interpreter, PropertySource,
+    AppImage, AppKind, AppState, Bindings, EffectKind, Failure, ImageError, Inputs, Interpreter, PropertySource,
     SystemValue, SystemValues, Theme, Value, WidgetKind, WidgetTree, NONE,
 };
 use rlvgl_core::widget::Rect;
@@ -29,7 +29,7 @@ use crate::nodes::{row_slots, slots_in_view, Extra, Node, PropertyValue};
 mod painting;
 
 use crate::subscriptions::{
-    load_subscriptions, PushedEvent, SubscriptionMemory, FAILURES_BEFORE_TURNING_OFF,
+    derive_inputs_in, load_subscriptions, PushedEvent, SubscriptionMemory, FAILURES_BEFORE_TURNING_OFF,
 };
 use crate::system::{button_value, swipe_value, AppEffect, AppFailure, Clocked, EventResult, System, Touch};
 use painting::{ScrollMove, TransitionRun};
@@ -307,17 +307,32 @@ impl<'image> AppHost<'image> {
     }
 
     /// Gives the host the shared library, whose images apps name from 32768 up.
-    pub fn set_library(&mut self, library_bytes: &'image [u8]) -> Result<(), OpenError> {
+    ///
+    /// What reads the library's functions is worked out again, the derive subscriptions run, and the
+    /// open screen is built again, since until now every call into the library failed quietly.
+    pub fn set_library(
+        &mut self,
+        library_bytes: &'image [u8],
+        now: Value,
+        system: &mut impl System,
+    ) -> Result<(), OpenError> {
         let library = AppImage::parse(library_bytes)?;
         verify(&library)?;
         if library.kind != AppKind::Library {
             return Err(OpenError::NotALibrary);
         }
         self.library = Some(library);
+        self.bindings
+            .load_into_with_library(&self.image, self.library.as_ref())?;
+        for memory in self.subscriptions.iter_mut() {
+            if memory.subscription.kind == SubscriptionKind::Derive {
+                memory.derive_inputs = derive_inputs_in(&self.image, self.library.as_ref(), memory.subscription.handler);
+            }
+        }
+        self.run_derives(Inputs::NOTHING, true, now, system);
         if self.is_open {
-            self.dirty_nodes = u128::MAX;
-            self.update_layout();
-            self.redraw_whole_screen();
+            let root = self.screen_root;
+            self.show_screen(root, now, system);
         }
         Ok(())
     }
@@ -700,7 +715,13 @@ impl<'image> AppHost<'image> {
                 let clocked = Clocked { values: system, now };
                 self.interpreter.set_row(row as Value);
                 self.interpreter
-                    .evaluate_expression(&self.image, expression, &self.state, &clocked)
+                    .evaluate_expression_with_library(
+                        &self.image,
+                        self.library.as_ref(),
+                        expression,
+                        &self.state,
+                        &clocked,
+                    )
                     .is_ok_and(|value| value != 0)
             }
             Some(PropertySource::Handler(_)) => false,
@@ -769,13 +790,19 @@ impl<'image> AppHost<'image> {
     ) -> Option<AppFailure> {
         let clocked = Clocked { values: system, now };
         self.interpreter.set_row(self.nodes[node_index].row as Value);
-        let result = self
-            .interpreter
-            .evaluate_expression(&self.image, expression, &self.state, &clocked);
+        let result = self.interpreter.evaluate_expression_with_library(
+            &self.image,
+            self.library.as_ref(),
+            expression,
+            &self.state,
+            &clocked,
+        );
         let failed = |failure| Some(AppFailure::Expression { expression, failure });
 
         let value = match result {
             Ok(value) => value,
+            // Until the host has the library, what calls it waits, and is worked out once it arrives.
+            Err(Failure::NoLibrary) => return None,
             Err(failure) => return failed(failure),
         };
         let applied = match property.value() {
@@ -881,8 +908,9 @@ impl<'image> AppHost<'image> {
             values: &*system,
             now,
         };
-        let outcome = match self.interpreter.run_handler_with_text(
+        let outcome = match self.interpreter.run_handler_with_library(
             &self.image,
+            self.library.as_ref(),
             handler,
             &mut self.state,
             fields,
@@ -1002,10 +1030,12 @@ impl<'image> AppHost<'image> {
                 }
                 let clocked = Clocked { values: system, now };
                 self.interpreter.set_row(0);
-                let outcome = self.interpreter.run_handler(
+                let outcome = self.interpreter.run_handler_with_library(
                     &self.image,
+                    self.library.as_ref(),
                     memory.subscription.handler,
                     &mut self.state,
+                    &[],
                     &[],
                     &clocked,
                 );
@@ -1014,6 +1044,7 @@ impl<'image> AppHost<'image> {
                         self.subscriptions[index].failures_in_a_row = 0;
                         changed_this_round |= outcome.changed_variables();
                     }
+                    Err(Failure::NoLibrary) => {}
                     Err(_) => self.subscriptions[index].failures_in_a_row += 1,
                 }
             }

@@ -469,7 +469,7 @@ impl Shell {
             return false;
         };
         if let Some(library) = self.library {
-            let _ = host.set_library(library);
+            let _ = host.set_library(library, now, &mut self.system);
         }
         if let Some(icons) = &self.launcher_icons {
             host.set_installed_app_icons(icons.list());

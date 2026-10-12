@@ -354,7 +354,7 @@ byte-level format.
   in as few bytes as the image asks. Handlers change copies of what they write, so a failure part
   way changes nothing, and loops stop after 200,000 steps.
 
-It never allocates and never panics on bad input. Its working memory is 2,152 B for the
+It never allocates and never panics on bad input. Its working memory is 2,168 B for the
 interpreter, 2,056 B for the bindings of up to 128 expressions and 2,440 B for the state.
 ### External flash (`drivers/external_flash`)
 
@@ -868,7 +868,7 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
 - **Demo.** With the `demo` feature, `demo::stopwatch_image` builds a stopwatch image with the
   runtime's writer, so the host runs before the compiler exists.
 
-On the watch, `AppHost` keeps its state, interpreter and bindings on the UI heap, 6,612 B. Each is
+On the watch, `AppHost` keeps its state, interpreter and bindings on the UI heap, 6,628 B. Each is
 boxed empty (`AppState::EMPTY`, `Bindings::EMPTY`) and filled in place, never built on the stack, so
 opening an app needs under 1 KB of stack; each widget of the open screen takes 240 B more plus its
 text; see [memory-map.md](memory-map.md). [app-runtime.md](app-runtime.md#the-app-host) describes

@@ -23,8 +23,8 @@ import {
   to_upper,
   unread_notifications,
   type Color,
-  type Instant,
 } from "neotime";
+import { display_hour, is_night, temperature_in_unit } from "neotime/lib";
 import { BatteryIcon } from "neotime/components";
 import { icon_named, icons } from "neotime/icons";
 import { Button, Column, Icon, Label, Row, Scale, Screen } from "neotime/widgets";
@@ -102,10 +102,7 @@ const shows_weather = persisted("shows_weather", true);
 
 const uses_24_hour_clock = computed(() => settings.uses_24_hour_clock.value);
 
-const display_hour = computed(() => {
-  const hour = hour_of(now.value);
-  return uses_24_hour_clock.value ? hour : hour % 12 === 0 ? 12 : hour % 12;
-});
+const shown_hour = computed(() => display_hour(now.value));
 
 /** The steps as a share of the goal, wrapping past 100 as InfiniTime's gauge does. */
 export const step_gauge_value = computed(
@@ -125,30 +122,17 @@ const has_weather = computed(() => current_weather.value.received_at !== null);
 const temperature_text = computed(() => {
   const celsius = current_weather.value.temperature;
   if (!has_weather.value) return "--";
-  return `${settings.uses_metric_units.value ? celsius : Math.round((celsius * 9) / 5) + 32}°`;
+  return `${temperature_in_unit(celsius)}°`;
 });
 
-function minute_of_day(instant: Instant): number {
-  return hour_of(instant) * 60 + minute_of(instant);
-}
-
-/** Night runs from sunset to sunrise, or from 18:00 to 06:00 until the phone sends them. */
-const is_night = computed(() => {
-  if (current_weather.value.sunrise === null || current_weather.value.sunset === null) {
-    return hour_of(now.value) < 6 || hour_of(now.value) >= 18;
-  }
-  return (
-    minute_of_day(now.value) < minute_of_day(current_weather.value.sunrise) ||
-    minute_of_day(now.value) >= minute_of_day(current_weather.value.sunset)
-  );
-});
+const is_night_now = computed(() => is_night(now.value));
 
 /** The condition's icon, the moon in place of the sun at night, and a cross before any forecast, as InfiniTime does. */
 const weather_icon = computed(() => {
   const condition = current_weather.value.condition;
   if (!has_weather.value) return icons.close;
-  if (is_night.value && condition === "clear") return icons.weather_night_clear;
-  if (is_night.value && condition === "few_clouds") return icons.weather_night_cloudy;
+  if (is_night_now.value && condition === "clear") return icons.weather_night_clear;
+  if (is_night_now.value && condition === "few_clouds") return icons.weather_night_cloudy;
   return icon_named(condition);
 });
 
@@ -292,7 +276,7 @@ function PineTimeStyleFace() {
         <Icon x={5} y={5} icon={icons.notification} size={20} color={digit_color} />
       )}
       <Label x={5} y={0} width={200} text_align="center" font="giant" color={digit_color}>
-        {format_number(display_hour.value, 2)}
+        {format_number(shown_hour.value, 2)}
       </Label>
       <Label x={5} y={110} width={200} text_align="center" font="giant" color={digit_color}>
         {format_number(minute_of(now.value), 2)}

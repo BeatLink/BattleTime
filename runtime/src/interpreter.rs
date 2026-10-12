@@ -91,6 +91,8 @@ pub enum Failure {
     WrongResultCount,
     NotAllowedHere,
     CallsTooDeep,
+    /// The code called the shared library before the host was given one.
+    NoLibrary,
 }
 
 // ============================================================================
@@ -156,13 +158,28 @@ enum JumpTo {
     Forward(u16),
     Back(u16),
     Call(u8),
+    CallLibrary {
+        function: u16,
+        arguments: u8,
+        results: u8,
+    },
+}
+
+/// Which code is running: the expression or handler itself, one of the app's functions, or one of
+/// the shared library's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Running {
+    #[default]
+    Top,
+    App(u8),
+    Library(u16),
 }
 
 /// Where to carry on when a called function ends.
 #[derive(Clone, Copy, Debug, Default)]
 struct Frame {
-    /// The calling function, or none for the expression or handler itself.
-    caller: Option<u8>,
+    /// The code that called, to carry on in when the function ends.
+    caller: Running,
     return_offset: u16,
     caller_locals_base: u8,
     caller_local_count: u8,
@@ -177,6 +194,8 @@ struct Frame {
 /// What a call may read and where its handler results go.
 struct Call<'call, System: SystemValues> {
     image: &'call AppImage<'call>,
+    /// The shared library, whose functions `CallLibrary` runs.
+    library: Option<&'call AppImage<'call>>,
     state: &'call AppState,
     event: &'call [Value],
     event_texts: &'call [&'call str],
@@ -221,7 +240,7 @@ impl Interpreter {
             locals_base: 0,
             local_count: MOST_LOCALS,
             frames: [Frame {
-                caller: None,
+                caller: Running::Top,
                 return_offset: 0,
                 caller_locals_base: 0,
                 caller_local_count: 0,
@@ -256,9 +275,22 @@ impl Interpreter {
         state: &AppState,
         system: &impl SystemValues,
     ) -> Result<Value, Failure> {
+        self.evaluate_expression_with_library(image, None, expression, state, system)
+    }
+
+    /// Like `evaluate_expression`, with the shared library whose functions the code may call.
+    pub fn evaluate_expression_with_library(
+        &mut self,
+        image: &AppImage,
+        library: Option<&AppImage>,
+        expression: u16,
+        state: &AppState,
+        system: &impl SystemValues,
+    ) -> Result<Value, Failure> {
         let code = image.expression_code(expression).ok_or(Failure::NoSuchCode)?;
         let call = Call {
             image,
+            library,
             state,
             event: &[],
             event_texts: &[],
@@ -295,10 +327,26 @@ impl Interpreter {
         event_texts: &[&str],
         system: &impl SystemValues,
     ) -> Result<HandlerOutcome, Failure> {
+        self.run_handler_with_library(image, None, handler, state, event, event_texts, system)
+    }
+
+    /// Like `run_handler_with_text`, with the shared library whose functions the code may call.
+    #[allow(clippy::too_many_arguments)]
+    pub fn run_handler_with_library(
+        &mut self,
+        image: &AppImage,
+        library: Option<&AppImage>,
+        handler: u16,
+        state: &mut AppState,
+        event: &[Value],
+        event_texts: &[&str],
+        system: &impl SystemValues,
+    ) -> Result<HandlerOutcome, Failure> {
         let code = image.handler_code(handler).ok_or(Failure::NoSuchCode)?;
         let mut outcome = HandlerOutcome::empty();
         let call = Call {
             image,
+            library,
             state,
             event,
             event_texts,
@@ -349,8 +397,9 @@ impl Interpreter {
         self.locals[..MOST_LOCALS].fill(0);
         self.frame_count = 0;
         let image = call.image;
+        let library = call.library;
         let mut code = top_code;
-        let mut running_function: Option<u8> = None;
+        let mut running = Running::Top;
         let mut offset = 0;
         let mut steps: u32 = 0;
 
@@ -359,10 +408,16 @@ impl Interpreter {
                 let Some(frame) = self.leave_function()? else {
                     return Ok(());
                 };
-                running_function = frame.caller;
+                running = frame.caller;
                 code = match frame.caller {
-                    None => top_code,
-                    Some(caller) => image.function(caller as u16).ok_or(Failure::NoSuchCode)?.code,
+                    Running::Top => top_code,
+                    Running::App(caller) => image.function(caller as u16).ok_or(Failure::NoSuchCode)?.code,
+                    Running::Library(caller) => {
+                        library
+                            .and_then(|library| library.function(caller))
+                            .ok_or(Failure::NoSuchCode)?
+                            .code
+                    }
                 };
                 offset = frame.return_offset as usize;
                 continue;
@@ -372,16 +427,42 @@ impl Interpreter {
                 return Err(Failure::TooManySteps);
             }
             let (instruction, next_offset) = decode(code, offset).map_err(|_| Failure::BadInstruction)?;
-            offset = match self.execute(instruction, &mut call)? {
+            let in_library = matches!(running, Running::Library(_));
+            let code_image = match in_library {
+                true => library.ok_or(Failure::NoSuchCode)?,
+                false => image,
+            };
+            offset = match self.execute(instruction, &mut call, code_image, in_library)? {
                 None => next_offset,
                 Some(JumpTo::Forward(distance)) => next_offset + distance as usize,
                 Some(JumpTo::Back(distance)) => next_offset
                     .checked_sub(distance as usize)
                     .ok_or(Failure::BadInstruction)?,
+                // A call from library code is to another of the library's functions.
                 Some(JumpTo::Call(callee)) => {
-                    let function = image.function(callee as u16).ok_or(Failure::NoSuchCode)?;
-                    self.enter_function(function, running_function, next_offset)?;
-                    running_function = Some(callee);
+                    let function = code_image.function(callee as u16).ok_or(Failure::NoSuchCode)?;
+                    self.enter_function(function, running, next_offset)?;
+                    running = match in_library {
+                        true => Running::Library(callee as u16),
+                        false => Running::App(callee),
+                    };
+                    code = function.code;
+                    0
+                }
+                Some(JumpTo::CallLibrary {
+                    function: callee,
+                    arguments,
+                    results,
+                }) => {
+                    let function = library
+                        .ok_or(Failure::NoLibrary)?
+                        .function(callee)
+                        .filter(|function| {
+                            function.argument_count == arguments && function.result_count == results
+                        })
+                        .ok_or(Failure::NoSuchCode)?;
+                    self.enter_function(function, running, next_offset)?;
+                    running = Running::Library(callee);
                     code = function.code;
                     0
                 }
@@ -393,7 +474,7 @@ impl Interpreter {
     fn enter_function(
         &mut self,
         function: Function,
-        caller: Option<u8>,
+        caller: Running,
         return_offset: usize,
     ) -> Result<(), Failure> {
         let locals_base = self.locals_base + self.local_count;
@@ -447,10 +528,32 @@ impl Interpreter {
         &mut self,
         instruction: Instruction,
         call: &mut Call<System>,
+        code_image: &AppImage,
+        in_library: bool,
     ) -> Result<Option<JumpTo>, Failure> {
         use Instruction::*;
 
+        // Library code is the same for every app, so it may not touch an app's state or its event.
+        if in_library && touches_the_app(instruction) {
+            return Err(Failure::NotAllowedHere);
+        }
         match instruction {
+            // The library's own text is copied out, so what it gives back never names its strings.
+            PushText(index) if in_library => {
+                let text = code_image.string(index).ok_or(Failure::BadText)?;
+                self.write_text(|writer| writer.write_bytes(text.as_bytes()))?;
+            }
+            FormatDuration(pattern_string) if in_library => {
+                let milliseconds = self.pop()?;
+                let pattern = code_image.string(pattern_string).ok_or(Failure::BadText)?;
+                self.write_text(|writer| pattern::write_duration(writer, milliseconds, pattern))?;
+            }
+            FormatTime(pattern_string) if in_library => {
+                let time = self.local_time(call)?;
+                let pattern = code_image.string(pattern_string).ok_or(Failure::BadText)?;
+                let uses_24_hour_clock = call.system.read(SystemValue::Uses24HourClock) != 0;
+                self.write_text(|writer| pattern::write_time(writer, &time, pattern, uses_24_hour_clock))?;
+            }
             PushSmall(value) => self.push(value as Value)?,
             PushInt(value) => self.push(value as Value)?,
             PushLong(value) => self.push(value)?,
@@ -591,6 +694,17 @@ impl Interpreter {
             LoopStart => {}
             LoopBack(distance) => return Ok(Some(JumpTo::Back(distance))),
             Call(function) => return Ok(Some(JumpTo::Call(function))),
+            CallLibrary {
+                function,
+                arguments,
+                results,
+            } => {
+                return Ok(Some(JumpTo::CallLibrary {
+                    function,
+                    arguments,
+                    results,
+                }))
+            }
             ReadRow => self.push(self.row)?,
 
             TimePart(part) => {
@@ -951,6 +1065,27 @@ impl Interpreter {
             .to_value(),
         )
     }
+}
+
+/// Whether an instruction reads or changes the app's state or event, or acts for the app, which
+/// library code may not.
+pub(crate) fn touches_the_app(instruction: Instruction) -> bool {
+    use Instruction::*;
+    matches!(
+        instruction,
+        ReadState(_)
+            | ReadElement(_)
+            | WriteState(_)
+            | WriteElement(_)
+            | FillArray(_)
+            | CopyArray { .. }
+            | TextFromCodes(_)
+            | ReadEvent(_)
+            | ReadEventText(_)
+            | Effect(_)
+            | RandomInt
+            | CallLibrary { .. }
+    )
 }
 
 /// Turns a JavaScript `slice` index, which counts from the end when negative, into a position.

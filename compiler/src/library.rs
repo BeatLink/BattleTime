@@ -306,7 +306,8 @@ pub const LIBRARY_FONTS: [&[u8]; 7] = [
 
 /// Writes the shared library image, which the runtime's install checks accept.
 pub fn build_library() -> Result<Vec<u8>, String> {
-    let mut writer = ImageWriter::new(LIBRARY_ID, LIBRARY_NAME, AppKind::Library, SHARED_LIBRARY_VERSION);
+    let writer = ImageWriter::new(LIBRARY_ID, LIBRARY_NAME, AppKind::Library, SHARED_LIBRARY_VERSION);
+    let (mut writer, _) = crate::shared_functions::compile_library_functions(writer)?;
     for picture in draw_every_icon()? {
         writer.image_resource(picture.format, picture.width, picture.height, &picture.pixels);
     }

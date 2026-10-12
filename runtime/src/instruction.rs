@@ -490,6 +490,12 @@ pub enum Instruction {
     Call(u8),
     /// Pushes the number of the row of a Repeat the code runs for, or 0 outside one.
     ReadRow,
+    /// Runs one of the shared library's functions, which takes `arguments` values and leaves `results`.
+    CallLibrary {
+        function: u16,
+        arguments: u8,
+        results: u8,
+    },
     TimePart(TimePart),
     /// Takes an instant and pushes the start of its local minute, hour or day.
     StartOf(TimeUnit),
@@ -555,6 +561,9 @@ impl Instruction {
             SliceText | PadStart => (3, 1),
             // The function's own header gives what a call takes and leaves; the verifier reads it there.
             Jump(_) | Call(_) => (0, 0),
+            CallLibrary {
+                arguments, results, ..
+            } => (arguments as usize, results as usize),
             Effect(kind) => (kind.argument_count(), 0),
         };
         StackEffect { taken, left }
@@ -647,6 +656,17 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
         ),
         0x2C => (Call(byte()?), 1),
         0x2D => (ReadRow, 0),
+        0x2E => {
+            let operands = bytes(4)?;
+            (
+                CallLibrary {
+                    function: u16::from_le_bytes([operands[0], operands[1]]),
+                    arguments: operands[2],
+                    results: operands[3],
+                },
+                4,
+            )
+        }
         0x30 => (
             TimePart(self::TimePart::from_byte(byte()?).ok_or(unknown(byte()?))?),
             1,
@@ -785,6 +805,15 @@ impl Instruction {
             }
             Call(function) => put(&[0x2C, function]),
             ReadRow => put(&[0x2D]),
+            CallLibrary {
+                function,
+                arguments,
+                results,
+            } => {
+                put(&[0x2E]);
+                put(&function.to_le_bytes());
+                put(&[arguments, results]);
+            }
             TimePart(part) => put(&[0x30, part as u8]),
             StartOf(unit) => put(&[0x31, unit as u8]),
             FormatNumber(minimum_digits) => put(&[0x40, minimum_digits]),

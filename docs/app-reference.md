@@ -461,6 +461,15 @@ From `neotime/lib`; they live in the [shared library](app-runtime.md#the-shared-
 |---|---|
 | `sine(degrees)`, `cosine(degrees)` | In thousandths, from a table. |
 | `point_on_circle(center_x, center_y, radius, degrees)` | `{ x, y }`, with 0 degrees at the top and angles going clockwise, as on a clock face. |
+| `display_hour(instant)` | The hour as the clock shows it: 0 to 23 on a 24 hour clock, else 1 to 12. |
+| `minute_of_day(instant)` | Minutes into the local day, 0 to 1439. |
+| `is_night(instant)` | Whether the instant is between sunset and sunrise, or from 18:00 to 06:00 until the phone sends them. |
+| `steps_since(base)` | Steps taken since today's count was `base`, counting again from today's count after midnight's reset. |
+| `temperature_in_unit(celsius)` | Whole degrees in the wearer's units. |
+| `digit_of(value, place)` | One decimal digit: `place` 1 for the units, 10 for the tens. |
+
+The compiler works out `sine`, `cosine` and `point_on_circle`; the others run in the library, so
+an app carries only a 5 byte call.
 
 ### Records and arrays
 

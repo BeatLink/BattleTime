@@ -26,7 +26,10 @@ pub mod widgets;
 #[cfg(any(test, feature = "writer"))]
 pub mod writer;
 
-pub use bindings::{analyse_expression, for_each_reached_instruction, Bindings, ExpressionInfo, Inputs};
+pub use bindings::{
+    analyse_expression, analyse_expression_in, for_each_reached_instruction, for_each_reached_instruction_in,
+    Bindings, ExpressionInfo, Inputs,
+};
 pub use image::{AppImage, AppKind, ImageError, StateVariable, ValueType};
 pub use instruction::{EffectKind, SystemValue};
 pub use interpreter::{Effect, Failure, HandlerOutcome, Interpreter, SystemValues, Value, NONE};
