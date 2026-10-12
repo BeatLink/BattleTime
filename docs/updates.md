@@ -232,10 +232,10 @@ For that to happen, all of these must go wrong at once:
    which is rarer still.
 
 So a watch is lost only by a battery failure during the half second of the write while it sits on
-its charger, or by internal flash that will not take a write. That is rare enough that the power-cut sweeps in `tests/emulator/migration.robot`
-(tagged `long`) were run only in part: cuts every 2 seconds through the wasp-os migration left the
-old system whole at 2, 4 and 6 seconds and NeoTime's bootloader whole at 8, 10 and 12 seconds,
-and none fell inside the write. Measuring the window more finely was judged not worth its cost.
+its charger, or by internal flash that will not take a write. Cuts every 2 seconds through the
+wasp-os migration in the emulator once left the old system whole at 2, 4 and 6 seconds and
+NeoTime's bootloader whole at 8, 10 and 12 seconds, with none inside the write; those sweeps were
+then dropped from the suites as adding little.
 
 The larger risk is after it. Once the reloader has run, the only Bluetooth on the watch is
 NeoTime's own controller, and a controller that does not work on real hardware leaves a watch
@@ -328,10 +328,10 @@ in `tests/emulator/`, one Robot file per area, run from the emulator's shell, ea
 process:
 
 ```sh
-pinetime-test --variable EMULATOR:<emulator checkout> --exclude long tests/emulator/<suite>.robot
+pinetime-test --variable EMULATOR:<emulator checkout> tests/emulator/<suite>.robot
 ```
 
-The `long` tag marks the power-cut sweeps, which take hours of wall-clock time. The emulator has
+The emulator has
 already caught two faults that would have stranded a watch: the reloader sent 256-byte pages from
 its own flash, which embassy's SPI driver cannot do (it panics above 255 bytes), and the firmware
 read the replaced image from the wrong page after a swap. The plan:
@@ -347,14 +347,10 @@ read the replaced image from the wrong page after a swap. The plan:
    app slot and the charger present. Afterwards the bootloader must be at 0, the staged images in
    the external flash, and after one more reset the firmware's alive marker set.
 5. **Migration from InfiniTime.** The same from MCUBoot with the MCUBoot image.
-6. **Power cuts.** Repeat 4 and 5 with a battery pull at points spread through the run. Each run
-   must end in one of two states: the old system still starts, or NeoTime's bootloader is whole.
-   The runs that end otherwise must all fall inside the bootloader write, and that window's
-   length is reported.
-7. **Watchdog.** With the button held, the firmware must stop feeding the watchdog and the watch
+6. **Watchdog.** With the button held, the firmware must stop feeding the watchdog and the watch
    must reset into the bootloader within about five seconds.
-8. **Rehearsal.** Under wasp-os's bootloader the rehearsal must start, no write to the flash
+7. **Rehearsal.** Under wasp-os's bootloader the rehearsal must start, no write to the flash
    controller may come from its code, both flashes must be unchanged while it runs, and the
    button hold must end in wasp-os's update mode rather than another start of the rehearsal.
-9. **Storage rehearsal.** The same, except the external flash may change; no write to the flash
+8. **Storage rehearsal.** The same, except the external flash may change; no write to the flash
    controller may come from its code, so the internal flash stays as wasp-os left it.

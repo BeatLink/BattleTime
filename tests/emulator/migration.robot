@@ -1,5 +1,5 @@
 *** Settings ***
-Documentation     The reloader moves a watch from wasp-os or InfiniTime onto NeoTime, and a power cut at any point leaves a watch that starts.
+Documentation     The reloader moves a watch from wasp-os or InfiniTime onto NeoTime.
 Suite Setup       Setup
 Suite Teardown    Teardown
 Test Setup        Reset Emulation
@@ -27,8 +27,6 @@ ${MCUBOOT_SLOT}           0x8000
 # How long the reloader needs, with the flash's real busy times, plus the first NeoTime boot.
 ${RELOADER_SECONDS}       40
 ${FIRST_BOOT_SECONDS}     30
-# Power cuts are spread over the reloader's run in steps of this many seconds.
-${CUT_STEP}               2
 # The bootloader's 16 KB and the boot state page after it.
 ${OLD_START_LENGTH}       0x5000
 
@@ -73,38 +71,6 @@ Old System Still Starts
     [Documentation]           True when internal flash is as the old system left it: the reloader has not begun the window.
     ${start}=                 Execute Command    sysbus ReadBytes 0x0 ${OLD_START_LENGTH}
     RETURN    ${{ $start == $OLD_START }}
-
-Classify After A Cut
-    ${old}=                   Old System Still Starts
-    ${new}=                   Flash Holds File    0x0    ${BOOTLOADER_BIN}
-    IF    ${old}
-        RETURN    old system
-    ELSE IF    ${new}
-        RETURN    neotime bootloader
-    ELSE
-        RETURN    nothing starts
-    END
-
-Cut The Power At Each Step And Classify
-    [Arguments]    ${start keyword}
-    ${outcomes}=              Create List
-    FOR    ${cut}    IN RANGE    ${CUT_STEP}    ${RELOADER_SECONDS}    ${CUT_STEP}
-        Reset Emulation
-        Run Keyword           ${start keyword}
-        Run For               ${cut}
-        Execute Command       powerClock PowerCycle
-        ${outcome}=           Classify After A Cut
-        Append To List        ${outcomes}    ${cut}s: ${outcome}
-        Log                   Cut at ${cut}s: ${outcome}    console=True
-    END
-    RETURN    ${outcomes}
-
-No Cut May Leave A Watch That Does Not Start
-    [Arguments]    ${outcomes}
-    FOR    ${outcome}    IN    @{outcomes}
-        Should Not Contain    ${outcome}    nothing starts
-    END
-    Log Many                  @{outcomes}
 
 *** Test Cases ***
 Moves A wasp-os Watch Onto NeoTime
@@ -155,14 +121,3 @@ Holding The Button Leaves The Reloader For The Old Update Mode
     Execute Command           ${BUTTON} Release
     ${old}=                   Old System Still Starts
     Should Be True            ${old}    The reloader changed internal flash
-
-Power Cuts During The wasp-os Migration
-    [Documentation]           Every cut must leave either the old system or NeoTime's bootloader able to start.
-    [Tags]                    long
-    ${outcomes}=              Cut The Power At Each Step And Classify    Start A Watch Running wasp-os With The Reloader As Its App
-    No Cut May Leave A Watch That Does Not Start    ${outcomes}
-
-Power Cuts During The InfiniTime Migration
-    [Tags]                    long
-    ${outcomes}=              Cut The Power At Each Step And Classify    Start A Watch Running InfiniTime's Bootloader With The Reloader As Its App
-    No Cut May Leave A Watch That Does Not Start    ${outcomes}

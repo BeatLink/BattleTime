@@ -143,7 +143,7 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.
 - [ ] **Run the emulator suites in CI.** CI runs none of `tests/emulator/` today, though they are
   the only tests of the firmware, bootloader and reloaders, which build only for the watch. All of
-  them, the power-cut sweeps included, take about 25 minutes with PineTimeEmulator's
+  them take about 25 minutes with PineTimeEmulator's
   `pinetime-test`; add a job that runs it from that flake.
 - [ ] **Read the bootloader in the updater with assembly loads.** `bootloader-updater`'s
   `installed_crc` reads `BOOTLOADER.start` (address 0, the null pointer) through `Nvmc`, which is
