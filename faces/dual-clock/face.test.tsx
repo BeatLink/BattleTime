@@ -21,8 +21,7 @@ function big_digits(container: Element): string[] {
 
 /** The colour the battery icon's outline is drawn in. */
 function battery_outline(container: Element): string {
-  return [...container.querySelectorAll<HTMLElement>("[data-widget=row]")].find((row) => row.style.width === "28px")!.style
-    .border;
+  return container.querySelector<HTMLElement>("[data-widget=battery-body]")!.style.border;
 }
 
 describe("dual clock", () => {

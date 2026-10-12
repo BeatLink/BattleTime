@@ -5,12 +5,19 @@ import type { ComponentChildren } from "preact";
 import type { Signal } from "@preact/signals";
 import {
   battery_percent,
+  current_weather,
   format_number,
+  format_temperature,
   format_time,
+  heart_rate,
   is_charging,
+  is_heart_rate_running,
   is_phone_connected,
+  next_alarm,
   now,
   settings,
+  steps_today,
+  unread_notifications,
   type ChangeEvent,
   type Duration,
   type TimeOfDay,
@@ -19,7 +26,20 @@ import {
   SECOND,
 } from "./index.ts";
 import { icons, type LibraryIcon } from "./icons.ts";
-import { Button, Column, Icon, Label, Roller, Row, Stack, type CommonProps, type FlexProps } from "./widgets.tsx";
+import {
+  Badge,
+  BatteryGauge,
+  Button,
+  Column,
+  Icon,
+  Label,
+  Roller,
+  Row,
+  Stack,
+  StatusRow,
+  type CommonProps,
+  type FlexProps,
+} from "./widgets.tsx";
 
 // ============================================================================
 // Panels and rows
@@ -105,21 +125,139 @@ export interface BatteryIconProps {
   show_bolt?: boolean;
 }
 
-/** The battery's charge and whether it is charging, drawn the way the system does. */
+/** The battery's charge and whether it is charging, drawn the way the system does, as one widget. */
 export function BatteryIcon(props: BatteryIconProps) {
-  const percent = battery_percent.value;
-  const own_color = props.color ?? "text";
-  const fill_color = props.single_color ? own_color : is_charging.value ? "success" : percent <= 20 ? "danger" : own_color;
   return (
-    <Row gap={4}>
-      {is_charging.value && props.show_bolt !== false && (
-        <Icon icon={icons.charging} size={16} color={props.single_color ? own_color : "warning"} />
-      )}
-      <Row width={28} height={14} padding={2} border_color={props.color ?? "text"} border_width={2} radius={3}>
-        <Column width={Math.round((20 * percent) / 100)} height="100%" background={fill_color} />
-      </Row>
-      {props.show_percent && <Label font="small">{`${percent}%`}</Label>}
-    </Row>
+    <BatteryGauge
+      value={battery_percent.value}
+      charging={is_charging.value}
+      color={props.color ?? "text"}
+      single_color={props.single_color}
+      show_bolt={props.show_bolt}
+      show_percent={props.show_percent}
+    />
+  );
+}
+
+export interface StatusIconsProps extends CommonProps {
+  /** The side of the icons. */
+  icon_size?: number;
+  gap?: number;
+  /** The battery's colour, when it is not the icons'. */
+  battery_color?: CommonProps["color"];
+  /** Shows the notifications icon while any are unread; it does unless this is false. */
+  show_notifications?: boolean;
+  /** Shows the phone's icon while it is connected; it does unless this is false. */
+  show_phone?: boolean;
+  /** Shows the alarm icon while an alarm is set. */
+  show_alarm?: boolean;
+  show_percent?: boolean;
+  single_color?: boolean;
+  show_bolt?: boolean;
+}
+
+/** The status row the system shows: unread notifications, the phone, an alarm and the battery, as one widget. */
+export function StatusIcons(props: StatusIconsProps) {
+  const notifications = props.show_notifications !== false && unread_notifications.value > 0 ? 1 : 0;
+  const phone = props.show_phone !== false && is_phone_connected.value ? 2 : 0;
+  const alarm = props.show_alarm === true && next_alarm.value !== null ? 4 : 0;
+  return (
+    <StatusRow
+      x={props.x}
+      y={props.y}
+      width={props.width}
+      height={props.height}
+      padding={props.padding}
+      align={props.align}
+      color={props.color}
+      border_color={props.battery_color ?? props.color ?? "text"}
+      gap={props.gap ?? 6}
+      icon_size={props.icon_size ?? 22}
+      value={battery_percent.value}
+      charging={is_charging.value}
+      status_flags={notifications + phone + alarm}
+      single_color={props.single_color}
+      show_bolt={props.show_bolt}
+      show_percent={props.show_percent}
+    />
+  );
+}
+
+export interface SystemBadgeProps extends CommonProps {
+  icon_size?: number;
+  gap?: number;
+  /** The icon's colour, when it is not the text's. */
+  icon_color?: CommonProps["color"];
+}
+
+/** Today's steps beside the steps icon, as one widget. */
+export function StepsBadge(props: SystemBadgeProps) {
+  return (
+    <Badge
+      icon={icons.steps}
+      x={props.x}
+      y={props.y}
+      width={props.width}
+      height={props.height}
+      padding={props.padding}
+      align={props.align}
+      color={props.color}
+      font={props.font}
+      gap={props.gap ?? 5}
+      icon_size={props.icon_size ?? 20}
+      recolor={props.icon_color}
+    >
+      {`${steps_today.value}`}
+    </Badge>
+  );
+}
+
+/** The heart rate beside the heart icon while it is measured, as one widget; the icon alone otherwise. */
+export function HeartRateBadge(props: SystemBadgeProps) {
+  return (
+    <Badge
+      icon={icons.heart}
+      x={props.x}
+      y={props.y}
+      width={props.width}
+      height={props.height}
+      padding={props.padding}
+      align={props.align}
+      color={props.color}
+      font={props.font}
+      gap={props.gap ?? 5}
+      icon_size={props.icon_size ?? 20}
+      recolor={props.icon_color}
+    >
+      {is_heart_rate_running.value ? `${heart_rate.value}` : ""}
+    </Badge>
+  );
+}
+
+export interface TemperatureBadgeProps extends SystemBadgeProps {
+  /** The weather's icon, which the face chooses, such as a night icon after sunset. */
+  icon: LibraryIcon;
+}
+
+/** The temperature in the wearer's units beside the weather's icon, as one widget. */
+export function TemperatureBadge(props: TemperatureBadgeProps) {
+  return (
+    <Badge
+      icon={props.icon}
+      x={props.x}
+      y={props.y}
+      width={props.width}
+      height={props.height}
+      padding={props.padding}
+      align={props.align}
+      color={props.color}
+      font={props.font}
+      gap={props.gap ?? 5}
+      icon_size={props.icon_size ?? 20}
+      recolor={props.icon_color}
+    >
+      {format_temperature(current_weather.value.temperature)}
+    </Badge>
   );
 }
 

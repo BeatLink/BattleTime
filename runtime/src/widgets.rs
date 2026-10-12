@@ -71,10 +71,16 @@ pub enum WidgetKind {
     AppList,
     /// Its one child repeated `row_count` times, each copy reading its row number with `ReadRow`.
     Repeat,
+    /// A battery: its outline filled to `value` percent, with a bolt while `charging`.
+    Battery,
+    /// The status row: notification, phone and alarm icons as `status_flags` says, then the battery.
+    StatusIcons,
+    /// An icon and a text beside it, such as the step count, drawn as one widget.
+    Badge,
 }
 
 impl WidgetKind {
-    const ALL: [WidgetKind; 40] = {
+    const ALL: [WidgetKind; 43] = {
         use WidgetKind::*;
         [
             Column,
@@ -117,6 +123,9 @@ impl WidgetKind {
             CellGrid,
             AppList,
             Repeat,
+            Battery,
+            StatusIcons,
+            Badge,
         ]
     };
 
@@ -241,10 +250,22 @@ pub enum Property {
     MajorColor,
     /// How many times a Repeat repeats its child.
     RowCount,
+    /// Whether a battery is charging.
+    Charging,
+    /// Draws a battery all in its `color`, rather than green while charging and red when low.
+    SingleColor,
+    /// Whether the charging bolt shows while charging.
+    ShowBolt,
+    /// Whether a battery's percentage shows beside it.
+    ShowPercent,
+    /// Which status icons show: 1 notifications, 2 the phone, 4 an alarm.
+    StatusFlags,
+    /// The side of the icons a StatusIcons or Badge draws.
+    IconSize,
 }
 
 impl Property {
-    const ALL: [Property; 72] = {
+    const ALL: [Property; 78] = {
         use Property::*;
         [
             X,
@@ -319,6 +340,12 @@ impl Property {
             Recolor,
             MajorColor,
             RowCount,
+            Charging,
+            SingleColor,
+            ShowBolt,
+            ShowPercent,
+            StatusFlags,
+            IconSize,
         ]
     };
 
@@ -329,7 +356,7 @@ impl Property {
     pub fn value(self) -> PropertyValue {
         use Property::*;
         match self {
-            Visible | ShowSeconds => PropertyValue::Bool,
+            Visible | ShowSeconds | Charging | SingleColor | ShowBolt | ShowPercent => PropertyValue::Bool,
             Background | Color | BorderColor | NeedleColor | HourColor | MinuteColor | SecondColor
             | Recolor => PropertyValue::Color,
             Cells | Palette | Options | Points | Series | Labels | Skip => PropertyValue::Array,
@@ -378,6 +405,7 @@ impl Property {
                     | Kind::Checkbox
                     | Kind::Radio
                     | Kind::TextArea
+                    | Kind::Badge
             ),
             Value => matches!(
                 kind,
@@ -396,6 +424,8 @@ impl Property {
                     | Kind::TextArea
                     | Kind::Scale
                     | Kind::ButtonMatrix
+                    | Kind::Battery
+                    | Kind::StatusIcons
             ),
             Minimum | Maximum | Step => {
                 matches!(
@@ -404,13 +434,13 @@ impl Property {
                 )
             }
             Image => matches!(kind, Kind::Image | Kind::ImageButton | Kind::AnimatedImage),
-            Icon => matches!(kind, Kind::Icon | Kind::Button),
+            Icon => matches!(kind, Kind::Icon | Kind::Button | Kind::Badge),
             Time | ShowSeconds => kind == Kind::AnalogClock,
             StartAngle | EndAngle => matches!(kind, Kind::Arc | Kind::ArcLabel | Kind::Scale),
             LongMode => kind == Kind::Label,
             Opacity => true,
             Disabled => is_input,
-            Gap => kind.holds_children() || kind == Kind::AppList,
+            Gap => kind.holds_children() || matches!(kind, Kind::AppList | Kind::StatusIcons | Kind::Badge),
             Justify | AlignItems => kind.holds_children(),
             Columns => matches!(kind, Kind::Grid | Kind::ButtonMatrix | Kind::CellGrid),
             Rows | CellSize | CellGap | CellShape | Cells | Palette => kind == Kind::CellGrid,
@@ -421,8 +451,13 @@ impl Property {
             HourColor | MinuteColor | SecondColor | HourLength | MinuteLength | SecondLength | HandStyle => {
                 kind == Kind::AnalogClock
             }
-            Recolor => matches!(kind, Kind::Image | Kind::Icon),
+            Recolor => matches!(kind, Kind::Image | Kind::Icon | Kind::Badge),
             RowCount => kind == Kind::Repeat,
+            Charging | SingleColor | ShowBolt | ShowPercent => {
+                matches!(kind, Kind::Battery | Kind::StatusIcons)
+            }
+            StatusFlags => kind == Kind::StatusIcons,
+            IconSize => matches!(kind, Kind::StatusIcons | Kind::Badge),
             OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease => {
                 is_input || kind.holds_children() || matches!(kind, Kind::CellGrid | Kind::AppList)
             }

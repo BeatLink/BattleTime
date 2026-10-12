@@ -9,7 +9,6 @@ import {
   day_of_year,
   define_app,
   format_time,
-  heart_rate,
   hour_of,
   is_heart_rate_running,
   is_phone_connected,
@@ -18,14 +17,13 @@ import {
   now,
   pad_start,
   settings,
-  steps_today,
   to_upper,
   unread_notifications,
   weekday_of,
   year_of,
   type Color,
 } from "neotime";
-import { BatteryIcon } from "neotime/components";
+import { BatteryIcon, HeartRateBadge, StepsBadge } from "neotime/components";
 import { icons } from "neotime/icons";
 import { Icon, Label, Line, Row, Screen } from "neotime/widgets";
 
@@ -117,14 +115,14 @@ function CasioFace() {
       </Label>
       <Line points={[{ x: 4, y: 209 }, { x: 234, y: 209 }, { x: 239, y: 214 }]} color={TEXT_COLOR} />
 
-      <Row x={5} y={214} height={24} gap={5}>
-        <Icon icon={icons.heart} size={20} color={is_heart_rate_running.value ? TEXT_COLOR : HEART_OFF_COLOR} />
-        {is_heart_rate_running.value && <Label color={TEXT_COLOR}>{`${heart_rate.value}`}</Label>}
-      </Row>
-      <Row x={120} y={214} width={115} height={24} justify="end" gap={5}>
-        <Icon icon={icons.steps} size={20} color={TEXT_COLOR} />
-        <Label color={TEXT_COLOR}>{`${steps_today.value}`}</Label>
-      </Row>
+      <HeartRateBadge
+        x={5}
+        y={214}
+        height={24}
+        color={TEXT_COLOR}
+        icon_color={is_heart_rate_running.value ? TEXT_COLOR : HEART_OFF_COLOR}
+      />
+      <StepsBadge x={120} y={214} width={115} height={24} align="end" color={TEXT_COLOR} />
     </Screen>
   );
 }

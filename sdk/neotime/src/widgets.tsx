@@ -15,7 +15,7 @@ import type {
   SwipeEvent,
   ThemeColorName,
 } from "./index.ts";
-import { icon_symbol, is_icon, type LibraryIcon } from "./icons.ts";
+import { icon_symbol, icons, is_icon, type LibraryIcon } from "./icons.ts";
 import { installed_apps } from "./index.ts";
 
 // ============================================================================
@@ -591,6 +591,114 @@ export function Icon(props: IconProps) {
       }}
     >
       {icon_symbol(props.icon)}
+    </div>
+  );
+}
+
+// ============================================================================
+// Battery, status icons and badges, each drawn by the watch as one widget
+// ============================================================================
+
+export interface BatteryGaugeProps extends CommonProps {
+  /** The charge in percent. */
+  value: number;
+  charging?: boolean;
+  /** Draws it all in `color`, rather than green while charging and red when low. */
+  single_color?: boolean;
+  /** Whether the charging bolt shows while charging; it does unless this is false. */
+  show_bolt?: boolean;
+  show_percent?: boolean;
+}
+
+/** A battery's outline filled to its charge, with a bolt while charging. Use `BatteryIcon` for the watch's own. */
+export function BatteryGauge(props: BatteryGaugeProps) {
+  const own_color = props.color ?? "text";
+  const fill_color = props.single_color
+    ? own_color
+    : props.charging
+      ? "success"
+      : props.value <= 20
+        ? "danger"
+        : own_color;
+  return (
+    <div data-widget="battery-gauge" style={{ display: "flex", gap: "4px", alignItems: "flex-start", ...common_style(props) }}>
+      {props.charging && props.show_bolt !== false && (
+        <Icon icon={icons.charging} size={16} color={props.single_color ? own_color : "warning"} />
+      )}
+      <div
+        data-widget="battery-body"
+        style={{
+          boxSizing: "border-box",
+          width: "28px",
+          height: "14px",
+          padding: "2px",
+          border: `2px solid ${css_color(own_color)}`,
+          borderRadius: "3px",
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ width: `${Math.round((20 * props.value) / 100)}px`, height: "100%", background: css_color(fill_color) }} />
+      </div>
+      {props.show_percent && <span style={{ fontSize: `${FONT_SIZES_IN_PIXELS.small}px` }}>{`${props.value}%`}</span>}
+    </div>
+  );
+}
+
+export interface StatusRowProps extends BatteryGaugeProps {
+  /** Which icons show before the battery: 1 notifications, 2 the phone, 4 an alarm. */
+  status_flags?: number;
+  icon_size?: number;
+  gap?: number;
+}
+
+/** Status icons followed by a battery, drawn as one widget. Use `StatusIcons` for the watch's own. */
+export function StatusRow(props: StatusRowProps) {
+  const flags = props.status_flags ?? 0;
+  const size = props.icon_size ?? 22;
+  const icons_shown = [
+    flags & 1 ? icons.notification : null,
+    flags & 2 ? icons.bluetooth : null,
+    flags & 4 ? icons.alarm : null,
+  ].filter((icon) => icon !== null);
+  const justify = props.align === "end" ? "flex-end" : props.align === "center" ? "center" : "flex-start";
+  return (
+    <div
+      data-widget="status-row"
+      style={{ display: "flex", gap: `${props.gap ?? 0}px`, alignItems: "flex-start", justifyContent: justify, ...common_style(props) }}
+    >
+      {icons_shown.map((icon) => (
+        <Icon icon={icon} size={size} color={props.color} />
+      ))}
+      <BatteryGauge
+        value={props.value}
+        charging={props.charging}
+        single_color={props.single_color}
+        show_bolt={props.show_bolt}
+        show_percent={props.show_percent}
+        color={props.border_color}
+      />
+    </div>
+  );
+}
+
+export interface BadgeProps extends CommonProps {
+  icon: LibraryIcon;
+  children?: ComponentChildren;
+  icon_size?: number;
+  gap?: number;
+  /** The icon's colour, when it is not the text's. */
+  recolor?: Color;
+}
+
+/** An icon and a text beside it, drawn as one widget. */
+export function Badge(props: BadgeProps) {
+  const justify = props.align === "end" ? "flex-end" : props.align === "center" ? "center" : "flex-start";
+  return (
+    <div data-widget="badge" style={{ display: "flex", gap: `${props.gap ?? 0}px`, justifyContent: justify, alignItems: "flex-start", ...common_style(props) }}>
+      <Icon icon={props.icon} size={props.icon_size ?? 20} color={props.recolor ?? props.color} />
+      <span data-widget="badge-text" style={{ alignSelf: "center" }}>
+        {props.children}
+      </span>
     </div>
   );
 }

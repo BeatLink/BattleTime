@@ -123,6 +123,14 @@ pub fn library_image_reference_bytes(library_image: u16) -> [u8; 4] {
     [LIBRARY_IMAGE_FORMAT, 0, low, high]
 }
 
+/// The shared library's icons that native widgets draw, by their number in the library, which never changes.
+pub mod library_icon {
+    pub const ALARM: u16 = 0;
+    pub const BLUETOOTH: u16 = 5;
+    pub const CHARGING: u16 = 7;
+    pub const NOTIFICATION: u16 = 29;
+}
+
 /// Which image an `Image` or `Icon` property names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ImageReference {

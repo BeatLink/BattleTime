@@ -8,7 +8,6 @@ import {
   define_app,
   format_temperature,
   format_time,
-  heart_rate,
   hour_of,
   is_heart_rate_running,
   is_phone_connected,
@@ -16,12 +15,11 @@ import {
   next_alarm,
   now,
   settings,
-  steps_today,
   unread_notifications,
   type Color,
   type Instant,
 } from "neotime";
-import { BatteryIcon } from "neotime/components";
+import { BatteryIcon, HeartRateBadge, StepsBadge } from "neotime/components";
 import { icon_named, icons } from "neotime/icons";
 import { Icon, Label, Row, Screen } from "neotime/widgets";
 
@@ -125,15 +123,16 @@ function DigitalFace() {
         {date_text.value}
       </Label>
 
-      <Row x={0} y={212} height={28} gap={5}>
-        <Icon icon={icons.heart} size={24} color={is_heart_rate_running.value ? HEART_COLOR : HEART_OFF_COLOR} />
-        {is_heart_rate_running.value && <Label color={HEART_COLOR}>{`${heart_rate.value}`}</Label>}
-      </Row>
+      <HeartRateBadge
+        x={0}
+        y={212}
+        height={28}
+        icon_size={24}
+        color={HEART_COLOR}
+        icon_color={is_heart_rate_running.value ? HEART_COLOR : HEART_OFF_COLOR}
+      />
 
-      <Row x={120} y={212} width={120} height={28} justify="end" gap={5}>
-        <Icon icon={icons.steps} size={24} color={STEPS_COLOR} />
-        <Label color={STEPS_COLOR}>{`${steps_today.value}`}</Label>
-      </Row>
+      <StepsBadge x={120} y={212} width={120} height={28} icon_size={24} align="end" color={STEPS_COLOR} />
     </Screen>
   );
 }

@@ -108,6 +108,9 @@ fn widget_kind(name: &str) -> Option<WidgetKind> {
         "Keyboard" => Keyboard,
         "CellGrid" => CellGrid,
         "AppList" => AppList,
+        "BatteryGauge" => Battery,
+        "StatusRow" => StatusIcons,
+        "Badge" => Badge,
         _ => return None,
     })
 }
@@ -142,6 +145,12 @@ fn property_for(name: &str) -> Option<(Property, Type)> {
         "icon" => (Icon, Type::ICON),
         "time" => (Time, number),
         "show_seconds" => (ShowSeconds, Type::BOOL),
+        "charging" => (Charging, Type::BOOL),
+        "single_color" => (SingleColor, Type::BOOL),
+        "show_bolt" => (ShowBolt, Type::BOOL),
+        "show_percent" => (ShowPercent, Type::BOOL),
+        "status_flags" => (StatusFlags, number),
+        "icon_size" => (IconSize, number),
         "start_angle" => (StartAngle, number),
         "end_angle" => (EndAngle, number),
         "long_mode" => (LongMode, Type::choice(ChoiceSet::LongMode)),

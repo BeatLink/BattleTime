@@ -137,7 +137,10 @@ fn content_size(node: &Node, available_width: Option<i32>) -> Size {
         | WidgetKind::Line
         | WidgetKind::Roller
         | WidgetKind::Dropdown
-        | WidgetKind::ButtonMatrix => measured(),
+        | WidgetKind::ButtonMatrix
+        | WidgetKind::Battery
+        | WidgetKind::StatusIcons
+        | WidgetKind::Badge => measured(),
         _ => fixed(0, 0),
     }
 }

@@ -200,6 +200,9 @@ from inside its parent's padding.
 | `Led` | led | A dot that is on, off or dimmed. |
 | `Chart` | chart | A line or bar chart from one or more fixed-length arrays, such as heart rate over a day. |
 | `CellGrid` | drawn by the runtime | A board of coloured cells from one array, such as Life, Snake or 2048. One widget however many cells, so a 400-cell board costs no more UI heap than a label. |
+| `BatteryGauge` | drawn by the runtime | A battery's outline filled to `value` percent, with a bolt while `charging`; `BatteryIcon` binds it to the watch's own battery. |
+| `StatusRow` | drawn by the runtime | Status icons chosen by `status_flags` (1 notifications, 2 the phone, 4 an alarm), then a battery in `border_color`; `StatusIcons` binds it to the system. |
+| `Badge` | drawn by the runtime | An `icon` and a text beside it as one widget, the icon in `recolor` when not the text's colour. |
 | `AppList` | drawn by the runtime | The installed apps as a scrolling list of rows, each its icon and name, read from the system by the widget itself. One widget however many apps, so a launcher is a few bytes. |
 | `Scale` | scale | Ticks and labels around a dial or along a ruler, with an optional needle at `value`. |
 | `AnalogClock` | clock | Clock hands bound to a time, normally `now`. |
@@ -236,7 +239,9 @@ still inlines them into each app; see
 | `Header` | A screen's title row, with an optional icon. |
 | `ListRow` | A list entry: icon, title, subtitle and a value or switch on the right. |
 | `StatusBar` | The time, battery and connection, as the system shows them. |
-| `BatteryIcon` | The battery's charge and whether it is charging, drawn the way the system does, with an optional percentage. `single_color` draws it all in `color`, and `show_bolt={false}` hides the charging bolt. |
+| `BatteryIcon` | The battery's charge and whether it is charging, drawn the way the system does, with an optional percentage, as one widget. `single_color` draws it all in `color`, and `show_bolt={false}` hides the charging bolt. |
+| `StatusIcons` | The status row as one widget: the notifications icon while any are unread, the phone's while it is connected, the alarm's with `show_alarm` while one is set, then the battery. `icon_size`, `gap`, `color` for the icons, `battery_color`, and `align` to place them across. |
+| `StepsBadge`, `HeartRateBadge`, `TemperatureBadge` | Today's steps, the heart rate while it is measured, or the temperature in the wearer's units, beside an icon, as one widget. `icon_size`, `gap`, `icon_color` and `align`; `TemperatureBadge` takes the weather `icon` the face chooses. |
 | `ConfirmDialog` | A question with two buttons, shown while a signal is true. |
 | `NumberPicker`, `TimePicker`, `DurationPicker` | Rollers set up for a number, a time of day or a duration. |
 | `Menu` | A list of named actions. |

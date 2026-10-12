@@ -222,6 +222,22 @@ pub enum Extra {
         reference: Option<i32>,
         recolor: Option<ColorValue>,
     },
+    /// What a Battery or StatusIcons shows besides its `value`, the charge in percent.
+    Battery {
+        charging: bool,
+        single_color: bool,
+        show_bolt: bool,
+        show_percent: bool,
+        /// Which status icons show: 1 notifications, 2 the phone, 4 an alarm.
+        status_flags: u8,
+        icon_size: u16,
+    },
+    /// A Badge's icon, the colour it is drawn in when not the text's, and its size.
+    Badge {
+        reference: Option<i32>,
+        recolor: Option<ColorValue>,
+        icon_size: u16,
+    },
     /// Which rows of a Repeat have nodes, when its rows have one fixed height and so sit in slots.
     Repeat {
         /// The rows' height, or 0 when every shown row is built.
@@ -262,6 +278,19 @@ impl Extra {
                 minute_length: None,
                 second_length: None,
             },
+            WidgetKind::Battery | WidgetKind::StatusIcons => Extra::Battery {
+                charging: false,
+                single_color: false,
+                show_bolt: true,
+                show_percent: false,
+                status_flags: 0,
+                icon_size: DEFAULT_STATUS_ICON_SIZE,
+            },
+            WidgetKind::Badge => Extra::Badge {
+                reference: None,
+                recolor: None,
+                icon_size: DEFAULT_BADGE_ICON_SIZE,
+            },
             WidgetKind::Repeat => Extra::Repeat {
                 slot_extent: 0,
                 slot_count: 0,
@@ -278,6 +307,10 @@ impl Extra {
         }
     }
 }
+
+/// The side of a StatusIcons' icons, and a Badge's, when the app gives none.
+pub const DEFAULT_STATUS_ICON_SIZE: u16 = 22;
+pub const DEFAULT_BADGE_ICON_SIZE: u16 = 20;
 
 /// Clamps a 64-bit app value into the 32 bits a widget holds.
 fn to_i32(value: i64) -> i32 {
@@ -560,6 +593,32 @@ impl Node {
                 Property::Recolor => color.is_some() && replace(recolor, color),
                 _ => false,
             },
+            Extra::Battery {
+                charging,
+                single_color,
+                show_bolt,
+                show_percent,
+                status_flags,
+                icon_size,
+            } => match property {
+                Property::Charging => replace(charging, number != 0),
+                Property::SingleColor => replace(single_color, number != 0),
+                Property::ShowBolt => replace(show_bolt, number != 0),
+                Property::ShowPercent => replace(show_percent, number != 0),
+                Property::StatusFlags => replace(status_flags, number.clamp(0, u8::MAX as i64) as u8),
+                Property::IconSize => replace(icon_size, to_u16(number)),
+                _ => false,
+            },
+            Extra::Badge {
+                reference,
+                recolor,
+                icon_size,
+            } => match property {
+                Property::Icon => replace(reference, Some(to_i32(number))),
+                Property::Recolor => color.is_some() && replace(recolor, color),
+                Property::IconSize => replace(icon_size, to_u16(number)),
+                _ => false,
+            },
             Extra::Repeat { .. } | Extra::None => false,
         }
     }
@@ -635,6 +694,9 @@ pub fn is_mapped(kind: WidgetKind) -> bool {
             | CellGrid
             | AppList
             | Repeat
+            | Battery
+            | StatusIcons
+            | Badge
             | Line
             | Scale
             | AnalogClock

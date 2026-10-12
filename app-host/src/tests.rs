@@ -1937,3 +1937,128 @@ fn the_rows_in_view_are_worked_out_from_the_slots() {
     assert_eq!(slots_in_view(-1000, clip, 40, 4, 12), (12, 12));
     assert_eq!(slots_in_view(0, clip, 40, 4, 2), (0, 2));
 }
+
+// ============================================================================
+// Batteries, status icons and badges
+// ============================================================================
+
+/// A Battery, a StatusIcons and a Badge stacked in a column, each with the properties given.
+fn status_image(battery: &[(Property, i32)], status: &[(Property, i32)], badge_text: &str) -> Vec<u8> {
+    let mut writer = ImageWriter::new("status", "Status", AppKind::App, 1);
+    let main = writer.string("main");
+    let text = writer.string(badge_text);
+    let constant = |pairs: &[(Property, i32)]| -> Vec<(Property, PropertySource)> {
+        pairs
+            .iter()
+            .map(|(property, value)| (*property, PropertySource::Constant(*value)))
+            .collect()
+    };
+    writer.widget(
+        WidgetKind::Column,
+        3,
+        &[(Property::ScreenName, PropertySource::Constant(main as i32))],
+    );
+    writer.widget(WidgetKind::Battery, 0, &constant(battery));
+    writer.widget(WidgetKind::StatusIcons, 0, &constant(status));
+    let mut badge = constant(&[(Property::Icon, 0x8000 + 39), (Property::Gap, 5)]);
+    badge.push((Property::Text, PropertySource::Constant(text as i32)));
+    writer.widget(WidgetKind::Badge, 0, &badge);
+    writer.build()
+}
+
+const BATTERY_WIDGET: u16 = 1;
+const STATUS_WIDGET: u16 = 2;
+const BADGE_WIDGET: u16 = 3;
+
+fn widget_size(host: &AppHost, widget: u16) -> (i32, i32) {
+    let (bounds, _) = host.widget_bounds(widget).unwrap();
+    (bounds.width, bounds.height)
+}
+
+#[test]
+fn a_battery_is_as_wide_as_its_parts() {
+    let plain = status_image(&[(Property::Value, 80), (Property::Align, 0)], &[], "");
+    let charging = status_image(
+        &[
+            (Property::Value, 80),
+            (Property::Charging, 1),
+            (Property::ShowPercent, 1),
+            (Property::Align, 0),
+        ],
+        &[],
+        "",
+    );
+    let mut system = FakeSystem::default();
+
+    let plain = AppHost::open(&plain, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let charging = AppHost::open(&charging, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    assert_eq!(widget_size(&plain, BATTERY_WIDGET).1, 14);
+    assert!(widget_size(&charging, BATTERY_WIDGET).1 >= 16);
+    assert_eq!(widget_size(&plain, BATTERY_WIDGET).0, 28);
+    assert!(widget_size(&charging, BATTERY_WIDGET).0 > 28 + 16);
+    assert!(system.failures.is_empty());
+}
+
+#[test]
+fn status_icons_grow_with_the_icons_they_show() {
+    let none = status_image(&[], &[(Property::Value, 50), (Property::Align, 0)], "");
+    let all = status_image(
+        &[],
+        &[
+            (Property::Value, 50),
+            (Property::StatusFlags, 7),
+            (Property::IconSize, 22),
+            (Property::Gap, 6),
+            (Property::Align, 0),
+        ],
+        "",
+    );
+    let mut system = FakeSystem::default();
+
+    let none = AppHost::open(&none, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let all = AppHost::open(&all, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    assert_eq!(widget_size(&none, STATUS_WIDGET).1, 14);
+    assert_eq!(widget_size(&all, STATUS_WIDGET).1, 22);
+}
+
+#[test]
+fn a_low_battery_fills_in_the_danger_colour_and_a_charging_one_in_success() {
+    let mut screen = FakeScreen::new();
+    let mut system = FakeSystem::default();
+    let danger = rgb565(DEFAULT_THEME.color(ThemeColor::Danger));
+    let success = rgb565(DEFAULT_THEME.color(ThemeColor::Success));
+
+    let low = status_image(&[(Property::Value, 10)], &[], "");
+    let mut host = AppHost::open(&low, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    host.draw(&mut screen).unwrap();
+    let (battery, _) = host.widget_bounds(BATTERY_WIDGET).unwrap();
+    let low_danger = screen.count_in(battery, danger);
+
+    let charging = status_image(&[(Property::Value, 90), (Property::Charging, 1)], &[], "");
+    let mut host = AppHost::open(&charging, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+    host.draw(&mut screen).unwrap();
+    let (battery, _) = host.widget_bounds(BATTERY_WIDGET).unwrap();
+
+    assert!(low_danger > 0);
+    assert!(screen.count_in(battery, success) > 100);
+}
+
+#[test]
+fn a_badge_shows_its_text_beside_its_icon() {
+    let image = status_image(&[], &[], "1234");
+    let mut system = FakeSystem::default();
+    let mut screen = FakeScreen::new();
+
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    host.draw(&mut screen).unwrap();
+
+    let (width, height) = widget_size(&host, BADGE_WIDGET);
+    assert_eq!(host.widget_text(BADGE_WIDGET), Some("1234"));
+    assert!(height >= 20);
+    assert!(width > 20);
+    let (badge, _) = host.widget_bounds(BADGE_WIDGET).unwrap();
+    assert!(screen.count_in(badge, rgb565(DEFAULT_THEME.color(ThemeColor::Text))) > 20);
+}

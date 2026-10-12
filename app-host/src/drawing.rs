@@ -384,6 +384,14 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
             plain_frame(renderer);
             draw_app_list(node, context, renderer);
         }
+        Battery | StatusIcons => {
+            plain_frame(renderer);
+            draw_status(node, context, renderer);
+        }
+        Badge => {
+            plain_frame(renderer);
+            draw_badge(node, context, renderer);
+        }
         Line => draw_polyline(node, context, renderer),
         Chart => {
             plain_frame(renderer);
@@ -621,6 +629,345 @@ fn draw_tick_box(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
 // ============================================================================
 // Cell grids
 // ============================================================================
+
+// ============================================================================
+// Battery, status icons and badges
+// ============================================================================
+
+const BOLT_SIZE: i32 = 16;
+const PIECE_GAP: i32 = 4;
+const BATTERY_WIDTH: i32 = 28;
+const BATTERY_HEIGHT: i32 = 14;
+const BATTERY_BORDER: i32 = 2;
+const BATTERY_RADIUS: i32 = 3;
+/// How wide the charge inside a full battery is.
+const BATTERY_FILL_WIDTH: i32 = 20;
+
+/// One thing a Battery or StatusIcons draws, left to right.
+#[derive(Clone, Copy)]
+enum StatusPiece {
+    Icon { library_icon: u16, side: i32 },
+    Bolt,
+    Battery,
+    Percent,
+}
+
+/// What a Battery or StatusIcons draws, with the gaps between and the tallest piece's height.
+struct StatusPieces {
+    pieces: [Option<StatusPiece>; 6],
+    gap: i32,
+    height: i32,
+    percent_width: i32,
+}
+
+impl StatusPieces {
+    fn piece_width(&self, piece: StatusPiece) -> i32 {
+        match piece {
+            StatusPiece::Icon { side, .. } => side,
+            StatusPiece::Bolt => BOLT_SIZE,
+            StatusPiece::Battery => BATTERY_WIDTH,
+            StatusPiece::Percent => self.percent_width,
+        }
+    }
+
+    /// The gap before a piece: the icons' own gap, and the battery's inner gap between its own parts.
+    fn gap_before(&self, piece: StatusPiece, previous: Option<StatusPiece>) -> i32 {
+        match (previous, piece) {
+            (None, _) => 0,
+            (Some(StatusPiece::Icon { .. }), _) => self.gap,
+            _ => PIECE_GAP,
+        }
+    }
+
+    fn width(&self) -> i32 {
+        let mut width = 0;
+        let mut previous = None;
+        for piece in self.pieces.iter().flatten() {
+            width += self.gap_before(*piece, previous) + self.piece_width(*piece);
+            previous = Some(*piece);
+        }
+        width
+    }
+}
+
+fn status_pieces(node: &Node) -> StatusPieces {
+    let Extra::Battery {
+        charging,
+        show_bolt,
+        show_percent,
+        status_flags,
+        icon_size,
+        ..
+    } = *node.extra
+    else {
+        return StatusPieces {
+            pieces: [None; 6],
+            gap: 0,
+            height: 0,
+            percent_width: 0,
+        };
+    };
+    use neotime_runtime::resources::library_icon;
+    let side = icon_size as i32;
+    let has_icons = node.kind == neotime_runtime::WidgetKind::StatusIcons && status_flags & 0b111 != 0;
+    let mut pieces = [None; 6];
+    let mut count = 0;
+    let mut add = |piece: StatusPiece| {
+        pieces[count] = Some(piece);
+        count += 1;
+    };
+    if node.kind == neotime_runtime::WidgetKind::StatusIcons {
+        for (flag, library_icon) in [
+            (1, library_icon::NOTIFICATION),
+            (2, library_icon::BLUETOOTH),
+            (4, library_icon::ALARM),
+        ] {
+            if status_flags & flag != 0 {
+                add(StatusPiece::Icon { library_icon, side });
+            }
+        }
+    }
+    if charging && show_bolt {
+        add(StatusPiece::Bolt);
+    }
+    add(StatusPiece::Battery);
+    if show_percent {
+        add(StatusPiece::Percent);
+    }
+    let small = FontName::Small.metrics();
+    let mut height = BATTERY_HEIGHT;
+    if charging && show_bolt {
+        height = height.max(BOLT_SIZE);
+    }
+    if has_icons {
+        height = height.max(side);
+    }
+    if show_percent {
+        height = height.max(line_height(small));
+    }
+    StatusPieces {
+        pieces,
+        gap: i32::from(node.settings.gap),
+        height,
+        percent_width: text_width(small, &percent_text(node.settings.value)),
+    }
+}
+
+fn percent_text(percent: i32) -> alloc::string::String {
+    alloc::format!("{percent}%")
+}
+
+/// Draws an image scaled into a square and centred in it, as an `Icon` of that size shows it.
+fn draw_icon_in(
+    context: &DrawContext,
+    reference: i32,
+    square: Rect,
+    color: Color,
+    renderer: &mut dyn Renderer,
+) {
+    let Some(image) = context.image_resource(reference) else {
+        return;
+    };
+    let (width, height) = (image.width as i32, image.height as i32);
+    let (shown_width, shown_height) = if square.width * height <= square.height * width {
+        (
+            square.width.max(1),
+            ((height * square.width + width / 2) / width).max(1),
+        )
+    } else {
+        (
+            ((width * square.height + height / 2) / height).max(1),
+            square.height.max(1),
+        )
+    };
+    let place = Rect {
+        x: square.x + Align::Center.offset(square.width, shown_width),
+        y: square.y + Align::Center.offset(square.height, shown_height),
+        width: shown_width,
+        height: shown_height,
+    };
+    draw_resource(&image, place, color, false, renderer);
+}
+
+/// A Battery drawn as the system draws one, or a StatusIcons' icons followed by its battery.
+fn draw_status(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
+    let Extra::Battery {
+        charging,
+        single_color,
+        ..
+    } = *node.extra
+    else {
+        return;
+    };
+    let theme = context.theme;
+    let pieces = status_pieces(node);
+    let inner = inset(node.bounds, i32::from(node.settings.padding));
+    let percent = node.settings.value.clamp(0, 100);
+    let is_status = node.kind == neotime_runtime::WidgetKind::StatusIcons;
+    let icon_color = resolve(node.settings.color, ThemeColor::Text, theme);
+    let battery_value = if is_status {
+        node.settings.border_color
+    } else {
+        node.settings.color
+    };
+    let battery_color = resolve(battery_value, ThemeColor::Text, theme);
+    let fill_color = match (single_color, charging, percent <= 20) {
+        (true, _, _) => battery_color,
+        (false, true, _) => resolve(None, ThemeColor::Success, theme),
+        (false, false, true) => resolve(None, ThemeColor::Danger, theme),
+        (false, false, false) => battery_color,
+    };
+    let bolt_color = match single_color {
+        true => battery_color,
+        false => resolve(None, ThemeColor::Warning, theme),
+    };
+
+    let align = node.settings.align.unwrap_or(Align::Start);
+    let mut x = inner.x + align.offset(inner.width, pieces.width());
+    let small = FontName::Small;
+    let mut previous = None;
+    for piece in pieces.pieces.iter().flatten().copied() {
+        x += pieces.gap_before(piece, previous);
+        let width = pieces.piece_width(piece);
+        let piece_height = match piece {
+            StatusPiece::Icon { side, .. } => side,
+            StatusPiece::Bolt => BOLT_SIZE,
+            StatusPiece::Battery => BATTERY_HEIGHT,
+            StatusPiece::Percent => line_height(small.metrics()),
+        };
+        // Each piece sits in the middle of the widget's height, as the row of widgets it replaces placed them.
+        let top = inner.y + Align::Center.offset(inner.height, piece_height);
+        match piece {
+            StatusPiece::Icon { library_icon, side } => {
+                let reference = ImageReference::SharedLibrary(library_icon).to_value();
+                let square = Rect {
+                    x,
+                    y: top,
+                    width: side,
+                    height: side,
+                };
+                draw_icon_in(context, reference, square, icon_color, renderer);
+            }
+            StatusPiece::Bolt => {
+                let reference =
+                    ImageReference::SharedLibrary(neotime_runtime::resources::library_icon::CHARGING);
+                let square = Rect {
+                    x,
+                    y: top,
+                    width: BOLT_SIZE,
+                    height: BOLT_SIZE,
+                };
+                draw_icon_in(context, reference.to_value(), square, bolt_color, renderer);
+            }
+            StatusPiece::Battery => {
+                let body = Rect {
+                    x,
+                    y: top,
+                    width: BATTERY_WIDTH,
+                    height: BATTERY_HEIGHT,
+                };
+                let outline = Style {
+                    bg_color: TRANSPARENT,
+                    border_color: battery_color,
+                    border_width: BATTERY_BORDER as u8,
+                    alpha: OPAQUE,
+                    radius: BATTERY_RADIUS as u8,
+                };
+                draw_widget_bg(renderer, body, &outline);
+                let fill = Rect {
+                    x: x + BATTERY_BORDER,
+                    y: top + BATTERY_BORDER,
+                    width: (BATTERY_FILL_WIDTH * percent * 2 + 100) / 200,
+                    height: BATTERY_HEIGHT - 2 * BATTERY_BORDER,
+                };
+                if fill.width > 0 {
+                    renderer.fill_rect(fill, fill_color);
+                }
+            }
+            StatusPiece::Percent => {
+                let area = Rect {
+                    x,
+                    y: top,
+                    width,
+                    height: line_height(small.metrics()),
+                };
+                draw_text_block(
+                    renderer,
+                    small,
+                    &percent_text(percent),
+                    area,
+                    Align::Start,
+                    false,
+                    battery_color,
+                );
+            }
+        }
+        x += width;
+        previous = Some(piece);
+    }
+}
+
+/// How big a Badge's icon and text are together.
+fn badge_size(node: &Node) -> (i32, i32) {
+    let Extra::Badge { icon_size, .. } = *node.extra else {
+        return (0, 0);
+    };
+    let side = icon_size as i32;
+    let font = node.settings.font.metrics();
+    let text = text_width(font, &node.text);
+    let gap = if text > 0 { i32::from(node.settings.gap) } else { 0 };
+    (side + gap + text, side.max(line_height(font)))
+}
+
+/// An icon, then its text, each in the middle of the widget's height, together placed across by `align`.
+fn draw_badge(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
+    let Extra::Badge {
+        reference,
+        recolor,
+        icon_size,
+    } = *node.extra
+    else {
+        return;
+    };
+    let theme = context.theme;
+    let inner = inset(node.bounds, i32::from(node.settings.padding));
+    let (width, _) = badge_size(node);
+    let side = icon_size as i32;
+    let text_color = resolve(node.settings.color, ThemeColor::Text, theme);
+    let icon_color = resolve(recolor.or(node.settings.color), ThemeColor::Text, theme);
+    let left = inner.x
+        + node
+            .settings
+            .align
+            .unwrap_or(Align::Start)
+            .offset(inner.width, width);
+    if let Some(reference) = reference {
+        let top = inner.y + Align::Center.offset(inner.height, side);
+        let square = Rect {
+            x: left,
+            y: top,
+            width: side,
+            height: side,
+        };
+        draw_icon_in(context, reference, square, icon_color, renderer);
+    }
+    let text_left = left + side + i32::from(node.settings.gap);
+    let area = Rect {
+        x: text_left,
+        y: inner.y,
+        width: (inner.x + inner.width - text_left).max(0),
+        height: inner.height,
+    };
+    draw_text_block(
+        renderer,
+        node.settings.font,
+        &node.text,
+        area,
+        Align::Start,
+        false,
+        text_color,
+    );
+}
 
 // ============================================================================
 // App lists
@@ -1505,6 +1852,11 @@ pub fn measure_node(node: &mut Node, context: &DrawContext) {
             _ => (0, 0),
         },
         Line => points_extent(context, node.settings.array),
+        Battery | StatusIcons => {
+            let pieces = status_pieces(node);
+            (pieces.width(), pieces.height)
+        }
+        Badge => badge_size(node),
         Roller => (
             widest_option() + 4 * OPTION_ROW_PADDING,
             3 * option_row_height(node),

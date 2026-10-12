@@ -343,3 +343,19 @@ fn the_library_carries_the_seven_text_fonts_in_order() {
         assert_eq!(font, *expected);
     }
 }
+
+#[test]
+fn the_icons_native_widgets_draw_have_the_numbers_the_runtime_expects() {
+    use neotime_runtime::resources::library_icon;
+    let number_of = |name: &str| {
+        crate::types::ICON_NAMES
+            .iter()
+            .position(|icon| *icon == name)
+            .unwrap() as u16
+    };
+
+    assert_eq!(number_of("alarm"), library_icon::ALARM);
+    assert_eq!(number_of("bluetooth"), library_icon::BLUETOOTH);
+    assert_eq!(number_of("charging"), library_icon::CHARGING);
+    assert_eq!(number_of("notification"), library_icon::NOTIFICATION);
+}

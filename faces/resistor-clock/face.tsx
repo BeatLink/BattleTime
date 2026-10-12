@@ -7,18 +7,16 @@ import {
   day_of,
   define_app,
   hour_of,
-  is_phone_connected,
   minute_of,
   month_of,
   now,
   second_of,
-  unread_notifications,
   year_of,
   type Color,
 } from "neotime";
-import { BatteryIcon } from "neotime/components";
+import { StatusIcons } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Column, Icon, Row, Screen } from "neotime/widgets";
+import { Column, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -53,11 +51,18 @@ const battery_color = computed<Color>(() =>
 
 function StatusBar() {
   return (
-    <Row x={0} y={0} width={240} height={32} justify="end" gap={6} padding={4}>
-      {unread_notifications.value > 0 && <Icon icon={icons.notification} size={22} color="accent" />}
-      {is_phone_connected.value && <Icon icon={icons.bluetooth} size={22} color="accent" />}
-      <BatteryIcon color={battery_color.value} />
-    </Row>
+    <StatusIcons
+      x={0}
+      y={0}
+      width={240}
+      height={32}
+      align="end"
+      gap={6}
+      padding={4}
+      icon_size={22}
+      color="accent"
+      battery_color={battery_color.value}
+    />
   );
 }
 

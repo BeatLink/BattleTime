@@ -215,8 +215,9 @@ the ones above it.
   heap wherever its record lives, so a composite drawn by the firmware as one node saves more RAM
   than a library component. In the firmware, which has 112 KB free:
   - `AppGrid`, the installed apps as a grid of icons, beside the `AppList` the launcher uses.
-  - `StatusIcons`: battery, Bluetooth, notifications and alarm, with a style for the wasp-os bar.
-    Replaces 13 `BatteryIcon` copies and 9 hand-made status rows in the faces.
+  - The other faces' own status rows on `StatusIcons`: analog, lite-analog, lite-digital,
+    lite-rings, infineat, pinetime-style and pride-flag still build theirs from icons, in
+    colours and orders of their own; `StatusIcons` would need a colour for each icon.
   - `TimePicker`, `DurationPicker`, `WeekdayPicker` and `Stepper`, writing back to a signal, for
     the alarm, timer, pomodoro, settings and metronome.
   - A `confirm(question, handler)` effect drawn over the screen, in place of `ConfirmDialog`,
@@ -226,7 +227,8 @@ the ones above it.
   - Numbers drawn in `CellGrid` cells, so twos and puzzle15 need 1 widget instead of 16 labels.
   - A digit-entry mode for `ButtonMatrix`, for the calculator and pomodoro.
   - `TextLines` over an array of character codes, for morse's 120 lines of wrapping.
-  - `SystemBadge` for steps, heart rate, weather and battery text, used in about 8 faces.
+  - The other faces' step, heart and weather rows on `StepsBadge`, `HeartRateBadge` and
+    `TemperatureBadge`: infineat, lite-digital, lite-weather, terminal and pinetime-style.
 - [ ] **Native array builtins.** Whole-board work is smaller and far faster in Rust than in
   bytecode loops: `slide_board` and `board_can_move` (twos), `line_length_through`
   (four-in-a-row), `life_step` (game-of-life, about 2,000 steps a generation now),
