@@ -170,7 +170,9 @@ The system loop feeds the watchdog only while the button is up (see the button d
 3. A short press moves to the next option: **Start firmware**, **Roll back**, **Install recovery**.
    A press held for a second (`MENU_SELECT_HOLD_IN_MILLISECONDS`) picks the marked one, with a buzz.
    After 30 seconds without a press (`MENU_TIMEOUT_IN_MILLISECONDS`) it starts the firmware, so a
-   watch is never left in the menu.
+   watch is never left in the menu. Start firmware, picked or timed out, is an ordinary start: a
+   firmware still on trial, such as one Roll back just installed that no phone has connected to
+   yet, is swapped back out, as on any reset.
 4. **Roll back** needs the firmware the last swap replaced, which sits one page up in the update
    slot (`PREVIOUS_FIRMWARE`). **Install recovery** needs `RECOVERY_FIRMWARE`. Either image must
    start with a stack pointer in RAM and a reset handler inside `FIRMWARE`; if it does not, the

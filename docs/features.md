@@ -116,7 +116,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **A bootloader menu on the side button.** Hold the button for about 10 seconds and the watch
   restarts into a menu: a short press moves between Start firmware, Roll back and Install recovery,
   and a one-second hold picks one. Roll back puts back the firmware the last update replaced, even
-  one that has confirmed itself. The menu starts the firmware by itself after 30 seconds.
+  one that has confirmed itself. The menu starts the firmware by itself after 30 seconds. Starting is an ordinary start, so a
+  firmware still on trial that no phone has connected to is swapped back out.
 - **A recovery firmware** kept in external flash, installed from the bootloader menu. It is a small
   build that only shows its status and takes a new firmware over Bluetooth. The companion's
   `neotime recovery recovery.zip` replaces it over Bluetooth while the watch keeps running.
