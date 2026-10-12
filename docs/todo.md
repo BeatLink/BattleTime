@@ -403,6 +403,9 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **Bonding** saved to the file system and restored at start.
 - [ ] **Privacy:** resolvable private addresses.
 - [ ] **A setting to turn the radio off.**
+- [ ] **Light the screen when a phone connects or leaves.** The shell redraws `is_phone_connected`
+  and sends the `phone` event, but a dark screen stays dark; turn it on briefly, outside do not
+  disturb, so the wearer sees the link change.
 - [ ] **Advertise like InfiniTime.** The firmware advertises every 160 ms all the time. InfiniTime
   advertises fast for 30 seconds after start or a disconnect and then about once a second, puts the
   heart rate and DFU service UUIDs and the transmit power in the advertisement, and the name in the
