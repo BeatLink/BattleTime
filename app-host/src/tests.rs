@@ -2110,3 +2110,188 @@ fn a_badge_shows_its_text_beside_its_icon() {
     let (badge, _) = host.widget_bounds(BADGE_WIDGET).unwrap();
     assert!(screen.count_in(badge, rgb565(DEFAULT_THEME.color(ThemeColor::Text))) > 20);
 }
+
+// ============================================================================
+// Pickers and Confirm
+// ============================================================================
+
+/// One picker filling the screen, whose `onChange` vibrates for as many milliseconds as the value it sends.
+fn picker_image(kind: WidgetKind, properties: &[(Property, i32)], text: &str) -> Vec<u8> {
+    use Instruction::*;
+
+    let mut writer = ImageWriter::new("picker", "Picker", AppKind::App, 1);
+    let main = writer.string("main");
+    let text = writer.string(text);
+    let report = writer.handler(code(|code| {
+        code.emit(ReadEvent(0)).emit(Effect(EffectKind::Vibrate));
+    }));
+    let mut all: Vec<(Property, PropertySource)> = properties
+        .iter()
+        .map(|(property, value)| (*property, PropertySource::Constant(*value)))
+        .collect();
+    all.push((Property::ScreenName, PropertySource::Constant(main as i32)));
+    all.push((Property::OnChange, PropertySource::Handler(report)));
+    if kind == WidgetKind::Stepper || kind == WidgetKind::Confirm {
+        all.push((Property::Text, PropertySource::Constant(text as i32)));
+    }
+    writer.widget(kind, 0, &all);
+    writer.build()
+}
+
+/// What tapping a picker at a point sends, or none when the tap is not handled.
+fn sent_by_tap(image: &[u8], x: i32, y: i32) -> Option<Value> {
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+    host.draw(&mut screen).unwrap();
+    host.touch(Touch::Click { x, y }, START_TIME, &mut system);
+    assert!(system.failures.is_empty());
+    system.effects.first().map(|(_, value, _)| *value)
+}
+
+#[test]
+fn time_rollers_roll_the_tapped_column_and_wrap_into_the_minute_of_the_day() {
+    let image = picker_image(WidgetKind::TimeRollers, &[(Property::Value, 8 * 60 + 30)], "");
+    let mut system = FakeSystem::default();
+    let host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let (bounds, _) = host.widget_bounds(0).unwrap();
+    let row_height = crate::drawing::option_row_height_of_font(crate::fonts::FontName::Normal);
+    let middle = bounds.y + bounds.height / 2;
+    let (width, _) = (bounds.width, 0);
+
+    // The hour column is left of the middle, the minute column right of it; a row lower is one more.
+    let hour_x = bounds.x + width / 2 - 40;
+    let minute_x = bounds.x + width / 2 + 40;
+
+    assert_eq!(
+        sent_by_tap(&image, hour_x, middle + row_height),
+        Some(9 * 60 + 30)
+    );
+    assert_eq!(
+        sent_by_tap(&image, minute_x, middle - row_height),
+        Some(8 * 60 + 29)
+    );
+    assert_eq!(sent_by_tap(&image, bounds.x + 2, middle), None);
+}
+
+#[test]
+fn twelve_hour_time_rollers_switch_between_morning_and_afternoon() {
+    let image = picker_image(
+        WidgetKind::TimeRollers,
+        &[(Property::Value, 8 * 60), (Property::TwelveHour, 1)],
+        "",
+    );
+    let mut system = FakeSystem::default();
+    let host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let (bounds, _) = host.widget_bounds(0).unwrap();
+    // The AM and PM button is the rightmost part, 56 pixels wide, with the rest centred beside it.
+    let digits = crate::fonts::text_width(crate::fonts::FontName::Normal.metrics(), "00") + 4 * 8;
+    let colon = crate::fonts::text_width(crate::fonts::FontName::Normal.metrics(), ":");
+    let width = 2 * digits + colon + 2 * 6 + 6 + 56;
+    let toggle_x = bounds.x + (bounds.width - width) / 2 + width - 20;
+
+    assert_eq!(
+        sent_by_tap(&image, toggle_x, bounds.y + bounds.height / 2),
+        Some(20 * 60)
+    );
+}
+
+#[test]
+fn duration_rollers_send_seconds() {
+    let image = picker_image(WidgetKind::DurationRollers, &[(Property::Value, 5 * 60 + 7)], "");
+    let mut system = FakeSystem::default();
+    let host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let (bounds, _) = host.widget_bounds(0).unwrap();
+    let row_height = crate::drawing::option_row_height_of_font(crate::fonts::FontName::Normal);
+    let middle = bounds.y + bounds.height / 2;
+
+    assert_eq!(
+        sent_by_tap(&image, bounds.x + bounds.width / 2 + 40, middle + row_height),
+        Some(5 * 60 + 8)
+    );
+    assert_eq!(
+        sent_by_tap(&image, bounds.x + bounds.width / 2 - 40, middle + row_height),
+        Some(6 * 60 + 7)
+    );
+}
+
+#[test]
+fn a_number_roller_sends_the_number_tapped() {
+    let image = picker_image(
+        WidgetKind::NumberRoller,
+        &[
+            (Property::Value, 6),
+            (Property::Minimum, 2),
+            (Property::Maximum, 99),
+            (Property::Digits, 2),
+        ],
+        "",
+    );
+    let mut system = FakeSystem::default();
+    let host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let (bounds, _) = host.widget_bounds(0).unwrap();
+    let row_height = crate::drawing::option_row_height_of_font(crate::fonts::FontName::Normal);
+
+    assert_eq!(
+        sent_by_tap(&image, 120, bounds.y + bounds.height / 2 - row_height),
+        Some(5)
+    );
+}
+
+#[test]
+fn a_day_button_toggles_its_day() {
+    let image = picker_image(
+        WidgetKind::WeekdayPicker,
+        &[(Property::Value, 0b0000_0011), (Property::Columns, 7)],
+        "",
+    );
+
+    // Seven buttons across the screen: the first is Monday, the third Wednesday.
+    assert_eq!(sent_by_tap(&image, 240 / 14, 120), Some(0b0000_0010));
+    assert_eq!(sent_by_tap(&image, 5 * 240 / 14, 120), Some(0b0000_0111));
+}
+
+#[test]
+fn a_stepper_steps_within_its_limits() {
+    let image = picker_image(
+        WidgetKind::Stepper,
+        &[
+            (Property::Value, 10),
+            (Property::Minimum, 0),
+            (Property::Maximum, 12),
+            (Property::Step, 5),
+        ],
+        "",
+    );
+
+    assert_eq!(sent_by_tap(&image, 5, 120), Some(5));
+    assert_eq!(sent_by_tap(&image, 235, 120), Some(12));
+    assert_eq!(sent_by_tap(&image, 120, 120), None);
+}
+
+#[test]
+fn a_confirm_sends_one_for_its_confirm_button_and_zero_for_the_other() {
+    let image = picker_image(WidgetKind::Confirm, &[], "Keep\nClear\nClear the picture?");
+    let mut system = FakeSystem::default();
+    let mut screen = FakeScreen::new();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    host.draw(&mut screen).unwrap();
+    let danger = rgb565(DEFAULT_THEME.color(ThemeColor::Danger));
+    // The question wraps onto two lines, so the buttons start below it at about 82.
+    let button_row = 100;
+
+    assert_eq!(sent_by_tap(&image, 60, button_row), Some(0));
+    assert_eq!(sent_by_tap(&image, 180, button_row), Some(1));
+    assert_eq!(sent_by_tap(&image, 120, 230), None);
+    assert!(
+        screen.count_in(
+            Rect {
+                x: 124,
+                y: 0,
+                width: 116,
+                height: 240
+            },
+            danger
+        ) > 500
+    );
+}

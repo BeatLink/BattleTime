@@ -806,6 +806,7 @@ library has), in the order above. The app host's font slots start empty, and the
 | `Bar`, `Slider`, `Switch`, `Led`, `ClickArea` | rlvgl | A tap on a `Switch`, or a tap or drag on a `Slider`, sends `onChange`. |
 | `CellGrid` | The host | Cells from an array and a palette, with `gap` and shape; click and drag send `{value}`, the cell's index. |
 | `Battery`, `StatusIcons`, `Badge` | The host | Drawn as the rows of icons, battery outline and label they replace drew them, each piece in the middle of the widget's height, from bound values such as the charge and which icons show. The icons they draw are the library's by fixed numbers in `resources::library_icon`. |
+| `NumberRoller`, `TimeRollers`, `DurationRollers`, `WeekdayPicker`, `Stepper`, `Confirm` | The host | Drawn from their `value` as the rollers, buttons and labels they replace, with no list of options kept in the app's state. A tap works out the value it makes, such as the number above or below in the tapped roller, and sends it to `onChange`. |
 | `AppList` | The host | A row per installed app, its icon and name read from the system values; scrolls like a `List`, and a click sends `{value}`, the app's place. |
 | `Line`, `Chart`, `Scale`, `AnalogClock` | The host | `Chart` draws one series. |
 | `ButtonMatrix` | The host | `"\n"` breaks rows; a press sends `{value}`; the button numbered `value` is highlighted. |

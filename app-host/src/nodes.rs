@@ -238,6 +238,13 @@ pub enum Extra {
         recolor: Option<ColorValue>,
         icon_size: u16,
     },
+    /// What the pickers and Confirm keep besides their `value`.
+    Picker {
+        twelve_hour: bool,
+        show_hours: bool,
+        step: u16,
+        digits: u8,
+    },
     /// Which rows of a Repeat have nodes, when its rows have one fixed height and so sit in slots.
     Repeat {
         /// The rows' height, or 0 when every shown row is built.
@@ -290,6 +297,17 @@ impl Extra {
                 reference: None,
                 recolor: None,
                 icon_size: DEFAULT_BADGE_ICON_SIZE,
+            },
+            WidgetKind::TimeRollers
+            | WidgetKind::DurationRollers
+            | WidgetKind::WeekdayPicker
+            | WidgetKind::Stepper
+            | WidgetKind::Confirm
+            | WidgetKind::NumberRoller => Extra::Picker {
+                twelve_hour: false,
+                show_hours: false,
+                step: 1,
+                digits: 1,
             },
             WidgetKind::Repeat => Extra::Repeat {
                 slot_extent: 0,
@@ -619,6 +637,18 @@ impl Node {
                 Property::IconSize => replace(icon_size, to_u16(number)),
                 _ => false,
             },
+            Extra::Picker {
+                twelve_hour,
+                show_hours,
+                step,
+                digits,
+            } => match property {
+                Property::Digits => replace(digits, number.clamp(1, 9) as u8),
+                Property::TwelveHour => replace(twelve_hour, number != 0),
+                Property::ShowHours => replace(show_hours, number != 0),
+                Property::Step => replace(step, to_u16(number).max(1)),
+                _ => false,
+            },
             Extra::Repeat { .. } | Extra::None => false,
         }
     }
@@ -697,6 +727,12 @@ pub fn is_mapped(kind: WidgetKind) -> bool {
             | Battery
             | StatusIcons
             | Badge
+            | TimeRollers
+            | DurationRollers
+            | WeekdayPicker
+            | Stepper
+            | Confirm
+            | NumberRoller
             | Line
             | Scale
             | AnalogClock

@@ -392,6 +392,19 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
             plain_frame(renderer);
             draw_badge(node, context, renderer);
         }
+        TimeRollers | DurationRollers | NumberRoller => {
+            plain_frame(renderer);
+            pickers::draw_rollers(node, context, renderer);
+        }
+        WeekdayPicker => {
+            plain_frame(renderer);
+            pickers::draw_weekdays(node, context, renderer);
+        }
+        Stepper => {
+            plain_frame(renderer);
+            pickers::draw_stepper(node, context, renderer);
+        }
+        Confirm => pickers::draw_confirm(node, context, renderer),
         Line => draw_polyline(node, context, renderer),
         Chart => {
             plain_frame(renderer);
@@ -629,6 +642,9 @@ fn draw_tick_box(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
 // ============================================================================
 // Cell grids
 // ============================================================================
+
+#[path = "pickers.rs"]
+pub mod pickers;
 
 // ============================================================================
 // Battery, status icons and badges
@@ -1658,7 +1674,12 @@ fn draw_button_matrix(node: &Node, context: &DrawContext, renderer: &mut dyn Ren
 
 /// How tall one option is in a Roller or a Dropdown.
 pub fn option_row_height(node: &Node) -> i32 {
-    line_height(node.settings.font.metrics()) + 2 * OPTION_ROW_PADDING
+    option_row_height_of_font(node.settings.font)
+}
+
+/// How tall one option is in a Roller drawn in this font.
+pub fn option_row_height_of_font(font: FontName) -> i32 {
+    line_height(font.metrics()) + 2 * OPTION_ROW_PADDING
 }
 
 /// How many rows a Roller shows: as many as fit, always an odd number so the chosen one is in the middle.
@@ -1857,6 +1878,10 @@ pub fn measure_node(node: &mut Node, context: &DrawContext) {
             (pieces.width(), pieces.height)
         }
         Badge => badge_size(node),
+        TimeRollers | DurationRollers | NumberRoller => pickers::rollers_size(node),
+        WeekdayPicker => pickers::weekdays_size(node),
+        Stepper => pickers::stepper_size(node),
+        Confirm => (0, 0),
         Roller => (
             widest_option() + 4 * OPTION_ROW_PADDING,
             3 * option_row_height(node),

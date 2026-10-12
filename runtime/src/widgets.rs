@@ -77,10 +77,23 @@ pub enum WidgetKind {
     StatusIcons,
     /// An icon and a text beside it, such as the step count, drawn as one widget.
     Badge,
+    /// Rollers for an hour and a minute, `value` the minute of the day, with AM and PM when `twelve_hour`.
+    TimeRollers,
+    /// Rollers for minutes and seconds, and hours with `show_hours`; `value` is the duration in seconds.
+    DurationRollers,
+    /// Seven day buttons, `value` the days set with Monday in bit 0, in rows of `columns`.
+    WeekdayPicker,
+    /// A minus button, the value, and a plus button, keeping `value` between `minimum` and `maximum`.
+    Stepper,
+    /// A question with two buttons, its `text` the cancel button's text, the confirm button's and the
+    /// question on lines of their own; `onChange` sends 1 for the confirm button and 0 for the other.
+    Confirm,
+    /// One roller of whole numbers from `minimum` to `maximum`, padded to `digits`.
+    NumberRoller,
 }
 
 impl WidgetKind {
-    const ALL: [WidgetKind; 43] = {
+    const ALL: [WidgetKind; 49] = {
         use WidgetKind::*;
         [
             Column,
@@ -126,6 +139,12 @@ impl WidgetKind {
             Battery,
             StatusIcons,
             Badge,
+            TimeRollers,
+            DurationRollers,
+            WeekdayPicker,
+            Stepper,
+            Confirm,
+            NumberRoller,
         ]
     };
 
@@ -262,10 +281,16 @@ pub enum Property {
     StatusFlags,
     /// The side of the icons a StatusIcons or Badge draws.
     IconSize,
+    /// Whether TimeRollers count hours 1 to 12 with AM and PM.
+    TwelveHour,
+    /// Whether DurationRollers have an hours roller.
+    ShowHours,
+    /// How many digits a NumberRoller pads its numbers to.
+    Digits,
 }
 
 impl Property {
-    const ALL: [Property; 78] = {
+    const ALL: [Property; 81] = {
         use Property::*;
         [
             X,
@@ -346,6 +371,9 @@ impl Property {
             ShowPercent,
             StatusFlags,
             IconSize,
+            TwelveHour,
+            ShowHours,
+            Digits,
         ]
     };
 
@@ -356,7 +384,8 @@ impl Property {
     pub fn value(self) -> PropertyValue {
         use Property::*;
         match self {
-            Visible | ShowSeconds | Charging | SingleColor | ShowBolt | ShowPercent => PropertyValue::Bool,
+            Visible | ShowSeconds | Charging | SingleColor | ShowBolt | ShowPercent | TwelveHour
+            | ShowHours => PropertyValue::Bool,
             Background | Color | BorderColor | NeedleColor | HourColor | MinuteColor | SecondColor
             | Recolor => PropertyValue::Color,
             Cells | Palette | Options | Points | Series | Labels | Skip => PropertyValue::Array,
@@ -394,6 +423,12 @@ impl Property {
                 | Kind::ButtonMatrix
                 | Kind::TextArea
                 | Kind::Keyboard
+                | Kind::TimeRollers
+                | Kind::DurationRollers
+                | Kind::WeekdayPicker
+                | Kind::Stepper
+                | Kind::Confirm
+                | Kind::NumberRoller
         );
         match self {
             Text => matches!(
@@ -406,6 +441,8 @@ impl Property {
                     | Kind::Radio
                     | Kind::TextArea
                     | Kind::Badge
+                    | Kind::Stepper
+                    | Kind::Confirm
             ),
             Value => matches!(
                 kind,
@@ -426,11 +463,23 @@ impl Property {
                     | Kind::ButtonMatrix
                     | Kind::Battery
                     | Kind::StatusIcons
+                    | Kind::TimeRollers
+                    | Kind::DurationRollers
+                    | Kind::WeekdayPicker
+                    | Kind::Stepper
+                    | Kind::NumberRoller
             ),
             Minimum | Maximum | Step => {
                 matches!(
                     kind,
-                    Kind::Arc | Kind::Bar | Kind::Slider | Kind::Spinbox | Kind::Scale | Kind::Chart
+                    Kind::Arc
+                        | Kind::Bar
+                        | Kind::Slider
+                        | Kind::Spinbox
+                        | Kind::Scale
+                        | Kind::Chart
+                        | Kind::Stepper
+                        | Kind::NumberRoller
                 )
             }
             Image => matches!(kind, Kind::Image | Kind::ImageButton | Kind::AnimatedImage),
@@ -440,9 +489,24 @@ impl Property {
             LongMode => kind == Kind::Label,
             Opacity => true,
             Disabled => is_input,
-            Gap => kind.holds_children() || matches!(kind, Kind::AppList | Kind::StatusIcons | Kind::Badge),
+            Gap => {
+                kind.holds_children()
+                    || matches!(
+                        kind,
+                        Kind::AppList
+                            | Kind::StatusIcons
+                            | Kind::Badge
+                            | Kind::TimeRollers
+                            | Kind::DurationRollers
+                            | Kind::WeekdayPicker
+                            | Kind::Stepper
+                    )
+            }
             Justify | AlignItems => kind.holds_children(),
-            Columns => matches!(kind, Kind::Grid | Kind::ButtonMatrix | Kind::CellGrid),
+            Columns => matches!(
+                kind,
+                Kind::Grid | Kind::ButtonMatrix | Kind::CellGrid | Kind::WeekdayPicker
+            ),
             Rows | CellSize | CellGap | CellShape | Cells | Palette => kind == Kind::CellGrid,
             Options => matches!(kind, Kind::Roller | Kind::Dropdown | Kind::ButtonMatrix),
             Points => kind == Kind::Line,
@@ -458,6 +522,9 @@ impl Property {
             }
             StatusFlags => kind == Kind::StatusIcons,
             IconSize => matches!(kind, Kind::StatusIcons | Kind::Badge),
+            TwelveHour => kind == Kind::TimeRollers,
+            ShowHours => kind == Kind::DurationRollers,
+            Digits => kind == Kind::NumberRoller,
             OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease => {
                 is_input || kind.holds_children() || matches!(kind, Kind::CellGrid | Kind::AppList)
             }

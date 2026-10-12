@@ -111,6 +111,12 @@ fn widget_kind(name: &str) -> Option<WidgetKind> {
         "BatteryGauge" => Battery,
         "StatusRow" => StatusIcons,
         "Badge" => Badge,
+        "TimeRollers" => TimeRollers,
+        "DurationRollers" => DurationRollers,
+        "DayButtons" => WeekdayPicker,
+        "Stepper" => Stepper,
+        "ConfirmBox" => Confirm,
+        "NumberRoller" => NumberRoller,
         _ => return None,
     })
 }
@@ -151,6 +157,9 @@ fn property_for(name: &str) -> Option<(Property, Type)> {
         "show_percent" => (ShowPercent, Type::BOOL),
         "status_flags" => (StatusFlags, number),
         "icon_size" => (IconSize, number),
+        "twelve_hour" => (TwelveHour, Type::BOOL),
+        "show_hours" => (ShowHours, Type::BOOL),
+        "digits" => (Digits, number),
         "start_angle" => (StartAngle, number),
         "end_angle" => (EndAngle, number),
         "long_mode" => (LongMode, Type::choice(ChoiceSet::LongMode)),

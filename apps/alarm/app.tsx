@@ -28,9 +28,9 @@ import {
   type TimeEvent,
   type TimeOfDay,
 } from "neotime";
-import { TimePicker } from "neotime/components";
+import { TimePicker, WeekdayPicker } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Button, ClickArea, Column, Grid, Icon, Label, Row, Screen, Scroll, Switch } from "neotime/widgets";
+import { Button, ClickArea, Column, Icon, Label, Row, Screen, Scroll, Switch } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -185,10 +185,6 @@ function open_alarm(place: number) {
   editing_time.value = { hour: alarms.value[place].hour, minute: alarms.value[place].minute };
   editing_days.value = alarms.value[place].days;
   go("edit_time");
-}
-
-function toggle_day(place: number) {
-  editing_days.value = editing_days.value ^ (1 << place);
 }
 
 /** Moves to the next preset, or to the first when the days are a pattern of their own. */
@@ -350,26 +346,13 @@ function EditTime() {
   );
 }
 
-function DayButton(props: { place: number }) {
-  const is_set = (editing_days.value & (1 << props.place)) !== 0;
-  return (
-    <Button background={is_set ? "accent" : "surface"} onClick={() => toggle_day(props.place)}>
-      {DAY_LETTERS[props.place]}
-    </Button>
-  );
-}
-
 function EditDays() {
   return (
     <Screen padding={8} gap={6}>
       <Label text_align="center">
         {format_time_of_day(editing_time.value.hour, editing_time.value.minute, uses_24_hour_clock.value)}
       </Label>
-      <Grid columns={4} gap={4} height={96}>
-        {range(7).map((place) => (
-          <DayButton place={place} />
-        ))}
-      </Grid>
+      <WeekdayPicker value={editing_days} columns={4} gap={4} height={96} />
       <Button height={40} onClick={cycle_repeat}>
         {repeat_name(editing_days.value)}
       </Button>

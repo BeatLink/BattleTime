@@ -140,7 +140,12 @@ fn content_size(node: &Node, available_width: Option<i32>) -> Size {
         | WidgetKind::ButtonMatrix
         | WidgetKind::Battery
         | WidgetKind::StatusIcons
-        | WidgetKind::Badge => measured(),
+        | WidgetKind::Badge
+        | WidgetKind::TimeRollers
+        | WidgetKind::DurationRollers
+        | WidgetKind::WeekdayPicker
+        | WidgetKind::Stepper
+        | WidgetKind::NumberRoller => measured(),
         _ => fixed(0, 0),
     }
 }

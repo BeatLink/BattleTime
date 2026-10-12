@@ -233,10 +233,8 @@ the ones above it.
   - The other faces' own status rows on `StatusIcons`: analog, lite-analog, lite-digital,
     lite-rings, infineat, pinetime-style and pride-flag still build theirs from icons, in
     colours and orders of their own; `StatusIcons` would need a colour for each icon.
-  - `TimePicker`, `DurationPicker`, `WeekdayPicker` and `Stepper`, writing back to a signal, for
-    the alarm, timer, pomodoro, settings and metronome.
-  - A `confirm(question, handler)` effect drawn over the screen, in place of `ConfirmDialog`,
-    whose 6 nodes stay allocated while hidden (infinipaint, morse, puzzle15, twos).
+  - `Stepper` in the apps that step a value by hand: settings' step goal, the metronome's tempo
+    and pomodoro's buzz length, each laid out its own way today.
   - A `ring(title, icon, until)` system alert with dismiss and snooze events, with the vibration
     and the stop after a time limit, for the alarm, timer and pomodoro.
   - Numbers drawn in `CellGrid` cells, so twos and puzzle15 need 1 widget instead of 16 labels.

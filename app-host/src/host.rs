@@ -17,6 +17,7 @@ use neotime_runtime::{
 };
 use rlvgl_core::widget::Rect;
 
+use crate::drawing::pickers::{is_picker, picker_tapped};
 use crate::drawing::{
     app_list_rows, app_row_at, cell_at, dropdown_option_at, label_scrolls, matrix_buttons, measure_node,
     option_row_height, roller_rows, DrawContext, LABEL_SCROLL_STEP_IN_MILLISECONDS,
@@ -1344,6 +1345,7 @@ impl<'image> AppHost<'image> {
                 WidgetKind::Switch | WidgetKind::Checkbox | WidgetKind::Radio | WidgetKind::Roller => {
                     property == Property::OnClick
                 }
+                kind if is_picker(kind) => property == Property::OnClick,
                 WidgetKind::Slider => matches!(property, Property::OnClick | Property::OnDrag),
                 WidgetKind::Dropdown if property == Property::OnClick => {
                     return Some((node_index, property, 0))
@@ -1365,6 +1367,7 @@ impl<'image> AppHost<'image> {
         let node = &self.nodes[node_index];
         let settings = &node.settings;
         Some(match node.kind {
+            kind if is_picker(kind) => return picker_tapped(node, x, y),
             WidgetKind::Switch | WidgetKind::Checkbox => (settings.value == 0) as Value,
             WidgetKind::Radio => 1,
             WidgetKind::Roller => {

@@ -1450,3 +1450,191 @@ export function ButtonMatrix(props: ButtonMatrixProps) {
     </div>
   );
 }
+
+// ============================================================================
+// Pickers and Confirm, each drawn by the watch as one widget
+// ============================================================================
+
+function two_digit_options(first: number, count: number): string[] {
+  return Array.from({ length: count }, (_, place) => `${first + place}`.padStart(2, "0"));
+}
+
+export interface TimeRollersProps extends CommonProps {
+  /** The minute of the day, from 0 to 1439. */
+  value: number;
+  /** Counts hours 1 to 12 with an AM and PM button. */
+  twelve_hour?: boolean;
+  gap?: number;
+  /** Receives the minute of the day chosen. */
+  onChange?: (event: ChangeEvent<number>) => void;
+}
+
+/** Rollers for an hour and a minute. Use `TimePicker` to set a time of day held in a signal. */
+export function TimeRollers(props: TimeRollersProps) {
+  const hour = Math.floor(props.value / 60);
+  const minute = props.value % 60;
+  const send = (next: number) => props.onChange && run_handler(props.onChange, { value: next });
+  return (
+    <div data-widget="time-rollers" style={{ display: "flex", gap: `${props.gap ?? 6}px`, justifyContent: "center", alignItems: "center", ...common_style(props) }}>
+      <Roller
+        options={props.twelve_hour ? two_digit_options(1, 12) : two_digit_options(0, 24)}
+        value={props.twelve_hour ? (hour + 11) % 12 : hour}
+        onChange={(event) =>
+          send(((props.twelve_hour ? ((event.value + 1) % 12) + (hour >= 12 ? 12 : 0) : event.value) * 60) + minute)
+        }
+      />
+      <span style={{ fontSize: `${FONT_SIZES_IN_PIXELS.large}px` }}>:</span>
+      <Roller options={two_digit_options(0, 60)} value={minute} onChange={(event) => send(hour * 60 + event.value)} />
+      {props.twelve_hour && (
+        <Button width={56} onClick={() => send(((hour + 12) % 24) * 60 + minute)}>
+          {hour < 12 ? "AM" : "PM"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+export interface DurationRollersProps extends CommonProps {
+  /** The duration in seconds. */
+  value: number;
+  show_hours?: boolean;
+  gap?: number;
+  /** Receives the duration chosen, in seconds. */
+  onChange?: (event: ChangeEvent<number>) => void;
+}
+
+/** Rollers for minutes and seconds, and hours if asked. Use `DurationPicker` to set a duration held in a signal. */
+export function DurationRollers(props: DurationRollersProps) {
+  const hours = Math.floor(props.value / 3600);
+  const minutes = Math.floor(props.value / 60) % (props.show_hours ? 60 : 100);
+  const seconds = props.value % 60;
+  const send = (next_hours: number, next_minutes: number, next_seconds: number) =>
+    props.onChange && run_handler(props.onChange, { value: next_hours * 3600 + next_minutes * 60 + next_seconds });
+  return (
+    <div data-widget="duration-rollers" style={{ display: "flex", gap: `${props.gap ?? 6}px`, justifyContent: "center", alignItems: "center", ...common_style(props) }}>
+      {props.show_hours && (
+        <Roller options={two_digit_options(0, 24)} value={hours} onChange={(event) => send(event.value, minutes, seconds)} />
+      )}
+      {props.show_hours && <span style={{ fontSize: `${FONT_SIZES_IN_PIXELS.large}px` }}>:</span>}
+      <Roller
+        options={two_digit_options(0, props.show_hours ? 60 : 100)}
+        value={minutes}
+        onChange={(event) => send(props.show_hours ? hours : 0, event.value, seconds)}
+      />
+      <span style={{ fontSize: `${FONT_SIZES_IN_PIXELS.large}px` }}>:</span>
+      <Roller options={two_digit_options(0, 60)} value={seconds} onChange={(event) => send(props.show_hours ? hours : 0, minutes, event.value)} />
+    </div>
+  );
+}
+
+export interface DayButtonsProps extends CommonProps {
+  /** The days set, Monday in bit 0. */
+  value: number;
+  /** How many buttons in a row; all seven unless given. */
+  columns?: number;
+  gap?: number;
+  /** Receives the days set after a button is tapped. */
+  onChange?: (event: ChangeEvent<number>) => void;
+}
+
+const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
+
+/** A button for each day of the week, lit while it is set. Use `WeekdayPicker` for days held in a signal. */
+export function DayButtons(props: DayButtonsProps) {
+  const columns = props.columns ?? 7;
+  return (
+    <div
+      data-widget="day-buttons"
+      style={{ display: "grid", gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: `${props.gap ?? 0}px`, ...common_style(props) }}
+    >
+      {DAY_LETTERS.map((letter, day) => (
+        <Button
+          background={(props.value & (1 << day)) !== 0 ? "accent" : "surface"}
+          onClick={() => props.onChange && run_handler(props.onChange, { value: props.value ^ (1 << day) })}
+        >
+          {letter}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+export interface StepperProps extends CommonProps {
+  value: number;
+  minimum: number;
+  maximum: number;
+  step?: number;
+  gap?: number;
+  /** What shows between the buttons; the value unless given. */
+  text?: string;
+  /** Receives the value after a step. */
+  onChange?: (event: ChangeEvent<number>) => void;
+}
+
+/** A minus button, the value and a plus button. */
+export function Stepper(props: StepperProps) {
+  const step = props.step ?? 1;
+  const send = (change: number) =>
+    props.onChange &&
+    run_handler(props.onChange, { value: Math.min(props.maximum, Math.max(props.minimum, props.value + change)) });
+  return (
+    <div data-widget="stepper" style={{ display: "flex", gap: `${props.gap ?? 0}px`, alignItems: "center", ...common_style(props) }}>
+      <Button onClick={() => send(-step)}>-</Button>
+      <Label grow={1} text_align="center">
+        {props.text ?? `${props.value}`}
+      </Label>
+      <Button onClick={() => send(step)}>+</Button>
+    </div>
+  );
+}
+
+export interface ConfirmBoxProps extends CommonProps {
+  /** The cancel button's text, the confirm button's and the question, each on a line of its own. */
+  text: string;
+  /** Receives 1 when the confirm button is tapped and 0 for the other. */
+  onChange?: (event: ChangeEvent<number>) => void;
+}
+
+/** A question with two buttons over the screen. Use `ConfirmDialog`, which shows while a signal is true. */
+export function ConfirmBox(props: ConfirmBoxProps) {
+  const send = (value: number) => props.onChange && run_handler(props.onChange, { value });
+  const [cancel_text, confirm_text, ...question] = props.text.split("\n");
+  return (
+    <div data-widget="confirm-box" style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "16px", ...common_style(props) }}>
+      <Label text_align="center">{question.join("\n")}</Label>
+      <div style={{ display: "flex", gap: "8px" }}>
+        <Button grow={1} onClick={() => send(0)}>
+          {cancel_text || "No"}
+        </Button>
+        <Button grow={1} background="danger" onClick={() => send(1)}>
+          {confirm_text || "Yes"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export interface NumberRollerProps extends CommonProps {
+  value: number;
+  minimum: number;
+  maximum: number;
+  /** Digits to pad to, such as 2 for minutes. */
+  digits?: number;
+  /** Receives the number chosen. */
+  onChange?: (event: ChangeEvent<number>) => void;
+}
+
+/** One roller of whole numbers. Use `NumberPicker` for a number held in a signal. */
+export function NumberRoller(props: NumberRollerProps) {
+  const options = Array.from({ length: props.maximum - props.minimum + 1 }, (_, place) =>
+    `${props.minimum + place}`.padStart(props.digits ?? 1, "0"),
+  );
+  return (
+    <Roller
+      {...props}
+      options={options}
+      value={props.value - props.minimum}
+      onChange={(event) => props.onChange && run_handler(props.onChange, { value: event.value + props.minimum })}
+    />
+  );
+}

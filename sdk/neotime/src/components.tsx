@@ -6,7 +6,6 @@ import type { Signal } from "@preact/signals";
 import {
   battery_percent,
   current_weather,
-  format_number,
   format_temperature,
   format_time,
   heart_rate,
@@ -21,8 +20,6 @@ import {
   type ChangeEvent,
   type Duration,
   type TimeOfDay,
-  HOUR,
-  MINUTE,
   SECOND,
 } from "./index.ts";
 import { icons, type LibraryIcon } from "./icons.ts";
@@ -35,8 +32,13 @@ import {
   Label,
   Roller,
   Row,
+  ConfirmBox,
+  DayButtons,
+  DurationRollers,
+  NumberRoller,
   Stack,
   StatusRow,
+  TimeRollers,
   type CommonProps,
   type FlexProps,
 } from "./widgets.tsx";
@@ -271,48 +273,32 @@ export interface ConfirmDialogProps {
   onCancel?: () => void;
 }
 
-/** A question with two buttons, shown over the screen while a signal is true. */
+/** A question with two buttons, shown over the screen while a signal is true, as one widget. */
 export function ConfirmDialog(props: ConfirmDialogProps) {
   if (!props.open.value) return null;
   return (
-    <Stack x={0} y={0} width={240} height={240} background="#000000">
-      <Column padding={16} gap={16} width={240} align_items="stretch">
-        <Label text_align="center">{props.question}</Label>
-        <Row gap={8}>
-          <Button
-            grow={1}
-            onClick={() => {
-              props.open.value = false;
-              props.onCancel?.();
-            }}
-          >
-            {props.cancel_text ?? "No"}
-          </Button>
-          <Button
-            grow={1}
-            background="danger"
-            onClick={() => {
-              props.open.value = false;
-              props.onConfirm();
-            }}
-          >
-            {props.confirm_text ?? "Yes"}
-          </Button>
-        </Row>
-      </Column>
-    </Stack>
+    <ConfirmBox
+      x={0}
+      y={0}
+      width={240}
+      height={240}
+      background="#000000"
+      text={`${props.cancel_text ?? "No"}\n${props.confirm_text ?? "Yes"}\n${props.question}`}
+      onChange={(event) => {
+        props.open.value = false;
+        if (event.value === 1) {
+          props.onConfirm();
+        } else {
+          props.onCancel?.();
+        }
+      }}
+    />
   );
 }
 
 // ============================================================================
 // Pickers
 // ============================================================================
-
-function number_options(minimum: number, maximum: number, width: number): string[] {
-  const options: string[] = [];
-  for (let value = minimum; value <= maximum; value++) options.push(format_number(value, width));
-  return options;
-}
 
 export interface NumberPickerProps extends CommonProps {
   value: Signal<number>;
@@ -323,16 +309,24 @@ export interface NumberPickerProps extends CommonProps {
   onChange?: (event: ChangeEvent<number>) => void;
 }
 
-/** A roller set up for a whole number. */
+/** A roller set up for a whole number, as one widget. */
 export function NumberPicker(props: NumberPickerProps) {
   return (
-    <Roller
-      {...props}
-      options={number_options(props.minimum, props.maximum, props.digits ?? 1)}
-      value={props.value.value - props.minimum}
+    <NumberRoller
+      x={props.x}
+      y={props.y}
+      width={props.width}
+      height={props.height}
+      grow={props.grow}
+      font={props.font}
+      color={props.color}
+      value={props.value.value}
+      minimum={props.minimum}
+      maximum={props.maximum}
+      digits={props.digits ?? 1}
       onChange={(event) => {
-        props.value.value = event.value + props.minimum;
-        props.onChange?.({ value: props.value.value });
+        props.value.value = event.value;
+        props.onChange?.({ value: event.value });
       }}
     />
   );
@@ -343,43 +337,17 @@ export interface TimePickerProps {
   onChange?: (event: ChangeEvent<TimeOfDay>) => void;
 }
 
-/** Rollers for an hour and a minute, following the 12 or 24 hour setting. */
+/** Rollers for an hour and a minute, following the 12 or 24 hour setting, as one widget. */
 export function TimePicker(props: TimePickerProps) {
-  const uses_24_hour_clock = settings.uses_24_hour_clock.value;
-  const hour = props.value.value.hour;
-
-  function set(next: TimeOfDay) {
-    props.value.value = next;
-    props.onChange?.({ value: next });
-  }
-
   return (
-    <Row gap={6} justify="center">
-      <Roller
-        options={uses_24_hour_clock ? number_options(0, 23, 2) : number_options(1, 12, 2)}
-        value={uses_24_hour_clock ? hour : (hour + 11) % 12}
-        onChange={(event) =>
-          set({
-            ...props.value.value,
-            hour: uses_24_hour_clock ? event.value : ((event.value + 1) % 12) + (hour >= 12 ? 12 : 0),
-          })
-        }
-      />
-      <Label font="large">:</Label>
-      <Roller
-        options={number_options(0, 59, 2)}
-        value={props.value.value.minute}
-        onChange={(event) => set({ ...props.value.value, minute: event.value })}
-      />
-      {!uses_24_hour_clock && (
-        <Button
-          width={56}
-          onClick={() => set({ ...props.value.value, hour: (hour + 12) % 24 })}
-        >
-          {hour < 12 ? "AM" : "PM"}
-        </Button>
-      )}
-    </Row>
+    <TimeRollers
+      value={props.value.value.hour * 60 + props.value.value.minute}
+      twelve_hour={!settings.uses_24_hour_clock.value}
+      onChange={(event) => {
+        props.value.value = { ...props.value.value, hour: Math.floor(event.value / 60), minute: event.value % 60 };
+        props.onChange?.({ value: props.value.value });
+      }}
+    />
   );
 }
 
@@ -389,36 +357,46 @@ export interface DurationPickerProps {
   onChange?: (event: ChangeEvent<Duration>) => void;
 }
 
-/** Rollers for minutes and seconds, and hours if asked. */
+/** Rollers for minutes and seconds, and hours if asked, as one widget. */
 export function DurationPicker(props: DurationPickerProps) {
-  const total = props.value.value;
-  const hours = Math.floor(total / HOUR);
-  const minutes = Math.floor(total / MINUTE) % (props.show_hours ? 60 : 100);
-  const seconds = Math.floor(total / SECOND) % 60;
-
-  function set(next_hours: number, next_minutes: number, next_seconds: number) {
-    props.value.value = next_hours * HOUR + next_minutes * MINUTE + next_seconds * SECOND;
-    props.onChange?.({ value: props.value.value });
-  }
-
   return (
-    <Row gap={6} justify="center">
-      {props.show_hours && (
-        <Roller options={number_options(0, 23, 2)} value={hours} onChange={(event) => set(event.value, minutes, seconds)} />
-      )}
-      {props.show_hours && <Label font="large">:</Label>}
-      <Roller
-        options={number_options(0, props.show_hours ? 59 : 99, 2)}
-        value={minutes}
-        onChange={(event) => set(props.show_hours ? hours : 0, event.value, seconds)}
-      />
-      <Label font="large">:</Label>
-      <Roller
-        options={number_options(0, 59, 2)}
-        value={seconds}
-        onChange={(event) => set(props.show_hours ? hours : 0, minutes, event.value)}
-      />
-    </Row>
+    <DurationRollers
+      value={Math.floor(props.value.value / SECOND)}
+      show_hours={props.show_hours === true}
+      onChange={(event) => {
+        props.value.value = event.value * SECOND;
+        props.onChange?.({ value: props.value.value });
+      }}
+    />
+  );
+}
+
+export interface WeekdayPickerProps extends CommonProps {
+  /** The days set, Monday in bit 0. */
+  value: Signal<number>;
+  /** How many buttons in a row; all seven unless given. */
+  columns?: number;
+  gap?: number;
+  onChange?: (event: ChangeEvent<number>) => void;
+}
+
+/** A button for each day of the week, toggling that day in a signal, as one widget. */
+export function WeekdayPicker(props: WeekdayPickerProps) {
+  return (
+    <DayButtons
+      x={props.x}
+      y={props.y}
+      width={props.width}
+      height={props.height}
+      grow={props.grow}
+      columns={props.columns}
+      gap={props.gap}
+      value={props.value.value}
+      onChange={(event) => {
+        props.value.value = event.value;
+        props.onChange?.({ value: event.value });
+      }}
+    />
   );
 }
 

@@ -76,6 +76,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   last seven days, and any of them hour by hour. The history and the trip count are kept through
   a restart, losing only the six minutes in progress.
 - **Shake to roll the dice,** and live accelerometer readings for apps such as motion and level.
+- **Rollers that show their numbers:** the timer's minutes and seconds and the dice's count and
+  sides, which were blank on the watch, and the alarm's time and days, each drawn as one widget.
   The accelerometer is read for these only while such an app is open and the screen is on.
 - **A steady battery charge.** The voltage is smoothed and read along InfiniTime's measured curve.
   The charge only rises on the charger and only falls off it, stops at 99 % while charging, and
