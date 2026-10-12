@@ -274,6 +274,9 @@ async fn main(spawner: Spawner) {
             give_up_channel: chip.PPI_CH22,
             address_time_channel: chip.PPI_CH26,
             end_time_channel: chip.PPI_CH27,
+            real_time_counter: chip.RTC0,
+            start_crystal_channel: chip.PPI_CH3,
+            start_timer_channel: chip.PPI_CH4,
         },
         Interrupts,
     );

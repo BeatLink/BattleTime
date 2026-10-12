@@ -10,6 +10,7 @@ mod controller;
 mod host_interface;
 mod link_layer;
 mod packets;
+mod wake_plan;
 
 #[cfg(target_os = "none")]
 mod nrf_radio;

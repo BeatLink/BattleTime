@@ -42,7 +42,7 @@ flowchart TB
     transport["BluetoothController<br/>(controller.rs: an HCI transport)"]
     hci["HostInterface<br/>(host_interface.rs: HCI commands and events)"]
     link["LinkLayer<br/>(link_layer.rs: advertising and the connection)"]
-    radio["nrf_radio.rs<br/>(RADIO, TIMER0 and PPI registers)"]
+    radio["nrf_radio.rs<br/>(RADIO, TIMER0, RTC0 and PPI registers)"]
 
     trouble --> external --> transport --> hci --> link
     radio -- "what happened on air" --> link
@@ -87,7 +87,6 @@ access in `nrf_radio.rs`, behind the small `Radio` trait, is the substitute.
 | Missing | What it costs |
 |---|---|
 | **Encryption and pairing** (`LL_ENC_REQ`) | Only unencrypted connections. Gadgetbridge works without bonding, as it does with InfiniTime, but phones that insist on pairing will fail. The chip's CCM and ECB peripherals do the AES work. |
-| **Sleeping between connection events** | The 64 MHz crystal and TIMER0 run the whole time Bluetooth is on, which costs far more battery than a SoftDevice. The fix is to wake from an RTC compare shortly before each event and start the crystal then. |
 | **Peripheral latency** | It listens at every connection event even when the central allows it to skip some. |
 | **Longer packets** (data length extension), **2 Mbit PHY**, **channel selection #2** | Slower transfers, for example of firmware updates. |
 | **A connection parameter request** from the peripheral | TrouBLE falls back to asking over L2CAP, which works. |
@@ -96,7 +95,7 @@ access in `nrf_radio.rs`, behind the small `Radio` trait, is the substitute.
 
 ## Timing
 
-TIMER0 runs at 1 MHz and is the controller's clock. Five of the nRF52832's fixed PPI channels
+TIMER0 runs at 1 MHz and times every radio event. Five of the nRF52832's fixed PPI channels
 connect it to the radio without the CPU:
 
 | PPI channel | Connects | Used for |
@@ -123,11 +122,38 @@ The first nRF52832 silicon revision has radio errata 102, 106 and 107. The contr
 Nordic's documented workaround on that revision only. Which revision the PineTime has is not yet
 checked.
 
+## Sleeping between events
+
+Between radio events TIMER0 and the 64 MHz crystal are stopped, and RTC0, on the 32768 Hz crystal,
+keeps the time. The controller's clock is microseconds since RTC0 started: read from TIMER0 while it
+runs, and from RTC0 while it sleeps. Two more PPI channels wake it without the CPU:
+
+| PPI channel | Connects | Used for |
+|---|---|---|
+| 3 | RTC0 compare 0 → crystal start | starting the crystal 50 ticks (about 1.5 ms) before it is needed |
+| 4 | RTC0 compare 1 → TIMER0 start | starting TIMER0 on an RTC0 tick, about 50 µs before the operation |
+
+TIMER0 always starts on an RTC0 tick, so the clock knows exactly where it counts from, and the link
+layer above never sees the difference. Whenever the next operation is at least 2 ms away the
+controller sleeps until then; when the link layer turns the radio off it sleeps with no wake at all.
+A sleeping controller asked for something sooner than the crystal can start, such as advertising
+500 µs from now, moves it to the first moment it can. `wake_plan.rs` holds this planning, which
+runs in tests on the computer.
+
+The 64-bit RTC0 count is kept in software from the 24-bit counter, so it needs reading at least
+every 512 seconds. Every advertising and connection event reads it; only a radio left off for longer
+loses a wrap, which does no harm because nothing is waiting for a time then.
+
+TIMER0 is stopped with SHUTDOWN, as STOP alone leaves it drawing current on the nRF52832 (erratum
+78). In the emulator, the crystal runs in about 2 % of the time while the watch advertises.
+
 ## What it takes from the chip
 
-- **Peripherals:** `RADIO`, `TIMER0`, `RNG`, and PPI channels 20, 21, 22, 26 and 27. Nothing else
-  in the firmware may use them.
-- **The 64 MHz crystal,** started by the controller and kept running.
+- **Peripherals:** `RADIO`, `TIMER0`, `RTC0`, `RNG`, and PPI channels 3, 4, 20, 21, 22, 26 and 27.
+  Nothing else in the firmware may use them.
+- **The 64 MHz crystal,** started and stopped by the controller around each radio event; nothing
+  else in the firmware may stop it.
+- **The 32768 Hz clock,** which embassy-nrf starts for its own timer.
 - **The `RADIO` interrupt,** at priority 0.
 - **RAM:** about 1.5 KB of static state. That covers two 257-byte radio buffers, four queued
   packets each way, and the HCI event queue. TrouBLE's own buffers come on top; see
@@ -151,6 +177,9 @@ let controller = neotime_bluetooth::start(
         give_up_channel: p.PPI_CH22,
         address_time_channel: p.PPI_CH26,
         end_time_channel: p.PPI_CH27,
+        real_time_counter: p.RTC0,
+        start_crystal_channel: p.PPI_CH3,
+        start_timer_channel: p.PPI_CH4,
     },
     Irqs,
 );
@@ -164,7 +193,7 @@ controller reports no public address.
 
 ## Tests
 
-`cargo test -p neotime-bluetooth` runs 39 tests on the computer:
+`cargo test -p neotime-bluetooth` runs 129 tests on the computer:
 
 - **The link layer, against a simulated central:**
   - advertising on each channel in turn;
@@ -174,6 +203,8 @@ controller reports no public address.
   - acknowledgements, resends and flow control;
   - each control procedure;
   - both kinds of lost link.
+- **Sleep planning:** when the timer keeps running, when it sleeps, the wake ticks, operations moved
+  later, and the clock across its 32-bit wrap.
 - **The HCI encoding,** checked by decoding our events with `bt-hci`'s own parsers.
 - **TrouBLE end to end, on a fake radio:**
   - TrouBLE advertises, accepts a connection from the simulated central, and sees the central
@@ -182,5 +213,6 @@ controller reports no public address.
     attribute server answers, and the answer comes back out through the controller's
     acknowledgements.
 
-None of this shows that the timing works on real hardware. The first test on the watch is in
+`tests/emulator/bluetooth_sleep.robot` checks in the PineTime emulator that the crystal is off
+for most of the time while the firmware advertises. None of this shows that the timing works on real hardware. The first test on the watch is in
 [todo.md](todo.md).

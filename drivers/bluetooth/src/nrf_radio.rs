@@ -4,6 +4,9 @@
 //! moment, CC1 gives up on a reception, and the radio's ADDRESS and END events capture their times
 //! into CC1 and CC2. Capturing ADDRESS into CC1 also moves the give-up time into the past, which is
 //! how a reception that has started is never cut off.
+//!
+//! Between operations TIMER0 and the 64 MHz crystal sleep. RTC0 keeps the time, and two of its
+//! compares start the crystal and then TIMER0 again through PPI channels 3 and 4.
 
 use core::cell::Cell;
 use core::ptr::addr_of_mut;
@@ -11,7 +14,9 @@ use core::ptr::addr_of_mut;
 use critical_section::Mutex;
 use embassy_nrf::interrupt::typelevel::{Binding, Handler, Interrupt};
 use embassy_nrf::interrupt::{self, InterruptExt, Priority};
-use embassy_nrf::peripherals::{PPI_CH20, PPI_CH21, PPI_CH22, PPI_CH26, PPI_CH27, RADIO, RNG, TIMER0};
+use embassy_nrf::peripherals::{
+    PPI_CH20, PPI_CH21, PPI_CH22, PPI_CH26, PPI_CH27, PPI_CH3, PPI_CH4, RADIO, RNG, RTC0, TIMER0,
+};
 use embassy_nrf::Peri;
 use nrf_pac as pac;
 
@@ -19,6 +24,7 @@ use crate::controller::{BluetoothController, ControllerState, Radio, RadioEvent}
 use crate::host_interface::HostInterface;
 use crate::link_layer::RadioOperation;
 use crate::packets::{Channel, ADDRESS_LENGTH, MAXIMUM_PAYLOAD_LENGTH, RADIO_BUFFER_LENGTH};
+use crate::wake_plan::{self, Plan, Wake, COUNTER_MASK};
 
 // ============================================================================
 // Register values
@@ -39,8 +45,6 @@ const SHORT_ADDRESS_SIGNAL_STRENGTH_START: u32 = 1 << 4;
 const SHORT_DISABLED_SIGNAL_STRENGTH_STOP: u32 = 1 << 8;
 const INTERRUPT_ON_DISABLED: u32 = 1 << 4;
 
-const CRYSTAL_SELECTED_AND_RUNNING: u32 = 1 | (1 << 16);
-
 const PART_CODE_ADDRESS: *const u32 = 0x1000_0130 as *const u32;
 const PART_REVISION_ADDRESS: *const u32 = 0x1000_0134 as *const u32;
 const NRF52832_PART_CODE: u32 = 6;
@@ -56,6 +60,13 @@ const GIVE_UP_CHANNEL: u32 = 1 << 22;
 const ADDRESS_TIME_CHANNEL: u32 = 1 << 26;
 const END_TIME_CHANNEL: u32 = 1 << 27;
 const SCHEDULING_CHANNELS: u32 = START_TRANSMIT_CHANNEL | START_RECEIVE_CHANNEL | GIVE_UP_CHANNEL;
+const START_CRYSTAL_CHANNEL: usize = 3;
+const START_TIMER_CHANNEL: usize = 4;
+const WAKE_CHANNELS: u32 = (1 << START_CRYSTAL_CHANNEL) | (1 << START_TIMER_CHANNEL);
+
+const START_CRYSTAL_COMPARE: usize = 0;
+const START_TIMER_COMPARE: usize = 1;
+const COMPARE_EVENTS_0_AND_1: u32 = (1 << 16) | (1 << 17);
 
 const START_COMPARE: usize = 0;
 const GIVE_UP_COMPARE: usize = 1;
@@ -90,6 +101,20 @@ enum Activity {
 }
 
 static ACTIVITY: Mutex<Cell<Activity>> = Mutex::new(Cell::new(Activity::Idle));
+
+/// Whether TIMER0 is counting, the clock's reading where it counted from zero, and RTC0 extended to 64 bits.
+#[derive(Clone, Copy)]
+struct Clock {
+    timer_is_running: bool,
+    timer_base: u32,
+    last_tick: u64,
+}
+
+static CLOCK: Mutex<Cell<Clock>> = Mutex::new(Cell::new(Clock {
+    timer_is_running: false,
+    timer_base: 0,
+    last_tick: 0,
+}));
 static STATE: ControllerState = ControllerState::new();
 
 // ============================================================================
@@ -106,6 +131,9 @@ pub struct RadioPeripherals {
     pub give_up_channel: Peri<'static, PPI_CH22>,
     pub address_time_channel: Peri<'static, PPI_CH26>,
     pub end_time_channel: Peri<'static, PPI_CH27>,
+    pub real_time_counter: Peri<'static, RTC0>,
+    pub start_crystal_channel: Peri<'static, PPI_CH3>,
+    pub start_timer_channel: Peri<'static, PPI_CH4>,
 }
 
 /// Starts the radio and returns the controller, ready to wrap in `ExternalController` for TrouBLE.
@@ -113,9 +141,10 @@ pub fn start(
     _peripherals: RadioPeripherals,
     _interrupts: impl Binding<interrupt::typelevel::RADIO, RadioInterruptHandler>,
 ) -> BluetoothController<'static, NrfRadio> {
-    start_high_frequency_crystal();
     configure_radio();
     configure_timer();
+    configure_wake_up();
+    fall_asleep();
 
     let device_address = read_device_address();
     STATE.start(HostInterface::new(device_address, read_random_bytes));
@@ -125,15 +154,6 @@ pub fn start(
     unsafe { interrupt::typelevel::RADIO::enable() };
 
     BluetoothController::new(&STATE, NrfRadio { _private: () })
-}
-
-fn start_high_frequency_crystal() {
-    if pac::CLOCK.hfclkstat().read().0 & CRYSTAL_SELECTED_AND_RUNNING == CRYSTAL_SELECTED_AND_RUNNING {
-        return;
-    }
-    pac::CLOCK.events_hfclkstarted().write_value(0);
-    pac::CLOCK.tasks_hfclkstart().write_value(1);
-    while pac::CLOCK.events_hfclkstarted().read() == 0 {}
 }
 
 fn configure_radio() {
@@ -191,7 +211,6 @@ fn configure_timer() {
         .prescaler()
         .write(|prescaler| prescaler.0 = TIMER_PRESCALER_FOR_1_MEGAHERTZ);
     timer.tasks_clear().write_value(1);
-    timer.tasks_start().write_value(1);
 
     pac::PPI
         .chenclr()
@@ -199,6 +218,34 @@ fn configure_timer() {
     pac::PPI
         .chenset()
         .write(|channels| channels.0 = ADDRESS_TIME_CHANNEL | END_TIME_CHANNEL);
+}
+
+/// RTC0 counts at 32768 Hz, and its compares 0 and 1 start the crystal and TIMER0.
+fn configure_wake_up() {
+    let counter = pac::RTC0;
+    counter.tasks_stop().write_value(1);
+    counter.prescaler().write(|prescaler| prescaler.0 = 0);
+    counter.intenclr().write(|interrupts| interrupts.0 = u32::MAX);
+    counter
+        .evtenset()
+        .write(|events| events.0 = COMPARE_EVENTS_0_AND_1);
+    counter.tasks_clear().write_value(1);
+    counter.tasks_start().write_value(1);
+
+    let ppi = pac::PPI;
+    ppi.chenclr().write(|channels| channels.0 = WAKE_CHANNELS);
+    ppi.ch(START_CRYSTAL_CHANNEL)
+        .eep()
+        .write_value(counter.events_compare(START_CRYSTAL_COMPARE).as_ptr() as u32);
+    ppi.ch(START_CRYSTAL_CHANNEL)
+        .tep()
+        .write_value(pac::CLOCK.tasks_hfclkstart().as_ptr() as u32);
+    ppi.ch(START_TIMER_CHANNEL)
+        .eep()
+        .write_value(counter.events_compare(START_TIMER_COMPARE).as_ptr() as u32);
+    ppi.ch(START_TIMER_CHANNEL)
+        .tep()
+        .write_value(pac::TIMER0.tasks_start().as_ptr() as u32);
 }
 
 /// The chip's factory address, made a static random address by setting its top two bits.
@@ -223,7 +270,7 @@ fn read_random_bytes(destination: &mut [u8]) {
 }
 
 // ============================================================================
-// Running operations
+// The radio and its clock
 // ============================================================================
 
 pub struct NrfRadio {
@@ -232,7 +279,7 @@ pub struct NrfRadio {
 
 impl Radio for NrfRadio {
     fn now(&self) -> u32 {
-        timer_now()
+        clock_now()
     }
 
     fn run(&self, operation: RadioOperation) {
@@ -249,6 +296,47 @@ impl Radio for NrfRadio {
 fn timer_now() -> u32 {
     pac::TIMER0.tasks_capture(NOW_CAPTURE).write_value(1);
     pac::TIMER0.cc(NOW_CAPTURE).read()
+}
+
+fn read_clock() -> Clock {
+    critical_section::with(|critical_section| CLOCK.borrow(critical_section).get())
+}
+
+fn write_clock(clock: Clock) {
+    critical_section::with(|critical_section| CLOCK.borrow(critical_section).set(clock));
+}
+
+/// RTC0's count, extended past its 24-bit wrap.
+fn current_tick() -> u64 {
+    critical_section::with(|critical_section| {
+        let clock = CLOCK.borrow(critical_section);
+        let mut reading = clock.get();
+        reading.last_tick = wake_plan::extend_tick(reading.last_tick, pac::RTC0.counter().read().0);
+        clock.set(reading);
+        reading.last_tick
+    })
+}
+
+/// Microseconds since RTC0 started: from TIMER0 while it runs, otherwise from RTC0.
+fn clock_now() -> u32 {
+    let clock = read_clock();
+    if clock.timer_is_running {
+        clock.timer_base.wrapping_add(timer_now())
+    } else {
+        wake_plan::microseconds_at_tick(current_tick())
+    }
+}
+
+/// The clock's reading when TIMER0 captured into `capture`.
+fn clock_at_capture(capture: usize) -> u32 {
+    read_clock()
+        .timer_base
+        .wrapping_add(pac::TIMER0.cc(capture).read())
+}
+
+/// Converts a time on the clock to a TIMER0 compare value.
+fn timer_value_at(at: u32) -> u32 {
+    at.wrapping_sub(read_clock().timer_base)
 }
 
 fn set_activity(activity: Activity) {
@@ -270,6 +358,72 @@ fn stop_radio() {
     interrupt::typelevel::RADIO::unpend();
     set_activity(Activity::Idle);
 }
+
+// ============================================================================
+// Sleeping and waking
+// ============================================================================
+
+/// Stops TIMER0 and the crystal; SHUTDOWN rather than STOP, as STOP alone keeps drawing current (erratum 78).
+fn fall_asleep() {
+    pac::TIMER0.tasks_shutdown().write_value(1);
+    pac::TIMER0.tasks_clear().write_value(1);
+    pac::CLOCK.tasks_hfclkstop().write_value(1);
+    let mut clock = read_clock();
+    clock.timer_is_running = false;
+    write_clock(clock);
+}
+
+/// Has RTC0 start the crystal and TIMER0 at the planned ticks.
+fn schedule_wake(wake: &Wake) {
+    let counter = pac::RTC0;
+    counter.events_compare(START_CRYSTAL_COMPARE).write_value(0);
+    counter.events_compare(START_TIMER_COMPARE).write_value(0);
+    counter
+        .cc(START_CRYSTAL_COMPARE)
+        .write(|compare| compare.0 = wake.crystal_tick as u32 & COUNTER_MASK);
+    counter
+        .cc(START_TIMER_COMPARE)
+        .write(|compare| compare.0 = wake.timer_tick as u32 & COUNTER_MASK);
+
+    let mut clock = read_clock();
+    clock.timer_base = wake.timer_base;
+    write_clock(clock);
+    pac::PPI.chenset().write(|channels| channels.0 = WAKE_CHANNELS);
+}
+
+/// Called once the radio has finished an operation, which proves a planned wake took place.
+fn note_timer_running() {
+    let mut clock = read_clock();
+    if !clock.timer_is_running {
+        clock.timer_is_running = true;
+        write_clock(clock);
+        pac::RTC0.events_compare(START_CRYSTAL_COMPARE).write_value(0);
+        pac::RTC0.events_compare(START_TIMER_COMPARE).write_value(0);
+    }
+}
+
+/// Stops any planned wake, and says whether TIMER0 is running because one already happened.
+fn cancel_wake() -> bool {
+    pac::PPI.chenclr().write(|channels| channels.0 = WAKE_CHANNELS);
+    if read_clock().timer_is_running {
+        return true;
+    }
+    let timer_was_started = pac::RTC0.events_compare(START_TIMER_COMPARE).read() != 0 && timer_is_counting();
+    if timer_was_started {
+        note_timer_running();
+    }
+    timer_was_started
+}
+
+/// Whether TIMER0 moves within a few microseconds, for a wake that fired just as it was cancelled.
+fn timer_is_counting() -> bool {
+    let first = timer_now();
+    (0..64).any(|_| timer_now() != first)
+}
+
+// ============================================================================
+// Running operations
+// ============================================================================
 
 fn tune_to(channel: Channel) {
     let radio = pac::RADIO;
@@ -296,16 +450,42 @@ fn clear_radio_events() {
 
 fn arm_compare(compare: usize, at: u32) {
     pac::TIMER0.events_compare(compare).write_value(0);
-    pac::TIMER0.cc(compare).write_value(at);
+    pac::TIMER0.cc(compare).write_value(timer_value_at(at));
 }
 
 fn is_too_late(at: u32) -> bool {
-    (at.wrapping_sub(timer_now()) as i32) < MINIMUM_LEAD_IN_MICROSECONDS
+    (at.wrapping_sub(clock_now()) as i32) < MINIMUM_LEAD_IN_MICROSECONDS
 }
 
 fn run_operation(operation: RadioOperation) {
     stop_radio();
+    let mut timer_is_running = cancel_wake();
 
+    loop {
+        match wake_plan::plan(operation, clock_now(), current_tick(), timer_is_running) {
+            Plan::StayAwake => return arm_operation(operation, true),
+            Plan::Sleep => return fall_asleep(),
+            Plan::SleepThenWake(wake) => {
+                fall_asleep();
+                schedule_wake(&wake);
+                if wake_was_set_in_time(&wake) {
+                    return arm_operation(wake_plan::postpone(operation, wake.delay), false);
+                }
+                // A compare set too close to the counter would wait a whole 512 s wrap, so plan again.
+                pac::PPI.chenclr().write(|channels| channels.0 = WAKE_CHANNELS);
+                timer_is_running = false;
+            }
+        }
+    }
+}
+
+/// Whether the counter was still far enough from both compares when they were written.
+fn wake_was_set_in_time(wake: &Wake) -> bool {
+    current_tick() + wake_plan::MINIMUM_COUNTER_LEAD_TICKS <= wake.crystal_tick
+}
+
+/// Sets TIMER0 to start the operation; a running timer that has already passed its start starts it at once.
+fn arm_operation(operation: RadioOperation, timer_is_running: bool) {
     match operation {
         RadioOperation::Off => {}
 
@@ -320,7 +500,7 @@ fn run_operation(operation: RadioOperation) {
             pac::PPI
                 .chenset()
                 .write(|channels| channels.0 = START_TRANSMIT_CHANNEL);
-            if is_too_late(start_at) {
+            if timer_is_running && is_too_late(start_at) {
                 pac::RADIO.tasks_txen().write_value(1);
             }
         }
@@ -336,8 +516,8 @@ fn run_operation(operation: RadioOperation) {
             pac::RADIO.packetptr().write_value(buffer as u32);
             set_activity(Activity::Receiving);
 
-            let give_up_at = if is_too_late(give_up_at) {
-                timer_now().wrapping_add(200)
+            let give_up_at = if timer_is_running && is_too_late(give_up_at) {
+                clock_now().wrapping_add(200)
             } else {
                 give_up_at
             };
@@ -346,7 +526,7 @@ fn run_operation(operation: RadioOperation) {
             pac::PPI
                 .chenset()
                 .write(|channels| channels.0 = START_RECEIVE_CHANNEL | GIVE_UP_CHANNEL);
-            if is_too_late(start_at) {
+            if timer_is_running && is_too_late(start_at) {
                 pac::RADIO.tasks_rxen().write_value(1);
             }
         }
@@ -372,9 +552,15 @@ impl Handler<interrupt::typelevel::RADIO> for RadioInterruptHandler {
             .chenclr()
             .write(|channels| channels.0 = SCHEDULING_CHANNELS);
 
+        let activity = take_activity();
+        if activity == Activity::Idle {
+            return;
+        }
+        note_timer_running();
+
         let packet_ended = radio.events_end().read() != 0;
-        let end_time = pac::TIMER0.cc(END_CAPTURE).read();
-        let event = match take_activity() {
+        let end_time = clock_at_capture(END_CAPTURE);
+        let event = match activity {
             Activity::Idle => return,
             Activity::Transmitting => RadioEvent::Transmitted { end_time },
             Activity::Receiving if packet_ended => {
@@ -383,12 +569,12 @@ impl Handler<interrupt::typelevel::RADIO> for RadioInterruptHandler {
                 RadioEvent::Received {
                     packet: &buffer[..length],
                     crc_is_valid: radio.crcstatus().read().0 & 1 == 1,
-                    address_time: pac::TIMER0.cc(ADDRESS_CAPTURE).read(),
+                    address_time: clock_at_capture(ADDRESS_CAPTURE),
                     end_time,
                     signal_strength: -(radio.rssisample().read().0 as i8 & 0x7F),
                 }
             }
-            Activity::Receiving => RadioEvent::NothingReceived { now: timer_now() },
+            Activity::Receiving => RadioEvent::NothingReceived { now: clock_now() },
         };
 
         STATE.on_radio_event(&NrfRadio { _private: () }, event);

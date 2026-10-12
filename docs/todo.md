@@ -43,6 +43,10 @@ document for its part instead.
   - the link drops cleanly when the phone leaves or goes out of range;
   - which nRF52832 revision the watch has (FICR at `0x10000134`), since the radio errata
     workaround depends on it.
+  - the controller's sleep between events holds a connection at both a 7.5 ms and a 4 s interval,
+    so the 1.5 ms allowed for the 64 MHz crystal to start is enough on this watch's crystal;
+  - the current drawn while advertising and while connected, against the old build that kept the
+    crystal and TIMER0 running.
 
 - [ ] **Settings on the PineTime.** The Settings app, the settings store and the companion's
   `settings` keys have run only in the simulator and the emulator. On the watch, check that:
@@ -113,9 +117,6 @@ See [bluetooth.md](bluetooth.md) for the details of each.
 
 - [ ] **Encryption and pairing.** Answer `LL_ENC_REQ` and encrypt packets with the chip's CCM and
   ECB peripherals, so phones that insist on pairing can connect.
-- [ ] **Sleep between connection events.** Wake from an RTC compare shortly before each event and
-  start the 64 MHz crystal then, instead of keeping the crystal and TIMER0 running. This is the
-  controller's biggest battery cost.
 - [ ] **Peripheral latency.** Skip the connection events the central allows the watch to skip.
 - [ ] **Faster transfers.** Data length extension, the 2 Mbit PHY and channel selection algorithm
   #2, mainly to speed up firmware updates.
