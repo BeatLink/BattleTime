@@ -32,7 +32,7 @@ use neotime_runtime::{
 
 use crate::{
     backlight::{self, Backlight},
-    battery, built_in_apps, clock,
+    battery, built_in_apps, clock, help,
     diagnostics::{self, Counter},
     motion,
     settings::{self, Settings},
@@ -212,6 +212,8 @@ struct Shell {
     backlight: Backlight,
     display: &'static SharedDisplay,
     lit: bool,
+    /// While the help screen shows, when its time changes next, so it is painted once a minute.
+    help_drawn_at: Option<Value>,
 }
 
 impl Shell {
@@ -244,7 +246,8 @@ impl Shell {
                 self.host = Some(host);
             }
             Err(_) if showing != Showing::Face => self.open(Showing::Face),
-            Err(_) => {}
+            // No face to show, so the help screen takes its place.
+            Err(_) => self.help_drawn_at = None,
         }
     }
 
@@ -383,12 +386,19 @@ impl Shell {
         if (!self.lit && !backlight::ALWAYS_ON_SCREEN) || status_is_shown() {
             return;
         }
-        if let Some(host) = &mut self.host {
-            if host.needs_drawing() {
+        match &mut self.host {
+            Some(host) if host.needs_drawing() => {
                 self.display.lock(|display| {
                     let _ = host.draw(&mut *display.borrow_mut());
                 });
             }
+            Some(_) => {}
+            None if self.help_drawn_at != Some(help::next_change(clock::now())) => {
+                let now = clock::now();
+                self.display.lock(|display| help::draw(&mut display.borrow_mut(), now, &self.settings.theme));
+                self.help_drawn_at = Some(help::next_change(now));
+            }
+            None => {}
         }
     }
 }
@@ -413,6 +423,7 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
         backlight,
         display,
         lit: true,
+        help_drawn_at: None,
     };
     shell.open(Showing::Face);
     let mut last_input = Instant::now();
@@ -423,11 +434,10 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
         shell.draw();
 
         let now = clock::now();
-        let mut wake_at = shell
-            .host
-            .as_ref()
-            .and_then(|host| host.next_wakeup(now))
-            .map_or(Instant::MAX, clock::instant_at);
+        let mut wake_at = match &shell.host {
+            Some(host) => host.next_wakeup(now).map_or(Instant::MAX, clock::instant_at),
+            None => clock::instant_at(help::next_change(now)),
+        };
         if shell.lit && !shell.system.keep_screen_on {
             wake_at = wake_at.min(last_input + SCREEN_TIMEOUT);
         }

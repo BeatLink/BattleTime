@@ -68,6 +68,8 @@ mod diagnostics;
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod settings;
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+mod help;
+#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod shell;
 // Under wasp-os the firmware is never rolled back or installed as recovery.
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
