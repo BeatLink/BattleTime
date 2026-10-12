@@ -173,14 +173,14 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (storage 16 KB, UI 21 KB; the recovery build has no UI heap) | 37,888 B | 16,384 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 13,026 B | 9,977 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 13,030 B | 9,981 B |
 | Bluetooth controller | 2,525 B | 2,525 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | BLEFS file service | 122 B | 122 B |
 | App host (with `neotime-ui` and rlvgl) | 56 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **54,040 B** | **29,416 B** |
-| Left for the stack | 11,480 B | 36,104 B |
+| **Static RAM** (`.data` and `.bss`) | **54,048 B** | **29,416 B** |
+| Left for the stack | 11,472 B | 36,104 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
