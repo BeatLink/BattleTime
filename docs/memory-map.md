@@ -37,11 +37,11 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 74.9 KB | 39.7 KB |
+| Firmware (start-up, shell, tasks) | 74.9 KB | 39.8 KB |
 | App host (with `neotime-ui` and rlvgl) | 69.1 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 42.2 KB | 42.2 KB |
 | App runtime | 24.1 KB | 0.1 KB |
-| core, alloc and compiler builtins | 23.8 KB | 11.1 KB |
+| core, alloc and compiler builtins | 23.8 KB | 11.0 KB |
 | Storage (littlefs) | 21.5 KB | 21.0 KB |
 | Embassy, allocator and Cortex-M | 17.8 KB | 16.1 KB |
 | Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
