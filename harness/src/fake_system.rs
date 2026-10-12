@@ -24,6 +24,29 @@ const RANDOM_SEED: u32 = 0x2545_f491;
 /// The phone sends at most this many days of forecast.
 const MOST_FORECAST_DAYS: usize = 5;
 
+/// Steps on each day of the history, today first; today's match the starting `steps_today`.
+pub const STARTING_DAY_STEPS: [Value; STEP_HISTORY_DAYS] = [4321, 8765, 10_234, 6543, 12_001, 7890, 3456];
+pub const STARTING_TRIP_STEPS: Value = 23_456;
+pub const STEP_HISTORY_DAYS: usize = 7;
+pub const HOURS_PER_DAY: usize = 24;
+
+/// Today's steps by 09:00, split between the two hours before it.
+const STEPS_TODAY_BEFORE_EIGHT: Value = 1500;
+
+/// The steps in each hour of the history, at `days_back * 24 + hour`: today's by 09:00, and each earlier
+/// day's spread over 08:00 to 17:00 with the rest in the last of those hours.
+pub fn starting_step_hours() -> Vec<Value> {
+    let mut hours = vec![0; STEP_HISTORY_DAYS * HOURS_PER_DAY];
+    hours[7] = STEPS_TODAY_BEFORE_EIGHT;
+    hours[8] = STARTING_DAY_STEPS[0] - STEPS_TODAY_BEFORE_EIGHT;
+    for (days_back, total) in STARTING_DAY_STEPS.iter().enumerate().skip(1) {
+        let day = &mut hours[days_back * HOURS_PER_DAY..(days_back + 1) * HOURS_PER_DAY];
+        day[8..18].fill(total / 10);
+        day[17] += total % 10;
+    }
+    hours
+}
+
 /// One coming day of the forecast.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ForecastDay {
@@ -89,6 +112,8 @@ pub struct FakeSystem {
     pub app_name: String,
     /// Set when an effect changed the notifications, so the watch tells the app once the call returns.
     pub notifications_changed: bool,
+    /// The steps in each hour of the step history, at `days_back * 24 + hour`.
+    pub step_hours: Vec<Value>,
     random_state: Cell<u32>,
     effects: Vec<RecordedEffect>,
     failures: Vec<AppFailure>,
@@ -123,6 +148,7 @@ impl FakeSystem {
             notifications: NotificationList::new(),
             app_name: String::new(),
             notifications_changed: false,
+            step_hours: starting_step_hours(),
             random_state: Cell::new(RANDOM_SEED),
             effects: Vec::new(),
             failures: Vec::new(),
@@ -152,6 +178,7 @@ impl FakeSystem {
             (MusicLength, 215_000),
             (NavigationDistance, 350),
             (NavigationProgressPercent, 40),
+            (StepTrip, STARTING_TRIP_STEPS),
         ];
         for (value, number) in starting_values {
             system.set(value, number);
@@ -205,6 +232,8 @@ impl SystemValues for FakeSystem {
             SystemValue::Now => self.now_in_milliseconds,
             SystemValue::WeatherForecastLength => self.forecast.len().min(MOST_FORECAST_DAYS) as Value,
             SystemValue::InstalledAppCount => self.installed_apps.len() as Value,
+            SystemValue::StepDayCount => (self.step_hours.len() / HOURS_PER_DAY) as Value,
+            SystemValue::StepHourCount => self.step_hours.len() as Value,
             other => self.values[other as usize],
         }
     }
@@ -227,6 +256,16 @@ impl SystemValues for FakeSystem {
                 }
                 _ => NONE,
             };
+        }
+        if value == SystemValue::StepHourSteps {
+            return self.step_hours.get(place).copied().unwrap_or(NONE);
+        }
+        if value == SystemValue::StepDayTotal {
+            return self
+                .step_hours
+                .chunks(HOURS_PER_DAY)
+                .nth(place)
+                .map_or(NONE, |day| day.iter().sum());
         }
         let Some(day) = self.forecast.get(place).filter(|_| place < MOST_FORECAST_DAYS) else {
             return NONE;

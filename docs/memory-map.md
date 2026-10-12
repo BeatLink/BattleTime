@@ -100,6 +100,8 @@ most images.
 | `/settings/system` | The watch-wide settings, 41 bytes. |
 | `/settings/theme` | The theme's colours, 16 bytes. |
 | `/resources/` | For resource packages; empty for now. |
+| `/steps/<year>/<month>-<day>` | One day's steps in six-minute slots, up to 480 bytes. A day logged past 12:48 is too large for its folder's metadata and takes a block of its own, so a year of days takes about 1.4 MB. |
+| `/steps/trip` | The trip count, 4 bytes. |
 
 A typical install is the digital face, the launcher and ten everyday apps (alarm, timer,
 stopwatch, settings, weather, steps, heart, flashlight, music and calculator), which

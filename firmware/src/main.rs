@@ -252,7 +252,7 @@ async fn main(spawner: Spawner) {
             )
             .unwrap(),
         );
-        spawner.spawn(motion::run_accelerometer(I2cDevice::new(i2c_bus)).unwrap());
+        spawner.spawn(motion::run_accelerometer(I2cDevice::new(i2c_bus), files).unwrap());
         spawner.spawn(
             vibration::run_vibrator(Output::new(chip.P0_16, Level::High, OutputDrive::Standard)).unwrap(),
         );

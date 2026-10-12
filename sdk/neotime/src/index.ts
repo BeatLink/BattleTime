@@ -185,6 +185,38 @@ export interface InstalledApp {
 /** Every app a launcher lists, in order; kept by the system. */
 export const installed_apps = signal<InstalledApp[]>([]);
 
+/** How many days the step history holds: today and the six before it. */
+export const STEP_HISTORY_DAYS = 7;
+
+export interface StepDay {
+  total: number;
+}
+
+export interface StepHour {
+  steps: number;
+}
+
+export interface StepHistory {
+  /** Steps since the wearer last reset the trip count with `reset_step_trip`. */
+  trip: number;
+  /** Each day's steps, by how many days back it is: today first, then yesterday. */
+  days: StepDay[];
+  /** The steps in each hour, at `days_back * 24 + hour`. */
+  hours: StepHour[];
+}
+
+/** An empty history: seven days of no steps. */
+export function empty_step_history(): StepHistory {
+  return {
+    trip: 0,
+    days: Array.from({ length: STEP_HISTORY_DAYS }, () => ({ total: 0 })),
+    hours: Array.from({ length: STEP_HISTORY_DAYS * 24 }, () => ({ steps: 0 })),
+  };
+}
+
+/** The system's step history, kept from local midnight to midnight whether or not any app is open. */
+export const step_history = signal<StepHistory>(empty_step_history());
+
 export interface CurrentMusic {
   artist: string;
   track: string;
@@ -638,8 +670,9 @@ export function stop_heart_rate() {
   emit({ kind: "stop_heart_rate" });
 }
 
-export function reset_steps() {
-  emit({ kind: "reset_steps" });
+/** Starts the trip count in `step_history` again from zero. */
+export function reset_step_trip() {
+  emit({ kind: "reset_step_trip" });
 }
 
 /** Changes one of `settings`, or `brightness`, by name. Booleans are 1 and 0. */

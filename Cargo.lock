@@ -1304,6 +1304,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-steps"
+version = "0.1.0"
+dependencies = [
+ "heapless 0.9.3",
+ "littlefs-rust",
+ "neotime-current-time",
+]
+
+[[package]]
 name = "neotime-storage"
 version = "0.1.0"
 dependencies = [

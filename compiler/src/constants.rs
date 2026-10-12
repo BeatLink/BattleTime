@@ -115,6 +115,7 @@ pub fn library_constant(name: &str) -> Option<Constant> {
         "DAY" => 86_400 * SECOND,
         "EVERY_DAY" => 0b111_1111,
         "SCREEN_SIZE" => 240,
+        "STEP_HISTORY_DAYS" => 7,
         _ => return None,
     }))
 }

@@ -25,6 +25,14 @@ document for its part instead.
   - walking raises `read_step_count`, and `reset_step_count` sets it back to 0;
   - the upload still works with chunks larger than 16 bytes, which would make starting faster.
 
+- [ ] **Step history on the PineTime.** It has run only in host tests and the test watch. On the
+  watch, check that:
+  - walking fills today's hours, and a file appears in `/steps/<year>` within six minutes;
+  - a restart keeps the day, the week and the trip count, losing at most six minutes;
+  - local midnight moves today to yesterday with the steps app closed;
+  - the phone setting the clock after a restart reads the right week back;
+  - the slot writes every six minutes do not upset the Bluetooth link.
+
 - [ ] **Bluetooth controller on the PineTime.** The firmware runs `neotime-bluetooth` on the watch and
   takes updates over it, but these checks, with a phone and with `btmon` on the computer, have not
   been made:
@@ -161,8 +169,8 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **The remaining companion messages.** [companion-protocol.md](companion-protocol.md) lists
   them under "not served yet". `call`, `musicinfo`, `musicstate`, `weather`, `find`, `vibrate`,
   `status` and the `music`, `call` and `findPhone` lines are served (`services/companion/src/phone.rs`).
-  - `alarm` (set or report the alarms), `steps` (a day in 240 six-minute slots, which needs a step
-    history kept on the watch) and `http` (answers to an app's request, and the watch's `http`
+  - `alarm` (set or report the alarms), `steps` (a day in 240 six-minute slots, read from the
+    step log with `neotime_steps::log`) and `http` (answers to an app's request, and the watch's `http`
     line).
   - `request_music_state` and `request_navigation_state` send nothing, since Bangle.js has no such
     message; find what Gadgetbridge answers, or add one for the companion app.
@@ -223,7 +231,7 @@ the ones above it.
   bytecode loops: `slide_board` and `board_can_move` (twos), `line_length_through`
   (four-in-a-row), `life_step` (game-of-life, about 2,000 steps a generation now),
   `random_cell_where`, `count_equal`, `shuffle`, `permutation_parity`, `arrays_equal`,
-  `push_shift` (history lists in heart, motion, steps, stopwatch and morse), `format_fixed`
+  `push_shift` (history lists in heart, motion, stopwatch and morse), `format_fixed`
   (calculator), `format_distance` (navigation, which ignores the units setting), `digit_of`,
   `sunday_week_of` and `days_in_year`.
 - [ ] **Library functions.** Logic with a real body that two or more apps share:
@@ -277,6 +285,10 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
 
 - [ ] **Calculator's 7 key is always highlighted,** because the compiler cannot pass labels to
   `highlighted` (see [compiler.md](compiler.md)).
+- [ ] **Lines are never drawn.** rlvgl's default `stroke_line_aa` clips to a rectangle whose right
+  and bottom edges are at -1, so every line is clipped away: the analog faces show no hands or
+  ticks, and charts, such as the steps app's day and week, show only their points. Override it in
+  `neotime-ui`'s renderer and `FadedRenderer` with the screen as the clip.
 - [ ] **Terminal face overflow.** Its last line falls off the bottom of the screen and
   "[STAT] Connected" is cut in half.
 - [ ] **Apps over the RAM budget.** The quality check's `KNOWN_GAPS` lists alarm (67 widgets on
@@ -369,8 +381,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 - [ ] **Raise to wake and lower to sleep,** in software on `read_acceleration`.
 - [ ] **Shake to wake,** with an adjustable threshold.
-- [ ] **Step history:** today, yesterday, a resettable trip count, and the rollover at midnight.
-- [ ] **Daily step goal** and a steps app.
 - [ ] **Motion service over BLE,** sending steps and raw x, y and z to the phone.
 
 ### Clock
@@ -403,8 +413,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 ### App runtime
 
 - [ ] **Run closed apps on the watch.** The shell runs only the open app and never calls
-  `open_in_background`, so an alarm or timer rings only while its app is open, and the steps app
-  misses midnight while closed. Run each installed app's background subscriptions, set
+  `open_in_background`, so an alarm or timer rings only while its app is open. Run each installed app's background subscriptions, set
   `next_alarm` from the earliest alarm so faces show the bell, and carry out `wake_screen`.
 - [ ] **Deliver the remaining sensor and phone events to apps.** The shell pushes steps,
   acceleration, shakes and phone notifications. Push the other `motion` kinds (wrist raise, tap,
@@ -464,6 +473,10 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **Report failed flash writes.** After each erase and page program, read the flash's security
   register and return an error when its erase-fail or program-fail bit is set, so littlefs moves
   the block instead of trusting it.
+- [ ] **Room for the step log.** Each day's file past 12:48 takes a 4 KB block, so the log keeps
+  every day but fills the file system's free 2.8 MB in about two years. Pack finished days, such
+  as a month to a file, or drop the oldest when space runs low. Until the clock is set after a
+  restart, steps are logged under the firmware's build date.
 
 ### Firmware updates
 
@@ -560,9 +573,6 @@ full report is
 
 - [ ] **Write the axis remap to the chip,** so its own motion features see the watch the right way
   up. The driver only remaps in software now.
-- [ ] **Log steps to the file system** every 6 minutes, one file a day, with no limit on history.
-- [ ] **Reset at midnight** without the steps app open.
-- [ ] **Per-day step graphs** in the steps app.
 
 ### Bluetooth
 

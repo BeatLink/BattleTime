@@ -1308,6 +1308,60 @@ fn reading_the_kept_notifications_needs_the_notifications_permission() {
     assert!(message.contains("reading the kept notifications"), "{message}");
 }
 
+/// Whether any expression or handler of the image runs this instruction.
+fn image_runs(image: &AppImage, wanted: neotime_runtime::instruction::Instruction) -> bool {
+    let codes = (0..image.expression_count())
+        .map(|expression| image.expression_code(expression).unwrap())
+        .chain((0..image.handler_count()).map(|handler| image.handler_code(handler).unwrap()));
+    for code in codes {
+        let mut offset = 0;
+        while offset < code.len() {
+            let (instruction, next) = neotime_runtime::instruction::decode(code, offset).unwrap();
+            if instruction == wanted {
+                return true;
+            }
+            offset = next;
+        }
+    }
+    false
+}
+
+#[test]
+fn the_step_history_is_read_one_day_or_hour_at_a_time() {
+    use neotime_runtime::instruction::Instruction;
+    let image = compile(&app(r#"import { reset_step_trip, step_history } from "neotime";
+        import { Chart } from "neotime/widgets";
+        const hours = computed(() => range(24).map((hour) => step_history.value.hours[24 + hour].steps));
+        function Main() {
+          return (
+            <Screen>
+              <Label>{`${step_history.value.days[1].total} ${step_history.value.days.length}`}</Label>
+              <Label>{`${step_history.value.trip} ${step_history.value.hours.length}`}</Label>
+              <Chart values={hours.value} />
+              <Button onClick={reset_step_trip}>Reset</Button>
+            </Screen>
+          );
+        }"#));
+    let image = AppImage::parse(&image).unwrap();
+
+    for value in [
+        SystemValue::StepTrip,
+        SystemValue::StepDayCount,
+        SystemValue::StepHourCount,
+    ] {
+        assert!(image_runs(&image, Instruction::ReadSystem(value)), "{value:?}");
+    }
+    assert!(image_runs(
+        &image,
+        Instruction::ReadSystemElement(SystemValue::StepDayTotal)
+    ));
+    assert!(image_runs(
+        &image,
+        Instruction::ReadSystemElement(SystemValue::StepHourSteps)
+    ));
+    assert!(image_runs(&image, Instruction::Effect(EffectKind::ResetStepTrip)));
+}
+
 #[test]
 fn a_twenty_millisecond_timer_needs_only_while_open() {
     let source = |period: u32| {

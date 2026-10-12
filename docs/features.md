@@ -60,7 +60,12 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   minute, even in do not disturb, until the phone stops it or the wearer touches the watch or
   presses the button. The phone can also buzz the watch one to five times, and ask for its battery
   level, voltage, charging state and steps.
-- **Step counting.** The accelerometer counts today's steps for the steps app and faces.
+- **Step counting and history.** The accelerometer counts today's steps for the steps app and
+  faces. The watch keeps the steps of every six minutes in a file for each day, with no limit on
+  how many days, and starts a new day at local midnight without any app open. The steps app shows
+  today against the daily goal, yesterday, a trip count that the Reset button starts again, the
+  last seven days, and any of them hour by hour. The history and the trip count are kept through
+  a restart, losing only the six minutes in progress.
 - **Shake to roll the dice,** and live accelerometer readings for apps such as motion and level.
   The accelerometer is read for these only while such an app is open and the screen is on.
 - **A steady battery charge.** The voltage is smoothed and read along InfiniTime's measured curve.

@@ -1,0 +1,13 @@
+[package]
+name = "neotime-steps"
+version = "0.1.0"
+edition = "2021"
+description = "The step history: today's steps by hour, the last week, a trip count and the daily step log on the file system"
+license.workspace = true
+publish = false
+
+[dependencies]
+heapless = "0.9"
+littlefs-rust = "0.1"
+
+neotime-current-time = { path = "../current_time" }

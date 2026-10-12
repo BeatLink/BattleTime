@@ -58,7 +58,7 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 | App | From | Notes | Screen |
 |---|---|---|---|
 | `heart` | InfiniTime HeartRate, wasp-os heart | Measures on opening; a chart of the last 24 readings. | <img src="../harness/snapshots/screens/app-heart.png" width="120" alt="heart"> |
-| `steps` | InfiniTime Steps, wasp-os step_counter and steplogger | Goal ring, trip meter, and a history screen of the week and today by hour, which the app logs itself. | <img src="../harness/snapshots/screens/app-steps.png" width="120" alt="steps"> |
+| `steps` | InfiniTime Steps, wasp-os step_counter and steplogger | Goal ring with yesterday's steps and a resettable trip meter, the last seven days, and any of them by hour, all from the system's step history. | <img src="../harness/snapshots/screens/app-steps.png" width="120" alt="steps"> |
 | `sports` | wasp-os sports | A stopwatch with the steps taken since it started. | <img src="../harness/snapshots/screens/app-sports.png" width="120" alt="sports"> |
 | `music` | InfiniTime Music, wasp-os music_player | Track, progress, play and skip by swipe, and a volume row. | <img src="../harness/snapshots/screens/app-music.png" width="120" alt="music"> |
 | `notifications` | InfiniTime Notifications, wasp-os notification list | The latest 5 notifications from the phone and from apps, newest first; a tap reads one in full and Dismiss removes it. Opens by itself when a notification wakes the screen. | <img src="../harness/snapshots/screens/app-notifications.png" width="120" alt="notifications"> |

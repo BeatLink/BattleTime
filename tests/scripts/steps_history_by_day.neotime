@@ -1,0 +1,27 @@
+# The steps app shows the system's history: yesterday and the trip on the ring, the week, and a day by hour.
+open app steps
+expect text "Yest: 8765"
+expect text "Trip: 23456"
+tap "Reset"
+expect effect reset-step-trip
+
+set step_history.trip 0
+expect text "Trip: 0"
+
+swipe up
+expect screen week
+tap "Sun"
+expect screen day
+expect text "Yesterday"
+expect text "8765"
+
+swipe left
+expect text "Saturday"
+expect text "10234"
+swipe right
+swipe right
+expect text "Today"
+expect text "4321"
+swipe right
+expect screen week
+expect no failures

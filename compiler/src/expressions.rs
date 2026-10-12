@@ -106,6 +106,7 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
         "current_navigation.instruction" => (SystemValue::NavigationInstruction, Type::TEXT),
         "current_navigation.distance" => (SystemValue::NavigationDistance, Type::NUMBER),
         "current_navigation.progress_percent" => (SystemValue::NavigationProgressPercent, Type::NUMBER),
+        "step_history.trip" => (SystemValue::StepTrip, Type::NUMBER),
         _ => return None,
     };
     Some(SystemSignal { value, value_type })
@@ -117,11 +118,13 @@ fn list_length(list: &str) -> Option<SystemValue> {
         "current_weather.forecast" => Some(SystemValue::WeatherForecastLength),
         "installed_apps" => Some(SystemValue::InstalledAppCount),
         "notifications" => Some(SystemValue::NotificationCount),
+        "step_history.days" => Some(SystemValue::StepDayCount),
+        "step_history.hours" => Some(SystemValue::StepHourCount),
         _ => None,
     }
 }
 
-/// One field of an element of a system list: a day of the forecast, an installed app or a kept notification.
+/// One field of an element of a system list: a day of the forecast, an installed app, a kept notification, or a day or hour of steps.
 fn list_field(list: &str, name: &str) -> Option<SystemSignal> {
     let (value, value_type) = match (list, name) {
         ("current_weather.forecast", "condition") => (
@@ -138,6 +141,8 @@ fn list_field(list: &str, name: &str) -> Option<SystemSignal> {
         ("notifications", "title") => (SystemValue::NotificationTitle, Type::TEXT),
         ("notifications", "body") => (SystemValue::NotificationBody, Type::TEXT),
         ("notifications", "time") => (SystemValue::NotificationTime, Type::NUMBER),
+        ("step_history.days", "total") => (SystemValue::StepDayTotal, Type::NUMBER),
+        ("step_history.hours", "steps") => (SystemValue::StepHourSteps, Type::NUMBER),
         _ => return None,
     };
     Some(SystemSignal { value, value_type })
@@ -304,6 +309,12 @@ impl<'a> Compiler<'a> {
             }
             Reference::SystemGroupValue("current_weather") if name == "forecast" => {
                 Some(Reference::SystemList("current_weather.forecast"))
+            }
+            Reference::SystemGroupValue("step_history") if name == "days" => {
+                Some(Reference::SystemList("step_history.days"))
+            }
+            Reference::SystemGroupValue("step_history") if name == "hours" => {
+                Some(Reference::SystemList("step_history.hours"))
             }
             Reference::SystemList(list) if name == "length" => Some(Reference::SystemRead(SystemSignal {
                 value: list_length(list)?,
@@ -1276,6 +1287,7 @@ fn library_reference<'a>(module: LibraryModule, name: &str) -> Reference<'a> {
                 "current_navigation" => Some("current_navigation"),
                 "installed_apps" => Some("installed_apps"),
                 "notifications" => Some("notifications"),
+                "step_history" => Some("step_history"),
                 _ => None,
             };
             if let Some(group) = group {

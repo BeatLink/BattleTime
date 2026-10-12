@@ -21,6 +21,7 @@ time.
 | `is_charging` | `Bool` | Whether the watch is on its charger and still charging; false once the battery is full. |
 | `battery_millivolts` | `Int` | The battery's voltage in millivolts, smoothed over the last few minutes' readings. |
 | `steps_today` | `Int` | Steps since local midnight. |
+| `step_history` | object | The system's step history, kept whether or not any app is open: `trip`, the steps since the wearer last called `reset_step_trip()`; `days`, today and the six days before, each with its `total`, read by how many days back it is (`step_history.value.days[1].total` is yesterday); and `hours`, each with its `steps`, read at `days_back * 24 + hour`. `STEP_HISTORY_DAYS` is 7. |
 | `heart_rate` | `Int` | The last heart rate measured, in beats per minute, or 0 if none. |
 | `heart_rate_measured_at` | `Instant` | When `heart_rate` was measured. |
 | `is_phone_connected` | `Bool` | Whether the phone is connected over Bluetooth. |
@@ -337,7 +338,7 @@ stopped or closed, a `heart_rate_reading` subscription when its next reading is 
 `measure_heart_rate()` call. `stop_heart_rate()` ends only that app's own continuous measuring;
 subscriptions keep their schedules. A subscription period under a minute needs
 `{ only_while_open: true }`, so a background app cannot keep the sensor on all the time.
-| `reset_steps()` | Starts today's step count from zero. |
+| `reset_step_trip()` | Starts the trip count in `step_history` from zero. Today's count and the history stay. |
 
 ### System
 

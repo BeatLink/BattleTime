@@ -15,6 +15,9 @@ use std::{
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use embedded_graphics_simulator::{sdl2::Keycode, OutputSettings, SimulatorDisplay, SimulatorEvent, Window};
 use neotime_app_host::{settings, AppEffect, AppFailure, AppHost, EventResult, System, Touch, STRIP_PIXELS};
+use neotime_app_testing::{
+    starting_step_hours, HOURS_PER_DAY, STARTING_DAY_STEPS, STARTING_TRIP_STEPS, STEP_HISTORY_DAYS,
+};
 use neotime_runtime::{
     events::{ButtonPress, SwipeDirection},
     resources::ImageReference,
@@ -167,6 +170,9 @@ impl SystemValues for SimulatedSystem {
             NextAlarm => NONE,
             WeatherForecastLength => SIMULATED_FORECAST.len() as Value,
             InstalledAppCount => self.installed_apps.len() as Value,
+            StepTrip => STARTING_TRIP_STEPS,
+            StepDayCount => STEP_HISTORY_DAYS as Value,
+            StepHourCount => (STEP_HISTORY_DAYS * HOURS_PER_DAY) as Value,
             _ => 0,
         }
     }
@@ -185,8 +191,11 @@ impl SystemValues for SimulatedSystem {
         }
     }
 
-    /// A three-day forecast: each day's condition, low and high; and the installed apps' icons.
+    /// A three-day forecast: each day's condition, low and high; the installed apps' icons; and the test watch's steps.
     fn read_element(&self, value: SystemValue, index: Value) -> Value {
+        if let Some(steps) = simulated_steps(value, index) {
+            return steps;
+        }
         if value == SystemValue::InstalledAppIcon {
             return match u16::try_from(index) {
                 Ok(place) if (place as usize) < self.installed_apps.len() => {
@@ -227,6 +236,24 @@ impl SystemValues for SimulatedSystem {
         state ^= state << 5;
         self.random_state.set(state);
         state
+    }
+}
+
+/// The step history the test watch starts with, by day or by hour.
+fn simulated_steps(value: SystemValue, index: Value) -> Option<Value> {
+    let place = usize::try_from(index).ok();
+    match value {
+        SystemValue::StepDayTotal => Some(
+            place
+                .and_then(|day| STARTING_DAY_STEPS.get(day).copied())
+                .unwrap_or(NONE),
+        ),
+        SystemValue::StepHourSteps => Some(
+            place
+                .and_then(|hour| starting_step_hours().get(hour).copied())
+                .unwrap_or(NONE),
+        ),
+        _ => None,
     }
 }
 

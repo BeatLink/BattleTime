@@ -17,13 +17,16 @@ import {
   is_do_not_disturb,
   notifications,
   period_in_milliseconds,
+  hour_of,
   settings,
   start_of_day,
+  step_history,
   steps_today,
   unread_notifications,
   DAY,
   HOUR,
   MINUTE,
+  STEP_HISTORY_DAYS,
   type App,
   type Instant,
   type KeptNotification,
@@ -181,8 +184,8 @@ function carry_out(effect: Effect) {
     case "set_bluetooth":
       is_bluetooth_enabled.value = effect.on as boolean;
       break;
-    case "reset_steps":
-      steps_today.value = 0;
+    case "reset_step_trip":
+      step_history.value = { ...step_history.peek(), trip: 0 };
       break;
     case "set_setting":
       change_setting(effect.key as string, effect.value as number);
@@ -250,6 +253,47 @@ export function press_button(kind: "press" | "long_press" = "press") {
   } else {
     is_screen_on.value = !is_screen_on.peek();
   }
+}
+
+// ============================================================================
+// Step history
+// ============================================================================
+
+const HOURS_PER_DAY = 24;
+
+/** Adds new steps to today, the hour they were taken in and the trip, as the watch does with each reading. */
+function add_steps(steps: number) {
+  const history = step_history.peek();
+  const hour = hour_of(now_milliseconds.peek());
+  step_history.value = {
+    trip: history.trip + steps,
+    days: history.days.map((day, days_back) => (days_back === 0 ? { total: day.total + steps } : day)),
+    hours: history.hours.map((entry, place) => (place === hour ? { steps: entry.steps + steps } : entry)),
+  };
+}
+
+/** Moves every day one back at midnight and starts today from zero, as the watch does. */
+function start_new_step_day() {
+  const history = step_history.peek();
+  step_history.value = {
+    trip: history.trip,
+    days: [{ total: 0 }, ...history.days.slice(0, STEP_HISTORY_DAYS - 1)],
+    hours: [
+      ...Array.from({ length: HOURS_PER_DAY }, () => ({ steps: 0 })),
+      ...history.hours.slice(0, (STEP_HISTORY_DAYS - 1) * HOURS_PER_DAY),
+    ],
+  };
+  steps_today.value = 0;
+}
+
+/** Keeps `step_history` in step with `steps_today` and the clock; returns a function that stops it. */
+function keep_step_history(): () => void {
+  let counted_steps = steps_today.peek();
+  return effect(() => {
+    const steps = steps_today.value;
+    if (steps > counted_steps) add_steps(steps - counted_steps);
+    counted_steps = steps;
+  });
 }
 
 // ============================================================================
@@ -334,8 +378,10 @@ export function start_scheduler(): () => void {
     app.subscriptions.map((subscription) => ({ app, subscription, next_due: null })),
   );
   let previous = now_milliseconds.peek();
+  const stop_counting_steps = keep_step_history();
   const stop_watching = effect(() => {
     const current = now_milliseconds.value;
+    if (crosses(previous, current, "day")) start_new_step_day();
     if (current !== previous) check_time_subscriptions(previous, current);
     previous = current;
   });
@@ -345,6 +391,7 @@ export function start_scheduler(): () => void {
   };
   start_clock();
   return () => {
+    stop_counting_steps();
     stop_watching();
     stop_listening();
   };

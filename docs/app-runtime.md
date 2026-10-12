@@ -494,7 +494,9 @@ System values, in the order `read system` numbers them: `now`, `utc_offset`, `ba
 `low` and `high`, the installed apps' count followed by their lists of `name`, `id` and `icon`,
 the settings' `screen_timeout_seconds`, `always_on_screen`, `chimes` and `theme`, then
 `battery_millivolts`, which shares `battery_percent`'s bit, and the kept notifications' count
-followed by their lists of `id`, `app`, `title`, `body` and `time`.
+followed by their lists of `id`, `app`, `title`, `body` and `time`, and the step history's `trip`,
+its day count and list of each day's `total`, and its hour count and list of each hour's `steps`,
+which share `steps_today`'s bit.
 `read system element` reads a list's elements through `SystemValues::read_element`, or
 `read_element_text` for the names, ids and notification texts. The location, artist, track and instruction are text: the system hands them
 over through `SystemValues::read_text`, and `read system` copies them into the call's text buffer.
@@ -506,7 +508,7 @@ Effects, in the order `effect` numbers them, with how many arguments each takes:
 `wake_screen`, `screen_off`, `go` (1), `back`, `open_app` (1), `close`, `show_toast` (1),
 `notify` (2), `dismiss_notification` (1), `mark_notifications_read`, `send_to_phone` (2),
 `music_control` (1), `call_control` (1), `find_phone` (1), `measure_heart_rate`,
-`start_heart_rate`, `stop_heart_rate`, `reset_steps`, `set_setting` (2), `set_do_not_disturb` (1),
+`start_heart_rate`, `stop_heart_rate`, `reset_step_trip`, `set_setting` (2), `set_do_not_disturb` (1),
 `log` (1), `request_music_state`, `set_heart_rate_led` (3), `set_bluetooth` (1),
 `request_navigation_state`.
 `vibrate_sequence` and `http_request` need arrays and more arguments, and come later.

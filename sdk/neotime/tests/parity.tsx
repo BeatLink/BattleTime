@@ -22,12 +22,15 @@ import {
   next_alarm,
   reset_persisted,
   settings,
+  step_history,
   steps_today,
   unread_notifications,
   utc_offset,
   HOUR,
   MINUTE,
+  STEP_HISTORY_DAYS,
   type App,
+  type StepHistory,
 } from "neotime";
 import {
   clear_notifications,
@@ -111,6 +114,28 @@ export const KNOWN_DIFFERENCES: KnownDifference[] = [
 /** Monday 5 January 2026, 09:00:00 UTC, the harness's START_TIME_IN_MILLISECONDS. */
 export const START_TIME_IN_MILLISECONDS = 1_767_603_600_000;
 
+/** Each day's steps, today first, and the trip, as harness/src/fake_system.rs starts with them. */
+const STARTING_DAY_STEPS = [4321, 8765, 10_234, 6543, 12_001, 7890, 3456];
+const STARTING_TRIP_STEPS = 23_456;
+const STEPS_TODAY_BEFORE_EIGHT = 1500;
+
+/** The fake watch's step history: today's by 09:00, and each earlier day's spread over 08:00 to 17:00. */
+function starting_step_history(): StepHistory {
+  const hours = Array.from({ length: STEP_HISTORY_DAYS * 24 }, () => 0);
+  hours[7] = STEPS_TODAY_BEFORE_EIGHT;
+  hours[8] = STARTING_DAY_STEPS[0] - STEPS_TODAY_BEFORE_EIGHT;
+  for (let days_back = 1; days_back < STEP_HISTORY_DAYS; days_back++) {
+    const total = STARTING_DAY_STEPS[days_back];
+    for (let hour = 8; hour < 18; hour++) hours[days_back * 24 + hour] = Math.floor(total / 10);
+    hours[days_back * 24 + 17] += total % 10;
+  }
+  return {
+    trip: STARTING_TRIP_STEPS,
+    days: STARTING_DAY_STEPS.map((total) => ({ total })),
+    hours: hours.map((steps) => ({ steps })),
+  };
+}
+
 /** Sets every system value to what harness/src/fake_system.rs starts with. */
 export function set_fake_system_values() {
   const now = START_TIME_IN_MILLISECONDS;
@@ -160,6 +185,7 @@ export function set_fake_system_values() {
   };
   installed_apps.value = [];
   clear_notifications();
+  step_history.value = starting_step_history();
 }
 
 // ============================================================================

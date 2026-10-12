@@ -2211,6 +2211,8 @@ fn every_system_value_has_a_bit_in_the_mask_and_related_values_share_one() {
         SystemValue::NotificationTitle.bit(),
         SystemValue::UnreadNotifications.bit()
     );
+    assert_eq!(SystemValue::StepHourSteps.bit(), SystemValue::StepsToday.bit());
+    assert_eq!(SystemValue::StepTrip.bit(), SystemValue::StepsToday.bit());
 }
 
 #[test]
@@ -2229,6 +2231,16 @@ fn a_kept_notification_is_a_list_whose_app_title_and_body_are_text() {
     assert!(!NotificationCount.is_list());
     assert!(NotificationBody.is_text());
     assert!(!NotificationTime.is_text());
+}
+
+#[test]
+fn the_step_history_lists_are_read_by_element() {
+    assert!(SystemValue::StepDayTotal.is_list());
+    assert!(SystemValue::StepHourSteps.is_list());
+    assert!(!SystemValue::StepTrip.is_list());
+    assert_eq!(SystemValue::from_byte(58), Some(SystemValue::StepHourSteps));
+    assert_eq!(EffectKind::from_byte(22), Some(EffectKind::ResetStepTrip));
+    assert_eq!(EffectKind::ResetStepTrip.argument_count(), 0);
 }
 
 // ============================================================================

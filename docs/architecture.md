@@ -33,7 +33,7 @@ flowchart TB
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>settings started; planned: power, events, notifications"]
-    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time; planned: steps"]
+    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/steps"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth,<br/>drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
@@ -163,6 +163,7 @@ NeoTime/
 │   ├── dfu/          neotime-dfu: the legacy DFU update protocol over Bluetooth
 │   ├── packages/     neotime-packages: the apps installed in /apps and the shared library's install
 │   ├── settings/     neotime-settings: the watch-wide settings, their limits and their file
+│   ├── steps/        neotime-steps: the step history by hour, the trip count and the daily step log
 │   ├── storage/      neotime-storage: the littlefs file system in the external flash
 │   └── updates/      neotime-updates: stores an uploaded firmware and hands it to the bootloader
 ├── simulator/        neotime-simulator: the drivers in a desktop window
@@ -460,6 +461,29 @@ the brightness, the screen timeout, the always-on screen, chimes and do not dist
 The theme is kept apart, as eight colours in `/settings/theme`, since the companion app can set any
 colours; the Settings app and `settings.theme` pick and read it by preset number.
 
+## Step history (`services/steps`)
+
+`neotime-steps` keeps the step history the firmware serves to apps as `steps_today` and
+`step_history`, and its log in `/steps`, so all of it is tested on a computer against littlefs in
+RAM.
+
+- **Readings.** `StepHistory::record` takes the chip's count and the local time. It adds what the
+  count gained since the last reading, or the whole count when it is lower, which means the chip
+  started again, to the six-minute slot being recorded, to that slot's hour and to the trip count.
+  Steps found at a reading belong to the slot of the reading before.
+- **Days.** It remembers today and the six days before as 24 hourly counts each, 336 bytes. At
+  local midnight each day moves one back. A clock set to another day, such as by the phone after
+  a restart, forgets them, and `log::store` reads them again from the log.
+- **The log.** When a slot ends with steps, `log::store` adds them to that slot's place in the
+  day's file, `/steps/<year>/<month>-<day>`, padding earlier slots with zeros, and saves the trip
+  count in `/steps/trip`. Each slot is a little-endian `u16`, as wasp-os's step logger writes them,
+  so a full day is 480 bytes. Slots without steps are never written, so a quiet night costs no
+  flash writes, and nothing is ever deleted.
+- **Start.** `log::load_history` reads the remembered days and the trip count back. The chip starts
+  its count from 0 at every start, so a restart loses only the slot in progress.
+
+Midnight is the clock's local time; the clock holds local time, as the phone writes it.
+
 ## Packages (`services/packages`)
 
 `neotime-packages` is the package manager for the apps and watch faces on the external flash. Each
@@ -566,9 +590,12 @@ watch face, the launcher and the apps through `neotime-app-host`:
   (`backlight.rs`) to level 1, 2 or 3 until the app closes, through the display driver's
   `Backlight`. The dim always-on level pulses the low pin at 1 kHz, lit 3 ticks of every 32, with
   RTC2, PPI channels 1 and 2 and GPIOTE channel 0, so it runs while the CPU sleeps.
-- **Steps.** `motion.rs` reads the accelerometer's own step counter every 30 seconds and resets it
-  at midnight. It shares the I2C bus with the touch panel. A change redraws what shows the steps
-  and goes to the app's `steps` subscriptions.
+- **Steps.** `motion.rs` reads the accelerometer's own step counter every 30 seconds and hands
+  each reading to the step history (see [Step history](#step-history-servicessteps)), which it
+  shares with the shell in a thread-mode mutex. It never resets the chip's count. It shares the
+  I2C bus with the touch panel. A change redraws what shows the steps and `step_history`, and goes
+  to the app's `steps` subscriptions. `reset_step_trip` from an app only signals the task, which
+  zeroes the trip and saves it, so no file is written from inside an app's handler.
 - **Acceleration and shakes.** While the screen is on, the shell asks
   `neotime_app_host::motion::reading_period_in_milliseconds` how often the open app needs readings:
   the shortest `acceleration` period, no faster than ten a second, or a tenth of a second for a

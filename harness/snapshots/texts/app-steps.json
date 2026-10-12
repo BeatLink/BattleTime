@@ -8,22 +8,21 @@
         "Goal: 10000",
         "Reset",
         "Steps",
-        "Trip: 4321",
-        "Yest: 0"
+        "Trip: 23456",
+        "Yest: 8765"
       ]
     },
     {
-      "name": "history",
+      "name": "week",
       "reached_by": "swipe up",
       "texts": [
         "Fri",
-        "Last 7 days",
+        "Last 7 days; tap one",
         "Mon",
         "Sat",
         "Step history",
         "Sun",
         "Thu",
-        "Today by hour",
         "Tue",
         "Wed"
       ]

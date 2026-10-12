@@ -15,7 +15,10 @@ mod snapshots;
 mod sources;
 mod watch;
 
-pub use fake_system::{FakeSystem, ForecastDay, InstalledApp, RecordedEffect, START_TIME_IN_MILLISECONDS};
+pub use fake_system::{
+    starting_step_hours, FakeSystem, ForecastDay, InstalledApp, RecordedEffect, HOURS_PER_DAY,
+    STARTING_DAY_STEPS, STARTING_TRIP_STEPS, START_TIME_IN_MILLISECONDS, STEP_HISTORY_DAYS,
+};
 pub use framebuffer::{Framebuffer, SCREEN_SIDE_IN_PIXELS};
 pub use script::{
     load_script, parse_script, run_script, run_script_on, EffectCheck, ExpectedArgument, ScreenPoint, Script,

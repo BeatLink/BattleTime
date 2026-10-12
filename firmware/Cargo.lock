@@ -1016,6 +1016,7 @@ dependencies = [
  "neotime-runtime",
  "neotime-settings",
  "neotime-status-screen",
+ "neotime-steps",
  "neotime-storage",
  "neotime-touch",
  "neotime-updates",
@@ -1063,6 +1064,15 @@ version = "0.1.0"
 dependencies = [
  "embedded-graphics",
  "embedded-hal 1.0.0",
+]
+
+[[package]]
+name = "neotime-steps"
+version = "0.1.0"
+dependencies = [
+ "heapless 0.9.3",
+ "littlefs-rust",
+ "neotime-current-time",
 ]
 
 [[package]]

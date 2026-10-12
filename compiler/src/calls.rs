@@ -55,7 +55,7 @@ pub fn effect_signature(name: &str) -> Option<(EffectKind, &'static [Type])> {
         "measure_heart_rate" => (EffectKind::MeasureHeartRate, &[]),
         "start_heart_rate" => (EffectKind::StartHeartRate, &[]),
         "stop_heart_rate" => (EffectKind::StopHeartRate, &[]),
-        "reset_steps" => (EffectKind::ResetSteps, &[]),
+        "reset_step_trip" => (EffectKind::ResetStepTrip, &[]),
         "set_setting" => (EffectKind::SetSetting, &[NAME, NUMBER]),
         "set_do_not_disturb" => (EffectKind::SetDoNotDisturb, &[BOOL]),
         "log" => (EffectKind::Log, &[TEXT]),

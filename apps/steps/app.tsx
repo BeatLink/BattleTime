@@ -1,23 +1,22 @@
 // Step counter, merged from InfiniTime's Steps and wasp-os's step_counter and steplogger.
 // The main screen is InfiniTime's goal ring with yesterday's count and a resettable trip meter,
-// turning green once the goal is met as wasp-os's bar does; swipe up for wasp-os's history graphs.
+// turning green once the goal is met as wasp-os's bar does. Swipe up for the week, and tap a day
+// for wasp-os's graph of it by hour. The system keeps the history, so nothing here runs in the background.
 
-import { computed } from "@preact/signals";
+import { computed, signal } from "@preact/signals";
 import {
   back,
-  clock_change,
   define_app,
   format_time,
   go,
-  hour_of,
   now,
-  persisted,
   range,
+  reset_step_trip,
   settings,
-  steps,
+  step_history,
   steps_today,
   DAY,
-  type StepsEvent,
+  STEP_HISTORY_DAYS,
   type SwipeEvent,
 } from "neotime";
 import { Header } from "neotime/components";
@@ -29,99 +28,82 @@ import { Arc, Button, Chart, Column, Label, Row, Screen } from "neotime/widgets"
 // ============================================================================
 
 const TRIP_LIMIT = 99999;
+const HOURS_PER_DAY = 24;
 
-/** Days back from today that the history shows, oldest first. */
+/** Days back from today that the week shows, oldest first. */
 const DAYS_SHOWN = [6, 5, 4, 3, 2, 1, 0];
 
-/** The day's count when the last step event was recorded. */
-const recorded_steps = persisted("recorded_steps", 0);
-
-/** Steps taken in each hour of today, recorded as they arrive. */
-const hourly_steps = persisted<number[]>(
-  "hourly_steps",
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-);
-
-/** Totals of earlier days, yesterday first. */
-const daily_totals = persisted<number[]>("daily_totals", [0, 0, 0, 0, 0, 0]);
-
-/** Steps counted on the trip meter up to the last recorded event. */
-const trip_steps = persisted("trip_steps", 0);
+/** The day the day screen shows, counted back from today. */
+const shown_days_back = signal(0);
 
 // ============================================================================
 // Derived values
 // ============================================================================
 
-/** Steps taken since the last recorded event; a lower count means the day's count started again. */
-const unrecorded_steps = computed(() =>
-  steps_today.value >= recorded_steps.value ? steps_today.value - recorded_steps.value : steps_today.value,
+const trip_text = computed(() =>
+  step_history.value.trip > TRIP_LIMIT ? `${TRIP_LIMIT}+` : `${step_history.value.trip}`,
 );
-
-const trip = computed(() => trip_steps.value + unrecorded_steps.value);
-
-const trip_text = computed(() => (trip.value > TRIP_LIMIT ? `${TRIP_LIMIT}+` : `${trip.value}`));
 
 const is_goal_met = computed(() => steps_today.value >= settings.step_goal.value);
 
-const hourly_with_unrecorded = computed(() => {
-  const current_hour = hour_of(now.value);
-  return hourly_steps.value.map((count, hour) => (hour === current_hour ? count + unrecorded_steps.value : count));
+/** The last seven days, oldest first, ending with today. */
+const week_totals = computed(() => DAYS_SHOWN.map((days_back) => step_history.value.days[days_back].total));
+
+const shown_hours = computed(() =>
+  range(HOURS_PER_DAY).map((hour) => step_history.value.hours[shown_days_back.value * HOURS_PER_DAY + hour].steps),
+);
+
+/** The largest of the week's totals, which tops its chart; at least 1, so an empty week still draws. */
+const week_most = computed(() => {
+  let most = 1;
+  for (const days_back of range(7)) {
+    const total = step_history.value.days[days_back].total;
+    if (total > most) most = total;
+  }
+  return most;
 });
 
-/** The last seven days, oldest first, ending with today. */
-const week_totals = computed(() => [
-  daily_totals.value[5],
-  daily_totals.value[4],
-  daily_totals.value[3],
-  daily_totals.value[2],
-  daily_totals.value[1],
-  daily_totals.value[0],
-  steps_today.value,
-]);
+const shown_hour_most = computed(() => {
+  let most = 1;
+  for (const hour of range(24)) {
+    const steps = step_history.value.hours[shown_days_back.value * HOURS_PER_DAY + hour].steps;
+    if (steps > most) most = steps;
+  }
+  return most;
+});
+
+const shown_day_name = computed(() => {
+  if (shown_days_back.value === 0) return "Today";
+  if (shown_days_back.value === 1) return "Yesterday";
+  return format_time(now.value - shown_days_back.value * DAY, "dddd");
+});
 
 // ============================================================================
 // Handlers
 // ============================================================================
 
-function record_steps(event: StepsEvent) {
-  const new_steps =
-    event.steps_today >= recorded_steps.value ? event.steps_today - recorded_steps.value : event.steps_today;
-  const current_hour = hour_of(now.value);
-  hourly_steps.value[current_hour] = hourly_steps.value[current_hour] + new_steps;
-  trip_steps.value = trip_steps.value + new_steps;
-  recorded_steps.value = event.steps_today;
-}
-
-/** The day's count may or may not have started again yet, and recording from it works either way. */
-function start_new_day() {
-  let total = unrecorded_steps.value;
-  for (const hour of range(24)) {
-    total = total + hourly_steps.value[hour];
-    hourly_steps.value[hour] = 0;
-  }
-  daily_totals.value = [
-    total,
-    daily_totals.value[0],
-    daily_totals.value[1],
-    daily_totals.value[2],
-    daily_totals.value[3],
-    daily_totals.value[4],
-  ];
-  trip_steps.value = trip_steps.value + unrecorded_steps.value;
-  recorded_steps.value = steps_today.value;
-}
-
-function reset_trip() {
-  trip_steps.value = -unrecorded_steps.value;
+function show_day(days_back: number) {
+  shown_days_back.value = days_back;
+  go("day");
 }
 
 function swipe_on_today(event: SwipeEvent) {
-  if (event.direction === "up") go("history");
+  if (event.direction === "up") go("week");
   else if (event.direction === "right") back();
 }
 
-function swipe_on_history(event: SwipeEvent) {
-  if (event.direction === "down" || event.direction === "right") back();
+function swipe_on_week(event: SwipeEvent) {
+  if (event.direction === "up") show_day(0);
+  else if (event.direction === "down" || event.direction === "right") back();
+}
+
+/** Left goes a day further back and right a day forward, or back to the week from today. */
+function swipe_on_day(event: SwipeEvent) {
+  if (event.direction === "left" && shown_days_back.value < STEP_HISTORY_DAYS - 1) {
+    shown_days_back.value = shown_days_back.value + 1;
+  } else if (event.direction === "right" && shown_days_back.value > 0) {
+    shown_days_back.value = shown_days_back.value - 1;
+  } else if (event.direction === "down" || event.direction === "right") back();
 }
 
 // ============================================================================
@@ -140,33 +122,54 @@ function Today() {
       >
         <Label font="large" color="#00ff00">{`${steps_today.value}`}</Label>
         <Label font="small" color="#b0b0b0">Steps</Label>
-        <Label font="small" color="#b0b0b0">{`Yest: ${daily_totals.value[0]}`}</Label>
+        <Label font="small" color="#b0b0b0">{`Yest: ${step_history.value.days[1].total}`}</Label>
         <Label font="small" color="#00ffff">{`Goal: ${settings.step_goal.value}`}</Label>
         <Label font="small" color="#ffff00">{`Trip: ${trip_text.value}`}</Label>
       </Arc>
-      <Button x={60} y={188} width={120} height={50} radius={25} onClick={reset_trip}>
+      <Button x={60} y={188} width={120} height={50} radius={25} onClick={reset_step_trip}>
         Reset
       </Button>
     </Screen>
   );
 }
 
-function History() {
+function DayButton(props: { days_back: number }) {
   return (
-    <Screen padding={8} gap={6} onSwipe={swipe_on_history}>
+    <Button width={32} height={32} font="small" onClick={() => show_day(props.days_back)}>
+      {format_time(now.value - props.days_back * DAY, "ddd")}
+    </Button>
+  );
+}
+
+function Week() {
+  return (
+    <Screen padding={8} gap={6} onSwipe={swipe_on_week}>
       <Header title="Step history" icon={icons.steps} />
-      <Label font="small" color="muted">Last 7 days</Label>
-      <Chart kind="bars" width={224} height={64} values={week_totals.value} color="accent" />
+      <Label font="small" color="muted">Last 7 days; tap one</Label>
+      <Chart width={224} height={96} values={week_totals.value} maximum={week_most.value} color="accent" />
       <Row justify="space_between" width={224}>
         {DAYS_SHOWN.map((days_back) => (
-          <Label font="small" color="muted" width={32} text_align="center">
-            {format_time(now.value - days_back * DAY, "ddd")}
-          </Label>
+          <DayButton days_back={days_back} />
         ))}
       </Row>
+    </Screen>
+  );
+}
+
+function Day() {
+  return (
+    <Screen padding={8} gap={6} onSwipe={swipe_on_day}>
+      <Header title={shown_day_name.value} icon={icons.steps} />
+      <Label font="large" color="success">{`${step_history.value.days[shown_days_back.value].total}`}</Label>
       <Column grow={1} justify="end" gap={2}>
-        <Label font="small" color="muted">Today by hour</Label>
-        <Chart kind="bars" width={224} height={52} values={hourly_with_unrecorded.value} color="success" />
+        <Chart width={224} height={96} values={shown_hours.value} maximum={shown_hour_most.value} color="success" />
+        <Row justify="space_between" width={224}>
+          <Label font="small" color="muted">0</Label>
+          <Label font="small" color="muted">6</Label>
+          <Label font="small" color="muted">12</Label>
+          <Label font="small" color="muted">18</Label>
+          <Label font="small" color="muted">24</Label>
+        </Row>
       </Column>
     </Screen>
   );
@@ -176,7 +179,5 @@ export default define_app({
   id: "steps",
   name: "Steps",
   icon: icons.steps,
-  screens: { main: Today, history: History },
-  subscriptions: [steps(record_steps), clock_change("day", start_new_day)],
-  permissions: ["background"],
+  screens: { main: Today, week: Week, day: Day },
 });

@@ -82,6 +82,16 @@ pub enum SystemValue {
     NotificationTitle,
     NotificationBody,
     NotificationTime,
+    /// Steps since the wearer last reset the trip count.
+    StepTrip,
+    /// How many days the step history holds: today and the six before it.
+    StepDayCount,
+    /// List: each day's steps, read by how many days back it is, today first.
+    StepDayTotal,
+    /// How many hours the step history holds, 24 for each day.
+    StepHourCount,
+    /// List: the steps in each hour, read at `days_back * 24 + hour`.
+    StepHourSteps,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -93,7 +103,7 @@ const INSTALLED_APPS_BIT: u32 = 21;
 const SETTINGS_BIT: u32 = 22;
 
 impl SystemValue {
-    pub const COUNT: usize = 54;
+    pub const COUNT: usize = 59;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -152,6 +162,11 @@ impl SystemValue {
             51 => NotificationTitle,
             52 => NotificationBody,
             53 => NotificationTime,
+            54 => StepTrip,
+            55 => StepDayCount,
+            56 => StepDayTotal,
+            57 => StepHourCount,
+            58 => StepHourSteps,
             _ => return None,
         })
     }
@@ -182,6 +197,7 @@ impl SystemValue {
             ScreenTimeoutSeconds | AlwaysOnScreen | Chimes | ThemePreset => SETTINGS_BIT,
             NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
             | NotificationTime => UnreadNotifications as u32,
+            StepTrip | StepDayCount | StepDayTotal | StepHourCount | StepHourSteps => StepsToday as u32,
             other => other as u32,
         };
         1 << group
@@ -203,6 +219,8 @@ impl SystemValue {
                 | NotificationTitle
                 | NotificationBody
                 | NotificationTime
+                | StepDayTotal
+                | StepHourSteps
         )
     }
 
@@ -305,7 +323,7 @@ pub enum EffectKind {
     MeasureHeartRate,
     StartHeartRate,
     StopHeartRate,
-    ResetSteps,
+    ResetStepTrip,
     SetSetting,
     SetDoNotDisturb,
     Log,
@@ -341,7 +359,7 @@ impl EffectKind {
             19 => MeasureHeartRate,
             20 => StartHeartRate,
             21 => StopHeartRate,
-            22 => ResetSteps,
+            22 => ResetStepTrip,
             23 => SetSetting,
             24 => SetDoNotDisturb,
             25 => Log,
@@ -368,7 +386,7 @@ impl EffectKind {
             | MeasureHeartRate
             | StartHeartRate
             | StopHeartRate
-            | ResetSteps => 0,
+            | ResetStepTrip => 0,
             Vibrate | VibratePattern | SetBrightness | KeepScreenOn | Go | OpenApp | ShowToast
             | DismissNotification | MusicControl | CallControl | SetDoNotDisturb | Log | FindPhone
             | SetBluetooth => 1,

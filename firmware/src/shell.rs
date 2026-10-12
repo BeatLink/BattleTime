@@ -52,6 +52,7 @@ use neotime_runtime::{
     Theme, Value,
 };
 use neotime_settings::{chimes, Setting};
+use neotime_steps::{StepHistory, DAYS_REMEMBERED, HOURS_PER_DAY};
 
 use crate::{
     app_events::{self, AppEvent},
@@ -201,6 +202,9 @@ impl SystemValues for WatchSystem {
             SystemValue::IsCharging => battery::is_charging() as Value,
             SystemValue::BatteryMillivolts => battery::millivolts() as Value,
             SystemValue::StepsToday => motion::steps_today() as Value,
+            SystemValue::StepTrip => motion::read_history(StepHistory::trip_steps) as Value,
+            SystemValue::StepDayCount => DAYS_REMEMBERED as Value,
+            SystemValue::StepHourCount => (DAYS_REMEMBERED * HOURS_PER_DAY) as Value,
             SystemValue::IsBluetoothEnabled => 1,
             SystemValue::IsPhoneConnected => phone::is_connected() as Value,
             SystemValue::Brightness => self.brightness as Value,
@@ -214,12 +218,17 @@ impl SystemValues for WatchSystem {
         self.phone.read_text(value).unwrap_or("")
     }
 
-    /// Each listed app's icon, which the host draws from the icons `apps` keeps, and the kept notifications.
+    /// Each listed app's icon, which the host draws from the icons `apps` keeps, the kept notifications and the step history.
     fn read_element(&self, value: SystemValue, index: Value) -> Value {
         if is_notification_value(value) {
             return self.notifications.read_element(value, index);
         }
+        let place = usize::try_from(index).unwrap_or(usize::MAX);
         match value {
+            SystemValue::StepDayTotal => motion::read_history(|history| history.steps_on_day(place)) as Value,
+            SystemValue::StepHourSteps => motion::read_history(|history| {
+                history.steps_in_hour(place / HOURS_PER_DAY, place % HOURS_PER_DAY)
+            }) as Value,
             SystemValue::InstalledAppIcon => match u16::try_from(index) {
                 Ok(place) if (place as usize) < self.installed.listed.len() => {
                     ImageReference::InstalledApp(place).to_value() as Value
@@ -299,6 +308,7 @@ impl System for WatchSystem {
             EffectKind::SetDoNotDisturb => {
                 settings::set_by_name(Setting::DoNotDisturb.name(), effect.number(0))
             }
+            EffectKind::ResetStepTrip => motion::reset_trip(),
             _ => {}
         }
     }

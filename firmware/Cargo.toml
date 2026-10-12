@@ -55,6 +55,7 @@ neotime-display = { path = "../drivers/display" }
 neotime-external-flash = { path = "../drivers/external_flash" }
 neotime-runtime = { path = "../runtime" }
 neotime-settings = { path = "../services/settings" }
+neotime-steps = { path = "../services/steps" }
 neotime-status-screen = { path = "../drivers/status_screen" }
 neotime-storage = { path = "../services/storage" }
 neotime-touch = { path = "../drivers/touch" }
