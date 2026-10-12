@@ -4,6 +4,7 @@
 //! The source is parsed with oxc and compiled straight from its syntax tree. docs/compiler.md
 //! describes the subset, the type rules and the number mappings.
 
+pub mod array_builtins;
 pub mod calls;
 pub mod compiler;
 pub mod constants;

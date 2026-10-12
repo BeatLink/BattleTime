@@ -179,9 +179,20 @@ pub fn analyse_expression_in(
             Instruction::ReadState(slot)
             | Instruction::ReadElement(slot)
             | Instruction::TextFromCodes(slot)
+            | Instruction::AskArray { array: slot, .. }
                 if (slot as usize) < 64 =>
             {
                 inputs = inputs.union(Inputs::state_slot(slot))
+            }
+            Instruction::WorkArray {
+                destination, source, ..
+            } => {
+                for slot in [destination, source]
+                    .into_iter()
+                    .filter(|&slot| (slot as usize) < 64)
+                {
+                    inputs = inputs.union(Inputs::state_slot(slot));
+                }
             }
             Instruction::ReadSystem(value) | Instruction::ReadSystemElement(value) => {
                 inputs = inputs.union(Inputs::system_value(value))

@@ -9,6 +9,11 @@
 //! A function call keeps its own locals above its caller's, and sees only the stack above the
 //! arguments it took; the caller's place is kept in a frame until the function's code ends.
 
+#[path = "array_work.rs"]
+mod array_work;
+
+pub use array_work::MOST_GRID_SIDE;
+
 use crate::image::{AppImage, Function};
 use crate::instruction::{decode, EffectKind, Instruction, SystemValue, TimeUnit, MOST_EFFECT_ARGUMENTS};
 use crate::pattern;
@@ -861,6 +866,17 @@ impl Interpreter {
                     }
                 }
             }
+            AskArray { question, array } => self.ask_array(call.state, question, array)?,
+            WorkArray {
+                work,
+                destination,
+                source,
+            } => {
+                if work.writes() {
+                    Self::require_handler(call)?;
+                }
+                self.work_array(call.state, work, destination, source)?;
+            }
             Effect(kind) => {
                 let mut arguments = [0; MOST_EFFECT_ARGUMENTS];
                 for index in (0..kind.argument_count()).rev() {
@@ -1087,6 +1103,8 @@ pub(crate) fn touches_the_app(instruction: Instruction) -> bool {
             | WriteElement(_)
             | FillArray(_)
             | CopyArray { .. }
+            | AskArray { .. }
+            | WorkArray { .. }
             | TextFromCodes(_)
             | ReadEvent(_)
             | ReadEventText(_)

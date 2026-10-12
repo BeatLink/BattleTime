@@ -44,4 +44,6 @@ pub use widgets::{Property, PropertySource, Widget, WidgetKind, WidgetTree};
 mod tests;
 
 #[cfg(test)]
+mod array_work_tests;
+#[cfg(test)]
 mod function_tests;

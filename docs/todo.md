@@ -233,9 +233,8 @@ the ones above it.
   - The host does not yet refuse an app whose `shared_library_version` is newer than the installed
     library's; such an app runs until it calls a function that is missing, then shows nothing.
   - Functions that change state, taking the variables by number as `copy array` names its arrays.
-  - Calls from the faces and apps that still compute the same things by hand, such as
-    `steps_since` in steps and sports. One-line helpers such as `(x + 1) % n` stay inlined, since a
-    call costs as many bytes.
+  - Calls from the faces and apps that still compute the same things by hand. One-line helpers
+    such as `(x + 1) % n` stay inlined, since a call costs as many bytes.
 - [ ] **Native widgets with their logic built in.** Every widget node costs 160 to 240 B of the UI
   heap wherever its record lives, so a composite drawn by the firmware as one node saves more RAM
   than a library component. In the firmware, which has 112 KB free:
@@ -252,22 +251,18 @@ the ones above it.
   - `TextLines` over an array of character codes, for morse's 120 lines of wrapping.
   - The other faces' step, heart and weather rows on `StepsBadge`, `HeartRateBadge` and
     `TemperatureBadge`: infineat, lite-digital, lite-weather, terminal and pinetime-style.
-- [ ] **Native array builtins.** Whole-board work is smaller and far faster in Rust than in
-  bytecode loops: `slide_board` and `board_can_move` (twos), `line_length_through`
-  (four-in-a-row), `life_step` (game-of-life, about 2,000 steps a generation now),
-  `random_cell_where`, `count_equal`, `shuffle`, `permutation_parity`, `arrays_equal`,
-  `push_shift` (history lists in heart, motion, stopwatch and morse), `format_fixed`
-  (calculator), `format_distance` (navigation), `digit_of`,
-  `sunday_week_of` and `days_in_year`.
+- [ ] **More native array builtins.** `AskArray` and `WorkArray` already count, find, measure
+  lines, slide 2048 grids, step Life and compare arrays. Still in bytecode loops: `shuffle` and
+  `permutation_parity` (puzzle15), `push_shift` (history lists in heart, motion, stopwatch and
+  morse), `format_fixed` (calculator), `format_distance` (navigation), `sunday_week_of` and
+  `days_in_year`. `arrays_equal` takes only signals, so puzzle15's check against its constant
+  solved board still loops.
 - [ ] **Library functions.** Logic with a real body that two or more apps share:
   - Time: `elapsed_clock` (start, pause, reset; stopwatch, sports, metronome, heart), `countdown`
-    and `remaining_seconds` (timer, pomodoro), `dial_hour` (10 faces and the alarm),
-    `day_mask_name` and `format_time_of_day` (alarm).
-  - Weather: `is_night`, `weather_icon_now`, `has_weather`, `weather_condition_name`,
-    `temperature_in_unit` and `temperature_color` (weather, digital, pinetime-style, terminal,
-    lite-weather).
-  - Steps: `steps_since`, which survives the midnight reset (steps, sports), and
-    `step_goal_percent`.
+    and `remaining_seconds` (timer, pomodoro), `day_mask_name` and `format_time_of_day` (alarm).
+  - Weather: `weather_icon_now`, `has_weather`, `weather_condition_name` and `temperature_color`
+    (weather, digital, pinetime-style, terminal, lite-weather).
+  - Steps: `step_goal_percent`.
   - Games: `record_best`, `step_for(direction)`, `neighbour_in`, `bounce_axis` and `move_toward`
     (snake, paddle, twos, puzzle15, four-in-a-row, lite-pong).
   - Editing values: `step_clamped`, `step_wrapped`, `append_digit` and `drop_digit` (settings,

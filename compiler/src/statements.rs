@@ -3,7 +3,7 @@
 use std::rc::Rc;
 
 use neotime_runtime::events::EventKind;
-use neotime_runtime::instruction::Instruction;
+use neotime_runtime::instruction::{ArrayQuestion, Instruction};
 use oxc_ast::ast::{
     AssignmentExpression, AssignmentTarget, BindingPattern, ChainElement, Expression, ForOfStatement,
     SimpleAssignmentTarget, Statement, VariableDeclaration, VariableDeclarationKind,
@@ -17,7 +17,7 @@ use crate::diagnostics::{fail, Compiled};
 use crate::emitter::{CodeKind, Emitter, InlineFrame};
 use crate::expressions::Typed;
 use crate::functions::CallOutcome;
-use crate::scope::{ElementIndex, FunctionBodyReference, FunctionReference, Reference, Scope};
+use crate::scope::{ElementIndex, FunctionBodyReference, FunctionReference, LibraryModule, Reference, Scope};
 use crate::types::{Kind, Range, Type};
 
 // ============================================================================
@@ -1494,6 +1494,24 @@ impl<'a> Compiler<'a> {
             }
         }
 
+        if let Expression::CallExpression(call) = strip_parentheses(value) {
+            if let Some(Reference::Library {
+                module: LibraryModule::Neotime,
+                name,
+            }) = self.resolve_reference(&call.callee, scope)
+            {
+                if crate::array_builtins::ARRAY_WORK_FUNCTIONS.contains(&name.as_str()) {
+                    let arguments: Vec<&'a Expression<'a>> = call
+                        .arguments
+                        .iter()
+                        .filter_map(|argument| argument.as_expression())
+                        .collect();
+                    return self
+                        .compile_array_work_assignment(emitter, target, &name, &arguments, scope, span);
+                }
+            }
+        }
+
         match strip_parentheses(value) {
             Expression::ArrayExpression(array) => {
                 let elements: Vec<&'a Expression<'a>> = array
@@ -1830,6 +1848,36 @@ impl<'a> Compiler<'a> {
     // Loops
     // ------------------------------------------------------------------------
 
+    /// `indexOf` or `includes` on an array signal of numbers, which the interpreter searches natively.
+    fn compile_native_search(
+        &mut self,
+        emitter: &mut Emitter,
+        variable: u8,
+        argument: &'a Expression<'a>,
+        search: Search,
+        scope: &Rc<Scope<'a>>,
+        span: Span,
+    ) -> Compiled<Typed> {
+        let typed = self.compile_value(emitter, argument, scope, None)?;
+        if typed.value_type.kind == Kind::Text {
+            return fail(argument.span(), "an array of numbers holds no text to look for");
+        }
+        self.emit_number(emitter, 0, span)?;
+        emitter.emit(
+            Instruction::AskArray {
+                question: ArrayQuestion::NthIndexOf,
+                array: variable,
+            },
+            span,
+        )?;
+        if search == Search::IndexOf {
+            return Ok(Typed::new(Type::NUMBER));
+        }
+        self.emit_number(emitter, 0, span)?;
+        emitter.emit(Instruction::GreaterOrEqual, span)?;
+        Ok(Typed::new(Type::BOOL))
+    }
+
     /// `includes`, `indexOf` and `count_where`: a loop over an array signal or a constant array.
     pub fn compile_array_search(
         &mut self,
@@ -1840,6 +1888,13 @@ impl<'a> Compiler<'a> {
         scope: &Rc<Scope<'a>>,
         span: Span,
     ) -> Compiled<Typed> {
+        if search != Search::CountWhere {
+            if let Some(Reference::StateArray(variable)) = self.resolve_reference(array, scope) {
+                if self.slots[variable as usize].value_type.kind != Kind::Text {
+                    return self.compile_native_search(emitter, variable, argument, search, scope, span);
+                }
+            }
+        }
         let spill_mark = emitter.locals_in_use();
         let spilled = self.spill_whole_stack(emitter, span)?;
         let mark = emitter.locals_in_use();

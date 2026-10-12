@@ -10,7 +10,7 @@
 //! before anything calls it.
 
 use crate::image::{AppImage, CodeBlock, CodeProblem, ImageError, MOST_FUNCTIONS};
-use crate::instruction::{decode, Instruction, StackEffect};
+use crate::instruction::{decode, ArrayWork, Instruction, StackEffect};
 use crate::interpreter::{LOCAL_POOL, MOST_CALL_DEPTH, MOST_EVENT_FIELDS, MOST_LOCALS, STACK_DEPTH};
 use crate::pattern;
 use crate::resources::verify_resources;
@@ -333,6 +333,10 @@ fn is_handler_only(instruction: Instruction) -> bool {
             | Instruction::WriteElement(_)
             | Instruction::FillArray(_)
             | Instruction::CopyArray { .. }
+            | Instruction::WorkArray {
+                work: ArrayWork::LifeStep | ArrayWork::Slide,
+                ..
+            }
             | Instruction::ReadEvent(_)
             | Instruction::ReadEventText(_)
             | Instruction::Effect(_)
@@ -362,7 +366,7 @@ fn check_operands(
             | Instruction::WriteElement(_)
             | Instruction::FillArray(_)
             | Instruction::CopyArray { .. }
-    );
+    ) || matches!(instruction, Instruction::WorkArray { work, .. } if work.writes());
 
     match instruction {
         _ if writes_state && is_expression => Err(CodeProblem::WriteInExpression),
@@ -379,14 +383,18 @@ fn check_operands(
             Some(false) => Err(CodeProblem::WrongVariableKind),
             Some(true) => Ok(()),
         },
-        Instruction::CopyArray { destination, source } => {
-            match (array_length(destination), array_length(source)) {
-                (Some(destination_length), Some(source_length)) if destination_length == source_length => {
-                    Ok(())
-                }
-                _ => Err(CodeProblem::WrongVariableKind),
-            }
-        }
+        Instruction::AskArray { array, .. } => match is_array(array) {
+            None => Err(CodeProblem::StateSlotOutOfRange),
+            Some(false) => Err(CodeProblem::WrongVariableKind),
+            Some(true) => Ok(()),
+        },
+        Instruction::CopyArray { destination, source }
+        | Instruction::WorkArray {
+            destination, source, ..
+        } => match (array_length(destination), array_length(source)) {
+            (Some(destination_length), Some(source_length)) if destination_length == source_length => Ok(()),
+            _ => Err(CodeProblem::WrongVariableKind),
+        },
         Instruction::PushText(index) if index >= image.string_count() => Err(CodeProblem::StringOutOfRange),
         Instruction::FormatTime(index) => match image.string(index) {
             None => Err(CodeProblem::StringOutOfRange),

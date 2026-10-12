@@ -418,14 +418,16 @@ Rules for each change:
 - **Never renumber the library.** An installed app refers to library parts by number, so a new
   version keeps every number the old one had and adds new parts at the end.
 
-What is built so far: the runtime runs functions with `call` (see [The bytecode](#the-bytecode)).
-The compiler compiles an app function it would otherwise copy into several places once and calls
-it, and turns code that repeats with only its constants changed into shared functions; together
-with library icons named rather than copied, they took the 49 apps and faces from 197 KB to
-105 KB. The shared library holds the icons and fonts; its functions and components,
-calls into it and the native composites are open work, listed in order under "Shared library and
-smaller apps" in [todo.md](todo.md). Until they exist, components from `neotime/components` are
-still inlined into each app.
+What is built so far: the runtime runs an app's own functions with `call` and the shared library's
+with `call library` (see [The bytecode](#the-bytecode)). The compiler compiles an app function it
+would otherwise copy into several places once and calls it, and turns code that repeats with only
+its constants changed into shared functions. The shared library holds the icons, the fonts and the
+functions of `neotime/lib`. The firmware draws the native composites, such as `AppList`,
+`StatusIcons`, the pickers and `ConfirmBox`, and answers the array functions of `neotime` (from
+`count_of` to `life_step`) natively. Together they took the 49 apps and faces from 197 KB to about
+90 KB. Library components, more functions and more native builtins are open work, listed under
+"Shared library and smaller apps" in [todo.md](todo.md); until library components exist, those
+from `neotime/components` are inlined into each app.
 
 ## The bytecode
 
@@ -490,6 +492,8 @@ Each instruction is one opcode byte followed by its operands:
 | `61` | write element | array, 1 byte | Takes an index and a value and writes that element. A value too wide for the element fails the call. Handlers only. |
 | `62` | copy array | destination and source arrays, 1 byte each | Copies every element; the two must be the same length. Handlers only. |
 | `63` | fill array | array, 1 byte | Takes a value and writes it to every element. Handlers only. |
+| `64` | ask array | question, 1 byte; array, 1 byte | Takes the question's arguments and pushes the answer: how many elements equal a value, where the `n`th one is, the longest line of a value through a cell of a grid, whether a 2048 slide would change the grid, or what it scores. |
+| `65` | work array | work, 1 byte; destination, 1 byte; source, 1 byte | Compares two arrays of one length, or writes the destination from the source: the Game of Life's next generation, or the grid after a 2048 slide. Writing is for handlers only, and the source may be the destination. |
 
 System values, in the order `read system` numbers them: `now`, `utc_offset`, `battery_percent`,
 `is_charging`, `steps_today`, `heart_rate`, `heart_rate_measured_at`, `is_phone_connected`,

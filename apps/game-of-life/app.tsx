@@ -4,7 +4,7 @@
 // a long press scatters a random soup. The 16 by 16 board wraps at its edges.
 
 import { signal } from "@preact/signals";
-import { define_app, every, keep_screen_on, random_int, range, type Color } from "neotime";
+import { define_app, every, keep_screen_on, life_step, random_int, range, type Color } from "neotime";
 import { icons } from "neotime/icons";
 import { CellGrid, Screen } from "neotime/widgets";
 
@@ -27,29 +27,9 @@ const ACORN_CELLS = [118, 136, 149, 150, 153, 154, 155];
 /** Each cell holds 0 when dead, or the place of its generation's colour in the palette when alive. */
 export const ACORN = CELLS.map((cell) => (ACORN_CELLS.includes(cell) ? 1 : 0));
 
-function is_alive(board: number[], cell: number): number {
-  return board[cell] === 0 ? 0 : 1;
-}
-
-/** A cell's value in the next generation: `live_value` if it is alive then, or 0. */
-function next_state(board: number[], cell: number, live_value: number): number {
-  const row = Math.floor(cell / BOARD_SIZE);
-  const column = cell % BOARD_SIZE;
-  const row_above = ((row + BOARD_SIZE - 1) % BOARD_SIZE) * BOARD_SIZE;
-  const this_row = row * BOARD_SIZE;
-  const row_below = ((row + 1) % BOARD_SIZE) * BOARD_SIZE;
-  const left = (column + BOARD_SIZE - 1) % BOARD_SIZE;
-  const right = (column + 1) % BOARD_SIZE;
-  const neighbours =
-    is_alive(board, row_above + left) + is_alive(board, row_above + column) + is_alive(board, row_above + right) +
-    is_alive(board, this_row + left) + is_alive(board, this_row + right) +
-    is_alive(board, row_below + left) + is_alive(board, row_below + column) + is_alive(board, row_below + right);
-  return neighbours === 3 || (board[cell] !== 0 && neighbours === 2) ? live_value : 0;
-}
-
-/** The next generation, with every live cell holding `live_value`. */
+/** The next generation, with every live cell holding `live_value`, on a board that wraps at its edges. */
 export function next_generation(board: number[], live_value: number): number[] {
-  return CELLS.map((cell) => next_state(board, cell, live_value));
+  return life_step(board, BOARD_SIZE, live_value);
 }
 
 // ============================================================================

@@ -852,6 +852,147 @@ export function count_where<Element>(array: Element[], test: (element: Element) 
   return array.filter(test).length;
 }
 
+/** How many elements equal `value`. The watch counts natively, so no loop is carried in the app. */
+export function count_of(array: readonly number[], value: number): number {
+  return array.filter((element) => element === value).length;
+}
+
+/** The index of the `n`th element equal to `value`, counting from 0, or -1 when there are fewer. */
+export function nth_index_of(array: readonly number[], value: number, n: number): number {
+  let seen = 0;
+  for (let index = 0; index < array.length; index++) {
+    if (array[index] !== value) continue;
+    if (seen === n) return index;
+    seen++;
+  }
+  return -1;
+}
+
+/** Whether two arrays of the same length hold the same elements. */
+export function arrays_equal(first: readonly number[], second: readonly number[]): boolean {
+  return first.length === second.length && first.every((element, index) => element === second[index]);
+}
+
+/**
+ * The longest line of `value` through `cell` on a grid `width` cells wide, across, down or along either
+ * diagonal, counting the cell itself as holding the value. Lines stop at the grid's edges.
+ */
+export function line_through(grid: readonly number[], width: number, cell: number, value: number): number {
+  const rows = grid.length / width;
+  const row = Math.floor(cell / width);
+  const column = cell % width;
+  let longest = 0;
+  for (const [row_step, column_step] of [[0, 1], [1, 0], [1, 1], [1, -1]]) {
+    let length = 1;
+    for (const sign of [1, -1]) {
+      for (let distance = 1; ; distance++) {
+        const next_row = row + sign * row_step * distance;
+        const next_column = column + sign * column_step * distance;
+        if (next_row < 0 || next_row >= rows || next_column < 0 || next_column >= width) break;
+        if (grid[next_row * width + next_column] !== value) break;
+        length++;
+      }
+    }
+    longest = Math.max(longest, length);
+  }
+  return longest;
+}
+
+/** The cells of each line a slide moves tiles along, each listed from the edge the tiles move to. */
+function slide_lines(length: number, width: number, direction: SwipeDirection): number[][] {
+  const rows = length / width;
+  const across = direction === "left" || direction === "right";
+  const lines: number[][] = [];
+  for (let line = 0; line < (across ? rows : width); line++) {
+    const cells: number[] = [];
+    for (let place = 0; place < (across ? width : rows); place++) {
+      cells.push(
+        direction === "up"
+          ? place * width + line
+          : direction === "down"
+            ? (rows - 1 - place) * width + line
+            : direction === "left"
+              ? line * width + place
+              : line * width + width - 1 - place,
+      );
+    }
+    lines.push(cells);
+  }
+  return lines;
+}
+
+/** One line of tile levels slid towards its start, merging each pair of equal tiles once, and the points scored. */
+function slide_line(levels: number[]): { slid: number[]; points: number } {
+  const slid: number[] = [];
+  let waiting = 0;
+  let points = 0;
+  for (const level of levels.filter((level) => level !== 0)) {
+    if (waiting === level) {
+      slid.push(level + 1);
+      points += 2 ** (level + 1);
+      waiting = 0;
+    } else {
+      if (waiting !== 0) slid.push(waiting);
+      waiting = level;
+    }
+  }
+  if (waiting !== 0) slid.push(waiting);
+  while (slid.length < levels.length) slid.push(0);
+  return { slid, points };
+}
+
+/**
+ * A grid of tile levels, `width` cells wide, with its tiles slid one way: each pair of equal tiles merges
+ * once into one a level higher, as in 2048, and 0 is an empty cell. Assign it to an array signal.
+ */
+export function slide_grid(grid: readonly number[], width: number, direction: SwipeDirection): number[] {
+  const result = [...grid];
+  for (const cells of slide_lines(grid.length, width, direction)) {
+    const { slid } = slide_line(cells.map((cell) => grid[cell]));
+    cells.forEach((cell, place) => (result[cell] = slid[place]));
+  }
+  return result;
+}
+
+/** The points a slide's merges score: two to the power of each merged tile's new level. */
+export function slide_points(grid: readonly number[], width: number, direction: SwipeDirection): number {
+  return slide_lines(grid.length, width, direction).reduce(
+    (points, cells) => points + slide_line(cells.map((cell) => grid[cell])).points,
+    0,
+  );
+}
+
+/** Whether sliding the tiles that way would move or merge any of them. */
+export function slide_changes(grid: readonly number[], width: number, direction: SwipeDirection): boolean {
+  return !arrays_equal(slide_grid(grid, width, direction), grid);
+}
+
+/** Whether a slide in any direction would move or merge a tile. */
+export function can_slide(grid: readonly number[], width: number): boolean {
+  return (["up", "down", "left", "right"] as const).some((direction) => slide_changes(grid, width, direction));
+}
+
+/**
+ * The next generation of Conway's Game of Life on a grid `width` cells wide that wraps at its edges. Any
+ * element not 0 is alive, and each live cell of the result holds `live_value`. Assign it to an array signal.
+ */
+export function life_step(grid: readonly number[], width: number, live_value: number): number[] {
+  const rows = grid.length / width;
+  const alive = (row: number, column: number) =>
+    grid[((row + rows) % rows) * width + ((column + width) % width)] !== 0 ? 1 : 0;
+  return grid.map((cell, index) => {
+    const row = Math.floor(index / width);
+    const column = index % width;
+    let neighbours = 0;
+    for (const row_step of [-1, 0, 1]) {
+      for (const column_step of [-1, 0, 1]) {
+        if (row_step !== 0 || column_step !== 0) neighbours += alive(row + row_step, column + column_step);
+      }
+    }
+    return neighbours === 3 || (cell !== 0 && neighbours === 2) ? live_value : 0;
+  });
+}
+
 /** A whole number padded with zeros to at least `width` digits. */
 export function format_number(value: number, width = 1): string {
   const sign = value < 0 ? "-" : "";

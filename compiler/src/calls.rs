@@ -449,6 +449,17 @@ impl<'a> Compiler<'a> {
                 scope,
                 span,
             )?,
+            name if crate::array_builtins::is_array_question(name) => {
+                self.compile_array_question(emitter, name, arguments, scope, span)?
+            }
+            name if crate::array_builtins::ARRAY_WORK_FUNCTIONS.contains(&name) => {
+                return fail(
+                    span,
+                    format!(
+                        "assign what `{name}` gives to an array signal, such as `board.value = {name}(...)`"
+                    ),
+                )
+            }
             "text_from_codes" => {
                 self.compile_text_from_codes(emitter, argument(0)?, argument(1)?, scope, span)?
             }

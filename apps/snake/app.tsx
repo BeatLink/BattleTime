@@ -98,11 +98,7 @@ const score = computed(() => length.value - 1);
 
 /** The first empty cell on the board, or -1 when the snake fills it. */
 function first_empty_cell(): number {
-  let found = -1;
-  for (const cell of CELLS) {
-    if (found < 0 && board.value[cell] === EMPTY) found = cell;
-  }
-  return found;
+  return board.value.indexOf(EMPTY);
 }
 
 /** Puts food on a random empty cell, or on the first empty one when a few random tries all land on the snake. */

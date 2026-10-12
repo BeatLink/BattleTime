@@ -87,11 +87,7 @@ export function start_game() {
 
 /** The cell of the gap, which is wherever the board holds 0. */
 function gap_cell(): number {
-  let gap = 0;
-  for (const cell of CELLS) {
-    if (board.value[cell] === 0) gap = cell;
-  }
-  return gap;
+  return board.value.indexOf(0);
 }
 
 /** Moves the tile beside the gap into it. */

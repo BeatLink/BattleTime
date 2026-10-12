@@ -503,9 +503,23 @@ An app's state is at most 2 KB, and one array at most 1 KB. Each array stores it
 | `range(count)` | `0` to `count - 1`, where `count` is known when the app is compiled. |
 | `array.includes(value)`, `array.indexOf(value)` | Whether the value is there, and where (or -1). |
 | `count_where(array, test)` | How many elements pass the test. |
+| `count_of(array, value)` | How many elements equal the value. |
+| `nth_index_of(array, value, n)` | Where the `n`th element equal to the value is, counting from 0, or -1. |
+| `arrays_equal(first, second)` | Whether two arrays of one length hold the same elements. |
+| `line_through(grid, width, cell, value)` | The longest line of the value through the cell, across, down or diagonally, counting the cell as holding it. Lines stop at the edges. |
+| `slide_grid(grid, width, direction)` | The grid with its tiles slid that way, equal pairs merging once into a tile one level higher, as in 2048. |
+| `slide_points(grid, width, direction)`, `slide_changes(...)`, `can_slide(grid, width)` | What a slide's merges score (two to the power of each new level), whether it changes the grid, and whether any slide would. |
+| `life_step(grid, width, live_value)` | The next generation of the Game of Life on a grid that wraps at its edges; each live cell holds `live_value`. At most 16 wide. |
 | `array.map(...)` | A new array of the same length. Allowed in views, `computed` and handlers. |
 
 Loops over fixed-length arrays are allowed in `computed` and handlers as well as views.
+
+The interpreter answers the functions from `count_of` down natively, so they cost a few bytes of
+the image where a loop costs dozens, and run far faster; `indexOf` and `includes` on an array signal
+do the same. Their arrays must be signals of numbers, such as `board.value`, or parameters given one.
+`slide_grid` and `life_step` give a whole array, so they may only be assigned to an array signal of
+the same length in a handler, as in `board.value = life_step(board.value, 16, 1)`. A grid is
+numbered across each row from the top left; a slide's lines are at most 16 long.
 
 ### Control flow
 

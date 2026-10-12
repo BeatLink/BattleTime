@@ -11,6 +11,7 @@ import {
   define_app,
   every,
   go,
+  line_through,
   persisted,
   random_int,
   range,
@@ -56,25 +57,6 @@ const DRAWN_PLACES = range(CELL_COUNT).map(
 const SEARCH_ORDER = [3, 2, 4, 1, 5, 0, 6];
 const REVERSED_SEARCH_ORDER = [6, 0, 5, 1, 4, 2, 3];
 
-/** How far one step along each line moves on the board, in places. */
-const ACROSS = 1;
-const UP = ROW_WIDTH;
-const UP_RIGHT = ROW_WIDTH + 1;
-const UP_LEFT = ROW_WIDTH - 1;
-
-/** The places to look at from a cell: for each line through it, three steps one way and then three the other. */
-const LINE_OFFSETS = [
-  ACROSS, 2 * ACROSS, 3 * ACROSS, -ACROSS, -2 * ACROSS, -3 * ACROSS,
-  UP, 2 * UP, 3 * UP, -UP, -2 * UP, -3 * UP,
-  UP_RIGHT, 2 * UP_RIGHT, 3 * UP_RIGHT, -UP_RIGHT, -2 * UP_RIGHT, -3 * UP_RIGHT,
-  UP_LEFT, 2 * UP_LEFT, 3 * UP_LEFT, -UP_LEFT, -2 * UP_LEFT, -3 * UP_LEFT,
-];
-const LINE_OFFSET_PLACES = range(24);
-
-/** Offsets come in runs of this many steps one way, and two runs make one line. */
-const STEPS_PER_RUN = 3;
-const STEPS_PER_LINE = 6;
-
 /** The board is drawn in cells of this size, the top row holding the counter being aimed. */
 const CELL_SIZE = 34;
 const BORDER = 1;
@@ -85,24 +67,9 @@ const WORST_SCORE = -1000;
 export const EMPTY_BOARD = BOARD_PLACES.map(() => EMPTY);
 export const EMPTY_HEIGHTS = [0, 0, 0, 0, 0, 0, 0];
 
-/** Whether putting a piece on a cell would make four in a row through it, looking along every line in one loop. */
+/** Whether putting a piece on a cell would make four in a row through it. */
 export function wins_at(board: number[], cell: number, piece: number): boolean {
-  // The search inlines this deep inside itself, so it keeps its locals and open branches few; a line
-  // that reaches three is never reset, so its length is the answer.
-  let line_length = 0;
-  let is_run_going = true;
-  for (const offset_place of LINE_OFFSET_PLACES) {
-    if (offset_place % STEPS_PER_LINE === 0 && line_length < 3) line_length = 0;
-    if (offset_place % STEPS_PER_RUN === 0) is_run_going = true;
-    if (is_run_going) {
-      is_run_going =
-        cell + LINE_OFFSETS[offset_place] >= 0 &&
-        cell + LINE_OFFSETS[offset_place] < BOARD_SIZE &&
-        board[cell + LINE_OFFSETS[offset_place]] === piece;
-    }
-    if (is_run_going && line_length < 3) line_length = line_length + 1;
-  }
-  return line_length >= 3;
+  return line_through(board, ROW_WIDTH, cell, piece) >= 4;
 }
 
 /** The last column in the order given where a piece would win at once, or -1. */
