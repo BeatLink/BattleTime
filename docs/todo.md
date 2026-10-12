@@ -96,8 +96,8 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 
 ## UI toolkit
 
-- [ ] **Measure the UI heap on the watch.** It is 20 KB; so far only the node size and the
-  stopwatch demo's screen are measured, on the computer. Count what a typical screen allocates on
+- [ ] **Measure the UI heap on the watch.** It is 21 KB, shared with the 16 KB storage heap; so
+  far it is measured only in the emulator, where the alarm peaks at 36,188 B of 37,888 B. Count what a typical screen allocates on
   the watch, then update the "UI heap" row in
   [memory-map.md](memory-map.md) and the size in `tools/draw_memory_maps.py`, and rerun the script.
 - [ ] **Text edges over colour.** The display cannot be read back, so the soft edges of letters are
@@ -137,24 +137,21 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   reused least recently used first. Each slot is filled by one DMA read of a whole resource, such
   as a font or picture from a resource package or a handler from `/apps`, so each costs one SPI
   transaction instead of many small reads.
-- [ ] **Fonts and icons into the shared library.** The fonts (47,919 B) and icons (26 KB) are
-  still `include_bytes!` statics in the firmware. Read them from the library region by address,
-  through the same path as `set_library`. That fills about 74 KB of the library's 92 KB and costs
-  no RAM, since both regions are read in place.
-- [ ] **Built-in face and apps out to `/apps`.** They take 29 KB of the firmware. They are apps,
-  so they belong on the external flash, not in the shared library.
+- [ ] **The remaining companion messages.** Read `call`, `musicinfo`, `musicstate`, `weather`,
+  `find` and `status` from [companion-protocol.md](companion-protocol.md): calls and music to apps
+  through `firmware/src/app_events.rs`, weather into `current_weather`, `find` as a ring that a
+  touch stops, and a `status` reply with battery, millivolts, steps and charging. Built on the
+  app-events work (`notify`, haptics and event delivery), which waspos-01 is landing.
+- [ ] **Harness gaps in the app host.** The test harness works around three: `widget_bounds` has
+  no clip rectangle, so it cannot tell a widget scrolled out of a List or Scroll; there is no
+  iterator over the open screen's nodes; and there is no public "redraw everything" (it re-applies
+  `set_theme`).
 - [ ] **Run app bytecode in place.** An app's code is copied from `/apps` into RAM when it opens.
   Copying it to internal flash on install and running it from there would save most of the 6 KB
   apps budget.
-- [ ] **No redraw wakeups while the screen is off.** `next_wakeup` still returns redraw timers,
-  such as a clock's per-second or a stopwatch's per-tenth redraw, after `screen_turned_off`, and
-  the shell keeps ticking on them. [app-runtime.md](app-runtime.md) says no redraw timer is set
-  while the screen is off; only subscriptions should wake the watch then.
-- [ ] **Act on `WakeScreen`.** Apps send it, such as the timer when it rings, and the app host
-  records it, but the firmware does not turn the screen on.
-- [ ] **Resize the firmware slot and the shared library.** After the moves above the firmware
-  falls from 352 KB to about 240 KB, so a split such as 320 KB firmware and 172 KB library becomes
-  possible if the library fills up. The sizes are in `neotime-boot`, which the bootloader shares,
+- [ ] **Resize the firmware slot and the shared library.** With no app, face or font built in the
+  firmware is 289 KB, so a split such as 320 KB firmware and 172 KB library becomes possible if the
+  library (74,876 B of 92 KB) fills up. The sizes are in `neotime-boot`, which the bootloader shares,
   so do it together with the next bootloader update that is needed anyway.
 
 ## RAM
@@ -163,11 +160,12 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   open, and the rehearsal build runs on 4 KB. Measure the peak on the watch, including file
   transfer over Bluetooth, then cut it down; up to 12 KB could be freed.
 - [ ] **Smaller Bluetooth buffers.** Fewer and smaller packets in the pool, one connection and a
-  trimmed GATT table take RAM from the 12 KB budget, at some cost to file transfer speed.
-- [ ] **Smaller widget nodes.** Each node takes 240 B of the UI heap. Narrower fields, and rare
-  fields kept outside the node, would fit more widgets or allow a smaller heap.
-- [ ] **Trim the stack.** About 15 KB is left for it and the deepest call needs 8 KB. Measure the
-  high-water mark on the watch before giving any of it away.
+  trimmed GATT table take RAM from the 12 KB budget, at some cost to file transfer speed. The
+  Bluetooth task's state is 4.8 KB, most of it TrouBLE's GATT table (39 attributes of 44 B, 2.1
+  KB) and its runner (1.6 KB); shrinking those means patching `third_party/trouble-host`.
+- [ ] **Trim the stack.** 13.0 KB is left for it; in the emulator it peaks at 8.3 KB with most apps
+  and 10.4 KB with the alarm open. Measure the high-water mark on the watch before giving any of it
+  away.
 - [ ] **Find large static RAM.** List `.bss` and `.data` by size with `nm --size-sort` and check
   for oversized embassy task state or tables that should be `const`.
 
@@ -175,16 +173,14 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 
 Found by the harness's snapshots and quality checks; see [testing.md](testing.md).
 
-- [ ] **Labels inside an `Arc` are not drawn on the watch.** The metronome's "120" and "bpm" and
-  the five labels inside the steps ring show in the browser preview but not on the watch. They are
-  listed in `KNOWN_DIFFERENCES` in `sdk/neotime/tests/parity.tsx`; take them out once fixed.
-- [ ] **Calculator keys.** The ⌫ and ± keys draw blank, apparently glyphs missing from the font,
-  and the 7 key is always highlighted because the compiler cannot pass labels to `highlighted`
-  (see [compiler.md](compiler.md)).
+- [ ] **Calculator's 7 key is always highlighted,** because the compiler cannot pass labels to
+  `highlighted` (see [compiler.md](compiler.md)).
 - [ ] **Terminal face overflow.** Its last line falls off the bottom of the screen and
   "[STAT] Connected" is cut in half.
 - [ ] **Apps over the RAM budget.** The quality check's `KNOWN_GAPS` lists alarm (67 widgets on
-  its main screen) and the launcher (65) against the 55 widgets the UI heap is documented to hold,
+  its main screen) and the launcher (65) against a widget budget worked out from 240 B nodes. Nodes
+  are 160 B now and the alarm opens in the emulator, at 36,188 B of the 37,888 B heap, so redo
+  the budget in the check and [memory-map.md](memory-map.md),
   and twos (9,615 B) and infineat (11,663 B) against the 5,744 B left for expression bytecode. The
   launcher runs on the watch, so measure the real limit and either correct
   [memory-map.md](memory-map.md) or slim the screens.
