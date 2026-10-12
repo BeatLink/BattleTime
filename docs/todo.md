@@ -75,10 +75,6 @@ document for its part instead.
     while it slides away, looks acceptable, or whether that unturning should move elsewhere;
   - the stack keeps 2 KB spare with the alarm open while its list scrolls.
 
-- [ ] **Stack margin with the alarm open.** Measured in the emulator with a typical install, the
-  alarm peaks at 10,516 B of 12,436 B, 1,920 B spare, under the 2 KB [memory-map.md](memory-map.md)
-  asks for. Find what makes that path deep, or win static RAM back, before anything grows.
-
 ## Bluetooth controller
 
 See [bluetooth.md](bluetooth.md) for the details of each.
@@ -252,6 +248,10 @@ the ones above it.
   by nothing.
 
 ## RAM
+
+- [ ] **Stack margin with the alarm open.** Measured in the emulator with a typical install, the
+  alarm peaks at 10,516 B of 12,436 B, 1,920 B spare, under the 2 KB [memory-map.md](memory-map.md)
+  asks for. Find what makes that path deep, or win static RAM back, before anything grows.
 
 - [ ] **Shrink the storage heap.** It is 16 KB, but littlefs needs about 1.8 KB with two files
   open, and the rehearsal build runs on 4 KB. Measure the peak on the watch, including file
