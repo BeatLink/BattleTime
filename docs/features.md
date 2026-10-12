@@ -80,6 +80,10 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **The version on screen and over Bluetooth.** The status page's first line and the Device
   Information service give the firmware's version and the commit it was built from, such as
   `NeoTime 0.1.0+1b19aed`, with a `*` when the build had uncommitted changes.
+- **Why the watch restarted.** The status page's last line says why the watch last started, such
+  as "Reset: watchdog" or "Reset: power on", or, when the run before crashed, "Fault at 0x0001a2b4"
+  or "Last run panicked". The diagnostics service carries the same, with the addresses a panic
+  passed through. It has run only in the emulator.
 - **Bootloader updates over Bluetooth,** with the bootloader updater: sent like any firmware
   update, it writes the new bootloader only on the charger and hands the watch back to the firmware
   that was running. It replaced the first watch's bootloader on 2026-10-11.

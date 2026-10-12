@@ -1,6 +1,11 @@
 //! Counters a computer can read over Bluetooth, to see what a part of the firmware is doing on the watch.
+//!
+//! After the counters come the words of `neotime_crash_record::last_restart_words`: why the watch
+//! last restarted, and the panic or fault that ended the run before, set once at start.
 
 use core::sync::atomic::{AtomicU32, Ordering};
+
+use neotime_crash_record::LAST_RESTART_WORDS;
 
 #[derive(Clone, Copy)]
 pub enum Counter {
@@ -23,8 +28,10 @@ pub enum Counter {
 }
 
 const COUNTER_COUNT: usize = 8;
+const WORD_COUNT: usize = COUNTER_COUNT + LAST_RESTART_WORDS;
+pub const SNAPSHOT_BYTES: usize = WORD_COUNT * 4;
 
-static COUNTERS: [AtomicU32; COUNTER_COUNT] = [const { AtomicU32::new(0) }; COUNTER_COUNT];
+static COUNTERS: [AtomicU32; WORD_COUNT] = [const { AtomicU32::new(0) }; WORD_COUNT];
 
 pub fn add_one(counter: Counter) {
     COUNTERS[counter as usize].fetch_add(1, Ordering::Relaxed);
@@ -34,9 +41,15 @@ pub fn set(counter: Counter, value: u32) {
     COUNTERS[counter as usize].store(value, Ordering::Relaxed);
 }
 
-/// Every counter, little-endian, in the order of `Counter`.
-pub fn snapshot() -> [u8; COUNTER_COUNT * 4] {
-    let mut bytes = [0; COUNTER_COUNT * 4];
+pub fn set_last_restart(words: [u32; LAST_RESTART_WORDS]) {
+    for (counter, word) in COUNTERS[COUNTER_COUNT..].iter().zip(words) {
+        counter.store(word, Ordering::Relaxed);
+    }
+}
+
+/// Every counter, little-endian, in the order of `Counter`, then the last restart's words.
+pub fn snapshot() -> [u8; SNAPSHOT_BYTES] {
+    let mut bytes = [0; SNAPSHOT_BYTES];
     for (counter, chunk) in COUNTERS.iter().zip(bytes.as_chunks_mut::<4>().0) {
         *chunk = counter.load(Ordering::Relaxed).to_le_bytes();
     }

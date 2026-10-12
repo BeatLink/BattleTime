@@ -44,6 +44,7 @@ use neotime_blefs::{service::FileTransferService, FileTransfer};
 use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
 use neotime_button::Button;
 use neotime_companion::LineAssembler;
+use neotime_crash_record::Crash;
 use neotime_dfu::{service::DfuWrite, service::LegacyDfuService, LegacyDfu};
 use neotime_display::Display;
 use neotime_runtime::events::ButtonPress;
@@ -71,6 +72,7 @@ mod clock;
 mod diagnostics;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod help;
+mod restart;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod settings;
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -192,6 +194,8 @@ async fn main(spawner: Spawner) {
     screen.write_line(line::TITLE, &title);
     screen.write_line(line::BUILD, storage::BUILD_NAME);
     storage::leave_breadcrumb(stage::SCREEN_STARTED);
+    let last_restart = restart::take_last_restart();
+    // The rehearsals' breadcrumbs say more than the reset reasons, so they keep the line when there are any.
     if let Some(previous) = previous_run {
         let mut text = heapless::String::<24>::new();
         let _ = core::fmt::write(
@@ -202,6 +206,8 @@ async fn main(spawner: Spawner) {
             ),
         );
         screen.write_line(line::LAST_RUN, &text);
+    } else {
+        show_last_restart(&mut screen, last_restart);
     }
 
     let storage_peripherals = storage::StoragePeripherals {
@@ -297,16 +303,20 @@ mod stage {
 }
 
 const CONFIGURABLE_FAULT_STATUS: *const u32 = 0xE000_ED28 as *const u32;
+const BUS_FAULT_ADDRESS: *const u32 = 0xE000_ED38 as *const u32;
 
 /// Halting lets the watchdog reset the watch, which a reset loop would never do.
 #[panic_handler]
 fn halt_on_panic(information: &core::panic::PanicInfo) -> ! {
+    // Taken first, so the search starts above the frames that record the panic.
+    let stack_pointer = cortex_m::register::msp::read();
     let line = information.location().map_or(0, |location| location.line());
     storage::record(storage::Breadcrumbs {
         stage: stage::PANICKED,
         detail: line,
         fault_status: 0,
     });
+    restart::record_panic(stack_pointer);
     loop {
         cortex_m::asm::wfe();
     }
@@ -314,10 +324,17 @@ fn halt_on_panic(information: &core::panic::PanicInfo) -> ! {
 
 #[cortex_m_rt::exception]
 unsafe fn HardFault(frame: &cortex_m_rt::ExceptionFrame) -> ! {
+    let fault_status = unsafe { CONFIGURABLE_FAULT_STATUS.read_volatile() };
     storage::record(storage::Breadcrumbs {
         stage: stage::FAULTED,
         detail: frame.pc(),
-        fault_status: unsafe { CONFIGURABLE_FAULT_STATUS.read_volatile() },
+        fault_status,
+    });
+    restart::record_crash(&Crash::HardFault {
+        program_counter: frame.pc(),
+        link_register: frame.lr(),
+        fault_status,
+        fault_address: unsafe { BUS_FAULT_ADDRESS.read_volatile() },
     });
     loop {
         cortex_m::asm::wfe();
@@ -524,6 +541,17 @@ fn start_screen(
     }
 }
 
+/// Puts the previous run's panic or fault on the page, or else why the watch restarted.
+fn show_last_restart(screen: &mut Screen, last_restart: restart::LastRestart) {
+    // Room for the whole text, because a short buffer drops whole pieces and `write_line` cuts it to fit anyway.
+    let mut text = heapless::String::<96>::new();
+    let _ = match &last_restart.crash {
+        Some(crash) => core::fmt::write(&mut text, format_args!("{crash}")),
+        None => core::fmt::write(&mut text, format_args!("Reset: {}", last_restart.reasons)),
+    };
+    screen.write_line(line::LAST_RUN, &text);
+}
+
 // ============================================================================
 // Bluetooth: advertise, serve GATT, take updates
 // ============================================================================
@@ -568,11 +596,11 @@ const PACKAGES_LINE_BYTES: usize = 256;
 /// The bytes one notification carries at the smallest MTU, 23, less the 3-byte header.
 const NOTIFICATION_BYTES: usize = 20;
 
-/// NeoTime's own service: counters from `diagnostics`, and the packages commands that install apps.
+/// NeoTime's own service: the counters and last restart from `diagnostics`, and the packages commands that install apps.
 #[gatt_service(uuid = "6e540001-0000-4000-8000-4e656f54696d")]
 struct NeoTimeService {
-    #[characteristic(uuid = "6e540002-0000-4000-8000-4e656f54696d", read)]
-    counters: [u8; 32],
+    #[characteristic(uuid = "6e540002-0000-4000-8000-4e656f54696d", read, value = [0; diagnostics::SNAPSHOT_BYTES])]
+    counters: [u8; diagnostics::SNAPSHOT_BYTES],
     /// One JSON command per line in, one JSON reply per line out; see docs/companion-protocol.md.
     #[characteristic(
         uuid = "6e540003-0000-4000-8000-4e656f54696d",

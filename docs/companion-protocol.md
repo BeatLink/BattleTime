@@ -162,7 +162,7 @@ Service `6e540001-0000-4000-8000-4e656f54696d`, with its characteristics on the 
 
 | Characteristic | UUID | Use | Served |
 |---|---|---|---|
-| Diagnostics | `6e540002-…` | Read: eight little-endian `u32` counters; see [architecture.md](architecture.md). | Yes |
+| Diagnostics | `6e540002-…` | Read: eight little-endian `u32` counters, then ten words on the last restart: the `RESETREAS` bits, the kind of crash (0 none, 1 panic, 2 HardFault) and eight detail words; see [architecture.md](architecture.md). | Yes |
 | Packages | `6e540003-…` | Write and notify: one JSON command per line, as in [Packages](#packages-served). | Yes |
 
 ### Packages (served)

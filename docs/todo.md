@@ -58,6 +58,13 @@ document for its part instead.
   - the face, the launcher and the apps install from `/apps` and appear without a restart;
   - `apps` lists them, and hiding, showing and removing one updates the launcher;
   - an image with a bad id or a library that fails its check is refused with an error.
+- [ ] **Reset reasons and crash record on the PineTime.** They have run only in the emulator. On the
+  watch, check that:
+  - the status page reads "Reset: power on" after the battery is reconnected, "Reset: watchdog"
+    after a button hold, and "Reset: software" after an update;
+  - when a panic or a HardFault happens, it shows on the next start's status page and in the
+    diagnostics characteristic's last-restart words, and a panic's addresses lead to its caller;
+  - an ordinary start after that shows the crash no more.
 
 ## Bluetooth controller
 
@@ -300,9 +307,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   held, runs the TWIM at about 390 kHz because of the nRF52832's 400 kHz timing erratum, and resets
   the TWIM when a transfer never finishes. NeoTime runs at 400 kHz with no time limit, so a frozen
   bus stops touch and steps for good.
-- [ ] **Reset reason and crash record.** Read and clear `RESETREAS` at start, and keep the panic
-  line or fault address in RAM the next start can read, then show both on the status page or in
-  the diagnostics service.
 - [ ] **Warn when a part fails at start.** InfiniTime shows a warning screen when the touch
   controller does not start; NeoTime shows nothing.
 - [ ] **A system info screen** showing the firmware version, which the status page and the Device

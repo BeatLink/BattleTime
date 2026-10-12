@@ -32,10 +32,11 @@ Holding The Button Resets Into The Bootloader
     Firmware Should Be Alive
 
     Execute Command           ${BUTTON} Press
-    Run For                   7
-    # The watchdog bit of RESETREAS.
+    # The watchdog resets within 5 seconds and the firmware clears RESETREAS when it starts, so it is read while the bootloader runs.
+    Run For                   5.5
     ${reason}=                Word At    ${RESETREAS}
     Should Be True            ${reason} & 0x2    The watchdog did not reset the watch
+    Run For                   1.5
     Execute Command           ${BUTTON} Release
     Run For                   4
     Word Should Be            ${BOOT_COUNT}    2

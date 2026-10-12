@@ -158,6 +158,7 @@ NeoTime/
 ├── services/
 │   ├── blefs/        neotime-blefs: Adafruit BLE file transfer, InfiniTime's file service
 │   ├── companion/    neotime-companion: the companion app's JSON lines over the UART service
+│   ├── crash_record/ neotime-crash-record: reset reasons in words and the crash record kept across a reset
 │   ├── current_time/ neotime-current-time: the Current Time service's values and calendar arithmetic
 │   ├── dfu/          neotime-dfu: the legacy DFU update protocol over Bluetooth
 │   ├── packages/     neotime-packages: the apps installed in /apps and the shared library's install
@@ -564,7 +565,25 @@ watch face, the launcher and the apps through `neotime-app-host`:
   last woke the shell, whether the screen is lit, the touch panel's state, touch reports, touches
   sent, button presses and the accelerometer's state. It showed that the touch panel failed to
   start while the accelerometer reset on the same bus, so the panel now starts first, with retries,
-  and the accelerometer waits for it.
+  and the accelerometer waits for it. Ten more words follow the counters, set once at start: the
+  last restart, described next.
+- **Reset reasons and crash record.** `restart.rs` reads and clears `RESETREAS` at start, and reads
+  and clears the crash record the previous run left in `.uninit` RAM (see
+  [memory-map.md](memory-map.md#ram-64-kb-planned)). The status page's last line shows the crash
+  when there was one, or else the reasons in words. The diagnostics characteristic gets
+  `neotime_crash_record::last_restart_words`: the `RESETREAS` bits, the kind of crash (0 none, 1
+  panic, 2 HardFault) and eight detail words. The HardFault handler records the stacked program
+  counter and link register, `CFSR` and `BFAR`. Reading a panic's location would keep the file
+  name and line of every panic site in the firmware, 26.6 KB of flash (6.7 KB of code, 19.9 KB of
+  constants), a quarter of what is free, so the panic handler records instead the first eight words on the stack above it that look like Thumb return
+  addresses into the code: odd, and between `__stext` and `__etext`. The first two or three are
+  usually inside `core::panicking`; the next is usually the function that panicked. A stale word can
+  pass the test too, so look each one up with `addr2line -e <the firmware's ELF> <address>`. Both
+  handlers then halt, so the watchdog resets the watch. The record is 44 bytes of little-endian
+  words: `CRSH`, the kind, the eight detail words, and a CRC-32 of the rest, so RAM that came up
+  with noise never reads as a crash. `neotime-crash-record` (`services/crash_record`) holds the
+  format and the decoding, with host tests; `tests/emulator/crash_record.robot` faults the running
+  firmware and checks the next start reports it.
 - **Saved state.** An app's persistent variables are written to `/apps/<id>/state` on the external
   flash when it closes or the screen turns off, only when one changed, and put back when it opens.
 - **Battery service.** The standard Battery service (0x180F) answers a read of 0x2A19 with the
