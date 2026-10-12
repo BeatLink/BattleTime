@@ -21,3 +21,8 @@ neotime-storage = { path = "../storage" }
 [dev-dependencies]
 neotime-runtime = { path = "../../runtime", features = ["writer"] }
 neotime-settings = { path = "../settings" }
+
+# Its argument parsing has tests, which `cargo test` runs.
+[[example]]
+name = "filesystem_use"
+test = true

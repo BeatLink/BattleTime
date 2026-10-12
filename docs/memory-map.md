@@ -134,20 +134,22 @@ the rollback after it was meant. The firmware measures 51 KB of static RAM:
 the Bluetooth host with its eight 128-byte packets, controller, display buffer and task state. The
 Bluetooth task's state is 4.8 KB: its GATT table (2.1 KB) and TrouBLE's runner (1.6 KB) are most of
 it; replies to the companion app and half-received lines wait on the heap, and the update state,
-status page and confirmation are held once in a static. That leaves 12.2 KB (12,508 B) for the
-stack. Measured in the emulator by painting the stack before start, the launcher path peaks at
-8.0 KB (8,188 B), 4.2 KB spare. The alarm, the deepest app, peaked at 10.5 KB in an earlier
-measurement that the tool cannot repeat, since it cannot open the alarm; against today's stack that
-would leave under 2 KB, so measure it again before the stack shrinks further. Drawing borrows a
-1,920 B strip of four screen rows from the stack while it runs. With it, a typical install (the digital face, the launcher and ten apps,
-built with `filesystem_use --image` and loaded into the emulator with the shared library) peaked at
-9.1 KB while sliding to the launcher and scrolling it, and at 10.3 KB (10,516 B) with the alarm
-open, 1,920 B spare: below the 2 KB this page asks for, so room must be found before the stack or
-the statics grow again. The lowest 256 bytes of the stack, from the first 256-byte boundary above
-the statics, are a guard the memory protection unit forbids (`firmware/src/stack_guard.rs`), so
-they count as used. The Bluetooth task builds its attribute table out of line, so its own frame
-under a connection is 0.6 KB and `serve_connection`'s 2.1 KB; packages commands run in a task of
-their own, since the verifier inside one once overflowed the stack under those frames.
+status page and confirmation are held once in a static. That leaves 10.6 KB (10,840 B) for the
+stack, of which the lowest bytes, up to 360 B, are the stack guard: 256 B from the first 256-byte
+boundary above the statics, which the memory protection unit forbids (`firmware/src/stack_guard.rs`).
+Measured in the emulator by painting the stack before start, with 10,480 B above the guard, the
+deepest path is the start itself, at 7.7 KB (7,848 B), 2,632 B spare: the Bluetooth task builds its
+attribute table out of line once, in a 6.9 KB frame. Opening the launcher, reopening the face after
+an install, and packages commands all stay below it. Those were measured on the watch's own `/apps`
+tree (16 apps and faces, saved states and an uploaded morse image) with `apps` and `install`
+commands sent over the emulator's Bluetooth bridge, and on every app in the repository installed
+one by one with the launcher open. The alarm, the deepest app, peaked at 10.5 KB in an earlier
+measurement that the tool cannot repeat, since it cannot open the alarm, so measure it again before
+the stack shrinks further. Drawing borrows a 1,920 B strip of four screen rows from the stack while
+it runs. Under a connection the Bluetooth task's own frame is 0.6 KB and `serve_connection`'s
+2.1 KB; packages commands run in a task of their own, since the verifier inside one once overflowed
+the stack under those frames, and the app host verifies an image and runs its first derives outside
+the 1.7 KB frame that loads it.
 
 The last 44 bytes of the firmware's static RAM, in the `.uninit` section just below the stack, are
 the crash record (`firmware/src/restart.rs`, laid out by `neotime-crash-record`). Start-up does not
@@ -166,7 +168,23 @@ To measure it again after a change, build the firmware and run, inside `nix deve
 
 It fills the stack with a pattern in the PineTime emulator, starts the firmware without the reset
 its first start would cause, swipes to the launcher, and prints the peak, the spare bytes and any
-resets. Keep at least 2 KB spare.
+resets. Spare bytes are counted down to the top of the guard. Keep at least 2 KB spare.
+
+With apps installed and packages commands sent over Bluetooth, as the companion app sends them:
+
+```sh
+cargo run -p neotime-packages --example filesystem_use -- --no-theme --image flash.bin launcher=launcher.ntapp ...
+(ulimit -v 12000000; PINETIME_RENODE_EMULATOR=<that checkout> \
+    python3 -I tools/measure_stack.py firmware/target/thumbv7em-none-eabihf/release/neotime-firmware 3 \
+    --flash flash.bin --library shared.ntlib --packages '{"c":"apps"}' '{"c":"install","id":"alarm"}')
+```
+
+`--packages` starts the emulator with its Bluetooth bridge and sends each line through
+`tools/packages_over_hci.py`, which speaks HCI to the bridge directly, needing neither BlueZ nor
+root. The Rust engine has no bridge yet, so this runs the Renode emulator it replaced, from a
+PineTimeEmulator checkout pinned at 97ebb02 that `PINETIME_RENODE_EMULATOR` names, for example
+`git -C ../PineTimeEmulator worktree add --detach .claude/worktrees/renode 97ebb02`. The bridge's controller now and then holds a packet back until more HCI traffic arrives, so
+the client nudges it with a harmless command and sends a line again when the watch could not read it.
 
 Static RAM by owner, from `tools/measure_memory.py`. The firmware's own share is mostly Embassy's
 task storage, which holds each task's state, and the Bluetooth host's packet pool:
