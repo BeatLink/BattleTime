@@ -258,8 +258,9 @@ gestures, not finger movement, and forces `defmt` on every user, so NeoTime has 
   presses straight away use `wait_for_press` and `wait_for_release`. Long presses are reported
   while the button is still held, and letting go afterwards is not a click. `Timing` changes the
   thresholds.
-- **Recovery.** `is_pressed` reads the pin at once. The system loop feeds the watchdog only while it
-  returns false, so holding the button lets the watchdog reset the watch into the bootloader.
+- **Recovery.** `is_pressed` reads the pin at once. The firmware's watchdog task reads the pin
+  itself and feeds the watchdog only while it is low, so holding the button lets the watchdog reset
+  the watch into the bootloader.
 
 The driver keeps no buffers: it uses a few bytes of RAM in the task that owns it.
 
@@ -514,10 +515,19 @@ watch face, the launcher and the apps through `neotime-app-host`:
 - **Navigation.** The face shows first. A swipe up the face does not use opens the launcher, an
   ordinary app (`apps/launcher`) that lists `installed_apps` with their icons; a tap opens one.
   The shell answers `installed_apps` from `/apps` and, while the launcher is open, gives the host
-  each app's icon. The button,
-  or a swipe right the app does not use, goes back a step: app to launcher, launcher to face.
-- **Transitions.** The launcher and apps slide up over what was open, and the button slides back
-  down; a swipe right going back wipes in from the left. The shell draws a transition's steps one
+  each app's icon. A swipe right the app does not use goes back a step: app to launcher,
+  launcher to face.
+- **Side button.** `send_button_gestures` owns the `neotime-button` driver and sleeps on the pin's
+  edge, sending each click, double click, long press and 2 second press to the shell.
+  `neotime_app_host::side_button` decides what each does, so its rules are tested on the host:
+  a dark screen only wakes; a click or long press goes to the open app first, whose `onButton`
+  or screen history may take it; then a click goes to the face, or from the face to sleep, or from the battery screen
+  back to what it covered; a long press goes back a step; a double click opens the app with the id
+  `notifications`, or leaves it for the face; a 2 second press goes to the face. A separate watchdog task reads the pin straight from the port
+  every 500 ms and feeds the watchdog only while it is up, so a hold of 4 to 5 seconds resets the
+  watch whatever the button task does.
+- **Transitions.** The launcher and apps slide up over what was open, and the button's way back
+  or home slides down; a swipe right going back wipes in from the left. The shell draws a transition's steps one
   after another, yielding to the other tasks between them, before it takes the next input. Once a
   new screen opens, the rest of the touch that opened it is dropped until the finger lifts, so a
   swipe that opens the launcher does not also scroll it.
@@ -528,8 +538,7 @@ watch face, the launcher and the apps through `neotime-app-host`:
   queue of 4 in which drags never take the last two places, so a lift and its gesture always fit;
   while the queue is that full, only the newest drag is held back. The shell merges the drags
   waiting in the queue into the latest one, so a list follows the finger however far drawing falls
-  behind. The watchdog task reads the button
-  every 20 ms and also reports short and long presses.
+  behind.
 - **Sleep.** After the settings' screen timeout without input, 15 seconds at first, the backlight goes off, the display sleeps and the
   app gets `screen_off`, unless it called `keep_screen_on(true)`; the next touch or press turns
   them on without acting on it. The loop sleeps until the next input or until `next_wakeup`;

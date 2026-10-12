@@ -31,7 +31,7 @@ use embassy_nrf::{
     wdt::{self, SleepConfig, Watchdog, WatchdogHandle},
 };
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
-use embassy_time::{Delay, Duration, Instant, Timer};
+use embassy_time::{Delay, Duration, Timer};
 use embedded_alloc::LlffHeap;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use mipidsi::interface::SpiInterface;
@@ -44,7 +44,6 @@ use neotime_dfu::{
     service::DfuWrite, service::LegacyDfuService, write_progress, Activity, LegacyDfu, Outcome,
 };
 use neotime_display::Display;
-use neotime_runtime::events::ButtonPress;
 use neotime_updates::ImageKind;
 use static_cell::StaticCell;
 use trouble_host::prelude::*;
@@ -104,7 +103,6 @@ bind_interrupts!(struct Interrupts {
 /// The package version and the git commit, such as `0.1.0+1b19aed`, set by `build.rs`.
 const FIRMWARE_VERSION: &str = env!("NEOTIME_FIRMWARE_VERSION");
 const DEVICE_NAME: &str = "NeoTime";
-const WATCHDOG_FEED_INTERVAL: Duration = Duration::from_millis(1000);
 const DISPLAY_COMMAND_BUFFER_SIZE: usize = 512;
 /// The shell's share of the heap, which the open app's widgets and text are allocated from.
 #[cfg(with_shell)]
@@ -112,10 +110,10 @@ const UI_HEAP_SIZE: usize = 21 * 1024;
 #[cfg(not(with_shell))]
 const UI_HEAP_SIZE: usize = 0;
 const HEAP_SIZE: usize = storage::HEAP_SIZE + UI_HEAP_SIZE;
-/// How often the button is read, for presses and for feeding the watchdog.
-const BUTTON_POLL_INTERVAL: Duration = Duration::from_millis(20);
-/// A press held this long is a long press.
-const LONG_PRESS: Duration = Duration::from_millis(400);
+/// How often the watchdog task reads the button, and feeds the watchdog when it is up.
+const WATCHDOG_CHECK_INTERVAL: Duration = Duration::from_millis(500);
+/// The side button's pin on port 0, which reads high while the button is held.
+const SIDE_BUTTON_PIN: usize = 13;
 
 type SpiBus = Mutex<NoopRawMutex, RefCell<Spim<'static>>>;
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -154,7 +152,8 @@ async fn main(spawner: Spawner) {
     let button_pin = Input::new(chip.P0_13, Pull::Down);
     let power_pin = Output::new(chip.P0_15, Level::Low, OutputDrive::Standard);
     let Ok(button) = Button::new(button_pin, power_pin);
-    spawner.spawn(feed_watchdog_while_button_is_up(watchdog, button).unwrap());
+    spawner.spawn(feed_watchdog_while_button_is_up(watchdog).unwrap());
+    spawner.spawn(send_button_gestures(button).unwrap());
 
     let mut spi_config = spim::Config::default();
     spi_config.frequency = spim::Frequency::M8;
@@ -380,42 +379,33 @@ fn take_over_watchdog(watchdog_peripheral: embassy_nrf::Peri<'static, peripheral
 
 /// Holding the button lets the watchdog reset the watch into the bootloader; see docs/bootloader.md.
 ///
-/// The same reads give the shell its presses: a short one when the button comes up, and a long one
-/// once while it is held.
+/// It reads the pin itself rather than through the button task, so it works whatever that task does.
 #[embassy_executor::task]
-async fn feed_watchdog_while_button_is_up(
-    mut watchdog: WatchdogHandle,
-    mut button: Button<Input<'static>, Output<'static>>,
-) {
-    let mut last_fed = Instant::now();
-    let mut pressed_at: Option<Instant> = None;
-    let mut long_press_sent = false;
+async fn feed_watchdog_while_button_is_up(mut watchdog: WatchdogHandle) {
     loop {
-        let is_pressed = button.is_pressed() == Ok(true);
-        if !is_pressed && last_fed.elapsed() >= WATCHDOG_FEED_INTERVAL {
+        if !side_button_is_held() {
             watchdog.pet();
-            last_fed = Instant::now();
         }
-        match (is_pressed, pressed_at) {
-            (true, None) => {
-                pressed_at = Some(Instant::now());
-                long_press_sent = false;
-            }
-            (true, Some(since)) if !long_press_sent && since.elapsed() >= LONG_PRESS => {
-                long_press_sent = true;
-                diagnostics::add_one(diagnostics::Counter::ButtonPresses);
-                let _ = shell::BUTTON_PRESSES.try_send(ButtonPress::LongPress);
-            }
-            (false, Some(_)) => {
-                pressed_at = None;
-                if !long_press_sent {
-                    diagnostics::add_one(diagnostics::Counter::ButtonPresses);
-                    let _ = shell::BUTTON_PRESSES.try_send(ButtonPress::Press);
-                }
-            }
-            _ => {}
-        }
-        Timer::after(BUTTON_POLL_INTERVAL).await;
+        Timer::after(WATCHDOG_CHECK_INTERVAL).await;
+    }
+}
+
+/// Reads the side button's pin straight from the port, without waiting out contact bounce.
+fn side_button_is_held() -> bool {
+    nrf_pac::P0.in_().read().pin(SIDE_BUTTON_PIN)
+}
+
+// ============================================================================
+// The button's gestures
+// ============================================================================
+
+/// Sends each click, double click and long press to the shell; it sleeps until the pin changes.
+#[embassy_executor::task]
+async fn send_button_gestures(mut button: Button<Input<'static>, Output<'static>>) {
+    loop {
+        let Ok(gesture) = button.next_gesture(&mut Delay).await;
+        diagnostics::add_one(diagnostics::Counter::ButtonPresses);
+        let _ = shell::BUTTON_GESTURES.try_send(gesture);
     }
 }
 

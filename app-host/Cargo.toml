@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 embedded-graphics = "0.8"
+neotime-button = { path = "../drivers/button" }
 neotime-companion = { path = "../services/companion" }
 neotime-runtime = { path = "../runtime" }
 neotime-settings = { path = "../services/settings" }

@@ -73,7 +73,9 @@ longer apply, so the handler calls `back()` itself if right should still go back
 |---|---|---|
 | `onButton` | `kind`: `press` or `long_press` | The side button, set on a screen. |
 
-Without a handler the button goes back, and from the watch face it turns the screen off. Watch faces
+A press reaches the handler as a click, once the double click window has closed. Without a handler
+a press or long press goes back one of the app's screens; on its first screen a press goes to the
+watch face and a long press goes back a step, and on the watch face a press turns the screen off. A double click and a 2 second hold always belong to the system. Watch faces
 cannot take the button. A watch face may still have more screens, such as its settings opened with
 a long press and `go("settings")`. Holding it for 5 seconds always resets the watch, whatever the app does.
 

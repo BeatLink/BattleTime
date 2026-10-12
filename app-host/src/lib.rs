@@ -19,6 +19,7 @@ pub mod motion;
 mod nodes;
 pub mod phone;
 pub mod settings;
+pub mod side_button;
 mod subscriptions;
 mod system;
 mod text;

@@ -364,11 +364,10 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### Side button
 
-- [ ] **Actions.** Bind each gesture: wake, back, open notifications, go to the watch face.
-- [ ] **Use the button driver in the firmware.** The firmware polls the pin every 20 ms with its
-  own long press, so `neotime-button`'s double click and 2 second press never reach apps, and the
-  poll runs while the watch sleeps. Wake on the pin's edge and send the driver's gestures instead,
-  keeping the watchdog fed only while the button is up.
+- [ ] **Try the gestures on the watch:** a click, a double click, a long press and a 2 second
+  hold each do what docs/features.md says, and a 5 second hold still resets into the bootloader.
+- [ ] **Double clicks and 2 second holds for apps.** `onButton` hears only presses and long
+  presses; the shell keeps the other two.
 
 ### Accelerometer
 
@@ -560,11 +559,6 @@ full report is
 ### Touch panel
 
 - [ ] **Pass touch and swipe events to apps.**
-
-### Side button
-
-- [ ] **Click goes home,** and a second click on the home screen puts the watch to sleep, as the
-  fork does.
 
 ### Accelerometer
 

@@ -21,7 +21,7 @@ pub enum Counter {
     TouchReports,
     /// Touches sent to the shell.
     TouchesSent,
-    /// Presses sent to the shell.
+    /// Button gestures sent to the shell.
     ButtonPresses,
     /// The accelerometer: 1 started, 2 failed to start, 3 failed to read.
     AccelerometerState,

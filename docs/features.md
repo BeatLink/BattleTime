@@ -18,10 +18,16 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Smooth scrolling.** A list follows the finger as it drags: the display moves the rows itself,
   and only the few rows that come into view are drawn. Lists below a heading, as in Settings,
   scroll to their last row with the heading kept still.
-- **The button and a right swipe go back a screen,** within an app before leaving it, unless the
-  app uses them itself.
+- **A right swipe goes back a screen,** within an app before leaving it, unless the app uses it
+  itself.
 - **Only what changed is drawn,** each part composed in memory first, so the screen never shows a
   half-drawn widget.
+- **Side button gestures.** Any press wakes a dark screen. A click goes back a screen within an
+  app, and from an app's first screen to the watch face; a click on the face puts the watch to
+  sleep, and on the battery screen goes back to what was open. A long press goes back a step, a
+  double click opens the notifications app when one is installed, and holding for 2 seconds goes
+  to the face whatever the app does. An app's own button handler gets clicks and long presses
+  first. While the phone rings the watch to find it, the first gesture only stops the ring.
 - **The screen sleeps on its own.** It turns off after the time chosen in settings, 15 seconds at
   first, unless the open app keeps it on. While it is dark the watch stays idle until the open app
   has something to do, and the clock is up to date the moment the screen comes back. The open app

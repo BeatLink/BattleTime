@@ -1,10 +1,11 @@
 //! The shell: shows the watch face, the launcher and the open app through the app host.
 //!
-//! The face is shown at start and after the button from the launcher. A swipe up on the face opens
-//! the launcher, a tap there opens an app, and the button or a swipe right that the app does not
-//! use goes back a step. The backlight and display turn off, or dim for an always-on screen, after
-//! the settings' timeout without input, unless the app keeps the screen on, and the next touch or
-//! press turns them on without acting on it. Each app's persistent state is saved to
+//! The face is shown at start. A swipe up on the face opens the launcher, a tap there opens an app,
+//! and a swipe right that the app does not use goes back a step. The side button's gestures act as
+//! `neotime_app_host::side_button` says: a click goes to the face and from the face to sleep. The
+//! backlight and display turn off, or dim for an always-on screen, after the settings' timeout
+//! without input, unless the app keeps the screen on, and the next touch or button gesture turns
+//! them on without acting on it. Each app's persistent state is saved to
 //! `/apps/<id>/state` when it closes or the screen turns off, and changed settings at the same times.
 //! The watch buzzes on the local hour or half hour when the chimes setting asks, and for each notification
 //! from the phone, which also goes to the open app and into the kept list. A notification that
@@ -37,17 +38,18 @@ use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_app_host::{
     haptics::{self, Vibration},
-    motion as app_motion, phone as app_phone, settings as app_settings, AppEffect, AppFailure, AppHost,
-    BatteryChange, EventResult, MotionKind, PushedEvent, System, Touch, Transition,
-    LARGEST_SAVED_STATE_BYTES, STRIP_PIXELS,
+    motion as app_motion, phone as app_phone, settings as app_settings,
+    side_button::{self, ButtonAction, ButtonSituation, OpenScreen},
+    AppEffect, AppFailure, AppHost, BatteryChange, EventResult, MotionKind, PushedEvent, System, Touch,
+    Transition, LARGEST_SAVED_STATE_BYTES, STRIP_PIXELS,
 };
 use neotime_battery::BatteryEvent;
+use neotime_button::Gesture;
 use neotime_companion::{PhoneData, PhoneUpdates, SettingsChange, NOTIFICATION_SOURCE_BYTES};
 use neotime_notifications::NotificationList;
 use neotime_runtime::{
-    events::{ButtonPress, SwipeDirection},
-    resources::ImageReference,
-    AppImage, EffectKind, SystemValue, SystemValues, Theme, Value,
+    events::SwipeDirection, resources::ImageReference, AppImage, EffectKind, SystemValue, SystemValues,
+    Theme, Value,
 };
 use neotime_settings::{chimes, Setting};
 
@@ -62,8 +64,8 @@ use crate::{
     vibration, SharedDisplay,
 };
 
-/// Presses of the side button, from the task that watches it.
-pub static BUTTON_PRESSES: Channel<CriticalSectionRawMutex, ButtonPress, 2> = Channel::new();
+/// The side button's gestures, from the task that watches it.
+pub static BUTTON_GESTURES: Channel<CriticalSectionRawMutex, Gesture, 2> = Channel::new();
 
 /// While set, the screen shows the start-up or update status page and the shell draws nothing.
 static SHOWING_STATUS: AtomicBool = AtomicBool::new(true);
@@ -78,9 +80,6 @@ static STATUS_DISMISSABLE: AtomicBool = AtomicBool::new(true);
 static STATUS_CHANGED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 const MILLISECONDS_PER_MINUTE: Value = 60_000;
-
-/// The app a notification opens when it wakes the screen.
-const NOTIFICATIONS_APP_ID: &str = "notifications";
 
 /// A chime is skipped when the shell notices it later than this, such as after the phone moved the clock on.
 const LATEST_CHIME_IN_MILLISECONDS: Value = MILLISECONDS_PER_MINUTE;
@@ -580,12 +579,42 @@ impl Shell {
         }
     }
 
-    fn press_button(&mut self, press: ButtonPress) {
-        let Some(host) = &mut self.host else {
-            return;
+    /// Offers the gesture to the open app first, and otherwise acts on it as `side_button` says.
+    fn button_gesture(&mut self, gesture: Gesture) {
+        let situation = self.button_situation();
+        if let (Some(press), Some(host)) = (side_button::press_for_app(gesture, &situation), &mut self.host) {
+            if host.press_button(press, clock::utc_now(), &mut self.system) != EventResult::NotHandled {
+                return;
+            }
+        }
+        match side_button::action_for(gesture, &situation) {
+            ButtonAction::Nothing => {}
+            ButtonAction::WakeScreen => self.turn_screen_on(),
+            ButtonAction::PutToSleep => self.turn_screen_off(),
+            ButtonAction::GoBack => self.go_back(Transition::Down),
+            ButtonAction::GoToFace => self.open(Showing::Face, Transition::Down),
+            ButtonAction::OpenNotifications => {
+                if let Some(place) = self.system.installed.place_of(side_button::NOTIFICATIONS_APP_ID) {
+                    self.open(Showing::App(place), Transition::Up);
+                }
+            }
+        }
+    }
+
+    fn button_situation(&self) -> ButtonSituation {
+        let installed = &self.system.installed;
+        let notifications_place = installed.place_of(side_button::NOTIFICATIONS_APP_ID);
+        let open_screen = match self.showing {
+            Showing::Face => OpenScreen::Face,
+            Showing::Launcher => OpenScreen::Launcher,
+            Showing::App(place) if Some(place) == notifications_place => OpenScreen::NotificationsApp,
+            Showing::App(_) => OpenScreen::App,
         };
-        if host.press_button(press, clock::utc_now(), &mut self.system) == EventResult::NotHandled {
-            self.go_back(Transition::Down);
+        ButtonSituation {
+            screen_is_lit: self.lit,
+            open_screen,
+            notifications_app_is_installed: notifications_place.is_some(),
+            covers_an_earlier_screen: self.battery_screen_returns_to.is_some(),
         }
     }
 
@@ -646,7 +675,7 @@ impl Shell {
         if self.lit || is_do_not_disturb() {
             return;
         }
-        let notifications_app = self.system.installed.place_of(NOTIFICATIONS_APP_ID);
+        let notifications_app = self.system.installed.place_of(side_button::NOTIFICATIONS_APP_ID);
         if let Some(place) = notifications_app.filter(|&place| self.showing != Showing::App(place)) {
             self.open(Showing::App(place), Transition::None);
         }
@@ -985,7 +1014,7 @@ pub async fn run_shell(
             None => {
                 select4(
                     TOUCHES.receive(),
-                    BUTTON_PRESSES.receive(),
+                    BUTTON_GESTURES.receive(),
                     Timer::at(wake_at),
                     select4(
                         system_values::next_changes(),
@@ -1034,23 +1063,19 @@ pub async fn run_shell(
                 }
                 shell.touch(touch);
             }
-            Either4::Second(press) => {
+            Either4::Second(gesture) => {
                 diagnostics::set(Counter::ShellLastWake, 2);
                 last_input = Instant::now();
                 if shell.stop_finding() {
                     continue;
                 }
-                if !shell.lit {
-                    shell.turn_screen_on();
-                    continue;
-                }
-                if status_is_shown() {
+                if shell.lit && status_is_shown() {
                     if !status_holds_screen() {
                         hide_status();
                     }
                     continue;
                 }
-                shell.press_button(press);
+                shell.button_gesture(gesture);
             }
             Either4::Third(()) => {
                 diagnostics::set(Counter::ShellLastWake, 3);
