@@ -276,6 +276,9 @@ the ones above it.
 - [ ] **Trim the stack.** 13.0 KB is left for it; in the emulator it peaks at 8.3 KB with most apps
   and 10.4 KB with the alarm open. Measure the high-water mark on the watch before giving any of it
   away.
+- [ ] **Measure the alarm's stack again.** About 11.6 KB is now left for the stack, and the alarm's
+  last peak of 10.5 KB would leave under the 2 KB minimum. `tools/measure_stack.py` cannot open the
+  alarm, so measure it with the alarm installed and open, in the emulator or on the watch.
 - [ ] **Find large static RAM.** List `.bss` and `.data` by size with `nm --size-sort` and check
   for oversized embassy task state or tables that should be `const`.
 
@@ -388,6 +391,9 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 - [ ] **Set the date and time on the watch,** with rollers for the date and the time (with AM/PM on
   a 12 hour clock), for when no phone has set the clock.
+- [ ] **The NeoTime Companion app should write the time zone.** It writes only Current Time
+  (0x2A2B), which sets local time, so the watch's UTC is off by the zone until 0x2A0F is written
+  too. The fix is in the NeoTime Companion repository.
 
 ### Settings
 
