@@ -6,6 +6,7 @@
 
 import { WatchSession, DEFAULT_SCAN_MS } from './ble';
 import { flash, flashUsage } from './commands/flash';
+import { recovery, recoveryUsage } from './commands/recovery';
 import { scan, scanUsage } from './commands/scan';
 import { diag, line, send, sendUsage } from './commands/send';
 import { alarms, apps, backup, files, listen, restore, settings, setTime, status, steps, watchUsage, weather } from './commands/watch';
@@ -27,6 +28,7 @@ ${scanUsage}
 
 ${flashUsage}
 
+${recoveryUsage}
 
 ${sendUsage}
 
@@ -76,6 +78,7 @@ function parse(argv: string[]): { args: string[]; options: Options } {
 // Whether a command needs a connected watch, as opposed to only the adapter.
 const NEEDS_WATCH = new Set([
   'flash',
+  'recovery',
   'notify',
   'find',
   'vibrate',
@@ -140,6 +143,13 @@ async function main(argv: string[]): Promise<number> {
           throw new Error('Give the firmware package to send.');
         }
         await flash(session, rest[0]);
+        break;
+
+      case 'recovery':
+        if (!rest[0]) {
+          throw new Error('Give the recovery firmware package to send.');
+        }
+        await recovery(session, rest[0]);
         break;
 
       case 'notify':

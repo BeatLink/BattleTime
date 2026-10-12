@@ -56,5 +56,3 @@ Android 13 and later.
 
 - **Firmware from GitHub Actions builds.** NeoTime has no CI yet; the finder already reads
   `firmware.zip` from releases and artifacts once there are some.
-- **Recovery images.** NeoTime takes an image for its recovery slot with DFU image type `0x08`;
-  nothing here sends one yet.

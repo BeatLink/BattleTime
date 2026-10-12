@@ -83,6 +83,41 @@ async function reconnectAfterSwap(link: DfuLink, address: string): Promise<boole
   return false;
 }
 
+// Sends a firmware package to NeoTime's recovery slot, which the bootloader menu installs from.
+//
+// The running firmware takes it with DFU image type 0x08 and stays where it is, so nothing is swapped
+// and nothing needs keeping; it restarts, so the time is written again once it is back.
+export async function flashRecovery(
+  link: DfuLink,
+  firmware: FirmwarePackage,
+  options: Pick<FlashOptions, 'confirm' | 'onStep'> = {},
+): Promise<void> {
+  const { onStep } = options;
+  if (firmware.images.length !== 1) {
+    throw new DfuError('A recovery package holds one firmware image.');
+  }
+  if (!(await hasDfu(link))) {
+    throw new DfuError('Only a watch running NeoTime keeps a recovery firmware.');
+  }
+  onStep?.({ step: 'detected' });
+
+  const image = { ...firmware.images[0], part: 'recovery' };
+  await new LegacyDfuController(link).run(image, (progress) =>
+    onStep?.({ step: 'progress', progress, image: 1, images: 1 }),
+  );
+
+  let confirmed = false;
+  if (options.confirm) {
+    onStep?.({ step: 'confirming' });
+    await sleep(REBOOT_MS);
+    if (await reconnectAfterSwap(link, link.deviceId)) {
+      await options.confirm(link);
+      confirmed = true;
+    }
+  }
+  onStep?.({ step: 'finished', confirmed });
+}
+
 export async function flashFirmware(
   link: DfuLink,
   firmware: FirmwarePackage,

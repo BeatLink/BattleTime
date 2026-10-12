@@ -10,6 +10,7 @@ import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
 
 import type { WatchSession } from './ble';
 import { flash } from './commands/flash';
+import { recovery } from './commands/recovery';
 
 // The flash command only needs the DFU link and a way to reset the watch, which is what a session gives it.
 class FakeSession extends MockLegacyDfuTarget {
@@ -62,5 +63,18 @@ describe('the flash command', () => {
     await expect(flash(new FakeSession() as unknown as WatchSession, path)).rejects.toThrow(
       /not a zip archive/,
     );
+  });
+});
+
+describe('the recovery command', () => {
+  it('sends the package to the recovery slot and sets the time once the watch is back', async () => {
+    const image = Uint8Array.from({ length: 1500 }, (_value, index) => (index * 7) & 0xff);
+    const session = new FakeSession();
+
+    await recovery(session as unknown as WatchSession, packageFile(image));
+
+    expect(session.imageTypes).toEqual([0x08]);
+    expect(session.received.image).toEqual(image);
+    expect(session.timeWrites).toHaveLength(1);
   });
 });

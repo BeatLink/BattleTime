@@ -95,6 +95,7 @@ transport the desktop app uses:
 ```bash
 npm run neotime -- scan
 npm run neotime -- flash path/to/firmware.zip
+npm run neotime -- recovery path/to/recovery.zip
 npm run neotime -- time
 npm run neotime -- diag
 npm run neotime -- files ls /settings

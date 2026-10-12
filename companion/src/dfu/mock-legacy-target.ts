@@ -44,6 +44,8 @@ export class MockLegacyDfuTarget implements DfuLink {
   private expected = 0;
   private packets = 0;
   private activated = false;
+  // The image type of every START_DFU, which says which slot an update is for.
+  readonly imageTypes: number[] = [];
   // Every Current Time value written, which is what keeps a NeoTime update.
   readonly timeWrites: Uint8Array[] = [];
 
@@ -177,6 +179,7 @@ export class MockLegacyDfuTarget implements DfuLink {
   private control(data: Uint8Array) {
     switch (data[0]) {
       case Procedure.START_DFU:
+        this.imageTypes.push(data[1]);
         this.stage = 'size';
         return;
       case Procedure.INITIALIZE_DFU:

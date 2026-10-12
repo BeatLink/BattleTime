@@ -51,6 +51,8 @@ const IMAGE_TYPE: Record<string, number> = {
   bootloader: 0x02,
   softdevice_bootloader: 0x03,
   application: 0x04,
+  // NeoTime's own type: the running firmware stores the image in its recovery slot and keeps running.
+  recovery: 0x08,
 };
 
 // The bootloader answers once every this many packets, which keeps the radio

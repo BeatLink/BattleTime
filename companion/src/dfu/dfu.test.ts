@@ -4,7 +4,7 @@ import { zipSync } from 'fflate';
 
 import { nextAddress, readU32le, u32le } from './bytes';
 import { encodeCurrentTime, setWatchTime } from '@/protocol/neotime';
-import { flashFirmware, type FlashStep } from './flash';
+import { flashFirmware, flashRecovery, type FlashStep } from './flash';
 import { parseNotification } from './legacy';
 import { MockLegacyDfuTarget } from './mock-legacy-target';
 import { FirmwarePackageError, readFirmwarePackage } from './package';
@@ -150,6 +150,51 @@ describe('flashing a NeoTime watch', () => {
     });
     expect(sent.at(-1)).toBe(image.length);
     expect(sent.every((value, index) => index === 0 || value >= sent[index - 1])).toBe(true);
+  });
+});
+
+describe('sending a recovery firmware', () => {
+  it('sends the image with NeoTime\'s recovery image type, to the running firmware', async () => {
+    const image = pattern(4000);
+    const target = new MockLegacyDfuTarget();
+    const steps: FlashStep[] = [];
+
+    await flashRecovery(target, readFirmwarePackage(firmwareZip(pattern(14), image)), {
+      onStep: (step) => steps.push(step),
+    });
+
+    expect(target.imageTypes).toEqual([0x08]);
+    expect(target.received.image).toEqual(image);
+    expect(target.finished).toBe(true);
+    expect(steps.at(-1)).toEqual({ step: 'finished', confirmed: false });
+  });
+
+  it('writes the time once the restarted watch is back', async () => {
+    const target = new MockLegacyDfuTarget();
+    await flashRecovery(target, readFirmwarePackage(firmwareZip(pattern(14), pattern(64))), {
+      confirm: (link) => setWatchTime(link),
+    });
+    expect(target.timeWrites).toHaveLength(1);
+  });
+
+  it('refuses a watch that is not running NeoTime', async () => {
+    const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'wasp-os');
+    await expect(
+      flashRecovery(target, readFirmwarePackage(firmwareZip(pattern(14), pattern(64)))),
+    ).rejects.toThrow(/Only a watch running NeoTime/);
+    expect(target.imageTypes).toEqual([]);
+  });
+
+  it('refuses a package with more than one image', async () => {
+    const firmware = readFirmwarePackage(firmwareZip(pattern(14), pattern(64)));
+    const twoImages = { ...firmware, images: [firmware.images[0], firmware.images[0]] };
+    await expect(flashRecovery(new MockLegacyDfuTarget(), twoImages)).rejects.toThrow(/one firmware image/);
+  });
+
+  it('leaves an ordinary update on the application image type', async () => {
+    const target = new MockLegacyDfuTarget();
+    await flashFirmware(target, readFirmwarePackage(firmwareZip(pattern(14), pattern(64))));
+    expect(target.imageTypes).toEqual([0x04]);
   });
 });
 
