@@ -69,10 +69,12 @@ pub enum WidgetKind {
     CellGrid,
     /// The installed apps as a scrolling list of rows, each its icon and name, drawn as one widget.
     AppList,
+    /// Its one child repeated `row_count` times, each copy reading its row number with `ReadRow`.
+    Repeat,
 }
 
 impl WidgetKind {
-    const ALL: [WidgetKind; 39] = {
+    const ALL: [WidgetKind; 40] = {
         use WidgetKind::*;
         [
             Column,
@@ -114,6 +116,7 @@ impl WidgetKind {
             Keyboard,
             CellGrid,
             AppList,
+            Repeat,
         ]
     };
 
@@ -126,7 +129,7 @@ impl WidgetKind {
         use WidgetKind::*;
         matches!(
             self,
-            Column | Row | Grid | Stack | Scroll | List | Pages | Tabs | Button | Arc | ClickArea
+            Column | Row | Grid | Stack | Scroll | List | Pages | Tabs | Button | Arc | ClickArea | Repeat
         )
     }
 }
@@ -236,10 +239,12 @@ pub enum Property {
     Recolor,
     /// The colour of a Scale's major ticks and labels.
     MajorColor,
+    /// How many times a Repeat repeats its child.
+    RowCount,
 }
 
 impl Property {
-    const ALL: [Property; 71] = {
+    const ALL: [Property; 72] = {
         use Property::*;
         [
             X,
@@ -313,6 +318,7 @@ impl Property {
             HandStyle,
             Recolor,
             MajorColor,
+            RowCount,
         ]
     };
 
@@ -416,6 +422,7 @@ impl Property {
                 kind == Kind::AnalogClock
             }
             Recolor => matches!(kind, Kind::Image | Kind::Icon),
+            RowCount => kind == Kind::Repeat,
             OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease => {
                 is_input || kind.holds_children() || matches!(kind, Kind::CellGrid | Kind::AppList)
             }
@@ -596,6 +603,8 @@ pub enum WidgetProblem {
     EventWithoutHandler,
     BadConstant,
     ArrayNotConstant,
+    /// A Repeat has one child, the row it repeats.
+    RepeatWithoutOneChild,
 }
 
 /// Checks that the widgets form whole trees and every property fits its widget.
@@ -618,6 +627,9 @@ pub fn verify_widgets(image: &AppImage) -> Result<(), ImageError> {
 
         if depth > 0 {
             children_left[depth - 1] -= 1;
+        }
+        if widget.kind == WidgetKind::Repeat && widget.child_count != 1 {
+            return Err(fail(index, WidgetProblem::RepeatWithoutOneChild));
         }
         if widget.child_count > 0 {
             if !widget.kind.holds_children() {

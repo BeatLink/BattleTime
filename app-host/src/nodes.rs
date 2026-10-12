@@ -222,6 +222,15 @@ pub enum Extra {
         reference: Option<i32>,
         recolor: Option<ColorValue>,
     },
+    /// Which rows of a Repeat have nodes, when its rows have one fixed height and so sit in slots.
+    Repeat {
+        /// The rows' height, or 0 when every shown row is built.
+        slot_extent: i16,
+        /// How many rows are shown, each taking a slot.
+        slot_count: u16,
+        first_built_slot: u16,
+        built_slots: u16,
+    },
 }
 
 impl Extra {
@@ -252,6 +261,12 @@ impl Extra {
                 hour_length: None,
                 minute_length: None,
                 second_length: None,
+            },
+            WidgetKind::Repeat => Extra::Repeat {
+                slot_extent: 0,
+                slot_count: 0,
+                first_built_slot: 0,
+                built_slots: 0,
             },
             WidgetKind::Image | WidgetKind::Icon | WidgetKind::Button | WidgetKind::ImageButton => {
                 Extra::Image {
@@ -329,7 +344,7 @@ impl ExtraSlot {
         }
     }
 
-    fn get_mut(&mut self) -> Option<&mut Extra> {
+    pub fn get_mut(&mut self) -> Option<&mut Extra> {
         self.0.as_deref_mut()
     }
 }
@@ -467,7 +482,7 @@ impl Node {
             Property::Visible => replace(&mut settings.visible, number != 0),
             Property::Disabled => replace(&mut settings.disabled, number != 0),
             Property::Opacity => replace(&mut settings.opacity, number.clamp(0, OPAQUE as i64) as u8),
-            Property::Value => replace(&mut settings.value, small),
+            Property::Value | Property::RowCount => replace(&mut settings.value, small),
             Property::Minimum => replace(&mut settings.minimum, small),
             Property::Maximum => replace(&mut settings.maximum, small),
             Property::StartAngle => replace(&mut settings.start_angle, Some(pixels)),
@@ -545,7 +560,7 @@ impl Node {
                 Property::Recolor => color.is_some() && replace(recolor, color),
                 _ => false,
             },
-            Extra::None => false,
+            Extra::Repeat { .. } | Extra::None => false,
         }
     }
 
@@ -619,6 +634,7 @@ pub fn is_mapped(kind: WidgetKind) -> bool {
             | Slider
             | CellGrid
             | AppList
+            | Repeat
             | Line
             | Scale
             | AnalogClock
@@ -636,3 +652,46 @@ pub fn is_mapped(kind: WidgetKind) -> bool {
 #[cfg(test)]
 #[path = "nodes_tests.rs"]
 mod nodes_tests;
+
+// ============================================================================
+// Repeated rows
+// ============================================================================
+
+/// A Repeat's rows when they have one fixed height: the height, how many rows show, and the first built.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RowSlots {
+    pub extent: i32,
+    pub count: i32,
+    pub first_built: i32,
+    pub built: i32,
+}
+
+/// The slots of a Repeat whose rows have one fixed height; none for any other node.
+pub fn row_slots(node: &Node) -> Option<RowSlots> {
+    match *node.extra {
+        Extra::Repeat {
+            slot_extent,
+            slot_count,
+            first_built_slot,
+            built_slots,
+        } if slot_extent > 0 => Some(RowSlots {
+            extent: slot_extent.into(),
+            count: slot_count.into(),
+            first_built: first_built_slot.into(),
+            built: built_slots.into(),
+        }),
+        _ => None,
+    }
+}
+
+/// The slots of `count` rows that can be seen through `clip`, for a Repeat at `top`: first and one past the last.
+pub fn slots_in_view(top: i32, clip: Rect, extent: i32, gap: i32, count: i32) -> (i32, i32) {
+    let pitch = (extent + gap).max(1);
+    let first = ((clip.y - top) - extent + pitch)
+        .div_euclid(pitch)
+        .clamp(0, count);
+    let last = (clip.y + clip.height - top + pitch - 1)
+        .div_euclid(pitch)
+        .clamp(first, count);
+    (first, last)
+}

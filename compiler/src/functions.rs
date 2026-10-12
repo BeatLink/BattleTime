@@ -58,6 +58,9 @@ pub struct FunctionPlan {
     pub called: HashSet<usize>,
     /// Functions that could not be compiled on their own, so they are always inlined.
     pub inline_only: HashSet<usize>,
+    /// The `.map` calls in lists, by where they start, that are unrolled because their row could not
+    /// be drawn as one repeated row.
+    pub unrolled_maps: HashSet<usize>,
 }
 
 impl FunctionPlan {

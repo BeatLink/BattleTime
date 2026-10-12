@@ -155,6 +155,10 @@ pub struct Compiler<'a> {
     pub compiled_functions: Vec<crate::functions::CompiledFunction>,
     /// The values each runtime parameter of a called function was given in this pass.
     pub parameter_ranges: HashMap<String, Range>,
+    /// Whether a `.map` rendered here is a list's rows, which become one Repeat.
+    pub rows_repeat_here: bool,
+    /// The `.map` calls, by where they start, whose row could not be drawn as one repeated row.
+    pub failed_maps: HashSet<usize>,
 }
 
 impl<'a> Compiler<'a> {
@@ -188,6 +192,8 @@ impl<'a> Compiler<'a> {
             failed_functions: HashSet::new(),
             compiled_functions: Vec::new(),
             parameter_ranges: HashMap::new(),
+            rows_repeat_here: false,
+            failed_maps: HashSet::new(),
         }
     }
 

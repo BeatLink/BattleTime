@@ -22,7 +22,7 @@ use crate::drawing::{
     option_row_height, roller_rows, DrawContext, LABEL_SCROLL_STEP_IN_MILLISECONDS,
 };
 use crate::layout::{clips_children, content_height, lay_out};
-use crate::nodes::{Node, PropertyValue};
+use crate::nodes::{row_slots, slots_in_view, Extra, Node, PropertyValue};
 
 #[path = "painting.rs"]
 mod painting;
@@ -447,8 +447,15 @@ impl<'image> AppHost<'image> {
         self.scroll_drag = None;
         self.scroll_move = None;
 
-        let failure = self.build_nodes(now, system);
+        let mut failure = self.build_nodes(now, system);
         self.measure_and_lay_out();
+        for _ in 0..2 {
+            if !self.rows_in_view_moved() {
+                break;
+            }
+            failure = failure.or(self.build_nodes(now, system));
+            self.measure_and_lay_out();
+        }
         self.redraw_whole_screen();
         self.dirty_nodes = 0;
         if let Some(failure) = failure {
@@ -509,8 +516,14 @@ impl<'image> AppHost<'image> {
             }
             if self.nodes[node_index].settings.visible {
                 let children: Vec<u16> = self.tree.children(widget_index).collect();
-                for child in children.into_iter().rev() {
-                    pending.push((child, row, Some(node_index as u8)));
+                let rows = match widget.kind {
+                    WidgetKind::Repeat => self.rows_to_build(node_index, now, system),
+                    _ => alloc::vec![row],
+                };
+                for &child_row in rows.iter().rev() {
+                    for &child in children.iter().rev() {
+                        pending.push((child, child_row, Some(node_index as u8)));
+                    }
                 }
             }
         }
@@ -572,7 +585,7 @@ impl<'image> AppHost<'image> {
         first_failure
     }
 
-    /// One bit for each expression a node of the screen reads.
+    /// One bit for each expression a node of the screen reads, and each repeated row's `visible`.
     fn expressions_on_screen(&self) -> u128 {
         let mut expressions = 0u128;
         for node in &self.nodes {
@@ -586,8 +599,113 @@ impl<'image> AppHost<'image> {
                     }
                 }
             }
+            if let Some(expression) = self.row_visibility_expression(node) {
+                expressions |= 1 << expression;
+            }
         }
         expressions
+    }
+
+    // ------------------------------------------------------------------------
+    // Repeated rows
+    // ------------------------------------------------------------------------
+
+    /// The expression that decides whether each row of a Repeat shows, if one does.
+    fn row_visibility_expression(&self, node: &Node) -> Option<u16> {
+        if node.kind != WidgetKind::Repeat {
+            return None;
+        }
+        let row = self.tree.widget(self.tree.children(node.widget_index).next()?)?;
+        match row.property(Property::Visible)? {
+            PropertySource::Expression(expression) if (expression as usize) < MOST_BOUND_EXPRESSIONS => {
+                Some(expression)
+            }
+            _ => None,
+        }
+    }
+
+    /// The rows of a Repeat to build nodes for: every row, or when its rows have one fixed height,
+    /// only the shown rows that can be seen, noting their slots so layout leaves room for the rest.
+    fn rows_to_build(&mut self, node_index: usize, now: Value, system: &impl SystemValues) -> Vec<u16> {
+        let node = &self.nodes[node_index];
+        let count = node.settings.value.clamp(0, u16::MAX as i32) as u16;
+        let row_widget = self
+            .tree
+            .children(node.widget_index)
+            .next()
+            .and_then(|row| self.tree.widget(row));
+        let extent = match row_widget.and_then(|row| row.property(Property::Height)) {
+            Some(PropertySource::Constant(height)) if height > 0 => height,
+            _ => return (0..count).collect(),
+        };
+        let visibility = row_widget.and_then(|row| row.property(Property::Visible));
+        let shown: Vec<u16> = (0..count)
+            .filter(|&row| self.row_is_shown(visibility, row, now, system))
+            .collect();
+        let node = &self.nodes[node_index];
+        let gap = i32::from(node.settings.gap);
+        let (first, last) = slots_in_view(node.bounds.y, node.clip, extent, gap, shown.len() as i32);
+        if let Some(Extra::Repeat {
+            slot_extent,
+            slot_count,
+            first_built_slot,
+            built_slots,
+        }) = self.nodes[node_index].extra.get_mut()
+        {
+            *slot_extent = extent.clamp(1, i16::MAX as i32) as i16;
+            *slot_count = shown.len() as u16;
+            *first_built_slot = first as u16;
+            *built_slots = (last - first) as u16;
+        }
+        shown[first as usize..last as usize].to_vec()
+    }
+
+    /// Whether one row of a Repeat shows, worked out without building it.
+    fn row_is_shown(
+        &mut self,
+        visibility: Option<PropertySource>,
+        row: u16,
+        now: Value,
+        system: &impl SystemValues,
+    ) -> bool {
+        match visibility {
+            None => true,
+            Some(PropertySource::Constant(value)) => value != 0,
+            Some(PropertySource::Expression(expression)) => {
+                let clocked = Clocked { values: system, now };
+                self.interpreter.set_row(row as Value);
+                self.interpreter
+                    .evaluate_expression(&self.image, expression, &self.state, &clocked)
+                    .is_ok_and(|value| value != 0)
+            }
+            Some(PropertySource::Handler(_)) => false,
+        }
+    }
+
+    /// Whether a Repeat's rows that can be seen are no longer the rows built, after a scroll or a new layout.
+    fn rows_in_view_moved(&self) -> bool {
+        self.nodes.iter().any(|node| {
+            let Some(slots) = row_slots(node) else {
+                return false;
+            };
+            let gap = i32::from(node.settings.gap);
+            let in_view = slots_in_view(node.bounds.y, node.clip, slots.extent, gap, slots.count);
+            in_view != (slots.first_built, slots.first_built + slots.built)
+        })
+    }
+
+    /// Lays the screen out again, then builds the rows that came into view and lays out once more.
+    fn settle_layout(&mut self, now: Value, system: &impl SystemValues) -> Option<AppFailure> {
+        self.update_layout();
+        let mut first_failure = None;
+        for _ in 0..2 {
+            if !self.rows_in_view_moved() {
+                break;
+            }
+            first_failure = first_failure.or(self.build_nodes(now, system));
+            self.update_layout();
+        }
+        first_failure
     }
 
     fn draw_context(&self) -> DrawContext<'_, 'image> {
@@ -625,6 +743,7 @@ impl<'image> AppHost<'image> {
         system: &impl SystemValues,
     ) -> Option<AppFailure> {
         let clocked = Clocked { values: system, now };
+        self.interpreter.set_row(self.nodes[node_index].row as Value);
         let result = self
             .interpreter
             .evaluate_expression(&self.image, expression, &self.state, &clocked);
@@ -682,10 +801,15 @@ impl<'image> AppHost<'image> {
             }
         }
 
-        if self.nodes_out_of_date {
+        let rows_changed = self
+            .nodes
+            .iter()
+            .filter_map(|node| self.row_visibility_expression(node))
+            .any(|expression| expressions & (1 << expression) != 0);
+        if self.nodes_out_of_date || rows_changed {
             first_failure = first_failure.or(self.build_nodes(now, system));
         }
-        self.update_layout();
+        first_failure = first_failure.or(self.settle_layout(now, system));
         if let Some(failure) = first_failure {
             system.app_failed(failure);
         }
@@ -724,8 +848,10 @@ impl<'image> AppHost<'image> {
         now: Value,
         system: &mut impl System,
         may_navigate: bool,
+        row: u16,
     ) -> EventResult {
         self.note_time(now, system);
+        self.interpreter.set_row(row as Value);
         let clocked = Clocked {
             values: &*system,
             now,
@@ -850,6 +976,7 @@ impl<'image> AppHost<'image> {
                     continue;
                 }
                 let clocked = Clocked { values: system, now };
+                self.interpreter.set_row(0);
                 let outcome = self.interpreter.run_handler(
                     &self.image,
                     memory.subscription.handler,
@@ -922,6 +1049,7 @@ impl<'image> AppHost<'image> {
             now,
             system,
             true,
+            0,
         );
         let failures = &mut self.subscriptions[index].failures_in_a_row;
         *failures = match result {
@@ -1099,7 +1227,7 @@ impl<'image> AppHost<'image> {
 
         let Some((node_index, handler_property, handler)) = self.hit_test(property, x, y) else {
             if let Touch::Drag { y, start_y, .. } = touch {
-                return self.scroll(x, y, start_y);
+                return self.scroll(x, y, start_y, now, system);
             }
             return EventResult::NotHandled;
         };
@@ -1112,7 +1240,8 @@ impl<'image> AppHost<'image> {
             let Some(value) = self.changed_value(node_index, x, y) else {
                 return EventResult::NotHandled;
             };
-            return self.run_handler(handler, EventKind::Change, &[value], &[], now, system, true);
+            let row = self.nodes[node_index].row;
+            return self.run_handler(handler, EventKind::Change, &[value], &[], now, system, true, row);
         }
         let touched_value = match self.nodes[node_index].kind {
             WidgetKind::CellGrid => cell_at(&self.nodes[node_index], x, y),
@@ -1124,7 +1253,17 @@ impl<'image> AppHost<'image> {
             return EventResult::NotHandled;
         };
         fields[field_count - 1] = touched_value as Value;
-        self.run_handler(handler, event, &fields[..field_count], &[], now, system, true)
+        let row = self.nodes[node_index].row;
+        self.run_handler(
+            handler,
+            event,
+            &fields[..field_count],
+            &[],
+            now,
+            system,
+            true,
+            row,
+        )
     }
 
     /// Sends a side button press to the screen's `onButton`.
@@ -1261,6 +1400,7 @@ impl<'image> AppHost<'image> {
         let inside_across = x >= node.bounds.x && x < node.bounds.x + node.bounds.width;
         let option =
             dropdown_option_at(node, y).filter(|&option| inside_across && option < node.option_count as i32);
+        let row = node.row;
         let handler = self
             .tree
             .widget(node.widget_index)
@@ -1274,13 +1414,14 @@ impl<'image> AppHost<'image> {
                 now,
                 system,
                 true,
+                row,
             )),
             _ => Some(EventResult::Handled),
         }
     }
 
     /// Scrolls the Scroll or List under a drag, keeping its content inside it.
-    fn scroll(&mut self, x: i32, y: i32, start_y: i32) -> EventResult {
+    fn scroll(&mut self, x: i32, y: i32, start_y: i32, now: Value, system: &mut impl System) -> EventResult {
         let drag = match self.scroll_drag {
             Some(drag) => drag,
             None => {
@@ -1310,6 +1451,12 @@ impl<'image> AppHost<'image> {
             node.scroll_offset = offset as i16;
             self.touch_scrolled = true;
             self.note_scroll(drag.node_index, moved_rows);
+            if self.rows_in_view_moved() {
+                let failure = self.build_nodes(now, system).or(self.settle_layout(now, system));
+                if let Some(failure) = failure {
+                    system.app_failed(failure);
+                }
+            }
         }
         EventResult::Handled
     }
@@ -1325,7 +1472,17 @@ impl<'image> AppHost<'image> {
             .and_then(|widget| widget.property(Property::OnScrollEnd));
         Some(match handler {
             Some(PropertySource::Handler(handler)) => {
-                self.run_handler(handler, EventKind::ScrollEnd, &[offset], &[], now, system, true)
+                let row = self.nodes[drag.node_index].row;
+                self.run_handler(
+                    handler,
+                    EventKind::ScrollEnd,
+                    &[offset],
+                    &[],
+                    now,
+                    system,
+                    true,
+                    row,
+                )
             }
             _ => EventResult::Handled,
         })
@@ -1349,7 +1506,7 @@ impl<'image> AppHost<'image> {
             _ => return EventResult::NotHandled,
         };
         let event = EventKind::for_property(property).unwrap_or(EventKind::Show);
-        self.run_handler(handler, event, fields, &[], now, system, may_navigate)
+        self.run_handler(handler, event, fields, &[], now, system, may_navigate, 0)
     }
 
     fn navigate(&mut self, navigation: Navigation, now: Value, system: &mut impl System) {
@@ -1490,6 +1647,15 @@ impl<'image> AppHost<'image> {
     /// The text a widget of the open screen shows.
     pub fn widget_text(&self, widget_index: u16) -> Option<&str> {
         Some(self.node(widget_index)?.text())
+    }
+
+    /// The text each node of a widget shows: one for most widgets, one for each built row of a repeated list.
+    pub fn widget_texts(&self, widget_index: u16) -> Vec<&str> {
+        self.nodes
+            .iter()
+            .filter(|node| node.widget_index == widget_index)
+            .map(|node| node.text())
+            .collect()
     }
 
     /// The rows a list widget such as an AppList draws itself, each with its text; empty for other widgets.

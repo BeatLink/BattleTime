@@ -2759,11 +2759,11 @@ fn working_memory_stays_inside_the_budget() {
         "interpreter {interpreter} B, handler outcome {handler_outcome} B, bindings {bindings} B, state {state} B"
     );
 
-    assert!(interpreter <= 2_150);
+    assert!(interpreter <= 2_160);
     assert!(handler_outcome <= 300);
     assert!(bindings <= 2_100);
     assert!(state <= 2_600);
-    assert!(interpreter + bindings + state <= 6_650);
+    assert!(interpreter + bindings + state <= 6_660);
 }
 
 #[test]
@@ -2848,4 +2848,51 @@ fn an_image_may_only_name_a_library_image() {
     assert_eq!(library_image_reference_bytes(300), [2, 0, 44, 1]);
     assert_eq!(library_image_named_by(&[2, 0, 44]), None);
     assert_eq!(library_image_named_by(&[2, 1, 44, 1]), None);
+}
+
+#[test]
+fn read_row_pushes_the_row_the_code_runs_for() {
+    let encoded = Instruction::ReadRow.encode();
+    let mut writer = ImageWriter::new("rows", "Rows", AppKind::App, 1);
+    let row_number = writer.expression(vec![0x2D]);
+    let bytes = writer.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let state = AppState::new(&image).unwrap();
+    let mut interpreter = Interpreter::new();
+    let system = FakeSystem::default();
+
+    let outside = interpreter.evaluate_expression(&image, row_number, &state, &system);
+    interpreter.set_row(7);
+    let inside = interpreter.evaluate_expression(&image, row_number, &state, &system);
+
+    assert_eq!(encoded.as_bytes(), &[0x2D]);
+    assert_eq!(verify(&image), Ok(()));
+    assert_eq!((outside, inside), (Ok(0), Ok(7)));
+}
+
+#[test]
+fn a_repeat_holds_exactly_one_row() {
+    for child_count in [0u8, 2] {
+        let mut writer = ImageWriter::new("rows", "Rows", AppKind::App, 1);
+        writer.widget(WidgetKind::Column, 1, &[]);
+        writer.widget(
+            WidgetKind::Repeat,
+            child_count,
+            &[(Property::RowCount, PropertySource::Constant(3))],
+        );
+        for _ in 0..child_count {
+            writer.widget(WidgetKind::Label, 0, &[]);
+        }
+        let bytes = writer.build();
+
+        assert_eq!(
+            verify(&AppImage::parse(&bytes).unwrap()),
+            Err(ImageError::BadWidget {
+                widget: 1,
+                problem: WidgetProblem::RepeatWithoutOneChild
+            })
+        );
+    }
+    assert!(Property::RowCount.belongs_to(WidgetKind::Repeat));
+    assert!(!Property::RowCount.belongs_to(WidgetKind::Column));
 }

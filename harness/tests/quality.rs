@@ -17,7 +17,7 @@ const MOST_ID_BYTES: usize = 32;
 const OPEN_APP_BYTES: usize = 12 * 1024;
 
 /// The runtime's measured working memory in that RAM: interpreter, bindings, state and section reader.
-const RUNTIME_WORKING_BYTES: usize = 2_144 + 2_056 + 2_440 + 256;
+const RUNTIME_WORKING_BYTES: usize = 2_152 + 2_056 + 2_440 + 256;
 
 /// The expression bytecode that fits beside the runtime's working memory.
 const MOST_EXPRESSION_BYTES: usize = OPEN_APP_BYTES - RUNTIME_WORKING_BYTES;
@@ -174,7 +174,7 @@ fn problems_with(package: &Package) -> Vec<String> {
 // ============================================================================
 
 /// Rules some packages break today, each a real gap to fix, so the rest stay checked; see docs/testing.md.
-const KNOWN_GAPS: [(&str, &str); 1] = [("apps/alarm", "its screen \"main\" has 67 widgets")];
+const KNOWN_GAPS: [(&str, &str); 0] = [];
 
 fn is_known_gap(package: &Package, problem: &str) -> bool {
     KNOWN_GAPS

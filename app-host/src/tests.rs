@@ -1720,3 +1720,174 @@ fn showing_a_hidden_widget_builds_its_nodes_and_hiding_it_frees_them() {
     assert_eq!(screen.count_in(line, text_color), 0);
     assert!(system.failures.is_empty());
 }
+
+// ============================================================================
+// Repeated rows
+// ============================================================================
+
+/// A Scroll of 12 repeated rows, each a button reading its row number, shown while it is below `count`.
+///
+/// A tap on a row vibrates for as many milliseconds as its row; the button under the list sets `count` to 2.
+fn repeated_rows_image(row_height: Option<i32>) -> Vec<u8> {
+    use Instruction::*;
+
+    let mut writer = ImageWriter::new("rows", "Rows", AppKind::App, 1);
+    let count = writer.variable("count", ValueType::Int, false, 12);
+    let main = writer.string("main");
+    let fewer = writer.string("Fewer");
+    let row_text = writer.expression(code(|code| {
+        code.emit(ReadRow).emit(FormatNumber(1));
+    }));
+    let row_shows = writer.expression(code(|code| {
+        code.emit(ReadRow).emit(ReadState(count)).emit(Less);
+    }));
+    let report_row = writer.handler(code(|code| {
+        code.emit(ReadRow).emit(Effect(EffectKind::Vibrate));
+    }));
+    let show_two = writer.handler(code(|code| {
+        code.emit(PushSmall(2)).emit(WriteState(count));
+    }));
+    let constant = PropertySource::Constant;
+    writer.widget(
+        WidgetKind::Column,
+        2,
+        &[(Property::ScreenName, constant(main as i32))],
+    );
+    writer.widget(
+        WidgetKind::Scroll,
+        1,
+        &[(Property::Grow, constant(1)), (Property::Gap, constant(4))],
+    );
+    writer.widget(
+        WidgetKind::Repeat,
+        1,
+        &[(Property::RowCount, constant(12)), (Property::Gap, constant(4))],
+    );
+    let mut row = alloc::vec![
+        (Property::Text, PropertySource::Expression(row_text)),
+        (Property::Visible, PropertySource::Expression(row_shows)),
+        (Property::OnClick, PropertySource::Handler(report_row)),
+    ];
+    if let Some(height) = row_height {
+        row.push((Property::Height, constant(height)));
+    }
+    writer.widget(WidgetKind::Button, 0, &row);
+    writer.widget(
+        WidgetKind::Button,
+        0,
+        &[
+            (Property::Text, constant(fewer as i32)),
+            (Property::Height, constant(BUTTON_HEIGHT)),
+            (Property::OnClick, PropertySource::Handler(show_two)),
+        ],
+    );
+    writer.build()
+}
+
+const ROW: u16 = 3;
+const FEWER_BUTTON: u16 = 4;
+
+/// The rows that have nodes, by the text each shows.
+fn built_rows(host: &AppHost) -> Vec<String> {
+    host.widget_texts(ROW).into_iter().map(String::from).collect()
+}
+
+#[test]
+fn only_the_rows_in_view_are_built() {
+    let image = repeated_rows_image(Some(40));
+    let mut system = FakeSystem::default();
+
+    let host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    let rows = built_rows(&host);
+    assert_eq!(rows.first().map(String::as_str), Some("0"));
+    assert!(rows.len() < 12, "{rows:?}");
+    assert!(host.node_count() < 12);
+    assert!(system.failures.is_empty());
+}
+
+#[test]
+fn scrolling_builds_the_rows_that_come_into_view_and_drops_the_rest() {
+    let image = repeated_rows_image(Some(40));
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let nodes_at_the_top = host.node_count();
+
+    host.touch(
+        Touch::Drag {
+            x: 120,
+            y: 0,
+            start_x: 120,
+            start_y: 200,
+        },
+        START_TIME,
+        &mut system,
+    );
+    host.touch(
+        Touch::Drag {
+            x: 120,
+            y: -400,
+            start_x: 120,
+            start_y: 200,
+        },
+        START_TIME,
+        &mut system,
+    );
+
+    let rows = built_rows(&host);
+    assert_eq!(rows.last().map(String::as_str), Some("11"));
+    assert!(!rows.contains(&"0".to_string()), "{rows:?}");
+    assert!(host.node_count() <= nodes_at_the_top + 1);
+}
+
+#[test]
+fn a_tap_on_a_row_runs_its_handler_for_that_row() {
+    let image = repeated_rows_image(Some(40));
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    host.touch(Touch::Click { x: 120, y: 44 + 20 }, START_TIME, &mut system);
+
+    assert_eq!(system.effects, [(EffectKind::Vibrate, 1, None)]);
+}
+
+#[test]
+fn rows_that_stop_showing_give_up_their_slots() {
+    let image = repeated_rows_image(Some(40));
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    click_on(&mut host, FEWER_BUTTON, START_TIME, &mut system);
+
+    assert_eq!(built_rows(&host), ["0", "1"]);
+    let (fewer, _) = host.widget_bounds(FEWER_BUTTON).unwrap();
+    assert_eq!(fewer.y, 240 - BUTTON_HEIGHT);
+}
+
+#[test]
+fn rows_of_no_fixed_height_are_all_built() {
+    let image = repeated_rows_image(None);
+    let mut system = FakeSystem::default();
+
+    let host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    assert_eq!(built_rows(&host).len(), 12);
+}
+
+#[test]
+fn the_rows_in_view_are_worked_out_from_the_slots() {
+    use crate::nodes::slots_in_view;
+    let clip = Rect {
+        x: 0,
+        y: 0,
+        width: 240,
+        height: 100,
+    };
+
+    assert_eq!(slots_in_view(0, clip, 40, 4, 12), (0, 3));
+    assert_eq!(slots_in_view(-44, clip, 40, 4, 12), (1, 4));
+    assert_eq!(slots_in_view(-40, clip, 40, 4, 12), (1, 4));
+    assert_eq!(slots_in_view(-39, clip, 40, 4, 12), (0, 4));
+    assert_eq!(slots_in_view(-1000, clip, 40, 4, 12), (12, 12));
+    assert_eq!(slots_in_view(0, clip, 40, 4, 2), (0, 2));
+}

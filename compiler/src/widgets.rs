@@ -1,5 +1,6 @@
 //! Turns each screen's JSX into a fixed widget tree: components are inlined, `{cond && <W/>}`
-//! becomes the widget's `visible` property, and `.map` over a fixed-length array is unrolled.
+//! becomes the widget's `visible` property, and `.map` over a fixed-length array is unrolled, or,
+//! directly inside a List or Scroll, becomes one Repeat whose row reads its number with `ReadRow`.
 
 use std::rc::Rc;
 
@@ -714,7 +715,6 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    /// `array.map((element, index) => <Widget/>)`, unrolled once for each element.
     /// Whether a `.map` callback returns widgets.
     fn callback_makes_widgets(&self, callback: &'a Expression<'a>, scope: &Rc<Scope<'a>>) -> bool {
         match self.resolve_reference(callback, scope) {
@@ -726,7 +726,126 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    /// `array.map((element, index) => <Widget/>)`: one Repeat inside a List or Scroll, otherwise
+    /// unrolled once for each element.
     fn render_map(
+        &mut self,
+        call: &'a CallExpression<'a>,
+        scope: &Rc<Scope<'a>>,
+        conditions: &[Condition<'a>],
+        out: &mut Rendered<'a>,
+    ) -> Compiled<()> {
+        let may_repeat = std::mem::take(&mut self.rows_repeat_here);
+        let result = match may_repeat {
+            true => self.render_repeat(call, scope, conditions, out),
+            false => Ok(false),
+        };
+        let result = match result {
+            Ok(true) => Ok(()),
+            Ok(false) => self.render_unrolled_map(call, scope, conditions, out),
+            Err(error) => Err(error),
+        };
+        self.rows_repeat_here = may_repeat;
+        result
+    }
+
+    /// What a `.map` callback's parameters stand for in a repeated row, and how many rows there are;
+    /// none when the map must be unrolled.
+    fn row_arguments(
+        &mut self,
+        call: &'a CallExpression<'a>,
+        scope: &Rc<Scope<'a>>,
+    ) -> Option<(u16, FunctionReference<'a>, Vec<Reference<'a>>)> {
+        let callback = |compiler: &Self, callback: &'a Expression<'a>| match compiler
+            .resolve_reference(callback, scope)
+        {
+            Some(Reference::Function(function)) => Some(function),
+            _ => None,
+        };
+        if let Some((length, callback_expression)) = self.array_from_length(call, scope) {
+            let count = u16::try_from(length).ok()?;
+            let function = callback(self, callback_expression)?;
+            let row = Reference::Row { count };
+            return Some((
+                count,
+                function,
+                vec![Reference::Constant(Constant::Undefined), row],
+            ));
+        }
+        let Expression::StaticMemberExpression(member) = strip_parentheses(&call.callee) else {
+            return None;
+        };
+        let function = callback(self, call.arguments.first()?.as_expression()?)?;
+        let (count, element) = match self.evaluate_constant(&member.object, scope) {
+            Some(Constant::Array(elements)) => {
+                let counts_up = elements
+                    .iter()
+                    .enumerate()
+                    .all(|(index, element)| *element == Constant::Number(index as i64));
+                if !counts_up {
+                    return None;
+                }
+                let count = u16::try_from(elements.len()).ok()?;
+                (count, Reference::Row { count })
+            }
+            Some(_) => return None,
+            None => match self.resolve_reference(&member.object, scope)? {
+                Reference::RecordArrayValue(fields) => {
+                    let length = fields
+                        .first()
+                        .map_or(0, |(_, variable)| self.slots[*variable as usize].length);
+                    let index = crate::scope::ElementIndex::Row;
+                    (length, Reference::RecordElement { fields, index })
+                }
+                Reference::StateArray(variable) => {
+                    let length = self.slots[variable as usize].length;
+                    let index = crate::scope::ElementIndex::Row;
+                    (length, Reference::StateElementAt { variable, index })
+                }
+                _ => return None,
+            },
+        };
+        (count > 0).then(|| (count, function, vec![element, Reference::Row { count }]))
+    }
+
+    /// A `.map` as one Repeat holding its callback's widget once; false when it must be unrolled.
+    ///
+    /// A callback that cannot be drawn as one row with its number read while running, such as one
+    /// that needs the element while compiling, is noted, and the next pass unrolls it.
+    fn render_repeat(
+        &mut self,
+        call: &'a CallExpression<'a>,
+        scope: &Rc<Scope<'a>>,
+        conditions: &[Condition<'a>],
+        out: &mut Rendered<'a>,
+    ) -> Compiled<bool> {
+        let key = call.span.start as usize;
+        if self.function_plan.unrolled_maps.contains(&key) {
+            return Ok(false);
+        }
+        let Some((count, function, arguments)) = self.row_arguments(call, scope) else {
+            return Ok(false);
+        };
+        let mut row = Rendered::default();
+        let rendered = self.render_function(&function, arguments, conditions, false, &mut row, call.span);
+        if rendered.is_err() || row.widgets.len() != 1 || !row.text.is_empty() {
+            self.failed_maps.insert(key);
+            rendered?;
+            return fail(
+                call.span,
+                "this list's row is drawn once for each element instead",
+            );
+        }
+        out.widgets.push(WidgetNode {
+            kind: WidgetKind::Repeat,
+            properties: vec![(Property::RowCount, PropertySource::Constant(count as i32))],
+            children: row.widgets,
+        });
+        Ok(true)
+    }
+
+    /// `array.map((element, index) => <Widget/>)`, unrolled once for each element.
+    fn render_unrolled_map(
         &mut self,
         call: &'a CallExpression<'a>,
         scope: &Rc<Scope<'a>>,
@@ -1098,7 +1217,24 @@ impl<'a> Compiler<'a> {
         }
 
         let mut rendered = Rendered::default();
-        self.render_children(&element.children, scope, &[], &mut rendered)?;
+        let lists_rows = matches!(kind, WidgetKind::List | WidgetKind::Scroll);
+        let outer_rows_repeat_here = std::mem::replace(&mut self.rows_repeat_here, lists_rows);
+        let children = self.render_children(&element.children, scope, &[], &mut rendered);
+        self.rows_repeat_here = outer_rows_repeat_here;
+        children?;
+        if lists_rows {
+            // A Repeat's rows sit in the list as its own children would, with its gap and alignment.
+            let spacing: Vec<(Property, PropertySource)> = properties
+                .iter()
+                .filter(|(property, _)| matches!(property, Property::Gap | Property::AlignItems))
+                .copied()
+                .collect();
+            for child in &mut rendered.widgets {
+                if child.kind == WidgetKind::Repeat {
+                    child.properties.extend(spacing.iter().copied());
+                }
+            }
+        }
         if !rendered.text.is_empty() {
             if !Property::Text.belongs_to(kind) {
                 return fail(
@@ -1527,3 +1663,7 @@ impl<'a> Compiler<'a> {
         Ok(Some(PropertySource::Expression(self.add_expression(code))))
     }
 }
+
+#[cfg(test)]
+#[path = "repeat_tests.rs"]
+mod repeat_tests;

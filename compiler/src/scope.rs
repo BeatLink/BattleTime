@@ -167,6 +167,10 @@ pub enum Reference<'a> {
     },
     /// An object whose fields are references, such as a component's props.
     Object(Rc<Vec<(String, Reference<'a>)>>),
+    /// The number of the row of a repeated list being drawn, from 0 to one less than `count`.
+    Row {
+        count: u16,
+    },
     /// JSX children passed to a component.
     Children {
         children: &'a [JSXChild<'a>],
@@ -179,6 +183,8 @@ pub enum Reference<'a> {
 pub enum ElementIndex<'a> {
     Constant(i64),
     Local(u8),
+    /// The row of a repeated list being drawn.
+    Row,
     Expression {
         expression: &'a Expression<'a>,
         scope: Rc<Scope<'a>>,

@@ -165,7 +165,7 @@ when a screen opens. Each one takes the common props below plus its own.
 | `Grid` | container, grid layout | Children in rows and columns, such as a keypad. |
 | `Stack` | container | Children on top of each other, such as text over an image. |
 | `Scroll` | scroll view | Content taller than the screen. |
-| `List` | list | A scrolling list of rows, from a fixed-length array. |
+| `List` | list | A scrolling list of rows, from a fixed-length array. A `.map` inside it is one repeated row, so a long list costs an app one row of code, and when the row has a fixed `height` the watch builds only the rows on screen. |
 | `Pages` | tile view | Full-screen pages the user swipes between. |
 | `Tabs` | tab view | Pages with a row of tabs. |
 

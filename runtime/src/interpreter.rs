@@ -195,6 +195,8 @@ pub struct Interpreter {
     local_count: usize,
     frames: [Frame; MOST_CALL_DEPTH],
     frame_count: usize,
+    /// The row of a Repeat that code runs for, which `ReadRow` pushes.
+    row: Value,
     text_buffer: [u8; TEXT_BUFFER_BYTES],
     text_used: usize,
     scratch: [u8; SCRATCH_BYTES],
@@ -227,6 +229,7 @@ impl Interpreter {
                 result_count: 0,
             }; MOST_CALL_DEPTH],
             frame_count: 0,
+            row: 0,
             text_buffer: [0; TEXT_BUFFER_BYTES],
             text_used: 0,
             scratch: [0; SCRATCH_BYTES],
@@ -238,6 +241,11 @@ impl Interpreter {
             }; MOST_CHANGED_VARIABLES],
             copy_count: 0,
         }
+    }
+
+    /// Sets the row of a Repeat that the next calls run for; 0 outside one.
+    pub fn set_row(&mut self, row: Value) {
+        self.row = row;
     }
 
     /// Works out an expression's value. A text result stays readable until the next call.
@@ -583,6 +591,7 @@ impl Interpreter {
             LoopStart => {}
             LoopBack(distance) => return Ok(Some(JumpTo::Back(distance))),
             Call(function) => return Ok(Some(JumpTo::Call(function))),
+            ReadRow => self.push(self.row)?,
 
             TimePart(part) => {
                 let time = self.local_time(call)?;

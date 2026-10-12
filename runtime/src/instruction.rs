@@ -420,6 +420,8 @@ pub enum Instruction {
     LoopBack(u16),
     /// Runs one of the app's functions, which takes its arguments from the stack and leaves its result.
     Call(u8),
+    /// Pushes the number of the row of a Repeat the code runs for, or 0 outside one.
+    ReadRow,
     TimePart(TimePart),
     /// Takes an instant and pushes the start of its local minute, hour or day.
     StartOf(TimeUnit),
@@ -468,7 +470,7 @@ impl Instruction {
         use Instruction::*;
         let (taken, left) = match self {
             PushSmall(_) | PushInt(_) | PushLong(_) | PushNone | PushText(_) | ReadState(_)
-            | ReadSystem(_) | ReadEvent(_) | ReadEventText(_) => (0, 1),
+            | ReadSystem(_) | ReadEvent(_) | ReadEventText(_) | ReadRow => (0, 1),
             ReadSystemElement(_) => (1, 1),
             Duplicate => (1, 2),
             Drop | JumpIfFalse(_) | WriteState(_) | WriteLocal(_) | FillArray(_) => (1, 0),
@@ -576,6 +578,7 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
             2,
         ),
         0x2C => (Call(byte()?), 1),
+        0x2D => (ReadRow, 0),
         0x30 => (
             TimePart(self::TimePart::from_byte(byte()?).ok_or(unknown(byte()?))?),
             1,
@@ -713,6 +716,7 @@ impl Instruction {
                 put(&distance.to_le_bytes());
             }
             Call(function) => put(&[0x2C, function]),
+            ReadRow => put(&[0x2D]),
             TimePart(part) => put(&[0x30, part as u8]),
             StartOf(unit) => put(&[0x31, unit as u8]),
             FormatNumber(minimum_digits) => put(&[0x40, minimum_digits]),

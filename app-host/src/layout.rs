@@ -13,7 +13,7 @@ use neotime_runtime::WidgetKind;
 use rlvgl_core::widget::Rect;
 
 use crate::fonts::{line_height, text_width};
-use crate::nodes::{inset, Align, Length, LongMode, Node, Placement};
+use crate::nodes::{inset, row_slots, Align, Length, LongMode, Node, Placement};
 use crate::text::{wrapped_line_count, wrapped_width};
 
 // ============================================================================
@@ -60,7 +60,7 @@ fn flow_of(kind: WidgetKind) -> Flow {
         Stack | Button => Flow::OnTop,
         Grid => Flow::Grid,
         // Pages and Tabs have no layout of their own yet, so they stack their children like a column.
-        Column | Scroll | List | Pages | Tabs | ClickArea => Flow::Down,
+        Column | Scroll | List | Pages | Tabs | ClickArea | Repeat => Flow::Down,
         Arc => Flow::DownCentered,
         _ => Flow::Nothing,
     }
@@ -167,7 +167,18 @@ fn is_in_flow(node: &Node) -> bool {
 }
 
 fn flowing(nodes: &[Box<Node>], index: usize) -> impl Iterator<Item = usize> + '_ {
-    children(nodes, index).filter(|&child| is_in_flow(&nodes[child]))
+    children(nodes, index).filter(|&child| is_in_flow(&nodes[child]) && !is_empty_repeat(nodes, child))
+}
+
+/// A Repeat with no row shown takes no space, so the widgets around it close up as if it were not there.
+fn is_empty_repeat(nodes: &[Box<Node>], index: usize) -> bool {
+    match row_slots(&nodes[index]) {
+        Some(slots) => slots.count == 0,
+        None => {
+            nodes[index].kind == WidgetKind::Repeat
+                && !children(nodes, index).any(|row| nodes[row].settings.visible)
+        }
+    }
 }
 
 /// The total of the gaps between `count` children.
@@ -178,6 +189,13 @@ fn gaps(count: i32, gap: i32) -> i32 {
 /// The size a widget wants, padding included and margin left out, within `available_width` if known.
 fn natural_size(nodes: &[Box<Node>], index: usize, available_width: Option<i32>) -> Size {
     let node = &nodes[index];
+    if let Some(slots) = row_slots(node) {
+        let gap = i32::from(node.settings.gap);
+        return Size {
+            width: available_width.unwrap_or(0),
+            height: slots.count * slots.extent + gaps(slots.count, gap),
+        };
+    }
     let padding = 2 * i32::from(node.settings.padding);
     let own_width = match node.settings.width {
         Some(Length::Pixels(pixels)) => Some(pixels.into()),
@@ -319,6 +337,9 @@ fn place(nodes: &mut [Box<Node>], index: usize, bounds: Rect, parent_shown: bool
     if clips_children(node.kind) {
         inner.y -= node.scroll_offset as i32;
     }
+    if let Some(slots) = row_slots(node) {
+        inner.y += slots.first_built * (slots.extent + i32::from(node.settings.gap));
+    }
 
     match flow_of(node.kind) {
         Flow::Down => place_flow(nodes, index, inner, true, false, shown, children_clip),
@@ -420,6 +441,26 @@ fn place_flow(
     while child < nodes[index].subtree_end as usize {
         let next_child = nodes[child].subtree_end as usize;
         if !is_in_flow(&nodes[child]) {
+            child = next_child;
+            continue;
+        }
+        if is_empty_repeat(nodes, child) {
+            let here = if is_down {
+                Rect {
+                    x: inner.x,
+                    y: inner.y + cursor,
+                    width: inner.width,
+                    height: 0,
+                }
+            } else {
+                Rect {
+                    x: inner.x + cursor,
+                    y: inner.y,
+                    width: 0,
+                    height: inner.height,
+                }
+            };
+            place(nodes, child, here, shown, clip);
             child = next_child;
             continue;
         }

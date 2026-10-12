@@ -109,7 +109,7 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
 
     // A first pass inlines every function and counts what each costs, to choose which to call.
     let mut plan = FunctionPlan::default();
-    match run_pass(program, components, assumed.clone(), &directory, &plan) {
+    match run_pass_unrolling(program, components, assumed.clone(), &directory, &mut plan) {
         Ok(compiler) => plan.choose(&compiler.inline_costs),
         Err(error) => {
             return Output {
@@ -124,7 +124,7 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
         let mut still_growing: Vec<String> = Vec::new();
         for _ in 0..MOST_PASSES {
             let (observed, plan_changed) =
-                match run_pass(program, components, assumed.clone(), &directory, &plan) {
+                match run_pass_unrolling(program, components, assumed.clone(), &directory, &mut plan) {
                     Ok(compiler) => (
                         compiler.observed_ranges(),
                         plan.give_up_on(&compiler.failed_functions),
@@ -170,12 +170,12 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
             *range = Range::ANY;
         }
     }
-    let mut last_pass = run_pass(program, components, assumed.clone(), &directory, &plan);
+    let mut last_pass = run_pass_unrolling(program, components, assumed.clone(), &directory, &mut plan);
     while let Ok(compiler) = &last_pass {
         if !plan.give_up_on(&compiler.failed_functions) {
             break;
         }
-        last_pass = run_pass(program, components, assumed.clone(), &directory, &plan);
+        last_pass = run_pass_unrolling(program, components, assumed.clone(), &directory, &mut plan);
     }
     match last_pass {
         Ok(mut compiler) => {
@@ -220,12 +220,37 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
     }
 }
 
+/// Runs a pass, and again with a list's `.map` unrolled each time its row cannot be one repeated row.
+fn run_pass_unrolling<'a>(
+    program: &'a oxc_ast::ast::Program<'a>,
+    components: &'a oxc_ast::ast::Program<'a>,
+    assumed: HashMap<String, Range>,
+    directory: &Option<PathBuf>,
+    plan: &mut FunctionPlan,
+) -> Result<Compiler<'a>, Diagnostic> {
+    loop {
+        let mut failed_maps = std::collections::HashSet::new();
+        match run_pass(
+            program,
+            components,
+            assumed.clone(),
+            directory,
+            plan,
+            &mut failed_maps,
+        ) {
+            Err(_) if !failed_maps.is_subset(&plan.unrolled_maps) => plan.unrolled_maps.extend(failed_maps),
+            result => return result,
+        }
+    }
+}
+
 fn run_pass<'a>(
     program: &'a oxc_ast::ast::Program<'a>,
     components: &'a oxc_ast::ast::Program<'a>,
     assumed: HashMap<String, Range>,
     directory: &Option<PathBuf>,
     plan: &FunctionPlan,
+    failed_maps: &mut std::collections::HashSet<usize>,
 ) -> Result<Compiler<'a>, Diagnostic> {
     let mut compiler = Compiler::new(assumed);
     compiler.source_directory = directory.clone();
@@ -241,7 +266,9 @@ fn run_pass<'a>(
         )
     })?;
     compiler.components_module = Some(components_module);
-    compiler.compile_app(module, program.span)?;
+    let compiled = compiler.compile_app(module, program.span);
+    failed_maps.extend(compiler.failed_maps.iter().copied());
+    compiled?;
     Ok(compiler)
 }
 

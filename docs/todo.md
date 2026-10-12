@@ -199,6 +199,10 @@ the ones above it.
   library versions. A function that changes state takes the variables by number, as `copy array`
   names its arrays. One-line helpers such as `(x + 1) % n` stay inlined, since a call costs as
   many bytes.
+- [ ] **Repeated rows outside lists.** A `.map` inside a `List` or `Scroll` is one `Repeat`; in
+  a `Column`, `Row` or `Grid` it is still unrolled, as in the settings choices, the weather
+  forecast and the alarm's weekday buttons. Laying a Repeat's rows out as its parent's own
+  children, so `justify` and grid columns treat them as before, would let those share one row too.
 - [ ] **Native widgets with their logic built in.** Every widget node costs 160 to 240 B of the UI
   heap wherever its record lives, so a composite drawn by the firmware as one node saves more RAM
   than a library component. In the firmware, which has 112 KB free:

@@ -254,6 +254,7 @@ impl<'a> Compiler<'a> {
             Some(Constant::Number(index)) => ElementIndex::Constant(index),
             _ => match self.resolve_reference(expression, scope) {
                 Some(Reference::Local { index, .. }) => ElementIndex::Local(index),
+                Some(Reference::Row { .. }) => ElementIndex::Row,
                 _ => ElementIndex::Expression {
                     expression,
                     scope: scope.clone(),
@@ -603,6 +604,11 @@ impl<'a> Compiler<'a> {
                 emitter.emit(Instruction::ReadState(variable), span)?;
                 Ok(Typed::with_range(self.slots[variable as usize].value_type, self.read_range(variable)))
             }
+            Reference::Row { count } => {
+                emitter.emit(Instruction::ReadRow, span)?;
+                let highest = (count as i64 - 1).max(0);
+                Ok(Typed::with_range(Type::NUMBER, Range { lowest: 0, highest }))
+            }
             Reference::ProgressionElement { index_local, start, step } => {
                 emitter.emit(Instruction::ReadLocal(index_local), span)?;
                 if step != 1 {
@@ -673,6 +679,7 @@ impl<'a> Compiler<'a> {
         match index {
             ElementIndex::Constant(index) => self.emit_number(emitter, *index, span),
             ElementIndex::Local(local) => emitter.emit(Instruction::ReadLocal(*local), span),
+            ElementIndex::Row => emitter.emit(Instruction::ReadRow, span),
             ElementIndex::Expression { expression, scope } => {
                 self.compile_value_of_type(emitter, expression, scope, Type::NUMBER)?;
                 Ok(())
