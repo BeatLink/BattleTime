@@ -20,3 +20,4 @@ neotime-storage = { path = "../storage" }
 
 [dev-dependencies]
 neotime-runtime = { path = "../../runtime", features = ["writer"] }
+neotime-settings = { path = "../settings" }

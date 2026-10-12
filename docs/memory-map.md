@@ -23,14 +23,41 @@ python3 tools/draw_memory_maps.py
 |---|---|---|---|
 | Bootloader | `0x00000` | 16 KB | The `embassy-boot` bootloader with its status screen, about 14 KB of it used. There is no SoftDevice and no MBR. |
 | Boot state | `0x04000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
-| Firmware | `0x05000` | 400 KB | The running firmware. It is linked to start here. It uses 289 KB. No app, face, icon or font is built in. |
+| Firmware | `0x05000` | 400 KB | The running firmware. It is linked to start here. No app, face, icon or font is built in; [What fills the firmware](#what-fills-the-firmware) shows what is. |
 | Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, the app host's text fonts (47,919 B; the library with them is 74,333 B), components, common functions and the preset themes. No apps are kept here; they live in `/apps` on the external flash. An installed library starts with an 8-byte header, `NTLB` and its length, which `neotime-packages` writes. See [app-runtime.md](app-runtime.md#the-shared-library). |
 
-Inside the firmware, 48 KB is set aside for the app runtime: the interpreter, the image verifier,
-the scheduler and the code that turns an app's widget tree into rlvgl widgets. It is part of the
-firmware image, so it runs in place from the internal flash, with the chip's instruction cache
-turned on, and never needs copying into RAM. The figure is a planned budget, to be replaced by
-the measured size once the runtime is built. See [app-runtime.md](app-runtime.md#the-runtime).
+
+### What fills the firmware
+
+Measured on the release builds of `firmware/` by `tools/measure_memory.py` (see
+[Measuring again](#measuring-again)). Each symbol counts towards the crate that owns it; the
+firmware is linked with LTO into a single object, so the crate comes from the symbol's name, and
+the files the firmware embeds, such as the Bosch configuration, are found by their bytes.
+
+<!-- measure_memory:firmware -->
+| Component | Full build | Recovery build |
+|---|---:|---:|
+| Firmware (start-up, shell, tasks) | 63.7 KB | 35.8 KB |
+| App host (with `neotime-ui` and rlvgl) | 53.0 KB | 0.0 KB |
+| Bluetooth (controller and TrouBLE) | 41.8 KB | 41.8 KB |
+| core, alloc and compiler builtins | 23.2 KB | 10.4 KB |
+| App runtime | 22.8 KB | 0.1 KB |
+| Storage (littlefs) | 21.5 KB | 20.9 KB |
+| Embassy, allocator and Cortex-M | 17.3 KB | 15.6 KB |
+| Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
+| Display, graphics and drivers | 7.9 KB | 3.4 KB |
+| Settings and companion (with serde) | 4.1 KB | 2.6 KB |
+| Packages | 2.7 KB | 2.0 KB |
+| Updates (DFU) | 2.4 KB | 2.4 KB |
+| BLEFS file service | 2.1 KB | 2.2 KB |
+| Other constants and padding | 14.5 KB | 7.1 KB |
+| **Used** | **289.0 KB** | **144.2 KB** |
+| Free of 400 KB | 111.0 KB | 255.8 KB |
+<!-- /measure_memory:firmware -->
+
+The accelerometer's configuration is the largest piece of data left in it; each watch could build
+in only its own chip's. The recovery build (`--features recovery`) leaves out the shell, so the app
+host and the runtime go with it.
 
 The watch face, the launcher and the apps live in `/apps` on the external flash, and the icons and
 the app host's text fonts in the shared-library region; none is inside the firmware. See
@@ -56,6 +83,39 @@ The chip is an XT25F32B, on the same SPI bus as the screen.
 Anything that changes often, such as settings, notifications and app state, is kept here, because
 littlefs spreads its writes across the chip. The internal flash changes only when the firmware or
 the shared library is updated.
+
+### What the file system holds
+
+littlefs works in 4 KB blocks, one erase sector each; the 3 MB region is 768 of them. Every folder
+is a metadata pair, two blocks, and a file small enough to fit in its folder's metadata, up to
+256 bytes here, costs no block of its own. Larger files take whole blocks, plus a few bytes per
+block for littlefs's list of them. So an app costs 8 KB for its folder before its image, more than
+most images.
+
+| Path | Holds |
+|---|---|
+| `/apps/<id>/app.ntapp` | The compiled app or face, as `neotime-compiler` writes it. |
+| `/apps/<id>/state` | What the app saved, written by the shell; small, so it lives in the folder's metadata. |
+| `/apps/<id>/disabled` | Present when the app is installed but hidden from the launcher. |
+| `/settings/system` | The watch-wide settings, 41 bytes. |
+| `/settings/theme` | The theme's colours, 16 bytes. |
+| `/resources/` | For resource packages; empty for now. |
+
+A typical install is the digital face, the launcher and ten everyday apps (alarm, timer,
+stopwatch, settings, weather, steps, heart, flashlight, music and calculator), which
+`tools/measure_memory.py` installs into a file system formatted as the watch formats it:
+
+<!-- measure_memory:file-system -->
+| What | Bytes | Blocks |
+|---|---:|---:|
+| Formatting: the root and the three top-level folders | | 8 |
+| `/settings/system` and `/settings/theme` | 57 | 0 |
+| 12 app folders | | 24 |
+| 12 app images, 1,049 B (flashlight) to 14,970 B (alarm) | 46,074 | 18 |
+| **In use** | | **50 of 768: 200 KB of 3 MB** |
+<!-- /measure_memory:file-system -->
+
+The rest, about 2.8 MB, is free for apps, saved state and resources.
 
 ## RAM (64 KB, planned)
 
@@ -83,7 +143,26 @@ To measure it again after a change, build the firmware and run, inside `nix deve
 
 It fills the stack with a pattern in the PineTime emulator, starts the firmware without the reset
 its first start would cause, swipes to the launcher, and prints the peak, the spare bytes and any
-resets. Keep at least 2 KB spare. The table below is the budget:
+resets. Keep at least 2 KB spare.
+
+Static RAM by owner, from `tools/measure_memory.py`. The firmware's own share is mostly Embassy's
+task storage, which holds each task's state, and the Bluetooth host's packet pool:
+
+<!-- measure_memory:ram -->
+| Owner | Full build | Recovery build |
+|---|---:|---:|
+| Heap (storage 16 KB, UI 20 KB; the recovery build has no UI heap) | 36,864 B | 16,384 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 13,361 B | 10,953 B |
+| Bluetooth controller | 2,525 B | 2,525 B |
+| Display, graphics and drivers | 372 B | 372 B |
+| BLEFS file service | 122 B | 122 B |
+| App host (with `neotime-ui` and rlvgl) | 56 B | 0 B |
+| Other | 1 B | 1 B |
+| **Static RAM** (`.data` and `.bss`) | **53,348 B** | **30,380 B** |
+| Left for the stack | 12,172 B | 35,140 B |
+<!-- /measure_memory:ram -->
+
+The table below is the budget:
 
 | Region | Budget | Holds | Status |
 |---|---|---|---|
@@ -99,6 +178,31 @@ resets. Keep at least 2 KB spare. The table below is the budget:
 
 The 64 KB is all the chip has, so a part that needs more must take it from another row of this
 table.
+
+## Measuring again
+
+The firmware, RAM and file-system tables above come from one script, which writes them into
+this page between the `<!-- measure_memory:... -->` markers. Run it inside `nix develop`;
+`--check` only reports whether the tables are out of date:
+
+```sh
+python3 -I tools/measure_memory.py
+```
+
+The pre-commit hook in `.githooks/pre-commit` runs it whenever a commit touches the firmware, its
+crates, the apps or `Cargo.lock`, and stages this page; `nix develop` turns the hook on with
+`git config core.hooksPath .githooks`. It measures the working tree, so it takes a minute or two
+for the firmware builds, and `NEOTIME_SKIP_MEMORY_MAP=1 git commit ...` skips it once. The prose
+around the tables, and the artifact the page is published as, still need updating by hand.
+
+It builds the full and the recovery firmware, sorts their symbols by crate, and runs the
+`filesystem_use` example of `neotime-packages`. That example also writes the whole 4 MB external
+flash with `--image <file>`, for the emulator to load with
+`externalFlashMemory LoadBinary @<file> 0`:
+
+```sh
+cargo run -p neotime-packages --example filesystem_use -- --image external.bin digital=firmware/apps/face.ntapp launcher=firmware/apps/launcher.ntapp
+```
 
 ## Watchdog
 

@@ -168,6 +168,10 @@
           ];
 
           shellHook = ''
+            # The pre-commit hook keeps docs/memory-map.md's measured tables current.
+            if [ -d .githooks ] && [ "$(git config --get core.hooksPath)" != .githooks ]; then
+              git config core.hooksPath .githooks
+            fi
             echo "NeoTime"
             echo "  cargo test --workspace                                 run every test, simulator included"
             echo "  cargo build --release --target thumbv7em-none-eabihf   build the drivers for the watch"
@@ -178,6 +182,7 @@
             echo "  nix run .#infinisim                                    open InfiniTime's simulator to compare"
             echo "  tools/check_coverage.sh                                run every test with coverage and check the floors"
             echo "  nix flake check                                        run all of the above as checks"
+            echo "  python3 -I tools/measure_memory.py                     measure the firmware and file system into docs/memory-map.md"
           '';
         };
       });

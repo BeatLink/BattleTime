@@ -1229,6 +1229,7 @@ dependencies = [
  "littlefs-rust",
  "neotime-boot",
  "neotime-runtime",
+ "neotime-settings",
  "neotime-storage",
  "serde",
  "serde-json-core",
