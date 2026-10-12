@@ -16,7 +16,7 @@ jobs:
     name: Tests and coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@v31
       - uses: Swatinem/rust-cache@v2
       - name: Install the TypeScript dependencies
@@ -32,15 +32,22 @@ jobs:
             target/coverage-rust.lcov
             target/coverage-typescript/
 
-  lints:
-    name: Formatting, lints and types
+  formatting:
+    name: Formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@v31
-      - uses: Swatinem/rust-cache@v2
       - name: Check the formatting
         run: nix develop --command cargo fmt --all --check
+
+  lints:
+    name: Lints and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - uses: Swatinem/rust-cache@v2
       - name: Run clippy
         run: nix develop --command cargo clippy --workspace --all-targets -- --deny warnings
       - name: Check the TypeScript types
@@ -50,7 +57,7 @@ jobs:
     name: Watch images
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@v31
       - uses: Swatinem/rust-cache@v2
         with:
