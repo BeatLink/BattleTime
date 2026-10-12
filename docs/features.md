@@ -11,7 +11,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   Touches and the side button reach the open app.
 - **A help screen** with the time and how to install a face, shown while no face is installed.
 - **The screen sleeps on its own.** It turns off after the time chosen in settings, 15 seconds at
-  first, unless the open app keeps it on.
+  first, unless the open app keeps it on. While it is dark the watch stays idle until the open app
+  has something to do, and the clock is up to date the moment the screen comes back. The open app
+  can also turn the screen on, such as when its timer rings, or off.
 - **Brightness.** The backlight has off, low, medium and high levels.
 - **An always-on screen,** turned on in settings. When the screen times out it dims and switches to
   the panel's low-power mode, and the face keeps drawing. It has not been tried on the watch yet.
