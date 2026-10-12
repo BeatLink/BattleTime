@@ -287,8 +287,9 @@ the ones above it.
 - [ ] **Trim the stack.** 13.0 KB is left for it; in the emulator it peaks at 8.3 KB with most apps
   and 10.4 KB with the alarm open. Measure the high-water mark on the watch before giving any of it
   away.
-- [ ] **Measure the alarm's stack again.** About 11.6 KB is now left for the stack, and the alarm's
-  last peak of 10.5 KB would leave under the 2 KB minimum. `tools/measure_stack.py` cannot open the
+- [ ] **Measure the alarm's stack again.** About 11.3 KB is now left for the stack, after the Alert
+  Notification service took 160 B more, and the alarm's last peak of 10.5 KB would leave under the
+  2 KB minimum. `tools/measure_stack.py` cannot open the
   alarm, so measure it with the alarm installed and open, in the emulator or on the watch.
 - [ ] **Find large static RAM.** List `.bss` and `.data` by size with `nm --size-sort` and check
   for oversized embassy task state or tables that should be `const`.
