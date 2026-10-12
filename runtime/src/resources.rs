@@ -122,7 +122,9 @@ impl ImageReference {
             SHARED_LIBRARY_FLAG..=0xFFFF => Some(ImageReference::SharedLibrary(
                 (value - SHARED_LIBRARY_FLAG) as u16,
             )),
-            INSTALLED_APP_FLAG..=0x1FFFF => Some(ImageReference::InstalledApp((value - INSTALLED_APP_FLAG) as u16)),
+            INSTALLED_APP_FLAG..=0x1FFFF => {
+                Some(ImageReference::InstalledApp((value - INSTALLED_APP_FLAG) as u16))
+            }
             _ => None,
         }
     }

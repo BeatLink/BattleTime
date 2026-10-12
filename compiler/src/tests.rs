@@ -1227,7 +1227,10 @@ fn array_widths_follow_ranges_through_helpers_and_counters() {
         }"#));
     let image = AppImage::parse(&image).unwrap();
     for key in ["a", "b", "c", "d"] {
-        let width = image.state_variable(variable_named(&image, key) as u16).unwrap().element_bytes;
+        let width = image
+            .state_variable(variable_named(&image, key) as u16)
+            .unwrap()
+            .element_bytes;
         assert_eq!(width, 1, "`{key}`");
     }
 }
@@ -1249,7 +1252,11 @@ fn the_forecast_is_read_one_day_at_a_time() {
         let mut offset = 0;
         while offset < code.len() {
             let (instruction, next) = neotime_runtime::instruction::decode(code, offset).unwrap();
-            if instruction == neotime_runtime::instruction::Instruction::ReadSystemElement(SystemValue::WeatherForecastHigh) {
+            if instruction
+                == neotime_runtime::instruction::Instruction::ReadSystemElement(
+                    SystemValue::WeatherForecastHigh,
+                )
+            {
                 return true;
             }
             offset = next;
@@ -1281,7 +1288,9 @@ export default define_app({{
 
 #[test]
 fn an_app_with_too_many_changing_values_is_refused() {
-    let labels: String = (0..140).map(|place| format!("<Label>{{`${{ticks.value + {place}}}`}}</Label>")).collect();
+    let labels: String = (0..140)
+        .map(|place| format!("<Label>{{`${{ticks.value + {place}}}`}}</Label>"))
+        .collect();
     let source = app(&format!(
         "const ticks = signal(0);\nfunction Main() {{ return <Screen>{labels}</Screen>; }}"
     ));

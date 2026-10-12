@@ -2770,11 +2770,21 @@ fn a_list_system_value_is_read_one_element_at_a_time() {
 
     let mut whole_list = ImageBuilder::new();
     whole_list.expression(Code::new().op_byte(0x07, high));
-    assert_eq!(verify_problem(&whole_list), Some(CodeProblem::WrongSystemValueKind));
+    assert_eq!(
+        verify_problem(&whole_list),
+        Some(CodeProblem::WrongSystemValueKind)
+    );
 
     let mut element_of_single = ImageBuilder::new();
-    element_of_single.expression(Code::new().small(0).op_byte(0x0F, SystemValue::BatteryPercent as u8));
-    assert_eq!(verify_problem(&element_of_single), Some(CodeProblem::WrongSystemValueKind));
+    element_of_single.expression(
+        Code::new()
+            .small(0)
+            .op_byte(0x0F, SystemValue::BatteryPercent as u8),
+    );
+    assert_eq!(
+        verify_problem(&element_of_single),
+        Some(CodeProblem::WrongSystemValueKind)
+    );
 }
 
 #[test]

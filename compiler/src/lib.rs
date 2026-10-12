@@ -120,9 +120,9 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
             still_growing = observed
                 .iter()
                 .filter(|(key, range)| {
-                    !assumed
-                        .get(*key)
-                        .is_some_and(|assumed| assumed.lowest <= range.lowest && assumed.highest >= range.highest)
+                    !assumed.get(*key).is_some_and(|assumed| {
+                        assumed.lowest <= range.lowest && assumed.highest >= range.highest
+                    })
                 })
                 .map(|(key, _)| key.clone())
                 .collect();

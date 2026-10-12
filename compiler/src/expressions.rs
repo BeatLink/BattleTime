@@ -285,7 +285,9 @@ impl<'a> Compiler<'a> {
                 module,
                 name: format!("Math.{name}"),
             }),
-            Reference::SystemGroup("installed_apps") if name == "value" => Some(Reference::SystemList("installed_apps")),
+            Reference::SystemGroup("installed_apps") if name == "value" => {
+                Some(Reference::SystemList("installed_apps"))
+            }
             Reference::SystemGroup(group) => {
                 if name == "value" {
                     return Some(Reference::SystemGroupValue(group));

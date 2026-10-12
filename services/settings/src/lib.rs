@@ -189,7 +189,12 @@ pub const FILE_BYTES: usize = 1 + ALL_RECORDS_BYTES;
 impl Settings {
     /// Writes every setting as records, in number order; returns the bytes written.
     pub fn write_records(&self, buffer: &mut [u8; ALL_RECORDS_BYTES]) -> usize {
-        for (record, setting) in buffer.as_chunks_mut::<RECORD_BYTES>().0.iter_mut().zip(Setting::ALL) {
+        for (record, setting) in buffer
+            .as_chunks_mut::<RECORD_BYTES>()
+            .0
+            .iter_mut()
+            .zip(Setting::ALL)
+        {
             record[0] = setting.number();
             record[1..].copy_from_slice(&self.get(setting).to_le_bytes());
         }

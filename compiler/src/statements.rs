@@ -411,7 +411,10 @@ impl<'a> Compiler<'a> {
         let frame = emitter.inline_frames.pop();
         compiled?;
         emitter.place(end);
-        let result_range = frame.as_ref().and_then(|frame| frame.result_range).unwrap_or(Range::ANY);
+        let result_range = frame
+            .as_ref()
+            .and_then(|frame| frame.result_range)
+            .unwrap_or(Range::ANY);
         match (result_local, frame.and_then(|frame| frame.result_type)) {
             (Some(local), Some(result_type)) => {
                 emitter.emit(Instruction::ReadLocal(local), span)?;

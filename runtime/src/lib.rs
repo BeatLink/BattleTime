@@ -31,7 +31,9 @@ pub use image::{AppImage, AppKind, ImageError, StateVariable, ValueType};
 pub use instruction::{EffectKind, SystemValue};
 pub use interpreter::{Effect, Failure, HandlerOutcome, Interpreter, SystemValues, Value, NONE};
 pub use state::AppState;
-pub use theme::{preset_matching, preset_named, ColorValue, PresetTheme, Theme, ThemeColor, DEFAULT_THEME, PRESET_THEMES};
+pub use theme::{
+    preset_matching, preset_named, ColorValue, PresetTheme, Theme, ThemeColor, DEFAULT_THEME, PRESET_THEMES,
+};
 pub use verifier::verify;
 pub use widgets::{Property, PropertySource, Widget, WidgetKind, WidgetTree};
 
