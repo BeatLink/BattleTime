@@ -108,6 +108,14 @@ export const settings = {
   uses_24_hour_clock: signal(true),
   uses_metric_units: signal(true),
   step_goal: signal(10000),
+  /** Seconds without input before the screen turns off, 5 to 300. */
+  screen_timeout_seconds: signal(15),
+  /** Whether the screen dims instead of turning off. */
+  always_on_screen: signal(false),
+  /** 0 off, 1 a buzz every hour, 2 every half hour. */
+  chimes: signal(0),
+  /** The preset theme in use, from 0 in the watch's order, or -1 for colours of the user's own. */
+  theme: signal(0),
 };
 
 /** Whether the heart rate sensor is measuring for any app. */
@@ -328,7 +336,8 @@ export interface HttpResponseEvent {
 }
 
 export interface SettingsEvent {
-  keys: string[];
+  /** The name of the setting that changed, as `set_setting` takes it. */
+  key: string;
 }
 
 // ============================================================================
@@ -616,7 +625,8 @@ export function reset_steps() {
   emit({ kind: "reset_steps" });
 }
 
-export function set_setting(key: string, value: unknown) {
+/** Changes one of `settings`, or `brightness`, by name. Booleans are 1 and 0. */
+export function set_setting(key: string, value: number) {
   emit({ kind: "set_setting", key, value });
 }
 

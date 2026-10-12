@@ -439,7 +439,8 @@ System values, in the order `read system` numbers them: `now`, `utc_offset`, `ba
 `received_at`, `sunrise`, `sunset` and `location`, the music's `is_playing`, `artist`, `track`,
 `position` and `length`, the navigation's `turn`, `instruction`, `distance` and
 `progress_percent`, and the forecast's length followed by its lists of each day's `condition`,
-`low` and `high`, and the installed apps' count followed by their lists of `name`, `id` and `icon`.
+`low` and `high`, the installed apps' count followed by their lists of `name`, `id` and `icon`,
+and the settings' `screen_timeout_seconds`, `always_on_screen`, `chimes` and `theme`.
 `read system element` reads a list's elements through `SystemValues::read_element`, or
 `read_element_text` for the names and ids. The location, artist, track and instruction are text: the system hands them
 over through `SystemValues::read_text`, and `read system` copies them into the call's text buffer.

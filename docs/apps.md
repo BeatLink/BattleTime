@@ -69,6 +69,7 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 | `infinipaint` | InfiniTime InfiniPaint | A 20 by 20 grid of cells instead of free drawing, since there is no canvas. |
 | `haiku` | wasp-os haiku | Built-in verses, since apps cannot read files. |
 | `morse` | wasp-os morse | Typing in Morse code with taps and swipes. |
+| `settings` | InfiniTime Settings, wasp-os settings | The watch-wide settings: brightness, screen timeout, always on, 12 or 24 hour clock, units, step goal, chimes, do not disturb and the theme. |
 | `hello`, `template` | wasp-os hello and template | Starting points for new apps. |
 
 ## Not ported
@@ -77,7 +78,7 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 |---|---|---|
 | `demo`, `gallery` | wasp-os | Need full-screen images and reading files. |
 | `read_me`, `test` | wasp-os | Developer tools, not apps. |
-| Launcher, settings, notifications, quick settings, firmware update | both | Part of the system, not apps. |
+| Launcher, notifications, quick settings, firmware update | both | Part of the system, not apps. |
 
 ## Limits
 

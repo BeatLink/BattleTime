@@ -46,7 +46,7 @@ reach the firmware slots.
 | Folder | Holds |
 |---|---|
 | `/apps` | one folder per installed app or watch face, with its code and its own data |
-| `/settings` | the system's settings |
+| `/settings` | `system`, the watch-wide settings as records (see [architecture.md](architecture.md#settings-servicessettings)), and `theme`, the theme's eight RGB565 colours |
 | `/resources` | fonts and pictures shared by the system and the apps |
 
 These are made when the file system is first prepared. What goes inside each will be settled by

@@ -184,6 +184,7 @@ impl<'text> PushedEvent<'text> {
                 Values::Uses24HourClock,
                 Values::UsesMetricUnits,
                 Values::StepGoal,
+                Values::Chimes,
                 Values::IsDoNotDisturb,
                 Values::Brightness,
                 Values::IsBluetoothEnabled,

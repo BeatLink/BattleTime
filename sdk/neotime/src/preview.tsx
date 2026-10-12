@@ -13,7 +13,10 @@ import {
   is_bluetooth_enabled,
   is_heart_rate_running,
   heart_rate_measured_at,
+  brightness,
+  is_do_not_disturb,
   period_in_milliseconds,
+  settings,
   start_of_day,
   steps_today,
   DAY,
@@ -163,7 +166,24 @@ function carry_out(effect: Effect) {
     case "reset_steps":
       steps_today.value = 0;
       break;
+    case "set_setting":
+      change_setting(effect.key as string, effect.value as number);
+      break;
+    case "set_do_not_disturb":
+      change_setting("do_not_disturb", effect.on ? 1 : 0);
+      break;
   }
+}
+
+/** Changes a setting the way the watch does, then tells subscribed apps; unknown names are ignored. */
+function change_setting(key: string, value: number) {
+  if (key === "brightness") brightness.value = value;
+  else if (key === "do_not_disturb") is_do_not_disturb.value = value !== 0;
+  else if (key in settings) {
+    const setting = settings[key as keyof typeof settings];
+    setting.value = (typeof setting.peek() === "boolean" ? value !== 0 : value) as never;
+  } else return;
+  deliver("settings_change", { key });
 }
 
 // ============================================================================

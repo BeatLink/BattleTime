@@ -14,11 +14,13 @@ use std::{
 
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use embedded_graphics_simulator::{sdl2::Keycode, OutputSettings, SimulatorDisplay, SimulatorEvent, Window};
-use neotime_app_host::{AppEffect, AppFailure, AppHost, EventResult, System, Touch};
+use neotime_app_host::{settings, AppEffect, AppFailure, AppHost, EventResult, System, Touch};
 use neotime_runtime::{
     events::{ButtonPress, SwipeDirection},
-    resources::ImageReference, AppImage, EffectKind, SystemValue, SystemValues, Theme, Value, DEFAULT_THEME, NONE,
+    resources::ImageReference,
+    AppImage, EffectKind, SystemValue, SystemValues, Theme, Value, DEFAULT_THEME, NONE,
 };
+use neotime_settings::{Setting, Settings};
 use neotime_vibrator::{Step, TAP};
 
 use super::{copy_panel_to_screen, start_vibrator, WatchDisplay, SWIPE_DISTANCE_IN_PIXELS};
@@ -66,16 +68,27 @@ fn wall_clock_in_milliseconds() -> Value {
 // The simulated system
 // ============================================================================
 
-/// Fixed system values, the real clock, and effects printed to the terminal.
+/// Fixed system values, the real clock, settings apps can change, and effects printed to the terminal.
 pub struct SimulatedSystem {
     vibrator_requests: Option<mpsc::Sender<&'static [Step]>>,
     random_state: Cell<u32>,
     /// Each installed app's name and id, for a launcher.
     installed_apps: Vec<(String, String)>,
+    settings: Settings,
+    /// `Setting::bit`s of the settings changed since the app was last told.
+    changed_settings: u32,
+    /// The preset number of the theme on show, as `settings.theme` reads.
+    theme_preset: Value,
+    /// A preset theme the app picked, shown once the host call returns.
+    theme_request: Option<Theme>,
 }
 
 impl SimulatedSystem {
-    fn new(vibrator_requests: Option<mpsc::Sender<&'static [Step]>>, random_seed: u32, files: &AppFiles) -> Self {
+    fn new(
+        vibrator_requests: Option<mpsc::Sender<&'static [Step]>>,
+        random_seed: u32,
+        files: &AppFiles,
+    ) -> Self {
         let installed_apps = files
             .installed_apps
             .iter()
@@ -89,6 +102,35 @@ impl SimulatedSystem {
             vibrator_requests,
             random_state: Cell::new(random_seed),
             installed_apps,
+            settings: Settings::default(),
+            changed_settings: 0,
+            theme_preset: 0,
+            theme_request: None,
+        }
+    }
+
+    fn change_setting(&mut self, name: &str, value: Value) {
+        if name == settings::THEME_SETTING {
+            self.theme_request = settings::preset_theme(value);
+            return;
+        }
+        match self.settings.set_by_name(name, value) {
+            Ok(setting) => self.changed_settings |= setting.bit(),
+            Err(error) => println!("  the watch would refuse it: {error:?}"),
+        }
+    }
+
+    /// Tells the app about settings its own handlers changed, once the host call has returned.
+    fn tell_app_about_settings(&mut self, host: &mut AppHost<'_>, now: Value) {
+        let changed = core::mem::take(&mut self.changed_settings);
+        if changed != 0 {
+            settings::tell_app_about_changes(host, changed, now, self);
+        }
+        if let Some(theme) = self.theme_request.take() {
+            self.theme_preset = settings::preset_number(&theme);
+            host.set_theme(theme);
+            let key = settings::THEME_SETTING;
+            host.deliver(neotime_app_host::PushedEvent::SettingsChange { key }, now, self);
         }
     }
 }
@@ -97,15 +139,20 @@ impl SystemValues for SimulatedSystem {
     fn read(&self, value: SystemValue) -> Value {
         use SystemValue::*;
         let now = wall_clock_in_milliseconds();
+        if let Some(setting) = settings::read_setting(&self.settings, value) {
+            return setting;
+        }
+        if value == ThemePreset {
+            return self.theme_preset;
+        }
         match value {
             Now => now,
             BatteryPercent => 87,
             StepsToday => 4321,
-            StepGoal => 10_000,
-            Brightness => 2,
+            Brightness => self.settings.get(Setting::Brightness) as Value,
             HeartRate => 64,
             HeartRateMeasuredAt => now - 5 * MINUTE_IN_MILLISECONDS,
-            Uses24HourClock | UsesMetricUnits | IsBluetoothEnabled | IsPhoneConnected | MusicIsPlaying => 1,
+            IsBluetoothEnabled | IsPhoneConnected | MusicIsPlaying => 1,
             WeatherTemperature => 18,
             WeatherLow => 11,
             WeatherHigh => 21,
@@ -124,7 +171,10 @@ impl SystemValues for SimulatedSystem {
     }
 
     fn read_element_text(&self, value: SystemValue, index: Value) -> &str {
-        let Some((name, id)) = usize::try_from(index).ok().and_then(|place| self.installed_apps.get(place)) else {
+        let Some((name, id)) = usize::try_from(index)
+            .ok()
+            .and_then(|place| self.installed_apps.get(place))
+        else {
             return "";
         };
         match value {
@@ -144,7 +194,9 @@ impl SystemValues for SimulatedSystem {
                 _ => NONE,
             };
         }
-        let Some(&(condition, low, high)) = usize::try_from(index).ok().and_then(|day| SIMULATED_FORECAST.get(day))
+        let Some(&(condition, low, high)) = usize::try_from(index)
+            .ok()
+            .and_then(|day| SIMULATED_FORECAST.get(day))
         else {
             return NONE;
         };
@@ -236,6 +288,13 @@ impl System for SimulatedSystem {
             EffectKind::RequestNavigationState | EffectKind::RequestMusicState => {
                 println!("  the watch would ask the phone; the simulator's values stay as they are")
             }
+            EffectKind::SetSetting => {
+                let name = effect.text(0).unwrap_or("").to_string();
+                self.change_setting(&name, effect.number(1));
+            }
+            EffectKind::SetDoNotDisturb => {
+                self.change_setting(Setting::DoNotDisturb.name(), effect.number(0))
+            }
             _ => {}
         }
     }
@@ -252,6 +311,10 @@ pub fn test_system() -> SimulatedSystem {
         vibrator_requests: None,
         random_state: Cell::new(1),
         installed_apps: Vec::new(),
+        settings: Settings::default(),
+        changed_settings: 0,
+        theme_preset: 0,
+        theme_request: None,
     }
 }
 
@@ -281,6 +344,7 @@ pub fn save_screenshot(
             now,
             &mut system,
         );
+        system.tell_app_about_settings(&mut host, now);
     }
     host.draw(display).unwrap_or_else(|never| match never {});
 
@@ -383,6 +447,7 @@ pub fn run(
                 }
                 _ => {}
             }
+            system.tell_app_about_settings(&mut host, now);
         }
 
         thread::sleep(FRAME_PAUSE);

@@ -32,8 +32,8 @@ flowchart TB
     compiler["App compiler, on the computer<br/>compiler: TSX to app images, started"]
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
-    system["System<br/>(planned: power, events, settings, notifications)"]
-    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/companion,<br/>services/packages; planned: time, steps"]
+    system["System<br/>settings started; planned: power, events, notifications"]
+    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/companion,<br/>services/packages, services/settings;<br/>planned: time, steps"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth,<br/>drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
@@ -78,7 +78,8 @@ Each layer uses only the layers below it.
   `drivers/bluetooth`. **(started: files on the external flash, and the on-watch half of firmware
   updates)**
 - **System** runs the watch: it sleeps and wakes, turns button, touch and motion into events, and
-  holds settings and notifications. **(planned)**
+  holds settings and notifications. **(started: the watch-wide settings, in `services/settings` and
+  the firmware's `settings.rs`)**
 - **UI toolkit** gives apps widgets, fonts and page transitions. Widgets come from
   [rlvgl](https://github.com/softoboros/rlvgl), a pure Rust rewrite of LVGL, and are drawn through
   `embedded-graphics` onto the display driver. **(started: drawing works, nothing else yet)**
@@ -158,6 +159,7 @@ NeoTime/
 │   ├── companion/    neotime-companion: the companion app's JSON lines over the UART service
 │   ├── dfu/          neotime-dfu: the legacy DFU update protocol over Bluetooth
 │   ├── packages/     neotime-packages: the apps installed in /apps and the shared library's install
+│   ├── settings/     neotime-settings: the watch-wide settings, their limits and their file
 │   ├── storage/      neotime-storage: the littlefs file system in the external flash
 │   └── updates/      neotime-updates: stores an uploaded firmware and hands it to the bootloader
 ├── simulator/        neotime-simulator: the drivers in a desktop window
@@ -405,8 +407,25 @@ uploads an image and the bootloader that installs it. It knows nothing of the up
 Gadgetbridge sends them or bare. `LineAssembler` joins writes into lines and drops one longer than
 512 bytes; `parse_line` reads a message with `serde-json-core`, without allocating; and
 `settings_report` writes the `settings` reply. It knows nothing of Bluetooth, so its tests run on
-a computer. So far it reads `settings` (a preset theme, single colours and the brightness) and
-names every other message by its `t`.
+a computer. So far it reads `settings` (a preset theme, single colours and every watch-wide
+setting, each checked against its limits) and names every other message by its `t`.
+
+## Settings (`services/settings`)
+
+`neotime-settings` defines the watch-wide settings: the 12 or 24 hour clock, units, the step goal,
+the brightness, the screen timeout, the always-on screen, chimes and do not disturb.
+
+- **One place for limits.** Each `Setting` has a fixed number, the name apps pass to `set_setting`,
+  and its lowest, highest and default values. `Settings::set` refuses a value outside them, so
+  nothing that reaches the store, from an app or from the phone, can be out of range.
+- **The file.** `/settings/system` holds a format byte, then one 5-byte record per setting: its
+  number and its value as a little-endian `i32`. A record for an unknown setting or with a bad
+  value is skipped, so a file from older or newer firmware still reads.
+- **Apps.** `neotime-app-host`'s `settings` module maps each setting to the system value apps read,
+  such as `settings.chimes`, and hands the open app a `settings_change` event for each change.
+
+The theme is kept apart, as eight colours in `/settings/theme`, since the companion app can set any
+colours; the Settings app and `settings.theme` pick and read it by preset number.
 
 ## Packages (`services/packages`)
 
@@ -458,12 +477,20 @@ watch face, the launcher and the apps through `neotime-app-host`:
 - **Input.** `touch.rs` turns the panel's reports into the host's touches: press, drag and release
   from the finger, and one click, long press or swipe from each touch's gesture. The watchdog task
   reads the button every 20 ms and also reports short and long presses.
-- **Sleep.** After 15 seconds without input the backlight goes off, the display sleeps and the
+- **Sleep.** After the settings' screen timeout without input, 15 seconds at first, the backlight goes off, the display sleeps and the
   app gets `screen_off`, unless it called `keep_screen_on(true)`; the next touch or press turns
   them on without acting on it. The loop sleeps until the next input or until `next_wakeup`.
-- **Always-on screen.** Built with the `always-on-screen` feature, the screen dims instead of
-  turning off: the panel enters its 8-colour low-power mode, the backlight drops to a tenth of its
-  low level, and the face keeps drawing. It is a build feature until settings can choose it.
+- **Always-on screen.** With the always-on setting, the screen dims instead of turning off: the
+  panel enters its 8-colour low-power mode, the backlight drops to a tenth of its low level, and
+  the face keeps drawing.
+- **Settings.** `settings.rs` holds the one store of watch-wide settings, loaded from
+  `/settings/system` at start. `set_setting` from an app and a `settings` message from the phone
+  both change it; the shell then redraws what reads them, sends the app `settings_change`, applies
+  the brightness unless the open app set its own, and writes the file when the app closes or the
+  screen turns off, or at once while it is off. `set_setting("theme", n)` picks preset theme `n`.
+- **Chimes.** With chimes on, the shell also wakes on the hour or half hour and buzzes, twice on
+  the hour and once on the half hour, unless do not disturb is on. A chime more than a minute late,
+  such as after the phone moved the clock on, is skipped.
 - **Effects.** `vibrate`, `vibrate_pattern` and `stop_vibrating` go to the motor's own task
   (`vibration.rs`), so a pattern never holds up the shell. `set_brightness` sets the backlight
   (`backlight.rs`) to level 1, 2 or 3 until the app closes, through the display driver's
@@ -474,8 +501,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
   and goes to the app's `steps` subscriptions.
 - **Companion app.** The Nordic UART service carries the companion's JSON lines. The Bluetooth
   task hands each write to `neotime-companion`; a `settings` message goes to the shell, which
-  applies the theme to the open app at once, sets the backlight level, keeps both in `/settings`
-  (`settings.rs`) and sends the settings back as a reply. Bluetooth runs as a task of its own, so
+  applies the theme to the open app at once, keeps it in `/settings/theme`, passes the other
+  settings to the store and sends the settings back as a reply. Bluetooth runs as a task of its own, so
   its stack frame (5.7 KB) is never added to start-up's.
 - **Diagnostics.** A NeoTime GATT service (`6e540001-…`) has one readable characteristic
   (`6e540002-…`) of eight little-endian `u32` counters from `diagnostics.rs`: shell loops, what
@@ -492,7 +519,7 @@ watch face, the launcher and the apps through `neotime-app-host`:
   offset from UTC of 0.
 - **Status page.** The start-up lines and an update's progress share the display with the shell;
   while the page is up the shell draws nothing, and when the update ends it paints again.
-- **Apps.** `tools/build_watch_apps.sh` compiles the face (`digital`), nine apps and the shared
+- **Apps.** `tools/build_watch_apps.sh` compiles the face (`digital`), the launcher, ten apps and the shared
   library into `firmware/apps/`, and the firmware builds them in. They move to the external flash
   once there is a way to send files to the watch.
 
@@ -501,9 +528,9 @@ watch face, the launcher and the apps through `neotime-app-host`:
   curve. P0.19 says power is present and P0.12 that it is charging.
 
 Not done yet: heart rate, notifications, music and weather read as 0 or empty; the touch panel stays
-awake while the screen is off; settings such as the 24 hour clock are fixed.
+awake while the screen is off.
 
-It takes 368 KB of the 400 KB firmware slot (the fonts are 47 KB, the built-in apps 29 KB, the
+It takes 380 KB of the 400 KB firmware slot (the fonts are 47 KB, the built-in apps 36 KB, the
 shared library 26 KB and the two accelerometers' configuration files 12 KB) and 52 KB of static RAM, 36 KB of it heap: 16 KB for storage and 20 KB for
 the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
 the button and the backlight timeout all work.

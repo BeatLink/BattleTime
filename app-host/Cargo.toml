@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 embedded-graphics = "0.8"
 neotime-runtime = { path = "../runtime" }
+neotime-settings = { path = "../services/settings" }
 neotime-ui = { path = "../ui" }
 rlvgl-core = { version = "0.2.5", default-features = false }
 rlvgl-widgets = { version = "0.2.5", default-features = false }

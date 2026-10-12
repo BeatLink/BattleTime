@@ -78,6 +78,10 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
         "settings.uses_24_hour_clock" => (SystemValue::Uses24HourClock, Type::BOOL),
         "settings.uses_metric_units" => (SystemValue::UsesMetricUnits, Type::BOOL),
         "settings.step_goal" => (SystemValue::StepGoal, Type::NUMBER),
+        "settings.screen_timeout_seconds" => (SystemValue::ScreenTimeoutSeconds, Type::NUMBER),
+        "settings.always_on_screen" => (SystemValue::AlwaysOnScreen, Type::BOOL),
+        "settings.chimes" => (SystemValue::Chimes, Type::NUMBER),
+        "settings.theme" => (SystemValue::ThemePreset, Type::NUMBER),
         "current_weather.temperature" => (SystemValue::WeatherTemperature, Type::NUMBER.or_null()),
         "current_weather.condition" => (
             SystemValue::WeatherCondition,

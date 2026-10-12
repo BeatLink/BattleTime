@@ -944,11 +944,15 @@ fn saved_state_comes_back_when_the_app_is_opened_again() {
     host.tick(START_TIME + 120_000, &mut system);
 
     let mut saved = vec![0; LARGEST_SAVED_STATE_BYTES];
-    let length = host.save_changed_state(&mut saved).unwrap().expect("ticks changed");
+    let length = host
+        .save_changed_state(&mut saved)
+        .unwrap()
+        .expect("ticks changed");
     assert_eq!(host.save_changed_state(&mut saved).unwrap(), None);
 
-    let host = AppHost::open_with_saved_state(&image, DEFAULT_THEME, &saved[..length], START_TIME, &mut system)
-        .unwrap();
+    let host =
+        AppHost::open_with_saved_state(&image, DEFAULT_THEME, &saved[..length], START_TIME, &mut system)
+            .unwrap();
     assert_eq!(host.state().get(0).unwrap(), 2);
     // Opens are not persistent, so the new host counts only its own.
     assert_eq!(host.state().get(1).unwrap(), 1);
@@ -959,7 +963,8 @@ fn saved_state_from_another_app_is_ignored() {
     let image = subscriber_image(false);
     let mut system = FakeSystem::default();
     let host =
-        AppHost::open_with_saved_state(&image, DEFAULT_THEME, b"not saved state", START_TIME, &mut system).unwrap();
+        AppHost::open_with_saved_state(&image, DEFAULT_THEME, b"not saved state", START_TIME, &mut system)
+            .unwrap();
     assert_eq!(host.state().get(0).unwrap(), 0);
 }
 
@@ -991,7 +996,11 @@ fn image_and_text_image() -> Vec<u8> {
             (Property::Color, constant(0xF800)),
         ],
     );
-    writer.widget(WidgetKind::Label, 0, &[(Property::Text, constant(long_text as i32))]);
+    writer.widget(
+        WidgetKind::Label,
+        0,
+        &[(Property::Text, constant(long_text as i32))],
+    );
     writer.build()
 }
 
@@ -1017,5 +1026,93 @@ fn a_long_label_wraps_onto_several_lines_inside_the_screen() {
     host.draw(&mut screen).unwrap();
     let (bounds, _) = host.widget_bounds(2).unwrap();
     assert!(contains(SCREEN_AREA, bounds));
-    assert!(bounds.height > 40, "one line would be about 20 pixels, got {bounds:?}");
+    assert!(
+        bounds.height > 40,
+        "one line would be about 20 pixels, got {bounds:?}"
+    );
+}
+
+// ============================================================================
+// Watch-wide settings
+// ============================================================================
+
+#[test]
+fn settings_read_as_their_system_values() {
+    use neotime_settings::{Setting, Settings};
+    let mut settings = Settings::default();
+    settings.set(Setting::ScreenTimeoutSeconds, 30).unwrap();
+    settings.set(Setting::DoNotDisturb, 1).unwrap();
+
+    assert_eq!(
+        settings::read_setting(&settings, SystemValue::ScreenTimeoutSeconds),
+        Some(30)
+    );
+    assert_eq!(
+        settings::read_setting(&settings, SystemValue::IsDoNotDisturb),
+        Some(1)
+    );
+    assert_eq!(
+        settings::read_setting(&settings, SystemValue::StepGoal),
+        Some(10_000)
+    );
+    assert_eq!(settings::read_setting(&settings, SystemValue::Brightness), None);
+    assert_eq!(
+        settings::read_setting(&settings, SystemValue::BatteryPercent),
+        None
+    );
+}
+
+/// An app that counts the `settings_change` events it hears.
+fn settings_listener_image() -> Vec<u8> {
+    use neotime_runtime::subscriptions::{Subscription, SubscriptionKind, SubscriptionValue};
+    use Instruction::*;
+
+    let mut writer = ImageWriter::new("listener", "Listener", AppKind::App, 1);
+    writer.variable("changes", ValueType::Int, false, 0);
+    let count_change = writer.handler(code(|code| {
+        code.emit(ReadState(0))
+            .emit(PushSmall(1))
+            .emit(Add)
+            .emit(WriteState(0));
+    }));
+    writer.subscription(Subscription {
+        kind: SubscriptionKind::SettingsChange,
+        only_while_open: true,
+        handler: count_change,
+        detail: 0,
+        days: 0,
+        value: SubscriptionValue::Constant(0),
+    });
+    writer.widget(WidgetKind::Column, 0, &[]);
+    writer.build()
+}
+
+#[test]
+fn each_changed_setting_reaches_the_open_app_as_an_event() {
+    use neotime_settings::Setting;
+    let image = settings_listener_image();
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    let changed = Setting::Chimes.bit() | Setting::StepGoal.bit();
+    settings::tell_app_about_changes(&mut host, changed, START_TIME, &mut system);
+
+    assert_eq!(host.state().get(0).unwrap(), 2);
+    assert!(system.failures.is_empty());
+}
+
+#[test]
+fn a_preset_theme_is_picked_and_read_back_by_number() {
+    use neotime_runtime::PRESET_THEMES;
+
+    let ocean = settings::preset_theme(2).unwrap();
+
+    assert_eq!(ocean, PRESET_THEMES[2].theme);
+    assert_eq!(settings::preset_number(&ocean), 2);
+    assert_eq!(settings::preset_number(&DEFAULT_THEME), 0);
+    assert_eq!(settings::preset_theme(PRESET_THEMES.len() as Value), None);
+    assert_eq!(settings::preset_theme(-1), None);
+    let mut own = DEFAULT_THEME;
+    own.set_color(neotime_runtime::ThemeColor::Accent, 0x1234);
+    assert_eq!(settings::preset_number(&own), -1);
 }

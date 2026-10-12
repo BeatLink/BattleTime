@@ -15,6 +15,7 @@ pub mod fonts;
 mod host;
 mod layout;
 mod nodes;
+pub mod settings;
 mod subscriptions;
 mod system;
 mod text;

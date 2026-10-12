@@ -26,7 +26,7 @@ time.
 | `unread_notifications` | `Int` | How many notifications are unread. |
 | `is_do_not_disturb` | `Bool` | Whether do not disturb is on. |
 | `brightness` | `Int` | The backlight level, 1 to 3. |
-| `settings` | object | The user's choices apps should follow: `uses_24_hour_clock`, `uses_metric_units`, `step_goal`, `theme` colours. |
+| `settings` | object | The user's choices apps should follow: `uses_24_hour_clock`, `uses_metric_units`, `step_goal`, `screen_timeout_seconds` (5 to 300), `always_on_screen`, `chimes` (0 off, 1 every hour, 2 every half hour) and `theme`, the preset theme's number in the watch's order (dark, light, ocean, forest, sunset, contrast), or -1 for colours of the user's own. |
 | `current_screen` | `Text` | The name of the app's screen on display. |
 | `is_heart_rate_running` | `Bool` | Whether the heart rate sensor is measuring for any app. |
 | `heart_rate_status` | `Int` | The sensor's state: 0 stopped, 1 no skin, 2 settling, 3 measuring. |
@@ -128,7 +128,7 @@ A handler run in the background may vibrate and notify without the `wake` permis
 | `navigation(handler)` | none | The phone's navigation app gives the next step; read it from `current_navigation`. |
 | `message(channel, handler)` | the message's fields | The companion app sends this app a message on its own channel. |
 | `http_response(handler)` | `request_id`, `status`, `body` | A reply to an `http_request` effect. |
-| `settings_change(handler)` | the changed keys | The user changes a setting in `settings`. |
+| `settings_change(handler)` | `key` | The user changes a setting, from the watch or the phone. `key` is its name as `set_setting` takes it, or `do_not_disturb`; one event comes for each setting changed. |
 
 When several of the same event are waiting, the runtime delivers only the latest, so a slow handler
 never falls behind.
@@ -334,7 +334,7 @@ subscriptions keep their schedules. A subscription period under a minute needs
 
 | Effect | Does |
 |---|---|
-| `set_setting(key, value)` | Changes one of the user's `settings`, such as the step goal. |
+| `set_setting(key, value)` | Changes one of the user's settings by name: any key of `settings`, `brightness` (1 to 3, the level the watch returns to) or `do_not_disturb`. `theme` takes a preset's number. Booleans are 1 or 0, and a value outside its limits is ignored. |
 | `set_do_not_disturb(on)` | Turns do not disturb on or off. |
 | `log(text)` | Writes a line to the debug log the companion app can read. |
 | `set_bluetooth(on)` | Turns Bluetooth on or off. |

@@ -12,3 +12,4 @@ serde = { version = "1", default-features = false, features = ["derive"] }
 serde-json-core = "0.6"
 
 neotime-runtime = { path = "../../runtime" }
+neotime-settings = { path = "../settings" }

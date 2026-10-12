@@ -16,6 +16,7 @@ mipidsi = "0.10"
 neotime-app-host = { path = "../app-host", features = ["demo"] }
 neotime-display = { path = "../drivers/display" }
 neotime-runtime = { path = "../runtime" }
+neotime-settings = { path = "../services/settings" }
 neotime-vibrator = { path = "../drivers/vibrator" }
 
 [dev-dependencies]

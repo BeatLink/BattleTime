@@ -1,12 +1,25 @@
-//! The wearer's settings that the companion app changes: the theme and the backlight level.
+//! The watch-wide settings and the theme, shared by the shell and the Bluetooth task.
 //!
-//! Each is kept in its own file under `/settings` on the external flash, and read back at start.
+//! The settings live in one store checked by `neotime-settings`. Apps change them with
+//! `set_setting`, and the companion app with its `settings` message, which also carries the theme.
+//! Every change wakes the shell, which saves the settings to `/settings/system` and tells the open
+//! app. The theme's colours are kept apart, in `/settings/theme`.
 
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
+use core::{
+    cell::Cell,
+    sync::atomic::{AtomicU32, Ordering},
+};
+
+use embassy_sync::{
+    blocking_mutex::{raw::CriticalSectionRawMutex, Mutex},
+    channel::Channel,
+};
+use neotime_app_host::settings::system_value_of;
 use neotime_companion::{ReplyLine, SettingsChange};
-use neotime_runtime::{Theme, ThemeColor, DEFAULT_THEME};
+use neotime_runtime::{Theme, ThemeColor, Value, DEFAULT_THEME};
+use neotime_settings::{Setting, Settings, FILE_BYTES};
 
-use crate::{backlight, storage};
+use crate::{storage, system_values};
 
 /// Changes the companion app asked for, from the Bluetooth task to the shell.
 pub static CHANGES: Channel<CriticalSectionRawMutex, SettingsChange, 2> = Channel::new();
@@ -14,42 +27,83 @@ pub static CHANGES: Channel<CriticalSectionRawMutex, SettingsChange, 2> = Channe
 /// Replies for the companion app, from the shell to the Bluetooth task.
 pub static REPLIES: Channel<CriticalSectionRawMutex, ReplyLine, 2> = Channel::new();
 
+const SETTINGS_PATH: &str = "/settings/system";
 const THEME_PATH: &str = "/settings/theme";
-const BRIGHTNESS_PATH: &str = "/settings/brightness";
 
-#[derive(Clone, Copy)]
-pub struct Settings {
-    pub theme: Theme,
-    /// The backlight level from 1 to 3 when no app has asked for another.
-    pub brightness: u8,
+// ============================================================================
+// The store
+// ============================================================================
+
+static SETTINGS: Mutex<CriticalSectionRawMutex, Cell<Settings>> = Mutex::new(Cell::new(Settings::DEFAULT));
+
+/// `Setting::bit`s of the changes the shell has not yet saved and passed on.
+static UNSAVED_CHANGES: AtomicU32 = AtomicU32::new(0);
+
+pub fn current() -> Settings {
+    SETTINGS.lock(Cell::get)
 }
 
-impl Settings {
-    /// The saved settings, or the defaults for any that were never saved.
-    pub fn load(files: &storage::Files) -> Settings {
-        let theme = files
-            .read(THEME_PATH)
-            .and_then(|bytes| theme_from_bytes(&bytes))
-            .unwrap_or(DEFAULT_THEME);
-        let brightness = files
-            .read(BRIGHTNESS_PATH)
-            .and_then(|bytes| bytes.first().copied())
-            .filter(|level| (1..=3).contains(level))
-            .unwrap_or(backlight::DEFAULT_LEVEL);
-        Settings { theme, brightness }
+/// Reads the saved settings at start-up; a missing or unreadable file leaves the defaults.
+pub fn load(files: &storage::Files) {
+    if let Some(bytes) = files.read(SETTINGS_PATH) {
+        SETTINGS.lock(|settings| settings.set(Settings::from_file(&bytes)));
     }
+}
 
-    /// Applies a change and saves whatever it changed.
-    pub fn apply(&mut self, change: &SettingsChange, files: &storage::Files) {
-        let theme = change.applied_to(self.theme);
-        if theme != self.theme {
-            self.theme = theme;
-            files.write(THEME_PATH, &theme_to_bytes(&theme));
+pub fn save(files: &storage::Files) {
+    let mut buffer = [0; FILE_BYTES];
+    let length = current().write_file(&mut buffer);
+    files.write(SETTINGS_PATH, &buffer[..length]);
+}
+
+/// Changes one setting by the name an app gave `set_setting`; unknown names and bad values do nothing.
+pub fn set_by_name(name: &str, value: Value) {
+    change(|settings| match settings.set_by_name(name, value) {
+        Ok(setting) => setting.bit(),
+        Err(_) => 0,
+    });
+}
+
+/// Applies the values a companion message carried, already checked against their limits.
+pub fn set_values(values: &[Option<i32>; Setting::COUNT]) {
+    change(|settings| {
+        let mut changed = 0;
+        for (setting, value) in Setting::ALL.into_iter().zip(values) {
+            if let Some(Ok(true)) = value.map(|value| settings.set(setting, value)) {
+                changed |= setting.bit();
+            }
         }
-        if let Some(level) = change.brightness.filter(|level| *level != self.brightness) {
-            self.brightness = level;
-            files.write(BRIGHTNESS_PATH, &[level]);
+        changed
+    });
+}
+
+/// The changes since the last call, as `Setting::bit`s.
+pub fn take_changes() -> u32 {
+    UNSAVED_CHANGES.swap(0, Ordering::Relaxed)
+}
+
+/// Runs a change on the store, then wakes the shell for every setting whose value changed.
+fn change(apply: impl FnOnce(&mut Settings) -> u32) {
+    let changed = SETTINGS.lock(|cell| {
+        let mut settings = cell.get();
+        let before = settings;
+        let changed = apply(&mut settings);
+        cell.set(settings);
+        if settings == before {
+            0
+        } else {
+            changed
         }
+    });
+    if changed == 0 {
+        return;
+    }
+    UNSAVED_CHANGES.fetch_or(changed, Ordering::Relaxed);
+    for setting in Setting::ALL
+        .into_iter()
+        .filter(|setting| changed & setting.bit() != 0)
+    {
+        system_values::changed(&[system_value_of(setting)]);
     }
 }
 
@@ -58,6 +112,18 @@ impl Settings {
 // ============================================================================
 
 const THEME_BYTES: usize = 2 * ThemeColor::COUNT;
+
+/// The saved theme, or the default when none was saved.
+pub fn load_theme(files: &storage::Files) -> Theme {
+    files
+        .read(THEME_PATH)
+        .and_then(|bytes| theme_from_bytes(&bytes))
+        .unwrap_or(DEFAULT_THEME)
+}
+
+pub fn save_theme(files: &storage::Files, theme: &Theme) {
+    files.write(THEME_PATH, &theme_to_bytes(theme));
+}
 
 fn theme_to_bytes(theme: &Theme) -> [u8; THEME_BYTES] {
     let mut bytes = [0; THEME_BYTES];

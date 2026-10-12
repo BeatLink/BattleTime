@@ -66,6 +66,12 @@ pub enum SystemValue {
     InstalledAppId,
     /// List: each app's icon, as an image reference from `ImageReference::InstalledApp`.
     InstalledAppIcon,
+    ScreenTimeoutSeconds,
+    AlwaysOnScreen,
+    /// 0 off, 1 every hour, 2 every half hour.
+    Chimes,
+    /// The number of the preset theme in use, in `PRESET_THEMES` order, or -1 for colours of the user's own.
+    ThemePreset,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -73,9 +79,11 @@ const MUSIC_BIT: u32 = 19;
 const NAVIGATION_BIT: u32 = 20;
 /// Bit 21 is free too, as every value numbered 21 to 31 is in a group.
 const INSTALLED_APPS_BIT: u32 = 21;
+/// The settings added after the first three share one bit, since a change to settings redraws them together.
+const SETTINGS_BIT: u32 = 22;
 
 impl SystemValue {
-    pub const COUNT: usize = 43;
+    pub const COUNT: usize = 47;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -123,6 +131,10 @@ impl SystemValue {
             40 => InstalledAppName,
             41 => InstalledAppId,
             42 => InstalledAppIcon,
+            43 => ScreenTimeoutSeconds,
+            44 => AlwaysOnScreen,
+            45 => Chimes,
+            46 => ThemePreset,
             _ => return None,
         })
     }
@@ -132,14 +144,24 @@ impl SystemValue {
         use SystemValue::*;
         let group = match self {
             HeartRate | HeartRateMeasuredAt => HeartRate as u32,
-            WeatherTemperature | WeatherCondition | WeatherLow | WeatherHigh | WeatherReceivedAt
-            | WeatherSunrise | WeatherSunset | WeatherLocation | WeatherForecastLength
-            | WeatherForecastCondition | WeatherForecastLow | WeatherForecastHigh => WeatherTemperature as u32,
+            WeatherTemperature
+            | WeatherCondition
+            | WeatherLow
+            | WeatherHigh
+            | WeatherReceivedAt
+            | WeatherSunrise
+            | WeatherSunset
+            | WeatherLocation
+            | WeatherForecastLength
+            | WeatherForecastCondition
+            | WeatherForecastLow
+            | WeatherForecastHigh => WeatherTemperature as u32,
             MusicIsPlaying | MusicArtist | MusicTrack | MusicPosition | MusicLength => MUSIC_BIT,
             NavigationTurn | NavigationInstruction | NavigationDistance | NavigationProgressPercent => {
                 NAVIGATION_BIT
             }
             InstalledAppCount | InstalledAppName | InstalledAppId | InstalledAppIcon => INSTALLED_APPS_BIT,
+            ScreenTimeoutSeconds | AlwaysOnScreen | Chimes | ThemePreset => SETTINGS_BIT,
             other => other as u32,
         };
         1 << group
@@ -164,7 +186,12 @@ impl SystemValue {
         use SystemValue::*;
         matches!(
             self,
-            WeatherLocation | MusicArtist | MusicTrack | NavigationInstruction | InstalledAppName | InstalledAppId
+            WeatherLocation
+                | MusicArtist
+                | MusicTrack
+                | NavigationInstruction
+                | InstalledAppName
+                | InstalledAppId
         )
     }
 }

@@ -1102,6 +1102,7 @@ version = "0.1.0"
 dependencies = [
  "embedded-graphics",
  "neotime-runtime",
+ "neotime-settings",
  "neotime-ui",
  "rlvgl-core",
  "rlvgl-widgets",
@@ -1147,6 +1148,7 @@ version = "0.1.0"
 dependencies = [
  "heapless 0.9.3",
  "neotime-runtime",
+ "neotime-settings",
  "serde",
  "serde-json-core",
 ]
@@ -1217,6 +1219,10 @@ name = "neotime-runtime"
 version = "0.1.0"
 
 [[package]]
+name = "neotime-settings"
+version = "0.1.0"
+
+[[package]]
 name = "neotime-simulator"
 version = "0.1.0"
 dependencies = [
@@ -1229,6 +1235,7 @@ dependencies = [
  "neotime-app-host",
  "neotime-display",
  "neotime-runtime",
+ "neotime-settings",
  "neotime-status-screen",
  "neotime-vibrator",
 ]

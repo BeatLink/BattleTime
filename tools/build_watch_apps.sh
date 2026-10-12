@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 face=digital
-apps=(stopwatch timer flashlight dice calculator snake puzzle15 steps heart)
+apps=(stopwatch timer flashlight dice calculator snake puzzle15 steps heart settings)
 out=firmware/apps
 
 rm -rf "$out"

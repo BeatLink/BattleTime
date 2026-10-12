@@ -6,32 +6,38 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 ## On the watch
 
 - **A watch face, a launcher and apps.** The firmware starts on the digital face. A launcher,
-  itself an ordinary app that another could replace, lists the built-in apps with their icons: stopwatch, timer, flashlight, dice, calculator, snake, puzzle 15, steps and
-  heart rate. Touches and the side button reach the open app.
-- **The screen sleeps on its own.** It turns off after 15 seconds, unless the open app keeps it on.
+  itself an ordinary app that another could replace, lists the built-in apps with their icons: stopwatch, timer, flashlight, dice, calculator, snake, puzzle 15, steps,
+  heart rate and settings. Touches and the side button reach the open app.
+- **The screen sleeps on its own.** It turns off after the time chosen in settings, 15 seconds at
+  first, unless the open app keeps it on.
 - **Brightness.** The backlight has off, low, medium and high levels.
-- **An always-on screen,** built with the `always-on-screen` feature. When the screen times out it
-  dims and switches to the panel's low-power mode, and the face keeps drawing. It has not been tried
-  on the watch yet.
+- **An always-on screen,** turned on in settings. When the screen times out it dims and switches to
+  the panel's low-power mode, and the face keeps drawing. It has not been tried on the watch yet.
+- **Settings, on the watch and from the companion app.** The Settings app and the companion app
+  change the same watch-wide settings: brightness, how soon the screen turns off, the always-on
+  screen, the 12 or 24 hour clock, metric or imperial units, the daily step goal, chimes, do not
+  disturb and the theme. They are kept through a restart, and apps follow them at once.
+- **Chimes.** A buzz every hour, or every half hour, chosen in settings; a double buzz on the hour.
+  Do not disturb silences them.
 - **Vibration** for apps that buzz.
 - **Step counting.** The accelerometer counts today's steps for the steps app and faces.
 - **Battery charge and charging state.**
 - **The time from the phone,** set through the Bluetooth Current Time service.
 - **The battery level on the phone,** through the standard Bluetooth Battery service, updated as it
   changes.
-- **Themes from the companion app.** Six presets (dark, light, ocean, forest, sunset and contrast)
-  or any colours, and the backlight level, set over Bluetooth and kept through a restart. The open
-  app changes colour at once. See [companion-protocol.md](companion-protocol.md).
+- **Themes.** Six presets (dark, light, ocean, forest, sunset and contrast), picked in the Settings
+  app or from the companion app, which can also set any colours. They are kept through a restart,
+  and the open app changes colour at once. See [companion-protocol.md](companion-protocol.md).
 - **Apps remember where they were.** An app's saved state is written to the watch's storage when
   it closes or the screen turns off, and put back when it opens.
 - **Text in clear, smooth fonts** made from JetBrains Mono and Open Sans.
 
 ## Apps and watch faces
 
-- **30 apps** ported from InfiniTime and wasp-os, merged where both firmwares had the same app:
+- **31 apps** ported from InfiniTime and wasp-os, merged where both firmwares had the same app:
   stopwatch, timer, alarm, pomodoro, calculator, dice, flashlight, phone finder, heart rate, steps,
   sports, music, weather, navigation, metronome, motion, level, beacon, Bluetooth off, 2048, paddle,
-  puzzle 15, snake, four in a row, Game of Life, paint, haiku, Morse, hello and a template. Each is
+  puzzle 15, snake, four in a row, Game of Life, paint, haiku, Morse, settings, hello and a template. Each is
   described in [apps.md](apps.md).
 - **18 watch faces** ported from InfiniTime, wasp-os and PinetimeLite, described in
   [faces.md](faces.md).

@@ -2,9 +2,11 @@
 //!
 //! The face is shown at start and after the button from the launcher. A swipe up on the face opens
 //! the launcher, a tap there opens an app, and the button or a swipe right that the app does not
-//! use goes back a step. The backlight and display turn off after a while without input, unless the
-//! app keeps the screen on, and the next touch or press turns them on without acting on it. Each
-//! app's persistent state is saved to `/apps/<id>/state` when it closes or the screen turns off.
+//! use goes back a step. The backlight and display turn off, or dim for an always-on screen, after
+//! the settings' timeout without input, unless the app keeps the screen on, and the next touch or
+//! press turns them on without acting on it. Each app's persistent state is saved to
+//! `/apps/<id>/state` when it closes or the screen turns off, and changed settings at the same times.
+//! The watch buzzes on the hour or half hour when the chimes setting asks, except in do not disturb.
 
 extern crate alloc;
 
@@ -21,22 +23,22 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channe
 use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_app_host::{
-    AppEffect, AppFailure, AppHost, EventResult, PushedEvent, System, Touch,
+    settings as app_settings, AppEffect, AppFailure, AppHost, EventResult, PushedEvent, System, Touch,
     LARGEST_SAVED_STATE_BYTES,
 };
 use neotime_companion::SettingsChange;
 use neotime_runtime::{
     events::{ButtonPress, SwipeDirection},
-    resources::ImageReference, AppImage, EffectKind, SystemValue, SystemValues, Value,
+    resources::ImageReference,
+    AppImage, EffectKind, SystemValue, SystemValues, Theme, Value,
 };
+use neotime_settings::{chimes, Setting};
 
 use crate::{
     backlight::{self, Backlight},
     battery, built_in_apps, clock, help,
     diagnostics::{self, Counter},
-    motion,
-    settings::{self, Settings},
-    storage, system_values,
+    motion, settings, storage, system_values,
     touch::TOUCHES,
     vibration, SharedDisplay,
 };
@@ -50,11 +52,26 @@ static SHOWING_STATUS: AtomicBool = AtomicBool::new(true);
 /// Set when the status page goes away, so the shell paints the whole screen again.
 static REDRAW_EVERYTHING: AtomicBool = AtomicBool::new(false);
 
-const SCREEN_TIMEOUT: Duration = Duration::from_secs(15);
+const MILLISECONDS_PER_MINUTE: Value = 60_000;
+
+/// A chime is skipped when the shell notices it later than this, such as after the phone moved the clock on.
+const LATEST_CHIME_IN_MILLISECONDS: Value = MILLISECONDS_PER_MINUTE;
+
+fn screen_timeout() -> Duration {
+    Duration::from_secs(settings::current().get(Setting::ScreenTimeoutSeconds) as u64)
+}
+
+/// How often the watch chimes, or `None` when the chimes are off.
+fn chime_period_in_milliseconds() -> Option<Value> {
+    match settings::current().get(Setting::Chimes) {
+        chimes::EVERY_HOUR => Some(60 * MILLISECONDS_PER_MINUTE),
+        chimes::EVERY_HALF_HOUR => Some(30 * MILLISECONDS_PER_MINUTE),
+        _ => None,
+    }
+}
 
 /// How long the start-up page stays up, so its lines can be read.
 const START_PAGE_TIME: Duration = Duration::from_secs(2);
-
 
 pub fn status_is_shown() -> bool {
     SHOWING_STATUS.load(Ordering::Relaxed)
@@ -99,17 +116,26 @@ struct WatchSystem {
     /// A brightness the open app asked for, applied once the host call returns.
     brightness_request: Option<u8>,
     keep_screen_on: bool,
+    /// The preset number of the theme in use, or -1, as `settings.theme` reads.
+    theme_preset: Value,
+    /// A preset theme the open app picked, applied once the host call returns.
+    theme_request: Option<Theme>,
 }
 
 impl SystemValues for WatchSystem {
     fn read(&self, value: SystemValue) -> Value {
+        if let Some(setting) = app_settings::read_setting(&settings::current(), value) {
+            return setting;
+        }
+        if value == SystemValue::ThemePreset {
+            return self.theme_preset;
+        }
         match value {
             SystemValue::Now => clock::now(),
             SystemValue::BatteryPercent => battery::percent() as Value,
             SystemValue::IsCharging => battery::is_charging() as Value,
             SystemValue::StepsToday => motion::steps_today() as Value,
-            SystemValue::Uses24HourClock | SystemValue::UsesMetricUnits | SystemValue::IsBluetoothEnabled => 1,
-            SystemValue::StepGoal => 10_000,
+            SystemValue::IsBluetoothEnabled => 1,
             SystemValue::Brightness => self.brightness as Value,
             SystemValue::NextAlarm => neotime_runtime::NONE,
             SystemValue::InstalledAppCount => built_in_apps::APPS.len() as Value,
@@ -179,6 +205,13 @@ impl System for WatchSystem {
             EffectKind::Back | EffectKind::Close => self.request = Request::Back,
             EffectKind::SetBrightness => self.brightness_request = Some(effect.number(0).clamp(1, 3) as u8),
             EffectKind::KeepScreenOn => self.keep_screen_on = effect.number(0) != 0,
+            EffectKind::SetSetting if effect.text(0) == Some(app_settings::THEME_SETTING) => {
+                self.theme_request = app_settings::preset_theme(effect.number(1));
+            }
+            EffectKind::SetSetting => settings::set_by_name(effect.text(0).unwrap_or(""), effect.number(1)),
+            EffectKind::SetDoNotDisturb => {
+                settings::set_by_name(Setting::DoNotDisturb.name(), effect.number(0))
+            }
             _ => {}
         }
     }
@@ -187,9 +220,9 @@ impl System for WatchSystem {
 }
 
 fn app_with_id(id: &str) -> Option<usize> {
-    built_in_apps::APPS.iter().position(|bytes| {
-        AppImage::parse(bytes).is_ok_and(|image| image.string(image.id_string) == Some(id))
-    })
+    built_in_apps::APPS
+        .iter()
+        .position(|bytes| AppImage::parse(bytes).is_ok_and(|image| image.string(image.id_string) == Some(id)))
 }
 
 /// Where an app's saved state lives: `/apps/<id>/state`.
@@ -208,12 +241,21 @@ struct Shell {
     host: Option<AppHost<'static>>,
     system: WatchSystem,
     files: &'static storage::Files,
-    settings: Settings,
+    /// The theme every app opens with, kept in `/settings/theme`.
+    theme: Theme,
+    /// Whether the open app set its own brightness, which a settings change leaves alone.
+    app_set_brightness: bool,
     backlight: Backlight,
     display: &'static SharedDisplay,
     lit: bool,
     /// While the help screen shows, when its time changes next, so it is painted once a minute.
     help_drawn_at: Option<Value>,
+    /// Whether the screen went off by dimming, for an always-on screen, rather than by sleeping.
+    dimmed: bool,
+    /// Settings changed since they were last written to the flash.
+    settings_unsaved: bool,
+    /// The wall clock time the chimes were last checked at.
+    chimes_checked_at: Value,
 }
 
 impl Shell {
@@ -224,9 +266,11 @@ impl Shell {
             host.close(now, &mut self.system);
             self.save_state_of(&mut host);
         }
+        self.save_settings();
         let _ = vibration::REQUESTS.try_send(vibration::Request::Stop);
         self.system.keep_screen_on = false;
-        self.set_brightness(self.settings.brightness);
+        self.app_set_brightness = false;
+        self.set_brightness(settings::current().get(Setting::Brightness) as u8);
 
         let bytes = match showing {
             Showing::Face => built_in_apps::FACE,
@@ -239,7 +283,7 @@ impl Shell {
             .and_then(|image| image.string(image.id_string))
             .and_then(|id| self.files.read(&state_path(id)))
             .unwrap_or_default();
-        match AppHost::open_with_saved_state(bytes, self.settings.theme, &saved, now, &mut self.system) {
+        match AppHost::open_with_saved_state(bytes, self.theme, &saved, now, &mut self.system) {
             Ok(mut host) => {
                 let _ = host.set_library(built_in_apps::LIBRARY);
                 host.set_installed_apps(&built_in_apps::APPS);
@@ -264,17 +308,72 @@ impl Shell {
 
     /// Applies a change from the companion app, then tells it the settings as they now are.
     fn change_settings(&mut self, change: &SettingsChange) {
-        let old_brightness = self.settings.brightness;
-        self.settings.apply(change, self.files);
-        if let Some(host) = &mut self.host {
-            host.set_theme(self.settings.theme);
-        }
-        // An app's own brightness stays until it closes; otherwise the new level shows at once.
-        if self.system.brightness == old_brightness {
-            self.set_brightness(self.settings.brightness);
-        }
-        let report = neotime_companion::settings_report(&self.settings.theme, self.settings.brightness);
+        self.set_theme(change.applied_to(self.theme));
+        settings::set_values(&change.values);
+        let report = neotime_companion::settings_report(&self.theme, &settings::current());
         let _ = settings::REPLIES.try_send(report);
+    }
+
+    /// Saves a new theme and shows it, and tells the open app its preset number changed.
+    fn set_theme(&mut self, theme: Theme) {
+        if theme == self.theme {
+            return;
+        }
+        self.theme = theme;
+        self.system.theme_preset = app_settings::preset_number(&theme);
+        settings::save_theme(&self.files, &theme);
+        self.help_drawn_at = None;
+        if let Some(host) = &mut self.host {
+            host.set_theme(theme);
+            let key = app_settings::THEME_SETTING;
+            host.deliver(
+                PushedEvent::SettingsChange { key },
+                clock::now(),
+                &mut self.system,
+            );
+        }
+    }
+
+    fn save_settings(&mut self) {
+        if core::mem::take(&mut self.settings_unsaved) {
+            settings::save(&self.files);
+        }
+    }
+
+    /// Passes changed settings on to the backlight and the open app; saved now only while the screen is off.
+    fn settings_changed(&mut self) {
+        let changed = settings::take_changes();
+        if changed == 0 {
+            return;
+        }
+        self.settings_unsaved = true;
+        // An app's own brightness stays until it closes; otherwise the new level shows at once.
+        if changed & Setting::Brightness.bit() != 0 && !self.app_set_brightness {
+            self.set_brightness(settings::current().get(Setting::Brightness) as u8);
+        }
+        if let Some(host) = &mut self.host {
+            app_settings::tell_app_about_changes(host, changed, clock::now(), &mut self.system);
+        }
+        if !self.lit {
+            self.save_settings();
+        }
+    }
+
+    /// Buzzes when an hour or half hour, as the chimes setting asks, has passed since the last check.
+    fn chime_if_due(&mut self, now: Value) {
+        let checked_at = core::mem::replace(&mut self.chimes_checked_at, now);
+        let Some(period) = chime_period_in_milliseconds() else {
+            return;
+        };
+        let boundary = now - now.rem_euclid(period);
+        let is_due = boundary > checked_at && now - boundary < LATEST_CHIME_IN_MILLISECONDS;
+        if is_due && !settings::current().is_on(Setting::DoNotDisturb) {
+            let on_the_hour = boundary.rem_euclid(60 * MILLISECONDS_PER_MINUTE) == 0;
+            let pattern = vibration::named_pattern(if on_the_hour { 1 } else { 0 });
+            if let Some(request) = pattern {
+                let _ = vibration::REQUESTS.try_send(request);
+            }
+        }
     }
 
     fn set_brightness(&mut self, level: u8) {
@@ -314,6 +413,7 @@ impl Shell {
     }
 
     fn system_values_changed(&mut self, changed: u32) {
+        self.settings_changed();
         let Some(host) = &mut self.host else {
             return;
         };
@@ -328,7 +428,8 @@ impl Shell {
     /// Turns the backlight off and puts the display to sleep, or dims both for an always-on screen.
     fn turn_screen_off(&mut self) {
         self.lit = false;
-        if backlight::ALWAYS_ON_SCREEN {
+        self.dimmed = settings::current().is_on(Setting::AlwaysOnScreen);
+        if self.dimmed {
             self.backlight.dim();
             self.display.lock(|display| {
                 let _ = display.borrow_mut().enter_low_power_mode();
@@ -344,18 +445,20 @@ impl Shell {
             self.save_state_of(&mut host);
             self.host = Some(host);
         }
+        self.save_settings();
     }
 
     fn turn_screen_on(&mut self) {
         self.lit = true;
         self.display.lock(|display| {
             let mut display = display.borrow_mut();
-            if backlight::ALWAYS_ON_SCREEN {
+            if self.dimmed {
                 let _ = display.leave_low_power_mode();
             } else {
                 let _ = display.wake(&mut Delay);
             }
         });
+        self.dimmed = false;
         self.backlight.turn_on();
         if let Some(host) = &mut self.host {
             host.screen_turned_on(clock::now(), &mut self.system);
@@ -365,7 +468,11 @@ impl Shell {
     /// Carries out what the last host call's handlers asked for.
     fn follow_requests(&mut self) {
         if let Some(level) = self.system.brightness_request.take() {
+            self.app_set_brightness = true;
             self.set_brightness(level);
+        }
+        if let Some(theme) = self.system.theme_request.take() {
+            self.set_theme(theme);
         }
         match core::mem::replace(&mut self.system.request, Request::Nothing) {
             Request::Nothing => {}
@@ -383,7 +490,7 @@ impl Shell {
                 host.set_theme(*host.theme());
             }
         }
-        if (!self.lit && !backlight::ALWAYS_ON_SCREEN) || status_is_shown() {
+        if (!self.lit && !self.dimmed) || status_is_shown() {
             return;
         }
         match &mut self.host {
@@ -395,7 +502,7 @@ impl Shell {
             Some(_) => {}
             None if self.help_drawn_at != Some(help::next_change(clock::now())) => {
                 let now = clock::now();
-                self.display.lock(|display| help::draw(&mut display.borrow_mut(), now, &self.settings.theme));
+                self.display.lock(|display| help::draw(&mut display.borrow_mut(), now, &self.theme));
                 self.help_drawn_at = Some(help::next_change(now));
             }
             None => {}
@@ -407,7 +514,9 @@ impl Shell {
 pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, files: &'static storage::Files) {
     Timer::after(START_PAGE_TIME).await;
     hide_status();
+    settings::load(&files);
 
+    let theme = settings::load_theme(&files);
     let mut shell = Shell {
         showing: Showing::Face,
         host: None,
@@ -417,13 +526,19 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
             brightness: backlight::DEFAULT_LEVEL,
             brightness_request: None,
             keep_screen_on: false,
+            theme_preset: app_settings::preset_number(&theme),
+            theme_request: None,
         },
-        settings: Settings::load(files),
+        theme,
+        app_set_brightness: false,
         files,
         backlight,
         display,
         lit: true,
         help_drawn_at: None,
+        dimmed: false,
+        settings_unsaved: false,
+        chimes_checked_at: clock::now(),
     };
     shell.open(Showing::Face);
     let mut last_input = Instant::now();
@@ -434,12 +549,17 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
         shell.draw();
 
         let now = clock::now();
+        shell.chime_if_due(now);
         let mut wake_at = match &shell.host {
             Some(host) => host.next_wakeup(now).map_or(Instant::MAX, clock::instant_at),
             None => clock::instant_at(help::next_change(now)),
         };
         if shell.lit && !shell.system.keep_screen_on {
-            wake_at = wake_at.min(last_input + SCREEN_TIMEOUT);
+            wake_at = wake_at.min(last_input + screen_timeout());
+        }
+        if let Some(period) = chime_period_in_milliseconds() {
+            let next_chime = now - now.rem_euclid(period) + period;
+            wake_at = wake_at.min(clock::instant_at(next_chime));
         }
 
         match select4(
@@ -472,7 +592,7 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
             }
             Either4::Third(()) => {
                 diagnostics::set(Counter::ShellLastWake, 3);
-                let timed_out = Instant::now() >= last_input + SCREEN_TIMEOUT;
+                let timed_out = Instant::now() >= last_input + screen_timeout();
                 if shell.lit && timed_out && !shell.system.keep_screen_on {
                     shell.turn_screen_off();
                 }

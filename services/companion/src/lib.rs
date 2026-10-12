@@ -10,6 +10,7 @@
 use core::fmt::Write;
 
 use neotime_runtime::{preset_matching, preset_named, PresetTheme, Theme, ThemeColor, PRESET_THEMES};
+use neotime_settings::{Setting, Settings};
 use serde::Deserialize;
 
 #[cfg(test)]
@@ -82,13 +83,19 @@ pub struct SettingsChange {
     pub preset: Option<&'static PresetTheme>,
     /// Single theme colours, as RGB565, applied after the preset.
     pub colors: [Option<u16>; ThemeColor::COUNT],
-    /// The backlight level from 1 to 3.
-    pub brightness: Option<u8>,
+    /// New values for the watch-wide settings, in `Setting::ALL` order, each inside its limits.
+    pub values: [Option<i32>; Setting::COUNT],
 }
 
 impl SettingsChange {
     pub fn changes_anything(&self) -> bool {
-        self.preset.is_some() || self.colors.iter().any(Option::is_some) || self.brightness.is_some()
+        self.preset.is_some()
+            || self.colors.iter().any(Option::is_some)
+            || self.values.iter().any(Option::is_some)
+    }
+
+    pub fn value(&self, setting: Setting) -> Option<i32> {
+        self.values[setting as usize]
     }
 
     /// The theme after this change.
@@ -109,8 +116,37 @@ pub enum MessageError {
     NotJson,
     UnknownTheme,
     BadColor,
-    BadBrightness,
+    /// A setting's value outside its limits, or `units` other than `Metric` or `Imperial`.
+    BadSetting,
 }
+
+// ============================================================================
+// The watch-wide settings' keys
+// ============================================================================
+
+/// How a setting is written in a message.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Shape {
+    Number,
+    TrueOrFalse,
+    /// `"Metric"` for 1 and `"Imperial"` for 0, as the wasp-os companion writes units.
+    Units,
+}
+
+/// Each setting's key, the same names the wasp-os companion's settings screen uses where it has one.
+const KEYS: [(Setting, &str, Shape); Setting::COUNT] = [
+    (Setting::Uses24HourClock, "clock_24h", Shape::TrueOrFalse),
+    (Setting::UsesMetricUnits, "units", Shape::Units),
+    (Setting::StepGoal, "step_goal", Shape::Number),
+    (Setting::Brightness, "brightness", Shape::Number),
+    (Setting::ScreenTimeoutSeconds, "blank_after", Shape::Number),
+    (Setting::AlwaysOnScreen, "always_on", Shape::TrueOrFalse),
+    (Setting::Chimes, "chimes", Shape::Number),
+    (Setting::DoNotDisturb, "do_not_disturb", Shape::TrueOrFalse),
+];
+
+const METRIC: &str = "Metric";
+const IMPERIAL: &str = "Imperial";
 
 #[derive(Deserialize)]
 struct Envelope<'line> {
@@ -120,7 +156,56 @@ struct Envelope<'line> {
     #[serde(default, borrow)]
     theme_colors: Option<ThemeColors<'line>>,
     #[serde(default)]
-    brightness: Option<u8>,
+    brightness: Option<i64>,
+    #[serde(default)]
+    blank_after: Option<i64>,
+    #[serde(default)]
+    clock_24h: Option<bool>,
+    #[serde(default, borrow)]
+    units: Option<&'line str>,
+    #[serde(default)]
+    step_goal: Option<i64>,
+    #[serde(default)]
+    always_on: Option<bool>,
+    #[serde(default)]
+    chimes: Option<i64>,
+    #[serde(default)]
+    do_not_disturb: Option<bool>,
+}
+
+impl Envelope<'_> {
+    /// Each setting the message carries, as the number the store holds, or an error for a bad one.
+    fn setting_values(&self) -> Result<[Option<i32>; Setting::COUNT], MessageError> {
+        let number = |value: Option<i64>| value.map(|value| i32::try_from(value).unwrap_or(i32::MIN));
+        let units = match self.units {
+            None => None,
+            Some(METRIC) => Some(1),
+            Some(IMPERIAL) => Some(0),
+            Some(_) => return Err(MessageError::BadSetting),
+        };
+        let mut values = [None; Setting::COUNT];
+        for setting in Setting::ALL {
+            values[setting as usize] = match setting {
+                Setting::Uses24HourClock => self.clock_24h.map(i32::from),
+                Setting::UsesMetricUnits => units,
+                Setting::StepGoal => number(self.step_goal),
+                Setting::Brightness => number(self.brightness),
+                Setting::ScreenTimeoutSeconds => number(self.blank_after),
+                Setting::AlwaysOnScreen => self.always_on.map(i32::from),
+                Setting::Chimes => number(self.chimes),
+                Setting::DoNotDisturb => self.do_not_disturb.map(i32::from),
+            };
+        }
+        let mut checked = Settings::default();
+        for (setting, value) in Setting::ALL.into_iter().zip(values) {
+            if let Some(value) = value {
+                checked
+                    .set(setting, value)
+                    .map_err(|_| MessageError::BadSetting)?;
+            }
+        }
+        Ok(values)
+    }
 }
 
 #[derive(Deserialize)]
@@ -161,13 +246,14 @@ impl<'line> ThemeColors<'line> {
 
 /// Reads one line: `GB({...})` as Gadgetbridge sends it, or a bare JSON object.
 pub fn parse_line(line: &[u8]) -> Result<Message<'_>, MessageError> {
-    let text = core::str::from_utf8(line).map_err(|_| MessageError::NotText)?.trim();
+    let text = core::str::from_utf8(line)
+        .map_err(|_| MessageError::NotText)?
+        .trim();
     let json = text
         .strip_prefix("GB(")
         .and_then(|inner| inner.strip_suffix(')'))
         .unwrap_or(text);
-    let (envelope, _) =
-        serde_json_core::from_str::<Envelope>(json).map_err(|_| MessageError::NotJson)?;
+    let (envelope, _) = serde_json_core::from_str::<Envelope>(json).map_err(|_| MessageError::NotJson)?;
     if envelope.t != "settings" {
         return Ok(Message::Unknown { kind: envelope.t });
     }
@@ -177,19 +263,14 @@ pub fn parse_line(line: &[u8]) -> Result<Message<'_>, MessageError> {
     if let Some(name) = envelope.theme.filter(|name| *name != CUSTOM_THEME) {
         change.preset = Some(preset_named(name).ok_or(MessageError::UnknownTheme)?);
     }
-    if let Some(colors) = envelope.theme_colors {
+    if let Some(colors) = &envelope.theme_colors {
         for (slot, value) in change.colors.iter_mut().zip(colors.in_order()) {
             if let Some(value) = value {
                 *slot = Some(rgb565_from_hex(value).ok_or(MessageError::BadColor)?);
             }
         }
     }
-    if let Some(level) = envelope.brightness {
-        if !(1..=3).contains(&level) {
-            return Err(MessageError::BadBrightness);
-        }
-        change.brightness = Some(level);
-    }
+    change.values = envelope.setting_values()?;
     Ok(Message::Settings(change))
 }
 
@@ -211,7 +292,13 @@ fn hex_from_rgb565(color: u16) -> heapless::String<7> {
     let blue = (color & 0x1F) as u32;
     let widen = |part: u32, bits: u32| (part << (8 - bits)) | (part >> (2 * bits - 8));
     let mut text = heapless::String::new();
-    let _ = write!(text, "#{:02x}{:02x}{:02x}", widen(red, 5), widen(green, 6), widen(blue, 5));
+    let _ = write!(
+        text,
+        "#{:02x}{:02x}{:02x}",
+        widen(red, 5),
+        widen(green, 6),
+        widen(blue, 5)
+    );
     text
 }
 
@@ -219,21 +306,42 @@ fn hex_from_rgb565(color: u16) -> heapless::String<7> {
 // Replies to the phone
 // ============================================================================
 
-/// The `settings` reply: the theme by name, or `custom`, its colours, the presets and the brightness.
-pub fn settings_report(theme: &Theme, brightness: u8) -> ReplyLine {
+/// The `settings` reply: the theme by name, or `custom`, its colours, the presets and every setting.
+pub fn settings_report(theme: &Theme, settings: &Settings) -> ReplyLine {
     let mut line = ReplyLine::new();
     let name = preset_matching(theme).map_or(CUSTOM_THEME, |preset| preset.name);
-    let _ = write!(line, "{{\"t\":\"settings\",\"theme\":\"{name}\",\"theme_colors\":{{");
+    let _ = write!(
+        line,
+        "{{\"t\":\"settings\",\"theme\":\"{name}\",\"theme_colors\":{{"
+    );
     for (index, color) in ThemeColor::ALL.into_iter().enumerate() {
         let separator = if index == 0 { "" } else { "," };
-        let _ = write!(line, "{separator}\"{}\":\"{}\"", color.name(), hex_from_rgb565(theme.color(color)));
+        let _ = write!(
+            line,
+            "{separator}\"{}\":\"{}\"",
+            color.name(),
+            hex_from_rgb565(theme.color(color))
+        );
     }
     let _ = write!(line, "}},\"themes\":[");
     for (index, preset) in PRESET_THEMES.iter().enumerate() {
         let separator = if index == 0 { "" } else { "," };
         let _ = write!(line, "{separator}\"{}\"", preset.name);
     }
-    let _ = writeln!(line, "],\"brightness\":{brightness}}}");
+    let _ = write!(line, "]");
+    for (setting, key, shape) in KEYS {
+        let value = settings.get(setting);
+        let _ = match shape {
+            Shape::Number => write!(line, ",\"{key}\":{value}"),
+            Shape::TrueOrFalse => write!(line, ",\"{key}\":{}", value != 0),
+            Shape::Units => write!(
+                line,
+                ",\"{key}\":\"{}\"",
+                if value != 0 { METRIC } else { IMPERIAL }
+            ),
+        };
+    }
+    let _ = writeln!(line, "}}");
     line
 }
 

@@ -25,9 +25,6 @@ use nrf_pac as pac;
 
 pub const DEFAULT_LEVEL: u8 = 2;
 
-/// Whether the screen dims to the panel's low-power mode instead of turning off.
-pub const ALWAYS_ON_SCREEN: bool = cfg!(feature = "always-on-screen");
-
 /// RTC2 ticks in one pulse of the dim level, about 1 kHz, so it does not flicker.
 const PULSE_PERIOD_TICKS: u32 = 32;
 

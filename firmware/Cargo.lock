@@ -877,6 +877,7 @@ version = "0.1.0"
 dependencies = [
  "embedded-graphics",
  "neotime-runtime",
+ "neotime-settings",
  "neotime-ui",
  "rlvgl-core",
  "rlvgl-widgets",
@@ -917,6 +918,7 @@ version = "0.1.0"
 dependencies = [
  "heapless 0.9.3",
  "neotime-runtime",
+ "neotime-settings",
  "serde",
  "serde-json-core",
 ]
@@ -979,6 +981,7 @@ dependencies = [
  "neotime-display",
  "neotime-external-flash",
  "neotime-runtime",
+ "neotime-settings",
  "neotime-storage",
  "neotime-touch",
  "neotime-updates",
@@ -990,6 +993,10 @@ dependencies = [
 
 [[package]]
 name = "neotime-runtime"
+version = "0.1.0"
+
+[[package]]
+name = "neotime-settings"
 version = "0.1.0"
 
 [[package]]

@@ -23,7 +23,7 @@ python3 tools/draw_memory_maps.py
 |---|---|---|---|
 | Bootloader | `0x00000` | 16 KB | The `embassy-boot` bootloader with its status screen, about 14 KB of it used. There is no SoftDevice and no MBR. |
 | Boot state | `0x04000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
-| Firmware | `0x05000` | 400 KB | The running firmware. It is linked to start here. It uses 368 KB, with the app host's fonts, the built-in apps and, for now, the shared library inside it. |
+| Firmware | `0x05000` | 400 KB | The running firmware. It is linked to start here. It uses 380 KB, with the app host's fonts, the built-in apps and, for now, the shared library inside it. |
 | Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, fonts, components, common functions and the preset themes. No apps are kept here; they live in `/apps` on the external flash. An installed library starts with an 8-byte header, `NTLB` and its length, which `neotime-packages` writes. See [app-runtime.md](app-runtime.md#the-shared-library). |
 
 Inside the firmware, 48 KB is set aside for the app runtime: the interpreter, the image verifier,
@@ -32,7 +32,7 @@ firmware image, so it runs in place from the internal flash, with the chip's ins
 turned on, and never needs copying into RAM. The figure is a planned budget, to be replaced by
 the measured size once the runtime is built. See [app-runtime.md](app-runtime.md#the-runtime).
 
-Also inside the firmware, until they move to the shared library or the external flash, are the app host's fonts at 47,919 B, the built-in watch face and apps at 29 KB and the shared library's icons at 26 KB;
+Also inside the firmware, until they move to the shared library or the external flash, are the app host's fonts at 47,919 B, the built-in watch face, launcher and apps at 36 KB and the shared library's icons at 26 KB;
 see [app-runtime.md](app-runtime.md#property-values).
 
 Also inside the firmware, the accelerometer's configuration files from Bosch take 6 KB for each chip
@@ -68,9 +68,9 @@ bootloader's note to the firmware (`BOOT_NOTE_ADDRESS`), which says whether the 
 was just installed, and its fourth is the bootloader updater's (`UPDATER_NOTE_ADDRESS`), which says
 the rollback after it was meant. The firmware measures 52 KB of static RAM:
 36 KB of heap (16 KB for storage and the 20 KB UI heap), and
-the Bluetooth host, controller, display buffer and task state. That leaves 13.7 KB for the
-stack. Measured in the emulator by painting the stack before start, it peaks at 10.2 KB while the
-launcher opens, so 3.8 KB is spare. The largest single frame is the Bluetooth task's, 5.7 KB.
+the Bluetooth host, controller, display buffer and task state. That leaves 13.2 KB for the
+stack. Measured in the emulator by painting the stack before start, it peaks at 10.1 KB while the
+launcher opens, so 3.2 KB is spare. The largest single frame is the Bluetooth task's, 5.7 KB.
 To measure it again after a change, build the firmware and run, inside `nix develop`:
 
 ```sh

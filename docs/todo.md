@@ -166,11 +166,9 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### Display
 
-- [ ] **Try the always-on screen on the watch.** Build with `--features always-on-screen` and
+- [ ] **Try the always-on screen on the watch.** Turn on Always on in the Settings app and
   check that the dim level is steady, without flicker, that the face keeps time, and how much
   battery a night costs. It has only been built, not run.
-- [ ] **An always-on setting.** Replace the `always-on-screen` build feature with a setting once
-  settings exist.
 - [ ] **Wake the screen for an update's progress.** The status page draws over a dark or dimmed
   screen, so an update's progress cannot be read until the screen is woken.
 - [ ] **Dim before the screen turns off.** Drop to the low backlight a few seconds before the
@@ -195,7 +193,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### Vibrator
 
-- [ ] **Callers.** Buzz for notifications, alarms, timers and hourly chimes.
+- [ ] **Callers.** Buzz for notifications, alarms and timers.
 
 ### Side button
 
@@ -315,7 +313,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-updates` branches.
 
 - [ ] **Deep power-down in sleep.** Put the flash chip to sleep when the watch sleeps.
-- [ ] **Use the file system:** save settings, alarms and the BLE bond there.
+- [ ] **Use the file system:** save alarms and the BLE bond there.
 - [ ] **File transfer over BLE,** with the Adafruit protocol InfiniTime's `FSService` uses, so
   companion apps can read, write and delete files.
 - [ ] **Resource packages:** fonts and pictures installed from a zip over BLE.
@@ -379,7 +377,7 @@ InfiniTime has these and NeoTime has nothing for them yet:
 | Board and system loop | sleep and wake of the whole system, wake locks, a system monitor |
 | Heart rate | HRS3300 driver, PPG processing, background measuring, the Heart Rate service |
 | Battery | the Battery service |
-| Clock | the Current Time client, hourly chimes |
+| Clock | the Current Time client |
 | Notifications | Alert Notification service and client, Immediate Alert, notification list, calls |
 | Other BLE services | Device Information, Music, Navigation, Simple Weather |
 | System screens | System Info, Battery Info, Notifications, the pass key, firmware validation |

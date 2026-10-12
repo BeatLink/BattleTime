@@ -50,21 +50,32 @@ it changes nothing. Either way the watch answers with the settings as they now a
 | `theme` | A preset's name: `dark`, `light`, `ocean`, `forest`, `sunset` or `contrast`. `custom` keeps the current colours. |
 | `theme_colors` | An object with any of the eight theme colours, each `"#rrggbb"`: `background`, `surface`, `text`, `muted`, `accent`, `success`, `warning`, `danger`. Applied after `theme`, so a preset can be adjusted in one message. |
 | `brightness` | The backlight level, 1 to 3, used whenever the open app has not set its own. |
+| `blank_after` | Seconds without input before the screen turns off, 5 to 300. |
+| `clock_24h` | `true` for a 24 hour clock, `false` for 12 hours. |
+| `units` | `"Metric"` or `"Imperial"`. |
+| `step_goal` | The daily step goal, 1000 to 50000. |
+| `always_on` | `true` to dim the screen instead of turning it off. |
+| `chimes` | `0` off, `1` a buzz every hour, `2` every half hour. |
+| `do_not_disturb` | `true` to silence chimes and, once they exist, notifications. |
 
-An unknown preset, a colour not written `#rrggbb` or a brightness outside 1 to 3 is refused with
-an `error` reply, and nothing in that message is applied.
+The key names after `theme_colors` are the ones the wasp-os companion's settings screen already
+sends. An unknown preset, a colour not written `#rrggbb`, `units` other than the two names, or any
+value outside its range is refused with an `error` reply, and nothing in that message is applied.
 
 The reply:
 
 ```json
 {"t":"settings","theme":"dark","theme_colors":{"background":"#000000","surface":"#292c31",
  "text":"#ffffff","muted":"#8c929c","accent":"#00aaa5","success":"#39be5a","warning":"#f7aa18",
- "danger":"#e74539"},"themes":["dark","light","ocean","forest","sunset","contrast"],"brightness":2}
+ "danger":"#e74539"},"themes":["dark","light","ocean","forest","sunset","contrast"],
+ "clock_24h":true,"units":"Metric","step_goal":10000,"brightness":2,"blank_after":15,
+ "always_on":false,"chimes":0,"do_not_disturb":false}
 ```
 
 `theme` is the preset whose colours match exactly, or `custom`. Colours are stored as RGB565, so a
 colour reads back to the nearest one the screen shows. The watch keeps the theme in
-`/settings/theme` and the brightness in `/settings/brightness`, so they survive a restart.
+`/settings/theme` and every other setting in `/settings/system`, so they survive a restart. The same
+settings change from the watch's own Settings app; the phone sees those changes in the next reply.
 
 ### Other messages (not served yet)
 
@@ -146,5 +157,6 @@ The shared library is a single image that `neotime-compiler library -o shared.nt
   internal flash, with no Bluetooth in it.
 - `firmware/src/main.rs`: the GATT services, which hand lines to `services/companion` and send its
   replies.
+- `services/settings`: each setting's limits and default, and the `/settings/system` file.
 - `firmware/src/settings.rs` and `firmware/src/shell.rs`: apply settings and keep them on the
   external flash.
