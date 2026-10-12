@@ -270,7 +270,7 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
   its main screen) and the launcher (65) against a widget budget worked out from 240 B nodes. Nodes
   are 160 B now and the alarm opens in the emulator, at 36,188 B of the 37,888 B heap, so redo
   the budget in the check and [memory-map.md](memory-map.md). The alarm's image has since shrunk
-  from 15 KB to 6.8 KB, so measure it again. The launcher runs on the watch, so measure the real limit and either correct
+  from 15 KB to 6.1 KB, so measure it again. The launcher runs on the watch, so measure the real limit and either correct
   [memory-map.md](memory-map.md) or slim the screens.
 
 ## Display and SPI bus
