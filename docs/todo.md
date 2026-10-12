@@ -36,6 +36,16 @@ document for its part instead.
   - which nRF52832 revision the watch has (FICR at `0x10000134`), since the radio errata
     workaround depends on it.
 
+- [ ] **Settings on the PineTime.** The Settings app, the settings store and the companion's
+  `settings` keys have run only in the simulator and the emulator. On the watch, check that:
+  - each switch and choice in the Settings app takes effect: brightness at once, the screen
+    timeout on the next idle, 12 or 24 hours and units on the face and apps;
+  - the always-on screen dims at a steady, flicker-free level instead of turning off;
+  - chimes buzz on the hour and half hour, and stay silent in do not disturb;
+  - a preset theme recolours the open app and the next one opened;
+  - settings survive a restart, from `/settings/system` and `/settings/theme`;
+  - a `settings` message from the companion app changes them and the reply lists every key.
+
 ## Bluetooth controller
 
 See [bluetooth.md](bluetooth.md) for the details of each.
