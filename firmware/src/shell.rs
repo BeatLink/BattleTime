@@ -36,9 +36,9 @@ use neotime_settings::{chimes, Setting};
 
 use crate::{
     backlight::{self, Backlight},
-    battery, built_in_apps, clock, help,
+    battery, built_in_apps, clock,
     diagnostics::{self, Counter},
-    motion, settings, storage, system_values,
+    help, motion, settings, storage, system_values,
     touch::TOUCHES,
     vibration, SharedDisplay,
 };
@@ -321,7 +321,7 @@ impl Shell {
         }
         self.theme = theme;
         self.system.theme_preset = app_settings::preset_number(&theme);
-        settings::save_theme(&self.files, &theme);
+        settings::save_theme(self.files, &theme);
         self.help_drawn_at = None;
         if let Some(host) = &mut self.host {
             host.set_theme(theme);
@@ -336,7 +336,7 @@ impl Shell {
 
     fn save_settings(&mut self) {
         if core::mem::take(&mut self.settings_unsaved) {
-            settings::save(&self.files);
+            settings::save(self.files);
         }
     }
 
@@ -502,7 +502,8 @@ impl Shell {
             Some(_) => {}
             None if self.help_drawn_at != Some(help::next_change(clock::now())) => {
                 let now = clock::now();
-                self.display.lock(|display| help::draw(&mut display.borrow_mut(), now, &self.theme));
+                self.display
+                    .lock(|display| help::draw(&mut display.borrow_mut(), now, &self.theme));
                 self.help_drawn_at = Some(help::next_change(now));
             }
             None => {}
@@ -511,12 +512,16 @@ impl Shell {
 }
 
 #[embassy_executor::task]
-pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, files: &'static storage::Files) {
+pub async fn run_shell(
+    display: &'static SharedDisplay,
+    backlight: Backlight,
+    files: &'static storage::Files,
+) {
     Timer::after(START_PAGE_TIME).await;
     hide_status();
-    settings::load(&files);
+    settings::load(files);
 
-    let theme = settings::load_theme(&files);
+    let theme = settings::load_theme(files);
     let mut shell = Shell {
         showing: Showing::Face,
         host: None,

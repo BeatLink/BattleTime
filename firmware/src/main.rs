@@ -19,6 +19,7 @@ use core::cell::RefCell;
 
 use embassy_embedded_hal::shared_bus::{asynch::i2c::I2cDevice, blocking::spi::SpiDevice};
 use embassy_executor::Spawner;
+use embassy_futures::select::{select3, Either3};
 use embassy_nrf::{
     bind_interrupts,
     config::LfclkSource,
@@ -39,13 +40,12 @@ use embedded_graphics::{
     text::Text,
 };
 use mipidsi::interface::SpiInterface;
-use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
 use neotime_blefs::{service::FileTransferService, FileTransfer};
+use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
 use neotime_button::Button;
+use neotime_companion::LineAssembler;
 use neotime_dfu::{service::DfuWrite, service::LegacyDfuService, LegacyDfu};
 use neotime_display::Display;
-use embassy_futures::select::{select3, Either3};
-use neotime_companion::LineAssembler;
 use neotime_runtime::events::ButtonPress;
 use static_cell::StaticCell;
 use trouble_host::prelude::*;
@@ -68,16 +68,16 @@ mod built_in_apps;
 mod clock;
 mod diagnostics;
 #[cfg_attr(not(with_shell), allow(dead_code))]
-mod settings;
-#[cfg_attr(not(with_shell), allow(dead_code))]
 mod help;
+#[cfg_attr(not(with_shell), allow(dead_code))]
+mod settings;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod shell;
 // Under wasp-os the firmware is never rolled back or installed as recovery.
-#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
-mod status;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod motion;
+#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+mod status;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod system_values;
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -202,7 +202,8 @@ async fn main(spawner: Spawner) {
         flash_chip_select: chip.P0_05,
         flash_controller: chip.NVMC,
     };
-    let Some((targets, confirmation, mode, files)) = storage::start(spi_bus, storage_peripherals, &mut screen).await
+    let Some((targets, confirmation, mode, files)) =
+        storage::start(spi_bus, storage_peripherals, &mut screen).await
     else {
         return;
     };
@@ -241,7 +242,9 @@ async fn main(spawner: Spawner) {
             .unwrap(),
         );
         spawner.spawn(motion::count_steps(I2cDevice::new(i2c_bus)).unwrap());
-        spawner.spawn(vibration::run_vibrator(Output::new(chip.P0_16, Level::High, OutputDrive::Standard)).unwrap());
+        spawner.spawn(
+            vibration::run_vibrator(Output::new(chip.P0_16, Level::High, OutputDrive::Standard)).unwrap(),
+        );
         spawner.spawn(shell::run_shell(screen.display, backlight, files).unwrap());
     }
     #[cfg(not(with_shell))]
@@ -428,7 +431,10 @@ impl Screen {
 
     fn write_line(&mut self, line: usize, text: &str) {
         let mut stored = StatusLine::new();
-        let _ = core::fmt::write(&mut stored, format_args!("{:.width$}", text, width = LINE_CHARACTERS));
+        let _ = core::fmt::write(
+            &mut stored,
+            format_args!("{:.width$}", text, width = LINE_CHARACTERS),
+        );
         self.lines[line] = stored;
         if shell::status_is_shown() {
             self.draw_line(line);
@@ -649,7 +655,8 @@ fn read_companion_line(line: &[u8]) {
         }
         Ok(neotime_companion::Message::Unknown { .. }) => {}
         Err(_) => {
-            let _ = settings::REPLIES.try_send(neotime_companion::error_report("could not read that message"));
+            let _ =
+                settings::REPLIES.try_send(neotime_companion::error_report("could not read that message"));
         }
     }
 }
@@ -668,7 +675,12 @@ async fn send_file_answers(
 ) {
     for answer in answers {
         for _ in 0..NOTIFY_ATTEMPTS {
-            match server.file_transfer.transfer.notify_raw(connection, &answer, false).await {
+            match server
+                .file_transfer
+                .transfer
+                .notify_raw(connection, &answer, false)
+                .await
+            {
                 Err(trouble_host::Error::OutOfMemory) => Timer::after(NOTIFY_RETRY_DELAY).await,
                 _ => break,
             }
@@ -703,7 +715,11 @@ async fn serve_connection(
                 continue;
             }
             Either3::Third(()) => {
-                let _ = server.battery.level.notify(connection, &battery::percent(), true).await;
+                let _ = server
+                    .battery
+                    .level
+                    .notify(connection, &battery::percent(), true)
+                    .await;
                 continue;
             }
         };
@@ -780,7 +796,10 @@ async fn serve_connection(
                     shown_kilobytes = kilobytes_received;
                     screen.show_status();
                     let mut progress = StatusLine::new();
-                    let _ = core::fmt::write(&mut progress, format_args!("Receiving {:>3} KB", kilobytes_received));
+                    let _ = core::fmt::write(
+                        &mut progress,
+                        format_args!("Receiving {:>3} KB", kilobytes_received),
+                    );
                     screen.write_line(line::UPDATE, &progress);
                 }
                 if outcome.reset_requested {

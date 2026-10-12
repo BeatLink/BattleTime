@@ -58,7 +58,8 @@ fn percent_at(millivolts: i32) -> u8 {
         let [(low_millivolts, low_percent), (high_millivolts, high_percent)] = [pair[0], pair[1]];
         if millivolts <= high_millivolts {
             let percent = low_percent
-                + (high_percent - low_percent) * (millivolts - low_millivolts) / (high_millivolts - low_millivolts);
+                + (high_percent - low_percent) * (millivolts - low_millivolts)
+                    / (high_millivolts - low_millivolts);
             return percent as u8;
         }
     }
@@ -76,7 +77,8 @@ pub async fn watch_battery(
     loop {
         let mut reading = [0; 1];
         adc.sample(&mut reading).await;
-        let millivolts = reading[0].max(0) as i32 * FULL_SCALE_IN_MILLIVOLTS * VOLTAGE_DIVIDER / FULL_SCALE_READING;
+        let millivolts =
+            reading[0].max(0) as i32 * FULL_SCALE_IN_MILLIVOLTS * VOLTAGE_DIVIDER / FULL_SCALE_READING;
         let percent = percent_at(millivolts);
         let is_charging = power_present_pin.is_low() && charging_pin.is_low();
 
@@ -103,5 +105,10 @@ pub fn battery_adc(
     saadc: embassy_nrf::Peri<'static, embassy_nrf::peripherals::SAADC>,
     battery_pin: embassy_nrf::Peri<'static, embassy_nrf::peripherals::P0_31>,
 ) -> Saadc<'static, 1> {
-    Saadc::new(saadc, crate::Interrupts, Config::default(), [ChannelConfig::single_ended(battery_pin)])
+    Saadc::new(
+        saadc,
+        crate::Interrupts,
+        Config::default(),
+        [ChannelConfig::single_ended(battery_pin)],
+    )
 }

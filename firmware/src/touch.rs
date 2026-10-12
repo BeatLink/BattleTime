@@ -49,7 +49,12 @@ impl Finger {
                 let moved = (x - start_x).abs().max((y - start_y).abs());
                 if self.dragging || moved > DRAG_THRESHOLD_IN_PIXELS {
                     self.dragging = true;
-                    send(Touch::Drag { x, y, start_x, start_y });
+                    send(Touch::Drag {
+                        x,
+                        y,
+                        start_x,
+                        start_y,
+                    });
                 }
             }
             FingerEvent::LiftedUp => send(Touch::Release { x, y }),
@@ -75,7 +80,11 @@ impl Finger {
 }
 
 #[embassy_executor::task]
-pub async fn read_touches(i2c_bus: I2cDeviceOnBus, interrupt_pin: Input<'static>, reset_pin: Output<'static>) {
+pub async fn read_touches(
+    i2c_bus: I2cDeviceOnBus,
+    interrupt_pin: Input<'static>,
+    reset_pin: Output<'static>,
+) {
     let mut panel = TouchPanel::new(i2c_bus, interrupt_pin, reset_pin);
     // Double taps are left off, because the panel would hold back every single tap waiting for one.
     let mut started = false;

@@ -9,7 +9,9 @@ use neotime_vibrator::{OnOffMotor, Step, Strength, Vibrator, TAP};
 /// What the shell asks of the motor; a new request cuts the one playing short.
 #[derive(Clone, Copy)]
 pub enum Request {
-    Buzz { milliseconds: u16 },
+    Buzz {
+        milliseconds: u16,
+    },
     Pattern(&'static [Step]),
     /// A ringing pattern, played again and again for up to a minute.
     Ring(&'static [Step]),
