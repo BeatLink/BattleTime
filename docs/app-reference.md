@@ -117,11 +117,11 @@ A handler run in the background may vibrate and notify without the `wake` permis
 | `heart_rate_reading(period, handler)` | `beats_per_minute`, `confidence` | A measurement every `period`. Several apps asking share one measurement. |
 | `steps(handler)` | `steps_today` | The step count changes, at most once a minute. |
 | `step_goal(handler)` | `steps_today` | The day's step goal is reached. |
-| `motion(kind, handler)` | `kind` | The accelerometer sees `wrist_raise`, `shake`, `tap`, `double_tap`, `still` or `moving`. Which ones exist depends on the chip; the BMA425 has them all. |
-| `acceleration(period, handler)` | `x`, `y`, `z` in thousandths of g | Raw readings, such as for a spirit level. Only while the app is open, and at most 10 a second. |
+| `motion(kind, handler)` | `kind` | The accelerometer sees `wrist_raise`, `shake`, `tap`, `double_tap`, `still` or `moving`. Only `shake` is sent so far, found in software while the app is open and the screen is on. |
+| `acceleration(period, handler)` | `x`, `y`, `z` in thousandths of g | Raw readings, such as for a spirit level. Only while the app is open and the screen is on, and at most 10 a second; the accelerometer is read only while an app asks. |
 | `battery(kind, handler)` | `percent` | The battery goes `low`, or charging `starts`, `stops` or `completes`. |
 | `phone(kind, handler)` | `is_connected` | The phone `connects` or `disconnects`. |
-| `notification(handler)` | `id`, `app`, `title`, `body`, `time` | A notification arrives from the phone. |
+| `notification(handler)` | `id`, `app`, `title`, `body`, `time` | A notification arrives from the phone. The watch keeps up to 24 bytes of `app`, 32 of `title` and 120 of `body`. |
 | `call(handler)` | `kind`, `caller` | A call is `incoming`, `answered` or `ended`. |
 | `music(handler)` | none | The phone's player changes; read the new state from `current_music`. |
 | `weather(handler)` | none | The phone sends a forecast; read it from `current_weather`, coming days included. |
@@ -274,8 +274,9 @@ finishes without failing, in the order they were called.
 | `vibrate_sequence([on, off, on, ...])` | A custom pattern in milliseconds, up to 16 steps. |
 | `stop_vibrating()` | Stops any pattern this app started. |
 
-Vibration is skipped during do not disturb unless the app is an alarm, and even then the user can
-turn that off.
+During do not disturb the watch plays only `vibrate_pattern("alarm")` and `stop_vibrating()`, so
+alarms and timers still ring; every other vibration, `notify`'s included, is skipped. The watch does
+not check the `wake` permission for this yet, and a setting to silence alarms too is planned.
 
 ### Display
 
@@ -300,7 +301,7 @@ turn that off.
 
 | Effect | Does |
 |---|---|
-| `notify(title, body)` | Adds a notification on the watch, with the usual vibration. |
+| `notify(title, body)` | Adds a notification on the watch, with the usual vibration. The watch buzzes but keeps no notification list yet. |
 | `dismiss_notification(id)` | Removes a notification. |
 | `mark_notifications_read()` | Marks every notification read. |
 

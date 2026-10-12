@@ -23,8 +23,14 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   disturb and the theme. They are kept through a restart, and apps follow them at once.
 - **Chimes.** A buzz every hour, or every half hour, chosen in settings; a double buzz on the hour.
   Do not disturb silences them.
-- **Vibration** for apps that buzz.
+- **Vibration** for apps that buzz, alarms and timers that ring, and notifications from the phone.
+  Do not disturb silences everything but alarms and timers.
+- **Notifications from the phone buzz the watch.** Gadgetbridge's `notify` message, sent through
+  the companion app's UART service, buzzes twice and goes to the open app. There is no
+  notification list yet.
 - **Step counting.** The accelerometer counts today's steps for the steps app and faces.
+- **Shake to roll the dice,** and live accelerometer readings for apps such as motion and level.
+  The accelerometer is read for these only while such an app is open and the screen is on.
 - **Battery charge and charging state.**
 - **The time from the phone,** set through the Bluetooth Current Time service.
 - **The battery level on the phone,** through the standard Bluetooth Battery service, updated as it

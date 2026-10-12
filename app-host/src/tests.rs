@@ -955,6 +955,108 @@ fn a_pushed_event_hands_its_fields_to_the_handler() {
 }
 
 // ============================================================================
+// Sensor subscriptions
+// ============================================================================
+
+/// An app with an acceleration subscription at this period, if given, and a shake subscription, if asked.
+fn sensor_image(acceleration_period: Option<Value>, listens_for_shake: bool) -> Vec<u8> {
+    use neotime_runtime::subscriptions::{Subscription, SubscriptionKind, SubscriptionValue};
+    use Instruction::*;
+
+    let mut writer = ImageWriter::new("sensors", "Sensors", AppKind::App, 1);
+    writer.variable("readings", ValueType::Int, false, 0);
+    let count_reading = writer.handler(code(|code| {
+        code.emit(ReadState(0))
+            .emit(PushSmall(1))
+            .emit(Add)
+            .emit(WriteState(0));
+    }));
+    let subscription = |kind, detail, value| Subscription {
+        kind,
+        only_while_open: true,
+        handler: count_reading,
+        detail,
+        days: 0,
+        value: SubscriptionValue::Constant(value),
+    };
+    if let Some(period) = acceleration_period {
+        writer.subscription(subscription(SubscriptionKind::Acceleration, 0, period));
+    }
+    if listens_for_shake {
+        writer.subscription(subscription(SubscriptionKind::Motion, MotionKind::Shake as u8, 0));
+    }
+    writer.widget(WidgetKind::Column, 0, &[]);
+    writer.build()
+}
+
+#[test]
+fn an_app_listens_only_for_the_events_its_running_subscriptions_wait_for() {
+    use neotime_runtime::subscriptions::SubscriptionKind;
+    let mut system = FakeSystem::default();
+    let image = sensor_image(None, true);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    assert!(host.listens_for(SubscriptionKind::Motion, Some(MotionKind::Shake as u8)));
+    assert!(host.listens_for(SubscriptionKind::Motion, None));
+    assert!(!host.listens_for(SubscriptionKind::Motion, Some(MotionKind::Tap as u8)));
+    assert!(!host.listens_for(SubscriptionKind::Notification, None));
+
+    host.close(START_TIME + 1, &mut system);
+    assert!(!host.listens_for(SubscriptionKind::Motion, None));
+}
+
+#[test]
+fn the_accelerometer_is_read_only_as_often_as_the_open_app_needs() {
+    let mut system = FakeSystem::default();
+    let reading_period = |image: &[u8], system: &mut FakeSystem| {
+        let host = AppHost::open(image, DEFAULT_THEME, START_TIME, system).unwrap();
+        motion::reading_period_in_milliseconds(&host)
+    };
+
+    assert_eq!(reading_period(&sensor_image(None, false), &mut system), None);
+    assert_eq!(
+        reading_period(&sensor_image(Some(250), false), &mut system),
+        Some(250)
+    );
+    assert_eq!(
+        reading_period(&sensor_image(Some(20), false), &mut system),
+        Some(100)
+    );
+    assert_eq!(reading_period(&sensor_image(None, true), &mut system), Some(100));
+    assert_eq!(
+        reading_period(&sensor_image(Some(500), true), &mut system),
+        Some(100)
+    );
+
+    let image = sensor_image(Some(250), true);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    host.close(START_TIME + 1, &mut system);
+    assert_eq!(motion::reading_period_in_milliseconds(&host), None);
+}
+
+#[test]
+fn an_acceleration_subscription_gets_the_latest_reading_at_its_period() {
+    let mut system = FakeSystem::default();
+    let image = sensor_image(Some(100), false);
+    const START_ON_A_PERIOD: Value = 1_000_000_000;
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_ON_A_PERIOD, &mut system).unwrap();
+
+    let reading = PushedEvent::Acceleration {
+        x: 10,
+        y: -20,
+        z: 980,
+    };
+    assert_eq!(
+        host.deliver(reading, START_ON_A_PERIOD + 10, &mut system),
+        EventResult::NotHandled
+    );
+    assert_eq!(host.state().get(0).unwrap(), 0);
+    host.tick(START_ON_A_PERIOD + 100, &mut system);
+
+    assert_eq!(host.state().get(0).unwrap(), 1);
+}
+
+// ============================================================================
 // Saved state
 // ============================================================================
 

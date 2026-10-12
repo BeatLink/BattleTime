@@ -10,7 +10,7 @@ use embedded_graphics::{pixelcolor::Rgb565, prelude::DrawTarget};
 use neotime_runtime::{
     events::{ButtonPress, EventKind},
     state::SaveBufferFull,
-    subscriptions::SubscriptionKind,
+    subscriptions::{Subscription, SubscriptionKind},
     verify,
     widgets::{Property, PropertyValue as ValueKind, DEEPEST_NESTING, MOST_WIDGETS},
     AppImage, AppKind, AppState, Bindings, EffectKind, ImageError, Inputs, Interpreter, PropertySource,
@@ -870,6 +870,30 @@ impl<'image> AppHost<'image> {
                     _ => subscription.next_due(now, &self.state, self.utc_offset),
                 }
             })
+            .min()
+    }
+
+    /// The subscriptions that would run now, leaving out failed ones and open-only ones of a closed app.
+    fn running_subscriptions(&self) -> impl Iterator<Item = &Subscription> + '_ {
+        self.subscriptions
+            .iter()
+            .filter(|memory| !memory.is_turned_off())
+            .filter(|memory| self.is_open || !memory.subscription.only_while_open)
+            .map(|memory| &memory.subscription)
+    }
+
+    /// Whether a running subscription waits for this event, such as `motion("shake")`, so the system watches only for what is wanted.
+    pub fn listens_for(&self, kind: SubscriptionKind, detail: Option<u8>) -> bool {
+        self.running_subscriptions().any(|subscription| {
+            subscription.kind == kind && detail.is_none_or(|detail| detail == subscription.detail)
+        })
+    }
+
+    /// The shortest period of the running subscriptions of a periodic kind, such as `acceleration`.
+    pub fn shortest_period_of(&self, kind: SubscriptionKind) -> Option<Value> {
+        self.running_subscriptions()
+            .filter(|subscription| subscription.kind == kind)
+            .filter_map(|subscription| subscription.current_value(&self.state))
             .min()
     }
 

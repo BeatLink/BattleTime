@@ -87,6 +87,8 @@ expect no failures
 | `wait 250ms`, `3s`, `10min`, `2h` | Moves the clock on, waking the app at each time it asked for. |
 | `set <system value> <number>` | Sets a value by the name apps read, such as `battery_percent` or `settings.step_goal`; `true` and `false` are 1 and 0. |
 | `notify "title" "body"` | Delivers a notification from the phone. |
+| `shake` | Delivers a shake from the accelerometer. |
+| `acceleration X Y Z` | Delivers an accelerometer reading in thousandths of g, which `acceleration` subscriptions get at their next period. |
 | `screen off`, `screen on` | Turns the screen off or on. |
 | `expect text "…"`, `expect no text "…"` | Whether some shown widget's text contains this. |
 | `expect screen <name>` | The open screen, by its name in `screens`. |

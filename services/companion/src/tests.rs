@@ -1,6 +1,6 @@
 extern crate std;
 
-use std::{string::String, vec::Vec};
+use std::{format, string::String, vec::Vec};
 
 use neotime_runtime::{theme::rgb565, ThemeColor, DEFAULT_THEME};
 use neotime_settings::{Setting, Settings};
@@ -76,9 +76,71 @@ fn unknown_keys_and_messages_are_passed_over() {
     let settings = parse_line(br#"{"t":"settings","launcher":"grid","theme":"ocean"}"#).unwrap();
     assert!(matches!(settings, Message::Settings(change) if change.preset.is_some()));
     assert_eq!(
-        parse_line(br#"GB({"t":"notify","id":3,"title":"Hi"})"#),
-        Ok(Message::Unknown { kind: "notify" })
+        parse_line(br#"GB({"t":"find","n":true})"#),
+        Ok(Message::Unknown { kind: "find" })
     );
+}
+
+// ============================================================================
+// Notifications
+// ============================================================================
+
+#[test]
+fn a_notification_carries_its_id_app_title_and_body() {
+    let line =
+        br#"GB({"t":"notify","id":1234,"src":"Messages","title":"Sam","body":"On my way","sender":"Sam"})"#;
+
+    let Ok(Message::Notification(notification)) = parse_line(line) else {
+        panic!("{:?}", parse_line(line));
+    };
+
+    assert_eq!(notification.id, 1234);
+    assert_eq!(notification.source, "Messages");
+    assert_eq!(notification.title, "Sam");
+    assert_eq!(notification.body, "On my way");
+}
+
+#[test]
+fn a_notification_with_fields_left_out_reads_as_empty() {
+    let Ok(Message::Notification(notification)) = parse_line(br#"{"t":"notify"}"#) else {
+        panic!();
+    };
+    assert_eq!(notification, PhoneNotification::default());
+}
+
+#[test]
+fn notification_text_has_its_escapes_undone() {
+    let line = br#"{"t":"notify","id":1,"title":"\"Quoted\"","body":"Line one\nCaf\u00e9"}"#;
+
+    let Ok(Message::Notification(notification)) = parse_line(line) else {
+        panic!();
+    };
+
+    assert_eq!(notification.title, "\"Quoted\"");
+    assert_eq!(notification.body, "Line one\nCafé");
+}
+
+#[test]
+fn long_notification_text_is_cut_at_a_whole_character() {
+    let body = "é".repeat(NOTIFICATION_BODY_BYTES);
+    let line = format!(r#"{{"t":"notify","id":2,"body":"{body}"}}"#);
+
+    let Ok(Message::Notification(notification)) = parse_line(line.as_bytes()) else {
+        panic!();
+    };
+
+    assert_eq!(notification.body.chars().count(), NOTIFICATION_BODY_BYTES / 2);
+}
+
+#[test]
+fn a_bad_escape_ends_the_text_there() {
+    let line = br#"{"t":"notify","id":3,"title":"Hi \ud83d there"}"#;
+
+    let Ok(Message::Notification(notification)) = parse_line(line) else {
+        panic!();
+    };
+
+    assert_eq!(notification.title, "Hi ");
 }
 
 #[test]

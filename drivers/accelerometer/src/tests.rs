@@ -357,3 +357,88 @@ fn a_wider_range_scales_each_reading_up() {
         0x02
     );
 }
+
+// ============================================================================
+// Shakes
+// ============================================================================
+
+const SHAKE_READING_PERIOD_IN_MILLISECONDS: u64 = 100;
+
+fn reading(x_in_milli_g: i16, z_in_milli_g: i16) -> Acceleration {
+    Acceleration {
+        x_in_milli_g,
+        y_in_milli_g: 0,
+        z_in_milli_g,
+    }
+}
+
+/// Feeds readings a tenth of a second apart from `start`, and gives the times a shake was found at.
+fn shakes_found(detector: &mut shake::ShakeDetector, start: u64, readings: &[Acceleration]) -> Vec<u64> {
+    let mut found = Vec::new();
+    for (place, reading) in readings.iter().enumerate() {
+        let time = start + place as u64 * SHAKE_READING_PERIOD_IN_MILLISECONDS;
+        if detector.feed(*reading, time) {
+            found.push(time);
+        }
+    }
+    found
+}
+
+/// The wrist swung back and forth: the x axis jumps between two g either way.
+fn swings(count: usize) -> Vec<Acceleration> {
+    (0..count)
+        .map(|place| reading(if place % 2 == 0 { -1000 } else { 1000 }, 0))
+        .collect()
+}
+
+#[test]
+fn three_jolts_within_a_second_make_one_shake() {
+    let mut detector = shake::ShakeDetector::new();
+
+    let found = shakes_found(&mut detector, 0, &swings(4));
+
+    assert_eq!(found, vec![300]);
+}
+
+#[test]
+fn a_still_or_gently_moving_watch_never_shakes() {
+    let mut detector = shake::ShakeDetector::new();
+    let gentle: Vec<Acceleration> = (0..50).map(|place| reading((place % 5) * 200, 1000)).collect();
+
+    assert!(shakes_found(&mut detector, 0, &gentle).is_empty());
+}
+
+#[test]
+fn a_long_shake_counts_once_a_second_at_most() {
+    let mut detector = shake::ShakeDetector::new();
+
+    let found = shakes_found(&mut detector, 0, &swings(30));
+
+    assert_eq!(found.len(), 3, "{found:?}");
+    assert!(found.windows(2).all(|pair| pair[1] - pair[0] > 1000), "{found:?}");
+}
+
+#[test]
+fn jolts_further_apart_than_the_window_do_not_add_up() {
+    let mut detector = shake::ShakeDetector::new();
+    let mut readings = Vec::new();
+    for level in [1000, -1000, 1000, -1000, 1000] {
+        readings.extend([reading(level, 0); 12]);
+    }
+
+    assert!(shakes_found(&mut detector, 0, &readings).is_empty());
+}
+
+#[test]
+fn readings_after_a_gap_are_not_compared_with_the_one_before() {
+    let mut detector = shake::ShakeDetector::new();
+    assert!(!detector.feed(reading(-1000, 0), 0));
+    assert!(!detector.feed(reading(1000, 0), 100));
+    assert!(!detector.feed(reading(-1000, 0), 200));
+
+    assert!(!detector.feed(reading(1000, 0), 2000));
+
+    detector.reset();
+    assert!(!detector.feed(reading(-1000, 0), 2100));
+    assert!(!detector.feed(reading(1000, 0), 2200));
+}

@@ -103,6 +103,8 @@ long-button
 wait 250ms
 set battery_percent 15
 notify "Hello" "From the phone"
+shake
+acceleration 10 -20 1000
 screen off
 screen on
 expect text "00:03"
@@ -158,6 +160,12 @@ screenshot out/frame.png
             ScriptCommand::Notify {
                 title: "Hello".to_string(),
                 body: "From the phone".to_string(),
+            },
+            ScriptCommand::Shake,
+            ScriptCommand::Acceleration {
+                x: 10,
+                y: -20,
+                z: 1000,
             },
             ScriptCommand::ScreenOff,
             ScriptCommand::ScreenOn,
@@ -312,6 +320,9 @@ fn commands_with_the_wrong_arguments_are_refused() {
         "set battery_percent",
         "set battery_percent lots",
         "notify Hello",
+        "shake hard",
+        "acceleration 1 2",
+        "acceleration x 2 3",
         "screen dim",
         "expect text 00:03",
         "expect sound",

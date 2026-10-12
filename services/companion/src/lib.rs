@@ -14,6 +14,7 @@ use core::fmt::Write;
 use neotime_runtime::{preset_matching, preset_named, PresetTheme, Theme, ThemeColor, PRESET_THEMES};
 use neotime_settings::{Setting, Settings};
 use serde::Deserialize;
+use serde_json_core::str::{EscapedStr, EscapedStringFragment};
 
 #[cfg(test)]
 mod tests;
@@ -77,6 +78,8 @@ impl LineAssembler {
 pub enum Message<'line> {
     /// `settings`: the keys it carries change; with none, it asks for the current settings.
     Settings(SettingsChange),
+    /// `notify`: a notification arrived on the phone.
+    Notification(PhoneNotification),
     /// A message this watch does not act on yet, by its `t`.
     Unknown { kind: &'line str },
 }
@@ -113,6 +116,43 @@ impl SettingsChange {
         }
         theme
     }
+}
+
+/// The longest app name, title and body a notification keeps; longer text is cut short.
+pub const NOTIFICATION_SOURCE_BYTES: usize = 24;
+pub const NOTIFICATION_TITLE_BYTES: usize = 32;
+pub const NOTIFICATION_BODY_BYTES: usize = 120;
+
+/// A notification from the phone, its text unescaped and cut to fit.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PhoneNotification {
+    pub id: i64,
+    /// The phone app it came from, such as `Messages`.
+    pub source: heapless::String<NOTIFICATION_SOURCE_BYTES>,
+    pub title: heapless::String<NOTIFICATION_TITLE_BYTES>,
+    pub body: heapless::String<NOTIFICATION_BODY_BYTES>,
+}
+
+/// A JSON string's text with its escapes undone, cut at the last whole character that fits.
+fn unescaped<const BYTES: usize>(text: Option<EscapedStr<'_>>) -> heapless::String<BYTES> {
+    let mut out = heapless::String::new();
+    for fragment in text.iter().flat_map(EscapedStr::fragments) {
+        // A bad escape, such as half of a surrogate pair, ends the text there.
+        let Ok(fragment) = fragment else {
+            break;
+        };
+        let mut encoded = [0; 4];
+        let piece = match fragment {
+            EscapedStringFragment::NotEscaped(piece) => piece,
+            EscapedStringFragment::Escaped(character) => character.encode_utf8(&mut encoded),
+        };
+        for character in piece.chars() {
+            if out.push(character).is_err() {
+                return out;
+            }
+        }
+    }
+    out
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -176,6 +216,14 @@ struct Envelope<'line> {
     chimes: Option<i64>,
     #[serde(default)]
     do_not_disturb: Option<bool>,
+    #[serde(default)]
+    id: Option<i64>,
+    #[serde(default, borrow)]
+    src: Option<EscapedStr<'line>>,
+    #[serde(default, borrow)]
+    title: Option<EscapedStr<'line>>,
+    #[serde(default, borrow)]
+    body: Option<EscapedStr<'line>>,
 }
 
 impl Envelope<'_> {
@@ -259,8 +307,17 @@ pub fn parse_line(line: &[u8]) -> Result<Message<'_>, MessageError> {
         .and_then(|inner| inner.strip_suffix(')'))
         .unwrap_or(text);
     let (envelope, _) = serde_json_core::from_str::<Envelope>(json).map_err(|_| MessageError::NotJson)?;
-    if envelope.t != "settings" {
-        return Ok(Message::Unknown { kind: envelope.t });
+    match envelope.t {
+        "settings" => {}
+        "notify" => {
+            return Ok(Message::Notification(PhoneNotification {
+                id: envelope.id.unwrap_or(0),
+                source: unescaped(envelope.src),
+                title: unescaped(envelope.title),
+                body: unescaped(envelope.body),
+            }))
+        }
+        kind => return Ok(Message::Unknown { kind }),
     }
 
     let mut change = SettingsChange::default();

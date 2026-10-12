@@ -4,23 +4,13 @@ use embassy_futures::select::{select, Either};
 use embassy_nrf::gpio::Output;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use embassy_time::Delay;
+use neotime_app_host::haptics::{Vibration, VibrationPattern};
 use neotime_vibrator::{OnOffMotor, Step, Strength, Vibrator, TAP};
 
-/// What the shell asks of the motor; a new request cuts the one playing short.
-#[derive(Clone, Copy)]
-pub enum Request {
-    Buzz {
-        milliseconds: u16,
-    },
-    Pattern(&'static [Step]),
-    /// A ringing pattern, played again and again for up to a minute.
-    Ring(&'static [Step]),
-    Stop,
-}
+/// What the shell asks of the motor; a new vibration cuts the one playing short.
+static REQUESTS: Channel<CriticalSectionRawMutex, Vibration, 2> = Channel::new();
 
-pub static REQUESTS: Channel<CriticalSectionRawMutex, Request, 2> = Channel::new();
-
-const LONGEST_BUZZ_IN_MILLISECONDS: u16 = 2000;
+/// The alarm pattern plays again and again for up to a minute.
 const RING_REPEATS: usize = 60;
 
 const DOUBLE_TAP: &[Step] = &[Step::buzz(40), Step::pause(80), Step::buzz(40)];
@@ -29,22 +19,21 @@ const ALARM: &[Step] = &[Step::buzz(400), Step::pause(600)];
 const SUCCESS: &[Step] = &[Step::buzz(30), Step::pause(60), Step::buzz(80)];
 const FAILURE: &[Step] = &[Step::buzz(200), Step::pause(100), Step::buzz(200)];
 
-/// The request for `vibrate_pattern`'s numbered names: tap, double tap, notification, alarm, success, failure.
-pub fn named_pattern(number: i64) -> Option<Request> {
-    Some(match number {
-        0 => Request::Pattern(TAP),
-        1 => Request::Pattern(DOUBLE_TAP),
-        2 => Request::Pattern(NOTIFICATION),
-        3 => Request::Ring(ALARM),
-        4 => Request::Pattern(SUCCESS),
-        5 => Request::Pattern(FAILURE),
-        _ => return None,
-    })
+/// Asks the motor for a vibration; `None`, a vibration do not disturb silenced, does nothing.
+pub fn request(vibration: Option<Vibration>) {
+    if let Some(vibration) = vibration {
+        let _ = REQUESTS.try_send(vibration);
+    }
 }
 
-pub fn buzz(milliseconds: i64) -> Request {
-    Request::Buzz {
-        milliseconds: milliseconds.clamp(0, LONGEST_BUZZ_IN_MILLISECONDS as i64) as u16,
+fn steps_of(pattern: VibrationPattern) -> &'static [Step] {
+    match pattern {
+        VibrationPattern::Tap => TAP,
+        VibrationPattern::DoubleTap => DOUBLE_TAP,
+        VibrationPattern::Notification => NOTIFICATION,
+        VibrationPattern::Alarm => ALARM,
+        VibrationPattern::Success => SUCCESS,
+        VibrationPattern::Failure => FAILURE,
     }
 }
 
@@ -56,23 +45,23 @@ pub async fn run_vibrator(motor_pin: Output<'static>) {
     loop {
         let playing = async {
             match next {
-                Request::Buzz { milliseconds } => {
+                Vibration::Buzz { milliseconds } => {
                     let _ = vibrator.vibrate(Strength::FULL, milliseconds, &mut Delay).await;
                 }
-                Request::Pattern(pattern) => {
-                    let _ = vibrator.play(pattern, &mut Delay).await;
-                }
-                Request::Ring(pattern) => {
+                Vibration::Pattern(VibrationPattern::Alarm) => {
                     for _ in 0..RING_REPEATS {
-                        let _ = vibrator.play(pattern, &mut Delay).await;
+                        let _ = vibrator.play(ALARM, &mut Delay).await;
                     }
                 }
-                Request::Stop => {}
+                Vibration::Pattern(pattern) => {
+                    let _ = vibrator.play(steps_of(pattern), &mut Delay).await;
+                }
+                Vibration::Stop => {}
             }
         };
         next = match select(playing, REQUESTS.receive()).await {
             Either::First(()) => REQUESTS.receive().await,
-            Either::Second(request) => request,
+            Either::Second(vibration) => vibration,
         };
     }
 }

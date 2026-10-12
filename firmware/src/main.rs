@@ -60,6 +60,8 @@ mod storage;
 
 // The rehearsals and the recovery firmware run without the shell, which leaves these unused there.
 #[cfg_attr(not(with_shell), allow(dead_code))]
+mod app_events;
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod apps;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod backlight;
@@ -242,7 +244,7 @@ async fn main(spawner: Spawner) {
             )
             .unwrap(),
         );
-        spawner.spawn(motion::count_steps(I2cDevice::new(i2c_bus)).unwrap());
+        spawner.spawn(motion::run_accelerometer(I2cDevice::new(i2c_bus)).unwrap());
         spawner.spawn(
             vibration::run_vibrator(Output::new(chip.P0_16, Level::High, OutputDrive::Standard)).unwrap(),
         );
@@ -681,6 +683,9 @@ fn read_companion_line(line: &[u8]) {
     match neotime_companion::parse_line(line) {
         Ok(neotime_companion::Message::Settings(change)) => {
             let _ = settings::CHANGES.try_send(change);
+        }
+        Ok(neotime_companion::Message::Notification(notification)) => {
+            app_events::notification_arrived(notification);
         }
         Ok(neotime_companion::Message::Unknown { .. }) => {}
         Err(_) => {

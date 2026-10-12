@@ -1,0 +1,8 @@
+# Shaking the watch rolls the dice once, and a second shake straight after is ignored.
+open app dice
+wait 2s
+shake
+expect effect vibrate 30
+shake
+expect no effect vibrate
+expect no failures

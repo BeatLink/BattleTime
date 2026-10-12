@@ -12,8 +12,10 @@ extern crate alloc;
 
 mod drawing;
 pub mod fonts;
+pub mod haptics;
 mod host;
 mod layout;
+pub mod motion;
 mod nodes;
 pub mod settings;
 mod subscriptions;

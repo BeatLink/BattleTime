@@ -1,12 +1,15 @@
 //! Driver for the PineTime's Bosch BMA421 or BMA425 accelerometer, on I2C address 0x18.
 //!
 //! The chip counts steps by itself once Bosch's configuration file for it has been uploaded, so the
-//! watch only reads the count. Acceleration is read on demand, turned to the watch's own axes.
+//! watch only reads the count. Acceleration is read on demand, turned to the watch's own axes, and
+//! `shake::ShakeDetector` finds shakes in those readings.
 
 #![no_std]
 
 use embedded_hal::i2c::ErrorType as I2cErrorType;
 use embedded_hal_async::{delay::DelayNs, i2c::I2c};
+
+pub mod shake;
 
 // ============================================================================
 // Chip registers

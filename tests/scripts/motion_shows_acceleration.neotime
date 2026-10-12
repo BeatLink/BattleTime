@@ -1,0 +1,8 @@
+# The motion app shows the latest accelerometer reading at its next tenth of a second.
+open app motion
+acceleration 120 -340 980
+wait 100ms
+expect text "120"
+expect text "-340"
+expect text "980"
+expect no failures

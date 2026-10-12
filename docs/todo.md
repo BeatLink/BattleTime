@@ -272,7 +272,11 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### Vibrator
 
-- [ ] **Callers.** Buzz for notifications, alarms and timers.
+- [ ] **Let the wearer silence alarms in do not disturb.** Alarms and timers ring through do not
+  disturb, which app-reference.md says the user can turn off. Add the setting, and keep app
+  permissions in the image so the watch can check `wake` instead of trusting the `alarm` pattern.
+- [ ] **Try the buzzes on the watch:** a phone notification buzzes twice and stays silent in do
+  not disturb, and the alarm pattern still rings there.
 
 ### Side button
 
@@ -340,10 +344,14 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   `open_in_background`, so an alarm or timer rings only while its app is open, and the steps app
   misses midnight while closed. Run each installed app's background subscriptions, set
   `next_alarm` from the earliest alarm so faces show the bell, and carry out `wake_screen`.
-- [ ] **Deliver sensor and phone events to apps.** The shell pushes only step counts. Push
-  acceleration for the motion app, shake for dice, and heart rate, music, navigation and weather
+- [ ] **Deliver the remaining sensor and phone events to apps.** The shell pushes steps,
+  acceleration, shakes and phone notifications. Push the other `motion` kinds (wrist raise, tap,
+  double tap, still, moving), heart rate, battery changes, calls, music, navigation and weather
   once those services exist.
 - [ ] **Lift the launcher's 16-row limit,** so every installed app is listed.
+- [ ] **Try acceleration and shakes on the watch.** The motion and level apps should follow the
+  watch's tilt with the right axes and signs, a firm shake should roll the dice once, and walking
+  should not. Tune `JOLT_THRESHOLD_IN_MILLI_G` if needed.
 
 ### UI toolkit
 
@@ -503,8 +511,13 @@ full report is
 ### Bluetooth
 
 - [ ] **The rest of the Gadgetbridge Bangle.js messages** in
-  [companion-protocol.md](companion-protocol.md): notifications, dismissals, music, weather, find
-  phone, alarms, steps, status, calls and HTTP. `settings` is served.
+  [companion-protocol.md](companion-protocol.md): dismissals, music, weather, find phone, alarms,
+  steps, status, calls and HTTP. `settings` and `notify` are served.
+- [ ] **A notification list.** Notifications from the phone and from `notify` are buzzed and passed
+  to the open app but not kept, so `unread_notifications` stays 0 and `dismiss_notification` and
+  `mark_notifications_read` do nothing. Keep the latest few, with a screen to read them.
+- [ ] **Wake the screen for a notification.** A notification buzzes but leaves a dark screen dark;
+  turn it on, outside do not disturb, so the wearer can read it.
 - [ ] **A developer console over BLE,** to replace the fork's Python REPL for uploads, time setting
   and resets.
 

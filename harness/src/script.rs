@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use embedded_graphics::pixelcolor::Rgb888;
 use embedded_graphics::prelude::*;
-use neotime_app_host::PushedEvent;
+use neotime_app_host::{MotionKind, PushedEvent};
 use neotime_compiler::calls::effect_signature;
 use neotime_compiler::expressions::system_signal;
 use neotime_compiler::types::{Kind, Type};
@@ -91,6 +91,8 @@ pub enum ScriptCommand {
     Wait(Duration),
     SetSystemValue { value: SystemValue, number: Value },
     Notify { title: String, body: String },
+    Shake,
+    Acceleration { x: Value, y: Value, z: Value },
     ScreenOn,
     ScreenOff,
     ExpectText(String),
@@ -240,7 +242,7 @@ fn split_words(line: &str) -> Result<SplitLine, String> {
 // ============================================================================
 
 const COMMAND_NAMES: &str = "open, install, tap, long-press, double-tap, drag, swipe, button, long-button, \
-                             wait, set, notify, screen, expect, screenshot";
+                             wait, set, notify, shake, acceleration, screen, expect, screenshot";
 
 /// Reads a whole script, or names the first line it cannot read.
 pub fn parse_script(text: &str) -> Result<Script, ScriptError> {
@@ -298,6 +300,8 @@ fn parse_command(words: &[Word]) -> Result<ScriptCommand, String> {
             }),
             _ => Err("write `notify \"title\" \"body\"`".to_string()),
         },
+        "shake" => expect_no_arguments(name, arguments, ScriptCommand::Shake),
+        "acceleration" => parse_acceleration(arguments),
         "screen" => match arguments.first().and_then(Word::bare) {
             Some("on") if arguments.len() == 1 => Ok(ScriptCommand::ScreenOn),
             Some("off") if arguments.len() == 1 => Ok(ScriptCommand::ScreenOff),
@@ -370,6 +374,25 @@ fn parse_point(x: &Word, y: &Word) -> Result<ScreenPoint, String> {
     Ok(ScreenPoint {
         x: coordinate(x)?,
         y: coordinate(y)?,
+    })
+}
+
+fn parse_acceleration(arguments: &[Word]) -> Result<ScriptCommand, String> {
+    let usage = || {
+        "write `acceleration <x> <y> <z>` in thousandths of g, such as `acceleration 0 0 1000`".to_string()
+    };
+    let [x, y, z] = arguments else {
+        return Err(usage());
+    };
+    let axis = |word: &Word| {
+        word.bare()
+            .and_then(|text| text.parse::<Value>().ok())
+            .ok_or_else(usage)
+    };
+    Ok(ScriptCommand::Acceleration {
+        x: axis(x)?,
+        y: axis(y)?,
+        z: axis(z)?,
     })
 }
 
@@ -716,6 +739,12 @@ impl ScriptRunner<'_> {
                     body,
                     time,
                 });
+            }
+            ScriptCommand::Shake => {
+                watch.deliver(PushedEvent::Motion(MotionKind::Shake));
+            }
+            ScriptCommand::Acceleration { x, y, z } => {
+                watch.deliver(PushedEvent::Acceleration { x: *x, y: *y, z: *z });
             }
             ScriptCommand::ScreenOn => {
                 watch.screen_on();

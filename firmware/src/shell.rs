@@ -6,7 +6,10 @@
 //! the settings' timeout without input, unless the app keeps the screen on, and the next touch or
 //! press turns them on without acting on it. Each app's persistent state is saved to
 //! `/apps/<id>/state` when it closes or the screen turns off, and changed settings at the same times.
-//! The watch buzzes on the hour or half hour when the chimes setting asks, except in do not disturb.
+//! The watch buzzes on the hour or half hour when the chimes setting asks, and for each notification
+//! from the phone, which also goes to the open app. Do not disturb silences all of it, and every app
+//! vibration but the alarm pattern. The accelerometer is read only while the screen is on and the
+//! open app subscribes to acceleration or shakes.
 
 extern crate alloc;
 
@@ -18,13 +21,14 @@ use core::{
 use alloc::vec;
 use core::fmt::Write;
 
-use embassy_futures::select::{select3, select4, Either3, Either4};
+use embassy_futures::select::{select4, Either4};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_app_host::{
-    settings as app_settings, AppEffect, AppFailure, AppHost, EventResult, PushedEvent, System, Touch,
-    LARGEST_SAVED_STATE_BYTES,
+    haptics::{self, Vibration},
+    motion as app_motion, settings as app_settings, AppEffect, AppFailure, AppHost, EventResult, MotionKind,
+    PushedEvent, System, Touch, LARGEST_SAVED_STATE_BYTES,
 };
 use neotime_companion::SettingsChange;
 use neotime_runtime::{
@@ -35,6 +39,7 @@ use neotime_runtime::{
 use neotime_settings::{chimes, Setting};
 
 use crate::{
+    app_events::{self, AppEvent},
     apps::{self, InstalledApps, LauncherIcons, Lent},
     backlight::{self, Backlight},
     battery, clock,
@@ -57,6 +62,10 @@ const MILLISECONDS_PER_MINUTE: Value = 60_000;
 
 /// A chime is skipped when the shell notices it later than this, such as after the phone moved the clock on.
 const LATEST_CHIME_IN_MILLISECONDS: Value = MILLISECONDS_PER_MINUTE;
+
+fn is_do_not_disturb() -> bool {
+    settings::current().is_on(Setting::DoNotDisturb)
+}
 
 fn screen_timeout() -> Duration {
     Duration::from_secs(settings::current().get(Setting::ScreenTimeoutSeconds) as u64)
@@ -188,14 +197,9 @@ impl SystemValues for WatchSystem {
 
 impl System for WatchSystem {
     fn carry_out(&mut self, effect: &AppEffect) {
-        let vibration_request = match effect.kind {
-            EffectKind::Vibrate => Some(vibration::buzz(effect.number(0))),
-            EffectKind::VibratePattern => vibration::named_pattern(effect.number(0)),
-            EffectKind::StopVibrating => Some(vibration::Request::Stop),
-            _ => None,
-        };
-        if let Some(request) = vibration_request {
-            let _ = vibration::REQUESTS.try_send(request);
+        let vibration = haptics::vibration_for_effect(effect.kind, effect.number(0), is_do_not_disturb());
+        if vibration.is_some() {
+            vibration::request(vibration);
             return;
         }
         match effect.kind {
@@ -270,7 +274,7 @@ impl Shell {
             self.save_state_of(&mut host);
         }
         self.save_settings();
-        let _ = vibration::REQUESTS.try_send(vibration::Request::Stop);
+        vibration::request(Some(Vibration::Stop));
         self.system.keep_screen_on = false;
         self.app_set_brightness = false;
         self.set_brightness(settings::current().get(Setting::Brightness) as u8);
@@ -424,12 +428,9 @@ impl Shell {
         };
         let boundary = now - now.rem_euclid(period);
         let is_due = boundary > checked_at && now - boundary < LATEST_CHIME_IN_MILLISECONDS;
-        if is_due && !settings::current().is_on(Setting::DoNotDisturb) {
-            let on_the_hour = boundary.rem_euclid(60 * MILLISECONDS_PER_MINUTE) == 0;
-            let pattern = vibration::named_pattern(if on_the_hour { 1 } else { 0 });
-            if let Some(request) = pattern {
-                let _ = vibration::REQUESTS.try_send(request);
-            }
+        if is_due {
+            let is_on_the_hour = boundary.rem_euclid(60 * MILLISECONDS_PER_MINUTE) == 0;
+            vibration::request(haptics::chime_vibration(is_on_the_hour, is_do_not_disturb()));
         }
     }
 
@@ -480,6 +481,42 @@ impl Shell {
             let steps_today = motion::steps_today() as Value;
             host.deliver(PushedEvent::Steps { steps_today }, now, &mut self.system);
         }
+    }
+
+    /// Buzzes for a phone notification, and passes sensor readings and notifications to the open app.
+    fn app_event(&mut self, event: AppEvent) {
+        let now = clock::now();
+        if let AppEvent::Notification(_) = &event {
+            vibration::request(haptics::notification_vibration(is_do_not_disturb()));
+        }
+        let Some(host) = &mut self.host else {
+            return;
+        };
+        let pushed = match &event {
+            AppEvent::Acceleration(reading) => PushedEvent::Acceleration {
+                x: reading.x_in_milli_g as Value,
+                y: reading.y_in_milli_g as Value,
+                z: reading.z_in_milli_g as Value,
+            },
+            AppEvent::Shake => PushedEvent::Motion(MotionKind::Shake),
+            AppEvent::Notification(notification) => PushedEvent::Notification {
+                id: notification.id,
+                app: &notification.source,
+                title: &notification.title,
+                body: &notification.body,
+                time: now,
+            },
+        };
+        host.deliver(pushed, now, &mut self.system);
+    }
+
+    /// Reads the accelerometer only as often as the open app needs while the screen is on.
+    fn match_accelerometer_to_app(&self) {
+        let period = match &self.host {
+            Some(host) if self.lit => app_motion::reading_period_in_milliseconds(host),
+            _ => None,
+        };
+        motion::read_acceleration_every(period);
     }
 
     /// Turns the backlight off and puts the display to sleep, or dims both for an always-on screen.
@@ -634,6 +671,7 @@ pub async fn run_shell(
         diagnostics::add_one(Counter::ShellLoops);
         diagnostics::set(Counter::ScreenLit, shell.lit as u32);
         shell.draw();
+        shell.match_accelerometer_to_app();
 
         let now = clock::now();
         shell.chime_if_due(now);
@@ -657,15 +695,16 @@ pub async fn run_shell(
             TOUCHES.receive(),
             BUTTON_PRESSES.receive(),
             Timer::at(wake_at),
-            select3(
+            select4(
                 system_values::next_changes(),
                 settings::CHANGES.receive(),
                 packages::CHANGED.wait(),
+                app_events::next(),
             ),
         )
         .await;
         // A new library may already lie where the open app's library was, so nothing reads it before the reload.
-        if !matches!(woke, Either4::Fourth(Either3::Third(_))) && packages::CHANGED.try_take().is_some() {
+        if !matches!(woke, Either4::Fourth(Either4::Third(_))) && packages::CHANGED.try_take().is_some() {
             shell.reload_apps();
             continue;
         }
@@ -700,17 +739,21 @@ pub async fn run_shell(
                     host.tick(clock::now(), &mut shell.system);
                 }
             }
-            Either4::Fourth(Either3::First(changed)) => {
+            Either4::Fourth(Either4::First(changed)) => {
                 diagnostics::set(Counter::ShellLastWake, 4);
                 shell.system_values_changed(changed);
             }
-            Either4::Fourth(Either3::Second(change)) => {
+            Either4::Fourth(Either4::Second(change)) => {
                 diagnostics::set(Counter::ShellLastWake, 5);
                 shell.change_settings(&change);
             }
-            Either4::Fourth(Either3::Third(_)) => {
+            Either4::Fourth(Either4::Third(_)) => {
                 diagnostics::set(Counter::ShellLastWake, 6);
                 shell.reload_apps();
+            }
+            Either4::Fourth(Either4::Fourth(event)) => {
+                diagnostics::set(Counter::ShellLastWake, 7);
+                shell.app_event(event);
             }
         }
         if shell.follow_requests() {

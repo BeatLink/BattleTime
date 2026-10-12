@@ -288,6 +288,11 @@ fails `start` with `ChipLeftOutOfBuild`.
 The configuration files are Bosch's, under the BSD-3-Clause licence in
 `src/configuration/LICENSE`, taken from the `BMA42X-Sensor-API` that wasp-os uses.
 
+- **Shakes.** `shake::ShakeDetector` takes readings about ten times a second and finds shakes in
+  software: a reading more than 1200 milli-g from the one before, summed over the axes, is a jolt,
+  three jolts within a second are a shake, and the next second is ignored, so one shake counts
+  once. Readings more than half a second apart are not compared.
+
 Wrist raise is planned in software on top of `read_acceleration`, as InfiniTime and wasp-os do it,
 so the chip's own tap and wrist-wear detectors are not set up.
 
@@ -409,7 +414,9 @@ Gadgetbridge sends them or bare. `LineAssembler` joins writes into lines and dro
 512 bytes; `parse_line` reads a message with `serde-json-core`, without allocating; and
 `settings_report` writes the `settings` reply. It knows nothing of Bluetooth, so its tests run on
 a computer. So far it reads `settings` (a preset theme, single colours and every watch-wide
-setting, each checked against its limits) and names every other message by its `t`.
+setting, each checked against its limits) and `notify` (a notification's id, app, title and body,
+unescaped and cut at a whole character to 24, 32 and 120 bytes), and names every other message by
+its `t`.
 
 ## Settings (`services/settings`)
 
@@ -505,18 +512,34 @@ watch face, the launcher and the apps through `neotime-app-host`:
 - **Chimes.** With chimes on, the shell also wakes on the hour or half hour and buzzes, twice on
   the hour and once on the half hour, unless do not disturb is on. A chime more than a minute late,
   such as after the phone moved the clock on, is skipped.
-- **Effects.** `vibrate`, `vibrate_pattern` and `stop_vibrating` go to the motor's own task
-  (`vibration.rs`), so a pattern never holds up the shell. `set_brightness` sets the backlight
+- **Vibration.** `neotime_app_host::haptics` decides what the motor plays: `vibrate`,
+  `vibrate_pattern`, `stop_vibrating` and `notify` from apps, a notification from the phone, and the
+  chimes. In do not disturb only the `alarm` pattern, which the alarm and timer ring with, and a
+  stop get through. Each `Vibration` goes to the motor's own task (`vibration.rs`), which turns it
+  into `neotime-vibrator` steps, so a pattern never holds up the shell; opening another app stops
+  what is playing.
+- **Effects.** `set_brightness` sets the backlight
   (`backlight.rs`) to level 1, 2 or 3 until the app closes, through the display driver's
   `Backlight`. The dim always-on level pulses the low pin at 1 kHz, lit 3 ticks of every 32, with
   RTC2, PPI channels 1 and 2 and GPIOTE channel 0, so it runs while the CPU sleeps.
 - **Steps.** `motion.rs` reads the accelerometer's own step counter every 30 seconds and resets it
   at midnight. It shares the I2C bus with the touch panel. A change redraws what shows the steps
   and goes to the app's `steps` subscriptions.
+- **Acceleration and shakes.** While the screen is on, the shell asks
+  `neotime_app_host::motion::reading_period_in_milliseconds` how often the open app needs readings:
+  the shortest `acceleration` period, no faster than ten a second, or a tenth of a second for a
+  `motion("shake")` subscription. `motion.rs` reads acceleration only then, so the chip is read for
+  steps alone the rest of the time, and feeds each reading to the shake detector. Readings and
+  shakes reach the shell through `app_events.rs`, which keeps only the latest of each; the host
+  hands the latest reading to `acceleration` subscriptions at their period and a shake to
+  `motion("shake")` at once.
 - **Companion app.** The Nordic UART service carries the companion's JSON lines. The Bluetooth
   task hands each write to `neotime-companion`; a `settings` message goes to the shell, which
   applies the theme to the open app at once, keeps it in `/settings/theme`, passes the other
-  settings to the store and sends the settings back as a reply, which waits on the heap. Bluetooth
+  settings to the store and sends the settings back as a reply, which waits on the heap. A `notify`
+  message goes to the shell through `app_events.rs`, which buzzes the notification pattern, unless
+  do not disturb is on, and hands it to the open app's `notification` subscriptions. Notifications
+  are not kept, so `unread_notifications` stays 0. Bluetooth
   runs as a task of its own, so its stack frame (5.7 KB) is never added to start-up's; what it keeps
   for the whole run (the update state, the status page and the confirmation) sits once in a static,
   since a task's arguments are stored twice in its state.
@@ -552,10 +575,10 @@ watch face, the launcher and the apps through `neotime-app-host`:
   once when power is plugged in or out, and turns it into a charge along a lithium discharge
   curve. P0.19 says power is present and P0.12 that it is charging.
 
-Not done yet: heart rate, notifications, music and weather read as 0 or empty; the touch panel stays
+Not done yet: heart rate, the notification count, music and weather read as 0 or empty; the touch panel stays
 awake while the screen is off.
 
-It takes 289 KB of the 400 KB firmware slot (the two accelerometers' configuration files are 12 KB
+It takes 293 KB of the 400 KB firmware slot (the two accelerometers' configuration files are 12 KB
 of it; the fonts are in the shared library) and 51 KB of static RAM, 37 KB of it heap: 16 KB for storage and 21 KB for
 the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
 the button and the backlight timeout all work.
@@ -643,7 +666,9 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
   background up. There is no screen buffer.
 - **Time and subscriptions.** `tick` runs due timers and redraws what the clock changed, and
   `next_wakeup` says when that next happens, so the watch can sleep in between. `deliver` hands
-  sensor and phone events to the app's subscriptions.
+  sensor and phone events to the app's subscriptions. `listens_for` and `shortest_period_of` say
+  which events and readings the running subscriptions wait for, so the embedder only watches for
+  those.
 - **Saved state.** `save_changed_state` writes the persistent variables when they change, and
   `open_with_saved_state` puts them back.
 - **Images and fonts.** Images come from the app or the shared library (`set_library`). The fonts

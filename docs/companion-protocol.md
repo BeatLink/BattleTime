@@ -57,7 +57,7 @@ it changes nothing. Either way the watch answers with the settings as they now a
 | `step_goal` | The daily step goal, 1000 to 50000. |
 | `always_on` | `true` to dim the screen instead of turning it off. |
 | `chimes` | `0` off, `1` a buzz every hour, `2` every half hour. |
-| `do_not_disturb` | `true` to silence chimes and, once they exist, notifications. |
+| `do_not_disturb` | `true` to silence chimes, notifications and every vibration but alarms. |
 
 The key names after `theme_colors` are the ones the wasp-os companion's settings screen already
 sends. An unknown preset, a colour not written `#rrggbb`, `units` other than the two names, or any
@@ -78,6 +78,15 @@ colour reads back to the nearest one the screen shows. The watch keeps the theme
 `/settings/theme` and every other setting in `/settings/system`, so they survive a restart. The same
 settings change from the watch's own Settings app; the phone sees those changes in the next reply.
 
+### Notifications (served)
+
+`{"t":"notify","id":1234,"src":"Messages","title":"Sam","body":"On my way"}` is a notification
+that arrived on the phone. The watch buzzes twice, unless do not disturb is on, and hands it to the
+open app's `notification` subscriptions, with `src` as its `app`. Escapes such as `\n` and `\"` are
+undone, and the watch keeps up to 24 bytes of `src`, 32 of `title` and 120 of `body`, cut at a whole
+character. Gadgetbridge's other keys, such as `sender`, are ignored. The watch keeps no
+notification list yet and sends no reply.
+
 ### Other messages (not served yet)
 
 These follow Gadgetbridge's Bangle.js messages, so its driver works too.
@@ -86,7 +95,6 @@ Phone to watch:
 
 | `t` | Fields | Meaning |
 |---|---|---|
-| `notify` | `id`, `src`, `title`, `body` | A notification arrives. |
 | `notify-` | `id` | A notification is dismissed. |
 | `call` | `cmd` (`incoming`, `start`, `end`, ...), `name`, `number` | A call. |
 | `musicinfo` | `artist`, `album`, `track`, `dur` | The track playing. |
