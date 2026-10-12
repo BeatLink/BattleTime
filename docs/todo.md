@@ -139,6 +139,12 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Run app bytecode in place.** An app's code is copied from `/apps` into RAM when it opens.
   Copying it to internal flash on install and running it from there would save most of the 6 KB
   apps budget.
+- [ ] **No redraw wakeups while the screen is off.** `next_wakeup` still returns redraw timers,
+  such as a clock's per-second or a stopwatch's per-tenth redraw, after `screen_turned_off`, and
+  the shell keeps ticking on them. [app-runtime.md](app-runtime.md) says no redraw timer is set
+  while the screen is off; only subscriptions should wake the watch then.
+- [ ] **Act on `WakeScreen`.** Apps send it, such as the timer when it rings, and the app host
+  records it, but the firmware does not turn the screen on.
 - [ ] **Resize the firmware slot and the shared library.** After the moves above the firmware
   falls from 352 KB to about 240 KB, so a split such as 320 KB firmware and 172 KB library becomes
   possible if the library fills up. The sizes are in `neotime-boot`, which the bootloader shares,
@@ -160,7 +166,21 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 
 ## Apps and faces
 
-Nothing open.
+Found by the harness's snapshots and quality checks; see [testing.md](testing.md).
+
+- [ ] **Labels inside an `Arc` are not drawn on the watch.** The metronome's "120" and "bpm" and
+  the five labels inside the steps ring show in the browser preview but not on the watch. They are
+  listed in `KNOWN_DIFFERENCES` in `sdk/neotime/tests/parity.tsx`; take them out once fixed.
+- [ ] **Calculator keys.** The ⌫ and ± keys draw blank, apparently glyphs missing from the font,
+  and the 7 key is always highlighted because the compiler cannot pass labels to `highlighted`
+  (see [compiler.md](compiler.md)).
+- [ ] **Terminal face overflow.** Its last line falls off the bottom of the screen and
+  "[STAT] Connected" is cut in half.
+- [ ] **Apps over the RAM budget.** The quality check's `KNOWN_GAPS` lists alarm (67 widgets on
+  its main screen) and the launcher (65) against the 55 widgets the UI heap is documented to hold,
+  and twos (9,615 B) and infineat (11,663 B) against the 5,744 B left for expression bytecode. The
+  launcher runs on the watch, so measure the real limit and either correct
+  [memory-map.md](memory-map.md) or slim the screens.
 
 ## Display and SPI bus
 
@@ -395,6 +415,23 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   each file is for.
 - [ ] **How to measure memory.** Say in [memory-map.md](memory-map.md) how each figure is measured
   on the watch: flash by crate and symbol, the stack's high-water mark, and heap peaks.
+- [ ] **Run the Renode suites in CI.** `tests/emulator/*.robot` are the only tests of the
+  firmware, bootloader and reloaders, which build only for the watch, but CI does not run them.
+  Package the patched Renode from PineTimeEmulator for the workflow and add a job.
+- [ ] **Firmware logic where tests reach it.** Coverage measures only the workspace. Move logic out
+  of `firmware/` into workspace crates, as `boot` and the services already are, so host tests
+  cover it.
+- [ ] **Harness gaps.** Open a named screen directly, so screens behind icon-only buttons, such as
+  the alarm's edit and ring screens, get smoke and snapshot coverage; read the key labels of a
+  `ButtonMatrix`, so `tap "7"` works on the calculator; match text spread over neighbouring
+  labels, such as a face's "09:00"; set text system values from `TestWatch`; and give `notify` an
+  app name in scripts.
+- [ ] **Scripts from an installed simulator.** `--script` finds app sources through the build-time
+  `CARGO_MANIFEST_DIR`, so it works only through `cargo run` in the repository, not from
+  `nix run`.
+- [ ] **App host API for tests.** `widget_bounds` gives no clip rectangle, there is no iterator
+  over the open screen's nodes, and there is no call to redraw the whole screen. The harness works
+  around all three.
 - [ ] **A user guide:** what the face shows, the swipes and button presses, moving from InfiniTime
   or wasp-os, updating with Gadgetbridge or ITD, and the recovery hold, with simulator screenshots.
 
