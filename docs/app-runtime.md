@@ -414,7 +414,8 @@ Rules for each change:
 What is built so far: the runtime runs functions with `call` (see [The bytecode](#the-bytecode)).
 The compiler compiles an app function it would otherwise copy into several places once and calls
 it, and turns code that repeats with only its constants changed into shared functions; together
-they took the 49 apps and faces from 197 KB to 129 KB. The shared library holds the icons and fonts; its functions and components,
+with library icons named rather than copied, they took the 49 apps and faces from 197 KB to
+105 KB. The shared library holds the icons and fonts; its functions and components,
 calls into it and the native composites are open work, listed in order under "Shared library and
 smaller apps" in [todo.md](todo.md). Until they exist, components from `neotime/components` are
 still inlined into each app.

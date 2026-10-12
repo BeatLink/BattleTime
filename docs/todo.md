@@ -181,8 +181,8 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 
 ## Shared library and smaller apps
 
-The 49 apps and faces hold 129 KB of images, down from 197 KB now that the compiler calls an app's
-own functions and shares code that repeats with other constants (see
+The 49 apps and faces hold 105 KB of images, down from 197 KB now that the compiler calls an app's
+own functions, shares code that repeats with other constants and names library icons (see
 [compiler.md](compiler.md#handlers)). Code that is byte-for-byte the same across apps is only
 about 4 KB, so sharing between apps pays only as library functions that take arguments. Library
 code is read in place from the internal flash and costs no RAM. The items run in order; each needs

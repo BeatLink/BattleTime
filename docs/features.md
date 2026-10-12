@@ -97,8 +97,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   small app images by `neotime-compiler`. The language is in [app-reference.md](app-reference.md)
   and [compiler.md](compiler.md).
 - **Small app images.** The compiler calls a function used in several places instead of copying
-  it, and shares code that repeats with only its constants changed, so an app takes less RAM while
-  it is open: the 49 apps and faces fell from 197 KB to 129 KB, four-in-a-row from 32 KB to 8 KB.
+  it, shares code that repeats with only its constants changed, and names a library icon rather
+  than copying it, so an app takes less RAM while it is open: the 49 apps and faces fell from
+  197 KB to 105 KB, four-in-a-row from 32 KB to 7 KB.
 - **A stand-in `neotime` package** in `sdk/neotime`, so apps type-check and their screens render in
   tests on the computer, with `npm run check` and `npm test`.
 - **A simulator** that runs the drivers and app images in a desktop window, and saves screenshots.

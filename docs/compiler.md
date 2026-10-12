@@ -269,7 +269,8 @@ Effect arguments that are text may point into the call's text buffer, such as th
 - A Chart's `series` uses its first series' `values` and `color`, with a warning for the rest.
 - `<Image src="./file.png">` and `icon: "./icon.png"` read PNGs relative to the source file. One-colour
   or alpha-only artwork is a mask; other artwork is a colour image blended onto black. The icon is
-  image 0 with the icon flag; a library icon given as `icon` is image 0 of format 2, which only names the library icon.
+  image 0 with the icon flag; a library icon given as `icon` is image 0 of format 2, which only
+  names the library icon.
 - `permissions` are checked against the effects, subscriptions and system values used, as
   app-reference.md lists them; a missing one is an error. The image has no field for them.
 - `neotime-compiler library -o shared.ntlib` writes the shared library: every icon in `ICON_NAMES`
