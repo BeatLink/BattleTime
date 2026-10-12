@@ -28,6 +28,7 @@ use crate::text::{draw_line, WrappedLines};
 // ============================================================================
 
 /// What a node reads while it is drawn, besides its own values.
+#[derive(Clone, Copy)]
 pub struct DrawContext<'context, 'image> {
     pub image: &'context AppImage<'image>,
     pub library: Option<&'context AppImage<'image>>,
@@ -39,6 +40,8 @@ pub struct DrawContext<'context, 'image> {
     pub utc_offset: Value,
     /// The time of the last tick, for scrolling labels.
     pub now: Value,
+    /// The part of the screen being painted, so a widget with much to draw can skip the rest.
+    pub clip: Rect,
 }
 
 impl<'image> DrawContext<'_, 'image> {
@@ -383,6 +386,10 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
         AppList => {
             plain_frame(renderer);
             draw_app_list(node, context, renderer);
+        }
+        TextFile => {
+            plain_frame(renderer);
+            draw_text_file(node, context, renderer);
         }
         Battery | StatusIcons => {
             plain_frame(renderer);
@@ -1178,6 +1185,75 @@ fn draw_cell_grid(node: &Node, context: &DrawContext, renderer: &mut dyn Rendere
             1 => fill_rounded_rect(renderer, place, color, to_u8(cells.cell_size / 4)),
             _ => renderer.fill_disc_aa(centre_of(place), cells.cell_size as f32 / 2.0, color),
         }
+    }
+}
+
+// ============================================================================
+// Text files
+// ============================================================================
+
+/// How many lines a TextFile's file wraps into, and the first of those its text holds.
+fn text_file_lines(node: &Node) -> (i32, i32) {
+    match *node.extra {
+        Extra::TextFile {
+            line_count,
+            first_line,
+            ..
+        } => (i32::from(line_count), i32::from(first_line)),
+        _ => (0, 0),
+    }
+}
+
+/// How tall a TextFile's whole file is with its padding, to bound how far it scrolls.
+pub fn text_file_height(node: &Node) -> i32 {
+    let (line_count, _) = text_file_lines(node);
+    line_count * line_height(node.settings.font.metrics()) + 2 * i32::from(node.settings.padding)
+}
+
+/// The lines a TextFile shows at its scroll offset, as the first and one past the last.
+pub fn text_file_lines_in_view(node: &Node) -> (i32, i32) {
+    let height = line_height(node.settings.font.metrics()).max(1);
+    let top = i32::from(node.scroll_offset) - i32::from(node.settings.padding);
+    let first = (top / height).max(0);
+    let end = (top + node.bounds.height + height - 1) / height + 1;
+    (first, end.max(first))
+}
+
+/// Each line a TextFile holds that is at least partly inside it, with its top.
+pub fn text_file_rows(node: &Node) -> impl Iterator<Item = (&str, i32)> + '_ {
+    let (_, first_line) = text_file_lines(node);
+    let height = line_height(node.settings.font.metrics());
+    let top = node.bounds.y + i32::from(node.settings.padding) - i32::from(node.scroll_offset);
+    node.text
+        .split('\n')
+        .enumerate()
+        .filter(|_| !node.text.is_empty())
+        .map(move |(place, line)| (line, top + (first_line + place as i32) * height))
+        .filter(move |(_, line_top)| {
+            *line_top + height > node.bounds.y && *line_top < node.bounds.y + node.bounds.height
+        })
+}
+
+/// The lines of a text file in view, each from the left edge inside the padding.
+fn draw_text_file(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
+    let font = node.settings.font;
+    let ascent = font.metrics().line_metrics().ascent as i32;
+    let is_placeholder = matches!(
+        *node.extra,
+        Extra::TextFile {
+            is_placeholder: true,
+            ..
+        }
+    );
+    let color = match is_placeholder {
+        true => resolve(None, ThemeColor::Muted, context.theme),
+        false => resolve(node.settings.color, ThemeColor::Text, context.theme),
+    };
+    let left = node.bounds.x + i32::from(node.settings.padding);
+    let height = line_height(font.metrics());
+    let painted = |top: i32| top + height > context.clip.y && top < context.clip.y + context.clip.height;
+    for (line, top) in text_file_rows(node).filter(|(_, top)| painted(*top)) {
+        draw_line(renderer, font, line, left, top + ascent, color);
     }
 }
 

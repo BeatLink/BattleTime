@@ -67,6 +67,14 @@ pub trait SystemValues {
 
     /// A fresh random number, such as one from the chip's random number generator.
     fn random_number(&self) -> u32;
+
+    /// Reads part of a file from the watch's storage into `out`, from `offset` bytes in.
+    ///
+    /// Gives how many bytes were read, fewer than `out` holds only at the file's end, or none when
+    /// the file cannot be read.
+    fn read_file(&self, _path: &str, _offset: u32, _out: &mut [u8]) -> Option<usize> {
+        None
+    }
 }
 
 /// Why a call stopped. Its writes and effects are dropped.

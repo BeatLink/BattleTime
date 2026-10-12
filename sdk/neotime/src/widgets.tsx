@@ -16,7 +16,7 @@ import type {
   ThemeColorName,
 } from "./index.ts";
 import { icon_symbol, icons, is_icon, type LibraryIcon } from "./icons.ts";
-import { installed_apps } from "./index.ts";
+import { installed_apps, preview_files } from "./index.ts";
 
 // ============================================================================
 // Theme
@@ -526,6 +526,37 @@ export function AppList(props: AppListProps) {
         </Button>
       ))}
     </List>
+  );
+}
+
+export interface TextFileProps extends CommonProps {
+  /** The file to show, written out, such as `"/notes/note.txt"`. */
+  path: string;
+  /** A file holding the font's name, `small`, `normal`, `medium` or `large`, which wins over `font`. */
+  font_path?: string;
+  /** Shown in the muted colour while the file is missing or empty. */
+  placeholder?: string;
+}
+
+const TEXT_FILE_FONTS: readonly Font[] = ["small", "normal", "medium", "large"];
+
+/**
+ * A text file from the watch's storage, wrapped and scrolled, drawn by the watch as one widget.
+ * The preview shows one label for each line of the file and lets the browser wrap them.
+ */
+export function TextFile(props: TextFileProps) {
+  const { path, font_path, placeholder, ...common } = props;
+  const named = font_path === undefined ? undefined : preview_files.value[font_path]?.trim();
+  const font = TEXT_FILE_FONTS.find((choice) => choice === named) ?? common.font;
+  const text = preview_files.value[path] ?? "";
+  return (
+    <Scroll {...common} font={font}>
+      {text === "" ? (
+        <Label color="muted">{placeholder ?? ""}</Label>
+      ) : (
+        text.replace(/\n$/, "").split("\n").map((line) => (line === "" ? <div style={{ height: "1.15em" }} /> : <Label>{line}</Label>))
+      )}
+    </Scroll>
   );
 }
 

@@ -350,6 +350,10 @@ impl Files {
         None
     }
 
+    pub fn read_part(&self, _path: &str, _offset: u32, _out: &mut [u8]) -> Option<usize> {
+        None
+    }
+
     pub fn read(&self, _path: &str) -> Option<alloc::vec::Vec<u8>> {
         None
     }

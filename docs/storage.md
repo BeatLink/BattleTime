@@ -48,6 +48,7 @@ reach the firmware slots.
 | `/apps` | one folder per installed app or watch face, with its code and its own data |
 | `/settings` | `system`, the watch-wide settings as records (see [architecture.md](architecture.md#settings-servicessettings)), and `theme`, the theme's eight RGB565 colours |
 | `/resources` | fonts and pictures shared by the system and the apps |
+| `/notes` | `note.txt`, the note the companion app sends, and `font`, the name of the font to show it in; see [companion-protocol.md](companion-protocol.md#notes) |
 | `/steps` | the step log: one file a day in a folder for each year, such as `2026/01-05`, and `trip`, the trip count; see [architecture.md](architecture.md#step-history-servicessteps) |
 
 The first three are made when the file system is first prepared, and `/steps` with the first

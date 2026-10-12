@@ -1419,3 +1419,33 @@ fn an_app_with_too_many_changing_values_is_refused() {
     ));
     assert!(first_error(&source).contains("at most 128"));
 }
+
+#[test]
+fn a_text_file_keeps_its_paths_as_strings() {
+    let image = compile(&app(r##"import { TextFile } from "neotime/widgets";
+        function Main() { return <Screen><TextFile path="/notes/note.txt" font_path="/notes/font" placeholder="No note" grow={1} /></Screen>; }"##));
+    let image = AppImage::parse(&image).unwrap();
+
+    for (property, expected) in [
+        (Property::Path, "/notes/note.txt"),
+        (Property::FontPath, "/notes/font"),
+        (Property::Placeholder, "No note"),
+    ] {
+        let PropertySource::Constant(string) = property_of(&image, WidgetKind::TextFile, property, 0) else {
+            panic!("{property:?} is not a constant");
+        };
+        assert_eq!(image.string(string as u16), Some(expected));
+    }
+}
+
+#[test]
+fn a_text_file_path_must_be_written_out() {
+    let error = first_error(&app(r##"import { TextFile } from "neotime/widgets";
+        const name = signal(0);
+        function Main() { return <Screen><TextFile path={`/notes/${name.value}`} /></Screen>; }"##));
+
+    assert!(
+        error.contains("`path` on `TextFile` must be text written out"),
+        "{error}"
+    );
+}

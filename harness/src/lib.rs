@@ -17,7 +17,8 @@ mod watch;
 
 pub use fake_system::{
     starting_step_hours, FakeSystem, ForecastDay, InstalledApp, RecordedEffect, HOURS_PER_DAY,
-    STARTING_DAY_STEPS, STARTING_TRIP_STEPS, START_TIME_IN_MILLISECONDS, STEP_HISTORY_DAYS,
+    STARTING_DAY_STEPS, STARTING_NOTE, STARTING_NOTE_PATH, STARTING_TRIP_STEPS, START_TIME_IN_MILLISECONDS,
+    STEP_HISTORY_DAYS,
 };
 pub use framebuffer::{Framebuffer, SCREEN_SIDE_IN_PIXELS};
 pub use script::{

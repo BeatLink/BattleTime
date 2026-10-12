@@ -112,6 +112,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 
 ## Apps and watch faces
 
+- **Notes.** Pick a text file in the companion app and it is copied to the watch, again whenever it
+  changes; the notes app shows it, read only and scrolled, in the font chosen in the companion app.
+  See [apps.md](apps.md).
 - **32 apps** ported from InfiniTime and wasp-os, merged where both firmwares had the same app:
   stopwatch, timer, alarm, pomodoro, calculator, dice, flashlight, phone finder, system info, heart rate, steps,
   sports, music, weather, navigation, metronome, motion, level, beacon, Bluetooth off, 2048, paddle,

@@ -8,7 +8,7 @@
 #![no_std]
 
 use embedded_storage::nor_flash::NorFlash;
-use littlefs_rust::{Config, Error, Filesystem, Storage};
+use littlefs_rust::{Config, Error, Filesystem, OpenFlags, SeekFrom, Storage};
 use neotime_boot::FILE_SYSTEM;
 
 // ============================================================================
@@ -170,6 +170,27 @@ const BYTES_IN_A_KILOBYTE: u32 = 1024;
 pub fn free_kilobytes<AnyStorage: Storage>(file_system: &Filesystem<AnyStorage>) -> Option<u32> {
     let used_blocks = file_system.fs_size().ok()?;
     Some(BLOCK_COUNT.saturating_sub(used_blocks) * (BLOCK_SIZE / BYTES_IN_A_KILOBYTE))
+}
+
+// ============================================================================
+// Reading part of a file
+// ============================================================================
+
+/// Reads from `offset` bytes into a file, as much as `out` holds; fewer only at the file's end.
+///
+/// Gives none when the file cannot be opened or read, such as when it is missing.
+pub fn read_part<AnyStorage: Storage>(
+    file_system: &Filesystem<AnyStorage>,
+    path: &str,
+    offset: u32,
+    out: &mut [u8],
+) -> Option<usize> {
+    let file = file_system.open(path, OpenFlags::READ).ok()?;
+    if offset >= file.size() {
+        return Some(0);
+    }
+    file.seek(SeekFrom::Start(offset)).ok()?;
+    file.read(out).ok().map(|length| length as usize)
 }
 
 #[cfg(test)]

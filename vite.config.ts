@@ -31,7 +31,7 @@ export default defineConfig({
       reporter: ["text-summary", "text", "lcov"],
       reportsDirectory: "target/coverage-typescript",
       // Raise these whenever coverage rises, so it never slips back.
-      thresholds: { lines: 94, statements: 94, branches: 88, functions: 89 },
+      thresholds: { lines: 94, statements: 94, branches: 89, functions: 89 },
     },
   },
 });

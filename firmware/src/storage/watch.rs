@@ -274,6 +274,11 @@ impl Files {
         self.file_system.as_ref()?.read_to_vec(path).ok()
     }
 
+    /// Reads part of a file from `offset`, as much as `out` holds; fewer only at the file's end.
+    pub fn read_part(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
+        neotime_storage::read_part(self.file_system.as_ref()?, path, offset, out)
+    }
+
     /// Runs one line from the packages characteristic, returning the reply line and what changed.
     pub fn run_packages_command(&self, line: &[u8]) -> (alloc::string::String, Change) {
         let Some(file_system) = &self.file_system else {

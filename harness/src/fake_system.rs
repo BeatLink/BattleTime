@@ -18,6 +18,12 @@ pub const START_TIME_IN_MILLISECONDS: Value = 1_767_603_600_000;
 const MINUTE_IN_MILLISECONDS: Value = 60_000;
 const HOUR_IN_MILLISECONDS: Value = 60 * MINUTE_IN_MILLISECONDS;
 
+/// The note the phone sent, which the notes app shows, at the path the companion app writes it to.
+pub const STARTING_NOTE_PATH: &str = "/notes/note.txt";
+/// Its lines are short enough not to wrap, so the browser preview, which cannot wrap as the watch does, shows the same lines.
+pub const STARTING_NOTE: &str =
+    "Packing list\n\n- Charger\n- Passport\n- Rain jacket\n- Two books\n\nCall the hotel\nbefore Friday.\n";
+
 /// The random generator's first state; any number but zero works.
 const RANDOM_SEED: u32 = 0x2545_f491;
 
@@ -114,6 +120,8 @@ pub struct FakeSystem {
     pub notifications_changed: bool,
     /// The steps in each hour of the step history, at `days_back * 24 + hour`.
     pub step_hours: Vec<Value>,
+    /// The watch's files by path, such as the note the phone sent.
+    pub files: Vec<(String, Vec<u8>)>,
     random_state: Cell<u32>,
     effects: Vec<RecordedEffect>,
     failures: Vec<AppFailure>,
@@ -149,6 +157,7 @@ impl FakeSystem {
             app_name: String::new(),
             notifications_changed: false,
             step_hours: starting_step_hours(),
+            files: vec![(STARTING_NOTE_PATH.to_string(), STARTING_NOTE.as_bytes().to_vec())],
             random_state: Cell::new(RANDOM_SEED),
             effects: Vec::new(),
             failures: Vec::new(),
@@ -198,6 +207,12 @@ impl FakeSystem {
         system.set_text(FirmwareVersion, "0.1.0+1b19aed");
         system.set_text(ResetReason, "watchdog");
         system
+    }
+
+    /// Writes a whole file, as the phone does over Bluetooth, replacing any file at that path.
+    pub fn write_file(&mut self, path: &str, bytes: &[u8]) {
+        self.files.retain(|(name, _)| name != path);
+        self.files.push((path.to_string(), bytes.to_vec()));
     }
 
     /// Sets a number value, such as the battery; `now` is the clock and is set through `now_in_milliseconds`.
@@ -303,6 +318,14 @@ impl SystemValues for FakeSystem {
             SystemValue::InstalledAppId => &app.id,
             _ => "",
         }
+    }
+
+    fn read_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
+        let (_, bytes) = self.files.iter().find(|(name, _)| name == path)?;
+        let rest = bytes.get(offset as usize..).unwrap_or(&[]);
+        let length = rest.len().min(out.len());
+        out[..length].copy_from_slice(&rest[..length]);
+        Some(length)
     }
 
     /// A xorshift generator, so every run of a test sees the same numbers.

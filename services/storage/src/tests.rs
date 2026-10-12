@@ -250,3 +250,38 @@ fn free_space_shrinks_by_the_blocks_a_file_takes() {
     assert!(free_when_empty - free_with_the_file >= 3 * 4);
     assert_eq!(free_with_the_file % 4, 0);
 }
+
+#[test]
+fn reads_any_part_of_a_file_and_nothing_past_its_end() {
+    let prepared = prepared(FakeFlash::blank());
+    let bytes: Vec<u8> = (0..5000u32).map(|place| (place % 251) as u8).collect();
+    prepared.file_system.mkdir("/notes").unwrap();
+    prepared
+        .file_system
+        .write_file("/notes/note.txt", &bytes)
+        .unwrap();
+    let mut out = [0u8; 512];
+
+    assert_eq!(
+        read_part(&prepared.file_system, "/notes/note.txt", 4096, &mut out),
+        Some(512)
+    );
+    assert_eq!(&out[..], &bytes[4096..4608]);
+    assert_eq!(
+        read_part(&prepared.file_system, "/notes/note.txt", 4800, &mut out),
+        Some(200)
+    );
+    assert_eq!(&out[..200], &bytes[4800..]);
+    assert_eq!(
+        read_part(&prepared.file_system, "/notes/note.txt", 5000, &mut out),
+        Some(0)
+    );
+    assert_eq!(
+        read_part(&prepared.file_system, "/notes/note.txt", 9000, &mut out),
+        Some(0)
+    );
+    assert_eq!(
+        read_part(&prepared.file_system, "/notes/missing.txt", 0, &mut out),
+        None
+    );
+}

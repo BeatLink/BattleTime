@@ -202,6 +202,15 @@ error (a command cut short, or data with no write in progress).
 Each app keeps its folder under `/apps/<id>/`: `app.ntapp` is the compiled image, as
 `neotime-compiler` writes it, and `state` is its saved state.
 
+### Notes
+
+The notes app shows `/notes/note.txt`, read only. The companion app writes it whole with the
+file transfer above whenever the chosen file is new or has changed, and writes `/notes/font` with
+the name of the font to show it in: `small`, `normal`, `medium` or `large`, without quotes. Any other
+font file, or none, leaves the app's own font. The text is UTF-8; the watch shows tabs and carriage
+returns as spaces and other bytes as `?`, and draws only the characters its fonts have. Deleting
+`/notes/note.txt` brings back the app's hint to choose a file.
+
 ## The NeoTime service
 
 Service `6e540001-0000-4000-8000-4e656f54696d`, with its characteristics on the same base:

@@ -20,8 +20,10 @@ use rlvgl_core::widget::Rect;
 use crate::drawing::pickers::{is_picker, picker_tapped};
 use crate::drawing::{
     app_list_rows, app_row_at, cell_at, dropdown_option_at, label_scrolls, matrix_buttons, measure_node,
-    option_row_height, roller_rows, DrawContext, LABEL_SCROLL_STEP_IN_MILLISECONDS,
+    option_row_height, roller_rows, text_file_lines_in_view, text_file_rows, DrawContext,
+    LABEL_SCROLL_STEP_IN_MILLISECONDS,
 };
+use crate::fonts::line_height;
 use crate::layout::{clips_children, content_height, lay_out};
 use crate::nodes::{row_slots, slots_in_view, Extra, Node, PropertyValue};
 
@@ -32,6 +34,8 @@ use crate::subscriptions::{
     derive_inputs_in, load_subscriptions, PushedEvent, SubscriptionMemory, FAILURES_BEFORE_TURNING_OFF,
 };
 use crate::system::{button_value, swipe_value, AppEffect, AppFailure, Clocked, EventResult, System, Touch};
+use crate::text::WrappedLines;
+use crate::text_file::{covers, font_from_file, LineIndex};
 use painting::{ScrollMove, TransitionRun};
 pub use painting::{Transition, STRIP_PIXELS};
 
@@ -161,6 +165,8 @@ pub struct AppHost<'image> {
     latest_heart_rate: [Value; 2],
     latest_acceleration: [Value; 3],
     scroll_drag: Option<ScrollDrag>,
+    /// Where each TextFile on the screen finds its lines in its file.
+    text_files: Vec<(NodeKey, LineIndex)>,
 }
 
 impl<'image> AppHost<'image> {
@@ -295,6 +301,7 @@ impl<'image> AppHost<'image> {
             latest_heart_rate: [0; 2],
             latest_acceleration: [0; 3],
             scroll_drag: None,
+            text_files: Vec::new(),
         };
         host.run_derives(Inputs::NOTHING, true, now, system);
         Ok(host)
@@ -462,6 +469,7 @@ impl<'image> AppHost<'image> {
         self.last_clock_update = now;
         self.scroll_drag = None;
         self.scroll_move = None;
+        self.text_files = Vec::new();
 
         let mut failure = self.build_nodes(now, system);
         self.measure_and_lay_out();
@@ -472,6 +480,7 @@ impl<'image> AppHost<'image> {
             failure = failure.or(self.build_nodes(now, system));
             self.measure_and_lay_out();
         }
+        self.fill_text_files(system);
         self.redraw_whole_screen();
         self.dirty_nodes = 0;
         if let Some(failure) = failure {
@@ -751,6 +760,7 @@ impl<'image> AppHost<'image> {
             first_failure = first_failure.or(self.build_nodes(now, system));
             self.update_layout();
         }
+        self.fill_text_files(system);
         first_failure
     }
 
@@ -763,6 +773,7 @@ impl<'image> AppHost<'image> {
             theme: &self.theme,
             utc_offset: self.utc_offset,
             now: self.now,
+            clip: SCREEN_AREA,
         }
     }
 
@@ -1010,6 +1021,115 @@ impl<'image> AppHost<'image> {
             }
         }
         changed
+    }
+
+    /// Reads into each TextFile the lines in view, wrapping its file first when its width or font is new.
+    ///
+    /// Kept out of line, so its frame is on the stack only while it runs, not under every layout.
+    #[inline(never)]
+    fn fill_text_files(&mut self, system: &impl SystemValues) {
+        for node_index in 0..self.nodes.len() {
+            let node = &self.nodes[node_index];
+            if node.kind != WidgetKind::TextFile || !node.shown {
+                continue;
+            }
+            let key = NodeKey::of(node);
+            let Some(widget) = self.tree.widget(node.widget_index) else {
+                continue;
+            };
+            let text_of = |property| match widget.property(property) {
+                Some(PropertySource::Constant(string)) => self.image.string(string as u16),
+                _ => None,
+            };
+            let Some(path) = text_of(Property::Path) else {
+                continue;
+            };
+            let font_path = text_of(Property::FontPath);
+            let mut read_file = |offset: u32, out: &mut [u8]| system.read_file(path, offset, out);
+            let place = self.text_files.iter().position(|(held, _)| *held == key);
+
+            let node = &mut self.nodes[node_index];
+            if place.is_none() {
+                let chosen_font = font_path.and_then(|font_path| {
+                    font_from_file(&mut |offset: u32, out: &mut [u8]| {
+                        system.read_file(font_path, offset, out)
+                    })
+                });
+                if let Some(font) = chosen_font {
+                    node.settings.font = font;
+                }
+            }
+            let padding = i32::from(node.settings.padding);
+            let width = (node.bounds.width - 2 * padding).max(1);
+            let font = node.settings.font;
+            let index_fits = place.is_some_and(|place| {
+                let index = &self.text_files[place].1;
+                index.width == width && index.font == font
+            });
+            let place = match place {
+                Some(place) if index_fits => place,
+                _ => {
+                    // The scroll offset is 16 bits, so the lines past what it reaches are left out.
+                    let most_lines = (i16::MAX as i32 - 2 * padding) / line_height(font.metrics()).max(1);
+                    let index = LineIndex::build(&mut read_file, font, width, most_lines);
+                    self.text_files.retain(|(held, _)| *held != key);
+                    self.text_files.push((key, index));
+                    self.dirty_nodes |= 1 << node_index;
+                    self.text_files.len() - 1
+                }
+            };
+            let index = &self.text_files[place].1;
+            if index.line_count == 0 {
+                let placeholder = text_of(Property::Placeholder).unwrap_or("");
+                let lines: Vec<&str> = WrappedLines::new(placeholder, font, width).collect();
+                node.text = lines.join("\n");
+                if let Some(extra) = node.extra.get_mut() {
+                    *extra = Extra::TextFile {
+                        line_count: lines.len() as u16,
+                        first_line: 0,
+                        held_lines: lines.len() as u16,
+                        is_placeholder: true,
+                    };
+                }
+                continue;
+            }
+            let (view_first, view_end) = text_file_lines_in_view(node);
+            let Some(&mut Extra::TextFile {
+                line_count,
+                first_line,
+                held_lines,
+                ..
+            }) = node.extra.get_mut()
+            else {
+                continue;
+            };
+            let holds_view = index_fits
+                && covers(
+                    i32::from(first_line),
+                    i32::from(held_lines),
+                    view_first,
+                    view_end,
+                    i32::from(line_count),
+                );
+            if holds_view {
+                continue;
+            }
+            let (window_first, text) = index.read_lines(&mut read_file, view_first, view_end);
+            let lines = if text.is_empty() {
+                0
+            } else {
+                text.split('\n').count()
+            };
+            node.text = text;
+            if let Some(extra) = node.extra.get_mut() {
+                *extra = Extra::TextFile {
+                    line_count: index.line_count as u16,
+                    first_line: window_first as u16,
+                    held_lines: lines as u16,
+                    is_placeholder: false,
+                };
+            }
+        }
     }
 
     /// Runs the derive subscriptions whose inputs changed, or all of them; returns what they changed.
@@ -1508,6 +1628,7 @@ impl<'image> AppHost<'image> {
         if moved_rows != 0 {
             node.scroll_offset = offset as i16;
             self.touch_scrolled = true;
+            self.fill_text_files(&*system);
             self.note_scroll(drag.node_index, moved_rows);
             if self.rows_in_view_moved() {
                 let failure = self.build_nodes(now, system);
@@ -1745,11 +1866,21 @@ impl<'image> AppHost<'image> {
             .collect()
     }
 
-    /// The rows a list widget such as an AppList draws itself, each with its text; empty for other widgets.
+    /// The rows a list widget such as an AppList or a TextFile draws itself, each with its text; empty for other widgets.
     pub fn widget_rows(&self, widget_index: u16) -> Vec<(&str, Rect)> {
         match self.node(widget_index) {
             Some(node) if node.kind == WidgetKind::AppList => {
                 app_list_rows(node).map(|(_, name, row)| (name, row)).collect()
+            }
+            Some(node) if node.kind == WidgetKind::TextFile => {
+                let height = line_height(node.settings.font.metrics());
+                let row = |top| Rect {
+                    x: node.bounds.x + i32::from(node.settings.padding),
+                    y: top,
+                    width: (node.bounds.width - 2 * i32::from(node.settings.padding)).max(0),
+                    height,
+                };
+                text_file_rows(node).map(|(line, top)| (line, row(top))).collect()
             }
             _ => Vec::new(),
         }

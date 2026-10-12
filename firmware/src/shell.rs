@@ -286,6 +286,10 @@ impl SystemValues for WatchSystem {
         self.random_state.set(state);
         state
     }
+
+    fn read_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
+        self.files.read_part(path, offset, out)
+    }
 }
 
 /// Whether the value is one of the kept notifications' fields, which all share one bit.

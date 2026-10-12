@@ -17,7 +17,7 @@ use rlvgl_core::{
 };
 
 use super::{AppHost, DISABLED_OPACITY, SCREEN_AREA};
-use crate::drawing::{draw_node, FadedRenderer};
+use crate::drawing::{draw_node, DrawContext, FadedRenderer};
 use crate::layout::{clips_children, content_height};
 use crate::nodes::{to_color, OPAQUE};
 
@@ -232,6 +232,7 @@ impl<'image> AppHost<'image> {
             let backdrop = self.backdrop(node_index, background);
             let opacity = self.opacity(node_index);
             let mut renderer = ScreenRenderer::new(&mut *target).with_background_color(backdrop);
+            let context = DrawContext { clip, ..context };
             {
                 let mut clipped = ClipRenderer::new(&mut renderer, clip);
                 if opacity == OPAQUE {

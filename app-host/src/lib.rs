@@ -23,6 +23,7 @@ pub mod side_button;
 mod subscriptions;
 mod system;
 mod text;
+mod text_file;
 
 #[cfg(any(test, feature = "demo"))]
 pub mod demo;

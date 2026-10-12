@@ -90,10 +90,12 @@ pub enum WidgetKind {
     Confirm,
     /// One roller of whole numbers from `minimum` to `maximum`, padded to `digits`.
     NumberRoller,
+    /// A text file from the watch's storage, wrapped and scrolled, read a little at a time.
+    TextFile,
 }
 
 impl WidgetKind {
-    const ALL: [WidgetKind; 49] = {
+    const ALL: [WidgetKind; 50] = {
         use WidgetKind::*;
         [
             Column,
@@ -145,6 +147,7 @@ impl WidgetKind {
             Stepper,
             Confirm,
             NumberRoller,
+            TextFile,
         ]
     };
 
@@ -287,10 +290,16 @@ pub enum Property {
     ShowHours,
     /// How many digits a NumberRoller pads its numbers to.
     Digits,
+    /// The file a TextFile shows.
+    Path,
+    /// A file holding the name of the font a TextFile uses, such as `small`, set from the phone.
+    FontPath,
+    /// What a TextFile shows while its file is missing or empty.
+    Placeholder,
 }
 
 impl Property {
-    const ALL: [Property; 81] = {
+    const ALL: [Property; 84] = {
         use Property::*;
         [
             X,
@@ -374,6 +383,9 @@ impl Property {
             TwelveHour,
             ShowHours,
             Digits,
+            Path,
+            FontPath,
+            Placeholder,
         ]
     };
 
@@ -390,7 +402,7 @@ impl Property {
             | Recolor => PropertyValue::Color,
             Cells | Palette | Options | Points | Series | Labels | Skip => PropertyValue::Array,
             Image | Icon => PropertyValue::Image,
-            Text | ScreenName => PropertyValue::Text,
+            Text | ScreenName | Path | FontPath | Placeholder => PropertyValue::Text,
             OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease | OnDrag | OnSwipe | OnButton
             | OnChange | OnPageChange | OnScrollEnd | OnShow | OnHide => PropertyValue::Event,
             _ => PropertyValue::Number,
@@ -525,13 +537,14 @@ impl Property {
             TwelveHour => kind == Kind::TimeRollers,
             ShowHours => kind == Kind::DurationRollers,
             Digits => kind == Kind::NumberRoller,
+            Path | FontPath | Placeholder => kind == Kind::TextFile,
             OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease => {
                 is_input || kind.holds_children() || matches!(kind, Kind::CellGrid | Kind::AppList)
             }
             OnDrag => matches!(kind, Kind::Slider | Kind::Arc | Kind::CellGrid) || kind.holds_children(),
             OnChange => is_input || kind == Kind::Arc,
             OnPageChange => matches!(kind, Kind::Pages | Kind::Tabs),
-            OnScrollEnd => matches!(kind, Kind::Scroll | Kind::List | Kind::AppList),
+            OnScrollEnd => matches!(kind, Kind::Scroll | Kind::List | Kind::AppList | Kind::TextFile),
             // Screen-wide events go on a screen's root, which the tree check confirms.
             OnSwipe | OnButton | OnShow | OnHide => true,
             _ => false,

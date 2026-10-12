@@ -23,6 +23,7 @@ use neotime_runtime::{
 
 use super::*;
 use crate::demo::{stopwatch_image, stopwatch_variables, stopwatch_widgets};
+use crate::fonts::FontName;
 
 // ============================================================================
 // Counting the heap
@@ -168,6 +169,7 @@ struct FakeSystem {
     steps_today: Value,
     is_phone_connected: bool,
     app_names: Vec<String>,
+    files: Vec<(String, Vec<u8>)>,
 }
 
 impl SystemValues for FakeSystem {
@@ -200,6 +202,14 @@ impl SystemValues for FakeSystem {
 
     fn random_number(&self) -> u32 {
         4
+    }
+
+    fn read_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
+        let (_, bytes) = self.files.iter().find(|(name, _)| name == path)?;
+        let rest = bytes.get(offset as usize..).unwrap_or(&[]);
+        let length = rest.len().min(out.len());
+        out[..length].copy_from_slice(&rest[..length]);
+        Some(length)
     }
 }
 
@@ -1499,6 +1509,7 @@ fn an_image_that_names_a_library_image_draws_that_image() {
         theme: &neotime_runtime::DEFAULT_THEME,
         utc_offset: 0,
         now: 0,
+        clip: crate::SCREEN_AREA,
     };
     let size_of = |context: &crate::drawing::DrawContext, reference: ImageReference| {
         context
@@ -1653,6 +1664,219 @@ fn an_app_list_paints_its_rows() {
     assert_eq!(screen.pixel(30, 80), surface);
     assert_eq!(screen.pixel(30, 64), background);
     assert_eq!(screen.pixel(30, 200), background);
+}
+
+// ============================================================================
+// Text files
+// ============================================================================
+
+/// One TextFile filling the screen, showing `/notes/note.txt` in the font `/notes/font` names.
+fn text_file_image() -> Vec<u8> {
+    let mut writer = ImageWriter::new("notes", "Notes", AppKind::App, 1);
+    let main = writer.string("main");
+    let path = writer.string("/notes/note.txt");
+    let font_path = writer.string("/notes/font");
+    let placeholder = writer.string("No note yet");
+    let constant = PropertySource::Constant;
+    writer.widget(
+        WidgetKind::TextFile,
+        0,
+        &[
+            (Property::ScreenName, constant(main as i32)),
+            (Property::Padding, constant(8)),
+            (Property::Path, constant(path as i32)),
+            (Property::FontPath, constant(font_path as i32)),
+            (Property::Placeholder, constant(placeholder as i32)),
+        ],
+    );
+    writer.build()
+}
+
+/// A note of numbered lines, each short enough not to wrap.
+fn numbered_note(lines: usize) -> Vec<u8> {
+    (0..lines)
+        .map(|line| std::format!("Line {line}\n"))
+        .collect::<String>()
+        .into_bytes()
+}
+
+fn system_with_note(note: Vec<u8>, font: Option<&str>) -> FakeSystem {
+    let mut files = alloc::vec![(String::from("/notes/note.txt"), note)];
+    if let Some(font) = font {
+        files.push((String::from("/notes/font"), font.as_bytes().to_vec()));
+    }
+    FakeSystem {
+        files,
+        ..Default::default()
+    }
+}
+
+fn shown_lines(host: &AppHost) -> Vec<String> {
+    host.widget_rows(0)
+        .iter()
+        .map(|(line, _)| String::from(*line))
+        .collect()
+}
+
+#[test]
+fn a_text_file_shows_its_first_lines_wrapped_to_the_screen() {
+    let image = text_file_image();
+    let note =
+        b"A note long enough that its words cannot all fit across one line of the watch.\nSecond".to_vec();
+    let mut system = system_with_note(note, None);
+    let host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    let rows = host.widget_rows(0);
+
+    assert!(rows.len() >= 3);
+    assert!(rows.iter().all(|(_, row)| row.width == 240 - 16 && row.x == 8));
+    assert_eq!(rows[0].1.y, 8);
+    assert_eq!(rows.last().map(|(line, _)| *line), Some("Second"));
+    assert!(system.failures.is_empty());
+}
+
+#[test]
+fn the_font_file_picks_the_font_and_its_line_height() {
+    let image = text_file_image();
+    let mut system = system_with_note(numbered_note(40), Some("large\n"));
+    let host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let rows = host.widget_rows(0);
+    let large = crate::fonts::line_height(FontName::Large.metrics());
+    assert_eq!(rows[1].1.y - rows[0].1.y, large);
+
+    let mut system = system_with_note(numbered_note(40), Some("nonsense"));
+    let host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let rows = host.widget_rows(0);
+    let normal = crate::fonts::line_height(FontName::Normal.metrics());
+    assert_eq!(rows[1].1.y - rows[0].1.y, normal);
+}
+
+#[test]
+fn a_long_text_file_scrolls_to_its_last_line_holding_only_lines_near_the_view() {
+    let image = text_file_image();
+    let mut system = system_with_note(numbered_note(500), Some("small"));
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    assert_eq!(shown_lines(&host).first().map(String::as_str), Some("Line 0"));
+    assert!(host.widget_text(0).unwrap().len() < 1024);
+
+    for _ in 0..200 {
+        host.touch(
+            Touch::Drag {
+                x: 120,
+                y: 0,
+                start_x: 120,
+                start_y: 239,
+            },
+            START_TIME,
+            &mut system,
+        );
+        host.touch(Touch::Release { x: 120, y: 0 }, START_TIME, &mut system);
+    }
+
+    let lines = shown_lines(&host);
+    assert_eq!(lines.last().map(String::as_str), Some("Line 499"));
+    assert!(host
+        .widget_rows(0)
+        .iter()
+        .all(|(_, row)| row.y + row.height > 0 && row.y < 240));
+    assert!(host.widget_text(0).unwrap().len() < 1024);
+}
+
+#[test]
+fn a_missing_or_empty_text_file_shows_its_placeholder_in_the_muted_colour() {
+    let image = text_file_image();
+    for mut system in [FakeSystem::default(), system_with_note(Vec::new(), None)] {
+        let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+        let mut screen = FakeScreen::new();
+
+        host.draw(&mut screen).unwrap();
+
+        assert_eq!(shown_lines(&host), ["No note yet"]);
+        assert!(system.failures.is_empty());
+        let muted = rgb565(DEFAULT_THEME.color(ThemeColor::Muted));
+        let height = crate::fonts::line_height(FontName::Normal.metrics());
+        assert!((8..120).any(|x| (8..8 + height).any(|y| screen.pixel(x, y) == muted)));
+    }
+}
+
+#[test]
+fn a_text_file_paints_its_letters() {
+    let image = text_file_image();
+    let mut system = system_with_note(b"MMMM".to_vec(), None);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+
+    host.draw(&mut screen).unwrap();
+
+    let background = rgb565(DEFAULT_THEME.color(ThemeColor::Background));
+    let height = crate::fonts::line_height(FontName::Normal.metrics());
+    let inked = (8..40).any(|x| (8..8 + height).any(|y| screen.pixel(x, y) != background));
+    assert!(inked);
+    assert!((8..40).all(|x| screen.pixel(x, 8 + 2 * height) == background));
+}
+
+#[test]
+fn a_text_file_draws_only_the_lines_inside_the_part_being_painted() {
+    use rlvgl_core::renderer::Renderer;
+    use rlvgl_core::widget::{Color, Rect};
+
+    /// Records the top of everything drawn.
+    #[derive(Default)]
+    struct Tops(Vec<i32>);
+    impl Renderer for Tops {
+        fn fill_rect(&mut self, rect: Rect, _color: Color) {
+            self.0.push(rect.y);
+        }
+        fn blend_rect(&mut self, rect: Rect, _color: Color) {
+            self.0.push(rect.y);
+        }
+        fn draw_text(&mut self, _position: (i32, i32), _text: &str, _color: Color) {}
+    }
+
+    let bytes = ImageWriter::new("notes", "Notes", AppKind::App, 1).build();
+    let image = neotime_runtime::AppImage::parse(&bytes).unwrap();
+    let state = neotime_runtime::AppState::new(&image).unwrap();
+    let mut node = crate::nodes::Node::new(0, WidgetKind::TextFile, 1, None, SCREEN_AREA);
+    node.shown = true;
+    node.text = (0..12)
+        .map(|line| std::format!("MMMM {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    if let Some(extra) = node.extra.get_mut() {
+        *extra = crate::nodes::Extra::TextFile {
+            line_count: 12,
+            first_line: 0,
+            held_lines: 12,
+            is_placeholder: false,
+        };
+    }
+    let height = crate::fonts::line_height(FontName::Normal.metrics());
+    let strip = Rect {
+        x: 0,
+        y: 3 * height,
+        width: 240,
+        height: 4,
+    };
+    let context = crate::drawing::DrawContext {
+        image: &image,
+        library: None,
+        installed_app_icons: &[],
+        state: &state,
+        theme: &neotime_runtime::DEFAULT_THEME,
+        utc_offset: 0,
+        now: 0,
+        clip: strip,
+    };
+    let mut tops = Tops::default();
+
+    crate::drawing::draw_node(&node, &context, &mut tops);
+
+    assert!(!tops.0.is_empty());
+    assert!(
+        tops.0.iter().all(|top| (3 * height..4 * height).contains(top)),
+        "{:?}",
+        tops.0
+    );
 }
 
 #[test]

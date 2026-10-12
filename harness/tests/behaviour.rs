@@ -235,3 +235,65 @@ fn opening_the_notifications_app_marks_every_notification_read() {
     assert!(watch.shows_text("Sam"));
     assert!(watch.failures().is_empty());
 }
+
+// ============================================================================
+// Notes
+// ============================================================================
+
+mod notes {
+    use super::*;
+    use neotime_app_testing::{compile_package, FakeSystem, PackageKind, STARTING_NOTE_PATH};
+
+    fn open_with_note(note: &str, font: Option<&str>) -> TestWatch {
+        let mut system = FakeSystem::new();
+        system.write_file(STARTING_NOTE_PATH, note.as_bytes());
+        if let Some(font) = font {
+            system.write_file("/notes/font", font.as_bytes());
+        }
+        let image = compile_package(PackageKind::App, "notes").unwrap();
+        TestWatch::open_image_on(image, system).unwrap()
+    }
+
+    #[test]
+    fn the_notes_app_shows_the_note_the_phone_sent() {
+        let watch = TestWatch::open_app("notes").unwrap();
+
+        assert!(watch.shows_text("Packing list"), "{:?}", watch.visible_texts());
+        assert!(watch.shows_text("- Passport"));
+        assert!(watch.failures().is_empty());
+    }
+
+    #[test]
+    fn the_notes_app_scrolls_a_long_note_to_its_end() {
+        let note: String = (1..=300).map(|line| format!("Line {line}\n")).collect();
+        let mut watch = open_with_note(&note, Some("small"));
+        assert!(watch.shows_text("Line 1"));
+        assert!(!watch.shows_text("Line 300"));
+
+        for _ in 0..120 {
+            watch.drag((120, 230), (120, 10));
+        }
+
+        assert!(watch.shows_text("Line 300"), "{:?}", watch.visible_texts());
+        assert!(watch.failures().is_empty());
+    }
+
+    #[test]
+    fn the_notes_app_shows_fewer_lines_in_a_larger_font() {
+        let note: String = (1..=40).map(|line| format!("Line {line}\n")).collect();
+        let small = open_with_note(&note, Some("small")).visible_texts().len();
+        let large = open_with_note(&note, Some("large")).visible_texts().len();
+
+        assert!(large < small, "large {large}, small {small}");
+    }
+
+    #[test]
+    fn the_notes_app_asks_for_a_note_while_there_is_none() {
+        let mut system = FakeSystem::new();
+        system.files.clear();
+        let image = compile_package(PackageKind::App, "notes").unwrap();
+        let watch = TestWatch::open_image_on(image, system).unwrap();
+
+        assert!(watch.shows_text("No note yet."), "{:?}", watch.visible_texts());
+    }
+}

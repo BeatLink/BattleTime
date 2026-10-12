@@ -117,6 +117,7 @@ fn widget_kind(name: &str) -> Option<WidgetKind> {
         "Stepper" => Stepper,
         "ConfirmBox" => Confirm,
         "NumberRoller" => NumberRoller,
+        "TextFile" => TextFile,
         _ => return None,
     })
 }
@@ -160,6 +161,9 @@ fn property_for(name: &str) -> Option<(Property, Type)> {
         "twelve_hour" => (TwelveHour, Type::BOOL),
         "show_hours" => (ShowHours, Type::BOOL),
         "digits" => (Digits, number),
+        "path" => (Path, Type::TEXT),
+        "font_path" => (FontPath, Type::TEXT),
+        "placeholder" => (Placeholder, Type::TEXT),
         "start_angle" => (StartAngle, number),
         "end_angle" => (EndAngle, number),
         "long_mode" => (LongMode, Type::choice(ChoiceSet::LongMode)),
@@ -1222,6 +1226,18 @@ impl<'a> Compiler<'a> {
                     properties.push((property, source));
                     continue;
                 }
+            }
+            let is_file = matches!(
+                property,
+                Property::Path | Property::FontPath | Property::Placeholder
+            );
+            if is_file && !matches!(self.reference_constant(&value), Some(Constant::Text(_))) {
+                return fail(
+                    span,
+                    format!(
+                        "`{prop}` on `{name}` must be text written out, such as `path=\"/notes/note.txt\"`"
+                    ),
+                );
             }
             if let Some(source) = self.property_source(value, value_type, property, span)? {
                 properties.push((property, source));

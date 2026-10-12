@@ -245,6 +245,14 @@ pub enum Extra {
         step: u16,
         digits: u8,
     },
+    /// How many wrapped lines a TextFile's file has, and which of them its text holds.
+    TextFile {
+        line_count: u16,
+        first_line: u16,
+        held_lines: u16,
+        /// Whether it holds its placeholder, because the file is missing or empty.
+        is_placeholder: bool,
+    },
     /// Which rows of a Repeat have nodes, when its rows have one fixed height and so sit in slots.
     Repeat {
         /// The rows' height, or 0 when every shown row is built.
@@ -308,6 +316,12 @@ impl Extra {
                 show_hours: false,
                 step: 1,
                 digits: 1,
+            },
+            WidgetKind::TextFile => Extra::TextFile {
+                line_count: 0,
+                first_line: 0,
+                held_lines: 0,
+                is_placeholder: false,
             },
             WidgetKind::Repeat => Extra::Repeat {
                 slot_extent: 0,
@@ -649,7 +663,7 @@ impl Node {
                 Property::Step => replace(step, to_u16(number).max(1)),
                 _ => false,
             },
-            Extra::Repeat { .. } | Extra::None => false,
+            Extra::TextFile { .. } | Extra::Repeat { .. } | Extra::None => false,
         }
     }
 
@@ -723,6 +737,7 @@ pub fn is_mapped(kind: WidgetKind) -> bool {
             | Slider
             | CellGrid
             | AppList
+            | TextFile
             | Repeat
             | Battery
             | StatusIcons

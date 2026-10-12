@@ -22,6 +22,7 @@ import {
   is_heart_rate_running,
   is_phone_connected,
   next_alarm,
+  preview_files,
   reset_persisted,
   reset_reason,
   settings,
@@ -144,6 +145,10 @@ function starting_step_history(): StepHistory {
   };
 }
 
+/** The note harness/src/fake_system.rs starts with, its STARTING_NOTE. */
+export const STARTING_NOTE =
+  "Packing list\n\n- Charger\n- Passport\n- Rain jacket\n- Two books\n\nCall the hotel\nbefore Friday.\n";
+
 /** Sets every system value to what harness/src/fake_system.rs starts with. */
 export function set_fake_system_values() {
   const now = START_TIME_IN_MILLISECONDS;
@@ -199,6 +204,7 @@ export function set_fake_system_values() {
     progress_percent: 40,
   };
   installed_apps.value = [];
+  preview_files.value = { "/notes/note.txt": STARTING_NOTE };
   clear_notifications();
   step_history.value = starting_step_history();
 }

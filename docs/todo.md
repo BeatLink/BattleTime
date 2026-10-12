@@ -80,6 +80,13 @@ document for its part instead.
     diagnostics characteristic's last-restart words, and a panic's addresses lead to its caller;
   - an ordinary start after that shows the crash no more.
 
+- [ ] **The notes app on the PineTime.** It has run on the emulated firmware with a 30 KB note in
+  littlefs, opened from the launcher and scrolled to line 115, but not on the watch. With the
+  companion app's Notes screen, check that:
+  - a chosen file reaches `/notes/note.txt`, and an edit to it is sent again within a minute;
+  - a font chosen in the companion app shows the next time the app opens;
+  - a long note scrolls smoothly to its last line, with no line drawn twice or out of place;
+  - the stack keeps its margin with the app open, which in the emulator matches the launcher's.
 - [ ] **Transitions and scrolling on the PineTime.** Slides, wipes and hardware-scrolled lists have
   run only in the emulator and against a model of the panel; none of it is on the watch yet. Flash
   the bootloader first, then a firmware built from master at e78fc7a or later. On the watch, check

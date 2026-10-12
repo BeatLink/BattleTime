@@ -203,6 +203,9 @@ export interface InstalledApp {
 /** Every app a launcher lists, in order; kept by the system. */
 export const installed_apps = signal<InstalledApp[]>([]);
 
+/** Files a `TextFile` reads in the browser preview, by path, standing in for the watch's storage. */
+export const preview_files = signal<Record<string, string>>({});
+
 /** How many days the step history holds: today and the six before it. */
 export const STEP_HISTORY_DAYS = 7;
 

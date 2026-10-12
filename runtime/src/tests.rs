@@ -1493,6 +1493,29 @@ fn refuses_a_property_the_widget_does_not_have() {
 }
 
 #[test]
+fn takes_a_text_file_with_its_paths_and_refuses_a_path_elsewhere() {
+    let mut builder = ImageBuilder::new();
+    let path = builder.string("/notes/note.txt");
+    let font_path = builder.string("/notes/font");
+    let placeholder = builder.string("No note yet");
+    builder.widget(
+        WidgetKind::TextFile,
+        0,
+        &[
+            (Property::Path, Constant(path as i32)),
+            (Property::FontPath, Constant(font_path as i32)),
+            (Property::Placeholder, Constant(placeholder as i32)),
+        ],
+    );
+    assert_eq!(widget_problem(&builder), None);
+
+    let mut builder = ImageBuilder::new();
+    let path = builder.string("/notes/note.txt");
+    builder.widget(WidgetKind::Label, 0, &[(Property::Path, Constant(path as i32))]);
+    assert_eq!(widget_problem(&builder), Some(WidgetProblem::PropertyNotOnWidget));
+}
+
+#[test]
 fn refuses_a_screen_event_below_the_screen_root() {
     let mut builder = ImageBuilder::new();
     let handler = builder.handler(Code::new());

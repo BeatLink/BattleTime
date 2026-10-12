@@ -858,6 +858,10 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
   those.
 - **Saved state.** `save_changed_state` writes the persistent variables when they change, and
   `open_with_saved_state` puts them back.
+- **Text files.** A `TextFile` reads its file through `SystemValues::read_file` a chunk at a time
+  (`text_file`): it wraps the whole file once when its screen opens, keeping where every eighth
+  line starts, and holds only the lines near the view, so a long note costs about the same RAM as a
+  short one. A font file the phone writes can choose its font.
 - **Images and fonts.** Images come from the app or the shared library (`set_library`). The fonts
   are anti-aliased bitmaps made by `tools/generate_fonts.py` and kept in the shared library;
   `fonts::install_from_library` takes them from there, so the firmware carries none of its own.

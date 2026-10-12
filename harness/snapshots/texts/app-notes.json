@@ -1,0 +1,17 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "- Charger",
+        "- Passport",
+        "- Rain jacket",
+        "- Two books",
+        "Call the hotel",
+        "Packing list",
+        "before Friday."
+      ]
+    }
+  ]
+}
