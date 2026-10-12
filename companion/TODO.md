@@ -40,6 +40,15 @@ Notifications tab and the watch provider, but has never been compiled. It needs 
 build to prove it, and the keep-alive notification needs `POST_NOTIFICATIONS` asked for on Android
 13 and later.
 
+## Tests
+
+- **Screen and component tests.** `src/app` and `src/components` are left out of coverage because
+  nothing tests them, which keeps the floor at 66%. Add `@testing-library/react-native`, test the
+  screens against the mock transport, take them out of the `collectCoverageFrom` exclusions and
+  raise the floors in `package.json`.
+- **CLI commands.** `cli/commands/watch.ts`, `scan.ts` and `send.ts` are counted but barely tested;
+  drive them against the mock watch as `cli/cli.test.ts` does for `flash`.
+
 ## Not started
 
 - **Firmware from GitHub Actions builds.** NeoTime has no CI yet; the finder already reads
