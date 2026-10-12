@@ -161,8 +161,8 @@ to locals, because a loop needs an empty stack.
   worked out then. Text elements must be fixed text. `includes` and `indexOf` on an array signal of
   numbers compile to one `AskArray` instead of the loop.
 - The array functions from `count_of` to `life_step` (`array_builtins.rs`) take array signals and
-  compile to `AskArray`, or to `WorkArray` for `arrays_equal`. `slide_grid` and `life_step` compile
-  only as the whole right side of an assignment to an array signal, written straight into it.
+  compile to `AskArray`, or to `WorkArray` for `arrays_equal`. `slide_grid`, `life_step`, `push_shift` and `unshift_pop`
+  compile only as the whole right side of an assignment to an array signal, written straight into it.
 - `icon_named(name)` with a literal, a choice such as a weather condition, fixed text, or a
   template such as `` `turn_${turn.value}` ``.
 - A constant array or object indexed at run time: numbers that go up evenly are computed, other

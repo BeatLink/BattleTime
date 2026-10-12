@@ -495,7 +495,7 @@ Each instruction is one opcode byte followed by its operands:
 | `62` | copy array | destination and source arrays, 1 byte each | Copies every element; the two must be the same length. Handlers only. |
 | `63` | fill array | array, 1 byte | Takes a value and writes it to every element. Handlers only. |
 | `64` | ask array | question, 1 byte; array, 1 byte | Takes the question's arguments and pushes the answer: how many elements equal a value, where the `n`th one is, the longest line of a value through a cell of a grid, whether a 2048 slide would change the grid, or what it scores. |
-| `65` | work array | work, 1 byte; destination, 1 byte; source, 1 byte | Compares two arrays of one length, or writes the destination from the source: the Game of Life's next generation, or the grid after a 2048 slide. Writing is for handlers only, and the source may be the destination. |
+| `65` | work array | work, 1 byte; destination, 1 byte; source, 1 byte | Compares two arrays of one length, or writes the destination from the source: the Game of Life's next generation, the grid after a 2048 slide, or the source moved one place along with a value taken from the stack added at the end or the front. Writing is for handlers only, and the source may be the destination. |
 
 System values, in the order `read system` numbers them: `now`, `utc_offset`, `battery_percent`,
 `is_charging`, `steps_today`, `heart_rate`, `heart_rate_measured_at`, `is_phone_connected`,

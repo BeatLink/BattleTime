@@ -6,6 +6,8 @@ import {
   life_step,
   line_through,
   nth_index_of,
+  push_shift,
+  unshift_pop,
   slide_changes,
   slide_grid,
   slide_points,
@@ -19,6 +21,11 @@ describe("array questions", () => {
     expect(nth_index_of([1, 0, 1, 0, 0], 0, 3)).toBe(-1);
     expect(arrays_equal([1, 2, 3], [1, 2, 3])).toBe(true);
     expect(arrays_equal([1, 2, 3], [1, 2, 4])).toBe(false);
+  });
+
+  it("move a history along with a new value", () => {
+    expect(push_shift([1, 2, 3], 9)).toEqual([2, 3, 9]);
+    expect(unshift_pop([1, 2, 3], 9)).toEqual([9, 1, 2]);
   });
 
   it("measures lines through a cell without wrapping", () => {

@@ -10,6 +10,7 @@ import {
   now,
   persisted,
   second_of,
+  unshift_pop,
   HOUR,
   type Duration,
   type Instant,
@@ -71,7 +72,7 @@ function start_or_pause() {
 
 function lap_or_reset() {
   if (started_at.value !== null) {
-    laps.value = [now.value - started_at.value, laps.value[0], laps.value[1], laps.value[2]];
+    laps.value = unshift_pop(laps.value, now.value - started_at.value);
     lap_count.value = lap_count.value + 1;
   } else {
     paused_after.value = 0;

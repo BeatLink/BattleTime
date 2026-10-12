@@ -972,6 +972,16 @@ export function can_slide(grid: readonly number[], width: number): boolean {
   return (["up", "down", "left", "right"] as const).some((direction) => slide_changes(grid, width, direction));
 }
 
+/** The array moved one place towards its start, with `value` in the last place: a history, newest last. Assign it to an array signal. */
+export function push_shift<Element>(array: readonly Element[], value: Element): Element[] {
+  return [...array.slice(1), value];
+}
+
+/** The array moved one place towards its end, with `value` in the first place: a history, newest first. Assign it to an array signal. */
+export function unshift_pop<Element>(array: readonly Element[], value: Element): Element[] {
+  return [value, ...array.slice(0, -1)];
+}
+
 /**
  * The next generation of Conway's Game of Life on a grid `width` cells wide that wraps at its edges. Any
  * element not 0 is alive, and each live cell of the result holds `live_value`. Assign it to an array signal.

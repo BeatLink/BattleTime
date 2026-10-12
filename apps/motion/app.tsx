@@ -2,7 +2,7 @@
 // It charts the last ten readings of each axis, shows the latest in thousandths of g, and the step count.
 
 import { signal } from "@preact/signals";
-import { acceleration, define_app, steps_today, type AccelerationEvent } from "neotime";
+import { acceleration, define_app, push_shift, steps_today, type AccelerationEvent } from "neotime";
 import { icons } from "neotime/icons";
 import { Chart, Label, Row, Screen } from "neotime/widgets";
 
@@ -25,15 +25,10 @@ const z_readings = signal<number[]>([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 // Handlers
 // ============================================================================
 
-/** The readings moved one place older, with the new one at the end. */
-function shifted(readings: number[], newest: number): number[] {
-  return readings.map((_reading, place) => (place + 1 < readings.length ? readings[place + 1] : newest));
-}
-
 function record(event: AccelerationEvent) {
-  x_readings.value = shifted(x_readings.value, event.x);
-  y_readings.value = shifted(y_readings.value, event.y);
-  z_readings.value = shifted(z_readings.value, event.z);
+  x_readings.value = push_shift(x_readings.value, event.x);
+  y_readings.value = push_shift(y_readings.value, event.y);
+  z_readings.value = push_shift(z_readings.value, event.z);
 }
 
 // ============================================================================

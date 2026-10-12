@@ -12,13 +12,16 @@ use crate::diagnostics::{fail, Compiled};
 use crate::emitter::Emitter;
 use crate::expressions::Typed;
 use crate::scope::{Reference, Scope};
-use crate::types::{ChoiceSet, Kind, Type};
+use crate::types::{ChoiceSet, Kind, Range, Type};
+
+/// The highest tile level a slide writes, where its points stop doubling.
+const MOST_SLIDE_LEVEL: i64 = 62;
 
 /// `can_slide` asks `SlideChanges` about every direction with this one.
 const ANY_DIRECTION: i64 = 4;
 
 /// The functions that give back a new array, which only an assignment to an array signal can take.
-pub const ARRAY_WORK_FUNCTIONS: [&str; 2] = ["slide_grid", "life_step"];
+pub const ARRAY_WORK_FUNCTIONS: [&str; 4] = ["slide_grid", "life_step", "push_shift", "unshift_pop"];
 
 /// Whether `name` is one of the array questions `compile_array_question` compiles.
 pub fn is_array_question(name: &str) -> bool {
@@ -107,7 +110,8 @@ impl<'a> Compiler<'a> {
         Ok(Typed::new(result))
     }
 
-    /// `target.value = slide_grid(...)` or `life_step(...)`, written straight into the target.
+    /// `target.value = slide_grid(...)`, or one of the other functions that give a whole array, written straight
+    /// into the target.
     pub(crate) fn compile_array_work_assignment(
         &mut self,
         emitter: &mut Emitter,
@@ -123,17 +127,17 @@ impl<'a> Compiler<'a> {
                 format!("`{name}` rewrites an array, which only a handler may do"),
             );
         }
-        let [source, rest @ ..] = arguments else {
-            return fail(
-                span,
-                format!("`{name}` takes a grid, its width and one more argument"),
-            );
+        let (work, numbers, takes) = match name {
+            "slide_grid" => (ArrayWork::Slide, 2, "a grid, its width and a direction"),
+            "life_step" => (ArrayWork::LifeStep, 2, "a grid, its width and the live value"),
+            "push_shift" => (ArrayWork::PushLast, 1, "an array and a value"),
+            _ => (ArrayWork::PushFirst, 1, "an array and a value"),
         };
-        if rest.len() != 2 {
-            return fail(
-                span,
-                format!("`{name}` takes a grid, its width and one more argument"),
-            );
+        let [source, rest @ ..] = arguments else {
+            return fail(span, format!("`{name}` takes {takes}"));
+        };
+        if rest.len() != numbers {
+            return fail(span, format!("`{name}` takes {takes}"));
         }
         let source = self.array_signal_argument(source, scope, name)?;
         if self.slots[source as usize].length != self.slots[target as usize].length {
@@ -142,11 +146,27 @@ impl<'a> Compiler<'a> {
                 format!("`{name}` writes an array as long as the one it reads"),
             );
         }
-        let work = match name {
-            "slide_grid" => ArrayWork::Slide,
-            _ => ArrayWork::LifeStep,
+        // What the target may hold afterwards, so the array is stored wide enough for it.
+        let source_range = self.read_range(source);
+        let written = match work {
+            ArrayWork::PushLast | ArrayWork::PushFirst => {
+                let element_type = self.slots[target as usize].value_type;
+                let pushed = self.compile_value_of_type(emitter, rest[0], scope, element_type)?;
+                source_range.union(pushed.range)
+            }
+            ArrayWork::LifeStep => {
+                let ranges = self.compile_array_arguments(emitter, false, rest, scope)?;
+                Range::exactly(0).union(ranges[1])
+            }
+            _ => {
+                self.compile_array_arguments(emitter, true, rest, scope)?;
+                source_range.union(Range {
+                    lowest: 0,
+                    highest: MOST_SLIDE_LEVEL,
+                })
+            }
         };
-        self.compile_array_arguments(emitter, work == ArrayWork::Slide, rest, scope)?;
+        self.note_write(target, written);
         emitter.emit(
             Instruction::WorkArray {
                 work,
@@ -158,22 +178,26 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    /// Numbers, the second a swipe direction when `last_is_direction` is set.
+    /// Numbers, the second a swipe direction when `last_is_direction` is set; gives the range of each.
     fn compile_array_arguments(
         &mut self,
         emitter: &mut Emitter,
         last_is_direction: bool,
         arguments: &[&'a Expression<'a>],
         scope: &Rc<Scope<'a>>,
-    ) -> Compiled<()> {
+    ) -> Compiled<Vec<Range>> {
+        let mut ranges = Vec::new();
         for (place, argument) in arguments.iter().enumerate() {
             let expected = match last_is_direction && place + 1 == arguments.len() {
                 true => Type::choice(ChoiceSet::SwipeDirection),
                 false => Type::NUMBER,
             };
-            self.compile_value_of_type(emitter, argument, scope, expected)?;
+            ranges.push(
+                self.compile_value_of_type(emitter, argument, scope, expected)?
+                    .range,
+            );
         }
-        Ok(())
+        Ok(ranges)
     }
 }
 

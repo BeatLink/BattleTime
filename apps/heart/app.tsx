@@ -10,6 +10,7 @@ import {
   heart_rate_status,
   is_heart_rate_running,
   keep_screen_on,
+  push_shift,
   start_heart_rate,
   stop_heart_rate,
   type HeartRateEvent,
@@ -80,9 +81,7 @@ function record(event: HeartRateEvent) {
   if (!is_measuring.value) return;
   beats_per_minute.value = event.beats_per_minute;
   if (heart_rate_status.value !== SENSOR_MEASURING || event.beats_per_minute === 0) return;
-  readings.value = readings.value.map((_reading, place) =>
-    place + 1 < readings.value.length ? readings.value[place + 1] : event.beats_per_minute,
-  );
+  readings.value = push_shift(readings.value, event.beats_per_minute);
 }
 
 // ============================================================================

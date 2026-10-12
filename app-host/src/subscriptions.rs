@@ -267,6 +267,18 @@ pub fn derive_inputs_in(image: &AppImage, library: Option<&AppImage>, handler: u
         Instruction::WriteState(slot) | Instruction::WriteElement(slot) | Instruction::FillArray(slot) => {
             writes |= bit(slot)
         }
+        Instruction::AskArray { array, .. } => reads.state_slots |= bit(array),
+        Instruction::WorkArray {
+            work,
+            destination,
+            source,
+        } => {
+            reads.state_slots |= bit(source);
+            match work.writes() {
+                true => writes |= bit(destination),
+                false => reads.state_slots |= bit(destination),
+            }
+        }
         Instruction::ReadSystem(value) => reads.system_values |= value.bit(),
         _ => {}
     });

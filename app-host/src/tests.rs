@@ -2547,3 +2547,41 @@ fn a_confirm_sends_one_for_its_confirm_button_and_zero_for_the_other() {
         ) > 500
     );
 }
+
+#[test]
+fn a_derive_reads_the_arrays_native_work_reads_but_not_the_one_it_writes() {
+    use neotime_runtime::instruction::{ArrayQuestion, ArrayWork};
+    use Instruction::*;
+
+    let mut writer = ImageWriter::new("arrays", "Arrays", AppKind::App, 1);
+    let asked = writer.array("asked", ValueType::Int, false, 4, 1, 0);
+    let written = writer.array("written", ValueType::Int, false, 4, 1, 0);
+    let source = writer.array("source", ValueType::Int, false, 4, 1, 0);
+    let compared = writer.array("compared", ValueType::Int, false, 4, 1, 0);
+    let mut code = neotime_runtime::writer::CodeWriter::new();
+    code.emit(PushSmall(0))
+        .emit(AskArray {
+            question: ArrayQuestion::CountOf,
+            array: asked,
+        })
+        .emit(Drop)
+        .emit(WorkArray {
+            work: ArrayWork::Equal,
+            destination: compared,
+            source: compared,
+        })
+        .emit(PushSmall(1))
+        .emit(WorkArray {
+            work: ArrayWork::PushLast,
+            destination: written,
+            source,
+        });
+    code.emit(Drop);
+    writer.handler(code.finish().unwrap());
+    let bytes = writer.build();
+    let image = neotime_runtime::AppImage::parse(&bytes).unwrap();
+
+    let inputs = crate::subscriptions::derive_inputs(&image, 0);
+
+    assert_eq!(inputs.state_slots, (1 << asked) | (1 << source) | (1 << compared));
+}

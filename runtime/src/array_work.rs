@@ -199,6 +199,32 @@ impl Interpreter {
                 self.slide(state, source, Some(destination), grid, direction)
                     .map(|_| ())
             }
+            ArrayWork::PushLast | ArrayWork::PushFirst => {
+                let value = self.pop()?;
+                if length == 0 {
+                    return Ok(());
+                }
+                // Each place is read before anything is written over it, so the source may be the destination.
+                let order: &mut dyn Iterator<Item = usize> = match work {
+                    ArrayWork::PushLast => &mut (0..length - 1),
+                    _ => &mut (1..length).rev(),
+                };
+                for index in order {
+                    let from = if work == ArrayWork::PushLast {
+                        index + 1
+                    } else {
+                        index - 1
+                    };
+                    let moved = self.element_of(state, source, from)?;
+                    self.write_element(state, destination, index as Value, moved, true)?;
+                }
+                let end = if work == ArrayWork::PushLast {
+                    length - 1
+                } else {
+                    0
+                };
+                self.write_element(state, destination, end as Value, value, true)
+            }
         }
     }
 

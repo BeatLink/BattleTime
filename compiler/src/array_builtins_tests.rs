@@ -22,7 +22,7 @@ fn source(body: &str, screen: &str) -> String {
     format!(
         r#"
 import {{ signal }} from "@preact/signals";
-import {{ define_app, count_of, nth_index_of, line_through, can_slide, slide_changes, slide_points, slide_grid, life_step, arrays_equal, type SwipeEvent }} from "neotime";
+import {{ define_app, count_of, nth_index_of, line_through, can_slide, slide_changes, slide_points, slide_grid, life_step, arrays_equal, push_shift, unshift_pop, type SwipeEvent }} from "neotime";
 import {{ Label, Screen }} from "neotime/widgets";
 
 const board = signal([1, 0, 1, 2]);
@@ -129,6 +129,27 @@ fn a_handler_rewrites_a_grid_straight_into_its_signal() {
 }
 
 #[test]
+fn a_history_takes_a_new_value_without_a_copy() {
+    let bytes = compiled(
+        "function swipe(event: SwipeEvent) { board.value = push_shift(board.value, 7); other.value = unshift_pop(other.value, board.value[0]); }",
+        "<Label>{`${board.value[0]}`}</Label>",
+    );
+    let image = AppImage::parse(&bytes).unwrap();
+    let code = instructions(image.handler_code(0).unwrap());
+    let works: Vec<ArrayWork> = code
+        .iter()
+        .filter_map(|instruction| match instruction {
+            Instruction::WorkArray { work, .. } => Some(*work),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(works, [ArrayWork::PushLast, ArrayWork::PushFirst]);
+    assert_eq!(image.state_count(), 2);
+    assert!(!code.contains(&Instruction::LoopStart));
+}
+
+#[test]
 fn array_functions_need_array_signals_and_new_grids_need_an_assignment() {
     assert!(
         first_error(NO_SWIPE, "<Label>{`${count_of([1, 2], 1)}`}</Label>").contains("needs an array signal")
@@ -146,4 +167,17 @@ fn array_functions_need_array_signals_and_new_grids_need_an_assignment() {
     );
     let short = "const short = signal([1, 2]);\nfunction swipe(event: SwipeEvent) { board.value = slide_grid(short.value, 2, event.direction); }";
     assert!(first_error(short, "<Label>{`${board.value[0]}`}</Label>").contains("as long as"));
+}
+
+#[test]
+fn an_array_is_stored_wide_enough_for_what_native_work_writes_into_it() {
+    let bytes = compiled(
+        "function swipe(event: SwipeEvent) { board.value = push_shift(board.value, 980); other.value = life_step(other.value, 2, 300); }",
+        "<Label>{`${board.value[0]}`}</Label>",
+    );
+    let image = AppImage::parse(&bytes).unwrap();
+    let width_of = |variable: u16| image.state_variable(variable).unwrap().element_bytes;
+
+    assert!(width_of(0) >= 2);
+    assert!(width_of(1) >= 2);
 }

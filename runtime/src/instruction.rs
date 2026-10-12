@@ -341,6 +341,10 @@ pub enum ArrayWork {
     /// Takes a grid's width and a direction, and writes the grid with its tiles slid that way, each pair of equal
     /// tiles merging once into one a level higher, as in 2048.
     Slide,
+    /// Takes a value and writes the source moved one place towards its start, the value in the last place.
+    PushLast,
+    /// Takes a value and writes the source moved one place towards its end, the value in the first place.
+    PushFirst,
 }
 
 impl ArrayWork {
@@ -349,6 +353,8 @@ impl ArrayWork {
             0 => ArrayWork::Equal,
             1 => ArrayWork::LifeStep,
             2 => ArrayWork::Slide,
+            3 => ArrayWork::PushLast,
+            4 => ArrayWork::PushFirst,
             _ => return None,
         })
     }
@@ -648,6 +654,10 @@ impl Instruction {
                 work: ArrayWork::Equal,
                 ..
             } => (0, 1),
+            WorkArray {
+                work: ArrayWork::PushLast | ArrayWork::PushFirst,
+                ..
+            } => (1, 0),
             WorkArray { .. } => (2, 0),
             Effect(kind) => (kind.argument_count(), 0),
         };

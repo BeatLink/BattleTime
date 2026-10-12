@@ -258,9 +258,8 @@ the ones above it.
   - The other faces' step, heart and weather rows on `StepsBadge`, `HeartRateBadge` and
     `TemperatureBadge`: infineat, lite-digital, lite-weather, terminal and pinetime-style.
 - [ ] **More native array builtins.** `AskArray` and `WorkArray` already count, find, measure
-  lines, slide 2048 grids, step Life and compare arrays. Still in bytecode loops: `shuffle` and
-  `permutation_parity` (puzzle15), `push_shift` (history lists in heart, motion, stopwatch and
-  morse), `format_fixed` (calculator), `format_distance` (navigation), `sunday_week_of` and
+  lines, slide 2048 grids, step Life, push onto histories and compare arrays. Still in bytecode
+  loops: `shuffle` and `permutation_parity` (puzzle15), `format_fixed` (calculator), `format_distance` (navigation), `sunday_week_of` and
   `days_in_year`. `arrays_equal` takes only signals, so puzzle15's check against its constant
   solved board still loops.
 - [ ] **Library functions.** Logic with a real body that two or more apps share:

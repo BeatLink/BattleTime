@@ -248,6 +248,13 @@ fn life_refuses_a_grid_wider_than_its_row_buffers() {
 }
 
 #[test]
+fn a_push_moves_the_history_along_in_place() {
+    assert_eq!(worked(&[1, 2, 3], Work::PushLast, &[9]), Ok(std::vec![2, 3, 9]));
+    assert_eq!(worked(&[1, 2, 3], Work::PushFirst, &[9]), Ok(std::vec![9, 1, 2]));
+    assert_eq!(worked(&[1], Work::PushLast, &[9]), Ok(std::vec![9]));
+}
+
+#[test]
 fn equal_compares_two_arrays() {
     let mut writer = ImageWriter::new("arrays", "Arrays", AppKind::App, 1);
     let first = writer
