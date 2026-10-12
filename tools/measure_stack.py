@@ -7,7 +7,7 @@ starts the firmware, can swipe up to the launcher, and reports the lowest stack 
     python3 -I tools/measure_stack.py firmware/target/thumbv7em-none-eabihf/release/neotime-firmware [seconds] [--launcher]
 
 Run it inside `nix develop`. It finds the emulator in $PINETIME_EMULATOR, or in a PineTimeEmulator
-folder beside this repository. Cap its memory with `ulimit -v 8000000` first: Renode can grow.
+folder beside this repository, and runs it with that checkout's `pinetime-engine`.
 """
 
 import os
@@ -21,6 +21,8 @@ STACK_TOP = 0x2000FFF0
 PATTERN = 0xA5A5A5A5
 FIRMWARE_VECTOR_TABLE = 0x5000
 SECONDS_BEFORE_SWIPE = 4
+# RESETREAS: a non-zero value means the chip reset during the run, which clears the stack pattern.
+RESET_REASON = 0x40000400
 
 # The UICR words embassy-nrf writes on the first start: both reset pin selections and the NFC pins as GPIO.
 FIRST_START_UICR = [(0x10001200, 0x15), (0x10001204, 0x15), (0x1000120C, 0xFFFFFFFE)]
@@ -57,7 +59,7 @@ def stack_end(firmware):
     sys.exit(f"{firmware} has no _stack_end symbol")
 
 
-def renode_script(emulator, firmware, end, seconds, swipe_to_launcher):
+def engine_script(emulator, firmware, end, seconds, swipe_to_launcher):
     painted = range(end, STACK_TOP - TOP_LEFT_ALONE, 4)
     lines = [f"include @{emulator}/scripts/pinetime.resc"]
     lines += [f"sysbus WriteDoubleWord {address:#x} {value:#x}" for address, value in FIRST_START_UICR]
@@ -70,7 +72,7 @@ def renode_script(emulator, firmware, end, seconds, swipe_to_launcher):
     ]
     if swipe_to_launcher:
         lines += [f'emulation RunFor "00:00:{SECONDS_BEFORE_SWIPE:02}"', 'sysbus.serial1.touch Swipe "up"']
-    lines += [f'emulation RunFor "00:00:{seconds:05.2f}"', "cpu PC"]
+    lines += [f'emulation RunFor "00:00:{seconds:05.2f}"', "cpu PC", f"sysbus ReadDoubleWord {RESET_REASON:#x}"]
     lines += [f"sysbus ReadDoubleWord {address:#x}" for address in range(end, STACK_TOP - TOP_LEFT_ALONE, READ_STEP)]
     lines.append("quit")
     return "\n".join(lines) + "\n"
@@ -87,9 +89,9 @@ def main():
     end = stack_end(firmware)
 
     with tempfile.NamedTemporaryFile("w", suffix=".resc", delete=False) as script:
-        script.write(renode_script(emulator, firmware, end, seconds, swipe_to_launcher))
+        script.write(engine_script(emulator, firmware, end, seconds, swipe_to_launcher))
     run = subprocess.run(
-        ["nix", "develop", str(emulator), "-c", "renode", "--console", "--disable-xwt", "--plain", script.name],
+        ["nix", "develop", str(emulator), "-c", "pinetime-engine", script.name],
         capture_output=True,
         text=True,
         cwd=emulator,
@@ -97,13 +99,12 @@ def main():
     os.unlink(script.name)
 
     output = run.stdout.splitlines()
-    resets = [line for line in output if "Resetting the chip" in line or "Watchdog timed out" in line]
     words = [int(line, 16) for line in output if line.startswith("0x")]
     if not words:
         sys.exit("the emulator gave no readings:\n" + run.stdout[-2000:] + run.stderr[-2000:])
     print(f"stack: {end:#x} to {STACK_TOP:#x}, {STACK_TOP - end} bytes")
-    print(f"final PC {words[0]:#x}; resets and watchdog timeouts: {len(resets)}")
-    changed = next((index for index, word in enumerate(words[1:]) if word != PATTERN), None)
+    print(f"final PC {words[0]:#x}; reset reasons since power-on: {words[1]:#x}")
+    changed = next((index for index, word in enumerate(words[2:]) if word != PATTERN), None)
     if changed is None:
         print("no stack word changed")
         return

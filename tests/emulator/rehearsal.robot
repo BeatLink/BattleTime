@@ -11,6 +11,9 @@ Library           OperatingSystem
 ${WASP_BOOTLOADER_HEX}    ${PROJECTS}/wasp-os/build-pinetime-s112/bootloader.hex
 ${REHEARSAL_BIN}          ${DIST}/rehearsal-under-wasp-os.bin
 ${WASP_APP_START}         0x19000
+# wasp-os's bootloader, which holds its update mode.
+${WASP_BOOTLOADER_START}  0x78000
+${WASP_BOOTLOADER_END}    0x7E000
 ${REHEARSAL_END}          0x71000
 ${WASP_SETTINGS}          0x7F000
 ${BANK_VALID_APP}         0x1
@@ -100,5 +103,7 @@ Holding The Button Returns To wasp-os's Update Mode
     Run For                   7
     Execute Command           ${BUTTON} Release
     Run For                   3
-    ${count}=                 Word At    ${BOOT_COUNT}
-    Should Be Equal As Integers    ${count}    1    The rehearsal started again instead of wasp-os's update mode
+    # The bootloader's own RAM covers the boot count, so the CPU's place tells which one runs.
+    ${text}=                  Execute Command    cpu PC
+    ${pc}=                    Convert To Integer    ${text.strip()}
+    Should Be True            ${WASP_BOOTLOADER_START} <= ${pc} < ${WASP_BOOTLOADER_END}    The rehearsal started again instead of wasp-os's update mode

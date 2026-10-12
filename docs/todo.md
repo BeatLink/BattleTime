@@ -141,9 +141,10 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Async flash in the firmware.** Flash writes block the Bluetooth host for up to a sector
   erase at a time, because the display shares the SPI bus and its driver is blocking.
 - [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.
-- [ ] **Run the emulator suites in CI** once the faster emulator lands. CI runs none of
-  `tests/emulator/` today, so the bootloader menu's tests in `update_and_recovery.robot` (rollback,
-  recovery, the timeout) have only run by hand, and on Renode they take well over an hour.
+- [ ] **Run the emulator suites in CI.** CI runs none of `tests/emulator/` today, though they are
+  the only tests of the firmware, bootloader and reloaders, which build only for the watch. All of
+  them, the power-cut sweeps included, take about 25 minutes with PineTimeEmulator's
+  `pinetime-test`; add a job that runs it from that flake.
 - [ ] **Read the bootloader in the updater with assembly loads.** `bootloader-updater`'s
   `installed_crc` reads `BOOTLOADER.start` (address 0, the null pointer) through `Nvmc`, which is
   undefined behaviour; the firmware's same read let the compiler delete most of the firmware. Use
@@ -550,9 +551,6 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **Measure the stack with any app open.** `tools/measure_stack.py` can only swipe to the
   launcher, so the alarm's 10.5 KB peak cannot be measured again, and neither can the system info
   app's. Let it install and open a named app in the emulator.
-- [ ] **Stack measurement runs out of memory in long runs.** Renode hit its 8 GB `ulimit` after
-  about five minutes when the tool ran at the end of a long chain of builds and tests, but passed
-  when run on its own. Find what grows, or start it with a fresh emulator each time.
 - [ ] **A DFU upload tool in `tools/`** that sends a zip over BlueZ, as wasp-os's `dfu.py` does,
   including type `0x08` for the recovery slot, which no client sends yet.
 - [ ] **Flashing a watch over SWD.** One image with the bootloader and the firmware, a way to fill
@@ -561,13 +559,6 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   each file is for.
 - [ ] **How to measure memory.** Say in [memory-map.md](memory-map.md) how each figure is measured
   on the watch: flash by crate and symbol, the stack's high-water mark, and heap peaks.
-- [ ] **`crash_record` "A Start Without A Crash Reports None" fails in Renode.** Its 6 s button
-  hold never lets the watchdog reset the watch, so the boot count stays at 1; `boot_chain`'s 7 s
-  hold does reset it. It fails the same way on master without any firmware change, so find whether
-  the test's hold is too short or the emulator's watchdog runs slow.
-- [ ] **Run the Renode suites in CI.** `tests/emulator/*.robot` are the only tests of the
-  firmware, bootloader and reloaders, which build only for the watch, but CI does not run them.
-  Package the patched Renode from PineTimeEmulator for the workflow and add a job.
 - [ ] **Firmware logic where tests reach it.** Coverage measures only the workspace. Move logic out
   of `firmware/` into workspace crates, as `boot` and the services already are, so host tests
   cover it.

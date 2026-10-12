@@ -69,7 +69,7 @@ firmware) and on DFU in the firmware.
 
 - Never write the bootloader pages from firmware, and keep the recovery slot valid.
 - Feed the watchdog only from the main loop and only while the side button is up.
-- Prove bootloader, reloader and update changes in the Renode suites under `tests/emulator` before
+- Prove bootloader, reloader and update changes in the emulator suites under `tests/emulator` before
   any watch, and only flash with the user's go-ahead.
 - After a DFU update something must confirm the firmware (writing the time, or any GATT read), or
   the next reset rolls it back.
@@ -82,8 +82,9 @@ firmware) and on DFU in the firmware.
   with master after touching such code.
 - **Dropping an embassy `Output` floats its pin.** Keep every display pin's `Output` alive while the
   screen is in use, or the reset pin drops and the panel goes blank.
-- **Renode runs the bootloader's delay loop fast** after the opening hold. In menu tests, move with
-  10 ms taps and pick with a hold of 1.5 s or more; don't read emulated press timing as real timing.
+- **The emulator runs delay loops at the chip's speed**, about 50 million instructions a second, so
+  MCUBoot's start-up takes about 20 emulated seconds. The Renode emulator it replaced ran them
+  about twice as fast; a test tuned there may need a longer wait.
 - **The packages example writes an all-black theme.** `filesystem_use` stores `/settings/theme` as
   zero bytes, so the launcher and apps render black in the emulator; build the image without it.
 - **`tools/measure_stack.py` starts with erased external flash**, so it measures only the help

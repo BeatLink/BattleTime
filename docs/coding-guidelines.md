@@ -63,7 +63,7 @@ Prefer a standard helper over a hand-rolled trick, for example `embassy_futures:
   request.
 - When a change raises coverage, raise the floor in the same change, so it never slips back.
 - The firmware, bootloader and reloaders build only for the watch; keep their logic in workspace
-  crates where tests can reach it, and test the rest in the Renode suites under `tests/emulator`.
+  crates where tests can reach it, and test the rest in the emulator suites under `tests/emulator`.
 
 ## Formatting and checks
 

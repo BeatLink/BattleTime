@@ -4,8 +4,7 @@ Documentation     Shared keywords for running NeoTime's images on the PineTime e
 Resource          ${RENODEKEYWORDS}
 
 *** Variables ***
-# Renode wants plain absolute paths, without `..` segments or dots in file names. The projects
-# folder is the nearest ancestor holding the emulator, which works from a worktree too.
+# The projects folder is the nearest ancestor holding the emulator, which works from a worktree too.
 ${PROJECTS}               ${{ str(next(p for p in __import__('pathlib').Path('${CURDIR}').resolve().parents if (p / 'PineTimeEmulator').exists())) }}
 ${EMULATOR}               ${PROJECTS}/PineTimeEmulator
 ${DIST}                   ${{ __import__('os').path.realpath('${CURDIR}/../../dist') }}

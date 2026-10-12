@@ -322,13 +322,13 @@ recovery firmware instead.
 
 ## Proving it on the emulator
 
-The emulator (`PineTimeEmulator/`, Renode) models the chip's flash controller, the external flash
+The emulator (`PineTimeEmulator/`, a Rust emulator of the whole watch) models the chip's flash controller, the external flash
 with real program and erase behaviour, the watchdog, the button and a battery pull. The suites are
 in `tests/emulator/`, one Robot file per area, run from the emulator's shell, each in its own
 process:
 
 ```sh
-renode-test --variable EMULATOR:<emulator checkout> --exclude long tests/emulator/<suite>.robot
+pinetime-test --variable EMULATOR:<emulator checkout> --exclude long tests/emulator/<suite>.robot
 ```
 
 The `long` tag marks the power-cut sweeps, which take hours of wall-clock time. The emulator has
