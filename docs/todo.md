@@ -259,16 +259,11 @@ the ones above it.
     `TemperatureBadge`: infineat, lite-digital, lite-weather, terminal and pinetime-style.
 - [ ] **Comparing with a constant array.** `arrays_equal` takes only signals, so puzzle15's check
   against its constant solved board still loops.
-- [ ] **Library functions.** Logic with a real body that two or more apps share:
-  - Time: `elapsed_clock` (start, pause, reset; stopwatch, sports, metronome, heart), `countdown`
-    and `remaining_seconds` (timer, pomodoro), `day_mask_name` and `format_time_of_day` (alarm).
-  - Weather: `weather_icon_now`, `has_weather`, `weather_condition_name` and `temperature_color`
-    (weather, digital, pinetime-style, terminal, lite-weather).
-  - Steps: `step_goal_percent`.
-  - Games: `record_best`, `step_for(direction)`, `neighbour_in`, `bounce_axis` and `move_toward`
-    (snake, paddle, twos, puzzle15, four-in-a-row, lite-pong).
-  - Editing values: `step_clamped`, `step_wrapped`, `append_digit` and `drop_digit` (settings,
-    metronome, pomodoro, calculator).
+- [ ] **Library functions that change state.** What is left of the shared logic writes state, so it
+  waits on library functions that take variables by number: `elapsed_clock` (start, pause and
+  reset; stopwatch, sports, metronome, heart), `countdown` (timer, pomodoro) and `record_best`
+  (twos, snake, puzzle15). The pure helpers that were on this list either moved into the library
+  or turned out to be one-liners that a call would not shrink.
 - [ ] **Library components.** Widget trees with props, for layouts that need no native logic:
   `ActionRow` and `PlayPauseButton` (7 apps), `ToggleScreen` (phone-finder, disable-bluetooth,
   flashlight, beacon), `SettingSwitch` and `ChoiceList` (settings), `CycleChooser` and
@@ -277,10 +272,8 @@ the ones above it.
 - [ ] **Library strings and palettes.** Start, Stop, Reset, Cancel, Dismiss, Snooze, Once, Every
   day, Weekdays, Weekends, Game over; InfiniTime's 18 colours, the resistor code and a rainbow; a
   theme colour for the `#b0b0b0` that 9 apps write out.
-- [ ] **Fixes found on the way.** The weather app rounds Fahrenheit differently from
-  `format_temperature`, and pinetime-style has a third version. Several apps rebuild `Header`,
-  `Card`, `clamp`, `indexOf` or `count_where` by hand. `StatusBar`, `ListRow` and `Menu` are used
-  by nothing.
+- [ ] **Fixes found on the way.** Several apps rebuild `Header` or `Card` by hand. `StatusBar`,
+  `ListRow` and `Menu` are used by nothing.
 
 ## RAM
 

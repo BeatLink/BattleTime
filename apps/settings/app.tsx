@@ -10,6 +10,7 @@
 import { computed } from "@preact/signals";
 import {
   brightness,
+  clamp,
   define_app,
   type Color,
   go,
@@ -74,7 +75,7 @@ export function set_timeout(seconds: number) {
 }
 
 export function change_step_goal(by: number) {
-  set_setting("step_goal", Math.min(HIGHEST_STEP_GOAL, Math.max(LOWEST_STEP_GOAL, settings.step_goal.value + by)));
+  set_setting("step_goal", clamp(settings.step_goal.value + by, LOWEST_STEP_GOAL, HIGHEST_STEP_GOAL));
 }
 
 export function toggle_24_hour_clock() {

@@ -472,6 +472,11 @@ From `neotime/lib`; they live in the [shared library](app-runtime.md#the-shared-
 | `digit_of(value, place)` | One decimal digit: `place` 1 for the units, 10 for the tens. |
 | `sunday_week_of(instant)` | The week counted from the year's first Sunday, as strftime's `%U` gives; the days before it are week 0. |
 | `days_in_year(year)` | 366 in a leap year, else 365. |
+| `weather_icon_at(instant)` | The current weather's icon, with the moon in place of the sun at night. |
+| `weather_condition_name(condition)` | InfiniTime's one-word name for a condition: Clear, Cloudy, Rain, Showers, Thunder, Snow or Mist. |
+| `temperature_color(celsius)` | InfiniTime's colour for a temperature, from blue when freezing to deep orange when hot. |
+| `format_time_of_day(hour, minute)` | `07:30` on a 24 hour clock, else `07:30 AM`. |
+| `day_mask_name(days)` | A set of days, Monday in bit 0, as Once, Every day, Weekdays, Weekends, or a letter a day such as `M-W----`. |
 
 The compiler works out `sine`, `cosine` and `point_on_circle`; the others run in the library, so
 an app carries only a 5 byte call.

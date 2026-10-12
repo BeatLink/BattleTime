@@ -24,9 +24,9 @@ import {
   unread_notifications,
   type Color,
 } from "neotime";
-import { display_hour, is_night, temperature_in_unit } from "neotime/lib";
+import { display_hour, temperature_in_unit, weather_icon_at } from "neotime/lib";
 import { BatteryIcon } from "neotime/components";
-import { icon_named, icons } from "neotime/icons";
+import { icons } from "neotime/icons";
 import { Button, Column, Icon, Label, Row, Scale, Screen } from "neotime/widgets";
 
 // ============================================================================
@@ -125,15 +125,11 @@ const temperature_text = computed(() => {
   return `${temperature_in_unit(celsius)}°`;
 });
 
-const is_night_now = computed(() => is_night(now.value));
 
 /** The condition's icon, the moon in place of the sun at night, and a cross before any forecast, as InfiniTime does. */
 const weather_icon = computed(() => {
-  const condition = current_weather.value.condition;
   if (!has_weather.value) return icons.close;
-  if (is_night_now.value && condition === "clear") return icons.weather_night_clear;
-  if (is_night_now.value && condition === "few_clouds") return icons.weather_night_cloudy;
-  return icon_named(condition);
+  return weather_icon_at(now.value);
 });
 
 /** The calendar sits lower when the weather is shown above it. */

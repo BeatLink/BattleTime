@@ -8,6 +8,7 @@ use std::sync::OnceLock;
 
 use neotime_runtime::writer::ImageWriter;
 use oxc_allocator::Allocator;
+use oxc_ast::ast::{Declaration, Program, Statement, TSType};
 use oxc_parser::Parser;
 use oxc_span::{SourceType, Span};
 
@@ -20,7 +21,7 @@ use crate::types::Type;
 // ============================================================================
 
 /// The library's functions, by their number in it.
-pub const LIBRARY_FUNCTIONS: [&str; 8] = [
+pub const LIBRARY_FUNCTIONS: [&str; 13] = [
     "display_hour",
     "minute_of_day",
     "is_night",
@@ -29,6 +30,11 @@ pub const LIBRARY_FUNCTIONS: [&str; 8] = [
     "digit_of",
     "sunday_week_of",
     "days_in_year",
+    "weather_icon_at",
+    "weather_condition_name",
+    "temperature_color",
+    "format_time_of_day",
+    "day_mask_name",
 ];
 
 const SDK_LIB: &str = include_str!("../../sdk/neotime/src/lib.ts");
@@ -73,8 +79,12 @@ pub fn compile_library_functions(
             .map(|parameter| compiler.parameter_type(&function, parameter))
             .collect::<Option<Vec<Type>>>()
             .ok_or_else(|| format!("`{name}` must give every parameter the type of one value"))?;
+        let result_type = declared_result_type(&parsed.program, name)
+            .and_then(|annotation| compiler.declared_type(annotation, module).ok().flatten())
+            .filter(|declared| !declared.is_array)
+            .map(|declared| declared.value_type);
         let compiled = compiler
-            .compile_library_function(&function, &parameter_types, Span::default())
+            .compile_library_function(&function, &parameter_types, result_type, Span::default())
             .map_err(|error| format!("`{name}` does not compile: {}", error.message))?;
         if compiled.number as usize != place {
             return Err(format!(
@@ -93,6 +103,24 @@ pub fn compile_library_functions(
         });
     }
     Ok((compiler.writer, signatures))
+}
+
+/// The return type written on an exported library function, such as `Color`, so its literals compile to it.
+fn declared_result_type<'a>(program: &'a Program<'a>, name: &str) -> Option<&'a TSType<'a>> {
+    program.body.iter().find_map(|statement| match statement {
+        Statement::ExportDeclaration(export) => match &export.declaration {
+            Declaration::FunctionDeclaration(function)
+                if function.id.as_ref().is_some_and(|id| id.name == name) =>
+            {
+                function
+                    .return_type
+                    .as_ref()
+                    .map(|annotation| &annotation.type_annotation)
+            }
+            _ => None,
+        },
+        _ => None,
+    })
 }
 
 /// The signature of every library function, worked out once by compiling the library.

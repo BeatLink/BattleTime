@@ -64,7 +64,7 @@ fn app_showing(expression: &str) -> Vec<u8> {
     let source = format!(
         r#"
 import {{ define_app, now, format_number }} from "neotime";
-import {{ display_hour, digit_of, is_night, steps_since, days_in_year }} from "neotime/lib";
+import {{ display_hour, digit_of, is_night, steps_since, days_in_year, format_time_of_day, day_mask_name, weather_condition_name }} from "neotime/lib";
 import {{ Label, Screen }} from "neotime/widgets";
 
 function Main() {{
@@ -144,4 +144,41 @@ fn library_functions_take_several_arguments_and_give_back_booleans() {
     assert_eq!(shown(&app_showing("steps_since(200)"), &system), "300");
     assert_eq!(shown(&app_showing("days_in_year(2024)"), &system), "366");
     assert_eq!(shown(&app_showing("days_in_year(1900)"), &system), "365");
+}
+
+#[test]
+fn library_functions_give_back_text_made_from_their_own_strings() {
+    let on_a_24_hour_clock = FakeSystem {
+        now: 0,
+        uses_24_hour_clock: true,
+        steps_today: 0,
+    };
+    let on_a_12_hour_clock = FakeSystem {
+        uses_24_hour_clock: false,
+        ..on_a_24_hour_clock
+    };
+
+    assert_eq!(
+        shown(&app_showing("format_time_of_day(7, 5)"), &on_a_24_hour_clock),
+        "07:05"
+    );
+    assert_eq!(
+        shown(&app_showing("format_time_of_day(19, 30)"), &on_a_12_hour_clock),
+        "07:30 PM"
+    );
+    assert_eq!(
+        shown(&app_showing("day_mask_name(0b0011111)"), &on_a_24_hour_clock),
+        "Weekdays"
+    );
+    assert_eq!(
+        shown(&app_showing("day_mask_name(0b0000101)"), &on_a_24_hour_clock),
+        "M-W----"
+    );
+    assert_eq!(
+        shown(
+            &app_showing("weather_condition_name(\"heavy_clouds\")"),
+            &on_a_24_hour_clock
+        ),
+        "Cloudy"
+    );
 }

@@ -4,13 +4,18 @@
 import {
   current_weather,
   day_of_year,
+  format_number,
   hour_of,
   minute_of,
   settings,
   steps_today,
   weekday_of,
+  EVERY_DAY,
+  type Color,
   type Instant,
+  type WeatherCondition,
 } from "./index.ts";
+import { icon_named, icons, type LibraryIcon } from "./icons.ts";
 
 // ============================================================================
 // Angles
@@ -92,3 +97,68 @@ export function sunday_week_of(instant: Instant): number {
 export function days_in_year(year: number): number {
   return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 366 : 365;
 }
+
+// ============================================================================
+// Weather
+// ============================================================================
+
+/** The icon for the current weather at an instant, with the moon in place of the sun at night, as InfiniTime draws it. */
+export function weather_icon_at(instant: Instant): LibraryIcon {
+  const condition = current_weather.value.condition;
+  if (is_night(instant) && condition === "clear") return icons.weather_night_clear;
+  if (is_night(instant) && condition === "few_clouds") return icons.weather_night_cloudy;
+  return icon_named(condition);
+}
+
+/** InfiniTime's one-word name for a weather condition. */
+export function weather_condition_name(condition: WeatherCondition): string {
+  if (condition === "clear" || condition === "few_clouds") return "Clear";
+  if (condition === "clouds" || condition === "heavy_clouds") return "Cloudy";
+  if (condition === "rain") return "Rain";
+  if (condition === "showers") return "Showers";
+  if (condition === "thunderstorm") return "Thunder";
+  if (condition === "snow") return "Snow";
+  return "Mist";
+}
+
+/** The colour InfiniTime gives a temperature in degrees Celsius, from blue when freezing to deep orange when hot. */
+export function temperature_color(celsius: number): Color {
+  if (celsius <= 0) return "#0050ff";
+  if (celsius <= 4) return "#00ffff";
+  if (celsius >= 27) return "#ff4000";
+  return "#ffb000";
+}
+
+// ============================================================================
+// Times of day and repeating days
+// ============================================================================
+
+/** A time of day as the wearer's clock shows it: `07:30` on a 24 hour clock, else `07:30 AM`. */
+export function format_time_of_day(hour: number, minute: number): string {
+  return settings.uses_24_hour_clock.value
+    ? `${format_number(hour, 2)}:${format_number(minute, 2)}`
+    : `${format_number(hour % 12 === 0 ? 12 : hour % 12, 2)}:${format_number(minute, 2)} ${hour < 12 ? "AM" : "PM"}`;
+}
+
+const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
+const MONDAY_TO_FRIDAY = 0b0011111;
+const WEEKEND = 0b1100000;
+
+/** One day's letter if it is in a set of days, Monday first in bit 0, or `-`. */
+function day_letter_if_set(days: number, place: number): string {
+  return (days & (1 << place)) !== 0 ? DAY_LETTERS[place] : "-";
+}
+
+/** A set of days, Monday in bit 0, as a name: Once, Every day, Weekdays, Weekends, or a letter for each day such as `M-W----`. */
+export function day_mask_name(days: number): string {
+  return days === 0
+    ? "Once"
+    : days === EVERY_DAY
+      ? "Every day"
+      : days === MONDAY_TO_FRIDAY
+        ? "Weekdays"
+        : days === WEEKEND
+          ? "Weekends"
+          : `${day_letter_if_set(days, 0)}${day_letter_if_set(days, 1)}${day_letter_if_set(days, 2)}${day_letter_if_set(days, 3)}${day_letter_if_set(days, 4)}${day_letter_if_set(days, 5)}${day_letter_if_set(days, 6)}`;
+}
+

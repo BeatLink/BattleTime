@@ -302,13 +302,14 @@ impl<'a> Compiler<'a> {
         &mut self,
         function: &FunctionReference<'a>,
         parameter_types: &[Type],
+        result_type: Option<Type>,
         span: Span,
     ) -> Compiled<CompiledFunction> {
         let shape = CallShape {
             identity: function.identity(),
             kind: CodeKind::Expression,
             wants_value: true,
-            expected: None,
+            expected: result_type,
             parameters: parameter_types
                 .iter()
                 .map(|value_type| ParameterKind::Runtime(*value_type))

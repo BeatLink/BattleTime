@@ -8,7 +8,7 @@ import {
   battery_millivolts,
   battery_percent,
   define_app,
-  format_number,
+  format_fixed,
   is_charging,
   now,
   SECOND,
@@ -59,10 +59,7 @@ const status_color = computed<Color>(() =>
 
 const needs_charging = computed(() => !is_charging.value && battery_percent.value < WARNING_PERCENT);
 
-const voltage_text = computed(
-  () =>
-    `${Math.floor(battery_millivolts.value / 1000)}.${format_number(Math.floor(battery_millivolts.value / 10) % 100, 2)} volts`,
-);
+const voltage_text = computed(() => `${format_fixed(Math.floor(battery_millivolts.value / 10), 2)} volts`);
 
 /** While charging the bar fills again and again from the charge to full, one step a second; it stops with the screen. */
 const bar_percent = computed(() =>

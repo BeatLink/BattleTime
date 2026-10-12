@@ -10,13 +10,11 @@ import {
   close,
   define_app,
   format_duration,
-  format_number,
   format_time,
   go,
   now,
   persisted,
   range,
-  settings,
   stop_vibrating,
   vibrate_pattern,
   wake_screen,
@@ -28,6 +26,7 @@ import {
   type TimeEvent,
   type TimeOfDay,
 } from "neotime";
+import { day_mask_name, format_time_of_day } from "neotime/lib";
 import { TimePicker, WeekdayPicker } from "neotime/components";
 import { icons } from "neotime/icons";
 import { Button, ClickArea, Column, Icon, Label, Row, Screen, Scroll, Switch } from "neotime/widgets";
@@ -41,9 +40,6 @@ const MAXIMUM_ALARMS = 12;
 const SNOOZE_LENGTH = 10 * MINUTE;
 
 const RING_LIMIT = MINUTE;
-
-/** The day letters in mask order, Monday first, so a day's place is also its bit. */
-const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 
 const MONDAY_TO_FRIDAY = 0b0011111;
 const WEEKEND = 0b1100000;
@@ -97,36 +93,8 @@ export const editing_time = signal<TimeOfDay>({ hour: 8, minute: 0 });
 export const editing_days = signal(0);
 
 // ============================================================================
-// Formatting
-// ============================================================================
-
-function format_time_of_day(hour: number, minute: number, uses_24_hour_clock: boolean): string {
-  return uses_24_hour_clock
-    ? `${format_number(hour, 2)}:${format_number(minute, 2)}`
-    : `${format_number(hour % 12 === 0 ? 12 : hour % 12, 2)}:${format_number(minute, 2)} ${hour < 12 ? "AM" : "PM"}`;
-}
-
-function day_letter_if_set(days: number, place: number): string {
-  return (days & (1 << place)) !== 0 ? DAY_LETTERS[place] : "-";
-}
-
-function repeat_name(days: number): string {
-  return days === 0
-    ? "Once"
-    : days === EVERY_DAY
-      ? "Every day"
-      : days === MONDAY_TO_FRIDAY
-        ? "Weekdays"
-        : days === WEEKEND
-          ? "Weekends"
-          : `${day_letter_if_set(days, 0)}${day_letter_if_set(days, 1)}${day_letter_if_set(days, 2)}${day_letter_if_set(days, 3)}${day_letter_if_set(days, 4)}${day_letter_if_set(days, 5)}${day_letter_if_set(days, 6)}`;
-}
-
-// ============================================================================
 // Derived values
 // ============================================================================
-
-const uses_24_hour_clock = computed(() => settings.uses_24_hour_clock.value);
 
 const has_room = computed(() => alarm_count.value < MAXIMUM_ALARMS);
 
@@ -292,10 +260,10 @@ function AlarmRow(props: { place: number }) {
         <Row gap={6} padding={6} height={56} background="surface" radius={12}>
           <ClickArea grow={1} onClick={() => open_alarm(place)}>
             <Label color={enabled ? "text" : "muted"}>
-              {format_time_of_day(alarms.value[place].hour, alarms.value[place].minute, uses_24_hour_clock.value)}
+              {format_time_of_day(alarms.value[place].hour, alarms.value[place].minute)}
             </Label>
             <Label font="small" color="muted">
-              {repeat_name(alarms.value[place].days)}
+              {day_mask_name(alarms.value[place].days)}
             </Label>
           </ClickArea>
           <Switch value={enabled} onChange={() => toggle_enabled(place)} />
@@ -350,11 +318,11 @@ function EditDays() {
   return (
     <Screen padding={8} gap={6}>
       <Label text_align="center">
-        {format_time_of_day(editing_time.value.hour, editing_time.value.minute, uses_24_hour_clock.value)}
+        {format_time_of_day(editing_time.value.hour, editing_time.value.minute)}
       </Label>
       <WeekdayPicker value={editing_days} columns={4} gap={4} height={96} />
       <Button height={40} onClick={cycle_repeat}>
-        {repeat_name(editing_days.value)}
+        {day_mask_name(editing_days.value)}
       </Button>
       <Row gap={6} height={52} margin={0}>
         <Button grow={1} height="100%" background="danger" onClick={delete_alarm}>

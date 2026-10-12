@@ -17,9 +17,9 @@ import {
   unread_notifications,
   type Color,
 } from "neotime";
-import { display_hour, is_night } from "neotime/lib";
+import { display_hour, weather_icon_at } from "neotime/lib";
 import { BatteryIcon, HeartRateBadge, StepsBadge } from "neotime/components";
-import { icon_named, icons } from "neotime/icons";
+import { icons } from "neotime/icons";
 import { Icon, Label, Row, Screen } from "neotime/widgets";
 
 // ============================================================================
@@ -56,15 +56,9 @@ const date_text = computed(() =>
 
 const has_weather = computed(() => current_weather.value.received_at !== null);
 
-const is_night_now = computed(() => is_night(now.value));
 
 /** The condition's icon, with the moon in place of the sun at night as InfiniTime does. */
-const weather_icon = computed(() => {
-  const condition = current_weather.value.condition;
-  if (is_night_now.value && condition === "clear") return icons.weather_night_clear;
-  if (is_night_now.value && condition === "few_clouds") return icons.weather_night_cloudy;
-  return icon_named(condition);
-});
+const weather_icon = computed(() => weather_icon_at(now.value));
 
 // ============================================================================
 // Screen

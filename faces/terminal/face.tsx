@@ -19,6 +19,7 @@ import {
   unread_notifications,
   type Color,
 } from "neotime";
+import { weather_condition_name } from "neotime/lib";
 import { icons } from "neotime/icons";
 import { Column, Label, Row, Screen } from "neotime/widgets";
 
@@ -46,16 +47,7 @@ const time_text = computed(() =>
 );
 
 /** InfiniTime's one-word name for the condition. */
-const condition_name = computed(() => {
-  const condition = current_weather.value.condition;
-  if (condition === "clear" || condition === "few_clouds") return "Clear";
-  if (condition === "clouds" || condition === "heavy_clouds") return "Cloudy";
-  if (condition === "rain") return "Rain";
-  if (condition === "showers") return "Showers";
-  if (condition === "thunderstorm") return "Thunder";
-  if (condition === "snow") return "Snow";
-  return "Mist";
-});
+const condition_name = computed(() => weather_condition_name(current_weather.value.condition));
 
 const weather_text = computed(() => {
   if (current_weather.value.received_at === null) return "---";
