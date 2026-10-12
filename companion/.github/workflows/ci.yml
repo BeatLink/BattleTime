@@ -1,0 +1,39 @@
+# Runs the tests with coverage, the type check, the lint and the CLI build on each push and pull request.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Tests, coverage, types and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install the dependencies
+        run: npm ci
+      - name: Run the tests with coverage and check the floors
+        run: npm run coverage
+      - name: Check the types
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Build the command line tool
+        run: npm run build:cli
+      - name: Keep the coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/

@@ -30,5 +30,8 @@ Read [README.md](README.md) for the layout and the protocol.
   NeoTime rolls the update back at its next reset.
 - Use `nix develop` for the toolchain. Electron must come from the flake, not from npm.
 - Open work is in [TODO.md](TODO.md); remove an item there in the same change that finishes it.
-- Verify with `npm test`, `npm run typecheck` and `npm run lint`. BLE needs a dev build; web and
+- Every change ships with tests in the same commit. `npm run coverage` runs them with coverage and
+  fails below the floors in `package.json` (`jest.coverageThreshold`); CI runs it on every push and
+  pull request. When coverage rises, raise the floors in the same change.
+- Verify with `npm run coverage`, `npm run typecheck` and `npm run lint`. BLE needs a dev build; web and
   Expo Go use the mock transport.

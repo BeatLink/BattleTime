@@ -11,6 +11,7 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "jest",
+    "coverage": "jest --coverage",
     "desktop": "expo export --platform web --output-dir dist && node scripts/electron.mjs",
     "desktop:dev": "node scripts/electron.mjs",
     "build:cli": "esbuild cli/neotime.ts --bundle --platform=node --target=node20 --format=cjs --external:node-ble --alias:@=./src --outfile=build/neotime.cjs",
@@ -59,7 +60,33 @@
     "testMatch": [
       "**/*.test.ts",
       "**/*.test.tsx"
-    ]
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.{ts,tsx}",
+      "cli/**/*.ts",
+      "!**/*.test.{ts,tsx}",
+      "!**/*.d.ts",
+      "!src/app/**",
+      "!src/components/**",
+      "!src/ble/ble-transport.ts",
+      "!src/ble/electron-transport.ts",
+      "!src/ble/create-transport*.ts",
+      "!cli/neotime.ts",
+      "!cli/ble.ts"
+    ],
+    "coverageReporters": [
+      "text-summary",
+      "text",
+      "lcov"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "lines": 66,
+        "statements": 66,
+        "branches": 59,
+        "functions": 65
+      }
+    }
   },
   "bin": {
     "neotime": "./build/neotime.cjs"

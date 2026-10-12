@@ -50,3 +50,6 @@ dist/
 
 # Command line tool build
 build/
+
+# test coverage reports
+coverage/

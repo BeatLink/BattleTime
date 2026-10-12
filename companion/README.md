@@ -51,9 +51,12 @@ browser has no Bluetooth either, and the mock is enough to work on screens witho
 
 ```bash
 npm test
+npm run coverage     # the tests again, failing if coverage drops below the floors in package.json
 npm run typecheck
 npm run lint
 ```
+
+CI runs the coverage, type check, lint and command line build on every push and pull request.
 
 ## The command line tool
 
