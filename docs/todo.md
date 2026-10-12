@@ -326,8 +326,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **Bonding** saved to the file system and restored at start.
 - [ ] **Privacy:** resolvable private addresses.
 - [ ] **A setting to turn the radio off.**
-- [ ] **Finish the Current Time service.** Reading 0x2A2B returns zeros instead of the watch's
-  time, and the Local Time Information characteristic (0x2A0F) is missing. InfiniTime serves both.
 - [ ] **Advertise like InfiniTime.** The firmware advertises every 160 ms all the time. InfiniTime
   advertises fast for 30 seconds after start or a disconnect and then about once a second, puts the
   heart rate and DFU service UUIDs and the transmit power in the advertisement, and the name in the

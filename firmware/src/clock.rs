@@ -2,15 +2,17 @@
 //!
 //! Until a phone sets it, it starts from when the firmware was built. Times are milliseconds since
 //! 1970 with no time zone; the phone writes local time, so the offset from UTC is always 0 for now.
+//! The time zone a phone writes is kept only to serve back to it.
 
 use core::cell::Cell;
 
 use embassy_sync::blocking_mutex::{raw::CriticalSectionRawMutex, Mutex};
 use embassy_time::Instant;
+use neotime_current_time::{
+    decode_current_time, encode_current_time, LocalTimeInformation, CURRENT_TIME_BYTES,
+    LOCAL_TIME_INFORMATION_BYTES,
+};
 use neotime_runtime::Value;
-
-const MILLISECONDS_PER_SECOND: i64 = 1000;
-const SECONDS_PER_DAY: i64 = 86_400;
 
 /// The wall clock time when the chip's timer read 0.
 static TIME_AT_START: Mutex<CriticalSectionRawMutex, Cell<Value>> =
@@ -32,33 +34,39 @@ pub fn instant_at(time: Value) -> Instant {
 }
 
 // ============================================================================
-// The Bluetooth Current Time characteristic
+// The Bluetooth Current Time service
 // ============================================================================
 
-/// Sets the clock from a Current Time (0x2A2B) value: year, month, day, hour, minute, second and more.
+/// The time zone a phone last wrote, served back on reads; the clock already holds local time, so it never moves it.
+static TIME_ZONE: Mutex<CriticalSectionRawMutex, Cell<LocalTimeInformation>> =
+    Mutex::new(Cell::new(LocalTimeInformation::UTC));
+
+/// The Current Time (0x2A2B) value for the clock's time now.
+pub fn current_time() -> [u8; CURRENT_TIME_BYTES] {
+    encode_current_time(now())
+}
+
+/// Sets the clock from a written Current Time value, unless it is not a real time.
 pub fn set_from_current_time(bytes: &[u8]) -> bool {
-    let [year_low, year_high, month, day, hour, minute, second, ..] = *bytes else {
+    let Some(time) = decode_current_time(bytes) else {
         return false;
     };
-    let year = u16::from_le_bytes([year_low, year_high]) as i64;
-    if !(1970..=2200).contains(&year) || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
-        return false;
-    }
-    let days = days_since_1970(year, month as i64, day as i64);
-    let seconds = days * SECONDS_PER_DAY + hour as i64 * 3600 + minute as i64 * 60 + second as i64;
-    set(seconds * MILLISECONDS_PER_SECOND);
+    set(time);
     true
 }
 
-/// Days from 1970-01-01 to a date, by Howard Hinnant's `days_from_civil`.
-fn days_since_1970(year: i64, month: i64, day: i64) -> i64 {
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = year.div_euclid(400);
-    let year_of_era = year - era * 400;
-    let month_from_march = (month + 9) % 12;
-    let day_of_year = (153 * month_from_march + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
+/// The Local Time Information (0x2A0F) value: the zone a phone last wrote, or UTC.
+pub fn local_time_information() -> [u8; LOCAL_TIME_INFORMATION_BYTES] {
+    TIME_ZONE.lock(Cell::get).encode()
+}
+
+/// Keeps a written Local Time Information value, unless it is outside what the field allows.
+pub fn set_local_time_information(bytes: &[u8]) -> bool {
+    let Some(time_zone) = LocalTimeInformation::decode(bytes) else {
+        return false;
+    };
+    TIME_ZONE.lock(|stored| stored.set(time_zone));
+    true
 }
 
 // ============================================================================

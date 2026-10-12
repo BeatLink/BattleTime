@@ -574,11 +574,13 @@ struct NeoTimeService {
     packages: [u8; 20],
 }
 
-/// The standard Current Time service, which phones write the time to.
+/// The standard Current Time service, which phones write the time and time zone to and read them from.
 #[gatt_service(uuid = "1805")]
 struct CurrentTimeService {
     #[characteristic(uuid = "2a2b", read, write)]
     current_time: [u8; 10],
+    #[characteristic(uuid = "2a0f", read, write)]
+    local_time_information: [u8; 2],
 }
 
 /// The chip's factory address with its top two bits set, the same static random address the controller reports.
@@ -787,6 +789,9 @@ async fn serve_connection(
                         if write.handle() == server.time.current_time.handle {
                             clock::set_from_current_time(&written);
                         }
+                        if write.handle() == server.time.local_time_information.handle {
+                            clock::set_local_time_information(&written);
+                        }
                         if write.handle() == server.uart.receive.handle {
                             companion_lines.push(&written, read_companion_line);
                         }
@@ -807,6 +812,15 @@ async fn serve_connection(
                         }
                         if read.handle() == server.battery.level.handle {
                             let _ = server.set(&server.battery.level, &battery::percent());
+                        }
+                        if read.handle() == server.time.current_time.handle {
+                            let _ = server.set(&server.time.current_time, &clock::current_time());
+                        }
+                        if read.handle() == server.time.local_time_information.handle {
+                            let _ = server.set(
+                                &server.time.local_time_information,
+                                &clock::local_time_information(),
+                            );
                         }
                         None
                     }

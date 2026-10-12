@@ -18,7 +18,8 @@ whether the watch serves it yet.
 | Service | UUID | Characteristic | Use | Served |
 |---|---|---|---|---|
 | Legacy DFU | `00001530-1212-efde-1523-785feabcd123` | as Nordic's legacy DFU | Firmware updates; see [updates.md](updates.md). | Yes |
-| Current Time | `0x1805` | `0x2A2B`, read and write | Writing the 10-byte Current Time value sets the clock. The watch keeps local time, so write local time. | Yes |
+| Current Time | `0x1805` | `0x2A2B`, read and write | Writing the 10-byte Current Time value sets the clock; reading it gives the watch's time, with the day of the week and 256ths of a second. The watch keeps local time, so write local time. A write that is not a real date and time is ignored. | Yes |
+| | | `0x2A0F`, read and write | Local Time Information: the time zone and daylight saving offset, in quarter hours. The watch keeps the last one written and reads it back, or 0 and 0 until one is; it never moves the clock. A value outside the field's range is ignored. Kept only until the watch restarts. | Yes |
 | Battery | `0x180F` | `0x2A19`, read and notify | The charge, 0 to 100, notified when it changes. | Yes |
 | File transfer | `0xFEBB` | as in [File transfer](#file-transfer) | Reading, writing, listing, moving and deleting files. | Yes |
 

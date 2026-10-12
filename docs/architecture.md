@@ -33,7 +33,7 @@ flowchart TB
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>settings started; planned: power, events, notifications"]
-    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings;<br/>planned: time, steps"]
+    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time; planned: steps"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth,<br/>drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
@@ -158,6 +158,7 @@ NeoTime/
 ├── services/
 │   ├── blefs/        neotime-blefs: Adafruit BLE file transfer, InfiniTime's file service
 │   ├── companion/    neotime-companion: the companion app's JSON lines over the UART service
+│   ├── current_time/ neotime-current-time: the Current Time service's values and calendar arithmetic
 │   ├── dfu/          neotime-dfu: the legacy DFU update protocol over Bluetooth
 │   ├── packages/     neotime-packages: the apps installed in /apps and the shared library's install
 │   ├── settings/     neotime-settings: the watch-wide settings, their limits and their file
@@ -418,6 +419,16 @@ setting, each checked against its limits) and `notify` (a notification's id, app
 unescaped and cut at a whole character to 24, 32 and 120 bytes), and names every other message by
 its `t`.
 
+## Current Time (`services/current_time`)
+
+`neotime-current-time` turns the clock's milliseconds since 1970 into the Bluetooth Current Time
+service's two values and back, so the calendar arithmetic is tested on a computer.
+`encode_current_time` gives the 10 bytes of 0x2A2B: the date, the time, the day of the week from
+Monday as 1, the 256ths of a second and an adjust reason of 0. `decode_current_time` reads a write
+of at least 7 bytes and refuses a year outside 1970 to 2200 or a date or time that does not exist.
+`LocalTimeInformation` holds 0x2A0F's time zone and daylight saving offset in quarter hours and
+refuses values the field does not allow, while taking its "unknown" values.
+
 ## Settings (`services/settings`)
 
 `neotime-settings` defines the watch-wide settings: the 12 or 24 hour clock, units, the step goal,
@@ -563,8 +574,10 @@ watch face, the launcher and the apps through `neotime-app-host`:
   app, or copies a new shared library into internal flash, raises `packages::CHANGED` for the shell.
   Copying the library erases internal flash pages, each stopping the CPU for about 85 ms.
 - **Clock.** `clock.rs` counts on from the time a phone last wrote to the Current Time
-  characteristic (0x2A2B), or from the build time until one does. It holds local time, with an
-  offset from UTC of 0.
+  characteristic (0x2A2B), or from the build time until one does, and answers a read of 0x2A2B with
+  that time. It holds local time, with an offset from UTC of 0. The time zone a phone writes to
+  Local Time Information (0x2A0F) is kept in RAM and read back, but moves neither the clock nor the
+  offset apps see.
 - **Status page.** The start-up lines and an update's progress share the display with the shell;
   while the page is up the shell draws nothing, and when the update ends it paints again.
 - **Apps.** None are built in. `apps.rs` reads the enabled apps from `/apps` through

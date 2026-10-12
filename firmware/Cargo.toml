@@ -43,6 +43,7 @@ neotime-app-host = { path = "../app-host" }
 neotime-bluetooth = { path = "../drivers/bluetooth" }
 neotime-boot = { path = "../boot" }
 neotime-companion = { path = "../services/companion" }
+neotime-current-time = { path = "../services/current_time" }
 neotime-blefs = { path = "../services/blefs", features = ["trouble"] }
 neotime-button = { path = "../drivers/button" }
 neotime-dfu = { path = "../services/dfu", features = ["trouble"] }

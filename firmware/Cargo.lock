@@ -933,6 +933,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-current-time"
+version = "0.1.0"
+
+[[package]]
 name = "neotime-dfu"
 version = "0.1.0"
 dependencies = [
@@ -988,6 +992,7 @@ dependencies = [
  "neotime-boot",
  "neotime-button",
  "neotime-companion",
+ "neotime-current-time",
  "neotime-dfu",
  "neotime-display",
  "neotime-external-flash",

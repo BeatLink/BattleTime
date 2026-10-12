@@ -32,7 +32,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Shake to roll the dice,** and live accelerometer readings for apps such as motion and level.
   The accelerometer is read for these only while such an app is open and the screen is on.
 - **Battery charge and charging state.**
-- **The time from the phone,** set through the Bluetooth Current Time service.
+- **The time from the phone,** set through the Bluetooth Current Time service. A phone can read the
+  watch's time and time zone back from the same service.
 - **The battery level on the phone,** through the standard Bluetooth Battery service, updated as it
   changes.
 - **Whether a phone is connected.** Faces show the Bluetooth icon while a phone is connected, and

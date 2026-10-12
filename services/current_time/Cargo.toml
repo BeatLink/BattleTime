@@ -1,0 +1,7 @@
+[package]
+name = "neotime-current-time"
+version = "0.1.0"
+edition = "2021"
+description = "The Bluetooth Current Time service's values: the watch's time and time zone as phones read and write them"
+license.workspace = true
+publish = false
