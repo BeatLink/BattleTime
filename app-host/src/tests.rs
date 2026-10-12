@@ -1368,3 +1368,46 @@ fn other_system_value_changes_push_no_events() {
     assert_eq!(host.state().get(0).unwrap(), 0);
     assert_eq!(host.state().get(2).unwrap(), 0);
 }
+
+#[test]
+fn an_image_that_names_a_library_image_draws_that_image() {
+    use neotime_runtime::resources::{library_image_reference_bytes, ImageFormat, ImageReference};
+
+    let mut library_writer = ImageWriter::new("shared", "Shared library", AppKind::Library, 1);
+    library_writer.image_resource(ImageFormat::Mask, 1, 1, &[255]);
+    library_writer.image_resource(ImageFormat::Mask, 2, 3, &[255; 6]);
+    let library_bytes = library_writer.build();
+    let library = neotime_runtime::AppImage::parse(&library_bytes).unwrap();
+    let mut app_writer = ImageWriter::new("app", "App", AppKind::App, 1);
+    app_writer.library_image_reference(1);
+    let app_bytes = app_writer.build();
+    let app = neotime_runtime::AppImage::parse(&app_bytes).unwrap();
+    let state = neotime_runtime::AppState::new(&app).unwrap();
+    let icon = library_image_reference_bytes(1);
+    let icons: &[&[u8]] = &[&icon];
+    let context = |library| crate::drawing::DrawContext {
+        image: &app,
+        library,
+        installed_app_icons: icons,
+        state: &state,
+        theme: &neotime_runtime::DEFAULT_THEME,
+        utc_offset: 0,
+        now: 0,
+    };
+    let size_of = |context: &crate::drawing::DrawContext, reference: ImageReference| {
+        context
+            .image_resource(reference.to_value())
+            .map(|image| (image.width, image.height))
+    };
+
+    let with_library = context(Some(&library));
+    let without_library = context(None);
+
+    assert_eq!(neotime_runtime::verify(&app), Ok(()));
+    assert_eq!(size_of(&with_library, ImageReference::App(0)), Some((2, 3)));
+    assert_eq!(
+        size_of(&with_library, ImageReference::InstalledApp(0)),
+        Some((2, 3))
+    );
+    assert_eq!(size_of(&without_library, ImageReference::App(0)), None);
+}

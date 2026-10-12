@@ -5,7 +5,7 @@
 //! board costs no more UI heap than a label.
 
 use neotime_runtime::{
-    resources::{ImageFormat, ImageReference, ImageResource},
+    resources::{library_image_named_by, ImageFormat, ImageReference, ImageResource},
     AppImage, AppState, ColorValue, Theme, ThemeColor, Value,
 };
 use rlvgl_core::{
@@ -63,12 +63,14 @@ impl<'image> DrawContext<'_, 'image> {
 
     /// The image an `image` or `icon` value names, from the app or the shared library.
     pub fn image_resource(&self, value: i32) -> Option<ImageResource<'image>> {
-        match ImageReference::from_value(value)? {
-            ImageReference::App(index) => self.image.resource(index),
-            ImageReference::SharedLibrary(index) => self.library?.resource(index),
-            ImageReference::InstalledApp(index) => {
-                ImageResource::parse(self.installed_app_icons.get(index as usize)?)
-            }
+        let bytes = match ImageReference::from_value(value)? {
+            ImageReference::App(index) => self.image.resource_bytes(index)?,
+            ImageReference::SharedLibrary(index) => return self.library?.resource(index),
+            ImageReference::InstalledApp(index) => self.installed_app_icons.get(index as usize)?,
+        };
+        match library_image_named_by(bytes) {
+            Some(library_image) => self.library?.resource(library_image),
+            None => ImageResource::parse(bytes),
         }
     }
 }

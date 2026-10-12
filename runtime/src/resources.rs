@@ -21,6 +21,9 @@ pub const LARGEST_IMAGE_SIDE: u16 = 240;
 const SHARED_LIBRARY_FLAG: i32 = 0x8000;
 const INSTALLED_APP_FLAG: i32 = 0x10000;
 
+/// The format byte of an image that only names a shared library image, such as an app's icon.
+const LIBRARY_IMAGE_FORMAT: u8 = 2;
+
 // ============================================================================
 // Images
 // ============================================================================
@@ -104,6 +107,22 @@ impl<'image> ImageResource<'image> {
     }
 }
 
+/// The shared library image that an image's bytes stand for, when they only name one.
+///
+/// Such an image is 4 bytes: the format 2, a reserved 0, and the library image's number.
+pub fn library_image_named_by(bytes: &[u8]) -> Option<u16> {
+    match bytes {
+        [LIBRARY_IMAGE_FORMAT, 0, low, high] => Some(u16::from_le_bytes([*low, *high])),
+        _ => None,
+    }
+}
+
+/// The bytes of an image that only names a shared library image.
+pub fn library_image_reference_bytes(library_image: u16) -> [u8; 4] {
+    let [low, high] = library_image.to_le_bytes();
+    [LIBRARY_IMAGE_FORMAT, 0, low, high]
+}
+
 /// Which image an `Image` or `Icon` property names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ImageReference {
@@ -142,9 +161,15 @@ impl ImageReference {
 // Checking
 // ============================================================================
 
-/// Checks that every image in the image decodes to exactly its size.
+/// Checks that every image in the image decodes to exactly its size, or only names a library image.
 pub fn verify_resources(image: &AppImage) -> Result<(), ImageError> {
     for index in 0..image.resource_count() {
+        let bytes = image
+            .resource_bytes(index)
+            .ok_or(ImageError::BadResource(index))?;
+        if library_image_named_by(bytes).is_some() {
+            continue;
+        }
         let resource = image.resource(index).ok_or(ImageError::BadResource(index))?;
         if !resource.is_well_formed() {
             return Err(ImageError::BadResource(index));

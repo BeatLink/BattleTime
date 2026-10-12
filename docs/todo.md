@@ -193,9 +193,6 @@ the ones above it.
   library versions. A function that changes state takes the variables by number, as `copy array`
   names its arrays. One-line helpers such as `(x + 1) % n` stay inlined, since a call costs as
   many bytes.
-- [ ] **Library icons by reference.** Every image carries its launcher icon as a 400 to 760 B
-  mask, even when it is a library icon: 24 KB over all images, and about 0.5 KB of RAM for each app
-  opened. A header field naming the library icon replaces the copy.
 - [ ] **Native widgets with their logic built in.** Every widget node costs 160 to 240 B of the UI
   heap wherever its record lives, so a composite drawn by the firmware as one node saves more RAM
   than a library component. In the firmware, which has 112 KB free:

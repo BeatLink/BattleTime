@@ -8,7 +8,6 @@ use neotime_runtime::AppImage;
 
 use super::{centre_mask, decode_png, decode_png_alpha, library_icon_picture, read_png_file, Picture};
 use crate::compile_source_in;
-use crate::library::ICON_SIDE;
 
 // ============================================================================
 // Helpers
@@ -441,17 +440,25 @@ fn a_png_icon_becomes_image_zero_and_marks_the_app_as_having_an_icon() {
 }
 
 #[test]
-fn a_library_icon_is_copied_in_as_image_zero() {
+fn a_library_icon_is_named_by_image_zero_rather_than_copied() {
     let source = app_with("icon: icons.timer,", "");
+    let timer = crate::types::ICON_NAMES
+        .iter()
+        .position(|name| *name == "timer")
+        .expect("a timer icon") as u16;
 
     let output = compile_source_in(&source, None);
 
     let bytes = output.image.expect("an image");
     let image = AppImage::parse(&bytes).unwrap();
     assert!(image.has_icon);
-    let (format, width, height, pixels) = resource_pixels(&image, 0);
-    assert_eq!((format, width, height), (ImageFormat::Mask, ICON_SIDE, ICON_SIDE));
-    assert!(pixels.iter().any(|&coverage| coverage > 0));
+    let icon = image.resource_bytes(0).expect("image 0");
+    assert_eq!(icon.len(), 4);
+    assert_eq!(
+        neotime_runtime::resources::library_image_named_by(icon),
+        Some(timer)
+    );
+    assert_eq!(neotime_runtime::verify(&image), Ok(()));
 }
 
 #[test]

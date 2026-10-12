@@ -210,13 +210,12 @@ impl<'a> Compiler<'a> {
         }
         match self.evaluate_constant(icon, root) {
             Some(Constant::Icon(value)) => {
-                // The launcher reads image 0, so a library icon is copied in as the app's own.
+                // The launcher reads image 0, which names the library icon rather than copying it.
                 let Some(ImageReference::SharedLibrary(index)) = ImageReference::from_value(value as i32) else {
                     return fail(span, "internal compiler error: an icon is not a shared library image");
                 };
-                let picture = library_icon_picture(index as usize).map_err(|problem| Diagnostic::error(span, problem))?;
-                self.writer
-                    .image_resource(picture.format, picture.width, picture.height, &picture.pixels);
+                library_icon_picture(index as usize).map_err(|problem| Diagnostic::error(span, problem))?;
+                self.writer.library_image_reference(index);
                 self.image_numbers.push((PathBuf::new(), 0));
             }
             Some(Constant::Text(path)) => {

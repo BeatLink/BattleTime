@@ -2825,3 +2825,23 @@ fn a_library_carries_fonts_and_an_app_keeps_eight_sections() {
     assert_eq!(sections, 8);
     assert_eq!(AppImage::parse(&app).unwrap().font_count(), 0);
 }
+
+#[test]
+fn an_image_may_only_name_a_library_image() {
+    use crate::resources::{library_image_named_by, library_image_reference_bytes};
+
+    let mut writer = ImageWriter::new("app", "App", AppKind::App, 1);
+    writer.library_image_reference(300);
+    let bytes = writer.build();
+    let image = AppImage::parse(&bytes).unwrap();
+
+    assert_eq!(verify(&image), Ok(()));
+    assert_eq!(
+        library_image_named_by(image.resource_bytes(0).unwrap()),
+        Some(300)
+    );
+    assert!(image.resource(0).is_none());
+    assert_eq!(library_image_reference_bytes(300), [2, 0, 44, 1]);
+    assert_eq!(library_image_named_by(&[2, 0, 44]), None);
+    assert_eq!(library_image_named_by(&[2, 1, 44, 1]), None);
+}

@@ -326,6 +326,10 @@ colour), 3 bytes each; a mask is runs of (count, coverage from 0 to 255), 2 byte
 the widget's colour, which is how icons follow the theme. Runs go left to right and top to bottom,
 and may continue onto the next row. The image check confirms the runs cover every pixel exactly.
 
+An image of format 2 holds no pixels: its 4 bytes are the format, a reserved 0 and the number of a
+shared library image, which is drawn in its place. An app whose launcher icon is a library icon
+keeps it this way as image 0, so the icon costs the app 4 bytes instead of several hundred.
+
 An `image` or `icon` property names an image by number: below 32768 it is one of the app's own
 images; 32768 to 65535 is the shared library's image of that number less 32768; and 65536 and up is
 the launcher icon of the installed app of that number less 65536, image 0 of that app's own image. The shared library

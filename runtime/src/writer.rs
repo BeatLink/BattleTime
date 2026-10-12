@@ -158,6 +158,13 @@ impl ImageWriter {
         (self.fonts.len() - 1) as u16
     }
 
+    /// Adds an image that only names a shared library image, such as an app's icon.
+    pub fn library_image_reference(&mut self, library_image: u16) -> u16 {
+        self.resources
+            .push(crate::resources::library_image_reference_bytes(library_image).to_vec());
+        (self.resources.len() - 1) as u16
+    }
+
     pub fn image_resource(&mut self, format: ImageFormat, width: u16, height: u16, pixels: &[u16]) -> u16 {
         let mut bytes: Vec<u8> = alloc::vec![
             match format {
