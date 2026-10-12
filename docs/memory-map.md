@@ -37,22 +37,22 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 77.5 KB | 41.2 KB |
+| Firmware (start-up, shell, tasks) | 77.6 KB | 41.2 KB |
 | App host (with `neotime-ui` and rlvgl) | 73.9 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 42.2 KB | 42.2 KB |
-| core, alloc and compiler builtins | 25.2 KB | 11.2 KB |
+| core, alloc and compiler builtins | 25.4 KB | 11.1 KB |
 | App runtime | 24.5 KB | 0.1 KB |
 | Storage (littlefs) | 21.6 KB | 21.0 KB |
 | Embassy, allocator and Cortex-M | 17.9 KB | 15.9 KB |
 | Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
 | Settings, companion and notifications (with serde) | 11.0 KB | 8.7 KB |
 | Display, graphics and drivers | 5.9 KB | 3.1 KB |
-| Packages | 2.7 KB | 2.0 KB |
+| Packages | 2.7 KB | 2.1 KB |
 | Updates (DFU) | 2.4 KB | 2.4 KB |
 | BLEFS file service | 2.0 KB | 2.2 KB |
 | Other constants and padding | 19.5 KB | 10.8 KB |
-| **Used** | **338.2 KB** | **160.7 KB** |
-| Free of 400 KB | 61.8 KB | 239.3 KB |
+| **Used** | **338.6 KB** | **160.6 KB** |
+| Free of 400 KB | 61.4 KB | 239.4 KB |
 <!-- /measure_memory:firmware -->
 
 The accelerometer's configuration is the largest piece of data left in it; each watch could build
