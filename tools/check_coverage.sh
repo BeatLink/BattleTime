@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-rust_minimum_line_percent=81
+rust_minimum_line_percent=86
 
 # The two command-line entry points only parse arguments and open windows, so they are left out.
 untested_entry_points='(compiler|simulator)/src/main\.rs$'

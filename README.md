@@ -31,6 +31,7 @@ watch from InfiniTime has run only in the emulator.
 - [Architecture](docs/architecture.md): how the code is laid out and how the parts fit together.
 - [Coding guidelines](docs/coding-guidelines.md): how NeoTime code is written.
 - [Simulator](docs/simulator.md): running the drivers in a desktop window with `nix run`.
+- [Testing apps](docs/testing.md): driving the real apps on a test watch from `cargo test`.
 - [Features](docs/features.md): what the watch can do, added as each feature is finished.
 - [To do](docs/todo.md): work that is known to be needed but not done yet.
 - [Memory map](docs/memory-map.md): how the RAM, internal flash and external flash are divided.

@@ -39,6 +39,7 @@
             ./boot
             ./compiler
             ./drivers
+            ./harness
             ./runtime
             ./services
             ./simulator
@@ -49,6 +50,9 @@
             ./sdk/neotime/src/components.tsx
             (lib.fileset.fileFilter (file: file.hasExt "tsx") ./apps)
             (lib.fileset.fileFilter (file: file.hasExt "tsx") ./faces)
+            # The harness's quality checks look for every app and face in these listings.
+            ./docs/apps.md
+            ./docs/faces.md
           ];
         };
 

@@ -1109,6 +1109,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-app-testing"
+version = "0.1.0"
+dependencies = [
+ "embedded-graphics",
+ "neotime-app-host",
+ "neotime-compiler",
+ "neotime-runtime",
+]
+
+[[package]]
 name = "neotime-bluetooth"
 version = "0.1.0"
 dependencies = [

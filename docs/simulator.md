@@ -60,6 +60,8 @@ vibration also taps the simulated motor. A failing handler is printed too, where
 show its crash screen. A touch or button press the app does not take is printed, because there
 the system's own meaning would apply.
 
+For automated checks of apps without a window, see [testing.md](testing.md).
+
 ## How it works
 
 The drivers talk to hardware only through `embedded-hal` and `mipidsi` traits, so the simulator

@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["boot", "drivers/*", "services/*", "runtime", "ui", "app-host", "simulator", "compiler"]
-# The simulator needs std, so plain builds for the watch leave it out.
+members = ["boot", "drivers/*", "services/*", "runtime", "ui", "app-host", "simulator", "compiler", "harness"]
+# The simulator and the app test harness need std, so plain builds for the watch leave them out.
 default-members = ["boot", "drivers/*", "services/*", "runtime", "ui", "app-host"]
 # The bootloader builds only for the watch, with its own settings.
 exclude = ["bootloader", "firmware", "third_party/littlefs-rust", "third_party/trouble-host"]
