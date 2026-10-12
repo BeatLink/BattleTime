@@ -2,7 +2,8 @@
 //!
 //! The real drivers run unchanged against simulated hardware: the display driver talks to a model
 //! of the ST7789 and the vibrator driver to a motor pin. The mouse is the touch panel and the space
-//! bar is the side button. With `--app` or `--demo` it runs an app image instead of the demo pages.
+//! bar is the side button. With `--app` or `--demo` it runs an app image instead of the demo pages,
+//! and with `--script` it runs a test script headless through the test watch.
 
 mod app;
 mod hardware;
@@ -63,6 +64,7 @@ struct Options {
     library_path: Option<String>,
     installed_paths: Vec<String>,
     clicks: Vec<Click>,
+    script_path: Option<String>,
 }
 
 // ============================================================================
@@ -71,6 +73,9 @@ struct Options {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let options = read_options()?;
+    if let Some(path) = &options.script_path {
+        run_script(path);
+    }
     let panel = SimulatedPanel::new();
     let mut display = Display::new(panel.clone(), UnconnectedPin, &mut ThreadDelay)
         .map_err(|error| format!("the display did not start: {error:?}"))?;
@@ -152,6 +157,7 @@ fn read_options() -> Result<Options, String> {
         library_path: None,
         installed_paths: Vec::new(),
         clicks: Vec::new(),
+        script_path: None,
     };
     let mut arguments = std::env::args().skip(1);
 
@@ -166,16 +172,38 @@ fn read_options() -> Result<Options, String> {
             "--library" => options.library_path = Some(value()?),
             "--installed" => options.installed_paths.push(value()?),
             "--click" => options.clicks.push(parse_click(&value()?)?),
+            "--script" => options.script_path = Some(value()?),
             _ => {
                 return Err(format!(
                     "unknown option {argument}; use --screenshot PATH, --page N, --scale N, --app PATH, \
-                     --demo, --click X,Y"
+                     --demo, --click X,Y, --script PATH"
                 ))
             }
         }
     }
 
     Ok(options)
+}
+
+/// Runs a test script through the test watch, printing each step, and exits non-zero if a step fails.
+fn run_script(path: &str) -> ! {
+    let script = match neotime_app_testing::load_script(std::path::Path::new(path)) {
+        Ok(script) => script,
+        Err(problem) => {
+            eprintln!("{problem}");
+            std::process::exit(2);
+        }
+    };
+    let run = neotime_app_testing::run_script(&script, std::path::Path::new("."), |outcome| {
+        println!("{outcome}")
+    });
+    match run.failure {
+        None => {
+            println!("passed all {} steps of {path}", run.passed_steps.len());
+            std::process::exit(0);
+        }
+        Some(_) => std::process::exit(1),
+    }
 }
 
 fn parse_number(text: &str) -> Result<usize, String> {

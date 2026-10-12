@@ -14,6 +14,7 @@ embedded-hal = "1.0"
 embedded-hal-async = "1.0"
 mipidsi = "0.10"
 neotime-app-host = { path = "../app-host", features = ["demo"] }
+neotime-app-testing = { path = "../harness" }
 neotime-display = { path = "../drivers/display" }
 neotime-runtime = { path = "../runtime" }
 neotime-settings = { path = "../services/settings" }

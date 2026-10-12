@@ -1,0 +1,16 @@
+# The stopwatch counts up once started and holds its time while paused.
+open app stopwatch
+expect screen main
+expect text "00:00"
+
+button                      # start
+wait 3s
+expect text "00:03"
+expect effect keep-screen-on true
+
+button                      # pause
+expect effect keep-screen-on false
+wait 1min
+expect text "00:03"
+expect no text "01:03"
+expect no failures

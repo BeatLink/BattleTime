@@ -1253,6 +1253,7 @@ dependencies = [
  "embedded-hal-async",
  "mipidsi",
  "neotime-app-host",
+ "neotime-app-testing",
  "neotime-display",
  "neotime-runtime",
  "neotime-settings",

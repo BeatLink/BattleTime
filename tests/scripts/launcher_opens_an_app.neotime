@@ -1,0 +1,10 @@
+# The launcher lists the installed apps and opens the one tapped.
+open app launcher
+install stopwatch timer
+expect text "Stopwatch"
+expect text "Timer"
+
+tap "Timer"
+expect effect open-app timer
+expect no effect open-app stopwatch
+expect no failures

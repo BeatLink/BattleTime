@@ -1,0 +1,10 @@
+# The digital face shows the date the test watch starts at, and the next one a day later.
+# Each digit of its time is a label of its own, so the time is checked by eye in the screenshot.
+open face digital
+expect text "Mon 5 Jan 2026"
+
+wait 24h
+expect text "Tue 6 Jan 2026"
+expect no text "Mon 5 Jan 2026"
+expect no failures
+screenshot digital_face.png

@@ -1,0 +1,13 @@
+# The calculator adds and multiplies with its keypad, whose keys have no text of their own to tap.
+open app calculator
+tap 30 87                   # 7
+tap 165 128                 # +
+tap 75 128                  # 5
+tap 204 211                 # =
+expect text "12"
+
+tap 165 170                 # ×
+tap 120 170                 # 3
+tap 204 211                 # =
+expect text "36"
+expect no failures

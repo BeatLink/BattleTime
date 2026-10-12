@@ -62,6 +62,20 @@ the system's own meaning would apply.
 
 For automated checks of apps without a window, see [testing.md](testing.md).
 
+## Running a script
+
+`--script` plays a test script without a window, through the same test watch `cargo test` uses:
+it compiles the apps from their source, so run it from the repository.
+
+```sh
+cargo run -p neotime-simulator -- --script tests/scripts/stopwatch_start_and_pause.neotime
+```
+
+It prints each step as `ok    line 6: button`, and stops at the first that fails with its line,
+what it expected and what it found. It exits with 0 when every step passes, 1 when one fails, and
+2 when the script cannot be read. A relative `screenshot` path is saved under the current folder.
+[testing.md](testing.md) lists the commands.
+
 ## How it works
 
 The drivers talk to hardware only through `embedded-hal` and `mipidsi` traits, so the simulator

@@ -53,6 +53,8 @@
             # The harness's quality checks look for every app and face in these listings.
             ./docs/apps.md
             ./docs/faces.md
+            # The harness plays every example script in this folder.
+            ./tests/scripts
           ];
         };
 
@@ -171,6 +173,7 @@
             echo "  cargo build --release --target thumbv7em-none-eabihf   build the drivers for the watch"
             echo "  cargo run -p neotime-simulator                         open the simulator"
             echo "  cargo run -p neotime-simulator -- --demo               run the built-in stopwatch app"
+            echo "  cargo run -p neotime-simulator -- --script FILE        play a test script, such as tests/scripts/*.neotime"
             echo "  tools/build_images.sh                                  build the bootloader, firmware and reloaders into dist/"
             echo "  nix run .#infinisim                                    open InfiniTime's simulator to compare"
             echo "  tools/check_coverage.sh                                run every test with coverage and check the floors"

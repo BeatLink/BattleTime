@@ -1,0 +1,12 @@
+# The timer rings when its ten minutes run out, and Dismiss silences it.
+open app timer
+tap 120 202                 # the start button under the duration picker
+wait 10min
+expect text "Time's up"
+expect effect vibrate-pattern alarm
+expect effect wake-screen
+
+tap "Dismiss"
+expect effect stop-vibrating
+expect no text "Time's up"
+expect no failures

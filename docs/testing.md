@@ -56,6 +56,63 @@ tests and given to every app.
 The fake system starts at 09:00 UTC on Monday 5 January 2026, with plausible readings such as 87%
 battery, and gives the same random numbers on every run.
 
+## Scripts
+
+A script drives the same test watch from a small text file, one command per line, so an
+end-to-end run needs no Rust. `#` starts a comment, blank lines are skipped, and text goes in
+double quotes, where `\"` is a quote and `\\` a backslash:
+
+```text
+# The stopwatch counts up once started and holds its time while paused.
+open app stopwatch
+button                      # start
+wait 3s
+expect text "00:03"
+expect effect keep-screen-on true
+button                      # pause
+wait 1min
+expect text "00:03"
+expect no failures
+```
+
+| Command | Does |
+|---|---|
+| `open app <id>`, `open face <id>` | Compiles and opens `apps/<id>` or `faces/<id>`; a script starts with one, and may open another later. |
+| `install <id> ...` | Installs these apps, so a launcher lists them. |
+| `tap X Y`, `tap "text"` | Taps a point, or the middle of the shown widget whose text is exactly that. |
+| `long-press ...`, `double-tap ...` | The same, held or tapped twice. |
+| `drag X1 Y1 X2 Y2` | Presses, drags in steps and lifts. |
+| `swipe up`, `down`, `left`, `right` | A swipe across the middle of the screen. |
+| `button`, `long-button` | Presses or holds the side button. |
+| `wait 250ms`, `3s`, `10min`, `2h` | Moves the clock on, waking the app at each time it asked for. |
+| `set <system value> <number>` | Sets a value by the name apps read, such as `battery_percent` or `settings.step_goal`; `true` and `false` are 1 and 0. |
+| `notify "title" "body"` | Delivers a notification from the phone. |
+| `screen off`, `screen on` | Turns the screen off or on. |
+| `expect text "…"`, `expect no text "…"` | Whether some shown widget's text contains this. |
+| `expect screen <name>` | The open screen, by its name in `screens`. |
+| `expect effect <name> [arguments]` | An effect by the name apps call it, such as `vibrate 30`, `vibrate-pattern alarm` or `open-app timer`. |
+| `expect no effect <name> [arguments]` | No such effect. |
+| `expect no failures` | No code of the app has failed. |
+| `screenshot <path.png>` | Saves the 240x240 screen as a PNG. |
+
+Names take hyphens or underscores alike. An effect check gives only the arguments it cares
+about, and looks at the effects asked for since the step after the previous effect check, so
+`expect no effect vibrate` after a tap is not met by an earlier vibration.
+
+A script stops at the first step that does not pass, and reports its line, the command, what it
+expected and what it found, such as the texts shown. A line the parser cannot read is named
+before anything runs. In Rust, `parse_script` or `load_script` reads a script and `run_script`
+plays it, giving a `ScriptRun` with the steps that passed and the `StepFailure`, if any;
+`run_script_on` plays one on a watch already open, such as one with an app written in a test.
+
+Example scripts live in `tests/scripts/*.neotime`, and `harness/tests/scripts.rs` plays every one,
+so `cargo test` and CI run them. The simulator plays one from the command line (see
+[simulator.md](simulator.md)):
+
+```sh
+cargo run -p neotime-simulator -- --script tests/scripts/timer_rings_and_dismisses.neotime
+```
+
 ## The suites
 
 - `harness/tests/smoke.rs` finds every app and face, opens it, taps everything that answers taps,
@@ -73,6 +130,7 @@ battery, and gives the same random numbers on every run.
   `harness/snapshots/texts/<kind>-<id>.json`, described under [Snapshots](#snapshots).
 - `harness/tests/screenshots.rs` compares each main screen, and a few screens after some taps,
   with the reference pictures in `harness/snapshots/screens/`.
+- `harness/tests/scripts.rs` plays every script in `tests/scripts`.
 
 ## Snapshots
 
