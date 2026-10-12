@@ -1097,11 +1097,23 @@ fn draw_image_widget(node: &Node, context: &DrawContext, area: Rect, renderer: &
     };
     match context.image_resource(reference) {
         Some(image) => {
+            let (width, height) = (image.width as i32, image.height as i32);
+            let (shown_width, shown_height) = if area.width * height <= area.height * width {
+                (
+                    area.width.max(1),
+                    ((height * area.width + width / 2) / width).max(1),
+                )
+            } else {
+                (
+                    ((width * area.height + height / 2) / height).max(1),
+                    area.height.max(1),
+                )
+            };
             let place = Rect {
-                x: area.x + Align::Center.offset(area.width, image.width as i32),
-                y: area.y + Align::Center.offset(area.height, image.height as i32),
-                width: image.width as i32,
-                height: image.height as i32,
+                x: area.x + Align::Center.offset(area.width, shown_width),
+                y: area.y + Align::Center.offset(area.height, shown_height),
+                width: shown_width,
+                height: shown_height,
             };
             draw_resource(&image, place, color, recolors, renderer);
         }
@@ -1148,7 +1160,11 @@ fn brightness(rgb565: u16) -> u8 {
     color.0.max(color.1).max(color.2)
 }
 
-/// Draws an image's runs row by row with its top-left corner at `place`.
+/// Draws an image's runs row by row, fitted to `place`'s size and positioned at its top-left corner.
+///
+/// `place` may be smaller or larger than the image itself: each source row and column maps onto the
+/// destination range it divides into, so the whole image always lands inside `place` with no gaps or
+/// double-drawn pixels, rather than being drawn at native size and left for the caller to clip.
 pub fn draw_resource(
     image: &ImageResource,
     place: Rect,
@@ -1158,6 +1174,9 @@ pub fn draw_resource(
 ) {
     const LONGEST_SPAN: usize = 64;
     let width = image.width as i32;
+    let height = image.height as i32;
+    let scaled_x = |column: i32| column * place.width / width;
+    let scaled_y = |row: i32| row * place.height / height;
     let mut coverage = [0u8; LONGEST_SPAN];
     let mut pixel = 0i32;
     for run in image.runs() {
@@ -1166,40 +1185,46 @@ pub fn draw_resource(
             let row = pixel / width;
             let column = pixel % width;
             let span = left.min(width - column);
-            let x = place.x + column;
-            let y = place.y + row;
-            let mask_coverage = match (image.format, recolors) {
-                (ImageFormat::Mask, _) => Some(run.value as u8),
-                (ImageFormat::Color, true) => Some(brightness(run.value)),
-                (ImageFormat::Color, false) => None,
-            };
-            match mask_coverage {
-                None => renderer.fill_rect(
-                    Rect {
-                        x,
-                        y,
-                        width: span,
-                        height: 1,
-                    },
-                    to_color(run.value),
-                ),
-                Some(0) => {}
-                Some(OPAQUE) => renderer.fill_rect(
-                    Rect {
-                        x,
-                        y,
-                        width: span,
-                        height: 1,
-                    },
-                    color,
-                ),
-                Some(value) => {
-                    let mut drawn = 0;
-                    while drawn < span {
-                        let piece = (span - drawn).min(LONGEST_SPAN as i32) as usize;
-                        coverage[..piece].fill(value);
-                        renderer.blend_row(x + drawn, y, color, &coverage[..piece]);
-                        drawn += piece as i32;
+            let (y_from, y_to) = (scaled_y(row), scaled_y(row + 1));
+            let (x_from, x_to) = (scaled_x(column), scaled_x(column + span));
+            if y_to > y_from && x_to > x_from {
+                let x = place.x + x_from;
+                let draw_span = x_to - x_from;
+                let mask_coverage = match (image.format, recolors) {
+                    (ImageFormat::Mask, _) => Some(run.value as u8),
+                    (ImageFormat::Color, true) => Some(brightness(run.value)),
+                    (ImageFormat::Color, false) => None,
+                };
+                for y in place.y + y_from..place.y + y_to {
+                    match mask_coverage {
+                        None => renderer.fill_rect(
+                            Rect {
+                                x,
+                                y,
+                                width: draw_span,
+                                height: 1,
+                            },
+                            to_color(run.value),
+                        ),
+                        Some(0) => {}
+                        Some(OPAQUE) => renderer.fill_rect(
+                            Rect {
+                                x,
+                                y,
+                                width: draw_span,
+                                height: 1,
+                            },
+                            color,
+                        ),
+                        Some(value) => {
+                            let mut drawn = 0;
+                            while drawn < draw_span {
+                                let piece = (draw_span - drawn).min(LONGEST_SPAN as i32) as usize;
+                                coverage[..piece].fill(value);
+                                renderer.blend_row(x + drawn, y, color, &coverage[..piece]);
+                                drawn += piece as i32;
+                            }
+                        }
                     }
                 }
             }

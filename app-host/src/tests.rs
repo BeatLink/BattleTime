@@ -1159,6 +1159,52 @@ fn a_mask_image_is_drawn_in_its_colour() {
     assert_eq!(red, (MASK_SIDE * MASK_SIDE) as usize);
 }
 
+/// An 8x8 mask covered only in its top-left 2x2 corner, drawn in a box half that size on each side.
+fn corner_mask_image() -> Vec<u8> {
+    use neotime_runtime::resources::ImageFormat;
+
+    let mut writer = ImageWriter::new("corner", "Corner", AppKind::App, 1);
+    let side = MASK_SIDE as usize;
+    let mut pixels = vec![0u16; side * side];
+    for row in 0..2 {
+        for column in 0..2 {
+            pixels[row * side + column] = 255;
+        }
+    }
+    let corner = writer.image_resource(ImageFormat::Mask, MASK_SIDE, MASK_SIDE, &pixels);
+    let constant = PropertySource::Constant;
+    writer.widget(WidgetKind::Column, 1, &[]);
+    writer.widget(
+        WidgetKind::Image,
+        0,
+        &[
+            (Property::Image, constant(corner as i32)),
+            (Property::Color, constant(0xF800)),
+            (Property::Width, constant((MASK_SIDE / 2) as i32)),
+            (Property::Height, constant((MASK_SIDE / 2) as i32)),
+        ],
+    );
+    writer.build()
+}
+
+#[test]
+fn an_icon_smaller_than_its_image_still_shows_the_images_corner() {
+    let image = corner_mask_image();
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+    host.draw(&mut screen).unwrap();
+    let (bounds, shown) = host.widget_bounds(1).unwrap();
+    assert!(shown);
+    assert_eq!(bounds.width, (MASK_SIDE / 2) as i32);
+    assert_eq!(bounds.height, (MASK_SIDE / 2) as i32);
+    let red = screen.count_in(bounds, Rgb565::RED);
+    assert!(
+        red > 0,
+        "a box smaller than the image should scale the whole image down into it, not crop to its centre and miss the corner"
+    );
+}
+
 #[test]
 fn a_long_label_wraps_onto_several_lines_inside_the_screen() {
     let image = image_and_text_image();
