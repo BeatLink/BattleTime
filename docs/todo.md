@@ -85,6 +85,15 @@ document for its part instead.
     while it slides away, looks acceptable, or whether that unturning should move elsewhere;
   - the stack keeps 2 KB spare with the alarm open while its list scrolls.
 
+- [ ] **Alert Notification from BlueZ.** The New Alert write (`0x1811`/`0x2A46`) is tested only on
+  the computer; nothing has written one over Bluetooth yet. First through the emulator's Bluetooth
+  bridge with `gatttool -i <bridge>`, then on the watch, check that:
+  - a write of `05 01 00` then `Sam`, a zero byte and `Hi` shows an SMS notification from Sam that
+    buzzes twice and wakes the screen;
+  - a write longer than 20 bytes arrives whole once BlueZ has raised the MTU, and the write is
+    answered without an error, since the watch reads it without storing it;
+  - ITD's `itctl notify` and Amazfish show their notifications the same way.
+
 ## Bluetooth controller
 
 See [bluetooth.md](bluetooth.md) for the details of each.
@@ -576,7 +585,7 @@ InfiniTime has these and NeoTime has nothing for them yet:
 | Board and system loop | sleep and wake of the whole system, wake locks, a system monitor |
 | Heart rate | HRS3300 driver, PPG processing, background measuring, the Heart Rate service |
 | Clock | the Current Time client |
-| Notifications | Alert Notification service and client, Immediate Alert, calls |
+| Notifications | the Alert Notification client, Immediate Alert, the call screen for a New Alert call |
 | Other BLE services | Music, Navigation, Simple Weather |
 | System screens | the pass key, firmware validation |
 

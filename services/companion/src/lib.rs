@@ -16,9 +16,14 @@ use neotime_settings::{Setting, Settings};
 use serde::Deserialize;
 use serde_json_core::str::{EscapedStr, EscapedStringFragment};
 
+mod alert;
+#[cfg(test)]
+mod alert_tests;
 mod phone;
 #[cfg(test)]
 mod tests;
+
+pub use alert::{parse_new_alert, MOST_NEW_ALERT_BYTES};
 
 pub use phone::{
     call_control_line, find_phone_line, music_control_line, status_report, CallKind, MusicInfo, MusicState,

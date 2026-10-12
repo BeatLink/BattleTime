@@ -38,7 +38,7 @@ use mipidsi::interface::SpiInterface;
 use neotime_blefs::{service::FileTransferService, FileTransfer};
 use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
 use neotime_button::Button;
-use neotime_companion::LineAssembler;
+use neotime_companion::{LineAssembler, MOST_NEW_ALERT_BYTES};
 use neotime_crash_record::Crash;
 use neotime_dfu::{
     service::DfuWrite, service::LegacyDfuService, write_progress, Activity, LegacyDfu, Outcome,
@@ -535,6 +535,27 @@ struct Server {
     battery: BatteryService,
     file_transfer: FileTransferService,
     device_information: DeviceInformationService,
+    alert_notification: AlertNotificationService,
+}
+
+/// The standard Alert Notification service: any Bluetooth tool writes a New Alert to show a notification.
+#[gatt_service(uuid = "1811")]
+struct AlertNotificationService {
+    /// Writes are read as they arrive and never stored, so one byte of storage takes any length.
+    #[characteristic(uuid = "2a46", write)]
+    new_alert: u8,
+}
+
+/// The id the next New Alert gets, counted above Gadgetbridge's 32-bit ids so the two never meet.
+static NEXT_NEW_ALERT: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Shows a New Alert written to the Alert Notification service as a notification.
+fn read_new_alert(write: &[u8]) {
+    let count = NEXT_NEW_ALERT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    let id = (1 << 32) + i64::from(count);
+    if let Some(notification) = neotime_companion::parse_new_alert(write, id) {
+        app_events::notification_arrived(notification);
+    }
 }
 
 /// The standard Device Information service: the firmware's version, as the status page shows it.
@@ -823,6 +844,11 @@ async fn serve_connection(
                                 file_answers = file_transfer.answer(files.file_system(), bytes, room);
                             });
                         }
+                        if write.handle() == server.alert_notification.new_alert.handle {
+                            write.with_data(|_, bytes| {
+                                read_new_alert(&bytes[..bytes.len().min(MOST_NEW_ALERT_BYTES)])
+                            });
+                        }
                         if write.handle() == server.time.current_time.handle {
                             clock::set_from_current_time(&written);
                         }
@@ -863,7 +889,15 @@ async fn serve_connection(
                     }
                     _ => None,
                 };
-                if let Ok(reply) = event.accept() {
+                let reply = match event {
+                    GattEvent::Write(write)
+                        if write.handle() == server.alert_notification.new_alert.handle =>
+                    {
+                        write.accept_unprocessed()
+                    }
+                    event => event.accept(),
+                };
+                if let Ok(reply) = reply {
                     reply.send().await;
                 }
                 clock::save_time_zone_if_changed(files);

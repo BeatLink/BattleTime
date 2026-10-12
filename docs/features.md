@@ -48,6 +48,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   phone and from apps, and the notifications app lists them newest first: a tap reads one in full
   and Dismiss removes it. A notification dismissed on the phone goes from the watch too. Faces show
   when some are unread.
+- **Notifications from any Bluetooth tool.** A New Alert written to the standard Alert Notification
+  service shows as a notification, as on InfiniTime, so BlueZ's `bluetoothctl`, ITD or Amazfish can
+  send one without the companion app.
 - **A notification wakes the screen.** One that arrives while the screen is dark turns it on and
   opens the notifications app, when it is installed, so it can be read at once. Do not disturb
   keeps the screen dark and the watch still, and the notification is still kept. While the phone
