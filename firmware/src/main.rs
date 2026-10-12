@@ -286,6 +286,7 @@ async fn main(spawner: Spawner) {
         confirmation,
         screen,
     });
+    spawner.spawn(packages::run_commands(files).unwrap());
     spawner.spawn(run_bluetooth(controller, parts, files).unwrap());
 }
 
@@ -633,6 +634,20 @@ struct BluetoothParts {
 }
 
 static BLUETOOTH_PARTS: StaticCell<BluetoothParts> = StaticCell::new();
+static SERVER: StaticCell<Server<'static>> = StaticCell::new();
+
+/// Builds the attribute table in a static, out of line, so the table under construction never sits in
+/// the Bluetooth task's frame, which stays on the stack under every connection.
+#[inline(never)]
+fn build_server() -> &'static Server<'static> {
+    SERVER.init(
+        Server::new_with_config(GapConfig::Peripheral(PeripheralConfig {
+            name: DEVICE_NAME,
+            appearance: &appearance::watch::GENERIC_WATCH,
+        }))
+        .unwrap(),
+    )
+}
 
 /// Its own task, so the Bluetooth loop's stack frame is not added to start-up's.
 #[embassy_executor::task]
@@ -653,11 +668,7 @@ async fn run_bluetooth(
         .build();
     let mut runner = stack.runner();
     let mut peripheral = stack.peripheral();
-    let server = Server::new_with_config(GapConfig::Peripheral(PeripheralConfig {
-        name: DEVICE_NAME,
-        appearance: &appearance::watch::GENERIC_WATCH,
-    }))
-    .unwrap();
+    let server = build_server();
     // Phones read the version straight from the attribute table, so nothing else uses this service.
     let _device_information = &server.device_information;
 
@@ -804,19 +815,27 @@ async fn serve_connection(
     let mut file_transfer = FileTransfer::new(neotime_storage::BLOCK_SIZE, neotime_storage::BLOCK_COUNT);
     // A packages command so far, on the heap since commands are short and rare.
     let mut packages_line: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
-    // Complete packages commands, run once the write that finished them is answered.
+    // Complete packages commands, handed to their task once the write that finished them is answered.
     let mut packages_commands: alloc::vec::Vec<alloc::vec::Vec<u8>> = alloc::vec::Vec::new();
+    // A reply left from a phone that went away before it arrived is not this phone's.
+    packages::REPLIES.clear();
     loop {
         // Pinned where they are made, so the connection's large future is never copied across the stack.
         let next_event = core::pin::pin!(connection.next());
-        let next_reply = core::pin::pin!(settings::REPLIES.receive());
+        let next_reply = core::pin::pin!(select(settings::REPLIES.receive(), packages::REPLIES.receive()));
         let battery_change = core::pin::pin!(battery::PERCENT_CHANGED.wait());
         let bluetooth_switched = core::pin::pin!(settings::BLUETOOTH_SWITCHED.wait());
         let event = match select4(next_event, next_reply, battery_change, bluetooth_switched).await {
             Either4::First(event) => event,
-            Either4::Second(reply) => {
+            Either4::Second(Either::First(reply)) => {
                 for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
                     let _ = server.uart.transmit.notify_raw(connection, piece, false).await;
+                }
+                continue;
+            }
+            Either4::Second(Either::Second(reply)) => {
+                for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
+                    let _ = server.neotime.packages.notify_raw(connection, piece, false).await;
                 }
                 continue;
             }
@@ -923,13 +942,7 @@ async fn serve_connection(
                 }
                 clock::save_time_zone_if_changed(files);
                 for command in packages_commands.drain(..) {
-                    let (reply, change) = files.run_packages_command(&command);
-                    for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
-                        let _ = server.neotime.packages.notify_raw(connection, piece, false).await;
-                    }
-                    if change != neotime_packages::commands::Change::None {
-                        packages::CHANGED.signal(change);
-                    }
+                    packages::COMMANDS.send(command).await;
                 }
                 if !*confirmed {
                     let kept = confirmation.confirm().await;

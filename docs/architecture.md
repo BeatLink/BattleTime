@@ -503,7 +503,8 @@ The folders are the whole record: there is no list of installed apps to fall out
   library, and refuses an image whose id is not the folder's name; a bad image is left where it is
   so the phone can send it again. `remove` deletes the folder with the saved state. `set_enabled`
   hides an app from the launcher with a `disabled` marker, without deleting it. `list` returns
-  every valid app in id order, and `enabled` the ones the launcher shows. `read_image` hands the
+  every app whose image parses and holds its folder's id, in id order, without verifying the code
+  again, and `enabled` the ones the launcher shows. `read_image` hands the
   shell an image to load into RAM.
 - **`commands`** answers the packages characteristic's JSON lines (`apps`, `install`, `remove`,
   `enable`, `install_library`) and says whether the apps or the library changed, so the shell can
@@ -676,10 +677,13 @@ watch face, the launcher and the apps through `neotime-app-host`:
   flash when it closes or the screen turns off, only when one changed, and put back when it opens.
 - **Battery service.** The standard Battery service (0x180F) answers a read of 0x2A19 with the
   charge `battery.rs` last measured, and notifies a subscribed phone whenever that changes.
-- **Packages characteristic.** Lines written to 6e540003 in the NeoTime service go to
-  `neotime-packages` through `storage::Files::run_packages_command`, and each reply is notified in
-  20-byte pieces. A command runs after its write is answered; one that installs, removes or hides an
-  app, or copies a new shared library into internal flash, raises `packages::CHANGED` for the shell.
+- **Packages characteristic.** Lines written to 6e540003 in the NeoTime service go, once their write
+  is answered, to `packages::run_commands`, a task of their own, which runs them through
+  `storage::Files::run_packages_command`; the Bluetooth task notifies each reply in 20-byte pieces.
+  The task starts near the top of the stack, while the Bluetooth task's frames under a connection
+  take about 2.7 KB, so the verifier inside an install never reaches the end of the stack. A command
+  that installs, removes or hides an app, or copies a new shared library into internal flash, raises
+  `packages::CHANGED` for the shell.
   Copying the library erases internal flash pages, each stopping the CPU for about 85 ms.
 - **Clock.** `clock.rs` holds one `WallClock`: UTC counted on from the build time, or from what a
   phone last set through Current Time (0x2A2B), Local Time Information (0x2A0F) or a `setTime`

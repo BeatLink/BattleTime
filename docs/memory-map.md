@@ -143,9 +143,9 @@ would leave under 2 KB, so measure it again before the stack shrinks further. Dr
 built with `filesystem_use --image` and loaded into the emulator with the shared library) peaked at
 9.1 KB while sliding to the launcher and scrolling it, and at 10.3 KB (10,516 B) with the alarm
 open, 1,920 B spare: below the 2 KB this page asks for, so room must be found before the stack or
-the statics grow again. The Bluetooth task's
-deepest path, a file command that makes littlefs compact a folder, adds up to about 9.1 KB from its
-functions' frames, below that peak.
+the statics grow again. The Bluetooth task builds its attribute table out of line, so its own frame
+under a connection is 0.6 KB and `serve_connection`'s 2.1 KB; packages commands run in a task of
+their own, since the verifier inside one once overflowed the stack under those frames.
 
 The last 44 bytes of the firmware's static RAM, in the `.uninit` section just below the stack, are
 the crash record (`firmware/src/restart.rs`, laid out by `neotime-crash-record`). Start-up does not
