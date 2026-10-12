@@ -156,13 +156,14 @@ to locals, because a loop needs an empty stack.
   `padStart`, and `.length` on text. On text known when compiling they are worked out then;
   otherwise they compile to `ToUpper`, `TextLength`, `SliceText` and `PadStart`. A missing `end`
   slices to the end, and `pad_start` pads with a space unless given one literal character.
+- `format_fixed(value, places, trim?)` compiles to `FormatFixed`, with `trim` false when left out.
 - `array.includes(value)`, `array.indexOf(value)` and `count_where(array, test)` over an array
   signal or a constant array, compiled as a loop; with everything known when compiling they are
   worked out then. Text elements must be fixed text. `includes` and `indexOf` on an array signal of
   numbers compile to one `AskArray` instead of the loop.
 - The array functions from `count_of` to `life_step` (`array_builtins.rs`) take array signals and
-  compile to `AskArray`, or to `WorkArray` for `arrays_equal`. `slide_grid`, `life_step`, `push_shift` and `unshift_pop`
-  compile only as the whole right side of an assignment to an array signal, written straight into it.
+  compile to `AskArray`, or to `WorkArray` for `arrays_equal`. `slide_grid`, `life_step`, `push_shift`, `unshift_pop` and
+  `shuffled` compile only as the whole right side of an assignment to an array signal, written straight into it.
 - `icon_named(name)` with a literal, a choice such as a weather condition, fixed text, or a
   template such as `` `turn_${turn.value}` ``.
 - A constant array or object indexed at run time: numbers that go up evenly are computed, other

@@ -441,6 +441,18 @@ impl<'a> Compiler<'a> {
                 emitter.emit(Instruction::PadStart, span)?;
                 Typed::new(Type::TEXT)
             }
+            "format_fixed" => {
+                self.compile_value_of_type(emitter, argument(0)?, scope, Type::NUMBER)?;
+                self.compile_value_of_type(emitter, argument(1)?, scope, Type::NUMBER)?;
+                match arguments.get(2) {
+                    Some(trim) => {
+                        self.compile_value_of_type(emitter, trim, scope, Type::BOOL)?;
+                    }
+                    None => self.emit_number(emitter, 0, span)?,
+                }
+                emitter.emit(Instruction::FormatFixed, span)?;
+                Typed::new(Type::TEXT)
+            }
             "next_time_of_day" => self.compile_next_time_of_day(
                 emitter,
                 argument(0)?,

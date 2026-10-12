@@ -255,6 +255,31 @@ fn a_push_moves_the_history_along_in_place() {
 }
 
 #[test]
+fn inversions_count_the_pairs_out_of_order() {
+    assert_eq!(answer(&[1, 2, 3], Question::Inversions, &[]), Ok(0));
+    assert_eq!(answer(&[3, 1, 2], Question::Inversions, &[]), Ok(2));
+    assert_eq!(
+        answer(&[0; 65], Question::Inversions, &[]),
+        Err(Failure::IndexOutOfRange)
+    );
+}
+
+#[test]
+fn a_shuffle_keeps_the_elements_and_leaves_the_rest_in_place() {
+    let shuffled = worked(&[1, 2, 3, 4, 5, 6], Work::Shuffle, &[1, 4]).unwrap();
+    let mut middle = shuffled[1..5].to_vec();
+    middle.sort();
+
+    assert_eq!((shuffled[0], shuffled[5]), (1, 6));
+    assert_eq!(middle, [2, 3, 4, 5]);
+    assert_ne!(shuffled, [1, 2, 3, 4, 5, 6]);
+    assert_eq!(
+        worked(&[1, 2, 3], Work::Shuffle, &[2, 2]),
+        Err(Failure::IndexOutOfRange)
+    );
+}
+
+#[test]
 fn equal_compares_two_arrays() {
     let mut writer = ImageWriter::new("arrays", "Arrays", AppKind::App, 1);
     let first = writer

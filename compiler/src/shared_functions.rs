@@ -20,13 +20,15 @@ use crate::types::Type;
 // ============================================================================
 
 /// The library's functions, by their number in it.
-pub const LIBRARY_FUNCTIONS: [&str; 6] = [
+pub const LIBRARY_FUNCTIONS: [&str; 8] = [
     "display_hour",
     "minute_of_day",
     "is_night",
     "steps_since",
     "temperature_in_unit",
     "digit_of",
+    "sunday_week_of",
+    "days_in_year",
 ];
 
 const SDK_LIB: &str = include_str!("../../sdk/neotime/src/lib.ts");

@@ -64,7 +64,7 @@ fn app_showing(expression: &str) -> Vec<u8> {
     let source = format!(
         r#"
 import {{ define_app, now, format_number }} from "neotime";
-import {{ display_hour, digit_of, is_night, steps_since }} from "neotime/lib";
+import {{ display_hour, digit_of, is_night, steps_since, days_in_year }} from "neotime/lib";
 import {{ Label, Screen }} from "neotime/widgets";
 
 function Main() {{
@@ -142,4 +142,6 @@ fn library_functions_take_several_arguments_and_give_back_booleans() {
     assert_eq!(shown(&app_showing("digit_of(4321, 100)"), &system), "3");
     assert_eq!(shown(&app_showing("is_night(now.value) ? 1 : 0"), &system), "1");
     assert_eq!(shown(&app_showing("steps_since(200)"), &system), "300");
+    assert_eq!(shown(&app_showing("days_in_year(2024)"), &system), "366");
+    assert_eq!(shown(&app_showing("days_in_year(1900)"), &system), "365");
 }

@@ -18,7 +18,7 @@ use crate::image::{AppImage, Function};
 use crate::instruction::{decode, EffectKind, Instruction, SystemValue, TimeUnit, MOST_EFFECT_ARGUMENTS};
 use crate::pattern;
 use crate::state::{read_packed, write_packed, AppState, Placement};
-use crate::text::{DateTime, TextReference, TextWriter};
+use crate::text::{DateTime, TextReference, TextWriter, MOST_FIXED_PLACES};
 
 // ============================================================================
 // Values and limits
@@ -786,6 +786,12 @@ impl Interpreter {
                     Ok(())
                 })?;
             }
+            FormatFixed => {
+                let trim = self.pop()? != 0;
+                let places = self.pop()?.clamp(0, MOST_FIXED_PLACES as Value) as u8;
+                let value = self.pop()?;
+                self.write_text(|writer| writer.write_fixed(value, places, trim))?;
+            }
             PadStart => {
                 let code = self.pop()?;
                 let width = self.pop()?;
@@ -875,7 +881,8 @@ impl Interpreter {
                 if work.writes() {
                     Self::require_handler(call)?;
                 }
-                self.work_array(call.state, work, destination, source)?;
+                let system = &call.system;
+                self.work_array(call.state, work, destination, source, &|| system.random_number())?;
             }
             Effect(kind) => {
                 let mut arguments = [0; MOST_EFFECT_ARGUMENTS];

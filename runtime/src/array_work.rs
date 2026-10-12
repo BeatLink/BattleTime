@@ -11,6 +11,9 @@ use crate::state::AppState;
 /// The longest side of a grid that `LifeStep` and the slides take, which sets the size of their row buffers.
 pub const MOST_GRID_SIDE: usize = 16;
 
+/// The longest array `Inversions` counts in, since it compares every pair.
+pub const MOST_INVERSION_ELEMENTS: usize = 64;
+
 /// Directions as the swipe event gives them.
 const UP: Value = 0;
 const DOWN: Value = 1;
@@ -143,6 +146,19 @@ impl Interpreter {
                 let grid = Grid::new(length, self.pop()?)?;
                 self.line_through(state, array, grid, cell, value)?
             }
+            ArrayQuestion::Inversions => {
+                if length > MOST_INVERSION_ELEMENTS {
+                    return Err(Failure::IndexOutOfRange);
+                }
+                let mut inversions = 0;
+                for earlier in 0..length {
+                    let value = self.element_of(state, array, earlier)?;
+                    for later in earlier + 1..length {
+                        inversions += (self.element_of(state, array, later)? < value) as Value;
+                    }
+                }
+                inversions
+            }
             ArrayQuestion::SlideChanges | ArrayQuestion::SlidePoints => {
                 let direction = self.pop()?;
                 let grid = Grid::new(length, self.pop()?)?;
@@ -174,6 +190,7 @@ impl Interpreter {
         work: ArrayWork,
         destination: u8,
         source: u8,
+        random_number: &dyn Fn() -> u32,
     ) -> Result<(), Failure> {
         let length = Self::array_length(state, source)?;
         if Self::array_length(state, destination)? != length {
@@ -198,6 +215,32 @@ impl Interpreter {
                 let grid = Grid::new(length, self.pop()?)?;
                 self.slide(state, source, Some(destination), grid, direction)
                     .map(|_| ())
+            }
+            ArrayWork::Shuffle => {
+                let count = self.pop()?;
+                let first = self.pop()?;
+                let (Ok(first), Ok(count)) = (usize::try_from(first), usize::try_from(count)) else {
+                    return Err(Failure::IndexOutOfRange);
+                };
+                if first + count > length {
+                    return Err(Failure::IndexOutOfRange);
+                }
+                if destination != source {
+                    for index in 0..length {
+                        let value = self.element_of(state, source, index)?;
+                        self.write_element(state, destination, index as Value, value, true)?;
+                    }
+                }
+                // Fisher and Yates: each place from the end takes a random one of the places not yet settled.
+                for place in (1..count).rev() {
+                    let other = random_number() as usize % (place + 1);
+                    let (here, there) = (first + place, first + other);
+                    let held = self.element_of(state, destination, here)?;
+                    let swapped = self.element_of(state, destination, there)?;
+                    self.write_element(state, destination, here as Value, swapped, true)?;
+                    self.write_element(state, destination, there as Value, held, true)?;
+                }
+                Ok(())
             }
             ArrayWork::PushLast | ArrayWork::PushFirst => {
                 let value = self.pop()?;

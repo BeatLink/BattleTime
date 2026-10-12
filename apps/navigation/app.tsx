@@ -3,7 +3,7 @@
 // route's progress.
 
 import { computed, signal } from "@preact/signals";
-import { current_navigation, define_app, navigation, request_navigation_state, settings } from "neotime";
+import { current_navigation, define_app, format_fixed, navigation, request_navigation_state, settings } from "neotime";
 import { icon_named, icons } from "neotime/icons";
 import { Bar, Icon, Label, Screen } from "neotime/widgets";
 
@@ -26,14 +26,14 @@ const has_step = signal(false);
 
 /** Metres below a kilometre, and kilometres to one decimal above it. */
 function metric_text(metres: number): string {
-  return metres < 1000 ? `${metres} m` : `${Math.floor(metres / 1000)}.${Math.floor((metres % 1000) / 100)} km`;
+  return metres < 1000 ? `${metres} m` : `${format_fixed(Math.floor(metres / 100), 1)} km`;
 }
 
 /** Feet below a tenth of a mile, and miles to one decimal above it. */
 function imperial_text(metres: number): string {
   if (metres < TENTH_OF_A_MILE_IN_METRES) return `${Math.floor((metres * 3281) / 1000)} ft`;
   const tenths_of_a_mile = Math.floor((metres * 10) / 1609);
-  return `${Math.floor(tenths_of_a_mile / 10)}.${tenths_of_a_mile % 10} mi`;
+  return `${format_fixed(tenths_of_a_mile, 1)} mi`;
 }
 
 const distance_text = computed(() =>

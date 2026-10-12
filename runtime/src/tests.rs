@@ -1905,6 +1905,7 @@ fn every_instruction_decodes_to_itself() {
         TextLength,
         SliceText,
         PadStart,
+        FormatFixed,
         FormatNumber(3),
         FormatDuration(9),
         FormatTime(258),
@@ -2968,4 +2969,21 @@ fn a_repeat_holds_exactly_one_row() {
     }
     assert!(Property::RowCount.belongs_to(WidgetKind::Repeat));
     assert!(!Property::RowCount.belongs_to(WidgetKind::Column));
+}
+
+#[test]
+fn format_fixed_writes_a_number_with_its_decimal_places() {
+    let fixed = |value: i64, places: i8, trim: i8| {
+        evaluate_text(
+            Code::new().long(value).small(places).small(trim).op(0x49),
+            &FakeSystem::default(),
+        )
+    };
+
+    assert_eq!(fixed(1250, 3, 0), "1.250");
+    assert_eq!(fixed(1250, 3, 1), "1.25");
+    assert_eq!(fixed(-50, 2, 0), "-0.50");
+    assert_eq!(fixed(3_000_000, 6, 1), "3");
+    assert_eq!(fixed(7, 0, 0), "7");
+    assert_eq!(fixed(5, 40, 1), "0.000000000000000005");
 }

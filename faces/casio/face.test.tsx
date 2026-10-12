@@ -4,7 +4,8 @@ import { cleanup, render } from "@testing-library/preact";
 import { afterEach, describe, expect, it } from "vitest";
 import { settings } from "neotime";
 import { freeze_clock, unfreeze_clock } from "neotime/preview";
-import face, { sunday_week_of, week_number_of } from "./face.tsx";
+import { sunday_week_of } from "neotime/lib";
+import face, { week_number_of } from "./face.tsx";
 
 // ============================================================================
 // Helpers

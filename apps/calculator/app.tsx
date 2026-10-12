@@ -5,7 +5,7 @@
 // Numbers are whole on the watch, so every value is held in millionths.
 
 import { computed } from "@preact/signals";
-import { define_app, format_number, persisted, range, vibrate, type ChangeEvent } from "neotime";
+import { define_app, format_fixed, persisted, range, vibrate, type ChangeEvent } from "neotime";
 import { icons } from "neotime/icons";
 import { ButtonMatrix, Column, Label, Screen } from "neotime/widgets";
 
@@ -61,57 +61,15 @@ const just_evaluated = persisted("just_evaluated", false);
 // Formatting
 // ============================================================================
 
-/** The first `decimals` decimal digits of a fraction in millionths. */
-function format_decimals(fraction: number, decimals: number): string {
-  const digits = decimals === 0 ? 0 : Math.floor(fraction / DECIMAL_PLACE_VALUES[decimals - 1]);
-  // The compiler needs the digit count written out, so each count has its own branch.
-  return decimals === 0
-    ? ""
-    : decimals === 1
-      ? format_number(digits, 1)
-      : decimals === 2
-        ? format_number(digits, 2)
-        : decimals === 3
-          ? format_number(digits, 3)
-          : decimals === 4
-            ? format_number(digits, 4)
-            : decimals === 5
-              ? format_number(digits, 5)
-              : format_number(digits, 6);
-}
-
-/** How many decimals a fraction in millionths needs once its trailing zeros are left off. */
-function decimals_needed(fraction: number): number {
-  return fraction === 0
-    ? 0
-    : fraction % 10 !== 0
-      ? 6
-      : fraction % 100 !== 0
-        ? 5
-        : fraction % 1000 !== 0
-          ? 4
-          : fraction % 10000 !== 0
-            ? 3
-            : fraction % 100000 !== 0
-              ? 2
-              : 1;
-}
-
 /** A value in millionths with its trailing zero decimals left off. */
 function format_result(value: number): string {
-  const magnitude = Math.abs(value);
-  const sign = value < 0 ? "-" : "";
-  const whole = Math.floor(magnitude / MILLIONTHS);
-  const fraction = magnitude % MILLIONTHS;
-  const decimals = decimals_needed(fraction);
-  return `${sign}${whole}${decimals > 0 ? "." : ""}${format_decimals(fraction, decimals)}`;
+  return format_fixed(value, DECIMAL_COUNT, true);
 }
 
 /** The entry as typed, keeping a trailing point or zeros. */
 function format_entry(magnitude: number, is_negative: boolean, has_point: boolean, decimals: number): string {
-  const whole = Math.floor(magnitude / MILLIONTHS);
-  const fraction = magnitude % MILLIONTHS;
-  return `${is_negative ? "-" : ""}${whole}${has_point ? "." : ""}${format_decimals(fraction, decimals)}`;
+  const typed = Math.floor(magnitude / (decimals === 0 ? MILLIONTHS : DECIMAL_PLACE_VALUES[decimals - 1]));
+  return `${is_negative ? "-" : ""}${format_fixed(typed, decimals)}${has_point && decimals === 0 ? "." : ""}`;
 }
 
 // ============================================================================

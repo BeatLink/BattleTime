@@ -1003,6 +1003,38 @@ export function life_step(grid: readonly number[], width: number, live_value: nu
   });
 }
 
+/**
+ * A number kept in units of a `places`-digit fraction, as text: `format_fixed(1250, 3)` is `1.250`. With
+ * `trim`, trailing zero decimals are left off, and the point too when none are left.
+ */
+export function format_fixed(value: number, places: number, trim = false): string {
+  const scale = 10 ** places;
+  const magnitude = Math.abs(value);
+  let fraction = places > 0 ? `${magnitude % scale}`.padStart(places, "0") : "";
+  if (trim) fraction = fraction.replace(/0+$/, "");
+  const sign = value < 0 ? "-" : "";
+  return `${sign}${Math.floor(magnitude / scale)}${fraction.length > 0 ? "." : ""}${fraction}`;
+}
+
+/** How many pairs of elements are out of order, the earlier one greater. Its parity tells whether a sliding puzzle can be solved. */
+export function count_inversions(array: readonly number[]): number {
+  let inversions = 0;
+  array.forEach((value, earlier) => {
+    for (let later = earlier + 1; later < array.length; later++) if (array[later] < value) inversions++;
+  });
+  return inversions;
+}
+
+/** The array with the `count` elements from `first` on in a random order. Assign it to an array signal. */
+export function shuffled<Element>(array: readonly Element[], first: number, count: number): Element[] {
+  const result = [...array];
+  for (let place = count - 1; place > 0; place--) {
+    const other = random_int(0, place);
+    [result[first + place], result[first + other]] = [result[first + other], result[first + place]];
+  }
+  return result;
+}
+
 /** A whole number padded with zeros to at least `width` digits. */
 export function format_number(value: number, width = 1): string {
   const sign = value < 0 ? "-" : "";

@@ -402,6 +402,7 @@ Template literals, such as `` `${steps} steps` ``, join text and numbers.
 | `format_temperature(celsius)` | The temperature in the user's units, with its sign. |
 | `to_upper(text)` | The text in capitals, such as `MON` or `OCT` from a pattern's names. |
 | `pad_start(text, width, character?)` | The text with spaces, or the character given, added in front up to `width`. |
+| `format_fixed(value, places, trim?)` | A number kept in units of a `places`-digit fraction as text: `format_fixed(1250, 3)` is `1.250`. With `trim`, trailing zero decimals are left off. |
 | `text_length(text)` | The number of characters. |
 | `slice_text(text, start, end?)` | Part of the text, counted in characters. |
 | `join(texts, separator)` | The texts of a fixed-length array joined together. |
@@ -469,6 +470,8 @@ From `neotime/lib`; they live in the [shared library](app-runtime.md#the-shared-
 | `steps_since(base)` | Steps taken since today's count was `base`, counting again from today's count after midnight's reset. |
 | `temperature_in_unit(celsius)` | Whole degrees in the wearer's units. |
 | `digit_of(value, place)` | One decimal digit: `place` 1 for the units, 10 for the tens. |
+| `sunday_week_of(instant)` | The week counted from the year's first Sunday, as strftime's `%U` gives; the days before it are week 0. |
+| `days_in_year(year)` | 366 in a leap year, else 365. |
 
 The compiler works out `sine`, `cosine` and `point_on_circle`; the others run in the library, so
 an app carries only a 5 byte call.
@@ -509,6 +512,8 @@ An app's state is at most 2 KB, and one array at most 1 KB. Each array stores it
 | `line_through(grid, width, cell, value)` | The longest line of the value through the cell, across, down or diagonally, counting the cell as holding it. Lines stop at the edges. |
 | `slide_grid(grid, width, direction)` | The grid with its tiles slid that way, equal pairs merging once into a tile one level higher, as in 2048. |
 | `slide_points(grid, width, direction)`, `slide_changes(...)`, `can_slide(grid, width)` | What a slide's merges score (two to the power of each new level), whether it changes the grid, and whether any slide would. |
+| `count_inversions(array)` | How many pairs are out of order, the earlier one greater; its parity says whether a sliding puzzle can be solved. At most 64 elements. |
+| `shuffled(array, first, count)` | The array with the `count` elements from `first` on in a random order. Handlers only. |
 | `push_shift(array, value)`, `unshift_pop(array, value)` | The array moved one place along with the value added at the end or the front, dropping the element at the other end: a history of readings or laps. |
 | `life_step(grid, width, live_value)` | The next generation of the Game of Life on a grid that wraps at its edges; each live cell holds `live_value`. At most 16 wide. |
 | `array.map(...)` | A new array of the same length. Allowed in views, `computed` and handlers. |
@@ -518,7 +523,7 @@ Loops over fixed-length arrays are allowed in `computed` and handlers as well as
 The interpreter answers the functions from `count_of` down natively, so they cost a few bytes of
 the image where a loop costs dozens, and run far faster; `indexOf` and `includes` on an array signal
 do the same. Their arrays must be signals of numbers, such as `board.value`, or parameters given one.
-`slide_grid`, `life_step`, `push_shift` and `unshift_pop` give a whole array, so they may only be assigned to an array signal of
+`slide_grid`, `life_step`, `push_shift`, `unshift_pop` and `shuffled` give a whole array, so they may only be assigned to an array signal of
 the same length in a handler, as in `board.value = life_step(board.value, 16, 1)`. A grid is
 numbered across each row from the top left; a slide's lines are at most 16 long.
 

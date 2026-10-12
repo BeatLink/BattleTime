@@ -22,7 +22,7 @@ fn source(body: &str, screen: &str) -> String {
     format!(
         r#"
 import {{ signal }} from "@preact/signals";
-import {{ define_app, count_of, nth_index_of, line_through, can_slide, slide_changes, slide_points, slide_grid, life_step, arrays_equal, push_shift, unshift_pop, type SwipeEvent }} from "neotime";
+import {{ define_app, count_of, nth_index_of, line_through, can_slide, slide_changes, slide_points, slide_grid, life_step, arrays_equal, push_shift, unshift_pop, shuffled, count_inversions, format_fixed, type SwipeEvent }} from "neotime";
 import {{ Label, Screen }} from "neotime/widgets";
 
 const board = signal([1, 0, 1, 2]);
@@ -180,4 +180,23 @@ fn an_array_is_stored_wide_enough_for_what_native_work_writes_into_it() {
 
     assert!(width_of(0) >= 2);
     assert!(width_of(1) >= 2);
+}
+
+#[test]
+fn shuffles_inversions_and_fixed_point_text_compile_to_single_instructions() {
+    let bytes = compiled(
+        "function swipe(event: SwipeEvent) { board.value = shuffled(board.value, 0, 3); }",
+        "<Label>{`${count_inversions(board.value)} ${format_fixed(1250, 3, true)}`}</Label>",
+    );
+    let image = AppImage::parse(&bytes).unwrap();
+    let handler = instructions(image.handler_code(0).unwrap());
+
+    assert_eq!(shown(&bytes), "1 1.25");
+    assert!(handler.iter().any(|instruction| matches!(
+        instruction,
+        Instruction::WorkArray {
+            work: ArrayWork::Shuffle,
+            ..
+        }
+    )));
 }

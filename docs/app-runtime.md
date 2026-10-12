@@ -488,14 +488,15 @@ Each instruction is one opcode byte followed by its operands:
 | `46` | text length | | Takes text and pushes how many characters it has. |
 | `47` | slice text | | Takes text, a start and an end, and pushes the characters between them; a negative position counts from the end, as JavaScript's `slice` does. |
 | `48` | pad start | | Takes text, a width and a character code, and pushes the text with that character added in front up to the width. |
+| `49` | format fixed | | Takes a number, a count of decimal places and a flag, and pushes the number as text with that many places, such as 1250 with 3 places as `1.250`; with the flag set, trailing zero decimals are left off. |
 | `50` | write state | slot, 1 byte | Takes a value for a state variable. Handlers only. |
 | `51` | effect | effect, 1 byte | Takes the effect's arguments and records it. Handlers only. |
 | `60` | read element | array, 1 byte | Takes an index and pushes that element. An index outside the array fails the call. |
 | `61` | write element | array, 1 byte | Takes an index and a value and writes that element. A value too wide for the element fails the call. Handlers only. |
 | `62` | copy array | destination and source arrays, 1 byte each | Copies every element; the two must be the same length. Handlers only. |
 | `63` | fill array | array, 1 byte | Takes a value and writes it to every element. Handlers only. |
-| `64` | ask array | question, 1 byte; array, 1 byte | Takes the question's arguments and pushes the answer: how many elements equal a value, where the `n`th one is, the longest line of a value through a cell of a grid, whether a 2048 slide would change the grid, or what it scores. |
-| `65` | work array | work, 1 byte; destination, 1 byte; source, 1 byte | Compares two arrays of one length, or writes the destination from the source: the Game of Life's next generation, the grid after a 2048 slide, or the source moved one place along with a value taken from the stack added at the end or the front. Writing is for handlers only, and the source may be the destination. |
+| `64` | ask array | question, 1 byte; array, 1 byte | Takes the question's arguments and pushes the answer: how many elements equal a value, where the `n`th one is, the longest line of a value through a cell of a grid, whether a 2048 slide would change the grid, what it scores, or how many pairs are out of order. |
+| `65` | work array | work, 1 byte; destination, 1 byte; source, 1 byte | Compares two arrays of one length, or writes the destination from the source: the Game of Life's next generation, the grid after a 2048 slide, the source moved one place along with a value taken from the stack added at the end or the front, or the source with some of its places shuffled. Writing is for handlers only, and the source may be the destination. |
 
 System values, in the order `read system` numbers them: `now`, `utc_offset`, `battery_percent`,
 `is_charging`, `steps_today`, `heart_rate`, `heart_rate_measured_at`, `is_phone_connected`,

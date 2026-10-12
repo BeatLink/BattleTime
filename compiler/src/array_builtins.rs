@@ -21,7 +21,8 @@ const MOST_SLIDE_LEVEL: i64 = 62;
 const ANY_DIRECTION: i64 = 4;
 
 /// The functions that give back a new array, which only an assignment to an array signal can take.
-pub const ARRAY_WORK_FUNCTIONS: [&str; 4] = ["slide_grid", "life_step", "push_shift", "unshift_pop"];
+pub const ARRAY_WORK_FUNCTIONS: [&str; 5] =
+    ["slide_grid", "life_step", "push_shift", "unshift_pop", "shuffled"];
 
 /// Whether `name` is one of the array questions `compile_array_question` compiles.
 pub fn is_array_question(name: &str) -> bool {
@@ -34,6 +35,7 @@ pub fn is_array_question(name: &str) -> bool {
             | "can_slide"
             | "slide_points"
             | "arrays_equal"
+            | "count_inversions"
     )
 }
 
@@ -69,6 +71,7 @@ impl<'a> Compiler<'a> {
     ) -> Compiled<Typed> {
         let (question, numbers, result) = match name {
             "count_of" => (ArrayQuestion::CountOf, 1, Type::NUMBER),
+            "count_inversions" => (ArrayQuestion::Inversions, 0, Type::NUMBER),
             "nth_index_of" => (ArrayQuestion::NthIndexOf, 2, Type::NUMBER),
             "line_through" => (ArrayQuestion::LineThrough, 3, Type::NUMBER),
             "slide_changes" => (ArrayQuestion::SlideChanges, 2, Type::BOOL),
@@ -131,6 +134,11 @@ impl<'a> Compiler<'a> {
             "slide_grid" => (ArrayWork::Slide, 2, "a grid, its width and a direction"),
             "life_step" => (ArrayWork::LifeStep, 2, "a grid, its width and the live value"),
             "push_shift" => (ArrayWork::PushLast, 1, "an array and a value"),
+            "shuffled" => (
+                ArrayWork::Shuffle,
+                2,
+                "an array, the first place to shuffle and how many",
+            ),
             _ => (ArrayWork::PushFirst, 1, "an array and a value"),
         };
         let [source, rest @ ..] = arguments else {
@@ -153,6 +161,10 @@ impl<'a> Compiler<'a> {
                 let element_type = self.slots[target as usize].value_type;
                 let pushed = self.compile_value_of_type(emitter, rest[0], scope, element_type)?;
                 source_range.union(pushed.range)
+            }
+            ArrayWork::Shuffle => {
+                self.compile_array_arguments(emitter, false, rest, scope)?;
+                source_range
             }
             ArrayWork::LifeStep => {
                 let ranges = self.compile_array_arguments(emitter, false, rest, scope)?;

@@ -3,7 +3,7 @@
 // count and the fewest moves to a solution persist, and a solved board says so.
 
 import { computed, signal } from "@preact/signals";
-import { define_app, persisted, random_int, range, vibrate_pattern, type SwipeEvent } from "neotime";
+import { count_inversions, define_app, persisted, range, shuffled, vibrate_pattern, type SwipeEvent } from "neotime";
 import { ConfirmDialog } from "neotime/components";
 import { icons } from "neotime/icons";
 import { Grid, Label, Row, Screen } from "neotime/widgets";
@@ -13,9 +13,6 @@ import { Grid, Label, Row, Screen } from "neotime/widgets";
 // ============================================================================
 
 const CELLS = range(16);
-
-/** The places the shuffle visits; the gap stays in the last cell. */
-const SHUFFLED_PLACES = range(15);
 
 /** Tiles in order with the gap, written 0, in the bottom right corner. */
 export const SOLVED_BOARD = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0];
@@ -70,18 +67,12 @@ function swap_cells(first: number, second: number) {
   board.value[second] = first_tile;
 }
 
-/** Deals a random solvable board: an even shuffle of the fifteen tiles, made even by one more swap if needed. */
+/** Deals a random solvable board: the fifteen tiles shuffled, made an even order by one more swap if needed. */
 export function start_game() {
   board.value = SOLVED_BOARD;
-  let swap_count = 0;
-  for (const place of SHUFFLED_PLACES) {
-    const other = random_int(place, 14);
-    if (other !== place) {
-      swap_cells(place, other);
-      swap_count = swap_count + 1;
-    }
-  }
-  if (swap_count % 2 === 1) swap_cells(13, 14);
+  board.value = shuffled(board.value, 0, 15);
+  // With the gap last, a board can be solved when the tiles' own order is even; the gap adds 15 inversions.
+  if (count_inversions(board.value) % 2 === 0) swap_cells(13, 14);
   move_count.value = 0;
 }
 

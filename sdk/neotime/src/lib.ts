@@ -1,7 +1,16 @@
 // Common functions kept in the shared library as bytecode, so apps call them instead of copying them.
 // Numbers on the watch are whole, so angles come back in thousandths.
 
-import { current_weather, hour_of, minute_of, settings, steps_today, type Instant } from "./index.ts";
+import {
+  current_weather,
+  day_of_year,
+  hour_of,
+  minute_of,
+  settings,
+  steps_today,
+  weekday_of,
+  type Instant,
+} from "./index.ts";
 
 // ============================================================================
 // Angles
@@ -72,4 +81,14 @@ export function temperature_in_unit(celsius: number): number {
 /** One decimal digit of a number: `place` 1 for the units, 10 for the tens, and so on. */
 export function digit_of(value: number, place: number): number {
   return Math.floor(value / place) % 10;
+}
+
+/** The week counted from the first Sunday of the year, as strftime's `%U` gives, so the days before it are week 0. */
+export function sunday_week_of(instant: Instant): number {
+  return Math.floor((day_of_year(instant) + 6 - ((weekday_of(instant) + 1) % 7)) / 7);
+}
+
+/** How many days a year has: 366 in a leap year, else 365. */
+export function days_in_year(year: number): number {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 366 : 365;
 }

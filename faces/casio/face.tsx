@@ -19,10 +19,10 @@ import {
   settings,
   to_upper,
   unread_notifications,
-  weekday_of,
   year_of,
   type Color,
 } from "neotime";
+import { days_in_year, sunday_week_of } from "neotime/lib";
 import { BatteryIcon, HeartRateBadge, StepsBadge } from "neotime/components";
 import { icons } from "neotime/icons";
 import { Icon, Label, Line, Row, Screen } from "neotime/widgets";
@@ -38,15 +38,6 @@ const HEART_OFF_COLOR: Color = "#1b1b1b";
 // Derived values
 // ============================================================================
 
-function is_leap_year(year: number): boolean {
-  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-}
-
-/** The week counted from the first Sunday of the year, as strftime's `%U` gives, so the days before it are week 0. */
-export function sunday_week_of(instant: number): number {
-  return Math.floor((day_of_year(instant) + 6 - ((weekday_of(instant) + 1) % 7)) / 7);
-}
-
 /** The ISO week on a 24 hour clock and the Sunday week on a 12 hour clock, as InfiniTime picks. */
 export function week_number_of(instant: number, uses_24_hour_clock: boolean): number {
   return uses_24_hour_clock ? iso_week_of(instant) : sunday_week_of(instant);
@@ -56,7 +47,7 @@ const uses_24_hour_clock = computed(() => settings.uses_24_hour_clock.value);
 
 const day_number = computed(() => day_of_year(now.value));
 
-const days_left_in_year = computed(() => (is_leap_year(year_of(now.value)) ? 366 : 365) - day_number.value);
+const days_left_in_year = computed(() => days_in_year(year_of(now.value)) - day_number.value);
 
 /** The day and month as printf's `%3d-%2d`, day first on a 24 hour clock and month first on a 12 hour one. */
 const date_text = computed(() => {

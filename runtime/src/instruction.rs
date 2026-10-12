@@ -306,6 +306,9 @@ pub enum ArrayQuestion {
     SlideChanges,
     /// Takes a grid's width and a direction, and pushes the points the merges of that slide score.
     SlidePoints,
+    /// Pushes how many pairs of elements are out of order, the earlier one greater; its parity says whether a
+    /// sliding puzzle can be solved.
+    Inversions,
 }
 
 impl ArrayQuestion {
@@ -316,6 +319,7 @@ impl ArrayQuestion {
             2 => ArrayQuestion::LineThrough,
             3 => ArrayQuestion::SlideChanges,
             4 => ArrayQuestion::SlidePoints,
+            5 => ArrayQuestion::Inversions,
             _ => return None,
         })
     }
@@ -323,6 +327,7 @@ impl ArrayQuestion {
     /// How many values the question takes from the stack.
     pub fn argument_count(self) -> usize {
         match self {
+            ArrayQuestion::Inversions => 0,
             ArrayQuestion::CountOf => 1,
             ArrayQuestion::NthIndexOf | ArrayQuestion::SlideChanges | ArrayQuestion::SlidePoints => 2,
             ArrayQuestion::LineThrough => 3,
@@ -345,6 +350,9 @@ pub enum ArrayWork {
     PushLast,
     /// Takes a value and writes the source moved one place towards its end, the value in the first place.
     PushFirst,
+    /// Takes a first place and a count, and writes the source with the elements in those places in a random
+    /// order.
+    Shuffle,
 }
 
 impl ArrayWork {
@@ -355,6 +363,7 @@ impl ArrayWork {
             2 => ArrayWork::Slide,
             3 => ArrayWork::PushLast,
             4 => ArrayWork::PushFirst,
+            5 => ArrayWork::Shuffle,
             _ => return None,
         })
     }
@@ -589,6 +598,9 @@ pub enum Instruction {
     SliceText,
     /// Takes text, a width and a character code, and pushes the text padded in front up to the width.
     PadStart,
+    /// Takes a number, a count of decimal places and a flag, and pushes the number as text with that many
+    /// places, such as 1250 with 3 places as `1.250`. When the flag is set, trailing zero decimals are left off.
+    FormatFixed,
     WriteState(u8),
     /// Takes an index and pushes that element of an array variable.
     ReadElement(u8),
@@ -643,7 +655,7 @@ impl Instruction {
             | GreaterOrEqual | Join => (2, 1),
             Negate | Absolute | BitNot | Not | IsNone | TimePart(_) | StartOf(_) | TextFromCodes(_)
             | ToUpper | TextLength | FormatNumber(_) | FormatDuration(_) | FormatTime(_) => (1, 1),
-            SliceText | PadStart => (3, 1),
+            SliceText | PadStart | FormatFixed => (3, 1),
             // The function's own header gives what a call takes and leaves; the verifier reads it there.
             Jump(_) | Call(_) => (0, 0),
             CallLibrary {
@@ -782,6 +794,7 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
         0x46 => (TextLength, 0),
         0x47 => (SliceText, 0),
         0x48 => (PadStart, 0),
+        0x49 => (FormatFixed, 0),
         0x50 => (WriteState(byte()?), 1),
         0x51 => (Effect(EffectKind::from_byte(byte()?).ok_or(unknown(byte()?))?), 1),
         0x60 => (ReadElement(byte()?), 1),
@@ -949,6 +962,7 @@ impl Instruction {
             TextLength => put(&[0x46]),
             SliceText => put(&[0x47]),
             PadStart => put(&[0x48]),
+            FormatFixed => put(&[0x49]),
             WriteState(variable) => put(&[0x50, variable]),
             Effect(kind) => put(&[0x51, kind as u8]),
             ReadElement(variable) => put(&[0x60, variable]),

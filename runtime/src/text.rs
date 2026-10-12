@@ -160,4 +160,31 @@ impl<'buffer> TextWriter<'buffer> {
         }
         Ok(())
     }
+
+    /// Writes a number kept in units of a `places`-digit fraction, such as 1250 with 3 places as `1.250`.
+    /// With `trim`, trailing zero decimals are left off, and the point too when none are left.
+    pub fn write_fixed(&mut self, value: i64, places: u8, trim: bool) -> Result<(), BufferFull> {
+        let places = places.min(MOST_FIXED_PLACES);
+        let scale = 10u64.pow(places as u32);
+        let magnitude = value.unsigned_abs();
+        let whole = magnitude / scale;
+        let mut fraction = magnitude % scale;
+        let mut digits = places;
+        while trim && digits > 0 && fraction.is_multiple_of(10) {
+            fraction /= 10;
+            digits -= 1;
+        }
+        if value < 0 {
+            self.write_bytes(b"-")?;
+        }
+        self.write_number(whole.min(i64::MAX as u64) as i64, 1)?;
+        if digits > 0 {
+            self.write_bytes(b".")?;
+            self.write_number(fraction as i64, digits)?;
+        }
+        Ok(())
+    }
 }
+
+/// The most decimal places `write_fixed` writes; more are taken as this many.
+pub const MOST_FIXED_PLACES: u8 = 18;

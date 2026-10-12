@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   arrays_equal,
   can_slide,
+  count_inversions,
   count_of,
+  format_fixed,
   life_step,
   line_through,
   nth_index_of,
   push_shift,
+  shuffled,
   unshift_pop,
   slide_changes,
   slide_grid,
@@ -76,5 +79,22 @@ describe("life", () => {
     const next = life_step(wrapped, 4, 1);
     expect([0, 4, 12].map((cell) => next[cell])).toEqual([1, 1, 1]);
     expect(next.filter((cell) => cell !== 0)).toHaveLength(3);
+  });
+});
+
+describe("numbers and puzzles", () => {
+  it("formats fixed-point numbers", () => {
+    expect(format_fixed(1250, 3)).toBe("1.250");
+    expect(format_fixed(1250, 3, true)).toBe("1.25");
+    expect(format_fixed(-50, 2)).toBe("-0.50");
+    expect(format_fixed(3_000_000, 6, true)).toBe("3");
+    expect(format_fixed(7, 0)).toBe("7");
+  });
+
+  it("counts inversions and shuffles only the places asked for", () => {
+    expect(count_inversions([3, 1, 2])).toBe(2);
+    const result = shuffled([1, 2, 3, 4, 5, 6], 1, 4);
+    expect([result[0], result[5]]).toEqual([1, 6]);
+    expect(result.slice(1, 5).sort()).toEqual([2, 3, 4, 5]);
   });
 });
