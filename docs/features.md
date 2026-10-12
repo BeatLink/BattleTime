@@ -118,8 +118,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   and a one-second hold picks one. Roll back puts back the firmware the last update replaced, even
   one that has confirmed itself. The menu starts the firmware by itself after 30 seconds.
 - **A recovery firmware** kept in external flash, installed from the bootloader menu. It is a small
-  build that only shows its status and takes a new firmware over Bluetooth. A firmware update can
-  also replace it.
+  build that only shows its status and takes a new firmware over Bluetooth. The companion's
+  `neotime recovery recovery.zip` replaces it over Bluetooth while the watch keeps running.
 - **The side button stops a stuck watch.** The firmware feeds the watchdog only while the button
   is up, so holding it restarts the watch.
 - **Status on screen.** The firmware, the recovery firmware, the bootloader and the bootloader

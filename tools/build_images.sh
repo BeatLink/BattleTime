@@ -18,6 +18,7 @@ python3 -I tools/package_dfu.py "$dist/firmware.bin" "$dist/firmware.zip"
 
 echo "recovery firmware (the status page, Bluetooth and updates, without the shell)"
 (cd firmware && cargo objcopy -q --release --features recovery -- -O binary "../$dist/recovery.bin")
+python3 -I tools/package_dfu.py "$dist/recovery.bin" "$dist/recovery.zip"
 
 echo "rehearsal (an app for wasp-os that writes no flash)"
 (cd firmware && cargo objcopy -q --release --features wasp-os-rehearsal -- -O binary "../$dist/rehearsal-under-wasp-os.bin")

@@ -52,7 +52,9 @@ supported".
 
 NeoTime's one addition is an image type for the recovery slot: `START_DFU` with type `0x08` (the
 standard types are 1, 2 and 4) sends the image to `RECOVERY_FIRMWARE` instead of the update slot.
-Companion apps never send it; `tools/` will.
+The companion's command line tool sends it with `neotime recovery dist/recovery.zip`, which
+`tools/build_images.sh` packages; the running firmware stores the image and restarts, with nothing
+swapped, and the bootloader menu's Install recovery puts it in when it is needed.
 
 `neotime-dfu` is the state machine, with no Bluetooth in it, so its tests drive a whole update
 through it against fake receivers. The `trouble` feature adds the GATT service definition the
