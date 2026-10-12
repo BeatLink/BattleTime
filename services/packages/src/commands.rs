@@ -10,7 +10,7 @@ use littlefs_rust::{Filesystem, Storage};
 use neotime_runtime::AppKind;
 use serde::Deserialize;
 
-use crate::{library::LibraryError, PackageError, Packages};
+use crate::{library::LibraryError, Packages};
 
 /// Where the phone puts a new shared library before `install_library`.
 pub const LIBRARY_UPLOAD_PATH: &str = "/resources/shared.ntlib";
@@ -22,9 +22,9 @@ struct Command<'line> {
     on: Option<bool>,
 }
 
-/// Copies a checked library into internal flash; the firmware gives it the flash controller.
+/// Copies a library file into internal flash and checks it there; the firmware gives it the flash controller.
 pub trait LibraryInstaller {
-    fn install(&mut self, image: &[u8]) -> Result<(), LibraryError>;
+    fn install<S: Storage>(&mut self, files: &Filesystem<S>, path: &str) -> Result<(), LibraryError>;
 }
 
 /// What a command did, beyond its reply, that the shell should hear about.
@@ -56,11 +56,7 @@ pub fn handle_command<S: Storage>(
             .set_enabled(id, command.on.unwrap_or(true))
             .map(|_| Change::Apps),
         ("install_library", _) => {
-            let result = files
-                .read_to_vec(LIBRARY_UPLOAD_PATH)
-                .map_err(|_| LibraryError::Image(PackageError::NotInstalled))
-                .and_then(|image| library.install(&image));
-            return match result {
+            return match library.install(files, LIBRARY_UPLOAD_PATH) {
                 Ok(()) => (ok_reply(name), Change::Library),
                 Err(error) => (error_reply(name, error.describe()), Change::None),
             };
@@ -162,6 +158,17 @@ mod tests {
         files
     }
 
+    fn big_file_system() -> Filesystem<RamStorage> {
+        let mut storage = RamStorage::new(4096, 128);
+        let config = Config::new(4096, 128);
+        Filesystem::format(&mut storage, &config).unwrap();
+        let files = Filesystem::mount(storage, config)
+            .map_err(|(error, _)| error)
+            .unwrap();
+        files.mkdir("/resources").unwrap();
+        files
+    }
+
     fn put_app(files: &Filesystem<RamStorage>, id: &str, name: &str, kind: AppKind) {
         files.mkdir(&app_folder(id)).unwrap();
         files
@@ -224,8 +231,11 @@ mod tests {
     struct Installer(FakeInternalFlash);
 
     impl LibraryInstaller for Installer {
-        fn install(&mut self, image: &[u8]) -> Result<(), LibraryError> {
-            library::install_library(&mut self.0, image)
+        fn install<S: Storage>(&mut self, files: &Filesystem<S>, path: &str) -> Result<(), LibraryError> {
+            library::install_library_from_file(&mut self.0, files, path, |flash, length| {
+                let start = (SHARED_LIBRARY.start + library::LIBRARY_HEADER_BYTES) as usize;
+                crate::check_library_image(&flash.memory[start..start + length as usize])
+            })
         }
     }
 
@@ -321,23 +331,56 @@ mod tests {
 
     #[test]
     fn a_library_too_large_for_the_region_is_refused_before_any_erase() {
-        let mut flash = FakeInternalFlash::new();
-        let mut writer = ImageWriter::new("shared", "Shared", AppKind::Library, 1);
-        let pixels: Vec<u16> = (0..(library::MOST_LIBRARY_BYTES / 2 + 16) as u16)
-            .map(|_| 255)
-            .collect();
+        let files = big_file_system();
+        files
+            .write_file(
+                LIBRARY_UPLOAD_PATH,
+                &std::vec![0; library::MOST_LIBRARY_BYTES as usize + 1],
+            )
+            .unwrap();
+        let mut installer = Installer(FakeInternalFlash::new());
+        assert_eq!(
+            installer.install(&files, LIBRARY_UPLOAD_PATH),
+            Err(LibraryError::TooLarge)
+        );
+        assert!(installer.0.erased.is_empty());
+    }
+
+    #[test]
+    fn a_library_failing_its_checks_in_place_gets_no_header() {
+        let files = file_system();
+        let mut image = ImageWriter::new("shared", "Shared library", AppKind::Library, 1).build();
+        let last = image.len() - 1;
+        image[last] ^= 0xFF;
+        files.write_file(LIBRARY_UPLOAD_PATH, &image).unwrap();
+        let mut installer = Installer(FakeInternalFlash::new());
+
+        let result = installer.install(&files, LIBRARY_UPLOAD_PATH);
+
+        assert!(matches!(result, Err(LibraryError::Image(_))));
+        let region = &installer.0.memory[SHARED_LIBRARY.start as usize..];
+        assert_eq!(library::installed_library(region), None);
+    }
+
+    #[test]
+    fn a_library_larger_than_one_copy_piece_arrives_whole() {
+        let files = big_file_system();
+        let mut writer = ImageWriter::new("shared", "Shared library", AppKind::Library, 1);
+        let pixels: Vec<u16> = (0..3000).map(|index| (index % 251) as u16).collect();
         writer.image_resource(
             neotime_runtime::resources::ImageFormat::Mask,
-            pixels.len() as u16,
-            1,
+            50,
+            60,
             &pixels,
         );
-        let result = library::install_library(&mut flash, &writer.build());
-        assert!(matches!(
-            result,
-            Err(LibraryError::TooLarge) | Err(LibraryError::Image(_))
-        ));
-        assert!(flash.erased.is_empty());
+        let image = writer.build();
+        files.write_file(LIBRARY_UPLOAD_PATH, &image).unwrap();
+        let mut installer = Installer(FakeInternalFlash::new());
+
+        installer.install(&files, LIBRARY_UPLOAD_PATH).unwrap();
+
+        let region = &installer.0.memory[SHARED_LIBRARY.start as usize..];
+        assert_eq!(library::installed_library(region), Some(&image[..]));
     }
 
     #[test]
@@ -351,7 +394,7 @@ mod tests {
         for error in [
             LibraryError::TooLarge,
             LibraryError::Flash,
-            LibraryError::Image(PackageError::BadId),
+            LibraryError::Image(crate::PackageError::BadId),
         ] {
             assert!(!error.describe().to_string().is_empty());
         }

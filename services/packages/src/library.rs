@@ -5,9 +5,10 @@
 //! region is ever erased or written.
 
 use embedded_storage::nor_flash::NorFlash;
+use littlefs_rust::{Filesystem, OpenFlags, Storage};
 use neotime_boot::{PAGE_SIZE, SHARED_LIBRARY};
 
-use crate::{check_library_image, PackageError};
+use crate::PackageError;
 
 /// Marks the start of an installed library.
 pub const LIBRARY_MAGIC: [u8; 4] = *b"NTLB";
@@ -41,26 +42,52 @@ pub fn installed_library(region: &[u8]) -> Option<&[u8]> {
     region.get(LIBRARY_HEADER_BYTES as usize..LIBRARY_HEADER_BYTES as usize + length)
 }
 
-/// Checks a library image, then erases just the pages it needs in the region and writes it there.
-/// `flash` addresses the whole internal flash, as the chip's flash controller does.
-pub fn install_library<Flash: NorFlash>(flash: &mut Flash, image: &[u8]) -> Result<(), LibraryError> {
-    check_library_image(image).map_err(LibraryError::Image)?;
-    if image.len() as u32 > MOST_LIBRARY_BYTES {
+/// How much of the file is copied at a time, so the library never has to fit in RAM.
+const COPY_BYTES: usize = 256;
+
+/// Copies a shared library from a file into the region in pieces, checks it where it now lies, and
+/// writes the header only if it passes. Only the pages it needs inside the region are erased.
+/// `flash` addresses the whole internal flash. `check_in_place` is given the image's length and must
+/// check the bytes now at `SHARED_LIBRARY.start + LIBRARY_HEADER_BYTES`; on the watch it reads them
+/// straight from the memory-mapped flash.
+pub fn install_library_from_file<S: Storage, Flash: NorFlash>(
+    flash: &mut Flash,
+    files: &Filesystem<S>,
+    path: &str,
+    check_in_place: impl FnOnce(&mut Flash, u32) -> Result<(), PackageError>,
+) -> Result<(), LibraryError> {
+    let missing = LibraryError::Image(PackageError::NotInstalled);
+    let file = files.open(path, OpenFlags::READ).map_err(|_| missing)?;
+    let length = file.size();
+    if length > MOST_LIBRARY_BYTES {
         return Err(LibraryError::TooLarge);
     }
-    let total = LIBRARY_HEADER_BYTES + image.len() as u32;
-    let erase_end = SHARED_LIBRARY.start + total.div_ceil(PAGE_SIZE) * PAGE_SIZE;
+    let erase_end = SHARED_LIBRARY.start + (LIBRARY_HEADER_BYTES + length).div_ceil(PAGE_SIZE) * PAGE_SIZE;
     debug_assert!(erase_end <= SHARED_LIBRARY.end());
     flash
         .erase(SHARED_LIBRARY.start, erase_end)
         .map_err(|_| LibraryError::Flash)?;
 
-    // The image first and the header last, so a cut in the middle leaves no header and no library.
-    let image_start = SHARED_LIBRARY.start + LIBRARY_HEADER_BYTES;
-    write_padded(flash, image_start, image)?;
+    let mut address = SHARED_LIBRARY.start + LIBRARY_HEADER_BYTES;
+    let mut piece = [0xFF; COPY_BYTES];
+    loop {
+        let read = file.read(&mut piece).map_err(|_| LibraryError::Flash)? as usize;
+        if read == 0 {
+            break;
+        }
+        write_padded(flash, address, &piece[..read])?;
+        address += read as u32;
+    }
+    drop(file);
+    if address - SHARED_LIBRARY.start - LIBRARY_HEADER_BYTES != length {
+        return Err(LibraryError::Flash);
+    }
+
+    // The header goes last, so a library that fails its checks or is cut short is never found.
+    check_in_place(flash, length).map_err(LibraryError::Image)?;
     let mut header = [0; LIBRARY_HEADER_BYTES as usize];
     header[0..4].copy_from_slice(&LIBRARY_MAGIC);
-    header[4..8].copy_from_slice(&(image.len() as u32).to_le_bytes());
+    header[4..8].copy_from_slice(&length.to_le_bytes());
     flash
         .write(SHARED_LIBRARY.start, &header)
         .map_err(|_| LibraryError::Flash)
