@@ -288,6 +288,12 @@ Recovery works on the watch as well. Holding the button reset the watch into the
 buzzed after five more seconds. It swapped in the recovery firmware, which started, and that
 firmware confirmed itself after its first Bluetooth exchange.
 
+Rollback works on the watch too. On 2026-10-12 a firmware was sent over a confirmed one and never
+connected to, so it stayed on trial. Holding the button reset the watch, and letting go as soon as
+the bootloader showed "Keep holding for recovery firmware" made it swap the confirmed firmware
+back, which started on the red "Update failed" page. Holding on past that text installs the
+recovery firmware instead.
+
 ## Proving it on the emulator
 
 The emulator (`PineTimeEmulator/`, Renode) models the chip's flash controller, the external flash

@@ -80,8 +80,6 @@ See [bluetooth.md](bluetooth.md) for the details of each.
 See [updates.md](updates.md). The reloader moved a watch from wasp-os onto NeoTime, and an update
 over Bluetooth and the button-hold recovery have both worked on that watch.
 
-- [ ] **Roll back a firmware on the watch.** A firmware that never confirms is put back at the next
-  reset in the emulator; it has not been tried on a watch.
 - [ ] **Check why wasp-os's update mode gives way to the reloader** about 4 seconds after the
   button escape in the emulator, with no reset between. Its advertising never times out, so this may
   be the emulator's SoftDevice; if a watch does the same, the escape leaves the reloader running.
