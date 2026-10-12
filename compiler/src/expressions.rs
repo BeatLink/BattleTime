@@ -64,6 +64,7 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
         "utc_offset" => (SystemValue::UtcOffset, Type::NUMBER),
         "battery_percent" => (SystemValue::BatteryPercent, Type::NUMBER),
         "is_charging" => (SystemValue::IsCharging, Type::BOOL),
+        "battery_millivolts" => (SystemValue::BatteryMillivolts, Type::NUMBER),
         "steps_today" => (SystemValue::StepsToday, Type::NUMBER),
         "heart_rate" => (SystemValue::HeartRate, Type::NUMBER),
         "heart_rate_measured_at" => (SystemValue::HeartRateMeasuredAt, instant),

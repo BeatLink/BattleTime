@@ -1,0 +1,21 @@
+# The battery app shows the charge, its state and the voltage, and warns to charge below ten percent.
+open app battery
+expect text "87%"
+expect text "Discharging"
+expect text "4.05 volts"
+
+set battery_percent 9
+set battery_millivolts 3640
+expect text "Battery low"
+expect text "Charge the watch"
+
+set is_charging true
+expect text "Charging"
+expect text "3.64 volts"
+expect no text "Charge the watch"
+
+set is_charging false
+set battery_percent 100
+set battery_millivolts 4180
+expect text "Fully charged"
+expect no failures

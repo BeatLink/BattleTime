@@ -2203,6 +2203,10 @@ fn every_system_value_has_a_bit_in_the_mask_and_related_values_share_one() {
         SystemValue::NavigationInstruction.bit()
     );
     assert_ne!(SystemValue::MusicTrack.bit(), SystemValue::BatteryPercent.bit());
+    assert_eq!(
+        SystemValue::BatteryMillivolts.bit(),
+        SystemValue::BatteryPercent.bit()
+    );
 }
 
 // ============================================================================

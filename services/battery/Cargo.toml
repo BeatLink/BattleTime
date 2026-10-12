@@ -1,0 +1,7 @@
+[package]
+name = "neotime-battery"
+version = "0.1.0"
+edition = "2021"
+description = "The battery's charge from its voltage and charger pins: smoothing, the charge curve and when to alert"
+license.workspace = true
+publish = false

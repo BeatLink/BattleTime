@@ -86,6 +86,9 @@ export const battery_percent = signal(80);
 
 export const is_charging = signal(false);
 
+/** The battery's smoothed voltage, in millivolts. */
+export const battery_millivolts = signal(3900);
+
 /** Steps since local midnight. */
 export const steps_today = signal(0);
 

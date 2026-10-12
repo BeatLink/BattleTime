@@ -1120,6 +1120,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-battery"
+version = "0.1.0"
+
+[[package]]
 name = "neotime-blefs"
 version = "0.1.0"
 dependencies = [

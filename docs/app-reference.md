@@ -17,8 +17,9 @@ time.
 |---|---|---|
 | `now` | `Instant` | The current time. A binding that reads it redraws as often as its format shows, such as once a minute for `HH:MM`. |
 | `utc_offset` | `Duration` | The local time zone's offset, set by the phone. |
-| `battery_percent` | `Int` | The battery charge, 0 to 100. |
-| `is_charging` | `Bool` | Whether the watch is on its charger. |
+| `battery_percent` | `Int` | The battery charge, 0 to 100. It only rises on the charger and only falls off it, stays at 99 while charging and reads 100 once the battery is full. |
+| `is_charging` | `Bool` | Whether the watch is on its charger and still charging; false once the battery is full. |
+| `battery_millivolts` | `Int` | The battery's voltage in millivolts, smoothed over the last few minutes' readings. |
 | `steps_today` | `Int` | Steps since local midnight. |
 | `heart_rate` | `Int` | The last heart rate measured, in beats per minute, or 0 if none. |
 | `heart_rate_measured_at` | `Instant` | When `heart_rate` was measured. |

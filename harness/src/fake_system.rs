@@ -120,6 +120,7 @@ impl FakeSystem {
         use SystemValue::*;
         let starting_values = [
             (BatteryPercent, 87),
+            (BatteryMillivolts, 4056),
             (StepsToday, 4321),
             (StepGoal, 10_000),
             (Brightness, 2),

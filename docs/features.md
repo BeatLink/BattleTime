@@ -32,7 +32,18 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Step counting.** The accelerometer counts today's steps for the steps app and faces.
 - **Shake to roll the dice,** and live accelerometer readings for apps such as motion and level.
   The accelerometer is read for these only while such an app is open and the screen is on.
-- **Battery charge and charging state.**
+- **A steady battery charge.** The voltage is smoothed and read along InfiniTime's measured curve.
+  The charge only rises on the charger and only falls off it, stops at 99 % while charging, and
+  reads 100 % and not charging once the charger stays connected after the battery is full.
+- **Battery screen.** The `battery` app shows the charge in a ring, whether the battery is
+  charging, fully charged, discharging, low or critical, and its voltage, with a bar that fills
+  while charging.
+- **Charging screen and low battery warning.** Plugging the charger in or taking it off lights the
+  screen on the battery app, and so does the charge falling below 10 % off the charger, once until
+  the next charge, when the app warns to charge the watch. Do not disturb keeps the low warning
+  dark, and an app that keeps the screen on, such as a ringing alarm, stays in front. The watch
+  goes back to what was open when the screen sleeps or on the button. Apps hear the same changes
+  through their `battery` subscriptions while they are open.
 - **The time from the phone,** set through the Bluetooth Current Time service. A phone can read the
   watch's time and time zone back from the same service.
 - **The battery level on the phone,** through the standard Bluetooth Battery service, updated as it

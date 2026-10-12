@@ -148,6 +148,7 @@ impl SystemValues for SimulatedSystem {
         match value {
             Now => now,
             BatteryPercent => 87,
+            BatteryMillivolts => 4056,
             StepsToday => 4321,
             Brightness => self.settings.get(Setting::Brightness) as Value,
             HeartRate => 64,

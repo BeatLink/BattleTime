@@ -44,6 +44,7 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 | `calculator` | InfiniTime Calculator, wasp-os calculator | Fixed point in millionths, up to 15 digits. wasp-os's brackets and powers are left out. |
 | `dice` | InfiniTime Dice | 1 to 9 dice of 2 to 99 sides; shake to roll. |
 | `flashlight` | InfiniTime FlashLight, wasp-os flashlight | Three brightness levels and a red light. |
+| `battery` | InfiniTime BatteryInfo, PinetimeLite charging and low battery screens | The charge in a ring, charging, full, low or critical, and the voltage; a bar that fills while charging, and a warning to charge below 10 %. The watch opens it when the charger is plugged in or out, or the charge goes low. |
 | `phone-finder` | wasp-os phone_finder | Rings the phone. It cannot yet stop the ring from the watch. |
 | `launcher` | NeoTime | The list of installed apps, each with its icon and name; a tap opens it. Any other launcher can replace it. |
 

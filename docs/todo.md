@@ -360,15 +360,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **Daily step goal** and a steps app.
 - [ ] **Motion service over BLE,** sending steps and raw x, y and z to the phone.
 
-### Battery
-
-- [ ] **A steady battery reading.** Show 100 % and not charging once the charger stays connected
-  but stops charging, let the percentage only rise on the charger and only fall on battery, cap it
-  at 99 % while charging, and use InfiniTime's measured voltage curve. Keep the voltage for a
-  battery screen.
-- [ ] **A battery screen** with the charge, the voltage and whether it is charging, full, low or
-  critical, as InfiniTime's battery info shows.
-
 ### Clock
 
 - [ ] **Time zone and summer time.** The clock holds local time with an offset of 0. Keep UTC plus
@@ -536,7 +527,7 @@ InfiniTime has these and NeoTime has nothing for them yet:
 | Clock | the Current Time client |
 | Notifications | Alert Notification service and client, Immediate Alert, notification list, calls |
 | Other BLE services | Device Information, Music, Navigation, Simple Weather |
-| System screens | System Info, Battery Info, Notifications, the pass key, firmware validation |
+| System screens | System Info, Notifications, the pass key, firmware validation |
 
 ## Gaps against the wasp-os fork
 
@@ -642,12 +633,6 @@ only by its Gadgetbridge fork and web app, so they are not worth copying.
   [app-reference.md](app-reference.md) already promises: the time and battery at the top, then
   brightness, the flashlight, a switch that silences the vibration for notifications, and a
   shortcut to settings.
-
-### Battery
-
-- [ ] **Charging screen.** Wake when the charger is plugged in or taken off, and show the charge
-  with a filling bar until the screen times out.
-- [ ] **Low battery alert.** Below 10 % and not charging, wake once and show a warning screen.
 
 ### Notifications
 

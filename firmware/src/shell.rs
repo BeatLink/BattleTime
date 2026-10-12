@@ -9,7 +9,9 @@
 //! The watch buzzes on the hour or half hour when the chimes setting asks, and for each notification
 //! from the phone, which also goes to the open app. Do not disturb silences all of it, and every app
 //! vibration but the alarm pattern. The accelerometer is read only while the screen is on and the
-//! open app subscribes to acceleration or shakes.
+//! open app subscribes to acceleration or shakes. Plugging the charger in or out, or the charge going
+//! low, lights the screen on the battery app, which goes back to what was open when the screen
+//! sleeps or the wearer goes back.
 
 extern crate alloc;
 
@@ -27,9 +29,10 @@ use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_app_host::{
     haptics::{self, Vibration},
-    motion as app_motion, settings as app_settings, AppEffect, AppFailure, AppHost, EventResult, MotionKind,
-    PushedEvent, System, Touch, LARGEST_SAVED_STATE_BYTES,
+    motion as app_motion, settings as app_settings, AppEffect, AppFailure, AppHost, BatteryChange,
+    EventResult, MotionKind, PushedEvent, System, Touch, LARGEST_SAVED_STATE_BYTES,
 };
+use neotime_battery::BatteryEvent;
 use neotime_companion::SettingsChange;
 use neotime_runtime::{
     events::{ButtonPress, SwipeDirection},
@@ -147,6 +150,7 @@ impl SystemValues for WatchSystem {
             SystemValue::Now => clock::now(),
             SystemValue::BatteryPercent => battery::percent() as Value,
             SystemValue::IsCharging => battery::is_charging() as Value,
+            SystemValue::BatteryMillivolts => battery::millivolts() as Value,
             SystemValue::StepsToday => motion::steps_today() as Value,
             SystemValue::IsBluetoothEnabled => 1,
             SystemValue::IsPhoneConnected => phone::is_connected() as Value,
@@ -264,11 +268,14 @@ struct Shell {
     /// The listed apps' icons, held only while the launcher is open.
     launcher_icons: Option<LauncherIcons>,
     library: Option<&'static [u8]>,
+    /// While the battery app shows because of a battery event, what was open before it.
+    battery_screen_returns_to: Option<Showing>,
 }
 
 impl Shell {
     /// Closes what is open and opens another; the face is the fallback when an image will not open.
     fn open(&mut self, showing: Showing) {
+        self.battery_screen_returns_to = None;
         let now = clock::now();
         if let Some(mut host) = self.host.take() {
             host.close(now, &mut self.system);
@@ -441,6 +448,10 @@ impl Shell {
     }
 
     fn go_back(&mut self) {
+        if let Some(showing) = self.battery_screen_returns_to {
+            self.open(showing);
+            return;
+        }
         match self.showing {
             Showing::Face => {}
             Showing::Launcher => self.open(Showing::Face),
@@ -473,10 +484,10 @@ impl Shell {
 
     fn system_values_changed(&mut self, changed: u32) {
         self.settings_changed();
-        let Some(host) = &mut self.host else {
-            return;
-        };
-        host.report_system_value_changes(changed, clock::now(), &mut self.system);
+        if let Some(host) = &mut self.host {
+            host.report_system_value_changes(changed, clock::now(), &mut self.system);
+        }
+        self.take_battery_events();
     }
 
     /// Buzzes for a phone notification, and passes sensor readings and notifications to the open app.
@@ -517,6 +528,9 @@ impl Shell {
 
     /// Turns the backlight off and puts the display to sleep, or dims both for an always-on screen.
     fn turn_screen_off(&mut self) {
+        if let Some(showing) = self.battery_screen_returns_to {
+            self.open(showing);
+        }
         self.lit = false;
         self.dimmed = settings::current().is_on(Setting::AlwaysOnScreen);
         if self.dimmed {
@@ -611,6 +625,59 @@ impl Shell {
     }
 }
 
+// ============================================================================
+// The battery screen
+// ============================================================================
+
+/// The app shown when the charger is plugged in or out, or the charge goes low.
+const BATTERY_APP_ID: &str = "battery";
+
+/// The app `battery` subscription's name for a battery event.
+fn battery_change(event: BatteryEvent) -> BatteryChange {
+    match event {
+        BatteryEvent::Low => BatteryChange::Low,
+        BatteryEvent::ChargingStarts => BatteryChange::ChargingStarts,
+        BatteryEvent::ChargingStops => BatteryChange::ChargingStops,
+        BatteryEvent::ChargingCompletes => BatteryChange::ChargingCompletes,
+    }
+}
+
+impl Shell {
+    /// Hands the battery's events to the open app, and lights the battery app for those that wake the screen.
+    fn take_battery_events(&mut self) {
+        while let Ok(event) = battery::EVENTS.try_receive() {
+            if let Some(host) = &mut self.host {
+                let change = battery_change(event);
+                let percent = battery::percent() as Value;
+                host.deliver(
+                    PushedEvent::Battery { change, percent },
+                    clock::now(),
+                    &mut self.system,
+                );
+            }
+            if event.wakes_screen(is_do_not_disturb()) {
+                self.show_battery_screen();
+            }
+        }
+    }
+
+    /// Opens the battery app over what is open, unless that app keeps the screen on, and turns the screen on.
+    fn show_battery_screen(&mut self) {
+        let place = self.system.installed.place_of(BATTERY_APP_ID);
+        if let Some(place) = place.filter(|_| !self.system.keep_screen_on) {
+            let battery_app = Showing::App(place);
+            let returns_to = self.battery_screen_returns_to.unwrap_or(self.showing);
+            if self.showing != battery_app {
+                self.open(battery_app);
+            }
+            if self.showing == battery_app && returns_to != battery_app {
+                self.battery_screen_returns_to = Some(returns_to);
+            }
+        }
+        self.system.screen_request = Some(true);
+    }
+}
+
 /// Gives the app host its text fonts from the installed shared library, which holds them.
 // Kept out of the shell task, so the library's parse never adds to the task's stack frame.
 #[inline(never)]
@@ -659,6 +726,7 @@ pub async fn run_shell(
         image: None,
         launcher_icons: None,
         library: apps::shared_library(),
+        battery_screen_returns_to: None,
     };
     shell.open(Showing::Face);
     let mut last_input = Instant::now();

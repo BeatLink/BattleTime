@@ -614,9 +614,25 @@ watch face, the launcher and the apps through `neotime-app-host`:
   the shell shows `help.rs`: the time and how to install one. `packages::CHANGED` makes the shell read
   everything again after an install.
 
-- **Battery.** `battery.rs` reads the battery's voltage through the SAADC once a minute, and at
-  once when power is plugged in or out, and turns it into a charge along a lithium discharge
-  curve. P0.19 says power is present and P0.12 that it is charging.
+- **Battery.** `battery.rs` reads the battery's voltage through the SAADC once a minute, and half
+  a second after power is plugged in or out, so both charger pins have settled. P0.19 says power
+  is present and P0.12 that it is charging. `neotime-battery` (`services/battery`) turns each
+  reading into what the watch shows: it moves a smoothed voltage a quarter of the way to each
+  reading, reads the charge along InfiniTime's measured curve, lets the charge only rise on the
+  charger and only fall off it, caps it at 99 % while charging, and calls the battery full, at
+  100 % and not charging, once two readings in a row find power with the charge pin idle, until the
+  charger is taken off. Apps read the charge, `is_charging` and `battery_millivolts`.
+- **Battery screen.** Each reading also gives events: the charger plugged in (`starts`) or taken
+  off (`stops`), the battery full (`completes`), and the charge below 10 % off the charger
+  (`low`), once until the charger is next connected, or at start-up when it starts that low.
+  They queue in `battery::EVENTS`, and the shell takes them when the battery values change. It
+  hands each to the open app's `battery` subscriptions, and for the charger and, outside do not
+  disturb, the low warning, it opens the `battery` app over what is open and lights the screen. An app that keeps the screen
+  on, such as a ringing alarm, stays in front, and the screen only lights.
+  The app is an ordinary installed app rather than a firmware pop-up, so it costs no firmware
+  flash and can be replaced; without it the screen just lights on what is open. When the screen
+  sleeps, or the button or a swipe right goes back, the shell reopens what was open before;
+  opening anything else forgets it.
 
 Not done yet: heart rate, the notification count, music and weather read as 0 or empty; the touch panel stays
 awake while the screen is off.

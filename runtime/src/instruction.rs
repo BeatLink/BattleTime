@@ -72,6 +72,8 @@ pub enum SystemValue {
     Chimes,
     /// The number of the preset theme in use, in `PRESET_THEMES` order, or -1 for colours of the user's own.
     ThemePreset,
+    /// The battery's smoothed voltage in millivolts, which changes with `battery_percent`.
+    BatteryMillivolts,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -83,7 +85,7 @@ const INSTALLED_APPS_BIT: u32 = 21;
 const SETTINGS_BIT: u32 = 22;
 
 impl SystemValue {
-    pub const COUNT: usize = 47;
+    pub const COUNT: usize = 48;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -135,6 +137,7 @@ impl SystemValue {
             44 => AlwaysOnScreen,
             45 => Chimes,
             46 => ThemePreset,
+            47 => BatteryMillivolts,
             _ => return None,
         })
     }
@@ -144,6 +147,7 @@ impl SystemValue {
         use SystemValue::*;
         let group = match self {
             HeartRate | HeartRateMeasuredAt => HeartRate as u32,
+            BatteryPercent | BatteryMillivolts => BatteryPercent as u32,
             WeatherTemperature
             | WeatherCondition
             | WeatherLow

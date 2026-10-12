@@ -4,6 +4,7 @@
 import { act, cleanup, fireEvent, render } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  battery_millivolts,
   battery_percent,
   brightness,
   current_music,
@@ -114,6 +115,7 @@ export function set_fake_system_values() {
   const now = START_TIME_IN_MILLISECONDS;
   utc_offset.value = 0;
   battery_percent.value = 87;
+  battery_millivolts.value = 4056;
   is_charging.value = false;
   steps_today.value = 4321;
   heart_rate.value = 64;

@@ -37,11 +37,11 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 68.4 KB | 40.2 KB |
+| Firmware (start-up, shell, tasks) | 69.5 KB | 40.2 KB |
 | App host (with `neotime-ui` and rlvgl) | 61.3 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 42.2 KB | 42.2 KB |
 | App runtime | 23.9 KB | 0.1 KB |
-| core, alloc and compiler builtins | 22.9 KB | 10.4 KB |
+| core, alloc and compiler builtins | 22.9 KB | 10.5 KB |
 | Storage (littlefs) | 21.5 KB | 20.9 KB |
 | Embassy, allocator and Cortex-M | 17.3 KB | 15.8 KB |
 | Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
@@ -50,9 +50,9 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Packages | 2.7 KB | 2.0 KB |
 | Updates (DFU) | 2.4 KB | 2.4 KB |
 | BLEFS file service | 2.1 KB | 2.2 KB |
-| Other constants and padding | 15.4 KB | 8.2 KB |
-| **Used** | **304.4 KB** | **150.6 KB** |
-| Free of 400 KB | 95.6 KB | 249.4 KB |
+| Other constants and padding | 15.5 KB | 8.2 KB |
+| **Used** | **305.4 KB** | **150.7 KB** |
+| Free of 400 KB | 94.6 KB | 249.3 KB |
 <!-- /measure_memory:firmware -->
 
 The accelerometer's configuration is the largest piece of data left in it; each watch could build
@@ -166,14 +166,14 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (storage 16 KB, UI 21 KB; the recovery build has no UI heap) | 37,888 B | 16,384 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 11,832 B | 9,248 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 11,894 B | 9,248 B |
 | Bluetooth controller | 2,525 B | 2,525 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | BLEFS file service | 122 B | 122 B |
 | App host (with `neotime-ui` and rlvgl) | 56 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **52,840 B** | **28,680 B** |
-| Left for the stack | 12,680 B | 36,840 B |
+| **Static RAM** (`.data` and `.bss`) | **52,904 B** | **28,680 B** |
+| Left for the stack | 12,616 B | 36,840 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
