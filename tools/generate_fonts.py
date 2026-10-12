@@ -28,8 +28,8 @@ ROOT = Path(__file__).resolve().parent.parent
 SOURCES = ROOT / "third_party" / "fonts"
 OUTPUT = ROOT / "app-host" / "fonts"
 
-# Characters the ports show beyond plain ASCII: degrees, the calculator's signs and the weather's ticks and crosses.
-EXTRA_TEXT = "°×÷✓✕"
+# Characters the ports show beyond plain ASCII: degrees, the calculator's signs and keys, and the weather's ticks and crosses.
+EXTRA_TEXT = "°×÷±←✓✕"
 TEXT = "".join(chr(code) for code in range(0x20, 0x7F)) + EXTRA_TEXT
 CLOCK = " 0123456789:-.+%°AMP"
 DIGITS = " 0123456789:"
