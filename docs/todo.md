@@ -89,8 +89,9 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 
 ## UI toolkit
 
-- [ ] **Measure the UI heap.** The memory map gives `rlvgl` a 14 KB heap, but that is a guess. Count
-  what a typical screen allocates, then update the "UI heap" row in
+- [ ] **Measure the UI heap on the watch.** It is 20 KB; so far only the node size and the
+  stopwatch demo's screen are measured, on the computer. Count what a typical screen allocates on
+  the watch, then update the "UI heap" row in
   [memory-map.md](memory-map.md) and the size in `tools/draw_memory_maps.py`, and rerun the script.
 - [ ] **Text edges over colour.** The display cannot be read back, so the soft edges of letters are
   mixed with one set background colour. Text on a coloured button gets dark fringes. A small line
@@ -129,6 +130,33 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   reused least recently used first. Each slot is filled by one DMA read of a whole resource, such
   as a font or picture from a resource package or a handler from `/apps`, so each costs one SPI
   transaction instead of many small reads.
+- [ ] **Fonts and icons into the shared library.** The fonts (47,919 B) and icons (26 KB) are
+  still `include_bytes!` statics in the firmware. Read them from the library region by address,
+  through the same path as `set_library`. That fills about 74 KB of the library's 92 KB and costs
+  no RAM, since both regions are read in place.
+- [ ] **Built-in face and apps out to `/apps`.** They take 29 KB of the firmware. They are apps,
+  so they belong on the external flash, not in the shared library.
+- [ ] **Run app bytecode in place.** An app's code is copied from `/apps` into RAM when it opens.
+  Copying it to internal flash on install and running it from there would save most of the 6 KB
+  apps budget.
+- [ ] **Resize the firmware slot and the shared library.** After the moves above the firmware
+  falls from 352 KB to about 240 KB, so a split such as 320 KB firmware and 172 KB library becomes
+  possible if the library fills up. The sizes are in `neotime-boot`, which the bootloader shares,
+  so do it together with the next bootloader update that is needed anyway.
+
+## RAM
+
+- [ ] **Shrink the storage heap.** It is 16 KB, but littlefs needs about 1.8 KB with two files
+  open, and the rehearsal build runs on 4 KB. Measure the peak on the watch, including file
+  transfer over Bluetooth, then cut it down; up to 12 KB could be freed.
+- [ ] **Smaller Bluetooth buffers.** Fewer and smaller packets in the pool, one connection and a
+  trimmed GATT table take RAM from the 12 KB budget, at some cost to file transfer speed.
+- [ ] **Smaller widget nodes.** Each node takes 240 B of the UI heap. Narrower fields, and rare
+  fields kept outside the node, would fit more widgets or allow a smaller heap.
+- [ ] **Trim the stack.** About 15 KB is left for it and the deepest call needs 8 KB. Measure the
+  high-water mark on the watch before giving any of it away.
+- [ ] **Find large static RAM.** List `.bss` and `.data` by size with `nm --size-sort` and check
+  for oversized embassy task state or tables that should be `const`.
 
 ## Apps and faces
 
