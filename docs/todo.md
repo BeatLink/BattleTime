@@ -328,7 +328,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **Recover the I2C bus.** InfiniTime clocks SCL 16 times at start to free a bus a sensor left
   held, runs the TWIM at about 390 kHz because of the nRF52832's 400 kHz timing erratum, and resets
   the TWIM when a transfer never finishes. NeoTime runs at 400 kHz with no time limit, so a frozen
-  bus stops touch and steps for good.
+  bus stops touch and steps for good. InfiniTime also turns the TWIM off between transfers.
 - [ ] **Warn when a part fails at start.** InfiniTime shows a warning screen when the touch
   controller does not start; NeoTime shows nothing.
 - [ ] **A system info screen** showing the firmware version, which the status page and the Device
@@ -345,7 +345,8 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **The panel's power settings.** mipidsi starts the ST7789 with its defaults. InfiniTime also
   sets the lowest panel and gate voltages, a VDV value that makes the first grey above black less
   of a jump, and its own porches and frame rate. Send the same commands after `Display::new`, then
-  compare the current drawn and the dark greys on the watch.
+  compare the current drawn and the dark greys on the watch. InfiniTime also waits 120 ms between
+  sleep-in and sleep-out, as the ST7789 needs.
 - [ ] **Release the panel in sleep,** so the SPI bus can be turned off.
 - [ ] **DMA transfers,** so the CPU is free while a buffer is sent. EasyDMA reuses the buffer, so
   wait for the transfer to end before writing it again.
@@ -410,6 +411,8 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   advertises fast for 30 seconds after start or a disconnect and then about once a second, puts the
   heart rate and DFU service UUIDs and the transmit power in the advertisement, and the name in the
   scan response, which some phone apps filter on.
+- [ ] **Match InfiniTime's GAP appearance,** 0x00C2 (a watch worn on the wrist), where NeoTime
+  says Generic Watch, 0x00C0.
 - [ ] **A larger ATT MTU.** The firmware allows 64 bytes where InfiniTime asks for 256. File
   transfer, long track names and notifications need longer writes.
 
@@ -458,6 +461,9 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   InfiniTime.
 - [ ] **Bebas Neue and Teko for Infineat,** which draws its time and date in them; NeoTime
   substitutes Open Sans and JetBrains Mono.
+- [ ] **The rest of the music values.** InfiniTime's music service also carries the album, the track
+  number and total, playback speed, repeat and shuffle, and moves the position on at the playback
+  speed while a track plays. The runtime has no value for any of them.
 - [ ] **Music disc artwork.** InfiniTime's music app shows a disc that spins while a track plays.
 
 ### Simulator
@@ -472,7 +478,8 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 
 - [ ] **Deep power-down in sleep.** Put the flash chip to sleep when the watch sleeps.
 - [ ] **Use the file system:** save alarms and the BLE bond there.
-- [ ] **Resource packages:** fonts and pictures installed from a zip over BLE.
+- [ ] **Resource packages:** fonts and pictures installed from a zip over BLE, with a list of
+  obsolete files that an upgrade deletes, as InfiniTime's `resources.json` has.
 - [ ] **Report failed flash writes.** After each erase and page program, read the flash's security
   register and return an error when its erase-fail or program-fail bit is set, so littlefs moves
   the block instead of trusting it.
@@ -549,10 +556,9 @@ InfiniTime has these and NeoTime has nothing for them yet:
 |---|---|
 | Board and system loop | sleep and wake of the whole system, wake locks, a system monitor |
 | Heart rate | HRS3300 driver, PPG processing, background measuring, the Heart Rate service |
-| Battery | the Battery service |
 | Clock | the Current Time client |
 | Notifications | Alert Notification service and client, Immediate Alert, calls |
-| Other BLE services | Device Information, Music, Navigation, Simple Weather |
+| Other BLE services | Music, Navigation, Simple Weather |
 | System screens | System Info, the pass key, firmware validation |
 
 ## Gaps against the wasp-os fork
@@ -591,7 +597,8 @@ full report is
 - [ ] **Widgets:** status bar, battery meter, clock, notification bar, scroll indicator, button,
   toggle, checkbox, slider, spinner, stopwatch and confirmation view.
 - [ ] **App icons:** monochrome Font Awesome icons per app.
-- [ ] **Grid and list launchers,** chosen in settings.
+- [ ] **Grid and list launchers,** chosen in settings. InfiniTime's grid shows 6 apps a page,
+  remembers the last page, and greys out apps and faces whose resources are missing.
 
 ### Simulator
 
@@ -645,7 +652,8 @@ only by its Gadgetbridge fork and web app, so they are not worth copying.
 - [ ] **A quick settings screen** on a swipe down from the watch face, as
   [app-reference.md](app-reference.md) already promises: the time and battery at the top, then
   brightness, the flashlight, a switch that silences the vibration for notifications, and a
-  shortcut to settings.
+  shortcut to settings. InfiniTime's switch has a third mode, sleep, which also turns off the wake
+  gestures and the always-on screen.
 
 ### Notifications
 
