@@ -72,6 +72,12 @@ pub fn handle_command<S: Storage>(
     }
 }
 
+/// Answers a command this build cannot run, such as in a rehearsal with no file system.
+pub fn refuse_command(line: &[u8], message: &str) -> (String, Change) {
+    let name = serde_json_core::from_slice::<Command>(line).map_or("?", |(command, _)| command.c);
+    (error_reply(name, message), Change::None)
+}
+
 fn ok_reply(name: &str) -> String {
     let mut reply = String::new();
     let _ = writeln!(reply, "{{\"c\":\"{}\",\"ok\":1}}", escaped(name));
@@ -367,12 +373,7 @@ mod tests {
         let files = big_file_system();
         let mut writer = ImageWriter::new("shared", "Shared library", AppKind::Library, 1);
         let pixels: Vec<u16> = (0..3000).map(|index| (index % 251) as u16).collect();
-        writer.image_resource(
-            neotime_runtime::resources::ImageFormat::Mask,
-            50,
-            60,
-            &pixels,
-        );
+        writer.image_resource(neotime_runtime::resources::ImageFormat::Mask, 50, 60, &pixels);
         let image = writer.build();
         files.write_file(LIBRARY_UPLOAD_PATH, &image).unwrap();
         let mut installer = Installer(FakeInternalFlash::new());
@@ -398,6 +399,15 @@ mod tests {
         ] {
             assert!(!error.describe().to_string().is_empty());
         }
+    }
+
+    #[test]
+    fn a_refusal_names_the_command() {
+        assert_eq!(
+            refuse_command(br#"{"c":"apps"}"#, "no files").0,
+            "{\"c\":\"apps\",\"err\":\"no files\"}\n"
+        );
+        assert_eq!(refuse_command(b"junk", "no files").1, Change::None);
     }
 
     #[test]

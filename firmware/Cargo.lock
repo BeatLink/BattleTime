@@ -991,6 +991,7 @@ dependencies = [
  "neotime-dfu",
  "neotime-display",
  "neotime-external-flash",
+ "neotime-packages",
  "neotime-runtime",
  "neotime-settings",
  "neotime-storage",
@@ -1000,6 +1001,20 @@ dependencies = [
  "nrf-pac",
  "static_cell",
  "trouble-host",
+]
+
+[[package]]
+name = "neotime-packages"
+version = "0.1.0"
+dependencies = [
+ "embedded-storage",
+ "heapless 0.9.3",
+ "littlefs-rust",
+ "neotime-boot",
+ "neotime-runtime",
+ "neotime-storage",
+ "serde",
+ "serde-json-core",
 ]
 
 [[package]]

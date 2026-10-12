@@ -425,9 +425,6 @@ full report is
 - [ ] **The rest of the Gadgetbridge Bangle.js messages** in
   [companion-protocol.md](companion-protocol.md): notifications, dismissals, music, weather, find
   phone, alarms, steps, status, calls and HTTP. `settings` is served.
-- [ ] **The packages characteristic** (`6e540003`) from
-  [companion-protocol.md](companion-protocol.md), wired to `neotime-packages`, for installing apps
-  from the phone.
 - [ ] **A developer console over BLE,** to replace the fork's Python REPL for uploads, time setting
   and resets.
 

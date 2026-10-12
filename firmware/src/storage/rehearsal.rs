@@ -212,4 +212,12 @@ impl Files {
     pub fn write(&self, _path: &str, _bytes: &[u8]) -> bool {
         false
     }
+
+    /// The rehearsal keeps no apps, so every packages command is refused.
+    pub fn run_packages_command(
+        &self,
+        line: &[u8],
+    ) -> (alloc::string::String, neotime_packages::commands::Change) {
+        neotime_packages::commands::refuse_command(line, "this build keeps no apps")
+    }
 }

@@ -16,9 +16,14 @@ use embassy_time::Delay;
 use embedded_storage::nor_flash::ReadNorFlash;
 use neotime_boot::{
     is_firmware_vector_table, UpdaterNote, BOOT_STATE, FIRMWARE, FIRMWARE_UPDATE, PREVIOUS_FIRMWARE,
-    RECOVERY_FIRMWARE, VECTOR_TABLE_CHECK_SIZE,
+    RECOVERY_FIRMWARE, SHARED_LIBRARY, VECTOR_TABLE_CHECK_SIZE,
 };
 use neotime_external_flash::ExternalFlash;
+use neotime_packages::{
+    check_library_image,
+    commands::{handle_command, refuse_command, Change, LibraryInstaller},
+    library::{install_library_from_file, LibraryError, LIBRARY_HEADER_BYTES},
+};
 use neotime_storage::{prepare_file_system, FileSystem, FileSystemFlash, Preparation};
 use neotime_updates::{
     confirm_running_firmware, forget_rollback, running_firmware_is_on_trial,
@@ -124,6 +129,7 @@ pub async fn start(
     );
     let files: &'static Files = FILES.init(Files {
         file_system: prepared.ok().map(|prepared| prepared.file_system),
+        internal_flash,
     });
 
     let targets = Receivers {
@@ -251,6 +257,8 @@ pub type WatchFileSystem = FileSystem<BlockingPartition<'static, NoopRawMutex, F
 /// The mounted file system, or nothing when it would not mount; the shell and the Bluetooth task share it.
 pub struct Files {
     file_system: Option<WatchFileSystem>,
+    /// For copying the shared library into its region of the internal flash.
+    internal_flash: &'static SharedInternalFlash,
 }
 
 impl Files {
@@ -260,6 +268,14 @@ impl Files {
 
     pub fn read(&self, path: &str) -> Option<alloc::vec::Vec<u8>> {
         self.file_system.as_ref()?.read_to_vec(path).ok()
+    }
+
+    /// Runs one line from the packages characteristic, returning the reply line and what changed.
+    pub fn run_packages_command(&self, line: &[u8]) -> (alloc::string::String, Change) {
+        let Some(file_system) = &self.file_system else {
+            return refuse_command(line, "the file system is not mounted");
+        };
+        handle_command(line, file_system, &mut InternalFlashLibrary(self.internal_flash))
     }
 
     /// Writes the whole file, making its folder first; false when the file system is missing or full.
@@ -273,5 +289,30 @@ impl Files {
             }
         }
         file_system.write_file(path, bytes).is_ok()
+    }
+}
+
+// ============================================================================
+// The shared library in internal flash
+// ============================================================================
+
+/// Copies a library file into the `SHARED_LIBRARY` region and checks it where it lies, through the
+/// chip's flash controller. Each page erase stops the CPU for about 85 ms.
+struct InternalFlashLibrary(&'static SharedInternalFlash);
+
+impl LibraryInstaller for InternalFlashLibrary {
+    fn install<S: littlefs_rust::Storage>(
+        &mut self,
+        files: &littlefs_rust::Filesystem<S>,
+        path: &str,
+    ) -> Result<(), LibraryError> {
+        self.0.lock(|flash| {
+            let mut flash = flash.borrow_mut();
+            install_library_from_file(&mut *flash, files, path, |_, length| {
+                // The internal flash is mapped into the address space, so the image is read where it was written.
+                let start = (SHARED_LIBRARY.start + LIBRARY_HEADER_BYTES) as *const u8;
+                check_library_image(unsafe { core::slice::from_raw_parts(start, length as usize) })
+            })
+        })
     }
 }

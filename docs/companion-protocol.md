@@ -154,9 +154,9 @@ Service `6e540001-0000-4000-8000-4e656f54696d`, with its characteristics on the 
 | Characteristic | UUID | Use | Served |
 |---|---|---|---|
 | Diagnostics | `6e540002-…` | Read: eight little-endian `u32` counters; see [architecture.md](architecture.md). | Yes |
-| Packages | `6e540003-…` | Write and notify: one JSON command per line, as in [Packages](#packages-not-served-yet). | Not yet |
+| Packages | `6e540003-…` | Write and notify: one JSON command per line, as in [Packages](#packages-served). | Yes |
 
-### Packages (not served yet)
+### Packages (served)
 
 An app or face is sent as a file first, to `/apps/<id>/app.ntapp`, then installed with a command on
 the packages characteristic. Each command is a JSON line written to it, and each answer a JSON line

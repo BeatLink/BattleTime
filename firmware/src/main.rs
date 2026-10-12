@@ -76,6 +76,7 @@ mod shell;
 // Under wasp-os the firmware is never rolled back or installed as recovery.
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod motion;
+mod packages;
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod status;
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -521,7 +522,7 @@ fn start_screen(
 struct Server {
     dfu: LegacyDfuService,
     time: CurrentTimeService,
-    diagnostics: DiagnosticsService,
+    neotime: NeoTimeService,
     uart: NordicUartService,
     battery: BatteryService,
     file_transfer: FileTransferService,
@@ -543,14 +544,25 @@ struct NordicUartService {
     transmit: [u8; 20],
 }
 
+/// The longest packages command kept; a longer one is cut and then refused as unreadable.
+const PACKAGES_LINE_BYTES: usize = 256;
+
 /// The bytes one notification carries at the smallest MTU, 23, less the 3-byte header.
 const NOTIFICATION_BYTES: usize = 20;
 
-/// NeoTime's own service: counters from `diagnostics`, read with any GATT client.
+/// NeoTime's own service: counters from `diagnostics`, and the packages commands that install apps.
 #[gatt_service(uuid = "6e540001-0000-4000-8000-4e656f54696d")]
-struct DiagnosticsService {
+struct NeoTimeService {
     #[characteristic(uuid = "6e540002-0000-4000-8000-4e656f54696d", read)]
     counters: [u8; 32],
+    /// One JSON command per line in, one JSON reply per line out; see docs/companion-protocol.md.
+    #[characteristic(
+        uuid = "6e540003-0000-4000-8000-4e656f54696d",
+        write,
+        write_without_response,
+        notify
+    )]
+    packages: [u8; 20],
 }
 
 /// The standard Current Time service, which phones write the time to.
@@ -701,6 +713,10 @@ async fn serve_connection(
     let mut shown_kilobytes = u32::MAX;
     let mut companion_lines = LineAssembler::new();
     let mut file_transfer = FileTransfer::new(neotime_storage::BLOCK_SIZE, neotime_storage::BLOCK_COUNT);
+    // A packages command so far, on the heap since commands are short and rare.
+    let mut packages_line: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
+    // Complete packages commands, run once the write that finished them is answered.
+    let mut packages_commands: alloc::vec::Vec<alloc::vec::Vec<u8>> = alloc::vec::Vec::new();
     loop {
         // Pinned where they are made, so the connection's large future is never copied across the stack.
         let next_event = core::pin::pin!(connection.next());
@@ -749,11 +765,20 @@ async fn serve_connection(
                         if write.handle() == server.uart.receive.handle {
                             companion_lines.push(&written, read_companion_line);
                         }
+                        if write.handle() == server.neotime.packages.handle {
+                            for &byte in written.iter() {
+                                if byte == b'\n' {
+                                    packages_commands.push(core::mem::take(&mut packages_line));
+                                } else if packages_line.len() < PACKAGES_LINE_BYTES {
+                                    packages_line.push(byte);
+                                }
+                            }
+                        }
                         server.dfu.classify(write.handle())
                     }
                     GattEvent::Read(read) => {
-                        if read.handle() == server.diagnostics.counters.handle {
-                            let _ = server.set(&server.diagnostics.counters, &diagnostics::snapshot());
+                        if read.handle() == server.neotime.counters.handle {
+                            let _ = server.set(&server.neotime.counters, &diagnostics::snapshot());
                         }
                         if read.handle() == server.battery.level.handle {
                             let _ = server.set(&server.battery.level, &battery::percent());
@@ -764,6 +789,15 @@ async fn serve_connection(
                 };
                 if let Ok(reply) = event.accept() {
                     reply.send().await;
+                }
+                for command in packages_commands.drain(..) {
+                    let (reply, change) = files.run_packages_command(&command);
+                    for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
+                        let _ = server.neotime.packages.notify_raw(connection, piece, false).await;
+                    }
+                    if change != neotime_packages::commands::Change::None {
+                        packages::CHANGED.signal(change);
+                    }
                 }
                 if !*confirmed {
                     let kept = confirmation.confirm().await;

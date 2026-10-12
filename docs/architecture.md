@@ -525,6 +525,11 @@ watch face, the launcher and the apps through `neotime-app-host`:
   flash when it closes or the screen turns off, only when one changed, and put back when it opens.
 - **Battery service.** The standard Battery service (0x180F) answers a read of 0x2A19 with the
   charge `battery.rs` last measured, and notifies a subscribed phone whenever that changes.
+- **Packages characteristic.** Lines written to 6e540003 in the NeoTime service go to
+  `neotime-packages` through `storage::Files::run_packages_command`, and each reply is notified in
+  20-byte pieces. A command runs after its write is answered; one that installs, removes or hides an
+  app, or copies a new shared library into internal flash, raises `packages::CHANGED` for the shell.
+  Copying the library erases internal flash pages, each stopping the CPU for about 85 ms.
 - **Clock.** `clock.rs` counts on from the time a phone last wrote to the Current Time
   characteristic (0x2A2B), or from the build time until one does. It holds local time, with an
   offset from UTC of 0.
