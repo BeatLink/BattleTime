@@ -287,11 +287,13 @@ after a restart, in which case the screen asks for the file again.
 NeoTime ships with no apps, faces or icons: a new watch shows only a help screen. When a watch with
 the packages characteristic has no face, the Watch tab offers **Set up the watch**, which installs
 the shared library, a face, the launcher and the apps chosen, in that order. The images come from
-[src/bundles/watch-apps.ts](src/bundles/watch-apps.ts), generated from NeoTime's
-`tools/build_watch_apps.sh` output:
+[src/bundles/watch-apps.ts](src/bundles/watch-apps.ts), generated from a folder of images compiled
+with NeoTime's `neotime-compiler`: one `.ntapp` per app (the face as `face.ntapp`) and the library
+from `neotime-compiler library -o shared.ntlib`. The images must match the firmware's runtime, so
+rebuild the bundle when the widget or instruction numbering changes.
 
 ```bash
-npm run import-watch-apps path/to/NeoTime/firmware/apps
+npm run import-watch-apps path/to/images
 ```
 
 [src/protocol/packages.ts](src/protocol/packages.ts) installs one image: an app or face is written

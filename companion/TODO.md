@@ -38,9 +38,6 @@ mock watch only.
 
 ## Notes
 
-- **Bundle the notes app.** `src/bundles/watch-apps.ts` predates NeoTime's `TextFile` widget, which
-  the `notes` app needs. Regenerate the bundle with `notes.ntapp` once the firmware with it is on
-  master, so setup can install it; until then install it with `neotime apps install`.
 - **Untried with a watch.** Sending, resending after an edit and the font have run only against the
   mock watch, and the desktop app's file dialog and folder watch only in tests. With a watch on
   NeoTime and its `notes` app installed, check that:
