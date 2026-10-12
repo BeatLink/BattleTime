@@ -45,7 +45,7 @@ const ICON_SYMBOLS = {
   settings: "⚙",
   showers: "🌦",
   snow: "❄",
-  steps: "👣",
+  steps: "🏃",
   stop: "■",
   stopwatch: "⏱",
   sun: "☀",

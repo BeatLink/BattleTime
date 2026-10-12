@@ -85,7 +85,7 @@ pub fn icon_source(name: &str) -> Option<IconSource> {
         "settings" => MaterialIcons(0xe8b8),
         "showers" => FontAwesome(0xf743),
         "snow" => FontAwesome(0xf2dc),
-        "steps" => FontAwesome(0xf54b),
+        "steps" => MaterialIcons(0xe566),
         "stop" => FontAwesome(0xf04d),
         "stopwatch" => FontAwesome(0xf2f2),
         "sun" => FontAwesome(0xf185),
