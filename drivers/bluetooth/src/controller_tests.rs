@@ -570,3 +570,17 @@ fn a_timer_check_leaves_advertising_and_an_unstarted_controller_alone() {
     state.check_supervision(&&radio);
     assert_eq!(radio.operations.borrow().len(), operations_before);
 }
+
+#[test]
+fn the_radio_is_idle_until_it_advertises_or_connects() {
+    let radio = FakeRadio::new();
+    assert!(ControllerState::new().radio_is_idle());
+    let state = started_state();
+    assert!(state.radio_is_idle());
+
+    let controller = BluetoothController::new(&state, &radio);
+    start_advertising(&controller);
+    assert!(!state.radio_is_idle());
+    central_connects(&state, &radio);
+    assert!(!state.radio_is_idle());
+}

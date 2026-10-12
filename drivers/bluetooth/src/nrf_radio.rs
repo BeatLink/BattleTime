@@ -10,6 +10,7 @@
 
 use core::cell::Cell;
 use core::ptr::addr_of_mut;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use critical_section::Mutex;
 use embassy_nrf::interrupt::typelevel::{Binding, Handler, Interrupt};
@@ -551,6 +552,15 @@ fn arm_operation(operation: RadioOperation, timer_is_running: bool) {
 // Interrupt
 // ============================================================================
 
+/// Radio interrupts so far, which show the link layer is still running.
+static RADIO_EVENTS: AtomicU32 = AtomicU32::new(0);
+
+/// How many radio interrupts there have been, and whether the radio has nothing to do; the
+/// watchdog task reads these to tell a stalled radio from an idle one.
+pub fn radio_progress() -> (u32, bool) {
+    (RADIO_EVENTS.load(Ordering::Relaxed), STATE.radio_is_idle())
+}
+
 /// Ends a connection the radio has stopped serving; the firmware calls it from a timer.
 pub fn check_supervision() {
     STATE.check_supervision(&NrfRadio { _private: () });
@@ -562,6 +572,7 @@ pub struct RadioInterruptHandler {
 
 impl Handler<interrupt::typelevel::RADIO> for RadioInterruptHandler {
     unsafe fn on_interrupt() {
+        RADIO_EVENTS.fetch_add(1, Ordering::Relaxed);
         let radio = pac::RADIO;
         if radio.events_disabled().read() == 0 {
             return;

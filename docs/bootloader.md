@@ -161,8 +161,9 @@ firmware update was swapped in under the new blue screen.
 The menu is for a firmware that starts but is broken badly enough that it cannot take an update,
 or one that should be swapped for the firmware before it. It needs only the side button.
 
-The system loop feeds the watchdog only while the button is up (see the button driver in
-[architecture.md](architecture.md)), so the menu opens with one long hold:
+The system loop feeds the watchdog only while the button is up, and while the shell and the radio
+make progress (see the button driver in [architecture.md](architecture.md)), so the menu opens with
+one long hold:
 
 1. Hold the button. After about 5 seconds the watchdog resets the watch.
 2. Keep holding. After 5 more seconds in the bootloader (`MENU_BUTTON_HOLD_IN_MILLISECONDS`), the

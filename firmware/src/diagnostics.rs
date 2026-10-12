@@ -37,6 +37,11 @@ pub fn add_one(counter: Counter) {
     COUNTERS[counter as usize].fetch_add(1, Ordering::Relaxed);
 }
 
+#[cfg_attr(not(with_shell), allow(dead_code))]
+pub fn get(counter: Counter) -> u32 {
+    COUNTERS[counter as usize].load(Ordering::Relaxed)
+}
+
 pub fn set(counter: Counter, value: u32) {
     COUNTERS[counter as usize].store(value, Ordering::Relaxed);
 }

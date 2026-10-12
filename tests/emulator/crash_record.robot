@@ -105,10 +105,11 @@ A Start Without A Crash Reports None
     Run For                   3
     Firmware Should Be Alive
 
+    # The hold opens the bootloader's menu, which starts the firmware again once left alone.
     Execute Command           ${BUTTON} Press
     Run For                   6
     Execute Command           ${BUTTON} Release
-    Run For                   4
+    Run For                   32
     Word Should Be            ${BOOT_COUNT}    2
     ${ram}=                   RAM Bytes
     Should Be True            $ram.find(b'CRSH') < 0    A crash record is in RAM after a reset that was not a crash

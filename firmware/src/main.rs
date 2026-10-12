@@ -388,19 +388,52 @@ fn take_over_watchdog(watchdog_peripheral: embassy_nrf::Peri<'static, peripheral
 }
 
 /// Holding the button lets the watchdog reset the watch into the bootloader; see docs/bootloader.md.
+/// A shell or a radio that stopped making progress lets it reset the watch too.
 ///
 /// It reads the pin itself rather than through the button task, so it works whatever that task does.
 #[embassy_executor::task]
 async fn feed_watchdog_while_button_is_up(mut watchdog: WatchdogHandle) {
+    let mut liveness = neotime_liveness::Liveness::new();
     loop {
-        if !side_button_is_held() {
-            watchdog.pet();
-        }
         // The radio's events end a silent connection; this ends one whose radio stopped sending them.
         neotime_bluetooth::check_supervision();
+        let (radio_events, radio_idle) = neotime_bluetooth::radio_progress();
+        let verdict = liveness.check(neotime_liveness::Reading {
+            shell_loops: shell_loops(),
+            radio_events,
+            radio_idle,
+        });
+        if verdict.ping_shell {
+            ping_shell();
+        }
+        if verdict.alive && !side_button_is_held() {
+            watchdog.pet();
+        }
         Timer::after(WATCHDOG_CHECK_INTERVAL).await;
     }
 }
+
+/// The shell's loops so far, or None before its first loop, while the start-up page shows.
+#[cfg(with_shell)]
+fn shell_loops() -> Option<u32> {
+    let loops = diagnostics::get(diagnostics::Counter::ShellLoops);
+    (loops > 0).then_some(loops)
+}
+
+/// The recovery firmware and the rehearsals have no shell to wait for.
+#[cfg(not(with_shell))]
+fn shell_loops() -> Option<u32> {
+    None
+}
+
+/// Wakes the shell for one loop with nothing changed, which proves it still runs.
+#[cfg(with_shell)]
+fn ping_shell() {
+    system_values::changed(&[]);
+}
+
+#[cfg(not(with_shell))]
+fn ping_shell() {}
 
 /// Reads the side button's pin straight from the port, without waiting out contact bounce.
 fn side_button_is_held() -> bool {

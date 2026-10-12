@@ -1012,6 +1012,7 @@ dependencies = [
  "neotime-dfu",
  "neotime-display",
  "neotime-external-flash",
+ "neotime-liveness",
  "neotime-notifications",
  "neotime-packages",
  "neotime-runtime",
@@ -1026,6 +1027,10 @@ dependencies = [
  "static_cell",
  "trouble-host",
 ]
+
+[[package]]
+name = "neotime-liveness"
+version = "0.1.0"
 
 [[package]]
 name = "neotime-notifications"

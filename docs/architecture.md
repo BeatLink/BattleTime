@@ -33,7 +33,7 @@ flowchart TB
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>settings started; planned: power, events, notifications"]
-    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/steps"]
+    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/steps,<br/>services/liveness"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth,<br/>drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
@@ -161,6 +161,7 @@ NeoTime/
 │   ├── crash_record/ neotime-crash-record: reset reasons in words and the crash record kept across a reset
 │   ├── current_time/ neotime-current-time: the Current Time service's values and calendar arithmetic
 │   ├── dfu/          neotime-dfu: the legacy DFU update protocol over Bluetooth
+│   ├── liveness/     neotime-liveness: whether the shell and the radio still make progress, for the watchdog
 │   ├── packages/     neotime-packages: the apps installed in /apps and the shared library's install
 │   ├── settings/     neotime-settings: the watch-wide settings, their limits and their file
 │   ├── steps/        neotime-steps: the step history by hour, the trip count and the daily step log
@@ -558,7 +559,13 @@ watch face, the launcher and the apps through `neotime-app-host`:
   back to what it covered; a long press goes back a step; a double click opens the app with the id
   `notifications`, or leaves it for the face; a 2 second press goes to the face. A separate watchdog task reads the pin straight from the port
   every 500 ms and feeds the watchdog only while it is up, so a hold of 4 to 5 seconds resets the
-  watch whatever the button task does.
+  watch whatever the button task does. It also feeds it only while the shell and the radio make
+  progress, as `neotime-liveness` judges: the shell's loop count must move, and a quiet shell is
+  woken with an empty system value change to prove it still runs; the radio's interrupt count must
+  move while it advertises or holds a connection. A shell stopped for six checks, or a radio with
+  work stopped for twelve, lets the watchdog reset the watch. Checks are counted rather than timed,
+  so a long job that blocks every task, such as copying the shared library, never counts.
+  `tests/emulator/liveness.robot` stops the radio's interrupt and sees the reset.
 - **Transitions.** The launcher and apps slide up over what was open, and the button's way back
   or home slides down; a swipe right going back wipes in from the left. The shell draws a transition's steps one
   after another, yielding to the other tasks between them, before it takes the next input. Once a

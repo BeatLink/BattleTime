@@ -88,6 +88,18 @@ impl ControllerState {
         })
     }
 
+    /// True while the radio has nothing to do: not started, or neither advertising nor connected.
+    pub fn radio_is_idle(&self) -> bool {
+        critical_section::with(|critical_section| {
+            self.host_interface
+                .borrow_ref(critical_section)
+                .as_ref()
+                .is_none_or(|host_interface| {
+                    !host_interface.link_layer.is_advertising() && !host_interface.link_layer.is_connected()
+                })
+        })
+    }
+
     /// Ends a connection whose radio has gone quiet past its supervision timeout, and tells the host.
     /// The radio's own events normally do this; a timer calls it in case they have stopped.
     pub fn check_supervision(&self, radio: &impl Radio) {

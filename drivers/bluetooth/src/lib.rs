@@ -21,7 +21,9 @@ pub use link_layer::RadioOperation;
 pub use packets::Channel;
 
 #[cfg(target_os = "none")]
-pub use nrf_radio::{check_supervision, start, NrfRadio, RadioInterruptHandler, RadioPeripherals};
+pub use nrf_radio::{
+    check_supervision, radio_progress, start, NrfRadio, RadioInterruptHandler, RadioPeripherals,
+};
 
 #[cfg(test)]
 mod tests;
