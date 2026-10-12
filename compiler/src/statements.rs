@@ -16,6 +16,7 @@ use crate::constants::{compound_operator, static_key, strip_parentheses, Constan
 use crate::diagnostics::{fail, Compiled};
 use crate::emitter::{CodeKind, Emitter, InlineFrame};
 use crate::expressions::Typed;
+use crate::functions::CallOutcome;
 use crate::scope::{ElementIndex, FunctionBodyReference, FunctionReference, Reference, Scope};
 use crate::types::{Kind, Range, Type};
 
@@ -96,6 +97,31 @@ impl<'a> Compiler<'a> {
                 "recursion is not available; use `for ... of` over a fixed-length array",
             );
         }
+        let outer_mark = emitter.locals_in_use();
+        let mut arguments = arguments;
+        if self.calls_function(function) {
+            let (references, expected_types) =
+                self.argument_references(emitter, function, arguments, span)?;
+            match self.call_function(
+                emitter,
+                function,
+                references,
+                expected_types,
+                wants_value,
+                expected,
+                span,
+            )? {
+                CallOutcome::Called(result) => {
+                    emitter.release_locals(outer_mark);
+                    return Ok(result);
+                }
+                CallOutcome::Inline(references) => {
+                    arguments = references.into_iter().map(ArgumentSource::Reference).collect()
+                }
+            }
+        }
+
+        let start = emitter.code_length();
         self.inline_stack.push(identity);
         let spill_mark = emitter.locals_in_use();
         let spilled = self.spill_stack(emitter, function, span);
@@ -109,8 +135,56 @@ impl<'a> Compiler<'a> {
             Ok(result)
         });
         emitter.release_locals(spill_mark);
+        emitter.release_locals(outer_mark);
         self.inline_stack.pop();
+        if result.is_ok() {
+            self.count_inlined(function, emitter.code_length() - start);
+        }
         result
+    }
+
+    /// Works out what each parameter stands for at a call, with the type its annotation asks for.
+    fn argument_references(
+        &mut self,
+        emitter: &mut Emitter,
+        function: &FunctionReference<'a>,
+        arguments: Vec<ArgumentSource<'a>>,
+        span: Span,
+    ) -> Compiled<(Vec<Reference<'a>>, Vec<Option<Type>>)> {
+        let mut references = Vec::new();
+        let mut expected_types = Vec::new();
+        let mut arguments = arguments.into_iter();
+        for parameter in &function.parameters.items {
+            let source = match arguments.next() {
+                Some(source) => source,
+                None => match &parameter.initializer {
+                    Some(initializer) => ArgumentSource::Expression(initializer, function.scope.clone()),
+                    None => ArgumentSource::Reference(Reference::Constant(Constant::Undefined)),
+                },
+            };
+            let expected = self.parameter_type(function, parameter);
+            references.push(self.argument_reference(emitter, source, expected, span)?);
+            expected_types.push(expected);
+        }
+        Ok((references, expected_types))
+    }
+
+    /// The type a parameter's annotation asks for, when it names one single value.
+    fn parameter_type(
+        &mut self,
+        function: &FunctionReference<'a>,
+        parameter: &'a oxc_ast::ast::FormalParameter<'a>,
+    ) -> Option<Type> {
+        parameter
+            .type_annotation
+            .as_ref()
+            .and_then(|annotation| {
+                self.declared_type(&annotation.type_annotation, function.scope.module)
+                    .ok()
+                    .flatten()
+            })
+            .filter(|declared| !declared.is_array)
+            .map(|declared| declared.value_type)
     }
 
     /// Moves the stack into locals before inlining a function that may loop, as a loop needs an empty stack.
@@ -365,7 +439,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn compile_function_body(
+    pub fn compile_function_body(
         &mut self,
         emitter: &mut Emitter,
         body: FunctionBodyReference<'a>,

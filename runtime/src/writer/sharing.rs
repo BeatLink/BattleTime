@@ -13,7 +13,7 @@ use alloc::vec::Vec;
 use super::ImageWriter;
 use crate::image::MOST_FUNCTIONS;
 use crate::instruction::{decode, Instruction};
-use crate::interpreter::{MOST_LOCALS, NONE};
+use crate::interpreter::{LOCAL_POOL, MOST_CALL_DEPTH, MOST_LOCALS, NONE};
 
 // ============================================================================
 // Costs
@@ -219,10 +219,13 @@ impl ImageWriter {
             }
         }
 
+        let callees = self.callee_needs();
         let mut shared: Vec<SharedCode> = groups
             .into_iter()
             .filter(|(_, members)| members.len() > 1)
-            .filter_map(|((table, _), members)| plan_sharing(table, members, &decoded[table as usize]))
+            .filter_map(|((table, _), members)| {
+                plan_sharing(table, members, &decoded[table as usize], &callees)
+            })
             .collect();
         shared.sort_by_key(|plan| core::cmp::Reverse(plan.bytes_saved));
 
@@ -233,6 +236,22 @@ impl ImageWriter {
             let codes = &decoded[plan.table as usize];
             self.add_shared_function(&plan, codes);
         }
+    }
+
+    /// For each function already added, the locals it needs with its callees, and its call depth.
+    fn callee_needs(&self) -> Vec<CalleeNeeds> {
+        let mut needs: Vec<CalleeNeeds> = Vec::with_capacity(self.functions.len());
+        for bytes in &self.functions {
+            let local_count = bytes.get(2).copied().unwrap_or(0) as usize;
+            let deepest_callee = DecodedCode::decode(bytes.get(3..).unwrap_or_default())
+                .map(|code| deepest_callee(&code, &needs))
+                .unwrap_or(CalleeNeeds::TOO_MUCH);
+            needs.push(CalleeNeeds {
+                locals: local_count + deepest_callee.locals,
+                depth: deepest_callee.depth + 1,
+            });
+        }
+        needs
     }
 
     fn add_shared_function(&mut self, plan: &SharedCode, codes: &[Option<DecodedCode>]) {
@@ -294,9 +313,45 @@ fn call_of(constants: &[Constant], arguments: &[usize], function: u8) -> Vec<Ins
     call
 }
 
+/// What calling a function takes: the locals of it and its callees, and how deep the calls go.
+#[derive(Clone, Copy, Debug, Default)]
+struct CalleeNeeds {
+    locals: usize,
+    depth: usize,
+}
+
+impl CalleeNeeds {
+    const TOO_MUCH: CalleeNeeds = CalleeNeeds {
+        locals: LOCAL_POOL,
+        depth: MOST_CALL_DEPTH,
+    };
+}
+
+/// The most that any function this code calls needs.
+fn deepest_callee(code: &DecodedCode, needs: &[CalleeNeeds]) -> CalleeNeeds {
+    let mut deepest = CalleeNeeds::default();
+    for instruction in &code.instructions {
+        if let Instruction::Call(function) = instruction {
+            let callee = needs
+                .get(*function as usize)
+                .copied()
+                .unwrap_or(CalleeNeeds::TOO_MUCH);
+            deepest.locals = deepest.locals.max(callee.locals);
+            deepest.depth = deepest.depth.max(callee.depth);
+        }
+    }
+    deepest
+}
+
 /// Works out which constants a group's members differ in, and whether sharing them saves bytes.
-fn plan_sharing(table: Table, members: Vec<usize>, codes: &[Option<DecodedCode>]) -> Option<SharedCode> {
+fn plan_sharing(
+    table: Table,
+    members: Vec<usize>,
+    codes: &[Option<DecodedCode>],
+    callees: &[CalleeNeeds],
+) -> Option<SharedCode> {
     let first = codes[members[0]].as_ref()?;
+    let deepest = deepest_callee(first, callees);
     let constants: Vec<Vec<Constant>> = members
         .iter()
         .map(|&member| codes[member].as_ref().map(DecodedCode::constants))
@@ -308,7 +363,10 @@ fn plan_sharing(table: Table, members: Vec<usize>, codes: &[Option<DecodedCode>]
                 .any(|member| member[place] != constants[0][place])
         })
         .collect();
-    if arguments.len() + first.local_count() > MOST_LOCALS {
+    let local_count = arguments.len() + first.local_count();
+    let too_deep =
+        deepest.depth + 1 >= MOST_CALL_DEPTH || local_count + deepest.locals > LOCAL_POOL - MOST_LOCALS;
+    if local_count > MOST_LOCALS || too_deep {
         return None;
     }
 

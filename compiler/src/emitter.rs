@@ -37,6 +37,17 @@ pub struct InlineFrame {
     pub expected: Option<Type>,
 }
 
+/// What running a function needs beyond its caller: locals, call depth and stack.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CallNeeds {
+    /// Its own locals and the most that the functions it calls take at once.
+    pub locals: u8,
+    /// How many calls deep it goes, counting itself.
+    pub depth: u8,
+    /// The deepest its stack goes, counted from where it starts.
+    pub stack: u8,
+}
+
 // ============================================================================
 // Emitter
 // ============================================================================
@@ -52,6 +63,12 @@ pub struct Emitter {
     /// The targets of jumps not yet placed, one entry per jump, as the runtime's checks count them.
     open_jumps: Vec<Label>,
     pub inline_frames: Vec<InlineFrame>,
+    /// For a function, how many results it leaves; otherwise the code's kind decides.
+    function_results: Option<usize>,
+    most_locals: u8,
+    deepest: usize,
+    /// What the functions this code calls need, the most of each.
+    callees: CallNeeds,
 }
 
 impl Emitter {
@@ -65,7 +82,67 @@ impl Emitter {
             loop_count: 0,
             open_jumps: Vec::new(),
             inline_frames: Vec::new(),
+            function_results: None,
+            most_locals: 0,
+            deepest: 0,
+            callees: CallNeeds::default(),
         }
+    }
+
+    /// An emitter for a function called from code of this kind, leaving a result or not.
+    pub fn for_function(kind: CodeKind, has_result: bool) -> Emitter {
+        Emitter {
+            function_results: Some(has_result as usize),
+            ..Emitter::new(kind)
+        }
+    }
+
+    /// How many bytes of code are written so far.
+    pub fn code_length(&self) -> usize {
+        self.writer.len()
+    }
+
+    /// How many locals the code uses at most.
+    pub fn local_count(&self) -> u8 {
+        self.most_locals
+    }
+
+    /// What running this code as a function needs, counting the functions it calls.
+    pub fn call_needs(&self) -> CallNeeds {
+        CallNeeds {
+            locals: self.most_locals + self.callees.locals,
+            depth: self.callees.depth + 1,
+            stack: self.deepest.max(self.callees.stack as usize) as u8,
+        }
+    }
+
+    /// Writes a call to a function that takes `argument_count` values and leaves `result_count`.
+    pub fn emit_call(
+        &mut self,
+        function: u8,
+        argument_count: usize,
+        result_count: usize,
+        callee: CallNeeds,
+        span: Span,
+    ) -> Compiled<()> {
+        if let Some(depth) = self.depth {
+            let Some(under_call) = depth.checked_sub(argument_count) else {
+                return fail(span, "internal compiler error: a call with too few arguments");
+            };
+            if under_call + callee.stack as usize > STACK_DEPTH {
+                return fail(
+                    span,
+                    format!("this expression needs more than {STACK_DEPTH} values at once; split it with `const` in a handler"),
+                );
+            }
+            self.callees.stack = self.callees.stack.max((under_call + callee.stack as usize) as u8);
+            self.depth = Some(under_call + result_count);
+            self.deepest = self.deepest.max(under_call + result_count);
+        }
+        self.callees.locals = self.callees.locals.max(callee.locals);
+        self.callees.depth = self.callees.depth.max(callee.depth);
+        self.writer.emit(Instruction::Call(function));
+        Ok(())
     }
 
     pub fn is_handler(&self) -> bool {
@@ -91,6 +168,7 @@ impl Emitter {
                 );
             }
             self.depth = Some(after);
+            self.deepest = self.deepest.max(after);
         }
         self.writer.emit(instruction);
         Ok(())
@@ -194,6 +272,7 @@ impl Emitter {
             );
         }
         self.locals_in_use += 1;
+        self.most_locals = self.most_locals.max(self.locals_in_use);
         Ok(self.locals_in_use - 1)
     }
 
@@ -208,9 +287,10 @@ impl Emitter {
 
     /// The finished code, which must leave one value for an expression and none for a handler.
     pub fn finish(self, span: Span) -> Compiled<Vec<u8>> {
-        let expected = match self.kind {
-            CodeKind::Expression => 1,
-            CodeKind::Handler => 0,
+        let expected = match (self.function_results, self.kind) {
+            (Some(results), _) => results,
+            (None, CodeKind::Expression) => 1,
+            (None, CodeKind::Handler) => 0,
         };
         if self.depth.is_some_and(|depth| depth != expected) {
             return fail(

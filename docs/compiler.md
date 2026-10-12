@@ -29,7 +29,8 @@ and `verify`.
 3. **Render each screen**: call its component once at compile time, inline every component, and
    turn the JSX into a fixed widget tree.
 4. **Compile** each property that changes into an expression, and each event function into a
-   handler. Identical code is stored once.
+   handler. Identical code is stored once. A function that the first pass found copied in several
+   places is compiled once and called, when that is smaller (see [Handlers](#handlers)).
 5. **Choose array widths** by running steps 2 to 4 again until the values each variable may hold
    stop growing (see [State](#state)). Ranges follow values through `+`, `-`, `*`, `%` with a
    constant, `? :`, `const` locals, function results and `.map` callbacks. A variable still growing
@@ -113,8 +114,17 @@ before anything is written.
   length, type and element width share one, unless one is still being filled.
 - A function whose body ends in `return <array>` is inlined into the assignment.
 
-Functions are inlined, never called; repeated code is shared as functions afterwards, as step 6
-of [How it works](#how-it-works) says. A call that would recurse is an error. Before inlining a
+Functions are inlined unless calling them makes the image smaller. A first pass inlines every
+function and counts its copies and their bytes (`functions.rs`). A top-level function whose copies
+cost more than one compiled function and its calls is then compiled once for each way it is
+called, in an expression or a handler, with or without a result, and called from then on.
+Arguments known when compiling that are not numbers, such as an array signal, a record or a text
+literal, are built into that compiled function; the others become its parameters, and the values
+each parameter is given join the passes that choose array widths, so an array it writes stays as
+narrow as when it was inlined. A function that cannot be compiled on its own, such as one that
+loops over `range(count)` of a parameter, needs a literal pattern from one, or takes its argument
+apart, is inlined instead and stays inlined. Repeated code is shared as functions afterwards, as
+step 6 of [How it works](#how-it-works) says. A call that would recurse is an error. Before inlining a
 function with statements in the middle of an expression, the values already on the stack are moved
 to locals, because a loop needs an empty stack.
 

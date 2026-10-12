@@ -176,21 +176,13 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 
 ## Shared library and smaller apps
 
-Measured on all 49 apps and faces: their images hold 197 KB, of which 120.6 KB is bytecode, 31.2 KB
-widget records, 24.1 KB images and 10.1 KB strings. The compiler inlines every function and
-component, so about half the bytecode is the same code repeated with other constants: 16 copies of
-a 270 B expression in twos, 12 of 949 B in infineat, the win check 6 to 8 times in four-in-a-row.
-Code that is byte-for-byte the same across apps is only about 4 KB, so sharing pays only as
-functions that take arguments. Library code is read in place from the internal flash and costs no
-RAM. The items run in order; each needs the ones above it.
+The 49 apps and faces hold 129 KB of images, down from 197 KB now that the compiler calls an app's
+own functions and shares code that repeats with other constants (see
+[compiler.md](compiler.md#handlers)). Code that is byte-for-byte the same across apps is only
+about 4 KB, so sharing between apps pays only as library functions that take arguments. Library
+code is read in place from the internal flash and costs no RAM. The items run in order; each needs
+the ones above it.
 
-- [ ] **Compile the app's own functions as functions.** The runtime has `call` and a functions
-  section, and the compiler already shares expressions and handlers that differ only in their
-  constants, which took the 49 images from 197 KB to 165 KB. What is left is code inlined inside
-  larger handlers, such as four-in-a-row's win check, 6 to 8 copies in handlers of up to 9 KB
-  (about 25 KB). Compile a function called from several places once, with its parameters as
-  locals, falling back to inlining when it cannot be; the parameters' value ranges must join the
-  passes that choose array widths, or arrays it writes would widen.
 - [ ] **Calls into the shared library.** `call_library` runs a function from a functions section
   in the library image, checked by the same verifier, with numbers that never change between
   library versions. A function that changes state takes the variables by number, as `copy array`

@@ -11,6 +11,7 @@ pub mod derived;
 pub mod diagnostics;
 pub mod emitter;
 pub mod expressions;
+pub mod functions;
 pub mod images;
 pub mod library;
 pub mod permissions;
@@ -29,6 +30,7 @@ use oxc_span::{SourceType, Span};
 
 use crate::compiler::Compiler;
 use crate::diagnostics::{Diagnostic, Severity};
+use crate::functions::FunctionPlan;
 use crate::types::Range;
 
 pub use crate::diagnostics::Diagnostic as CompileDiagnostic;
@@ -104,19 +106,43 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
     // A variable still growing when the passes run out, such as a counter, is taken to hold anything,
     // and the passes start again, so it does not widen every other array with it.
     let mut assumed: HashMap<String, Range> = HashMap::new();
+
+    // A first pass inlines every function and counts what each costs, to choose which to call.
+    let mut plan = FunctionPlan::default();
+    match run_pass(program, components, assumed.clone(), &directory, &plan) {
+        Ok(compiler) => plan.choose(&compiler.inline_costs),
+        Err(error) => {
+            return Output {
+                image: None,
+                diagnostics: vec![error],
+            }
+        }
+    }
+
     let mut converged = false;
     'rounds: for _ in 0..MOST_ROUNDS {
         let mut still_growing: Vec<String> = Vec::new();
         for _ in 0..MOST_PASSES {
-            let observed = match run_pass(program, components, assumed.clone(), &directory) {
-                Ok(compiler) => compiler.observed_ranges(),
-                Err(error) => {
-                    return Output {
-                        image: None,
-                        diagnostics: vec![error],
+            let (observed, plan_changed) =
+                match run_pass(program, components, assumed.clone(), &directory, &plan) {
+                    Ok(compiler) => (
+                        compiler.observed_ranges(),
+                        plan.give_up_on(&compiler.failed_functions),
+                    ),
+                    Err(error) => {
+                        return Output {
+                            image: None,
+                            diagnostics: vec![error],
+                        }
                     }
+                };
+            if plan_changed {
+                for (key, range) in observed {
+                    let entry = assumed.entry(key).or_insert(range);
+                    *entry = entry.union(range);
                 }
-            };
+                continue;
+            }
             still_growing = observed
                 .iter()
                 .filter(|(key, range)| {
@@ -144,7 +170,14 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
             *range = Range::ANY;
         }
     }
-    match run_pass(program, components, assumed, &directory) {
+    let mut last_pass = run_pass(program, components, assumed.clone(), &directory, &plan);
+    while let Ok(compiler) = &last_pass {
+        if !plan.give_up_on(&compiler.failed_functions) {
+            break;
+        }
+        last_pass = run_pass(program, components, assumed.clone(), &directory, &plan);
+    }
+    match last_pass {
         Ok(mut compiler) => {
             compiler.writer.share_repeated_code();
             let image = compiler.writer.build();
@@ -192,9 +225,11 @@ fn run_pass<'a>(
     components: &'a oxc_ast::ast::Program<'a>,
     assumed: HashMap<String, Range>,
     directory: &Option<PathBuf>,
+    plan: &FunctionPlan,
 ) -> Result<Compiler<'a>, Diagnostic> {
     let mut compiler = Compiler::new(assumed);
     compiler.source_directory = directory.clone();
+    compiler.function_plan = plan.clone();
     let module = compiler.load_module(program)?;
     let components_module = compiler.load_module(components).map_err(|error| {
         Diagnostic::error(

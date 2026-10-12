@@ -440,6 +440,15 @@ impl CodeWriter {
         self
     }
 
+    /// How many bytes of code are written so far.
+    pub fn len(&self) -> usize {
+        self.bytes.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+
     /// A new label, placed later with `place`.
     pub fn label(&mut self) -> Label {
         self.label_offsets.push(None);

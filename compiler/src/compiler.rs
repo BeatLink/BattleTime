@@ -145,6 +145,16 @@ pub struct Compiler<'a> {
     pub derived_count: usize,
     /// The first use of each permission the app needs, to check against its `permissions`.
     pub permission_uses: Vec<crate::permissions::PermissionUse>,
+    /// Which of the app's functions are called rather than inlined in this pass.
+    pub function_plan: crate::functions::FunctionPlan,
+    /// What inlining each function cost in this pass, by its identity.
+    pub inline_costs: HashMap<usize, crate::functions::InlineCost>,
+    /// Functions this pass tried and failed to compile on their own.
+    pub failed_functions: HashSet<usize>,
+    /// The functions compiled so far, one for each way of calling them.
+    pub compiled_functions: Vec<crate::functions::CompiledFunction>,
+    /// The values each runtime parameter of a called function was given in this pass.
+    pub parameter_ranges: HashMap<String, Range>,
 }
 
 impl<'a> Compiler<'a> {
@@ -173,6 +183,11 @@ impl<'a> Compiler<'a> {
             derived_targets: Vec::new(),
             derived_count: 0,
             permission_uses: Vec::new(),
+            function_plan: crate::functions::FunctionPlan::default(),
+            inline_costs: HashMap::new(),
+            failed_functions: HashSet::new(),
+            compiled_functions: Vec::new(),
+            parameter_ranges: HashMap::new(),
         }
     }
 
@@ -330,6 +345,11 @@ impl<'a> Compiler<'a> {
             .iter()
             .zip(ranges)
             .map(|(slot, range)| (slot.key.clone(), range))
+            .chain(
+                self.parameter_ranges
+                    .iter()
+                    .map(|(key, range)| (key.clone(), *range)),
+            )
             .collect()
     }
 
