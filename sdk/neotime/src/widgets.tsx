@@ -16,6 +16,7 @@ import type {
   ThemeColorName,
 } from "./index.ts";
 import { icon_symbol, is_icon, type LibraryIcon } from "./icons.ts";
+import { installed_apps } from "./index.ts";
 
 // ============================================================================
 // Theme
@@ -501,6 +502,37 @@ export function List(props: FlexProps) {
       {props.children}
     </div>
   );
+}
+
+export interface AppListProps extends CommonProps {
+  /** Pixels between rows. */
+  gap?: number;
+  /** Receives the place in `installed_apps` of the app whose row is tapped. */
+  onClick?: (event: ChangeEvent<number>) => void;
+}
+
+/** The installed apps as a scrolling list of rows, each its icon and name, drawn by the watch as one widget. */
+export function AppList(props: AppListProps) {
+  return (
+    <List padding={props.padding} gap={props.gap} {...common_props_only(props)}>
+      {installed_apps.value.map((app, place) => (
+        <Button height={52} onClick={() => props.onClick && run_handler(props.onClick, { value: place })}>
+          <Row gap={12} align_items="center" padding={8}>
+            <Icon icon={app.icon} size={32} />
+            <Label grow={1} long_mode="clip">
+              {app.name}
+            </Label>
+          </Row>
+        </Button>
+      ))}
+    </List>
+  );
+}
+
+/** The props every widget shares, without the ones `AppList` handles itself. */
+function common_props_only(props: AppListProps): CommonProps {
+  const { gap: _gap, onClick: _on_click, padding: _padding, ...common } = props;
+  return common;
 }
 
 // ============================================================================

@@ -7,7 +7,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 
 - **A watch face, a launcher and apps, installed from the phone.** The firmware carries none of
   its own: the companion app installs a face, the launcher and any apps into the watch's storage.
-  The launcher, itself an ordinary app that another could replace, lists them with their icons.
+  The launcher, itself an ordinary app that another could replace, lists them with their icons,
+  however many are installed.
   Touches and the side button reach the open app.
 - **A help screen** with the time and how to install a face, shown while no face is installed.
 - **The screen sleeps on its own.** It turns off after the time chosen in settings, 15 seconds at

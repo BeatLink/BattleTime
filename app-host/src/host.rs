@@ -4,7 +4,7 @@
 //! An app is open, with a screen, or closed, with only its state, so subscriptions can run in the
 //! background without any widgets.
 
-use alloc::{boxed::Box, vec::Vec};
+use alloc::{boxed::Box, string::String, vec::Vec};
 
 use embedded_graphics::{pixelcolor::Rgb565, prelude::DrawTarget};
 use neotime_runtime::{
@@ -23,8 +23,9 @@ use rlvgl_core::{
 };
 
 use crate::drawing::{
-    cell_at, draw_node, dropdown_option_at, label_scrolls, matrix_buttons, measure_node, option_row_height,
-    roller_rows, DrawContext, FadedRenderer, LABEL_SCROLL_STEP_IN_MILLISECONDS,
+    app_list_rows, app_row_at, cell_at, draw_node, dropdown_option_at, label_scrolls, matrix_buttons,
+    measure_node, option_row_height, roller_rows, DrawContext, FadedRenderer,
+    LABEL_SCROLL_STEP_IN_MILLISECONDS,
 };
 use crate::layout::{clips_children, content_height, lay_out};
 use crate::nodes::{to_color, Node, PropertyValue, OPAQUE};
@@ -471,6 +472,7 @@ impl<'image> AppHost<'image> {
             }
         }
 
+        self.fill_app_lists(system);
         self.measure_and_lay_out();
         self.whole_screen_dirty = true;
         self.dirty_nodes = 0;
@@ -684,6 +686,36 @@ impl<'image> AppHost<'image> {
             system_values: changed_system_values,
         }));
         self.refresh(affected, all_variables, now, system);
+        if changed_system_values & SystemValue::InstalledAppCount.bit() != 0 && self.fill_app_lists(system) {
+            self.update_layout();
+        }
+    }
+
+    /// Reads the installed apps' names into every AppList on the screen; true when any changed.
+    fn fill_app_lists(&mut self, system: &impl SystemValues) -> bool {
+        let mut changed = false;
+        for (node_index, node) in self.nodes.iter_mut().enumerate() {
+            if node.kind != WidgetKind::AppList {
+                continue;
+            }
+            let count = system
+                .read(SystemValue::InstalledAppCount)
+                .clamp(0, i32::MAX as Value);
+            let mut names = String::new();
+            for place in 0..count {
+                if place > 0 {
+                    names.push('\n');
+                }
+                names.push_str(system.read_element_text(SystemValue::InstalledAppName, place));
+            }
+            if node.settings.value as Value != count || node.text != names {
+                node.settings.value = count as i32;
+                node.text = names;
+                self.dirty_nodes |= 1 << node_index;
+                changed = true;
+            }
+        }
+        changed
     }
 
     /// Runs the derive subscriptions whose inputs changed, or all of them; returns what they changed.
@@ -965,6 +997,7 @@ impl<'image> AppHost<'image> {
         }
         let touched_value = match self.nodes[node_index].kind {
             WidgetKind::CellGrid => cell_at(&self.nodes[node_index], x, y),
+            WidgetKind::AppList => app_row_at(&self.nodes[node_index], x, y),
             WidgetKind::ButtonMatrix => self.matrix_button_at(node_index, x, y),
             _ => Some(0),
         };
@@ -1311,6 +1344,16 @@ impl<'image> AppHost<'image> {
     /// The text a widget of the open screen shows.
     pub fn widget_text(&self, widget_index: u16) -> Option<&str> {
         Some(self.node(widget_index)?.text())
+    }
+
+    /// The rows a list widget such as an AppList draws itself, each with its text; empty for other widgets.
+    pub fn widget_rows(&self, widget_index: u16) -> Vec<(&str, Rect)> {
+        match self.node(widget_index) {
+            Some(node) if node.kind == WidgetKind::AppList => {
+                app_list_rows(node).map(|(_, name, row)| (name, row)).collect()
+            }
+            _ => Vec::new(),
+        }
     }
 
     /// How many widgets the open screen has, which is how many nodes the UI heap holds.

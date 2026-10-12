@@ -68,7 +68,7 @@ fn flow_of(kind: WidgetKind) -> Flow {
 
 /// Whether a widget's children are cut off at its edges.
 pub fn clips_children(kind: WidgetKind) -> bool {
-    matches!(kind, WidgetKind::Scroll | WidgetKind::List)
+    matches!(kind, WidgetKind::Scroll | WidgetKind::List | WidgetKind::AppList)
 }
 
 /// Widgets drawn over their parent rather than placed in its flow.
@@ -533,6 +533,9 @@ fn place_grid(nodes: &mut [Box<Node>], index: usize, inner: Rect, shown: bool, c
 
 /// How tall the content of a Scroll or List is, to bound how far it scrolls.
 pub fn content_height(nodes: &[Box<Node>], index: usize) -> i32 {
+    if nodes[index].kind == WidgetKind::AppList {
+        return crate::drawing::app_list_height(&nodes[index]);
+    }
     let settings = &nodes[index].settings;
     let inner_width = (nodes[index].bounds.width - 2 * i32::from(settings.padding)).max(0);
     let count = flowing(nodes, index).count() as i32;

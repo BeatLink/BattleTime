@@ -106,6 +106,7 @@ fn widget_kind(name: &str) -> Option<WidgetKind> {
         "TextArea" => TextArea,
         "Keyboard" => Keyboard,
         "CellGrid" => CellGrid,
+        "AppList" => AppList,
         _ => return None,
     })
 }

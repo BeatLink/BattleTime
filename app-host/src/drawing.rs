@@ -186,6 +186,61 @@ fn round_line(renderer: &mut dyn Renderer, from: PointF, to: PointF, width: f32,
 }
 
 // ============================================================================
+// Drawing over a known colour
+// ============================================================================
+
+/// Passes drawing on with the soft edges of text and masks already mixed with `backdrop`.
+///
+/// The screen renderer mixes them with the colour behind the whole widget, which is wrong for parts
+/// a widget draws over a colour of its own, such as the rows of an AppList.
+pub struct OverColorRenderer<'inner> {
+    pub inner: &'inner mut dyn Renderer,
+    pub backdrop: Color,
+}
+
+impl Renderer for OverColorRenderer<'_> {
+    fn fill_rect(&mut self, rect: Rect, color: Color) {
+        self.inner.fill_rect(rect, color);
+    }
+
+    fn blend_rect(&mut self, rect: Rect, color: Color) {
+        self.inner.blend_rect(rect, color);
+    }
+
+    fn blend_row(&mut self, x: i32, y: i32, color: Color, coverage: &[u8]) {
+        let mix = |front: u8, back: u8, amount: u8| {
+            ((front as u16 * amount as u16 + back as u16 * (OPAQUE - amount) as u16) / OPAQUE as u16) as u8
+        };
+        for (offset, &amount) in coverage.iter().enumerate() {
+            if amount == 0 {
+                continue;
+            }
+            let mixed = Color(
+                mix(color.0, self.backdrop.0, amount),
+                mix(color.1, self.backdrop.1, amount),
+                mix(color.2, self.backdrop.2, amount),
+                color.3,
+            );
+            let dot = Rect {
+                x: x + offset as i32,
+                y,
+                width: 1,
+                height: 1,
+            };
+            self.inner.blend_rect(dot, mixed);
+        }
+    }
+
+    fn draw_pixels(&mut self, position: (i32, i32), pixels: &[Color], width: u32, height: u32) {
+        self.inner.draw_pixels(position, pixels, width, height);
+    }
+
+    fn draw_text(&mut self, position: (i32, i32), text: &str, color: Color) {
+        self.inner.draw_text(position, text, color);
+    }
+}
+
+// ============================================================================
 // Opacity
 // ============================================================================
 
@@ -324,6 +379,10 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
         CellGrid => {
             plain_frame(renderer);
             draw_cell_grid(node, context, renderer);
+        }
+        AppList => {
+            plain_frame(renderer);
+            draw_app_list(node, context, renderer);
         }
         Line => draw_polyline(node, context, renderer),
         Chart => {
@@ -562,6 +621,110 @@ fn draw_tick_box(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
 // ============================================================================
 // Cell grids
 // ============================================================================
+
+// ============================================================================
+// App lists
+// ============================================================================
+
+/// How tall each row of an AppList is.
+pub const APP_ROW_HEIGHT: i32 = 52;
+const APP_ICON_SIZE: i32 = 32;
+const APP_ROW_PADDING: i32 = 8;
+const APP_ICON_GAP: i32 = 12;
+
+/// How many apps an AppList holds: the host keeps the count in `value` and the names in its text.
+fn app_count(node: &Node) -> i32 {
+    node.settings.value.max(0)
+}
+
+/// Where each row of an AppList starts: the first row's top and the distance to the next.
+fn app_rows(node: &Node) -> (i32, i32) {
+    let top = node.bounds.y + i32::from(node.settings.padding) - i32::from(node.scroll_offset);
+    (top, APP_ROW_HEIGHT + i32::from(node.settings.gap))
+}
+
+/// How tall an AppList's rows are together, with its padding, to bound how far it scrolls.
+pub fn app_list_height(node: &Node) -> i32 {
+    let count = app_count(node);
+    let gaps = (count - 1).max(0) * i32::from(node.settings.gap);
+    count * APP_ROW_HEIGHT + gaps + 2 * i32::from(node.settings.padding)
+}
+
+/// The place of the app whose row is under a touch, or none between rows and past the last.
+pub fn app_row_at(node: &Node, x: i32, y: i32) -> Option<i32> {
+    let (top, pitch) = app_rows(node);
+    let padding = i32::from(node.settings.padding);
+    let inside = x >= node.bounds.x + padding && x < node.bounds.x + node.bounds.width - padding;
+    if !inside || y < top {
+        return None;
+    }
+    let place = (y - top) / pitch;
+    let in_row = (y - top) % pitch < APP_ROW_HEIGHT;
+    (in_row && place < app_count(node)).then_some(place)
+}
+
+/// Each row of an AppList that is at least partly inside it: the app's place, its name and the row's box.
+pub fn app_list_rows(node: &Node) -> impl Iterator<Item = (usize, &str, Rect)> + '_ {
+    let padding = i32::from(node.settings.padding);
+    let (top, pitch) = app_rows(node);
+    node.text
+        .split('\n')
+        .take(app_count(node) as usize)
+        .enumerate()
+        .map(move |(place, name)| {
+            let row = Rect {
+                x: node.bounds.x + padding,
+                y: top + place as i32 * pitch,
+                width: (node.bounds.width - 2 * padding).max(0),
+                height: APP_ROW_HEIGHT,
+            };
+            (place, name, row)
+        })
+        .filter(|(_, _, row)| {
+            row.y + row.height > node.bounds.y && row.y < node.bounds.y + node.bounds.height
+        })
+}
+
+/// Each installed app as a row like a button: its icon, then its name.
+fn draw_app_list(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
+    let theme = context.theme;
+    let color = resolve(node.settings.color, ThemeColor::Text, theme);
+    let surface = resolve(None, ThemeColor::Surface, theme);
+    for (place, name, row) in app_list_rows(node) {
+        let mut body = rlvgl_widgets::button::Button::new(alloc::string::String::new(), row);
+        *body.style_mut() = frame_style(&Settings::default(), surface, BUTTON_RADIUS, theme);
+        body.draw(renderer);
+
+        let icon_area = Rect {
+            x: row.x + APP_ROW_PADDING,
+            y: row.y + (APP_ROW_HEIGHT - APP_ICON_SIZE) / 2,
+            width: APP_ICON_SIZE,
+            height: APP_ICON_SIZE,
+        };
+        let icon = ImageReference::InstalledApp(place as u16).to_value();
+        let mut over_row = OverColorRenderer {
+            inner: renderer,
+            backdrop: surface,
+        };
+        draw_image(context, icon, icon_area, color, &mut over_row);
+        let text_left = icon_area.x + APP_ICON_SIZE + APP_ICON_GAP;
+        let text_area = Rect {
+            x: text_left,
+            y: row.y,
+            width: (row.x + row.width - APP_ROW_PADDING - text_left).max(0),
+            height: APP_ROW_HEIGHT,
+        };
+        draw_text_block(
+            &mut over_row,
+            node.settings.font,
+            name,
+            text_area,
+            Align::Start,
+            false,
+            color,
+        );
+    }
+}
 
 /// Where a CellGrid's cells are: the first cell's corner, the pitch from one to the next, and the size.
 pub struct CellLayout {

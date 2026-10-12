@@ -174,10 +174,7 @@ fn problems_with(package: &Package) -> Vec<String> {
 // ============================================================================
 
 /// Rules some packages break today, each a real gap to fix, so the rest stay checked; see docs/testing.md.
-const KNOWN_GAPS: [(&str, &str); 2] = [
-    ("apps/alarm", "its screen \"main\" has 67 widgets"),
-    ("apps/launcher", "its screen \"main\" has 65 widgets"),
-];
+const KNOWN_GAPS: [(&str, &str); 1] = [("apps/alarm", "its screen \"main\" has 67 widgets")];
 
 fn is_known_gap(package: &Package, problem: &str) -> bool {
     KNOWN_GAPS

@@ -67,10 +67,12 @@ pub enum WidgetKind {
     Keyboard,
     /// A board of coloured cells drawn from one array, such as Life or Snake.
     CellGrid,
+    /// The installed apps as a scrolling list of rows, each its icon and name, drawn as one widget.
+    AppList,
 }
 
 impl WidgetKind {
-    const ALL: [WidgetKind; 38] = {
+    const ALL: [WidgetKind; 39] = {
         use WidgetKind::*;
         [
             Column,
@@ -111,6 +113,7 @@ impl WidgetKind {
             TextArea,
             Keyboard,
             CellGrid,
+            AppList,
         ]
     };
 
@@ -401,7 +404,8 @@ impl Property {
             LongMode => kind == Kind::Label,
             Opacity => true,
             Disabled => is_input,
-            Gap | Justify | AlignItems => kind.holds_children(),
+            Gap => kind.holds_children() || kind == Kind::AppList,
+            Justify | AlignItems => kind.holds_children(),
             Columns => matches!(kind, Kind::Grid | Kind::ButtonMatrix | Kind::CellGrid),
             Rows | CellSize | CellGap | CellShape | Cells | Palette => kind == Kind::CellGrid,
             Options => matches!(kind, Kind::Roller | Kind::Dropdown | Kind::ButtonMatrix),
@@ -413,12 +417,12 @@ impl Property {
             }
             Recolor => matches!(kind, Kind::Image | Kind::Icon),
             OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease => {
-                is_input || kind.holds_children() || kind == Kind::CellGrid
+                is_input || kind.holds_children() || matches!(kind, Kind::CellGrid | Kind::AppList)
             }
             OnDrag => matches!(kind, Kind::Slider | Kind::Arc | Kind::CellGrid) || kind.holds_children(),
             OnChange => is_input || kind == Kind::Arc,
             OnPageChange => matches!(kind, Kind::Pages | Kind::Tabs),
-            OnScrollEnd => matches!(kind, Kind::Scroll | Kind::List),
+            OnScrollEnd => matches!(kind, Kind::Scroll | Kind::List | Kind::AppList),
             // Screen-wide events go on a screen's root, which the tree check confirms.
             OnSwipe | OnButton | OnShow | OnHide => true,
             _ => false,

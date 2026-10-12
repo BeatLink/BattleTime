@@ -196,8 +196,7 @@ the ones above it.
 - [ ] **Native widgets with their logic built in.** Every widget node costs 160 to 240 B of the UI
   heap wherever its record lives, so a composite drawn by the firmware as one node saves more RAM
   than a library component. In the firmware, which has 112 KB free:
-  - `AppList` and `AppGrid`, reading the installed apps themselves: the launcher's 65 widgets
-    become 1, and the 16-row limit goes.
+  - `AppGrid`, the installed apps as a grid of icons, beside the `AppList` the launcher uses.
   - `StatusIcons`: battery, Bluetooth, notifications and alarm, with a style for the wasp-os bar.
     Replaces 13 `BatteryIcon` copies and 9 hand-made status rows in the faces.
   - `TimePicker`, `DurationPicker`, `WeekdayPicker` and `Stepper`, writing back to a signal, for
@@ -410,7 +409,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   acceleration, shakes and phone notifications. Push the other `motion` kinds (wrist raise, tap,
   double tap, still, moving), heart rate, battery changes, calls, music, navigation and weather
   once those services exist.
-- [ ] **Lift the launcher's 16-row limit,** so every installed app is listed.
 - [ ] **Try acceleration and shakes on the watch.** The motion and level apps should follow the
   watch's tilt with the right axes and signs, a firm shake should roll the dice once, and walking
   should not. Tune `JOLT_THRESHOLD_IN_MILLI_G` if needed.

@@ -612,8 +612,8 @@ compiler and the runtime both follow it:
 Text fields are read with `read event text`, not `read event`; the host passes them with
 `Interpreter::run_handler_with_text`.
 
-A touch's `value` is the number of the cell or button touched in a CellGrid or ButtonMatrix, and 0
-for any other widget. A screen's root may take `onDrag`, for drawing or steering across the whole
+A touch's `value` is the number of the cell or button touched in a CellGrid or ButtonMatrix, or the
+place of the app touched in an AppList, and 0 for any other widget. A screen's root may take `onDrag`, for drawing or steering across the whole
 screen.
 
 ### Time
@@ -790,6 +790,7 @@ library has), in the order above. The app host's font slots start empty, and the
 | `Arc` | rlvgl arc | `background` is the track and `color` the filled part; `border_width` is the ring's thickness. Its children are laid out as a column centred in it. Not draggable yet. |
 | `Bar`, `Slider`, `Switch`, `Led`, `ClickArea` | rlvgl | A tap on a `Switch`, or a tap or drag on a `Slider`, sends `onChange`. |
 | `CellGrid` | The host | Cells from an array and a palette, with `gap` and shape; click and drag send `{value}`, the cell's index. |
+| `AppList` | The host | A row per installed app, its icon and name read from the system values; scrolls like a `List`, and a click sends `{value}`, the app's place. |
 | `Line`, `Chart`, `Scale`, `AnalogClock` | The host | `Chart` draws one series. |
 | `ButtonMatrix` | The host | `"\n"` breaks rows; a press sends `{value}`; the button numbered `value` is highlighted. |
 | `Roller`, `Dropdown`, `Checkbox`, `Radio` | The host | A dropdown opens its list on a tap. |

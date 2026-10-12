@@ -167,6 +167,7 @@ struct FakeSystem {
     weather_location: String,
     steps_today: Value,
     is_phone_connected: bool,
+    app_names: Vec<String>,
 }
 
 impl SystemValues for FakeSystem {
@@ -175,7 +176,18 @@ impl SystemValues for FakeSystem {
             SystemValue::Uses24HourClock => 1,
             SystemValue::StepsToday => self.steps_today,
             SystemValue::IsPhoneConnected => self.is_phone_connected as Value,
+            SystemValue::InstalledAppCount => self.app_names.len() as Value,
             _ => 0,
+        }
+    }
+
+    fn read_element_text(&self, value: SystemValue, index: Value) -> &str {
+        match value {
+            SystemValue::InstalledAppName => usize::try_from(index)
+                .ok()
+                .and_then(|index| self.app_names.get(index))
+                .map_or("", String::as_str),
+            _ => "",
         }
     }
 
@@ -1410,4 +1422,214 @@ fn an_image_that_names_a_library_image_draws_that_image() {
         Some((2, 3))
     );
     assert_eq!(size_of(&without_library, ImageReference::App(0)), None);
+}
+
+// ============================================================================
+// App lists
+// ============================================================================
+
+/// One AppList filling the screen, whose tap vibrates for as many milliseconds as the place tapped.
+fn app_list_image() -> Vec<u8> {
+    use Instruction::*;
+
+    let mut writer = ImageWriter::new("launcher", "Apps", AppKind::App, 1);
+    let main = writer.string("main");
+    let report_place = writer.handler(code(|code| {
+        code.emit(ReadEvent(2)).emit(Effect(EffectKind::Vibrate));
+    }));
+    let constant = PropertySource::Constant;
+    writer.widget(
+        WidgetKind::AppList,
+        0,
+        &[
+            (Property::ScreenName, constant(main as i32)),
+            (Property::Padding, constant(8)),
+            (Property::Gap, constant(8)),
+            (Property::OnClick, PropertySource::Handler(report_place)),
+        ],
+    );
+    writer.build()
+}
+
+fn system_with_apps(count: usize) -> FakeSystem {
+    FakeSystem {
+        app_names: (0..count).map(|place| std::format!("App {place}")).collect(),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn an_app_list_draws_a_row_for_each_installed_app() {
+    let image = app_list_image();
+    let mut system = system_with_apps(3);
+    let host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    let rows = host.widget_rows(0);
+
+    assert_eq!(host.node_count(), 1);
+    let names: Vec<&str> = rows.iter().map(|(name, _)| *name).collect();
+    assert_eq!(names, ["App 0", "App 1", "App 2"]);
+    assert_eq!(rows[0].1.y, 8);
+    assert_eq!(rows[1].1.y - rows[0].1.y, crate::drawing::APP_ROW_HEIGHT + 8);
+    assert_eq!(rows[0].1.width, 240 - 16);
+}
+
+#[test]
+fn tapping_a_row_sends_its_place_and_a_gap_sends_nothing() {
+    let image = app_list_image();
+    let mut system = system_with_apps(3);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let second = host.widget_rows(0)[1].1;
+
+    let on_row = host.touch(
+        Touch::Click {
+            x: 120,
+            y: second.y + 10,
+        },
+        START_TIME,
+        &mut system,
+    );
+    let in_gap = host.touch(
+        Touch::Click {
+            x: 120,
+            y: second.y - 4,
+        },
+        START_TIME,
+        &mut system,
+    );
+    let past_the_end = host.touch(Touch::Click { x: 120, y: 230 }, START_TIME, &mut system);
+
+    assert_eq!(on_row, EventResult::Handled);
+    assert_eq!(in_gap, EventResult::NotHandled);
+    assert_eq!(past_the_end, EventResult::NotHandled);
+    assert_eq!(system.effects, [(EffectKind::Vibrate, 1, None)]);
+}
+
+#[test]
+fn a_long_app_list_scrolls_and_keeps_its_rows_inside_it() {
+    let image = app_list_image();
+    let mut system = system_with_apps(8);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let first_before = host.widget_rows(0)[0].1;
+
+    host.touch(
+        Touch::Drag {
+            x: 120,
+            y: 40,
+            start_x: 120,
+            start_y: 200,
+        },
+        START_TIME,
+        &mut system,
+    );
+    let rows = host.widget_rows(0);
+
+    assert!(rows[0].1.y < first_before.y);
+    assert!(rows.iter().all(|(_, row)| row.y + row.height > 0 && row.y < 240));
+    assert_eq!(rows.first().map(|(name, _)| *name), Some("App 2"));
+    assert_eq!(rows.last().map(|(name, _)| *name), Some("App 6"));
+}
+
+#[test]
+fn installing_an_app_adds_its_row() {
+    let image = app_list_image();
+    let mut system = system_with_apps(1);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    system.app_names.push("Timer".into());
+    host.system_values_changed(SystemValue::InstalledAppCount.bit(), START_TIME, &mut system);
+
+    let names: Vec<&str> = host.widget_rows(0).iter().map(|(name, _)| *name).collect();
+    assert_eq!(names, ["App 0", "Timer"]);
+    assert!(dirty(&host).contains(&0));
+}
+
+#[test]
+fn an_app_list_paints_its_rows() {
+    let image = app_list_image();
+    let mut system = system_with_apps(2);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+
+    host.draw(&mut screen).unwrap();
+
+    let surface = rgb565(DEFAULT_THEME.color(ThemeColor::Surface));
+    let background = rgb565(DEFAULT_THEME.color(ThemeColor::Background));
+    assert_eq!(screen.pixel(30, 12), surface);
+    assert_eq!(screen.pixel(30, 80), surface);
+    assert_eq!(screen.pixel(30, 64), background);
+    assert_eq!(screen.pixel(30, 200), background);
+}
+
+#[test]
+fn text_over_a_row_is_mixed_with_the_rows_colour() {
+    use rlvgl_core::renderer::Renderer;
+    use rlvgl_core::widget::{Color, Rect};
+
+    #[derive(Default)]
+    struct Recorder {
+        dots: Vec<(Rect, Color)>,
+    }
+    impl Renderer for Recorder {
+        fn fill_rect(&mut self, rect: Rect, color: Color) {
+            self.dots.push((rect, color));
+        }
+        fn blend_rect(&mut self, rect: Rect, color: Color) {
+            self.dots.push((rect, color));
+        }
+        fn draw_text(&mut self, _position: (i32, i32), _text: &str, _color: Color) {}
+    }
+
+    let mut recorder = Recorder::default();
+    let mut over = crate::drawing::OverColorRenderer {
+        inner: &mut recorder,
+        backdrop: Color(0, 0, 100, 255),
+    };
+    over.blend_row(5, 7, Color(200, 0, 0, 255), &[0, 255, 51]);
+    over.fill_rect(
+        Rect {
+            x: 0,
+            y: 0,
+            width: 2,
+            height: 2,
+        },
+        Color(1, 2, 3, 255),
+    );
+    over.blend_rect(
+        Rect {
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+        },
+        Color(4, 5, 6, 255),
+    );
+    over.draw_text((0, 0), "x", Color(0, 0, 0, 255));
+    over.draw_pixels((0, 0), &[Color(7, 8, 9, 255)], 1, 1);
+
+    assert_eq!(
+        recorder.dots[0],
+        (
+            Rect {
+                x: 6,
+                y: 7,
+                width: 1,
+                height: 1
+            },
+            Color(200, 0, 0, 255)
+        )
+    );
+    assert_eq!(
+        recorder.dots[1],
+        (
+            Rect {
+                x: 7,
+                y: 7,
+                width: 1,
+                height: 1
+            },
+            Color(40, 0, 80, 255)
+        )
+    );
+    assert_eq!(recorder.dots.len(), 5);
 }

@@ -43,10 +43,10 @@ describe("launcher", () => {
     expect(open_app.value).toBe(timer);
   });
 
-  it("has rows for the first sixteen apps", () => {
+  it("lists every app, however many are installed", () => {
     installed_apps.value = Array.from({ length: 20 }, (_, place) => ({ id: `app-${place}`, name: `App ${place}`, icon: icons.game }));
     render(<OpenScreen />);
-    expect(screen.getAllByRole("button")).toHaveLength(16);
-    expect(screen.queryByText("App 16")).toBeNull();
+    expect(screen.getAllByRole("button")).toHaveLength(20);
+    expect(screen.getByText("App 19")).toBeTruthy();
   });
 });

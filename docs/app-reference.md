@@ -191,6 +191,7 @@ from inside its parent's padding.
 | `Led` | led | A dot that is on, off or dimmed. |
 | `Chart` | chart | A line or bar chart from one or more fixed-length arrays, such as heart rate over a day. |
 | `CellGrid` | drawn by the runtime | A board of coloured cells from one array, such as Life, Snake or 2048. One widget however many cells, so a 400-cell board costs no more UI heap than a label. |
+| `AppList` | drawn by the runtime | The installed apps as a scrolling list of rows, each its icon and name, read from the system by the widget itself. One widget however many apps, so a launcher is a few bytes. |
 | `Scale` | scale | Ticks and labels around a dial or along a ruler, with an optional needle at `value`. |
 | `AnalogClock` | clock | Clock hands bound to a time, normally `now`. |
 | `Table` | table | Rows and columns of text. |
@@ -241,6 +242,7 @@ Every angle, in every widget and function, is in degrees clockwise from twelve o
 | `Line` | `points`: a fixed-length array of `{ x, y }`. |
 | `Scale` | `ticks`, `major_every`, `labels` for the major ticks, `skip` for tick numbers to leave out (such as under a date window), and `value` and `needle_color` for a gauge. `start_angle` and `end_angle` make a part dial, such as a half gauge. |
 | `CellGrid` | `columns`, `rows`, `cell_size`, `cell_gap`, `cell_shape` (`square`, `rounded` or `round`), `cells` (one number per cell, read as a colour from `palette`), `palette` (a fixed array, or a state array to change colours as the app runs), and `onClick` and `onDrag` receiving `{ value }`, the cell's number. |
+| `AppList` | `gap` between rows, `padding`, `color` for the icons and names, and `onClick` receiving `{ value }`, the tapped app's place in `installed_apps`. Rows are 52 pixels tall. |
 | `Image` | `width` and `height`, from the common props, for an image that is not square. |
 | `Chart` | `series`: up to 3 arrays, each with its colour. |
 | `Arc` | `value`, `minimum` and `maximum`. Given a signal, the arc can be dragged and writes back to it, with `onChange`. |

@@ -254,12 +254,8 @@ impl TestWatch {
     /// Taps the shown widget whose text is exactly `text`, and fails listing what is shown if none is.
     #[track_caller]
     pub fn tap_text(&mut self, text: &str) -> EventResult {
-        let found = self
-            .visible_widgets()
-            .into_iter()
-            .find(|&widget_index| self.host.widget_text(widget_index) == Some(text));
-        match found {
-            Some(widget_index) => self.tap_widget(widget_index),
+        match self.area_of_text(text) {
+            Some(area) => self.tap(area.x + area.width / 2, area.y + area.height / 2),
             None => panic!(
                 "{}: no shown widget reads {text:?}; the screen shows {:?}",
                 self.id(),
@@ -429,12 +425,40 @@ impl TestWatch {
 
     /// The text of every seen widget that shows some, in the image's order.
     pub fn visible_texts(&self) -> Vec<String> {
-        self.visible_widgets()
+        self.visible_text_areas()
             .into_iter()
-            .filter_map(|widget_index| self.host.widget_text(widget_index))
-            .filter(|text| !text.is_empty())
-            .map(str::to_string)
+            .map(|(text, _)| text)
             .collect()
+    }
+
+    /// Every text that can be seen with where it is: a widget's text, or each row a list widget draws itself.
+    pub fn visible_text_areas(&self) -> Vec<(String, Rect)> {
+        let mut texts = Vec::new();
+        for widget_index in self.visible_widgets() {
+            let Some(area) = self.visible_area(widget_index) else {
+                continue;
+            };
+            let rows = self.host.widget_rows(widget_index);
+            if rows.is_empty() {
+                let text = self.host.widget_text(widget_index).unwrap_or_default();
+                texts.push((text.to_string(), area));
+            }
+            for (text, row) in rows {
+                if let Some(row_area) = row.intersect(area) {
+                    texts.push((text.to_string(), row_area));
+                }
+            }
+        }
+        texts.retain(|(text, _)| !text.is_empty());
+        texts
+    }
+
+    /// Where a seen text is exactly this one, for tapping it.
+    pub fn area_of_text(&self, text: &str) -> Option<Rect> {
+        self.visible_text_areas()
+            .into_iter()
+            .find(|(shown, _)| shown == text)
+            .map(|(_, area)| area)
     }
 
     /// Whether some seen widget's text contains `text`.

@@ -615,6 +615,7 @@ pub fn is_mapped(kind: WidgetKind) -> bool {
             | Switch
             | Slider
             | CellGrid
+            | AppList
             | Line
             | Scale
             | AnalogClock

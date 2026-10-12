@@ -837,11 +837,7 @@ fn touch_point(watch: &TestWatch, target: &TouchTarget) -> Result<ScreenPoint, M
         TouchTarget::Point(point) => return Ok(*point),
         TouchTarget::Text(text) => text,
     };
-    let area = watch
-        .visible_widgets()
-        .into_iter()
-        .find(|&widget_index| watch.host().widget_text(widget_index) == Some(text.as_str()))
-        .and_then(|widget_index| watch.visible_area(widget_index));
+    let area = watch.area_of_text(text);
     match area {
         Some(area) => Ok(ScreenPoint {
             x: area.x + area.width / 2,
