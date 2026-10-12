@@ -41,7 +41,7 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | App host (with `neotime-ui` and rlvgl) | 55.5 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 42.1 KB | 42.1 KB |
 | App runtime | 23.8 KB | 0.1 KB |
-| core, alloc and compiler builtins | 22.7 KB | 10.5 KB |
+| core, alloc and compiler builtins | 22.7 KB | 10.4 KB |
 | Storage (littlefs) | 21.5 KB | 20.9 KB |
 | Embassy, allocator and Cortex-M | 17.0 KB | 15.6 KB |
 | Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
@@ -111,8 +111,8 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 | Formatting: the root and the three top-level folders | | 8 |
 | `/settings/system` and `/settings/theme` | 57 | 0 |
 | 12 app folders | | 24 |
-| 12 app images, 964 B (flashlight) to 8,522 B (alarm) | 37,800 | 15 |
-| **In use** | | **47 of 768: 188 KB of 3 MB** |
+| 12 app images, 924 B (flashlight) to 6,822 B (alarm) | 34,711 | 13 |
+| **In use** | | **45 of 768: 180 KB of 3 MB** |
 <!-- /measure_memory:file-system -->
 
 The rest, about 2.8 MB, is free for apps, saved state and resources.
@@ -169,7 +169,7 @@ The table below is the budget:
 
 | Region | Budget | Holds | Status |
 |---|---|---|---|
-| UI heap | 21 KB | The heap that `rlvgl`'s widgets allocate from. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (6,604 B), one 160 B node per widget of the open screen, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. Storage shares the same heap. The alarm peaked at 36,188 B of the 37,888 B heap with its 15 KB image and 67 widgets; shared code has since cut its image to 8.5 KB, so measure it again. The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
+| UI heap | 21 KB | The heap that `rlvgl`'s widgets allocate from. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (6,604 B), one 160 B node per widget of the open screen, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. Storage shares the same heap. The alarm peaked at 36,188 B of the 37,888 B heap with its 15 KB image and 67 widgets; calls and shared code have since cut its image to 6.8 KB, so measure it again. The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
 | Bluetooth | 12 KB | The controller and the TrouBLE host: connection state, packet buffers and the GATT tables. | Partly measured: the controller is 1.5 KB; TrouBLE's example with it is 12.0 KB in all, executor included |
 | Apps | 6 KB | Memory for the app that is open beyond the UI heap, such as the parts of its file read from `/apps`. The runtime's working memory in it is measured: 2,144 B for the interpreter, 2,056 B for the bindings and 2,440 B for the state. `AppHost` keeps all three on the UI heap. | Partly measured |
 | Stack | 8 KB | The main stack, for interrupts and code that is not in a task. | Planned |
