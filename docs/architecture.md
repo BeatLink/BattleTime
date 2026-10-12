@@ -429,13 +429,18 @@ values apps read them through. It also writes the `status` reply and the `music`
 
 ## Current Time (`services/current_time`)
 
-`neotime-current-time` turns the clock's milliseconds since 1970 into the Bluetooth Current Time
-service's two values and back, so the calendar arithmetic is tested on a computer.
+`neotime-current-time` holds the wall clock's logic and turns its milliseconds since 1970 into the
+Bluetooth Current Time service's two values and back, so the time handling is tested on a computer.
+`WallClock` keeps UTC as an offset from the timer's uptime, which the caller passes in, plus a
+`LocalTimeInformation` zone; it gives UTC and local time, and sets either, keeping UTC or the local
+time when the zone changes, as [companion-protocol.md](companion-protocol.md#time-and-time-zone)
+describes. `parse_time_line` reads Gadgetbridge's `setTime(...)` and `E.setTimeZone(...)` lines.
 `encode_current_time` gives the 10 bytes of 0x2A2B: the date, the time, the day of the week from
 Monday as 1, the 256ths of a second and an adjust reason of 0. `decode_current_time` reads a write
 of at least 7 bytes and refuses a year outside 1970 to 2200 or a date or time that does not exist.
 `LocalTimeInformation` holds 0x2A0F's time zone and daylight saving offset in quarter hours and
-refuses values the field does not allow, while taking its "unknown" values.
+refuses values the field does not allow, while taking its "unknown" values, which count as 0 in
+`offset_in_milliseconds`.
 
 ## Settings (`services/settings`)
 
@@ -528,9 +533,9 @@ watch face, the launcher and the apps through `neotime-app-host`:
   both change it; the shell then redraws what reads them, sends the app `settings_change`, applies
   the brightness unless the open app set its own, and writes the file when the app closes or the
   screen turns off, or at once while it is off. `set_setting("theme", n)` picks preset theme `n`.
-- **Chimes.** With chimes on, the shell also wakes on the hour or half hour and buzzes, twice on
-  the hour and once on the half hour, unless do not disturb is on. A chime more than a minute late,
-  such as after the phone moved the clock on, is skipped.
+- **Chimes.** With chimes on, the shell also wakes on the local hour or half hour and buzzes, twice
+  on the hour and once on the half hour, unless do not disturb is on. A chime more than a minute
+  late, such as after the phone moved the clock on, is skipped.
 - **Vibration.** `neotime_app_host::haptics` decides what the motor plays: `vibrate`,
   `vibrate_pattern`, `stop_vibrating` and `notify` from apps, a notification from the phone, and the
   chimes. In do not disturb only the `alarm` pattern, which the alarm and timer ring with, and a
@@ -606,11 +611,14 @@ watch face, the launcher and the apps through `neotime-app-host`:
   20-byte pieces. A command runs after its write is answered; one that installs, removes or hides an
   app, or copies a new shared library into internal flash, raises `packages::CHANGED` for the shell.
   Copying the library erases internal flash pages, each stopping the CPU for about 85 ms.
-- **Clock.** `clock.rs` counts on from the time a phone last wrote to the Current Time
-  characteristic (0x2A2B), or from the build time until one does, and answers a read of 0x2A2B with
-  that time. It holds local time, with an offset from UTC of 0. The time zone a phone writes to
-  Local Time Information (0x2A0F) is kept in RAM and read back, but moves neither the clock nor the
-  offset apps see.
+- **Clock.** `clock.rs` holds one `WallClock`: UTC counted on from the build time, or from what a
+  phone last set through Current Time (0x2A2B), Local Time Information (0x2A0F) or a `setTime`
+  line, which `read_companion_line` hands it before reading JSON. `clock::now()` gives local time,
+  for drawing, chimes and the midnight step reset; `clock::utc_now()` gives the `now` apps and the
+  app host see, with `clock::utc_offset()` as `utc_offset`, and `clock::instant_at` turns a UTC
+  time into a timer reading. Setting the clock signals `now` and `utc_offset` as changed. A changed
+  zone is written to `/settings/time_zone` by the Bluetooth task after the write is answered, and
+  the shell reads it back at start unless a phone already wrote one.
 - **Status page.** The start-up lines and an update's progress share the display with the shell;
   while the page is up the shell draws nothing, and when the update ends it paints again.
 - **Version.** `build.rs` sets `FIRMWARE_VERSION` from the package version in `firmware/Cargo.toml`

@@ -6,7 +6,7 @@
 //! the settings' timeout without input, unless the app keeps the screen on, and the next touch or
 //! press turns them on without acting on it. Each app's persistent state is saved to
 //! `/apps/<id>/state` when it closes or the screen turns off, and changed settings at the same times.
-//! The watch buzzes on the hour or half hour when the chimes setting asks, and for each notification
+//! The watch buzzes on the local hour or half hour when the chimes setting asks, and for each notification
 //! from the phone, which also goes to the open app. Do not disturb silences all of it, and every app
 //! vibration but the alarm pattern. The accelerometer is read only while the screen is on and the
 //! open app subscribes to acceleration or shakes. Plugging the charger in or out, or the charge going
@@ -154,7 +154,8 @@ impl SystemValues for WatchSystem {
             return phone_value;
         }
         match value {
-            SystemValue::Now => clock::now(),
+            SystemValue::Now => clock::utc_now(),
+            SystemValue::UtcOffset => clock::utc_offset(),
             SystemValue::BatteryPercent => battery::percent() as Value,
             SystemValue::IsCharging => battery::is_charging() as Value,
             SystemValue::BatteryMillivolts => battery::millivolts() as Value,
@@ -276,7 +277,7 @@ struct Shell {
     dimmed: bool,
     /// Settings changed since they were last written to the flash.
     settings_unsaved: bool,
-    /// The wall clock time the chimes were last checked at.
+    /// The local time the chimes were last checked at.
     chimes_checked_at: Value,
     /// The open app's image, which its host borrows; freed only once that host is gone.
     image: Option<Lent<[u8]>>,
@@ -293,7 +294,7 @@ impl Shell {
     /// Closes what is open and opens another; the face is the fallback when an image will not open.
     fn open(&mut self, showing: Showing) {
         self.battery_screen_returns_to = None;
-        let now = clock::now();
+        let now = clock::utc_now();
         if let Some(mut host) = self.host.take() {
             host.close(now, &mut self.system);
             self.save_state_of(&mut host);
@@ -367,7 +368,7 @@ impl Shell {
     /// Reads the installed apps again, such as after the companion app installed one, and shows the face.
     fn reload_apps(&mut self) {
         if let Some(mut host) = self.host.take() {
-            host.close(clock::now(), &mut self.system);
+            host.close(clock::utc_now(), &mut self.system);
             self.save_state_of(&mut host);
         }
         if let Some(image) = self.image.take() {
@@ -415,7 +416,7 @@ impl Shell {
             let key = app_settings::THEME_SETTING;
             host.deliver(
                 PushedEvent::SettingsChange { key },
-                clock::now(),
+                clock::utc_now(),
                 &mut self.system,
             );
         }
@@ -439,7 +440,7 @@ impl Shell {
             self.set_brightness(settings::current().get(Setting::Brightness) as u8);
         }
         if let Some(host) = &mut self.host {
-            app_settings::tell_app_about_changes(host, changed, clock::now(), &mut self.system);
+            app_settings::tell_app_about_changes(host, changed, clock::utc_now(), &mut self.system);
         }
         if !self.lit {
             self.save_settings();
@@ -481,7 +482,7 @@ impl Shell {
         let Some(host) = &mut self.host else {
             return;
         };
-        let result = host.touch(touch, clock::now(), &mut self.system);
+        let result = host.touch(touch, clock::utc_now(), &mut self.system);
         if result == EventResult::NotHandled {
             match (touch, self.showing) {
                 (Touch::Swipe(SwipeDirection::Up), Showing::Face) => self.open(Showing::Launcher),
@@ -495,7 +496,7 @@ impl Shell {
         let Some(host) = &mut self.host else {
             return;
         };
-        if host.press_button(press, clock::now(), &mut self.system) == EventResult::NotHandled {
+        if host.press_button(press, clock::utc_now(), &mut self.system) == EventResult::NotHandled {
             self.go_back();
         }
     }
@@ -503,7 +504,7 @@ impl Shell {
     fn system_values_changed(&mut self, changed: u32) {
         self.settings_changed();
         if let Some(host) = &mut self.host {
-            host.report_system_value_changes(changed, clock::now(), &mut self.system);
+            host.report_system_value_changes(changed, clock::utc_now(), &mut self.system);
         }
         self.take_battery_events();
     }
@@ -514,7 +515,7 @@ impl Shell {
             self.phone_updated(updates);
             return;
         }
-        let now = clock::now();
+        let now = clock::utc_now();
         if let AppEvent::Notification(_) = &event {
             vibration::request(haptics::notification_vibration(is_do_not_disturb()));
         }
@@ -542,7 +543,7 @@ impl Shell {
 
     /// Buzzes and rings as the phone asks, keeps its music and weather, and tells the open app.
     fn phone_updated(&mut self, mut updates: PhoneUpdates) {
-        let now = clock::now();
+        let now = clock::utc_now();
         let is_do_not_disturb = is_do_not_disturb();
         if let Some(count) = updates.buzzes {
             vibration::request(haptics::phone_buzzes_vibration(count, is_do_not_disturb));
@@ -603,7 +604,7 @@ impl Shell {
             });
         }
         if let Some(mut host) = self.host.take() {
-            host.screen_turned_off(clock::now(), &mut self.system);
+            host.screen_turned_off(clock::utc_now(), &mut self.system);
             self.save_state_of(&mut host);
             self.host = Some(host);
         }
@@ -623,7 +624,7 @@ impl Shell {
         self.dimmed = false;
         self.backlight.turn_on();
         if let Some(host) = &mut self.host {
-            let now = clock::now();
+            let now = clock::utc_now();
             host.screen_turned_on(now, &mut self.system);
             // The clock was not redrawn while the screen was dark, so this catches it up.
             host.tick(now, &mut self.system);
@@ -672,10 +673,11 @@ impl Shell {
                 });
             }
             Some(_) => {}
-            None if self.help_drawn_at != Some(help::next_change(clock::now())) => {
-                let now = clock::now();
+            None if self.help_drawn_at != Some(help::next_change(clock::utc_now())) => {
+                let now = clock::utc_now();
+                let local_now = clock::now();
                 self.display
-                    .lock(|display| help::draw(&mut display.borrow_mut(), now, &self.theme));
+                    .lock(|display| help::draw(&mut display.borrow_mut(), local_now, &self.theme));
                 self.help_drawn_at = Some(help::next_change(now));
             }
             None => {}
@@ -709,7 +711,7 @@ impl Shell {
                 let percent = battery::percent() as Value;
                 host.deliver(
                     PushedEvent::Battery { change, percent },
-                    clock::now(),
+                    clock::utc_now(),
                     &mut self.system,
                 );
             }
@@ -754,6 +756,7 @@ pub async fn run_shell(
     Timer::after(START_PAGE_TIME).await;
     hide_status();
     settings::load(files);
+    clock::load_time_zone(files);
     install_fonts(apps::shared_library());
 
     let theme = settings::load_theme(files);
@@ -762,7 +765,7 @@ pub async fn run_shell(
         host: None,
         system: WatchSystem {
             request: Request::Nothing,
-            random_state: Cell::new(clock::now() as u32 | 1),
+            random_state: Cell::new(clock::utc_now() as u32 | 1),
             brightness: backlight::DEFAULT_LEVEL,
             brightness_request: None,
             keep_screen_on: false,
@@ -797,8 +800,9 @@ pub async fn run_shell(
         shell.draw();
         shell.match_accelerometer_to_app();
 
-        let now = clock::now();
-        shell.chime_if_due(now);
+        let now = clock::utc_now();
+        let local_now = clock::now();
+        shell.chime_if_due(local_now);
         let mut wake_at = match &shell.host {
             // A dark screen needs no redraws, so only the app's subscriptions wake the shell.
             Some(host) if !shell.lit && !shell.dimmed => host
@@ -811,8 +815,8 @@ pub async fn run_shell(
             wake_at = wake_at.min(last_input + screen_timeout());
         }
         if let Some(period) = chime_period_in_milliseconds() {
-            let next_chime = now - now.rem_euclid(period) + period;
-            wake_at = wake_at.min(clock::instant_at(next_chime));
+            let next_local_chime = local_now - local_now.rem_euclid(period) + period;
+            wake_at = wake_at.min(clock::instant_at(next_local_chime - clock::utc_offset()));
         }
 
         let woke = select4(
@@ -866,7 +870,7 @@ pub async fn run_shell(
                     shell.turn_screen_off();
                 }
                 if let Some(host) = &mut shell.host {
-                    host.tick(clock::now(), &mut shell.system);
+                    host.tick(clock::utc_now(), &mut shell.system);
                 }
             }
             Either4::Fourth(Either4::First(changed)) => {

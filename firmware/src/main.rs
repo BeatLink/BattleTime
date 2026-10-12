@@ -725,6 +725,9 @@ async fn run_bluetooth(
 
 /// Hands a message to the shell, or answers `status` at once; unknown messages are passed over.
 fn read_companion_line(line: &[u8]) {
+    if clock::read_time_line(line) {
+        return;
+    }
     match neotime_companion::parse_line(line) {
         Ok(neotime_companion::Message::Settings(change)) => {
             let _ = settings::CHANGES.try_send(change);
@@ -881,6 +884,7 @@ async fn serve_connection(
                 if let Ok(reply) = event.accept() {
                     reply.send().await;
                 }
+                clock::save_time_zone_if_changed(files);
                 for command in packages_commands.drain(..) {
                     let (reply, change) = files.run_packages_command(&command);
                     for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {

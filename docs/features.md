@@ -52,8 +52,11 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   dark, and an app that keeps the screen on, such as a ringing alarm, stays in front. The watch
   goes back to what was open when the screen sleeps or on the button. Apps hear the same changes
   through their `battery` subscriptions while they are open.
-- **The time from the phone,** set through the Bluetooth Current Time service. A phone can read the
-  watch's time and time zone back from the same service.
+- **The time and time zone from the phone,** set through the Bluetooth Current Time service or
+  Gadgetbridge's `setTime` line. The watch keeps UTC with the time zone and summer time offsets,
+  shows local time, and remembers the zone across restarts. Alarms, chimes and the midnight step
+  reset follow local time, and apps can show UTC and other zones. A phone can read the watch's
+  time and time zone back.
 - **The battery level on the phone,** through the standard Bluetooth Battery service, updated as it
   changes.
 - **Whether a phone is connected.** Faces show the Bluetooth icon while a phone is connected, and

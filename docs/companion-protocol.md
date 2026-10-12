@@ -18,10 +18,33 @@ whether the watch serves it yet.
 | Service | UUID | Characteristic | Use | Served |
 |---|---|---|---|---|
 | Legacy DFU | `00001530-1212-efde-1523-785feabcd123` | as Nordic's legacy DFU | Firmware updates; see [updates.md](updates.md). | Yes |
-| Current Time | `0x1805` | `0x2A2B`, read and write | Writing the 10-byte Current Time value sets the clock; reading it gives the watch's time, with the day of the week and 256ths of a second. The watch keeps local time, so write local time. A write that is not a real date and time is ignored. | Yes |
-| | | `0x2A0F`, read and write | Local Time Information: the time zone and daylight saving offset, in quarter hours. The watch keeps the last one written and reads it back, or 0 and 0 until one is; it never moves the clock. A value outside the field's range is ignored. Kept only until the watch restarts. | Yes |
+| Current Time | `0x1805` | `0x2A2B`, read and write | Writing the 10-byte Current Time value sets the clock to that local time, read in the zone the watch already has; reading it gives the watch's local time, with the day of the week and 256ths of a second. A write that is not a real date and time is ignored. See [Time and time zone](#time-and-time-zone). | Yes |
+| | | `0x2A0F`, read and write | Local Time Information: the time zone and daylight saving offset, in quarter hours. Writing it changes the zone and keeps the local time; reading it gives the zone the watch is in, or 0 and 0 until one is written. A value outside the field's range is ignored. Saved, so it survives a restart. | Yes |
 | Battery | `0x180F` | `0x2A19`, read and notify | The charge, 0 to 100, notified when it changes. | Yes |
 | File transfer | `0xFEBB` | as in [File transfer](#file-transfer) | Reading, writing, listing, moving and deleting files. | Yes |
+
+## Time and time zone
+
+The watch counts UTC and keeps a time zone and daylight saving offset beside it. Local time is UTC
+plus both offsets, and an unknown time zone (`-128`) or daylight saving (`255`) counts as 0. Apps
+see UTC as `now` and the sum as `utc_offset`; faces, alarms, chimes and the midnight step reset use
+local time. The zone is saved in `/settings/time_zone` as the two bytes of 0x2A0F; the time itself
+starts again from the build time after a restart, so a phone should set it on every connection.
+
+The two ways in treat the zone differently, as their senders expect:
+
+- **Current Time Service.** 0x2A2B carries local time, as the standard says, so the watch keeps
+  UTC as that time minus its zone. A 0x2A0F write keeps the local time and moves UTC instead. A
+  phone may write the two in either order, as InfiniTime allows, and the watch ends at the same
+  time. A client that writes only 0x2A2B leaves the zone as it was, so its local time is right but
+  UTC is off by that zone.
+- **Gadgetbridge's Bangle.js line.** A message channel line starting `setTime(` or
+  `E.setTimeZone(`, optionally after the `0x10` byte Gadgetbridge puts first, is read for those
+  two calls, each at the start or after a `;`, and the rest of the line is ignored.
+  `setTime(<seconds since 1970, UTC>)` sets UTC, and `E.setTimeZone(<hours>)` sets the whole offset,
+  rounded to a quarter hour, as the time zone with no daylight saving, keeping UTC. A call whose
+  value is malformed or out of range is skipped. The watch sends no reply. For example
+  `\x10setTime(1767603600);E.setTimeZone(1.0);...` sets 10:00 local time at UTC+1.
 
 ## The message channel
 

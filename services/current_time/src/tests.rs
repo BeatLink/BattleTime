@@ -215,3 +215,239 @@ fn refuses_a_short_or_out_of_range_zone() {
         assert_eq!(LocalTimeInformation::decode(bytes), None, "{bytes:?}");
     }
 }
+
+#[test]
+fn the_offset_adds_the_zone_and_daylight_saving() {
+    let new_york_in_summer = LocalTimeInformation {
+        time_zone_in_quarter_hours: -20,
+        daylight_saving_in_quarter_hours: 4,
+    };
+
+    assert_eq!(new_york_in_summer.offset_in_milliseconds(), -4 * HOUR);
+}
+
+#[test]
+fn unknown_parts_of_the_zone_count_as_none() {
+    let unknown = LocalTimeInformation {
+        time_zone_in_quarter_hours: UNKNOWN_TIME_ZONE,
+        daylight_saving_in_quarter_hours: UNKNOWN_DAYLIGHT_SAVING,
+    };
+
+    assert_eq!(unknown.offset_in_milliseconds(), 0);
+}
+
+// ============================================================================
+// The wall clock
+// ============================================================================
+
+const HOUR: i64 = 3_600_000;
+
+/// UTC+1 with an hour of summer time, as central Europe has in summer.
+const BERLIN_IN_SUMMER: LocalTimeInformation = LocalTimeInformation {
+    time_zone_in_quarter_hours: 4,
+    daylight_saving_in_quarter_hours: 4,
+};
+
+const INDIA: LocalTimeInformation = LocalTimeInformation {
+    time_zone_in_quarter_hours: 22,
+    daylight_saving_in_quarter_hours: 0,
+};
+
+#[test]
+fn a_new_clock_counts_on_from_its_start_in_utc() {
+    let clock = WallClock::starting_at(MONDAY_5_JANUARY_2026_AT_09_00);
+
+    assert_eq!(clock.utc(5000), MONDAY_5_JANUARY_2026_AT_09_00 + 5000);
+    assert_eq!(clock.local(5000), MONDAY_5_JANUARY_2026_AT_09_00 + 5000);
+    assert_eq!(clock.zone(), LocalTimeInformation::UTC);
+}
+
+#[test]
+fn local_time_is_utc_moved_by_the_zone() {
+    let mut clock = WallClock::starting_at(MONDAY_5_JANUARY_2026_AT_09_00);
+
+    clock.set_zone_keeping_utc(BERLIN_IN_SUMMER);
+
+    assert_eq!(clock.utc_offset_in_milliseconds(), 2 * HOUR);
+    assert_eq!(clock.local(0), MONDAY_5_JANUARY_2026_AT_09_00 + 2 * HOUR);
+    assert_eq!(clock.utc(0), MONDAY_5_JANUARY_2026_AT_09_00);
+}
+
+#[test]
+fn setting_utc_counts_from_the_uptime_it_was_set_at() {
+    let mut clock = WallClock::starting_at(0);
+
+    clock.set_utc(MONDAY_5_JANUARY_2026_AT_09_00, 60_000);
+
+    assert_eq!(clock.utc(60_000), MONDAY_5_JANUARY_2026_AT_09_00);
+    assert_eq!(clock.utc(61_000), MONDAY_5_JANUARY_2026_AT_09_00 + 1000);
+}
+
+#[test]
+fn a_local_time_is_read_in_the_zone_the_clock_has() {
+    let mut clock = WallClock::starting_at(0);
+    clock.set_zone_keeping_utc(INDIA);
+
+    clock.set_local(MONDAY_5_JANUARY_2026_AT_09_00, 0);
+
+    assert_eq!(clock.utc(0), MONDAY_5_JANUARY_2026_AT_09_00 - 5 * HOUR - HOUR / 2);
+}
+
+#[test]
+fn keeping_the_local_time_moves_utc_by_the_zone_change() {
+    let mut clock = WallClock::starting_at(MONDAY_5_JANUARY_2026_AT_09_00);
+
+    clock.set_zone_keeping_local_time(BERLIN_IN_SUMMER);
+
+    assert_eq!(clock.local(0), MONDAY_5_JANUARY_2026_AT_09_00);
+    assert_eq!(clock.utc(0), MONDAY_5_JANUARY_2026_AT_09_00 - 2 * HOUR);
+}
+
+#[test]
+fn the_uptime_at_a_time_counts_from_the_start_and_never_goes_below_zero() {
+    let clock = WallClock::starting_at(MONDAY_5_JANUARY_2026_AT_09_00);
+
+    assert_eq!(clock.uptime_at(MONDAY_5_JANUARY_2026_AT_09_00 + HOUR), HOUR);
+    assert_eq!(clock.uptime_at(0), 0);
+}
+
+#[test]
+fn current_time_and_zone_written_in_either_order_give_the_same_clock() {
+    let nine_in_berlin = [0xEA, 0x07, 1, 5, 9, 0, 0, 1, 0, 0];
+    let berlin = BERLIN_IN_SUMMER.encode();
+    let mut time_first = WallClock::starting_at(0);
+    let mut zone_first = WallClock::starting_at(0);
+
+    assert!(time_first.write_current_time(&nine_in_berlin, 0));
+    assert!(time_first.write_local_time_information(&berlin));
+    assert!(zone_first.write_local_time_information(&berlin));
+    assert!(zone_first.write_current_time(&nine_in_berlin, 0));
+
+    assert_eq!(time_first, zone_first);
+    assert_eq!(time_first.local(0), MONDAY_5_JANUARY_2026_AT_09_00);
+    assert_eq!(time_first.utc(0), MONDAY_5_JANUARY_2026_AT_09_00 - 2 * HOUR);
+    assert_eq!(time_first.current_time(0), nine_in_berlin);
+}
+
+#[test]
+fn bad_writes_leave_the_clock_alone() {
+    let mut clock = WallClock::starting_at(MONDAY_5_JANUARY_2026_AT_09_00);
+    let before = clock;
+
+    assert!(!clock.write_current_time(&[0xEA, 0x07, 13, 1, 0, 0, 0], 0));
+    assert!(!clock.write_local_time_information(&[57, 0]));
+
+    assert_eq!(clock, before);
+}
+
+#[test]
+fn a_time_line_sets_utc_then_the_zone_keeping_utc() {
+    let mut clock = WallClock::starting_at(0);
+    let line = TimeLine {
+        utc_seconds: Some(MONDAY_5_JANUARY_2026_AT_09_00 / 1000),
+        zone: Some(INDIA),
+    };
+
+    clock.apply_time_line(line, 1000);
+
+    assert_eq!(clock.utc(1000), MONDAY_5_JANUARY_2026_AT_09_00);
+    assert_eq!(
+        clock.local(1000),
+        MONDAY_5_JANUARY_2026_AT_09_00 + 5 * HOUR + HOUR / 2
+    );
+}
+
+#[test]
+fn an_empty_time_line_changes_nothing() {
+    let mut clock = WallClock::starting_at(MONDAY_5_JANUARY_2026_AT_09_00);
+    let before = clock;
+
+    clock.apply_time_line(TimeLine::default(), 0);
+
+    assert_eq!(clock, before);
+}
+
+// ============================================================================
+// Companion time lines
+// ============================================================================
+
+fn zone_of(quarter_hours: i8) -> Option<LocalTimeInformation> {
+    Some(LocalTimeInformation {
+        time_zone_in_quarter_hours: quarter_hours,
+        daylight_saving_in_quarter_hours: 0,
+    })
+}
+
+#[test]
+fn reads_gadgetbridges_time_line() {
+    let line = b"\x10setTime(1767603600);E.setTimeZone(1.0);(s=>s&&(s.timezone=1.0,require('Storage').write('setting.json',s)))(require('Storage').readJSON('setting.json',1))";
+
+    assert_eq!(
+        parse_time_line(line),
+        Some(TimeLine {
+            utc_seconds: Some(1_767_603_600),
+            zone: zone_of(4),
+        })
+    );
+}
+
+#[test]
+fn reads_each_call_alone() {
+    assert_eq!(
+        parse_time_line(b"setTime(1767603600.75)"),
+        Some(TimeLine {
+            utc_seconds: Some(1_767_603_600),
+            zone: None,
+        })
+    );
+    assert_eq!(
+        parse_time_line(b"E.setTimeZone(-3.5)"),
+        Some(TimeLine {
+            utc_seconds: None,
+            zone: zone_of(-14),
+        })
+    );
+}
+
+#[test]
+fn rounds_a_zone_to_the_nearest_quarter_hour() {
+    assert_eq!(parse_time_line(b"E.setTimeZone(5.75)").unwrap().zone, zone_of(23));
+    assert_eq!(parse_time_line(b"E.setTimeZone(5.8)").unwrap().zone, zone_of(23));
+    assert_eq!(
+        parse_time_line(b"E.setTimeZone(-9.9)").unwrap().zone,
+        zone_of(-40)
+    );
+    assert_eq!(parse_time_line(b"E.setTimeZone(0)").unwrap().zone, zone_of(0));
+}
+
+#[test]
+fn leaves_out_a_malformed_or_out_of_range_call() {
+    let refused: [&[u8]; 8] = [
+        b"setTime();E.setTimeZone(15)",
+        b"setTime(abc);E.setTimeZone(1.x)",
+        b"setTime(-5);E.setTimeZone(-)",
+        b"setTime(99999999999);E.setTimeZone(.5)",
+        b"setTime(1234567890123456);E.setTimeZone(-12.5)",
+        b"setTime(17676036;E.setTimeZone(1",
+        b"setTime(1.2.3);E.setTimeZone(99999999999999)",
+        b"setTime( );x.E.setTimeZone(1)",
+    ];
+
+    for line in refused {
+        assert_eq!(parse_time_line(line), Some(TimeLine::default()), "{line:?}");
+    }
+}
+
+#[test]
+fn ignores_other_lines() {
+    let ignored: [&[u8]; 4] = [
+        br#"GB({"t":"notify","id":1})"#,
+        b"{\"t\":\"settings\"}",
+        b"print(setTime(5))",
+        &[0xFF, 0xFE],
+    ];
+
+    for line in ignored {
+        assert_eq!(parse_time_line(line), None, "{line:?}");
+    }
+}

@@ -357,9 +357,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### Clock
 
-- [ ] **Time zone and summer time.** The clock holds local time with an offset of 0. Keep UTC plus
-  the zone and summer time offsets, set from the Local Time Information characteristic as
-  InfiniTime does, so apps can show UTC and other zones.
 - [ ] **Set the date and time on the watch,** with rollers for the date and the time (with AM/PM on
   a 12 hour clock), for when no phone has set the clock.
 
