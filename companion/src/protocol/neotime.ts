@@ -21,6 +21,8 @@ export const NEOTIME_DIAGNOSTICS = '6e540002-0000-4000-8000-4e656f54696d';
 // The file service: JSON commands and replies on the control characteristic, raw bytes on the data one.
 export const NEOTIME_FILE_CONTROL = '6e540003-0000-4000-8000-4e656f54696d';
 export const NEOTIME_FILE_DATA = '6e540004-0000-4000-8000-4e656f54696d';
+// The packages characteristic: JSON commands that install, list and remove apps and the shared library.
+export const NEOTIME_PACKAGES = '6e540003-0000-4000-8000-4e656f54696d';
 
 // NeoTime's advertisement has no room for its own service, so a scan recognises it by this name.
 export const NEOTIME_NAME = 'NeoTime';
@@ -35,8 +37,10 @@ export type WatchCapabilities = {
   time: boolean;
   battery: boolean;
   diagnostics: boolean;
-  // The file service, for files, backups and installing apps.
+  // The file service, for files and backups.
   files: boolean;
+  // The packages characteristic, for installing apps, faces and the shared library.
+  packages: boolean;
   // The Nordic UART message channel, for notifications, music, weather, settings and the rest.
   uart: boolean;
 };
@@ -47,19 +51,21 @@ export const NO_CAPABILITIES: WatchCapabilities = {
   battery: false,
   diagnostics: false,
   files: false,
+  packages: false,
   uart: false,
 };
 
 export async function readCapabilities(link: DfuLink): Promise<WatchCapabilities> {
-  const [dfu, time, battery, diagnostics, files, uart] = await Promise.all([
+  const [dfu, time, battery, diagnostics, files, packages, uart] = await Promise.all([
     link.hasCharacteristic(LEGACY_DFU_SERVICE, LEGACY_CONTROL_POINT),
     link.hasCharacteristic(CURRENT_TIME_SERVICE, CURRENT_TIME),
     link.hasCharacteristic(BATTERY_SERVICE, BATTERY_LEVEL),
     link.hasCharacteristic(NEOTIME_SERVICE, NEOTIME_DIAGNOSTICS),
     link.hasCharacteristic(NEOTIME_SERVICE, NEOTIME_FILE_CONTROL),
+    link.hasCharacteristic(NEOTIME_SERVICE, NEOTIME_PACKAGES),
     link.hasCharacteristic(NUS_SERVICE, NUS_RX),
   ]);
-  return { dfu, time, battery, diagnostics, files, uart };
+  return { dfu, time, battery, diagnostics, files, packages, uart };
 }
 
 // ============================================================================

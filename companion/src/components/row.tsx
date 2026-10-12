@@ -40,9 +40,10 @@ export function Row({ label, detail, onPress, right, style, ...rest }: RowProps)
 type ToggleRowProps = Omit<RowProps, 'right' | 'onPress'> & {
   value: boolean;
   onValueChange: (value: boolean) => void;
+  disabled?: boolean;
 };
 
-export function ToggleRow({ value, onValueChange, ...rest }: ToggleRowProps) {
+export function ToggleRow({ value, onValueChange, disabled, ...rest }: ToggleRowProps) {
   const theme = useTheme();
   return (
     <Row
@@ -51,6 +52,7 @@ export function ToggleRow({ value, onValueChange, ...rest }: ToggleRowProps) {
         <Switch
           value={value}
           onValueChange={onValueChange}
+          disabled={disabled}
           trackColor={{ true: theme.accent, false: theme.backgroundSelected }}
           thumbColor={theme.text}
         />

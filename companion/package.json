@@ -14,7 +14,8 @@
     "desktop": "expo export --platform web --output-dir dist && node scripts/electron.mjs",
     "desktop:dev": "node scripts/electron.mjs",
     "build:cli": "esbuild cli/neotime.ts --bundle --platform=node --target=node20 --format=cjs --external:node-ble --alias:@=./src --outfile=build/neotime.cjs",
-    "neotime": "npm run build:cli --silent && node build/neotime.cjs"
+    "neotime": "npm run build:cli --silent && node build/neotime.cjs",
+    "import-watch-apps": "node scripts/import-watch-apps.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",

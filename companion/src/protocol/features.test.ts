@@ -2,6 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import { MockGadgetbridge } from '@/ble/mock-gadgetbridge';
 import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
+import { testImage } from '@/test-support/app-images';
 
 import { createBackup, parseBackup, restoreBackup } from './backup';
 import { FileService } from './file-service';
@@ -123,11 +124,11 @@ describe('files', () => {
   it('installs an app into its own folder and removes it again', async () => {
     const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
     const service = await fileService(watch);
-    await service.installApp('timer', new Uint8Array(300));
-    expect(watch.fileService.installed.has('timer')).toBe(true);
-    expect(watch.fileService.files.get('/apps/timer/app.ntapp')).toHaveLength(300);
+    const image = testImage('timer', 'Timer', 'app', 300);
+    await service.installApp('timer', image);
+    expect(watch.fileService.files.get('/apps/timer/app.ntapp')).toEqual(image);
     await service.removeApp('timer');
-    expect(watch.fileService.installed.has('timer')).toBe(false);
+    expect(watch.fileService.files.has('/apps/timer/app.ntapp')).toBe(false);
     await expect(service.installApp('../evil', new Uint8Array(1))).rejects.toThrow('app id');
   });
 });

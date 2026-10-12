@@ -65,6 +65,9 @@ export function appImagePath(id: string): string {
 // The client
 // ============================================================================
 
+// Commands the packages client sends on the same characteristic.
+const PACKAGES_COMMANDS = new Set(['apps', 'install', 'remove', 'enable', 'install_library']);
+
 // How long one command may take, which covers a sector erase before a write.
 const REPLY_TIMEOUT_MS = 15000;
 
@@ -185,6 +188,10 @@ export class FileService {
   private async nextReply(command: string): Promise<Reply> {
     const raw = await this.replies.next(REPLY_TIMEOUT_MS);
     const reply = JSON.parse(new TextDecoder().decode(raw)) as Reply;
+    // The packages client shares this characteristic, so its replies pass by here too.
+    if (reply.c !== command && PACKAGES_COMMANDS.has(reply.c)) {
+      return this.nextReply(command);
+    }
     if (reply.err) {
       throw new FileServiceError(reply.err);
     }

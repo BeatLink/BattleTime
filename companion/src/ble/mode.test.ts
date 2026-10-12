@@ -61,7 +61,7 @@ describe('the mock watches', () => {
   });
 });
 
-const NEOTIME: WatchCapabilities = { dfu: true, time: true, battery: false, diagnostics: true, files: false, uart: false };
+const NEOTIME: WatchCapabilities = { dfu: true, time: true, battery: false, diagnostics: true, files: false, packages: false, uart: false };
 const WITH_UART: WatchCapabilities = { ...NEOTIME, uart: true };
 
 describe('which tabs are offered', () => {

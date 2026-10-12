@@ -11,6 +11,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
 import type { DiagnosticCounter } from '@/protocol/neotime';
+import { needsSetup } from '@/protocol/setup';
 import { phoneBridge } from '@/services/phone';
 import { useTask } from '@/state/use-task';
 
@@ -56,7 +57,24 @@ export default function WatchScreen() {
     capabilities,
     batteryLevel,
     readDiagnostics,
+    packages,
   } = useWatch();
+  // Whether the watch has no face yet, read once each time one with the packages characteristic connects.
+  const [setupNeeded, setSetupNeeded] = useState(false);
+  const canInstall = watchReady && capabilities.packages && capabilities.files;
+  useEffect(() => {
+    if (!canInstall) {
+      return;
+    }
+    let cancelled = false;
+    void packages()
+      .then((client) => client.apps())
+      .then((apps) => !cancelled && setSetupNeeded(needsSetup(apps)))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [canInstall, packages]);
   const diagnostics = useTask();
   const [counters, setCounters] = useState<DiagnosticCounter[] | null>(null);
   // A clock for the "last synced" line, moved on twice a minute.
@@ -215,6 +233,19 @@ export default function WatchScreen() {
         </Card>
       ) : null}
 
+      {canInstall && setupNeeded ? (
+        <Card>
+          <ThemedText type="smallBold" style={{ color: theme.accent }}>
+            This watch has no face yet.
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            NeoTime starts with no apps. Install the shared icons, a watch face, the launcher and the
+            apps from this phone.
+          </ThemedText>
+          <Button title="Set up the watch" onPress={() => router.push('/setup')} />
+        </Card>
+      ) : null}
+
       {uartReady || (watchReady && capabilities.files) ? (
         <Card title="On the watch">
           {uartReady ? (
@@ -228,9 +259,11 @@ export default function WatchScreen() {
               />
             </>
           ) : null}
+          {canInstall ? (
+            <Row label="Apps" detail="Install, hide or remove apps and faces" onPress={() => router.push('/apps')} />
+          ) : null}
           {capabilities.files ? (
             <>
-              <Row label="Apps" detail="Install a compiled app, or remove one" onPress={() => router.push('/apps')} />
               <Row label="Files" detail="Browse, send and delete files, and check free space" onPress={() => router.push('/files')} />
               <Row label="Backup" detail="Save the watch's settings and app state, and put them back" onPress={() => router.push('/backup')} />
             </>

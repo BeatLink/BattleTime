@@ -19,6 +19,7 @@ import {
 } from '@/protocol/gadgetbridge';
 import type { DfuLink } from '@/dfu/link';
 import { FileService } from '@/protocol/file-service';
+import { PackagesClient } from '@/protocol/packages';
 import {
   NO_CAPABILITIES,
   readBatteryLevel,
@@ -74,6 +75,8 @@ type WatchContextValue = {
   clearConsole: () => void;
   // NeoTime's file service on the connected watch, opened on first use.
   files: () => Promise<FileService>;
+  // The packages characteristic on the connected watch, opened on first use.
+  packages: () => Promise<PackagesClient>;
   // Raw GATT for a firmware update, or null where the transport has no watch
   // or cannot reach past the UART service.
   dfuLink: () => DfuLink | null;
@@ -114,6 +117,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   const transportRef = useRef<WatchTransport | null>(null);
   const bufferRef = useRef(new LineBuffer());
   const filesRef = useRef<Promise<FileService> | null>(null);
+  const packagesRef = useRef<Promise<PackagesClient> | null>(null);
   const nextId = useRef(1);
 
   const [connection, setConnection] = useState<ConnectionState>('disconnected');
@@ -201,6 +205,8 @@ export function WatchProvider({ children }: { children: ReactNode }) {
           bufferRef.current.reset();
           void filesRef.current?.then((service) => service.close()).catch(() => {});
           filesRef.current = null;
+          void packagesRef.current?.then((client) => client.close()).catch(() => {});
+          packagesRef.current = null;
           router.reset();
         }
       },
@@ -483,6 +489,22 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     return filesRef.current;
   }, []);
 
+  const packages = useCallback(() => {
+    if (!packagesRef.current) {
+      const link = transportRef.current?.dfuLink();
+      if (!link) {
+        return Promise.reject(new Error('Connect to a watch first.'));
+      }
+      const opening = PackagesClient.open(link);
+      // A failed open is forgotten, so the next use tries again.
+      opening.catch(() => {
+        if (packagesRef.current === opening) packagesRef.current = null;
+      });
+      packagesRef.current = opening;
+    }
+    return packagesRef.current;
+  }, []);
+
   const value = useMemo<WatchContextValue>(
     () => ({
       transportKind,
@@ -509,6 +531,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       updateSettings,
       clearConsole,
       files,
+      packages,
       dfuLink,
       requests: router,
       sendWeather,
@@ -549,6 +572,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       updateSettings,
       clearConsole,
       files,
+      packages,
       dfuLink,
     ],
   );

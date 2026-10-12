@@ -8,6 +8,7 @@ import { LEGACY_DFU_SERVICE } from '@/dfu/uuids';
 import type { DfuLink, WriteMode } from '@/dfu/link';
 import { decodeWatchLine, encodeForWatch, LineBuffer } from '@/protocol/gadgetbridge';
 import { FileService } from '@/protocol/file-service';
+import { PackagesClient } from '@/protocol/packages';
 import { ReplyRouter, type RequestChannel } from '@/protocol/requests';
 
 import { WatchBle, type ScannedDevice, type WatchBleEvent } from '../node/ble';
@@ -19,6 +20,7 @@ export class WatchSession implements DfuLink {
   private readonly ble: WatchBle;
   private readonly lines = new LineBuffer();
   private fileService: Promise<FileService> | null = null;
+  private packagesClient: Promise<PackagesClient> | null = null;
   private readonly router = new ReplyRouter((message) => this.send(encodeForWatch(message)));
   private readonly notifyListeners = new Map<string, (value: Uint8Array) => void>();
   private readonly found = new Map<string, ScannedDevice>();
@@ -112,6 +114,12 @@ export class WatchSession implements DfuLink {
   files(): Promise<FileService> {
     this.fileService ??= FileService.open(this);
     return this.fileService;
+  }
+
+  // The packages characteristic, opened on first use.
+  packages(): Promise<PackagesClient> {
+    this.packagesClient ??= PackagesClient.open(this);
+    return this.packagesClient;
   }
 
   // The Gadgetbridge messages the watch answers: settings, alarms and steps.

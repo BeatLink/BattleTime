@@ -6,6 +6,7 @@ import type { DfuLink, WriteMode } from './link';
 import { Procedure } from './legacy';
 import { NUS_SERVICE } from '@/ble/uuids';
 import { MockFileService } from '@/protocol/mock-file-service';
+import { MockPackagesService } from '@/protocol/mock-packages-service';
 import {
   CURRENT_TIME,
   CURRENT_TIME_SERVICE,
@@ -36,7 +37,9 @@ export class MockLegacyDfuTarget implements DfuLink {
 
   private mode: 'application' | 'bootloader' = 'application';
   // Who is listening on each characteristic.
-  private readonly listeners = new Map<string, (value: Uint8Array) => void>();
+  private readonly listeners = new Map<string, Set<(value: Uint8Array) => void>>();
+  // Part of a line written to the shared control characteristic.
+  private pendingControl = '';
   private stage: Stage = 'idle';
   private expected = 0;
   private packets = 0;
@@ -51,13 +54,22 @@ export class MockLegacyDfuTarget implements DfuLink {
     private readonly uart = false,
   ) {
     this.fileService = new MockFileService(
-      (value) => this.listeners.get(NEOTIME_FILE_CONTROL)?.(value),
-      (value) => this.listeners.get(NEOTIME_FILE_DATA)?.(value),
+      (value) => this.emit(NEOTIME_FILE_CONTROL, value),
+      (value) => this.emit(NEOTIME_FILE_DATA, value),
     );
+    this.packagesService = new MockPackagesService(this.fileService.files, (value) => this.emit(NEOTIME_FILE_CONTROL, value));
   }
 
   // NeoTime's files, which tests read back.
   readonly fileService: MockFileService;
+  // The packages commands, which share the control characteristic and the files.
+  readonly packagesService: MockPackagesService;
+
+  private emit(characteristic: string, value: Uint8Array) {
+    for (const listener of this.listeners.get(characteristic) ?? []) {
+      listener(value);
+    }
+  }
 
   get deviceId() {
     return this.id;
@@ -108,9 +120,11 @@ export class MockLegacyDfuTarget implements DfuLink {
     characteristic: string,
     onValue: (value: Uint8Array) => void,
   ): Promise<() => void> {
-    this.listeners.set(characteristic, onValue);
+    const listeners = this.listeners.get(characteristic) ?? new Set();
+    listeners.add(onValue);
+    this.listeners.set(characteristic, listeners);
     return () => {
-      this.listeners.delete(characteristic);
+      listeners.delete(onValue);
     };
   }
 
@@ -131,7 +145,7 @@ export class MockLegacyDfuTarget implements DfuLink {
       return;
     }
     if (characteristic === NEOTIME_FILE_CONTROL) {
-      this.fileService.control(data);
+      this.routeControl(data);
       return;
     }
     if (characteristic === NEOTIME_FILE_DATA) {
@@ -147,8 +161,25 @@ export class MockLegacyDfuTarget implements DfuLink {
     }
   }
 
+  // Packages commands go to the packages service, the rest to the file service, a line at a time.
+  private routeControl(data: Uint8Array) {
+    this.pendingControl += new TextDecoder().decode(data);
+    let newline = this.pendingControl.indexOf('\n');
+    while (newline >= 0) {
+      const line = this.pendingControl.slice(0, newline);
+      this.pendingControl = this.pendingControl.slice(newline + 1);
+      newline = this.pendingControl.indexOf('\n');
+      const message = JSON.parse(line) as { c: string };
+      if (MockPackagesService.handles(message.c)) {
+        this.packagesService.handle(message);
+      } else {
+        this.fileService.control(new TextEncoder().encode(`${line}\n`));
+      }
+    }
+  }
+
   private respond(procedure: number) {
-    this.listeners.get(LEGACY_CONTROL_POINT)?.(Uint8Array.from([Procedure.RESPONSE, procedure, SUCCESS]));
+    this.emit(LEGACY_CONTROL_POINT, Uint8Array.from([Procedure.RESPONSE, procedure, SUCCESS]));
   }
 
   private control(data: Uint8Array) {
@@ -178,7 +209,7 @@ export class MockLegacyDfuTarget implements DfuLink {
         this.activated = true;
         return;
       default:
-        this.listeners.get(LEGACY_CONTROL_POINT)?.(Uint8Array.from([Procedure.RESPONSE, data[0], 2]));
+        this.emit(LEGACY_CONTROL_POINT, Uint8Array.from([Procedure.RESPONSE, data[0], 2]));
     }
   }
 
@@ -201,7 +232,7 @@ export class MockLegacyDfuTarget implements DfuLink {
     this.received.image = concat(this.received.image, chunk);
     this.packets += 1;
     if (this.packets % RECEIPT_INTERVAL === 0) {
-      this.listeners.get(LEGACY_CONTROL_POINT)?.(
+      this.emit(LEGACY_CONTROL_POINT, 
         concat([Procedure.PACKET_RECEIPT_NOTIFICATION], u32le(this.received.image.length)),
       );
     }

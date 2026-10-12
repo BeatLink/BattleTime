@@ -66,7 +66,8 @@ npm run neotime -- flash path/to/firmware.zip
 npm run neotime -- time
 npm run neotime -- diag
 npm run neotime -- files ls /settings
-npm run neotime -- apps install path/to/timer.ntapp timer
+npm run neotime -- apps setup
+npm run neotime -- apps install path/to/timer.ntapp
 npm run neotime -- backup watch-backup.json
 npm run neotime -- notify "Build finished" "All tests passed"
 npm run neotime -- status
@@ -111,7 +112,8 @@ src/app/                 Expo Router screens
   (tabs)/console.tsx     Raw UART traffic and a line to send as it is
   (tabs)/settings.tsx    App settings: weather place, hosts watch apps may fetch, GitHub builds
   scan.tsx               Modal that lists nearby watches
-  apps.tsx               Install a compiled .ntapp app, or remove one
+  apps.tsx               Install a compiled .ntapp or .ntlib image, hide or remove an app
+  setup.tsx              Set up a new watch: the shared icons, a face, the launcher and apps
   files.tsx              The watch's file system: browse, send, read, delete, free space
   backup.tsx             Copy the watch's settings and app state off and back
   steps.tsx              The last week of steps, by day and by hour
@@ -142,7 +144,8 @@ The app reads which services the watch serves right after connecting, in
 | Current Time | `0x1805` / `0x2A2B` | the clock, set on every connection |
 | Battery | `0x180F` / `0x2A19` | the battery level |
 | NeoTime diagnostics | `6e540001-…` / `6e540002-…` | eight 32-bit counters |
-| NeoTime file service | `6e540001-…` / `6e540003-…`, `6e540004-…` | files, backups, apps |
+| NeoTime file service | `6e540001-…` / `6e540003-…`, `6e540004-…` | files, backups |
+| NeoTime packages | `6e540001-…` / `6e540003-…` | installing, hiding and removing apps; the shared library |
 | Nordic UART | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` | the Gadgetbridge messages |
 
 The NeoTime UUIDs share the base `6e54xxxx-0000-4000-8000-4e656f54696d`. The full description,
@@ -199,6 +202,25 @@ travel as raw bytes on the data characteristic. During a `put` the watch reports
 every 4 KB, and the app waits for each report, so it never runs ahead of the flash. An app is
 installed by writing its compiled image to `/apps/<id>/app.ntapp` and then asking the watch to check
 and add it; removing it deletes the whole folder, saved state included.
+
+## Apps and the first run
+
+NeoTime ships with no apps, faces or icons: a new watch shows only a help screen. When a watch with
+the packages characteristic has no face, the Watch tab offers **Set up the watch**, which installs
+the shared library, a face, the launcher and the apps chosen, in that order. The images come from
+[src/bundles/watch-apps.ts](src/bundles/watch-apps.ts), generated from NeoTime's
+`tools/build_watch_apps.sh` output:
+
+```bash
+npm run import-watch-apps path/to/NeoTime/firmware/apps
+```
+
+[src/protocol/packages.ts](src/protocol/packages.ts) installs one image: an app or face is written
+to `/apps/<id>/app.ntapp` and then installed with `{"c":"install","id":...}` on the packages
+characteristic, which checks it on the watch; the shared library goes to `/resources/shared.ntlib`
+and `{"c":"install_library"}` copies it into internal flash. The id and kind come from the image's
+own header ([src/protocol/app-image.ts](src/protocol/app-image.ts)). The Apps screen and
+`neotime apps` also list, hide, show and remove apps.
 
 ## License
 

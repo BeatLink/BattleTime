@@ -7,6 +7,8 @@ import { basename, dirname } from 'node:path';
 import type { SettingsMessage } from '@/protocol/gadgetbridge';
 import { createBackup, parseBackup, restoreBackup } from '@/protocol/backup';
 import { setWatchTime } from '@/protocol/neotime';
+import { installImage } from '@/protocol/packages';
+import { runSetup, setupItems } from '@/protocol/setup';
 import { encodeForWatch, decodeWatchLine } from '@/protocol/gadgetbridge';
 import { readAlarms, readStatus, readWatchSettings, writeAlarms, writeWatchSettings } from '@/protocol/requests';
 import { readStepHistory } from '@/protocol/steps';
@@ -23,7 +25,7 @@ neotime alarms [HH:MM[/days][/off] ...|none]
 neotime steps [days]
 neotime weather <place>
 neotime files [ls [dir]|get <path> [dest]|put <file> <path>|rm <path>|df]
-neotime apps [list|install <app.ntapp> <id>|remove <id>]
+neotime apps [list|install <image>|remove <id>|hide <id>|show <id>|setup]
 neotime backup <file>
 neotime restore <file>
 neotime listen [line] [--allow <hosts>] [--wait <seconds>]
@@ -32,8 +34,10 @@ neotime listen [line] [--allow <hosts>] [--wait <seconds>]
   brightness=3, theme=ocean, theme_colors='{"accent":"#ff8000"}' and the like
   change them. alarms with no arguments lists them, otherwise replaces
   them all: 07:30/12345 rings on weekdays (1 is Monday), 06:00/67/off is a
-  weekend alarm turned off, and a bare time rings once. files and apps use
-  NeoTime's file service; paths are absolute, such as /settings. listen stays
+  weekend alarm turned off, and a bare time rings once. files uses NeoTime's
+  file service; paths are absolute, such as /settings. apps installs a .ntapp
+  or .ntlib image, and setup installs the face, launcher, apps and shared
+  library this tool bundles onto a new watch. listen stays
   connected and prints what the watch sends, answering its apps' http
   requests for the hosts given; it runs the line given first, and stops
   after --wait seconds or at Ctrl+C.`;
@@ -171,28 +175,42 @@ export async function files(session: WatchSession, args: string[]) {
 }
 
 export async function apps(session: WatchSession, args: string[]) {
-  const [action = 'list', first, second] = args;
-  const service = await session.files();
+  const [action = 'list', first] = args;
+  const packages = await session.packages();
   switch (action) {
     case 'list':
-      for (const entry of await service.list('/apps')) {
-        if (entry.directory) say(entry.name);
+      for (const app of await packages.apps()) {
+        say(`${app.id.padEnd(16)} ${app.kind.padEnd(5)} ${app.enabled ? '      ' : 'hidden'} ${app.name}`);
       }
       return;
     case 'install': {
-      if (!first || !second) throw new Error('Give the compiled app and its id.');
-      const image = new Uint8Array(readFileSync(first));
+      if (!first) throw new Error('Give the compiled .ntapp or .ntlib image.');
       const bar = new ProgressBar();
-      await service.installApp(second, image, (p) => bar.update(p.sent, p.total, p.file));
+      const header = await installImage(await session.files(), packages, new Uint8Array(readFileSync(first)), (p) =>
+        bar.update(p.sent, p.total, p.file),
+      );
       bar.done();
-      say(`Installed ${second}.`);
+      say(`Installed ${header.name}${header.kind === 'library' ? ' as the shared library' : ` as ${header.id}`}.`);
       return;
     }
     case 'remove':
-      if (!first) throw new Error('Give the id of the app to remove.');
-      await service.removeApp(first);
-      say(`Removed ${first}.`);
+    case 'hide':
+    case 'show':
+      if (!first) throw new Error('Give the id of the app.');
+      if (action === 'remove') await packages.remove(first);
+      else await packages.enable(first, action === 'show');
+      say(`${action === 'remove' ? 'Removed' : action === 'hide' ? 'Hid' : 'Showed'} ${first}.`);
       return;
+    case 'setup': {
+      const items = setupItems();
+      const bar = new ProgressBar();
+      await runSetup(await session.files(), packages, items, (step) =>
+        bar.update(step.sent, step.total, `${step.index + 1}/${step.count} ${step.item.header.name}`),
+      );
+      bar.done();
+      say(`Installed ${items.length} images. The watch shows its face now.`);
+      return;
+    }
     default:
       throw new Error(`Unknown apps action: ${action}`);
   }
