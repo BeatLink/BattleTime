@@ -121,6 +121,9 @@ that was running before. That firmware reads the note, clears the rollback's mar
 `neotime_updates::forget_rollback`, and its status page says "Bootloader updated" or "Bootloader up
 to date" instead of "Update failed". Quitting leaves no note, so a quit reads as the failed update
 it is. The write is about four pages, half a second or so, and is the only part with no way back.
+Only a firmware from `db985cf` on reads the note. An older one shows the red "Update failed" page
+after the hand-back even though the bootloader was written, as on the first watch; the Revert mark
+it leaves clears with the next firmware update.
 
 `tests/emulator/bootloader_update.robot` runs it from the bootloader the reloader put on the first
 watch, kept in `tests/emulator/fixtures/` because it cannot be rebuilt bit for bit. On 2026-10-11
