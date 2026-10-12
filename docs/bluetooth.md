@@ -80,7 +80,12 @@ access in `nrf_radio.rs`, behind the small `Radio` trait, is the substitute.
   feature exchange, version exchange, ping, and termination from either side. Anything else is
   answered with "unknown response", which tells the central the feature is missing.
 - **Losing the link:** the supervision timeout, a central that never shows up after connecting,
-  and an update whose instant has already passed.
+  and an update whose instant has already passed. The link layer checks these when the radio
+  reports something, and the firmware's watchdog task calls `check_supervision` every half second
+  too, so a radio that stopped reporting still ends the connection and the host advertises again.
+  The radio driver keeps what the radio is doing as a byte, and a value it does not know, which
+  only memory overwritten by something else gives, counts as nothing heard rather than leaving the
+  radio off.
 
 ## Not done yet
 

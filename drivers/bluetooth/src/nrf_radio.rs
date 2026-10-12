@@ -94,13 +94,23 @@ static mut RECEIVE_BUFFER: RadioBuffer = RadioBuffer {
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 enum Activity {
     Idle,
     Transmitting,
     Receiving,
 }
 
-static ACTIVITY: Mutex<Cell<Activity>> = Mutex::new(Cell::new(Activity::Idle));
+impl Activity {
+    fn from_byte(byte: u8) -> Option<Activity> {
+        [Activity::Idle, Activity::Transmitting, Activity::Receiving]
+            .into_iter()
+            .find(|activity| *activity as u8 == byte)
+    }
+}
+
+/// Kept as a byte, so a value overwritten by something else reads as unknown rather than as undefined behaviour.
+static ACTIVITY: Mutex<Cell<u8>> = Mutex::new(Cell::new(Activity::Idle as u8));
 
 /// Whether TIMER0 is counting, the clock's reading where it counted from zero, and RTC0 extended to 64 bits.
 #[derive(Clone, Copy)]
@@ -340,11 +350,15 @@ fn timer_value_at(at: u32) -> u32 {
 }
 
 fn set_activity(activity: Activity) {
-    critical_section::with(|critical_section| ACTIVITY.borrow(critical_section).set(activity));
+    critical_section::with(|critical_section| ACTIVITY.borrow(critical_section).set(activity as u8));
 }
 
-fn take_activity() -> Activity {
-    critical_section::with(|critical_section| ACTIVITY.borrow(critical_section).replace(Activity::Idle))
+/// What the radio was doing, or None when the byte holds no activity at all.
+fn take_activity() -> Option<Activity> {
+    let byte = critical_section::with(|critical_section| {
+        ACTIVITY.borrow(critical_section).replace(Activity::Idle as u8)
+    });
+    Activity::from_byte(byte)
 }
 
 fn stop_radio() {
@@ -537,6 +551,11 @@ fn arm_operation(operation: RadioOperation, timer_is_running: bool) {
 // Interrupt
 // ============================================================================
 
+/// Ends a connection the radio has stopped serving; the firmware calls it from a timer.
+pub fn check_supervision() {
+    STATE.check_supervision(&NrfRadio { _private: () });
+}
+
 pub struct RadioInterruptHandler {
     _private: (),
 }
@@ -553,7 +572,7 @@ impl Handler<interrupt::typelevel::RADIO> for RadioInterruptHandler {
             .write(|channels| channels.0 = SCHEDULING_CHANNELS);
 
         let activity = take_activity();
-        if activity == Activity::Idle {
+        if activity == Some(Activity::Idle) {
             return;
         }
         note_timer_running();
@@ -561,9 +580,9 @@ impl Handler<interrupt::typelevel::RADIO> for RadioInterruptHandler {
         let packet_ended = radio.events_end().read() != 0;
         let end_time = clock_at_capture(END_CAPTURE);
         let event = match activity {
-            Activity::Idle => return,
-            Activity::Transmitting => RadioEvent::Transmitted { end_time },
-            Activity::Receiving if packet_ended => {
+            Some(Activity::Idle) => return,
+            Some(Activity::Transmitting) => RadioEvent::Transmitted { end_time },
+            Some(Activity::Receiving) if packet_ended => {
                 let buffer = &(*addr_of_mut!(RECEIVE_BUFFER)).bytes;
                 let length = (2 + buffer[1] as usize).min(RADIO_BUFFER_LENGTH);
                 RadioEvent::Received {
@@ -574,7 +593,10 @@ impl Handler<interrupt::typelevel::RADIO> for RadioInterruptHandler {
                     signal_strength: -(radio.rssisample().read().0 as i8 & 0x7F),
                 }
             }
-            Activity::Receiving => RadioEvent::NothingReceived { now: clock_now() },
+            Some(Activity::Receiving) => RadioEvent::NothingReceived { now: clock_now() },
+            // Something overwrote the record of what the radio was doing. Hearing nothing lets the link
+            // layer plan its next step, where returning would leave the radio off for good.
+            None => RadioEvent::NothingReceived { now: clock_now() },
         };
 
         STATE.on_radio_event(&NrfRadio { _private: () }, event);

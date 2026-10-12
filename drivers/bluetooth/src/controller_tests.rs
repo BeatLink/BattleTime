@@ -501,3 +501,72 @@ fn hearing_nothing_after_an_advertisement_moves_to_the_next_channel() {
     };
     assert_eq!(channel.index, 38);
 }
+
+// ============================================================================
+// Supervision from a timer
+// ============================================================================
+
+/// The connect request's interval and supervision timeout, in microseconds.
+const TEST_INTERVAL: u32 = 24 * 1_250;
+const TEST_SUPERVISION_TIMEOUT: u32 = 100 * 10_000;
+
+/// Reads the next packet for the host and says whether it reports the link gone.
+fn reads_a_disconnection<RadioDriver: Radio>(controller: &BluetoothController<'_, RadioDriver>) -> bool {
+    let mut receive_buffer = [0; 64];
+    let packet: ControllerToHostPacket = block_on(controller.read(&mut receive_buffer)).unwrap();
+    matches!(packet, ControllerToHostPacket::Event(event) if matches!(event.kind, EventKind::DisconnectionComplete))
+}
+
+#[test]
+fn a_timer_check_ends_a_connection_whose_radio_went_quiet() {
+    let radio = FakeRadio::new();
+    let state = started_state();
+    let controller = BluetoothController::new(&state, &radio);
+    start_advertising(&controller);
+    let anchor = central_connects(&state, &radio);
+    central_sends_empty_packet(&state, &radio, false, false, anchor);
+    forget_connection_events(&controller);
+    let operations_before = radio.operations.borrow().len();
+
+    radio.now.set(anchor + TEST_SUPERVISION_TIMEOUT);
+    state.check_supervision(&&radio);
+    assert_eq!(radio.operations.borrow().len(), operations_before);
+
+    radio
+        .now
+        .set(anchor + TEST_SUPERVISION_TIMEOUT + TEST_INTERVAL + 1);
+    state.check_supervision(&&radio);
+    assert_eq!(radio.last_operation(), RadioOperation::Off);
+    assert!(reads_a_disconnection(&controller));
+}
+
+#[test]
+fn a_timer_check_ends_a_connection_that_never_got_going() {
+    let radio = FakeRadio::new();
+    let state = started_state();
+    let controller = BluetoothController::new(&state, &radio);
+    start_advertising(&controller);
+    let first_anchor = central_connects(&state, &radio);
+    forget_connection_events(&controller);
+
+    radio.now.set(first_anchor + 8 * TEST_INTERVAL);
+    state.check_supervision(&&radio);
+
+    assert_eq!(radio.last_operation(), RadioOperation::Off);
+    assert!(reads_a_disconnection(&controller));
+}
+
+#[test]
+fn a_timer_check_leaves_advertising_and_an_unstarted_controller_alone() {
+    let radio = FakeRadio::new();
+    ControllerState::new().check_supervision(&&radio);
+    assert!(radio.operations.borrow().is_empty());
+
+    let state = started_state();
+    let controller = BluetoothController::new(&state, &radio);
+    start_advertising(&controller);
+    let operations_before = radio.operations.borrow().len();
+    radio.now.set(60_000_000);
+    state.check_supervision(&&radio);
+    assert_eq!(radio.operations.borrow().len(), operations_before);
+}

@@ -673,6 +673,13 @@ watch face, the launcher and the apps through `neotime-app-host`:
   with noise never reads as a crash. `neotime-crash-record` (`services/crash_record`) holds the
   format and the decoding, with host tests; `tests/emulator/crash_record.robot` faults the running
   firmware and checks the next start reports it.
+- **Stack guard.** `stack_guard.rs` has the memory protection unit forbid the lowest 256 bytes of
+  the stack, so a stack grown too deep faults instead of quietly overwriting the statics below it,
+  as a packages command once overwrote the radio's state and froze the link. The MemManage handler
+  moves the stack pointer back to the top before it uses any stack, records a HardFault whose
+  `CFSR` shows a MemManage fault and whose address is `MMFAR`, inside the guard, and halts for the
+  watchdog. A frame bigger than the guard can step over it, so it catches the usual overflow of a
+  few hundred bytes rather than every one. The rehearsals leave the unit to wasp-os's SoftDevice.
 - **Saved state.** An app's persistent variables are written to `/apps/<id>/state` on the external
   flash when it closes or the screen turns off, only when one changed, and put back when it opens.
 - **Battery service.** The standard Battery service (0x180F) answers a read of 0x2A19 with the

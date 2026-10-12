@@ -88,6 +88,21 @@ impl ControllerState {
         })
     }
 
+    /// Ends a connection whose radio has gone quiet past its supervision timeout, and tells the host.
+    /// The radio's own events normally do this; a timer calls it in case they have stopped.
+    pub fn check_supervision(&self, radio: &impl Radio) {
+        critical_section::with(|critical_section| {
+            let mut host_interface = self.host_interface.borrow_ref_mut(critical_section);
+            let Some(host_interface) = host_interface.as_mut() else {
+                return;
+            };
+            if let Some(operation) = host_interface.link_layer.check_supervision(radio.now()) {
+                radio.run(operation);
+                self.host_waker.wake();
+            }
+        });
+    }
+
     /// Hands the link layer what the radio saw, then starts the radio on whatever comes next.
     pub fn on_radio_event(&self, radio: &impl Radio, event: RadioEvent) {
         self.with_host_interface(|host_interface| {

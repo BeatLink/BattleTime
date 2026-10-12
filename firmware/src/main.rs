@@ -75,6 +75,9 @@ mod restart;
 mod settings;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod shell;
+// wasp-os's SoftDevice owns the memory protection unit under the rehearsals.
+#[cfg(not(feature = "wasp-os-rehearsal"))]
+mod stack_guard;
 // Under wasp-os the firmware is never rolled back or installed as recovery.
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod motion;
@@ -134,6 +137,8 @@ static HOST_RESOURCES: StaticCell<HostResources<DefaultPacketPool, 1, 2>> = Stat
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
+    #[cfg(not(feature = "wasp-os-rehearsal"))]
+    stack_guard::start();
     let previous_run = storage::previous_breadcrumbs();
     storage::leave_breadcrumb(stage::ENTERED_MAIN);
     storage::prepare_clocks();
@@ -391,6 +396,8 @@ async fn feed_watchdog_while_button_is_up(mut watchdog: WatchdogHandle) {
         if !side_button_is_held() {
             watchdog.pet();
         }
+        // The radio's events end a silent connection; this ends one whose radio stopped sending them.
+        neotime_bluetooth::check_supervision();
         Timer::after(WATCHDOG_CHECK_INTERVAL).await;
     }
 }

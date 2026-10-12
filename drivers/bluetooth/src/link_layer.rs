@@ -842,6 +842,29 @@ impl LinkLayer {
         }
     }
 
+    /// Ends a connection the radio has stopped serving, for a timer to call, since the check in
+    /// `close_connection_event` only runs when the radio reports something. A link that is still
+    /// running ends there first, as it allows one interval less.
+    pub fn check_supervision(&mut self, now: u32) -> Option<RadioOperation> {
+        let State::Connected(connection) = &self.state else {
+            return None;
+        };
+        let (since, limit) = if connection.established {
+            (
+                connection.last_heard,
+                connection.timeout as u32 * UNIT_10_MILLISECONDS,
+            )
+        } else {
+            (connection.created_at, 6 * connection.interval_in_microseconds())
+        };
+        let limit_with_margin = limit + connection.interval_in_microseconds();
+        if microseconds_from(since, now) > limit_with_margin as i32 {
+            Some(self.end_connection(disconnect_reason::CONNECTION_TIMEOUT))
+        } else {
+            None
+        }
+    }
+
     fn close_connection_event(&mut self, now: u32) -> RadioOperation {
         let connection = self.connection();
         connection.step = EventStep::WaitingForFirstPacket;
