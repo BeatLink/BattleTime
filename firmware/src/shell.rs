@@ -364,7 +364,7 @@ impl Shell {
         self.set_theme(change.applied_to(self.theme));
         settings::set_values(&change.values);
         let report = neotime_companion::settings_report(&self.theme, &settings::current());
-        let _ = settings::REPLIES.try_send(report);
+        settings::send_reply(&report);
     }
 
     /// Saves a new theme and shows it, and tells the open app its preset number changed.

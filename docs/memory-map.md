@@ -37,22 +37,22 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 63.7 KB | 35.8 KB |
+| Firmware (start-up, shell, tasks) | 62.7 KB | 34.9 KB |
 | App host (with `neotime-ui` and rlvgl) | 53.0 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 41.8 KB | 41.8 KB |
-| core, alloc and compiler builtins | 23.2 KB | 10.4 KB |
+| core, alloc and compiler builtins | 23.4 KB | 10.3 KB |
 | App runtime | 22.8 KB | 0.1 KB |
 | Storage (littlefs) | 21.5 KB | 20.9 KB |
-| Embassy, allocator and Cortex-M | 17.3 KB | 15.6 KB |
+| Embassy, allocator and Cortex-M | 17.1 KB | 15.5 KB |
 | Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
 | Display, graphics and drivers | 7.9 KB | 3.4 KB |
 | Settings and companion (with serde) | 4.1 KB | 2.6 KB |
-| Packages | 2.7 KB | 2.0 KB |
+| Packages | 2.7 KB | 2.1 KB |
 | Updates (DFU) | 2.4 KB | 2.4 KB |
 | BLEFS file service | 2.1 KB | 2.2 KB |
-| Other constants and padding | 14.5 KB | 7.1 KB |
-| **Used** | **289.0 KB** | **144.2 KB** |
-| Free of 400 KB | 111.0 KB | 255.8 KB |
+| Other constants and padding | 14.5 KB | 7.2 KB |
+| **Used** | **288.1 KB** | **143.2 KB** |
+| Free of 400 KB | 111.9 KB | 256.8 KB |
 <!-- /measure_memory:firmware -->
 
 The accelerometer's configuration is the largest piece of data left in it; each watch could build
@@ -127,12 +127,15 @@ firmware, which then has the whole of RAM but its last 16 bytes, the alive marke
 below it too, so the marker survives from one firmware start to the next. Its third word is the
 bootloader's note to the firmware (`BOOT_NOTE_ADDRESS`), which says whether the recovery firmware
 was just installed, and its fourth is the bootloader updater's (`UPDATER_NOTE_ADDRESS`), which says
-the rollback after it was meant. The firmware measures 52 KB of static RAM:
-36 KB of heap (16 KB for storage and the 20 KB UI heap), and
-the Bluetooth host with its eight 128-byte packets, controller, display buffer and task state. That
-leaves 12.2 KB for the stack. Measured in the emulator by painting the stack before start, it peaks
-at 8.3 KB with the face, the launcher, stopwatch, settings or weather open, 3.9 KB spare, and at
-10.4 KB with the alarm open, 1.8 KB spare, the one app below the 2 KB margin. The Bluetooth task's deepest path, a file
+the rollback after it was meant. The firmware measures 51 KB of static RAM:
+37 KB of heap (16 KB for storage and the 21 KB UI heap), and
+the Bluetooth host with its eight 128-byte packets, controller, display buffer and task state. The
+Bluetooth task's state is 4.8 KB: its GATT table (2.1 KB) and TrouBLE's runner (1.6 KB) are most of
+it; replies to the companion app and half-received lines wait on the heap, and the update state,
+status page and confirmation are held once in a static. That leaves 13.0 KB for the stack. Measured
+in the emulator by painting the stack before start, it peaks at 8.3 KB with the face, the launcher,
+stopwatch, settings or weather open, 4.9 KB spare, and at 10.4 KB with the alarm open, 2.9 KB
+spare. The Bluetooth task's deepest path, a file
 command that makes littlefs compact a folder, adds up to about 9.1 KB from its functions' frames,
 below that peak.
 To measure it again after a change, build the firmware and run, inside `nix develop`:
@@ -151,22 +154,22 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 <!-- measure_memory:ram -->
 | Owner | Full build | Recovery build |
 |---|---:|---:|
-| Heap (storage 16 KB, UI 20 KB; the recovery build has no UI heap) | 36,864 B | 16,384 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 13,361 B | 10,953 B |
+| Heap (storage 16 KB, UI 21 KB; the recovery build has no UI heap) | 37,888 B | 16,384 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 11,245 B | 8,837 B |
 | Bluetooth controller | 2,525 B | 2,525 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | BLEFS file service | 122 B | 122 B |
 | App host (with `neotime-ui` and rlvgl) | 56 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **53,348 B** | **30,380 B** |
-| Left for the stack | 12,172 B | 35,140 B |
+| **Static RAM** (`.data` and `.bss`) | **52,252 B** | **28,268 B** |
+| Left for the stack | 13,268 B | 37,252 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
 
 | Region | Budget | Holds | Status |
 |---|---|---|---|
-| UI heap | 20 KB | The heap that `rlvgl`'s widgets allocate from. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (6,288 B), one 160 B node per widget of the open screen, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. Storage shares the same heap. The alarm, the largest app, peaks at 36,188 B of the 36,864 B heap with its 15 KB image and 67 widgets. The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
+| UI heap | 21 KB | The heap that `rlvgl`'s widgets allocate from. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (6,288 B), one 160 B node per widget of the open screen, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. Storage shares the same heap. The alarm, the largest app, peaks at 36,188 B of the 37,888 B heap with its 15 KB image and 67 widgets. The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
 | Bluetooth | 12 KB | The controller and the TrouBLE host: connection state, packet buffers and the GATT tables. | Partly measured: the controller is 1.5 KB; TrouBLE's example with it is 12.0 KB in all, executor included |
 | Apps | 6 KB | Memory for the app that is open beyond the UI heap, such as the parts of its file read from `/apps`. The runtime's working memory in it is measured: 1,792 B for the interpreter, 2,056 B for the bindings and 2,440 B for the state. `AppHost` keeps all three on the UI heap. | Partly measured |
 | Stack | 8 KB | The main stack, for interrupts and code that is not in a task. | Planned |

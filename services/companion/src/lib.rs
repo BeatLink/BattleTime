@@ -7,6 +7,8 @@
 
 #![no_std]
 
+extern crate alloc;
+
 use core::fmt::Write;
 
 use neotime_runtime::{preset_matching, preset_named, PresetTheme, Theme, ThemeColor, PRESET_THEMES};
@@ -30,9 +32,11 @@ pub type ReplyLine = heapless::String<MOST_LINE_BYTES>;
 // ============================================================================
 
 /// Gathers written bytes into lines, since one line may take several writes.
+///
+/// A half-received line is kept on the heap, which is freed once the line is complete.
 #[derive(Default)]
 pub struct LineAssembler {
-    buffer: heapless::Vec<u8, MOST_LINE_BYTES>,
+    buffer: alloc::vec::Vec<u8>,
     overflowed: bool,
 }
 
@@ -48,9 +52,10 @@ impl LineAssembler {
                 if !self.overflowed {
                     on_line(&self.buffer);
                 }
-                self.buffer.clear();
-                self.overflowed = false;
-            } else if self.buffer.push(byte).is_err() {
+                self.clear();
+            } else if self.buffer.len() < MOST_LINE_BYTES {
+                self.buffer.push(byte);
+            } else {
                 self.overflowed = true;
             }
         }
@@ -58,7 +63,7 @@ impl LineAssembler {
 
     /// Forgets a half-received line, such as when the phone disconnects.
     pub fn clear(&mut self) {
-        self.buffer.clear();
+        self.buffer = alloc::vec::Vec::new();
         self.overflowed = false;
     }
 }

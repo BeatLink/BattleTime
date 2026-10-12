@@ -14,6 +14,9 @@ use embassy_sync::{
     blocking_mutex::{raw::CriticalSectionRawMutex, Mutex},
     channel::Channel,
 };
+extern crate alloc;
+
+use alloc::boxed::Box;
 use neotime_app_host::settings::system_value_of;
 use neotime_companion::{ReplyLine, SettingsChange};
 use neotime_runtime::{Theme, ThemeColor, Value, DEFAULT_THEME};
@@ -24,8 +27,13 @@ use crate::{storage, system_values};
 /// Changes the companion app asked for, from the Bluetooth task to the shell.
 pub static CHANGES: Channel<CriticalSectionRawMutex, SettingsChange, 2> = Channel::new();
 
-/// Replies for the companion app, from the shell to the Bluetooth task.
-pub static REPLIES: Channel<CriticalSectionRawMutex, ReplyLine, 2> = Channel::new();
+/// Replies for the companion app, from the shell to the Bluetooth task, kept on the heap only while they wait.
+pub static REPLIES: Channel<CriticalSectionRawMutex, Box<str>, 2> = Channel::new();
+
+/// Queues a reply line for the companion app; it is dropped if two are already waiting.
+pub fn send_reply(line: &ReplyLine) {
+    let _ = REPLIES.try_send(Box::from(line.as_str()));
+}
 
 const SETTINGS_PATH: &str = "/settings/system";
 const THEME_PATH: &str = "/settings/theme";

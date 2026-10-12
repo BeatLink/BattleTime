@@ -35,6 +35,15 @@ fn a_line_longer_than_the_buffer_is_dropped_and_the_next_is_read() {
     assert_eq!(lines, ["{\"t\":\"settings\"}"]);
 }
 
+#[test]
+fn a_finished_line_gives_its_memory_back() {
+    let mut assembler = LineAssembler::new();
+    assembler.push(b"{\"t\":\"sett", |_| {});
+    assert!(assembler.buffer.capacity() > 0);
+    assembler.push(b"ings\"}\n", |_| {});
+    assert_eq!(assembler.buffer.capacity(), 0);
+}
+
 // ============================================================================
 // Messages
 // ============================================================================

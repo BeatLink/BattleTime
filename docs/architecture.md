@@ -513,8 +513,10 @@ watch face, the launcher and the apps through `neotime-app-host`:
 - **Companion app.** The Nordic UART service carries the companion's JSON lines. The Bluetooth
   task hands each write to `neotime-companion`; a `settings` message goes to the shell, which
   applies the theme to the open app at once, keeps it in `/settings/theme`, passes the other
-  settings to the store and sends the settings back as a reply. Bluetooth runs as a task of its own, so
-  its stack frame (5.7 KB) is never added to start-up's.
+  settings to the store and sends the settings back as a reply, which waits on the heap. Bluetooth
+  runs as a task of its own, so its stack frame (5.7 KB) is never added to start-up's; what it keeps
+  for the whole run (the update state, the status page and the confirmation) sits once in a static,
+  since a task's arguments are stored twice in its state.
 - **Diagnostics.** A NeoTime GATT service (`6e540001-…`) has one readable characteristic
   (`6e540002-…`) of eight little-endian `u32` counters from `diagnostics.rs`: shell loops, what
   last woke the shell, whether the screen is lit, the touch panel's state, touch reports, touches
@@ -551,7 +553,7 @@ Not done yet: heart rate, notifications, music and weather read as 0 or empty; t
 awake while the screen is off.
 
 It takes 289 KB of the 400 KB firmware slot (the two accelerometers' configuration files are 12 KB
-of it; the fonts are in the shared library) and 52 KB of static RAM, 36 KB of it heap: 16 KB for storage and 20 KB for
+of it; the fonts are in the shared library) and 51 KB of static RAM, 37 KB of it heap: 16 KB for storage and 21 KB for
 the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
 the button and the backlight timeout all work.
 

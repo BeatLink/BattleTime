@@ -275,8 +275,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   acceleration for the motion app, shake for dice, and heart rate, music, navigation and weather
   once those services exist.
 - [ ] **Lift the launcher's 16-row limit,** so every installed app is listed.
-- [ ] **Keep the alarm within the stack margin.** With the alarm open the stack peaks at 10.4 KB,
-  1.8 KB spare, under the 2 KB kept free; win the room back from the Bluetooth task.
 
 ### UI toolkit
 

@@ -103,7 +103,7 @@ const WATCHDOG_FEED_INTERVAL: Duration = Duration::from_millis(1000);
 const DISPLAY_COMMAND_BUFFER_SIZE: usize = 512;
 /// The shell's share of the heap, which the open app's widgets and text are allocated from.
 #[cfg(with_shell)]
-const UI_HEAP_SIZE: usize = 20 * 1024;
+const UI_HEAP_SIZE: usize = 21 * 1024;
 #[cfg(not(with_shell))]
 const UI_HEAP_SIZE: usize = 0;
 const HEAP_SIZE: usize = storage::HEAP_SIZE + UI_HEAP_SIZE;
@@ -264,7 +264,12 @@ async fn main(spawner: Spawner) {
         Interrupts,
     );
     storage::leave_breadcrumb(stage::RADIO_STARTED);
-    spawner.spawn(run_bluetooth(controller, targets, confirmation, screen, files).unwrap());
+    let parts = BLUETOOTH_PARTS.init(BluetoothParts {
+        dfu: LegacyDfu::new(targets),
+        confirmation,
+        screen,
+    });
+    spawner.spawn(run_bluetooth(controller, parts, files).unwrap());
 }
 
 // ============================================================================
@@ -581,15 +586,28 @@ fn device_address() -> [u8; 6] {
     [low[0], low[1], low[2], low[3], high[0], high[1] | 0xC0]
 }
 
+/// What the Bluetooth task keeps for the whole run, held in a static and lent to it, since an async
+/// task's arguments are stored twice in its state.
+struct BluetoothParts {
+    dfu: LegacyDfu<storage::Targets>,
+    confirmation: storage::Confirmation,
+    screen: Screen,
+}
+
+static BLUETOOTH_PARTS: StaticCell<BluetoothParts> = StaticCell::new();
+
 /// Its own task, so the Bluetooth loop's stack frame is not added to start-up's.
 #[embassy_executor::task]
 async fn run_bluetooth(
     controller: neotime_bluetooth::BluetoothController<'static, neotime_bluetooth::NrfRadio>,
-    targets: storage::Targets,
-    mut confirmation: storage::Confirmation,
-    mut screen: Screen,
+    parts: &'static mut BluetoothParts,
     files: &'static storage::Files,
 ) {
+    let BluetoothParts {
+        dfu,
+        confirmation,
+        screen,
+    } = parts;
     let controller: ExternalController<_, 4> = ExternalController::new(controller);
     let resources = HOST_RESOURCES.init(HostResources::new());
     let stack = trouble_host::new(controller, resources)
@@ -602,7 +620,6 @@ async fn run_bluetooth(
         appearance: &appearance::watch::GENERIC_WATCH,
     }))
     .unwrap();
-    let mut dfu = LegacyDfu::new(targets);
 
     let mut advertisement_data = [0; 31];
     let advertisement_length = AdStructure::encode_slice(
@@ -645,9 +662,9 @@ async fn run_bluetooth(
             serve_connection(
                 &connection,
                 &server,
-                &mut dfu,
-                &mut screen,
-                &mut confirmation,
+                dfu,
+                screen,
+                confirmation,
                 &mut confirmed,
                 files,
             )
@@ -667,8 +684,7 @@ fn read_companion_line(line: &[u8]) {
         }
         Ok(neotime_companion::Message::Unknown { .. }) => {}
         Err(_) => {
-            let _ =
-                settings::REPLIES.try_send(neotime_companion::error_report("could not read that message"));
+            settings::send_reply(&neotime_companion::error_report("could not read that message"));
         }
     }
 }
