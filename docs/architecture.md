@@ -126,7 +126,7 @@ NeoTime/
 ├── docs/
 │   ├── app-reference.md the events, widgets and effects apps can use
 │   ├── app-runtime.md the proposed app format and runtime
-│   ├── apps.md       the apps ported from InfiniTime and wasp-os
+│   ├── apps.md       the apps ported from InfiniTime and wasp-os, with a screenshot of each
 │   ├── architecture.md
 │   ├── bluetooth.md  the Bluetooth controller
 │   ├── bootloader.md

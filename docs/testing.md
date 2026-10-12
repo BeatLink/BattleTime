@@ -166,6 +166,8 @@ The preview test leaves out what the test watch cannot read: an icon's symbol an
 `harness/tests/screenshots.rs` draws each app's and face's main screen, plus the stopwatch three
 seconds after starting, the calculator after 7 + 5 = and the launcher listing four apps, and
 compares the 240x240 frame pixel for pixel with `harness/snapshots/screens/<name>.png`.
+[apps.md](apps.md) shows the apps' pictures in its Screen column, so a new app's row there needs
+its picture too.
 
 ### Reading a failure
 
