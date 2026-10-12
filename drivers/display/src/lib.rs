@@ -49,6 +49,13 @@ const DEFAULT_IDLE_FRAME_RATE: [u8; 3] = [0x00, 0x0F, 0x0F];
 // Display
 // ============================================================================
 
+/// Which memory rows scroll: those after the top fixed rows, `scrolling_rows` of them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ScrollArea {
+    pub top_fixed_rows: u16,
+    pub scrolling_rows: u16,
+}
+
 pub struct Display<DisplayInterface: Interface<Word = u8>, ResetPin: OutputPin> {
     panel: mipidsi::Display<DisplayInterface, ST7789, ResetPin>,
     top_fixed_rows: u16,
@@ -114,6 +121,13 @@ where
 
     pub fn scroll_offset(&self) -> u16 {
         self.scroll_offset
+    }
+
+    pub fn scroll_area(&self) -> ScrollArea {
+        ScrollArea {
+            top_fixed_rows: self.top_fixed_rows,
+            scrolling_rows: self.scrolling_rows,
+        }
     }
 
     /// Turns the panel off to save power; its memory is kept.

@@ -25,14 +25,18 @@ use core::{
 use alloc::vec;
 use core::fmt::Write;
 
-use embassy_futures::select::{select4, Either4};
+use embassy_futures::{
+    select::{select4, Either4},
+    yield_now,
+};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_app_host::{
     haptics::{self, Vibration},
     motion as app_motion, phone as app_phone, settings as app_settings, AppEffect, AppFailure, AppHost,
-    BatteryChange, EventResult, MotionKind, PushedEvent, System, Touch, LARGEST_SAVED_STATE_BYTES,
+    BatteryChange, EventResult, MotionKind, PushedEvent, System, Touch, Transition,
+    LARGEST_SAVED_STATE_BYTES, STRIP_PIXELS,
 };
 use neotime_battery::BatteryEvent;
 use neotime_companion::{PhoneData, PhoneUpdates, SettingsChange};
@@ -288,13 +292,18 @@ struct Shell {
     battery_screen_returns_to: Option<Showing>,
     /// Until when the phone's find ring plays, unless the wearer touches the watch first.
     finding_until: Option<Instant>,
+    /// A touch taken from the queue while merging drags, handled next.
+    waiting_touch: Option<Touch>,
+    /// Set when a new screen opens, so the rest of a touch begun on the old one goes nowhere until the finger lifts.
+    finger_left_on_old_screen: bool,
 }
 
 impl Shell {
-    /// Closes what is open and opens another; the face is the fallback when an image will not open.
-    fn open(&mut self, showing: Showing) {
+    /// Closes what is open and opens another, coming in by `transition`; the face is the fallback when an image will not open.
+    fn open(&mut self, showing: Showing, transition: Transition) {
         self.battery_screen_returns_to = None;
         let now = clock::utc_now();
+        self.finger_left_on_old_screen = true;
         if let Some(mut host) = self.host.take() {
             host.close(now, &mut self.system);
             self.save_state_of(&mut host);
@@ -335,6 +344,9 @@ impl Shell {
             .unwrap_or_default();
         if self.start_host(bytes, &saved, now) {
             self.image = Some(image);
+            if let Some(host) = &mut self.host {
+                host.set_next_transition(transition);
+            }
         } else {
             image.release();
             self.open_failed(showing);
@@ -361,7 +373,7 @@ impl Shell {
         if showing == Showing::Face {
             self.help_drawn_at = None;
         } else {
-            self.open(Showing::Face);
+            self.open(Showing::Face, Transition::None);
         }
     }
 
@@ -380,7 +392,7 @@ impl Shell {
         self.system.installed = InstalledApps::read(self.files);
         self.library = apps::shared_library();
         install_fonts(self.library);
-        self.open(Showing::Face);
+        self.open(Showing::Face, Transition::None);
     }
 
     /// Writes the app's persistent state when any of it changed since the last save.
@@ -466,16 +478,34 @@ impl Shell {
         self.system.brightness = self.backlight.level();
     }
 
-    fn go_back(&mut self) {
+    /// Goes back a step, the new screen coming in by `transition`.
+    fn go_back(&mut self, transition: Transition) {
         if let Some(showing) = self.battery_screen_returns_to {
-            self.open(showing);
+            self.open(showing, transition);
             return;
         }
         match self.showing {
             Showing::Face => {}
-            Showing::Launcher => self.open(Showing::Face),
-            Showing::App(_) => self.open(Showing::Launcher),
+            Showing::Launcher => self.open(Showing::Face, transition),
+            Showing::App(_) => self.open(Showing::Launcher, transition),
         }
+    }
+
+    /// Merges a drag with the drags queued behind it, so the screen follows the finger however far drawing fell behind.
+    fn latest_of(&mut self, touch: Touch) -> Touch {
+        let Touch::Drag { .. } = touch else {
+            return touch;
+        };
+        let mut latest = touch;
+        while let Ok(next) = TOUCHES.try_receive() {
+            if let Touch::Drag { .. } = next {
+                latest = next;
+            } else {
+                self.waiting_touch = Some(next);
+                break;
+            }
+        }
+        latest
     }
 
     fn touch(&mut self, touch: Touch) {
@@ -485,8 +515,10 @@ impl Shell {
         let result = host.touch(touch, clock::utc_now(), &mut self.system);
         if result == EventResult::NotHandled {
             match (touch, self.showing) {
-                (Touch::Swipe(SwipeDirection::Up), Showing::Face) => self.open(Showing::Launcher),
-                (Touch::Swipe(SwipeDirection::Right), _) => self.go_back(),
+                (Touch::Swipe(SwipeDirection::Up), Showing::Face) => {
+                    self.open(Showing::Launcher, Transition::Up)
+                }
+                (Touch::Swipe(SwipeDirection::Right), _) => self.go_back(Transition::Right),
                 _ => {}
             }
         }
@@ -497,7 +529,7 @@ impl Shell {
             return;
         };
         if host.press_button(press, clock::utc_now(), &mut self.system) == EventResult::NotHandled {
-            self.go_back();
+            self.go_back(Transition::Down);
         }
     }
 
@@ -588,7 +620,7 @@ impl Shell {
     /// Turns the backlight off and puts the display to sleep, or dims both for an always-on screen.
     fn turn_screen_off(&mut self) {
         if let Some(showing) = self.battery_screen_returns_to {
-            self.open(showing);
+            self.open(showing, Transition::None);
         }
         self.lit = false;
         self.dimmed = settings::current().is_on(Setting::AlwaysOnScreen);
@@ -648,10 +680,15 @@ impl Shell {
         }
         match core::mem::replace(&mut self.system.request, Request::Nothing) {
             Request::Nothing => {}
-            Request::Open(showing) => self.open(showing),
-            Request::Back => self.go_back(),
+            Request::Open(showing) => self.open(showing, Transition::Up),
+            Request::Back => self.go_back(Transition::Down),
         }
         screen_request == Some(true)
+    }
+
+    /// Whether the open app is part way through a transition, which the shell finishes before anything else.
+    fn is_in_transition(&self) -> bool {
+        self.host.as_ref().is_some_and(|host| host.is_in_transition())
     }
 
     fn draw(&mut self) {
@@ -667,11 +704,7 @@ impl Shell {
             return;
         }
         match &mut self.host {
-            Some(host) if host.needs_drawing() => {
-                self.display.lock(|display| {
-                    let _ = host.draw(&mut *display.borrow_mut());
-                });
-            }
+            Some(host) if host.needs_drawing() => draw_host(self.display, host),
             Some(_) => {}
             None if self.help_drawn_at != Some(help::next_change(clock::utc_now())) => {
                 let now = clock::utc_now();
@@ -728,7 +761,7 @@ impl Shell {
             let battery_app = Showing::App(place);
             let returns_to = self.battery_screen_returns_to.unwrap_or(self.showing);
             if self.showing != battery_app {
-                self.open(battery_app);
+                self.open(battery_app, Transition::Up);
             }
             if self.showing == battery_app && returns_to != battery_app {
                 self.battery_screen_returns_to = Some(returns_to);
@@ -736,6 +769,16 @@ impl Shell {
         }
         self.system.screen_request = Some(true);
     }
+}
+
+/// Draws what changed through rows of the screen held on the stack, free again once they are sent.
+// Kept out of the shell task, so the rows are on the stack only while drawing, never in the task's state.
+#[inline(never)]
+fn draw_host(display: &SharedDisplay, host: &mut AppHost<'static>) {
+    let mut strip = [Rgb565::BLACK; STRIP_PIXELS];
+    display.lock(|display| {
+        let _ = host.draw_step(&mut *display.borrow_mut(), &mut strip);
+    });
 }
 
 /// Gives the app host its text fonts from the installed shared library, which holds them.
@@ -790,14 +833,20 @@ pub async fn run_shell(
         library: apps::shared_library(),
         battery_screen_returns_to: None,
         finding_until: None,
+        waiting_touch: None,
+        finger_left_on_old_screen: false,
     };
-    shell.open(Showing::Face);
+    shell.open(Showing::Face, Transition::None);
     let mut last_input = Instant::now();
 
     loop {
         diagnostics::add_one(Counter::ShellLoops);
         diagnostics::set(Counter::ScreenLit, shell.lit as u32);
         shell.draw();
+        while shell.lit && shell.is_in_transition() {
+            yield_now().await;
+            shell.draw();
+        }
         shell.match_accelerometer_to_app();
 
         let now = clock::utc_now();
@@ -819,18 +868,23 @@ pub async fn run_shell(
             wake_at = wake_at.min(clock::instant_at(next_local_chime - clock::utc_offset()));
         }
 
-        let woke = select4(
-            TOUCHES.receive(),
-            BUTTON_PRESSES.receive(),
-            Timer::at(wake_at),
-            select4(
-                system_values::next_changes(),
-                settings::CHANGES.receive(),
-                packages::CHANGED.wait(),
-                app_events::next(),
-            ),
-        )
-        .await;
+        let woke = match shell.waiting_touch.take() {
+            Some(touch) => Either4::First(touch),
+            None => {
+                select4(
+                    TOUCHES.receive(),
+                    BUTTON_PRESSES.receive(),
+                    Timer::at(wake_at),
+                    select4(
+                        system_values::next_changes(),
+                        settings::CHANGES.receive(),
+                        packages::CHANGED.wait(),
+                        app_events::next(),
+                    ),
+                )
+                .await
+            }
+        };
         // A new library may already lie where the open app's library was, so nothing reads it before the reload.
         if !matches!(woke, Either4::Fourth(Either4::Third(_))) && packages::CHANGED.try_take().is_some() {
             shell.reload_apps();
@@ -838,6 +892,7 @@ pub async fn run_shell(
         }
         match woke {
             Either4::First(touch) => {
+                let touch = shell.latest_of(touch);
                 diagnostics::set(Counter::ShellLastWake, 1);
                 last_input = Instant::now();
                 if shell.stop_finding() {
@@ -848,6 +903,16 @@ pub async fn run_shell(
                         shell.turn_screen_on();
                     }
                     continue;
+                }
+                if shell.finger_left_on_old_screen {
+                    match touch {
+                        Touch::Press { .. } => shell.finger_left_on_old_screen = false,
+                        Touch::Release { .. } => {
+                            shell.finger_left_on_old_screen = false;
+                            continue;
+                        }
+                        _ => continue,
+                    }
                 }
                 shell.touch(touch);
             }

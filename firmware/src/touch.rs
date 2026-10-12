@@ -12,8 +12,11 @@ use crate::{
     I2cDeviceOnBus,
 };
 
-/// Touches waiting for the UI; when it falls behind, the newest are dropped.
+/// Touches waiting for the UI, which merges queued drags.
 pub static TOUCHES: Channel<CriticalSectionRawMutex, Touch, 4> = Channel::new();
+
+/// Places in the queue drags never take, so a lift and its gesture always fit.
+const PLACES_KEPT_FOR_LIFTS: usize = 2;
 
 /// Signalled once the panel has started, or given up starting.
 pub static STARTED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
@@ -79,6 +82,34 @@ impl Finger {
     }
 }
 
+/// Queues touches for the UI, holding back the newest drag while the queue is nearly full.
+#[derive(Default)]
+struct TouchSender {
+    held_drag: Option<Touch>,
+}
+
+impl TouchSender {
+    fn send(&mut self, touch: Touch) {
+        if let Touch::Drag { .. } = touch {
+            self.held_drag = Some(touch);
+            self.send_held_drag();
+            return;
+        }
+        // A drag still held when the finger lifts is out of date, so it goes now or not at all.
+        self.send_held_drag();
+        self.held_drag = None;
+        let _ = TOUCHES.try_send(touch);
+    }
+
+    fn send_held_drag(&mut self) {
+        if TOUCHES.free_capacity() > PLACES_KEPT_FOR_LIFTS {
+            if let Some(drag) = self.held_drag.take() {
+                let _ = TOUCHES.try_send(drag);
+            }
+        }
+    }
+}
+
 #[embassy_executor::task]
 pub async fn read_touches(
     i2c_bus: I2cDeviceOnBus,
@@ -103,6 +134,7 @@ pub async fn read_touches(
     }
     diagnostics::set(Counter::TouchState, 1);
     let mut finger = Finger::default();
+    let mut sender = TouchSender::default();
     loop {
         let Ok(report) = panel.wait_for_report().await else {
             continue;
@@ -110,7 +142,7 @@ pub async fn read_touches(
         diagnostics::add_one(Counter::TouchReports);
         finger.touches_for(&report, |touch| {
             diagnostics::add_one(Counter::TouchesSent);
-            let _ = TOUCHES.try_send(touch);
+            sender.send(touch);
         });
     }
 }

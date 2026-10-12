@@ -11,6 +11,17 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   however many are installed.
   Touches and the side button reach the open app.
 - **A help screen** with the time and how to install a face, shown while no face is installed.
+- **Screens slide and wipe in, as on InfiniTime.** The launcher slides up over the face, an app
+  slides up over the launcher, and going back with the button slides the way back down. Going
+  forward to another screen of an app wipes it in from the right, and going back wipes in from the
+  left, as does a swipe to the right.
+- **Smooth scrolling.** A list follows the finger as it drags: the display moves the rows itself,
+  and only the few rows that come into view are drawn. Lists below a heading, as in Settings,
+  scroll to their last row with the heading kept still.
+- **The button and a right swipe go back a screen,** within an app before leaving it, unless the
+  app uses them itself.
+- **Only what changed is drawn,** each part composed in memory first, so the screen never shows a
+  half-drawn widget.
 - **The screen sleeps on its own.** It turns off after the time chosen in settings, 15 seconds at
   first, unless the open app keeps it on. While it is dark the watch stays idle until the open app
   has something to do, and the clock is up to date the moment the screen comes back. The open app

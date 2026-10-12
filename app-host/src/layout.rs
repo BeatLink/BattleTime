@@ -391,6 +391,8 @@ fn place_flow(
         let wanted = if is_down { settings.height } else { settings.width };
         match wanted {
             Some(length) => length.of(main_space),
+            // A growing Scroll or List fills the space left and scrolls the rest, so its content never sizes it.
+            None if clips_children(nodes[child].kind) && settings.grow > 0 => 2 * i32::from(settings.padding),
             None => main_of(natural_size(nodes, child, is_down.then_some(cross))),
         }
     };

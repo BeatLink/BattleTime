@@ -13,3 +13,9 @@ neotime-companion = { path = "../services/companion" }
 neotime-compiler = { path = "../compiler" }
 neotime-runtime = { path = "../runtime" }
 png = "0.18"
+
+[dev-dependencies]
+embedded-hal = "1.0"
+mipidsi = "0.10"
+neotime-display = { path = "../drivers/display" }
+neotime-ui = { path = "../ui" }

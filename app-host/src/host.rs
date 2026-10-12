@@ -6,33 +6,33 @@
 
 use alloc::{boxed::Box, string::String, vec::Vec};
 
-use embedded_graphics::{pixelcolor::Rgb565, prelude::DrawTarget};
 use neotime_runtime::{
-    events::{ButtonPress, EventKind},
+    events::{ButtonPress, EventKind, SwipeDirection},
     state::SaveBufferFull,
     subscriptions::{Subscription, SubscriptionKind},
     verify,
     widgets::{Property, PropertyValue as ValueKind, MOST_WIDGETS},
     AppImage, AppKind, AppState, Bindings, EffectKind, ImageError, Inputs, Interpreter, PropertySource,
-    SystemValue, SystemValues, Theme, ThemeColor, Value, WidgetKind, WidgetTree, NONE,
+    SystemValue, SystemValues, Theme, Value, WidgetKind, WidgetTree, NONE,
 };
-use neotime_ui::ScreenRenderer;
-use rlvgl_core::{
-    renderer::{ClipRenderer, Renderer},
-    widget::{Color, Rect},
-};
+use rlvgl_core::widget::Rect;
 
 use crate::drawing::{
-    app_list_rows, app_row_at, cell_at, draw_node, dropdown_option_at, label_scrolls, matrix_buttons,
-    measure_node, option_row_height, roller_rows, DrawContext, FadedRenderer,
-    LABEL_SCROLL_STEP_IN_MILLISECONDS,
+    app_list_rows, app_row_at, cell_at, dropdown_option_at, label_scrolls, matrix_buttons, measure_node,
+    option_row_height, roller_rows, DrawContext, LABEL_SCROLL_STEP_IN_MILLISECONDS,
 };
 use crate::layout::{clips_children, content_height, lay_out};
-use crate::nodes::{to_color, Node, PropertyValue, OPAQUE};
+use crate::nodes::{Node, PropertyValue};
+
+#[path = "painting.rs"]
+mod painting;
+
 use crate::subscriptions::{
     load_subscriptions, PushedEvent, SubscriptionMemory, FAILURES_BEFORE_TURNING_OFF,
 };
 use crate::system::{button_value, swipe_value, AppEffect, AppFailure, Clocked, EventResult, System, Touch};
+use painting::{ScrollMove, TransitionRun};
+pub use painting::{Transition, STRIP_PIXELS};
 
 // ============================================================================
 // Limits
@@ -141,6 +141,11 @@ pub struct AppHost<'image> {
     cleared_regions: Vec<Rect>,
     /// A widget was shown or hidden, so the nodes must be built again to match.
     nodes_out_of_date: bool,
+    /// Whether the touch under way has scrolled a list, so its slide is not also a swipe.
+    touch_scrolled: bool,
+    scroll_move: Option<ScrollMove>,
+    next_transition: Transition,
+    transition_run: Option<TransitionRun>,
     whole_screen_dirty: bool,
     last_clock_update: Value,
     /// The time of the last call that gave one, for scrolling labels.
@@ -273,6 +278,10 @@ impl<'image> AppHost<'image> {
             dirty_nodes: 0,
             cleared_regions: Vec::new(),
             nodes_out_of_date: false,
+            touch_scrolled: false,
+            scroll_move: None,
+            next_transition: Transition::None,
+            transition_run: None,
             whole_screen_dirty: true,
             last_clock_update: now,
             now,
@@ -293,7 +302,7 @@ impl<'image> AppHost<'image> {
     /// Gives the host each installed app's icon, as `AppImage::resource_bytes` gives it, for a launcher.
     pub fn set_installed_app_icons(&mut self, icons: &'image [&'image [u8]]) {
         self.installed_app_icons = icons;
-        self.whole_screen_dirty = true;
+        self.redraw_whole_screen();
     }
 
     /// Gives the host the shared library, whose images apps name from 32768 up.
@@ -307,7 +316,7 @@ impl<'image> AppHost<'image> {
         if self.is_open {
             self.dirty_nodes = u128::MAX;
             self.update_layout();
-            self.whole_screen_dirty = true;
+            self.redraw_whole_screen();
         }
         Ok(())
     }
@@ -376,8 +385,9 @@ impl<'image> AppHost<'image> {
         self.nodes = Vec::new();
         self.screen_expressions = 0;
         self.dirty_nodes = 0;
-        self.whole_screen_dirty = true;
+        self.redraw_whole_screen();
         self.scroll_drag = None;
+        self.scroll_move = None;
     }
 
     /// Tells an open app that the display turned on, through its `ScreenOn` subscriptions.
@@ -435,10 +445,11 @@ impl<'image> AppHost<'image> {
         self.screen_root = root;
         self.last_clock_update = now;
         self.scroll_drag = None;
+        self.scroll_move = None;
 
         let failure = self.build_nodes(now, system);
         self.measure_and_lay_out();
-        self.whole_screen_dirty = true;
+        self.redraw_whole_screen();
         self.dirty_nodes = 0;
         if let Some(failure) = failure {
             system.app_failed(failure);
@@ -457,6 +468,10 @@ impl<'image> AppHost<'image> {
         let drag = self
             .scroll_drag
             .and_then(|drag| Some((NodeKey::of(self.nodes.get(drag.node_index)?), drag)));
+        let scrolled = self
+            .scroll_move
+            .take()
+            .and_then(|scroll_move| Some(NodeKey::of(self.nodes.get(scroll_move.node_index)?)));
         let mut old: Vec<Option<Box<Node>>> =
             core::mem::take(&mut self.nodes).into_iter().map(Some).collect();
         self.dirty_nodes = 0;
@@ -519,6 +534,12 @@ impl<'image> AppHost<'image> {
             let node_index = self.nodes.iter().position(|node| NodeKey::of(node) == key)?;
             Some(ScrollDrag { node_index, ..drag })
         });
+        // The node numbers changed, so a scroll not drawn yet is drawn as the list's own change instead.
+        if let Some(node_index) =
+            scrolled.and_then(|key| self.nodes.iter().position(|node| NodeKey::of(node) == key))
+        {
+            self.mark_subtree_dirty(node_index);
+        }
         self.screen_expressions = self.expressions_on_screen();
         self.nodes_out_of_date = false;
         self.fill_app_lists(system);
@@ -1033,21 +1054,25 @@ impl<'image> AppHost<'image> {
         if !self.is_open {
             return EventResult::NotHandled;
         }
+        if let Touch::Press { .. } = touch {
+            self.touch_scrolled = false;
+        }
         if let Some(result) = self.touch_open_dropdown(touch, now, system) {
             return result;
         }
         let (property, x, y, mut fields): (Property, i32, i32, [Value; 5]) = match touch {
+            // The panel can name a slide while the finger is still down, so only a lift ends a scroll.
+            Touch::Swipe(_) if self.scroll_drag.is_some() => return EventResult::Handled,
+            Touch::Swipe(SwipeDirection::Up | SwipeDirection::Down) if self.touch_scrolled => {
+                return EventResult::Handled
+            }
             Touch::Swipe(direction) => {
-                if let Some(result) = self.end_scroll(now, system) {
-                    return result;
-                }
-                return self.run_screen_event(
-                    Property::OnSwipe,
-                    &[swipe_value(direction)],
-                    now,
-                    system,
-                    true,
-                );
+                let result =
+                    self.run_screen_event(Property::OnSwipe, &[swipe_value(direction)], now, system, true);
+                return match (result, direction) {
+                    (EventResult::NotHandled, SwipeDirection::Right) => self.go_back_a_screen(now, system),
+                    _ => result,
+                };
             }
             Touch::Release { .. } if self.scroll_drag.is_some() => {
                 return self.end_scroll(now, system).unwrap_or(EventResult::Handled);
@@ -1107,7 +1132,19 @@ impl<'image> AppHost<'image> {
         if !self.is_open {
             return EventResult::NotHandled;
         }
-        self.run_screen_event(Property::OnButton, &[button_value(press)], now, system, true)
+        match self.run_screen_event(Property::OnButton, &[button_value(press)], now, system, true) {
+            EventResult::NotHandled => self.go_back_a_screen(now, system),
+            result => result,
+        }
+    }
+
+    /// Returns to the previous screen, as an unused button or right swipe does; not handled on the first screen.
+    fn go_back_a_screen(&mut self, now: Value, system: &mut impl System) -> EventResult {
+        if self.screen_history_length == 0 {
+            return EventResult::NotHandled;
+        }
+        self.navigate(Navigation::Back, now, system);
+        EventResult::Handled
     }
 
     /// Whether a node, or any widget around it, is disabled.
@@ -1268,10 +1305,11 @@ impl<'image> AppHost<'image> {
             (content_height(&self.nodes, drag.node_index) - self.nodes[drag.node_index].bounds.height).max(0);
         let offset = (drag.start_offset - (y - start_y)).clamp(0, farthest);
         let node = &mut self.nodes[drag.node_index];
-        if node.scroll_offset as i32 != offset {
+        let moved_rows = offset - node.scroll_offset as i32;
+        if moved_rows != 0 {
             node.scroll_offset = offset as i16;
-            self.dirty_nodes |= 1 << drag.node_index;
-            self.update_layout();
+            self.touch_scrolled = true;
+            self.note_scroll(drag.node_index, moved_rows);
         }
         EventResult::Handled
     }
@@ -1332,6 +1370,10 @@ impl<'image> AppHost<'image> {
             }
         };
 
+        self.next_transition = match navigation {
+            Navigation::Go(_) => Transition::Left,
+            Navigation::Back => Transition::Right,
+        };
         self.run_screen_event(Property::OnHide, &[], now, system, false);
         self.show_screen(next_screen, now, system);
         self.run_screen_event(Property::OnShow, &[], now, system, false);
@@ -1408,7 +1450,13 @@ impl<'image> AppHost<'image> {
     /// Changes the theme and redraws every colour, without running any app code.
     pub fn set_theme(&mut self, theme: Theme) {
         self.theme = theme;
+        self.redraw_whole_screen();
+    }
+
+    /// Draws the whole screen next, starting any transition again from its beginning.
+    fn redraw_whole_screen(&mut self) {
         self.whole_screen_dirty = true;
+        self.transition_run = None;
     }
 
     // ------------------------------------------------------------------------
@@ -1417,7 +1465,11 @@ impl<'image> AppHost<'image> {
 
     /// Whether `draw` has anything to do.
     pub fn needs_drawing(&self) -> bool {
-        self.is_open && (self.whole_screen_dirty || self.dirty_nodes != 0 || !self.cleared_regions.is_empty())
+        self.is_open
+            && (self.whole_screen_dirty
+                || self.dirty_nodes != 0
+                || !self.cleared_regions.is_empty()
+                || self.scroll_move.is_some())
     }
 
     /// The image's numbers of the widgets waiting to be drawn again.
@@ -1461,122 +1513,6 @@ impl<'image> AppHost<'image> {
             .map(|node| &**node)
             .find(|node| node.widget_index == widget_index)
     }
-
-    /// Draws every widget that changed since the last call, and only those parts of the screen.
-    pub fn draw<Screen>(&mut self, screen: &mut Screen) -> Result<(), Screen::Error>
-    where
-        Screen: DrawTarget<Color = Rgb565>,
-    {
-        if !self.is_open {
-            return Ok(());
-        }
-        let regions = self.dirty_regions();
-        for region in &regions {
-            self.paint(screen, *region)?;
-        }
-
-        for (node_index, node) in self.nodes.iter_mut().enumerate() {
-            if self.whole_screen_dirty || self.dirty_nodes & (1 << node_index) != 0 {
-                node.drawn_bounds = node.covered_area();
-            }
-        }
-        self.whole_screen_dirty = false;
-        self.dirty_nodes = 0;
-        self.cleared_regions.clear();
-        Ok(())
-    }
-
-    /// The parts of the screen to paint again: where each changed widget was and where it is now.
-    fn dirty_regions(&self) -> Vec<Rect> {
-        let mut regions: Vec<Rect> = Vec::new();
-        if self.whole_screen_dirty {
-            regions.push(SCREEN_AREA);
-            return regions;
-        }
-        for (node_index, node) in self.nodes.iter().enumerate() {
-            if self.dirty_nodes & (1 << node_index) == 0 {
-                continue;
-            }
-            for region in [node.drawn_bounds, node.covered_area()].into_iter().flatten() {
-                add_region(&mut regions, region);
-            }
-        }
-        for region in &self.cleared_regions {
-            add_region(&mut regions, *region);
-        }
-        regions
-    }
-
-    /// Paints one region from the background up, every shown widget clipped to it; open lists last.
-    fn paint<Screen>(&self, screen: &mut Screen, region: Rect) -> Result<(), Screen::Error>
-    where
-        Screen: DrawTarget<Color = Rgb565>,
-    {
-        let Some(region) = region.intersect(SCREEN_AREA) else {
-            return Ok(());
-        };
-        let background = to_color(self.theme.color(ThemeColor::Background));
-        let mut renderer = ScreenRenderer::new(screen).with_background_color(background);
-        renderer.fill_rect(region, background);
-        renderer.finish()?;
-
-        let context = self.draw_context();
-        let in_front_last = self
-            .nodes
-            .iter()
-            .enumerate()
-            .filter(|(_, node)| !node.is_open)
-            .chain(self.nodes.iter().enumerate().filter(|(_, node)| node.is_open));
-        for (node_index, node) in in_front_last {
-            let Some(clip) = node.covered_area().and_then(|area| area.intersect(region)) else {
-                continue;
-            };
-            let backdrop = self.backdrop(node_index, background);
-            let opacity = self.opacity(node_index);
-            let mut renderer = ScreenRenderer::new(screen).with_background_color(backdrop);
-            {
-                let mut clipped = ClipRenderer::new(&mut renderer, clip);
-                if opacity == OPAQUE {
-                    draw_node(node, &context, &mut clipped);
-                } else {
-                    let mut faded = FadedRenderer {
-                        inner: &mut clipped,
-                        opacity,
-                    };
-                    draw_node(node, &context, &mut faded);
-                }
-            }
-            renderer.finish()?;
-        }
-        Ok(())
-    }
-
-    /// How opaque a node draws: its own `opacity` times every parent's, halved if it is disabled.
-    fn opacity(&self, node_index: usize) -> u8 {
-        let mut opacity = OPAQUE as u32;
-        let mut next = Some(node_index);
-        while let Some(index) = next {
-            opacity = opacity * self.nodes[index].settings.opacity as u32 / OPAQUE as u32;
-            next = self.nodes[index].parent.map(|parent| parent as usize);
-        }
-        if self.is_disabled(node_index) {
-            opacity = opacity * DISABLED_OPACITY as u32 / OPAQUE as u32;
-        }
-        opacity as u8
-    }
-
-    /// The colour behind a node's content, for mixing the soft edges of its text and shapes.
-    fn backdrop(&self, node_index: usize, screen_background: Color) -> Color {
-        let mut next = Some(node_index);
-        while let Some(index) = next {
-            let node = &self.nodes[index];
-            if let Some(color) = node.own_background(&self.theme) {
-                return color;
-            }
-            next = node.parent.map(|parent| parent as usize);
-        }
-        screen_background
-    }
 }
 
 /// What several handlers' results add up to: a failure wins, then any handler that ran.
@@ -1586,19 +1522,4 @@ fn combine(first: EventResult, second: EventResult) -> EventResult {
         (EventResult::Handled, _) | (_, EventResult::Handled) => EventResult::Handled,
         _ => EventResult::NotHandled,
     }
-}
-
-/// Adds a region to paint, merging it with any it overlaps.
-fn add_region(regions: &mut Vec<Rect>, region: Rect) {
-    if region.width <= 0 || region.height <= 0 {
-        return;
-    }
-    let mut merged = region;
-    while let Some(position) = regions
-        .iter()
-        .position(|existing| existing.intersect(merged).is_some())
-    {
-        merged = merged.union(regions.swap_remove(position));
-    }
-    regions.push(merged);
 }

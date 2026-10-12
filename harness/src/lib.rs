@@ -32,7 +32,9 @@ pub use sources::{
 };
 pub use watch::{TestWatch, MOST_WAKEUPS_PER_ADVANCE};
 
-pub use neotime_app_host::{AppFailure, BatteryChange, CallKind, EventResult, MotionKind, PushedEvent};
+pub use neotime_app_host::{
+    AppFailure, BatteryChange, CallKind, EventResult, MotionKind, PushedEvent, Touch, Transition,
+};
 pub use neotime_runtime::events::SwipeDirection as Direction;
 pub use neotime_runtime::{EffectKind, SystemValue, Value, WidgetKind};
 

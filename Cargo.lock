@@ -1114,10 +1114,14 @@ name = "neotime-app-testing"
 version = "0.1.0"
 dependencies = [
  "embedded-graphics",
+ "embedded-hal 1.0.0",
+ "mipidsi",
  "neotime-app-host",
  "neotime-companion",
  "neotime-compiler",
+ "neotime-display",
  "neotime-runtime",
+ "neotime-ui",
  "png",
 ]
 

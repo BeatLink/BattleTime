@@ -429,6 +429,25 @@ fn scrolling_moves_the_children_up_and_they_are_clipped_to_the_scroll() {
 }
 
 #[test]
+fn a_growing_scroll_fills_the_space_left_however_tall_its_content() {
+    let mut nodes = tree(&[
+        (WidgetKind::Column, None),
+        (WidgetKind::Chart, Some(0)),
+        (WidgetKind::Scroll, Some(0)),
+        (WidgetKind::Chart, Some(2)),
+        (WidgetKind::Chart, Some(2)),
+        (WidgetKind::Chart, Some(2)),
+    ]);
+    nodes[1].settings.height = Some(Length::Pixels(40));
+    nodes[2].settings.grow = 1;
+
+    let nodes = laid_out(nodes);
+
+    assert_eq!(nodes[2].bounds, rect(0, 40, 240, 200));
+    assert_eq!(content_height(&nodes, 2), 300);
+}
+
+#[test]
 fn a_scroll_wholly_off_the_screen_lets_its_children_draw_nothing() {
     let mut nodes = tree(&[
         (WidgetKind::Column, None),

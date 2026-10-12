@@ -157,6 +157,11 @@ impl TestWatch {
 // ============================================================================
 
 impl TestWatch {
+    /// Sends one touch as the panel reports it, such as a single step of a drag.
+    pub fn touch(&mut self, touch: Touch) -> EventResult {
+        self.send(touch)
+    }
+
     fn send(&mut self, touch: Touch) -> EventResult {
         let now = self.now();
         self.host.touch(touch, now, &mut self.system)

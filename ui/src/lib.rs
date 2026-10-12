@@ -8,6 +8,12 @@
 
 pub use rlvgl_core;
 
+mod scrolling;
+mod strip;
+
+pub use scrolling::{FixedScreen, ScrollBand, ScrollState, ScrollingScreen};
+pub use strip::Strip;
+
 use embedded_graphics::{
     mono_font::{ascii::FONT_10X20, MonoFont, MonoTextStyle},
     pixelcolor::Rgb565,

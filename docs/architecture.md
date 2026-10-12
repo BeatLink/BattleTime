@@ -516,9 +516,20 @@ watch face, the launcher and the apps through `neotime-app-host`:
   The shell answers `installed_apps` from `/apps` and, while the launcher is open, gives the host
   each app's icon. The button,
   or a swipe right the app does not use, goes back a step: app to launcher, launcher to face.
+- **Transitions.** The launcher and apps slide up over what was open, and the button slides back
+  down; a swipe right going back wipes in from the left. The shell draws a transition's steps one
+  after another, yielding to the other tasks between them, before it takes the next input. Once a
+  new screen opens, the rest of the touch that opened it is dropped until the finger lifts, so a
+  swipe that opens the launcher does not also scroll it.
+- **Drawing.** `draw_host` lends the host a strip of `STRIP_PIXELS` (1,920 B) on the stack, held
+  only while drawing, and draws through the display driver, whose hardware scroll the host uses.
 - **Input.** `touch.rs` turns the panel's reports into the host's touches: press, drag and release
-  from the finger, and one click, long press or swipe from each touch's gesture. The watchdog task
-  reads the button every 20 ms and also reports short and long presses.
+  from the finger, and one click, long press or swipe from each touch's gesture. Touches wait in a
+  queue of 4 in which drags never take the last two places, so a lift and its gesture always fit;
+  while the queue is that full, only the newest drag is held back. The shell merges the drags
+  waiting in the queue into the latest one, so a list follows the finger however far drawing falls
+  behind. The watchdog task reads the button
+  every 20 ms and also reports short and long presses.
 - **Sleep.** After the settings' screen timeout without input, 15 seconds at first, the backlight goes off, the display sleeps and the
   app gets `screen_off`, unless it called `keep_screen_on(true)`; the next touch or press turns
   them on without acting on it. The loop sleeps until the next input or until `next_wakeup`;
@@ -717,19 +728,24 @@ and compile every app and face to report which compile.
 `ScreenRenderer` wraps any `embedded-graphics` `DrawTarget` for `Rgb565`, such as the display
 driver's `Display`, and carries out rlvgl's drawing calls on it:
 
-- **No screen buffer.** A full 240x240 picture takes 115 KB, more than the watch's 64 KB of RAM, so
-  each rectangle, text run and image row goes straight to the display.
-- **See-through colours.** The display cannot be read back, so a partly transparent colour, such as
-  the soft edge of a letter, is mixed with a set background colour (`with_background_color`, black
-  by default). Fully transparent pixels are skipped, so what is underneath stays.
+- **Strips instead of a screen buffer.** A full 240x240 picture takes 115 KB, more than the watch's
+  64 KB of RAM. A `Strip` holds a few rows of the screen in a small buffer and is a `DrawTarget`
+  itself, so a part of the screen is drawn there, background first and widgets on top, and sent to
+  the display in one go. The panel then never shows a half-drawn widget, and each pixel crosses the
+  bus once.
+- **See-through colours.** A partly transparent colour, such as the soft edge of a letter, is mixed
+  with a set background colour (`with_background_color`, black by default). Fully transparent
+  pixels are skipped, so what is underneath stays.
 - **Plain text.** `draw_text` uses an `embedded-graphics` mono font, 10x20 by default
   (`with_font`). Widgets that use rlvgl's own fonts draw through its anti-aliased glyph path.
 - **Errors.** rlvgl's drawing calls cannot fail, so the first error from the screen is kept and
   returned by `finish`.
-- **Scrolling.** Drawing goes through the display driver, so it follows the hardware scroll.
-
-rlvgl needs a heap (`alloc`), which the firmware will have to provide. Still to do: sizing that heap,
-touch input, page slides on the hardware scroll, and a desktop simulator.
+- **Hardware scrolling.** `ScrollingScreen` is a screen whose panel can move a band of rows by
+  itself, as the ST7789 does; `Display` implements it. A `ScrollBand` names the rows that move, and
+  `scroll_by` turns them round like a ring, while drawing still takes screen positions. A new band
+  can only be set while the ring is unturned, or the picture must be drawn again, because the
+  panel's memory stays where it was. `FixedScreen` wraps any other `DrawTarget`, such as a picture in
+  memory, as a screen that cannot scroll.
 
 ## App host (`app-host`)
 
@@ -744,8 +760,28 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
   effects go to the embedder through the `System` trait, except `go` and `back`, which the host
   carries out itself.
 - **Redrawing.** Only the expressions a change affects are worked out again, and only the widgets
-  whose value, place or visibility changed are drawn again, each region painted from the
-  background up. There is no screen buffer.
+  whose value, place or visibility changed are drawn again: where each was and where it is now.
+  `draw_step` paints each such region a strip at a time through a buffer the caller lends it
+  (`STRIP_PIXELS`, four rows), from the background up; `draw` does the same on any plain screen.
+- **Scrolling.** A drag on a Scroll or List moves its content with the finger, and only a lift of
+  the finger ends it, even when the panel names a slide while the finger is still down; a vertical swipe the drag made is not also sent to
+  the screen. On a `ScrollingScreen` the panel moves the list's rows: the host sets a band to the
+  list's rows, draws the rows coming into view over those about to leave at the other end, turns
+  the band, and redraws any rounded or bordered edge rows of the list and the boxes around it. It
+  falls back to drawing the list again when anything else is drawn across those rows, the move is
+  more than half the band, or the panel has another band turned. A list given `grow` takes the
+  space left in its parent rather than the height of its content.
+- **Transitions.** A whole new screen comes in by a `Transition`, set with `set_next_transition`
+  and drawn a step per `draw_step` call while `is_in_transition` is true. `Up` and `Down` slide the
+  new screen in over the old one 8 rows a step, as InfiniTime does: each step draws the new rows
+  over the rows that leave next and turns the whole screen's band, so after 240 rows the band is
+  unturned again. `Left` and `Right` wipe the new screen in 16 columns a step. `go` wipes from the
+  right, `back` from the left. A slide needs the whole screen as the band; when the old picture
+  sits in a turned band that the new screen cannot use, the band is unturned at the start of the
+  transition, which shows the outgoing screen out of place while it slides away. On a screen that
+  cannot scroll, slides are drawn at once.
+- **Going back.** An unused side button or right swipe returns to the previous screen, and is
+  left to the embedder on the first one.
 - **Time and subscriptions.** `tick` runs due timers and redraws what the clock changed, and
   `next_wakeup` says when that next happens, so the watch can sleep in between. `deliver` hands
   sensor and phone events to the app's subscriptions. `listens_for` and `shortest_period_of` say

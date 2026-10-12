@@ -94,10 +94,9 @@ hands them simulated parts in place of the chip's:
   its own thread, so a pattern waits without freezing the window.
 - **Delays** sleep the thread.
 
-Without an app, the simulator shows three demo pages (`simulator/src/pages.rs`). Moving
-between them uses the display driver's hardware scroll the way page slides on the watch will: each
-step scrolls 16 rows and draws only the 16 rows that have just come on screen. The demo pages are
-replaced once the UI toolkit exists.
+An app runs through the display driver over the panel model, so its scrolled lists move with the
+hardware scroll and its transitions draw one step a frame, as on the watch. Without an app, the
+simulator shows three demo pages (`simulator/src/pages.rs`), which slide 16 rows a step.
 
 The simulator's tests (`simulator/src/tests.rs`) check the display driver against the panel model,
 including that a full slide leaves exactly the frame that drawing the page directly would. They

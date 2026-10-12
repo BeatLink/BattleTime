@@ -37,22 +37,22 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 72.1 KB | 41.2 KB |
-| App host (with `neotime-ui` and rlvgl) | 61.5 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 71.2 KB | 40.2 KB |
+| App host (with `neotime-ui` and rlvgl) | 66.3 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 42.2 KB | 42.2 KB |
 | App runtime | 23.9 KB | 0.1 KB |
-| core, alloc and compiler builtins | 23.4 KB | 10.9 KB |
+| core, alloc and compiler builtins | 23.5 KB | 10.9 KB |
 | Storage (littlefs) | 21.5 KB | 21.0 KB |
-| Embassy, allocator and Cortex-M | 17.3 KB | 15.8 KB |
+| Embassy, allocator and Cortex-M | 17.4 KB | 15.8 KB |
 | Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
 | Settings and companion (with serde) | 10.5 KB | 8.7 KB |
-| Display, graphics and drivers | 7.9 KB | 3.4 KB |
-| Packages | 2.7 KB | 2.0 KB |
+| Display, graphics and drivers | 8.2 KB | 3.3 KB |
+| Packages | 2.7 KB | 2.1 KB |
 | Updates (DFU) | 2.4 KB | 2.4 KB |
 | BLEFS file service | 2.1 KB | 2.2 KB |
-| Other constants and padding | 16.4 KB | 9.0 KB |
-| **Used** | **316.0 KB** | **158.8 KB** |
-| Free of 400 KB | 84.0 KB | 241.2 KB |
+| Other constants and padding | 16.6 KB | 9.0 KB |
+| **Used** | **320.6 KB** | **157.7 KB** |
+| Free of 400 KB | 79.4 KB | 242.3 KB |
 <!-- /measure_memory:firmware -->
 
 The accelerometer's configuration is the largest piece of data left in it; each watch could build
@@ -136,7 +136,12 @@ status page and confirmation are held once in a static. That leaves 12.2 KB (12,
 stack. Measured in the emulator by painting the stack before start, the launcher path peaks at
 8.0 KB (8,188 B), 4.2 KB spare. The alarm, the deepest app, peaked at 10.5 KB in an earlier
 measurement that the tool cannot repeat, since it cannot open the alarm; against today's stack that
-would leave under 2 KB, so measure it again before the stack shrinks further. The Bluetooth task's
+would leave under 2 KB, so measure it again before the stack shrinks further. Drawing borrows a
+1,920 B strip of four screen rows from the stack while it runs. With it, a typical install (the digital face, the launcher and ten apps,
+built with `filesystem_use --image` and loaded into the emulator with the shared library) peaked at
+9.1 KB while sliding to the launcher and scrolling it, and at 10.3 KB (10,516 B) with the alarm
+open, 1,920 B spare: below the 2 KB this page asks for, so room must be found before the stack or
+the statics grow again. The Bluetooth task's
 deepest path, a file command that makes littlefs compact a folder, adds up to about 9.1 KB from its
 functions' frames, below that peak.
 
@@ -166,14 +171,14 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (storage 16 KB, UI 21 KB; the recovery build has no UI heap) | 37,888 B | 16,384 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 12,001 B | 9,255 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 12,073 B | 9,255 B |
 | Bluetooth controller | 2,525 B | 2,525 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | BLEFS file service | 122 B | 122 B |
 | App host (with `neotime-ui` and rlvgl) | 56 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **53,008 B** | **28,688 B** |
-| Left for the stack | 12,512 B | 36,832 B |
+| **Static RAM** (`.data` and `.bss`) | **53,080 B** | **28,688 B** |
+| Left for the stack | 12,440 B | 36,832 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:

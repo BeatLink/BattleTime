@@ -230,6 +230,19 @@ fn scroll_wraps_round_the_area() {
 }
 
 #[test]
+fn reports_the_rows_that_scroll() {
+    let mut display = new_display_with_no_commands_recorded();
+
+    display.set_scroll_area(20, 100).unwrap();
+
+    let expected = ScrollArea {
+        top_fixed_rows: 20,
+        scrolling_rows: MEMORY_ROWS - 120,
+    };
+    assert_eq!(display.scroll_area(), expected);
+}
+
+#[test]
 fn keeps_the_fixed_area_still() {
     let mut display = new_display_with_no_commands_recorded();
     display.set_scroll_area(20, 0).unwrap();

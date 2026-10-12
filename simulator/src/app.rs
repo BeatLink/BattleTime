@@ -14,7 +14,7 @@ use std::{
 
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use embedded_graphics_simulator::{sdl2::Keycode, OutputSettings, SimulatorDisplay, SimulatorEvent, Window};
-use neotime_app_host::{settings, AppEffect, AppFailure, AppHost, EventResult, System, Touch};
+use neotime_app_host::{settings, AppEffect, AppFailure, AppHost, EventResult, System, Touch, STRIP_PIXELS};
 use neotime_runtime::{
     events::{ButtonPress, SwipeDirection},
     resources::ImageReference,
@@ -403,12 +403,16 @@ pub fn run(
     let mut touch = TouchTracker::default();
     let mut is_light = false;
 
+    let mut strip = vec![Rgb565::BLACK; STRIP_PIXELS];
+
     print_app_controls(host.image().string(host.image().name_string).unwrap_or("app"));
     loop {
         let now = wall_clock_in_milliseconds();
         host.tick(now, &mut system);
+        // A transition draws one step a frame, so it moves as it would on the watch.
         if host.needs_drawing() {
-            host.draw(&mut display).unwrap_or_else(|never| match never {});
+            host.draw_step(&mut display, &mut strip)
+                .unwrap_or_else(|never| match never {});
         }
         copy_panel_to_screen(&panel, &mut screen, motor_running.load(Ordering::Relaxed));
         window.update(&screen);

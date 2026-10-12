@@ -1067,6 +1067,9 @@ name = "neotime-ui"
 version = "0.1.0"
 dependencies = [
  "embedded-graphics",
+ "embedded-hal 1.0.0",
+ "mipidsi",
+ "neotime-display",
  "rlvgl-core",
 ]
 

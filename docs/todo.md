@@ -66,6 +66,19 @@ document for its part instead.
     diagnostics characteristic's last-restart words, and a panic's addresses lead to its caller;
   - an ordinary start after that shows the crash no more.
 
+- [ ] **Transitions and scrolling on the PineTime.** Slides, wipes and hardware-scrolled lists have
+  run only in the emulator and against a model of the panel. On the watch, check that:
+  - a slide and a wipe each take about a quarter of a second, and a slide shows no tearing at its
+    leading edge;
+  - the launcher and the Settings list follow a finger without lag, and reach their last row;
+  - opening Settings from a scrolled launcher, where the outgoing launcher is shown out of place
+    while it slides away, looks acceptable, or whether that unturning should move elsewhere;
+  - the stack keeps 2 KB spare with the alarm open while its list scrolls.
+
+- [ ] **Stack margin with the alarm open.** Measured in the emulator with a typical install, the
+  alarm peaks at 10,516 B of 12,436 B, 1,920 B spare, under the 2 KB [memory-map.md](memory-map.md)
+  asks for. Find what makes that path deep, or win static RAM back, before anything grows.
+
 ## Bluetooth controller
 
 See [bluetooth.md](bluetooth.md) for the details of each.
@@ -108,8 +121,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Text edges over colour.** The display cannot be read back, so the soft edges of letters are
   mixed with one set background colour. Text on a coloured button gets dark fringes. A small line
   buffer would let edges mix with what is really underneath.
-- [ ] **Page slides in the UI.** The simulator's demo pages already slide in with the hardware
-  scroll. Move that into `neotime-ui` so rlvgl screens slide the same way.
 - [ ] **rlvgl screens in the simulator.** The simulator still shows hand-drawn demo pages. Draw
   real rlvgl screens there through `ScreenRenderer`.
 - [ ] **Touch input.** Turn `neotime-touch` gestures into rlvgl events.

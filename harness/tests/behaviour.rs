@@ -84,6 +84,32 @@ fn the_launcher_lists_the_installed_apps_and_opens_the_one_tapped() {
 }
 
 // ============================================================================
+// Going back
+// ============================================================================
+
+#[test]
+fn the_button_returns_from_a_settings_screen_to_the_list_and_then_leaves() {
+    let mut watch = TestWatch::open_app("settings").unwrap();
+    watch.tap_text("Brightness");
+    assert_eq!(watch.screen_name(), Some("brightness"));
+
+    assert_eq!(watch.press_button(), EventResult::Handled);
+    assert_eq!(watch.screen_name(), Some("main"));
+
+    assert_eq!(watch.press_button(), EventResult::NotHandled);
+}
+
+#[test]
+fn a_right_swipe_returns_to_the_previous_screen() {
+    let mut watch = TestWatch::open_app("settings").unwrap();
+    watch.tap_text("Brightness");
+
+    assert_eq!(watch.swipe(Direction::Right), EventResult::Handled);
+
+    assert_eq!(watch.screen_name(), Some("main"));
+}
+
+// ============================================================================
 // Template
 // ============================================================================
 
