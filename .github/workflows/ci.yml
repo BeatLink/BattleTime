@@ -60,6 +60,33 @@ jobs:
       - name: Check the TypeScript types
         run: nix develop --command bash -c "npm ci && npm run check"
 
+  watch-lints:
+    # The firmware and bootloader build only for the watch and sit outside the workspace, so they are linted on their own.
+    name: Watch lints (${{ matrix.build.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build:
+          - { name: firmware, crate: firmware, features: "" }
+          - { name: recovery firmware, crate: firmware, features: "--features recovery" }
+          - { name: wasp-os rehearsal, crate: firmware, features: "--features wasp-os-rehearsal" }
+          - { name: storage rehearsal, crate: firmware, features: "--features wasp-os-storage-rehearsal" }
+          - { name: bootloader, crate: bootloader, features: "" }
+    defaults:
+      run:
+        working-directory: ${{ matrix.build.crate }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ matrix.build.crate }} -> target
+      - name: Check the formatting
+        run: nix develop .. --command cargo fmt --check
+      - name: Run clippy
+        run: nix develop .. --command cargo clippy --release ${{ matrix.build.features }} -- --deny warnings
+
   watch-images:
     name: Watch images
     runs-on: ubuntu-latest
