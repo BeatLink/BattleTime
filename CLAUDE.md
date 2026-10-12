@@ -8,6 +8,10 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
 ## Working alongside other sessions
 
 - Several Claude sessions work on NeoTime at once, each in its own worktree under `.claude/worktrees`.
+- Talk to the other sessions whenever it helps: find them with `ListAgents` and message them with
+  `SendMessage`. Agree on an order when one feature depends on another's landing, say which files
+  you are about to change when they might be editing them too, and ask before touching a part
+  another session owns.
 - Work lands by pushing to GitHub's `master`, so the local `master` is often behind. Run
   `git fetch origin`, rebase onto `origin/master`, rerun the tests, then push without force.
 - Never name a commit to anyone until it is on `origin/master`.
