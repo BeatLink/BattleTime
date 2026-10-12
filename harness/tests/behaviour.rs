@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use neotime_app_testing::{Direction, EffectKind, EventResult, TestWatch};
+use neotime_app_testing::{Direction, EffectKind, EventResult, SystemValue, TestWatch};
 
 // ============================================================================
 // Named numbers
@@ -134,6 +134,48 @@ fn the_template_leaves_on_a_long_press_of_the_button() {
     watch.long_press_button();
 
     assert_eq!(watch.effects_of(EffectKind::Back).len(), 1);
+}
+
+// ============================================================================
+// System info
+// ============================================================================
+
+#[test]
+fn system_info_shows_a_new_firmware_version_and_a_dirty_tree() {
+    let mut watch = TestWatch::open_app("system-info").unwrap();
+    assert!(watch.shows_text("0.1.0+1b19aed"), "{:?}", watch.visible_texts());
+
+    watch.set_system_text(SystemValue::FirmwareVersion, "0.2.0+0a1b2c3*");
+
+    assert!(watch.shows_text("0.2.0+0a1b2c3*"), "{:?}", watch.visible_texts());
+    assert!(!watch.shows_text("0.1.0+1b19aed"));
+    assert_eq!(watch.pixels_left_stale(), 0);
+    assert!(watch.failures().is_empty());
+}
+
+#[test]
+fn system_info_says_the_last_run_crashed() {
+    let mut watch = TestWatch::open_app("system-info").unwrap();
+    assert!(watch.shows_text("watchdog"), "{:?}", watch.visible_texts());
+
+    watch.set_system_text(SystemValue::ResetReason, "Fault at 0x0001a2b4");
+
+    assert!(
+        watch.shows_text("Fault at 0x0001a2b4"),
+        "{:?}",
+        watch.visible_texts()
+    );
+    assert!(watch.failures().is_empty());
+}
+
+#[test]
+fn system_info_counts_uptime_from_a_start_the_phone_moved() {
+    let mut watch = TestWatch::open_app("system-info").unwrap();
+    let now = watch.now();
+
+    watch.set_system_value(SystemValue::StartedAt, now - 2 * 24 * 3_600_000 - 61_000);
+
+    assert!(watch.shows_text("2d 00:01:01"), "{:?}", watch.visible_texts());
 }
 
 // ============================================================================

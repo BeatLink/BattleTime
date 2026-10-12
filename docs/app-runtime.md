@@ -494,14 +494,16 @@ System values, in the order `read system` numbers them: `now`, `utc_offset`, `ba
 `low` and `high`, the installed apps' count followed by their lists of `name`, `id` and `icon`,
 the settings' `screen_timeout_seconds`, `always_on_screen`, `chimes` and `theme`, then
 `battery_millivolts`, which shares `battery_percent`'s bit, and the kept notifications' count
-followed by their lists of `id`, `app`, `title`, `body` and `time`, and the step history's `trip`,
+followed by their lists of `id`, `app`, `title`, `body` and `time`, the step history's `trip`,
 its day count and list of each day's `total`, and its hour count and list of each hour's `steps`,
-which share `steps_today`'s bit.
+which share `steps_today`'s bit, and `firmware_version`, `started_at`, `free_storage_kilobytes`
+and `reset_reason`.
 `read system element` reads a list's elements through `SystemValues::read_element`, or
-`read_element_text` for the names, ids and notification texts. The location, artist, track and instruction are text: the system hands them
+`read_element_text` for the names, ids and notification texts. The location, artist, track,
+instruction, firmware version and reset reason are text: the system hands them
 over through `SystemValues::read_text`, and `read system` copies them into the call's text buffer.
 Values the phone sends together share one bit of an input mask, so all the weather values redraw
-together; that keeps the mask in 32 bits.
+together, and the four a system info screen shows share another; that keeps the mask in 32 bits.
 
 Effects, in the order `effect` numbers them, with how many arguments each takes: `vibrate` (1),
 `vibrate_pattern` (1), `stop_vibrating`, `set_brightness` (1), `keep_screen_on` (1),

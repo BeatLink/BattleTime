@@ -62,7 +62,15 @@ impl SystemValues for FakeSystem {
             SystemValue::Now => self.now,
             SystemValue::Uses24HourClock => 1,
             SystemValue::UsesMetricUnits => 1,
+            SystemValue::StartedAt => self.now - 90_000,
             _ => 0,
+        }
+    }
+
+    fn read_text(&self, value: SystemValue) -> &str {
+        match value {
+            SystemValue::FirmwareVersion => "0.1.0+1b19aed",
+            _ => "",
         }
     }
 
@@ -994,6 +1002,25 @@ fn system_text_values_are_read_like_any_other() {
         property_of(&image, WidgetKind::Label, Property::Text, 0),
         PropertySource::Expression(_)
     ));
+}
+
+#[test]
+fn the_firmware_version_and_uptime_are_read_without_a_permission() {
+    let source = app(r#"import { firmware_version, started_at } from "neotime";
+        function Main() {
+          return (
+            <Screen>
+              <Label>{`NeoTime ${firmware_version.value}`}</Label>
+              <Label>{format_duration(now.value - started_at.value, "h:mm:ss")}</Label>
+            </Screen>
+          );
+        }"#);
+    let image = compile(&source);
+    let image = AppImage::parse(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(label_text(&image, &state, 0), "NeoTime 0.1.0+1b19aed");
+    assert_eq!(label_text(&image, &state, 1), "0:01:30");
 }
 
 #[test]

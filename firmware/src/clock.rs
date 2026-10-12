@@ -52,7 +52,7 @@ fn note_change(zone_changed: bool, applied: bool) {
         ZONE_UNSAVED.store(true, Ordering::Relaxed);
     }
     if applied {
-        system_values::changed(&[SystemValue::Now, SystemValue::UtcOffset]);
+        system_values::changed(&[SystemValue::Now, SystemValue::UtcOffset, SystemValue::StartedAt]);
     }
 }
 
@@ -68,6 +68,11 @@ pub fn now() -> Value {
 /// Milliseconds since 1970 in UTC, the instant apps see as `now`.
 pub fn utc_now() -> Value {
     CLOCK.lock(Cell::get).utc(uptime())
+}
+
+/// When the watch last started, in UTC, which moves with the clock when a phone sets it.
+pub fn started_at() -> Value {
+    CLOCK.lock(Cell::get).utc(0)
 }
 
 /// How far local time is ahead of UTC, the value apps see as `utc_offset`.

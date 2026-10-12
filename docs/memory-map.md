@@ -150,11 +150,11 @@ functions' frames, below that peak.
 The last 44 bytes of the firmware's static RAM, in the `.uninit` section just below the stack, are
 the crash record (`firmware/src/restart.rs`, laid out by `neotime-crash-record`). Start-up does not
 zero `.uninit`, so a panic or HardFault written there survives the reset that follows. It sits at
-about `0x2000CE30`, wherever the linker puts the end of the other statics, so each build has its own
+about `0x2000CEB0`, wherever the linker puts the end of the other statics, so each build has its own
 address and a record from another build fails its checksum. The bootloader runs between the two
 starts but keeps clear of it: its statics are 336 B at the bottom of RAM and its stack reaches about
 4.7 KB below the alive marker in an ordinary start, measured in the emulator, against the record's
-12.4 KB. A stack that grew into the record would only happen after the firmware's own stack had
+12.3 KB. A stack that grew into the record would only happen after the firmware's own stack had
 already overflowed.
 To measure it again after a change, build the firmware and run, inside `nix develop`:
 

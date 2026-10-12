@@ -92,6 +92,13 @@ pub enum SystemValue {
     StepHourCount,
     /// List: the steps in each hour, read at `days_back * 24 + hour`.
     StepHourSteps,
+    /// Text: the firmware's version and commit, such as `0.1.0+1b19aed`.
+    FirmwareVersion,
+    /// When the watch last started, so `now - started_at` is how long it has been running.
+    StartedAt,
+    FreeStorageKilobytes,
+    /// Text: why the watch last restarted, such as `watchdog` or `Fault at 0x0001a2b4`.
+    ResetReason,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -101,9 +108,11 @@ const NAVIGATION_BIT: u32 = 20;
 const INSTALLED_APPS_BIT: u32 = 21;
 /// The settings added after the first three share one bit, since a change to settings redraws them together.
 const SETTINGS_BIT: u32 = 22;
+/// The values a system info screen shows share one bit, as they seldom change.
+const SYSTEM_INFO_BIT: u32 = 23;
 
 impl SystemValue {
-    pub const COUNT: usize = 59;
+    pub const COUNT: usize = 63;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -167,6 +176,10 @@ impl SystemValue {
             56 => StepDayTotal,
             57 => StepHourCount,
             58 => StepHourSteps,
+            59 => FirmwareVersion,
+            60 => StartedAt,
+            61 => FreeStorageKilobytes,
+            62 => ResetReason,
             _ => return None,
         })
     }
@@ -198,6 +211,7 @@ impl SystemValue {
             NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
             | NotificationTime => UnreadNotifications as u32,
             StepTrip | StepDayCount | StepDayTotal | StepHourCount | StepHourSteps => StepsToday as u32,
+            FirmwareVersion | StartedAt | FreeStorageKilobytes | ResetReason => SYSTEM_INFO_BIT,
             other => other as u32,
         };
         1 << group
@@ -238,6 +252,8 @@ impl SystemValue {
                 | NotificationApp
                 | NotificationTitle
                 | NotificationBody
+                | FirmwareVersion
+                | ResetReason
         )
     }
 }

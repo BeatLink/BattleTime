@@ -160,5 +160,17 @@ pub fn prepare_file_system<Flash: NorFlash>(
     })
 }
 
+// ============================================================================
+// Free space
+// ============================================================================
+
+const BYTES_IN_A_KILOBYTE: u32 = 1024;
+
+/// The space no file or folder uses, in whole kilobytes, or nothing when littlefs cannot count it.
+pub fn free_kilobytes<AnyStorage: Storage>(file_system: &Filesystem<AnyStorage>) -> Option<u32> {
+    let used_blocks = file_system.fs_size().ok()?;
+    Some(BLOCK_COUNT.saturating_sub(used_blocks) * (BLOCK_SIZE / BYTES_IN_A_KILOBYTE))
+}
+
 #[cfg(test)]
 mod tests;

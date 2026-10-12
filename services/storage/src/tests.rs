@@ -229,3 +229,24 @@ fn mounted_file_system_and_one_open_file_fit_in_two_kilobytes_of_heap() {
     println!("heap while mounted: {heap_while_mounted} bytes, per open file: {heap_for_one_open_file} bytes");
     assert!(heap_while_mounted + heap_for_one_open_file <= 2048);
 }
+
+// ============================================================================
+// Free space
+// ============================================================================
+
+#[test]
+fn free_space_shrinks_by_the_blocks_a_file_takes() {
+    let prepared = prepared(FakeFlash::blank());
+    let free_when_empty = free_kilobytes(&prepared.file_system).unwrap();
+
+    prepared
+        .file_system
+        .write_file("/apps/big", &[7; 3 * BLOCK_SIZE as usize])
+        .unwrap();
+    let free_with_the_file = free_kilobytes(&prepared.file_system).unwrap();
+
+    assert!(free_when_empty < BLOCK_COUNT * 4);
+    assert!(free_when_empty > (BLOCK_COUNT - 16) * 4);
+    assert!(free_when_empty - free_with_the_file >= 3 * 4);
+    assert_eq!(free_with_the_file % 4, 0);
+}

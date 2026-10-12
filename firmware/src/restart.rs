@@ -9,7 +9,10 @@ use core::{
     ptr::{addr_of, addr_of_mut},
 };
 
-use neotime_crash_record::{find_return_addresses, last_restart_words, Crash, ResetReasons, RECORD_SIZE};
+use embassy_sync::once_lock::OnceLock;
+use neotime_crash_record::{
+    find_return_addresses, last_restart_words, Crash, ResetReasons, RestartReason, RECORD_SIZE,
+};
 
 use crate::diagnostics;
 
@@ -79,6 +82,12 @@ pub struct LastRestart {
     pub crash: Option<Crash>,
 }
 
+/// Room for every reset reason at once, so the text is never cut short.
+const RESTART_REASON_BYTES: usize = 96;
+
+/// Why the watch last restarted, in words, kept in a static so apps read it without copying it.
+static RESTART_REASON: OnceLock<heapless::String<RESTART_REASON_BYTES>> = OnceLock::new();
+
 /// Takes the reset reasons and the crash record once, and puts them after the diagnostics counters.
 pub fn take_last_restart() -> LastRestart {
     let last_restart = LastRestart {
@@ -89,5 +98,19 @@ pub fn take_last_restart() -> LastRestart {
         last_restart.reasons,
         last_restart.crash.as_ref(),
     ));
+    RESTART_REASON.get_or_init(|| {
+        let mut text = heapless::String::new();
+        let reason = RestartReason {
+            reasons: last_restart.reasons,
+            crash: last_restart.crash.as_ref(),
+        };
+        let _ = core::fmt::write(&mut text, format_args!("{reason}"));
+        text
+    });
     last_restart
+}
+
+/// Why the watch last restarted, as the `reset_reason` system value reads; empty until start-up has looked.
+pub fn restart_reason() -> &'static str {
+    RESTART_REASON.try_get().map_or("", |text| text.as_str())
 }

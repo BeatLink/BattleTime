@@ -202,6 +202,26 @@ impl fmt::Display for Crash {
 }
 
 // ============================================================================
+// Why the watch restarted, in words
+// ============================================================================
+
+/// The crash when the run before had one, or else the reset reasons, as the system info app shows it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RestartReason<'crash> {
+    pub reasons: ResetReasons,
+    pub crash: Option<&'crash Crash>,
+}
+
+impl fmt::Display for RestartReason<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        match self.crash {
+            Some(crash) => write!(formatter, "{crash}"),
+            None => write!(formatter, "{}", self.reasons),
+        }
+    }
+}
+
+// ============================================================================
 // What the diagnostics service sends
 // ============================================================================
 

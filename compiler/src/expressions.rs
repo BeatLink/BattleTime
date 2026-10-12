@@ -83,6 +83,10 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
         "settings.always_on_screen" => (SystemValue::AlwaysOnScreen, Type::BOOL),
         "settings.chimes" => (SystemValue::Chimes, Type::NUMBER),
         "settings.theme" => (SystemValue::ThemePreset, Type::NUMBER),
+        "firmware_version" => (SystemValue::FirmwareVersion, Type::TEXT),
+        "started_at" => (SystemValue::StartedAt, instant),
+        "free_storage_kilobytes" => (SystemValue::FreeStorageKilobytes, Type::NUMBER),
+        "reset_reason" => (SystemValue::ResetReason, Type::TEXT),
         "current_weather.temperature" => (SystemValue::WeatherTemperature, Type::NUMBER.or_null()),
         "current_weather.condition" => (
             SystemValue::WeatherCondition,

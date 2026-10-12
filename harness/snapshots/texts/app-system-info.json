@@ -1,0 +1,21 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "0.1.0+1b19aed",
+        "0d 03:25:00",
+        "2.7 MB free",
+        "87%",
+        "Battery",
+        "Firmware",
+        "Last restart",
+        "Storage",
+        "System info",
+        "Uptime",
+        "watchdog"
+      ]
+    }
+  ]
+}

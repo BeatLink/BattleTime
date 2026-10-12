@@ -138,7 +138,7 @@ fn the_stopwatch_runs_on_the_runtime() {
 // ============================================================================
 
 /// The apps and faces that are expected to compile, so a change that breaks one is caught: all of them.
-const EXPECTED_TO_COMPILE: [&str; 48] = [
+const EXPECTED_TO_COMPILE: [&str; 49] = [
     "apps/alarm",
     "apps/beacon",
     "apps/calculator",
@@ -164,6 +164,7 @@ const EXPECTED_TO_COMPILE: [&str; 48] = [
     "apps/snake",
     "apps/sports",
     "apps/steps",
+    "apps/system-info",
     "apps/stopwatch",
     "apps/template",
     "apps/timer",

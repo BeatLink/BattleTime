@@ -170,6 +170,33 @@ fn crashes_read_as_one_short_line() {
 }
 
 // ============================================================================
+// Why the watch restarted, in words
+// ============================================================================
+
+#[test]
+fn the_restart_reason_names_the_crash_before_the_reset_reasons() {
+    let watchdog = ResetReasons::from_register(1 << 1);
+    let fault = hard_fault();
+
+    let after_a_fault = RestartReason {
+        reasons: watchdog,
+        crash: Some(&fault),
+    };
+    let after_a_reset = RestartReason {
+        reasons: watchdog,
+        crash: None,
+    };
+    let after_power_on = RestartReason {
+        reasons: ResetReasons::from_register(0),
+        crash: None,
+    };
+
+    assert_eq!(after_a_fault.to_string(), "Fault at 0x0001a2b4");
+    assert_eq!(after_a_reset.to_string(), "watchdog");
+    assert_eq!(after_power_on.to_string(), "power on");
+}
+
+// ============================================================================
 // What the diagnostics service sends
 // ============================================================================
 

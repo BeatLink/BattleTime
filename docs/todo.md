@@ -334,9 +334,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   bus stops touch and steps for good. InfiniTime also turns the TWIM off between transfers.
 - [ ] **Warn when a part fails at start.** InfiniTime shows a warning screen when the touch
   controller does not start; NeoTime shows nothing.
-- [ ] **A system info screen** showing the firmware version, which the status page and the Device
-  Information service already carry. Apps read only system values, so it needs a text value such
-  as `firmware_version` through the runtime, the compiler, the SDK and the preview.
 
 ### Display
 
@@ -448,7 +445,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   paged lists do. Both are laid out as a plain column now.
 - [ ] **Cyrillic text.** InfiniTime's 20 px font has Cyrillic letters for notifications and music
   titles. Add them to the text fonts in `tools/generate_fonts.py`.
-- [ ] **More library icons:** brightness levels, sleep, notifications on and off, info, list,
+- [ ] **More library icons:** brightness levels, sleep, notifications on and off, list,
   home, eye, ban, phone off, volume mute, tachometer, paintbrush, paddle, map, shield, and the
   moon and night rain weather icons. Quick settings and the ports need them.
 - [ ] **UI design guidelines.** Add InfiniTime's rules to `app-reference.md`: buttons at least 50
@@ -457,6 +454,12 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### Apps and faces
 
+- [ ] **Try the system info app on the watch.** It has run only in the harness and the simulator.
+  Install the new shared library first, which carries its `info` icon, then check the version,
+  the uptime after the phone sets the clock, the reset reason after a button-hold reset, and the
+  free storage before and after an install.
+- [ ] **More in the system info app:** the free heap, the Bluetooth address and the display's
+  state, as InfiniTime's System Info screen shows.
 - [ ] **The full set of navigation turns.** Phones send about 50 icon names, such as forks,
   merges, ramps, ferries and roundabout exits, and the distance as text. NeoTime has 10 turns and
   always prints metres. Add InfiniTime's navigation pictures, map each name to one, and show the
@@ -520,10 +523,18 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **A swap progress bar on the bootloader screen.** It says "Installing firmware" for up to 30
   seconds with nothing moving. Its 16 KB has about 2 KB to spare.
 - [ ] **A setting to turn updates off,** or on until the next reset.
-- [ ] **Show the bootloader version** in a system info screen.
+- [ ] **Show the bootloader version** in the system info app. The bootloader keeps no version
+  yet, so it needs one at a fixed place the firmware can read, and an update of the bootloader on
+  the watch.
 
 ### Developer tools and docs
 
+- [ ] **Measure the stack with any app open.** `tools/measure_stack.py` can only swipe to the
+  launcher, so the alarm's 10.5 KB peak cannot be measured again, and neither can the system info
+  app's. Let it install and open a named app in the emulator.
+- [ ] **Stack measurement runs out of memory in long runs.** Renode hit its 8 GB `ulimit` after
+  about five minutes when the tool ran at the end of a long chain of builds and tests, but passed
+  when run on its own. Find what grows, or start it with a fresh emulator each time.
 - [ ] **A DFU upload tool in `tools/`** that sends a zip over BlueZ, as wasp-os's `dfu.py` does,
   including type `0x08` for the recovery slot, which no client sends yet.
 - [ ] **Flashing a watch over SWD.** One image with the bootloader and the firmware, a way to fill
@@ -541,7 +552,7 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **Harness gaps.** Open a named screen directly, so screens behind icon-only buttons, such as
   the alarm's edit and ring screens, get smoke and snapshot coverage; read the key labels of a
   `ButtonMatrix`, so `tap "7"` works on the calculator; match text spread over neighbouring
-  labels, such as a face's "09:00"; set text system values from `TestWatch`; give `notify` an
+  labels, such as a face's "09:00"; set text system values from scripts; give `notify` an
   app name in scripts; and see every built row of a repeated list, since `widget_text` and
   `widget_bounds` give only the first row's node, so `tap "Sam"` cannot reach the second row of
   the notifications list.
@@ -565,7 +576,7 @@ InfiniTime has these and NeoTime has nothing for them yet:
 | Clock | the Current Time client |
 | Notifications | Alert Notification service and client, Immediate Alert, calls |
 | Other BLE services | Music, Navigation, Simple Weather |
-| System screens | System Info, the pass key, firmware validation |
+| System screens | the pass key, firmware validation |
 
 ## Gaps against the wasp-os fork
 

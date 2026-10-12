@@ -108,6 +108,7 @@ pub fn icon_source(name: &str) -> Option<IconSource> {
         "weather_night_clear" => FontAwesome(0xf186),
         "weather_night_cloudy" => FontAwesome(0xf6c3),
         "pine_logo" => IconSource::PineLogo,
+        "info" => FontAwesome(0xf05a),
         _ => return None,
     })
 }

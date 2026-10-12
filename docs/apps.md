@@ -51,6 +51,7 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 | `flashlight` | InfiniTime FlashLight, wasp-os flashlight | Three brightness levels and a red light. | <img src="../harness/snapshots/screens/app-flashlight.png" width="120" alt="flashlight"> |
 | `battery` | InfiniTime BatteryInfo, PinetimeLite charging and low battery screens | The charge in a ring, charging, full, low or critical, and the voltage; a bar that fills while charging, and a warning to charge below 10 %. The watch opens it when the charger is plugged in or out, or the charge goes low. | <img src="../harness/snapshots/screens/app-battery.png" width="120" alt="battery"> |
 | `phone-finder` | wasp-os phone_finder | Rings the phone. It cannot yet stop the ring from the watch. | <img src="../harness/snapshots/screens/app-phone-finder.png" width="120" alt="phone finder"> |
+| `system-info` | InfiniTime SystemInfo | The firmware version, uptime, why the watch last restarted, the battery and free storage. The bootloader version, memory and Bluetooth address are not shown yet. | <img src="../harness/snapshots/screens/app-system-info.png" width="120" alt="system info"> |
 | `launcher` | NeoTime | The list of installed apps, each with its icon and name; a tap opens it. Any other launcher can replace it. | <img src="../harness/snapshots/screens/app-launcher.png" width="120" alt="launcher"> <img src="../harness/snapshots/screens/app-launcher-installed.png" width="120" alt="launcher installed"> |
 
 ## Health and phone

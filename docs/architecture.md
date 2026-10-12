@@ -389,6 +389,7 @@ across the flash; InfiniTime uses it on the same chip.
 - **Never formats by mistake.** It formats only when littlefs finds no file system at all. A read
   error from the flash is returned instead, so a bus fault cannot wipe the watch.
 - **Cost.** The buffers live on the heap: under 1 KB while mounted and about 400 bytes per open file.
+- **Free space.** `free_kilobytes` counts the blocks no file or folder uses, for the system info app.
 - **Two fixes.** `littlefs-rust-core` is built without overflow checks, as C behaves, and a patched
   copy of the wrapper in `third_party/littlefs-rust` turns off a 256-entry cap that panics on file
   systems written by the C littlefs.
@@ -671,9 +672,15 @@ watch face, the launcher and the apps through `neotime-app-host`:
   line, which `read_companion_line` hands it before reading JSON. `clock::now()` gives local time,
   for drawing, chimes and the midnight step reset; `clock::utc_now()` gives the `now` apps and the
   app host see, with `clock::utc_offset()` as `utc_offset`, and `clock::instant_at` turns a UTC
-  time into a timer reading. Setting the clock signals `now` and `utc_offset` as changed. A changed
-  zone is written to `/settings/time_zone` by the Bluetooth task after the write is answered, and
-  the shell reads it back at start unless a phone already wrote one.
+  time into a timer reading. Setting the clock signals `now`, `utc_offset` and `started_at` as
+  changed. A changed zone is written to `/settings/time_zone` by the Bluetooth task after the write
+  is answered, and the shell reads it back at start unless a phone already wrote one.
+- **System info.** Apps read `firmware_version` from the build's version, `started_at` from the
+  clock's UTC at uptime zero, `reset_reason` from the text `restart.rs` writes once at start into a
+  static with `neotime_crash_record::RestartReason`, and `free_storage_kilobytes` from
+  `neotime_storage::free_kilobytes`. Counting the free space walks the file system, so a read
+  before it is counted gives 0 and asks the shell's loop to count it, outside the redraw's deep
+  stack; the app then redraws with the count, which is kept until the next app opens.
 - **Status page.** The start-up lines and an update's progress share the display with the shell;
   while the page is up the shell draws nothing. During an update the page holds the screen lit;
   once the update ends or fails it gives way to the next touch or press, or to the timeout. Its

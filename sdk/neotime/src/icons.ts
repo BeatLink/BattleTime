@@ -68,6 +68,7 @@ const ICON_SYMBOLS = {
   weather_night_cloudy: "☁",
   none: " ",
   pine_logo: "🌲",
+  info: "ℹ",
 } as const;
 
 export type IconName = keyof typeof ICON_SYMBOLS;

@@ -101,8 +101,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 
 ## Apps and watch faces
 
-- **31 apps** ported from InfiniTime and wasp-os, merged where both firmwares had the same app:
-  stopwatch, timer, alarm, pomodoro, calculator, dice, flashlight, phone finder, heart rate, steps,
+- **32 apps** ported from InfiniTime and wasp-os, merged where both firmwares had the same app:
+  stopwatch, timer, alarm, pomodoro, calculator, dice, flashlight, phone finder, system info, heart rate, steps,
   sports, music, weather, navigation, metronome, motion, level, beacon, Bluetooth off, 2048, paddle,
   puzzle 15, snake, four in a row, Game of Life, paint, haiku, Morse, settings, hello and a template. Each is
   described in [apps.md](apps.md).
@@ -147,6 +147,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   as "Reset: watchdog" or "Reset: power on", or, when the run before crashed, "Fault at 0x0001a2b4"
   or "Last run panicked". The diagnostics service carries the same, with the addresses a panic
   passed through. It has run only in the emulator.
+- **A system info app** showing the firmware's version and commit, how long the watch has run since
+  it started, why it last restarted, the battery and the free storage, as InfiniTime's System Info
+  screen does.
 - **Bootloader updates over Bluetooth,** with the bootloader updater: sent like any firmware
   update, it writes the new bootloader only on the charger and hands the watch back to the firmware
   that was running. It replaced the first watch's bootloader on 2026-10-11.

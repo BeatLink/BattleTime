@@ -421,6 +421,14 @@ impl TestWatch {
             .report_system_value_changes(value.bit(), now, &mut self.system);
     }
 
+    /// Changes a text system value, such as the firmware version, and redraws what shows it.
+    pub fn set_system_text(&mut self, value: SystemValue, text: &str) {
+        self.system.set_text(value, text);
+        let now = self.now();
+        self.host
+            .report_system_value_changes(value.bit(), now, &mut self.system);
+    }
+
     pub fn screen_on(&mut self) -> EventResult {
         self.is_screen_on = true;
         let now = self.now();

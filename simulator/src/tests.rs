@@ -153,6 +153,20 @@ fn effects_print_with_their_names() {
 }
 
 #[test]
+fn the_simulator_gives_its_own_version_and_start() {
+    use neotime_runtime::{SystemValue, SystemValues};
+
+    let system = crate::app::test_system();
+
+    assert!(system
+        .read_text(SystemValue::FirmwareVersion)
+        .ends_with("+simulator"));
+    assert_eq!(system.read_text(SystemValue::ResetReason), "power on");
+    assert_eq!(system.read(SystemValue::StartedAt), 0);
+    assert!(system.read(SystemValue::FreeStorageKilobytes) > 0);
+}
+
+#[test]
 fn low_power_mode_shows_eight_colours_and_keeps_the_rest() {
     let (panel, mut display) = started_display();
     let area = Rectangle::new(Point::new(10, 20), Size::new(5, 5));

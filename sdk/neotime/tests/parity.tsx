@@ -10,6 +10,8 @@ import {
   current_music,
   current_navigation,
   current_weather,
+  firmware_version,
+  free_storage_kilobytes,
   heart_rate,
   heart_rate_measured_at,
   heart_rate_status,
@@ -21,7 +23,9 @@ import {
   is_phone_connected,
   next_alarm,
   reset_persisted,
+  reset_reason,
   settings,
+  started_at,
   step_history,
   steps_today,
   unread_notifications,
@@ -161,6 +165,10 @@ export function set_fake_system_values() {
   heart_rate_status.value = 0;
   is_bluetooth_enabled.value = true;
   next_alarm.value = null;
+  firmware_version.value = "0.1.0+1b19aed";
+  started_at.value = now - 3 * HOUR - 25 * MINUTE;
+  free_storage_kilobytes.value = 2840;
+  reset_reason.value = "watchdog";
   current_weather.value = {
     temperature: 18,
     condition: "clear",

@@ -179,6 +179,11 @@ impl FakeSystem {
             (NavigationDistance, 350),
             (NavigationProgressPercent, 40),
             (StepTrip, STARTING_TRIP_STEPS),
+            (
+                StartedAt,
+                now - 3 * HOUR_IN_MILLISECONDS - 25 * MINUTE_IN_MILLISECONDS,
+            ),
+            (FreeStorageKilobytes, 2840),
         ];
         for (value, number) in starting_values {
             system.set(value, number);
@@ -187,6 +192,8 @@ impl FakeSystem {
         system.set_text(MusicArtist, "The Testers");
         system.set_text(MusicTrack, "Test Pattern");
         system.set_text(NavigationInstruction, "Turn left onto Main Street");
+        system.set_text(FirmwareVersion, "0.1.0+1b19aed");
+        system.set_text(ResetReason, "watchdog");
         system
     }
 

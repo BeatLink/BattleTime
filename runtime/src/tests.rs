@@ -2243,6 +2243,22 @@ fn the_step_history_lists_are_read_by_element() {
     assert_eq!(EffectKind::ResetStepTrip.argument_count(), 0);
 }
 
+#[test]
+fn the_system_info_values_share_a_bit_and_the_version_and_reset_reason_are_text() {
+    let firmware_version = SystemValue::from_byte(59).unwrap();
+
+    assert_eq!(firmware_version, SystemValue::FirmwareVersion);
+    assert_eq!(SystemValue::from_byte(SystemValue::COUNT as u8), None);
+    assert_eq!(firmware_version.bit(), SystemValue::StartedAt.bit());
+    assert_eq!(firmware_version.bit(), SystemValue::FreeStorageKilobytes.bit());
+    assert_eq!(firmware_version.bit(), SystemValue::ResetReason.bit());
+    assert_ne!(firmware_version.bit(), SystemValue::ThemePreset.bit());
+    assert!(firmware_version.is_text());
+    assert!(SystemValue::ResetReason.is_text());
+    assert!(!SystemValue::StartedAt.is_text());
+    assert!(!SystemValue::FreeStorageKilobytes.is_text());
+}
+
 // ============================================================================
 // Boards, cell grids and starting values
 // ============================================================================

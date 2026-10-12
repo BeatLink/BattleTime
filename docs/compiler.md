@@ -231,7 +231,7 @@ them the same way.
 | `grow` | a weight; `padding`, `margin`, `border_width` and `radius` are pixels |
 | `visible`, `show_seconds` | 0 or 1 |
 | `start_angle`, `end_angle`, and every other angle | degrees clockwise from twelve o'clock, passed through unchanged; the host converts them for rlvgl |
-| `icon`, `src` | a shared library image reference, 32768 plus the icon's position in `ICON_NAMES` in `compiler/src/types.rs`, which is also its image number in the shared library: the first 58 in the order of `sdk/neotime/src/icons.ts` up to `weather` (57), then `none` 58, `weather_night_clear` 59, `weather_night_cloudy` 60 and `pine_logo` 61; new icons go at the end so numbers never change |
+| `icon`, `src` | a shared library image reference, 32768 plus the icon's position in `ICON_NAMES` in `compiler/src/types.rs`, which is also its image number in the shared library: the first 58 in the order of `sdk/neotime/src/icons.ts` up to `weather` (57), then `none` 58, `weather_night_clear` 59, `weather_night_cloudy` 60, `pine_logo` 61 and `info` 62; new icons go at the end so numbers never change |
 | `text`, screen names, `go`, `open_app`, `set_setting`'s key | a string of the image |
 | `opacity` | 0 to 255 |
 | `disabled` | 0 or 1 |

@@ -38,6 +38,10 @@ time.
 | `current_weather` | object | The last forecast the phone sent: `temperature`, `condition`, `low`, `high`, `sunrise`, `sunset`, `location` and `received_at` (each `null` until the phone sends it), and `forecast`, up to 5 coming days, each with `condition`, `low` and `high`: read `current_weather.value.forecast.length` and `current_weather.value.forecast[day].high`. Reading it needs no permission, so faces need no subscription of their own. |
 | `installed_apps` | list | Every app a launcher lists, in order: `installed_apps.value.length`, and `installed_apps.value[i].name`, `.id` (for `open_app`) and `.icon` (for an `Icon`). `apps/launcher` is a launcher written this way. |
 | `current_music` | object | The phone's player: `artist`, `track`, `is_playing`, `position` and `length`. Needs the `phone` permission. |
+| `firmware_version` | `Text` | The firmware's version and the commit it was built from, such as `0.1.0+1b19aed`, with a `*` when the build had uncommitted changes. At most 22 characters. |
+| `started_at` | `Instant` | When the watch last started, so `now - started_at` is how long it has run. It moves with the clock when the phone sets the time. |
+| `free_storage_kilobytes` | `Int` | The space left in the watch's file system, counted when the app opens. |
+| `reset_reason` | `Text` | Why the watch last restarted: `Fault at 0x…` or `Last run panicked` when the run before crashed, or else the chip's reset reasons, such as `watchdog`, `reset pin` or `power on`. |
 | `current_navigation` | object | The phone's navigation: `turn`, `instruction` (text), `distance` in metres and `progress_percent`. Needs the `phone` permission. |
 
 The system keeps the latest weather, music and navigation, including their text, and keeps them
@@ -260,7 +264,7 @@ Every angle, in every widget and function, is in degrees clockwise from twelve o
 ### Shared library images and icons
 
 Besides the system icons, the shared library holds a `pine_logo` image and icons for `alarm`,
-`weather_night_clear`, `weather_night_cloudy` and `none`, the empty icon.
+`info`, `weather_night_clear`, `weather_night_cloudy` and `none`, the empty icon.
 
 ### Left out
 

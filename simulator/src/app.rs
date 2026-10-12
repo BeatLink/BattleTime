@@ -41,6 +41,8 @@ const MINUTE_IN_MILLISECONDS: Value = 60_000;
 /// The coming days the simulated phone forecasts: condition number, low and high in °C.
 const SIMULATED_FORECAST: [(Value, Value, Value); 3] = [(0, 12, 22), (2, 10, 17), (5, 8, 14)];
 const HOUR_IN_MILLISECONDS: Value = 60 * MINUTE_IN_MILLISECONDS;
+const SIMULATED_FIRMWARE_VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "+simulator");
+const SIMULATED_FREE_STORAGE_KILOBYTES: Value = 2840;
 
 /// A light theme, for trying `set_theme` with the T key.
 const LIGHT_THEME: Theme = Theme::new([0xFFFF, 0xDEFB, 0x0000, 0x6B4D, 0x04B3, 0x2589, 0xFC40, 0xD8A7]);
@@ -84,6 +86,8 @@ pub struct SimulatedSystem {
     theme_preset: Value,
     /// A preset theme the app picked, shown once the host call returns.
     theme_request: Option<Theme>,
+    /// When the simulator started, as `started_at` reads.
+    started_at: Value,
 }
 
 impl SimulatedSystem {
@@ -109,6 +113,7 @@ impl SimulatedSystem {
             changed_settings: 0,
             theme_preset: 0,
             theme_request: None,
+            started_at: wall_clock_in_milliseconds(),
         }
     }
 
@@ -173,6 +178,8 @@ impl SystemValues for SimulatedSystem {
             StepTrip => STARTING_TRIP_STEPS,
             StepDayCount => STEP_HISTORY_DAYS as Value,
             StepHourCount => (STEP_HISTORY_DAYS * HOURS_PER_DAY) as Value,
+            StartedAt => self.started_at,
+            FreeStorageKilobytes => SIMULATED_FREE_STORAGE_KILOBYTES,
             _ => 0,
         }
     }
@@ -225,6 +232,8 @@ impl SystemValues for SimulatedSystem {
             MusicArtist => "The Simulators",
             MusicTrack => "Test Pattern",
             NavigationInstruction => "Turn left onto Main Street",
+            FirmwareVersion => SIMULATED_FIRMWARE_VERSION,
+            ResetReason => "power on",
             _ => "",
         }
     }
@@ -343,6 +352,7 @@ pub fn test_system() -> SimulatedSystem {
         changed_settings: 0,
         theme_preset: 0,
         theme_request: None,
+        started_at: 0,
     }
 }
 

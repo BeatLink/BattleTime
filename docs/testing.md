@@ -44,7 +44,7 @@ tests and given to every app.
 | `advance(Duration)` | Moves the clock on, waking the app at each time it asked for on the way, in order. |
 | `deliver(PushedEvent::Steps { .. })` | An event from the phone or a sensor, with the system values it carries. |
 | `receive_from_phone(line)` | A companion line from the phone, read by `neotime-companion` as the watch reads it. |
-| `set_system_value`, `screen_off`, `screen_on`, `install_apps(&["timer"])` | Change the battery or another value, the screen, or the launcher's list. |
+| `set_system_value`, `set_system_text`, `screen_off`, `screen_on`, `install_apps(&["timer"])` | Change the battery, the firmware version or another value, the screen, or the launcher's list. |
 
 | Inspect | Gives |
 |---|---|

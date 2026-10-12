@@ -179,6 +179,11 @@ struct WatchSystem {
     notifications_changed: bool,
     /// The open app's name, which a notification it makes shows as its source.
     open_app_name: heapless::String<NOTIFICATION_SOURCE_BYTES>,
+    files: &'static storage::Files,
+    /// Counted once after an app opens and first reads it, since counting walks the file system.
+    free_storage_kilobytes: Cell<Option<Value>>,
+    /// Whether an app read the free storage before it was counted, so the loop counts it.
+    free_storage_wanted: Cell<bool>,
 }
 
 impl SystemValues for WatchSystem {
@@ -210,12 +215,21 @@ impl SystemValues for WatchSystem {
             SystemValue::Brightness => self.brightness as Value,
             SystemValue::NextAlarm => neotime_runtime::NONE,
             SystemValue::InstalledAppCount => self.installed.listed.len() as Value,
+            SystemValue::StartedAt => clock::started_at(),
+            SystemValue::FreeStorageKilobytes => self.free_storage_kilobytes.get().unwrap_or_else(|| {
+                self.free_storage_wanted.set(true);
+                0
+            }),
             _ => 0,
         }
     }
 
     fn read_text(&self, value: SystemValue) -> &str {
-        self.phone.read_text(value).unwrap_or("")
+        match value {
+            SystemValue::FirmwareVersion => crate::FIRMWARE_VERSION,
+            SystemValue::ResetReason => crate::restart::restart_reason(),
+            _ => self.phone.read_text(value).unwrap_or(""),
+        }
     }
 
     /// Each listed app's icon, which the host draws from the icons `apps` keeps, the kept notifications and the step history.
@@ -271,6 +285,22 @@ impl SystemValues for WatchSystem {
 /// Whether the value is one of the kept notifications' fields, which all share one bit.
 fn is_notification_value(value: SystemValue) -> bool {
     value.bit() == SystemValue::UnreadNotifications.bit()
+}
+
+impl WatchSystem {
+    /// Walks the file system from the loop rather than deep inside a redraw, so its frames stay off the peak stack.
+    fn count_free_storage_if_wanted(&self) {
+        if !self.free_storage_wanted.replace(false) {
+            return;
+        }
+        let counted = self
+            .files
+            .file_system()
+            .and_then(neotime_storage::free_kilobytes)
+            .map_or(0, Value::from);
+        self.free_storage_kilobytes.set(Some(counted));
+        system_values::changed(&[SystemValue::FreeStorageKilobytes]);
+    }
 }
 
 impl System for WatchSystem {
@@ -400,6 +430,8 @@ impl Shell {
             self.open_failed(showing);
             return;
         };
+        self.system.free_storage_kilobytes.set(None);
+        self.system.free_storage_wanted.set(false);
         let bytes = image.get();
         let saved = AppImage::parse(bytes)
             .ok()
@@ -968,6 +1000,9 @@ pub async fn run_shell(
             notifications: NotificationList::new(),
             notifications_changed: false,
             open_app_name: heapless::String::new(),
+            files,
+            free_storage_kilobytes: Cell::new(None),
+            free_storage_wanted: Cell::new(false),
         },
         theme,
         app_set_brightness: false,
@@ -998,6 +1033,7 @@ pub async fn run_shell(
             yield_now().await;
             shell.draw();
         }
+        shell.system.count_free_storage_if_wanted();
         shell.match_accelerometer_to_app();
 
         let now = clock::utc_now();

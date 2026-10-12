@@ -147,6 +147,18 @@ export const is_bluetooth_enabled = signal(true);
 /** The next alarm any app has set to ring, or null. */
 export const next_alarm = signal<Instant | null>(null);
 
+/** The firmware's version and commit, such as `0.1.0+1b19aed`. */
+export const firmware_version = signal("0.1.0+preview");
+
+/** When the watch last started, so `now - started_at` is how long it has been running. */
+export const started_at = signal<Instant>(now_milliseconds.value);
+
+/** The file system's free space, in kilobytes. */
+export const free_storage_kilobytes = signal(2840);
+
+/** Why the watch last restarted, such as `watchdog`, `power on` or `Fault at 0x0001a2b4`. */
+export const reset_reason = signal("power on");
+
 export interface CurrentWeather {
   temperature: number;
   condition: WeatherCondition;
