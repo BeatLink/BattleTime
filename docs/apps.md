@@ -6,6 +6,12 @@ and [wasp-os](https://github.com/wasp-os/wasp-os), written in the app language d
 the same app, the port merges them into one. Each app lives in `apps/<id>/app.tsx`, which names its
 sources at the top. Watch faces are a separate package, listed in [faces.md](faces.md).
 
+An app should be a thin layer over the shared parts in the firmware and the shared library: use
+the SDK's widgets, components and functions rather than writing your own, and move anything a
+second app needs into the library. RAM is the scarcest resource on the watch, and an app's own
+code all takes RAM while it is open; see
+[Building apps from shared parts](app-runtime.md#building-apps-from-shared-parts).
+
 They compile to app images with `neotime-compiler`. They also type-check against `sdk/neotime`, a
 stand-in for the `neotime` package, and every screen renders in a test.
 

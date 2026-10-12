@@ -10,6 +10,10 @@ and declares `kind: "face"`.
 
 They compile with the apps; see [apps.md](apps.md#checking-the-apps) for how they are checked.
 
+Faces follow the same structure as apps: status icons, step and heart rate badges, weather and the
+clock's parts come from the shared parts rather than being drawn again in each face; see
+[Building apps from shared parts](app-runtime.md#building-apps-from-shared-parts).
+
 | Face | From | Notes |
 |---|---|---|
 | `digital` | InfiniTime WatchFaceDigital, wasp-os clock | Status icons, weather, heart rate and steps. |

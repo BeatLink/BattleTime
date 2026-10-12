@@ -164,13 +164,90 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   no clip rectangle, so it cannot tell a widget scrolled out of a List or Scroll; there is no
   iterator over the open screen's nodes; and there is no public "redraw everything" (it re-applies
   `set_theme`).
-- [ ] **Run app bytecode in place.** An app's code is copied from `/apps` into RAM when it opens.
-  Copying it to internal flash on install and running it from there would save most of the 6 KB
-  apps budget.
+- [ ] **Read handlers from the file when they run.** The shell reads an app's whole image into the
+  UI heap when it opens, so every byte of it costs RAM. Keep only the expressions and the functions
+  they call, which run on every redraw, in RAM and read a handler from `/apps` when its event
+  comes, as [app-runtime.md](app-runtime.md) plans. Apps stay on the external flash; nothing of an
+  app is copied into the internal flash.
 - [ ] **Resize the firmware slot and the shared library.** With no app, face or font built in the
   firmware is 289 KB, so a split such as 320 KB firmware and 172 KB library becomes possible if the
   library (74,876 B of 92 KB) fills up. The sizes are in `neotime-boot`, which the bootloader shares,
   so do it together with the next bootloader update that is needed anyway.
+
+## Shared library and smaller apps
+
+Measured on all 49 apps and faces: their images hold 197 KB, of which 120.6 KB is bytecode, 31.2 KB
+widget records, 24.1 KB images and 10.1 KB strings. The compiler inlines every function and
+component, so about half the bytecode is the same code repeated with other constants: 16 copies of
+a 270 B expression in twos, 12 of 949 B in infineat, the win check 6 to 8 times in four-in-a-row.
+Code that is byte-for-byte the same across apps is only about 4 KB, so sharing pays only as
+functions that take arguments. Library code is read in place from the internal flash and costs no
+RAM. The items run in order; each needs the ones above it.
+
+- [ ] **Compile the app's own functions as functions.** The runtime has `call` and a functions
+  section, and the compiler already shares expressions and handlers that differ only in their
+  constants, which took the 49 images from 197 KB to 165 KB. What is left is code inlined inside
+  larger handlers, such as four-in-a-row's win check, 6 to 8 copies in handlers of up to 9 KB
+  (about 25 KB). Compile a function called from several places once, with its parameters as
+  locals, falling back to inlining when it cannot be; the parameters' value ranges must join the
+  passes that choose array widths, or arrays it writes would widen.
+- [ ] **Calls into the shared library.** `call_library` runs a function from a functions section
+  in the library image, checked by the same verifier, with numbers that never change between
+  library versions. A function that changes state takes the variables by number, as `copy array`
+  names its arrays. One-line helpers such as `(x + 1) % n` stay inlined, since a call costs as
+  many bytes.
+- [ ] **Library icons by reference.** Every image carries its launcher icon as a 400 to 760 B
+  mask, even when it is a library icon: 24 KB over all images, and about 0.5 KB of RAM for each app
+  opened. A header field naming the library icon replaces the copy.
+- [ ] **Native widgets with their logic built in.** Every widget node costs 160 to 240 B of the UI
+  heap wherever its record lives, so a composite drawn by the firmware as one node saves more RAM
+  than a library component. In the firmware, which has 112 KB free:
+  - `AppList` and `AppGrid`, reading the installed apps themselves: the launcher's 65 widgets
+    become 1, and the 16-row limit goes.
+  - `StatusIcons`: battery, Bluetooth, notifications and alarm, with a style for the wasp-os bar.
+    Replaces 13 `BatteryIcon` copies and 9 hand-made status rows in the faces.
+  - `TimePicker`, `DurationPicker`, `WeekdayPicker` and `Stepper`, writing back to a signal, for
+    the alarm, timer, pomodoro, settings and metronome.
+  - A `confirm(question, handler)` effect drawn over the screen, in place of `ConfirmDialog`,
+    whose 6 nodes stay allocated while hidden (infinipaint, morse, puzzle15, twos).
+  - A `ring(title, icon, until)` system alert with dismiss and snooze events, with the vibration
+    and the stop after a time limit, for the alarm, timer and pomodoro.
+  - Numbers drawn in `CellGrid` cells, so twos and puzzle15 need 1 widget instead of 16 labels.
+  - A digit-entry mode for `ButtonMatrix`, for the calculator and pomodoro.
+  - `TextLines` over an array of character codes, for morse's 120 lines of wrapping.
+  - `SystemBadge` for steps, heart rate, weather and battery text, used in about 8 faces.
+- [ ] **Native array builtins.** Whole-board work is smaller and far faster in Rust than in
+  bytecode loops: `slide_board` and `board_can_move` (twos), `line_length_through`
+  (four-in-a-row), `life_step` (game-of-life, about 2,000 steps a generation now),
+  `random_cell_where`, `count_equal`, `shuffle`, `permutation_parity`, `arrays_equal`,
+  `push_shift` (history lists in heart, motion, steps, stopwatch and morse), `format_fixed`
+  (calculator), `format_distance` (navigation, which ignores the units setting), `digit_of`,
+  `sunday_week_of` and `days_in_year`.
+- [ ] **Library functions.** Logic with a real body that two or more apps share:
+  - Time: `elapsed_clock` (start, pause, reset; stopwatch, sports, metronome, heart), `countdown`
+    and `remaining_seconds` (timer, pomodoro), `dial_hour` (10 faces and the alarm),
+    `day_mask_name` and `format_time_of_day` (alarm).
+  - Weather: `is_night`, `weather_icon_now`, `has_weather`, `weather_condition_name`,
+    `temperature_in_unit` and `temperature_color` (weather, digital, pinetime-style, terminal,
+    lite-weather).
+  - Steps: `steps_since`, which survives the midnight reset (steps, sports), and
+    `step_goal_percent`.
+  - Games: `record_best`, `step_for(direction)`, `neighbour_in`, `bounce_axis` and `move_toward`
+    (snake, paddle, twos, puzzle15, four-in-a-row, lite-pong).
+  - Editing values: `step_clamped`, `step_wrapped`, `append_digit` and `drop_digit` (settings,
+    metronome, pomodoro, calculator).
+- [ ] **Library components.** Widget trees with props, for layouts that need no native logic:
+  `ActionRow` and `PlayPauseButton` (7 apps), `ToggleScreen` (phone-finder, disable-bluetooth,
+  flashlight, beacon), `SettingSwitch` and `ChoiceList` (settings), `CycleChooser` and
+  `DoneButton` (infineat, pride-flag, pinetime-style), `GameOverPanel`, `ScoreHeader`,
+  `EmptyState`, and `ClassicDial` with `DateWindow` (analog, lite-analog).
+- [ ] **Library strings and palettes.** Start, Stop, Reset, Cancel, Dismiss, Snooze, Once, Every
+  day, Weekdays, Weekends, Game over; InfiniTime's 18 colours, the resistor code and a rainbow; a
+  theme colour for the `#b0b0b0` that 9 apps write out.
+- [ ] **Fixes found on the way.** The weather app rounds Fahrenheit differently from
+  `format_temperature`, and pinetime-style has a third version. Several apps rebuild `Header`,
+  `Card`, `clamp`, `indexOf` or `count_where` by hand. `StatusBar`, `ListRow` and `Menu` are used
+  by nothing.
 
 ## RAM
 
@@ -198,9 +275,8 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
 - [ ] **Apps over the RAM budget.** The quality check's `KNOWN_GAPS` lists alarm (67 widgets on
   its main screen) and the launcher (65) against a widget budget worked out from 240 B nodes. Nodes
   are 160 B now and the alarm opens in the emulator, at 36,188 B of the 37,888 B heap, so redo
-  the budget in the check and [memory-map.md](memory-map.md),
-  and twos (9,615 B) and infineat (11,663 B) against the 5,744 B left for expression bytecode. The
-  launcher runs on the watch, so measure the real limit and either correct
+  the budget in the check and [memory-map.md](memory-map.md). The alarm's image has since shrunk
+  from 15 KB to 8.5 KB, so measure it again. The launcher runs on the watch, so measure the real limit and either correct
   [memory-map.md](memory-map.md) or slim the screens.
 
 ## Display and SPI bus

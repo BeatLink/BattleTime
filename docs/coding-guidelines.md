@@ -44,6 +44,17 @@ Prefer a standard helper over a hand-rolled trick, for example `embassy_futures:
 - Name tests after the behaviour they check: `splits_where_memory_wraps`,
   `cancelling_a_vibration_turns_the_motor_off`.
 
+## Apps and shared parts
+
+- Apps are assembled from shared parts that live in the firmware and the shared library; the app
+  itself holds only what is unique to it. RAM is the scarcest resource, and shared parts cost
+  none. [app-runtime.md](app-runtime.md#building-apps-from-shared-parts) gives the rules.
+- Use the shared parts before writing your own, and move anything a second app needs into the
+  shared library, written generically.
+- Build a composite widget with its own logic, or heavy work over a whole array, natively in the
+  firmware rather than in app code.
+- Never put an app or a face in the internal flash.
+
 ## Tests and coverage
 
 - Every change ships with tests for what it adds or changes, in the same commit.

@@ -216,7 +216,9 @@ from inside its parent's padding.
 ### Components from the shared library
 
 These are built from the widgets above and kept in the [shared library](app-runtime.md#the-shared-library),
-so they cost an app nothing to include.
+so they will cost an app nothing to include. Until calls into the library exist, the compiler
+still inlines them into each app; see
+[Building apps from shared parts](app-runtime.md#building-apps-from-shared-parts).
 
 | Component | Use |
 |---|---|

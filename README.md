@@ -12,6 +12,9 @@ It aims to combine the best parts of the two existing PineTime firmwares:
 ## Goals
 
 - **Loadable apps.** Apps and watch faces install over BLE, with no reflash.
+- **Apps built from shared parts.** Widgets, functions, images and fonts that apps have in common
+  live in the firmware and its shared library, and apps assemble them, so each app is small, easy
+  to write and light on RAM, the scarcest resource on the watch.
 - **Pure Rust.** The whole firmware is Rust, including the Bluetooth stack: the
   [TrouBLE](https://github.com/embassy-rs/trouble) host on NeoTime's own radio controller,
   built on [Embassy](https://embassy.dev).
