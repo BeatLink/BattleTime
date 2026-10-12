@@ -160,7 +160,8 @@ Service `6e540001-0000-4000-8000-4e656f54696d`, with its characteristics on the 
 
 An app or face is sent as a file first, to `/apps/<id>/app.ntapp`, then installed with a command on
 the packages characteristic. Each command is a JSON line written to it, and each answer a JSON line
-notified on it, in pieces of up to 20 bytes; a failure answers with the command and `"err":"..."`.
+notified on it, in pieces of up to 20 bytes; a failure answers with the command and `"err":"..."`. The
+recovery firmware has no apps, so it refuses every command with an error.
 
 | Command | Answer |
 |---|---|

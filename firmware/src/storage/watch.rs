@@ -16,14 +16,10 @@ use embassy_time::Delay;
 use embedded_storage::nor_flash::ReadNorFlash;
 use neotime_boot::{
     is_firmware_vector_table, UpdaterNote, BOOT_STATE, FIRMWARE, FIRMWARE_UPDATE, PREVIOUS_FIRMWARE,
-    RECOVERY_FIRMWARE, SHARED_LIBRARY, VECTOR_TABLE_CHECK_SIZE,
+    RECOVERY_FIRMWARE, VECTOR_TABLE_CHECK_SIZE,
 };
 use neotime_external_flash::ExternalFlash;
-use neotime_packages::{
-    check_library_image,
-    commands::{handle_command, refuse_command, Change, LibraryInstaller},
-    library::{install_library_from_file, LibraryError, LIBRARY_HEADER_BYTES},
-};
+use neotime_packages::commands::{refuse_command, Change};
 use neotime_storage::{prepare_file_system, FileSystem, FileSystemFlash, Preparation};
 use neotime_updates::{
     confirm_running_firmware, forget_rollback, running_firmware_is_on_trial,
@@ -258,6 +254,7 @@ pub type WatchFileSystem = FileSystem<BlockingPartition<'static, NoopRawMutex, F
 pub struct Files {
     file_system: Option<WatchFileSystem>,
     /// For copying the shared library into its region of the internal flash.
+    #[cfg_attr(not(with_shell), allow(dead_code))]
     internal_flash: &'static SharedInternalFlash,
 }
 
@@ -275,7 +272,27 @@ impl Files {
         let Some(file_system) = &self.file_system else {
             return refuse_command(line, "the file system is not mounted");
         };
-        handle_command(line, file_system, &mut InternalFlashLibrary(self.internal_flash))
+        self.run_packages_command_on(file_system, line)
+    }
+
+    #[cfg(with_shell)]
+    fn run_packages_command_on(
+        &self,
+        file_system: &WatchFileSystem,
+        line: &[u8],
+    ) -> (alloc::string::String, Change) {
+        let mut library = shared_library::InternalFlashLibrary(self.internal_flash);
+        neotime_packages::commands::handle_command(line, file_system, &mut library)
+    }
+
+    /// The recovery firmware has no apps, so it leaves the package manager out.
+    #[cfg(not(with_shell))]
+    fn run_packages_command_on(
+        &self,
+        _file_system: &WatchFileSystem,
+        line: &[u8],
+    ) -> (alloc::string::String, Change) {
+        refuse_command(line, "the recovery firmware does not install apps")
     }
 
     /// Writes the whole file, making its folder first; false when the file system is missing or full.
@@ -296,23 +313,34 @@ impl Files {
 // The shared library in internal flash
 // ============================================================================
 
-/// Copies a library file into the `SHARED_LIBRARY` region and checks it where it lies, through the
-/// chip's flash controller. Each page erase stops the CPU for about 85 ms.
-struct InternalFlashLibrary(&'static SharedInternalFlash);
+#[cfg(with_shell)]
+mod shared_library {
+    use super::SharedInternalFlash;
+    use neotime_boot::SHARED_LIBRARY;
+    use neotime_packages::{
+        check_library_image,
+        commands::LibraryInstaller,
+        library::{install_library_from_file, LibraryError, LIBRARY_HEADER_BYTES},
+    };
 
-impl LibraryInstaller for InternalFlashLibrary {
-    fn install<S: littlefs_rust::Storage>(
-        &mut self,
-        files: &littlefs_rust::Filesystem<S>,
-        path: &str,
-    ) -> Result<(), LibraryError> {
-        self.0.lock(|flash| {
-            let mut flash = flash.borrow_mut();
-            install_library_from_file(&mut *flash, files, path, |_, length| {
-                // The internal flash is mapped into the address space, so the image is read where it was written.
-                let start = (SHARED_LIBRARY.start + LIBRARY_HEADER_BYTES) as *const u8;
-                check_library_image(unsafe { core::slice::from_raw_parts(start, length as usize) })
+    /// Copies a library file into the `SHARED_LIBRARY` region and checks it where it lies, through the
+    /// chip's flash controller. Each page erase stops the CPU for about 85 ms.
+    pub struct InternalFlashLibrary(pub &'static SharedInternalFlash);
+
+    impl LibraryInstaller for InternalFlashLibrary {
+        fn install<S: littlefs_rust::Storage>(
+            &mut self,
+            files: &littlefs_rust::Filesystem<S>,
+            path: &str,
+        ) -> Result<(), LibraryError> {
+            self.0.lock(|flash| {
+                let mut flash = flash.borrow_mut();
+                install_library_from_file(&mut *flash, files, path, |_, length| {
+                    // The internal flash is mapped into the address space, so the image is read where it was written.
+                    let start = (SHARED_LIBRARY.start + LIBRARY_HEADER_BYTES) as *const u8;
+                    check_library_image(unsafe { core::slice::from_raw_parts(start, length as usize) })
+                })
             })
-        })
+        }
     }
 }
