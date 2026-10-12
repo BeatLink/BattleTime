@@ -55,6 +55,41 @@ fn normal_text_width(text: &str) -> i32 {
 }
 
 // ============================================================================
+// Arcs
+// ============================================================================
+
+#[test]
+fn an_arc_stacks_its_children_in_its_middle() {
+    let nodes = tree(&[
+        (WidgetKind::Arc, None),
+        (WidgetKind::Led, Some(0)),
+        (WidgetKind::Led, Some(0)),
+    ]);
+
+    let nodes = laid_out(nodes);
+
+    assert_eq!(nodes[1].bounds, rect(112, 104, 16, 16));
+    assert_eq!(nodes[2].bounds, rect(112, 120, 16, 16));
+    assert!(nodes[1].shown && nodes[2].shown);
+}
+
+#[test]
+fn a_click_area_stacks_its_children_and_takes_their_size() {
+    let nodes = tree(&[
+        (WidgetKind::Arc, None),
+        (WidgetKind::ClickArea, Some(0)),
+        (WidgetKind::Led, Some(1)),
+        (WidgetKind::Led, Some(1)),
+    ]);
+
+    let nodes = laid_out(nodes);
+
+    assert_eq!(nodes[1].bounds, rect(112, 104, 16, 32));
+    assert_eq!(nodes[2].bounds, rect(112, 104, 16, 16));
+    assert_eq!(nodes[3].bounds, rect(112, 120, 16, 16));
+}
+
+// ============================================================================
 // Rows
 // ============================================================================
 

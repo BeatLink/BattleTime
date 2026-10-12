@@ -184,7 +184,7 @@ from inside its parent's padding.
 | `Icon` | image | A shared library icon, drawn in the `color` given. |
 | `AnimatedImage` | animated image | A short loop of frames. |
 | `Line` | line | Lines between points, such as clock ticks. |
-| `Arc` | arc | A ring or part of one, such as a progress ring. |
+| `Arc` | arc | A ring or part of one, such as a progress ring. Its children are stacked in its middle. |
 | `ArcLabel` | arc label | Text along a curve. |
 | `Bar` | bar | A straight progress bar. |
 | `Spinner` | spinner | Shows that something is in progress. |
@@ -202,7 +202,7 @@ from inside its parent's padding.
 |---|---|---|
 | `Button` | button | A tappable button with text or an icon. |
 | `ImageButton` | image button | A button drawn as an image. |
-| `ClickArea` | click area | An invisible area that takes touches. |
+| `ClickArea` | click area | An invisible area that takes touches. Its children are stacked down it, as in a `Column`. |
 | `Switch` | switch | On or off. |
 | `Checkbox` | checkbox | Ticked or not, with a label. |
 | `Radio` | radio | One choice from a group. |

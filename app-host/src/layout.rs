@@ -45,6 +45,8 @@ struct Size {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Flow {
     Down,
+    /// A column centred both ways, as an Arc holds its children in its middle.
+    DownCentered,
     Across,
     OnTop,
     Grid,
@@ -58,7 +60,8 @@ fn flow_of(kind: WidgetKind) -> Flow {
         Stack | Button => Flow::OnTop,
         Grid => Flow::Grid,
         // Pages and Tabs have no layout of their own yet, so they stack their children like a column.
-        Column | Scroll | List | Pages | Tabs => Flow::Down,
+        Column | Scroll | List | Pages | Tabs | ClickArea => Flow::Down,
+        Arc => Flow::DownCentered,
         _ => Flow::Nothing,
     }
 }
@@ -246,7 +249,8 @@ fn natural_size(nodes: &[Box<Node>], index: usize, available_width: Option<i32>)
                 height: height + gaps(rows, gap),
             }
         }
-        Flow::Nothing => own,
+        // An Arc keeps its own size, with its children inside it.
+        Flow::Nothing | Flow::DownCentered => own,
     };
 
     Size {
@@ -317,8 +321,9 @@ fn place(nodes: &mut [Box<Node>], index: usize, bounds: Rect, parent_shown: bool
     }
 
     match flow_of(node.kind) {
-        Flow::Down => place_flow(nodes, index, inner, true, shown, children_clip),
-        Flow::Across => place_flow(nodes, index, inner, false, shown, children_clip),
+        Flow::Down => place_flow(nodes, index, inner, true, false, shown, children_clip),
+        Flow::DownCentered => place_flow(nodes, index, inner, true, true, shown, children_clip),
+        Flow::Across => place_flow(nodes, index, inner, false, false, shown, children_clip),
         Flow::OnTop => place_on_top(nodes, index, inner, shown, children_clip),
         Flow::Grid => place_grid(nodes, index, inner, shown, children_clip),
         Flow::Nothing => {}
@@ -335,8 +340,16 @@ fn place(nodes: &mut [Box<Node>], index: usize, bounds: Rect, parent_shown: bool
     }
 }
 
-/// Lays children one after another, down when `is_down`, otherwise across.
-fn place_flow(nodes: &mut [Box<Node>], index: usize, inner: Rect, is_down: bool, shown: bool, clip: Rect) {
+/// Lays children one after another, down when `is_down`, otherwise across; `centered` puts them in the middle both ways.
+fn place_flow(
+    nodes: &mut [Box<Node>],
+    index: usize,
+    inner: Rect,
+    is_down: bool,
+    centered: bool,
+    shown: bool,
+    clip: Rect,
+) {
     let main_of = |size: Size| if is_down { size.height } else { size.width };
     let cross_of = |size: Size| if is_down { size.width } else { size.height };
     let inner_size = Size {
@@ -346,8 +359,10 @@ fn place_flow(nodes: &mut [Box<Node>], index: usize, inner: Rect, is_down: bool,
     let main_space = main_of(inner_size);
     let cross_space = cross_of(inner_size);
     let gap = i32::from(nodes[index].settings.gap);
-    let justify = nodes[index].settings.justify;
-    let align_items = nodes[index].settings.align_items;
+    let (justify, align_items) = match centered {
+        true => (Placement::Center, Some(Placement::Center)),
+        false => (nodes[index].settings.justify, nodes[index].settings.align_items),
+    };
 
     // Across the flow: the child's size, and where it starts, inside its margin.
     let cross_place = |nodes: &[Box<Node>], child: usize| {

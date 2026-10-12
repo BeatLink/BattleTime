@@ -4,7 +4,12 @@
       "name": "main",
       "reached_by": null,
       "texts": [
-        "Reset"
+        "4321",
+        "Goal: 10000",
+        "Reset",
+        "Steps",
+        "Trip: 4321",
+        "Yest: 0"
       ]
     },
     {

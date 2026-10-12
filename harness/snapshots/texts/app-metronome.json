@@ -4,7 +4,9 @@
       "name": "main",
       "reached_by": null,
       "texts": [
-        "4 bpb"
+        "120",
+        "4 bpb",
+        "bpm"
       ]
     }
   ]
