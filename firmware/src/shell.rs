@@ -40,8 +40,8 @@ use neotime_app_host::{
     haptics::{self, Vibration},
     motion as app_motion, phone as app_phone, settings as app_settings,
     side_button::{self, ButtonAction, ButtonSituation, OpenScreen},
-    AppEffect, AppFailure, AppHost, BatteryChange, EventResult, MotionKind, PushedEvent, System, Touch,
-    Transition, LARGEST_SAVED_STATE_BYTES, STRIP_PIXELS,
+    AppEffect, AppFailure, AppHost, BatteryChange, EventResult, MotionKind, OpenError, PushedEvent, System,
+    Touch, Transition, LARGEST_SAVED_STATE_BYTES, STRIP_PIXELS,
 };
 use neotime_battery::BatteryEvent;
 use neotime_button::Gesture;
@@ -473,7 +473,11 @@ impl Shell {
             return false;
         };
         if let Some(library) = self.library {
-            let _ = host.set_library(library, now, &mut self.system);
+            // An app built for a newer library would fail wherever it calls into it, so it is not opened.
+            if let Err(OpenError::LibraryTooOld { .. }) = host.set_library(library, now, &mut self.system) {
+                self.host = None;
+                return false;
+            }
         }
         if let Some(icons) = &self.launcher_icons {
             host.set_installed_app_icons(icons.list());

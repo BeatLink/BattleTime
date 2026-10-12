@@ -1381,6 +1381,34 @@ fn neotime_compiler_library_stand_in() -> Vec<u8> {
     writer.build()
 }
 
+/// The counter app, recorded as built against shared library `version`.
+fn counter_image_for_library(version: u16) -> Vec<u8> {
+    let mut image = counter_image();
+    image[8..10].copy_from_slice(&version.to_le_bytes());
+    image
+}
+
+#[test]
+fn an_app_built_for_a_newer_library_is_refused_it() {
+    let library = ImageWriter::new("shared", "Shared library", AppKind::Library, 2).build();
+    let mut system = FakeSystem::default();
+    let open = |version: u16, system: &mut FakeSystem| {
+        let image = std::boxed::Box::leak(counter_image_for_library(version).into_boxed_slice());
+        let mut host = AppHost::open(image, DEFAULT_THEME, START_TIME, system).unwrap();
+        host.set_library(&library, START_TIME, system).map(|_| ())
+    };
+
+    assert!(open(1, &mut system).is_ok());
+    assert!(open(2, &mut system).is_ok());
+    assert!(matches!(
+        open(3, &mut system),
+        Err(OpenError::LibraryTooOld {
+            needed: 3,
+            installed: 2
+        })
+    ));
+}
+
 #[test]
 fn open_into_opens_the_app_in_the_slot() {
     let image = counter_image();

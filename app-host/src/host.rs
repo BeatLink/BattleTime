@@ -12,8 +12,8 @@ use neotime_runtime::{
     subscriptions::{Subscription, SubscriptionKind},
     verify,
     widgets::{Property, PropertyValue as ValueKind, MOST_WIDGETS},
-    AppImage, AppKind, AppState, Bindings, EffectKind, Failure, ImageError, Inputs, Interpreter, PropertySource,
-    SystemValue, SystemValues, Theme, Value, WidgetKind, WidgetTree, NONE,
+    AppImage, AppKind, AppState, Bindings, EffectKind, Failure, ImageError, Inputs, Interpreter,
+    PropertySource, SystemValue, SystemValues, Theme, Value, WidgetKind, WidgetTree, NONE,
 };
 use rlvgl_core::widget::Rect;
 
@@ -72,6 +72,12 @@ pub enum OpenError {
     Image(ImageError),
     NoScreens,
     NotALibrary,
+    /// The app was built against a newer shared library than the one installed, so parts it names
+    /// may be missing.
+    LibraryTooOld {
+        needed: u16,
+        installed: u16,
+    },
 }
 
 impl From<ImageError> for OpenError {
@@ -315,6 +321,8 @@ impl<'image> AppHost<'image> {
 
     /// Gives the host the shared library, whose images apps name from 32768 up.
     ///
+    /// A library older than the one the app was built against is refused and the host keeps none.
+    ///
     /// What reads the library's functions is worked out again, the derive subscriptions run, and the
     /// open screen is built again, since until now every call into the library failed quietly.
     pub fn set_library(
@@ -328,12 +336,19 @@ impl<'image> AppHost<'image> {
         if library.kind != AppKind::Library {
             return Err(OpenError::NotALibrary);
         }
+        if self.image.shared_library_version > library.shared_library_version {
+            return Err(OpenError::LibraryTooOld {
+                needed: self.image.shared_library_version,
+                installed: library.shared_library_version,
+            });
+        }
         self.library = Some(library);
         self.bindings
             .load_into_with_library(&self.image, self.library.as_ref())?;
         for memory in self.subscriptions.iter_mut() {
             if memory.subscription.kind == SubscriptionKind::Derive {
-                memory.derive_inputs = derive_inputs_in(&self.image, self.library.as_ref(), memory.subscription.handler);
+                memory.derive_inputs =
+                    derive_inputs_in(&self.image, self.library.as_ref(), memory.subscription.handler);
             }
         }
         self.run_derives(Inputs::NOTHING, true, now, system);

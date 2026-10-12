@@ -235,8 +235,8 @@ the ones above it.
 
 - [ ] **More of the shared library's functions.** `CallLibrary` runs the pure functions in
   `LIBRARY_FUNCTIONS`. Still open:
-  - The host does not yet refuse an app whose `shared_library_version` is newer than the installed
-    library's; such an app runs until it calls a function that is missing, then shows nothing.
+  - The companion does not check the library version before installing, so an app too new for
+    the watch installs and then never opens.
   - Functions that change state, taking the variables by number as `copy array` names its arrays.
   - Calls from the faces and apps that still compute the same things by hand. One-line helpers
     such as `(x + 1) % n` stay inlined, since a call costs as many bytes.
