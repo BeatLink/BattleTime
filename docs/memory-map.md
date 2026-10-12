@@ -41,7 +41,7 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | App host (with `neotime-ui` and rlvgl) | 55.5 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 42.2 KB | 42.2 KB |
 | App runtime | 23.9 KB | 0.1 KB |
-| core, alloc and compiler builtins | 22.7 KB | 10.4 KB |
+| core, alloc and compiler builtins | 22.7 KB | 10.5 KB |
 | Storage (littlefs) | 21.5 KB | 20.9 KB |
 | Embassy, allocator and Cortex-M | 17.3 KB | 15.8 KB |
 | Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
@@ -51,8 +51,8 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Updates (DFU) | 2.4 KB | 2.4 KB |
 | BLEFS file service | 2.1 KB | 2.2 KB |
 | Other constants and padding | 15.3 KB | 8.2 KB |
-| **Used** | **298.2 KB** | **150.6 KB** |
-| Free of 400 KB | 101.8 KB | 249.4 KB |
+| **Used** | **298.2 KB** | **150.7 KB** |
+| Free of 400 KB | 101.8 KB | 249.3 KB |
 <!-- /measure_memory:firmware -->
 
 The accelerometer's configuration is the largest piece of data left in it; each watch could build
@@ -132,12 +132,23 @@ the rollback after it was meant. The firmware measures 51 KB of static RAM:
 the Bluetooth host with its eight 128-byte packets, controller, display buffer and task state. The
 Bluetooth task's state is 4.8 KB: its GATT table (2.1 KB) and TrouBLE's runner (1.6 KB) are most of
 it; replies to the companion app and half-received lines wait on the heap, and the update state,
-status page and confirmation are held once in a static. That leaves 12.8 KB for the stack. Measured
-in the emulator by painting the stack before start, it peaks at 8.4 KB with the face, the launcher,
-stopwatch, settings or weather open, 4.7 KB spare, and at 10.5 KB with the alarm open, 2.7 KB
-spare. The Bluetooth task's deepest path, a file
-command that makes littlefs compact a folder, adds up to about 9.1 KB from its functions' frames,
-below that peak.
+status page and confirmation are held once in a static. That leaves 12.4 KB (12,692 B) for the
+stack. Measured in the emulator by painting the stack before start, the launcher path peaks at
+8.0 KB (8,036 B), 4.6 KB spare. The alarm, the deepest app, peaked at 10.5 KB in an earlier
+measurement that the tool cannot repeat, since it cannot open the alarm; against today's stack that
+would leave under 2 KB, so measure it again before the stack shrinks further. The Bluetooth task's
+deepest path, a file command that makes littlefs compact a folder, adds up to about 9.1 KB from its
+functions' frames, below that peak.
+
+The last 44 bytes of the firmware's static RAM, in the `.uninit` section just below the stack, are
+the crash record (`firmware/src/restart.rs`, laid out by `neotime-crash-record`). Start-up does not
+zero `.uninit`, so a panic or HardFault written there survives the reset that follows. It sits at
+about `0x2000CE30`, wherever the linker puts the end of the other statics, so each build has its own
+address and a record from another build fails its checksum. The bootloader runs between the two
+starts but keeps clear of it: its statics are 336 B at the bottom of RAM and its stack reaches about
+4.7 KB below the alive marker in an ordinary start, measured in the emulator, against the record's
+12.4 KB. A stack that grew into the record would only happen after the firmware's own stack had
+already overflowed.
 To measure it again after a change, build the firmware and run, inside `nix develop`:
 
 ```sh
