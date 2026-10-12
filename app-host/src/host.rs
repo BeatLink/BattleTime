@@ -12,7 +12,7 @@ use neotime_runtime::{
     state::SaveBufferFull,
     subscriptions::{Subscription, SubscriptionKind},
     verify,
-    widgets::{Property, PropertyValue as ValueKind, DEEPEST_NESTING, MOST_WIDGETS},
+    widgets::{Property, PropertyValue as ValueKind, MOST_WIDGETS},
     AppImage, AppKind, AppState, Bindings, EffectKind, ImageError, Inputs, Interpreter, PropertySource,
     SystemValue, SystemValues, Theme, ThemeColor, Value, WidgetKind, WidgetTree, NONE,
 };
@@ -89,6 +89,22 @@ struct ScrollDrag {
     start_offset: i32,
 }
 
+/// Which widget, and which row of a repeated list, a node stands for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct NodeKey {
+    widget_index: u16,
+    row: u16,
+}
+
+impl NodeKey {
+    fn of(node: &Node) -> NodeKey {
+        NodeKey {
+            widget_index: node.widget_index,
+            row: node.row,
+        }
+    }
+}
+
 fn mask_of(expressions: impl Iterator<Item = usize>) -> u128 {
     expressions
         .filter(|&expression| expression < MOST_BOUND_EXPRESSIONS)
@@ -121,6 +137,10 @@ pub struct AppHost<'image> {
     nodes: Vec<Box<Node>>,
     /// One bit for each node to draw again.
     dirty_nodes: u128,
+    /// Where nodes that are gone were last drawn, to paint over.
+    cleared_regions: Vec<Rect>,
+    /// A widget was shown or hidden, so the nodes must be built again to match.
+    nodes_out_of_date: bool,
     whole_screen_dirty: bool,
     last_clock_update: Value,
     /// The time of the last call that gave one, for scrolling labels.
@@ -251,6 +271,8 @@ impl<'image> AppHost<'image> {
             screen_expressions: 0,
             nodes: Vec::new(),
             dirty_nodes: 0,
+            cleared_regions: Vec::new(),
+            nodes_out_of_date: false,
             whole_screen_dirty: true,
             last_clock_update: now,
             now,
@@ -408,77 +430,143 @@ impl<'image> AppHost<'image> {
     // ------------------------------------------------------------------------
 
     fn show_screen(&mut self, root: u16, now: Value, system: &mut impl System) {
-        let end = self.tree.subtree_end(root).unwrap_or(root + 1);
-        let count = (end - root) as usize;
-        let mut nodes: Vec<Box<Node>> = Vec::with_capacity(count.min(MOST_WIDGETS));
-        let mut open_parents = [0u8; DEEPEST_NESTING + 1];
-        let mut depth = 0;
-
-        for widget_index in root..end {
-            let Some(widget) = self.tree.widget(widget_index) else {
-                break;
-            };
-            let node_index = nodes.len();
-            while depth > 0 && nodes[open_parents[depth - 1] as usize].subtree_end as usize <= node_index {
-                depth -= 1;
-            }
-            let subtree_end = self.tree.subtree_end(widget_index).unwrap_or(end) - root;
-            let parent = (depth > 0).then(|| open_parents[depth - 1]);
-            nodes.push(Box::new(Node::new(
-                widget_index,
-                widget.kind,
-                subtree_end as u8,
-                parent,
-                SCREEN_AREA,
-            )));
-            if widget.child_count > 0 && depth < open_parents.len() {
-                open_parents[depth] = node_index as u8;
-                depth += 1;
-            }
-        }
-
-        self.nodes = nodes;
+        self.nodes = Vec::new();
+        self.cleared_regions.clear();
         self.screen_root = root;
-        self.screen_expressions = 0;
         self.last_clock_update = now;
         self.scroll_drag = None;
 
+        let failure = self.build_nodes(now, system);
+        self.measure_and_lay_out();
+        self.whole_screen_dirty = true;
+        self.dirty_nodes = 0;
+        if let Some(failure) = failure {
+            system.app_failed(failure);
+        }
+    }
+
+    /// Makes the nodes match what can show: one for each widget whose parents are all visible.
+    ///
+    /// A node that already exists is kept with its values, scroll and marks; a new one has its
+    /// properties worked out. So a hidden part of the screen, such as a closed dialog, holds no UI
+    /// heap, and showing it costs only its own nodes.
+    fn build_nodes(&mut self, now: Value, system: &impl SystemValues) -> Option<AppFailure> {
+        let was_dirty: Vec<bool> = (0..self.nodes.len())
+            .map(|index| self.whole_screen_dirty || self.dirty_nodes & (1 << index) != 0)
+            .collect();
+        let drag = self
+            .scroll_drag
+            .and_then(|drag| Some((NodeKey::of(self.nodes.get(drag.node_index)?), drag)));
+        let mut old: Vec<Option<Box<Node>>> =
+            core::mem::take(&mut self.nodes).into_iter().map(Some).collect();
+        self.dirty_nodes = 0;
+
         let mut first_failure = None;
-        for node_index in 0..self.nodes.len() {
-            let Some(widget) = self.tree.widget(self.nodes[node_index].widget_index) else {
+        let mut pending: Vec<(u16, u16, Option<u8>)> = alloc::vec![(self.screen_root, 0, None)];
+        while let Some((widget_index, row, parent)) = pending.pop() {
+            let Some(widget) = self.tree.widget(widget_index) else {
                 continue;
             };
-            for entry in widget.properties().flatten() {
-                match entry.source {
-                    PropertySource::Constant(constant) => {
-                        let value = match entry.property.value() {
-                            ValueKind::Text => match self.image.string(constant as u16) {
-                                Some(text) => PropertyValue::Text(text),
-                                None => continue,
-                            },
-                            _ => PropertyValue::Number(constant as Value),
-                        };
-                        self.nodes[node_index].apply(entry.property, value);
+            if self.nodes.len() >= MOST_WIDGETS {
+                break;
+            }
+            let node_index = self.nodes.len();
+            let key = NodeKey { widget_index, row };
+            let kept = old
+                .iter()
+                .position(|node| node.as_ref().is_some_and(|node| NodeKey::of(node) == key))
+                .and_then(|place| Some((old[place].take()?, was_dirty[place])));
+            match kept {
+                Some((mut node, dirty)) => {
+                    node.parent = parent;
+                    self.nodes.push(node);
+                    if dirty {
+                        self.dirty_nodes |= 1 << node_index;
                     }
-                    PropertySource::Expression(expression) => {
-                        if (expression as usize) < MOST_BOUND_EXPRESSIONS {
-                            self.screen_expressions |= 1 << expression;
-                        }
-                        let failure = self.evaluate_into(node_index, entry.property, expression, now, system);
-                        first_failure = first_failure.or(failure);
-                    }
-                    PropertySource::Handler(_) => {}
+                }
+                None => {
+                    let mut node = Node::new(widget_index, widget.kind, 0, parent, SCREEN_AREA);
+                    node.row = row;
+                    self.nodes.push(Box::new(node));
+                    first_failure = first_failure.or(self.fill_node(node_index, now, system));
+                    self.dirty_nodes |= 1 << node_index;
+                }
+            }
+            if self.nodes[node_index].settings.visible {
+                let children: Vec<u16> = self.tree.children(widget_index).collect();
+                for child in children.into_iter().rev() {
+                    pending.push((child, row, Some(node_index as u8)));
                 }
             }
         }
 
-        self.fill_app_lists(system);
-        self.measure_and_lay_out();
-        self.whole_screen_dirty = true;
-        self.dirty_nodes = 0;
-        if let Some(failure) = first_failure {
-            system.app_failed(failure);
+        let count = self.nodes.len();
+        let mut ends: Vec<usize> = (1..=count).collect();
+        for index in (0..count).rev() {
+            if let Some(parent) = self.nodes[index].parent {
+                ends[parent as usize] = ends[parent as usize].max(ends[index]);
+            }
         }
+        for (node, end) in self.nodes.iter_mut().zip(ends) {
+            node.subtree_end = end as u8;
+        }
+        for node in old.into_iter().flatten() {
+            if let Some(area) = node.drawn_bounds {
+                self.cleared_regions.push(area);
+            }
+        }
+        self.scroll_drag = drag.and_then(|(key, drag)| {
+            let node_index = self.nodes.iter().position(|node| NodeKey::of(node) == key)?;
+            Some(ScrollDrag { node_index, ..drag })
+        });
+        self.screen_expressions = self.expressions_on_screen();
+        self.nodes_out_of_date = false;
+        self.fill_app_lists(system);
+        first_failure
+    }
+
+    /// Works out a new node's properties: constants from the image, expressions by running them.
+    fn fill_node(&mut self, node_index: usize, now: Value, system: &impl SystemValues) -> Option<AppFailure> {
+        let widget = self.tree.widget(self.nodes[node_index].widget_index)?;
+        let mut first_failure = None;
+        for entry in widget.properties().flatten() {
+            match entry.source {
+                PropertySource::Constant(constant) => {
+                    let value = match entry.property.value() {
+                        ValueKind::Text => match self.image.string(constant as u16) {
+                            Some(text) => PropertyValue::Text(text),
+                            None => continue,
+                        },
+                        _ => PropertyValue::Number(constant as Value),
+                    };
+                    self.nodes[node_index].apply(entry.property, value);
+                }
+                PropertySource::Expression(expression) => {
+                    let failure = self.evaluate_into(node_index, entry.property, expression, now, system);
+                    first_failure = first_failure.or(failure);
+                }
+                PropertySource::Handler(_) => {}
+            }
+        }
+        first_failure
+    }
+
+    /// One bit for each expression a node of the screen reads.
+    fn expressions_on_screen(&self) -> u128 {
+        let mut expressions = 0u128;
+        for node in &self.nodes {
+            let Some(widget) = self.tree.widget(node.widget_index) else {
+                continue;
+            };
+            for entry in widget.properties().flatten() {
+                if let PropertySource::Expression(expression) = entry.source {
+                    if (expression as usize) < MOST_BOUND_EXPRESSIONS {
+                        expressions |= 1 << expression;
+                    }
+                }
+            }
+        }
+        expressions
     }
 
     fn draw_context(&self) -> DrawContext<'_, 'image> {
@@ -534,6 +622,9 @@ impl<'image> AppHost<'image> {
         };
         if applied {
             self.dirty_nodes |= 1 << node_index;
+            if property == Property::Visible {
+                self.nodes_out_of_date = true;
+            }
         }
         None
     }
@@ -570,6 +661,9 @@ impl<'image> AppHost<'image> {
             }
         }
 
+        if self.nodes_out_of_date {
+            first_failure = first_failure.or(self.build_nodes(now, system));
+        }
         self.update_layout();
         if let Some(failure) = first_failure {
             system.app_failed(failure);
@@ -1323,7 +1417,7 @@ impl<'image> AppHost<'image> {
 
     /// Whether `draw` has anything to do.
     pub fn needs_drawing(&self) -> bool {
-        self.is_open && (self.whole_screen_dirty || self.dirty_nodes != 0)
+        self.is_open && (self.whole_screen_dirty || self.dirty_nodes != 0 || !self.cleared_regions.is_empty())
     }
 
     /// The image's numbers of the widgets waiting to be drawn again.
@@ -1388,6 +1482,7 @@ impl<'image> AppHost<'image> {
         }
         self.whole_screen_dirty = false;
         self.dirty_nodes = 0;
+        self.cleared_regions.clear();
         Ok(())
     }
 
@@ -1405,6 +1500,9 @@ impl<'image> AppHost<'image> {
             for region in [node.drawn_bounds, node.covered_area()].into_iter().flatten() {
                 add_region(&mut regions, region);
             }
+        }
+        for region in &self.cleared_regions {
+            add_region(&mut regions, *region);
         }
         regions
     }

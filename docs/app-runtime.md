@@ -649,11 +649,17 @@ not yet read an image a section at a time from the external flash.
 `AppHost::open` parses and verifies the image, sets up the state and the bindings, and opens the
 first screen:
 
-1. It makes one node for each widget of the screen, with an rlvgl widget to draw it.
-2. It reads every property once: constants straight from the image, expressions through the
-   interpreter. Text comes from `Interpreter::text`.
+1. It makes one node for each widget of the screen whose parents are all visible, with an rlvgl
+   widget to draw it. A hidden widget keeps its own node, which holds its `visible`, but nothing
+   inside it has one, so a closed dialog costs no UI heap.
+2. It reads each node's properties once: constants straight from the image, expressions through
+   the interpreter. Text comes from `Interpreter::text`.
 3. It lays the screen out, as [Layout](#layout) describes.
 4. It runs the screen's `onShow`, if it has one.
+
+When a widget is shown or hidden, the host builds the nodes again to match: the nodes that stay
+keep their values, the ones inside a newly shown widget have their properties worked out, and
+where the dropped ones were drawn is painted over.
 
 `open_with_saved_state` does the same, with the bytes `save_changed_state` once wrote put over the
 defaults first; saved state that does not fit, such as another app's, is ignored.

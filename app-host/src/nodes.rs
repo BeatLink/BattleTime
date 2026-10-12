@@ -349,6 +349,8 @@ impl core::ops::Deref for ExtraSlot {
 pub struct Node {
     /// The widget's number in the image.
     pub widget_index: u16,
+    /// Which row of a repeated list the node draws, or 0 outside one.
+    pub row: u16,
     pub kind: WidgetKind,
     /// The node just past this one and everything inside it.
     pub subtree_end: u8,
@@ -384,6 +386,7 @@ impl Node {
     ) -> Node {
         Node {
             widget_index,
+            row: 0,
             kind,
             subtree_end,
             parent,

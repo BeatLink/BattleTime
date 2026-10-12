@@ -1633,3 +1633,90 @@ fn text_over_a_row_is_mixed_with_the_rows_colour() {
     );
     assert_eq!(recorder.dots.len(), 5);
 }
+
+// ============================================================================
+// Hidden widgets
+// ============================================================================
+
+/// A button that flips a flag, and a panel of two labels shown only while the flag is set.
+fn hidden_panel_image() -> Vec<u8> {
+    use Instruction::*;
+
+    let mut writer = ImageWriter::new("panel", "Panel", AppKind::App, 1);
+    let is_open = writer.variable("is_open", ValueType::Bool, false, 0);
+    let main = writer.string("main");
+    let first = writer.string("First line");
+    let second = writer.string("Second line");
+    let toggle_text = writer.string("Toggle");
+    let flip = writer.handler(code(|code| {
+        code.emit(ReadState(is_open)).emit(Not).emit(WriteState(is_open));
+    }));
+    let shown = writer.expression(code(|code| {
+        code.emit(ReadState(is_open));
+    }));
+    let constant = PropertySource::Constant;
+    writer.widget(
+        WidgetKind::Column,
+        2,
+        &[(Property::ScreenName, constant(main as i32))],
+    );
+    writer.widget(
+        WidgetKind::Button,
+        0,
+        &[
+            (Property::Text, constant(toggle_text as i32)),
+            (Property::Height, constant(BUTTON_HEIGHT)),
+            (Property::OnClick, PropertySource::Handler(flip)),
+        ],
+    );
+    writer.widget(
+        WidgetKind::Column,
+        2,
+        &[(Property::Visible, PropertySource::Expression(shown))],
+    );
+    writer.widget(WidgetKind::Label, 0, &[(Property::Text, constant(first as i32))]);
+    writer.widget(WidgetKind::Label, 0, &[(Property::Text, constant(second as i32))]);
+    writer.build()
+}
+
+const PANEL: u16 = 2;
+const PANEL_FIRST_LINE: u16 = 3;
+
+#[test]
+fn a_hidden_widget_holds_no_nodes_for_what_is_inside_it() {
+    let image = hidden_panel_image();
+    let mut system = FakeSystem::default();
+
+    let host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    assert_eq!(host.node_count(), 3);
+    assert_eq!(host.widget_bounds(PANEL).map(|(_, shown)| shown), Some(false));
+    assert_eq!(host.widget_text(PANEL_FIRST_LINE), None);
+}
+
+#[test]
+fn showing_a_hidden_widget_builds_its_nodes_and_hiding_it_frees_them() {
+    let image = hidden_panel_image();
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+    host.draw(&mut screen).unwrap();
+    let text_color = rgb565(DEFAULT_THEME.color(ThemeColor::Text));
+
+    click_on(&mut host, 1, START_TIME, &mut system);
+    host.draw(&mut screen).unwrap();
+    let (line, shown) = host.widget_bounds(PANEL_FIRST_LINE).unwrap();
+    let drawn_while_open = screen.count_in(line, text_color);
+    let nodes_while_open = host.node_count();
+
+    click_on(&mut host, 1, START_TIME, &mut system);
+    assert!(host.needs_drawing());
+    host.draw(&mut screen).unwrap();
+
+    assert!(shown);
+    assert_eq!(nodes_while_open, 5);
+    assert!(drawn_while_open > 20);
+    assert_eq!(host.node_count(), 3);
+    assert_eq!(screen.count_in(line, text_color), 0);
+    assert!(system.failures.is_empty());
+}

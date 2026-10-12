@@ -700,7 +700,8 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
 `alloc`, because rlvgl's widgets need a heap.
 
 - **Opening.** `AppHost::open` checks the image, sets up the state and bindings, and builds the
-  first screen: one node per widget, each drawn by an rlvgl widget, laid out by a small flexbox.
+  first screen: one node per widget whose parents are all visible, each drawn by an rlvgl widget,
+  laid out by a small flexbox. Showing or hiding a widget builds or frees the nodes inside it.
 - **Events.** A touch goes to the topmost widget under it that has a handler for it. The handler's
   effects go to the embedder through the `System` trait, except `go` and `back`, which the host
   carries out itself.
