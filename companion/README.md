@@ -22,7 +22,7 @@ in the NeoTime tree):
 - the battery level from the standard Battery service;
 - the Gadgetbridge-style messages over the Nordic UART Service: notifications, calls, music,
   weather, find, status, steps, alarms, watch settings and web requests for watch apps;
-- the file service: browsing files, backups, and installing compiled `.ntapp` apps.
+- the BLEFS file service: browsing files, backups, and installing compiled `.ntapp` apps.
 
 Each feature is offered only when the connected watch serves what it needs, so nothing breaks while
 the firmware catches up. On Android the app forwards notifications, calls and now playing, and obeys
@@ -147,7 +147,7 @@ The app reads which services the watch serves right after connecting, in
 | Current Time | `0x1805` / `0x2A2B` | the clock, set on every connection |
 | Battery | `0x180F` / `0x2A19` | the battery level |
 | NeoTime diagnostics | `6e540001-…` / `6e540002-…` | eight 32-bit counters |
-| NeoTime file service | `6e540001-…` / `6e540003-…`, `6e540004-…` | files, backups |
+| File transfer (BLEFS) | `0xFEBB` / `adaf0200-…` | files, backups, apps |
 | NeoTime packages | `6e540001-…` / `6e540003-…` | installing, hiding and removing apps; the shared library |
 | Nordic UART | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` | the Gadgetbridge messages |
 
@@ -199,12 +199,15 @@ waiting for it. A watch app asks for a page with `{"t":"http","url":..,"id":..}`
 
 ## The file service
 
-[src/protocol/file-service.ts](src/protocol/file-service.ts) sends JSON commands, one per line, on
-the control characteristic: `ls`, `get`, `put`, `rm`, `df`, `install` and `remove`. File contents
-travel as raw bytes on the data characteristic. During a `put` the watch reports how far it has got
-every 4 KB, and the app waits for each report, so it never runs ahead of the flash. An app is
-installed by writing its compiled image to `/apps/<id>/app.ntapp` and then asking the watch to check
-and add it; removing it deletes the whole folder, saved state included.
+[src/protocol/file-service.ts](src/protocol/file-service.ts) speaks Adafruit's BLE file transfer
+protocol, the file service InfiniTime calls `FSService`, on service `0xFEBB`. Each command is one
+binary write to the transfer characteristic, and the watch answers with notifications on it: read
+and read pacing, write and write data, delete, make folder, list folder and move. A write sends the
+file in pieces no larger than the watch says it will take next, and a read asks again from where it
+got to until it has the whole file. The watch makes missing folders when a file is written, and
+deletes a folder with everything in it. The protocol has no free-space command, so `storage()`
+starts a write to a scratch file, reads how much room the answer offers, and deletes the file.
+Commands run one at a time, so answers never mix.
 
 ## Apps and the first run
 

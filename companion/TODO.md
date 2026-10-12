@@ -6,7 +6,7 @@ What is known to be unfinished in this app. Remove an item in the same change th
 
 The firmware side is described in `docs/companion-protocol.md` in the NeoTime repo and is being
 built in this order: the UART channel with the settings message, the Battery service, the remaining
-Gadgetbridge messages, then the file service. Each of these is built and tested here against the
+Gadgetbridge messages. Each of these is built and tested here against the
 mock watch only.
 
 - **Theme and settings keys.** `src/protocol/theme.ts` and the watch settings screen still use the
@@ -25,6 +25,8 @@ mock watch only.
 
 ## Untried on a watch
 
+- **Files over BLEFS.** The client runs against the mock watch, and the firmware's service against a
+  raw HCI client in the emulator, but the two have not met over a real radio.
 - **Firmware updates against NeoTime.** The DFU flow and the reconnect that keeps the update run
   against the mock watch only; NeoTime's own Bluetooth controller has not run on hardware yet.
 - **The phone and desktop builds.** They share the protocol code with the command line tool, but

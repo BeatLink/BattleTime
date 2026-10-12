@@ -2,11 +2,11 @@ import { describe, expect, it } from '@jest/globals';
 
 import { MockGadgetbridge } from '@/ble/mock-gadgetbridge';
 import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
-import { testImage } from '@/test-support/app-images';
 
 import { createBackup, parseBackup, restoreBackup } from './backup';
 import { FileService } from './file-service';
 import { decodeWatchLine, encodeForWatch, type PhoneToWatchMessage } from './gadgetbridge';
+import { readCapabilities } from './neotime';
 import { readAlarms, readStatus, readWatchSettings, ReplyRouter, writeAlarms, writeWatchSettings } from './requests';
 import { hourlySteps, readStepHistory } from './steps';
 import { changedColors, normaliseHex } from './theme';
@@ -103,7 +103,7 @@ describe('files', () => {
     expect((await service.list('/')).map((file) => file.name)).toEqual(['apps', 'resources', 'settings']);
     expect(new TextDecoder().decode(await service.read('/settings/theme.json'))).toBe('{"accent":"#00a0ff"}');
 
-    // Larger than one 4 KB pacing step, so the write waits for the watch along the way.
+    // Many notifications long, so the read paces and the write sends many pieces.
     const big = Uint8Array.from({ length: 9000 }, (_value, index) => index & 0xff);
     const sent: number[] = [];
     await service.write('/resources/big.bin', big, (progress) => sent.push(progress.sent));
@@ -121,15 +121,11 @@ describe('files', () => {
     await expect(service.read('/apps/../x')).rejects.toThrow('absolute path');
   });
 
-  it('installs an app into its own folder and removes it again', async () => {
-    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
-    const service = await fileService(watch);
-    const image = testImage('timer', 'Timer', 'app', 300);
-    await service.installApp('timer', image);
-    expect(watch.fileService.files.get('/apps/timer/app.ntapp')).toEqual(image);
-    await service.removeApp('timer');
-    expect(watch.fileService.files.has('/apps/timer/app.ntapp')).toBe(false);
-    await expect(service.installApp('../evil', new Uint8Array(1))).rejects.toThrow('app id');
+  it('is offered only on a NeoTime watch that serves it', async () => {
+    const neotime = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+    expect((await readCapabilities(neotime)).files).toBe(true);
+    const wasp = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'wasp-os', true);
+    expect((await readCapabilities(wasp)).files).toBe(false);
   });
 });
 

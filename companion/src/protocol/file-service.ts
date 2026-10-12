@@ -1,11 +1,10 @@
-// NeoTime's file service: JSON commands on a control characteristic and raw bytes on a data characteristic.
+// Adafruit BLE file transfer, the file service InfiniTime calls FSService and NeoTime serves at 0xFEBB.
 // The watch side and the full description live in docs/companion-protocol.md in the NeoTime tree; keep them in step.
 
 import type { DfuLink } from '@/dfu/link';
 import { NotifyQueue } from '@/dfu/link';
-import { DFU_PAYLOAD_SIZE } from '@/dfu/uuids';
 
-import { NEOTIME_FILE_CONTROL, NEOTIME_FILE_DATA, NEOTIME_SERVICE } from './neotime';
+import { FILE_TRANSFER, FILE_TRANSFER_SERVICE } from './neotime';
 
 // ============================================================================
 // Types
@@ -13,24 +12,48 @@ import { NEOTIME_FILE_CONTROL, NEOTIME_FILE_DATA, NEOTIME_SERVICE } from './neot
 
 export type WatchFile = { name: string; path: string; size: number; directory: boolean };
 
-export type WatchStorage = { free: number; total: number };
+export type WatchStorage = { free: number };
 
 export type Progress = { file: string; sent: number; total: number };
 
 export class FileServiceError extends Error {}
 
-// A reply on the control characteristic: the command it answers plus whatever that command reports.
-type Reply = {
-  c: string;
-  err?: string;
-  e?: [string, number, boolean | number][];
-  n?: number;
-  ok?: number | boolean;
-  at?: number;
-  done?: number | boolean;
-  free?: number;
-  total?: number;
-};
+// ============================================================================
+// The protocol's numbers
+// ============================================================================
+
+export const COMMAND = {
+  read: 0x10,
+  readData: 0x11,
+  readPacing: 0x12,
+  write: 0x20,
+  writePacing: 0x21,
+  writeData: 0x22,
+  delete: 0x30,
+  deleteStatus: 0x31,
+  makeDirectory: 0x40,
+  makeDirectoryStatus: 0x41,
+  listDirectory: 0x50,
+  listDirectoryEntry: 0x51,
+  move: 0x60,
+  moveStatus: 0x61,
+} as const;
+
+export const STATUS = { ok: 0x01, error: 0x02, noFile: 0x03, protocolError: 0x04 } as const;
+
+// The longest write the phone sends: the watch's 124-byte MTU less the 3-byte header. Phones ask for 185
+// and BlueZ for 517, so both settle on the watch's 124.
+export const LONGEST_WRITE = 121;
+
+const WRITE_DATA_HEADER = 12;
+const READ_DATA_HEADER = 16;
+const LIST_ENTRY_HEADER = 28;
+
+// The chunk the phone asks for each time; the watch sends what fits in one notification.
+const READ_CHUNK = 4096;
+
+// Measuring free space opens this file and deletes it again.
+const FREE_SPACE_PROBE = '/.free';
 
 // ============================================================================
 // Paths
@@ -53,165 +76,282 @@ export function checkPath(path: string): string {
   return path;
 }
 
-// Where an app's compiled image goes, which `install` then checks and adds.
-export function appImagePath(id: string): string {
-  if (!/^[a-z0-9_-]+$/i.test(id)) {
-    throw new FileServiceError(`${id}: an app id is letters, digits, "-" and "_".`);
+// ============================================================================
+// Building commands
+// ============================================================================
+
+class Writer {
+  private readonly bytes: Uint8Array;
+  private readonly view: DataView;
+  private at = 0;
+
+  constructor(length: number) {
+    this.bytes = new Uint8Array(length);
+    this.view = new DataView(this.bytes.buffer);
   }
-  return `/apps/${id}/app.ntapp`;
+
+  u8(value: number) {
+    this.view.setUint8(this.at, value);
+    this.at += 1;
+    return this;
+  }
+
+  u16(value: number) {
+    this.view.setUint16(this.at, value, true);
+    this.at += 2;
+    return this;
+  }
+
+  u32(value: number) {
+    this.view.setUint32(this.at, value, true);
+    this.at += 4;
+    return this;
+  }
+
+  zeros(count: number) {
+    this.at += count;
+    return this;
+  }
+
+  raw(bytes: Uint8Array) {
+    this.bytes.set(bytes, this.at);
+    this.at += bytes.length;
+    return this;
+  }
+
+  done(): Uint8Array {
+    return this.bytes;
+  }
+}
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+export function readCommand(path: Uint8Array, offset: number, chunkSize: number, pacing = false): Uint8Array {
+  if (pacing) {
+    return new Writer(12).u8(COMMAND.readPacing).u8(STATUS.ok).zeros(2).u32(offset).u32(chunkSize).done();
+  }
+  return new Writer(12 + path.length)
+    .u8(COMMAND.read)
+    .zeros(1)
+    .u16(path.length)
+    .u32(offset)
+    .u32(chunkSize)
+    .raw(path)
+    .done();
+}
+
+export function writeCommand(path: Uint8Array, offset: number, totalSize: number): Uint8Array {
+  return new Writer(20 + path.length)
+    .u8(COMMAND.write)
+    .zeros(1)
+    .u16(path.length)
+    .u32(offset)
+    .zeros(8)
+    .u32(totalSize)
+    .raw(path)
+    .done();
+}
+
+export function writeDataCommand(offset: number, data: Uint8Array): Uint8Array {
+  return new Writer(WRITE_DATA_HEADER + data.length)
+    .u8(COMMAND.writeData)
+    .u8(STATUS.ok)
+    .zeros(2)
+    .u32(offset)
+    .u32(data.length)
+    .raw(data)
+    .done();
+}
+
+export function pathCommand(command: number, path: Uint8Array): Uint8Array {
+  return new Writer(4 + path.length).u8(command).zeros(1).u16(path.length).raw(path).done();
+}
+
+export function makeDirectoryCommand(path: Uint8Array): Uint8Array {
+  return new Writer(16 + path.length).u8(COMMAND.makeDirectory).zeros(1).u16(path.length).zeros(12).raw(path).done();
+}
+
+export function moveCommand(oldPath: Uint8Array, newPath: Uint8Array): Uint8Array {
+  return new Writer(7 + oldPath.length + newPath.length)
+    .u8(COMMAND.move)
+    .zeros(1)
+    .u16(oldPath.length)
+    .u16(newPath.length)
+    .raw(oldPath)
+    .zeros(1)
+    .raw(newPath)
+    .done();
+}
+
+function view(bytes: Uint8Array): DataView {
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
 
 // ============================================================================
 // The client
 // ============================================================================
 
-// Commands the packages client sends on the same characteristic.
-const PACKAGES_COMMANDS = new Set(['apps', 'install', 'remove', 'enable', 'install_library']);
-
 // How long one command may take, which covers a sector erase before a write.
 const REPLY_TIMEOUT_MS = 15000;
 
-// The watch reports how far a write has got every this many bytes, and the phone waits for it.
-const PACE_BYTES = 4096;
-
 export class FileService {
-  private readonly replies = new NotifyQueue();
-  private readonly data = new NotifyQueue();
-  private pending = '';
-  private unsubscribers: (() => void)[] = [];
+  private readonly answers = new NotifyQueue();
+  private unsubscribe: (() => void) | null = null;
+  // Commands run one at a time, since each answer is matched to the command before it.
+  private queue: Promise<unknown> = Promise.resolve();
 
   private constructor(private readonly link: DfuLink) {}
 
   static async open(link: DfuLink): Promise<FileService> {
     const service = new FileService(link);
-    service.unsubscribers = await Promise.all([
-      link.subscribe(NEOTIME_SERVICE, NEOTIME_FILE_CONTROL, (value) => service.onControl(value)),
-      link.subscribe(NEOTIME_SERVICE, NEOTIME_FILE_DATA, (value) => service.data.push(value)),
-    ]);
+    service.unsubscribe = await link.subscribe(FILE_TRANSFER_SERVICE, FILE_TRANSFER, (value) =>
+      service.answers.push(value),
+    );
     return service;
   }
 
   close() {
-    for (const unsubscribe of this.unsubscribers) {
-      unsubscribe();
-    }
-    this.unsubscribers = [];
+    this.unsubscribe?.();
+    this.unsubscribe = null;
   }
 
-  async list(dir: string): Promise<WatchFile[]> {
-    const reply = await this.command({ c: 'ls', p: checkPath(dir) });
-    if (!Array.isArray(reply.e)) {
-      throw new FileServiceError(`The watch did not list ${dir}.`);
-    }
-    return reply.e
-      .map(([name, size, directory]) => ({ name, path: joinPath(dir, name), size, directory: Boolean(directory) }))
-      .sort((a, b) => Number(b.directory) - Number(a.directory) || a.name.localeCompare(b.name));
-  }
-
-  async read(path: string, onProgress?: (progress: Progress) => void): Promise<Uint8Array> {
-    const reply = await this.command({ c: 'get', p: checkPath(path) });
-    if (typeof reply.n !== 'number') {
-      throw new FileServiceError(`The watch did not say how long ${path} is.`);
-    }
-    const out = new Uint8Array(reply.n);
-    let got = 0;
-    while (got < out.length) {
-      const chunk = await this.data.next(REPLY_TIMEOUT_MS);
-      if (got + chunk.length > out.length) {
-        throw new FileServiceError(`${path}: the watch sent more than it said it would.`);
-      }
-      out.set(chunk, got);
-      got += chunk.length;
-      onProgress?.({ file: path, sent: got, total: out.length });
-    }
-    return out;
-  }
-
-  async write(path: string, contents: Uint8Array, onProgress?: (progress: Progress) => void): Promise<void> {
-    await this.command({ c: 'put', p: checkPath(path), n: contents.length });
-    let acknowledged = 0;
-    for (let offset = 0; offset < contents.length; offset += DFU_PAYLOAD_SIZE) {
-      const chunk = contents.subarray(offset, offset + DFU_PAYLOAD_SIZE);
-      await this.link.write(NEOTIME_SERVICE, NEOTIME_FILE_DATA, chunk, 'command');
-      const sent = offset + chunk.length;
-      // Wait at each 4 KB mark for the watch to say it has that much, so the phone never runs ahead.
-      if (sent < contents.length && Math.floor(sent / PACE_BYTES) > Math.floor(acknowledged / PACE_BYTES)) {
-        const reply = await this.nextReply('put');
-        if (typeof reply.at !== 'number') {
-          throw new FileServiceError(`${path}: the watch answered out of turn.`);
+  list(dir: string): Promise<WatchFile[]> {
+    return this.serially(async () => {
+      const path = encoder.encode(checkPath(dir));
+      const entries: WatchFile[] = [];
+      let answer = await this.command(pathCommand(COMMAND.listDirectory, path), COMMAND.listDirectoryEntry, dir);
+      for (;;) {
+        const fields = view(answer);
+        const nameLength = fields.getUint16(2, true);
+        const entry = fields.getUint32(4, true);
+        const total = fields.getUint32(8, true);
+        if (entry >= total) {
+          break;
         }
-        acknowledged = reply.at;
+        const name = decoder.decode(answer.subarray(LIST_ENTRY_HEADER, LIST_ENTRY_HEADER + nameLength));
+        if (name !== '.' && name !== '..') {
+          const directory = (fields.getUint32(12, true) & 1) === 1;
+          entries.push({ name, path: joinPath(dir, name), size: fields.getUint32(24, true), directory });
+        }
+        answer = await this.answer(COMMAND.listDirectoryEntry, dir);
       }
-      onProgress?.({ file: path, sent, total: contents.length });
-    }
-    // The last progress reports and then the finish arrive here, in that order.
-    for (;;) {
-      const reply = await this.nextReply('put');
-      if (reply.done) {
-        return;
+      return entries.sort((a, b) => Number(b.directory) - Number(a.directory) || a.name.localeCompare(b.name));
+    });
+  }
+
+  read(path: string, onProgress?: (progress: Progress) => void): Promise<Uint8Array> {
+    return this.serially(async () => {
+      const encoded = encoder.encode(checkPath(path));
+      let answer = await this.command(readCommand(encoded, 0, READ_CHUNK), COMMAND.readData, path);
+      const total = view(answer).getUint32(8, true);
+      const out = new Uint8Array(total);
+      let got = 0;
+      for (;;) {
+        const fields = view(answer);
+        const offset = fields.getUint32(4, true);
+        const length = fields.getUint32(12, true);
+        if (offset !== got || offset + length > total) {
+          throw new FileServiceError(`${path}: the watch sent a piece out of place.`);
+        }
+        out.set(answer.subarray(READ_DATA_HEADER, READ_DATA_HEADER + length), offset);
+        got += length;
+        onProgress?.({ file: path, sent: got, total });
+        if (got >= total) {
+          return out;
+        }
+        if (length === 0) {
+          throw new FileServiceError(`${path}: the watch stopped sending.`);
+        }
+        answer = await this.command(readCommand(encoded, got, READ_CHUNK, true), COMMAND.readData, path);
       }
-    }
+    });
   }
 
-  async remove(path: string): Promise<void> {
-    await this.command({ c: 'rm', p: checkPath(path) });
+  // The watch makes any missing folders above the file, and replaces a file that is already there.
+  write(path: string, contents: Uint8Array, onProgress?: (progress: Progress) => void): Promise<void> {
+    return this.serially(async () => {
+      const encoded = encoder.encode(checkPath(path));
+      let answer = await this.command(writeCommand(encoded, 0, contents.length), COMMAND.writePacing, path);
+      let offset = 0;
+      while (offset < contents.length) {
+        const allowed = view(answer).getUint32(16, true);
+        if (allowed === 0) {
+          throw new FileServiceError(`${path}: the watch has no room left.`);
+        }
+        const piece = contents.subarray(offset, offset + Math.min(allowed, LONGEST_WRITE - WRITE_DATA_HEADER));
+        answer = await this.command(writeDataCommand(offset, piece), COMMAND.writePacing, path);
+        offset += piece.length;
+        onProgress?.({ file: path, sent: offset, total: contents.length });
+      }
+    });
   }
 
-  async storage(): Promise<WatchStorage> {
-    const reply = await this.command({ c: 'df' });
-    return { free: reply.free ?? 0, total: reply.total ?? 0 };
+  // Deleting a folder deletes everything in it.
+  remove(path: string): Promise<void> {
+    return this.serially(async () => {
+      const encoded = encoder.encode(checkPath(path));
+      await this.command(pathCommand(COMMAND.delete, encoded), COMMAND.deleteStatus, path);
+    });
   }
 
-  // Send an app's compiled image and ask the watch to check it and add it to the installed apps.
-  async installApp(id: string, image: Uint8Array, onProgress?: (progress: Progress) => void): Promise<void> {
-    await this.write(appImagePath(id), image, onProgress);
-    await this.command({ c: 'install', id });
+  // Makes the folder and any missing above it; a folder that is already there is fine.
+  mkdir(path: string): Promise<void> {
+    return this.serially(async () => {
+      const encoded = encoder.encode(checkPath(path));
+      await this.command(makeDirectoryCommand(encoded), COMMAND.makeDirectoryStatus, path);
+    });
   }
 
-  async removeApp(id: string): Promise<void> {
-    appImagePath(id);
-    await this.command({ c: 'remove', id });
+  move(from: string, to: string): Promise<void> {
+    return this.serially(async () => {
+      const command = moveCommand(encoder.encode(checkPath(from)), encoder.encode(checkPath(to)));
+      await this.command(command, COMMAND.moveStatus, from);
+    });
+  }
+
+  // The protocol has no free-space command, but a write's first answer says how much the watch can take.
+  storage(): Promise<WatchStorage> {
+    const probe = encoder.encode(FREE_SPACE_PROBE);
+    return this.serially(async () => {
+      const answer = await this.command(writeCommand(probe, 0, 0xffffffff), COMMAND.writePacing, FREE_SPACE_PROBE);
+      await this.command(pathCommand(COMMAND.delete, probe), COMMAND.deleteStatus, FREE_SPACE_PROBE);
+      return { free: view(answer).getUint32(16, true) };
+    });
   }
 
   // ==========================================================================
-  // Commands and replies
+  // Commands and answers
   // ==========================================================================
 
-  private async command(message: { c: string } & Record<string, unknown>): Promise<Reply> {
-    const bytes = new TextEncoder().encode(`${JSON.stringify(message)}\n`);
-    for (let offset = 0; offset < bytes.length; offset += DFU_PAYLOAD_SIZE) {
-      await this.link.write(NEOTIME_SERVICE, NEOTIME_FILE_CONTROL, bytes.subarray(offset, offset + DFU_PAYLOAD_SIZE), 'request');
-    }
-    return this.nextReply(message.c);
+  private serially<T>(work: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(work, work);
+    this.queue = result.catch(() => undefined);
+    return result;
   }
 
-  private async nextReply(command: string): Promise<Reply> {
-    const raw = await this.replies.next(REPLY_TIMEOUT_MS);
-    const reply = JSON.parse(new TextDecoder().decode(raw)) as Reply;
-    // The packages client shares this characteristic, so its replies pass by here too.
-    if (reply.c !== command && PACKAGES_COMMANDS.has(reply.c)) {
-      return this.nextReply(command);
+  private async command(bytes: Uint8Array, expected: number, path: string): Promise<Uint8Array> {
+    if (bytes.length > LONGEST_WRITE) {
+      throw new FileServiceError(`${path}: the path is too long to send.`);
     }
-    if (reply.err) {
-      throw new FileServiceError(reply.err);
-    }
-    if (reply.c !== command) {
-      throw new FileServiceError(`The watch answered ${reply.c} to ${command}.`);
-    }
-    return reply;
+    await this.link.write(FILE_TRANSFER_SERVICE, FILE_TRANSFER, bytes, 'request');
+    return this.answer(expected, path);
   }
 
-  // Replies can span notifications, so collect bytes until each newline.
-  private onControl(value: Uint8Array) {
-    this.pending += new TextDecoder().decode(value);
-    let newline = this.pending.indexOf('\n');
-    while (newline >= 0) {
-      const line = this.pending.slice(0, newline).trim();
-      this.pending = this.pending.slice(newline + 1);
-      if (line) {
-        this.replies.push(new TextEncoder().encode(line));
-      }
-      newline = this.pending.indexOf('\n');
+  private async answer(expected: number, path: string): Promise<Uint8Array> {
+    const answer = await this.answers.next(REPLY_TIMEOUT_MS);
+    if (answer[0] !== expected) {
+      throw new FileServiceError(`The watch answered ${answer[0]} to a command expecting ${expected}.`);
+    }
+    switch (answer[1]) {
+      case STATUS.ok:
+        return answer;
+      case STATUS.noFile:
+        throw new FileServiceError(`${path} does not exist.`);
+      case STATUS.protocolError:
+        throw new FileServiceError(`${path}: the watch did not understand the request.`);
+      default:
+        throw new FileServiceError(`${path}: the watch could not do that.`);
     }
   }
 }

@@ -10,9 +10,9 @@ import { MockPackagesService } from '@/protocol/mock-packages-service';
 import {
   CURRENT_TIME,
   CURRENT_TIME_SERVICE,
+  FILE_TRANSFER,
   NEOTIME_DIAGNOSTICS,
-  NEOTIME_FILE_CONTROL,
-  NEOTIME_FILE_DATA,
+  NEOTIME_PACKAGES,
   NEOTIME_SERVICE,
 } from '@/protocol/neotime';
 
@@ -53,11 +53,8 @@ export class MockLegacyDfuTarget implements DfuLink {
     // Whether the firmware also serves the UART message channel and the file service.
     private readonly uart = false,
   ) {
-    this.fileService = new MockFileService(
-      (value) => this.emit(NEOTIME_FILE_CONTROL, value),
-      (value) => this.emit(NEOTIME_FILE_DATA, value),
-    );
-    this.packagesService = new MockPackagesService(this.fileService.files, (value) => this.emit(NEOTIME_FILE_CONTROL, value));
+    this.fileService = new MockFileService((value) => this.emit(FILE_TRANSFER, value));
+    this.packagesService = new MockPackagesService(this.fileService.files, (value) => this.emit(NEOTIME_PACKAGES, value));
   }
 
   // NeoTime's files, which tests read back.
@@ -93,7 +90,7 @@ export class MockLegacyDfuTarget implements DfuLink {
     if (service === LEGACY_DFU_SERVICE) {
       return this.neotime || this.mode === 'bootloader';
     }
-    if (characteristic === NEOTIME_FILE_CONTROL) {
+    if (characteristic === FILE_TRANSFER) {
       return this.neotime && this.uart && this.mode === 'application';
     }
     if (service === CURRENT_TIME_SERVICE || service === NEOTIME_SERVICE) {
@@ -144,12 +141,12 @@ export class MockLegacyDfuTarget implements DfuLink {
       this.timeWrites.push(data);
       return;
     }
-    if (characteristic === NEOTIME_FILE_CONTROL) {
+    if (characteristic === NEOTIME_PACKAGES) {
       this.routeControl(data);
       return;
     }
-    if (characteristic === NEOTIME_FILE_DATA) {
-      this.fileService.data(data);
+    if (characteristic === FILE_TRANSFER) {
+      this.fileService.transfer(data);
       return;
     }
     if (characteristic === LEGACY_PACKET) {
@@ -161,7 +158,7 @@ export class MockLegacyDfuTarget implements DfuLink {
     }
   }
 
-  // Packages commands go to the packages service, the rest to the file service, a line at a time.
+  // Packages commands, a line at a time.
   private routeControl(data: Uint8Array) {
     this.pendingControl += new TextDecoder().decode(data);
     let newline = this.pendingControl.indexOf('\n');
@@ -169,12 +166,7 @@ export class MockLegacyDfuTarget implements DfuLink {
       const line = this.pendingControl.slice(0, newline);
       this.pendingControl = this.pendingControl.slice(newline + 1);
       newline = this.pendingControl.indexOf('\n');
-      const message = JSON.parse(line) as { c: string };
-      if (MockPackagesService.handles(message.c)) {
-        this.packagesService.handle(message);
-      } else {
-        this.fileService.control(new TextEncoder().encode(`${line}\n`));
-      }
+      this.packagesService.handle(JSON.parse(line) as { c: string });
     }
   }
 

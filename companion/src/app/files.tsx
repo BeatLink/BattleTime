@@ -172,7 +172,7 @@ export default function FilesScreen() {
         <Card title="Storage">
           <Row
             label={storage ? `${size(storage.free)} free` : 'File system'}
-            detail={storage ? `of ${size(storage.total)} on the external flash` : 'Read how much room is left'}
+            detail={storage ? 'on the external flash' : 'Read how much room is left'}
           />
           <Button
             title="Check free space"

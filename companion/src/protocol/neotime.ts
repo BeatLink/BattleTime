@@ -1,4 +1,4 @@
-// The GATT services NeoTime serves besides DFU: the standard Current Time service and its own diagnostics.
+// The GATT services NeoTime serves besides DFU: Current Time, its own diagnostics and the BLEFS file service.
 // The watch side lives in firmware/src/main.rs, clock.rs and diagnostics.rs in the NeoTime tree; keep them in step.
 
 import type { DfuLink } from '@/dfu/link';
@@ -18,11 +18,13 @@ export const BATTERY_LEVEL = '00002a19-0000-1000-8000-00805f9b34fb';
 // NeoTime's own services share this base, which ends in "NeoTim" in ASCII.
 export const NEOTIME_SERVICE = '6e540001-0000-4000-8000-4e656f54696d';
 export const NEOTIME_DIAGNOSTICS = '6e540002-0000-4000-8000-4e656f54696d';
-// The file service: JSON commands and replies on the control characteristic, raw bytes on the data one.
-export const NEOTIME_FILE_CONTROL = '6e540003-0000-4000-8000-4e656f54696d';
-export const NEOTIME_FILE_DATA = '6e540004-0000-4000-8000-4e656f54696d';
 // The packages characteristic: JSON commands that install, list and remove apps and the shared library.
 export const NEOTIME_PACKAGES = '6e540003-0000-4000-8000-4e656f54696d';
+
+// Adafruit's BLE file transfer under InfiniTime's service UUID; see file-service.ts.
+export const FILE_TRANSFER_SERVICE = '0000febb-0000-1000-8000-00805f9b34fb';
+export const FILE_TRANSFER_VERSION = 'adaf0100-4669-6c65-5472-616e73666572';
+export const FILE_TRANSFER = 'adaf0200-4669-6c65-5472-616e73666572';
 
 // NeoTime's advertisement has no room for its own service, so a scan recognises it by this name.
 export const NEOTIME_NAME = 'NeoTime';
@@ -37,7 +39,7 @@ export type WatchCapabilities = {
   time: boolean;
   battery: boolean;
   diagnostics: boolean;
-  // The file service, for files and backups.
+  // The BLEFS file service, for files, backups and installing apps.
   files: boolean;
   // The packages characteristic, for installing apps, faces and the shared library.
   packages: boolean;
@@ -61,7 +63,7 @@ export async function readCapabilities(link: DfuLink): Promise<WatchCapabilities
     link.hasCharacteristic(CURRENT_TIME_SERVICE, CURRENT_TIME),
     link.hasCharacteristic(BATTERY_SERVICE, BATTERY_LEVEL),
     link.hasCharacteristic(NEOTIME_SERVICE, NEOTIME_DIAGNOSTICS),
-    link.hasCharacteristic(NEOTIME_SERVICE, NEOTIME_FILE_CONTROL),
+    link.hasCharacteristic(FILE_TRANSFER_SERVICE, FILE_TRANSFER),
     link.hasCharacteristic(NEOTIME_SERVICE, NEOTIME_PACKAGES),
     link.hasCharacteristic(NUS_SERVICE, NUS_RX),
   ]);

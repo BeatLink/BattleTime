@@ -166,7 +166,7 @@ export async function files(session: WatchSession, args: string[]) {
       return;
     case 'df': {
       const storage = await service.storage();
-      say(`${storage.free} bytes free of ${storage.total}.`);
+      say(`${storage.free} bytes free.`);
       return;
     }
     default:
