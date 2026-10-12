@@ -77,6 +77,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Status on screen.** The status page shows the firmware's mode in plain words and a colour:
   black when confirmed, amber on trial, red after a rollback and purple for the recovery firmware.
   The bootloader turns the screen blue while it waits for a recovery hold or installs an update.
+- **The version on screen and over Bluetooth.** The status page's first line and the Device
+  Information service give the firmware's version and the commit it was built from, such as
+  `NeoTime 0.1.0+1b19aed`, with a `*` when the build had uncommitted changes.
 - **Bootloader updates over Bluetooth,** with the bootloader updater: sent like any firmware
   update, it writes the new bootloader only on the charger and hands the watch back to the firmware
   that was running. It replaced the first watch's bootloader on 2026-10-11.

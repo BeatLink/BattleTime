@@ -315,9 +315,9 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   the diagnostics service.
 - [ ] **Warn when a part fails at start.** InfiniTime shows a warning screen when the touch
   controller does not start; NeoTime shows nothing.
-- [ ] **The version from the build.** The version is typed into `main.rs`. Take it from
-  `Cargo.toml` and add the git commit, for the status page, a system info screen and the Device
-  Information service.
+- [ ] **A system info screen** showing the firmware version, which the status page and the Device
+  Information service already carry. Apps read only system values, so it needs a text value such
+  as `firmware_version` through the runtime, the compiler, the SDK and the preview.
 
 ### Display
 

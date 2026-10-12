@@ -101,7 +101,8 @@ bind_interrupts!(struct Interrupts {
     RADIO => neotime_bluetooth::RadioInterruptHandler;
 });
 
-const FIRMWARE_VERSION: &str = "0.1.0";
+/// The package version and the git commit, such as `0.1.0+1b19aed`, set by `build.rs`.
+const FIRMWARE_VERSION: &str = env!("NEOTIME_FIRMWARE_VERSION");
 const DEVICE_NAME: &str = "NeoTime";
 const WATCHDOG_FEED_INTERVAL: Duration = Duration::from_millis(1000);
 const DISPLAY_COMMAND_BUFFER_SIZE: usize = 512;
@@ -535,6 +536,14 @@ struct Server {
     uart: NordicUartService,
     battery: BatteryService,
     file_transfer: FileTransferService,
+    device_information: DeviceInformationService,
+}
+
+/// The standard Device Information service: the firmware's version, as the status page shows it.
+#[gatt_service(uuid = "180a")]
+struct DeviceInformationService {
+    #[characteristic(uuid = "2a26", read, value = FIRMWARE_VERSION)]
+    firmware_revision: &'static str,
 }
 
 /// The standard Battery service: the charge, 0 to 100, read or notified when it changes.
@@ -626,6 +635,8 @@ async fn run_bluetooth(
         appearance: &appearance::watch::GENERIC_WATCH,
     }))
     .unwrap();
+    // Phones read the version straight from the attribute table, so nothing else uses this service.
+    let _device_information = &server.device_information;
 
     let mut advertisement_data = [0; 31];
     let advertisement_length = AdStructure::encode_slice(

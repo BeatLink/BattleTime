@@ -380,3 +380,73 @@ mod bootloader_image_check {
         assert!(!is_bootloader_vector_table([0xFF; 8]));
     }
 }
+
+// ============================================================================
+// Version text
+// ============================================================================
+
+mod version {
+    use super::super::version::*;
+
+    use super::std::string::String;
+
+    fn version_of(package_version: &str, commit: Option<BuildCommit<'_>>) -> String {
+        let mut text = String::new();
+        write_version(&mut text, package_version, commit).unwrap();
+        text
+    }
+
+    #[test]
+    fn a_full_hash_is_cut_to_seven_digits() {
+        let commit = read_commit("1b19aed0c4f2a8e3d5b6c7a8f9e0d1c2b3a4f5e6\n").unwrap();
+
+        assert_eq!(commit.short_hash, "1b19aed");
+        assert!(!commit.has_uncommitted_changes);
+    }
+
+    #[test]
+    fn nix_dirty_short_rev_marks_uncommitted_changes() {
+        let commit = read_commit("1b19aed-dirty").unwrap();
+
+        assert_eq!(commit.short_hash, "1b19aed");
+        assert!(commit.has_uncommitted_changes);
+    }
+
+    #[test]
+    fn text_that_is_not_a_hash_gives_no_commit() {
+        assert_eq!(read_commit(""), None);
+        assert_eq!(read_commit("unknown"), None);
+        assert_eq!(read_commit("1b19ae"), None);
+        assert_eq!(read_commit("-dirty"), None);
+        assert_eq!(read_commit("1b19aez"), None);
+    }
+
+    #[test]
+    fn the_version_joins_the_package_version_and_the_commit() {
+        let commit = read_commit("1b19aed").unwrap();
+
+        assert_eq!(version_of("0.1.0", Some(commit)), "0.1.0+1b19aed");
+    }
+
+    #[test]
+    fn uncommitted_changes_add_a_star() {
+        let commit = read_commit("1b19aed-dirty").unwrap();
+
+        assert_eq!(version_of("0.1.0", Some(commit)), "0.1.0+1b19aed*");
+    }
+
+    #[test]
+    fn an_unknown_commit_says_so() {
+        assert_eq!(version_of("0.1.0", None), "0.1.0+unknown");
+    }
+
+    #[test]
+    fn the_longest_version_fits_the_status_page_title() {
+        const STATUS_LINE_CHARACTERS: usize = 22;
+        let commit = read_commit("1b19aed-dirty").unwrap();
+
+        let title_length = "NeoTime ".len() + version_of("0.1.0", Some(commit)).len();
+
+        assert!(title_length <= STATUS_LINE_CHARACTERS);
+    }
+}

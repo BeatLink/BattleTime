@@ -581,6 +581,12 @@ watch face, the launcher and the apps through `neotime-app-host`:
   offset apps see.
 - **Status page.** The start-up lines and an update's progress share the display with the shell;
   while the page is up the shell draws nothing, and when the update ends it paints again.
+- **Version.** `build.rs` sets `FIRMWARE_VERSION` from the package version in `firmware/Cargo.toml`
+  and the commit `git rev-parse HEAD` gives, through `neotime_boot::version`: `0.1.0+1b19aed`, with
+  a `*` when `git status` shows uncommitted changes. Where there is no `.git`, such as a Nix build,
+  it reads the commit from `NEOTIME_GIT_COMMIT`, which takes Nix's `shortRev` or `dirtyShortRev`,
+  and says `unknown` without either. The status page's title shows it, and the standard Device
+  Information service (0x180A) answers a read of Firmware Revision (0x2A26) with it.
 - **Apps.** None are built in. `apps.rs` reads the enabled apps from `/apps` through
   `neotime-packages`: the first face is the watch face, the app with id `launcher` is the launcher,
   and every other app is listed in `installed_apps`. Their icons are copied out of their images
