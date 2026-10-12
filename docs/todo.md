@@ -139,9 +139,30 @@ Nothing open.
 
 ## Gaps against InfiniTime
 
-What InfiniTime has for each feature NeoTime already has, compared with InfiniTime `6c119eb5`
-on 2026-10-11. Items already listed in the sections above are not repeated.
-The full report is [NeoTime vs InfiniTime: feature coverage](https://claude.ai/code/artifact/4a70bc3f-2b66-4bdf-8ba9-c9233c2f28ea).
+What InfiniTime has for each feature NeoTime already has, compared file by file with InfiniTime
+`6c119eb5` on 2026-10-11. Items already listed in the sections above are not repeated. On the
+`worktree-prune-superseded` branch of the BeatLink InfiniTime fork, the files NeoTime has fully
+replaced are removed, so what is left there is the porting reference for these items.
+The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact/LqGLNFf5MvT5D39o44hfUv); the earlier feature summary is
+[NeoTime vs InfiniTime: feature coverage](https://claude.ai/code/artifact/4a70bc3f-2b66-4bdf-8ba9-c9233c2f28ea).
+
+### Board and system
+
+- [ ] **Turn on the DC/DC regulator.** The firmware keeps embassy-nrf's default, the LDO.
+  InfiniTime sets `DCDCEN` at start, which cuts the current the chip draws, most of all while the
+  radio is on. Set `config.dcdc.reg1 = true` in the firmware and the bootloader.
+- [ ] **Recover the I2C bus.** InfiniTime clocks SCL 16 times at start to free a bus a sensor left
+  held, runs the TWIM at about 390 kHz because of the nRF52832's 400 kHz timing erratum, and resets
+  the TWIM when a transfer never finishes. NeoTime runs at 400 kHz with no time limit, so a frozen
+  bus stops touch and steps for good.
+- [ ] **Reset reason and crash record.** Read and clear `RESETREAS` at start, and keep the panic
+  line or fault address in RAM the next start can read, then show both on the status page or in
+  the diagnostics service.
+- [ ] **Warn when a part fails at start.** InfiniTime shows a warning screen when the touch
+  controller does not start; NeoTime shows nothing.
+- [ ] **The version from the build.** The version is typed into `main.rs`. Take it from
+  `Cargo.toml` and add the git commit, for the status page, a system info screen and the Device
+  Information service.
 
 ### Display
 
@@ -152,6 +173,12 @@ The full report is [NeoTime vs InfiniTime: feature coverage](https://claude.ai/c
   settings exist.
 - [ ] **Wake the screen for an update's progress.** The status page draws over a dark or dimmed
   screen, so an update's progress cannot be read until the screen is woken.
+- [ ] **Dim before the screen turns off.** Drop to the low backlight a few seconds before the
+  timeout, so a wearer still reading can touch to keep it on, as InfiniTime does.
+- [ ] **The panel's power settings.** mipidsi starts the ST7789 with its defaults. InfiniTime also
+  sets the lowest panel and gate voltages, a VDV value that makes the first grey above black less
+  of a jump, and its own porches and frame rate. Send the same commands after `Display::new`, then
+  compare the current drawn and the dark greys on the watch.
 - [ ] **Release the panel in sleep,** so the SPI bus can be turned off.
 - [ ] **DMA transfers,** so the CPU is free while a buffer is sent. EasyDMA reuses the buffer, so
   wait for the transfer to end before writing it again.
@@ -160,6 +187,11 @@ The full report is [NeoTime vs InfiniTime: feature coverage](https://claude.ai/c
 
 - [ ] **Wake on tap.** Let a single tap or a double tap wake the watch, chosen in settings.
   `sleep_until_double_tap` is the driver half.
+- [ ] **Sleep the touch panel with the screen.** The firmware leaves the panel scanning while the
+  screen is off. Call `sleep` when the screen turns off, and `wake` when it turns on.
+- [ ] **Double taps on the watch.** The firmware starts the panel with double taps off, so
+  `onDoubleClick` never fires on the watch. Turn them on when the open screen or a wake setting
+  wants them.
 
 ### Vibrator
 
@@ -168,6 +200,10 @@ The full report is [NeoTime vs InfiniTime: feature coverage](https://claude.ai/c
 ### Side button
 
 - [ ] **Actions.** Bind each gesture: wake, back, open notifications, go to the watch face.
+- [ ] **Use the button driver in the firmware.** The firmware polls the pin every 20 ms with its
+  own long press, so `neotime-button`'s double click and 2 second press never reach apps, and the
+  poll runs while the watch sleeps. Wake on the pin's edge and send the driver's gestures instead,
+  keeping the watchdog fed only while the button is up.
 
 ### Accelerometer
 
@@ -177,20 +213,96 @@ The full report is [NeoTime vs InfiniTime: feature coverage](https://claude.ai/c
 - [ ] **Daily step goal** and a steps app.
 - [ ] **Motion service over BLE,** sending steps and raw x, y and z to the phone.
 
+### Battery
+
+- [ ] **A steady battery reading.** Show 100 % and not charging once the charger stays connected
+  but stops charging, let the percentage only rise on the charger and only fall on battery, cap it
+  at 99 % while charging, and use InfiniTime's measured voltage curve. Keep the voltage for a
+  battery screen.
+- [ ] **A battery screen** with the charge, the voltage and whether it is charging, full, low or
+  critical, as InfiniTime's battery info shows.
+
+### Clock
+
+- [ ] **Time zone and summer time.** The clock holds local time with an offset of 0. Keep UTC plus
+  the zone and summer time offsets, set from the Local Time Information characteristic as
+  InfiniTime does, so apps can show UTC and other zones.
+- [ ] **Set the date and time on the watch,** with rollers for the date and the time (with AM/PM on
+  a 12 hour clock), for when no phone has set the clock.
+
+### Settings
+
+- [ ] **A settings app** with Display, Wake up, Time format, Units, Watch face, Steps, Date and
+  time, Chimes, Shake calibration, Firmware, Updates, Bluetooth, Heart rate and About. The firmware
+  must carry out `set_setting`, save each change to `/settings` and read them back at start, so the
+  24 hour clock, units, step goal, Bluetooth and screen timeout stop being fixed in
+  `firmware/src/shell.rs`.
+
 ### Bluetooth
 
 - [ ] **Pairing with a passkey.** Secure Connections with a 6-digit passkey shown on screen, as
   InfiniTime does. Needs encryption in the controller first.
 - [ ] **Bonding** saved to the file system and restored at start.
 - [ ] **Privacy:** resolvable private addresses.
-- [ ] **A BLE host in the firmware.** TrouBLE runs only in the tests so far.
 - [ ] **A setting to turn the radio off.**
+- [ ] **Tell apps when a phone connects.** `is_phone_connected` always reads false and no `phone`
+  event is sent, so the digital face's Bluetooth icon never shows and phone apps cannot say "not
+  connected". Set it on connect and disconnect, and wake the shell on both.
+- [ ] **Finish the Current Time service.** Reading 0x2A2B returns zeros instead of the watch's
+  time, and the Local Time Information characteristic (0x2A0F) is missing. InfiniTime serves both.
+- [ ] **Advertise like InfiniTime.** The firmware advertises every 160 ms all the time. InfiniTime
+  advertises fast for 30 seconds after start or a disconnect and then about once a second, puts the
+  heart rate and DFU service UUIDs and the transmit power in the advertisement, and the name in the
+  scan response, which some phone apps filter on.
+- [ ] **A larger ATT MTU.** The firmware allows 64 bytes where InfiniTime asks for 256. File
+  transfer, long track names and notifications need longer writes.
+
+### App runtime
+
+- [ ] **Run closed apps on the watch.** The shell runs only the open app and never calls
+  `open_in_background`, so an alarm or timer rings only while its app is open, and the steps app
+  misses midnight while closed. Run each installed app's background subscriptions, set
+  `next_alarm` from the earliest alarm so faces show the bell, and carry out `wake_screen`.
+- [ ] **Deliver sensor and phone events to apps.** The shell pushes only step counts. Push
+  acceleration for the motion app, shake for dice, and heart rate, music, navigation and weather
+  once those services exist.
+- [ ] **Build every ported app and face into the firmware.** The watch carries 9 apps and only the
+  digital face; the rest exist only as source. Choose the set at build time, as InfiniTime's
+  `ENABLE_USERAPPS` and `ENABLE_WATCHFACES` do, and lift the launcher's 16-row limit.
 
 ### UI toolkit
 
 - [ ] **Double line buffers with DMA,** so one is filled while the other is sent. InfiniTime uses
   two of 240 x 4 pixels. This also fixes the text edges listed above.
 - [ ] **Fonts and pictures** built into the firmware, and more loaded from the external flash.
+- [ ] **Drag to change an Arc.** The app host gives `Arc` no `onChange`, so the metronome's tempo
+  ring cannot be dragged; only tap tempo works.
+- [ ] **A canvas widget for free drawing.** Paint fills cells of a 20 by 20 grid; InfiniTime
+  paints where the finger is.
+- [ ] **Pages and Tabs widgets** that swipe between pages with a page indicator, as InfiniTime's
+  paged lists do. Both are laid out as a plain column now.
+- [ ] **Cyrillic text.** InfiniTime's 20 px font has Cyrillic letters for notifications and music
+  titles. Add them to the text fonts in `tools/generate_fonts.py`.
+- [ ] **More library icons:** brightness levels, sleep, notifications on and off, info, list,
+  home, eye, ban, phone off, volume mute, tachometer, paintbrush, paddle, map, shield, and the
+  moon and night rain weather icons. Quick settings and the ports need them.
+- [ ] **UI design guidelines.** Add InfiniTime's rules to `app-reference.md`: buttons at least 50
+  pixels high and on the bottom edge, room for a page indicator and top bar, switches twice as
+  wide as tall, and black backgrounds.
+
+### Apps and faces
+
+- [ ] **The full set of navigation turns.** Phones send about 50 icon names, such as forks,
+  merges, ramps, ferries and roundabout exits, and the distance as text. NeoTime has 10 turns and
+  always prints metres. Add InfiniTime's navigation pictures, map each name to one, and show the
+  distance as the phone writes it.
+- [ ] **Night icons in the weather app.** It shows the sun at night where InfiniTime shows the
+  moon. One shared night-aware lookup would also replace the copies in the faces.
+- [ ] **A 40 pixel seven-segment font,** so the Casio face's day-of-year and date lines match
+  InfiniTime.
+- [ ] **Bebas Neue and Teko for Infineat,** which draws its time and date in them; NeoTime
+  substitutes Open Sans and JetBrains Mono.
+- [ ] **Music disc artwork.** InfiniTime's music app shows a disc that spins while a track plays.
 
 ### Simulator
 
@@ -207,10 +319,35 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **File transfer over BLE,** with the Adafruit protocol InfiniTime's `FSService` uses, so
   companion apps can read, write and delete files.
 - [ ] **Resource packages:** fonts and pictures installed from a zip over BLE.
+- [ ] **Report failed flash writes.** After each erase and page program, read the flash's security
+  register and return an error when its erase-fail or program-fail bit is set, so littlefs moves
+  the block instead of trusting it.
 
 ### Firmware updates
 
+- [ ] **Escaping the reloader under InfiniTime leads back to the reloader.** InfiniTime's DFU
+  installs the reloader as an unconfirmed MCUBoot test image, and the reloader stages NeoTime over
+  MCUBoot's secondary slot (SPI 0x40000 to 0xB4000), where the previous InfiniTime waits. After
+  that, a reset does not bring InfiniTime back. MCUBoot 1.5.0, which bootloader 1.0.0 is built on,
+  checks the slot before reverting, finds no valid image, erases it and starts the reloader again,
+  and the bootloader's button-hold rollback and factory restore end the same way. So no reset
+  bricks the watch, but a reloader that keeps failing, such as on a bad flash chip, cannot be left
+  without SWD. The comment on `feed_watchdog_while_button_is_up` in `reloader/src/main.rs`, which
+  says a held button returns to the old update mode, is only true for wasp-os. Decide whether the
+  reloader should keep InfiniTime's slot until its own checks pass, and write InfiniTime's flash
+  layout into [updates.md](updates.md). Checked from source only, not in the emulator.
+- [ ] **Test the InfiniTime migration against the bootloader watches ship with.**
+  `migration.robot` loads lupyuen's bootloader 5.0.4 from the InfiniTime checkout and puts the
+  reloader straight into its slot. Watches carry JF002's bootloader 1.0.0 and get the reloader
+  through InfiniTime's DFU, which swaps it in from SPI 0x40000. Fetch both bootloaders in the
+  flake and drive the real swap.
 - [ ] **Confirm or reject a new firmware** from settings, as InfiniTime's firmware screen does.
+- [ ] **Force a rollback from the bootloader.** InfiniTime's bootloader 1.0.0 rolls back even a
+  confirmed firmware on a shorter button hold than recovery. NeoTime only has the recovery hold.
+- [ ] **Update progress as a bar with the result.** The status page counts kilobytes. Show a bar
+  and a percentage of the image size, then a pass or fail, as InfiniTime does.
+- [ ] **Give up on a stalled update.** InfiniTime aborts an update when no packet has arrived for
+  10 seconds; NeoTime only aborts when the link drops.
 - [ ] **A swap progress bar on the bootloader screen.** It says "Installing firmware" for up to 30
   seconds with nothing moving. Its 16 KB has about 2 KB to spare.
 - [ ] **A bootloader updater,** so a watch already on NeoTime gets the bootloader's status screen.
@@ -221,21 +358,36 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **A setting to turn updates off,** or on until the next reset.
 - [ ] **Show the bootloader version** in a system info screen.
 
+### Developer tools and docs
+
+- [ ] **A DFU upload tool in `tools/`** that sends a zip over BlueZ, as wasp-os's `dfu.py` does,
+  including type `0x08` for the recovery slot, which no client sends yet.
+- [ ] **Flashing a watch over SWD.** One image with the bootloader and the firmware, a way to fill
+  the recovery slot on a watch flashed this way, and a page on probes, the SWD pins and RTT logs.
+- [ ] **Releases.** A version scheme, tagged releases carrying `dist/`, and a page saying what
+  each file is for.
+- [ ] **How to measure memory.** Say in [memory-map.md](memory-map.md) how each figure is measured
+  on the watch: flash by crate and symbol, the stack's high-water mark, and heap peaks.
+- [ ] **Bring the status lines up to date.** README says nothing has run on a watch,
+  `architecture.md` says there is no firmware image and that the controller and touch have only run
+  against fakes, `storage.md` says the firmware does not mount the file system, and
+  `bootloader.md` "Not done yet" still lists the reloader and the recovery firmware.
+- [ ] **A user guide:** what the face shows, the swipes and button presses, moving from InfiniTime
+  or wasp-os, updating with Gadgetbridge or ITD, and the recovery hold, with simulator screenshots.
+
 ### Not started
 
 InfiniTime has these and NeoTime has nothing for them yet:
 
 | Area | What InfiniTime has |
 |---|---|
-| Board and system loop | pin setup, tasks, sleep and wake, wake locks, the watchdog, a system monitor |
+| Board and system loop | sleep and wake of the whole system, wake locks, a system monitor |
 | Heart rate | HRS3300 driver, PPG processing, background measuring, the Heart Rate service |
-| Battery | voltage and percentage, charging and power-present pins, the Battery service |
-| Clock | RTC date and time, 12 or 24 hours, the Current Time service and client |
-| Settings | watch face, wake-up mode, chimes, screen timeout, step goal, weather units |
+| Battery | the Battery service |
+| Clock | the Current Time client, hourly chimes |
 | Notifications | Alert Notification service and client, Immediate Alert, notification list, calls |
 | Other BLE services | Device Information, Music, Navigation, Simple Weather |
-| Watch faces | Digital, Analog, PineTimeStyle, Terminal, Infineat, Casio G7710, Pride Flag |
-| Apps | Alarm, Timer, Stopwatch, Music, Navigation, Weather, Calculator, Metronome, Flashlight, Paint, Paddle, 2048, Dice, System Info |
+| System screens | System Info, Battery Info, Notifications, the pass key, firmware validation |
 
 ## Gaps against the wasp-os fork
 
