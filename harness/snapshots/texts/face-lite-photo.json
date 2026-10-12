@@ -1,0 +1,14 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "00",
+        "09",
+        ":",
+        "Monday, 05 January"
+      ]
+    }
+  ]
+}

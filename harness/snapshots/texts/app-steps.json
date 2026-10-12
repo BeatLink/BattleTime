@@ -1,0 +1,27 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "Reset"
+      ]
+    },
+    {
+      "name": "history",
+      "reached_by": "swipe up",
+      "texts": [
+        "Fri",
+        "Last 7 days",
+        "Mon",
+        "Sat",
+        "Step history",
+        "Sun",
+        "Thu",
+        "Today by hour",
+        "Tue",
+        "Wed"
+      ]
+    }
+  ]
+}

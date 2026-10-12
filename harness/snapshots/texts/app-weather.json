@@ -1,0 +1,25 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "08:40",
+        "10",
+        "11°",
+        "14",
+        "17",
+        "18°C",
+        "20",
+        "21°",
+        "7",
+        "9",
+        "Clear sky",
+        "Test City",
+        "Thu",
+        "Tue",
+        "Wed"
+      ]
+    }
+  ]
+}

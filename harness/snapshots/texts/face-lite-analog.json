@@ -1,0 +1,13 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "12",
+        "MON\n05",
+        "PineTime"
+      ]
+    }
+  ]
+}

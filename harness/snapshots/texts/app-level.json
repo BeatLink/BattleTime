@@ -1,0 +1,19 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": []
+    },
+    {
+      "name": "menu",
+      "reached_by": "tap middle",
+      "texts": [
+        "Calibrate",
+        "Calibrate on a flat surface",
+        "Cancel",
+        "Reset"
+      ]
+    }
+  ]
+}

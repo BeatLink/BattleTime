@@ -4,15 +4,22 @@
 //! the real `AppHost`, and drives it the way the watch would: taps, swipes, the side button, the
 //! clock and events from the phone and sensors. A recording `FakeSystem` stands in for the
 //! firmware, keeping every effect and failure, and a `Framebuffer` holds the drawn pixels.
+//! `snapshots` keeps what the watch shows in committed files, for the parity and screenshot tests.
 //! docs/testing.md shows how to write a test with it.
 
 mod fake_system;
 mod framebuffer;
+mod snapshots;
 mod sources;
 mod watch;
 
 pub use fake_system::{FakeSystem, ForecastDay, InstalledApp, RecordedEffect, START_TIME_IN_MILLISECONDS};
 pub use framebuffer::{Framebuffer, SCREEN_SIDE_IN_PIXELS};
+pub use snapshots::{
+    check_screen_snapshot, check_text_snapshot, decode_png, difference_picture, encode_png,
+    failure_directory, frame_to_rgb_bytes, is_updating_snapshots, line_difference, screen_texts_json,
+    ScreenTexts, SnapshotFolders, UPDATE_SNAPSHOTS_VARIABLE,
+};
 pub use sources::{
     compile_package, compile_source_text, every_package, package_source, repository_root, shared_library,
     OpenFailure, Package, PackageKind,

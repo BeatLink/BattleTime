@@ -1,0 +1,40 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "0 s",
+        "24 hour clock",
+        "Always on",
+        "Brightness",
+        "Medium",
+        "Screen off",
+        "Settings"
+      ]
+    },
+    {
+      "name": "brightness",
+      "reached_by": "tap \"Brightness\"",
+      "texts": [
+        "Brightness",
+        "High",
+        "Low",
+        "Medium"
+      ]
+    },
+    {
+      "name": "timeout",
+      "reached_by": "tap \"Screen off\"",
+      "texts": [
+        "10 s",
+        "120 s",
+        "15 s",
+        "30 s",
+        "5 s",
+        "60 s",
+        "Screen off after"
+      ]
+    }
+  ]
+}

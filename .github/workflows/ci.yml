@@ -31,6 +31,13 @@ jobs:
           path: |
             target/coverage-rust.lcov
             target/coverage-typescript/
+      - name: Keep the pictures of screens that no longer match
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-failures
+          path: target/snapshot-failures/
+          if-no-files-found: ignore
 
   formatting:
     name: Formatting

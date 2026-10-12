@@ -1,0 +1,25 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "---",
+        "09:00:00",
+        "18°C Clear",
+        "2026-01-05",
+        "4321 steps",
+        "87%",
+        "Connected",
+        "[BATT]",
+        "[DATE]",
+        "[L_HR]",
+        "[STAT]",
+        "[STEP]",
+        "[TIME]",
+        "[WTHR]",
+        "user@watch:~ $ now"
+      ]
+    }
+  ]
+}

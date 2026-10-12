@@ -69,3 +69,61 @@ battery, and gives the same random numbers on every run.
   55 widgets the UI heap holds. Packages that break a rule today are listed in `KNOWN_GAPS`
   with the rule they break, and the test fails once one is fixed, so the list only shrinks.
 - `harness/tests/behaviour.rs` checks what some apps do, such as the timer ringing when it ends.
+- `harness/tests/parity.rs` records the texts each app and face shows in
+  `harness/snapshots/texts/<kind>-<id>.json`, described under [Snapshots](#snapshots).
+- `harness/tests/screenshots.rs` compares each main screen, and a few screens after some taps,
+  with the reference pictures in `harness/snapshots/screens/`.
+
+## Snapshots
+
+Committed snapshot files hold what the watch shows, so the watch tests and the browser preview's
+tests share one truth and neither depends on the other running first. Every snapshot is taken on
+the fake system above: 09:00 UTC on Monday 5 January 2026, 87% battery and the rest.
+
+### Preview and watch parity
+
+`harness/tests/parity.rs` opens every app and face and writes the texts of its main screen, sorted,
+to `harness/snapshots/texts/<kind>-<id>.json`, such as `app-stopwatch.json`. It then makes a few
+gestures on a freshly opened copy: a tap on each text shown once, a tap and a long press in the
+middle, and the four swipes. Each other screen one of them opens is recorded too, with the gesture
+that reached it in `reached_by`.
+
+`apps/tests/parity.test.tsx` and `faces/tests/parity.test.tsx` read the same files. For each screen
+they open the app in the browser preview at the same moment, with every system value set as the
+fake system sets it and the preview's time zone in UTC, make the same gesture, and compare the
+texts. The shared code, and the one list of accepted differences, live in
+`sdk/neotime/tests/parity.tsx`. `KNOWN_DIFFERENCES` gives each real difference with a one-line
+reason. A listed difference that goes away fails the test too, so the list only shrinks.
+
+The preview test leaves out what the test watch cannot read: an icon's symbol and the keys of a
+`ButtonMatrix`, which the watch draws inside the one widget.
+
+### Reference screenshots
+
+`harness/tests/screenshots.rs` draws each app's and face's main screen, plus the stopwatch three
+seconds after starting, the calculator after 7 + 5 = and the launcher listing four apps, and
+compares the 240x240 frame pixel for pixel with `harness/snapshots/screens/<name>.png`.
+
+### Reading a failure
+
+- A text snapshot that differs prints the lines that changed: `-` for what the committed file
+  holds and `+` for what the watch shows now.
+- A preview parity failure shows `watch_only` and `preview_only`: the texts only one side shows,
+  beside the known differences expected for that screen. A wrong screen name means the gesture
+  in `reached_by` opened a different screen in the preview.
+- A screenshot that differs gives the number of differing pixels and leaves two pictures in
+  `target/snapshot-failures/`: `<name>.actual.png`, the screen as drawn now, and
+  `<name>.difference.png`, the reference dimmed with every changed pixel in magenta. CI keeps
+  that folder as the `snapshot-failures` artifact of a failed run.
+
+### Updating snapshots
+
+When a change to what an app shows is meant, rewrite the snapshots and commit them with it:
+
+```sh
+NEOTIME_UPDATE_SNAPSHOTS=1 cargo test -p neotime-app-testing --test parity --test screenshots
+npm test   # the preview must agree with the new texts, or list why it does not
+```
+
+Look at the changed PNGs before committing them. A new app or face needs its snapshots written
+this way before the preview's parity test passes.

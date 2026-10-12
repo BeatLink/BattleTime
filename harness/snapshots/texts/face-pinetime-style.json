@@ -1,0 +1,38 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "00",
+        "09",
+        "18°",
+        "5",
+        "JAN",
+        "MON"
+      ]
+    },
+    {
+      "name": "settings",
+      "reached_by": "long press middle",
+      "texts": [
+        "<",
+        "<",
+        "<",
+        ">",
+        ">",
+        ">",
+        "Background",
+        "Bar",
+        "Black",
+        "Random",
+        "Reset",
+        "Steps: Full",
+        "Teal",
+        "Teal",
+        "Time",
+        "Weather: On"
+      ]
+    }
+  ]
+}

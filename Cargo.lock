@@ -1116,6 +1116,7 @@ dependencies = [
  "neotime-app-host",
  "neotime-compiler",
  "neotime-runtime",
+ "png",
 ]
 
 [[package]]

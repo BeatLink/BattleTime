@@ -1,0 +1,16 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "0",
+        "0",
+        "0",
+        "9",
+        ":",
+        "Mon 5 Jan 2026"
+      ]
+    }
+  ]
+}

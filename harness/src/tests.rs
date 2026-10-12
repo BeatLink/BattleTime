@@ -318,3 +318,146 @@ fn installed_apps_are_compiled_and_listed_by_name_and_id() {
     );
     assert!(watch.shows_text("Timer"));
 }
+
+// ============================================================================
+// Snapshots
+// ============================================================================
+
+/// Snapshot folders of a test's own under target/, so a check never touches the committed files.
+fn scratch_snapshot_folders(test_name: &str, is_updating: bool) -> SnapshotFolders {
+    let root = repository_root()
+        .join("target/harness-snapshot-tests")
+        .join(test_name);
+    let _ = std::fs::remove_dir_all(&root);
+    SnapshotFolders {
+        texts: root.join("texts"),
+        screens: root.join("screens"),
+        failures: root.join("failures"),
+        is_updating,
+    }
+}
+
+#[test]
+fn screen_texts_are_written_sorted_one_to_a_line_with_json_escapes() {
+    let screens = [
+        ScreenTexts {
+            name: "main".into(),
+            reached_by: None,
+            texts: vec!["b".into(), "a \"quoted\"\\\n\t\u{1}".into()],
+        },
+        ScreenTexts {
+            name: "empty".into(),
+            reached_by: Some("swipe up".into()),
+            texts: Vec::new(),
+        },
+    ];
+
+    let json = screen_texts_json(&screens);
+
+    assert_eq!(
+        json,
+        "{\n  \"screens\": [\n    {\n      \"name\": \"main\",\n      \"reached_by\": null,\n      \"texts\": [\n        \"a \\\"quoted\\\"\\\\\\n\\t\\u0001\",\n        \"b\"\n      ]\n    },\n    {\n      \"name\": \"empty\",\n      \"reached_by\": \"swipe up\",\n      \"texts\": []\n    }\n  ]\n}\n"
+    );
+    assert_eq!(screen_texts_json(&[]), "{\n  \"screens\": []\n}\n");
+}
+
+#[test]
+fn a_line_difference_marks_lines_gone_and_lines_new() {
+    let difference = line_difference("one\ntwo\nthree\n", "one\n2\nthree\nfour\n");
+
+    assert_eq!(difference, "- two\n+ 2\n+ four\n");
+    assert_eq!(line_difference("same\n", "same\n"), "");
+}
+
+#[test]
+fn a_frame_comes_back_unchanged_from_a_png() {
+    let mut frame = Framebuffer::new();
+    Pixel(Point::new(3, 4), Rgb565::new(31, 63, 31))
+        .draw(&mut frame)
+        .unwrap();
+    Pixel(Point::new(5, 6), Rgb565::new(1, 2, 3))
+        .draw(&mut frame)
+        .unwrap();
+    let pixels = frame_to_rgb_bytes(&frame);
+
+    let decoded = decode_png(&encode_png(&pixels).unwrap()).unwrap();
+
+    assert_eq!(decoded, pixels);
+    assert_eq!(&pixels[(4 * 240 + 3) * 3..][..3], &[255, 255, 255]);
+    assert!(decode_png(b"not a png").is_err());
+}
+
+#[test]
+fn a_difference_picture_paints_and_counts_only_the_changed_pixels() {
+    let expected = [200, 100, 0, 10, 20, 30];
+    let actual = [200, 100, 0, 11, 20, 30];
+
+    let (picture, changed_pixels) = difference_picture(&expected, &actual);
+
+    assert_eq!(changed_pixels, 1);
+    assert_eq!(picture, [50, 25, 0, 255, 0, 255]);
+}
+
+#[test]
+fn a_text_snapshot_is_written_when_updating_and_then_matches() {
+    let updating = scratch_snapshot_folders("text-update", true);
+    updating.check_text("app-example", "{}\n").unwrap();
+    let checking = SnapshotFolders {
+        is_updating: false,
+        ..updating
+    };
+
+    assert_eq!(checking.check_text("app-example", "{}\n"), Ok(()));
+    let problem = checking.check_text("app-example", "{ }\n").unwrap_err();
+    assert!(problem.contains("- {}\n+ { }"), "{problem}");
+}
+
+#[test]
+fn a_changed_screen_leaves_the_actual_and_difference_pictures_behind() {
+    let updating = scratch_snapshot_folders("screen-change", true);
+    let mut frame = Framebuffer::new();
+    updating.check_screen("app-example", &frame).unwrap();
+    let checking = SnapshotFolders {
+        is_updating: false,
+        ..updating
+    };
+    assert_eq!(checking.check_screen("app-example", &frame), Ok(()));
+
+    Pixel(Point::new(0, 0), Rgb565::RED).draw(&mut frame).unwrap();
+    let problem = checking.check_screen("app-example", &frame).unwrap_err();
+
+    assert!(problem.contains("1 pixels differ"), "{problem}");
+    let difference = std::fs::read(checking.failures.join("app-example.difference.png")).unwrap();
+    assert_eq!(&decode_png(&difference).unwrap()[..3], &[255, 0, 255]);
+    let actual = std::fs::read(checking.failures.join("app-example.actual.png")).unwrap();
+    assert_eq!(&decode_png(&actual).unwrap()[..3], &[255, 0, 0]);
+}
+
+#[test]
+fn a_screen_that_matches_again_clears_the_pictures_of_its_last_failure() {
+    let updating = scratch_snapshot_folders("screen-recovers", true);
+    let frame = Framebuffer::new();
+    updating.check_screen("app-example", &frame).unwrap();
+    let checking = SnapshotFolders {
+        is_updating: false,
+        ..updating
+    };
+    std::fs::create_dir_all(&checking.failures).unwrap();
+    std::fs::write(checking.failures.join("app-example.actual.png"), b"old").unwrap();
+
+    checking.check_screen("app-example", &frame).unwrap();
+
+    assert!(!checking.failures.join("app-example.actual.png").exists());
+}
+
+#[test]
+fn a_missing_reference_picture_fails_and_leaves_the_drawn_screen() {
+    let checking = scratch_snapshot_folders("screen-missing", false);
+
+    let problem = checking
+        .check_screen("app-missing", &Framebuffer::new())
+        .unwrap_err();
+
+    assert!(problem.contains("cannot read"), "{problem}");
+    assert!(checking.failures.join("app-missing.actual.png").is_file());
+}

@@ -1,0 +1,24 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "Four in a Row",
+        "Level",
+        "Swipe down to play",
+        "Won 0%",
+        "at level 0"
+      ]
+    },
+    {
+      "name": "game",
+      "reached_by": "tap \"Four in a Row\"",
+      "texts": []
+    }
+  ]
+}

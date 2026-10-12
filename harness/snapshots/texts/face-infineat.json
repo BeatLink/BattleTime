@@ -1,0 +1,25 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "00",
+        "09",
+        "4321",
+        "Mon 05"
+      ]
+    },
+    {
+      "name": "settings",
+      "reached_by": "long press middle",
+      "texts": [
+        "<",
+        ">",
+        "Colours",
+        "Orange",
+        "Side cover: On"
+      ]
+    }
+  ]
+}

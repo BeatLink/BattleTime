@@ -1,0 +1,15 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "0",
+        "2",
+        "2",
+        "Best 0",
+        "Score"
+      ]
+    }
+  ]
+}
