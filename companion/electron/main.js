@@ -7,6 +7,7 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const { join } = require('node:path');
 
 const { WatchBle } = require('../node/ble');
+const { DesktopIntegration } = require('../node/desktop');
 const { serve } = require('./server');
 
 const DIST = join(__dirname, '..', 'dist');
@@ -14,11 +15,27 @@ const DIST = join(__dirname, '..', 'dist');
 let window_ = null;
 let ble = null;
 let server = null;
+let desktop = null;
+
+function sendToWindow(channel, ...args) {
+  if (window_ && !window_.isDestroyed()) {
+    window_.webContents.send(channel, ...args);
+  }
+}
 
 function emit(name, payload) {
-  if (window_ && !window_.isDestroyed()) {
-    window_.webContents.send('ble:event', name, payload);
-  }
+  sendToWindow('ble:event', name, payload);
+}
+
+// Runs a request from the window and hands back its result or its error as plain data.
+function handle(channel, action) {
+  ipcMain.handle(channel, async (_event, ...args) => {
+    try {
+      return { ok: true, value: await action(...args) };
+    } catch (error) {
+      return { ok: false, error: String(error.message || error) };
+    }
+  });
 }
 
 async function createWindow() {
@@ -56,15 +73,6 @@ async function createWindow() {
 function wireBluetooth() {
   ble = new WatchBle(emit);
 
-  const handle = (channel, action) =>
-    ipcMain.handle(channel, async (_event, ...args) => {
-      try {
-        return { ok: true, value: await action(...args) };
-      } catch (error) {
-        return { ok: false, error: String(error.message || error) };
-      }
-    });
-
   handle('ble:start-scan', () => ble.startScan());
   handle('ble:stop-scan', () => ble.stopScan());
   handle('ble:connect', (id) => ble.connect(id));
@@ -80,8 +88,28 @@ function wireBluetooth() {
   handle('ble:reconnect', (id) => ble.reconnect(id));
 }
 
+// Notifications, media players, Do Not Disturb and location from this computer, in place of a phone's.
+function wireDesktop() {
+  desktop = new DesktopIntegration((name, payload) => sendToWindow('desktop:event', payload));
+  void desktop.start().catch(() => undefined);
+
+  handle('desktop:notification-access', () => desktop.hasNotificationAccess());
+  handle('desktop:do-not-disturb', () => desktop.isDoNotDisturb());
+  handle('desktop:media-command', (player, command) => desktop.mediaCommand(player, command));
+  handle('desktop:locate', () => desktop.locate());
+  // The window asks for the players once it is listening, since it may have missed the first report.
+  handle('desktop:players', () => desktop.emitPlayers());
+}
+
+// The desktop's location service and notification server know the app by its desktop file.
+app.setName('NeoTime Companion');
+if (process.platform === 'linux') {
+  app.setDesktopName('neotime-companion.desktop');
+}
+
 app.whenReady().then(async () => {
   wireBluetooth();
+  wireDesktop();
   await createWindow();
 
   app.on('activate', () => {
@@ -93,6 +121,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', async () => {
   await ble?.destroy().catch(() => undefined);
+  await desktop?.stop().catch(() => undefined);
   server?.close();
   if (process.platform !== 'darwin') {
     app.quit();

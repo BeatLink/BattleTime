@@ -1,7 +1,7 @@
 # Phone bridge
 
 `phoneBridge` from `@/services/phone` tells the app about the phone's notifications, calls and
-media, and lets the watch act on them. The watch side of each message is in
+media, and lets the watch act on them. In the desktop app the computer stands in for the phone. The watch side of each message is in
 `src/protocol/gadgetbridge.ts`; this folder only covers the phone.
 
 ## Platforms
@@ -9,6 +9,9 @@ media, and lets the watch act on them. The watch side of each message is in
 - **Android** uses the Expo local module in `modules/phone-bridge`. Its manifest declares the
   services and permissions, and Gradle merges them into the app, so no config plugin is needed.
   The module is native code, so it needs a development build.
+- **The desktop app** uses `desktop.ts`, fed by `node/desktop.js` in Electron's main process over
+  D-Bus: desktop notifications, MPRIS media players, Do Not Disturb and GeoClue's location. It has
+  no calls and needs no keep-alive. `kind` is `computer`, so the screens say "computer".
 - **iOS, web and Expo Go** get a stub with `available: false`. Queries answer `false`, actions
   reject, and `subscribe` never calls back. iOS has no public way to read other apps'
   notifications; that would need ANCS on the watch.
@@ -34,4 +37,4 @@ media, and lets the watch act on them. The watch side of each message is in
   ongoing notification, so the Bluetooth link in JavaScript survives the app being backgrounded.
   Call it while the app is in front, because Android refuses to start one from the background.
 
-The Kotlin has never been compiled or run.
+The Kotlin compiles in a debug APK but has never run on a phone.

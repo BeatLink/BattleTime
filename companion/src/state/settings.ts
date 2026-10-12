@@ -16,6 +16,8 @@ export type Settings = {
   // The place weather reports are for, as the user typed it and as it was found.
   weatherQuery: string;
   weatherPlace: Place | null;
+  // Report the weather where the device is, found by the computer's location service, instead of the place above.
+  weatherFromDevice: boolean;
   // Whether watch apps may fetch URLs through the phone, and from which hosts.
   httpEnabled: boolean;
   httpAllowedHosts: string;
@@ -36,6 +38,7 @@ export const defaultSettings: Settings = {
   respectDoNotDisturb: true,
   weatherQuery: '',
   weatherPlace: null,
+  weatherFromDevice: false,
   httpEnabled: false,
   httpAllowedHosts: '',
   githubRepo: 'BeatLink/NeoTime',

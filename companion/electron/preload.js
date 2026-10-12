@@ -20,7 +20,29 @@ ipcRenderer.on('ble:event', (_event, name, payload) => {
   }
 });
 
+const desktopListeners = new Set();
+
+ipcRenderer.on('desktop:event', (_event, payload) => {
+  for (const listener of desktopListeners) {
+    listener(payload);
+  }
+});
+
+// What this computer offers in place of a phone, read by src/services/phone/desktop.ts.
+const desktop = {
+  hasNotificationAccess: () => ipcRenderer.invoke('desktop:notification-access'),
+  isDoNotDisturb: () => ipcRenderer.invoke('desktop:do-not-disturb'),
+  mediaCommand: (player, command) => ipcRenderer.invoke('desktop:media-command', player, command),
+  locate: () => ipcRenderer.invoke('desktop:locate'),
+  onEvent: (listener) => {
+    desktopListeners.add(listener);
+    void ipcRenderer.invoke('desktop:players');
+    return () => desktopListeners.delete(listener);
+  },
+};
+
 contextBridge.exposeInMainWorld('neotime', {
+  desktop,
   startScan: () => ipcRenderer.invoke('ble:start-scan'),
   stopScan: () => ipcRenderer.invoke('ble:stop-scan'),
   connect: (id) => ipcRenderer.invoke('ble:connect', id),

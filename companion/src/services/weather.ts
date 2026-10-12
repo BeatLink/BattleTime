@@ -47,6 +47,28 @@ export async function findPlace(name: string, fetcher: Fetch = fetch): Promise<P
   return { name: best.name, latitude: best.latitude, longitude: best.longitude };
 }
 
+// The place to report for: where the device is when asked and it can tell, otherwise the place chosen by name.
+export async function weatherPlace(
+  chosen: Place | null,
+  locate: (() => Promise<Place>) | null,
+): Promise<Place> {
+  if (locate) {
+    return locate();
+  }
+  if (!chosen) {
+    throw new Error('Choose a place for the weather in Settings first.');
+  }
+  return chosen;
+}
+
+// Where the weather is reported for, in words for the screens, or null when there is nowhere yet.
+export function describeWeatherSource(chosen: Place | null, fromDevice: boolean, device: string): string | null {
+  if (fromDevice) {
+    return `wherever this ${device} is`;
+  }
+  return chosen ? chosen.name : null;
+}
+
 export async function currentWeather(place: Place, fetcher: Fetch = fetch): Promise<WeatherMessage> {
   const url =
     'https://api.open-meteo.com/v1/forecast?current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m' +

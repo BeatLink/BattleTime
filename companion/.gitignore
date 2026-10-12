@@ -53,3 +53,7 @@ build/
 
 # test coverage reports
 coverage/
+
+# Nix build links
+result
+result-*

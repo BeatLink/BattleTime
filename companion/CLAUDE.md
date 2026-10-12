@@ -11,6 +11,9 @@ Read [README.md](README.md) for the layout and the protocol.
   BlueZ through `node/ble.js`, so a change to Bluetooth on a computer belongs there. Every step
   there has a timeout and a failed connect drops the link, because a half-open BlueZ connection
   makes every later attempt wait for services that never resolve.
+- The phone's part (notifications, media, Do Not Disturb, location) sits behind `phoneBridge` in
+  `src/services/phone`. In the desktop app the computer plays it through `node/desktop.js` over
+  D-Bus; check `phoneBridge.kind`, `supportsCalls` and `supportsLocation`, never the platform.
 - `cli/` is the command line tool. It imports the same `src/` modules the screens do, so a feature
   gets a command rather than a second implementation. `npm run neotime -- <command>` rebuilds it
   with esbuild and runs it.
@@ -28,7 +31,9 @@ Read [README.md](README.md) for the layout and the protocol.
   `firmware/apps`; do not edit it by hand.
 - After a firmware update the app must exchange GATT data with the watch (it writes the time), or
   NeoTime rolls the update back at its next reset.
-- Use `nix develop` for the toolchain. Electron must come from the flake, not from npm.
+- Use `nix develop` for the toolchain, and `nix develop .#android` for the Android SDK. Electron
+  must come from the flake, not from npm. A change to `package-lock.json` needs a new
+  `npmDepsHash` in `flake.nix` (`nix run nixpkgs#prefetch-npm-deps -- package-lock.json`).
 - Open work is in [TODO.md](TODO.md); remove an item there in the same change that finishes it.
 - Every change ships with tests in the same commit. `npm run coverage` runs them with coverage and
   fails below the floors in `package.json` (`jest.coverageThreshold`); CI runs it on every push and

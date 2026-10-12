@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 
-import { currentWeather, describeWeatherCode, findPlace } from './weather';
+import { currentWeather, describeWeatherCode, describeWeatherSource, findPlace, weatherPlace } from './weather';
 
 const kingston = { name: 'Kingston', latitude: 18, longitude: -76.8 };
 
@@ -96,5 +96,28 @@ describe('without a fetcher given', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe('weatherPlace', () => {
+  it('asks the device where it is when it can', async () => {
+    const here = { name: 'Here', latitude: 1, longitude: 2 };
+    await expect(weatherPlace(kingston, async () => here)).resolves.toBe(here);
+  });
+
+  it('uses the chosen place otherwise', async () => {
+    await expect(weatherPlace(kingston, null)).resolves.toBe(kingston);
+  });
+
+  it('asks for a place when there is none', async () => {
+    await expect(weatherPlace(null, null)).rejects.toThrow('Choose a place');
+  });
+});
+
+describe('describeWeatherSource', () => {
+  it('names the device, the chosen place, or nothing', () => {
+    expect(describeWeatherSource(kingston, true, 'computer')).toBe('wherever this computer is');
+    expect(describeWeatherSource(kingston, false, 'computer')).toBe('Kingston');
+    expect(describeWeatherSource(null, false, 'phone')).toBeNull();
   });
 });

@@ -26,8 +26,10 @@ in the NeoTime tree):
 
 Each feature is offered only when the connected watch serves what it needs, so nothing breaks while
 the firmware catches up. On Android the app forwards notifications, calls and now playing, and obeys
-Do Not Disturb; that bridge has not been compiled yet, see
-[src/services/phone/README.md](src/services/phone/README.md).
+Do Not Disturb; that bridge compiles but has not run on a phone yet, see
+[src/services/phone/README.md](src/services/phone/README.md). The desktop app does the same with the
+computer's own notifications, media players and Do Not Disturb, and can report the weather wherever
+the computer is.
 
 ## Getting started
 
@@ -48,6 +50,33 @@ npm start            # Expo, including the browser, where the mock watch stands 
 
 Bluetooth on a phone needs a development build, so Expo Go falls back to the mock watch. A plain
 browser has no Bluetooth either, and the mock is enough to work on screens without hardware.
+
+The Android SDK, NDK and JDK live in a shell of their own, since they come to a few gigabytes:
+
+```bash
+nix develop .#android
+npm run android                       # build, install and start on a phone over adb
+npx expo prebuild -p android && (cd android && ./gradlew assembleRelease)   # an APK, no phone needed
+```
+
+The shell pins the versions React Native 0.86 builds against (SDK 36, build tools 36.0.0, NDK
+27.1.12297006, CMake 3.22.1) and points Gradle at the SDK's own `aapt2`, because the one Gradle
+downloads does not run on NixOS.
+
+### Installing
+
+The flake also builds the desktop app and the command line tool as one package, with a menu entry:
+
+```bash
+nix run github:BeatLink/neotime-companion                  # the desktop app
+nix run github:BeatLink/neotime-companion#neotime -- scan  # the command line tool
+nix profile install github:BeatLink/neotime-companion      # neotime-companion and neotime on PATH
+```
+
+On NixOS it can go in `environment.systemPackages` or `home.packages` as
+`inputs.neotime-companion.packages.${system}.default`. When `package-lock.json` changes,
+`npmDepsHash` in `flake.nix` must change with it; `nix run nixpkgs#prefetch-npm-deps --
+package-lock.json` prints the new one, and CI's Nix job fails until it matches.
 
 ```bash
 npm test
@@ -96,6 +125,29 @@ NixOS. `npm run desktop` starts it through [scripts/electron.mjs](scripts/electr
 skips the launcher npm would otherwise put first on `PATH`; that launcher starts Electron's
 unwrapped binary, which dies with SIGILL. Run it inside `nix develop`, or the script says so.
 
+### The computer in place of a phone
+
+On a phone the app forwards what the phone knows; in the desktop app the computer plays that part,
+through [node/desktop.js](node/desktop.js) in the main process and
+[src/services/phone/desktop.ts](src/services/phone/desktop.ts) in the window. Both builds share the
+`phoneBridge` interface, so the watch provider and the screens do not know which one they have.
+
+| On a phone | On Linux |
+| --- | --- |
+| Notifications | Desktop notifications, overheard on the session bus as apps send them |
+| Now playing and media keys | Any MPRIS player: browsers, Spotify, VLC and the rest |
+| Do Not Disturb | The notification server's `Inhibited` flag (KDE), or Cinnamon's, GNOME's or dunst's setting |
+| Calls | None; the Calls toggle is hidden |
+| The weather place | A place chosen by name, or wherever GeoClue says the computer is |
+| The clock | The computer's clock |
+
+The watch's clock is set on every connection and again whenever this device's clock jumps (set by
+hand, synced, a new time zone, waking from sleep), and every six hours anyway, by
+[src/state/clock-changes.ts](src/state/clock-changes.ts). That part runs on phones too.
+
+Weather from the computer's location needs GeoClue running; on NixOS that is
+`services.geoclue2.enable = true`, and GeoClue knows the app as `neotime-companion`.
+
 ### Connecting by address
 
 The command line tool connects to a remembered address without scanning. BlueZ forgets an unpaired
@@ -126,11 +178,12 @@ electron/                Desktop app: main process, preload bridge and file serv
 src/ble/                 Transport layer: react-native-ble-plx, Electron, and a mock for browsers
 src/dfu/                 Firmware updates: Nordic legacy DFU and the package reader
 cli/                     The command line tool, which runs the same code as the screens
-node/                    BlueZ over node-ble, shared by the desktop app and the tool
+node/                    BlueZ over node-ble, shared by the desktop app and the tool, and the
+                         computer's notifications, media players and location over D-Bus
 src/protocol/            NeoTime's GATT services, the file service, the Gadgetbridge messages,
                          backups and the requests the watch answers
 src/services/            Weather, the watch apps' http proxy and GitHub firmware builds
-src/services/phone/      Notifications, calls, media and Do Not Disturb from the phone
+src/services/phone/      Notifications, calls, media and Do Not Disturb from the phone or computer
 modules/phone-bridge/    The Android native module behind it
 src/state/               Watch provider (connection, capabilities, traffic, settings)
 src/components/          Themed building blocks

@@ -1,10 +1,13 @@
 import type { PhoneBridge } from './types';
 
-const unsupported = () => Promise.reject(new Error('The phone bridge is only available on Android'));
+const unsupported = () => Promise.reject(new Error('The phone bridge is only available on Android and the desktop app'));
 
 // Stands in where there is no native bridge: queries answer false, actions reject, and no events ever arrive.
 export const unavailablePhoneBridge: PhoneBridge = {
   available: false,
+  kind: 'none',
+  supportsCalls: false,
+  supportsLocation: false,
   hasNotificationAccess: async () => false,
   openNotificationAccessSettings: unsupported,
   requestCallPermissions: async () => false,
@@ -15,4 +18,5 @@ export const unavailablePhoneBridge: PhoneBridge = {
   mediaCommand: unsupported,
   startKeepAlive: unsupported,
   stopKeepAlive: async () => {},
+  locate: () => Promise.reject(new Error('This device cannot tell where it is')),
 };

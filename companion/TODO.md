@@ -30,15 +30,18 @@ mock watch only.
   against the mock watch only; NeoTime's own Bluetooth controller has not run on hardware yet.
 - **The phone and desktop builds.** They share the protocol code with the command line tool, but
   not its Bluetooth layer on a phone, and the desktop app has not been opened against a watch.
+- **Forwarding from the desktop app.** Desktop notifications, MPRIS players and Do Not Disturb are
+  read correctly on Cinnamon, but nothing has been forwarded to a real watch from the desktop yet.
+  GeoClue's location is untried, since the development machine runs no GeoClue.
 - **The NeoTime name check in scans.** A running NeoTime is told from a bootloader by its advertised
   name; check what a phone and BlueZ report for it.
 
 ## Notification forwarding
 
 The Android bridge in [src/services/phone](src/services/phone/README.md) is wired into the
-Notifications tab and the watch provider, but has never been compiled. It needs a development
-build to prove it, and the keep-alive notification needs `POST_NOTIFICATIONS` asked for on Android
-13 and later.
+Notifications tab and the watch provider, and compiles in a debug APK from `nix develop .#android`,
+but has never run on a phone. The keep-alive notification needs `POST_NOTIFICATIONS` asked for on
+Android 13 and later.
 
 ## Tests
 

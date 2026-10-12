@@ -1,4 +1,4 @@
-# Runs the tests with coverage, the type check, the lint and the CLI build on each push and pull request.
+# Runs the tests with coverage, the type check, the lint, the CLI build and the Nix package on each push and pull request.
 name: CI
 
 on:
@@ -38,3 +38,13 @@ jobs:
         with:
           name: coverage
           path: coverage/
+
+  nix:
+    name: Nix package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      # Fails when package-lock.json changes without npmDepsHash in flake.nix.
+      - name: Build the desktop app and command line tool
+        run: nix build .#default --print-build-logs

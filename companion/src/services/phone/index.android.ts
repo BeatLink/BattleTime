@@ -5,7 +5,7 @@ import { toPhoneEvent } from './events';
 import { unavailablePhoneBridge } from './stub';
 import type { MediaCommand, PhoneBridge, PhoneEvent } from './types';
 
-export type { MediaCommand, PhoneBridge, PhoneEvent } from './types';
+export type { BridgeKind, DeviceLocation, MediaCommand, PhoneBridge, PhoneEvent } from './types';
 
 interface NativePhoneBridge {
   hasNotificationAccess(): Promise<boolean>;
@@ -23,6 +23,9 @@ interface NativePhoneBridge {
 function nativeBridge(native: NativePhoneBridge): PhoneBridge {
   return {
     available: true,
+    kind: 'phone',
+    supportsCalls: true,
+    supportsLocation: false,
     hasNotificationAccess: () => native.hasNotificationAccess(),
     openNotificationAccessSettings: () => native.openNotificationAccessSettings(),
     requestCallPermissions: () => native.requestCallPermissions(),
@@ -39,6 +42,7 @@ function nativeBridge(native: NativePhoneBridge): PhoneBridge {
     mediaCommand: (command) => native.mediaCommand(command),
     startKeepAlive: (watchName) => native.startKeepAlive(watchName),
     stopKeepAlive: () => native.stopKeepAlive(),
+    locate: () => Promise.reject(new Error('Choose a place for the weather by name on a phone')),
   };
 }
 

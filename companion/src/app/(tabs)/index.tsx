@@ -13,6 +13,8 @@ import { useWatch } from '@/hooks/use-watch';
 import type { DiagnosticCounter } from '@/protocol/neotime';
 import { needsSetup } from '@/protocol/setup';
 import { phoneBridge } from '@/services/phone';
+import { deviceWord } from '@/services/phone/words';
+import { describeWeatherSource } from '@/services/weather';
 import { useTask } from '@/state/use-task';
 
 // How long ago a moment was, in the coarse words a status line needs.
@@ -59,6 +61,11 @@ export default function WatchScreen() {
     readDiagnostics,
     packages,
   } = useWatch();
+  const weatherSource = describeWeatherSource(
+    settings.weatherPlace,
+    settings.weatherFromDevice && phoneBridge.supportsLocation,
+    deviceWord(phoneBridge.kind),
+  );
   // Whether the watch has no face yet, read once each time one with the packages characteristic connects.
   const [setupNeeded, setSetupNeeded] = useState(false);
   const canInstall = watchReady && capabilities.packages && capabilities.files;
@@ -146,7 +153,7 @@ export default function WatchScreen() {
       {findPhoneActive ? (
         <Card>
           <ThemedText type="smallBold" style={{ color: theme.accent }}>
-            The watch is looking for this phone.
+            The watch is looking for this {deviceWord(phoneBridge.kind)}.
           </ThemedText>
         </Card>
       ) : null}
@@ -240,7 +247,7 @@ export default function WatchScreen() {
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             NeoTime starts with no apps. Install the shared icons, a watch face, the launcher and the
-            apps from this phone.
+            apps from this {deviceWord(phoneBridge.kind)}.
           </ThemedText>
           <Button title="Set up the watch" onPress={() => router.push('/setup')} />
         </Card>
@@ -286,7 +293,7 @@ export default function WatchScreen() {
                 t: 'notify',
                 id: Date.now() % 100000,
                 src: 'NeoTime Companion',
-                title: 'Hello from your phone',
+                title: `Hello from your ${deviceWord(phoneBridge.kind)}`,
                 body: 'Notifications are working.',
               })
             }
@@ -296,10 +303,10 @@ export default function WatchScreen() {
             detail="One short pulse"
             onPress={() => send({ t: 'vibrate', n: 1 })}
           />
-          {settings.weatherPlace ? (
+          {weatherSource ? (
             <Row
               label="Send weather"
-              detail={`Current conditions in ${settings.weatherPlace.name}`}
+              detail={`Current conditions ${settings.weatherFromDevice ? '' : 'in '}${weatherSource}`}
               onPress={() => void sendWeather().catch(() => {})}
             />
           ) : null}

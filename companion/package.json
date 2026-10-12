@@ -21,6 +21,7 @@
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "dbus-next": "^0.10.2",
     "expo": "~57.0.24",
     "expo-constants": "~57.0.19",
     "expo-dev-client": "~57.0.19",
@@ -81,10 +82,10 @@
     ],
     "coverageThreshold": {
       "global": {
-        "lines": 66,
-        "statements": 66,
-        "branches": 59,
-        "functions": 65
+        "lines": 71,
+        "statements": 71,
+        "branches": 65,
+        "functions": 70
       }
     }
   },

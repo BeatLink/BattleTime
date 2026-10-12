@@ -32,7 +32,8 @@ import {
 import { readStatus, ReplyRouter, type RequestChannel } from '@/protocol/requests';
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
 import { phoneBridge, type PhoneEvent } from '@/services/phone';
-import { currentWeather } from '@/services/weather';
+import { currentWeather, weatherPlace } from '@/services/weather';
+import { watchClockChanges } from '@/state/clock-changes';
 import { defaultSettings, loadSettings, saveSettings, type Settings } from '@/state/settings';
 
 export type ConsoleEntry = {
@@ -396,6 +397,20 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     };
   }, [watchReady]);
 
+  // Set the watch again whenever this device's clock or time zone changes, and every few hours anyway.
+  const clockOn = watchReady && capabilities.time;
+  useEffect(() => {
+    if (!clockOn) {
+      return;
+    }
+    return watchClockChanges(() => {
+      const link = transportRef.current?.dfuLink();
+      if (link) {
+        void setWatchTime(link).catch((error: Error) => setLastError(error.message));
+      }
+    });
+  }, [clockOn]);
+
   const readBattery = useCallback(async () => {
     const link = transportRef.current?.dfuLink();
     if (link) {
@@ -442,15 +457,14 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   }, [watchReady, watchName]);
 
   const sendWeather = useCallback(async () => {
-    const place = settingsRef.current.weatherPlace;
-    if (!place) {
-      throw new Error('Choose a place for the weather in Settings first.');
-    }
-    await send(await currentWeather(place));
+    const current = settingsRef.current;
+    const locate = current.weatherFromDevice && phoneBridge.supportsLocation ? () => phoneBridge.locate() : null;
+    await send(await currentWeather(await weatherPlace(current.weatherPlace, locate)));
   }, [send]);
 
   // Send the weather when a watch connects and every half hour after that.
-  const weatherOn = uartReady && settings.forwardWeather && settings.weatherPlace !== null;
+  const weatherFromDevice = settings.weatherFromDevice && phoneBridge.supportsLocation;
+  const weatherOn = uartReady && settings.forwardWeather && (settings.weatherPlace !== null || weatherFromDevice);
   useEffect(() => {
     if (!weatherOn) {
       return;

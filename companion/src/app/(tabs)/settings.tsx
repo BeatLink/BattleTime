@@ -9,6 +9,8 @@ import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { useWatch } from '@/hooks/use-watch';
 import { MAX_RESPONSE, parseHostList } from '@/services/http-proxy';
+import { phoneBridge } from '@/services/phone';
+import { deviceWord } from '@/services/phone/words';
 import { findPlace } from '@/services/weather';
 import { useTask } from '@/state/use-task';
 
@@ -32,6 +34,7 @@ function SettingsForm() {
   const { settings, updateSettings, transportKind } = useWatch();
   const task = useTask();
   const [place, setPlace] = useState(settings.weatherQuery);
+  const [located, setLocated] = useState<string | null>(null);
   const hosts = parseHostList(settings.httpAllowedHosts);
 
   return (
@@ -75,6 +78,22 @@ function SettingsForm() {
             })
           }
         />
+        {phoneBridge.supportsLocation ? (
+          <ToggleRow
+            label={`Use where this ${deviceWord(phoneBridge.kind)} is`}
+            detail={located ?? 'Asks the location service each time, instead of using the place above'}
+            value={settings.weatherFromDevice}
+            onValueChange={(value) => {
+              void updateSettings({ weatherFromDevice: value });
+              if (value) {
+                void task.run('Finding where this is', async () => {
+                  const here = await phoneBridge.locate();
+                  setLocated(`Found ${here.name}, ${here.latitude.toFixed(2)}, ${here.longitude.toFixed(2)}`);
+                });
+              }
+            }}
+          />
+        ) : null}
         <ErrorNote error={task.error} onDismiss={task.clearError} />
       </Card>
 
