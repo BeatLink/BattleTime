@@ -123,7 +123,8 @@ cargo run -p neotime-simulator -- --script tests/scripts/timer_rings_and_dismiss
   It names each package with a problem, so one broken app is easy to find.
 - `harness/tests/quality.rs` checks each package's id against its folder and the id rules, its
   name and launcher icon, its listing in [apps.md](apps.md) or [faces.md](faces.md), the comment
-  at the top of its source, the install checks, and that it fits in RAM: its expressions within
+  at the top of its source, the install checks, and that it fits in RAM: its expressions and
+  functions within
   the 12 KB the open app has, beside the runtime's working memory, and each screen within the
   55 widgets the UI heap holds. Packages that break a rule today are listed in `KNOWN_GAPS`
   with the rule they break, and the test fails once one is fixed, so the list only shrinks.

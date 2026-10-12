@@ -8,7 +8,8 @@
 use alloc::vec::Vec;
 
 use neotime_runtime::{
-    instruction::{decode, Instruction},
+    for_each_reached_instruction,
+    instruction::Instruction,
     subscriptions::{Subscription, SubscriptionKind},
     AppImage, Inputs, SystemValue, Value, NONE,
 };
@@ -249,28 +250,21 @@ pub fn derive_inputs(image: &AppImage, handler: u16) -> Inputs {
     };
     let mut reads = Inputs::NOTHING;
     let mut writes = 0u64;
-    let mut offset = 0;
     let bit = |slot: u8| if slot < 64 { 1u64 << slot } else { 0 };
-    while offset < code.len() {
-        let Ok((instruction, next_offset)) = decode(code, offset) else {
-            break;
-        };
-        match instruction {
-            Instruction::ReadState(slot)
-            | Instruction::ReadElement(slot)
-            | Instruction::TextFromCodes(slot) => reads.state_slots |= bit(slot),
-            Instruction::CopyArray { destination, source } => {
-                reads.state_slots |= bit(source);
-                writes |= bit(destination);
-            }
-            Instruction::WriteState(slot)
-            | Instruction::WriteElement(slot)
-            | Instruction::FillArray(slot) => writes |= bit(slot),
-            Instruction::ReadSystem(value) => reads.system_values |= value.bit(),
-            _ => {}
+    for_each_reached_instruction(image, code, |instruction| match instruction {
+        Instruction::ReadState(slot) | Instruction::ReadElement(slot) | Instruction::TextFromCodes(slot) => {
+            reads.state_slots |= bit(slot)
         }
-        offset = next_offset;
-    }
+        Instruction::CopyArray { destination, source } => {
+            reads.state_slots |= bit(source);
+            writes |= bit(destination);
+        }
+        Instruction::WriteState(slot) | Instruction::WriteElement(slot) | Instruction::FillArray(slot) => {
+            writes |= bit(slot)
+        }
+        Instruction::ReadSystem(value) => reads.system_values |= value.bit(),
+        _ => {}
+    });
     reads.state_slots &= !writes;
     reads
 }

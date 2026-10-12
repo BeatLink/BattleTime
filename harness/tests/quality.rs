@@ -17,7 +17,7 @@ const MOST_ID_BYTES: usize = 32;
 const OPEN_APP_BYTES: usize = 12 * 1024;
 
 /// The runtime's measured working memory in that RAM: interpreter, bindings, state and section reader.
-const RUNTIME_WORKING_BYTES: usize = 1_792 + 2_056 + 2_440 + 256;
+const RUNTIME_WORKING_BYTES: usize = 2_144 + 2_056 + 2_440 + 256;
 
 /// The expression bytecode that fits beside the runtime's working memory.
 const MOST_EXPRESSION_BYTES: usize = OPEN_APP_BYTES - RUNTIME_WORKING_BYTES;
@@ -119,9 +119,14 @@ fn problems_with(package: &Package) -> Vec<String> {
         .filter_map(|expression| image.expression_code(expression))
         .map(<[u8]>::len)
         .sum();
-    if expression_bytes > MOST_EXPRESSION_BYTES {
+    let function_bytes: usize = (0..image.function_count())
+        .filter_map(|function| image.function(function))
+        .map(|function| function.code.len())
+        .sum();
+    if expression_bytes + function_bytes > MOST_EXPRESSION_BYTES {
         problems.push(format!(
-            "its expressions take {expression_bytes} bytes, over the {MOST_EXPRESSION_BYTES} bytes the open app has for them"
+            "its expressions and functions take {} bytes, over the {MOST_EXPRESSION_BYTES} bytes the open app has for them",
+            expression_bytes + function_bytes
         ));
     }
     let tree = WidgetTree::new(image);
@@ -169,11 +174,9 @@ fn problems_with(package: &Package) -> Vec<String> {
 // ============================================================================
 
 /// Rules some packages break today, each a real gap to fix, so the rest stay checked; see docs/testing.md.
-const KNOWN_GAPS: [(&str, &str); 4] = [
+const KNOWN_GAPS: [(&str, &str); 2] = [
     ("apps/alarm", "its screen \"main\" has 67 widgets"),
     ("apps/launcher", "its screen \"main\" has 65 widgets"),
-    ("apps/twos", "its expressions take"),
-    ("faces/infineat", "its expressions take"),
 ];
 
 fn is_known_gap(package: &Package, problem: &str) -> bool {

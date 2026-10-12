@@ -18,9 +18,11 @@ lists the events, widgets and effects apps can use.
 - **Apps live on the external flash.** An app is read from its file a section at a time. Only
   its state, its expressions and the open screen take RAM, inside the 12 KB the
   [memory map](memory-map.md) gives the open app.
-- **What apps share lives in the firmware's flash.** The internal flash holds no apps. Beside the
-  firmware and its runtime, it keeps a shared library of images, fonts, components and functions
-  that every app can use, so each app stays small.
+- **Apps are assembled from shared parts.** The firmware and the shared library hold the widgets,
+  components, functions, images and fonts that apps have in common, and an app connects them like
+  building blocks. RAM is the watch's scarcest resource, and shared parts are read in place from
+  flash, so the less an app carries itself, the less RAM it takes and the easier it is to write.
+  See [Building apps from shared parts](#building-apps-from-shared-parts).
 - **A broken app cannot break the watch.** Every app image is checked when it is installed, and
   every call ends: a call that loops is stopped after 200,000 steps.
 
@@ -272,6 +274,8 @@ Each kind of section appears at most once:
 | 6 | Subscriptions | 16 bytes per subscription, described below. |
 | 7 | Resources | The app's own images, as a table of (offset, length) pairs followed by the images, described below. |
 | 8 | Initial values | Optional. For arrays whose elements do not all start the same: a table of (offset, length) pairs, then per array its number (1 byte) followed by its elements packed exactly as they are stored in RAM. Every element is checked against the array's type. |
+| 9 | Fonts | The shared library only; see [Property values](#property-values). |
+| 10 | Functions | Optional. Up to 256 functions, the same layout as expressions. Each function's bytes start with its argument count, its result count (0 or 1) and how many locals it uses, then its code. |
 
 Widgets are stored depth first, so a widget's children follow it, each with everything inside
 it. Each root is one screen, and the first is the screen the app opens on. A widget record is:
@@ -370,6 +374,45 @@ The library is checked by the same verifier as an app image. It can be updated t
 firmware or on its own, and a new version keeps the numbers of everything the old one had, so
 installed apps keep working.
 
+## Building apps from shared parts
+
+This is the structure every app, face and runtime change should follow. The watch has 64 KB of
+RAM, and an open app gets about 12 KB beside the UI heap. An app's image is read from `/apps` into
+RAM when it opens and every widget of its screen takes a node in the UI heap, so every byte an app
+carries and every widget it builds costs RAM for as long as it is open. Code and data in the
+internal flash are read in place and cost none. So the work is split into three layers:
+
+| Layer | Lives in | RAM while an app is open | Holds |
+|---|---|---|---|
+| Native widgets and builtins | The firmware, in Rust | One node per widget; the code costs none | Composite widgets with logic of their own, such as a time picker, the status icons or the list of installed apps, and work over whole arrays, such as sliding a 2048 board |
+| The shared library | The internal flash after the firmware, read in place | None | Functions, components, images, fonts, strings and themes that two or more apps use |
+| The app | `/apps` on the external flash, read into RAM when it opens | All of it | Its own state, its layout, and the few lines that connect the shared parts and are unique to it |
+
+Rules for each change:
+
+- **Look in the shared parts first.** Before writing a helper, a component or a table in an app,
+  check `neotime`, `neotime/components`, `neotime/lib` and the widgets in
+  [app-reference.md](app-reference.md). Use them rather than writing the same thing again.
+- **Move what repeats.** When a second app needs code that one app has, move it into the shared
+  library and make both use it. Write it generically, with parameters for what differs, so later
+  apps can use it too.
+- **Make composites native.** A widget built from many widgets with logic between them, such as a
+  picker, a dialog or a list, belongs in the firmware as one widget: one node instead of many, and
+  no bytecode in the app.
+- **Make heavy work native.** A loop over a whole array that runs often, such as a game board's
+  move or a neighbour count, is far smaller and faster as a builtin than as bytecode.
+- **Keep apps out of the internal flash.** It holds only the bootloader, the firmware and the
+  shared library. Apps, faces and anything that changes often stay on the external flash.
+- **Never renumber the library.** An installed app refers to library parts by number, so a new
+  version keeps every number the old one had and adds new parts at the end.
+
+What is built so far: the runtime runs functions with `call` (see [The bytecode](#the-bytecode)),
+and the compiler turns code that repeats with only its constants changed into shared functions
+inside each image. The shared library holds the icons and fonts; its functions and components,
+calls into it and the native composites are open work, listed in order under "Shared library and
+smaller apps" in [todo.md](todo.md). Until they exist, components from `neotime/components` are
+still inlined into each app.
+
 ## The bytecode
 
 The interpreter is a stack machine with room for 32 values. Values are 64 bits and carry no type
@@ -413,6 +456,7 @@ Each instruction is one opcode byte followed by its operands:
 | `29` | jump if false | distance, 2 bytes | Takes a value and skips forward if it is 0. `? :`, `&&` and `\|\|` compile to this. |
 | `2A` | loop start | | Marks where a loop begins. The stack must be empty here. |
 | `2B` | loop back | distance, 2 bytes | Goes back that many bytes, counted from the end of this instruction, to a loop start. The stack must be empty here too. |
+| `2C` | call | function, 1 byte | Takes the function's arguments into its first locals, runs it, and leaves its result, if it has one. The function sees only the stack above what the caller had, and its own locals. |
 | `30` | time part | part, 1 byte | Takes an instant and pushes its local year, month, day, hour, minute, second or weekday (0 to 6, Monday first). |
 | `31` | start of | unit, 1 byte | Takes an instant and pushes the start of its local minute, hour or day. A binding that uses it redraws once a minute. |
 | `40` | format number | minimum digits, 1 byte | Takes a number and pushes it as text, padded with zeros. |
@@ -483,10 +527,15 @@ Then one pass over each expression and handler checks:
 - that single-value instructions only name single values and array instructions only arrays, that
   copied arrays have the same length, and that locals are within the 16;
 - that every loop back lands on a loop start, and the stack is empty at both;
+- that every call names a function numbered below the code calling it, so no call can recurse, and
+  that calls nest at most 8 deep with their locals inside the pool of 48;
+- that a function's header asks for at most one result and no more arguments than locals, and its
+  code leaves exactly that result;
 - that the stack never goes below empty or above 32 values, and that every path into a jump
   target arrives with the same depth;
 - that an expression ends with exactly one value and a handler with none;
-- that expressions do not read events, write state, cause effects or use random numbers.
+- that expressions do not read events, write state, cause effects or use random numbers, nor call
+  a function that does.
 
 Last, a pass over the widgets checks:
 
@@ -765,16 +814,16 @@ The working memory below is measured from `neotime-runtime`; the rest is still a
 
 | Part | Size |
 |---|---|
-| Interpreter: a stack of 32 values, 16 locals, the 256-byte text buffer and the 1 KB scratch area | 1,792 B, measured |
+| Interpreter: a stack of 32 values, 48 locals shared by the code and the functions it calls, 8 call frames, the 256-byte text buffer and the 1 KB scratch area | 2,144 B, measured |
 | A handler's results: which variables changed and up to 8 effects | 272 B, measured, only while a handler runs |
 | Bindings: what each of up to 128 expressions reads and its redraw period | 2,056 B, measured |
 | State: up to 2 KB of variables and arrays, and where each lies | 2,440 B, measured |
 | Expression bytecode, copied in when the app opens | about 1 KB |
 | Section reader for the image on the external flash | 256 B |
 
-That is about 6.6 KB, which leaves the rest of the open app's 12 KB for a second app's state
+That is about 7.9 KB, which leaves the rest of the open app's 12 KB for a second app's state
 while a subscription runs. On the watch, the interpreter, the bindings and the
-state take 6,288 B together, measured with `size_of` for the watch's target. `AppHost` keeps each
+state take 6,604 B together, measured with `size_of` for the watch's target. `AppHost` keeps each
 on the heap, boxed empty and filled in place with `AppState::load_layout` and
 `Bindings::load_into`, so opening an app needs under 1 KB of stack.
 

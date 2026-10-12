@@ -414,6 +414,8 @@ pub enum Instruction {
     LoopStart,
     /// Goes back this many bytes, counted from the end of this instruction, to a `LoopStart`.
     LoopBack(u16),
+    /// Runs one of the app's functions, which takes its arguments from the stack and leaves its result.
+    Call(u8),
     TimePart(TimePart),
     /// Takes an instant and pushes the start of its local minute, hour or day.
     StartOf(TimeUnit),
@@ -477,7 +479,8 @@ impl Instruction {
             Negate | Absolute | BitNot | Not | IsNone | TimePart(_) | StartOf(_) | TextFromCodes(_)
             | ToUpper | TextLength | FormatNumber(_) | FormatDuration(_) | FormatTime(_) => (1, 1),
             SliceText | PadStart => (3, 1),
-            Jump(_) => (0, 0),
+            // The function's own header gives what a call takes and leaves; the verifier reads it there.
+            Jump(_) | Call(_) => (0, 0),
             Effect(kind) => (kind.argument_count(), 0),
         };
         StackEffect { taken, left }
@@ -568,6 +571,7 @@ pub fn decode(code: &[u8], offset: usize) -> Result<(Instruction, usize), Decode
             LoopBack(u16::from_le_bytes(bytes(2)?.try_into().unwrap_or_default())),
             2,
         ),
+        0x2C => (Call(byte()?), 1),
         0x30 => (
             TimePart(self::TimePart::from_byte(byte()?).ok_or(unknown(byte()?))?),
             1,
@@ -704,6 +708,7 @@ impl Instruction {
                 put(&[0x2B]);
                 put(&distance.to_le_bytes());
             }
+            Call(function) => put(&[0x2C, function]),
             TimePart(part) => put(&[0x30, part as u8]),
             StartOf(unit) => put(&[0x31, unit as u8]),
             FormatNumber(minimum_digits) => put(&[0x40, minimum_digits]),

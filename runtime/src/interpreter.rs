@@ -5,8 +5,11 @@
 //! on the copy; the copies are written back only when it finishes, so a handler that fails part
 //! way changes nothing. Its effects are only collected. Every check is repeated here even for
 //! verified code, so a bad image fails a call instead of crashing the watch.
+//!
+//! A function call keeps its own locals above its caller's, and sees only the stack above the
+//! arguments it took; the caller's place is kept in a frame until the function's code ends.
 
-use crate::image::AppImage;
+use crate::image::{AppImage, Function};
 use crate::instruction::{decode, EffectKind, Instruction, SystemValue, TimeUnit, MOST_EFFECT_ARGUMENTS};
 use crate::pattern;
 use crate::state::{read_packed, write_packed, AppState, Placement};
@@ -26,6 +29,12 @@ pub const STACK_DEPTH: usize = 32;
 pub const TEXT_BUFFER_BYTES: usize = 256;
 pub const MOST_EVENT_FIELDS: usize = 8;
 pub const MOST_LOCALS: usize = 16;
+
+/// How many calls may be under way at once.
+pub const MOST_CALL_DEPTH: usize = 8;
+
+/// Room for the locals of an expression or handler and of every call under way inside it.
+pub const LOCAL_POOL: usize = 48;
 pub const MOST_EFFECTS: usize = 8;
 
 /// How many variables one handler may change.
@@ -81,6 +90,7 @@ pub enum Failure {
     TooManySteps,
     WrongResultCount,
     NotAllowedHere,
+    CallsTooDeep,
 }
 
 // ============================================================================
@@ -141,10 +151,23 @@ struct WorkingCopy {
     length: u16,
 }
 
-/// Where the next instruction is, after a jump.
+/// Where the next instruction is, after a jump or a call.
 enum JumpTo {
     Forward(u16),
     Back(u16),
+    Call(u8),
+}
+
+/// Where to carry on when a called function ends.
+#[derive(Clone, Copy, Debug, Default)]
+struct Frame {
+    /// The calling function, or none for the expression or handler itself.
+    caller: Option<u8>,
+    return_offset: u16,
+    caller_locals_base: u8,
+    caller_local_count: u8,
+    caller_stack_floor: u8,
+    result_count: u8,
 }
 
 // ============================================================================
@@ -165,7 +188,13 @@ struct Call<'call, System: SystemValues> {
 pub struct Interpreter {
     stack: [Value; STACK_DEPTH],
     depth: usize,
-    locals: [Value; MOST_LOCALS],
+    /// The running code may not take values below this, which belong to its callers.
+    stack_floor: usize,
+    locals: [Value; LOCAL_POOL],
+    locals_base: usize,
+    local_count: usize,
+    frames: [Frame; MOST_CALL_DEPTH],
+    frame_count: usize,
     text_buffer: [u8; TEXT_BUFFER_BYTES],
     text_used: usize,
     scratch: [u8; SCRATCH_BYTES],
@@ -185,7 +214,19 @@ impl Interpreter {
         Interpreter {
             stack: [0; STACK_DEPTH],
             depth: 0,
-            locals: [0; MOST_LOCALS],
+            stack_floor: 0,
+            locals: [0; LOCAL_POOL],
+            locals_base: 0,
+            local_count: MOST_LOCALS,
+            frames: [Frame {
+                caller: None,
+                return_offset: 0,
+                caller_locals_base: 0,
+                caller_local_count: 0,
+                caller_stack_floor: 0,
+                result_count: 0,
+            }; MOST_CALL_DEPTH],
+            frame_count: 0,
             text_buffer: [0; TEXT_BUFFER_BYTES],
             text_used: 0,
             scratch: [0; SCRATCH_BYTES],
@@ -289,16 +330,35 @@ impl Interpreter {
         }
     }
 
-    fn run<System: SystemValues>(&mut self, code: &[u8], mut call: Call<System>) -> Result<(), Failure> {
+    fn run<System: SystemValues>(&mut self, top_code: &[u8], mut call: Call<System>) -> Result<(), Failure> {
         self.depth = 0;
+        self.stack_floor = 0;
         self.text_used = 0;
         self.scratch_used = 0;
         self.copy_count = 0;
-        self.locals = [0; MOST_LOCALS];
+        self.locals_base = 0;
+        self.local_count = MOST_LOCALS;
+        self.locals[..MOST_LOCALS].fill(0);
+        self.frame_count = 0;
+        let image = call.image;
+        let mut code = top_code;
+        let mut running_function: Option<u8> = None;
         let mut offset = 0;
         let mut steps: u32 = 0;
 
-        while offset < code.len() {
+        loop {
+            if offset >= code.len() {
+                let Some(frame) = self.leave_function()? else {
+                    return Ok(());
+                };
+                running_function = frame.caller;
+                code = match frame.caller {
+                    None => top_code,
+                    Some(caller) => image.function(caller as u16).ok_or(Failure::NoSuchCode)?.code,
+                };
+                offset = frame.return_offset as usize;
+                continue;
+            }
             steps += 1;
             if steps > MOST_STEPS {
                 return Err(Failure::TooManySteps);
@@ -310,9 +370,68 @@ impl Interpreter {
                 Some(JumpTo::Back(distance)) => next_offset
                     .checked_sub(distance as usize)
                     .ok_or(Failure::BadInstruction)?,
+                Some(JumpTo::Call(callee)) => {
+                    let function = image.function(callee as u16).ok_or(Failure::NoSuchCode)?;
+                    self.enter_function(function, running_function, next_offset)?;
+                    running_function = Some(callee);
+                    code = function.code;
+                    0
+                }
             };
         }
+    }
+
+    /// Moves a call's arguments into its own locals and remembers where the caller was.
+    fn enter_function(
+        &mut self,
+        function: Function,
+        caller: Option<u8>,
+        return_offset: usize,
+    ) -> Result<(), Failure> {
+        let locals_base = self.locals_base + self.local_count;
+        let local_count = function.local_count as usize;
+        let argument_count = function.argument_count as usize;
+        if self.frame_count == MOST_CALL_DEPTH
+            || locals_base + local_count > LOCAL_POOL
+            || argument_count > local_count
+            || function.result_count > 1
+        {
+            return Err(Failure::CallsTooDeep);
+        }
+
+        self.frames[self.frame_count] = Frame {
+            caller,
+            return_offset: u16::try_from(return_offset).map_err(|_| Failure::BadInstruction)?,
+            caller_locals_base: self.locals_base as u8,
+            caller_local_count: self.local_count as u8,
+            caller_stack_floor: self.stack_floor as u8,
+            result_count: function.result_count,
+        };
+        self.frame_count += 1;
+        self.locals[locals_base..locals_base + local_count].fill(0);
+        for local in (0..argument_count).rev() {
+            self.locals[locals_base + local] = self.pop()?;
+        }
+        self.locals_base = locals_base;
+        self.local_count = local_count;
+        self.stack_floor = self.depth;
         Ok(())
+    }
+
+    /// Ends the running function and gives back its caller's frame; none when nothing was called.
+    fn leave_function(&mut self) -> Result<Option<Frame>, Failure> {
+        if self.frame_count == 0 {
+            return Ok(None);
+        }
+        self.frame_count -= 1;
+        let frame = self.frames[self.frame_count];
+        if self.depth != self.stack_floor + frame.result_count as usize {
+            return Err(Failure::WrongResultCount);
+        }
+        self.locals_base = frame.caller_locals_base as usize;
+        self.local_count = frame.caller_local_count as usize;
+        self.stack_floor = frame.caller_stack_floor as usize;
+        Ok(Some(frame))
     }
 
     /// Carries out one instruction, and says where to go next when it jumps.
@@ -366,12 +485,13 @@ impl Interpreter {
                 self.write_text(|writer| writer.write_bytes(text.as_bytes()))?;
             }
             ReadLocal(local) => {
-                let value = *self.locals.get(local as usize).ok_or(Failure::BadLocal)?;
+                let value = self.locals[self.local_index(local)?];
                 self.push(value)?;
             }
             WriteLocal(local) => {
                 let value = self.pop()?;
-                *self.locals.get_mut(local as usize).ok_or(Failure::BadLocal)? = value;
+                let index = self.local_index(local)?;
+                self.locals[index] = value;
             }
 
             Duplicate => {
@@ -462,6 +582,7 @@ impl Interpreter {
             }
             LoopStart => {}
             LoopBack(distance) => return Ok(Some(JumpTo::Back(distance))),
+            Call(function) => return Ok(Some(JumpTo::Call(function))),
 
             TimePart(part) => {
                 let time = self.local_time(call)?;
@@ -722,8 +843,19 @@ impl Interpreter {
     }
 
     fn pop(&mut self) -> Result<Value, Failure> {
-        self.depth = self.depth.checked_sub(1).ok_or(Failure::StackUnderflow)?;
+        if self.depth <= self.stack_floor {
+            return Err(Failure::StackUnderflow);
+        }
+        self.depth -= 1;
         Ok(self.stack[self.depth])
+    }
+
+    /// Where one of the running code's locals is in the pool.
+    fn local_index(&self, local: u8) -> Result<usize, Failure> {
+        match (local as usize) < self.local_count {
+            true => Ok(self.locals_base + local as usize),
+            false => Err(Failure::BadLocal),
+        }
     }
 
     fn arithmetic(

@@ -26,6 +26,12 @@ const CRC_COVERS_FROM: usize = 16;
 /// The most state variables an app may have, so that each fits one bit of an input mask.
 pub const MOST_STATE_VARIABLES: usize = 64;
 
+/// The most functions an image may have, so that `Call` names each with one byte.
+pub const MOST_FUNCTIONS: usize = 256;
+
+/// The bytes before a function's code: its argument count, result count and local count.
+const FUNCTION_HEADER_BYTES: usize = 3;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -51,6 +57,8 @@ pub enum SectionKind {
     InitialValues,
     /// The shared library's text fonts, in the order `font` numbers its bitmap fonts.
     Fonts,
+    /// Code that expressions, handlers and other functions run with `Call`.
+    Functions,
 }
 
 impl SectionKind {
@@ -66,6 +74,7 @@ impl SectionKind {
             7 => Resources,
             8 => InitialValues,
             9 => Fonts,
+            10 => Functions,
             _ => return None,
         })
     }
@@ -177,6 +186,18 @@ pub enum ImageError {
 pub enum CodeBlock {
     Expression(u16),
     Handler(u16),
+    Function(u16),
+}
+
+/// One function: what a call to it takes and leaves, how many locals it uses, and its code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Function<'image> {
+    /// The arguments arrive in its first locals, the first argument in local 0.
+    pub argument_count: u8,
+    /// 0 or 1.
+    pub result_count: u8,
+    pub local_count: u8,
+    pub code: &'image [u8],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -204,6 +225,14 @@ pub enum CodeProblem {
     TooManyLoops,
     /// A list system value read whole, or a single one read by element.
     WrongSystemValueKind,
+    /// A call to a function that does not exist, or to one not numbered below the caller.
+    BadCall,
+    /// A function whose header asks for more than one result or more locals than allowed.
+    BadFunctionHeader,
+    /// An expression calls a function that writes state, reads the event or causes effects.
+    HandlerFunctionInExpression,
+    /// Calls nested deeper than the interpreter keeps room for.
+    CallsTooDeep,
 }
 
 // ============================================================================
@@ -304,6 +333,7 @@ pub struct AppImage<'image> {
     subscriptions: &'image [u8],
     resources: EntryTable<'image>,
     fonts: EntryTable<'image>,
+    functions: EntryTable<'image>,
 }
 
 impl<'image> AppImage<'image> {
@@ -353,6 +383,7 @@ impl<'image> AppImage<'image> {
             subscriptions: &[],
             resources: EntryTable::default(),
             fonts: EntryTable::default(),
+            functions: EntryTable::default(),
         };
 
         let mut seen_sections = 0u32;
@@ -388,6 +419,12 @@ impl<'image> AppImage<'image> {
                 }
                 SectionKind::Resources => image.resources = EntryTable::parse(count, section_bytes)?,
                 SectionKind::Fonts => image.fonts = EntryTable::parse(count, section_bytes)?,
+                SectionKind::Functions => {
+                    if count as usize > MOST_FUNCTIONS {
+                        return Err(ImageError::TableOutOfBounds);
+                    }
+                    image.functions = EntryTable::parse(count, section_bytes)?
+                }
             }
         }
 
@@ -508,6 +545,22 @@ impl<'image> AppImage<'image> {
 
     pub fn handler_code(&self, index: u16) -> Option<&'image [u8]> {
         self.handlers.get(index)
+    }
+
+    pub fn function_count(&self) -> u16 {
+        self.functions.count
+    }
+
+    /// A function's header and code; none when it is missing or shorter than its header.
+    pub fn function(&self, index: u16) -> Option<Function<'image>> {
+        let bytes = self.functions.get(index)?;
+        let header = bytes.get(..FUNCTION_HEADER_BYTES)?;
+        Some(Function {
+            argument_count: header[0],
+            result_count: header[1],
+            local_count: header[2],
+            code: &bytes[FUNCTION_HEADER_BYTES..],
+        })
     }
 
     pub fn widget_count(&self) -> u16 {

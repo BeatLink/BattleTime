@@ -345,12 +345,13 @@ byte-level format.
 - **Events.** `events` fixes which fields each event carries and in what order, for the compiler
   and the runtime alike.
 - **Writer.** With the `writer` feature, `ImageWriter` and `CodeWriter` write images and assemble
-  bytecode with labels, for the compiler and tests.
+  bytecode with labels, for the compiler and tests. `share_repeated_code` turns code that repeats
+  with only its constants changed into calls to one function.
 - **State and arrays.** `AppState` packs an app's variables and arrays into 2 KB, each array element
   in as few bytes as the image asks. Handlers change copies of what they write, so a failure part
   way changes nothing, and loops stop after 200,000 steps.
 
-It never allocates and never panics on bad input. Its working memory is 1,792 B for the
+It never allocates and never panics on bad input. Its working memory is 2,144 B for the
 interpreter, 2,056 B for the bindings of up to 128 expressions and 2,440 B for the state.
 ### External flash (`drivers/external_flash`)
 
@@ -698,7 +699,7 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
 - **Demo.** With the `demo` feature, `demo::stopwatch_image` builds a stopwatch image with the
   runtime's writer, so the host runs before the compiler exists.
 
-On the watch, `AppHost` keeps its state, interpreter and bindings on the UI heap, 6,288 B. Each is
+On the watch, `AppHost` keeps its state, interpreter and bindings on the UI heap, 6,604 B. Each is
 boxed empty (`AppState::EMPTY`, `Bindings::EMPTY`) and filled in place, never built on the stack, so
 opening an app needs under 1 KB of stack; each widget of the open screen takes 240 B more plus its
 text; see [memory-map.md](memory-map.md). [app-runtime.md](app-runtime.md#the-app-host) describes

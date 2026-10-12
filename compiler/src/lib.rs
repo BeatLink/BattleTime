@@ -145,7 +145,8 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
         }
     }
     match run_pass(program, components, assumed, &directory) {
-        Ok(compiler) => {
+        Ok(mut compiler) => {
+            compiler.writer.share_repeated_code();
             let image = compiler.writer.build();
             let mut diagnostics = compiler.warnings;
             let expressions = compiler.writer.expression_count();

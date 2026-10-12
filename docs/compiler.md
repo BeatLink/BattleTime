@@ -35,7 +35,11 @@ and `verify`.
    constant, `? :`, `const` locals, function results and `.map` callbacks. A variable still growing
    after six passes, such as a counter, is taken to hold anything, and the passes start again, so
    it does not widen the other arrays.
-6. **Write** the image with the runtime's `ImageWriter`, then check it with the runtime's checks.
+6. **Share repeated code.** Expressions or handlers that match instruction for instruction except
+   for the numbers and texts they push, such as one per cell of a board, become one function each
+   that takes the differing constants as arguments; each copy becomes those pushes and a `Call`.
+   A group is shared only when that makes the image smaller (`ImageWriter::share_repeated_code`).
+7. **Write** the image with the runtime's `ImageWriter`, then check it with the runtime's checks.
 
 Anything known at compile time is worked out then: constants, tables such as `CELLS.map(...)`,
 props passed as literals, `HOUR * 2`. Only what reads state, the clock, the system or an event
@@ -109,7 +113,8 @@ before anything is written.
   length, type and element width share one, unless one is still being filled.
 - A function whose body ends in `return <array>` is inlined into the assignment.
 
-Functions are inlined, never called. A call that would recurse is an error. Before inlining a
+Functions are inlined, never called; repeated code is shared as functions afterwards, as step 6
+of [How it works](#how-it-works) says. A call that would recurse is an error. Before inlining a
 function with statements in the middle of an expression, the values already on the stack are moved
 to locals, because a loop needs an empty stack.
 

@@ -4,6 +4,8 @@
 //! instructions with named jump targets, working out every jump's distance when the code is
 //! finished. Only built with the `writer` feature, since the watch never writes images.
 
+mod sharing;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -26,6 +28,7 @@ const SUBSCRIPTIONS_SECTION: u16 = 6;
 const RESOURCES_SECTION: u16 = 7;
 const INITIAL_VALUES_SECTION: u16 = 8;
 const FONTS_SECTION: u16 = 9;
+const FUNCTIONS_SECTION: u16 = 10;
 
 const HEADER_BYTES: usize = 20;
 const SECTION_ENTRY_BYTES: usize = 12;
@@ -59,6 +62,7 @@ pub struct ImageWriter {
     subscriptions: Vec<Subscription>,
     resources: Vec<Vec<u8>>,
     fonts: Vec<Vec<u8>>,
+    functions: Vec<Vec<u8>>,
 }
 
 impl ImageWriter {
@@ -78,6 +82,7 @@ impl ImageWriter {
             subscriptions: Vec::new(),
             resources: Vec::new(),
             fonts: Vec::new(),
+            functions: Vec::new(),
         };
         writer.id_string = writer.string(id);
         writer.name_string = writer.string(name);
@@ -217,6 +222,19 @@ impl ImageWriter {
         (self.handlers.len() - 1) as u16
     }
 
+    /// How many functions the image holds so far, which is also the number the next one gets.
+    pub fn function_count(&self) -> usize {
+        self.functions.len()
+    }
+
+    /// Adds a function that `Instruction::Call` runs; its arguments arrive in its first locals.
+    pub fn function(&mut self, argument_count: u8, result_count: u8, local_count: u8, code: Vec<u8>) -> u8 {
+        let mut bytes = alloc::vec![argument_count, result_count, local_count];
+        bytes.extend(code);
+        self.functions.push(bytes);
+        (self.functions.len() - 1) as u8
+    }
+
     /// Adds a widget. Widgets must be added depth first: each one followed by its children.
     pub fn widget(
         &mut self,
@@ -288,6 +306,13 @@ impl ImageWriter {
         // Only the shared library has fonts, so app images keep their eight sections.
         if !self.fonts.is_empty() {
             sections.push((FONTS_SECTION, self.fonts.len() as u16, entry_table(&self.fonts)));
+        }
+        if !self.functions.is_empty() {
+            sections.push((
+                FUNCTIONS_SECTION,
+                self.functions.len() as u16,
+                entry_table(&self.functions),
+            ));
         }
 
         let mut image: Vec<u8> = Vec::new();

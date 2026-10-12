@@ -4,9 +4,49 @@
 //! The runtime derives this from the code itself when an app opens, so a wrong compiler can never
 //! make a widget miss an update.
 
-use crate::image::{AppImage, ImageError};
+use crate::image::{AppImage, ImageError, MOST_FUNCTIONS};
 use crate::instruction::{decode, Instruction, SystemValue, TimePart};
 use crate::pattern;
+
+// ============================================================================
+// Walking code
+// ============================================================================
+
+/// Shows `visit` every instruction of `code` and of every function it calls, each function once.
+///
+/// Returns none when any of the code cannot be decoded or a call names a missing function.
+pub fn for_each_reached_instruction(
+    image: &AppImage,
+    code: &[u8],
+    mut visit: impl FnMut(Instruction),
+) -> Option<()> {
+    let mut called = [0u64; MOST_FUNCTIONS / 64];
+    let mut scanned = [0u64; MOST_FUNCTIONS / 64];
+    let mut next_code = Some(code);
+
+    while let Some(code) = next_code {
+        let mut offset = 0;
+        while offset < code.len() {
+            let (instruction, next_offset) = decode(code, offset).ok()?;
+            if let Instruction::Call(function) = instruction {
+                called[function as usize / 64] |= 1 << (function % 64);
+            }
+            visit(instruction);
+            offset = next_offset;
+        }
+
+        next_code = None;
+        for function in 0..MOST_FUNCTIONS {
+            let bit = 1u64 << (function % 64);
+            if called[function / 64] & bit != 0 && scanned[function / 64] & bit == 0 {
+                scanned[function / 64] |= bit;
+                next_code = Some(image.function(function as u16)?.code);
+                break;
+            }
+        }
+    }
+    Some(())
+}
 
 // ============================================================================
 // Inputs
@@ -90,10 +130,8 @@ pub struct ExpressionInfo {
 pub fn analyse_expression(image: &AppImage, code: &[u8]) -> Option<ExpressionInfo> {
     let mut inputs = Inputs::NOTHING;
     let mut finest_step: Option<u32> = None;
-    let mut offset = 0;
 
-    while offset < code.len() {
-        let (instruction, next_offset) = decode(code, offset).ok()?;
+    for_each_reached_instruction(image, code, |instruction| {
         match instruction {
             Instruction::ReadState(slot)
             | Instruction::ReadElement(slot)
@@ -110,8 +148,7 @@ pub fn analyse_expression(image: &AppImage, code: &[u8]) -> Option<ExpressionInf
         if let Some(step) = smallest_visible_step(image, instruction) {
             finest_step = Some(finest_step.map_or(step, |finest| finest.min(step)));
         }
-        offset = next_offset;
-    }
+    })?;
 
     let redraw_period_in_milliseconds = match inputs.reads_clock() {
         true => finest_step.unwrap_or(SECOND_IN_MILLISECONDS),
