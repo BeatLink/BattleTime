@@ -5,8 +5,9 @@ Rust. It drives the nRF52832's radio directly and gives the
 [TrouBLE](https://github.com/embassy-rs/trouble) host a standard HCI interface. No Nordic code is
 involved: no SoftDevice, no SoftDevice Controller and no MPSL.
 
-**Status:** it passes its tests on the computer, including TrouBLE running against it, and builds
-for the watch. **It has never run on a watch.**
+**Status:** it passes its tests on the computer, including TrouBLE running against it, and it runs
+on the watch, where firmware updates over Bluetooth use it. The checks under "Hardware tests" in
+[todo.md](todo.md) have not been made yet.
 
 ## Why NeoTime has its own
 

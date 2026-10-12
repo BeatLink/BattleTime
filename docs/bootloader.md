@@ -144,15 +144,6 @@ cargo build --release
 
 ## Not done yet
 
-- **Never run on a watch.** It builds and the shared code is tested on the computer, but nothing
-  has been tried on hardware.
-- **The reloader.** A watch running InfiniTime or wasp-os takes one special update, the reloader,
-  through that firmware's own update path. The reloader writes this bootloader to address 0 and
-  NeoTime to `FIRMWARE`, replacing MCUBoot or wasp-os's MBR, SoftDevice and bootloader. It is being
-  written against `neotime-boot`'s layout, and can be tried first in the Renode emulator in
-  `PineTimeEmulator/`. Rewriting address 0 is the one step with no way back: a power cut or a bug
-  there leaves the watch unable to start until it is reflashed over SWD.
-- **The recovery firmware** itself.
 - **Signed updates.** embassy-boot's updater can check an ed25519 signature before marking a swap.
   That check runs in the firmware, in `neotime-updates`, so it costs the bootloader nothing; it is
   not used yet.

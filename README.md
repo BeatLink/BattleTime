@@ -21,9 +21,10 @@ It aims to combine the best parts of the two existing PineTime firmwares:
 
 ## Status
 
-Early work. The drivers, the bootloader, a first firmware that takes updates over Bluetooth, and the
-reloader that moves a watch over from InfiniTime or wasp-os all exist, and all have run only on the
-computer. Nothing has run on a watch yet.
+Early work. The drivers, the bootloader, a firmware with a watch face, a launcher and apps, and the
+reloader all run on a PineTime. On 2026-10-11 the reloader moved a watch from wasp-os onto NeoTime,
+and firmware updates over Bluetooth and the button-hold recovery have worked on it since. Moving a
+watch from InfiniTime has run only in the emulator.
 
 ## Documentation
 

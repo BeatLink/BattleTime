@@ -8,8 +8,8 @@ document for its part instead.
 
 ## Hardware tests
 
-- [ ] **Touch panel on the PineTime.** `neotime-touch` has only run against fake hardware. Once the
-  board layer can start a driver, check on the watch that:
+- [ ] **Touch panel on the PineTime.** The firmware runs `neotime-touch` on the watch, but these
+  checks have not been made:
   - `start` succeeds and `read_chip_info` gives a sensible chip ID (0xb4 or a near value);
   - taps, long presses and slides in all four directions come through as the right `Gesture`;
   - a drag streams reports while the finger stays down, and the finger lifting is reported;
@@ -17,17 +17,17 @@ document for its part instead.
   - `sleep` stops the interrupts, and `sleep_until_double_tap` wakes on a double tap only;
   - `wake` brings back the settings `start` was given.
 
-- [ ] **Accelerometer on the PineTime.** `neotime-accelerometer` has only run against fake
-  hardware. On the watch, check that:
+- [ ] **Accelerometer on the PineTime.** The firmware counts steps with
+  `neotime-accelerometer` on the watch, but these checks have not been made:
   - `start` succeeds and names the chip the watch really has, which on this watch is a BMA425;
   - lying flat with the screen up reads about +1000 milli-g on z, and tilting it reads the
     expected signs on x and y, which settles whether `Orientation::PINETIME` is right;
   - walking raises `read_step_count`, and `reset_step_count` sets it back to 0;
   - the upload still works with chunks larger than 16 bytes, which would make starting faster.
 
-- [ ] **Bluetooth controller on the PineTime.** `neotime-bluetooth` has only run against a fake
-  radio. Once there is firmware to put it in, check on the watch, with a phone and with `btmon` on
-  the computer, that:
+- [ ] **Bluetooth controller on the PineTime.** The firmware runs `neotime-bluetooth` on the watch and
+  takes updates over it, but these checks, with a phone and with `btmon` on the computer, have not
+  been made:
   - advertisements show up on all three channels, with the right name and address;
   - a scan request gets the scan response;
   - a phone connects, and the connection survives the phone changing its interval;
@@ -368,10 +368,6 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   each file is for.
 - [ ] **How to measure memory.** Say in [memory-map.md](memory-map.md) how each figure is measured
   on the watch: flash by crate and symbol, the stack's high-water mark, and heap peaks.
-- [ ] **Bring the status lines up to date.** README says nothing has run on a watch,
-  `architecture.md` says there is no firmware image and that the controller and touch have only run
-  against fakes, `storage.md` says the firmware does not mount the file system, and
-  `bootloader.md` "Not done yet" still lists the reloader and the recovery firmware.
 - [ ] **A user guide:** what the face shows, the swipes and button presses, moving from InfiniTime
   or wasp-os, updating with Gadgetbridge or ITD, and the recovery hold, with simulator screenshots.
 

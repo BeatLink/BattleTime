@@ -85,7 +85,5 @@ the watch uses somewhat less:
 
 ## Not done yet
 
-- The firmware does not mount it yet; that comes with the board layer and the external flash's
-  async driver.
-- Nothing has run on the watch. The tests run littlefs on the computer against a fake flash.
 - Both problems above are worth reporting to littlefs-rust, so the local copy can go.
+- Flash writes block the Bluetooth host, because the external flash's driver is not async yet.

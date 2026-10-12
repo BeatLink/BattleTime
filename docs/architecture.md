@@ -73,7 +73,7 @@ Each layer uses only the layers below it.
 - **Board** is the one place that knows the PineTime's wiring. It sets up the chip's SPI, I2C and
   pins with `embassy-nrf`, then hands them to the drivers. **(planned)**
 - **Services** keep the watch's state: the BLE link and the GATT services companion apps use, the
-  clock, the step count, files on the external flash, and firmware updates. The BLE link will run
+  clock, the step count, files on the external flash, and firmware updates. The BLE link runs
   the [TrouBLE](https://github.com/embassy-rs/trouble) host on NeoTime's own controller in
   `drivers/bluetooth`. **(started: files on the external flash, and the on-watch half of firmware
   updates)**
@@ -302,7 +302,8 @@ Nordic's closed SoftDevice Controller and saves about 27 KB of flash and 5 KB of
 - **How it is split.** The HCI interface and the link layer are plain logic that runs in tests on
   a computer, including TrouBLE itself on a fake radio. Only `nrf_radio.rs` touches the chip: the
   radio, TIMER0, the random number generator and five fixed PPI channels.
-- **Status.** Tested on the computer only; it has never run on a watch.
+- **Status.** It runs on the watch, and firmware updates over Bluetooth use it. The checks under
+  "Hardware tests" in [todo.md](todo.md) have not been made yet.
 
 See [bluetooth.md](bluetooth.md) for the design, the timing, what it takes from the chip and what is
 missing.
@@ -512,8 +513,9 @@ system, sent through that system's own update path, which stages the firmware an
 firmware in the external flash, writes NeoTime's bootloader over the first pages of internal
 flash, and marks the swap. The order, from `neotime_boot::migration`, keeps the time when a power
 cut would leave the watch unable to start to the bootloader write, about a quarter of a second.
-Two builds, `from-wasp-os` and `from-infinitime`, link where each old system starts apps. It has
-never run on a watch; see [updates.md](updates.md) for the emulator plan.
+Two builds, `from-wasp-os` and `from-infinitime`, link where each old system starts apps. The
+`from-wasp-os` build moved a watch on 2026-10-11; the `from-infinitime` build has run only in the
+emulator. See [updates.md](updates.md).
 
 ## Bootloader (`bootloader` and `boot`)
 
@@ -667,4 +669,4 @@ cd bootloader && cargo build --release
 cd firmware && cargo build --release
 ```
 
-There is no firmware image to flash yet. That arrives with the board layer.
+[updates.md](updates.md) says how to put these images on a watch.
