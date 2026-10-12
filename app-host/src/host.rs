@@ -116,6 +116,15 @@ impl NodeKey {
     }
 }
 
+/// Runs the install checks on an image before it is loaded, in a frame of its own, so the verifier
+/// never runs below the large frame that builds the host. Its 800-byte table goes on the heap.
+#[inline(never)]
+fn verify_image(image_bytes: &[u8]) -> Result<(), OpenError> {
+    let image = AppImage::parse(image_bytes)?;
+    verify_with(&image, &mut Box::new(CheckedFunctions::NONE))?;
+    Ok(())
+}
+
 fn mask_of(expressions: impl Iterator<Item = usize>) -> u128 {
     expressions
         .filter(|&expression| expression < MOST_BOUND_EXPRESSIONS)
@@ -196,7 +205,9 @@ impl<'image> AppHost<'image> {
         now: Value,
         system: &mut impl System,
     ) -> Result<Self, OpenError> {
+        verify_image(image_bytes)?;
         let mut host = Self::load(image_bytes, theme, saved_state, now, system)?;
+        host.run_derives(Inputs::NOTHING, true, now, system);
         host.bring_to_front(now, system);
         Ok(host)
     }
@@ -213,8 +224,11 @@ impl<'image> AppHost<'image> {
         now: Value,
         system: &mut impl System,
     ) -> Result<&'slot mut Self, OpenError> {
+        verify_image(image_bytes)?;
         Self::load_into(slot, image_bytes, theme, saved_state, now, system)?;
         let host = slot.as_mut().ok_or(OpenError::NoScreens)?;
+        // Derives run here, not inside the load, so the interpreter never runs below the load's large frame.
+        host.run_derives(Inputs::NOTHING, true, now, system);
         host.bring_to_front(now, system);
         Ok(host)
     }
@@ -240,7 +254,10 @@ impl<'image> AppHost<'image> {
         now: Value,
         system: &mut impl System,
     ) -> Result<Self, OpenError> {
-        Self::load(image_bytes, theme, saved_state, now, system)
+        verify_image(image_bytes)?;
+        let mut host = Self::load(image_bytes, theme, saved_state, now, system)?;
+        host.run_derives(Inputs::NOTHING, true, now, system);
+        Ok(host)
     }
 
     fn load(
@@ -251,8 +268,6 @@ impl<'image> AppHost<'image> {
         system: &mut impl System,
     ) -> Result<Self, OpenError> {
         let image = AppImage::parse(image_bytes)?;
-        // The verifier's 800-byte table goes on the heap too, which the watch's stack has no room for.
-        verify_with(&image, &mut Box::new(CheckedFunctions::NONE))?;
         // Each big part is boxed empty and filled in place, so none is ever built on the stack.
         let mut state = Box::new(AppState::EMPTY);
         state.load_layout(&image)?;
@@ -310,7 +325,6 @@ impl<'image> AppHost<'image> {
             scroll_drag: None,
             text_files: Vec::new(),
         };
-        host.run_derives(Inputs::NOTHING, true, now, system);
         Ok(host)
     }
 

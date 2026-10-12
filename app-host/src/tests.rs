@@ -410,6 +410,32 @@ fn opening_a_broken_image_fails() {
     assert!(matches!(result, Err(OpenError::Image(_))));
 }
 
+#[test]
+fn every_way_of_opening_verifies_the_code() {
+    let mut writer = ImageWriter::new("broken", "Broken", AppKind::App, 1);
+    writer.expression(vec![]);
+    let image = writer.build();
+    let refused = |result: Result<(), OpenError>| {
+        matches!(
+            result,
+            Err(OpenError::Image(neotime_runtime::ImageError::BadCode { .. }))
+        )
+    };
+    let mut system = FakeSystem::default();
+
+    assert!(refused(
+        AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).map(|_| ())
+    ));
+    assert!(refused(
+        AppHost::open_in_background(&image, DEFAULT_THEME, &[], START_TIME, &mut system).map(|_| ())
+    ));
+    let mut slot = None;
+    assert!(refused(
+        AppHost::open_into(&mut slot, &image, DEFAULT_THEME, &[], START_TIME, &mut system).map(|_| ())
+    ));
+    assert!(slot.is_none());
+}
+
 // ============================================================================
 // Touch
 // ============================================================================
