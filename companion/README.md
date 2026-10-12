@@ -99,6 +99,7 @@ npm run neotime -- recovery path/to/recovery.zip
 npm run neotime -- time
 npm run neotime -- diag
 npm run neotime -- files ls /settings
+npm run neotime -- note shopping.txt large
 npm run neotime -- apps setup
 npm run neotime -- apps install path/to/timer.ntapp
 npm run neotime -- backup watch-backup.json
@@ -170,6 +171,7 @@ src/app/                 Expo Router screens
   scan.tsx               Modal that lists nearby watches
   apps.tsx               Install a compiled .ntapp or .ntlib image, hide or remove an app
   setup.tsx              Set up a new watch: the shared icons, a face, the launcher and apps
+  notes.tsx              The text file the watch's Notes app shows, and its font there
   files.tsx              The watch's file system: browse, send, read, delete, free space
   backup.tsx             Copy the watch's settings and app state off and back
   steps.tsx              The last week of steps, by day and by hour
@@ -262,6 +264,23 @@ got to until it has the whole file. The watch makes missing folders when a file 
 deletes a folder with everything in it. The protocol has no free-space command, so `storage()`
 starts a write to a scratch file, reads how much room the answer offers, and deletes the file.
 Commands run one at a time, so answers never mix.
+
+## Notes
+
+The Notes screen keeps a text file of the user's choice on the watch, for NeoTime's `notes` app to
+show read only. [src/protocol/notes.ts](src/protocol/notes.ts) writes it to `/notes/note.txt` and
+the chosen font's name to `/notes/font` over the file service, each only when it differs from what
+was last sent; the first check on a connection lists `/notes` too, so a note deleted on the watch
+is sent again. [src/state/note-sync.ts](src/state/note-sync.ts) checks when the watch connects,
+every minute, and when the file or font is changed here, one check at a time. Notes are limited to
+64 kB.
+
+[src/services/note-file.ts](src/services/note-file.ts) reaches the file. The desktop app picks it
+in a file dialog and reads it from disk in the main process
+([node/note-file.js](node/note-file.js)), which also watches its folder, so a save is sent within a
+moment. A phone or a browser keeps the document picker's link and reads it again on each check; a
+browser can read it only until the page reloads, and a phone may withdraw the app's access to it
+after a restart, in which case the screen asks for the file again.
 
 ## Apps and the first run
 

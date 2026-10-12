@@ -36,6 +36,25 @@ mock watch only.
 - **The NeoTime name check in scans.** A running NeoTime is told from a bootloader by its advertised
   name; check what a phone and BlueZ report for it.
 
+## Notes
+
+- **Bundle the notes app.** `src/bundles/watch-apps.ts` predates NeoTime's `TextFile` widget, which
+  the `notes` app needs. Regenerate the bundle with `notes.ntapp` once the firmware with it is on
+  master, so setup can install it; until then install it with `neotime apps install`.
+- **Untried with a watch.** Sending, resending after an edit and the font have run only against the
+  mock watch, and the desktop app's file dialog and folder watch only in tests. With a watch on
+  NeoTime and its `notes` app installed, check that:
+  - choosing a file in the desktop app sends it, and saving it in an editor sends it again within
+    a few seconds;
+  - on a phone, choosing a file sends it, and an edit is sent within a minute, also after the app
+    restarts;
+  - a new font reaches the watch, and the next opening of the app uses it;
+  - a note over 64 kB is refused with its size, and "Stop and remove" brings back the app's hint;
+  - `neotime note <file> large` and `neotime note remove` work over BlueZ.
+- **Reading the file again on a phone.** The picker's `content://` link is read again with `fetch`,
+  which may stop working after the app restarts; keeping access would need
+  `takePersistableUriPermission` in the native module.
+
 ## Notification forwarding
 
 The Android bridge in [src/services/phone](src/services/phone/README.md) is wired into the

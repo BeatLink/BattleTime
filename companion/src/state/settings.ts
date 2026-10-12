@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import type { NoteFont, NoteOnWatch } from '@/protocol/notes';
+import type { NoteFileRef } from '@/services/note-file';
 import type { Place } from '@/services/weather';
 
 // User settings that survive restarts, stored as one JSON blob.
@@ -25,6 +27,10 @@ export type Settings = {
   githubRepo: string;
   githubToken: string;
   firmwareBoard: string;
+  // The text file the watch's notes app shows, the font it is drawn in, and what the watch was last sent.
+  noteFile: NoteFileRef | null;
+  noteFont: NoteFont;
+  noteOnWatch: NoteOnWatch | null;
 };
 
 export const defaultSettings: Settings = {
@@ -44,6 +50,9 @@ export const defaultSettings: Settings = {
   githubRepo: 'BeatLink/NeoTime',
   githubToken: '',
   firmwareBoard: 'pinetime',
+  noteFile: null,
+  noteFont: 'normal',
+  noteOnWatch: null,
 };
 
 const STORAGE_KEY = 'neotime.settings.v1';

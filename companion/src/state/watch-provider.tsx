@@ -19,6 +19,7 @@ import {
 } from '@/protocol/gadgetbridge';
 import type { DfuLink } from '@/dfu/link';
 import { FileService } from '@/protocol/file-service';
+import { removeNote } from '@/protocol/notes';
 import { PackagesClient } from '@/protocol/packages';
 import {
   NO_CAPABILITIES,
@@ -31,9 +32,11 @@ import {
 } from '@/protocol/neotime';
 import { readStatus, ReplyRouter, type RequestChannel } from '@/protocol/requests';
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
+import { noteFileAccess, type NoteFileAccess } from '@/services/note-file';
 import { phoneBridge, type PhoneEvent } from '@/services/phone';
 import { currentWeather, weatherPlace } from '@/services/weather';
 import { watchClockChanges } from '@/state/clock-changes';
+import { NoteSync, type NoteStatus } from '@/state/note-sync';
 import { defaultSettings, loadSettings, saveSettings, type Settings } from '@/state/settings';
 
 export type ConsoleEntry = {
@@ -93,6 +96,14 @@ type WatchContextValue = {
   refreshStatus: () => Promise<void>;
   // What the phone is playing, as its media session last reported it.
   nowPlaying: NowPlaying | null;
+  // Choosing and reading the text file the watch's notes app shows.
+  noteFiles: NoteFileAccess;
+  // How keeping the watch's note up to date last went.
+  noteStatus: NoteStatus;
+  // Checks the chosen file now and sends it if it changed.
+  syncNote: () => Promise<void>;
+  // Stops keeping a note on the watch and takes it off.
+  forgetNote: () => Promise<void>;
 };
 
 export type NowPlaying = Extract<PhoneEvent, { type: 'media' }>;
@@ -107,6 +118,9 @@ const NOTIFY_BODY_LIMIT = 300;
 function clip(text: string, limit: number): string {
   return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
 }
+
+// How often the chosen note is read again while a watch is connected; the desktop app also hears each save.
+const NOTE_CHECK_INTERVAL_MS = 60 * 1000;
 
 // How often the weather is sent while a watch is connected.
 const WEATHER_INTERVAL_MS = 30 * 60 * 1000;
@@ -519,6 +533,61 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     return packagesRef.current;
   }, []);
 
+  // Keep the watch's note matching the chosen file: on connecting, after each save the platform
+  // reports, every minute, and whenever the file or its font is changed here.
+  const noteFiles = useMemo(() => noteFileAccess(), []);
+  const [noteStatus, setNoteStatus] = useState<NoteStatus>({ kind: 'idle' });
+  const noteSyncRef = useRef<NoteSync | null>(null);
+  const noteFile = settings.noteFile;
+  const watchId = watch?.id ?? null;
+  const notesOn = watchReady && capabilities.files && noteFile !== null && watchId !== null;
+  useEffect(() => {
+    if (!notesOn || noteFile === null || watchId === null) {
+      noteSyncRef.current = null;
+      return;
+    }
+    const sync = new NoteSync({
+      access: noteFiles,
+      files,
+      watchId,
+      current: () => ({
+        file: settingsRef.current.noteFile,
+        font: settingsRef.current.noteFont,
+        onWatch: settingsRef.current.noteOnWatch,
+      }),
+      remember: (onWatch) => void updateSettings({ noteOnWatch: onWatch }),
+      onStatus: setNoteStatus,
+    });
+    noteSyncRef.current = sync;
+    void sync.sync();
+    const timer = setInterval(() => void sync.sync(), NOTE_CHECK_INTERVAL_MS);
+    const stopWatching = noteFiles.watch(noteFile, () => void sync.sync());
+    return () => {
+      clearInterval(timer);
+      stopWatching?.();
+      noteSyncRef.current = null;
+    };
+    // The file's link is what matters, not the object holding it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notesOn, noteFile?.uri, watchId, noteFiles, files, updateSettings]);
+
+  const noteFont = settings.noteFont;
+  useEffect(() => {
+    void noteSyncRef.current?.sync();
+  }, [noteFont]);
+
+  const syncNote = useCallback(async () => {
+    await noteSyncRef.current?.sync();
+  }, []);
+
+  const forgetNote = useCallback(async () => {
+    await updateSettings({ noteFile: null, noteOnWatch: null });
+    setNoteStatus({ kind: 'idle' });
+    if (watchReady && capabilities.files) {
+      await removeNote(await files());
+    }
+  }, [updateSettings, watchReady, capabilities.files, files]);
+
   const value = useMemo<WatchContextValue>(
     () => ({
       transportKind,
@@ -553,8 +622,16 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       lastSynced,
       refreshStatus,
       nowPlaying,
+      noteFiles,
+      noteStatus,
+      syncNote,
+      forgetNote,
     }),
     [
+      noteFiles,
+      noteStatus,
+      syncNote,
+      forgetNote,
       status,
       lastSynced,
       refreshStatus,

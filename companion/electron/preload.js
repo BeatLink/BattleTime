@@ -41,8 +41,29 @@ const desktop = {
   },
 };
 
+const noteListeners = new Set();
+
+ipcRenderer.on('notes:changed', (_event, id) => {
+  for (const listener of noteListeners) {
+    listener(id);
+  }
+});
+
+// The note shown on the watch, read by src/services/note-file.ts.
+const notes = {
+  pick: () => ipcRenderer.invoke('notes:pick'),
+  read: (path) => ipcRenderer.invoke('notes:read', path),
+  watch: (path) => ipcRenderer.invoke('notes:watch', path),
+  unwatch: (id) => ipcRenderer.invoke('notes:unwatch', id),
+  onChange: (listener) => {
+    noteListeners.add(listener);
+    return () => noteListeners.delete(listener);
+  },
+};
+
 contextBridge.exposeInMainWorld('neotime', {
   desktop,
+  notes,
   startScan: () => ipcRenderer.invoke('ble:start-scan'),
   stopScan: () => ipcRenderer.invoke('ble:stop-scan'),
   connect: (id) => ipcRenderer.invoke('ble:connect', id),

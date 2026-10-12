@@ -41,6 +41,7 @@ export default function RootLayout() {
           <Stack.Screen name="alarms" options={{ headerShown: true, title: 'Alarms' }} />
           <Stack.Screen name="watch-settings" options={{ headerShown: true, title: 'Watch settings' }} />
           <Stack.Screen name="files" options={{ headerShown: true, title: 'Files' }} />
+          <Stack.Screen name="notes" options={{ headerShown: true, title: 'Notes' }} />
           <Stack.Screen name="backup" options={{ headerShown: true, title: 'Backup' }} />
           <Stack.Screen name="apps" options={{ headerShown: true, title: 'Apps' }} />
           <Stack.Screen name="setup" options={{ headerShown: true, title: 'Set up the watch' }} />

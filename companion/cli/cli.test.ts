@@ -7,10 +7,13 @@ import { join } from 'node:path';
 import { zipSync } from 'fflate';
 
 import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
+import { FileService } from '@/protocol/file-service';
+import { NOTE_FONT_PATH, NOTE_PATH } from '@/protocol/notes';
 
 import type { WatchSession } from './ble';
 import { flash } from './commands/flash';
 import { recovery } from './commands/recovery';
+import { note } from './commands/watch';
 
 // The flash command only needs the DFU link and a way to reset the watch, which is what a session gives it.
 class FakeSession extends MockLegacyDfuTarget {
@@ -76,5 +79,35 @@ describe('the recovery command', () => {
     expect(session.imageTypes).toEqual([0x08]);
     expect(session.received.image).toEqual(image);
     expect(session.timeWrites).toHaveLength(1);
+  });
+});
+
+describe('the note command', () => {
+  // A session whose file service is the mock watch's.
+  function noteSession() {
+    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+    const service = FileService.open(watch);
+    return { session: { deviceId: watch.deviceId, files: () => service } as unknown as WatchSession, service };
+  }
+
+  it('sends a text file and its font, and removes it again', async () => {
+    const { session, service } = noteSession();
+    const path = join(mkdtempSync(join(tmpdir(), 'neotime-')), 'list.txt');
+    writeFileSync(path, 'Milk\nBread\n');
+
+    await note(session, [path, 'large']);
+    const files = await service;
+    expect(new TextDecoder().decode(await files.read(NOTE_PATH))).toBe('Milk\nBread\n');
+    expect(new TextDecoder().decode(await files.read(NOTE_FONT_PATH))).toBe('large');
+
+    await note(session, ['remove']);
+    await expect(files.read(NOTE_PATH)).rejects.toThrow();
+  });
+
+  it('asks for a file and a known font', async () => {
+    const { session } = noteSession();
+
+    await expect(note(session, [])).rejects.toThrow('Give the text file');
+    await expect(note(session, ['list.txt', 'huge'])).rejects.toThrow('The font is one of small, normal, medium, large');
   });
 });

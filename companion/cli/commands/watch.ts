@@ -7,6 +7,7 @@ import { basename, dirname } from 'node:path';
 import type { SettingsMessage } from '@/protocol/gadgetbridge';
 import { createBackup, parseBackup, restoreBackup } from '@/protocol/backup';
 import { setWatchTime } from '@/protocol/neotime';
+import { NOTE_FONTS, NOTE_PATH, removeNote, syncNote, type NoteFont } from '@/protocol/notes';
 import { installImage } from '@/protocol/packages';
 import { runSetup, setupItems } from '@/protocol/setup';
 import { encodeForWatch, decodeWatchLine } from '@/protocol/gadgetbridge';
@@ -25,6 +26,7 @@ neotime alarms [HH:MM[/days][/off] ...|none]
 neotime steps [days]
 neotime weather <place>
 neotime files [ls [dir]|get <path> [dest]|put <file> <path>|rm <path>|df]
+neotime note <file> [small|normal|medium|large]|remove
 neotime apps [list|install <image>|remove <id>|hide <id>|show <id>|setup]
 neotime backup <file>
 neotime restore <file>
@@ -35,7 +37,8 @@ neotime listen [line] [--allow <hosts>] [--wait <seconds>]
   change them. alarms with no arguments lists them, otherwise replaces
   them all: 07:30/12345 rings on weekdays (1 is Monday), 06:00/67/off is a
   weekend alarm turned off, and a bare time rings once. files uses NeoTime's
-  file service; paths are absolute, such as /settings. apps installs a .ntapp
+  file service; paths are absolute, such as /settings. note sends a text file
+  for the watch's Notes app to show, in the font given, or removes it. apps installs a .ntapp
   or .ntlib image, and setup installs the face, launcher, apps and shared
   library this tool bundles onto a new watch. listen stays
   connected and prints what the watch sends, answering its apps' http
@@ -265,4 +268,24 @@ export async function listen(
       setTimeout(resolve, waitMs);
     }
   });
+}
+
+// Sends a text file for the watch's Notes app, or takes it off with `remove`.
+export async function note(session: WatchSession, args: string[]) {
+  const [file, font = 'normal'] = args;
+  if (!file) {
+    throw new Error('Give the text file to show, or remove.');
+  }
+  const service = await session.files();
+  if (file === 'remove') {
+    await removeNote(service);
+    say('Removed the note.');
+    return;
+  }
+  if (!(NOTE_FONTS as readonly string[]).includes(font)) {
+    throw new Error(`The font is one of ${NOTE_FONTS.join(', ')}, not ${font}.`);
+  }
+  const bytes = new Uint8Array(readFileSync(file));
+  await syncNote(service, bytes, font as NoteFont, session.deviceId, null, false);
+  say(`Sent ${basename(file)} (${bytes.length} bytes) to ${NOTE_PATH}, in the ${font} font.`);
 }

@@ -3,11 +3,12 @@
 // It runs the same interface as the phone app, served from the web export,
 // with Bluetooth handled here in the main process.
 
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
-const { join } = require('node:path');
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { basename, join } = require('node:path');
 
 const { WatchBle } = require('../node/ble');
 const { DesktopIntegration } = require('../node/desktop');
+const { NoteFileWatches, readNoteFile } = require('../node/note-file');
 const { serve } = require('./server');
 
 const DIST = join(__dirname, '..', 'dist');
@@ -16,6 +17,7 @@ let window_ = null;
 let ble = null;
 let server = null;
 let desktop = null;
+let noteWatches = null;
 
 function sendToWindow(channel, ...args) {
   if (window_ && !window_.isDestroyed()) {
@@ -101,6 +103,27 @@ function wireDesktop() {
   handle('desktop:players', () => desktop.emitPlayers());
 }
 
+// The text file shown on the watch's notes app: chosen in a file dialog, read from disk and watched for saves.
+function wireNotes() {
+  noteWatches = new NoteFileWatches((id) => sendToWindow('notes:changed', id));
+
+  handle('notes:pick', async () => {
+    const chosen = await dialog.showOpenDialog(window_, {
+      title: 'Choose a note for the watch',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Text', extensions: ['txt', 'md', 'text'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    });
+    const path = chosen.canceled ? null : chosen.filePaths[0];
+    return path ? { name: basename(path), uri: path } : null;
+  });
+  handle('notes:read', (path) => readNoteFile(path));
+  handle('notes:watch', (path) => noteWatches.start(path));
+  handle('notes:unwatch', (id) => noteWatches.stop(id));
+}
+
 // The desktop's location service and notification server know the app by its desktop file.
 app.setName('NeoTime Companion');
 if (process.platform === 'linux') {
@@ -110,6 +133,7 @@ if (process.platform === 'linux') {
 app.whenReady().then(async () => {
   wireBluetooth();
   wireDesktop();
+  wireNotes();
   await createWindow();
 
   app.on('activate', () => {
@@ -122,6 +146,7 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', async () => {
   await ble?.destroy().catch(() => undefined);
   await desktop?.stop().catch(() => undefined);
+  noteWatches?.stopAll();
   server?.close();
   if (process.platform !== 'darwin') {
     app.quit();

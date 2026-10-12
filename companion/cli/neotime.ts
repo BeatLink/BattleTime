@@ -9,7 +9,21 @@ import { flash, flashUsage } from './commands/flash';
 import { recovery, recoveryUsage } from './commands/recovery';
 import { scan, scanUsage } from './commands/scan';
 import { diag, line, send, sendUsage } from './commands/send';
-import { alarms, apps, backup, files, listen, restore, settings, setTime, status, steps, watchUsage, weather } from './commands/watch';
+import {
+  alarms,
+  apps,
+  backup,
+  files,
+  listen,
+  note,
+  restore,
+  settings,
+  setTime,
+  status,
+  steps,
+  watchUsage,
+  weather,
+} from './commands/watch';
 import { say, warn } from './output';
 import { resolveAddress } from './target';
 
@@ -92,6 +106,7 @@ const NEEDS_WATCH = new Set([
   'steps',
   'weather',
   'files',
+  'note',
   'apps',
   'backup',
   'restore',
@@ -224,6 +239,10 @@ async function main(argv: string[]): Promise<number> {
 
       case 'files':
         await files(session, rest);
+        break;
+
+      case 'note':
+        await note(session, rest);
         break;
 
       case 'apps':
