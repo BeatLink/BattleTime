@@ -182,6 +182,57 @@ fn setting_a_system_value_redraws_what_shows_it() {
     assert!(watch.shows_text("Steps 12"));
 }
 
+/// Counts the phone connecting and going away through `phone` subscriptions.
+const PHONE_LISTENER_APP: &str = r#"
+// A test app: it counts how often the phone connects and goes away.
+import { signal } from "@preact/signals";
+import { define_app, phone } from "neotime";
+import { Label, Screen } from "neotime/widgets";
+
+const connects = signal(0);
+const disconnects = signal(0);
+
+function count_connect() {
+  connects.value = connects.value + 1;
+}
+
+function count_disconnect() {
+  disconnects.value = disconnects.value + 1;
+}
+
+function Listener() {
+  return (
+    <Screen>
+      <Label>{`Connects ${connects.value}`}</Label>
+      <Label>{`Disconnects ${disconnects.value}`}</Label>
+    </Screen>
+  );
+}
+
+export default define_app({
+  id: "listener",
+  name: "Listener",
+  screens: { main: Listener },
+  subscriptions: [
+    phone("connects", count_connect, { only_while_open: true }),
+    phone("disconnects", count_disconnect, { only_while_open: true }),
+  ],
+});
+"#;
+
+#[test]
+fn setting_is_phone_connected_pushes_the_phone_event() {
+    let mut watch = TestWatch::open_source(PHONE_LISTENER_APP).unwrap();
+
+    watch.set_system_value(SystemValue::IsPhoneConnected, 0);
+    assert!(watch.shows_text("Disconnects 1"), "{:?}", watch.visible_texts());
+    assert!(watch.shows_text("Connects 0"));
+
+    watch.set_system_value(SystemValue::IsPhoneConnected, 1);
+    assert!(watch.shows_text("Connects 1"), "{:?}", watch.visible_texts());
+    assert!(watch.failures().is_empty());
+}
+
 #[test]
 fn gestures_nobody_answers_are_left_to_the_system() {
     let mut watch = counter();

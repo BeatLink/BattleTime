@@ -533,6 +533,10 @@ watch face, the launcher and the apps through `neotime-app-host`:
   shakes reach the shell through `app_events.rs`, which keeps only the latest of each; the host
   hands the latest reading to `acceleration` subscriptions at their period and a shake to
   `motion("shake")` at once.
+- **Phone connection.** `phone.rs` holds whether a phone is connected, which the Bluetooth task
+  sets when a connection is accepted and clears when it ends. Each change wakes the shell, which
+  redraws what reads `is_phone_connected` and sends the app's `phone` subscriptions `connects` or
+  `disconnects`, through the host's `report_system_value_changes`.
 - **Companion app.** The Nordic UART service carries the companion's JSON lines. The Bluetooth
   task hands each write to `neotime-companion`; a `settings` message goes to the shell, which
   applies the theme to the open app at once, keeps it in `/settings/theme`, passes the other

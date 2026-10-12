@@ -617,6 +617,7 @@ What happens next is driven by the embedder:
 | `deliver(event, now, system)` | Hands a `PushedEvent` to the subscriptions of its kind: steps, motion, heart rate, battery, phone, notifications and calls (with their text), music, weather, navigation and settings changes. Acceleration readings are kept and handed over at each subscription's period. |
 | `save_changed_state(out)` | Writes the persistent state when any of it changed since the last save, else returns `None`. `LARGEST_SAVED_STATE_BYTES` is always big enough. |
 | `system_values_changed(bits, now, system)` | Works out again what reads the system values that changed, such as the battery. `bits` is `SystemValue::bit` of each, or'd together; values the phone sends together, such as the weather, share one bit. |
+| `report_system_value_changes(bits, now, system)` | Does the same, then delivers the events some changes stand for, reading the new values from `system`: `steps` when `steps_today` changed and `phone` when `is_phone_connected` did. The firmware's shell and the test watch's `set_system_value` call it. |
 | `set_theme(theme)` | Resolves every colour again from the values already held. No app code runs. |
 | `draw(screen)` | Paints only the parts of the screen that changed. |
 | `take_changed_persistent_variables()` | Which persistent variables changed since the last call, one bit each, so the embedder can save them. |

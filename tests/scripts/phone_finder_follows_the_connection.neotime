@@ -1,0 +1,10 @@
+# The phone finder says when no phone is connected, and stops saying it once one connects.
+open app phone-finder
+expect no text "Phone not connected"
+
+set is_phone_connected false
+expect text "Phone not connected"
+
+set is_phone_connected true
+expect no text "Phone not connected"
+expect no failures

@@ -1262,6 +1262,22 @@ impl<'image> AppHost<'image> {
         self.after_change(0, changed, now, system);
     }
 
+    /// Redraws what reads the changed system values, then pushes the events some of them stand for.
+    ///
+    /// A new step count pushes `steps`, and the phone connecting or going away pushes `phone`, with
+    /// the values read from `system`.
+    pub fn report_system_value_changes(&mut self, changed: u32, now: Value, system: &mut impl System) {
+        self.system_values_changed(changed, now, system);
+        if changed & SystemValue::StepsToday.bit() != 0 {
+            let steps_today = system.read(SystemValue::StepsToday);
+            self.deliver(PushedEvent::Steps { steps_today }, now, system);
+        }
+        if changed & SystemValue::IsPhoneConnected.bit() != 0 {
+            let is_connected = system.read(SystemValue::IsPhoneConnected) != 0;
+            self.deliver(PushedEvent::Phone { is_connected }, now, system);
+        }
+    }
+
     /// Changes the theme and redraws every colour, without running any app code.
     pub fn set_theme(&mut self, theme: Theme) {
         self.theme = theme;

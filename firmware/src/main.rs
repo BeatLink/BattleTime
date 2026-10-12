@@ -79,6 +79,8 @@ mod shell;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod motion;
 mod packages;
+#[cfg_attr(not(with_shell), allow(dead_code))]
+mod phone;
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod status;
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -661,6 +663,7 @@ async fn run_bluetooth(
             };
             screen.write_line(line::BLUETOOTH, "Phone connected");
             storage::leave_breadcrumb(stage::CONNECTED);
+            phone::set_connected(true);
             serve_connection(
                 &connection,
                 &server,
@@ -671,6 +674,7 @@ async fn run_bluetooth(
                 files,
             )
             .await;
+            phone::set_connected(false);
             screen.write_line(line::BLUETOOTH, "Ready for updates");
         }
     };

@@ -35,6 +35,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **The time from the phone,** set through the Bluetooth Current Time service.
 - **The battery level on the phone,** through the standard Bluetooth Battery service, updated as it
   changes.
+- **Whether a phone is connected.** Faces show the Bluetooth icon while a phone is connected, and
+  phone apps such as the phone finder say when none is. Apps hear the phone connect and go away.
 - **Themes.** Six presets (dark, light, ocean, forest, sunset and contrast), picked in the Settings
   app or from the companion app, which can also set any colours. They are kept through a restart,
   and the open app changes colour at once. See [companion-protocol.md](companion-protocol.md).

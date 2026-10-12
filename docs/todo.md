@@ -326,9 +326,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **Bonding** saved to the file system and restored at start.
 - [ ] **Privacy:** resolvable private addresses.
 - [ ] **A setting to turn the radio off.**
-- [ ] **Tell apps when a phone connects.** `is_phone_connected` always reads false and no `phone`
-  event is sent, so the digital face's Bluetooth icon never shows and phone apps cannot say "not
-  connected". Set it on connect and disconnect, and wake the shell on both.
 - [ ] **Finish the Current Time service.** Reading 0x2A2B returns zeros instead of the watch's
   time, and the Local Time Information characteristic (0x2A0F) is missing. InfiniTime serves both.
 - [ ] **Advertise like InfiniTime.** The firmware advertises every 160 ms all the time. InfiniTime

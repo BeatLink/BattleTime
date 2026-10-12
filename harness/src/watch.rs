@@ -326,12 +326,15 @@ impl TestWatch {
         self.host.deliver(event, now, &mut self.system)
     }
 
-    /// Changes a system value, such as the battery, and lets the app redraw what shows it.
+    /// Changes a system value, such as the battery, as the watch's shell reports it.
+    ///
+    /// The app redraws what shows it, and a change of the step count or of `is_phone_connected`
+    /// also pushes the `steps` or `phone` event.
     pub fn set_system_value(&mut self, value: SystemValue, number: Value) {
         self.system.set(value, number);
         let now = self.now();
         self.host
-            .system_values_changed(value.bit(), now, &mut self.system);
+            .report_system_value_changes(value.bit(), now, &mut self.system);
     }
 
     pub fn screen_on(&mut self) -> EventResult {

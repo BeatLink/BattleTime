@@ -165,12 +165,16 @@ struct FakeSystem {
     effects: Vec<(EffectKind, Value, Option<String>)>,
     failures: Vec<AppFailure>,
     weather_location: String,
+    steps_today: Value,
+    is_phone_connected: bool,
 }
 
 impl SystemValues for FakeSystem {
     fn read(&self, value: SystemValue) -> Value {
         match value {
             SystemValue::Uses24HourClock => 1,
+            SystemValue::StepsToday => self.steps_today,
+            SystemValue::IsPhoneConnected => self.is_phone_connected as Value,
             _ => 0,
         }
     }
@@ -1273,4 +1277,94 @@ fn open_into_opens_the_app_in_the_slot() {
 
     assert!(AppHost::open_into(&mut slot, &[1, 2, 3], DEFAULT_THEME, &[], START_TIME, &mut system).is_err());
     assert!(slot.is_some());
+}
+
+// ============================================================================
+// System value changes
+// ============================================================================
+
+/// An app that counts the phone connecting in state 0 and going away in state 1, and keeps the steps in 2.
+fn phone_listener_image() -> Vec<u8> {
+    use neotime_runtime::subscriptions::{Subscription, SubscriptionKind, SubscriptionValue};
+    use Instruction::*;
+
+    let mut writer = ImageWriter::new("phone", "Phone", AppKind::App, 1);
+    writer.variable("connects", ValueType::Int, false, 0);
+    writer.variable("disconnects", ValueType::Int, false, 0);
+    writer.variable("steps", ValueType::Int, false, 0);
+    let add_one_to = |writer: &mut ImageWriter, variable: u8| {
+        writer.handler(code(|code| {
+            code.emit(ReadState(variable))
+                .emit(PushSmall(1))
+                .emit(Add)
+                .emit(WriteState(variable));
+        }))
+    };
+    let count_connect = add_one_to(&mut writer, 0);
+    let count_disconnect = add_one_to(&mut writer, 1);
+    let store_steps = writer.handler(code(|code| {
+        code.emit(ReadEvent(0)).emit(WriteState(2));
+    }));
+    let subscription = |kind, handler, detail| Subscription {
+        kind,
+        only_while_open: true,
+        handler,
+        detail,
+        days: 0,
+        value: SubscriptionValue::Constant(0),
+    };
+    writer.subscription(subscription(SubscriptionKind::Phone, count_connect, 0));
+    writer.subscription(subscription(SubscriptionKind::Phone, count_disconnect, 1));
+    writer.subscription(subscription(SubscriptionKind::Steps, store_steps, 0));
+    writer.widget(WidgetKind::Column, 0, &[]);
+    writer.build()
+}
+
+#[test]
+fn the_phone_connecting_and_going_away_reach_the_app_as_phone_events() {
+    let image = phone_listener_image();
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let phone_changed = SystemValue::IsPhoneConnected.bit();
+
+    system.is_phone_connected = true;
+    host.report_system_value_changes(phone_changed, START_TIME + 1, &mut system);
+    assert_eq!(host.state().get(0).unwrap(), 1);
+    assert_eq!(host.state().get(1).unwrap(), 0);
+
+    system.is_phone_connected = false;
+    host.report_system_value_changes(phone_changed, START_TIME + 2, &mut system);
+    assert_eq!(host.state().get(0).unwrap(), 1);
+    assert_eq!(host.state().get(1).unwrap(), 1);
+    assert!(system.failures.is_empty());
+}
+
+#[test]
+fn a_new_step_count_reaches_the_app_as_a_steps_event() {
+    let image = phone_listener_image();
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    system.steps_today = 1234;
+    host.report_system_value_changes(SystemValue::StepsToday.bit(), START_TIME + 1, &mut system);
+
+    assert_eq!(host.state().get(2).unwrap(), 1234);
+    assert_eq!(host.state().get(0).unwrap(), 0);
+    assert_eq!(host.state().get(1).unwrap(), 0);
+}
+
+#[test]
+fn other_system_value_changes_push_no_events() {
+    let image = phone_listener_image();
+    let mut system = FakeSystem {
+        steps_today: 99,
+        is_phone_connected: true,
+        ..FakeSystem::default()
+    };
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    host.report_system_value_changes(SystemValue::BatteryPercent.bit(), START_TIME + 1, &mut system);
+
+    assert_eq!(host.state().get(0).unwrap(), 0);
+    assert_eq!(host.state().get(2).unwrap(), 0);
 }

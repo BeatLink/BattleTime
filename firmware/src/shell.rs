@@ -44,7 +44,7 @@ use crate::{
     backlight::{self, Backlight},
     battery, clock,
     diagnostics::{self, Counter},
-    help, motion, packages, settings, storage, system_values,
+    help, motion, packages, phone, settings, storage, system_values,
     touch::TOUCHES,
     vibration, SharedDisplay,
 };
@@ -149,6 +149,7 @@ impl SystemValues for WatchSystem {
             SystemValue::IsCharging => battery::is_charging() as Value,
             SystemValue::StepsToday => motion::steps_today() as Value,
             SystemValue::IsBluetoothEnabled => 1,
+            SystemValue::IsPhoneConnected => phone::is_connected() as Value,
             SystemValue::Brightness => self.brightness as Value,
             SystemValue::NextAlarm => neotime_runtime::NONE,
             SystemValue::InstalledAppCount => self.installed.listed.len() as Value,
@@ -475,12 +476,7 @@ impl Shell {
         let Some(host) = &mut self.host else {
             return;
         };
-        let now = clock::now();
-        host.system_values_changed(changed, now, &mut self.system);
-        if changed & SystemValue::StepsToday.bit() != 0 {
-            let steps_today = motion::steps_today() as Value;
-            host.deliver(PushedEvent::Steps { steps_today }, now, &mut self.system);
-        }
+        host.report_system_value_changes(changed, clock::now(), &mut self.system);
     }
 
     /// Buzzes for a phone notification, and passes sensor readings and notifications to the open app.
