@@ -565,6 +565,30 @@ fn a_tick_redraws_a_clock_bound_label_once_a_second() {
 }
 
 #[test]
+fn with_the_screen_dark_only_subscriptions_set_the_next_wakeup() {
+    let mut system = FakeSystem::default();
+    const START_TIME: Value = 1_000_020_000;
+    let clock = stopwatch_image();
+    let subscriber = subscriber_image(false);
+    let mut clock_host = AppHost::open(&clock, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let subscriber_host = AppHost::open(&subscriber, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    clock_host.draw(&mut FakeScreen::new()).unwrap();
+    click_on(
+        &mut clock_host,
+        stopwatch_widgets::START_BUTTON,
+        START_TIME,
+        &mut system,
+    );
+
+    assert!(clock_host.next_wakeup(START_TIME).is_some());
+    assert_eq!(clock_host.next_subscription_due(START_TIME), None);
+    assert_eq!(
+        subscriber_host.next_subscription_due(START_TIME),
+        Some(START_TIME + 60_000)
+    );
+}
+
+#[test]
 fn a_screen_without_the_clock_never_wakes() {
     let image = counter_image();
     let mut system = FakeSystem::default();

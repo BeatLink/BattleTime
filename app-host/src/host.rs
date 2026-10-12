@@ -1227,6 +1227,11 @@ impl<'image> AppHost<'image> {
             .min()
     }
 
+    /// When the next subscription comes due, leaving out redraws, for while the screen is dark.
+    pub fn next_subscription_due(&self, now: Value) -> Option<Value> {
+        self.next_timer(now)
+    }
+
     /// Redraws what reads the system values that changed, given as `SystemValue::bit` values or'd together.
     pub fn system_values_changed(&mut self, changed: u32, now: Value, system: &mut impl System) {
         self.note_time(now, system);

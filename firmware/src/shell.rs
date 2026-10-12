@@ -122,6 +122,8 @@ struct WatchSystem {
     /// A preset theme the open app picked, applied once the host call returns.
     theme_request: Option<Theme>,
     installed: InstalledApps,
+    /// Whether the open app asked to turn the screen on (`wake_screen`) or off (`screen_off`).
+    screen_request: Option<bool>,
 }
 
 impl SystemValues for WatchSystem {
@@ -204,6 +206,8 @@ impl System for WatchSystem {
             }
             EffectKind::Back | EffectKind::Close => self.request = Request::Back,
             EffectKind::SetBrightness => self.brightness_request = Some(effect.number(0).clamp(1, 3) as u8),
+            EffectKind::WakeScreen => self.screen_request = Some(true),
+            EffectKind::ScreenOff => self.screen_request = Some(false),
             EffectKind::KeepScreenOn => self.keep_screen_on = effect.number(0) != 0,
             EffectKind::SetSetting if effect.text(0) == Some(app_settings::THEME_SETTING) => {
                 self.theme_request = app_settings::preset_theme(effect.number(1));
@@ -514,12 +518,21 @@ impl Shell {
         self.dimmed = false;
         self.backlight.turn_on();
         if let Some(host) = &mut self.host {
-            host.screen_turned_on(clock::now(), &mut self.system);
+            let now = clock::now();
+            host.screen_turned_on(now, &mut self.system);
+            // The clock was not redrawn while the screen was dark, so this catches it up.
+            host.tick(now, &mut self.system);
         }
     }
 
-    /// Carries out what the last host call's handlers asked for.
-    fn follow_requests(&mut self) {
+    /// Carries out what the last host call's handlers asked for, and says whether an app woke the screen.
+    fn follow_requests(&mut self) -> bool {
+        let screen_request = self.system.screen_request.take();
+        match screen_request {
+            Some(true) if !self.lit => self.turn_screen_on(),
+            Some(false) if self.lit => self.turn_screen_off(),
+            _ => {}
+        }
         if let Some(level) = self.system.brightness_request.take() {
             self.app_set_brightness = true;
             self.set_brightness(level);
@@ -532,6 +545,7 @@ impl Shell {
             Request::Open(showing) => self.open(showing),
             Request::Back => self.go_back(),
         }
+        screen_request == Some(true)
     }
 
     fn draw(&mut self) {
@@ -597,6 +611,7 @@ pub async fn run_shell(
             theme_preset: app_settings::preset_number(&theme),
             theme_request: None,
             installed: InstalledApps::read(files),
+            screen_request: None,
         },
         theme,
         app_set_brightness: false,
@@ -623,6 +638,10 @@ pub async fn run_shell(
         let now = clock::now();
         shell.chime_if_due(now);
         let mut wake_at = match &shell.host {
+            // A dark screen needs no redraws, so only the app's subscriptions wake the shell.
+            Some(host) if !shell.lit && !shell.dimmed => host
+                .next_subscription_due(now)
+                .map_or(Instant::MAX, clock::instant_at),
             Some(host) => host.next_wakeup(now).map_or(Instant::MAX, clock::instant_at),
             None => clock::instant_at(help::next_change(now)),
         };
@@ -694,6 +713,8 @@ pub async fn run_shell(
                 shell.reload_apps();
             }
         }
-        shell.follow_requests();
+        if shell.follow_requests() {
+            last_input = Instant::now();
+        }
     }
 }

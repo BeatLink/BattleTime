@@ -490,7 +490,10 @@ watch face, the launcher and the apps through `neotime-app-host`:
   reads the button every 20 ms and also reports short and long presses.
 - **Sleep.** After the settings' screen timeout without input, 15 seconds at first, the backlight goes off, the display sleeps and the
   app gets `screen_off`, unless it called `keep_screen_on(true)`; the next touch or press turns
-  them on without acting on it. The loop sleeps until the next input or until `next_wakeup`.
+  them on without acting on it. The loop sleeps until the next input or until `next_wakeup`;
+  while the screen is dark it wakes only for the app's subscriptions (`next_subscription_due`),
+  and catches the clock's redraws up when the screen turns on. An app's `wake_screen()` and
+  `screen_off()` turn the screen on and off, and waking it restarts the timeout.
 - **Always-on screen.** With the always-on setting, the screen dims instead of turning off: the
   panel enters its 8-colour low-power mode, the backlight drops to a tenth of its low level, and
   the face keeps drawing.
