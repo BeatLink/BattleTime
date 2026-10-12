@@ -475,15 +475,15 @@ impl<'image> AppHost<'image> {
         let drag = self
             .scroll_drag
             .and_then(|drag| Some((NodeKey::of(self.nodes.get(drag.node_index)?), drag)));
-        let scrolled = self
-            .scroll_move
-            .take()
-            .and_then(|scroll_move| Some(NodeKey::of(self.nodes.get(scroll_move.node_index)?)));
+        let scrolled = self.scroll_move.take().and_then(|scroll_move| {
+            Some((NodeKey::of(self.nodes.get(scroll_move.node_index)?), scroll_move))
+        });
         let mut old: Vec<Option<Box<Node>>> =
             core::mem::take(&mut self.nodes).into_iter().map(Some).collect();
         self.dirty_nodes = 0;
 
         let mut first_failure = None;
+        let mut created: Vec<usize> = Vec::new();
         let mut pending: Vec<(u16, u16, Option<u8>)> = alloc::vec![(self.screen_root, 0, None)];
         while let Some((widget_index, row, parent)) = pending.pop() {
             let Some(widget) = self.tree.widget(widget_index) else {
@@ -512,6 +512,7 @@ impl<'image> AppHost<'image> {
                     self.nodes.push(Box::new(node));
                     first_failure = first_failure.or(self.fill_node(node_index, now, system));
                     self.dirty_nodes |= 1 << node_index;
+                    created.push(node_index);
                 }
             }
             if self.nodes[node_index].settings.visible {
@@ -538,8 +539,25 @@ impl<'image> AppHost<'image> {
         for (node, end) in self.nodes.iter_mut().zip(ends) {
             node.subtree_end = end as u8;
         }
+        // During a scroll the panel moves a list's old pixels and draws the rows coming into view, so
+        // rows built or dropped inside it need no drawing of their own.
+        let scrolled_list = scrolled.as_ref().and_then(|(key, _)| {
+            let node_index = self.nodes.iter().position(|node| NodeKey::of(node) == *key)?;
+            Some((node_index, self.nodes[node_index].covered_area()?))
+        });
+        if let Some((list, _)) = scrolled_list {
+            let inside = list + 1..self.nodes[list].subtree_end as usize;
+            for &node_index in created.iter().filter(|index| inside.contains(index)) {
+                self.dirty_nodes &= !(1 << node_index);
+            }
+        }
         for node in old.into_iter().flatten() {
-            if let Some(area) = node.drawn_bounds {
+            let Some(area) = node.drawn_bounds else {
+                continue;
+            };
+            let moved_with_the_list =
+                scrolled_list.is_some_and(|(_, list_area)| list_area.intersect(area) == Some(area));
+            if !moved_with_the_list {
                 self.cleared_regions.push(area);
             }
         }
@@ -547,12 +565,11 @@ impl<'image> AppHost<'image> {
             let node_index = self.nodes.iter().position(|node| NodeKey::of(node) == key)?;
             Some(ScrollDrag { node_index, ..drag })
         });
-        // The node numbers changed, so a scroll not drawn yet is drawn as the list's own change instead.
-        if let Some(node_index) =
-            scrolled.and_then(|key| self.nodes.iter().position(|node| NodeKey::of(node) == key))
-        {
-            self.mark_subtree_dirty(node_index);
-        }
+        // A scroll not drawn yet still moves the list in the panel; rows built for it draw as they come into view.
+        self.scroll_move = scrolled.and_then(|(key, scroll_move)| {
+            let node_index = self.nodes.iter().position(|node| NodeKey::of(node) == key)?;
+            Some(scroll_move.for_node(node_index))
+        });
         self.screen_expressions = self.expressions_on_screen();
         self.nodes_out_of_date = false;
         self.fill_app_lists(system);
@@ -1452,7 +1469,9 @@ impl<'image> AppHost<'image> {
             self.touch_scrolled = true;
             self.note_scroll(drag.node_index, moved_rows);
             if self.rows_in_view_moved() {
-                let failure = self.build_nodes(now, system).or(self.settle_layout(now, system));
+                let failure = self.build_nodes(now, system);
+                self.measure_and_lay_out();
+                let failure = failure.or(self.settle_layout(now, system));
                 if let Some(failure) = failure {
                     system.app_failed(failure);
                 }
@@ -1647,6 +1666,16 @@ impl<'image> AppHost<'image> {
     /// The text a widget of the open screen shows.
     pub fn widget_text(&self, widget_index: u16) -> Option<&str> {
         Some(self.node(widget_index)?.text())
+    }
+
+    /// Each node of a widget, as where it is, whether it is shown and its text: one for most widgets,
+    /// one for each built row of a repeated list.
+    pub fn widget_nodes(&self, widget_index: u16) -> Vec<(Rect, bool, &str)> {
+        self.nodes
+            .iter()
+            .filter(|node| node.widget_index == widget_index)
+            .map(|node| (node.bounds, node.shown, node.text()))
+            .collect()
     }
 
     /// The text each node of a widget shows: one for most widgets, one for each built row of a repeated list.

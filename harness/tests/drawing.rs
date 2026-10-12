@@ -459,3 +459,36 @@ fn a_list_opened_after_a_scrolled_launcher_still_scrolls_with_the_panel() {
     assert_eq!(watch.scrolling_band(), (42, 232));
     assert!(sent.iter().all(|&pixels| pixels <= 6 * SIDE), "{sent:?}");
 }
+
+#[test]
+fn a_list_of_repeated_rows_scrolls_with_the_panel_while_rows_are_built_and_dropped() {
+    let source = r#"
+import { define_app, range } from "neotime";
+import { Button, List } from "neotime/widgets";
+
+function Rows() {
+  return (
+    <List padding={8} gap={8}>
+      {range(20).map((place) => (
+        <Button height={44}>{`Row ${place}`}</Button>
+      ))}
+    </List>
+  );
+}
+
+export default define_app({ id: "rows", name: "Rows", screens: { main: Rows } });
+"#;
+    let mut app = TestWatch::open_source(source).unwrap();
+    let mut watch = Watch::new();
+    watch.draw_everything(&mut app);
+    let nodes_at_the_top = app.host().node_count();
+
+    let mut sent = drag_drawing_each_move(&mut app, &mut watch, 220, 30);
+    sent.extend(drag_drawing_each_move(&mut app, &mut watch, 220, 30));
+
+    assert!(app.shows_text("Row 9"), "{:?}", app.visible_texts());
+    assert!(!app.shows_text("Row 0"));
+    assert!(app.host().node_count() <= nodes_at_the_top + 1);
+    let most_sent = sent.iter().max().copied().unwrap();
+    assert!(most_sent <= 8 * SIDE, "a move sent {most_sent} pixels");
+}

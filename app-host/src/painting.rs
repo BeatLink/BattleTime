@@ -70,6 +70,13 @@ pub(super) struct ScrollMove {
     rows: i32,
 }
 
+impl ScrollMove {
+    /// The same move, for the list's node at its new place after the nodes were built again.
+    pub(super) fn for_node(self, node_index: usize) -> ScrollMove {
+        ScrollMove { node_index, ..self }
+    }
+}
+
 fn rows_from(first_row: i32, row_count: i32) -> Rect {
     Rect {
         x: 0,

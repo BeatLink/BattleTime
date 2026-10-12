@@ -469,11 +469,16 @@ impl TestWatch {
 
     /// Where a widget can be seen: shown, and inside the screen and every widget around it.
     pub fn visible_area(&self, widget_index: u16) -> Option<Rect> {
-        let parents: HashMap<u16, Option<u16>> = self.screen_widgets().into_iter().collect();
         let (bounds, is_shown) = self.host.widget_bounds(widget_index)?;
         if !is_shown {
             return None;
         }
+        self.area_inside_parents(widget_index, bounds)
+    }
+
+    /// The part of a widget's box inside the screen and every widget around it.
+    fn area_inside_parents(&self, widget_index: u16, bounds: Rect) -> Option<Rect> {
+        let parents: HashMap<u16, Option<u16>> = self.screen_widgets().into_iter().collect();
         let mut area = bounds.intersect(SCREEN_AREA)?;
         let mut parent = parents.get(&widget_index).copied().flatten();
         while let Some(parent_index) = parent {
@@ -536,18 +541,23 @@ impl TestWatch {
     /// Every text that can be seen with where it is: a widget's text, or each row a list widget draws itself.
     pub fn visible_text_areas(&self) -> Vec<(String, Rect)> {
         let mut texts = Vec::new();
-        for widget_index in self.visible_widgets() {
-            let Some(area) = self.visible_area(widget_index) else {
-                continue;
-            };
-            let rows = self.host.widget_rows(widget_index);
-            if rows.is_empty() {
-                let text = self.host.widget_text(widget_index).unwrap_or_default();
-                texts.push((text.to_string(), area));
-            }
-            for (text, row) in rows {
-                if let Some(row_area) = row.intersect(area) {
-                    texts.push((text.to_string(), row_area));
+        for (widget_index, _) in self.screen_widgets() {
+            // A repeated list's row has a node for each row built, each with its own text.
+            for (bounds, is_shown, text) in self.host.widget_nodes(widget_index) {
+                let Some(area) = is_shown
+                    .then(|| self.area_inside_parents(widget_index, bounds))
+                    .flatten()
+                else {
+                    continue;
+                };
+                let rows = self.host.widget_rows(widget_index);
+                if rows.is_empty() {
+                    texts.push((text.to_string(), area));
+                }
+                for (text, row) in rows {
+                    if let Some(row_area) = row.intersect(area) {
+                        texts.push((text.to_string(), row_area));
+                    }
                 }
             }
         }
