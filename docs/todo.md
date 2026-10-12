@@ -77,9 +77,9 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   reset in the emulator; it has not been tried on a watch.
 - [ ] **Run the power-cut sweeps** in `tests/emulator/migration.robot` (tagged `long`), which have
   never run on the final reloader. They take hours, so check the runner's memory early.
-- [ ] **Fix the reloader's button-escape test.** "Holding The Button Leaves The Reloader For The Old
-  Update Mode" fails in the emulator, likely in its button model; wasp-os's bootloader does start a
-  5 second watchdog and enters its update mode on a held button.
+- [ ] **Check why wasp-os's update mode gives way to the reloader** about 4 seconds after the
+  button escape in the emulator, with no reset between. Its advertising never times out, so this may
+  be the emulator's SoftDevice; if a watch does the same, the escape leaves the reloader running.
 - [ ] **Run the DFU service against more clients:** wasp-os's `dfu.py` works on the watch; the
   companion app and Gadgetbridge are next.
 - [ ] **Async flash in the firmware.** Flash writes block the Bluetooth host for up to a sector

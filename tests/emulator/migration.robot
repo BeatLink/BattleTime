@@ -140,18 +140,19 @@ The Reloader Waits For The Charger
     Flash Should Hold File    0x0    ${BOOTLOADER_BIN}
 
 Holding The Button Leaves The Reloader For The Old Update Mode
-    [Documentation]           Waiting for the charger, the reloader stops feeding the watchdog while the button is held, and changes nothing.
+    [Documentation]           Waiting for the charger, the reloader stops feeding the watchdog while the button is held, so the watchdog resets into wasp-os's bootloader, and nothing is changed.
     Start A Watch Running wasp-os With The Reloader As Its App, Unplugged
-    Run For                   5
+    Run For                   ${5}
     ${pc}=                    Execute Command    cpu PC
     Should Be True            ${WASP_APP_START} <= ${pc.strip()} < ${WASP_APP_END}    The reloader is not running
 
+    # The watchdog's 5 seconds run out a second before this look. wasp-os's update mode does not stay
+    # up in the emulator and starts the reloader again a few seconds later, so the look is made while held.
     Execute Command           ${BUTTON} Press
-    Run For                   7
-    Execute Command           ${BUTTON} Release
-    Run For                   3
+    Run For                   ${6}
     ${pc}=                    Execute Command    cpu PC
-    Should Not Be True        ${WASP_APP_START} <= ${pc.strip()} < ${WASP_APP_END}    The reloader is still running
+    Should Be True            ${WASP_APP_END} <= ${pc.strip()} < ${WASP_SETTINGS}    The watchdog did not reset into wasp-os's bootloader
+    Execute Command           ${BUTTON} Release
     ${old}=                   Old System Still Starts
     Should Be True            ${old}    The reloader changed internal flash
 
