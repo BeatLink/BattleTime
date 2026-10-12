@@ -178,7 +178,8 @@ impl<'files, S: Storage> Packages<'files, S> {
                 apps.push(app);
             }
         }
-        apps.sort_by(|a, b| a.id.cmp(&b.id));
+        // Ids are unique, so this gives the stable order without the stable sort's 4 KB buffer on the stack.
+        apps.sort_unstable_by(|a, b| a.id.cmp(&b.id));
         Ok(apps)
     }
 
