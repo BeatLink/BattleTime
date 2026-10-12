@@ -153,14 +153,14 @@ impl embedded_hal_async::delay::DelayNs for CountingDelay {
     }
 }
 
-struct NoDelay;
-
-impl DelayNs for NoDelay {
-    fn delay_ns(&mut self, _nanoseconds: u32) {}
+impl DelayNs for CountingDelay {
+    fn delay_ns(&mut self, nanoseconds: u32) {
+        self.microseconds_waited += nanoseconds / 1000;
+    }
 }
 
-fn started_flash() -> ExternalFlash<FakeChip> {
-    ExternalFlash::new(FakeChip::new(), &mut NoDelay).unwrap()
+fn started_flash() -> ExternalFlash<FakeChip, CountingDelay> {
+    ExternalFlash::new(FakeChip::new(), CountingDelay::default()).unwrap()
 }
 
 // ============================================================================
@@ -171,9 +171,10 @@ fn started_flash() -> ExternalFlash<FakeChip> {
 fn starting_wakes_the_chip_and_checks_its_id() {
     let flash = started_flash();
 
-    let chip = flash.release();
+    let parts = flash.release();
 
-    assert!(!chip.asleep);
+    assert!(!parts.spi.asleep);
+    assert_eq!(parts.delay.microseconds_waited, WAKE_UP_TIME_IN_MICROSECONDS);
 }
 
 #[test]
@@ -185,7 +186,7 @@ fn accepts_a_four_megabyte_chip_from_another_maker() {
         capacity: 0x16,
     };
 
-    let result = ExternalFlash::new(chip, &mut NoDelay);
+    let result = ExternalFlash::new(chip, CountingDelay::default());
 
     assert!(result.is_ok());
 }
@@ -200,7 +201,7 @@ fn refuses_a_chip_of_another_size() {
     };
     chip.chip_id = smaller_chip_id;
 
-    let result = ExternalFlash::new(chip, &mut NoDelay);
+    let result = ExternalFlash::new(chip, CountingDelay::default());
 
     assert!(matches!(result, Err(Error::UnknownChip(id)) if id == smaller_chip_id));
 }
@@ -214,7 +215,7 @@ fn refuses_a_chip_that_does_not_answer() {
         capacity: 0xFF,
     };
 
-    let result = ExternalFlash::new(chip, &mut NoDelay);
+    let result = ExternalFlash::new(chip, CountingDelay::default());
 
     assert!(matches!(result, Err(Error::UnknownChip(_))));
 }
@@ -225,7 +226,7 @@ fn sleeping_puts_the_chip_in_deep_power_down() {
 
     flash.sleep().unwrap();
 
-    assert!(flash.release().asleep);
+    assert!(flash.release().spi.asleep);
 }
 
 // ============================================================================
@@ -255,20 +256,25 @@ fn splits_a_write_where_it_crosses_a_program_page() {
 
     assert_eq!(read_back, written);
     assert_eq!(
-        flash.release().programmed_addresses,
+        flash.release().spi.programmed_addresses,
         [0x10F0, 0x1100, 0x1200, 0x1300]
     );
 }
 
 #[test]
-fn waits_while_the_chip_is_busy() {
+fn waits_between_polls_while_the_chip_is_busy() {
     let mut chip = FakeChip::new();
     chip.busy_polls_after_each_write = 3;
-    let mut flash = ExternalFlash::new(chip, &mut NoDelay).unwrap();
+    let mut flash = ExternalFlash::new(chip, CountingDelay::default()).unwrap();
 
     flash.write(0, &[0]).unwrap();
+    let parts = flash.release();
 
-    assert_eq!(flash.release().status_polls, 4);
+    assert_eq!(parts.spi.status_polls, 4);
+    assert_eq!(
+        parts.delay.microseconds_waited,
+        WAKE_UP_TIME_IN_MICROSECONDS + 3 * BUSY_POLL_INTERVAL_IN_MICROSECONDS
+    );
 }
 
 #[test]
@@ -296,7 +302,7 @@ fn erasing_clears_each_sector_in_the_range() {
 
     assert!(read_back[..SECTOR_SIZE].iter().all(|byte| *byte == 0));
     assert!(read_back[SECTOR_SIZE..].iter().all(|byte| *byte == 0xFF));
-    assert_eq!(flash.release().erased_addresses, [0x3000, 0x4000]);
+    assert_eq!(flash.release().spi.erased_addresses, [0x3000, 0x4000]);
 }
 
 #[test]

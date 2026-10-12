@@ -36,7 +36,7 @@ use neotime_boot::{
     PAGE_SIZE, PREVIOUS_FIRMWARE, RECOVERY_FIRMWARE, WATCHDOG_TIMEOUT_IN_TICKS,
 };
 use neotime_button::Button;
-use neotime_external_flash::ExternalFlash;
+use neotime_external_flash::{BusyWait, ExternalFlash};
 use neotime_vibrator::{OnOffMotor, Strength, Vibrator};
 use panic_reset as _;
 
@@ -163,7 +163,7 @@ fn prepare_firmware<'d>(
     };
 
     let Ok(flash_spi) = RefCellDevice::new_no_delay(&spi_bus, flash_chip_select);
-    let Ok(external_flash) = ExternalFlash::new(flash_spi, delay) else {
+    let Ok(external_flash) = ExternalFlash::new(flash_spi, BusyWait { cpu_frequency_in_hertz: CPU_FREQUENCY_IN_HERTZ }) else {
         return BootNote::Normal;
     };
 

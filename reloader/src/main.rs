@@ -37,7 +37,7 @@ use neotime_boot::{
     BOOT_STATE, FIRMWARE_UPDATE, PAGE_SIZE,
 };
 use neotime_display::Display;
-use neotime_external_flash::ExternalFlash;
+use neotime_external_flash::{BusyWait, ExternalFlash};
 // A panic halts, so the watchdog resets into the old update mode instead of looping through this image.
 use panic_halt as _;
 use static_cell::StaticCell;
@@ -153,7 +153,10 @@ fn main() -> ! {
     }
 
     let flash_chip_select = Output::new(chip.P0_05, Level::High, OutputDrive::Standard);
-    let Ok(external_flash) = ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), &mut delay)
+    let Ok(external_flash) = ExternalFlash::new(
+        SpiDevice::new(spi_bus, flash_chip_select),
+        BusyWait { cpu_frequency_in_hertz: CPU_FREQUENCY_IN_HERTZ },
+    )
     else {
         screen.status("No flash chip");
         halt(&button);

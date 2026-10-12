@@ -25,7 +25,7 @@ panic-reset = "0.1"
 
 neotime-boot = { path = "../boot" }
 neotime-button = { path = "../drivers/button" }
-neotime-external-flash = { path = "../drivers/external_flash" }
+neotime-external-flash = { path = "../drivers/external_flash", features = ["cortex-m"] }
 neotime-status-screen = { path = "../drivers/status_screen" }
 neotime-vibrator = { path = "../drivers/vibrator" }
 

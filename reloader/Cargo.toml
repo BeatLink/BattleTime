@@ -30,7 +30,7 @@ static_cell = "2.1"
 
 neotime-boot = { path = "../boot" }
 neotime-display = { path = "../drivers/display" }
-neotime-external-flash = { path = "../drivers/external_flash" }
+neotime-external-flash = { path = "../drivers/external_flash", features = ["cortex-m"] }
 
 [build-dependencies]
 neotime-boot = { path = "../boot" }

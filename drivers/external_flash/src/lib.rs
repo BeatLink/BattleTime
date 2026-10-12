@@ -2,8 +2,8 @@
 //!
 //! The chip shares its SPI bus with the screen. Writes are split at the chip's 256-byte program
 //! pages, and the chip is woken from deep power-down on start, since the firmware may have left it
-//! asleep before a reset. `ExternalFlash` blocks, for the bootloader; `AsyncExternalFlash` waits
-//! with an async delay while the chip is busy, so the firmware's other tasks keep running.
+//! asleep before a reset. `ExternalFlash` blocks and waits with a blocking delay while the chip is
+//! busy; `AsyncExternalFlash` waits with an async delay, so the firmware's other tasks keep running.
 
 #![no_std]
 
@@ -136,19 +136,43 @@ fn sector_starts(from: u32, to: u32) -> impl Iterator<Item = u32> {
 }
 
 // ============================================================================
-// Blocking external flash, for the bootloader
+// Busy wait
 // ============================================================================
 
-pub struct ExternalFlash<FlashSpi> {
-    spi: FlashSpi,
+/// A blocking delay that only spins the CPU, so it reads no timer and needs no peripheral.
+#[cfg(feature = "cortex-m")]
+pub struct BusyWait {
+    pub cpu_frequency_in_hertz: u32,
 }
 
-impl<FlashSpi: SpiDevice> ExternalFlash<FlashSpi> {
-    /// Wakes the chip and checks that it answers as a 4 MB chip, so a second-source part works too.
-    pub fn new(spi: FlashSpi, delay: &mut impl DelayNs) -> Result<Self, Error<FlashSpi::Error>> {
-        let mut flash = ExternalFlash { spi };
+#[cfg(feature = "cortex-m")]
+impl DelayNs for BusyWait {
+    fn delay_ns(&mut self, nanoseconds: u32) {
+        let cycles = u64::from(nanoseconds) * u64::from(self.cpu_frequency_in_hertz) / 1_000_000_000;
+        cortex_m::asm::delay(cycles as u32);
+    }
+}
 
-        flash.wake(delay)?;
+// ============================================================================
+// Blocking external flash
+// ============================================================================
+
+pub struct ExternalFlash<FlashSpi, Delay> {
+    spi: FlashSpi,
+    delay: Delay,
+}
+
+pub struct FlashParts<FlashSpi, Delay> {
+    pub spi: FlashSpi,
+    pub delay: Delay,
+}
+
+impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
+    /// Wakes the chip and checks that it answers as a 4 MB chip, so a second-source part works too.
+    pub fn new(spi: FlashSpi, delay: Delay) -> Result<Self, Error<FlashSpi::Error>> {
+        let mut flash = ExternalFlash { spi, delay };
+
+        flash.wake()?;
         let chip_id = flash.read_chip_id()?;
 
         check_chip_id(chip_id)?;
@@ -173,18 +197,19 @@ impl<FlashSpi: SpiDevice> ExternalFlash<FlashSpi> {
         self.spi.write(&[DEEP_POWER_DOWN]).map_err(Error::Spi)
     }
 
-    pub fn wake(&mut self, delay: &mut impl DelayNs) -> Result<(), Error<FlashSpi::Error>> {
+    pub fn wake(&mut self) -> Result<(), Error<FlashSpi::Error>> {
         self.spi.write(&[RELEASE_POWER_DOWN]).map_err(Error::Spi)?;
-        delay.delay_us(WAKE_UP_TIME_IN_MICROSECONDS);
+        self.delay.delay_us(WAKE_UP_TIME_IN_MICROSECONDS);
         Ok(())
     }
 
-    pub fn release(self) -> FlashSpi {
-        self.spi
+    pub fn release(self) -> FlashParts<FlashSpi, Delay> {
+        FlashParts {
+            spi: self.spi,
+            delay: self.delay,
+        }
     }
-}
 
-impl<FlashSpi: SpiDevice> ExternalFlash<FlashSpi> {
     fn enable_writing(&mut self) -> Result<(), Error<FlashSpi::Error>> {
         self.spi.write(&[WRITE_ENABLE]).map_err(Error::Spi)
     }
@@ -199,6 +224,7 @@ impl<FlashSpi: SpiDevice> ExternalFlash<FlashSpi> {
             if status[0] & WRITE_IN_PROGRESS_BIT == 0 {
                 return Ok(());
             }
+            self.delay.delay_us(BUSY_POLL_INTERVAL_IN_MICROSECONDS);
         }
     }
 
@@ -221,11 +247,11 @@ impl<FlashSpi: SpiDevice> ExternalFlash<FlashSpi> {
     }
 }
 
-impl<FlashSpi: SpiDevice> ErrorType for ExternalFlash<FlashSpi> {
+impl<FlashSpi: SpiDevice, Delay: DelayNs> ErrorType for ExternalFlash<FlashSpi, Delay> {
     type Error = Error<FlashSpi::Error>;
 }
 
-impl<FlashSpi: SpiDevice> ReadNorFlash for ExternalFlash<FlashSpi> {
+impl<FlashSpi: SpiDevice, Delay: DelayNs> ReadNorFlash for ExternalFlash<FlashSpi, Delay> {
     const READ_SIZE: usize = 1;
 
     fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
@@ -242,7 +268,7 @@ impl<FlashSpi: SpiDevice> ReadNorFlash for ExternalFlash<FlashSpi> {
     }
 }
 
-impl<FlashSpi: SpiDevice> NorFlash for ExternalFlash<FlashSpi> {
+impl<FlashSpi: SpiDevice, Delay: DelayNs> NorFlash for ExternalFlash<FlashSpi, Delay> {
     const WRITE_SIZE: usize = 1;
     const ERASE_SIZE: usize = SECTOR_SIZE;
 
@@ -266,7 +292,7 @@ impl<FlashSpi: SpiDevice> NorFlash for ExternalFlash<FlashSpi> {
 }
 
 /// NOR flash can be written again without an erase, as long as bits only go from 1 to 0.
-impl<FlashSpi: SpiDevice> MultiwriteNorFlash for ExternalFlash<FlashSpi> {}
+impl<FlashSpi: SpiDevice, Delay: DelayNs> MultiwriteNorFlash for ExternalFlash<FlashSpi, Delay> {}
 
 // ============================================================================
 // Async external flash, for the firmware
@@ -275,11 +301,6 @@ impl<FlashSpi: SpiDevice> MultiwriteNorFlash for ExternalFlash<FlashSpi> {}
 pub struct AsyncExternalFlash<FlashSpi, Delay> {
     spi: FlashSpi,
     delay: Delay,
-}
-
-pub struct AsyncFlashParts<FlashSpi, Delay> {
-    pub spi: FlashSpi,
-    pub delay: Delay,
 }
 
 impl<FlashSpi, Delay> AsyncExternalFlash<FlashSpi, Delay>
@@ -323,8 +344,8 @@ where
         Ok(())
     }
 
-    pub fn release(self) -> AsyncFlashParts<FlashSpi, Delay> {
-        AsyncFlashParts {
+    pub fn release(self) -> FlashParts<FlashSpi, Delay> {
+        FlashParts {
             spi: self.spi,
             delay: self.delay,
         }

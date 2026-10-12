@@ -21,14 +21,14 @@ use embassy_nrf::{
     Peri,
 };
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
-use embassy_time::Delay;
+
 use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 use embedded_storage_async::nor_flash::{
     ErrorType as AsyncErrorType, NorFlash as AsyncNorFlash, NorFlashErrorKind,
     ReadNorFlash as AsyncReadNorFlash,
 };
 use neotime_boot::{FIRMWARE_UPDATE, PAGE_SIZE};
-use neotime_external_flash::ExternalFlash;
+use neotime_external_flash::{BusyWait, ExternalFlash};
 use neotime_storage::{prepare_file_system, FileSystemFlash, Preparation};
 use neotime_updates::{ImageKind, UpdateError, UpdateReceiver, UpdateTargets};
 use static_cell::StaticCell;
@@ -68,7 +68,10 @@ fn feed_watchdog() {
 // Starting the storage
 // ============================================================================
 
-type FlashOnBus = ExternalFlash<SpiDevice<'static, NoopRawMutex, Spim<'static>, Output<'static>>>;
+/// Waits between busy polls of the flash chip by spinning the 64 MHz CPU.
+const BUSY_WAIT: BusyWait = BusyWait { cpu_frequency_in_hertz: 64_000_000 };
+
+type FlashOnBus = ExternalFlash<SpiDevice<'static, NoopRawMutex, Spim<'static>, Output<'static>>, BusyWait>;
 type SharedExternalFlash = Mutex<NoopRawMutex, RefCell<FlashOnBus>>;
 type UpdateSlot =
     embassy_embedded_hal::adapter::BlockingAsync<BlockingPartition<'static, NoopRawMutex, FlashOnBus>>;
@@ -89,7 +92,7 @@ pub async fn start(
 ) -> Option<(Targets, Confirmation, Mode, &'static Files)> {
     let _flash_controller_never_used = peripherals.flash_controller;
     let flash_chip_select = Output::new(peripherals.flash_chip_select, Level::High, OutputDrive::Standard);
-    let mut flash = match ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), &mut Delay) {
+    let mut flash = match ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), BUSY_WAIT) {
         Ok(flash) => flash,
         Err(_) => {
             screen.write_line(line::FILES, "No chip");

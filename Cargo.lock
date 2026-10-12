@@ -1236,6 +1236,7 @@ dependencies = [
 name = "neotime-external-flash"
 version = "0.1.0"
 dependencies = [
+ "cortex-m",
  "embassy-futures",
  "embedded-hal 1.0.0",
  "embedded-hal-async",
