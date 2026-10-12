@@ -134,6 +134,10 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   be the emulator's SoftDevice; if a watch does the same, the escape leaves the reloader running.
 - [ ] **Run the DFU service against more clients:** wasp-os's `dfu.py` works on the watch; the
   companion app and Gadgetbridge are next.
+- [ ] **An update over Bluetooth in the emulator.** The update suites write images straight into
+  flash, so no emulator test sends a firmware through the DFU service. Send one over the
+  PineTimeEmulator Bluetooth bridge from a raw-HCI client, which also proves the controller's sleep
+  between events holds through a long transfer.
 - [ ] **Async flash in the firmware.** Flash writes block the Bluetooth host for up to a sector
   erase at a time, because the display shares the SPI bus and its driver is blocking.
 - [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.
@@ -557,6 +561,10 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   each file is for.
 - [ ] **How to measure memory.** Say in [memory-map.md](memory-map.md) how each figure is measured
   on the watch: flash by crate and symbol, the stack's high-water mark, and heap peaks.
+- [ ] **`crash_record` "A Start Without A Crash Reports None" fails in Renode.** Its 6 s button
+  hold never lets the watchdog reset the watch, so the boot count stays at 1; `boot_chain`'s 7 s
+  hold does reset it. It fails the same way on master without any firmware change, so find whether
+  the test's hold is too short or the emulator's watchdog runs slow.
 - [ ] **Run the Renode suites in CI.** `tests/emulator/*.robot` are the only tests of the
   firmware, bootloader and reloaders, which build only for the watch, but CI does not run them.
   Package the patched Renode from PineTimeEmulator for the workflow and add a job.
