@@ -1,8 +1,11 @@
-//! A small ST7789 driver for the bootloader's status screen: a coloured background and lines of text.
+//! A small ST7789 driver for status screens: a coloured background and lines of text.
 //!
 //! The firmware's display driver is built on mipidsi, which does not fit in the bootloader's 16 KB, so
-//! this one sends the few commands a status screen needs and nothing else. Text uses the small 6x10
-//! font drawn at double size, which looks like the firmware's 12x20 text for a third of the flash.
+//! this one sends the few commands a status screen needs and nothing else. The bootloader and the
+//! bootloader updater both use it. Text uses the small 6x10 font drawn at double size, which looks
+//! like the firmware's 12x20 text for a third of the flash.
+
+#![no_std]
 
 use embedded_graphics::{
     mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder},
@@ -83,15 +86,33 @@ impl<Spi: SpiDevice, DataOrCommand: OutputPin> Screen<Spi, DataOrCommand> {
         Some(screen)
     }
 
+    /// Draws up to `LINE_CHARACTERS` of the text, then fills the rest of the line, so it covers whatever the line said before.
     pub fn write_line(&mut self, line: i32, text: &str) {
         let style = MonoTextStyleBuilder::new()
             .font(&FONT_6X10)
             .text_color(Rgb565::WHITE)
             .background_color(self.background)
             .build();
+        let shown = text
+            .char_indices()
+            .nth(LINE_CHARACTERS)
+            .map_or(text, |(end, _)| &text[..end]);
         let baseline = (Self::FIRST_BASELINE + line * Self::LINE_HEIGHT) / TEXT_SCALE as i32;
         let position = Point::new(Self::LEFT_MARGIN / TEXT_SCALE as i32, baseline);
-        let _ = Text::new(text, position, style).draw(&mut DoubleSize { screen: self });
+        let Ok(text_end) = Text::new(shown, position, style).draw(&mut DoubleSize { screen: self }) else {
+            return;
+        };
+
+        let glyph_top = baseline - FONT_6X10.baseline as i32;
+        let rest_of_line = Rectangle::new(
+            Point::new(text_end.x, glyph_top) * TEXT_SCALE as i32,
+            Size::new(
+                SCREEN_SIZE.saturating_sub(text_end.x as u32 * TEXT_SCALE),
+                FONT_6X10.character_size.height * TEXT_SCALE,
+            ),
+        );
+        let background = self.background;
+        let _ = self.fill_area(&rest_of_line, core::iter::repeat(background));
     }
 
     fn fill_background(&mut self) -> Result<(), Spi::Error> {
@@ -111,7 +132,11 @@ impl<Spi: SpiDevice, DataOrCommand: OutputPin> Screen<Spi, DataOrCommand> {
     }
 
     /// Sends the colours for every pixel of an on-screen area, row by row.
-    fn fill_area(&mut self, area: &Rectangle, colours: impl IntoIterator<Item = Rgb565>) -> Result<(), Spi::Error> {
+    fn fill_area(
+        &mut self,
+        area: &Rectangle,
+        colours: impl IntoIterator<Item = Rgb565>,
+    ) -> Result<(), Spi::Error> {
         let Some(bottom_right) = area.bottom_right() else {
             return Ok(());
         };
@@ -123,7 +148,10 @@ impl<Spi: SpiDevice, DataOrCommand: OutputPin> Screen<Spi, DataOrCommand> {
 
         let mut bytes = [0; PIXELS_PER_WRITE * 2];
         let mut count = 0;
-        for colour in colours.into_iter().take(area.size.width as usize * area.size.height as usize) {
+        for colour in colours
+            .into_iter()
+            .take(area.size.width as usize * area.size.height as usize)
+        {
             let raw = RawU16::from(colour).into_inner().to_be_bytes();
             bytes[count * 2..count * 2 + 2].copy_from_slice(&raw);
             count += 1;
@@ -176,7 +204,11 @@ impl<Spi: SpiDevice, DataOrCommand: OutputPin> DrawTarget for Screen<Spi, DataOr
         Colours: IntoIterator<Item = Rgb565>,
     {
         if self.bounding_box().intersection(area) != *area {
-            return self.draw_iter(area.points().zip(colours).map(|(point, colour)| Pixel(point, colour)));
+            return self.draw_iter(
+                area.points()
+                    .zip(colours)
+                    .map(|(point, colour)| Pixel(point, colour)),
+            );
         }
         self.fill_area(area, colours)
     }
@@ -220,7 +252,11 @@ impl<Spi: SpiDevice, DataOrCommand: OutputPin> DrawTarget for DoubleSize<'_, Spi
         let width = area.size.width as usize;
         let pixel_count = width * area.size.height as usize;
         if pixel_count > LARGEST_GLYPH_PIXELS || width == 0 {
-            return self.draw_iter(area.points().zip(colours).map(|(point, colour)| Pixel(point, colour)));
+            return self.draw_iter(
+                area.points()
+                    .zip(colours)
+                    .map(|(point, colour)| Pixel(point, colour)),
+            );
         }
         let mut glyph = [Rgb565::BLACK; LARGEST_GLYPH_PIXELS];
         for (slot, colour) in glyph.iter_mut().zip(colours) {

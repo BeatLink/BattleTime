@@ -1229,7 +1229,16 @@ dependencies = [
  "neotime-app-host",
  "neotime-display",
  "neotime-runtime",
+ "neotime-status-screen",
  "neotime-vibrator",
+]
+
+[[package]]
+name = "neotime-status-screen"
+version = "0.1.0"
+dependencies = [
+ "embedded-graphics",
+ "embedded-hal 1.0.0",
 ]
 
 [[package]]

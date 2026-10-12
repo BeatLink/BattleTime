@@ -22,6 +22,8 @@ The work of an update is split three ways:
 | `neotime-bootloader` | `bootloader/` | the watch only | the bootloader program |
 | `neotime-boot` | `boot/` | the watch and in tests | the flash layout, the watchdog timeout, the recovery copy |
 | `neotime-external-flash` | `drivers/external_flash/` | the watch and in tests | the external flash driver |
+| `neotime-status-screen` | `drivers/status_screen/` | the watch, and in the simulator's tests | the small ST7789 driver for the blue status screen |
+| `neotime-bootloader-updater` | `bootloader-updater/` | the watch only | the image that replaces this bootloader on a watch already on NeoTime |
 
 `neotime-boot` is shared with the firmware, which must use the same layout and watchdog timeout.
 The bootloader's linker memory map is generated from it by `bootloader/build.rs`, so the two
@@ -78,8 +80,9 @@ Every flash read, write and erase feeds the watchdog, so a long swap does not tr
 
 On an ordinary start the screen stays dark and the firmware starts at once. Whenever the bootloader
 has work to do, it turns the screen blue (`status_colour::BOOTLOADER`) and says what it is doing in
-white. The screen code is its own small ST7789 driver in `bootloader/src/screen.rs`, since the
-firmware's mipidsi-based driver does not fit. Text uses the 6x10 font drawn at double size.
+white. The screen code is its own small ST7789 driver in `drivers/status_screen`, since the
+firmware's mipidsi-based driver does not fit. Text uses the 6x10 font drawn at double size. The
+simulator's tests run it against the simulator's ST7789 model, through the panel's SPI wires.
 
 | When | Lines |
 |---|---|
@@ -96,6 +99,31 @@ alive marker, which every program's linker keeps free. `BootNote::RecoveryInstal
 button hold installed the recovery firmware on this start, and `BootNote::Normal` means anything
 else. The top half of the word is a fixed pattern, so whatever RAM held at power-on never reads
 as a note.
+
+## Updating the bootloader
+
+Nothing on the watch can replace the bootloader once it is installed, so a new one goes out inside
+the bootloader updater (`bootloader-updater/`, built into `dist/bootloader-updater.zip` by
+`tools/build_images.sh`). It is sent like any firmware update, and the bootloader swaps it in on
+trial. It then:
+
+1. Checks the bootloader it carries: its CRC, and a vector table that starts inside `BOOTLOADER`.
+   A damaged one is never written; holding the button quits.
+2. Compares it with the installed bootloader. If they match, nothing is written.
+3. Waits for the charger, since a power cut during the write leaves nothing that starts. Holding
+   the button meanwhile quits.
+4. Erases and writes the bootloader's pages from RAM, then reads them back. On a mismatch it tries
+   again, feeding the watchdog whatever the button does, and never resets with a broken bootloader.
+5. Leaves a note at `UPDATER_NOTE_ADDRESS`, the alive marker's fourth word, and resets.
+
+The updater never confirms itself, so its reset makes the new bootloader roll back to the firmware
+that was running before. That firmware reads the note, clears the rollback's mark with
+`neotime_updates::forget_rollback`, and its status page says "Bootloader updated" or "Bootloader up
+to date" instead of "Update failed". Quitting leaves no note, so a quit reads as the failed update
+it is. The write is about four pages, half a second or so, and is the only part with no way back.
+
+`tests/emulator/bootloader_update.robot` runs it from the bootloader the reloader put on the first
+watch, kept in `tests/emulator/fixtures/` because it cannot be rebuilt bit for bit.
 
 ## What the firmware must do
 
@@ -144,6 +172,9 @@ cargo build --release
 
 ## Not done yet
 
+- **The status screen and the updater on a watch.** The first watch runs the bootloader from before
+  the status screen; both have run only in the emulator.
+- **A small recovery firmware** of its own; the recovery slot holds the full firmware.
 - **Signed updates.** embassy-boot's updater can check an ed25519 signature before marking a swap.
   That check runs in the firmware, in `neotime-updates`, so it costs the bootloader nothing; it is
   not used yet.

@@ -21,12 +21,12 @@ embedded-hal = "1.0"
 embedded-graphics = "0.8"
 embedded-hal-bus = "0.3"
 embedded-storage = "0.3"
-heapless = "0.9"
 panic-reset = "0.1"
 
 neotime-boot = { path = "../boot" }
 neotime-button = { path = "../drivers/button" }
 neotime-external-flash = { path = "../drivers/external_flash" }
+neotime-status-screen = { path = "../drivers/status_screen" }
 neotime-vibrator = { path = "../drivers/vibrator" }
 
 [build-dependencies]

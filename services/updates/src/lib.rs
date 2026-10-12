@@ -185,6 +185,18 @@ pub async fn confirm_running_firmware<BootState: NorFlash>(
     Ok(())
 }
 
+/// Clears a rollback's mark, for when the rollback was meant, as after the bootloader updater.
+pub async fn forget_rollback<BootState: NorFlash>(
+    boot_state: BootState,
+    state_alignment_buffer: &mut [u8],
+) -> Result<(), UpdateError> {
+    let mut firmware_state = FirmwareState::new(boot_state, state_alignment_buffer);
+    if firmware_state.get_state().await? == State::Revert {
+        firmware_state.mark_booted().await?;
+    }
+    Ok(())
+}
+
 /// Whether the bootloader rolled back the last update; true until the next update is marked.
 pub async fn running_firmware_was_rolled_back<BootState: NorFlash>(
     boot_state: BootState,

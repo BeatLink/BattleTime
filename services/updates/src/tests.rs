@@ -288,7 +288,10 @@ fn confirming_after_a_rollback_keeps_the_rollback_mark() {
     block_on(confirm_running_firmware(&mut boot_state, &mut alignment)).unwrap();
 
     assert_eq!(boot_state.erase_count, 0);
-    assert_eq!(block_on(running_firmware_was_rolled_back(&mut boot_state, &mut alignment)), Ok(true));
+    assert_eq!(
+        block_on(running_firmware_was_rolled_back(&mut boot_state, &mut alignment)),
+        Ok(true)
+    );
 }
 
 #[test]
@@ -306,10 +309,29 @@ fn an_update_is_accepted_after_a_rollback_and_clears_the_mark() {
 }
 
 #[test]
+fn forgetting_a_rollback_clears_its_mark_and_nothing_else() {
+    let mut boot_state = rolled_back_boot_state();
+    let mut alignment = [0; 4];
+    block_on(forget_rollback(&mut boot_state, &mut alignment)).unwrap();
+    assert_eq!(
+        block_on(running_firmware_was_rolled_back(&mut boot_state, &mut alignment)),
+        Ok(false)
+    );
+
+    let mut on_trial = BootStatePage::erased(PAGE_SIZE);
+    block_on(FirmwareState::new(&mut on_trial, &mut alignment).mark_updated()).unwrap();
+    block_on(forget_rollback(&mut on_trial, &mut alignment)).unwrap();
+    assert_eq!(boot_state_of(&mut on_trial), State::Swap);
+}
+
+#[test]
 fn a_fresh_watch_was_not_rolled_back() {
     let mut boot_state = BootStatePage::erased(PAGE_SIZE);
     let mut alignment = [0; 4];
-    assert_eq!(block_on(running_firmware_was_rolled_back(&mut boot_state, &mut alignment)), Ok(false));
+    assert_eq!(
+        block_on(running_firmware_was_rolled_back(&mut boot_state, &mut alignment)),
+        Ok(false)
+    );
 }
 
 // ============================================================================

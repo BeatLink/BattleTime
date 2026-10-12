@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Builds every image NeoTime ships and packs them into dist/: the bootloader, the firmware, and the
-# two reloaders that move a watch over from wasp-os or InfiniTime. Run it inside `nix develop`.
+# Builds every image NeoTime ships and packs them into dist/: the bootloader, the firmware, the
+# bootloader updater, and the two reloaders that move a watch over from wasp-os or InfiniTime. Run it
+# inside `nix develop`.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -24,6 +25,10 @@ python3 -I tools/package_dfu.py "$dist/storage-rehearsal-under-wasp-os.bin" "$di
 # A 16 KB upload for the rehearsal's update service, which keeps it in RAM and checks it.
 python3 -I -c "import random; random.seed(1); open('$dist/rehearsal-upload.bin', 'wb').write(bytes(random.getrandbits(8) for _ in range(16384)))"
 python3 -I tools/package_dfu.py "$dist/rehearsal-upload.bin" "$dist/rehearsal-upload.zip"
+
+echo "bootloader updater (a firmware update that installs dist/bootloader.bin on a watch already on NeoTime)"
+(cd bootloader-updater && NEOTIME_NEW_BOOTLOADER_BIN="$PWD/../$dist/bootloader.bin" cargo objcopy -q --release -- -O binary "../$dist/bootloader-updater.bin")
+python3 -I tools/package_dfu.py "$dist/bootloader-updater.bin" "$dist/bootloader-updater.zip"
 
 # Until there is a smaller recovery firmware, the firmware itself serves as the recovery image.
 export NEOTIME_BOOTLOADER_BIN="$PWD/$dist/bootloader.bin"

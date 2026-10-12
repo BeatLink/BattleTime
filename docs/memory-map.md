@@ -65,7 +65,8 @@ firmware, which then has the whole of RAM but its last 16 bytes, the alive marke
 (`FIRMWARE_ALIVE_MARKER`) an emulator reads; the bootloader and the reloader keep their stacks
 below it too, so the marker survives from one firmware start to the next. Its third word is the
 bootloader's note to the firmware (`BOOT_NOTE_ADDRESS`), which says whether the recovery firmware
-was just installed. The firmware measures 52 KB of static RAM:
+was just installed, and its fourth is the bootloader updater's (`UPDATER_NOTE_ADDRESS`), which says
+the rollback after it was meant. The firmware measures 52 KB of static RAM:
 36 KB of heap (16 KB for storage and the 20 KB UI heap), and
 the Bluetooth host, controller, display buffer and task state. That leaves 13.7 KB for the
 stack. Measured in the emulator by painting the stack before start, it peaks at 10.2 KB while the

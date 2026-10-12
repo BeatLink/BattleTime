@@ -257,6 +257,143 @@ impl Interface for SimulatedPanel {
     }
 }
 
+// ============================================================================
+// The SPI wires, for drivers that send bytes and drive the data/command line themselves
+// ============================================================================
+
+#[cfg(test)]
+pub use wires::{DataOrCommandPin, PanelSpi};
+
+/// Only the tests drive the panel over its SPI wires so far, for the status screen, which skips mipidsi.
+#[cfg(test)]
+mod wires {
+    use std::{cell::RefCell, convert::Infallible, rc::Rc};
+
+    use embedded_hal::{
+        digital::{ErrorType as PinErrorType, OutputPin},
+        spi::{ErrorType as SpiErrorType, Operation, SpiDevice},
+    };
+
+    use super::{
+        SimulatedPanel, SET_COLUMN_ADDRESS, SET_ROW_ADDRESS, SET_SCROLL_AREA, SET_SCROLL_START,
+        WRITE_MEMORY_START,
+    };
+
+    const MEMORY_ACCESS_CONTROL: u8 = 0x36;
+    const PIXEL_FORMAT: u8 = 0x3A;
+
+    /// What the chip has seen on its wires: a byte with the line low is a command, and the bytes after
+    /// it with the line high are its arguments or, after WRITE_MEMORY_START, pixels two bytes each.
+    #[derive(Default)]
+    struct WireState {
+        data_mode: bool,
+        command: Option<u8>,
+        arguments: Vec<u8>,
+        writing_pixels: bool,
+        pixel_high_byte: Option<u8>,
+    }
+
+    /// How many argument bytes each command takes, so it runs as soon as they have all arrived.
+    fn argument_count(code: u8) -> usize {
+        match code {
+            SET_COLUMN_ADDRESS | SET_ROW_ADDRESS => 4,
+            SET_SCROLL_AREA => 6,
+            SET_SCROLL_START => 2,
+            MEMORY_ACCESS_CONTROL | PIXEL_FORMAT => 1,
+            _ => 0,
+        }
+    }
+
+    impl SimulatedPanel {
+        /// The panel's SPI bus and data/command line, for a driver that sends the bytes itself rather than through mipidsi.
+        pub fn spi_wires(&self) -> (PanelSpi, DataOrCommandPin) {
+            let wires = Rc::new(RefCell::new(WireState::default()));
+            (
+                PanelSpi {
+                    panel: self.clone(),
+                    wires: wires.clone(),
+                },
+                DataOrCommandPin { wires },
+            )
+        }
+    }
+
+    pub struct PanelSpi {
+        panel: SimulatedPanel,
+        wires: Rc<RefCell<WireState>>,
+    }
+
+    impl PanelSpi {
+        fn receive_byte(&self, byte: u8) {
+            let mut wires = self.wires.borrow_mut();
+            let mut state = self.panel.state.borrow_mut();
+            if !wires.data_mode {
+                wires.command = Some(byte);
+                wires.arguments.clear();
+                wires.writing_pixels = byte == WRITE_MEMORY_START;
+                wires.pixel_high_byte = None;
+                if argument_count(byte) == 0 {
+                    state.run_command(byte, &[]);
+                }
+                return;
+            }
+
+            if wires.writing_pixels {
+                match wires.pixel_high_byte.take() {
+                    None => wires.pixel_high_byte = Some(byte),
+                    Some(high) => state.write_pixel(u16::from_be_bytes([high, byte])),
+                }
+                return;
+            }
+
+            let Some(code) = wires.command else {
+                return;
+            };
+            wires.arguments.push(byte);
+            if wires.arguments.len() == argument_count(code) {
+                state.run_command(code, &wires.arguments);
+            }
+        }
+    }
+
+    impl SpiErrorType for PanelSpi {
+        type Error = Infallible;
+    }
+
+    impl SpiDevice for PanelSpi {
+        fn transaction(&mut self, operations: &mut [Operation<'_, u8>]) -> Result<(), Infallible> {
+            for operation in operations {
+                if let Operation::Write(bytes) = operation {
+                    for byte in bytes.iter() {
+                        self.receive_byte(*byte);
+                    }
+                }
+            }
+            Ok(())
+        }
+    }
+
+    pub struct DataOrCommandPin {
+        wires: Rc<RefCell<WireState>>,
+    }
+
+    impl PinErrorType for DataOrCommandPin {
+        type Error = Infallible;
+    }
+
+    impl OutputPin for DataOrCommandPin {
+        fn set_low(&mut self) -> Result<(), Infallible> {
+            self.wires.borrow_mut().data_mode = false;
+            Ok(())
+        }
+
+        fn set_high(&mut self) -> Result<(), Infallible> {
+            self.wires.borrow_mut().data_mode = true;
+            Ok(())
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "panel_tests.rs"]
 mod panel_tests;

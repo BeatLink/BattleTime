@@ -120,6 +120,7 @@ NeoTime/
 ├── rust-toolchain.toml  the Rust version and the watch's target
 ├── boot/             neotime-boot: the flash layout and migration plan, shared by every program
 ├── bootloader/       neotime-bootloader: the bootloader program, built only for the watch
+├── bootloader-updater/  neotime-bootloader-updater: a firmware update that replaces the bootloader
 ├── firmware/         neotime-firmware: the firmware program, built only for the watch
 ├── docs/
 │   ├── app-reference.md the events, widgets and effects apps can use
@@ -144,6 +145,7 @@ NeoTime/
 │   ├── bluetooth/    neotime-bluetooth: the Bluetooth LE controller for the chip's radio
 │   ├── button/       neotime-button: the side button
 │   ├── display/      neotime-display: the ST7789 screen
+│   ├── status_screen/  neotime-status-screen: the bootloader's small ST7789 status screen
 │   ├── external_flash/  neotime-external-flash: the 4 MB SPI NOR flash
 │   ├── touch/        neotime-touch: the CST816S touch panel
 │   └── vibrator/     neotime-vibrator: the vibration motor

@@ -17,3 +17,7 @@ neotime-app-host = { path = "../app-host", features = ["demo"] }
 neotime-display = { path = "../drivers/display" }
 neotime-runtime = { path = "../runtime" }
 neotime-vibrator = { path = "../drivers/vibrator" }
+
+[dev-dependencies]
+# The status screen the bootloader uses is tested against this panel model too.
+neotime-status-screen = { path = "../drivers/status_screen" }

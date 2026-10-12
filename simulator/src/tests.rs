@@ -166,3 +166,102 @@ fn low_power_mode_shows_eight_colours_and_keeps_the_rest() {
     assert_eq!(shown_in_low_power, Rgb565::new(Rgb565::MAX_R, 0, 0));
     assert_eq!(panel.shown_pixel(12, 22), dark_orange);
 }
+
+// ============================================================================
+// The bootloader's status screen, sending bytes over the panel's SPI wires
+// ============================================================================
+
+mod status_screen {
+    use embedded_graphics::{
+        mono_font::ascii::FONT_6X10,
+        pixelcolor::{raw::RawU16, Rgb565},
+        prelude::RgbColor,
+    };
+    use neotime_status_screen::{Screen, LINE_CHARACTERS};
+
+    use crate::{
+        hardware::{ThreadDelay, UnconnectedPin},
+        panel::{DataOrCommandPin, PanelSpi, SimulatedPanel},
+    };
+
+    const BLUE: u16 = 0x00EB;
+    const LEFT_MARGIN: u16 = 12;
+    const CHARACTER_WIDTH: u16 = 12;
+
+    fn started_screen() -> (SimulatedPanel, Screen<PanelSpi, DataOrCommandPin>) {
+        let panel = SimulatedPanel::new();
+        let (spi, data_or_command) = panel.spi_wires();
+        let screen = Screen::start(
+            spi,
+            data_or_command,
+            UnconnectedPin,
+            Rgb565::from(RawU16::new(BLUE)),
+            &mut ThreadDelay,
+        )
+        .unwrap();
+        (panel, screen)
+    }
+
+    /// The screen rows a line's text covers: the 10-pixel font cell at double height, at the screen's baselines.
+    fn line_rows(line: u16) -> core::ops::Range<u16> {
+        let baseline = (50 + line * 26) / 2;
+        let top = (baseline - FONT_6X10.baseline as u16) * 2;
+        top..top + 20
+    }
+
+    fn count(
+        panel: &SimulatedPanel,
+        columns: core::ops::Range<u16>,
+        rows: core::ops::Range<u16>,
+        colour: Rgb565,
+    ) -> usize {
+        let mut found = 0;
+        panel.for_each_shown_pixel(|column, row, shown| {
+            if columns.contains(&column) && rows.contains(&row) && shown == colour {
+                found += 1;
+            }
+        });
+        found
+    }
+
+    #[test]
+    fn it_wakes_the_panel_and_shows_the_background_everywhere() {
+        let (panel, _) = started_screen();
+        let blue = Rgb565::from(RawU16::new(BLUE));
+        assert_eq!(count(&panel, 0..240, 0..240, blue), 240 * 240);
+    }
+
+    #[test]
+    fn a_line_shows_white_text_inside_its_rows_only() {
+        let (panel, mut screen) = started_screen();
+        screen.write_line(1, "Installing");
+        let rows = line_rows(1);
+        assert!(count(&panel, 0..240, rows.clone(), Rgb565::WHITE) > 100);
+        assert_eq!(count(&panel, 0..240, 0..rows.start, Rgb565::WHITE), 0);
+        assert_eq!(count(&panel, 0..240, rows.end..240, Rgb565::WHITE), 0);
+    }
+
+    #[test]
+    fn a_shorter_line_covers_what_the_longer_one_said() {
+        let (panel, mut screen) = started_screen();
+        screen.write_line(0, "Installing firmware");
+        screen.write_line(0, "Done");
+        let right_of_done = LEFT_MARGIN + 4 * CHARACTER_WIDTH;
+        assert_eq!(count(&panel, right_of_done..240, line_rows(0), Rgb565::WHITE), 0);
+    }
+
+    #[test]
+    fn text_past_the_line_is_cut_at_the_edge() {
+        let (panel, mut screen) = started_screen();
+        screen.write_line(2, "A line far longer than nineteen characters");
+        let end_of_line = LEFT_MARGIN + LINE_CHARACTERS as u16 * CHARACTER_WIDTH;
+        assert!(count(&panel, LEFT_MARGIN..end_of_line, line_rows(2), Rgb565::WHITE) > 100);
+        assert_eq!(count(&panel, end_of_line..240, line_rows(2), Rgb565::WHITE), 0);
+    }
+
+    #[test]
+    fn text_that_is_not_ascii_does_not_panic() {
+        let (_, mut screen) = started_screen();
+        screen.write_line(0, "é€ ünïcödé line that runs on and on");
+    }
+}

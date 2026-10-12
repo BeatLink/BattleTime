@@ -323,3 +323,60 @@ mod boot_note {
         assert!(crate::FIRMWARE_ALIVE_MARKER.contains(crate::BOOT_NOTE_ADDRESS + 3));
     }
 }
+
+mod updater_note {
+    use crate::{BootNote, UpdaterNote};
+
+    #[test]
+    fn a_note_reads_back_as_itself() {
+        for note in [
+            UpdaterNote::BootloaderWritten,
+            UpdaterNote::BootloaderAlreadyCurrent,
+        ] {
+            assert_eq!(UpdaterNote::from_word(note.to_word()), Some(note));
+        }
+    }
+
+    #[test]
+    fn the_bootloader_note_is_not_an_updater_note() {
+        assert_eq!(UpdaterNote::from_word(BootNote::Normal.to_word()), None);
+        assert_eq!(UpdaterNote::from_word(0), None);
+        assert_eq!(UpdaterNote::from_word(u32::MAX), None);
+    }
+
+    #[test]
+    fn it_sits_in_the_last_word_the_linkers_keep_free_and_apart_from_the_boot_note() {
+        assert!(crate::FIRMWARE_ALIVE_MARKER.contains(crate::UPDATER_NOTE_ADDRESS + 3));
+        assert_ne!(crate::UPDATER_NOTE_ADDRESS, crate::BOOT_NOTE_ADDRESS);
+    }
+}
+
+mod bootloader_image_check {
+    use crate::{is_bootloader_vector_table, is_firmware_vector_table};
+
+    fn vector_table(stack_pointer: u32, reset_handler: u32) -> [u8; 8] {
+        let mut start = [0; 8];
+        start[..4].copy_from_slice(&stack_pointer.to_le_bytes());
+        start[4..].copy_from_slice(&reset_handler.to_le_bytes());
+        start
+    }
+
+    #[test]
+    fn a_bootloader_starts_inside_the_bootloader_region() {
+        assert!(is_bootloader_vector_table(vector_table(0x2001_0000, 0x0000_0101)));
+    }
+
+    #[test]
+    fn a_firmware_is_not_a_bootloader_and_the_other_way_round() {
+        assert!(!is_bootloader_vector_table(vector_table(
+            0x2000_FFF0,
+            0x0000_50DD
+        )));
+        assert!(!is_firmware_vector_table(vector_table(0x2001_0000, 0x0000_0101)));
+    }
+
+    #[test]
+    fn erased_flash_is_not_a_bootloader() {
+        assert!(!is_bootloader_vector_table([0xFF; 8]));
+    }
+}

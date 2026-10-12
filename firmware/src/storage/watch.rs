@@ -15,20 +15,24 @@ use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
 use embassy_time::Delay;
 use embedded_storage::nor_flash::ReadNorFlash;
 use neotime_boot::{
-    is_firmware_vector_table, BOOT_STATE, FIRMWARE, FIRMWARE_UPDATE, PREVIOUS_FIRMWARE, RECOVERY_FIRMWARE,
-    VECTOR_TABLE_CHECK_SIZE,
+    is_firmware_vector_table, UpdaterNote, BOOT_STATE, FIRMWARE, FIRMWARE_UPDATE, PREVIOUS_FIRMWARE,
+    RECOVERY_FIRMWARE, VECTOR_TABLE_CHECK_SIZE,
 };
 use neotime_external_flash::ExternalFlash;
 use neotime_storage::{prepare_file_system, FileSystem, FileSystemFlash, Preparation};
 use neotime_updates::{
-    confirm_running_firmware, running_firmware_is_on_trial, running_firmware_was_rolled_back, Receivers,
-    RecoveryReceiver, UpdateReceiver,
+    confirm_running_firmware, forget_rollback, running_firmware_is_on_trial,
+    running_firmware_was_rolled_back, Receivers, RecoveryReceiver, UpdateReceiver,
 };
 use static_cell::StaticCell;
 
 use core::cell::RefCell;
 
-use crate::{line, status::{self, Mode}, Screen, SpiBus};
+use crate::{
+    line,
+    status::{self, Mode},
+    Screen, SpiBus,
+};
 
 // ============================================================================
 // What this build is
@@ -154,6 +158,17 @@ pub async fn start(
     if mode == Mode::OnTrial && !rolling_back_would_help(external_flash) && confirmation.confirm().await {
         mode = Mode::Confirmed;
     }
+    if mode == Mode::RolledBack {
+        match status::take_updater_note() {
+            Some(UpdaterNote::BootloaderWritten) if confirmation.forget_rollback().await => {
+                mode = Mode::BootloaderUpdated;
+            }
+            Some(UpdaterNote::BootloaderAlreadyCurrent) if confirmation.forget_rollback().await => {
+                mode = Mode::BootloaderAlreadyCurrent;
+            }
+            _ => {}
+        }
+    }
     if status::recovery_was_just_installed() || status::IS_RECOVERY_BUILD {
         mode = Mode::Recovery;
     }
@@ -211,9 +226,18 @@ impl Confirmation {
         }
     }
 
+    /// True once the rollback's mark is gone, so the page no longer says the update failed.
+    async fn forget_rollback(&mut self) -> bool {
+        forget_rollback(&mut self.boot_state, self.alignment)
+            .await
+            .is_ok()
+    }
+
     /// True once the bootloader will keep this firmware.
     pub async fn confirm(&mut self) -> bool {
-        confirm_running_firmware(&mut self.boot_state, self.alignment).await.is_ok()
+        confirm_running_firmware(&mut self.boot_state, self.alignment)
+            .await
+            .is_ok()
     }
 }
 

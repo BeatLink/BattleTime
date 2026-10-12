@@ -136,6 +136,35 @@ impl BootNote {
     }
 }
 
+/// The fourth word of `FIRMWARE_ALIVE_MARKER`, where the bootloader updater leaves word for the firmware it hands back to.
+pub const UPDATER_NOTE_ADDRESS: u32 = FIRMWARE_ALIVE_MARKER.start + 12;
+const UPDATER_NOTE_MAGIC: u32 = 0xB10A_0000;
+
+/// The updater runs on trial and never confirms, so the firmware before it comes back as a rollback; this says the rollback was meant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UpdaterNote {
+    /// A new bootloader was written and checked.
+    BootloaderWritten = 1,
+    /// The bootloader already matched the one the updater carries, so nothing was written.
+    BootloaderAlreadyCurrent = 2,
+}
+
+impl UpdaterNote {
+    pub const fn to_word(self) -> u32 {
+        UPDATER_NOTE_MAGIC | self as u32
+    }
+
+    pub const fn from_word(word: u32) -> Option<UpdaterNote> {
+        match word {
+            word if word == UpdaterNote::BootloaderWritten.to_word() => Some(UpdaterNote::BootloaderWritten),
+            word if word == UpdaterNote::BootloaderAlreadyCurrent.to_word() => {
+                Some(UpdaterNote::BootloaderAlreadyCurrent)
+            }
+            _ => None,
+        }
+    }
+}
+
 /// Screen backgrounds as RGB565, one for each mode, so the mode shows from across the room.
 pub mod status_colour {
     /// The bootloader at work: installing, rolling back or waiting for the recovery hold.
@@ -201,6 +230,17 @@ pub fn is_firmware_vector_table(vector_table_start: [u8; VECTOR_TABLE_CHECK_SIZE
     let reset_handler_is_in_firmware = FIRMWARE.contains(reset_handler_address);
 
     stack_pointer_is_in_ram && reset_handler_is_thumb_code && reset_handler_is_in_firmware
+}
+
+/// Checks the vector table at the start of a bootloader image: a stack pointer in RAM and a reset handler in `BOOTLOADER`.
+pub fn is_bootloader_vector_table(vector_table_start: [u8; VECTOR_TABLE_CHECK_SIZE]) -> bool {
+    let [stack_pointer, reset_handler] = [&vector_table_start[..4], &vector_table_start[4..]]
+        .map(|word| u32::from_le_bytes(word.try_into().unwrap()));
+    let stack_pointer_is_in_ram = stack_pointer > RAM.start && stack_pointer <= RAM.end();
+    let reset_handler_is_thumb_code = reset_handler & 1 == 1;
+    let reset_handler_is_in_bootloader = BOOTLOADER.contains(reset_handler & !1);
+
+    stack_pointer_is_in_ram && reset_handler_is_thumb_code && reset_handler_is_in_bootloader
 }
 
 pub fn looks_like_firmware<Flash: NorFlash>(

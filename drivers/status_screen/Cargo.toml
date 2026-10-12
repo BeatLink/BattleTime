@@ -1,0 +1,11 @@
+[package]
+name = "neotime-status-screen"
+version = "0.1.0"
+edition = "2021"
+description = "A small ST7789 driver for status screens that must fit in a few kilobytes: a background colour and lines of text"
+license.workspace = true
+publish = false
+
+[dependencies]
+embedded-graphics = "0.8"
+embedded-hal = "1.0"
