@@ -38,9 +38,9 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Component | Full build | Recovery build |
 |---|---:|---:|
 | Firmware (start-up, shell, tasks) | 76.2 KB | 40.8 KB |
-| App host (with `neotime-ui` and rlvgl) | 71.1 KB | 0.0 KB |
+| App host (with `neotime-ui` and rlvgl) | 73.9 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 42.2 KB | 42.2 KB |
-| core, alloc and compiler builtins | 24.9 KB | 11.1 KB |
+| core, alloc and compiler builtins | 25.4 KB | 11.1 KB |
 | App runtime | 24.5 KB | 0.1 KB |
 | Storage (littlefs) | 21.6 KB | 21.0 KB |
 | Embassy, allocator and Cortex-M | 17.9 KB | 15.9 KB |
@@ -50,9 +50,9 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Packages | 2.7 KB | 2.1 KB |
 | Updates (DFU) | 2.4 KB | 2.4 KB |
 | BLEFS file service | 2.0 KB | 2.2 KB |
-| Other constants and padding | 19.2 KB | 10.8 KB |
-| **Used** | **333.5 KB** | **160.2 KB** |
-| Free of 400 KB | 66.5 KB | 239.8 KB |
+| Other constants and padding | 19.3 KB | 10.8 KB |
+| **Used** | **337.1 KB** | **160.2 KB** |
+| Free of 400 KB | 62.9 KB | 239.8 KB |
 <!-- /measure_memory:firmware -->
 
 The accelerometer's configuration is the largest piece of data left in it; each watch could build
@@ -113,7 +113,7 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 | Formatting: the root and the three top-level folders | | 8 |
 | `/settings/system` and `/settings/theme` | 57 | 0 |
 | 12 app folders | | 24 |
-| 12 app images, 194 B (launcher) to 3,765 B (alarm) | 23,398 | 11 |
+| 12 app images, 194 B (launcher) to 3,765 B (alarm) | 23,146 | 11 |
 | **In use** | | **43 of 768: 172 KB of 3 MB** |
 <!-- /measure_memory:file-system -->
 
