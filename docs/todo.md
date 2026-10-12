@@ -75,8 +75,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 
 - [ ] **Roll back a firmware on the watch.** A firmware that never confirms is put back at the next
   reset in the emulator; it has not been tried on a watch.
-- [ ] **Run the power-cut sweeps** in `tests/emulator/migration.robot` (tagged `long`), which have
-  never run on the final reloader. They take hours, so check the runner's memory early.
 - [ ] **Check why wasp-os's update mode gives way to the reloader** about 4 seconds after the
   button escape in the emulator, with no reset between. Its advertising never times out, so this may
   be the emulator's SoftDevice; if a watch does the same, the escape leaves the reloader running.
@@ -358,8 +356,6 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   10 seconds; NeoTime only aborts when the link drops.
 - [ ] **A swap progress bar on the bootloader screen.** It says "Installing firmware" for up to 30
   seconds with nothing moving. Its 16 KB has about 2 KB to spare.
-- [ ] **Cut the power during the updater's write** in the emulator, to measure the window and show
-  that every cut outside it leaves a bootloader that starts.
 - [ ] **A setting to turn updates off,** or on until the next reset.
 - [ ] **Show the bootloader version** in a system info screen.
 

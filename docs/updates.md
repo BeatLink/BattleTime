@@ -147,8 +147,8 @@ The order comes from `neotime_boot::migration`, and its tests hold it to these r
    `FIRMWARE_UPDATE`, both in the external flash. The old system still starts during this; it has
    only lost its own files in the external flash.
 4. **Write the bootloader** over the first pages of internal flash. From the first erase until the
-   last word is in place, nothing on the watch starts. The bootloader is 8 KB, two pages: about a
-   quarter of a second. Each copy is read back and compared, and retried up to three times.
+   last word is in place, nothing on the watch starts. The bootloader is about 13 KB, four pages:
+   about half a second. Each copy is read back and compared, and retried up to three times.
 5. **Mark the swap** in `BOOT_STATE`, so the bootloader's first start installs the staged
    firmware. Even if this step is lost, the bootloader is whole and the button hold installs the
    recovery firmware.
@@ -179,8 +179,37 @@ wrong address or does not fit its slot. `tools/build_images.sh` builds everythin
 ### The risk, honestly
 
 Without an SWD probe, a watch that cannot start cannot be brought back. The reloader keeps that
-window to the bootloader write, about a quarter of a second, and only enters it on a charger. It
-cannot make the window zero: the old and the new bootloader want the same first page.
+window to the bootloader write, about half a second, and only enters it on a charger. It cannot
+make the window zero: the old and the new bootloader want the same first page.
+
+### Losing power during the bootloader write
+
+The reloader and the bootloader updater (see [bootloader.md](bootloader.md#updating-the-bootloader))
+share one risk: from the first erase of the bootloader's pages until the last word is written and
+read back, nothing on the watch can start. Erasing four 4 KB pages and writing about 13 KB takes
+about half a second. A watch that loses power inside that half second has no bootloader and, without
+an SWD probe, cannot be brought back; with one, `probe-rs` can write the bootloader again.
+
+For that to happen, all of these must go wrong at once:
+
+1. **The power must fail inside the half second.** Neither program starts writing until the charger
+   is present on P0.19, and the whole update before it takes minutes, so the window is a tiny part
+   of the time the watch spends on the charger.
+2. **The battery must fail too.** The PineTime runs from its internal battery; the charger only
+   charges it. Lifting the watch off the charger does not cut the power, so the battery itself must
+   be disconnected or collapse in that half second, while it is being charged.
+3. **Nothing else may stop it first.** Both programs feed the watchdog through every erase and
+   write, take the new bootloader from flash they never erase, and read every page back. The
+   updater writes again on a mismatch for as long as it takes and never resets with a broken
+   bootloader. The reloader tries three times and then stops with "Failed, hold the button", which
+   would leave no bootloader; that needs the chip's own flash to refuse the same pages three times,
+   which is rarer still.
+
+So a watch is lost only by a battery failure during the half second of the write while it sits on
+its charger, or by internal flash that will not take a write. That is rare enough that the power-cut sweeps in `tests/emulator/migration.robot`
+(tagged `long`) were run only in part: cuts every 2 seconds through the wasp-os migration left the
+old system whole at 2, 4 and 6 seconds and NeoTime's bootloader whole at 8, 10 and 12 seconds,
+and none fell inside the write. Measuring the window more finely was judged not worth its cost.
 
 The larger risk is after it. Once the reloader has run, the only Bluetooth on the watch is
 NeoTime's own controller, and a controller that does not work on real hardware leaves a watch

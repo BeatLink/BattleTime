@@ -120,7 +120,9 @@ The updater never confirms itself, so its reset makes the new bootloader roll ba
 that was running before. That firmware reads the note, clears the rollback's mark with
 `neotime_updates::forget_rollback`, and its status page says "Bootloader updated" or "Bootloader up
 to date" instead of "Update failed". Quitting leaves no note, so a quit reads as the failed update
-it is. The write is about four pages, half a second or so, and is the only part with no way back.
+it is. The write is about four pages, half a second or so, and is the only part with no way back;
+[updates.md](updates.md#losing-power-during-the-bootloader-write) sets out what would have to go
+wrong for a power cut to land in it.
 Only a firmware from `db985cf` on reads the note. An older one shows the red "Update failed" page
 after the hand-back even though the bootloader was written, as on the first watch; the Revert mark
 it leaves clears with the next firmware update.
