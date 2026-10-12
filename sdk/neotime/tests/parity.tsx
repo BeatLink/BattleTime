@@ -30,6 +30,7 @@ import {
   type App,
 } from "neotime";
 import {
+  clear_notifications,
   clear_storage,
   freeze_clock,
   install_apps,
@@ -158,6 +159,7 @@ export function set_fake_system_values() {
     progress_percent: 40,
   };
   installed_apps.value = [];
+  clear_notifications();
 }
 
 // ============================================================================

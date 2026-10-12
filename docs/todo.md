@@ -169,7 +169,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
     they are kept in RAM only.
   - A temperature with a fraction makes the `weather` line unreadable, since the watch parses
     whole numbers only to stay clear of float parsing's flash; round it if a phone sends one.
-  - `notify-` (a dismissed notification) belongs with the notification list.
   - Nothing has run on the watch yet: try each message from Gadgetbridge and the companion app.
 - [ ] **Harness gaps in the app host.** The test harness works around three: `widget_bounds` has
   no clip rectangle, so it cannot tell a widget scrolled out of a List or Scroll; there is no
@@ -350,7 +349,9 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   disturb, which app-reference.md says the user can turn off. Add the setting, and keep app
   permissions in the image so the watch can check `wake` instead of trusting the `alarm` pattern.
 - [ ] **Try the buzzes on the watch:** a phone notification buzzes twice and stays silent in do
-  not disturb, and the alarm pattern still rings there.
+  not disturb, and the alarm pattern still rings there. Check too that a notification on a dark
+  screen turns it on into the notifications app, that a `notify-` from Gadgetbridge removes it, and
+  that the heap holds with five kept beside the alarm app.
 
 ### Side button
 
@@ -507,8 +508,10 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **Harness gaps.** Open a named screen directly, so screens behind icon-only buttons, such as
   the alarm's edit and ring screens, get smoke and snapshot coverage; read the key labels of a
   `ButtonMatrix`, so `tap "7"` works on the calculator; match text spread over neighbouring
-  labels, such as a face's "09:00"; set text system values from `TestWatch`; and give `notify` an
-  app name in scripts.
+  labels, such as a face's "09:00"; set text system values from `TestWatch`; give `notify` an
+  app name in scripts; and see every built row of a repeated list, since `widget_text` and
+  `widget_bounds` give only the first row's node, so `tap "Sam"` cannot reach the second row of
+  the notifications list.
 - [ ] **Scripts from an installed simulator.** `--script` finds app sources through the build-time
   `CARGO_MANIFEST_DIR`, so it works only through `cargo run` in the repository, not from
   `nix run`.
@@ -528,9 +531,9 @@ InfiniTime has these and NeoTime has nothing for them yet:
 | Heart rate | HRS3300 driver, PPG processing, background measuring, the Heart Rate service |
 | Battery | the Battery service |
 | Clock | the Current Time client |
-| Notifications | Alert Notification service and client, Immediate Alert, notification list, calls |
+| Notifications | Alert Notification service and client, Immediate Alert, calls |
 | Other BLE services | Device Information, Music, Navigation, Simple Weather |
-| System screens | System Info, Notifications, the pass key, firmware validation |
+| System screens | System Info, the pass key, firmware validation |
 
 ## Gaps against the wasp-os fork
 
@@ -565,13 +568,8 @@ full report is
 ### Bluetooth
 
 - [ ] **The rest of the Gadgetbridge Bangle.js messages** in
-  [companion-protocol.md](companion-protocol.md): dismissals, music, weather, find phone, alarms,
-  steps, status, calls and HTTP. `settings` and `notify` are served.
-- [ ] **A notification list.** Notifications from the phone and from `notify` are buzzed and passed
-  to the open app but not kept, so `unread_notifications` stays 0 and `dismiss_notification` and
-  `mark_notifications_read` do nothing. Keep the latest few, with a screen to read them.
-- [ ] **Wake the screen for a notification.** A notification buzzes but leaves a dark screen dark;
-  turn it on, outside do not disturb, so the wearer can read it.
+  [companion-protocol.md](companion-protocol.md): alarms, steps and HTTP. `settings`, `notify`,
+  `notify-`, calls, music, weather, find, vibrate and status are served.
 - [ ] **A developer console over BLE,** to replace the fork's Python REPL for uploads, time setting
   and resets.
 

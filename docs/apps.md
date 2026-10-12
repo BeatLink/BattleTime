@@ -56,6 +56,7 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 | `steps` | InfiniTime Steps, wasp-os step_counter and steplogger | Goal ring, trip meter, and a history screen of the week and today by hour, which the app logs itself. |
 | `sports` | wasp-os sports | A stopwatch with the steps taken since it started. |
 | `music` | InfiniTime Music, wasp-os music_player | Track, progress, play and skip by swipe, and a volume row. |
+| `notifications` | InfiniTime Notifications, wasp-os notification list | The latest 5 notifications from the phone and from apps, newest first; a tap reads one in full and Dismiss removes it. Opens by itself when a notification wakes the screen. |
 | `weather` | InfiniTime Weather, wasp-os weather | Conditions, low and high, and a 5 day forecast, all read from `current_weather`. |
 | `navigation` | InfiniTime Navigation | The next turn, its distance and the trip's progress. |
 | `metronome` | InfiniTime Metronome | Beats scheduled from the start time so they never drift; tap tempo. |
@@ -86,7 +87,7 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 |---|---|---|
 | `demo`, `gallery` | wasp-os | Need full-screen images and reading files. |
 | `read_me`, `test` | wasp-os | Developer tools, not apps. |
-| Launcher, notifications, quick settings, firmware update | both | Part of the system, not apps. |
+| Quick settings, firmware update | both | Part of the system, not apps. |
 
 ## Limits
 

@@ -108,8 +108,13 @@ settings change from the watch's own Settings app; the phone sees those changes 
 that arrived on the phone. The watch buzzes twice, unless do not disturb is on, and hands it to the
 open app's `notification` subscriptions, with `src` as its `app`. Escapes such as `\n` and `\"` are
 undone, and the watch keeps up to 24 bytes of `src`, 32 of `title` and 120 of `body`, cut at a whole
-character. Gadgetbridge's other keys, such as `sender`, are ignored. The watch keeps no
-notification list yet and sends no reply.
+character. Gadgetbridge's other keys, such as `sender`, are ignored. The watch keeps the latest 5,
+newest first, for apps to read as `notifications`; one with the `id` of one already kept replaces
+it. While the screen is dark, outside do not disturb, it turns the screen on and opens the
+notifications app. It sends no reply.
+
+`{"t":"notify-","id":1234}` says the notification with that `id` was dismissed on the phone; the
+watch removes it from the list, and sends no reply.
 
 ### Calls, music, weather and the rest (served)
 
@@ -141,7 +146,6 @@ Phone to watch:
 
 | `t` | Fields | Meaning |
 |---|---|---|
-| `notify-` | `id` | A notification is dismissed. |
 | `alarm` | `d`: a list of `{h, m, on, rep}` | Set the alarms; with no `d`, report them. |
 | `steps` | `y`, `m`, `d` | The watch replies with that day's steps in 240 six-minute slots, `null` where unknown. |
 | `http` | `id`, `resp` or `err` | The answer to a watch's `http` request. |

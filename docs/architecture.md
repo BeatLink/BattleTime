@@ -577,8 +577,16 @@ watch face, the launcher and the apps through `neotime-app-host`:
   applies the theme to the open app at once, keeps it in `/settings/theme`, passes the other
   settings to the store and sends the settings back as a reply, which waits on the heap. A `notify`
   message goes to the shell through `app_events.rs`, which buzzes the notification pattern, unless
-  do not disturb is on, and hands it to the open app's `notification` subscriptions. Notifications
-  are not kept, so `unread_notifications` stays 0. Calls, music, weather, `find` and `vibrate`
+  do not disturb is on, hands it to the open app's `notification` subscriptions, and then keeps it
+  in `neotime-notifications` (`services/notifications`). That list holds the latest 5 in RAM, newest
+  first, each one's text on the heap (about 200 B each), and answers the `notifications` and
+  `unread_notifications` system values; apps' `notify`, `dismiss_notification` and
+  `mark_notifications_read` change it, as does a `notify-` dismissal from the phone, and the shell
+  tells the open app through `report_system_value_changes` once the host call returns. A
+  notification that finds the screen dark, outside do not disturb, opens the `notifications` app
+  when it is installed and asks for the screen to turn on, as an incoming call does, so it counts
+  as input for the screen timeout; while `find` rings, a notification neither buzzes nor wakes.
+  Calls, music, weather, `find` and `vibrate`
   wait together in `app_events.rs` as one `PhoneUpdates`, the latest of each kind; the shell keeps
   the music and weather in its `PhoneData` for apps to read, and `neotime_app_host::phone` hands
   the open app its `call`, `music` and `weather` events. An incoming call buzzes and lights the

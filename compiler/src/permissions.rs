@@ -98,7 +98,7 @@ pub fn runs_in_background(kind: SubscriptionKind, only_while_open: bool) -> bool
     !only_while_open && !matches!(kind, Open | Close | ScreenOn | ScreenOff | Derive)
 }
 
-/// The permission reading a system value needs: the phone's player and navigation need `phone`.
+/// The permission reading a system value needs: the phone's player and navigation need `phone`, the kept notifications `notifications`.
 pub fn system_value_permission(value: SystemValue) -> Option<Permission> {
     use SystemValue::*;
     match value {
@@ -111,6 +111,8 @@ pub fn system_value_permission(value: SystemValue) -> Option<Permission> {
         | NavigationInstruction
         | NavigationDistance
         | NavigationProgressPercent => Some(Permission::Phone),
+        NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
+        | NotificationTime => Some(Permission::Notifications),
         _ => None,
     }
 }
@@ -148,11 +150,12 @@ impl<'a> Compiler<'a> {
 
     /// Records a system value read, for the ones that need a permission.
     pub fn note_system_read(&mut self, value: SystemValue, span: Span) {
-        self.note_permission(
-            system_value_permission(value),
-            "reading the phone's player or navigation",
-            span,
-        );
+        let permission = system_value_permission(value);
+        let what = match permission {
+            Some(Permission::Notifications) => "reading the kept notifications",
+            _ => "reading the phone's player or navigation",
+        };
+        self.note_permission(permission, what, span);
     }
 
     /// Checks the app's `permissions` against everything it was found to use.

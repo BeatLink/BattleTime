@@ -364,7 +364,7 @@ using it costs no RAM.
 | Themes | The preset [themes](#theming) the user can choose from. |
 | Components | Ready-made widget trees with their bindings, such as a card, a list row, a header, a number picker and a confirm dialog. |
 | Functions | Bytecode for common work: date and time formatting, unit conversion, small maths such as trigonometry from tables, sorting a fixed-length array. |
-| Notification screens | The layouts that show a notification and the list of them. The notifications themselves are on the external flash. |
+| Notification screens | The layouts that show a notification and the list of them. The `notifications` app draws them today, and the notifications themselves are kept in RAM. |
 
 In the source, apps import these from the `neotime` package, for example
 `import { Card } from "neotime/components"` or `icons.heart`. The compiler refers to them by number
@@ -492,10 +492,11 @@ System values, in the order `read system` numbers them: `now`, `utc_offset`, `ba
 `position` and `length`, the navigation's `turn`, `instruction`, `distance` and
 `progress_percent`, and the forecast's length followed by its lists of each day's `condition`,
 `low` and `high`, the installed apps' count followed by their lists of `name`, `id` and `icon`,
-and the settings' `screen_timeout_seconds`, `always_on_screen`, `chimes` and `theme`, then
-`battery_millivolts`, which shares `battery_percent`'s bit.
+the settings' `screen_timeout_seconds`, `always_on_screen`, `chimes` and `theme`, then
+`battery_millivolts`, which shares `battery_percent`'s bit, and the kept notifications' count
+followed by their lists of `id`, `app`, `title`, `body` and `time`.
 `read system element` reads a list's elements through `SystemValues::read_element`, or
-`read_element_text` for the names and ids. The location, artist, track and instruction are text: the system hands them
+`read_element_text` for the names, ids and notification texts. The location, artist, track and instruction are text: the system hands them
 over through `SystemValues::read_text`, and `read system` copies them into the call's text buffer.
 Values the phone sends together share one bit of an input mask, so all the weather values redraw
 together; that keeps the mask in 32 bits.

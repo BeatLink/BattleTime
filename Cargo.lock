@@ -1120,6 +1120,7 @@ dependencies = [
  "neotime-companion",
  "neotime-compiler",
  "neotime-display",
+ "neotime-notifications",
  "neotime-runtime",
  "neotime-ui",
  "png",
@@ -1239,6 +1240,16 @@ dependencies = [
  "embedded-hal-async",
  "embedded-storage",
  "embedded-storage-async",
+]
+
+[[package]]
+name = "neotime-notifications"
+version = "0.1.0"
+dependencies = [
+ "heapless 0.9.3",
+ "neotime-app-host",
+ "neotime-companion",
+ "neotime-runtime",
 ]
 
 [[package]]

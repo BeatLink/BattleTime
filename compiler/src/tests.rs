@@ -1247,23 +1247,55 @@ fn the_forecast_is_read_one_day_at_a_time() {
           return <Screen><Day place={1} /></Screen>;
         }"#));
     let image = AppImage::parse(&image).unwrap();
-    let reads_element = (0..image.expression_count()).any(|expression| {
+
+    assert!(reads_system_element(&image, SystemValue::WeatherForecastHigh));
+}
+
+/// Whether any expression of the image reads this system list element.
+fn reads_system_element(image: &AppImage, value: SystemValue) -> bool {
+    (0..image.expression_count()).any(|expression| {
         let code = image.expression_code(expression).unwrap();
         let mut offset = 0;
         while offset < code.len() {
             let (instruction, next) = neotime_runtime::instruction::decode(code, offset).unwrap();
-            if instruction
-                == neotime_runtime::instruction::Instruction::ReadSystemElement(
-                    SystemValue::WeatherForecastHigh,
-                )
-            {
+            if instruction == neotime_runtime::instruction::Instruction::ReadSystemElement(value) {
                 return true;
             }
             offset = next;
         }
         false
-    });
-    assert!(reads_element);
+    })
+}
+
+const NOTIFICATIONS_SOURCE: &str = r#"import { notifications } from "neotime";
+const place = signal(0);
+function Main() {
+  return (
+    <Screen>
+      <Label>{place.value < notifications.value.length ? notifications.value[place.value].title : "None"}</Label>
+      <Label>{`${notifications.value[0].id}`}</Label>
+    </Screen>
+  );
+}"#;
+
+#[test]
+fn the_kept_notifications_are_read_one_field_at_a_time() {
+    let source = format!(
+        "{HEADER}\n{NOTIFICATIONS_SOURCE}\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }}, permissions: [\"notifications\"] }});"
+    );
+    let image = compile(&source);
+    let image = AppImage::parse(&image).unwrap();
+
+    assert!(reads_system_element(&image, SystemValue::NotificationTitle));
+    assert!(reads_system_element(&image, SystemValue::NotificationId));
+}
+
+#[test]
+fn reading_the_kept_notifications_needs_the_notifications_permission() {
+    let message = first_error(&app(NOTIFICATIONS_SOURCE));
+
+    assert!(message.contains("`notifications` permission"), "{message}");
+    assert!(message.contains("reading the kept notifications"), "{message}");
 }
 
 #[test]

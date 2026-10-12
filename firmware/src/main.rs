@@ -713,6 +713,9 @@ fn read_companion_line(line: &[u8]) {
             app_events::notification_arrived(notification);
         }
         Ok(neotime_companion::Message::StatusRequest) => send_status(),
+        Ok(neotime_companion::Message::NotificationDismissed { id }) => {
+            app_events::notification_dismissed(id);
+        }
         Ok(neotime_companion::Message::Unknown { .. }) => {}
         Ok(phone_message) => app_events::phone_message_arrived(phone_message),
         Err(_) => {

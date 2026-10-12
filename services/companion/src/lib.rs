@@ -102,6 +102,8 @@ pub enum Message<'line> {
     Vibrate { times: u8 },
     /// `status`: the phone asks for the battery and steps.
     StatusRequest,
+    /// `notify-`: the notification with this id was dismissed on the phone.
+    NotificationDismissed { id: i64 },
     /// A message this watch does not act on yet, by its `t`.
     Unknown { kind: &'line str },
 }
@@ -345,6 +347,11 @@ pub fn parse_line(line: &[u8]) -> Result<Message<'_>, MessageError> {
         "find" => return phone::parse_find(json),
         "vibrate" => return phone::parse_vibrate(json),
         "status" => return Ok(Message::StatusRequest),
+        "notify-" => {
+            return Ok(Message::NotificationDismissed {
+                id: envelope.id.unwrap_or(0),
+            })
+        }
         kind => return Ok(Message::Unknown { kind }),
     }
 

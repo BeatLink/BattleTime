@@ -4,6 +4,7 @@
 use std::cell::Cell;
 
 use neotime_app_host::{AppEffect, AppFailure, System};
+use neotime_notifications::NotificationList;
 use neotime_runtime::resources::ImageReference;
 use neotime_runtime::{EffectKind, SystemValue, SystemValues, Value, NONE};
 
@@ -82,6 +83,12 @@ pub struct FakeSystem {
     texts: [String; SystemValue::COUNT],
     pub forecast: Vec<ForecastDay>,
     pub installed_apps: Vec<InstalledApp>,
+    /// The notifications the watch keeps, which `notify` and the phone add to.
+    pub notifications: NotificationList,
+    /// The open app's name, which a notification it makes shows as its source.
+    pub app_name: String,
+    /// Set when an effect changed the notifications, so the watch tells the app once the call returns.
+    pub notifications_changed: bool,
     random_state: Cell<u32>,
     effects: Vec<RecordedEffect>,
     failures: Vec<AppFailure>,
@@ -113,6 +120,9 @@ impl FakeSystem {
                 },
             ],
             installed_apps: Vec::new(),
+            notifications: NotificationList::new(),
+            app_name: String::new(),
+            notifications_changed: false,
             random_state: Cell::new(RANDOM_SEED),
             effects: Vec::new(),
             failures: Vec::new(),
@@ -188,6 +198,9 @@ impl Default for FakeSystem {
 
 impl SystemValues for FakeSystem {
     fn read(&self, value: SystemValue) -> Value {
+        if let Some(number) = self.notifications.read(value) {
+            return number;
+        }
         match value {
             SystemValue::Now => self.now_in_milliseconds,
             SystemValue::WeatherForecastLength => self.forecast.len().min(MOST_FORECAST_DAYS) as Value,
@@ -201,6 +214,9 @@ impl SystemValues for FakeSystem {
     }
 
     fn read_element(&self, value: SystemValue, index: Value) -> Value {
+        if value.bit() == SystemValue::UnreadNotifications.bit() {
+            return self.notifications.read_element(value, index);
+        }
         let Ok(place) = usize::try_from(index) else {
             return NONE;
         };
@@ -224,6 +240,9 @@ impl SystemValues for FakeSystem {
     }
 
     fn read_element_text(&self, value: SystemValue, index: Value) -> &str {
+        if value.bit() == SystemValue::UnreadNotifications.bit() {
+            return self.notifications.read_element_text(value, index);
+        }
         let Some(app) = usize::try_from(index)
             .ok()
             .and_then(|place| self.installed_apps.get(place))
@@ -254,6 +273,10 @@ impl SystemValues for FakeSystem {
 
 impl System for FakeSystem {
     fn carry_out(&mut self, effect: &AppEffect) {
+        let now = self.now_in_milliseconds;
+        if self.notifications.carry_out(effect, &self.app_name, now) {
+            self.notifications_changed = true;
+        }
         let argument_count = effect.kind.argument_count();
         let text_positions = text_arguments(effect.kind);
         let numbers = (0..argument_count)

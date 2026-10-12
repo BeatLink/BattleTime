@@ -1010,6 +1010,7 @@ dependencies = [
  "neotime-dfu",
  "neotime-display",
  "neotime-external-flash",
+ "neotime-notifications",
  "neotime-packages",
  "neotime-runtime",
  "neotime-settings",
@@ -1021,6 +1022,16 @@ dependencies = [
  "nrf-pac",
  "static_cell",
  "trouble-host",
+]
+
+[[package]]
+name = "neotime-notifications"
+version = "0.1.0"
+dependencies = [
+ "heapless 0.9.3",
+ "neotime-app-host",
+ "neotime-companion",
+ "neotime-runtime",
 ]
 
 [[package]]

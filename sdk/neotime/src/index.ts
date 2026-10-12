@@ -99,7 +99,21 @@ export const heart_rate_measured_at = signal<Instant>(0);
 
 export const is_phone_connected = signal(true);
 
+/** How many of the kept notifications are unread. */
 export const unread_notifications = signal(0);
+
+export interface KeptNotification {
+  /** What `dismiss_notification` takes; the phone's id, or a negative one for an app's. */
+  id: number;
+  app: string;
+  title: string;
+  body: string;
+  /** When it arrived. */
+  time: Instant;
+}
+
+/** The notifications the watch keeps, newest first, at most 5; reading them needs the `notifications` permission. */
+export const notifications = signal<KeptNotification[]>([]);
 
 export const is_do_not_disturb = signal(false);
 

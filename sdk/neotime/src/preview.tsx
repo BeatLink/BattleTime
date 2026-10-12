@@ -15,15 +15,18 @@ import {
   heart_rate_measured_at,
   brightness,
   is_do_not_disturb,
+  notifications,
   period_in_milliseconds,
   settings,
   start_of_day,
   steps_today,
+  unread_notifications,
   DAY,
   HOUR,
   MINUTE,
   type App,
   type Instant,
+  type KeptNotification,
   type Subscription,
   type TimeOfDay,
   type WeatherDay,
@@ -132,8 +135,23 @@ function carry_out(effect: Effect) {
       show_toast(effect.text as string);
       break;
     case "notify":
+      keep_notification({
+        id: next_app_notification_id--,
+        app: app?.name ?? "",
+        title: effect.title as string,
+        body: effect.body as string,
+        time: now_milliseconds.peek(),
+      });
       show_toast(`${effect.title}: ${effect.body}`);
       buzz(200);
+      break;
+    case "dismiss_notification":
+      kept_notifications = kept_notifications.filter((kept) => kept.notification.id !== effect.id);
+      show_notifications();
+      break;
+    case "mark_notifications_read":
+      kept_notifications = kept_notifications.map((kept) => ({ ...kept, is_read: true }));
+      show_notifications();
       break;
     case "vibrate":
       buzz(effect.milliseconds as number);
@@ -173,6 +191,37 @@ function carry_out(effect: Effect) {
       change_setting("do_not_disturb", effect.on ? 1 : 0);
       break;
   }
+}
+
+// ============================================================================
+// Notifications
+// ============================================================================
+
+/** As many as the watch keeps. */
+const MOST_KEPT_NOTIFICATIONS = 5;
+
+let kept_notifications: { notification: KeptNotification; is_read: boolean }[] = [];
+let next_app_notification_id = -1;
+
+function show_notifications() {
+  batch(() => {
+    notifications.value = kept_notifications.map((kept) => kept.notification);
+    unread_notifications.value = kept_notifications.filter((kept) => !kept.is_read).length;
+  });
+}
+
+/** Keeps a notification as the newest and unread, in place of any with its id, as the watch does. */
+export function keep_notification(notification: KeptNotification) {
+  const others = kept_notifications.filter((kept) => kept.notification.id !== notification.id);
+  kept_notifications = [{ notification, is_read: false }, ...others].slice(0, MOST_KEPT_NOTIFICATIONS);
+  show_notifications();
+}
+
+/** Forgets every kept notification, for tests. */
+export function clear_notifications() {
+  kept_notifications = [];
+  next_app_notification_id = -1;
+  show_notifications();
 }
 
 /** Changes a setting the way the watch does, then tells subscribed apps; unknown names are ignored. */
@@ -328,6 +377,10 @@ export function deliver(kind: Subscription["kind"], event: object, filter?: (sub
       sunset: null,
       forecast: forecast.forecast ?? [],
     };
+  }
+  if (kind === "notification") {
+    const notification = event as Omit<KeptNotification, "time"> & { time?: Instant };
+    keep_notification({ ...notification, time: notification.time ?? now_milliseconds.peek() });
   }
   if (kind === "music") current_music.value = { ...(event as typeof current_music.value) };
   if (kind === "navigation") current_navigation.value = { ...(event as typeof current_navigation.value) };

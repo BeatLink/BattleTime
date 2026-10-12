@@ -191,7 +191,7 @@ The table below is the budget:
 | Stack | 8 KB | The main stack, for interrupts and code that is not in a task. | Planned |
 | Tasks | 6 KB | Embassy's tasks. Each task's state is fixed in size when the firmware is built. | Planned |
 | Reserve | 4 KB | Left free, so a budget that runs over does not crash the watch. | Planned |
-| System state | 4 KB | Settings, notifications, alarms and the step count. | Planned |
+| System state | 4 KB | Settings, notifications, alarms and the step count. The latest 5 notifications are kept on the heap, about 200 B each, beside about 200 B of the shell task's state. | Planned |
 | Display buffer | 2 KB | The buffer `neotime-display` fills before each SPI transfer. | Planned |
 | File system buffers | 2 KB | littlefs-rust, allocated from the heap: 944 B while mounted, plus 408 B for each open file; room for two open at once. | Measured on a 64-bit computer; the watch needs a little less |
 

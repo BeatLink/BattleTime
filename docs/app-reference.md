@@ -24,7 +24,8 @@ time.
 | `heart_rate` | `Int` | The last heart rate measured, in beats per minute, or 0 if none. |
 | `heart_rate_measured_at` | `Instant` | When `heart_rate` was measured. |
 | `is_phone_connected` | `Bool` | Whether the phone is connected over Bluetooth. |
-| `unread_notifications` | `Int` | How many notifications are unread. |
+| `unread_notifications` | `Int` | How many of the kept notifications are unread. |
+| `notifications` | list | The latest 5 notifications the watch keeps, from the phone and from apps, newest first: `notifications.value.length`, and `notifications.value[i].id` (for `dismiss_notification`), `.app`, `.title`, `.body` and `.time`, when it arrived. An app's own have negative ids. Needs the `notifications` permission. `apps/notifications` lists them this way. |
 | `is_do_not_disturb` | `Bool` | Whether do not disturb is on. |
 | `brightness` | `Int` | The backlight level, 1 to 3. |
 | `settings` | object | The user's choices apps should follow: `uses_24_hour_clock`, `uses_metric_units`, `step_goal`, `screen_timeout_seconds` (5 to 300), `always_on_screen`, `chimes` (0 off, 1 every hour, 2 every half hour) and `theme`, the preset theme's number in the watch's order (dark, light, ocean, forest, sunset, contrast), or -1 for colours of the user's own. |
@@ -306,9 +307,9 @@ not check the `wake` permission for this yet, and a setting to silence alarms to
 
 | Effect | Does |
 |---|---|
-| `notify(title, body)` | Adds a notification on the watch, with the usual vibration. The watch buzzes but keeps no notification list yet. |
+| `notify(title, body)` | Adds a notification on the watch, with the usual vibration, under the app's name. |
 | `dismiss_notification(id)` | Removes a notification. |
-| `mark_notifications_read()` | Marks every notification read. |
+| `mark_notifications_read()` | Marks every notification read, so `unread_notifications` is 0. |
 
 ### Phone
 

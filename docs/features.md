@@ -37,9 +37,15 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   Do not disturb silences them.
 - **Vibration** for apps that buzz, alarms and timers that ring, and notifications from the phone.
   Do not disturb silences everything but alarms and timers.
-- **Notifications from the phone buzz the watch.** Gadgetbridge's `notify` message, sent through
-  the companion app's UART service, buzzes twice and goes to the open app. There is no
-  notification list yet.
+- **Notifications from the phone.** Gadgetbridge's `notify` message, sent through the companion
+  app's UART service, buzzes twice and goes to the open app. The watch keeps the latest 5, from the
+  phone and from apps, and the notifications app lists them newest first: a tap reads one in full
+  and Dismiss removes it. A notification dismissed on the phone goes from the watch too. Faces show
+  when some are unread.
+- **A notification wakes the screen.** One that arrives while the screen is dark turns it on and
+  opens the notifications app, when it is installed, so it can be read at once. Do not disturb
+  keeps the screen dark and the watch still, and the notification is still kept. While the phone
+  rings the watch to find it, a notification is kept without a buzz or a wake.
 - **Music, weather and calls from the phone.** Gadgetbridge's `musicinfo`, `musicstate` and
   `weather` messages fill the music app, the weather app and the faces that show the weather; the
   music app's buttons control the phone's player. An incoming call buzzes and lights the screen,

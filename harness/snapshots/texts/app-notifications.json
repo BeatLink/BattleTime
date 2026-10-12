@@ -1,0 +1,11 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "No notifications"
+      ]
+    }
+  ]
+}

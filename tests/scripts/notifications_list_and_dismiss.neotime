@@ -1,0 +1,16 @@
+# Notifications from the phone are listed newest first, read in full and dismissed.
+# The test watch reads only the first built row of a repeated list, so this taps the newest.
+open app notifications
+expect text "No notifications"
+notify "Sam" "On my way"
+notify "Alex" "Running late"
+expect no text "No notifications"
+expect text "Alex"
+tap "Alex"
+expect screen message
+expect text "Running late"
+tap "Dismiss"
+expect screen main
+expect no text "Alex"
+expect text "Sam"
+expect no failures

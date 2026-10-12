@@ -2207,6 +2207,28 @@ fn every_system_value_has_a_bit_in_the_mask_and_related_values_share_one() {
         SystemValue::BatteryMillivolts.bit(),
         SystemValue::BatteryPercent.bit()
     );
+    assert_eq!(
+        SystemValue::NotificationTitle.bit(),
+        SystemValue::UnreadNotifications.bit()
+    );
+}
+
+#[test]
+fn a_kept_notification_is_a_list_whose_app_title_and_body_are_text() {
+    use SystemValue::*;
+
+    for value in [
+        NotificationId,
+        NotificationApp,
+        NotificationTitle,
+        NotificationBody,
+        NotificationTime,
+    ] {
+        assert!(value.is_list());
+    }
+    assert!(!NotificationCount.is_list());
+    assert!(NotificationBody.is_text());
+    assert!(!NotificationTime.is_text());
 }
 
 // ============================================================================

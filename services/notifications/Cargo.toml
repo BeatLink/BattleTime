@@ -1,0 +1,13 @@
+[package]
+name = "neotime-notifications"
+version = "0.1.0"
+edition = "2021"
+description = "The notifications the watch keeps: the latest few from the phone and from apps, for apps to list"
+license.workspace = true
+publish = false
+
+[dependencies]
+heapless = "0.9"
+neotime-app-host = { path = "../../app-host" }
+neotime-companion = { path = "../companion" }
+neotime-runtime = { path = "../../runtime" }

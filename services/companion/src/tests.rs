@@ -101,6 +101,13 @@ fn a_notification_carries_its_id_app_title_and_body() {
 }
 
 #[test]
+fn a_dismissal_names_the_notification_by_its_id() {
+    let line = br#"GB({"t":"notify-","id":1234})"#;
+
+    assert_eq!(parse_line(line), Ok(Message::NotificationDismissed { id: 1234 }));
+}
+
+#[test]
 fn a_notification_with_fields_left_out_reads_as_empty() {
     let Ok(Message::Notification(notification)) = parse_line(br#"{"t":"notify"}"#) else {
         panic!();

@@ -28,7 +28,8 @@ pub mod demo;
 
 pub use fonts::FontName;
 pub use host::{
-    AppHost, OpenError, Transition, LARGEST_SAVED_STATE_BYTES, SCREEN_AREA, SCREEN_HISTORY_DEPTH, STRIP_PIXELS,
+    AppHost, OpenError, Transition, LARGEST_SAVED_STATE_BYTES, SCREEN_AREA, SCREEN_HISTORY_DEPTH,
+    STRIP_PIXELS,
 };
 pub use nodes::{is_mapped, Align, Length};
 pub use rlvgl_core::widget::Rect;

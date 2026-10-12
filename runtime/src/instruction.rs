@@ -74,6 +74,14 @@ pub enum SystemValue {
     ThemePreset,
     /// The battery's smoothed voltage in millivolts, which changes with `battery_percent`.
     BatteryMillivolts,
+    /// How many notifications the watch keeps, newest first.
+    NotificationCount,
+    /// One kept notification, read with `ReadSystemElement` and its place: its id, its app, title and body as text, and when it came.
+    NotificationId,
+    NotificationApp,
+    NotificationTitle,
+    NotificationBody,
+    NotificationTime,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -85,7 +93,7 @@ const INSTALLED_APPS_BIT: u32 = 21;
 const SETTINGS_BIT: u32 = 22;
 
 impl SystemValue {
-    pub const COUNT: usize = 48;
+    pub const COUNT: usize = 54;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -138,6 +146,12 @@ impl SystemValue {
             45 => Chimes,
             46 => ThemePreset,
             47 => BatteryMillivolts,
+            48 => NotificationCount,
+            49 => NotificationId,
+            50 => NotificationApp,
+            51 => NotificationTitle,
+            52 => NotificationBody,
+            53 => NotificationTime,
             _ => return None,
         })
     }
@@ -166,6 +180,8 @@ impl SystemValue {
             }
             InstalledAppCount | InstalledAppName | InstalledAppId | InstalledAppIcon => INSTALLED_APPS_BIT,
             ScreenTimeoutSeconds | AlwaysOnScreen | Chimes | ThemePreset => SETTINGS_BIT,
+            NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
+            | NotificationTime => UnreadNotifications as u32,
             other => other as u32,
         };
         1 << group
@@ -182,6 +198,11 @@ impl SystemValue {
                 | InstalledAppName
                 | InstalledAppId
                 | InstalledAppIcon
+                | NotificationId
+                | NotificationApp
+                | NotificationTitle
+                | NotificationBody
+                | NotificationTime
         )
     }
 
@@ -196,6 +217,9 @@ impl SystemValue {
                 | NavigationInstruction
                 | InstalledAppName
                 | InstalledAppId
+                | NotificationApp
+                | NotificationTitle
+                | NotificationBody
         )
     }
 }

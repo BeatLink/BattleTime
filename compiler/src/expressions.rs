@@ -116,11 +116,12 @@ fn list_length(list: &str) -> Option<SystemValue> {
     match list {
         "current_weather.forecast" => Some(SystemValue::WeatherForecastLength),
         "installed_apps" => Some(SystemValue::InstalledAppCount),
+        "notifications" => Some(SystemValue::NotificationCount),
         _ => None,
     }
 }
 
-/// One field of an element of a system list: a day of the forecast, or an installed app.
+/// One field of an element of a system list: a day of the forecast, an installed app or a kept notification.
 fn list_field(list: &str, name: &str) -> Option<SystemSignal> {
     let (value, value_type) = match (list, name) {
         ("current_weather.forecast", "condition") => (
@@ -132,6 +133,11 @@ fn list_field(list: &str, name: &str) -> Option<SystemSignal> {
         ("installed_apps", "name") => (SystemValue::InstalledAppName, Type::TEXT),
         ("installed_apps", "id") => (SystemValue::InstalledAppId, Type::TEXT),
         ("installed_apps", "icon") => (SystemValue::InstalledAppIcon, Type::ICON),
+        ("notifications", "id") => (SystemValue::NotificationId, Type::NUMBER),
+        ("notifications", "app") => (SystemValue::NotificationApp, Type::TEXT),
+        ("notifications", "title") => (SystemValue::NotificationTitle, Type::TEXT),
+        ("notifications", "body") => (SystemValue::NotificationBody, Type::TEXT),
+        ("notifications", "time") => (SystemValue::NotificationTime, Type::NUMBER),
         _ => return None,
     };
     Some(SystemSignal { value, value_type })
@@ -287,8 +293,8 @@ impl<'a> Compiler<'a> {
                 module,
                 name: format!("Math.{name}"),
             }),
-            Reference::SystemGroup("installed_apps") if name == "value" => {
-                Some(Reference::SystemList("installed_apps"))
+            Reference::SystemGroup(list @ ("installed_apps" | "notifications")) if name == "value" => {
+                Some(Reference::SystemList(list))
             }
             Reference::SystemGroup(group) => {
                 if name == "value" {
@@ -1269,6 +1275,7 @@ fn library_reference<'a>(module: LibraryModule, name: &str) -> Reference<'a> {
                 "current_music" => Some("current_music"),
                 "current_navigation" => Some("current_navigation"),
                 "installed_apps" => Some("installed_apps"),
+                "notifications" => Some("notifications"),
                 _ => None,
             };
             if let Some(group) = group {

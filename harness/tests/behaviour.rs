@@ -146,3 +146,50 @@ fn the_digital_face_shows_the_date() {
 
     assert!(watch.shows_text("Mon 5 Jan 2026"), "{:?}", watch.visible_texts());
 }
+
+// ============================================================================
+// Notifications
+// ============================================================================
+
+const NOTIFYING_APP: &str = r#"
+import { define_app, notify, unread_notifications } from "neotime";
+import { Label, Screen } from "neotime/widgets";
+function Main() {
+  return <Screen onClick={() => notify("Done", "Your timer ended")}><Label>{`${unread_notifications.value} unread`}</Label></Screen>;
+}
+export default define_app({ id: "notifier", name: "Notifier", permissions: ["notifications"], screens: { main: Main } });
+"#;
+
+#[test]
+fn an_apps_notification_is_kept_under_its_name_and_counted_unread() {
+    let mut watch = TestWatch::open_source(NOTIFYING_APP).unwrap();
+    assert!(watch.shows_text("0 unread"));
+
+    watch.tap(120, 120);
+
+    assert!(watch.shows_text("1 unread"), "{:?}", watch.visible_texts());
+    let kept = watch.system().notifications.get(0).unwrap();
+    assert_eq!(kept.source, "Notifier");
+    assert_eq!(kept.title, "Done");
+    assert_eq!(kept.body, "Your timer ended");
+}
+
+#[test]
+fn opening_the_notifications_app_marks_every_notification_read() {
+    let mut watch = TestWatch::open_app("notifications").unwrap();
+    watch.screen_off();
+    watch.deliver(neotime_app_testing::PushedEvent::Notification {
+        id: 5,
+        app: "Messages",
+        title: "Sam",
+        body: "On my way",
+        time: watch.now(),
+    });
+    assert_eq!(watch.system().notifications.unread_count(), 1);
+
+    watch.screen_on();
+
+    assert_eq!(watch.system().notifications.unread_count(), 0);
+    assert!(watch.shows_text("Sam"));
+    assert!(watch.failures().is_empty());
+}

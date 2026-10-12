@@ -7,9 +7,12 @@ use neotime_app_host::{AppFailure, AppHost, EventResult, PushedEvent, Rect, Touc
 use neotime_companion::{PhoneData, PhoneUpdates, MUSIC_TEXTS, MUSIC_VALUES, WEATHER_TEXTS, WEATHER_VALUES};
 use neotime_runtime::events::{ButtonPress, SwipeDirection};
 use neotime_runtime::{
-    AppImage, EffectKind, Property, PropertySource, SystemValue, SystemValues, Value, WidgetKind, WidgetTree,
+    AppImage, EffectKind, Property, PropertySource, SystemValue, Value, WidgetKind, WidgetTree,
     DEFAULT_THEME, NONE,
 };
+
+use neotime_companion::PhoneNotification;
+use neotime_notifications::cut_to_fit;
 
 use crate::fake_system::{FakeSystem, InstalledApp, RecordedEffect};
 use crate::framebuffer::Framebuffer;
@@ -80,6 +83,11 @@ impl TestWatch {
         let mut host =
             AppHost::open(image, DEFAULT_THEME, now, &mut system).map_err(OpenFailure::CannotOpen)?;
         host.set_library(library).map_err(OpenFailure::CannotOpen)?;
+        system.app_name = host
+            .image()
+            .string(host.image().name_string)
+            .unwrap_or_default()
+            .to_string();
         let widgets = WidgetTree::new(*host.image());
         Ok(TestWatch {
             host,
@@ -164,7 +172,19 @@ impl TestWatch {
 
     fn send(&mut self, touch: Touch) -> EventResult {
         let now = self.now();
-        self.host.touch(touch, now, &mut self.system)
+        let result = self.host.touch(touch, now, &mut self.system);
+        self.report_notification_changes();
+        result
+    }
+
+    /// Tells the app the notifications changed when its last call changed them, as the shell does.
+    fn report_notification_changes(&mut self) {
+        if std::mem::take(&mut self.system.notifications_changed) {
+            let now = self.now();
+            let changed = SystemValue::UnreadNotifications.bit();
+            self.host
+                .report_system_value_changes(changed, now, &mut self.system);
+        }
     }
 
     /// A tap as the touch panel reports one: the finger down, up, then the tap itself.
@@ -229,13 +249,18 @@ impl TestWatch {
 
     pub fn press_button(&mut self) -> EventResult {
         let now = self.now();
-        self.host.press_button(ButtonPress::Press, now, &mut self.system)
+        let result = self.host.press_button(ButtonPress::Press, now, &mut self.system);
+        self.report_notification_changes();
+        result
     }
 
     pub fn long_press_button(&mut self) -> EventResult {
         let now = self.now();
-        self.host
-            .press_button(ButtonPress::LongPress, now, &mut self.system)
+        let result = self
+            .host
+            .press_button(ButtonPress::LongPress, now, &mut self.system);
+        self.report_notification_changes();
+        result
     }
 
     /// Taps the middle of a widget of the open screen, by its number in the image.
@@ -302,12 +327,16 @@ impl TestWatch {
             );
             self.set_clock(next);
             self.host.tick(next, &mut self.system);
+            self.report_notification_changes();
         }
         self.set_clock(target);
         self.host.tick(target, &mut self.system);
+        self.report_notification_changes();
     }
 
     /// Hands the app an event from the phone or a sensor, and updates the system values it carries.
+    ///
+    /// A notification is kept in the list once the app's handlers have run, as on the watch.
     pub fn deliver(&mut self, event: PushedEvent) -> EventResult {
         let now = self.now();
         match event {
@@ -322,13 +351,20 @@ impl TestWatch {
             PushedEvent::Phone { is_connected } => self
                 .system
                 .set(SystemValue::IsPhoneConnected, is_connected as Value),
-            PushedEvent::Notification { .. } => {
-                let unread = self.system.read(SystemValue::UnreadNotifications);
-                self.system.set(SystemValue::UnreadNotifications, unread + 1);
-            }
             _ => {}
         }
-        self.host.deliver(event, now, &mut self.system)
+        let result = self.host.deliver(event, now, &mut self.system);
+        if let PushedEvent::Notification {
+            id, app, title, body, ..
+        } = event
+        {
+            self.system
+                .notifications
+                .add(Box::new(phone_notification(id, app, title, body)), now);
+            self.system.notifications_changed = true;
+        }
+        self.report_notification_changes();
+        result
     }
 
     /// Reads a companion line as the watch does, keeps its music or weather, and tells the app of it.
@@ -388,13 +424,27 @@ impl TestWatch {
     pub fn screen_on(&mut self) -> EventResult {
         self.is_screen_on = true;
         let now = self.now();
-        self.host.screen_turned_on(now, &mut self.system)
+        let result = self.host.screen_turned_on(now, &mut self.system);
+        self.report_notification_changes();
+        result
     }
 
     pub fn screen_off(&mut self) -> EventResult {
         self.is_screen_on = false;
         let now = self.now();
-        self.host.screen_turned_off(now, &mut self.system)
+        let result = self.host.screen_turned_off(now, &mut self.system);
+        self.report_notification_changes();
+        result
+    }
+}
+
+/// A notification as the phone sends it, its text cut to fit as the watch cuts it.
+fn phone_notification(id: Value, app: &str, title: &str, body: &str) -> PhoneNotification {
+    PhoneNotification {
+        id,
+        source: cut_to_fit(app),
+        title: cut_to_fit(title),
+        body: cut_to_fit(body),
     }
 }
 

@@ -7,13 +7,15 @@
 //! press turns them on without acting on it. Each app's persistent state is saved to
 //! `/apps/<id>/state` when it closes or the screen turns off, and changed settings at the same times.
 //! The watch buzzes on the local hour or half hour when the chimes setting asks, and for each notification
-//! from the phone, which also goes to the open app. Do not disturb silences all of it, and every app
-//! vibration but the alarm pattern. The accelerometer is read only while the screen is on and the
-//! open app subscribes to acceleration or shakes. Plugging the charger in or out, or the charge going
-//! low, lights the screen on the battery app, which goes back to what was open when the screen
-//! sleeps or the wearer goes back. The phone's music and weather are kept for apps to read, an
-//! incoming call buzzes and lights the screen, and the phone can ring the watch until the wearer
-//! touches it. While an update runs, the status page holds the screen lit; once the update ends or
+//! from the phone, which also goes to the open app and into the kept list. A notification that
+//! finds the screen dark turns it on and opens the notifications app, when one is installed. Do not
+//! disturb silences all of it, keeps the screen dark, and silences every app vibration but the
+//! alarm pattern. The accelerometer is read only while the screen is on and the open app
+//! subscribes to acceleration or shakes. Plugging the charger in or out, or the charge going low,
+//! lights the screen on the battery app, which goes back to what was open when the screen sleeps
+//! or the wearer goes back. The phone's music and weather are kept for apps to read, an incoming
+//! call buzzes and lights the screen, and the phone can ring the watch until the wearer touches it.
+//! While an update runs, the status page holds the screen lit; once the update ends or
 //! fails, the next touch or press puts the shell back.
 
 extern crate alloc;
@@ -40,7 +42,8 @@ use neotime_app_host::{
     LARGEST_SAVED_STATE_BYTES, STRIP_PIXELS,
 };
 use neotime_battery::BatteryEvent;
-use neotime_companion::{PhoneData, PhoneUpdates, SettingsChange};
+use neotime_companion::{PhoneData, PhoneUpdates, SettingsChange, NOTIFICATION_SOURCE_BYTES};
+use neotime_notifications::NotificationList;
 use neotime_runtime::{
     events::{ButtonPress, SwipeDirection},
     resources::ImageReference,
@@ -75,6 +78,9 @@ static STATUS_DISMISSABLE: AtomicBool = AtomicBool::new(true);
 static STATUS_CHANGED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 const MILLISECONDS_PER_MINUTE: Value = 60_000;
+
+/// The app a notification opens when it wakes the screen.
+const NOTIFICATIONS_APP_ID: &str = "notifications";
 
 /// A chime is skipped when the shell notices it later than this, such as after the phone moved the clock on.
 const LATEST_CHIME_IN_MILLISECONDS: Value = MILLISECONDS_PER_MINUTE;
@@ -168,6 +174,11 @@ struct WatchSystem {
     screen_request: Option<bool>,
     /// The music and weather the phone last sent.
     phone: PhoneData,
+    notifications: NotificationList,
+    /// Set when the kept notifications changed, so the open app is told once the host call returns.
+    notifications_changed: bool,
+    /// The open app's name, which a notification it makes shows as its source.
+    open_app_name: heapless::String<NOTIFICATION_SOURCE_BYTES>,
 }
 
 impl SystemValues for WatchSystem {
@@ -180,6 +191,9 @@ impl SystemValues for WatchSystem {
         }
         if let Some(phone_value) = self.phone.read(value) {
             return phone_value;
+        }
+        if let Some(number) = self.notifications.read(value) {
+            return number;
         }
         match value {
             SystemValue::Now => clock::utc_now(),
@@ -201,8 +215,11 @@ impl SystemValues for WatchSystem {
         self.phone.read_text(value).unwrap_or("")
     }
 
-    /// Each listed app's icon, which the host draws from the icons `apps` keeps.
+    /// Each listed app's icon, which the host draws from the icons `apps` keeps, and the kept notifications.
     fn read_element(&self, value: SystemValue, index: Value) -> Value {
+        if is_notification_value(value) {
+            return self.notifications.read_element(value, index);
+        }
         match value {
             SystemValue::InstalledAppIcon => match u16::try_from(index) {
                 Ok(place) if (place as usize) < self.installed.listed.len() => {
@@ -214,8 +231,11 @@ impl SystemValues for WatchSystem {
         }
     }
 
-    /// Each listed app's name and id.
+    /// Each listed app's name and id, and each kept notification's text.
     fn read_element_text(&self, value: SystemValue, index: Value) -> &str {
+        if is_notification_value(value) {
+            return self.notifications.read_element_text(value, index);
+        }
         let Some(entry) = usize::try_from(index)
             .ok()
             .and_then(|place| self.installed.listed.get(place))
@@ -240,8 +260,19 @@ impl SystemValues for WatchSystem {
     }
 }
 
+/// Whether the value is one of the kept notifications' fields, which all share one bit.
+fn is_notification_value(value: SystemValue) -> bool {
+    value.bit() == SystemValue::UnreadNotifications.bit()
+}
+
 impl System for WatchSystem {
     fn carry_out(&mut self, effect: &AppEffect) {
+        if self
+            .notifications
+            .carry_out(effect, &self.open_app_name, clock::utc_now())
+        {
+            self.notifications_changed = true;
+        }
         let vibration = haptics::vibration_for_effect(effect.kind, effect.number(0), is_do_not_disturb());
         if vibration.is_some() {
             vibration::request(vibration);
@@ -379,6 +410,7 @@ impl Shell {
 
     /// Opens a host on the image into `self.host`.
     fn start_host(&mut self, bytes: &'static [u8], saved: &[u8], now: Value) -> bool {
+        self.system.open_app_name = app_name_of(bytes);
         let Ok(host) = AppHost::open_into(&mut self.host, bytes, self.theme, saved, now, &mut self.system)
         else {
             return false;
@@ -565,36 +597,60 @@ impl Shell {
         self.take_battery_events();
     }
 
-    /// Buzzes for a phone notification, and passes sensor readings and notifications to the open app.
+    /// Keeps and buzzes for a phone notification, takes the phone's other updates, and passes readings and notifications to the open app.
     fn app_event(&mut self, event: AppEvent) {
-        if let AppEvent::Phone(updates) = event {
-            self.phone_updated(updates);
-            return;
-        }
         let now = clock::utc_now();
-        if let AppEvent::Notification(_) = &event {
-            vibration::request(haptics::notification_vibration(is_do_not_disturb()));
-        }
-        let Some(host) = &mut self.host else {
-            return;
-        };
-        let pushed = match &event {
-            AppEvent::Acceleration(reading) => PushedEvent::Acceleration {
+        match event {
+            AppEvent::Phone(updates) => self.phone_updated(updates),
+            AppEvent::Notification(notification) => {
+                if let Some(host) = &mut self.host {
+                    let pushed = PushedEvent::Notification {
+                        id: notification.id,
+                        app: &notification.source,
+                        title: &notification.title,
+                        body: &notification.body,
+                        time: now,
+                    };
+                    host.deliver(pushed, now, &mut self.system);
+                }
+                self.system.notifications.add(notification, now);
+                self.system.notifications_changed = true;
+                // A ringing find goes on, so the notification neither buzzes over it nor opens an app.
+                if !self.is_finding() {
+                    self.wake_for_notification();
+                    vibration::request(haptics::notification_vibration(is_do_not_disturb()));
+                }
+            }
+            AppEvent::NotificationDismissed(id) => {
+                self.system.notifications_changed |= self.system.notifications.dismiss(id);
+            }
+            AppEvent::Acceleration(reading) => self.deliver(PushedEvent::Acceleration {
                 x: reading.x_in_milli_g as Value,
                 y: reading.y_in_milli_g as Value,
                 z: reading.z_in_milli_g as Value,
-            },
-            AppEvent::Shake => PushedEvent::Motion(MotionKind::Shake),
-            AppEvent::Notification(notification) => PushedEvent::Notification {
-                id: notification.id,
-                app: &notification.source,
-                title: &notification.title,
-                body: &notification.body,
-                time: now,
-            },
-            AppEvent::Phone(_) => return,
-        };
-        host.deliver(pushed, now, &mut self.system);
+            }),
+            AppEvent::Shake => self.deliver(PushedEvent::Motion(MotionKind::Shake)),
+        }
+    }
+
+    fn deliver(&mut self, event: PushedEvent) {
+        if let Some(host) = &mut self.host {
+            host.deliver(event, clock::utc_now(), &mut self.system);
+        }
+    }
+
+    /// Asks for a dark screen to turn on outside do not disturb, showing the notifications app when one is installed.
+    ///
+    /// The screen turns on through `follow_requests`, as for the battery screen, so it wakes once and counts as input.
+    fn wake_for_notification(&mut self) {
+        if self.lit || is_do_not_disturb() {
+            return;
+        }
+        let notifications_app = self.system.installed.place_of(NOTIFICATIONS_APP_ID);
+        if let Some(place) = notifications_app.filter(|&place| self.showing != Showing::App(place)) {
+            self.open(Showing::App(place), Transition::None);
+        }
+        self.system.screen_request = Some(true);
     }
 
     /// Buzzes and rings as the phone asks, keeps its music and weather, and tells the open app.
@@ -619,6 +675,10 @@ impl Shell {
         if let Some(host) = &mut self.host {
             app_phone::tell_app(host, updates.call.as_deref(), changes, now, &mut self.system);
         }
+    }
+
+    fn is_finding(&self) -> bool {
+        self.finding_until.is_some_and(|until| Instant::now() < until)
     }
 
     /// Stops the phone's find ring if it still plays, and says whether it did, so the touch does nothing else.
@@ -693,6 +753,12 @@ impl Shell {
 
     /// Carries out what the last host call's handlers asked for, and says whether an app woke the screen.
     fn follow_requests(&mut self) -> bool {
+        if core::mem::take(&mut self.system.notifications_changed) {
+            if let Some(host) = &mut self.host {
+                let changed = SystemValue::UnreadNotifications.bit();
+                host.report_system_value_changes(changed, clock::utc_now(), &mut self.system);
+            }
+        }
         let screen_request = self.system.screen_request.take();
         match screen_request {
             Some(true) if !self.lit => self.turn_screen_on(),
@@ -746,7 +812,8 @@ impl Shell {
     }
 }
 
-// ============================================================================
+// =====================================================================}
+
 // The battery screen
 // ============================================================================
 
@@ -809,6 +876,17 @@ fn draw_host(display: &SharedDisplay, host: &mut AppHost<'static>) {
     });
 }
 
+/// The name an app image gives itself, cut to fit a notification's source.
+// Kept out of the shell task, so the image's parse never adds to the task's stack frame.
+#[inline(never)]
+fn app_name_of(bytes: &[u8]) -> heapless::String<NOTIFICATION_SOURCE_BYTES> {
+    AppImage::parse(bytes)
+        .ok()
+        .and_then(|parsed| parsed.string(parsed.name_string))
+        .map(neotime_notifications::cut_to_fit)
+        .unwrap_or_default()
+}
+
 /// Gives the app host its text fonts from the installed shared library, which holds them.
 // Kept out of the shell task, so the library's parse never adds to the task's stack frame.
 #[inline(never)]
@@ -848,6 +926,9 @@ pub async fn run_shell(
             installed: InstalledApps::read(files),
             screen_request: None,
             phone: PhoneData::default(),
+            notifications: NotificationList::new(),
+            notifications_changed: false,
+            open_app_name: heapless::String::new(),
         },
         theme,
         app_set_brightness: false,
