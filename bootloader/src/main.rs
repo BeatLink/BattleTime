@@ -319,8 +319,7 @@ impl<'bus, 'd> StatusPage<'bus, 'd> {
     }
 
     /// Lists the options from the action line down, marks the selected one, and says how to use them.
-    fn show_menu(&mut self, selected: usize, delay: &mut Delay) {
-        self.show("Unchanged", "", "", delay);
+    fn show_menu(&mut self, selected: usize) {
         if let Some((screen, _, _)) = &mut self.screen {
             for (index, (_, marked, unmarked)) in MENU.iter().enumerate() {
                 screen.write_line(
@@ -367,9 +366,10 @@ fn choose(
 ) -> Choice {
     // The hold that opened the menu is still going; it must end before a press counts.
     wait_for_release(button, watchdog, delay);
+    status_page.show("Unchanged", "", "", delay);
     let mut selected = 0;
     loop {
-        status_page.show_menu(selected, delay);
+        status_page.show_menu(selected);
         let mut waited = 0;
         while button.is_pressed() != Ok(true) {
             if waited >= MENU_TIMEOUT_IN_MILLISECONDS {

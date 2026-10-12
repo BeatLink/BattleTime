@@ -115,12 +115,14 @@ Open The Menu
 
 Pick Menu Option
     [Documentation]           Moves down with short presses, then picks with a long one.
+    ...                       The presses are taps, because in the emulator the bootloader's delay loop runs faster
+    ...                       after the opening hold, so a 0.2 second press already counts as a pick there.
     [Arguments]    ${index}
     FOR    ${press}    IN RANGE    ${index}
         Execute Command       ${BUTTON} Press
-        Run For               0.2
+        Run For               0.01
         Execute Command       ${BUTTON} Release
-        Run For               0.2
+        Run For               0.5
     END
     Execute Command           ${BUTTON} Press
     Run For                   1.5
