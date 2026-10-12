@@ -142,18 +142,91 @@ fn content_size(node: &Node, available_width: Option<i32>) -> Size {
     }
 }
 
-/// The node numbers of a node's direct children.
+/// Whether a node is a Repeat whose rows are laid out as its parent's own children.
+///
+/// Only a Repeat whose rows sit in slots of one height, as in a long list, lays them out itself.
+pub fn is_transparent(node: &Node) -> bool {
+    node.kind == WidgetKind::Repeat && row_slots(node).is_none()
+}
+
+/// The node numbers of a node's children as layout sees them: the rows of a transparent Repeat
+/// stand in for the Repeat itself.
 fn children(nodes: &[Box<Node>], index: usize) -> impl Iterator<Item = usize> + '_ {
     let end = nodes[index].subtree_end as usize;
     let mut next = index + 1;
-    core::iter::from_fn(move || {
+    // Inside a transparent Repeat: where its rows end, and where the parent's next child is.
+    let mut inside: Option<(usize, usize)> = None;
+    core::iter::from_fn(move || loop {
+        if let Some((rows_end, resume)) = inside {
+            if next < rows_end {
+                let row = next;
+                next = nodes[row].subtree_end as usize;
+                return Some(row);
+            }
+            inside = None;
+            next = resume;
+        }
         if next >= end {
             return None;
         }
         let child = next;
         next = nodes[child].subtree_end as usize;
-        Some(child)
+        if is_transparent(&nodes[child]) && nodes[child].settings.visible {
+            inside = Some((nodes[child].subtree_end as usize, next));
+            next = child + 1;
+            continue;
+        }
+        if is_transparent(&nodes[child]) {
+            continue;
+        }
+        return Some(child);
     })
+}
+
+/// The transparent Repeats directly inside a node.
+fn transparent_repeats(nodes: &[Box<Node>], index: usize) -> alloc::vec::Vec<usize> {
+    let end = nodes[index].subtree_end as usize;
+    let mut found = alloc::vec::Vec::new();
+    let mut child = index + 1;
+    while child < end {
+        if is_transparent(&nodes[child]) {
+            found.push(child);
+        }
+        child = nodes[child].subtree_end as usize;
+    }
+    found
+}
+
+/// Gives each transparent Repeat inside a node the box around its rows, so clipping and lookups still work.
+fn place_transparent_repeats(nodes: &mut [Box<Node>], index: usize, inner: Rect, shown: bool, clip: Rect) {
+    for repeat in transparent_repeats(nodes, index) {
+        let end = nodes[repeat].subtree_end as usize;
+        let mut around: Option<Rect> = None;
+        let mut row = repeat + 1;
+        while row < end {
+            let bounds = nodes[row].bounds;
+            around = Some(around.map_or(bounds, |around| around.union(bounds)));
+            row = nodes[row].subtree_end as usize;
+        }
+        let node = &mut nodes[repeat];
+        node.bounds = around.unwrap_or(Rect {
+            x: inner.x,
+            y: inner.y,
+            width: 0,
+            height: 0,
+        });
+        node.clip = clip;
+        node.shown = shown && node.settings.visible;
+        if !node.shown {
+            let mut row = repeat + 1;
+            while row < end {
+                let row_clip = nodes[row].clip;
+                let row_bounds = nodes[row].bounds;
+                place(nodes, row, row_bounds, false, row_clip);
+                row = nodes[row].subtree_end as usize;
+            }
+        }
+    }
 }
 
 fn is_positioned(node: &Node) -> bool {
@@ -350,15 +423,15 @@ fn place(nodes: &mut [Box<Node>], index: usize, bounds: Rect, parent_shown: bool
         Flow::Nothing => {}
     }
 
-    let mut child = index + 1;
-    while child < nodes[index].subtree_end as usize {
+    let kids: alloc::vec::Vec<usize> = children(nodes, index).collect();
+    for child in kids {
         if !is_in_flow(&nodes[child]) {
             let fills = false;
             let child_bounds = place_positioned_box(nodes, child, inner, fills);
             place(nodes, child, child_bounds, shown, children_clip);
         }
-        child = nodes[child].subtree_end as usize;
     }
+    place_transparent_repeats(nodes, index, inner, shown, children_clip);
 }
 
 /// Lays children one after another, down when `is_down`, otherwise across; `centered` puts them in the middle both ways.
@@ -437,11 +510,9 @@ fn place_flow(
         _ => (0, 0),
     };
 
-    let mut child = index + 1;
-    while child < nodes[index].subtree_end as usize {
-        let next_child = nodes[child].subtree_end as usize;
+    let kids: alloc::vec::Vec<usize> = children(nodes, index).collect();
+    for child in kids {
         if !is_in_flow(&nodes[child]) {
-            child = next_child;
             continue;
         }
         if is_empty_repeat(nodes, child) {
@@ -461,7 +532,6 @@ fn place_flow(
                 }
             };
             place(nodes, child, here, shown, clip);
-            child = next_child;
             continue;
         }
         let settings = nodes[child].settings;
@@ -490,7 +560,6 @@ fn place_flow(
         };
         place(nodes, child, child_bounds, shown, clip);
         cursor += main + 2 * i32::from(settings.margin) + gap + extra_gap;
-        child = next_child;
     }
 }
 
@@ -518,13 +587,11 @@ fn place_in_room(nodes: &mut [Box<Node>], child: usize, room: Rect, shown: bool,
 
 /// Puts children on top of each other, each filling the inside unless it has a size or `align`.
 fn place_on_top(nodes: &mut [Box<Node>], index: usize, inner: Rect, shown: bool, clip: Rect) {
-    let mut child = index + 1;
-    while child < nodes[index].subtree_end as usize {
-        let next_child = nodes[child].subtree_end as usize;
+    let kids: alloc::vec::Vec<usize> = children(nodes, index).collect();
+    for child in kids {
         if is_in_flow(&nodes[child]) {
             place_in_room(nodes, child, inner, shown, clip);
         }
-        child = next_child;
     }
 }
 

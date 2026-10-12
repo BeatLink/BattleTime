@@ -960,8 +960,18 @@ fn array_from_with_a_length_repeats_widgets() {
     ));
     let image = AppImage::parse(&image).unwrap();
     let state = AppState::new(&image).unwrap();
+    let PropertySource::Expression(expression) = property_of(&image, WidgetKind::Label, Property::Text, 0)
+    else {
+        panic!("the label's text is not an expression");
+    };
+    let mut interpreter = Interpreter::new();
+    interpreter.set_row(4);
+    let value = interpreter
+        .evaluate_expression(&image, expression, &state, &SYSTEM)
+        .unwrap();
 
-    assert_eq!(label_text(&image, &state, 4), "120");
+    assert_eq!(interpreter.text(&image, value), Ok("120"));
+    assert_eq!(widgets(&image)[1].0, WidgetKind::Repeat);
 }
 
 #[test]

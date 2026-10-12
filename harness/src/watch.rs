@@ -543,11 +543,8 @@ impl TestWatch {
         let mut texts = Vec::new();
         for (widget_index, _) in self.screen_widgets() {
             // A repeated list's row has a node for each row built, each with its own text.
-            for (bounds, is_shown, text) in self.host.widget_nodes(widget_index) {
-                let Some(area) = is_shown
-                    .then(|| self.area_inside_parents(widget_index, bounds))
-                    .flatten()
-                else {
+            for (area, text) in self.host.widget_nodes(widget_index) {
+                let Some(area) = area else {
                     continue;
                 };
                 let rows = self.host.widget_rows(widget_index);

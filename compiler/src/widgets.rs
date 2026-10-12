@@ -1,6 +1,6 @@
 //! Turns each screen's JSX into a fixed widget tree: components are inlined, `{cond && <W/>}`
-//! becomes the widget's `visible` property, and `.map` over a fixed-length array is unrolled, or,
-//! directly inside a List or Scroll, becomes one Repeat whose row reads its number with `ReadRow`.
+//! becomes the widget's `visible` property, and `.map` over a fixed-length array becomes one Repeat
+//! whose row reads its number with `ReadRow`, or is unrolled when its row cannot be drawn that way.
 
 use std::rc::Rc;
 
@@ -726,8 +726,8 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    /// `array.map((element, index) => <Widget/>)`: one Repeat inside a List or Scroll, otherwise
-    /// unrolled once for each element.
+    /// `array.map((element, index) => <Widget/>)`: one Repeat inside a widget that holds others,
+    /// otherwise unrolled once for each element.
     fn render_map(
         &mut self,
         call: &'a CallExpression<'a>,
@@ -1218,7 +1218,7 @@ impl<'a> Compiler<'a> {
 
         let mut rendered = Rendered::default();
         let lists_rows = matches!(kind, WidgetKind::List | WidgetKind::Scroll);
-        let outer_rows_repeat_here = std::mem::replace(&mut self.rows_repeat_here, lists_rows);
+        let outer_rows_repeat_here = std::mem::replace(&mut self.rows_repeat_here, kind.holds_children());
         let children = self.render_children(&element.children, scope, &[], &mut rendered);
         self.rows_repeat_here = outer_rows_repeat_here;
         children?;

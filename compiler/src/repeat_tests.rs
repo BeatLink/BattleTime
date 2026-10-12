@@ -96,10 +96,10 @@ function Main() {
 }
 
 #[test]
-fn a_map_outside_a_list_is_unrolled() {
+fn a_map_in_any_widget_that_holds_others_repeats_its_row() {
     let source = app(r#"
 function Main() {
-  return <Column>{range(3).map((place) => <Label>{`${place}`}</Label>)}</Column>;
+  return <Column><Row>{range(3).map((place) => <Label>{`${place}`}</Label>)}</Row></Column>;
 }
 "#);
 
@@ -107,8 +107,8 @@ function Main() {
         kinds(&source),
         [
             WidgetKind::Column,
-            WidgetKind::Label,
-            WidgetKind::Label,
+            WidgetKind::Row,
+            WidgetKind::Repeat,
             WidgetKind::Label
         ]
     );

@@ -793,7 +793,7 @@ library has), in the order above. The app host's font slots start empty, and the
 |---|---|---|
 | `Column`, `Row`, `Stack`, `Grid` | rlvgl container | Transparent unless they have a `background`. |
 | `Scroll`, `List` | rlvgl container | Drag to scroll; `onScrollEnd` when the drag ends. One that grows takes only the room left over and scrolls the rest. |
-| `Repeat` | The host | Its one child, the row, built once for each of `row_count` rows, each run with its row number for `ReadRow`. When the row has a fixed `height`, the host works out which rows show without building them, leaves a slot for each, and builds nodes only for the rows that can be seen, building and dropping rows as the list scrolls. |
+| `Repeat` | The host | Its one child, the row, built once for each of `row_count` rows, each run with its row number for `ReadRow`. Laid out as its parent's own children, so `justify`, `gap` and grid columns treat its rows as before. Down a `List` or `Scroll`, when the row has a fixed `height`, the host instead works out which rows show without building them, leaves a slot for each, and builds nodes only for the rows that can be seen, building and dropping rows as the list scrolls. |
 | `Label` | rlvgl label | Wraps at spaces; `long_mode` scroll and clip work. `align` places the text across. |
 | `Button` | rlvgl button with a label or icon | `background` defaults to the theme's `surface`, and `radius` to 12. |
 | `Image`, `Icon` | The host's image drawing | Colour images as they are, masks in `color`. A missing image draws a placeholder box. |

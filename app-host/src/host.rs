@@ -651,8 +651,15 @@ impl<'image> AppHost<'image> {
             .children(node.widget_index)
             .next()
             .and_then(|row| self.tree.widget(row));
+        // Rows sit in slots only down a list that scrolls; elsewhere they are laid out as their parent's own children.
+        let in_a_list = node.parent.is_some_and(|parent| {
+            matches!(
+                self.nodes[parent as usize].kind,
+                WidgetKind::List | WidgetKind::Scroll
+            )
+        });
         let extent = match row_widget.and_then(|row| row.property(Property::Height)) {
-            Some(PropertySource::Constant(height)) if height > 0 => height,
+            Some(PropertySource::Constant(height)) if height > 0 && in_a_list => height,
             _ => return (0..count).collect(),
         };
         let visibility = row_widget.and_then(|row| row.property(Property::Visible));
@@ -1668,14 +1675,31 @@ impl<'image> AppHost<'image> {
         Some(self.node(widget_index)?.text())
     }
 
-    /// Each node of a widget, as where it is, whether it is shown and its text: one for most widgets,
-    /// one for each built row of a repeated list.
-    pub fn widget_nodes(&self, widget_index: u16) -> Vec<(Rect, bool, &str)> {
+    /// Each node of a widget, as the part of it that can be seen and its text: one for most widgets,
+    /// one for each built row of a repeated list. The part is none when the node is hidden or out of sight.
+    pub fn widget_nodes(&self, widget_index: u16) -> Vec<(Option<Rect>, &str)> {
         self.nodes
             .iter()
-            .filter(|node| node.widget_index == widget_index)
-            .map(|node| (node.bounds, node.shown, node.text()))
+            .enumerate()
+            .filter(|(_, node)| node.widget_index == widget_index)
+            .map(|(node_index, node)| (self.seen_area(node_index), node.text()))
             .collect()
+    }
+
+    /// The part of a node inside the screen and every node around it, if it is shown.
+    fn seen_area(&self, node_index: usize) -> Option<Rect> {
+        let node = &self.nodes[node_index];
+        if !node.shown {
+            return None;
+        }
+        let mut area = node.bounds.intersect(SCREEN_AREA)?;
+        let mut next = node.parent;
+        while let Some(parent) = next {
+            let parent = &self.nodes[parent as usize];
+            area = area.intersect(parent.bounds)?;
+            next = parent.parent;
+        }
+        (area.width > 0 && area.height > 0).then_some(area)
     }
 
     /// The text each node of a widget shows: one for most widgets, one for each built row of a repeated list.

@@ -68,15 +68,15 @@ becomes bytecode.
   `if (test) return null;` hides what follows while `test` holds.
 - `{condition && <Widget/>}` and `{test ? <A/> : <B/>}` set `visible`. Conditions nest through
   fragments and components, and are joined with `&&`.
-- `array.map((element, index) => <Widget/>)` is unrolled once per element. The array must be a
-  constant, `range(n)` or an array signal.
-- Directly inside a `List` or `Scroll`, a `.map` over `range(n)`, `Array.from({ length })`, an
-  array signal or an array of records instead becomes one `Repeat` holding its row once. Inside
-  the row, the index reads the row's number with `ReadRow`, and the element is the array's
-  element at that row, so an expression or handler is compiled once for every row. The Repeat
-  takes the list's `gap` and `align_items`. A row must be one widget; a row that needs its element
-  while compiling, such as an image `src` chosen by it, is unrolled instead, by a pass that runs
-  again with that `.map` unrolled.
+- `array.map((element, index) => <Widget/>)` directly inside a widget that holds others, over
+  `range(n)`, `Array.from({ length })`, an array signal or an array of records, becomes one
+  `Repeat` holding its row once. Inside the row, the index reads the row's number with `ReadRow`,
+  and the element is the array's element at that row, so an expression or handler is compiled
+  once for every row. Inside a `List` or `Scroll` the Repeat takes the list's `gap` and
+  `align_items`.
+- Any other `.map`, such as one over a constant array that is not a range, is unrolled once per
+  element. So is a row of more than one widget, and a row that needs its element while compiling,
+  such as an image `src` chosen by it, by a pass that runs again with that `.map` unrolled.
 - `props.children` puts the children passed to a component where it is written.
 - Text children, `{expressions}` and template literals are joined into the widget's `text`.
 - `<Screen>` becomes a `Column`, or a `Row` with `direction="row"`, and must be the outermost
