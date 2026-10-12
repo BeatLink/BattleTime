@@ -168,9 +168,9 @@
           ];
 
           shellHook = ''
-            # The pre-commit hook keeps docs/memory-map.md's measured tables current.
-            if [ -d .githooks ] && [ "$(git config --get core.hooksPath)" != .githooks ]; then
-              git config core.hooksPath .githooks
+            # CI measures docs/memory-map.md now; a clone still pointing git at the removed .githooks gets its default hooks back.
+            if [ ! -d .githooks ] && [ "$(git config --get core.hooksPath)" = .githooks ]; then
+              git config --unset core.hooksPath
             fi
             echo "NeoTime"
             echo "  cargo test --workspace                                 run every test, simulator included"

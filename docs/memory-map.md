@@ -208,11 +208,11 @@ this page between the `<!-- measure_memory:... -->` markers. Run it inside `nix 
 python3 -I tools/measure_memory.py
 ```
 
-The pre-commit hook in `.githooks/pre-commit` runs it whenever a commit touches the firmware, its
-crates, the apps or `Cargo.lock`, and stages this page; `nix develop` turns the hook on with
-`git config core.hooksPath .githooks`. It measures the working tree, so it takes a minute or two
-for the firmware builds, and `NEOTIME_SKIP_MEMORY_MAP=1 git commit ...` skips it once. The prose
-around the tables, and the artifact the page is published as, still need updating by hand.
+CI's Memory map job (`.github/workflows/ci.yml`) runs it on every push and pull request and keeps
+the measured page as an artifact. On master, when the tables change, it commits this page as
+`docs(memory-map): measure <commit>`, so nobody needs to run it before landing; rebase over that
+commit as over any other. The prose around the tables, and the artifact the page is published as,
+still need updating by hand.
 
 It builds the full and the recovery firmware, sorts their symbols by crate, and runs the
 `filesystem_use` example of `neotime-packages`. That example also writes the whole 4 MB external

@@ -14,8 +14,8 @@ the `filesystem_use` example of neotime-packages, which installs them into a fil
 as the watch formats it.
 
 It writes its tables into docs/memory-map.md, between the `<!-- measure_memory:NAME -->` markers.
-With `--check` it changes nothing and fails when the doc's tables are out of date. The pre-commit
-hook in .githooks runs it.
+With `--check` it changes nothing and fails when the doc's tables are out of date. CI's Memory map
+job runs it on every push, and on master commits the doc when its tables change.
 """
 
 import argparse

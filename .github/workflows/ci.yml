@@ -88,6 +88,53 @@ jobs:
       - name: Run clippy
         run: nix develop .. --command cargo clippy --release ${{ matrix.build.features }} -- --deny warnings
 
+  memory-map:
+    # Measures the firmware and file system into docs/memory-map.md, and on master commits the tables when they change.
+    name: Memory map
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            firmware -> target
+      - name: Measure the firmware and file system
+        run: nix develop --command python3 -I tools/measure_memory.py
+      - name: Keep the measured page
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-map
+          path: docs/memory-map.md
+      - name: Commit the tables when they changed
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          if git diff --quiet -- docs/memory-map.md; then
+            echo "The memory map is current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --quiet --message "docs(memory-map): measure ${GITHUB_SHA::7}" -- docs/memory-map.md
+          # A push in the meantime is retried on top of it; a newer page there means that push's own run measures again.
+          for attempt in 1 2 3; do
+            if ! git pull --quiet --rebase origin master; then
+              git rebase --abort
+              echo "docs/memory-map.md changed on master since this run; the newer run measures it."
+              exit 0
+            fi
+            if git push --quiet origin HEAD:master; then
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
+
   watch-images:
     name: Watch images
     runs-on: ubuntu-latest
