@@ -840,6 +840,23 @@ async fn send_file_answers(
     }
 }
 
+/// Sends a packages reply in 20-byte notifications, waiting for a free packet when the reply fills
+/// the send queue, since an app list takes more notifications than the pool has packets.
+async fn send_packages_reply(
+    connection: &GattConnection<'_, '_, DefaultPacketPool>,
+    server: &Server<'_>,
+    reply: &str,
+) {
+    for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
+        for _ in 0..NOTIFY_ATTEMPTS {
+            match server.neotime.packages.notify_raw(connection, piece, false).await {
+                Err(trouble_host::Error::OutOfMemory) => Timer::after(NOTIFY_RETRY_DELAY).await,
+                _ => break,
+            }
+        }
+    }
+}
+
 /// The first data a phone exchanges proves the radio works end to end, so that is when the firmware confirms itself.
 async fn serve_connection(
     connection: &GattConnection<'_, '_, DefaultPacketPool>,
@@ -874,9 +891,7 @@ async fn serve_connection(
                 continue;
             }
             Either4::Second(Either::Second(reply)) => {
-                for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
-                    let _ = server.neotime.packages.notify_raw(connection, piece, false).await;
-                }
+                send_packages_reply(connection, server, &reply).await;
                 continue;
             }
             Either4::Third(()) => {

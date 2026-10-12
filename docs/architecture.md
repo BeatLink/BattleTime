@@ -693,7 +693,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
   charge `battery.rs` last measured, and notifies a subscribed phone whenever that changes.
 - **Packages characteristic.** Lines written to 6e540003 in the NeoTime service go, once their write
   is answered, to `packages::run_commands`, a task of their own, which runs them through
-  `storage::Files::run_packages_command`; the Bluetooth task notifies each reply in 20-byte pieces.
+  `storage::Files::run_packages_command`; the Bluetooth task notifies each reply in 20-byte pieces,
+  waiting for a free packet when a long reply, such as the app list, fills the eight-packet pool.
   The task starts near the top of the stack, while the Bluetooth task's frames under a connection
   take about 2.7 KB, so the verifier inside an install never reaches the end of the stack. A command
   that installs, removes or hides an app, or copies a new shared library into internal flash, raises
