@@ -33,7 +33,7 @@ flowchart TB
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>settings started; planned: power, events, notifications"]
-    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/companion,<br/>services/packages, services/settings;<br/>planned: time, steps"]
+    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings;<br/>planned: time, steps"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth,<br/>drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
@@ -156,6 +156,7 @@ NeoTime/
 ├── sdk/
 │   └── neotime/      the neotime package apps and faces import, as a stand-in for now
 ├── services/
+│   ├── blefs/        neotime-blefs: Adafruit BLE file transfer, InfiniTime's file service
 │   ├── companion/    neotime-companion: the companion app's JSON lines over the UART service
 │   ├── dfu/          neotime-dfu: the legacy DFU update protocol over Bluetooth
 │   ├── packages/     neotime-packages: the apps installed in /apps and the shared library's install
@@ -458,6 +459,16 @@ and NeoTime's tools update NeoTime without changes. `LegacyDfu` is the state mac
 Bluetooth in it: control point commands and packet writes go in, notifications and a reset request
 come out, and the bytes go to `neotime-updates`. Its tests run a whole update through it. The
 `trouble` feature adds the GATT service for TrouBLE. See [updates.md](updates.md).
+
+## Files over Bluetooth (`services/blefs`)
+
+`neotime-blefs` speaks Adafruit's BLE file transfer protocol, InfiniTime's `FSService`, so ITD,
+Gadgetbridge and the companion app reach the watch's files. `FileTransfer` turns one command into
+its answers against a littlefs `Filesystem`, with no Bluetooth in it; it remembers the file being
+read or written between commands, and opens and closes the file for each one, so the shell can use
+the file system between commands. The firmware sends each answer as a notification, waiting for a
+free packet when a folder listing fills the send queue. Its tests run against littlefs in RAM. The
+`trouble` feature adds the GATT service. See [companion-protocol.md](companion-protocol.md#file-transfer).
 
 ## Firmware (`firmware`)
 

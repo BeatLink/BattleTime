@@ -32,16 +32,18 @@ embedded-hal = "1.0"
 embedded-storage = "0.3"
 embedded-storage-async = "0.4"
 heapless = "0.9"
+littlefs-rust = "0.1"
 mipidsi = "0.10"
 nrf-pac = { version = "0.4", features = ["nrf52832"] }
 static_cell = "2.1"
-trouble-host = { version = "0.8", default-features = false, features = ["peripheral", "gatt", "derive", "default-packet-pool", "default-packet-pool-mtu-64", "default-packet-pool-size-8"] }
+trouble-host = { version = "0.8", default-features = false, features = ["peripheral", "gatt", "derive", "default-packet-pool", "default-packet-pool-mtu-128", "default-packet-pool-size-8"] }
 
 neotime-accelerometer = { path = "../drivers/accelerometer" }
 neotime-app-host = { path = "../app-host" }
 neotime-bluetooth = { path = "../drivers/bluetooth" }
 neotime-boot = { path = "../boot" }
 neotime-companion = { path = "../services/companion" }
+neotime-blefs = { path = "../services/blefs", features = ["trouble"] }
 neotime-button = { path = "../drivers/button" }
 neotime-dfu = { path = "../services/dfu", features = ["trouble"] }
 neotime-display = { path = "../drivers/display" }

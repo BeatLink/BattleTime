@@ -1,0 +1,16 @@
+[package]
+name = "neotime-blefs"
+version = "0.1.0"
+edition = "2021"
+description = "Adafruit BLE file transfer, the file service InfiniTime, ITD and Gadgetbridge speak"
+license.workspace = true
+publish = false
+
+[features]
+# The GATT service macro needs static_cell in scope.
+trouble = ["dep:trouble-host", "dep:static_cell"]
+
+[dependencies]
+littlefs-rust = "0.1"
+static_cell = { version = "2.1", optional = true }
+trouble-host = { version = "0.8", default-features = false, features = ["peripheral", "gatt", "derive"], optional = true }

@@ -28,6 +28,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Themes.** Six presets (dark, light, ocean, forest, sunset and contrast), picked in the Settings
   app or from the companion app, which can also set any colours. They are kept through a restart,
   and the open app changes colour at once. See [companion-protocol.md](companion-protocol.md).
+- **Files over Bluetooth.** Phones and computers read, write, list, move and delete the watch's
+  files through the same file service InfiniTime has, so ITD, Gadgetbridge and the companion app
+  can use it. See [companion-protocol.md](companion-protocol.md#file-transfer).
 - **Apps remember where they were.** An app's saved state is written to the watch's storage when
   it closes or the screen turns off, and put back when it opens.
 - **Text in clear, smooth fonts** made from JetBrains Mono and Open Sans.

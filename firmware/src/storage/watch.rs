@@ -254,8 +254,6 @@ pub struct Files {
 }
 
 impl Files {
-    /// For the Bluetooth task's file and package services.
-    #[allow(dead_code)]
     pub fn file_system(&self) -> Option<&WatchFileSystem> {
         self.file_system.as_ref()
     }

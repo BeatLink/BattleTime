@@ -1119,6 +1119,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-blefs"
+version = "0.1.0"
+dependencies = [
+ "littlefs-rust",
+ "static_cell",
+ "trouble-host",
+]
+
+[[package]]
 name = "neotime-bluetooth"
 version = "0.1.0"
 dependencies = [

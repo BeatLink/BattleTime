@@ -324,8 +324,6 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 
 - [ ] **Deep power-down in sleep.** Put the flash chip to sleep when the watch sleeps.
 - [ ] **Use the file system:** save alarms and the BLE bond there.
-- [ ] **File transfer over BLE,** with the Adafruit protocol InfiniTime's `FSService` uses, so
-  companion apps can read, write and delete files.
 - [ ] **Resource packages:** fonts and pictures installed from a zip over BLE.
 - [ ] **Report failed flash writes.** After each erase and page program, read the flash's security
   register and return an error when its erase-fail or program-fail bit is set, so littlefs moves

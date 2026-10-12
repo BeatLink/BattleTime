@@ -196,7 +196,15 @@ impl Confirmation {
 /// The rehearsal has no shell, so it keeps no files for it.
 pub struct Files;
 
+/// Stands in for the watch's file system type; the rehearsal never has one.
+pub type WatchFileSystem = littlefs_rust::Filesystem<littlefs_rust::RamStorage>;
+
 impl Files {
+    /// Always nothing, so the file service answers every command with an error.
+    pub fn file_system(&self) -> Option<&WatchFileSystem> {
+        None
+    }
+
     pub fn read(&self, _path: &str) -> Option<alloc::vec::Vec<u8>> {
         None
     }

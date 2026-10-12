@@ -884,6 +884,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-blefs"
+version = "0.1.0"
+dependencies = [
+ "littlefs-rust",
+ "static_cell",
+ "trouble-host",
+]
+
+[[package]]
 name = "neotime-bluetooth"
 version = "0.1.0"
 dependencies = [
@@ -970,9 +979,11 @@ dependencies = [
  "embedded-storage",
  "embedded-storage-async",
  "heapless 0.9.3",
+ "littlefs-rust",
  "mipidsi",
  "neotime-accelerometer",
  "neotime-app-host",
+ "neotime-blefs",
  "neotime-bluetooth",
  "neotime-boot",
  "neotime-button",

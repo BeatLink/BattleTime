@@ -20,6 +20,7 @@ whether the watch serves it yet.
 | Legacy DFU | `00001530-1212-efde-1523-785feabcd123` | as Nordic's legacy DFU | Firmware updates; see [updates.md](updates.md). | Yes |
 | Current Time | `0x1805` | `0x2A2B`, read and write | Writing the 10-byte Current Time value sets the clock. The watch keeps local time, so write local time. | Yes |
 | Battery | `0x180F` | `0x2A19`, read and notify | The charge, 0 to 100, notified when it changes. | Yes |
+| File transfer | `0xFEBB` | as in [File transfer](#file-transfer) | Reading, writing, listing, moving and deleting files. | Yes |
 
 ## The message channel
 
@@ -102,6 +103,50 @@ Watch to phone: `music` with `n` (`play`, `pause`, `next`, `previous`, `volumeup
 `volumedown`); `call` with `n` (`ACCEPT`, `REJECT`, `IGNORE`); `findPhone` with `n`; `http` with
 `id`, `url`, `method`, `body`; `info` and `error` with `msg`.
 
+## File transfer
+
+Files move through Adafruit's BLE file transfer protocol, the one InfiniTime's `FSService` serves,
+so ITD, Gadgetbridge and InfiniTime's resource loader work with NeoTime unchanged.
+`services/blefs` speaks it.
+
+| Characteristic | UUID | Use |
+|---|---|---|
+| Service | `0xFEBB` | |
+| Version | `adaf0100-4669-6c65-5472-616e73666572` | Read: the protocol version, 4, as a little-endian `u32`. |
+| Transfer | `adaf0200-4669-6c65-5472-616e73666572` | Write or write without response: one command. Notify: its answers. |
+
+Numbers are little-endian, paths are absolute (`/apps/stopwatch/app.ntapp`), and every command fits
+in one write, so the phone must exchange a larger MTU first. The watch's packets allow an MTU of
+up to 124. An answer's second byte is its status: `1` OK, `2` error, `3` no such file, `4` protocol
+error (a command cut short, or data with no write in progress).
+
+| Command | Layout | Answer |
+|---|---|---|
+| Read `0x10` | `0x10`, pad, path length `u16`, offset `u32`, chunk size `u32`, path | `0x11`, status, pad ×2, offset `u32`, total length `u32`, chunk length `u32`, data |
+| Read pacing `0x12` | `0x12`, `1`, pad ×2, offset `u32`, chunk size `u32` | the next `0x11` |
+| Write `0x20` | `0x20`, pad, path length `u16`, offset `u32`, time `u64`, total size `u32`, path | `0x21`, status, pad ×2, offset `u32`, time `u64`, bytes it will take next `u32` |
+| Write data `0x22` | `0x22`, `1`, pad ×2, offset `u32`, length `u32`, data | `0x21` with the offset of the next write |
+| Delete `0x30` | `0x30`, pad, path length `u16`, path | `0x31`, status |
+| Make folder `0x40` | `0x40`, pad, path length `u16`, pad ×4, time `u64`, path | `0x41`, status, pad ×6, time `u64` |
+| List folder `0x50` | `0x50`, pad, path length `u16`, path | one `0x51` per entry: status, name length `u16`, entry `u32`, total `u32`, flags `u32` (bit 0: folder), time `u64`, size `u32`, name; then a last `0x51` whose entry equals the total and whose name is empty |
+| Move `0x60` | `0x60`, pad, old length `u16`, new length `u16`, old path, one separator byte, new path | `0x61`, status |
+
+- **Reading.** Each answer holds as much of the asked-for chunk as fits in one notification. The
+  phone asks for the rest with read pacing, from the offset it has reached, until it has the total.
+- **Writing.** A write opens the file, makes any missing folders above it, and cuts the file back
+  to the offset, so an interrupted upload resumes where it stopped and a new one starts at 0. The
+  phone then sends data pieces in order. The last answer says 0 bytes to come.
+- **Deleting** a folder deletes everything in it. **Making a folder** makes its parents and
+  succeeds if the folder is already there.
+- The watch keeps no file times, so every time it reports is 0.
+- **Differences from InfiniTime.** InfiniTime never cuts a file back when it is written again,
+  answers a data piece with that piece's own offset, and reports some failures as negative littlefs
+  codes. NeoTime follows Adafruit's description: status `3` for a missing file, the next offset in
+  write answers, and a written file that ends at its total size.
+
+Each app keeps its folder under `/apps/<id>/`: `app.ntapp` is the compiled image, as
+`neotime-compiler` writes it, and `state` is its saved state.
+
 ## The NeoTime service
 
 Service `6e540001-0000-4000-8000-4e656f54696d`, with its characteristics on the same base:
@@ -110,26 +155,6 @@ Service `6e540001-0000-4000-8000-4e656f54696d`, with its characteristics on the 
 |---|---|---|---|
 | Diagnostics | `6e540002-…` | Read: eight little-endian `u32` counters; see [architecture.md](architecture.md). | Yes |
 | Packages | `6e540003-…` | Write and notify: one JSON command per line, as in [Packages](#packages-not-served-yet). | Not yet |
-| File data | `6e540004-…` | Write without response and notify: raw file bytes. | Not yet |
-
-### Files (not served yet)
-
-Paths are absolute, such as `/apps/stopwatch/state`. Each command is a JSON line written to file
-control, and each answer a JSON line notified on it; a failure answers with the command and
-`"err":"..."`.
-
-| Command | Answer |
-|---|---|
-| `{"c":"ls","p":path}` | `{"c":"ls","e":[[name,size,is_folder],...]}`, `is_folder` as 0 or 1 |
-| `{"c":"get","p":path}` | `{"c":"get","n":size}`, then the bytes notified on file data |
-| `{"c":"put","p":path,"n":size}` | `{"c":"put","ok":1}`; the phone then writes the bytes to file data, in pieces of at most MTU − 3, and the watch notifies `{"c":"put","at":offset}` every 4 KB and `{"c":"put","done":1}` at the end |
-| `{"c":"rm","p":path}` | `{"c":"rm","ok":1}`; a folder must be empty |
-| `{"c":"df"}` | `{"c":"df","free":bytes,"total":bytes}` |
-| `{"c":"install","id":id}` | `{"c":"install","ok":1}` once `/apps/<id>/app.ntapp` checks out and the app appears in `installed_apps` |
-| `{"c":"remove","id":id}` | `{"c":"remove","ok":1}`; deletes `/apps/<id>` with its saved state |
-
-Each app keeps its folder under `/apps/<id>/`: `app.ntapp` is the compiled image, as
-`neotime-compiler` writes it, and `state` is its saved state.
 
 ### Packages (not served yet)
 

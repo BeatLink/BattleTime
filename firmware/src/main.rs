@@ -39,6 +39,7 @@ use embedded_graphics::{
 };
 use mipidsi::interface::SpiInterface;
 use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
+use neotime_blefs::{service::FileTransferService, FileTransfer};
 use neotime_button::Button;
 use neotime_dfu::{service::DfuWrite, service::LegacyDfuService, LegacyDfu};
 use neotime_display::Display;
@@ -516,6 +517,7 @@ struct Server {
     diagnostics: DiagnosticsService,
     uart: NordicUartService,
     battery: BatteryService,
+    file_transfer: FileTransferService,
 }
 
 /// The standard Battery service: the charge, 0 to 100, read or notified when it changes.
@@ -567,7 +569,7 @@ async fn run_bluetooth(
     targets: storage::Targets,
     mut confirmation: storage::Confirmation,
     mut screen: Screen,
-    _files: &'static storage::Files,
+    files: &'static storage::Files,
 ) {
     let controller: ExternalController<_, 4> = ExternalController::new(controller);
     let resources = HOST_RESOURCES.init(HostResources::new());
@@ -628,6 +630,7 @@ async fn run_bluetooth(
                 &mut screen,
                 &mut confirmation,
                 &mut confirmed,
+                files,
             )
             .await;
             screen.write_line(line::BLUETOOTH, "Ready for updates");
@@ -650,6 +653,28 @@ fn read_companion_line(line: &[u8]) {
     }
 }
 
+/// How long to wait for a free packet when a long answer, such as a folder listing, fills the send queue.
+const NOTIFY_RETRY_DELAY: Duration = Duration::from_millis(20);
+const NOTIFY_ATTEMPTS: usize = 50;
+/// The bytes a notification spends on its opcode and handle.
+const NOTIFICATION_HEADER_BYTES: usize = 3;
+
+/// Sends a BLEFS command's answers, one notification each; see docs/companion-protocol.md.
+async fn send_file_answers(
+    connection: &GattConnection<'_, '_, DefaultPacketPool>,
+    server: &Server<'_>,
+    answers: alloc::vec::Vec<alloc::vec::Vec<u8>>,
+) {
+    for answer in answers {
+        for _ in 0..NOTIFY_ATTEMPTS {
+            match server.file_transfer.transfer.notify_raw(connection, &answer, false).await {
+                Err(trouble_host::Error::OutOfMemory) => Timer::after(NOTIFY_RETRY_DELAY).await,
+                _ => break,
+            }
+        }
+    }
+}
+
 /// The first data a phone exchanges proves the radio works end to end, so that is when the firmware confirms itself.
 async fn serve_connection(
     connection: &GattConnection<'_, '_, DefaultPacketPool>,
@@ -658,9 +683,11 @@ async fn serve_connection(
     screen: &mut Screen,
     confirmation: &mut storage::Confirmation,
     confirmed: &mut bool,
+    files: &'static storage::Files,
 ) {
     let mut shown_kilobytes = u32::MAX;
     let mut companion_lines = LineAssembler::new();
+    let mut file_transfer = FileTransfer::new(neotime_storage::BLOCK_SIZE, neotime_storage::BLOCK_COUNT);
     loop {
         // Pinned where they are made, so the connection's large future is never copied across the stack.
         let next_event = core::pin::pin!(connection.next());
@@ -687,11 +714,18 @@ async fn serve_connection(
             }
             GattConnectionEvent::Gatt { event } => {
                 let mut written = heapless::Vec::<u8, 64>::new();
+                let mut file_answers = alloc::vec::Vec::new();
                 let target = match &event {
                     GattEvent::Write(write) => {
                         write.with_data(|_, bytes| {
                             let _ = written.extend_from_slice(&bytes[..bytes.len().min(64)]);
                         });
+                        if write.handle() == server.file_transfer.transfer.handle {
+                            let room = connection.raw().att_mtu() as usize - NOTIFICATION_HEADER_BYTES;
+                            write.with_data(|_, bytes| {
+                                file_answers = file_transfer.answer(files.file_system(), bytes, room);
+                            });
+                        }
                         if write.handle() == server.time.current_time.handle {
                             clock::set_from_current_time(&written);
                         }
@@ -726,6 +760,7 @@ async fn serve_connection(
                     }
                     *confirmed = true;
                 }
+                send_file_answers(connection, server, file_answers).await;
 
                 let outcome = match target {
                     Some(DfuWrite::ControlPoint) => dfu.on_control_point(&written).await,
