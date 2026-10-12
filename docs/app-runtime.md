@@ -716,7 +716,10 @@ fonts in `third_party/fonts/` and kept in `app-host/fonts/`:
 | `condensed` | JetBrains Mono Bold at 48, squeezed to 70% width | Digits and clock characters | 1,850 |
 
 `seven_segment` and `dot_matrix` are drawn from segments and dots, so they take no font data. The
-fonts are built into the firmware for now, 47,919 B in all; they belong in the shared library.
+seven fonts, 47,919 B in all, live in the shared library's font section (section 9, which only a
+library has), in the order above. The app host's font slots start empty, and the embedder calls
+`fonts::install_from_library` once with the installed library; until then text takes no room. The
+`built-in-fonts` feature starts them filled from `app-host/fonts/`, for the simulator and tests.
 
 ### Widgets in the host
 

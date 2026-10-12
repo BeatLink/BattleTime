@@ -5,6 +5,9 @@
 //! seven-segment and dot-matrix display fonts carry no bitmaps: their glyphs are worked out from
 //! segments and dots as they are drawn. docs/app-runtime.md lists the sizes.
 
+use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+
+use neotime_runtime::AppImage;
 use rlvgl_core::{
     font::{FontLineMetrics, FontMetrics, GlyphInfo},
     renderer::Renderer,
@@ -26,9 +29,10 @@ const COVERAGE_PER_STEP: u8 = 17;
 /// The widest glyph row drawn in one go; wider glyphs are drawn in pieces.
 const WIDEST_GLYPH_ROW: usize = 128;
 
-/// A font made by `tools/generate_fonts.py`, read in place.
+/// A font made by `tools/generate_fonts.py`, read in place from the shared library once installed.
 pub struct BitmapFont {
-    bytes: &'static [u8],
+    start: AtomicPtr<u8>,
+    length: AtomicUsize,
 }
 
 /// Where one glyph's coverage starts, and its size and place.
@@ -50,19 +54,48 @@ fn read_u16(bytes: &[u8], at: usize) -> u16 {
 }
 
 impl BitmapFont {
-    pub const fn new(bytes: &'static [u8]) -> Self {
-        BitmapFont { bytes }
+    /// A font with no glyphs yet; `install_from_library` fills it.
+    pub const fn empty() -> Self {
+        BitmapFont {
+            start: AtomicPtr::new(core::ptr::null_mut()),
+            length: AtomicUsize::new(0),
+        }
+    }
+
+    /// A font that starts with its glyphs, for builds that carry the font files.
+    #[cfg(any(test, feature = "built-in-fonts"))]
+    const fn preinstalled(bytes: &'static [u8]) -> Self {
+        BitmapFont {
+            start: AtomicPtr::new(bytes.as_ptr() as *mut u8),
+            length: AtomicUsize::new(bytes.len()),
+        }
+    }
+
+    fn install(&self, bytes: &'static [u8]) {
+        self.length.store(0, Ordering::Release);
+        self.start.store(bytes.as_ptr() as *mut u8, Ordering::Release);
+        self.length.store(bytes.len(), Ordering::Release);
+    }
+
+    fn bytes(&self) -> &'static [u8] {
+        let length = self.length.load(Ordering::Acquire);
+        let start = self.start.load(Ordering::Acquire);
+        if start.is_null() || length == 0 {
+            return &[];
+        }
+        // Only `install` sets these, from a `'static` slice.
+        unsafe { core::slice::from_raw_parts(start, length) }
     }
 
     fn is_valid(&self) -> bool {
-        self.bytes.len() >= FONT_HEADER_BYTES && &self.bytes[..4] == FONT_MAGIC
+        self.bytes().len() >= FONT_HEADER_BYTES && &self.bytes()[..4] == FONT_MAGIC
     }
 
     fn glyph_count(&self) -> usize {
         if !self.is_valid() {
             return 0;
         }
-        read_u16(self.bytes, 6) as usize
+        read_u16(self.bytes(), 6) as usize
     }
 
     fn data_start(&self) -> usize {
@@ -71,7 +104,7 @@ impl BitmapFont {
 
     fn entry_at(&self, index: usize) -> Option<(u16, GlyphEntry)> {
         let start = FONT_HEADER_BYTES + index * GLYPH_ENTRY_BYTES;
-        let entry = self.bytes.get(start..start + GLYPH_ENTRY_BYTES)?;
+        let entry = self.bytes().get(start..start + GLYPH_ENTRY_BYTES)?;
         let character = u16::from_le_bytes([entry[0], entry[1]]);
         let offset = entry[2] as usize | (entry[3] as usize) << 8 | (entry[4] as usize) << 16;
         Some((
@@ -106,7 +139,7 @@ impl BitmapFont {
     /// The glyph's coverage, pixel by pixel from its top-left corner, as 0 to 255.
     fn coverage(&self, glyph: GlyphEntry) -> impl Iterator<Item = u8> + '_ {
         let start = self.data_start() + glyph.offset;
-        let data = self.bytes.get(start..).unwrap_or(&[]);
+        let data = self.bytes().get(start..).unwrap_or(&[]);
         let mut halves = data.iter().flat_map(|byte| [byte >> 4, byte & 0x0F].into_iter());
         let mut repeat_value = 0;
         let mut repeats_left = 0u8;
@@ -166,9 +199,9 @@ impl FontMetrics for BitmapFont {
 
     fn line_metrics(&self) -> FontLineMetrics {
         FontLineMetrics {
-            line_height: read_u16(self.bytes, 8),
-            ascent: read_u16(self.bytes, 10) as i16,
-            descent: read_u16(self.bytes, 12) as i16,
+            line_height: read_u16(self.bytes(), 8),
+            ascent: read_u16(self.bytes(), 10) as i16,
+            descent: read_u16(self.bytes(), 12) as i16,
         }
     }
 
@@ -452,22 +485,58 @@ impl FontMetrics for DotMatrixFont {
 // Font numbers
 // ============================================================================
 
-static SMALL: BitmapFont = BitmapFont::new(include_bytes!("../fonts/small.ntfont"));
-static NORMAL: BitmapFont = BitmapFont::new(include_bytes!("../fonts/normal.ntfont"));
-static MEDIUM: BitmapFont = BitmapFont::new(include_bytes!("../fonts/medium.ntfont"));
-static LARGE: BitmapFont = BitmapFont::new(include_bytes!("../fonts/large.ntfont"));
-static HUGE: BitmapFont = BitmapFont::new(include_bytes!("../fonts/huge.ntfont"));
-static GIANT: BitmapFont = BitmapFont::new(include_bytes!("../fonts/giant.ntfont"));
-static CONDENSED: BitmapFont = BitmapFont::new(include_bytes!("../fonts/condensed.ntfont"));
+// The watch carries no font: they come from the shared library. Tests and the simulator carry them.
+#[cfg(not(any(test, feature = "built-in-fonts")))]
+mod font_slots {
+    use super::BitmapFont;
+
+    pub static SMALL: BitmapFont = BitmapFont::empty();
+    pub static NORMAL: BitmapFont = BitmapFont::empty();
+    pub static MEDIUM: BitmapFont = BitmapFont::empty();
+    pub static LARGE: BitmapFont = BitmapFont::empty();
+    pub static HUGE: BitmapFont = BitmapFont::empty();
+    pub static GIANT: BitmapFont = BitmapFont::empty();
+    pub static CONDENSED: BitmapFont = BitmapFont::empty();
+}
+
+#[cfg(any(test, feature = "built-in-fonts"))]
+mod font_slots {
+    use super::BitmapFont;
+
+    pub static SMALL: BitmapFont = BitmapFont::preinstalled(include_bytes!("../fonts/small.ntfont"));
+    pub static NORMAL: BitmapFont = BitmapFont::preinstalled(include_bytes!("../fonts/normal.ntfont"));
+    pub static MEDIUM: BitmapFont = BitmapFont::preinstalled(include_bytes!("../fonts/medium.ntfont"));
+    pub static LARGE: BitmapFont = BitmapFont::preinstalled(include_bytes!("../fonts/large.ntfont"));
+    pub static HUGE: BitmapFont = BitmapFont::preinstalled(include_bytes!("../fonts/huge.ntfont"));
+    pub static GIANT: BitmapFont = BitmapFont::preinstalled(include_bytes!("../fonts/giant.ntfont"));
+    pub static CONDENSED: BitmapFont = BitmapFont::preinstalled(include_bytes!("../fonts/condensed.ntfont"));
+}
+
+use font_slots::{CONDENSED, GIANT, HUGE, LARGE, MEDIUM, NORMAL, SMALL};
+
+/// The bitmap fonts in the order the shared library keeps them.
+static LIBRARY_ORDER: [&BitmapFont; 7] = [&SMALL, &NORMAL, &MEDIUM, &LARGE, &HUGE, &GIANT, &CONDENSED];
+
+/// Takes the text fonts from the shared library, which must stay where it is, such as in internal flash.
+///
+/// Until then text takes no room and draws nothing; returns how many fonts the library had.
+pub fn install_from_library(library: &AppImage<'static>) -> usize {
+    let mut installed = 0;
+    for (index, font) in LIBRARY_ORDER.iter().enumerate() {
+        // A font the library lacks is emptied, so it never points into an older library.
+        let bytes = library.font(index as u16).unwrap_or(&[]);
+        font.install(bytes);
+        installed += usize::from(!bytes.is_empty());
+    }
+    installed
+}
+
 static SEVEN_SEGMENT: SevenSegmentFont = SevenSegmentFont;
 static DOT_MATRIX: DotMatrixFont = DotMatrixFont;
 
 /// How many bytes of flash the bitmap fonts take, for the memory map.
 pub fn bitmap_font_bytes() -> usize {
-    [&SMALL, &NORMAL, &MEDIUM, &LARGE, &HUGE, &GIANT, &CONDENSED]
-        .iter()
-        .map(|font| font.bytes.len())
-        .sum()
+    LIBRARY_ORDER.iter().map(|font| font.bytes().len()).sum()
 }
 
 /// The `font` property's values, in the order docs/app-reference.md lists the fonts.

@@ -363,6 +363,8 @@ pub struct AppFiles<'image> {
     pub library: &'image [u8],
     /// Other apps' images, which a launcher lists.
     pub installed_apps: &'image [&'image [u8]],
+    /// Each of those apps' icon, or empty for none.
+    pub installed_app_icons: &'image [&'image [u8]],
 }
 
 /// Opens the app, with the shared library when one was given.
@@ -377,7 +379,7 @@ fn open<'image>(
         host.set_library(files.library)
             .map_err(|error| format!("the shared library did not open: {error:?}"))?;
     }
-    host.set_installed_apps(files.installed_apps);
+    host.set_installed_app_icons(files.installed_app_icons);
     Ok(host)
 }
 

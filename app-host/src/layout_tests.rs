@@ -1,3 +1,6 @@
+// The host keeps each node in its own allocation, and these tests build nodes the same way.
+#![allow(clippy::vec_box)]
+
 use alloc::vec::Vec;
 
 use super::*;
@@ -16,11 +19,13 @@ const SCREEN: Rect = Rect {
 };
 
 /// Nodes in tree order, each given with the number of its parent.
-fn tree(shape: &[(WidgetKind, Option<u8>)]) -> Vec<Node> {
-    let mut nodes: Vec<Node> = shape
+fn tree(shape: &[(WidgetKind, Option<u8>)]) -> Vec<Box<Node>> {
+    let mut nodes: Vec<Box<Node>> = shape
         .iter()
         .enumerate()
-        .map(|(index, &(kind, parent))| Node::new(index as u16, kind, index as u8 + 1, parent, SCREEN))
+        .map(|(index, &(kind, parent))| {
+            Box::new(Node::new(index as u16, kind, index as u8 + 1, parent, SCREEN))
+        })
         .collect();
     for index in (0..nodes.len()).rev() {
         if let Some(parent) = nodes[index].parent {
@@ -36,7 +41,7 @@ fn rect(x: i32, y: i32, width: i32, height: i32) -> Rect {
     Rect { x, y, width, height }
 }
 
-fn laid_out(mut nodes: Vec<Node>) -> Vec<Node> {
+fn laid_out(mut nodes: Vec<Box<Node>>) -> Vec<Box<Node>> {
     lay_out(&mut nodes, SCREEN);
     nodes
 }
@@ -495,7 +500,7 @@ fn children_of_a_hidden_container_are_not_shown() {
 
 #[test]
 fn laying_out_no_nodes_does_nothing() {
-    let mut nodes: Vec<Node> = Vec::new();
+    let mut nodes: Vec<Box<Node>> = Vec::new();
 
     lay_out(&mut nodes, SCREEN);
 

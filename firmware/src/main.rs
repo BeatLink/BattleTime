@@ -3,8 +3,8 @@
 //! It takes over the bootloader's watchdog and feeds it only while the side button is up, shows a
 //! page on the screen, mounts the file system, advertises as "NeoTime", takes firmware updates over
 //! legacy DFU, and confirms itself to the bootloader once a phone has exchanged data with it.
-//! After start-up the shell takes the screen and runs the watch face, the launcher and the apps built
-//! in by `tools/build_watch_apps.sh`; a phone sets the clock through the Current Time service.
+//! After start-up the shell takes the screen and runs the watch face, the launcher and the apps the
+//! companion app installed in `/apps`; a phone sets the clock through the Current Time service.
 //!
 //! The `wasp-os-rehearsal` feature builds it as an app for wasp-os instead, which touches no flash;
 //! see docs/updates.md. The `recovery` feature builds the small recovery firmware: the status page,
@@ -60,11 +60,11 @@ mod storage;
 
 // The rehearsals and the recovery firmware run without the shell, which leaves these unused there.
 #[cfg_attr(not(with_shell), allow(dead_code))]
+mod apps;
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod backlight;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod battery;
-#[cfg_attr(not(with_shell), allow(dead_code))]
-mod built_in_apps;
 mod clock;
 mod diagnostics;
 #[cfg_attr(not(with_shell), allow(dead_code))]

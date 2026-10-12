@@ -5,5 +5,4 @@ use neotime_packages::commands::Change;
 
 /// Raised by the Bluetooth task after a packages command changes the installed apps or the shared
 /// library, so the shell reads its app list again or lets go of the old library before using it.
-#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 pub static CHANGED: Signal<CriticalSectionRawMutex, Change> = Signal::new();

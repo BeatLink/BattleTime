@@ -291,11 +291,26 @@ pub fn draw_every_icon() -> Result<Vec<Picture>, String> {
     ICON_NAMES.iter().map(|name| fonts.draw(name)).collect()
 }
 
+/// The text fonts `tools/generate_fonts.py` made, in the order the app host numbers its bitmap fonts:
+/// small, normal, medium, large, huge, giant and condensed.
+pub const LIBRARY_FONTS: [&[u8]; 7] = [
+    include_bytes!("../../app-host/fonts/small.ntfont"),
+    include_bytes!("../../app-host/fonts/normal.ntfont"),
+    include_bytes!("../../app-host/fonts/medium.ntfont"),
+    include_bytes!("../../app-host/fonts/large.ntfont"),
+    include_bytes!("../../app-host/fonts/huge.ntfont"),
+    include_bytes!("../../app-host/fonts/giant.ntfont"),
+    include_bytes!("../../app-host/fonts/condensed.ntfont"),
+];
+
 /// Writes the shared library image, which the runtime's install checks accept.
 pub fn build_library() -> Result<Vec<u8>, String> {
     let mut writer = ImageWriter::new(LIBRARY_ID, LIBRARY_NAME, AppKind::Library, SHARED_LIBRARY_VERSION);
     for picture in draw_every_icon()? {
         writer.image_resource(picture.format, picture.width, picture.height, &picture.pixels);
+    }
+    for font in LIBRARY_FONTS {
+        writer.font(font);
     }
     let image = writer.build();
     crate::check_image(&image)?;

@@ -1032,8 +1032,7 @@ fn a_long_label_wraps_onto_several_lines_inside_the_screen() {
     );
 }
 
-// ============================================================================
-// Watch-wide settings
+// =====================================================================// Watch-wide settings
 // ============================================================================
 
 #[test]
@@ -1115,4 +1114,37 @@ fn a_preset_theme_is_picked_and_read_back_by_number() {
     let mut own = DEFAULT_THEME;
     own.set_color(neotime_runtime::ThemeColor::Accent, 0x1234);
     assert_eq!(settings::preset_number(&own), -1);
+}
+
+#[test]
+fn fonts_come_from_the_shared_library() {
+    let library: &'static [u8] =
+        std::boxed::Box::leak(neotime_compiler_library_stand_in().into_boxed_slice());
+    let image = neotime_runtime::AppImage::parse(library).unwrap();
+    assert_eq!(crate::fonts::install_from_library(&image), 7);
+    assert!(crate::fonts::bitmap_font_bytes() > 0);
+}
+
+/// A library image holding just the seven fonts, as the compiler's builder writes them.
+fn neotime_compiler_library_stand_in() -> Vec<u8> {
+    let mut writer = ImageWriter::new("shared", "Shared library", AppKind::Library, 1);
+    for name in ["small", "normal", "medium", "large", "huge", "giant", "condensed"] {
+        let path = std::format!("{}/fonts/{name}.ntfont", env!("CARGO_MANIFEST_DIR"));
+        writer.font(&std::fs::read(path).unwrap());
+    }
+    writer.build()
+}
+
+#[test]
+fn open_into_opens_the_app_in_the_slot() {
+    let image = counter_image();
+    let mut system = FakeSystem::default();
+    let mut slot = None;
+
+    let host = AppHost::open_into(&mut slot, &image, DEFAULT_THEME, &[], START_TIME, &mut system).unwrap();
+    assert!(host.needs_drawing());
+    assert!(slot.is_some());
+
+    assert!(AppHost::open_into(&mut slot, &[1, 2, 3], DEFAULT_THEME, &[], START_TIME, &mut system).is_err());
+    assert!(slot.is_some());
 }

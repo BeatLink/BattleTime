@@ -18,7 +18,7 @@ use core::{
 use alloc::vec;
 use core::fmt::Write;
 
-use embassy_futures::select::{select, select4, Either, Either4};
+use embassy_futures::select::{select3, select4, Either3, Either4};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
@@ -35,10 +35,11 @@ use neotime_runtime::{
 use neotime_settings::{chimes, Setting};
 
 use crate::{
+    apps::{self, InstalledApps, LauncherIcons, Lent},
     backlight::{self, Backlight},
-    battery, built_in_apps, clock,
+    battery, clock,
     diagnostics::{self, Counter},
-    help, motion, settings, storage, system_values,
+    help, motion, packages, settings, storage, system_values,
     touch::TOUCHES,
     vibration, SharedDisplay,
 };
@@ -120,6 +121,7 @@ struct WatchSystem {
     theme_preset: Value,
     /// A preset theme the open app picked, applied once the host call returns.
     theme_request: Option<Theme>,
+    installed: InstalledApps,
 }
 
 impl SystemValues for WatchSystem {
@@ -138,16 +140,16 @@ impl SystemValues for WatchSystem {
             SystemValue::IsBluetoothEnabled => 1,
             SystemValue::Brightness => self.brightness as Value,
             SystemValue::NextAlarm => neotime_runtime::NONE,
-            SystemValue::InstalledAppCount => built_in_apps::APPS.len() as Value,
+            SystemValue::InstalledAppCount => self.installed.listed.len() as Value,
             _ => 0,
         }
     }
 
-    /// Each installed app's icon, drawn by the host from the app's own first image.
+    /// Each listed app's icon, which the host draws from the icons `apps` keeps.
     fn read_element(&self, value: SystemValue, index: Value) -> Value {
         match value {
             SystemValue::InstalledAppIcon => match u16::try_from(index) {
-                Ok(place) if (place as usize) < built_in_apps::APPS.len() => {
+                Ok(place) if (place as usize) < self.installed.listed.len() => {
                     ImageReference::InstalledApp(place).to_value() as Value
                 }
                 _ => neotime_runtime::NONE,
@@ -156,21 +158,19 @@ impl SystemValues for WatchSystem {
         }
     }
 
-    /// Each installed app's name and id, read from its image.
+    /// Each listed app's name and id.
     fn read_element_text(&self, value: SystemValue, index: Value) -> &str {
-        let Some(image) = usize::try_from(index)
+        let Some(entry) = usize::try_from(index)
             .ok()
-            .and_then(|place| built_in_apps::APPS.get(place))
-            .and_then(|bytes| AppImage::parse(bytes).ok())
+            .and_then(|place| self.installed.listed.get(place))
         else {
             return "";
         };
-        let string = match value {
-            SystemValue::InstalledAppName => image.name_string,
-            SystemValue::InstalledAppId => image.id_string,
-            _ => return "",
-        };
-        image.string(string).unwrap_or("")
+        match value {
+            SystemValue::InstalledAppName => &entry.name,
+            SystemValue::InstalledAppId => &entry.id,
+            _ => "",
+        }
     }
 
     /// Xorshift, seeded from the clock when the shell starts; enough for dice and games.
@@ -198,7 +198,7 @@ impl System for WatchSystem {
         }
         match effect.kind {
             EffectKind::OpenApp => {
-                if let Some(index) = effect.text(0).and_then(app_with_id) {
+                if let Some(index) = effect.text(0).and_then(|id| self.installed.place_of(id)) {
                     self.request = Request::Open(Showing::App(index));
                 }
             }
@@ -217,12 +217,6 @@ impl System for WatchSystem {
     }
 
     fn app_failed(&mut self, _failure: AppFailure) {}
-}
-
-fn app_with_id(id: &str) -> Option<usize> {
-    built_in_apps::APPS
-        .iter()
-        .position(|bytes| AppImage::parse(bytes).is_ok_and(|image| image.string(image.id_string) == Some(id)))
 }
 
 /// Where an app's saved state lives: `/apps/<id>/state`.
@@ -256,6 +250,11 @@ struct Shell {
     settings_unsaved: bool,
     /// The wall clock time the chimes were last checked at.
     chimes_checked_at: Value,
+    /// The open app's image, which its host borrows; freed only once that host is gone.
+    image: Option<Lent<[u8]>>,
+    /// The listed apps' icons, held only while the launcher is open.
+    launcher_icons: Option<LauncherIcons>,
+    library: Option<&'static [u8]>,
 }
 
 impl Shell {
@@ -272,27 +271,81 @@ impl Shell {
         self.app_set_brightness = false;
         self.set_brightness(settings::current().get(Setting::Brightness) as u8);
 
-        let bytes = match showing {
-            Showing::Face => built_in_apps::FACE,
-            Showing::Launcher => built_in_apps::LAUNCHER,
-            Showing::App(index) => built_in_apps::APPS[index],
-        };
+        if let Some(image) = self.image.take() {
+            image.release();
+        }
+        if let Some(icons) = self.launcher_icons.take() {
+            icons.release();
+        }
+
         self.showing = showing;
+        if showing == Showing::Launcher {
+            self.launcher_icons = Some(LauncherIcons::read(self.files, &self.system.installed));
+        }
+        let installed = &self.system.installed;
+        let id = match showing {
+            Showing::Face => installed.face.clone(),
+            Showing::Launcher => installed.has_launcher.then(|| apps::LAUNCHER_ID.into()),
+            Showing::App(place) => installed.listed.get(place).map(|entry| entry.id.clone()),
+        };
+        let Some(image) = id.and_then(|id| apps::read_image(self.files, &id)) else {
+            self.open_failed(showing);
+            return;
+        };
+        let bytes = image.get();
         let saved = AppImage::parse(bytes)
             .ok()
-            .and_then(|image| image.string(image.id_string))
+            .and_then(|parsed| parsed.string(parsed.id_string))
             .and_then(|id| self.files.read(&state_path(id)))
             .unwrap_or_default();
-        match AppHost::open_with_saved_state(bytes, self.theme, &saved, now, &mut self.system) {
-            Ok(mut host) => {
-                let _ = host.set_library(built_in_apps::LIBRARY);
-                host.set_installed_apps(&built_in_apps::APPS);
-                self.host = Some(host);
-            }
-            Err(_) if showing != Showing::Face => self.open(Showing::Face),
-            // No face to show, so the help screen takes its place.
-            Err(_) => self.help_drawn_at = None,
+        if self.start_host(bytes, &saved, now) {
+            self.image = Some(image);
+        } else {
+            image.release();
+            self.open_failed(showing);
         }
+    }
+
+    /// Opens a host on the image into `self.host`.
+    fn start_host(&mut self, bytes: &'static [u8], saved: &[u8], now: Value) -> bool {
+        let Ok(host) = AppHost::open_into(&mut self.host, bytes, self.theme, saved, now, &mut self.system)
+        else {
+            return false;
+        };
+        if let Some(library) = self.library {
+            let _ = host.set_library(library);
+        }
+        if let Some(icons) = &self.launcher_icons {
+            host.set_installed_app_icons(icons.list());
+        }
+        true
+    }
+
+    /// Falls back to the face when anything else will not open, or to the help screen without one.
+    fn open_failed(&mut self, showing: Showing) {
+        if showing == Showing::Face {
+            self.help_drawn_at = None;
+        } else {
+            self.open(Showing::Face);
+        }
+    }
+
+    /// Reads the installed apps again, such as after the companion app installed one, and shows the face.
+    fn reload_apps(&mut self) {
+        if let Some(mut host) = self.host.take() {
+            host.close(clock::now(), &mut self.system);
+            self.save_state_of(&mut host);
+        }
+        if let Some(image) = self.image.take() {
+            image.release();
+        }
+        if let Some(icons) = self.launcher_icons.take() {
+            icons.release();
+        }
+        self.system.installed = InstalledApps::read(self.files);
+        self.library = apps::shared_library();
+        install_fonts(self.library);
+        self.open(Showing::Face);
     }
 
     /// Writes the app's persistent state when any of it changed since the last save.
@@ -511,6 +564,15 @@ impl Shell {
     }
 }
 
+/// Gives the app host its text fonts from the installed shared library, which holds them.
+// Kept out of the shell task, so the library's parse never adds to the task's stack frame.
+#[inline(never)]
+fn install_fonts(library: Option<&'static [u8]>) {
+    if let Some(Ok(library)) = library.map(AppImage::parse) {
+        neotime_app_host::fonts::install_from_library(&library);
+    }
+}
+
 #[embassy_executor::task]
 pub async fn run_shell(
     display: &'static SharedDisplay,
@@ -520,6 +582,7 @@ pub async fn run_shell(
     Timer::after(START_PAGE_TIME).await;
     hide_status();
     settings::load(files);
+    install_fonts(apps::shared_library());
 
     let theme = settings::load_theme(files);
     let mut shell = Shell {
@@ -533,6 +596,7 @@ pub async fn run_shell(
             keep_screen_on: false,
             theme_preset: app_settings::preset_number(&theme),
             theme_request: None,
+            installed: InstalledApps::read(files),
         },
         theme,
         app_set_brightness: false,
@@ -544,6 +608,9 @@ pub async fn run_shell(
         dimmed: false,
         settings_unsaved: false,
         chimes_checked_at: clock::now(),
+        image: None,
+        launcher_icons: None,
+        library: apps::shared_library(),
     };
     shell.open(Showing::Face);
     let mut last_input = Instant::now();
@@ -567,14 +634,23 @@ pub async fn run_shell(
             wake_at = wake_at.min(clock::instant_at(next_chime));
         }
 
-        match select4(
+        let woke = select4(
             TOUCHES.receive(),
             BUTTON_PRESSES.receive(),
             Timer::at(wake_at),
-            select(system_values::next_changes(), settings::CHANGES.receive()),
+            select3(
+                system_values::next_changes(),
+                settings::CHANGES.receive(),
+                packages::CHANGED.wait(),
+            ),
         )
-        .await
-        {
+        .await;
+        // A new library may already lie where the open app's library was, so nothing reads it before the reload.
+        if !matches!(woke, Either4::Fourth(Either3::Third(_))) && packages::CHANGED.try_take().is_some() {
+            shell.reload_apps();
+            continue;
+        }
+        match woke {
             Either4::First(touch) => {
                 diagnostics::set(Counter::ShellLastWake, 1);
                 last_input = Instant::now();
@@ -605,13 +681,17 @@ pub async fn run_shell(
                     host.tick(clock::now(), &mut shell.system);
                 }
             }
-            Either4::Fourth(Either::First(changed)) => {
+            Either4::Fourth(Either3::First(changed)) => {
                 diagnostics::set(Counter::ShellLastWake, 4);
                 shell.system_values_changed(changed);
             }
-            Either4::Fourth(Either::Second(change)) => {
+            Either4::Fourth(Either3::Second(change)) => {
                 diagnostics::set(Counter::ShellLastWake, 5);
                 shell.change_settings(&change);
+            }
+            Either4::Fourth(Either3::Third(_)) => {
+                diagnostics::set(Counter::ShellLastWake, 6);
+                shell.reload_apps();
             }
         }
         shell.follow_requests();

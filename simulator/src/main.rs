@@ -101,10 +101,21 @@ fn main() -> Result<(), Box<dyn Error>> {
             .map(|path| std::fs::read(path).map_err(|error| format!("could not read {path}: {error}")))
             .collect::<Result<_, _>>()?;
         let installed_apps: Vec<&[u8]> = installed.iter().map(Vec::as_slice).collect();
+        let installed_app_icons: Vec<&[u8]> = installed_apps
+            .iter()
+            .map(|bytes| {
+                neotime_runtime::AppImage::parse(bytes)
+                    .ok()
+                    .filter(|image| image.has_icon)
+                    .and_then(|image| image.resource_bytes(0))
+                    .unwrap_or_default()
+            })
+            .collect();
         let files = app::AppFiles {
             image: &image,
             library: &library,
             installed_apps: &installed_apps,
+            installed_app_icons: &installed_app_icons,
         };
         return match &options.screenshot_path {
             Some(path) => app::save_screenshot(

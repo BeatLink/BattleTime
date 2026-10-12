@@ -23,8 +23,8 @@ python3 tools/draw_memory_maps.py
 |---|---|---|---|
 | Bootloader | `0x00000` | 16 KB | The `embassy-boot` bootloader with its status screen, about 14 KB of it used. There is no SoftDevice and no MBR. |
 | Boot state | `0x04000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
-| Firmware | `0x05000` | 400 KB | The running firmware. It is linked to start here. It uses 382 KB, with the app host's fonts, the built-in apps and, for now, the shared library inside it. |
-| Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, fonts, components, common functions and the preset themes. No apps are kept here; they live in `/apps` on the external flash. An installed library starts with an 8-byte header, `NTLB` and its length, which `neotime-packages` writes. See [app-runtime.md](app-runtime.md#the-shared-library). |
+| Firmware | `0x05000` | 400 KB | The running firmware. It is linked to start here. It uses 289 KB. No app, face, icon or font is built in. |
+| Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, the app host's text fonts (47,919 B; the library with them is 74,333 B), components, common functions and the preset themes. No apps are kept here; they live in `/apps` on the external flash. An installed library starts with an 8-byte header, `NTLB` and its length, which `neotime-packages` writes. See [app-runtime.md](app-runtime.md#the-shared-library). |
 
 Inside the firmware, 48 KB is set aside for the app runtime: the interpreter, the image verifier,
 the scheduler and the code that turns an app's widget tree into rlvgl widgets. It is part of the
@@ -32,8 +32,9 @@ firmware image, so it runs in place from the internal flash, with the chip's ins
 turned on, and never needs copying into RAM. The figure is a planned budget, to be replaced by
 the measured size once the runtime is built. See [app-runtime.md](app-runtime.md#the-runtime).
 
-Also inside the firmware, until they move to the shared library or the external flash, are the app host's fonts at 47,919 B, the built-in watch face, launcher and apps at 36 KB and the shared library's icons at 26 KB;
-see [app-runtime.md](app-runtime.md#property-values).
+The watch face, the launcher and the apps live in `/apps` on the external flash, and the icons and
+the app host's text fonts in the shared-library region; none is inside the firmware. See
+[app-runtime.md](app-runtime.md#property-values).
 
 Also inside the firmware, the accelerometer's configuration files from Bosch take 6 KB for each chip
 built in, 12 KB with both the BMA421 and the BMA425 (see the `neotime-accelerometer` cargo
@@ -70,7 +71,8 @@ the rollback after it was meant. The firmware measures 52 KB of static RAM:
 36 KB of heap (16 KB for storage and the 20 KB UI heap), and
 the Bluetooth host with its eight 128-byte packets, controller, display buffer and task state. That
 leaves 12.2 KB for the stack. Measured in the emulator by painting the stack before start, it peaks
-at 10.1 KB while the launcher opens, so 2.1 KB is spare. The Bluetooth task's deepest path, a file
+at 8.3 KB with the face, the launcher, stopwatch, settings or weather open, 3.9 KB spare, and at
+10.4 KB with the alarm open, 1.8 KB spare, the one app below the 2 KB margin. The Bluetooth task's deepest path, a file
 command that makes littlefs compact a folder, adds up to about 9.1 KB from its functions' frames,
 below that peak.
 To measure it again after a change, build the firmware and run, inside `nix develop`:
@@ -85,7 +87,7 @@ resets. Keep at least 2 KB spare. The table below is the budget:
 
 | Region | Budget | Holds | Status |
 |---|---|---|---|
-| UI heap | 20 KB | The heap that `rlvgl`'s widgets allocate from. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (6,288 B), and one 240 B node per widget of the open screen here, plus its text, so about 55 widgets fit. The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. | Partly measured: node size with `size_of` for the watch, the demo screen with a counting allocator on the computer |
+| UI heap | 20 KB | The heap that `rlvgl`'s widgets allocate from. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (6,288 B), one 160 B node per widget of the open screen, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. Storage shares the same heap. The alarm, the largest app, peaks at 36,188 B of the 36,864 B heap with its 15 KB image and 67 widgets. The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
 | Bluetooth | 12 KB | The controller and the TrouBLE host: connection state, packet buffers and the GATT tables. | Partly measured: the controller is 1.5 KB; TrouBLE's example with it is 12.0 KB in all, executor included |
 | Apps | 6 KB | Memory for the app that is open beyond the UI heap, such as the parts of its file read from `/apps`. The runtime's working memory in it is measured: 1,792 B for the interpreter, 2,056 B for the bindings and 2,440 B for the state. `AppHost` keeps all three on the UI heap. | Partly measured |
 | Stack | 8 KB | The main stack, for interrupts and code that is not in a task. | Planned |

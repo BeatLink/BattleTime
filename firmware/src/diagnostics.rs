@@ -6,7 +6,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 pub enum Counter {
     /// Times round the shell's loop.
     ShellLoops,
-    /// Which input woke the shell last: 1 touch, 2 button, 3 timer, 4 system values, 5 settings.
+    /// Which input woke the shell last: 1 touch, 2 button, 3 timer, 4 system values, 5 settings, 6 apps changed.
     ShellLastWake,
     /// Whether the screen is lit: 1 lit, 0 off.
     ScreenLit,

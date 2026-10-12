@@ -49,6 +49,8 @@ pub enum SectionKind {
     Resources,
     /// The starting elements of arrays whose elements do not all start the same.
     InitialValues,
+    /// The shared library's text fonts, in the order `font` numbers its bitmap fonts.
+    Fonts,
 }
 
 impl SectionKind {
@@ -63,6 +65,7 @@ impl SectionKind {
             6 => Subscriptions,
             7 => Resources,
             8 => InitialValues,
+            9 => Fonts,
             _ => return None,
         })
     }
@@ -300,6 +303,7 @@ pub struct AppImage<'image> {
     subscription_count: u16,
     subscriptions: &'image [u8],
     resources: EntryTable<'image>,
+    fonts: EntryTable<'image>,
 }
 
 impl<'image> AppImage<'image> {
@@ -348,6 +352,7 @@ impl<'image> AppImage<'image> {
             subscription_count: 0,
             subscriptions: &[],
             resources: EntryTable::default(),
+            fonts: EntryTable::default(),
         };
 
         let mut seen_sections = 0u32;
@@ -382,6 +387,7 @@ impl<'image> AppImage<'image> {
                     image.subscription_count = count;
                 }
                 SectionKind::Resources => image.resources = EntryTable::parse(count, section_bytes)?,
+                SectionKind::Fonts => image.fonts = EntryTable::parse(count, section_bytes)?,
             }
         }
 
@@ -530,6 +536,20 @@ impl<'image> AppImage<'image> {
 
     pub fn resource(&self, index: u16) -> Option<ImageResource<'image>> {
         ImageResource::parse(self.resources.get(index)?)
+    }
+
+    /// One image's bytes as stored, which `ImageResource::parse` reads, such as to keep an app's icon alone.
+    pub fn resource_bytes(&self, index: u16) -> Option<&'image [u8]> {
+        self.resources.get(index)
+    }
+
+    pub fn font_count(&self) -> u16 {
+        self.fonts.count
+    }
+
+    /// One text font's bytes, as `tools/generate_fonts.py` writes them.
+    pub fn font(&self, index: u16) -> Option<&'image [u8]> {
+        self.fonts.get(index)
     }
 
     pub fn initial_values_count(&self) -> u16 {

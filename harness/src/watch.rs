@@ -89,7 +89,7 @@ impl TestWatch {
 
     /// Compiles the apps with these ids and installs them, so a launcher lists them.
     pub fn install_apps(&mut self, ids: &[&str]) -> Result<(), OpenFailure> {
-        let mut images: Vec<&'static [u8]> = Vec::new();
+        let mut icons: Vec<&'static [u8]> = Vec::new();
         let mut installed_apps = Vec::new();
         for id in ids {
             let image: &'static [u8] = Box::leak(compile_package(PackageKind::App, id)?.into_boxed_slice());
@@ -99,10 +99,12 @@ impl TestWatch {
                 name: text(parsed.name_string),
                 id: text(parsed.id_string),
             });
-            images.push(image);
+            let icon = parsed.has_icon.then(|| parsed.resource_bytes(0)).flatten();
+            icons.push(icon.unwrap_or_default());
         }
         self.system.installed_apps = installed_apps;
-        self.host.set_installed_apps(Box::leak(images.into_boxed_slice()));
+        self.host
+            .set_installed_app_icons(Box::leak(icons.into_boxed_slice()));
         let now = self.now();
         self.host
             .system_values_changed(SystemValue::InstalledAppCount.bit(), now, &mut self.system);

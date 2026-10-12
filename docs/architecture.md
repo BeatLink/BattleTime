@@ -482,8 +482,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
 
 - **Navigation.** The face shows first. A swipe up the face does not use opens the launcher, an
   ordinary app (`apps/launcher`) that lists `installed_apps` with their icons; a tap opens one.
-  The shell answers `installed_apps` from the built-in list and gives the host every app's image,
-  so the launcher can show their icons. The button,
+  The shell answers `installed_apps` from `/apps` and, while the launcher is open, gives the host
+  each app's icon. The button,
   or a swipe right the app does not use, goes back a step: app to launcher, launcher to face.
 - **Input.** `touch.rs` turns the panel's reports into the host's touches: press, drag and release
   from the finger, and one click, long press or swipe from each touch's gesture. The watchdog task
@@ -535,9 +535,13 @@ watch face, the launcher and the apps through `neotime-app-host`:
   offset from UTC of 0.
 - **Status page.** The start-up lines and an update's progress share the display with the shell;
   while the page is up the shell draws nothing, and when the update ends it paints again.
-- **Apps.** `tools/build_watch_apps.sh` compiles the face (`digital`), the launcher, ten apps and the shared
-  library into `firmware/apps/`, and the firmware builds them in. They move to the external flash
-  once there is a way to send files to the watch.
+- **Apps.** None are built in. `apps.rs` reads the enabled apps from `/apps` through
+  `neotime-packages`: the first face is the watch face, the app with id `launcher` is the launcher,
+  and every other app is listed in `installed_apps`. Their icons are copied out of their images
+  only while the launcher is open, and freed when it closes. The open app's image is read into the heap when it opens and freed once its
+  host is gone. The shared library is read in place from the internal-flash region. With no face
+  the shell shows `help.rs`: the time and how to install one. `packages::CHANGED` makes the shell read
+  everything again after an install.
 
 - **Battery.** `battery.rs` reads the battery's voltage through the SAADC once a minute, and at
   once when power is plugged in or out, and turns it into a charge along a lithium discharge
@@ -546,8 +550,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
 Not done yet: heart rate, notifications, music and weather read as 0 or empty; the touch panel stays
 awake while the screen is off.
 
-It takes 380 KB of the 400 KB firmware slot (the fonts are 47 KB, the built-in apps 36 KB, the
-shared library 26 KB and the two accelerometers' configuration files 12 KB) and 52 KB of static RAM, 36 KB of it heap: 16 KB for storage and 20 KB for
+It takes 289 KB of the 400 KB firmware slot (the two accelerometers' configuration files are 12 KB
+of it; the fonts are in the shared library) and 52 KB of static RAM, 36 KB of it heap: 16 KB for storage and 20 KB for
 the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
 the button and the backlight timeout all work.
 
@@ -638,7 +642,8 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
 - **Saved state.** `save_changed_state` writes the persistent variables when they change, and
   `open_with_saved_state` puts them back.
 - **Images and fonts.** Images come from the app or the shared library (`set_library`). The fonts
-  are anti-aliased bitmaps built into the crate, made by `tools/generate_fonts.py`.
+  are anti-aliased bitmaps made by `tools/generate_fonts.py` and kept in the shared library;
+  `fonts::install_from_library` takes them from there, so the firmware carries none of its own.
 - **Theme.** `set_theme` redraws every colour from the values already held, without running app
   code.
 - **Failures.** A failing handler or expression is reported through `System::app_failed`, and the

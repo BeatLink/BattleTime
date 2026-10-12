@@ -5,7 +5,7 @@
 //! the app gave them, fixed or a theme reference, and resolved only when drawn, so a new theme
 //! needs no app code to run.
 
-use alloc::string::String;
+use alloc::{boxed::Box, string::String};
 
 use neotime_runtime::{widgets::Property, ColorValue, Theme, ThemeColor, Value, WidgetKind};
 use rlvgl_core::widget::{Color, Rect};
@@ -19,23 +19,23 @@ use crate::fonts::FontName;
 /// A length: whole pixels, or a share of the parent's inner size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Length {
-    Pixels(i32),
-    Percent(i32),
+    Pixels(i16),
+    Percent(i16),
 }
 
 impl Length {
     /// A negative value is a percentage, so `-100` means `"100%"`.
     pub fn from_value(value: i32) -> Length {
         match value {
-            value if value < 0 => Length::Percent(value.saturating_neg()),
-            value => Length::Pixels(value),
+            value if value < 0 => Length::Percent(to_i16(value.saturating_neg())),
+            value => Length::Pixels(to_i16(value)),
         }
     }
 
     pub fn of(self, whole: i32) -> i32 {
         match self {
-            Length::Pixels(pixels) => pixels,
-            Length::Percent(percent) => whole.saturating_mul(percent) / 100,
+            Length::Pixels(pixels) => pixels.into(),
+            Length::Percent(percent) => whole.saturating_mul(percent.into()) / 100,
         }
     }
 }
@@ -118,19 +118,19 @@ pub enum PropertyValue<'text> {
 /// What the common properties of a widget hold.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Settings {
-    pub x: Option<i32>,
-    pub y: Option<i32>,
+    pub x: Option<i16>,
+    pub y: Option<i16>,
     pub width: Option<Length>,
     pub height: Option<Length>,
-    pub grow: i32,
-    pub padding: i32,
-    pub margin: i32,
-    pub gap: i32,
+    pub grow: i16,
+    pub padding: i16,
+    pub margin: i16,
+    pub gap: i16,
     pub background: Option<ColorValue>,
     pub color: Option<ColorValue>,
     pub border_color: Option<ColorValue>,
-    pub border_width: Option<i32>,
-    pub radius: Option<i32>,
+    pub border_width: Option<i16>,
+    pub radius: Option<i16>,
     pub font: FontName,
     pub align: Option<Align>,
     pub justify: Placement,
@@ -142,8 +142,8 @@ pub struct Settings {
     pub value: i32,
     pub minimum: i32,
     pub maximum: i32,
-    pub start_angle: Option<i32>,
-    pub end_angle: Option<i32>,
+    pub start_angle: Option<i16>,
+    pub end_angle: Option<i16>,
     /// A Grid's or ButtonMatrix's columns, or a CellGrid's.
     pub columns: u16,
     /// The state array the widget's main array property names: cells, options, points, series or labels.
@@ -269,6 +269,11 @@ fn to_i32(value: i64) -> i32 {
     value.clamp(i32::MIN as i64, i32::MAX as i64) as i32
 }
 
+/// Clamps a value into the 16 bits a position, a length or an angle is kept in, which fits any screen.
+fn to_i16(value: impl Into<i64>) -> i16 {
+    value.into().clamp(i16::MIN as i64, i16::MAX as i64) as i16
+}
+
 fn to_u16(value: i64) -> u16 {
     value.clamp(0, u16::MAX as i64) as u16
 }
@@ -312,6 +317,31 @@ pub fn resolve_or_clear(color: Option<ColorValue>, theme: &Theme) -> Color {
     color.map_or(TRANSPARENT, |color| to_color(color.resolve(theme)))
 }
 
+/// A widget's `Extra`, kept on the heap only for the few kinds that have one, so every other node stays small.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ExtraSlot(Option<Box<Extra>>);
+
+impl ExtraSlot {
+    fn for_kind(kind: WidgetKind) -> ExtraSlot {
+        match Extra::for_kind(kind) {
+            Extra::None => ExtraSlot(None),
+            extra => ExtraSlot(Some(Box::new(extra))),
+        }
+    }
+
+    fn get_mut(&mut self) -> Option<&mut Extra> {
+        self.0.as_deref_mut()
+    }
+}
+
+impl core::ops::Deref for ExtraSlot {
+    type Target = Extra;
+
+    fn deref(&self) -> &Extra {
+        self.0.as_deref().unwrap_or(&Extra::None)
+    }
+}
+
 // ============================================================================
 // Nodes
 // ============================================================================
@@ -324,7 +354,7 @@ pub struct Node {
     pub subtree_end: u8,
     pub parent: Option<u8>,
     pub settings: Settings,
-    pub extra: Extra,
+    pub extra: ExtraSlot,
     pub text: String,
     /// The size the widget's content wants, worked out by the host from images and arrays.
     pub content_width: i16,
@@ -358,7 +388,7 @@ impl Node {
             subtree_end,
             parent,
             settings: Settings::default(),
-            extra: Extra::for_kind(kind),
+            extra: ExtraSlot::for_kind(kind),
             text: String::new(),
             content_width: 0,
             content_height: 0,
@@ -405,23 +435,24 @@ impl Node {
             return true;
         }
         let small = to_i32(number);
+        let pixels = to_i16(number);
         let color = ColorValue::from_value(number);
         let settings = &mut self.settings;
 
         match property {
-            Property::X => replace(&mut settings.x, Some(small)),
-            Property::Y => replace(&mut settings.y, Some(small)),
+            Property::X => replace(&mut settings.x, Some(pixels)),
+            Property::Y => replace(&mut settings.y, Some(pixels)),
             Property::Width => replace(&mut settings.width, Some(Length::from_value(small))),
             Property::Height => replace(&mut settings.height, Some(Length::from_value(small))),
-            Property::Grow => replace(&mut settings.grow, small.max(0)),
-            Property::Padding => replace(&mut settings.padding, small.max(0)),
-            Property::Margin => replace(&mut settings.margin, small.max(0)),
-            Property::Gap => replace(&mut settings.gap, small.max(0)),
+            Property::Grow => replace(&mut settings.grow, pixels.max(0)),
+            Property::Padding => replace(&mut settings.padding, pixels.max(0)),
+            Property::Margin => replace(&mut settings.margin, pixels.max(0)),
+            Property::Gap => replace(&mut settings.gap, pixels.max(0)),
             Property::Background => color.is_some() && replace(&mut settings.background, color),
             Property::Color => color.is_some() && replace(&mut settings.color, color),
             Property::BorderColor => color.is_some() && replace(&mut settings.border_color, color),
-            Property::BorderWidth => replace(&mut settings.border_width, Some(small.max(0))),
-            Property::Radius => replace(&mut settings.radius, Some(small.max(0))),
+            Property::BorderWidth => replace(&mut settings.border_width, Some(pixels.max(0))),
+            Property::Radius => replace(&mut settings.radius, Some(pixels.max(0))),
             Property::Font => replace(&mut settings.font, FontName::from_value(small)),
             Property::Align => replace(&mut settings.align, Align::from_value(small)),
             Property::Justify => replace(
@@ -436,8 +467,8 @@ impl Node {
             Property::Value => replace(&mut settings.value, small),
             Property::Minimum => replace(&mut settings.minimum, small),
             Property::Maximum => replace(&mut settings.maximum, small),
-            Property::StartAngle => replace(&mut settings.start_angle, Some(small)),
-            Property::EndAngle => replace(&mut settings.end_angle, Some(small)),
+            Property::StartAngle => replace(&mut settings.start_angle, Some(pixels)),
+            Property::EndAngle => replace(&mut settings.end_angle, Some(pixels)),
             Property::Columns => replace(&mut settings.columns, to_u16(number)),
             Property::Cells | Property::Options | Property::Points | Property::Series => {
                 replace(&mut settings.array, to_variable(number))
@@ -450,7 +481,10 @@ impl Node {
     fn apply_extra(&mut self, property: Property, number: i64) -> bool {
         let color = ColorValue::from_value(number);
         let length = Some(to_u16(number));
-        match &mut self.extra {
+        let Some(extra) = self.extra.get_mut() else {
+            return false;
+        };
+        match extra {
             Extra::CellGrid {
                 rows,
                 cell_size,
@@ -539,7 +573,7 @@ impl Node {
             }
         };
         add(self.settings.array);
-        match self.extra {
+        match *self.extra {
             Extra::CellGrid { palette, .. } => add(palette),
             Extra::Scale { skip, labels, .. } => {
                 add(skip);

@@ -147,11 +147,19 @@ pub fn compile_source_text(source: &str) -> Result<Vec<u8>, OpenFailure> {
     }
 }
 
-/// The shared library, built once for every test in the process.
+/// The shared library, built once for every test in the process, with its fonts given to the app host as the watch does.
 pub fn shared_library() -> Result<&'static [u8], OpenFailure> {
     static LIBRARY: OnceLock<Result<Vec<u8>, String>> = OnceLock::new();
+    static FONTS: std::sync::Once = std::sync::Once::new();
     match LIBRARY.get_or_init(neotime_compiler::library::build_library) {
-        Ok(bytes) => Ok(bytes),
+        Ok(bytes) => {
+            FONTS.call_once(|| {
+                if let Ok(image) = neotime_runtime::AppImage::parse(bytes) {
+                    neotime_app_host::fonts::install_from_library(&image);
+                }
+            });
+            Ok(bytes)
+        }
         Err(problem) => Err(OpenFailure::NoSharedLibrary(problem.clone())),
     }
 }

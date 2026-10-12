@@ -31,8 +31,8 @@ use crate::text::{draw_line, WrappedLines};
 pub struct DrawContext<'context, 'image> {
     pub image: &'context AppImage<'image>,
     pub library: Option<&'context AppImage<'image>>,
-    /// The installed apps' images, whose icons a launcher shows.
-    pub installed_apps: &'image [&'image [u8]],
+    /// Each installed app's icon as `AppImage::resource_bytes` gives it, or empty for none.
+    pub installed_app_icons: &'image [&'image [u8]],
     pub state: &'context AppState,
     pub theme: &'context Theme,
     /// Milliseconds the local time is ahead of UTC.
@@ -67,8 +67,7 @@ impl<'image> DrawContext<'_, 'image> {
             ImageReference::App(index) => self.image.resource(index),
             ImageReference::SharedLibrary(index) => self.library?.resource(index),
             ImageReference::InstalledApp(index) => {
-                let app = AppImage::parse(self.installed_apps.get(index as usize)?).ok()?;
-                app.has_icon.then(|| app.resource(0)).flatten()
+                ImageResource::parse(self.installed_app_icons.get(index as usize)?)
             }
         }
     }
@@ -123,9 +122,9 @@ fn frame_style(settings: &Settings, background: Color, default_radius: i32, them
     Style {
         bg_color: background,
         border_color: resolve(settings.border_color, ThemeColor::Muted, theme),
-        border_width: to_u8(settings.border_width.unwrap_or(BORDER_WIDTH)),
+        border_width: to_u8(settings.border_width.map(i32::from).unwrap_or(BORDER_WIDTH)),
         alpha: OPAQUE,
-        radius: to_u8(settings.radius.unwrap_or(default_radius)),
+        radius: to_u8(settings.radius.map(i32::from).unwrap_or(default_radius)),
     }
 }
 
@@ -269,7 +268,10 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
         }
         Arc => {
             let mut arc = rlvgl_widgets::arc::Arc::new(bounds, settings.minimum, settings.maximum);
-            let (start, end) = match (settings.start_angle, settings.end_angle) {
+            let (start, end) = match (
+                settings.start_angle.map(i32::from),
+                settings.end_angle.map(i32::from),
+            ) {
                 (Some(start), Some(end)) => (start, end),
                 _ => (ARC_DEFAULT_START_ANGLE, ARC_DEFAULT_END_ANGLE),
             };
@@ -277,7 +279,7 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
             arc.set_rotation(TWELVE_TO_RIGHT_IN_DEGREES);
             arc.set_value(settings.value);
             arc.style.border_color = track(settings.background);
-            arc.style.border_width = to_u8(settings.border_width.unwrap_or(ARC_STROKE_WIDTH));
+            arc.style.border_width = to_u8(settings.border_width.map(i32::from).unwrap_or(ARC_STROKE_WIDTH));
             arc.indicator_color = accent(settings.color);
             arc.knob_color = TRANSPARENT;
             arc.draw(renderer);
@@ -336,7 +338,12 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
         }
         Image | Icon => {
             plain_frame(renderer);
-            draw_image_widget(node, context, inset(bounds, settings.padding), renderer);
+            draw_image_widget(
+                node,
+                context,
+                inset(bounds, i32::from(settings.padding)),
+                renderer,
+            );
         }
         ButtonMatrix => {
             plain_frame(renderer);
@@ -377,7 +384,7 @@ pub fn label_scrolls(node: &Node) -> bool {
     node.kind == neotime_runtime::WidgetKind::Label
         && node.settings.long_mode == LongMode::Scroll
         && text_width(node.settings.font.metrics(), &node.text)
-            > inset(node.bounds, node.settings.padding).width
+            > inset(node.bounds, i32::from(node.settings.padding)).width
 }
 
 /// Draws lines of text inside `area`, each placed across by `align` and the block centred down.
@@ -406,7 +413,7 @@ fn draw_text_block(
 
 fn draw_label_text(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
     let settings = &node.settings;
-    let area = inset(node.bounds, settings.padding);
+    let area = inset(node.bounds, i32::from(settings.padding));
     let color = resolve(settings.color, ThemeColor::Text, context.theme);
     let align = settings.align.unwrap_or(Align::Start);
     let font = settings.font;
@@ -433,9 +440,9 @@ fn draw_label_text(node: &Node, context: &DrawContext, renderer: &mut dyn Render
 /// A button's icon, if it has one, then its text, together centred.
 fn draw_button_content(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
     let settings = &node.settings;
-    let area = inset(node.bounds, settings.padding);
+    let area = inset(node.bounds, i32::from(settings.padding));
     let color = resolve(settings.color, ThemeColor::Text, context.theme);
-    let icon = match node.extra {
+    let icon = match *node.extra {
         Extra::Image {
             reference: Some(reference),
             ..
@@ -493,7 +500,7 @@ fn draw_button_content(node: &Node, context: &DrawContext, renderer: &mut dyn Re
 fn draw_tick_box(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
     let settings = &node.settings;
     let theme = context.theme;
-    let area = inset(node.bounds, settings.padding);
+    let area = inset(node.bounds, i32::from(settings.padding));
     let is_on = settings.value != 0;
     let accent = resolve(settings.background, ThemeColor::Accent, theme);
     let border = resolve(settings.border_color, ThemeColor::Muted, theme);
@@ -570,14 +577,14 @@ pub fn cell_layout(node: &Node) -> Option<CellLayout> {
         cell_size,
         cell_gap,
         ..
-    } = node.extra
+    } = *node.extra
     else {
         return None;
     };
     let columns = (node.settings.columns as i32).max(1);
     let rows = (rows as i32).max(1);
     let gap = cell_gap as i32;
-    let area = inset(node.bounds, node.settings.padding);
+    let area = inset(node.bounds, i32::from(node.settings.padding));
     let fitted = ((area.width - (columns - 1) * gap) / columns).min((area.height - (rows - 1) * gap) / rows);
     let cell_size = match cell_size {
         0 => fitted.max(1),
@@ -608,7 +615,7 @@ fn draw_cell_grid(node: &Node, context: &DrawContext, renderer: &mut dyn Rendere
     };
     let Extra::CellGrid {
         cell_shape, palette, ..
-    } = node.extra
+    } = *node.extra
     else {
         return;
     };
@@ -692,7 +699,7 @@ fn draw_chart(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
         return;
     };
     let settings = &node.settings;
-    let area = inset(node.bounds, settings.padding.max(1));
+    let area = inset(node.bounds, i32::from(settings.padding).max(1));
     let color = resolve(settings.color, ThemeColor::Accent, context.theme);
     let span = (settings.maximum as f32 - settings.minimum as f32).max(1.0);
     let height = (area.height - 1) as f32;
@@ -728,8 +735,8 @@ fn tick_angle(start: f32, span: f32, tick: u16, ticks: u16) -> f32 {
 }
 
 fn dial_angles(settings: &Settings) -> (f32, f32) {
-    let start = settings.start_angle.unwrap_or(0) as f32;
-    let end = settings.end_angle.unwrap_or(360) as f32;
+    let start = settings.start_angle.map(i32::from).unwrap_or(0) as f32;
+    let end = settings.end_angle.map(i32::from).unwrap_or(360) as f32;
     let mut span = end - start;
     if span <= 0.0 {
         span += 360.0;
@@ -745,13 +752,13 @@ fn draw_scale(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
         labels,
         needle_color,
         major_color,
-    } = node.extra
+    } = *node.extra
     else {
         return;
     };
     let settings = &node.settings;
     let theme = context.theme;
-    let area = inset(node.bounds, settings.padding);
+    let area = inset(node.bounds, i32::from(settings.padding));
     let centre = centre_of(area);
     let radius = area.width.min(area.height) as f32 / 2.0;
     let (start, span) = dial_angles(settings);
@@ -848,12 +855,12 @@ fn draw_analog_clock(node: &Node, context: &DrawContext, renderer: &mut dyn Rend
         hour_length,
         minute_length,
         second_length,
-    } = node.extra
+    } = *node.extra
     else {
         return;
     };
     let theme = context.theme;
-    let area = inset(node.bounds, node.settings.padding);
+    let area = inset(node.bounds, i32::from(node.settings.padding));
     let centre = centre_of(area);
     let radius = area.width.min(area.height) as f32 / 2.0;
     let length_of = |length: Option<u16>, share: i32| {
@@ -914,7 +921,7 @@ fn draw_analog_clock(node: &Node, context: &DrawContext, renderer: &mut dyn Rend
 // ============================================================================
 
 fn draw_image_widget(node: &Node, context: &DrawContext, area: Rect, renderer: &mut dyn Renderer) {
-    let Extra::Image { reference, recolor } = node.extra else {
+    let Extra::Image { reference, recolor } = *node.extra else {
         return;
     };
     let color = resolve(recolor.or(node.settings.color), ThemeColor::Text, context.theme);
@@ -1053,7 +1060,7 @@ pub fn matrix_buttons<'context>(
     let length = options.map_or(0, |(_, length)| length);
     let text = move |index: usize| options.map_or("", |(variable, _)| context.text_element(variable, index));
     let row_count = (0..length).filter(|&index| text(index) == ROW_BREAK).count() as i32 + 1;
-    let area = inset(node.bounds, node.settings.padding);
+    let area = inset(node.bounds, i32::from(node.settings.padding));
     let row_height = (area.height - (row_count - 1) * MATRIX_GAP) / row_count.max(1);
 
     let mut index = 0;
@@ -1288,7 +1295,7 @@ pub fn measure_node(node: &mut Node, context: &DrawContext) {
         })
     };
     let (width, height) = match node.kind {
-        Image | Icon | Button => match node.extra {
+        Image | Icon | Button => match *node.extra {
             Extra::Image {
                 reference: Some(reference),
                 ..
@@ -1301,7 +1308,7 @@ pub fn measure_node(node: &mut Node, context: &DrawContext) {
             _ => (PLACEHOLDER_SIZE, PLACEHOLDER_SIZE),
         },
         CellGrid => match cell_layout(node) {
-            Some(cells) if matches!(node.extra, Extra::CellGrid { cell_size, .. } if cell_size > 0) => (
+            Some(cells) if matches!(*node.extra, Extra::CellGrid { cell_size, .. } if cell_size > 0) => (
                 cells.columns * cells.pitch - (cells.pitch - cells.cell_size),
                 cells.rows * cells.pitch - (cells.pitch - cells.cell_size),
             ),

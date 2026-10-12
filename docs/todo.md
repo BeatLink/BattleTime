@@ -274,15 +274,15 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **Deliver sensor and phone events to apps.** The shell pushes only step counts. Push
   acceleration for the motion app, shake for dice, and heart rate, music, navigation and weather
   once those services exist.
-- [ ] **Build every ported app and face into the firmware.** The watch carries 9 apps and only the
-  digital face; the rest exist only as source. Choose the set at build time, as InfiniTime's
-  `ENABLE_USERAPPS` and `ENABLE_WATCHFACES` do, and lift the launcher's 16-row limit.
+- [ ] **Lift the launcher's 16-row limit,** so every installed app is listed.
+- [ ] **Keep the alarm within the stack margin.** With the alarm open the stack peaks at 10.4 KB,
+  1.8 KB spare, under the 2 KB kept free; win the room back from the Bluetooth task.
 
 ### UI toolkit
 
 - [ ] **Double line buffers with DMA,** so one is filled while the other is sent. InfiniTime uses
   two of 240 x 4 pixels. This also fixes the text edges listed above.
-- [ ] **Fonts and pictures** built into the firmware, and more loaded from the external flash.
+- [ ] **More fonts and pictures** loaded from the external flash, beyond the shared library's.
 - [ ] **Drag to change an Arc.** The app host gives `Arc` no `onChange`, so the metronome's tempo
   ring cannot be dragged; only tap tempo works.
 - [ ] **A canvas widget for free drawing.** Paint fills cells of a 20 by 20 grid; InfiniTime

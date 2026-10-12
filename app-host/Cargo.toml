@@ -18,5 +18,7 @@ rlvgl-widgets = { version = "0.2.5", default-features = false }
 neotime-runtime = { path = "../runtime", features = ["writer"] }
 
 [features]
+# The text fonts built in from fonts/, for the simulator and tools; the watch takes them from the shared library.
+built-in-fonts = []
 # The built-in stopwatch demo image, written with the runtime's image writer.
 demo = ["neotime-runtime/writer"]

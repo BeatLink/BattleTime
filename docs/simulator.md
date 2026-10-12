@@ -40,7 +40,9 @@ given more than once. `--library path/to/shared.ntlib` gives the app the shared 
 icons apps take from it:
 
 ```sh
-nix run . -- --app firmware/apps/face.ntapp --library firmware/apps/shared.ntlib
+cargo run -q -p neotime-compiler -- faces/digital/face.tsx -o face.ntapp
+cargo run -q -p neotime-compiler -- library -o shared.ntlib
+nix run . -- --app face.ntapp --library shared.ntlib
 ```
 
 | Input | Does |

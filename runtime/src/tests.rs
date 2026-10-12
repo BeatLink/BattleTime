@@ -2807,3 +2807,21 @@ fn state_and_bindings_load_in_place_as_they_do_when_made() {
         assert_eq!(bindings.info(expression), loaded.info(expression));
     }
 }
+
+#[test]
+fn a_library_carries_fonts_and_an_app_keeps_eight_sections() {
+    use crate::writer::ImageWriter;
+
+    let mut library = ImageWriter::new("shared", "Shared library", AppKind::Library, 1);
+    library.font(b"NTFN first font");
+    library.font(b"NTFN second font");
+    let bytes = library.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    assert_eq!(image.font_count(), 2);
+    assert_eq!(image.font(1), Some(&b"NTFN second font"[..]));
+
+    let app = ImageWriter::new("app", "App", AppKind::App, 1).build();
+    let sections = u16::from_le_bytes([app[10], app[11]]);
+    assert_eq!(sections, 8);
+    assert_eq!(AppImage::parse(&app).unwrap().font_count(), 0);
+}

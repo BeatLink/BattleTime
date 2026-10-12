@@ -331,3 +331,15 @@ fn the_library_image_holds_every_icon_and_passes_the_install_checks() {
         (ImageFormat::Mask, ICON_SIDE, ICON_SIDE)
     );
 }
+
+#[test]
+fn the_library_carries_the_seven_text_fonts_in_order() {
+    let bytes = build_library().unwrap();
+    let image = neotime_runtime::AppImage::parse(&bytes).unwrap();
+    assert_eq!(image.font_count(), 7);
+    for (index, expected) in super::LIBRARY_FONTS.iter().enumerate() {
+        let font = image.font(index as u16).unwrap();
+        assert_eq!(&font[..4], b"NTFN");
+        assert_eq!(font, *expected);
+    }
+}

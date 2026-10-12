@@ -25,6 +25,7 @@ const WIDGETS_SECTION: u16 = 5;
 const SUBSCRIPTIONS_SECTION: u16 = 6;
 const RESOURCES_SECTION: u16 = 7;
 const INITIAL_VALUES_SECTION: u16 = 8;
+const FONTS_SECTION: u16 = 9;
 
 const HEADER_BYTES: usize = 20;
 const SECTION_ENTRY_BYTES: usize = 12;
@@ -57,6 +58,7 @@ pub struct ImageWriter {
     initial_values: Vec<Vec<u8>>,
     subscriptions: Vec<Subscription>,
     resources: Vec<Vec<u8>>,
+    fonts: Vec<Vec<u8>>,
 }
 
 impl ImageWriter {
@@ -75,6 +77,7 @@ impl ImageWriter {
             initial_values: Vec::new(),
             subscriptions: Vec::new(),
             resources: Vec::new(),
+            fonts: Vec::new(),
         };
         writer.id_string = writer.string(id);
         writer.name_string = writer.string(name);
@@ -144,6 +147,12 @@ impl ImageWriter {
 
     /// Adds an image from its pixels: RGB565 colours, or coverage from 0 to 255 for a mask.
     /// Runs are found here, so the caller gives every pixel, left to right and top to bottom.
+    /// Adds a text font, as `tools/generate_fonts.py` writes it; only the shared library has fonts.
+    pub fn font(&mut self, bytes: &[u8]) -> u16 {
+        self.fonts.push(bytes.to_vec());
+        (self.fonts.len() - 1) as u16
+    }
+
     pub fn image_resource(&mut self, format: ImageFormat, width: u16, height: u16, pixels: &[u16]) -> u16 {
         let mut bytes: Vec<u8> = alloc::vec![
             match format {
@@ -239,7 +248,7 @@ impl ImageWriter {
 
     pub fn build(&self) -> Vec<u8> {
         let strings: Vec<Vec<u8>> = self.strings.iter().map(|text| text.as_bytes().to_vec()).collect();
-        let sections = [
+        let mut sections = alloc::vec![
             (STRINGS_SECTION, self.strings.len() as u16, entry_table(&strings)),
             (STATE_SECTION, self.variables.len() as u16, self.state_section()),
             (
@@ -276,6 +285,10 @@ impl ImageWriter {
                 entry_table(&self.initial_values),
             ),
         ];
+        // Only the shared library has fonts, so app images keep their eight sections.
+        if !self.fonts.is_empty() {
+            sections.push((FONTS_SECTION, self.fonts.len() as u16, entry_table(&self.fonts)));
+        }
 
         let mut image: Vec<u8> = Vec::new();
         image.extend(MAGIC);

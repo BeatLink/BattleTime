@@ -103,7 +103,7 @@ pub struct AppHost<'image> {
     image: AppImage<'image>,
     tree: WidgetTree<'image>,
     library: Option<AppImage<'image>>,
-    installed_apps: &'image [&'image [u8]],
+    installed_app_icons: &'image [&'image [u8]],
     // The three big parts live on the heap, so opening an app never copies kilobytes across the stack.
     state: Box<AppState>,
     interpreter: Box<Interpreter>,
@@ -115,7 +115,9 @@ pub struct AppHost<'image> {
     screen_history_length: usize,
     /// One bit for each expression the open screen's widgets read.
     screen_expressions: u128,
-    nodes: Vec<Node>,
+    /// Each node is its own allocation, so a screen of many widgets never needs one large free block.
+    #[allow(clippy::vec_box)]
+    nodes: Vec<Box<Node>>,
     /// One bit for each node to draw again.
     dirty_nodes: u128,
     whole_screen_dirty: bool,
@@ -158,6 +160,37 @@ impl<'image> AppHost<'image> {
         let mut host = Self::load(image_bytes, theme, saved_state, now, system)?;
         host.bring_to_front(now, system);
         Ok(host)
+    }
+
+    /// Opens an app into `slot`, like `open_with_saved_state`, and returns the host there.
+    ///
+    /// The host is built in a step of its own that returns before the app's first handlers run, so
+    /// the stack never holds its copies and those handlers at once.
+    pub fn open_into<'slot>(
+        slot: &'slot mut Option<Self>,
+        image_bytes: &'image [u8],
+        theme: Theme,
+        saved_state: &[u8],
+        now: Value,
+        system: &mut impl System,
+    ) -> Result<&'slot mut Self, OpenError> {
+        Self::load_into(slot, image_bytes, theme, saved_state, now, system)?;
+        let host = slot.as_mut().ok_or(OpenError::NoScreens)?;
+        host.bring_to_front(now, system);
+        Ok(host)
+    }
+
+    #[inline(never)]
+    fn load_into(
+        slot: &mut Option<Self>,
+        image_bytes: &'image [u8],
+        theme: Theme,
+        saved_state: &[u8],
+        now: Value,
+        system: &mut impl System,
+    ) -> Result<(), OpenError> {
+        *slot = Some(Self::load(image_bytes, theme, saved_state, now, system)?);
+        Ok(())
     }
 
     /// Loads an app's state without opening it, so its subscriptions can run in the background.
@@ -205,7 +238,7 @@ impl<'image> AppHost<'image> {
             image,
             tree,
             library: None,
-            installed_apps: &[],
+            installed_app_icons: &[],
             state,
             interpreter: Box::new(Interpreter::new()),
             bindings,
@@ -234,9 +267,9 @@ impl<'image> AppHost<'image> {
         Ok(host)
     }
 
-    /// Gives the host every installed app's image, for the icons a launcher shows.
-    pub fn set_installed_apps(&mut self, installed_apps: &'image [&'image [u8]]) {
-        self.installed_apps = installed_apps;
+    /// Gives the host each installed app's icon, as `AppImage::resource_bytes` gives it, for a launcher.
+    pub fn set_installed_app_icons(&mut self, icons: &'image [&'image [u8]]) {
+        self.installed_app_icons = icons;
         self.whole_screen_dirty = true;
     }
 
@@ -376,7 +409,7 @@ impl<'image> AppHost<'image> {
     fn show_screen(&mut self, root: u16, now: Value, system: &mut impl System) {
         let end = self.tree.subtree_end(root).unwrap_or(root + 1);
         let count = (end - root) as usize;
-        let mut nodes: Vec<Node> = Vec::with_capacity(count.min(MOST_WIDGETS));
+        let mut nodes: Vec<Box<Node>> = Vec::with_capacity(count.min(MOST_WIDGETS));
         let mut open_parents = [0u8; DEEPEST_NESTING + 1];
         let mut depth = 0;
 
@@ -390,13 +423,13 @@ impl<'image> AppHost<'image> {
             }
             let subtree_end = self.tree.subtree_end(widget_index).unwrap_or(end) - root;
             let parent = (depth > 0).then(|| open_parents[depth - 1]);
-            nodes.push(Node::new(
+            nodes.push(Box::new(Node::new(
                 widget_index,
                 widget.kind,
                 subtree_end as u8,
                 parent,
                 SCREEN_AREA,
-            ));
+            )));
             if widget.child_count > 0 && depth < open_parents.len() {
                 open_parents[depth] = node_index as u8;
                 depth += 1;
@@ -450,7 +483,7 @@ impl<'image> AppHost<'image> {
         DrawContext {
             image: &self.image,
             library: self.library.as_ref(),
-            installed_apps: self.installed_apps,
+            installed_app_icons: self.installed_app_icons,
             state: &self.state,
             theme: &self.theme,
             utc_offset: self.utc_offset,
@@ -1241,7 +1274,10 @@ impl<'image> AppHost<'image> {
     }
 
     fn node(&self, widget_index: u16) -> Option<&Node> {
-        self.nodes.iter().find(|node| node.widget_index == widget_index)
+        self.nodes
+            .iter()
+            .map(|node| &**node)
+            .find(|node| node.widget_index == widget_index)
     }
 
     /// Draws every widget that changed since the last call, and only those parts of the screen.

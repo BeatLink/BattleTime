@@ -75,7 +75,7 @@ fn a_negative_length_is_a_share_of_the_whole() {
     assert_eq!(Length::from_value(-50), Length::Percent(50));
     assert_eq!(Length::from_value(-50).of(240), 120);
     assert_eq!(Length::from_value(30).of(240), 30);
-    assert_eq!(Length::from_value(i32::MIN), Length::Percent(i32::MAX));
+    assert_eq!(Length::from_value(i32::MIN), Length::Percent(i16::MAX));
 }
 
 // ============================================================================
@@ -85,7 +85,7 @@ fn a_negative_length_is_a_share_of_the_whole() {
 #[test]
 fn each_kind_starts_with_its_own_extra_properties_empty() {
     assert!(matches!(
-        node(WidgetKind::CellGrid).extra,
+        *node(WidgetKind::CellGrid).extra,
         Extra::CellGrid {
             rows: 0,
             palette: None,
@@ -93,7 +93,7 @@ fn each_kind_starts_with_its_own_extra_properties_empty() {
         }
     ));
     assert!(matches!(
-        node(WidgetKind::Scale).extra,
+        *node(WidgetKind::Scale).extra,
         Extra::Scale {
             ticks: 0,
             labels: None,
@@ -101,7 +101,7 @@ fn each_kind_starts_with_its_own_extra_properties_empty() {
         }
     ));
     assert!(matches!(
-        node(WidgetKind::AnalogClock).extra,
+        *node(WidgetKind::AnalogClock).extra,
         Extra::AnalogClock {
             time: 0,
             show_seconds: false,
@@ -109,13 +109,13 @@ fn each_kind_starts_with_its_own_extra_properties_empty() {
         }
     ));
     assert!(matches!(
-        node(WidgetKind::Button).extra,
+        *node(WidgetKind::Button).extra,
         Extra::Image {
             reference: None,
             recolor: None
         }
     ));
-    assert_eq!(node(WidgetKind::Label).extra, Extra::None);
+    assert_eq!(*node(WidgetKind::Label).extra, Extra::None);
 }
 
 #[test]
@@ -132,7 +132,7 @@ fn a_cell_grid_stores_its_rows_cells_shape_and_palette() {
 
     assert_eq!(changed, [true; 5]);
     assert_eq!(
-        grid.extra,
+        *grid.extra,
         Extra::CellGrid {
             rows: 8,
             cell_size: 12,
@@ -165,7 +165,7 @@ fn a_scale_stores_its_ticks_labels_and_colours() {
     scale.apply(Property::MajorColor, number(theme_value(ThemeColor::Accent)));
 
     assert_eq!(
-        scale.extra,
+        *scale.extra,
         Extra::Scale {
             ticks: 60,
             major_every: 5,
@@ -185,7 +185,7 @@ fn a_scale_ignores_a_needle_colour_that_is_not_a_colour() {
 
     assert!(!changed);
     assert!(matches!(
-        scale.extra,
+        *scale.extra,
         Extra::Scale {
             needle_color: None,
             ..
@@ -208,7 +208,7 @@ fn an_analog_clock_stores_its_time_hands_and_colours() {
     clock.apply(Property::SecondLength, number(100_000));
 
     assert_eq!(
-        clock.extra,
+        *clock.extra,
         Extra::AnalogClock {
             time: 1_000_000,
             show_seconds: true,
@@ -233,7 +233,7 @@ fn an_image_stores_its_picture_and_recolour() {
 
     assert!(picture_changed && recolor_changed && !bad_recolor_changed);
     assert_eq!(
-        image.extra,
+        *image.extra,
         Extra::Image {
             reference: Some(2),
             recolor: Some(ColorValue::Fixed(RED as u16)),
