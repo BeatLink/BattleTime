@@ -155,9 +155,10 @@ fn main() -> ! {
     let flash_chip_select = Output::new(chip.P0_05, Level::High, OutputDrive::Standard);
     let Ok(external_flash) = ExternalFlash::new(
         SpiDevice::new(spi_bus, flash_chip_select),
-        BusyWait { cpu_frequency_in_hertz: CPU_FREQUENCY_IN_HERTZ },
-    )
-    else {
+        BusyWait {
+            cpu_frequency_in_hertz: CPU_FREQUENCY_IN_HERTZ,
+        },
+    ) else {
         screen.status("No flash chip");
         halt(&button);
     };
@@ -248,7 +249,12 @@ fn halt(button: &Input<'_>) -> ! {
     }
 }
 
-fn wait_for_the_charger(power_present: &Input<'_>, button: &Input<'_>, screen: &mut Screen, delay: &mut Delay) {
+fn wait_for_the_charger(
+    power_present: &Input<'_>,
+    button: &Input<'_>,
+    screen: &mut Screen,
+    delay: &mut Delay,
+) {
     let mut asked = false;
     while power_present.is_high() {
         if !asked {

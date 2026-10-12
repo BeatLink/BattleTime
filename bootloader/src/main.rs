@@ -163,7 +163,12 @@ fn prepare_firmware<'d>(
     };
 
     let Ok(flash_spi) = RefCellDevice::new_no_delay(&spi_bus, flash_chip_select);
-    let Ok(external_flash) = ExternalFlash::new(flash_spi, BusyWait { cpu_frequency_in_hertz: CPU_FREQUENCY_IN_HERTZ }) else {
+    let Ok(external_flash) = ExternalFlash::new(
+        flash_spi,
+        BusyWait {
+            cpu_frequency_in_hertz: CPU_FREQUENCY_IN_HERTZ,
+        },
+    ) else {
         return BootNote::Normal;
     };
 

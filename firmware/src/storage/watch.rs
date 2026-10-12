@@ -75,7 +75,9 @@ pub fn record(_breadcrumbs: Breadcrumbs) {}
 // ============================================================================
 
 /// Waits between busy polls of the flash chip by spinning the 64 MHz CPU.
-const BUSY_WAIT: BusyWait = BusyWait { cpu_frequency_in_hertz: 64_000_000 };
+const BUSY_WAIT: BusyWait = BusyWait {
+    cpu_frequency_in_hertz: 64_000_000,
+};
 
 type FlashOnBus = ExternalFlash<SpiDevice<'static, NoopRawMutex, Spim<'static>, Output<'static>>, BusyWait>;
 type SharedExternalFlash = Mutex<NoopRawMutex, RefCell<FlashOnBus>>;
