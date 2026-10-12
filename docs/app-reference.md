@@ -234,23 +234,20 @@ from inside its parent's padding.
 ### Components from the shared library
 
 These are built from the widgets above and kept in the [shared library](app-runtime.md#the-shared-library),
-so they will cost an app nothing to include. Until calls into the library exist, the compiler
-still inlines them into each app; see
-[Building apps from shared parts](app-runtime.md#building-apps-from-shared-parts).
+so they will cost an app nothing to include. Until library components exist, the compiler inlines
+them into each app; see [Building apps from shared parts](app-runtime.md#building-apps-from-shared-parts).
+For a list of entries use a `List` with a `Repeat`, and for the status row the native `StatusIcons`.
 
 | Component | Use |
 |---|---|
 | `Card` | A rounded panel, the standard block of an app's layout. |
 | `Header` | A screen's title row, with an optional icon. |
-| `ListRow` | A list entry: icon, title, subtitle and a value or switch on the right. |
-| `StatusBar` | The time, battery and connection, as the system shows them. |
 | `BatteryIcon` | The battery's charge and whether it is charging, drawn the way the system does, with an optional percentage, as one widget. `single_color` draws it all in `color`, and `show_bolt={false}` hides the charging bolt. |
 | `StatusIcons` | The status row as one widget: the notifications icon while any are unread, the phone's while it is connected, the alarm's with `show_alarm` while one is set, then the battery. `icon_size`, `gap`, `color` for the icons, `battery_color`, and `align` to place them across. |
 | `StepsBadge`, `HeartRateBadge`, `TemperatureBadge` | Today's steps, the heart rate while it is measured, or the temperature in the wearer's units, beside an icon, as one widget. `icon_size`, `gap`, `icon_color` and `align`; `TemperatureBadge` takes the weather `icon` the face chooses. |
 | `ConfirmDialog` | A question with two buttons, shown while a signal is true, as one widget. |
 | `NumberPicker`, `TimePicker`, `DurationPicker` | Rollers for a number, a time of day or a duration, writing back to a signal, each one widget. `TimePicker` follows the 12 or 24 hour setting. |
 | `WeekdayPicker` | A button for each day of the week, toggling that day in a signal of day bits, Monday in bit 0, as one widget; `columns` buttons a row. |
-| `Menu` | A list of named actions. |
 
 ### Props beyond the common ones
 

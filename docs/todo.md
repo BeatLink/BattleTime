@@ -272,8 +272,6 @@ the ones above it.
 - [ ] **Library strings and palettes.** Start, Stop, Reset, Cancel, Dismiss, Snooze, Once, Every
   day, Weekdays, Weekends, Game over; InfiniTime's 18 colours, the resistor code and a rainbow; a
   theme colour for the `#b0b0b0` that 9 apps write out.
-- [ ] **Fixes found on the way.** Several apps rebuild `Header` or `Card` by hand. `StatusBar`,
-  `ListRow` and `Menu` are used by nothing.
 
 ## RAM
 

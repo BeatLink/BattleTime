@@ -22,8 +22,9 @@ import {
   type SwipeEvent,
   type TimeEvent,
 } from "neotime";
+import { Card } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Button, ButtonMatrix, Column, Icon, Label, Row, Screen } from "neotime/widgets";
+import { Button, ButtonMatrix, Icon, Label, Row, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -243,16 +244,16 @@ function Pomodoro() {
       )}
 
       {is_running.value && (
-        <Column grow={1} align_items="center" justify="center" background="surface" radius={12}>
+        <Card grow={1} align_items="center" justify="center" padding={0}>
           <Label font="huge">{format_duration(remaining.value, "mm:ss")}</Label>
-        </Column>
+        </Card>
       )}
 
       {is_ringing.value && (
-        <Column grow={1} align_items="center" justify="center" gap={6} background="surface" radius={12}>
+        <Card grow={1} align_items="center" justify="center" gap={6} padding={0}>
           <Icon icon={icons.timer} size={48} color="warning" />
           <Label>Pomodoro</Label>
-        </Column>
+        </Card>
       )}
 
       {!is_stopped.value && (

@@ -4,8 +4,9 @@
 
 import { computed } from "@preact/signals";
 import { back, define_app, persisted, type SwipeEvent } from "neotime";
+import { Card } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Column, Label, Screen } from "neotime/widgets";
+import { Label, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -70,9 +71,9 @@ function swipe(event: SwipeEvent) {
 
 function VerseLine(props: { text: string }) {
   return (
-    <Column grow={1} justify="center" background="surface" radius={12} padding={6}>
+    <Card grow={1} justify="center" padding={6}>
       <Label text_align="center">{props.text}</Label>
-    </Column>
+    </Card>
   );
 }
 

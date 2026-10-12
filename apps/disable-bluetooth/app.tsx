@@ -4,8 +4,9 @@
 
 import { computed } from "@preact/signals";
 import { define_app, is_bluetooth_enabled, is_phone_connected, set_bluetooth } from "neotime";
+import { Card } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Button, Column, Icon, Label, Screen } from "neotime/widgets";
+import { Button, Icon, Label, Screen } from "neotime/widgets";
 
 // ============================================================================
 // Derived values
@@ -30,10 +31,10 @@ function toggle_bluetooth() {
 function DisableBluetooth() {
   return (
     <Screen padding={8} gap={6}>
-      <Column grow={1} align_items="center" justify="center" gap={6} background="surface" radius={12}>
+      <Card grow={1} align_items="center" justify="center" gap={6} padding={0}>
         <Icon icon={icons.bluetooth} size={40} color={is_bluetooth_enabled.value ? "accent" : "muted"} />
         <Label>{status_text.value}</Label>
-      </Column>
+      </Card>
       <Button
         grow={1}
         background={is_bluetooth_enabled.value ? "danger" : "accent"}

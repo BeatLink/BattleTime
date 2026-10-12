@@ -4,8 +4,9 @@
 
 import { computed, signal } from "@preact/signals";
 import { back, define_app, type ButtonEvent, type ClickEvent, type SwipeEvent } from "neotime";
+import { Card } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Column, Label, Screen } from "neotime/widgets";
+import { Label, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -68,9 +69,9 @@ function touch(event: ClickEvent) {
 
 function TextCard(props: { text: string }) {
   return (
-    <Column grow={1} justify="center" background="surface" radius={12} padding={12}>
+    <Card grow={1} justify="center" padding={12}>
       <Label text_align="center">{props.text}</Label>
-    </Column>
+    </Card>
   );
 }
 

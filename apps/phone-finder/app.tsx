@@ -3,8 +3,9 @@
 
 import { signal } from "@preact/signals";
 import { define_app, find_phone, is_phone_connected, show_toast } from "neotime";
+import { Card } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Button, Column, Icon, Label, Screen } from "neotime/widgets";
+import { Button, Icon, Label, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -34,7 +35,7 @@ function stop_when_closed() {
 function PhoneFinder() {
   return (
     <Screen padding={8} gap={6}>
-      <Column grow={1} align_items="center" justify="center" gap={6} background="surface" radius={12}>
+      <Card grow={1} align_items="center" justify="center" gap={6} padding={0}>
         <Icon icon={icons.phone} size={40} />
         <Label>Find phone</Label>
         {!is_phone_connected.value && (
@@ -42,7 +43,7 @@ function PhoneFinder() {
             Phone not connected
           </Label>
         )}
-      </Column>
+      </Card>
       <Button
         grow={1}
         background={is_ringing.value ? "danger" : "accent"}

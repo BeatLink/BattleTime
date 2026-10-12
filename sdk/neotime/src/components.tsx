@@ -7,13 +7,11 @@ import {
   battery_percent,
   current_weather,
   format_temperature,
-  format_time,
   heart_rate,
   is_charging,
   is_heart_rate_running,
   is_phone_connected,
   next_alarm,
-  now,
   settings,
   steps_today,
   unread_notifications,
@@ -70,49 +68,6 @@ export function Header(props: HeaderProps) {
     <Row gap={8} height={36} padding={4}>
       {props.icon && <Icon icon={props.icon} size={28} color={props.color ?? "accent"} />}
       <Label color={props.color ?? "accent"}>{props.title}</Label>
-    </Row>
-  );
-}
-
-export interface ListRowProps {
-  title: string;
-  subtitle?: string;
-  icon?: LibraryIcon;
-  /** Text on the right, such as a current choice. */
-  value?: string;
-  /** Children replace the value on the right, such as a `Switch`. */
-  children?: ComponentChildren;
-  onClick?: () => void;
-}
-
-/** A list entry: icon, title, subtitle and a value or control on the right. */
-export function ListRow(props: ListRowProps) {
-  return (
-    <Row gap={8} padding={6} height={props.subtitle ? 56 : 44} onClick={props.onClick}>
-      {props.icon && <Icon icon={props.icon} size={28} color="accent" />}
-      <Column grow={1}>
-        <Label long_mode="scroll">{props.title}</Label>
-        {props.subtitle && (
-          <Label font="small" color="muted" long_mode="scroll">
-            {props.subtitle}
-          </Label>
-        )}
-      </Column>
-      {props.value !== undefined && <Label color="muted">{props.value}</Label>}
-      {props.children}
-    </Row>
-  );
-}
-
-/** The time, battery and connection, as the system shows them. */
-export function StatusBar() {
-  return (
-    <Row height={24} padding={2} justify="space_between">
-      <Label font="small">{format_time(now.value, settings.uses_24_hour_clock.value ? "HH:mm" : "hh:mm")}</Label>
-      <Row gap={4}>
-        {is_phone_connected.value && <Icon icon={icons.bluetooth} size={18} color="accent" />}
-        <BatteryIcon show_percent />
-      </Row>
     </Row>
   );
 }
@@ -397,22 +352,5 @@ export function WeekdayPicker(props: WeekdayPickerProps) {
         props.onChange?.({ value: event.value });
       }}
     />
-  );
-}
-
-export interface MenuItem {
-  title: string;
-  icon?: LibraryIcon;
-  onClick: () => void;
-}
-
-/** A list of named actions. */
-export function Menu(props: { items: MenuItem[] }) {
-  return (
-    <Column gap={2}>
-      {props.items.map((item) => (
-        <ListRow title={item.title} icon={item.icon} onClick={item.onClick} />
-      ))}
-    </Column>
   );
 }
