@@ -1,4 +1,4 @@
-//! What the vibration motor plays for an app's haptic effects, a notification or a chime.
+//! What the vibration motor plays for an app's haptic effects, a notification, a chime or the phone.
 //!
 //! Do not disturb silences everything but the `alarm` pattern, which alarms and timers ring with,
 //! and a stop, so a ringing alarm can always be silenced. The embedder turns each `Vibration` into
@@ -57,13 +57,14 @@ impl VibrationPattern {
 pub enum Vibration {
     Buzz { milliseconds: u16 },
     Pattern(VibrationPattern),
+    Buzzes { count: u8 },
     Stop,
 }
 
 impl Vibration {
     pub fn sounds_in_do_not_disturb(self) -> bool {
         match self {
-            Vibration::Buzz { .. } => false,
+            Vibration::Buzz { .. } | Vibration::Buzzes { .. } => false,
             Vibration::Pattern(pattern) => pattern.sounds_in_do_not_disturb(),
             Vibration::Stop => true,
         }
@@ -107,6 +108,31 @@ pub fn chime_vibration(is_on_the_hour: bool, is_do_not_disturb: bool) -> Option<
         false => VibrationPattern::Tap,
     };
     Vibration::Pattern(pattern).unless_silenced(is_do_not_disturb)
+}
+
+// ============================================================================
+// The phone
+// ============================================================================
+
+/// The ring that helps the wearer find the watch, or a stop; it sounds even in do not disturb.
+pub fn find_vibration(is_on: bool) -> Vibration {
+    match is_on {
+        true => Vibration::Pattern(VibrationPattern::Alarm),
+        false => Vibration::Stop,
+    }
+}
+
+/// The buzzes the phone's `vibrate` asks for, or `None` in do not disturb.
+pub fn phone_buzzes_vibration(count: u8, is_do_not_disturb: bool) -> Option<Vibration> {
+    Vibration::Buzzes { count }.unless_silenced(is_do_not_disturb)
+}
+
+/// The buzz for an incoming call, nothing for one answered or ended, and `None` in do not disturb.
+pub fn call_vibration(kind: neotime_companion::CallKind, is_do_not_disturb: bool) -> Option<Vibration> {
+    match kind {
+        neotime_companion::CallKind::Incoming => notification_vibration(is_do_not_disturb),
+        neotime_companion::CallKind::Answered | neotime_companion::CallKind::Ended => None,
+    }
 }
 
 #[cfg(test)]

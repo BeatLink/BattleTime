@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 embedded-graphics = "0.8"
 neotime-app-host = { path = "../app-host" }
+neotime-companion = { path = "../services/companion" }
 neotime-compiler = { path = "../compiler" }
 neotime-runtime = { path = "../runtime" }
 png = "0.18"

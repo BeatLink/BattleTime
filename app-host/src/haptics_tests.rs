@@ -91,3 +91,36 @@ fn chimes_tap_twice_on_the_hour_once_on_the_half_hour_and_never_in_do_not_distur
     );
     assert_eq!(chime_vibration(true, true), None);
 }
+
+// ============================================================================
+// The phone
+// ============================================================================
+
+#[test]
+fn finding_the_watch_rings_even_in_do_not_disturb_and_stops_on_request() {
+    let ring = find_vibration(true);
+    assert_eq!(ring, Vibration::Pattern(VibrationPattern::Alarm));
+    assert!(ring.sounds_in_do_not_disturb());
+    assert_eq!(find_vibration(false), Vibration::Stop);
+}
+
+#[test]
+fn the_phones_buzzes_are_silenced_by_do_not_disturb() {
+    assert_eq!(
+        phone_buzzes_vibration(3, false),
+        Some(Vibration::Buzzes { count: 3 })
+    );
+    assert_eq!(phone_buzzes_vibration(3, true), None);
+}
+
+#[test]
+fn only_an_incoming_call_buzzes() {
+    use neotime_companion::CallKind;
+    assert_eq!(
+        call_vibration(CallKind::Incoming, false),
+        Some(Vibration::Pattern(VibrationPattern::Notification))
+    );
+    assert_eq!(call_vibration(CallKind::Incoming, true), None);
+    assert_eq!(call_vibration(CallKind::Answered, false), None);
+    assert_eq!(call_vibration(CallKind::Ended, false), None);
+}

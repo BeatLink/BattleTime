@@ -1101,6 +1101,7 @@ name = "neotime-app-host"
 version = "0.1.0"
 dependencies = [
  "embedded-graphics",
+ "neotime-companion",
  "neotime-runtime",
  "neotime-settings",
  "neotime-ui",
@@ -1114,6 +1115,7 @@ version = "0.1.0"
 dependencies = [
  "embedded-graphics",
  "neotime-app-host",
+ "neotime-companion",
  "neotime-compiler",
  "neotime-runtime",
  "png",

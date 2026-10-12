@@ -13,6 +13,12 @@ static REQUESTS: Channel<CriticalSectionRawMutex, Vibration, 2> = Channel::new()
 /// The alarm pattern plays again and again for up to a minute.
 const RING_REPEATS: usize = 60;
 
+/// How long a ring lasts when nothing stops it.
+pub const RING_DURATION: embassy_time::Duration = embassy_time::Duration::from_secs(RING_REPEATS as u64);
+
+/// One of the phone's `vibrate` buzzes, with the pause after it.
+const PHONE_BUZZ: &[Step] = &[Step::buzz(150), Step::pause(150)];
+
 const DOUBLE_TAP: &[Step] = &[Step::buzz(40), Step::pause(80), Step::buzz(40)];
 const NOTIFICATION: &[Step] = &[Step::buzz(80), Step::pause(120), Step::buzz(80)];
 const ALARM: &[Step] = &[Step::buzz(400), Step::pause(600)];
@@ -51,6 +57,11 @@ pub async fn run_vibrator(motor_pin: Output<'static>) {
                 Vibration::Pattern(VibrationPattern::Alarm) => {
                     for _ in 0..RING_REPEATS {
                         let _ = vibrator.play(ALARM, &mut Delay).await;
+                    }
+                }
+                Vibration::Buzzes { count } => {
+                    for _ in 0..count {
+                        let _ = vibrator.play(PHONE_BUZZ, &mut Delay).await;
                     }
                 }
                 Vibration::Pattern(pattern) => {

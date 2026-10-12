@@ -18,7 +18,7 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use neotime_app_host::settings::system_value_of;
-use neotime_companion::{ReplyLine, SettingsChange};
+use neotime_companion::SettingsChange;
 use neotime_runtime::{Theme, ThemeColor, Value, DEFAULT_THEME};
 use neotime_settings::{Setting, Settings, FILE_BYTES};
 
@@ -31,8 +31,8 @@ pub static CHANGES: Channel<CriticalSectionRawMutex, SettingsChange, 2> = Channe
 pub static REPLIES: Channel<CriticalSectionRawMutex, Box<str>, 2> = Channel::new();
 
 /// Queues a reply line for the companion app; it is dropped if two are already waiting.
-pub fn send_reply(line: &ReplyLine) {
-    let _ = REPLIES.try_send(Box::from(line.as_str()));
+pub fn send_reply(line: &str) {
+    let _ = REPLIES.try_send(Box::from(line));
 }
 
 const SETTINGS_PATH: &str = "/settings/system";

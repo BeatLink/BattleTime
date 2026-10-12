@@ -11,7 +11,9 @@
 //! vibration but the alarm pattern. The accelerometer is read only while the screen is on and the
 //! open app subscribes to acceleration or shakes. Plugging the charger in or out, or the charge going
 //! low, lights the screen on the battery app, which goes back to what was open when the screen
-//! sleeps or the wearer goes back.
+//! sleeps or the wearer goes back. The phone's music and weather are kept for apps to read, an
+//! incoming call buzzes and lights the screen, and the phone can ring the watch until the wearer
+//! touches it.
 
 extern crate alloc;
 
@@ -29,11 +31,11 @@ use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_app_host::{
     haptics::{self, Vibration},
-    motion as app_motion, settings as app_settings, AppEffect, AppFailure, AppHost, BatteryChange,
-    EventResult, MotionKind, PushedEvent, System, Touch, LARGEST_SAVED_STATE_BYTES,
+    motion as app_motion, phone as app_phone, settings as app_settings, AppEffect, AppFailure, AppHost,
+    BatteryChange, EventResult, MotionKind, PushedEvent, System, Touch, LARGEST_SAVED_STATE_BYTES,
 };
 use neotime_battery::BatteryEvent;
-use neotime_companion::SettingsChange;
+use neotime_companion::{PhoneData, PhoneUpdates, SettingsChange};
 use neotime_runtime::{
     events::{ButtonPress, SwipeDirection},
     resources::ImageReference,
@@ -136,6 +138,8 @@ struct WatchSystem {
     installed: InstalledApps,
     /// Whether the open app asked to turn the screen on (`wake_screen`) or off (`screen_off`).
     screen_request: Option<bool>,
+    /// The music and weather the phone last sent.
+    phone: PhoneData,
 }
 
 impl SystemValues for WatchSystem {
@@ -145,6 +149,9 @@ impl SystemValues for WatchSystem {
         }
         if value == SystemValue::ThemePreset {
             return self.theme_preset;
+        }
+        if let Some(phone_value) = self.phone.read(value) {
+            return phone_value;
         }
         match value {
             SystemValue::Now => clock::now(),
@@ -159,6 +166,10 @@ impl SystemValues for WatchSystem {
             SystemValue::InstalledAppCount => self.installed.listed.len() as Value,
             _ => 0,
         }
+    }
+
+    fn read_text(&self, value: SystemValue) -> &str {
+        self.phone.read_text(value).unwrap_or("")
     }
 
     /// Each listed app's icon, which the host draws from the icons `apps` keeps.
@@ -205,6 +216,10 @@ impl System for WatchSystem {
         let vibration = haptics::vibration_for_effect(effect.kind, effect.number(0), is_do_not_disturb());
         if vibration.is_some() {
             vibration::request(vibration);
+            return;
+        }
+        if let Some(line) = app_phone::line_for_effect(effect.kind, effect.number(0)) {
+            settings::send_reply(&line);
             return;
         }
         match effect.kind {
@@ -270,6 +285,8 @@ struct Shell {
     library: Option<&'static [u8]>,
     /// While the battery app shows because of a battery event, what was open before it.
     battery_screen_returns_to: Option<Showing>,
+    /// Until when the phone's find ring plays, unless the wearer touches the watch first.
+    finding_until: Option<Instant>,
 }
 
 impl Shell {
@@ -283,6 +300,7 @@ impl Shell {
         }
         self.save_settings();
         vibration::request(Some(Vibration::Stop));
+        self.finding_until = None;
         self.system.keep_screen_on = false;
         self.app_set_brightness = false;
         self.set_brightness(settings::current().get(Setting::Brightness) as u8);
@@ -492,6 +510,10 @@ impl Shell {
 
     /// Buzzes for a phone notification, and passes sensor readings and notifications to the open app.
     fn app_event(&mut self, event: AppEvent) {
+        if let AppEvent::Phone(updates) = event {
+            self.phone_updated(updates);
+            return;
+        }
         let now = clock::now();
         if let AppEvent::Notification(_) = &event {
             vibration::request(haptics::notification_vibration(is_do_not_disturb()));
@@ -513,8 +535,44 @@ impl Shell {
                 body: &notification.body,
                 time: now,
             },
+            AppEvent::Phone(_) => return,
         };
         host.deliver(pushed, now, &mut self.system);
+    }
+
+    /// Buzzes and rings as the phone asks, keeps its music and weather, and tells the open app.
+    fn phone_updated(&mut self, mut updates: PhoneUpdates) {
+        let now = clock::now();
+        let is_do_not_disturb = is_do_not_disturb();
+        if let Some(count) = updates.buzzes {
+            vibration::request(haptics::phone_buzzes_vibration(count, is_do_not_disturb));
+        }
+        if let Some(call) = &updates.call {
+            let buzz = haptics::call_vibration(call.kind, is_do_not_disturb);
+            if buzz.is_some() {
+                vibration::request(buzz);
+                self.system.screen_request = Some(true);
+            }
+        }
+        if let Some(is_on) = updates.find {
+            vibration::request(Some(haptics::find_vibration(is_on)));
+            self.finding_until = is_on.then(|| Instant::now() + vibration::RING_DURATION);
+        }
+        let changes = self.system.phone.apply(&mut updates, now);
+        if let Some(host) = &mut self.host {
+            app_phone::tell_app(host, updates.call.as_deref(), changes, now, &mut self.system);
+        }
+    }
+
+    /// Stops the phone's find ring if it still plays, and says whether it did, so the touch does nothing else.
+    fn stop_finding(&mut self) -> bool {
+        match self.finding_until.take() {
+            Some(until) if Instant::now() < until => {
+                vibration::request(Some(Vibration::Stop));
+                true
+            }
+            _ => false,
+        }
     }
 
     /// Reads the accelerometer only as often as the open app needs while the screen is on.
@@ -712,6 +770,7 @@ pub async fn run_shell(
             theme_request: None,
             installed: InstalledApps::read(files),
             screen_request: None,
+            phone: PhoneData::default(),
         },
         theme,
         app_set_brightness: false,
@@ -727,6 +786,7 @@ pub async fn run_shell(
         launcher_icons: None,
         library: apps::shared_library(),
         battery_screen_returns_to: None,
+        finding_until: None,
     };
     shell.open(Showing::Face);
     let mut last_input = Instant::now();
@@ -776,6 +836,9 @@ pub async fn run_shell(
             Either4::First(touch) => {
                 diagnostics::set(Counter::ShellLastWake, 1);
                 last_input = Instant::now();
+                if shell.stop_finding() {
+                    continue;
+                }
                 if !shell.lit {
                     if matches!(touch, Touch::Release { .. }) {
                         shell.turn_screen_on();
@@ -787,6 +850,9 @@ pub async fn run_shell(
             Either4::Second(press) => {
                 diagnostics::set(Counter::ShellLastWake, 2);
                 last_input = Instant::now();
+                if shell.stop_finding() {
+                    continue;
+                }
                 if !shell.lit {
                     shell.turn_screen_on();
                     continue;

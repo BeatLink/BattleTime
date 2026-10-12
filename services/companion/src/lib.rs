@@ -16,8 +16,16 @@ use neotime_settings::{Setting, Settings};
 use serde::Deserialize;
 use serde_json_core::str::{EscapedStr, EscapedStringFragment};
 
+mod phone;
 #[cfg(test)]
 mod tests;
+
+pub use phone::{
+    call_control_line, find_phone_line, music_control_line, status_report, CallKind, MusicInfo, MusicState,
+    PhoneCall, PhoneChanges, PhoneData, PhoneUpdates, ShortLine, WatchStatus, Weather, WeatherCondition,
+    CALLER_BYTES, MOST_PHONE_BUZZES, MUSIC_ARTIST_BYTES, MUSIC_TEXTS, MUSIC_TRACK_BYTES, MUSIC_VALUES,
+    SHORT_LINE_BYTES, WEATHER_LOCATION_BYTES, WEATHER_TEXTS, WEATHER_VALUES,
+};
 
 /// The longest line either side sends; a longer one is dropped whole.
 pub const MOST_LINE_BYTES: usize = 512;
@@ -80,6 +88,20 @@ pub enum Message<'line> {
     Settings(SettingsChange),
     /// `notify`: a notification arrived on the phone.
     Notification(PhoneNotification),
+    /// `call`: a call started, was answered or ended.
+    Call(PhoneCall),
+    /// `musicinfo`: the track the phone's player has.
+    MusicInfo(MusicInfo),
+    /// `musicstate`: whether it plays, and where in the track.
+    MusicState(MusicState),
+    /// `weather`: the phone's forecast.
+    Weather(Weather),
+    /// `find`: start or stop ringing the watch.
+    Find { is_on: bool },
+    /// `vibrate`: buzz this many times.
+    Vibrate { times: u8 },
+    /// `status`: the phone asks for the battery and steps.
+    StatusRequest,
     /// A message this watch does not act on yet, by its `t`.
     Unknown { kind: &'line str },
 }
@@ -317,6 +339,12 @@ pub fn parse_line(line: &[u8]) -> Result<Message<'_>, MessageError> {
                 body: unescaped(envelope.body),
             }))
         }
+        "call" | "musicinfo" | "musicstate" | "weather" => {
+            return phone::parse_phone_message(envelope.t, json)
+        }
+        "find" => return phone::parse_find(json),
+        "vibrate" => return phone::parse_vibrate(json),
+        "status" => return Ok(Message::StatusRequest),
         kind => return Ok(Message::Unknown { kind }),
     }
 

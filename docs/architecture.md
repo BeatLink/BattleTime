@@ -419,7 +419,13 @@ Gadgetbridge sends them or bare. `LineAssembler` joins writes into lines and dro
 a computer. So far it reads `settings` (a preset theme, single colours and every watch-wide
 setting, each checked against its limits) and `notify` (a notification's id, app, title and body,
 unescaped and cut at a whole character to 24, 32 and 120 bytes), and names every other message by
-its `t`.
+its `t`. `phone.rs` reads the rest of Gadgetbridge's messages that the watch serves, each with its
+own small struct so its parse never adds to the others' stack: `call`, `musicinfo`, `musicstate`,
+`weather` (kelvin turned into Celsius, OpenWeatherMap codes into the sky names apps use), `find`,
+`vibrate` and `status`. `PhoneUpdates` keeps the latest of each kind until the shell takes them,
+the larger ones on the heap, and `PhoneData` keeps the music and weather and answers the system
+values apps read them through. It also writes the `status` reply and the `music`, `call` and
+`findPhone` lines an app's effects send.
 
 ## Current Time (`services/current_time`)
 
@@ -556,7 +562,14 @@ watch face, the launcher and the apps through `neotime-app-host`:
   settings to the store and sends the settings back as a reply, which waits on the heap. A `notify`
   message goes to the shell through `app_events.rs`, which buzzes the notification pattern, unless
   do not disturb is on, and hands it to the open app's `notification` subscriptions. Notifications
-  are not kept, so `unread_notifications` stays 0. Bluetooth
+  are not kept, so `unread_notifications` stays 0. Calls, music, weather, `find` and `vibrate`
+  wait together in `app_events.rs` as one `PhoneUpdates`, the latest of each kind; the shell keeps
+  the music and weather in its `PhoneData` for apps to read, and `neotime_app_host::phone` hands
+  the open app its `call`, `music` and `weather` events. An incoming call buzzes and lights the
+  screen unless do not disturb is on; `find` plays the alarm pattern until `n` is false, the
+  wearer touches the watch or presses the button, or a minute passes. `status` is answered at once
+  from the Bluetooth task, and `music_control`, `call_control` and `find_phone` send their lines
+  through the same reply queue as the settings. Bluetooth
   runs as a task of its own, so its stack frame (5.7 KB) is never added to start-up's; what it keeps
   for the whole run (the update state, the status page and the confirmation) sits once in a static,
   since a task's arguments are stored twice in its state.
@@ -634,7 +647,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
   sleeps, or the button or a swipe right goes back, the shell reopens what was open before;
   opening anything else forgets it.
 
-Not done yet: heart rate, the notification count, music and weather read as 0 or empty; the touch panel stays
+Not done yet: heart rate, the notification count, navigation and the weather forecast's days read
+as 0 or empty, and music and weather are lost on a restart; the touch panel stays
 awake while the screen is off.
 
 It takes 293 KB of the 400 KB firmware slot (the two accelerometers' configuration files are 12 KB

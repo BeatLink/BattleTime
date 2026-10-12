@@ -17,6 +17,7 @@ mod host;
 mod layout;
 pub mod motion;
 mod nodes;
+pub mod phone;
 pub mod settings;
 mod subscriptions;
 mod system;

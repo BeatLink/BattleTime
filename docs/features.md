@@ -29,6 +29,14 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Notifications from the phone buzz the watch.** Gadgetbridge's `notify` message, sent through
   the companion app's UART service, buzzes twice and goes to the open app. There is no
   notification list yet.
+- **Music, weather and calls from the phone.** Gadgetbridge's `musicinfo`, `musicstate` and
+  `weather` messages fill the music app, the weather app and the faces that show the weather; the
+  music app's buttons control the phone's player. An incoming call buzzes and lights the screen,
+  unless do not disturb is on, and reaches apps that listen for calls.
+- **Find the watch from the phone.** Gadgetbridge's find-device rings the watch for up to a
+  minute, even in do not disturb, until the phone stops it or the wearer touches the watch or
+  presses the button. The phone can also buzz the watch one to five times, and ask for its battery
+  level, voltage, charging state and steps.
 - **Step counting.** The accelerometer counts today's steps for the steps app and faces.
 - **Shake to roll the dice,** and live accelerometer readings for apps such as motion and level.
   The accelerometer is read for these only while such an app is open and the screen is on.

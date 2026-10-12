@@ -88,29 +88,42 @@ undone, and the watch keeps up to 24 bytes of `src`, 32 of `title` and 120 of `b
 character. Gadgetbridge's other keys, such as `sender`, are ignored. The watch keeps no
 notification list yet and sends no reply.
 
-### Other messages (not served yet)
+### Calls, music, weather and the rest (served)
 
-These follow Gadgetbridge's Bangle.js messages, so its driver works too.
+These follow Gadgetbridge's Bangle.js messages, so its driver works too. Numbers are whole; a
+field of the wrong type, such as a temperature with a fraction, makes the line unreadable, which
+the watch answers with an `error` reply. Text is unescaped and cut at a whole character.
+
+| `t` | Fields the watch reads | What it does |
+|---|---|---|
+| `call` | `cmd`, `name`, `number` | Runs the `call` subscriptions with the caller's `name`, or the `number` without one, up to 32 bytes. `incoming` is an incoming call, which buzzes and turns the screen on unless do not disturb is on; `accept`, `start` and `outgoing` are `answered`; `reject` and `end` are `ended`. Another `cmd` is ignored. |
+| `musicinfo` | `artist`, `track`, `dur` (seconds) | Fills `current_music`'s artist (32 bytes), track (64 bytes) and length, and runs the `music` subscriptions. `album` is ignored. |
+| `musicstate` | `state`, `position` (seconds) | `play` is playing and anything else is not; `position`, when given, is how far into the track. Runs the `music` subscriptions. |
+| `weather` | `temp`, `hi`, `lo` (kelvin), `code`, `loc` | Fills `current_weather`: the temperatures in Celsius, the sky from the OpenWeatherMap `code`, the place (32 bytes) and `received_at`, the watch's time when it came. Runs the `weather` subscriptions. The watch has no sunrise, sunset or coming days from it. `hum`, `txt`, `wind` and the rest are ignored. |
+| `find` | `n` | `true` rings the watch, even in do not disturb, for up to a minute or until the wearer touches the watch or presses the button; `false` stops it. |
+| `vibrate` | `n` | Buzzes `n` times, 1 to 5, unless do not disturb is on. |
+| `status` | | Replies `{"t":"status","bat":87,"mv":3950,"steps":4321,"charging":false}`: the charge in percent, the battery's voltage in millivolts, smoothed as `battery_millivolts` is, today's steps and whether it is charging. |
+
+The watch keeps the music and weather until it restarts, and the latest of each message until the
+shell takes it, so a burst of messages leaves only the newest of each kind.
+
+Watch to phone, sent as apps ask: `music` with `n` (`play`, `pause`, `next`, `previous`,
+`volumeup`, `volumedown`) for `music_control`; `call` with `n` (`ACCEPT`, `REJECT`, `IGNORE`) for
+`call_control`'s `answer`, `reject` and `mute`; and `findPhone` with `n`, `true` or `false`, for
+`find_phone`.
+
+### Other messages (not served yet)
 
 Phone to watch:
 
 | `t` | Fields | Meaning |
 |---|---|---|
 | `notify-` | `id` | A notification is dismissed. |
-| `call` | `cmd` (`incoming`, `start`, `end`, ...), `name`, `number` | A call. |
-| `musicinfo` | `artist`, `album`, `track`, `dur` | The track playing. |
-| `musicstate` | `state` (`play`, `pause`), `position` | The player's state. |
-| `weather` | `temp` (kelvin), `hum`, `code`, `txt`, `wind`, `wdir`, `loc` | The weather, which apps read from `current_weather`. |
-| `find` | `n` (bool) | Start or stop ringing the watch. |
-| `vibrate` | `n` (1 to 5) | Buzz. |
 | `alarm` | `d`: a list of `{h, m, on, rep}` | Set the alarms; with no `d`, report them. |
-| `status` | | The watch replies `{"t":"status","bat":...,"mv":...,"steps":...,"charging":...}`. |
 | `steps` | `y`, `m`, `d` | The watch replies with that day's steps in 240 six-minute slots, `null` where unknown. |
 | `http` | `id`, `resp` or `err` | The answer to a watch's `http` request. |
 
-Watch to phone: `music` with `n` (`play`, `pause`, `next`, `previous`, `volumeup`,
-`volumedown`); `call` with `n` (`ACCEPT`, `REJECT`, `IGNORE`); `findPhone` with `n`; `http` with
-`id`, `url`, `method`, `body`; `info` and `error` with `msg`.
+Watch to phone: `http` with `id`, `url`, `method`, `body`; `info` with `msg`.
 
 ## File transfer
 

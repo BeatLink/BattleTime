@@ -723,7 +723,7 @@ async fn run_bluetooth(
     let _ = embassy_futures::join::join(runner.run(), serve).await;
 }
 
-/// Hands a `settings` message to the shell; other messages wait for the features that use them.
+/// Hands a message to the shell, or answers `status` at once; unknown messages are passed over.
 fn read_companion_line(line: &[u8]) {
     match neotime_companion::parse_line(line) {
         Ok(neotime_companion::Message::Settings(change)) => {
@@ -732,11 +732,24 @@ fn read_companion_line(line: &[u8]) {
         Ok(neotime_companion::Message::Notification(notification)) => {
             app_events::notification_arrived(notification);
         }
+        Ok(neotime_companion::Message::StatusRequest) => send_status(),
         Ok(neotime_companion::Message::Unknown { .. }) => {}
+        Ok(phone_message) => app_events::phone_message_arrived(phone_message),
         Err(_) => {
             settings::send_reply(&neotime_companion::error_report("could not read that message"));
         }
     }
+}
+
+/// Answers the companion app's `status` with the battery and today's steps.
+fn send_status() {
+    let status = neotime_companion::WatchStatus {
+        battery_percent: battery::percent(),
+        battery_millivolts: battery::millivolts(),
+        steps_today: motion::steps_today(),
+        is_charging: battery::is_charging(),
+    };
+    settings::send_reply(&neotime_companion::status_report(&status));
 }
 
 /// How long to wait for a free packet when a long answer, such as a folder listing, fills the send queue.

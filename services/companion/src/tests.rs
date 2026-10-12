@@ -76,8 +76,8 @@ fn unknown_keys_and_messages_are_passed_over() {
     let settings = parse_line(br#"{"t":"settings","launcher":"grid","theme":"ocean"}"#).unwrap();
     assert!(matches!(settings, Message::Settings(change) if change.preset.is_some()));
     assert_eq!(
-        parse_line(br#"GB({"t":"find","n":true})"#),
-        Ok(Message::Unknown { kind: "find" })
+        parse_line(br#"GB({"t":"alarm","d":[]})"#),
+        Ok(Message::Unknown { kind: "alarm" })
     );
 }
 

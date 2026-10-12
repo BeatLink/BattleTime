@@ -91,6 +91,7 @@ pub enum ScriptCommand {
     Wait(Duration),
     SetSystemValue { value: SystemValue, number: Value },
     Notify { title: String, body: String },
+    Phone(String),
     Shake,
     Acceleration { x: Value, y: Value, z: Value },
     ScreenOn,
@@ -242,7 +243,7 @@ fn split_words(line: &str) -> Result<SplitLine, String> {
 // ============================================================================
 
 const COMMAND_NAMES: &str = "open, install, tap, long-press, double-tap, drag, swipe, button, long-button, \
-                             wait, set, notify, shake, acceleration, screen, expect, screenshot";
+                             wait, set, notify, phone, shake, acceleration, screen, expect, screenshot";
 
 /// Reads a whole script, or names the first line it cannot read.
 pub fn parse_script(text: &str) -> Result<Script, ScriptError> {
@@ -299,6 +300,10 @@ fn parse_command(words: &[Word]) -> Result<ScriptCommand, String> {
                 body: body.clone(),
             }),
             _ => Err("write `notify \"title\" \"body\"`".to_string()),
+        },
+        "phone" => match arguments {
+            [Word::Quoted(line)] => Ok(ScriptCommand::Phone(line.clone())),
+            _ => Err("write `phone \"<line>\"`, with each quote in the line written \\\"".to_string()),
         },
         "shake" => expect_no_arguments(name, arguments, ScriptCommand::Shake),
         "acceleration" => parse_acceleration(arguments),
@@ -739,6 +744,11 @@ impl ScriptRunner<'_> {
                     body,
                     time,
                 });
+            }
+            ScriptCommand::Phone(line) => {
+                watch
+                    .receive_from_phone(line)
+                    .map_err(|failure| mismatch("a line the watch takes", failure))?;
             }
             ScriptCommand::Shake => {
                 watch.deliver(PushedEvent::Motion(MotionKind::Shake));

@@ -4,10 +4,11 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use neotime_app_host::{AppFailure, AppHost, EventResult, PushedEvent, Rect, Touch, SCREEN_AREA};
+use neotime_companion::{PhoneData, PhoneUpdates, MUSIC_TEXTS, MUSIC_VALUES, WEATHER_TEXTS, WEATHER_VALUES};
 use neotime_runtime::events::{ButtonPress, SwipeDirection};
 use neotime_runtime::{
     AppImage, EffectKind, Property, PropertySource, SystemValue, SystemValues, Value, WidgetKind, WidgetTree,
-    DEFAULT_THEME,
+    DEFAULT_THEME, NONE,
 };
 
 use crate::fake_system::{FakeSystem, InstalledApp, RecordedEffect};
@@ -41,6 +42,8 @@ pub struct TestWatch {
     system: FakeSystem,
     framebuffer: Framebuffer,
     is_screen_on: bool,
+    /// The music and weather the phone sent through `receive_from_phone`.
+    phone: PhoneData,
 }
 
 impl TestWatch {
@@ -84,6 +87,7 @@ impl TestWatch {
             system,
             framebuffer: Framebuffer::new(),
             is_screen_on: true,
+            phone: PhoneData::default(),
         })
     }
 
@@ -320,6 +324,49 @@ impl TestWatch {
             _ => {}
         }
         self.host.deliver(event, now, &mut self.system)
+    }
+
+    /// Reads a companion line as the watch does, keeps its music or weather, and tells the app of it.
+    ///
+    /// Only the messages the shell passes to apps are taken: a call, music, weather, find or vibrate.
+    pub fn receive_from_phone(&mut self, line: &str) -> Result<(), String> {
+        let message = neotime_companion::parse_line(line.as_bytes())
+            .map_err(|error| format!("the watch cannot read {line:?}: {error:?}"))?;
+        let mut updates = PhoneUpdates::new();
+        if !updates.record(message) {
+            return Err(format!(
+                "{line:?} is not a call, music, weather, find or vibrate message"
+            ));
+        }
+
+        let now = self.now();
+        let changes = self.phone.apply(&mut updates, now);
+        if changes.music {
+            self.copy_phone_values(&MUSIC_VALUES, &MUSIC_TEXTS);
+        }
+        if changes.weather {
+            self.copy_phone_values(&WEATHER_VALUES, &WEATHER_TEXTS);
+            self.system.forecast.clear();
+        }
+        neotime_app_host::phone::tell_app(
+            &mut self.host,
+            updates.call.as_deref(),
+            changes,
+            now,
+            &mut self.system,
+        );
+        Ok(())
+    }
+
+    /// Sets the fake system's values to what the phone sent, as the watch's shell reads them.
+    fn copy_phone_values(&mut self, values: &[SystemValue], texts: &[SystemValue]) {
+        for &value in values {
+            self.system.set(value, self.phone.read(value).unwrap_or(NONE));
+        }
+        for &value in texts {
+            self.system
+                .set_text(value, self.phone.read_text(value).unwrap_or_default());
+        }
     }
 
     /// Changes a system value, such as the battery, as the watch's shell reports it.

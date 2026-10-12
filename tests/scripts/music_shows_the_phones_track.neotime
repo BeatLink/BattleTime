@@ -1,0 +1,14 @@
+# The music app shows the track the phone's player has, and runs its position on while it plays.
+open app music
+phone "GB({\"t\":\"musicinfo\",\"artist\":\"Night Owls\",\"album\":\"Live\",\"track\":\"Late Train\",\"dur\":200})"
+phone "GB({\"t\":\"musicstate\",\"state\":\"play\",\"position\":30,\"shuffle\":1,\"repeat\":1})"
+expect text "Night Owls"
+expect text "Late Train"
+expect text "00:30/03:20"
+wait 10s
+expect text "00:40/03:20"
+
+phone "GB({\"t\":\"musicstate\",\"state\":\"pause\",\"position\":45})"
+wait 10s
+expect text "00:45/03:20"
+expect no failures

@@ -1,0 +1,10 @@
+# The weather app shows what the phone sent: the place, the sky and the temperatures in Celsius.
+open app weather
+phone "GB({\"t\":\"weather\",\"temp\":296,\"hi\":299,\"lo\":285,\"hum\":40,\"rain\":20,\"uv\":3,\"code\":500,\"txt\":\"light rain\",\"wind\":12,\"wdir\":90,\"loc\":\"Harbour Town\"})"
+expect text "Harbour Town"
+expect no text "Test City"
+expect text "Rain"
+expect text "23"
+expect text "12°"
+expect text "26°"
+expect no failures

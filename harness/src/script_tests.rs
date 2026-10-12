@@ -332,6 +332,9 @@ fn commands_with_the_wrong_arguments_are_refused() {
         "expect effect vibrate many",
         "screenshot",
         "\"tap\" 1 2",
+        "phone",
+        "phone settings",
+        "phone \"{}\" \"{}\"",
     ];
 
     for line in lines {
@@ -551,4 +554,21 @@ fn a_screenshot_that_cannot_be_saved_fails() {
         .unwrap()
         .expected
         .starts_with("to save /proc/neotime/frame.png"));
+}
+
+#[test]
+fn a_phone_line_reaches_the_app_and_a_line_the_watch_refuses_fails() {
+    let script = parse_script("phone \"{\\\"t\\\":\\\"find\\\",\\\"n\\\":true}\"\n").unwrap();
+    assert_eq!(
+        script.steps[0].command,
+        ScriptCommand::Phone(r#"{"t":"find","n":true}"#.to_string())
+    );
+
+    assert_eq!(
+        run_on_scripted_app("phone \"{\\\"t\\\":\\\"vibrate\\\"}\"\n").failure,
+        None
+    );
+    let failure = run_on_scripted_app("phone \"GB(oops)\"\n").failure.unwrap();
+    assert_eq!(failure.expected, "a line the watch takes");
+    assert!(failure.found.contains("cannot read"), "{}", failure.found);
 }
