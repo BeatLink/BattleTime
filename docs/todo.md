@@ -67,7 +67,9 @@ document for its part instead.
   - an ordinary start after that shows the crash no more.
 
 - [ ] **Transitions and scrolling on the PineTime.** Slides, wipes and hardware-scrolled lists have
-  run only in the emulator and against a model of the panel. On the watch, check that:
+  run only in the emulator and against a model of the panel; none of it is on the watch yet. Flash
+  the bootloader first, then a firmware built from master at e78fc7a or later. On the watch, check
+  that:
   - a slide and a wipe each take about a quarter of a second, and a slide shows no tearing at its
     leading edge;
   - the launcher and the Settings list follow a finger without lag, and reach their last row;
