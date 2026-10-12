@@ -295,7 +295,8 @@ impl<'image> AppHost<'image> {
             library: None,
             installed_app_icons: &[],
             state,
-            interpreter: Box::new(Interpreter::new()),
+            // Made a constant, so the box is filled from flash rather than from a 2 KB copy on the stack.
+            interpreter: Box::new(const { Interpreter::new() }),
             bindings,
             theme,
             is_open: false,
