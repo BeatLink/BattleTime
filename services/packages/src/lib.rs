@@ -172,7 +172,8 @@ impl<'files, S: Storage> Packages<'files, S> {
     }
 
     /// Every installed app in id order, which is the order the launcher shows them in.
-    /// A folder without a valid image is left out.
+    /// A folder whose image is missing, damaged or not its own is left out. Installing verified
+    /// the code and the app host verifies it again before running it, so listing only parses each image.
     pub fn list(&self) -> Result<Vec<InstalledApp>, PackageError> {
         let mut apps = Vec::new();
         for entry in self.files.list_dir(APPS_DIRECTORY)? {
@@ -197,7 +198,8 @@ impl<'files, S: Storage> Packages<'files, S> {
 
     fn describe(&self, id: &str) -> Option<InstalledApp> {
         let bytes = self.files.read_to_vec(&app_file(id, IMAGE_FILE)).ok()?;
-        let image = check_image(&bytes).ok()?;
+        // Parsing checks the image's CRC; verifying its code here would cost each listing over a kilobyte of stack per call.
+        let image = AppImage::parse(&bytes).ok()?;
         if image.kind == AppKind::Library || image.string(image.id_string) != Some(id) {
             return None;
         }

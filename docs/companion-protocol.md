@@ -229,7 +229,7 @@ recovery firmware has no apps, so it refuses every command with an error.
 
 | Command | Answer |
 |---|---|
-| `{"c":"apps"}` | `{"c":"apps","a":[[id,name,kind,enabled,bytes],...]}`, `kind` being `app` or `face` and `enabled` 0 or 1, in id order |
+| `{"c":"apps"}` | `{"c":"apps","a":[[id,name,kind,enabled,bytes],...]}`, `kind` being `app` or `face` and `enabled` 0 or 1, in id order; each image's CRC and id are checked, but its code only at install |
 | `{"c":"install","id":id}` | `{"c":"install","ok":1}` once `/apps/<id>/app.ntapp` passes the app checks, holds that id and is not the shared library; the app then appears in `installed_apps` |
 | `{"c":"remove","id":id}` | `{"c":"remove","ok":1}`; deletes `/apps/<id>` with its saved state |
 | `{"c":"enable","id":id,"on":bool}` | `{"c":"enable","ok":1}`; a disabled app stays installed but leaves the launcher |

@@ -159,6 +159,29 @@ fn the_library_check_wants_a_library() {
 // Listing, hiding and removing
 // ============================================================================
 
+/// An image that parses, so its CRC is right, but whose code fails verification.
+fn image_with_bad_code(id: &str) -> Vec<u8> {
+    let mut writer = ImageWriter::new(id, "Broken", AppKind::App, 1);
+    writer.expression(vec![]);
+    writer.build()
+}
+
+#[test]
+fn installing_verifies_the_code_but_listing_only_parses() {
+    let files = file_system();
+    let bytes = image_with_bad_code("timer");
+    assert!(AppImage::parse(&bytes).is_ok());
+    put(&files, "timer", &bytes);
+    let packages = Packages::new(&files);
+
+    assert!(matches!(
+        packages.install("timer"),
+        Err(PackageError::BadImage(_))
+    ));
+    let ids: Vec<String> = packages.list().unwrap().into_iter().map(|app| app.id).collect();
+    assert_eq!(ids, vec!["timer"]);
+}
+
 #[test]
 fn the_list_is_in_id_order_and_skips_what_is_not_an_app() {
     let files = file_system();
