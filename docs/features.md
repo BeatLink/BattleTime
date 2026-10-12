@@ -66,7 +66,7 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   The bootloader turns the screen blue while it waits for a recovery hold or installs an update.
 - **Bootloader updates over Bluetooth,** with the bootloader updater: sent like any firmware
   update, it writes the new bootloader only on the charger and hands the watch back to the firmware
-  that was running. It has run only in the emulator.
+  that was running. It replaced the first watch's bootloader on 2026-10-11.
 - **Moving a watch from InfiniTime or wasp-os onto NeoTime** through that system's own update
   path, with the reloader. It moved a watch from wasp-os on 2026-10-11; the InfiniTime path has
   run only in the emulator.

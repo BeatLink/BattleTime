@@ -123,7 +123,9 @@ to date" instead of "Update failed". Quitting leaves no note, so a quit reads as
 it is. The write is about four pages, half a second or so, and is the only part with no way back.
 
 `tests/emulator/bootloader_update.robot` runs it from the bootloader the reloader put on the first
-watch, kept in `tests/emulator/fixtures/` because it cannot be rebuilt bit for bit.
+watch, kept in `tests/emulator/fixtures/` because it cannot be rebuilt bit for bit. On 2026-10-11
+it replaced that bootloader on the watch itself: the rollback showed "Update failed", and the next
+firmware update was swapped in under the new blue screen.
 
 ## What the firmware must do
 
@@ -172,8 +174,6 @@ cargo build --release
 
 ## Not done yet
 
-- **The status screen and the updater on a watch.** The first watch runs the bootloader from before
-  the status screen; both have run only in the emulator.
 - **Signed updates.** embassy-boot's updater can check an ed25519 signature before marking a swap.
   That check runs in the firmware, in `neotime-updates`, so it costs the bootloader nothing; it is
   not used yet.

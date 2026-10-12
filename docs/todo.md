@@ -358,8 +358,6 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   10 seconds; NeoTime only aborts when the link drops.
 - [ ] **A swap progress bar on the bootloader screen.** It says "Installing firmware" for up to 30
   seconds with nothing moving. Its 16 KB has about 2 KB to spare.
-- [ ] **Run the bootloader updater on a watch,** on its charger, so the first watch gets the status
-  screen. It has run only in the emulator, and a failed write leaves a watch without SWD unbootable.
 - [ ] **Cut the power during the updater's write** in the emulator, to measure the window and show
   that every cut outside it leaves a bootloader that starts.
 - [ ] **A setting to turn updates off,** or on until the next reset.
