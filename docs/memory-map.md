@@ -37,22 +37,22 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 71.2 KB | 40.2 KB |
-| App host (with `neotime-ui` and rlvgl) | 66.3 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 71.8 KB | 40.2 KB |
+| App host (with `neotime-ui` and rlvgl) | 68.2 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 42.2 KB | 42.2 KB |
-| App runtime | 23.9 KB | 0.1 KB |
-| core, alloc and compiler builtins | 23.5 KB | 10.9 KB |
+| App runtime | 24.2 KB | 0.1 KB |
+| core, alloc and compiler builtins | 23.4 KB | 10.9 KB |
 | Storage (littlefs) | 21.5 KB | 21.0 KB |
 | Embassy, allocator and Cortex-M | 17.4 KB | 15.8 KB |
 | Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
 | Settings and companion (with serde) | 10.5 KB | 8.7 KB |
 | Display, graphics and drivers | 8.2 KB | 3.3 KB |
-| Packages | 2.7 KB | 2.1 KB |
+| Packages | 2.7 KB | 2.0 KB |
 | Updates (DFU) | 2.4 KB | 2.4 KB |
 | BLEFS file service | 2.1 KB | 2.2 KB |
 | Other constants and padding | 16.6 KB | 9.0 KB |
-| **Used** | **320.6 KB** | **157.7 KB** |
-| Free of 400 KB | 79.4 KB | 242.3 KB |
+| **Used** | **323.1 KB** | **157.7 KB** |
+| Free of 400 KB | 76.9 KB | 242.3 KB |
 <!-- /measure_memory:firmware -->
 
 The accelerometer's configuration is the largest piece of data left in it; each watch could build
@@ -111,8 +111,8 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 | Formatting: the root and the three top-level folders | | 8 |
 | `/settings/system` and `/settings/theme` | 57 | 0 |
 | 12 app folders | | 24 |
-| 12 app images, 194 B (launcher) to 6,062 B (alarm) | 26,522 | 12 |
-| **In use** | | **44 of 768: 176 KB of 3 MB** |
+| 12 app images, 194 B (launcher) to 3,932 B (alarm) | 24,392 | 11 |
+| **In use** | | **43 of 768: 172 KB of 3 MB** |
 <!-- /measure_memory:file-system -->
 
 The rest, about 2.8 MB, is free for apps, saved state and resources.
