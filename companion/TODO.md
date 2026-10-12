@@ -16,15 +16,14 @@ mock watch only.
 
 ## Packages
 
-- **The packages characteristic is not served yet.** The firmware's `services/packages` answers the
-  commands, but `firmware/src/main.rs` does not register the characteristic until the file system
-  is shared with the Bluetooth task. Until then the Apps and setup screens appear only on the mock.
 - **Choosing a face during setup.** The bundle holds the one face NeoTime builds; offer the others
   once `tools/build_watch_apps.sh` compiles them.
 - **Updating a bundled app** that is already installed: compare versions and offer the newer one.
 
 ## Untried on a watch
 
+- **Installing apps.** The firmware now serves the packages characteristic, but the Apps and setup
+  screens have run only against the mock watch.
 - **Files over BLEFS.** The client runs against the mock watch, and the firmware's service against a
   raw HCI client in the emulator, but the two have not met over a real radio.
 - **Firmware updates against NeoTime.** The DFU flow and the reconnect that keeps the update run
