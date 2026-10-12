@@ -86,7 +86,7 @@ pub async fn start(
     spi_bus: &'static SpiBus,
     peripherals: StoragePeripherals,
     screen: &mut Screen,
-) -> Option<(Targets, Confirmation, Mode, Files)> {
+) -> Option<(Targets, Confirmation, Mode, &'static Files)> {
     let _flash_controller_never_used = peripherals.flash_controller;
     let flash_chip_select = Output::new(peripherals.flash_chip_select, Level::High, OutputDrive::Standard);
     let mut flash = match ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), &mut Delay) {
@@ -152,7 +152,7 @@ pub async fn start(
             STATE_ALIGNMENT.init([0; 4]),
         ),
     };
-    Some((targets, Confirmation, Mode::Confirmed, Files))
+    Some((targets, Confirmation, Mode::Confirmed, &Files))
 }
 
 // ============================================================================

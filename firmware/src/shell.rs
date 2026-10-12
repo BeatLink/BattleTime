@@ -207,7 +207,7 @@ struct Shell {
     showing: Showing,
     host: Option<AppHost<'static>>,
     system: WatchSystem,
-    files: storage::Files,
+    files: &'static storage::Files,
     settings: Settings,
     backlight: Backlight,
     display: &'static SharedDisplay,
@@ -265,7 +265,7 @@ impl Shell {
     /// Applies a change from the companion app, then tells it the settings as they now are.
     fn change_settings(&mut self, change: &SettingsChange) {
         let old_brightness = self.settings.brightness;
-        self.settings.apply(change, &self.files);
+        self.settings.apply(change, self.files);
         if let Some(host) = &mut self.host {
             host.set_theme(self.settings.theme);
         }
@@ -404,7 +404,7 @@ impl Shell {
 }
 
 #[embassy_executor::task]
-pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, files: storage::Files) {
+pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, files: &'static storage::Files) {
     Timer::after(START_PAGE_TIME).await;
     hide_status();
 
@@ -418,7 +418,7 @@ pub async fn run_shell(display: &'static SharedDisplay, backlight: Backlight, fi
             brightness_request: None,
             keep_screen_on: false,
         },
-        settings: Settings::load(&files),
+        settings: Settings::load(files),
         files,
         backlight,
         display,

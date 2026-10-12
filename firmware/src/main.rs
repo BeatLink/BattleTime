@@ -258,7 +258,7 @@ async fn main(spawner: Spawner) {
         Interrupts,
     );
     storage::leave_breadcrumb(stage::RADIO_STARTED);
-    spawner.spawn(run_bluetooth(controller, targets, confirmation, screen).unwrap());
+    spawner.spawn(run_bluetooth(controller, targets, confirmation, screen, files).unwrap());
 }
 
 // ============================================================================
@@ -567,6 +567,7 @@ async fn run_bluetooth(
     targets: storage::Targets,
     mut confirmation: storage::Confirmation,
     mut screen: Screen,
+    _files: &'static storage::Files,
 ) {
     let controller: ExternalController<_, 4> = ExternalController::new(controller);
     let resources = HOST_RESOURCES.init(HostResources::new());

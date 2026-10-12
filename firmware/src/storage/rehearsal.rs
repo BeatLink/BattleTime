@@ -160,7 +160,7 @@ pub async fn start(
     _spi_bus: &'static SpiBus,
     peripherals: StoragePeripherals,
     screen: &mut Screen,
-) -> Option<(Targets, Confirmation, Mode, Files)> {
+) -> Option<(Targets, Confirmation, Mode, &'static Files)> {
     core::mem::forget(Output::new(
         peripherals.flash_chip_select,
         Level::High,
@@ -174,7 +174,7 @@ pub async fn start(
         image_size_in_bytes: 0,
         bytes_received: 0,
     };
-    Some((targets, Confirmation, Mode::Confirmed, Files))
+    Some((targets, Confirmation, Mode::Confirmed, &Files))
 }
 
 // ============================================================================

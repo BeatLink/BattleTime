@@ -81,6 +81,7 @@ static EXTERNAL_FLASH: StaticCell<SharedExternalFlash> = StaticCell::new();
 static INTERNAL_FLASH: StaticCell<SharedInternalFlash> = StaticCell::new();
 static STATE_ALIGNMENT: StaticCell<[u8; 4]> = StaticCell::new();
 static CONFIRM_ALIGNMENT: StaticCell<[u8; 4]> = StaticCell::new();
+static FILES: StaticCell<Files> = StaticCell::new();
 
 pub struct StoragePeripherals {
     pub flash_chip_select: Peri<'static, P0_05>,
@@ -91,7 +92,7 @@ pub async fn start(
     spi_bus: &'static SpiBus,
     peripherals: StoragePeripherals,
     screen: &mut Screen,
-) -> Option<(Targets, Confirmation, Mode, Files)> {
+) -> Option<(Targets, Confirmation, Mode, &'static Files)> {
     let flash_chip_select = Output::new(peripherals.flash_chip_select, Level::High, OutputDrive::Standard);
     let external_flash = match ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), &mut Delay) {
         Ok(flash) => EXTERNAL_FLASH.init(Mutex::new(RefCell::new(flash))),
@@ -117,9 +118,9 @@ pub async fn start(
             Err(_) => "Files damaged",
         },
     );
-    let files = Files {
+    let files: &'static Files = FILES.init(Files {
         file_system: prepared.ok().map(|prepared| prepared.file_system),
-    };
+    });
 
     let targets = Receivers {
         firmware: UpdateReceiver::new(
@@ -220,12 +221,21 @@ impl Confirmation {
 // Files for saved app state
 // ============================================================================
 
-/// The mounted file system, or nothing when it would not mount.
+/// The littlefs file system in the external flash.
+pub type WatchFileSystem = FileSystem<BlockingPartition<'static, NoopRawMutex, FlashOnBus>>;
+
+/// The mounted file system, or nothing when it would not mount; the shell and the Bluetooth task share it.
 pub struct Files {
-    file_system: Option<FileSystem<BlockingPartition<'static, NoopRawMutex, FlashOnBus>>>,
+    file_system: Option<WatchFileSystem>,
 }
 
 impl Files {
+    /// For the Bluetooth task's file and package services.
+    #[allow(dead_code)]
+    pub fn file_system(&self) -> Option<&WatchFileSystem> {
+        self.file_system.as_ref()
+    }
+
     pub fn read(&self, path: &str) -> Option<alloc::vec::Vec<u8>> {
         self.file_system.as_ref()?.read_to_vec(path).ok()
     }
