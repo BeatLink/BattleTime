@@ -45,6 +45,12 @@ document for its part instead.
   - a preset theme recolours the open app and the next one opened;
   - settings survive a restart, from `/settings/system` and `/settings/theme`;
   - a `settings` message from the companion app changes them and the reply lists every key.
+- [ ] **Files over BLEFS on the PineTime.** The file service has run only in the emulator, against a
+  raw HCI client. On the watch, with the companion's `neotime files` commands, check that:
+  - the phone reaches an MTU of 124, so a write of up to 121 bytes is taken whole;
+  - listing, making a folder, writing a file, reading it back, moving it and deleting a folder work;
+  - a long listing arrives complete, with no notification lost while packets are short;
+  - free space reads back through the companion's scratch-file write.
 
 ## Bluetooth controller
 
