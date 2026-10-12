@@ -69,7 +69,16 @@ was just installed. The firmware measures 52 KB of static RAM:
 36 KB of heap (16 KB for storage and the 20 KB UI heap), and
 the Bluetooth host, controller, display buffer and task state. That leaves 13.7 KB for the
 stack. Measured in the emulator by painting the stack before start, it peaks at 10.2 KB while the
-launcher opens, so 3.8 KB is spare. The largest single frame is the Bluetooth task's, 5.7 KB. The table below is the budget:
+launcher opens, so 3.8 KB is spare. The largest single frame is the Bluetooth task's, 5.7 KB.
+To measure it again after a change, build the firmware and run, inside `nix develop`:
+
+```sh
+(ulimit -v 8000000; python3 -I tools/measure_stack.py firmware/target/thumbv7em-none-eabihf/release/neotime-firmware 8 --launcher)
+```
+
+It fills the stack with a pattern in the PineTime emulator, starts the firmware without the reset
+its first start would cause, swipes to the launcher, and prints the peak, the spare bytes and any
+resets. Keep at least 2 KB spare. The table below is the budget:
 
 | Region | Budget | Holds | Status |
 |---|---|---|---|
