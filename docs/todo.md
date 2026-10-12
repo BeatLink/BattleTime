@@ -51,6 +51,13 @@ document for its part instead.
   - listing, making a folder, writing a file, reading it back, moving it and deleting a folder work;
   - a long listing arrives complete, with no notification lost while packets are short;
   - free space reads back through the companion's scratch-file write.
+- [ ] **Installing apps on the PineTime.** The packages characteristic has run only in the emulator
+  and against the companion's mock watch. Once the firmware without built-in apps is on the watch,
+  run the companion's setup flow and check that:
+  - the shared library installs into internal flash and survives a restart;
+  - the face, the launcher and the apps install from `/apps` and appear without a restart;
+  - `apps` lists them, and hiding, showing and removing one updates the launcher;
+  - an image with a bad id or a library that fails its check is refused with an error.
 
 ## Bluetooth controller
 
