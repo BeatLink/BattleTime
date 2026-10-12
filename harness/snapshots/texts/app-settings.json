@@ -5,12 +5,13 @@
       "reached_by": null,
       "texts": [
         "0 s",
-        "24 hour clock",
         "Always on",
         "Brightness",
         "Medium",
         "Screen off",
-        "Settings"
+        "Settings",
+        "Tap",
+        "Wake"
       ]
     },
     {
@@ -34,6 +35,16 @@
         "5 s",
         "60 s",
         "Screen off after"
+      ]
+    },
+    {
+      "name": "wake",
+      "reached_by": "tap \"Wake\"",
+      "texts": [
+        "Button only",
+        "Double tap",
+        "Tap",
+        "Wake the screen with"
       ]
     }
   ]

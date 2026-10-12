@@ -4,7 +4,8 @@
 //! companion app through the firmware, and both go through `Settings::set`, so a value outside its
 //! limits never gets in. They are saved in `/settings/system` as records: one byte naming the
 //! setting, then its value as a little-endian `i32`. A setting this firmware does not know is
-//! skipped, so a file from older or newer firmware still reads.
+//! skipped, so a file from older or newer firmware still reads. Bluetooth is saved too but never read
+//! back, so a restart always turns the radio on again.
 
 #![no_std]
 
@@ -23,6 +24,10 @@ pub enum Setting {
     AlwaysOnScreen = 5,
     Chimes = 6,
     DoNotDisturb = 7,
+    Bluetooth = 8,
+    AllowsUpdates = 9,
+    WakeOnTouch = 10,
+    AlarmsInDoNotDisturb = 11,
 }
 
 /// The lowest and highest value a setting takes, both included, and the value it starts at.
@@ -40,8 +45,15 @@ pub mod chimes {
     pub const EVERY_HALF_HOUR: i32 = 2;
 }
 
+/// What `Setting::WakeOnTouch` holds.
+pub mod wake_on_touch {
+    pub const OFF: i32 = 0;
+    pub const TAP: i32 = 1;
+    pub const DOUBLE_TAP: i32 = 2;
+}
+
 impl Setting {
-    pub const COUNT: usize = 8;
+    pub const COUNT: usize = 12;
 
     pub const ALL: [Setting; Setting::COUNT] = [
         Setting::Uses24HourClock,
@@ -52,6 +64,10 @@ impl Setting {
         Setting::AlwaysOnScreen,
         Setting::Chimes,
         Setting::DoNotDisturb,
+        Setting::Bluetooth,
+        Setting::AllowsUpdates,
+        Setting::WakeOnTouch,
+        Setting::AlarmsInDoNotDisturb,
     ];
 
     pub fn from_number(number: u8) -> Option<Setting> {
@@ -73,6 +89,10 @@ impl Setting {
             Setting::AlwaysOnScreen => "always_on_screen",
             Setting::Chimes => "chimes",
             Setting::DoNotDisturb => "do_not_disturb",
+            Setting::Bluetooth => "bluetooth",
+            Setting::AllowsUpdates => "allows_updates",
+            Setting::WakeOnTouch => "wake_on_touch",
+            Setting::AlarmsInDoNotDisturb => "alarms_in_do_not_disturb",
         }
     }
 
@@ -97,7 +117,16 @@ impl Setting {
             Setting::AlwaysOnScreen => limits(0, 1, 0),
             Setting::Chimes => limits(chimes::OFF, chimes::EVERY_HALF_HOUR, chimes::OFF),
             Setting::DoNotDisturb => limits(0, 1, 0),
+            Setting::Bluetooth => limits(0, 1, 1),
+            Setting::AllowsUpdates => limits(0, 1, 1),
+            Setting::WakeOnTouch => limits(wake_on_touch::OFF, wake_on_touch::DOUBLE_TAP, wake_on_touch::TAP),
+            Setting::AlarmsInDoNotDisturb => limits(0, 1, 1),
         }
+    }
+
+    /// Whether a saved value is read back at start; Bluetooth is not, so a watch with no way to turn it on again can restart instead.
+    pub fn survives_restart(self) -> bool {
+        self != Setting::Bluetooth
     }
 
     /// The setting's bit in a mask of settings, such as the ones that changed.
@@ -226,11 +255,17 @@ impl Settings {
         FILE_BYTES
     }
 
-    /// Reads a saved file; anything missing, unknown or out of limits keeps its default.
+    /// Reads a saved file; anything missing, unknown, out of limits or not kept across a restart keeps its default.
     pub fn from_file(bytes: &[u8]) -> Settings {
         let mut settings = Settings::default();
         if let [FILE_FORMAT, records @ ..] = bytes {
             settings.apply_records(records);
+        }
+        for setting in Setting::ALL
+            .into_iter()
+            .filter(|setting| !setting.survives_restart())
+        {
+            settings.values[setting as usize] = setting.limits().default;
         }
         settings
     }

@@ -64,7 +64,7 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 | `music` | InfiniTime Music, wasp-os music_player | Track, progress, play and skip by swipe, and a volume row. | <img src="../harness/snapshots/screens/app-music.png" width="120" alt="music"> |
 | `notifications` | InfiniTime Notifications, wasp-os notification list | The latest 5 notifications from the phone and from apps, newest first; a tap reads one in full and Dismiss removes it. Opens by itself when a notification wakes the screen. | <img src="../harness/snapshots/screens/app-notifications.png" width="120" alt="notifications"> |
 | `weather` | InfiniTime Weather, wasp-os weather | Conditions, low and high, and a 5 day forecast, all read from `current_weather`. | <img src="../harness/snapshots/screens/app-weather.png" width="120" alt="weather"> |
-| `navigation` | InfiniTime Navigation | The next turn, its distance and the trip's progress. | <img src="../harness/snapshots/screens/app-navigation.png" width="120" alt="navigation"> |
+| `navigation` | InfiniTime Navigation | The next turn, its distance in the wearer's units and the trip's progress. | <img src="../harness/snapshots/screens/app-navigation.png" width="120" alt="navigation"> |
 | `metronome` | InfiniTime Metronome | Beats scheduled from the start time so they never drift; tap tempo. | <img src="../harness/snapshots/screens/app-metronome.png" width="120" alt="metronome"> |
 | `motion` | InfiniTime Motion | Charts of the raw x, y and z acceleration. | <img src="../harness/snapshots/screens/app-motion.png" width="120" alt="motion"> |
 | `level` | wasp-os level | A spirit level with a saved calibration. | <img src="../harness/snapshots/screens/app-level.png" width="120" alt="level"> |
@@ -84,7 +84,7 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 | `infinipaint` | InfiniTime InfiniPaint | A 20 by 20 grid of cells instead of free drawing, since there is no canvas. | <img src="../harness/snapshots/screens/app-infinipaint.png" width="120" alt="infinipaint"> |
 | `haiku` | wasp-os haiku | Built-in verses, since apps cannot read files. | <img src="../harness/snapshots/screens/app-haiku.png" width="120" alt="haiku"> |
 | `morse` | wasp-os morse | Typing in Morse code with taps and swipes. | <img src="../harness/snapshots/screens/app-morse.png" width="120" alt="morse"> |
-| `settings` | InfiniTime Settings, wasp-os settings | The watch-wide settings: brightness, screen timeout, always on, 12 or 24 hour clock, units, step goal, chimes, do not disturb and the theme. | <img src="../harness/snapshots/screens/app-settings.png" width="120" alt="settings"> |
+| `settings` | InfiniTime Settings, wasp-os settings | The watch-wide settings: brightness, screen timeout, always on, 12 or 24 hour clock, units, step goal, chimes, what wakes the screen, do not disturb and whether alarms ring in it, the theme, Bluetooth and firmware updates. | <img src="../harness/snapshots/screens/app-settings.png" width="120" alt="settings"> |
 | `hello`, `template` | wasp-os hello and template | Starting points for new apps. | <img src="../harness/snapshots/screens/app-hello.png" width="120" alt="hello"> <img src="../harness/snapshots/screens/app-template.png" width="120" alt="template"> |
 
 ## Not ported

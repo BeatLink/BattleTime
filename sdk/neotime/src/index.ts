@@ -133,6 +133,12 @@ export const settings = {
   chimes: signal(0),
   /** The preset theme in use, from 0 in the watch's order, or -1 for colours of the user's own. */
   theme: signal(0),
+  /** Whether the watch takes firmware updates from a phone. */
+  allows_updates: signal(true),
+  /** What turns a dark screen on besides the button: 0 nothing, 1 a tap, 2 a double tap. */
+  wake_on_touch: signal(1),
+  /** Whether alarms and timers still ring in do not disturb. */
+  alarms_in_do_not_disturb: signal(true),
 };
 
 /** Whether the heart rate sensor is measuring for any app. */
@@ -687,7 +693,7 @@ export function reset_step_trip() {
   emit({ kind: "reset_step_trip" });
 }
 
-/** Changes one of `settings`, or `brightness`, by name. Booleans are 1 and 0. */
+/** Changes one of `settings`, `brightness`, `do_not_disturb` or `bluetooth` by name. Booleans are 1 and 0. */
 export function set_setting(key: string, value: number) {
   emit({ kind: "set_setting", key, value });
 }

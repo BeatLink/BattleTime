@@ -155,3 +155,29 @@ fn a_missing_or_foreign_file_gives_the_defaults() {
     assert_eq!(Settings::from_file(&[]), Settings::default());
     assert_eq!(Settings::from_file(&[99, 3, 1, 0, 0, 0]), Settings::default());
 }
+
+#[test]
+fn bluetooth_turns_on_again_after_a_restart() {
+    let mut settings = Settings::default();
+    settings.set(Setting::Bluetooth, 0).unwrap();
+    settings.set(Setting::AllowsUpdates, 0).unwrap();
+    let mut buffer = [0; FILE_BYTES];
+
+    let length = settings.write_file(&mut buffer);
+    let read_back = Settings::from_file(&buffer[..length]);
+
+    assert!(read_back.is_on(Setting::Bluetooth));
+    assert!(!read_back.is_on(Setting::AllowsUpdates));
+}
+
+#[test]
+fn a_file_from_before_the_newer_settings_reads_them_as_their_defaults() {
+    let old_file = [FILE_FORMAT, 7, 1, 0, 0, 0];
+
+    let settings = Settings::from_file(&old_file);
+
+    assert!(settings.is_on(Setting::DoNotDisturb));
+    assert!(settings.is_on(Setting::AllowsUpdates));
+    assert!(settings.is_on(Setting::AlarmsInDoNotDisturb));
+    assert_eq!(settings.get(Setting::WakeOnTouch), wake_on_touch::TAP);
+}

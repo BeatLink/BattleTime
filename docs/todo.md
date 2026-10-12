@@ -50,6 +50,12 @@ document for its part instead.
     timeout on the next idle, 12 or 24 hours and units on the face and apps;
   - the always-on screen dims at a steady, flicker-free level instead of turning off;
   - chimes buzz on the hour and half hour, and stay silent in do not disturb;
+  - with alarms in do not disturb off, an alarm stays silent in do not disturb;
+  - each wake choice works on a dark screen: a tap, a double tap from the sleeping panel, and only
+    the button, with the panel asleep;
+  - Bluetooth off drops the phone and stops advertising, on brings it back, and a restart turns
+    it on again;
+  - with updates off a phone's DFU is refused and the status page says "Updates are off";
   - a preset theme recolours the open app and the next one opened;
   - settings survive a restart, from `/settings/system` and `/settings/theme`;
   - a `settings` message from the companion app changes them and the reply lists every key.
@@ -243,7 +249,7 @@ the ones above it.
   (four-in-a-row), `life_step` (game-of-life, about 2,000 steps a generation now),
   `random_cell_where`, `count_equal`, `shuffle`, `permutation_parity`, `arrays_equal`,
   `push_shift` (history lists in heart, motion, stopwatch and morse), `format_fixed`
-  (calculator), `format_distance` (navigation, which ignores the units setting), `digit_of`,
+  (calculator), `format_distance` (navigation), `digit_of`,
   `sunday_week_of` and `days_in_year`.
 - [ ] **Library functions.** Logic with a real body that two or more apps share:
   - Time: `elapsed_clock` (start, pause, reset; stopwatch, sports, metronome, heart), `countdown`
@@ -365,19 +371,14 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### Touch panel
 
-- [ ] **Wake on tap.** Let a single tap or a double tap wake the watch, chosen in settings.
-  `sleep_until_double_tap` is the driver half.
-- [ ] **Sleep the touch panel with the screen.** The firmware leaves the panel scanning while the
-  screen is off. Call `sleep` when the screen turns off, and `wake` when it turns on.
-- [ ] **Double taps on the watch.** The firmware starts the panel with double taps off, so
-  `onDoubleClick` never fires on the watch. Turn them on when the open screen or a wake setting
-  wants them.
+- [ ] **Double taps in apps on the watch.** The firmware starts the panel with double taps off, so
+  `onDoubleClick` never fires in an open app; only waking by double tap uses them. Turn them on
+  when the open screen wants them.
 
 ### Vibrator
 
-- [ ] **Let the wearer silence alarms in do not disturb.** Alarms and timers ring through do not
-  disturb, which app-reference.md says the user can turn off. Add the setting, and keep app
-  permissions in the image so the watch can check `wake` instead of trusting the `alarm` pattern.
+- [ ] **Check `wake` before an alarm rings through do not disturb.** Keep app permissions in the
+  image so the watch can check `wake` instead of trusting any app that plays the `alarm` pattern.
 - [ ] **Try the buzzes on the watch:** a phone notification buzzes twice and stays silent in do
   not disturb, and the alarm pattern still rings there. Check too that a notification on a dark
   screen turns it on into the notifications app, that a `notify-` from Gadgetbridge removes it, and
@@ -406,11 +407,9 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### Settings
 
-- [ ] **A settings app** with Display, Wake up, Time format, Units, Watch face, Steps, Date and
-  time, Chimes, Shake calibration, Firmware, Updates, Bluetooth, Heart rate and About. The firmware
-  must carry out `set_setting`, save each change to `/settings` and read them back at start, so the
-  24 hour clock, units, step goal, Bluetooth and screen timeout stop being fixed in
-  `firmware/src/shell.rs`.
+- [ ] **The rest of InfiniTime's settings screens:** Watch face, Date and time, Shake calibration,
+  Firmware, Heart rate and About. Each needs its feature first, such as choosing among installed
+  faces or setting the clock by hand.
 
 ### Bluetooth
 
@@ -418,7 +417,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   InfiniTime does. Needs encryption in the controller first.
 - [ ] **Bonding** saved to the file system and restored at start.
 - [ ] **Privacy:** resolvable private addresses.
-- [ ] **A setting to turn the radio off.**
 - [ ] **Light the screen when a phone connects or leaves.** The shell redraws `is_phone_connected`
   and sends the `phone` event, but a dark screen stays dark; turn it on briefly, outside do not
   disturb, so the wearer sees the link change.
@@ -534,7 +532,7 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   10 seconds; NeoTime only aborts when the link drops.
 - [ ] **A swap progress bar on the bootloader screen.** It says "Installing firmware" for up to 30
   seconds with nothing moving. Its 16 KB has about 2 KB to spare.
-- [ ] **A setting to turn updates off,** or on until the next reset.
+- [ ] **Updates on only until the next reset,** as a third choice beside the on and off switch.
 - [ ] **Show the bootloader version** in the system info app. The bootloader keeps no version
   yet, so it needs one at a fixed place the firmware can read, and an update of the bootloader on
   the watch.

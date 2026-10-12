@@ -451,14 +451,18 @@ refuses values the field does not allow, while taking its "unknown" values, whic
 ## Settings (`services/settings`)
 
 `neotime-settings` defines the watch-wide settings: the 12 or 24 hour clock, units, the step goal,
-the brightness, the screen timeout, the always-on screen, chimes and do not disturb.
+the brightness, the screen timeout, the always-on screen, chimes, do not disturb, whether alarms
+ring in do not disturb, which touch wakes the screen, Bluetooth and whether updates are taken.
 
 - **One place for limits.** Each `Setting` has a fixed number, the name apps pass to `set_setting`,
   and its lowest, highest and default values. `Settings::set` refuses a value outside them, so
   nothing that reaches the store, from an app or from the phone, can be out of range.
 - **The file.** `/settings/system` holds a format byte, then one 5-byte record per setting: its
   number and its value as a little-endian `i32`. A record for an unknown setting or with a bad
-  value is skipped, so a file from older or newer firmware still reads.
+  value is skipped, so a file from older or newer firmware still reads. Bluetooth is written but
+  never read back (`Setting::survives_restart`), so a restart always turns the radio on: every app,
+  the Settings app included, is installed over Bluetooth, so a watch saved with it off could never
+  be reached again.
 - **Apps.** `neotime-app-host`'s `settings` module maps each setting to the system value apps read,
   such as `settings.chimes`, and hands the open app a `settings_change` event for each change.
 
@@ -581,13 +585,20 @@ watch face, the launcher and the apps through `neotime-app-host`:
   both change it; the shell then redraws what reads them, sends the app `settings_change`, applies
   the brightness unless the open app set its own, and writes the file when the app closes or the
   screen turns off, or at once while it is off. `set_setting("theme", n)` picks preset theme `n`.
+- **Waking by touch.** The `wake_on_touch` setting picks what turns a dark screen on besides the
+  button. When the screen turns off the shell tells the touch task (`touch.rs`), which puts the
+  panel into deep sleep for none, leaves it scanning for a tap, or sleeps it listening for a double
+  tap only; `neotime_app_host::settings::touch_wakes_screen` decides which touch wakes the shell.
+- **Bluetooth and updates.** Turning the `bluetooth` setting off stops advertising and drops a
+  connected phone; turning it on advertises again. With `allows_updates` off, `neotime-dfu` refuses
+  a DFU start and the status page says "Updates are off"; an update already running carries on.
 - **Chimes.** With chimes on, the shell also wakes on the local hour or half hour and buzzes, twice
   on the hour and once on the half hour, unless do not disturb is on. A chime more than a minute
   late, such as after the phone moved the clock on, is skipped.
 - **Vibration.** `neotime_app_host::haptics` decides what the motor plays: `vibrate`,
   `vibrate_pattern`, `stop_vibrating` and `notify` from apps, a notification from the phone, and the
   chimes. In do not disturb only the `alarm` pattern, which the alarm and timer ring with, and a
-  stop get through. Each `Vibration` goes to the motor's own task (`vibration.rs`), which turns it
+  stop get through; with the `alarms_in_do_not_disturb` setting off, only a stop does. Each `Vibration` goes to the motor's own task (`vibration.rs`), which turns it
   into `neotime-vibrator` steps, so a pattern never holds up the shell; opening another app stops
   what is playing.
 - **Effects.** `set_brightness` sets the backlight
@@ -725,8 +736,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
   opening anything else forgets it.
 
 Not done yet: heart rate, the notification count, navigation and the weather forecast's days read
-as 0 or empty, and music and weather are lost on a restart; the touch panel stays
-awake while the screen is off.
+as 0 or empty, and music and weather are lost on a restart; with a tap waking the screen, the
+touch panel stays awake while the screen is off.
 
 It takes 293 KB of the 400 KB firmware slot (the two accelerometers' configuration files are 12 KB
 of it; the fonts are in the shared library) and 51 KB of static RAM, 37 KB of it heap: 16 KB for storage and 21 KB for

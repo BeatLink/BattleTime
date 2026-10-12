@@ -29,11 +29,11 @@ time.
 | `notifications` | list | The latest 5 notifications the watch keeps, from the phone and from apps, newest first: `notifications.value.length`, and `notifications.value[i].id` (for `dismiss_notification`), `.app`, `.title`, `.body` and `.time`, when it arrived. An app's own have negative ids. Needs the `notifications` permission. `apps/notifications` lists them this way. |
 | `is_do_not_disturb` | `Bool` | Whether do not disturb is on. |
 | `brightness` | `Int` | The backlight level, 1 to 3. |
-| `settings` | object | The user's choices apps should follow: `uses_24_hour_clock`, `uses_metric_units`, `step_goal`, `screen_timeout_seconds` (5 to 300), `always_on_screen`, `chimes` (0 off, 1 every hour, 2 every half hour) and `theme`, the preset theme's number in the watch's order (dark, light, ocean, forest, sunset, contrast), or -1 for colours of the user's own. |
+| `settings` | object | The user's choices apps should follow: `uses_24_hour_clock`, `uses_metric_units`, `step_goal`, `screen_timeout_seconds` (5 to 300), `always_on_screen`, `chimes` (0 off, 1 every hour, 2 every half hour), `allows_updates`, `wake_on_touch` (0 only the button wakes the screen, 1 a tap, 2 a double tap), `alarms_in_do_not_disturb` and `theme`, the preset theme's number in the watch's order (dark, light, ocean, forest, sunset, contrast), or -1 for colours of the user's own. |
 | `current_screen` | `Text` | The name of the app's screen on display. |
 | `is_heart_rate_running` | `Bool` | Whether the heart rate sensor is measuring for any app. |
 | `heart_rate_status` | `Int` | The sensor's state: 0 stopped, 1 no skin, 2 settling, 3 measuring. |
-| `is_bluetooth_enabled` | `Bool` | Whether Bluetooth is on, whether or not the phone is connected. |
+| `is_bluetooth_enabled` | `Bool` | Whether Bluetooth is on, whether or not the phone is connected. It is on again after every restart. |
 | `next_alarm` | `Instant \| null` | The next alarm any app has set to ring, or `null` if none is set. In app code an empty optional is always `null`. |
 | `current_weather` | object | The last forecast the phone sent: `temperature`, `condition`, `low`, `high`, `sunrise`, `sunset`, `location` and `received_at` (each `null` until the phone sends it), and `forecast`, up to 5 coming days, each with `condition`, `low` and `high`: read `current_weather.value.forecast.length` and `current_weather.value.forecast[day].high`. Reading it needs no permission, so faces need no subscription of their own. |
 | `installed_apps` | list | Every app a launcher lists, in order: `installed_apps.value.length`, and `installed_apps.value[i].name`, `.id` (for `open_app`) and `.icon` (for an `Icon`). `apps/launcher` is a launcher written this way. |
@@ -293,8 +293,9 @@ finishes without failing, in the order they were called.
 | `stop_vibrating()` | Stops any pattern this app started. |
 
 During do not disturb the watch plays only `vibrate_pattern("alarm")` and `stop_vibrating()`, so
-alarms and timers still ring; every other vibration, `notify`'s included, is skipped. The watch does
-not check the `wake` permission for this yet, and a setting to silence alarms too is planned.
+alarms and timers still ring; every other vibration, `notify`'s included, is skipped. With
+`settings.alarms_in_do_not_disturb` off, the alarm pattern is skipped too. The watch does not check
+the `wake` permission for this yet.
 
 ### Display
 
@@ -353,10 +354,10 @@ subscriptions keep their schedules. A subscription period under a minute needs
 
 | Effect | Does |
 |---|---|
-| `set_setting(key, value)` | Changes one of the user's settings by name: any key of `settings`, `brightness` (1 to 3, the level the watch returns to) or `do_not_disturb`. `theme` takes a preset's number. Booleans are 1 or 0, and a value outside its limits is ignored. |
+| `set_setting(key, value)` | Changes one of the user's settings by name: any key of `settings`, `brightness` (1 to 3, the level the watch returns to), `do_not_disturb` or `bluetooth`. `theme` takes a preset's number. Booleans are 1 or 0, and a value outside its limits is ignored. |
 | `set_do_not_disturb(on)` | Turns do not disturb on or off. |
 | `log(text)` | Writes a line to the debug log the companion app can read. |
-| `set_bluetooth(on)` | Turns Bluetooth on or off. |
+| `set_bluetooth(on)` | Turns Bluetooth on or off; the same as `set_setting("bluetooth", ...)`. A restart turns it on again. |
 | `set_heart_rate_led(on, brightness, period)` | Drives the heart rate sensor's LED directly, such as for a beacon. `brightness` is the drive level, 0 to 3, and `period` the flash period in milliseconds, 0 for steady. The runtime turns it off when the app closes, even with the `background` permission, to save the battery. |
 
 Settings and other values that change often are stored on the external flash, never the internal

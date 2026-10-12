@@ -99,6 +99,12 @@ pub enum SystemValue {
     FreeStorageKilobytes,
     /// Text: why the watch last restarted, such as `watchdog` or `Fault at 0x0001a2b4`.
     ResetReason,
+    /// Whether the watch takes firmware updates.
+    AllowsUpdates,
+    /// 0 only the button wakes the screen, 1 a tap does, 2 a double tap does.
+    WakeOnTouch,
+    /// Whether alarms and timers still ring in do not disturb.
+    AlarmsInDoNotDisturb,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -112,7 +118,7 @@ const SETTINGS_BIT: u32 = 22;
 const SYSTEM_INFO_BIT: u32 = 23;
 
 impl SystemValue {
-    pub const COUNT: usize = 63;
+    pub const COUNT: usize = 66;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -180,6 +186,9 @@ impl SystemValue {
             60 => StartedAt,
             61 => FreeStorageKilobytes,
             62 => ResetReason,
+            63 => AllowsUpdates,
+            64 => WakeOnTouch,
+            65 => AlarmsInDoNotDisturb,
             _ => return None,
         })
     }
@@ -207,7 +216,8 @@ impl SystemValue {
                 NAVIGATION_BIT
             }
             InstalledAppCount | InstalledAppName | InstalledAppId | InstalledAppIcon => INSTALLED_APPS_BIT,
-            ScreenTimeoutSeconds | AlwaysOnScreen | Chimes | ThemePreset => SETTINGS_BIT,
+            ScreenTimeoutSeconds | AlwaysOnScreen | Chimes | ThemePreset | AllowsUpdates | WakeOnTouch
+            | AlarmsInDoNotDisturb => SETTINGS_BIT,
             NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
             | NotificationTime => UnreadNotifications as u32,
             StepTrip | StepDayCount | StepDayTotal | StepHourCount | StepHourSteps => StepsToday as u32,

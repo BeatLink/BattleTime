@@ -19,7 +19,7 @@ use core::cell::RefCell;
 
 use embassy_embedded_hal::shared_bus::{asynch::i2c::I2cDevice, blocking::spi::SpiDevice};
 use embassy_executor::Spawner;
-use embassy_futures::select::{select3, Either3};
+use embassy_futures::select::{select, select4, Either, Either4};
 use embassy_nrf::{
     bind_interrupts,
     config::LfclkSource,
@@ -44,6 +44,7 @@ use neotime_dfu::{
     service::DfuWrite, service::LegacyDfuService, write_progress, Activity, LegacyDfu, Outcome,
 };
 use neotime_display::Display;
+use neotime_settings::Setting;
 use neotime_updates::ImageKind;
 use static_cell::StaticCell;
 use trouble_host::prelude::*;
@@ -671,6 +672,13 @@ async fn run_bluetooth(
         let mut advertising_shown = false;
         let mut confirmed = false;
         loop {
+            if !settings::is_bluetooth_on() {
+                screen.write_line(line::BLUETOOTH, "Off");
+                while !settings::is_bluetooth_on() {
+                    settings::BLUETOOTH_SWITCHED.wait().await;
+                }
+                advertising_shown = false;
+            }
             let advertiser = peripheral
                 .advertise(
                     &AdvertisementParameters::default(),
@@ -687,7 +695,9 @@ async fn run_bluetooth(
                 advertising_shown = true;
             }
 
-            let Ok(connection) = advertiser.accept().await else {
+            let Either::First(Ok(connection)) =
+                select(advertiser.accept(), settings::BLUETOOTH_SWITCHED.wait()).await
+            else {
                 continue;
             };
             let Ok(connection) = connection.with_attribute_server(&server) else {
@@ -798,20 +808,28 @@ async fn serve_connection(
         let next_event = core::pin::pin!(connection.next());
         let next_reply = core::pin::pin!(settings::REPLIES.receive());
         let battery_change = core::pin::pin!(battery::PERCENT_CHANGED.wait());
-        let event = match select3(next_event, next_reply, battery_change).await {
-            Either3::First(event) => event,
-            Either3::Second(reply) => {
+        let bluetooth_switched = core::pin::pin!(settings::BLUETOOTH_SWITCHED.wait());
+        let event = match select4(next_event, next_reply, battery_change, bluetooth_switched).await {
+            Either4::First(event) => event,
+            Either4::Second(reply) => {
                 for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
                     let _ = server.uart.transmit.notify_raw(connection, piece, false).await;
                 }
                 continue;
             }
-            Either3::Third(()) => {
+            Either4::Third(()) => {
                 let _ = server
                     .battery
                     .level
                     .notify(connection, &battery::percent(), true)
                     .await;
+                continue;
+            }
+            // The link stays until the controller reports it gone, which ends this connection as usual.
+            Either4::Fourth(()) => {
+                if !settings::is_bluetooth_on() {
+                    connection.raw().disconnect();
+                }
                 continue;
             }
         };
@@ -924,6 +942,7 @@ async fn serve_connection(
                 }
                 send_file_answers(connection, server, file_answers).await;
 
+                dfu.set_allows_updates(settings::current().is_on(Setting::AllowsUpdates));
                 let outcome = match target {
                     Some(DfuWrite::ControlPoint) => dfu.on_control_point(&written).await,
                     Some(DfuWrite::Packet) => dfu.on_packet(&written).await,

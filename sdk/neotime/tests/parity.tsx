@@ -101,6 +101,9 @@ export const KNOWN_DIFFERENCES: KnownDifference[] = [
   { snapshot: "app-heart", screen: "main", side: "preview_only", text: "075", reason: "The watch waits for the sensor; the preview hands back a reading at once." },
   { snapshot: "app-heart", screen: "main", side: "preview_only", text: "Measuring...", reason: "The watch waits for the sensor; the preview hands back a reading at once." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "10000", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-settings", screen: "main", side: "preview_only", text: "24 hour clock", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Alarms in DND", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Bluetooth", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Chimes", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Dark", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Do not disturb", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
@@ -108,6 +111,7 @@ export const KNOWN_DIFFERENCES: KnownDifference[] = [
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Off", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Step goal", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Theme", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Updates", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "face-terminal", screen: "main", side: "preview_only", text: "user@watch:~ $", reason: "The last line falls below the screen on the watch, and the preview test has no layout to tell." },
 ];
 
@@ -161,6 +165,9 @@ export function set_fake_system_values() {
   settings.always_on_screen.value = false;
   settings.chimes.value = 0;
   settings.theme.value = 0;
+  settings.allows_updates.value = true;
+  settings.wake_on_touch.value = 1;
+  settings.alarms_in_do_not_disturb.value = true;
   is_heart_rate_running.value = false;
   heart_rate_status.value = 0;
   is_bluetooth_enabled.value = true;

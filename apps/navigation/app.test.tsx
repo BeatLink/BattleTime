@@ -1,5 +1,6 @@
 import { act, cleanup, render, screen } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { set_setting } from "neotime";
 import { deliver, effect_log, install_apps, open, OpenScreen, start_scheduler } from "neotime/preview";
 import app from "./app.tsx";
 
@@ -18,6 +19,7 @@ describe("navigation", () => {
     install_apps([app]);
     stop_scheduler = start_scheduler();
     effect_log.value = [];
+    set_setting("uses_metric_units", 1);
     open(app);
     render(<OpenScreen />);
   });
@@ -40,6 +42,14 @@ describe("navigation", () => {
     expect(screen.getByText("250 m")).toBeTruthy();
     send_step(12345, 10);
     expect(screen.getByText("12.3 km")).toBeTruthy();
+  });
+
+  it("shows feet, then miles, when the units setting is imperial", () => {
+    act(() => set_setting("uses_metric_units", 0));
+    send_step(100, 10);
+    expect(screen.getByText("328 ft")).toBeTruthy();
+    send_step(12345, 10);
+    expect(screen.getByText("7.6 mi")).toBeTruthy();
   });
 
   it("fills the bar with the route's progress and turns it red near the end", () => {

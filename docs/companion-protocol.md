@@ -83,6 +83,10 @@ it changes nothing. Either way the watch answers with the settings as they now a
 | `always_on` | `true` to dim the screen instead of turning it off. |
 | `chimes` | `0` off, `1` a buzz every hour, `2` every half hour. |
 | `do_not_disturb` | `true` to silence chimes, notifications and every vibration but alarms. |
+| `bluetooth` | `false` drops the phone and stops advertising until the wearer turns it on again or the watch restarts. |
+| `updates` | `false` refuses firmware updates until turned on again. |
+| `wake_on_touch` | What turns a dark screen on besides the button: `0` nothing, `1` a tap, `2` a double tap. |
+| `alarms_in_dnd` | `false` silences alarms and timers in do not disturb too. |
 
 The key names after `theme_colors` are the ones the wasp-os companion's settings screen already
 sends. An unknown preset, a colour not written `#rrggbb`, `units` other than the two names, or any
@@ -95,7 +99,8 @@ The reply:
  "text":"#ffffff","muted":"#8c929c","accent":"#00aaa5","success":"#39be5a","warning":"#f7aa18",
  "danger":"#e74539"},"themes":["dark","light","ocean","forest","sunset","contrast"],
  "clock_24h":true,"units":"Metric","step_goal":10000,"brightness":2,"blank_after":15,
- "always_on":false,"chimes":0,"do_not_disturb":false}
+ "always_on":false,"chimes":0,"do_not_disturb":false,"bluetooth":true,"updates":true,
+ "wake_on_touch":1,"alarms_in_dnd":true}
 ```
 
 `theme` is the preset whose colours match exactly, or `custom`. Colours are stored as RGB565, so a

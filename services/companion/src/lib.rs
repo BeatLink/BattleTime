@@ -217,6 +217,10 @@ const KEYS: [(Setting, &str, Shape); Setting::COUNT] = [
     (Setting::AlwaysOnScreen, "always_on", Shape::TrueOrFalse),
     (Setting::Chimes, "chimes", Shape::Number),
     (Setting::DoNotDisturb, "do_not_disturb", Shape::TrueOrFalse),
+    (Setting::Bluetooth, "bluetooth", Shape::TrueOrFalse),
+    (Setting::AllowsUpdates, "updates", Shape::TrueOrFalse),
+    (Setting::WakeOnTouch, "wake_on_touch", Shape::Number),
+    (Setting::AlarmsInDoNotDisturb, "alarms_in_dnd", Shape::TrueOrFalse),
 ];
 
 const METRIC: &str = "Metric";
@@ -245,6 +249,14 @@ struct Envelope<'line> {
     chimes: Option<i64>,
     #[serde(default)]
     do_not_disturb: Option<bool>,
+    #[serde(default)]
+    bluetooth: Option<bool>,
+    #[serde(default)]
+    updates: Option<bool>,
+    #[serde(default)]
+    wake_on_touch: Option<i64>,
+    #[serde(default)]
+    alarms_in_dnd: Option<bool>,
     #[serde(default)]
     id: Option<i64>,
     #[serde(default, borrow)]
@@ -276,6 +288,10 @@ impl Envelope<'_> {
                 Setting::AlwaysOnScreen => self.always_on.map(i32::from),
                 Setting::Chimes => number(self.chimes),
                 Setting::DoNotDisturb => self.do_not_disturb.map(i32::from),
+                Setting::Bluetooth => self.bluetooth.map(i32::from),
+                Setting::AllowsUpdates => self.updates.map(i32::from),
+                Setting::WakeOnTouch => number(self.wake_on_touch),
+                Setting::AlarmsInDoNotDisturb => self.alarms_in_dnd.map(i32::from),
             };
         }
         let mut checked = Settings::default();

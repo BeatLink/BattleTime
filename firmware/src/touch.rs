@@ -1,10 +1,12 @@
 //! The touch panel, turned into the touches the app host takes.
 
+use embassy_futures::select::{select, Either};
 use embassy_nrf::gpio::{Input, Output};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, signal::Signal};
 use embassy_time::{Delay, Duration, Timer};
 use neotime_app_host::Touch;
 use neotime_runtime::events::SwipeDirection;
+use neotime_settings::wake_on_touch;
 use neotime_touch::{FingerEvent, Gesture, Settings, TouchPanel, TouchReport};
 
 use crate::{
@@ -17,6 +19,23 @@ pub static TOUCHES: Channel<CriticalSectionRawMutex, Touch, 4> = Channel::new();
 
 /// Places in the queue drags never take, so a lift and its gesture always fit.
 const PLACES_KEPT_FOR_LIFTS: usize = 2;
+
+/// What the panel listens for, set by the shell as the screen turns on and off.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Listening {
+    Everything,
+    /// The screen is dark, and the `wake_on_touch` setting says which touch should still reach the shell.
+    WhileDark {
+        wake_on_touch: i32,
+    },
+}
+
+static LISTENING: Signal<CriticalSectionRawMutex, Listening> = Signal::new();
+
+/// Tells the touch task what to listen for; only the newest request counts.
+pub fn listen_for(listening: Listening) {
+    LISTENING.signal(listening);
+}
 
 /// Signalled once the panel has started, or given up starting.
 pub static STARTED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
@@ -135,14 +154,60 @@ pub async fn read_touches(
     diagnostics::set(Counter::TouchState, 1);
     let mut finger = Finger::default();
     let mut sender = TouchSender::default();
+    let mut listening = Listening::Everything;
     loop {
-        let Ok(report) = panel.wait_for_report().await else {
-            continue;
+        let report = match select(panel.wait_for_report(), LISTENING.wait()).await {
+            Either::First(Ok(report)) => report,
+            Either::First(Err(_)) => continue,
+            Either::Second(next) => {
+                if next != listening {
+                    let _ = switch_panel(&mut panel, listening, next).await;
+                    listening = next;
+                    finger = Finger::default();
+                }
+                continue;
+            }
         };
         diagnostics::add_one(Counter::TouchReports);
+        // Asleep for double taps, the panel interrupts only for one, so any report means a double tap.
+        if listening
+            == (Listening::WhileDark {
+                wake_on_touch: wake_on_touch::DOUBLE_TAP,
+            })
+        {
+            let x = report.position.column as i32;
+            let y = report.position.row as i32;
+            sender.send(Touch::DoubleClick { x, y });
+            continue;
+        }
         finger.touches_for(&report, |touch| {
             diagnostics::add_one(Counter::TouchesSent);
             sender.send(touch);
         });
+    }
+}
+
+/// Puts the panel to sleep, to sleep listening for a double tap, or back to work, as the new listening needs.
+async fn switch_panel(
+    panel: &mut TouchPanel<I2cDeviceOnBus, Input<'static>, Output<'static>>,
+    from: Listening,
+    to: Listening,
+) -> Result<(), ()> {
+    if from != Listening::Everything
+        && from
+            != (Listening::WhileDark {
+                wake_on_touch: wake_on_touch::TAP,
+            })
+    {
+        panel.wake(&mut Delay).await.map_err(|_| ())?;
+    }
+    match to {
+        Listening::WhileDark {
+            wake_on_touch: wake_on_touch::OFF,
+        } => panel.sleep(&mut Delay).await.map_err(|_| ()),
+        Listening::WhileDark {
+            wake_on_touch: wake_on_touch::DOUBLE_TAP,
+        } => panel.sleep_until_double_tap(&mut Delay).await.map_err(|_| ()),
+        _ => Ok(()),
     }
 }

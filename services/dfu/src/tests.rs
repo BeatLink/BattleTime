@@ -315,6 +315,40 @@ fn softdevice_and_bootloader_images_are_not_supported() {
 }
 
 #[test]
+fn with_updates_turned_off_no_update_starts() {
+    let mut phone = Phone::new();
+    phone.dfu.set_allows_updates(false);
+
+    let outcome = block_on(
+        phone
+            .dfu
+            .on_control_point(&[command::START_DFU, image_type::APPLICATION]),
+    );
+
+    assert_eq!(
+        outcome.notifications[0].as_slice(),
+        response(command::START_DFU, result::NOT_SUPPORTED)
+    );
+    assert_eq!(outcome.failure(), Some(Failure::TurnedOff));
+    assert_eq!(Failure::TurnedOff.words(), "Updates are off");
+    assert!(!phone.dfu.is_updating());
+}
+
+#[test]
+fn turning_updates_on_again_lets_an_update_start() {
+    let mut phone = Phone::new();
+    phone.dfu.set_allows_updates(false);
+    phone.command(&[command::START_DFU, image_type::APPLICATION]);
+    phone.take_notifications();
+    phone.dfu.set_allows_updates(true);
+
+    phone.command(&[command::START_DFU, image_type::APPLICATION]);
+
+    assert!(phone.take_notifications().is_empty());
+    assert!(phone.dfu.is_updating());
+}
+
+#[test]
 fn an_image_too_large_for_the_slot_is_refused_at_the_start() {
     let mut phone = Phone::new();
 

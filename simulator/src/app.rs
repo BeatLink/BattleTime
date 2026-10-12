@@ -161,7 +161,7 @@ impl SystemValues for SimulatedSystem {
             Brightness => self.settings.get(Setting::Brightness) as Value,
             HeartRate => 64,
             HeartRateMeasuredAt => now - 5 * MINUTE_IN_MILLISECONDS,
-            IsBluetoothEnabled | IsPhoneConnected | MusicIsPlaying => 1,
+            IsPhoneConnected | MusicIsPlaying => 1,
             WeatherTemperature => 18,
             WeatherLow => 11,
             WeatherHigh => 21,
@@ -332,6 +332,7 @@ impl System for SimulatedSystem {
             EffectKind::SetDoNotDisturb => {
                 self.change_setting(Setting::DoNotDisturb.name(), effect.number(0))
             }
+            EffectKind::SetBluetooth => self.change_setting(Setting::Bluetooth.name(), effect.number(0)),
             _ => {}
         }
     }

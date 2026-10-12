@@ -87,6 +87,9 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
         "started_at" => (SystemValue::StartedAt, instant),
         "free_storage_kilobytes" => (SystemValue::FreeStorageKilobytes, Type::NUMBER),
         "reset_reason" => (SystemValue::ResetReason, Type::TEXT),
+        "settings.allows_updates" => (SystemValue::AllowsUpdates, Type::BOOL),
+        "settings.wake_on_touch" => (SystemValue::WakeOnTouch, Type::NUMBER),
+        "settings.alarms_in_do_not_disturb" => (SystemValue::AlarmsInDoNotDisturb, Type::BOOL),
         "current_weather.temperature" => (SystemValue::WeatherTemperature, Type::NUMBER.or_null()),
         "current_weather.condition" => (
             SystemValue::WeatherCondition,

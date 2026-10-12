@@ -1,8 +1,8 @@
 //! What the vibration motor plays for an app's haptic effects, a notification, a chime or the phone.
 //!
 //! Do not disturb silences everything but the `alarm` pattern, which alarms and timers ring with,
-//! and a stop, so a ringing alarm can always be silenced. The embedder turns each `Vibration` into
-//! motor steps.
+//! and a stop, so a ringing alarm can always be silenced. The wearer can have it silence alarms too.
+//! The embedder turns each `Vibration` into motor steps.
 
 use neotime_runtime::{EffectKind, Value};
 
@@ -76,14 +76,29 @@ impl Vibration {
     }
 }
 
+/// How much of what apps ask the motor for do not disturb silences.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Silence {
+    Nothing,
+    AllButAlarms,
+    /// Everything but a stop.
+    Everything,
+}
+
+impl Silence {
+    pub fn from_settings(is_do_not_disturb: bool, alarms_ring_in_do_not_disturb: bool) -> Silence {
+        match (is_do_not_disturb, alarms_ring_in_do_not_disturb) {
+            (false, _) => Silence::Nothing,
+            (true, true) => Silence::AllButAlarms,
+            (true, false) => Silence::Everything,
+        }
+    }
+}
+
 /// What an effect asks of the motor, or `None` for an effect that is not haptic or is silenced.
 ///
 /// `notify` buzzes the notification pattern, as a notification from the phone does.
-pub fn vibration_for_effect(
-    kind: EffectKind,
-    first_argument: Value,
-    is_do_not_disturb: bool,
-) -> Option<Vibration> {
+pub fn vibration_for_effect(kind: EffectKind, first_argument: Value, silence: Silence) -> Option<Vibration> {
     let vibration = match kind {
         EffectKind::Vibrate => Vibration::Buzz {
             milliseconds: first_argument.clamp(0, LONGEST_BUZZ_IN_MILLISECONDS as Value) as u16,
@@ -93,7 +108,11 @@ pub fn vibration_for_effect(
         EffectKind::Notify => Vibration::Pattern(VibrationPattern::Notification),
         _ => return None,
     };
-    vibration.unless_silenced(is_do_not_disturb)
+    match silence {
+        Silence::Nothing => Some(vibration),
+        Silence::AllButAlarms => vibration.unless_silenced(true),
+        Silence::Everything => (vibration == Vibration::Stop).then_some(vibration),
+    }
 }
 
 /// The buzz for a notification from the phone, or `None` in do not disturb.

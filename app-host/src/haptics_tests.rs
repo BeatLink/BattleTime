@@ -7,15 +7,15 @@ use super::*;
 #[test]
 fn vibrate_buzzes_for_the_time_asked_within_two_seconds() {
     assert_eq!(
-        vibration_for_effect(EffectKind::Vibrate, 30, false),
+        vibration_for_effect(EffectKind::Vibrate, 30, Silence::Nothing),
         Some(Vibration::Buzz { milliseconds: 30 })
     );
     assert_eq!(
-        vibration_for_effect(EffectKind::Vibrate, 10_000, false),
+        vibration_for_effect(EffectKind::Vibrate, 10_000, Silence::Nothing),
         Some(Vibration::Buzz { milliseconds: 2000 })
     );
     assert_eq!(
-        vibration_for_effect(EffectKind::Vibrate, -5, false),
+        vibration_for_effect(EffectKind::Vibrate, -5, Silence::Nothing),
         Some(Vibration::Buzz { milliseconds: 0 })
     );
 }
@@ -23,32 +23,41 @@ fn vibrate_buzzes_for_the_time_asked_within_two_seconds() {
 #[test]
 fn vibrate_pattern_plays_the_pattern_of_its_number() {
     assert_eq!(
-        vibration_for_effect(EffectKind::VibratePattern, 0, false),
+        vibration_for_effect(EffectKind::VibratePattern, 0, Silence::Nothing),
         Some(Vibration::Pattern(VibrationPattern::Tap))
     );
     assert_eq!(
-        vibration_for_effect(EffectKind::VibratePattern, 3, false),
+        vibration_for_effect(EffectKind::VibratePattern, 3, Silence::Nothing),
         Some(Vibration::Pattern(VibrationPattern::Alarm))
     );
     assert_eq!(
-        vibration_for_effect(EffectKind::VibratePattern, 5, false),
+        vibration_for_effect(EffectKind::VibratePattern, 5, Silence::Nothing),
         Some(Vibration::Pattern(VibrationPattern::Failure))
     );
-    assert_eq!(vibration_for_effect(EffectKind::VibratePattern, 6, false), None);
-    assert_eq!(vibration_for_effect(EffectKind::VibratePattern, -1, false), None);
+    assert_eq!(
+        vibration_for_effect(EffectKind::VibratePattern, 6, Silence::Nothing),
+        None
+    );
+    assert_eq!(
+        vibration_for_effect(EffectKind::VibratePattern, -1, Silence::Nothing),
+        None
+    );
 }
 
 #[test]
 fn notify_and_stop_vibrating_reach_the_motor_and_other_effects_do_not() {
     assert_eq!(
-        vibration_for_effect(EffectKind::Notify, 0, false),
+        vibration_for_effect(EffectKind::Notify, 0, Silence::Nothing),
         Some(Vibration::Pattern(VibrationPattern::Notification))
     );
     assert_eq!(
-        vibration_for_effect(EffectKind::StopVibrating, 0, false),
+        vibration_for_effect(EffectKind::StopVibrating, 0, Silence::Nothing),
         Some(Vibration::Stop)
     );
-    assert_eq!(vibration_for_effect(EffectKind::KeepScreenOn, 1, false), None);
+    assert_eq!(
+        vibration_for_effect(EffectKind::KeepScreenOn, 1, Silence::Nothing),
+        None
+    );
 }
 
 // ============================================================================
@@ -57,17 +66,50 @@ fn notify_and_stop_vibrating_reach_the_motor_and_other_effects_do_not() {
 
 #[test]
 fn do_not_disturb_silences_everything_but_the_alarm_and_a_stop() {
-    assert_eq!(vibration_for_effect(EffectKind::Vibrate, 30, true), None);
-    assert_eq!(vibration_for_effect(EffectKind::VibratePattern, 2, true), None);
-    assert_eq!(vibration_for_effect(EffectKind::Notify, 0, true), None);
     assert_eq!(
-        vibration_for_effect(EffectKind::VibratePattern, 3, true),
+        vibration_for_effect(EffectKind::Vibrate, 30, Silence::AllButAlarms),
+        None
+    );
+    assert_eq!(
+        vibration_for_effect(EffectKind::VibratePattern, 2, Silence::AllButAlarms),
+        None
+    );
+    assert_eq!(
+        vibration_for_effect(EffectKind::Notify, 0, Silence::AllButAlarms),
+        None
+    );
+    assert_eq!(
+        vibration_for_effect(EffectKind::VibratePattern, 3, Silence::AllButAlarms),
         Some(Vibration::Pattern(VibrationPattern::Alarm))
     );
     assert_eq!(
-        vibration_for_effect(EffectKind::StopVibrating, 0, true),
+        vibration_for_effect(EffectKind::StopVibrating, 0, Silence::AllButAlarms),
         Some(Vibration::Stop)
     );
+}
+
+#[test]
+fn do_not_disturb_can_silence_alarms_too_but_never_a_stop() {
+    assert_eq!(
+        vibration_for_effect(EffectKind::VibratePattern, 3, Silence::Everything),
+        None
+    );
+    assert_eq!(
+        vibration_for_effect(EffectKind::Vibrate, 30, Silence::Everything),
+        None
+    );
+    assert_eq!(
+        vibration_for_effect(EffectKind::StopVibrating, 0, Silence::Everything),
+        Some(Vibration::Stop)
+    );
+}
+
+#[test]
+fn the_settings_choose_how_much_is_silenced() {
+    assert_eq!(Silence::from_settings(false, false), Silence::Nothing);
+    assert_eq!(Silence::from_settings(false, true), Silence::Nothing);
+    assert_eq!(Silence::from_settings(true, true), Silence::AllButAlarms);
+    assert_eq!(Silence::from_settings(true, false), Silence::Everything);
 }
 
 #[test]

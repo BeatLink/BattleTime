@@ -1,13 +1,16 @@
 import { act, cleanup, render } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { brightness, is_do_not_disturb, set_setting, settings } from "neotime";
+import { brightness, is_bluetooth_enabled, is_do_not_disturb, set_setting, settings } from "neotime";
 import { install_apps, open, OpenScreen, press_button, screen_stack, start_scheduler } from "neotime/preview";
 import app, {
   change_step_goal,
   set_brightness_level,
   set_timeout,
   toggle_24_hour_clock,
+  toggle_alarms_in_do_not_disturb,
+  toggle_bluetooth,
   toggle_do_not_disturb,
+  toggle_updates,
 } from "./app.tsx";
 
 let stop_scheduler = () => {};
@@ -39,6 +42,10 @@ describe("settings", () => {
     set_setting("uses_metric_units", 1);
     set_setting("theme", 0);
     set_setting("do_not_disturb", 0);
+    set_setting("bluetooth", 1);
+    set_setting("allows_updates", 1);
+    set_setting("wake_on_touch", 1);
+    set_setting("alarms_in_do_not_disturb", 1);
     open(app);
   });
 
@@ -58,6 +65,24 @@ describe("settings", () => {
     expect(settings.screen_timeout_seconds.value).toBe(30);
     expect(settings.uses_24_hour_clock.value).toBe(false);
     expect(is_do_not_disturb.value).toBe(true);
+  });
+
+  it("turns Bluetooth, updates and alarms in do not disturb off and on again", () => {
+    toggle_bluetooth();
+    toggle_updates();
+    toggle_alarms_in_do_not_disturb();
+
+    expect(is_bluetooth_enabled.value).toBe(false);
+    expect(settings.allows_updates.value).toBe(false);
+    expect(settings.alarms_in_do_not_disturb.value).toBe(false);
+
+    toggle_bluetooth();
+    toggle_updates();
+    toggle_alarms_in_do_not_disturb();
+
+    expect(is_bluetooth_enabled.value).toBe(true);
+    expect(settings.allows_updates.value).toBe(true);
+    expect(settings.alarms_in_do_not_disturb.value).toBe(true);
   });
 
   it("picks a preset theme by number", () => {
@@ -84,6 +109,9 @@ describe("settings", () => {
     expect(settings.uses_24_hour_clock.value).toBe(false);
     expect(settings.uses_metric_units.value).toBe(false);
     expect(is_do_not_disturb.value).toBe(true);
+    expect(settings.alarms_in_do_not_disturb.value).toBe(false);
+    expect(is_bluetooth_enabled.value).toBe(false);
+    expect(settings.allows_updates.value).toBe(false);
   });
 
   it("opens each screen of choices from its row and goes back with the button", () => {
@@ -93,6 +121,7 @@ describe("settings", () => {
       ["Screen off", "timeout"],
       ["Step goal", "step_goal"],
       ["Chimes", "chimes"],
+      ["Wake", "wake"],
       ["Theme", "theme"],
     ];
 
@@ -119,6 +148,9 @@ describe("settings", () => {
     open_row(container, "Theme");
     widgets(container, "button").forEach(tap);
     act(() => press_button());
+    open_row(container, "Wake");
+    widgets(container, "button").forEach(tap);
+    act(() => press_button());
     open_row(container, "Step goal");
     const [fewer, more] = widgets(container, "button");
     tap(more);
@@ -129,6 +161,7 @@ describe("settings", () => {
     expect(settings.screen_timeout_seconds.value).toBe(120);
     expect(settings.chimes.value).toBe(2);
     expect(settings.theme.value).toBe(5);
+    expect(settings.wake_on_touch.value).toBe(2);
     expect(settings.step_goal.value).toBe(10500);
   });
 });

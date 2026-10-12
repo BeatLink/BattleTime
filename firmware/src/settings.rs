@@ -13,6 +13,7 @@ use core::{
 use embassy_sync::{
     blocking_mutex::{raw::CriticalSectionRawMutex, Mutex},
     channel::Channel,
+    signal::Signal,
 };
 extern crate alloc;
 
@@ -33,6 +34,13 @@ pub static REPLIES: Channel<CriticalSectionRawMutex, Box<str>, 2> = Channel::new
 /// Queues a reply line for the companion app; it is dropped if two are already waiting.
 pub fn send_reply(line: &str) {
     let _ = REPLIES.try_send(Box::from(line));
+}
+
+/// Raised when the Bluetooth setting changes, so the Bluetooth task drops the phone or advertises again.
+pub static BLUETOOTH_SWITCHED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
+pub fn is_bluetooth_on() -> bool {
+    current().is_on(Setting::Bluetooth)
 }
 
 const SETTINGS_PATH: &str = "/settings/system";
@@ -107,6 +115,9 @@ fn change(apply: impl FnOnce(&mut Settings) -> u32) {
         return;
     }
     UNSAVED_CHANGES.fetch_or(changed, Ordering::Relaxed);
+    if changed & Setting::Bluetooth.bit() != 0 {
+        BLUETOOTH_SWITCHED.signal(());
+    }
     for setting in Setting::ALL
         .into_iter()
         .filter(|setting| changed & setting.bit() != 0)

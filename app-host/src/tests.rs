@@ -1289,6 +1289,54 @@ fn each_changed_setting_reaches_the_open_app_as_an_event() {
 }
 
 #[test]
+fn the_new_settings_read_as_their_system_values() {
+    use neotime_settings::{Setting, Settings};
+    let mut settings = Settings::default();
+    settings.set(Setting::Bluetooth, 0).unwrap();
+    settings.set(Setting::WakeOnTouch, 2).unwrap();
+
+    assert_eq!(
+        settings::read_setting(&settings, SystemValue::IsBluetoothEnabled),
+        Some(0)
+    );
+    assert_eq!(
+        settings::read_setting(&settings, SystemValue::AllowsUpdates),
+        Some(1)
+    );
+    assert_eq!(
+        settings::read_setting(&settings, SystemValue::WakeOnTouch),
+        Some(2)
+    );
+    assert_eq!(
+        settings::read_setting(&settings, SystemValue::AlarmsInDoNotDisturb),
+        Some(1)
+    );
+}
+
+#[test]
+fn the_wake_setting_picks_which_touch_turns_a_dark_screen_on() {
+    use neotime_settings::{wake_on_touch, Setting, Settings};
+    let lift = Touch::Release { x: 1, y: 2 };
+    let double_tap = Touch::DoubleClick { x: 1, y: 2 };
+    let press = Touch::Press { x: 1, y: 2 };
+    let mut settings = Settings::default();
+
+    assert!(settings::touch_wakes_screen(&settings, &lift));
+    assert!(!settings::touch_wakes_screen(&settings, &press));
+    assert!(!settings::touch_wakes_screen(&settings, &double_tap));
+
+    settings
+        .set(Setting::WakeOnTouch, wake_on_touch::DOUBLE_TAP)
+        .unwrap();
+    assert!(settings::touch_wakes_screen(&settings, &double_tap));
+    assert!(!settings::touch_wakes_screen(&settings, &lift));
+
+    settings.set(Setting::WakeOnTouch, wake_on_touch::OFF).unwrap();
+    assert!(!settings::touch_wakes_screen(&settings, &lift));
+    assert!(!settings::touch_wakes_screen(&settings, &double_tap));
+}
+
+#[test]
 fn a_preset_theme_is_picked_and_read_back_by_number() {
     use neotime_runtime::PRESET_THEMES;
 

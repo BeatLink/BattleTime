@@ -38,11 +38,17 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Settings, on the watch and from the companion app.** The Settings app and the companion app
   change the same watch-wide settings: brightness, how soon the screen turns off, the always-on
   screen, the 12 or 24 hour clock, metric or imperial units, the daily step goal, chimes, do not
-  disturb and the theme. They are kept through a restart, and apps follow them at once.
+  disturb, whether alarms ring in do not disturb, what wakes the screen, Bluetooth, firmware updates
+  and the theme. They are kept through a restart, except Bluetooth, and apps follow them at once.
+- **Waking the screen by touch.** A tap, a double tap, or only the button, chosen in settings. With
+  only the button, the touch panel sleeps while the screen is off. Not tried on the watch yet.
+- **Bluetooth off,** from settings or an app, until it is turned on again or the watch restarts, so
+  a watch can never be left out of reach. Not tried on the watch yet.
+- **Updates off,** so no phone can install firmware until they are turned on again in settings.
 - **Chimes.** A buzz every hour, or every half hour, chosen in settings; a double buzz on the hour.
   Do not disturb silences them.
 - **Vibration** for apps that buzz, alarms and timers that ring, and notifications from the phone.
-  Do not disturb silences everything but alarms and timers.
+  Do not disturb silences everything but alarms and timers, and those too if the wearer chooses.
 - **Notifications from the phone.** Gadgetbridge's `notify` message, sent through the companion
   app's UART service, buzzes twice and goes to the open app. The watch keeps the latest 5, from the
   phone and from apps, and the notifications app lists them newest first: a tap reads one in full

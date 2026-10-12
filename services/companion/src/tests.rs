@@ -205,7 +205,7 @@ fn a_changed_theme_is_reported_as_custom_and_reads_back() {
 
 #[test]
 fn every_setting_has_a_key_the_wasp_os_companion_already_knows_where_it_can() {
-    let line = br#"{"t":"settings","blank_after":30,"clock_24h":false,"units":"Imperial","step_goal":8000,"always_on":true,"chimes":2,"do_not_disturb":true}"#;
+    let line = br#"{"t":"settings","blank_after":30,"clock_24h":false,"units":"Imperial","step_goal":8000,"always_on":true,"chimes":2,"do_not_disturb":true,"bluetooth":false,"updates":false,"wake_on_touch":2,"alarms_in_dnd":false}"#;
     let Ok(Message::Settings(change)) = parse_line(line) else {
         panic!();
     };
@@ -217,6 +217,10 @@ fn every_setting_has_a_key_the_wasp_os_companion_already_knows_where_it_can() {
     assert_eq!(change.value(Setting::AlwaysOnScreen), Some(1));
     assert_eq!(change.value(Setting::Chimes), Some(2));
     assert_eq!(change.value(Setting::DoNotDisturb), Some(1));
+    assert_eq!(change.value(Setting::Bluetooth), Some(0));
+    assert_eq!(change.value(Setting::AllowsUpdates), Some(0));
+    assert_eq!(change.value(Setting::WakeOnTouch), Some(2));
+    assert_eq!(change.value(Setting::AlarmsInDoNotDisturb), Some(0));
     assert_eq!(change.value(Setting::Brightness), None);
 }
 
@@ -225,8 +229,9 @@ fn one_bad_setting_refuses_the_whole_message() {
     let too_short = br#"{"t":"settings","brightness":3,"blank_after":1}"#;
     let unknown_units = br#"{"t":"settings","units":"Furlongs"}"#;
     let huge = br#"{"t":"settings","step_goal":99999999999}"#;
+    let unknown_wake = br#"{"t":"settings","wake_on_touch":3}"#;
 
-    for line in [&too_short[..], &unknown_units[..], &huge[..]] {
+    for line in [&too_short[..], &unknown_units[..], &huge[..], &unknown_wake[..]] {
         assert_eq!(parse_line(line), Err(MessageError::BadSetting));
     }
 }
@@ -243,7 +248,8 @@ fn the_report_gives_every_setting_and_reads_back_the_same() {
     assert!(report.len() < MOST_LINE_BYTES);
     assert!(report.contains("\"units\":\"Imperial\""), "{report}");
     assert!(report.contains("\"clock_24h\":true"), "{report}");
-    assert!(report.ends_with("\"do_not_disturb\":false}\n"), "{report}");
+    assert!(report.contains("\"do_not_disturb\":false"), "{report}");
+    assert!(report.ends_with("\"alarms_in_dnd\":true}\n"), "{report}");
     let Ok(Message::Settings(reread)) = parse_line(report.trim_end().as_bytes()) else {
         panic!("{report}");
     };

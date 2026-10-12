@@ -182,7 +182,7 @@ function carry_out(effect: Effect) {
       heart_rate_status.value = 0;
       break;
     case "set_bluetooth":
-      is_bluetooth_enabled.value = effect.on as boolean;
+      change_setting("bluetooth", effect.on ? 1 : 0);
       break;
     case "reset_step_trip":
       step_history.value = { ...step_history.peek(), trip: 0 };
@@ -231,6 +231,7 @@ export function clear_notifications() {
 function change_setting(key: string, value: number) {
   if (key === "brightness") brightness.value = value;
   else if (key === "do_not_disturb") is_do_not_disturb.value = value !== 0;
+  else if (key === "bluetooth") is_bluetooth_enabled.value = value !== 0;
   else if (key in settings) {
     const setting = settings[key as keyof typeof settings];
     setting.value = (typeof setting.peek() === "boolean" ? value !== 0 : value) as never;

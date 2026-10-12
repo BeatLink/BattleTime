@@ -2,11 +2,25 @@
 // From InfiniTime: one list of what can be changed, each opening its own screen of choices, the
 // display timeout, the 12 or 24 hour clock, the step goal and the hourly chimes.
 // From wasp-os: brightness in three steps, units, and do not disturb.
+// Also: what touch wakes the screen, whether alarms ring in do not disturb, Bluetooth until the next
+// restart, and whether the watch takes firmware updates.
 // The theme is one of the watch's presets; the companion app can also set colours of the user's own.
 // Every change goes to the watch's settings with `set_setting`, so the companion app sees it too.
 
 import { computed } from "@preact/signals";
-import { brightness, define_app, type Color, go, is_do_not_disturb, range, set_do_not_disturb, set_setting, settings } from "neotime";
+import {
+  brightness,
+  define_app,
+  type Color,
+  go,
+  is_bluetooth_enabled,
+  is_do_not_disturb,
+  range,
+  set_bluetooth,
+  set_do_not_disturb,
+  set_setting,
+  settings,
+} from "neotime";
 import { icons } from "neotime/icons";
 import { Button, Column, Grid, Icon, Label, Row, Screen, Scroll, Switch } from "neotime/widgets";
 
@@ -20,6 +34,8 @@ const TIMEOUTS_IN_SECONDS = [5, 10, 15, 30, 60, 120];
 const TIMEOUT_COUNT = 6;
 
 const CHIME_NAMES = ["Off", "Every hour", "Every half hour"];
+
+const WAKE_NAMES = ["Button only", "Tap", "Double tap"];
 
 /** The watch's preset themes in its own order, each shown by its background and accent colours. */
 const THEME_NAMES = ["Dark", "Light", "Ocean", "Forest", "Sunset", "Contrast"];
@@ -40,6 +56,8 @@ const brightness_name = computed(() => BRIGHTNESS_NAMES[brightness.value - 1]);
 const timeout_text = computed(() => `${settings.screen_timeout_seconds.value} s`);
 
 const chime_name = computed(() => CHIME_NAMES[settings.chimes.value]);
+
+const wake_name = computed(() => WAKE_NAMES[settings.wake_on_touch.value]);
 
 const theme_name = computed(() => (settings.theme.value < 0 ? "Own" : THEME_NAMES[settings.theme.value]));
 
@@ -73,6 +91,18 @@ export function toggle_always_on_screen() {
 
 export function toggle_do_not_disturb() {
   set_do_not_disturb(!is_do_not_disturb.value);
+}
+
+export function toggle_alarms_in_do_not_disturb() {
+  set_setting("alarms_in_do_not_disturb", settings.alarms_in_do_not_disturb.value ? 0 : 1);
+}
+
+export function toggle_bluetooth() {
+  set_bluetooth(!is_bluetooth_enabled.value);
+}
+
+export function toggle_updates() {
+  set_setting("allows_updates", settings.allows_updates.value ? 0 : 1);
 }
 
 // ============================================================================
@@ -110,12 +140,20 @@ function SettingsList() {
         <ChoiceRow title="Brightness" value={brightness_name.value} onClick={() => go("brightness")} />
         <ChoiceRow title="Screen off" value={timeout_text.value} onClick={() => go("timeout")} />
         <SwitchRow title="Always on" value={settings.always_on_screen.value} onChange={toggle_always_on_screen} />
+        <ChoiceRow title="Wake" value={wake_name.value} onClick={() => go("wake")} />
         <SwitchRow title="24 hour clock" value={settings.uses_24_hour_clock.value} onChange={toggle_24_hour_clock} />
         <SwitchRow title="Metric units" value={settings.uses_metric_units.value} onChange={toggle_metric_units} />
         <ChoiceRow title="Step goal" value={`${settings.step_goal.value}`} onClick={() => go("step_goal")} />
         <ChoiceRow title="Chimes" value={chime_name.value} onClick={() => go("chimes")} />
         <SwitchRow title="Do not disturb" value={is_do_not_disturb.value} onChange={toggle_do_not_disturb} />
+        <SwitchRow
+          title="Alarms in DND"
+          value={settings.alarms_in_do_not_disturb.value}
+          onChange={toggle_alarms_in_do_not_disturb}
+        />
         <ChoiceRow title="Theme" value={theme_name.value} onClick={() => go("theme")} />
+        <SwitchRow title="Bluetooth" value={is_bluetooth_enabled.value} onChange={toggle_bluetooth} />
+        <SwitchRow title="Updates" value={settings.allows_updates.value} onChange={toggle_updates} />
       </Scroll>
     </Screen>
   );
@@ -201,6 +239,23 @@ function Chimes() {
   );
 }
 
+function Wake() {
+  return (
+    <Screen padding={8} gap={6}>
+      <Label color="muted">Wake the screen with</Label>
+      <Column grow={1} gap={6} justify="center">
+        {range(3).map((place) => (
+          <Choice
+            label={WAKE_NAMES[place]}
+            chosen={settings.wake_on_touch.value === place}
+            onClick={() => set_setting("wake_on_touch", place)}
+          />
+        ))}
+      </Column>
+    </Screen>
+  );
+}
+
 function ThemeChoice(props: { place: number }) {
   const place = props.place;
   return (
@@ -239,6 +294,7 @@ export default define_app({
     timeout: Timeout,
     step_goal: StepGoal,
     chimes: Chimes,
+    wake: Wake,
     theme: Theme,
   },
   permissions: ["settings"],

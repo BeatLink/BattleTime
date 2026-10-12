@@ -69,6 +69,8 @@ pub struct Outcome {
     /// Notifications to send on the control point, in order.
     pub notifications: Vec<Notification, 2>,
     pub reset_requested: bool,
+    /// The watch refused to start because the wearer turned updates off.
+    pub refused_while_off: bool,
 }
 
 impl Outcome {
@@ -88,6 +90,9 @@ impl Outcome {
 
     /// Why the watch refused a step, read from the first response that was not a success.
     pub fn failure(&self) -> Option<Failure> {
+        if self.refused_while_off {
+            return Some(Failure::TurnedOff);
+        }
         self.notifications
             .iter()
             .filter(|notification| notification.first() == Some(&command::RESPONSE))
@@ -120,6 +125,7 @@ pub enum Failure {
     TooLarge,
     Damaged,
     StepFailed,
+    TurnedOff,
 }
 
 impl Failure {
@@ -141,6 +147,7 @@ impl Failure {
             Failure::TooLarge => "Image too large",
             Failure::Damaged => "Checksum did not match",
             Failure::StepFailed => "Could not store image",
+            Failure::TurnedOff => "Updates are off",
         }
     }
 }
@@ -212,6 +219,7 @@ pub struct LegacyDfu<Targets: UpdateTargets> {
     init_packet: Vec<u8, LARGEST_INIT_PACKET>,
     expected_crc: u16,
     write_buffer: Vec<u8, WRITE_BUFFER_SIZE>,
+    allows_updates: bool,
 }
 
 impl<Targets: UpdateTargets> LegacyDfu<Targets> {
@@ -227,7 +235,13 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
             init_packet: Vec::new(),
             expected_crc: 0,
             write_buffer: Vec::new(),
+            allows_updates: true,
         }
+    }
+
+    /// Whether a new update may start; one already running carries on.
+    pub fn set_allows_updates(&mut self, allows_updates: bool) {
+        self.allows_updates = allows_updates;
     }
 
     pub fn is_updating(&self) -> bool {
@@ -303,6 +317,7 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
                 Outcome {
                     notifications: Vec::new(),
                     reset_requested: true,
+                    refused_while_off: false,
                 }
             }
             command::REPORT_RECEIVED_IMAGE_SIZE => {
@@ -317,6 +332,12 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
     fn start(&mut self, parameters: &[u8]) -> Outcome {
         if self.state != State::Idle {
             return Outcome::response(command::START_DFU, result::INVALID_STATE);
+        }
+        if !self.allows_updates {
+            return Outcome {
+                refused_while_off: true,
+                ..Outcome::response(command::START_DFU, result::NOT_SUPPORTED)
+            };
         }
         self.kind = match parameters.first() {
             Some(&image_type::APPLICATION) => ImageKind::Firmware,
@@ -404,6 +425,7 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
             Ok(()) => Outcome {
                 notifications: Vec::new(),
                 reset_requested: true,
+                refused_while_off: false,
             },
             Err(_) => Outcome::response(command::ACTIVATE_IMAGE_AND_RESET, result::OPERATION_FAILED),
         }

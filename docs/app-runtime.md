@@ -497,7 +497,8 @@ the settings' `screen_timeout_seconds`, `always_on_screen`, `chimes` and `theme`
 followed by their lists of `id`, `app`, `title`, `body` and `time`, the step history's `trip`,
 its day count and list of each day's `total`, and its hour count and list of each hour's `steps`,
 which share `steps_today`'s bit, and `firmware_version`, `started_at`, `free_storage_kilobytes`
-and `reset_reason`.
+and `reset_reason`, then the settings' `allows_updates`, `wake_on_touch` and
+`alarms_in_do_not_disturb`, which share the other settings' bit.
 `read system element` reads a list's elements through `SystemValues::read_element`, or
 `read_element_text` for the names, ids and notification texts. The location, artist, track,
 instruction, firmware version and reset reason are text: the system hands them

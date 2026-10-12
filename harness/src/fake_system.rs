@@ -184,6 +184,9 @@ impl FakeSystem {
                 now - 3 * HOUR_IN_MILLISECONDS - 25 * MINUTE_IN_MILLISECONDS,
             ),
             (FreeStorageKilobytes, 2840),
+            (AllowsUpdates, 1),
+            (WakeOnTouch, 1),
+            (AlarmsInDoNotDisturb, 1),
         ];
         for (value, number) in starting_values {
             system.set(value, number);

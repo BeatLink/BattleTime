@@ -61,7 +61,7 @@ use crate::{
     battery, clock,
     diagnostics::{self, Counter},
     help, motion, packages, phone, settings, storage, system_values,
-    touch::TOUCHES,
+    touch::{self, TOUCHES},
     vibration, SharedDisplay,
 };
 
@@ -87,6 +87,13 @@ const LATEST_CHIME_IN_MILLISECONDS: Value = MILLISECONDS_PER_MINUTE;
 
 fn is_do_not_disturb() -> bool {
     settings::current().is_on(Setting::DoNotDisturb)
+}
+
+/// What the touch panel listens for while the screen is dark.
+fn listening_while_dark() -> touch::Listening {
+    touch::Listening::WhileDark {
+        wake_on_touch: settings::current().get(Setting::WakeOnTouch),
+    }
 }
 
 fn screen_timeout() -> Duration {
@@ -210,7 +217,6 @@ impl SystemValues for WatchSystem {
             SystemValue::StepTrip => motion::read_history(StepHistory::trip_steps) as Value,
             SystemValue::StepDayCount => DAYS_REMEMBERED as Value,
             SystemValue::StepHourCount => (DAYS_REMEMBERED * HOURS_PER_DAY) as Value,
-            SystemValue::IsBluetoothEnabled => 1,
             SystemValue::IsPhoneConnected => phone::is_connected() as Value,
             SystemValue::Brightness => self.brightness as Value,
             SystemValue::NextAlarm => neotime_runtime::NONE,
@@ -311,7 +317,12 @@ impl System for WatchSystem {
         {
             self.notifications_changed = true;
         }
-        let vibration = haptics::vibration_for_effect(effect.kind, effect.number(0), is_do_not_disturb());
+        let current = settings::current();
+        let silence = haptics::Silence::from_settings(
+            current.is_on(Setting::DoNotDisturb),
+            current.is_on(Setting::AlarmsInDoNotDisturb),
+        );
+        let vibration = haptics::vibration_for_effect(effect.kind, effect.number(0), silence);
         if vibration.is_some() {
             vibration::request(vibration);
             return;
@@ -339,6 +350,7 @@ impl System for WatchSystem {
                 settings::set_by_name(Setting::DoNotDisturb.name(), effect.number(0))
             }
             EffectKind::ResetStepTrip => motion::reset_trip(),
+            EffectKind::SetBluetooth => settings::set_by_name(Setting::Bluetooth.name(), effect.number(0)),
             _ => {}
         }
     }
@@ -552,6 +564,9 @@ impl Shell {
             app_settings::tell_app_about_changes(host, changed, clock::utc_now(), &mut self.system);
         }
         if !self.lit {
+            if changed & Setting::WakeOnTouch.bit() != 0 {
+                touch::listen_for(listening_while_dark());
+            }
             self.save_settings();
         }
     }
@@ -782,6 +797,7 @@ impl Shell {
             hide_status();
         }
         self.lit = false;
+        touch::listen_for(listening_while_dark());
         self.dimmed = settings::current().is_on(Setting::AlwaysOnScreen);
         if self.dimmed {
             self.backlight.dim();
@@ -804,6 +820,7 @@ impl Shell {
 
     fn turn_screen_on(&mut self) {
         self.lit = true;
+        touch::listen_for(touch::Listening::Everything);
         self.display.lock(|display| {
             let mut display = display.borrow_mut();
             if self.dimmed {
@@ -1086,7 +1103,7 @@ pub async fn run_shell(
                     continue;
                 }
                 if !shell.lit {
-                    if matches!(touch, Touch::Release { .. }) {
+                    if app_settings::touch_wakes_screen(&settings::current(), &touch) {
                         shell.turn_screen_on();
                     }
                     continue;
