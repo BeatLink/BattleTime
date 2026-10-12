@@ -135,3 +135,7 @@ pub enum ButtonPress {
     Press,
     LongPress,
 }
+
+#[cfg(test)]
+#[path = "events_tests.rs"]
+mod events_tests;

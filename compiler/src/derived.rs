@@ -361,3 +361,7 @@ impl<'a> Compiler<'a> {
         Ok(variable)
     }
 }
+
+#[cfg(test)]
+#[path = "derived_tests.rs"]
+mod derived_tests;

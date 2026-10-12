@@ -327,9 +327,11 @@ impl HostInterface {
             opcode::LE_SET_RANDOM_ADDRESS => {
                 if self.link_layer.is_advertising() {
                     self.complete_with_status(command, status::COMMAND_DISALLOWED);
+                } else if parameters.len() < ADDRESS_LENGTH {
+                    self.complete_with_status(command, status::INVALID_PARAMETERS);
                 } else {
                     let mut address = [0; ADDRESS_LENGTH];
-                    address.copy_from_slice(&parameters[..ADDRESS_LENGTH.min(parameters.len())]);
+                    address.copy_from_slice(&parameters[..ADDRESS_LENGTH]);
                     self.random_address = Some(address);
                     self.refresh_own_address();
                     self.complete_with_status(command, status::SUCCESS);
@@ -707,3 +709,7 @@ pub fn serialise_host_packet<Packet: bt_hci::transport::PacketToController>(
     bt_hci::transport::PacketToController::write_hci(&WithIndicator::new(packet), &mut writer).ok()?;
     Some(size)
 }
+
+#[cfg(test)]
+#[path = "host_interface_tests.rs"]
+mod host_interface_tests;

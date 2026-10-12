@@ -44,6 +44,16 @@ Prefer a standard helper over a hand-rolled trick, for example `embassy_futures:
 - Name tests after the behaviour they check: `splits_where_memory_wraps`,
   `cancelling_a_vibration_turns_the_motor_off`.
 
+## Tests and coverage
+
+- Every change ships with tests for what it adds or changes, in the same commit.
+- `tools/check_coverage.sh` runs every host test with coverage and fails below the floors: the Rust
+  one in the script, the TypeScript ones in `vite.config.ts`. CI runs it on every push and pull
+  request.
+- When a change raises coverage, raise the floor in the same change, so it never slips back.
+- The firmware, bootloader and reloaders build only for the watch; keep their logic in workspace
+  crates where tests can reach it, and test the rest in the Renode suites under `tests/emulator`.
+
 ## Formatting and checks
 
 - Run `cargo fmt` (maximum line width 110, from `rustfmt.toml`) and `cargo test` before a commit.

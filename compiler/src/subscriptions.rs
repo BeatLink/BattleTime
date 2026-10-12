@@ -450,3 +450,7 @@ fn check_period(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "subscriptions_tests.rs"]
+mod subscriptions_tests;

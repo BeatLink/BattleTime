@@ -153,6 +153,8 @@
           packages = [
             rust
             pkgs.cargo-binutils
+            pkgs.cargo-llvm-cov
+            pkgs.nodejs_24
             pkgs.pkg-config
             pkgs.probe-rs-tools
             pkgs.python3
@@ -167,6 +169,7 @@
             echo "  cargo run -p neotime-simulator -- --demo               run the built-in stopwatch app"
             echo "  tools/build_images.sh                                  build the bootloader, firmware and reloaders into dist/"
             echo "  nix run .#infinisim                                    open InfiniTime's simulator to compare"
+            echo "  tools/check_coverage.sh                                run every test with coverage and check the floors"
             echo "  nix flake check                                        run all of the above as checks"
           '';
         };

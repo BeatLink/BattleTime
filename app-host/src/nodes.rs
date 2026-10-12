@@ -594,3 +594,7 @@ pub fn is_mapped(kind: WidgetKind) -> bool {
             | Radio
     )
 }
+
+#[cfg(test)]
+#[path = "nodes_tests.rs"]
+mod nodes_tests;

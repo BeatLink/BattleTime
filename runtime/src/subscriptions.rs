@@ -345,3 +345,7 @@ fn check_subscription(image: &AppImage, subscription: &Subscription) -> Result<(
 
 /// Kept so the time-unit numbering of `ClockChange` follows `TimeUnit`.
 const _: () = assert!(TimeUnit::Minute as u8 == 0 && TimeUnit::Hour as u8 == 1 && TimeUnit::Day as u8 == 2);
+
+#[cfg(test)]
+#[path = "subscriptions_tests.rs"]
+mod subscriptions_tests;

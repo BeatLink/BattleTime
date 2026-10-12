@@ -22,5 +22,14 @@ export default defineConfig({
     environment: "jsdom",
     include: ["apps/**/*.test.tsx", "faces/**/*.test.tsx", "sdk/**/*.test.tsx"],
     exclude: ["**/node_modules/**"],
+    coverage: {
+      provider: "v8",
+      include: ["apps/**/*.tsx", "faces/**/*.tsx", "sdk/neotime/src/**"],
+      exclude: ["**/*.test.tsx", "**/tests/**"],
+      reporter: ["text-summary", "text", "lcov"],
+      reportsDirectory: "target/coverage-typescript",
+      // Raise these whenever coverage rises, so it never slips back.
+      thresholds: { lines: 93, statements: 93, branches: 88, functions: 87 },
+    },
   },
 });

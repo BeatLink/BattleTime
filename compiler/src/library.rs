@@ -301,3 +301,7 @@ pub fn build_library() -> Result<Vec<u8>, String> {
     crate::check_image(&image)?;
     Ok(image)
 }
+
+#[cfg(test)]
+#[path = "library_tests.rs"]
+mod library_tests;

@@ -256,3 +256,7 @@ impl Interface for SimulatedPanel {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "panel_tests.rs"]
+mod panel_tests;

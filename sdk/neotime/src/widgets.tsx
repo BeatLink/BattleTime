@@ -483,6 +483,26 @@ export function Scroll(props: FlexProps) {
   );
 }
 
+/** A scrolling list of rows, drawn in the browser like a `Scroll`. */
+export function List(props: FlexProps) {
+  return (
+    <div
+      data-widget="list"
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        gap: props.gap !== undefined ? `${props.gap}px` : undefined,
+        overflowY: "auto",
+        minHeight: 0,
+        ...common_style(props),
+      }}
+    >
+      {props.children}
+    </div>
+  );
+}
+
 // ============================================================================
 // Showing things
 // ============================================================================

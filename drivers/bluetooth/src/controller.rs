@@ -276,3 +276,7 @@ impl<RadioDriver: Radio> Transport for BluetoothController<'_, RadioDriver> {
 }
 
 const _: () = assert!(RADIO_BUFFER_LENGTH >= 2 + 255);
+
+#[cfg(test)]
+#[path = "controller_tests.rs"]
+mod controller_tests;

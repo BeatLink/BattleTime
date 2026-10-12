@@ -72,3 +72,7 @@ impl OutputPin for MotorPin {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "hardware_tests.rs"]
+mod hardware_tests;

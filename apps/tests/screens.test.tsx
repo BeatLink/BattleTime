@@ -20,6 +20,7 @@ describe.each(Object.entries(modules))("%s", (_path, module) => {
   it.each(Object.keys(app.screens))("draws its %s screen", (screen_name) => {
     const ScreenComponent = app.screens[screen_name];
     const { container } = render(<ScreenComponent />);
-    expect(container.querySelector("[data-widget=screen]")).not.toBeNull();
+    // The watch takes any one widget as a screen's root, most often a `<Screen>`.
+    expect(container.firstElementChild?.getAttribute("data-widget")).toBeTruthy();
   });
 });

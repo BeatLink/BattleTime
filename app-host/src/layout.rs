@@ -523,3 +523,7 @@ pub fn content_height(nodes: &[Node], index: usize) -> i32 {
         .sum();
     children + gaps(count, settings.gap) + 2 * settings.padding
 }
+
+#[cfg(test)]
+#[path = "layout_tests.rs"]
+mod layout_tests;

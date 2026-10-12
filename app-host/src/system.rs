@@ -149,3 +149,7 @@ impl<Values: SystemValues + ?Sized> SystemValues for Clocked<'_, Values> {
         self.values.random_number()
     }
 }
+
+#[cfg(test)]
+#[path = "system_tests.rs"]
+mod system_tests;

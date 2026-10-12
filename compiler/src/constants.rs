@@ -1031,3 +1031,7 @@ fn library_call_constant(module: LibraryModule, name: &str, arguments: &[Constan
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "constants_tests.rs"]
+mod constants_tests;

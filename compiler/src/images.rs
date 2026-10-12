@@ -266,3 +266,7 @@ fn library_icon_picture(index: usize) -> Result<Picture, String> {
         .cloned()
         .ok_or_else(|| format!("the shared library has no icon {index}"))
 }
+
+#[cfg(test)]
+#[path = "images_tests.rs"]
+mod images_tests;
