@@ -9,11 +9,11 @@
 
 extern crate alloc;
 
-use alloc::{string::String, vec::Vec};
+use alloc::{boxed::Box, string::String, vec::Vec};
 use core::fmt::Write;
 
 use littlefs_rust::{Error, FileType, Filesystem, Storage};
-use neotime_runtime::{verify, AppImage, AppKind, ImageError};
+use neotime_runtime::{verify_with, AppImage, AppKind, CheckedFunctions, ImageError};
 use neotime_storage::APPS_DIRECTORY;
 
 pub mod commands;
@@ -129,8 +129,13 @@ pub fn app_file(id: &str, file: &str) -> AppPath {
 /// The checks the app host makes before it runs an image.
 fn check_image(bytes: &[u8]) -> Result<AppImage<'_>, PackageError> {
     let image = AppImage::parse(bytes).map_err(PackageError::BadImage)?;
-    verify(&image).map_err(PackageError::BadImage)?;
+    verify_with(&image, &mut checked_functions_on_the_heap()).map_err(PackageError::BadImage)?;
     Ok(image)
+}
+
+/// The verifier's 800-byte table, on the heap, since commands run with little stack to spare.
+fn checked_functions_on_the_heap() -> Box<CheckedFunctions> {
+    Box::new(CheckedFunctions::NONE)
 }
 
 /// Checks an app or face image for the folder `id`.

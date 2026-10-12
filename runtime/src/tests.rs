@@ -479,6 +479,16 @@ fn stopwatch_image_passes_verification() {
 }
 
 #[test]
+fn verifying_with_a_used_table_gives_the_same_answer() {
+    let stopwatch = stopwatch();
+    let image = AppImage::parse(&stopwatch.bytes).unwrap();
+    let mut functions = crate::CheckedFunctions::NONE;
+
+    assert_eq!(crate::verify_with(&image, &mut functions), Ok(()));
+    assert_eq!(crate::verify_with(&image, &mut functions), Ok(()));
+}
+
+#[test]
 fn stopwatch_shows_the_time_since_it_started() {
     let stopwatch = stopwatch();
     let image = AppImage::parse(&stopwatch.bytes).unwrap();

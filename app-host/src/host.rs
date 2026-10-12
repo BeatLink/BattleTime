@@ -10,10 +10,10 @@ use neotime_runtime::{
     events::{ButtonPress, EventKind, SwipeDirection},
     state::SaveBufferFull,
     subscriptions::{Subscription, SubscriptionKind},
-    verify,
+    verify_with,
     widgets::{Property, PropertyValue as ValueKind, MOST_WIDGETS},
-    AppImage, AppKind, AppState, Bindings, EffectKind, Failure, ImageError, Inputs, Interpreter,
-    PropertySource, SystemValue, SystemValues, Theme, Value, WidgetKind, WidgetTree, NONE,
+    AppImage, AppKind, AppState, Bindings, CheckedFunctions, EffectKind, Failure, ImageError, Inputs,
+    Interpreter, PropertySource, SystemValue, SystemValues, Theme, Value, WidgetKind, WidgetTree, NONE,
 };
 use rlvgl_core::widget::Rect;
 
@@ -251,7 +251,8 @@ impl<'image> AppHost<'image> {
         system: &mut impl System,
     ) -> Result<Self, OpenError> {
         let image = AppImage::parse(image_bytes)?;
-        verify(&image)?;
+        // The verifier's 800-byte table goes on the heap too, which the watch's stack has no room for.
+        verify_with(&image, &mut Box::new(CheckedFunctions::NONE))?;
         // Each big part is boxed empty and filled in place, so none is ever built on the stack.
         let mut state = Box::new(AppState::EMPTY);
         state.load_layout(&image)?;
@@ -332,7 +333,7 @@ impl<'image> AppHost<'image> {
         system: &mut impl System,
     ) -> Result<(), OpenError> {
         let library = AppImage::parse(library_bytes)?;
-        verify(&library)?;
+        verify_with(&library, &mut Box::new(CheckedFunctions::NONE))?;
         if library.kind != AppKind::Library {
             return Err(OpenError::NotALibrary);
         }

@@ -34,6 +34,13 @@ const MOST_LOOPS: usize = 16;
 /// Checks every function, expression and handler in the image.
 pub fn verify(image: &AppImage) -> Result<(), ImageError> {
     let mut functions = CheckedFunctions::NONE;
+    verify_with(image, &mut functions)
+}
+
+/// Checks the image as `verify` does, keeping its 800-byte table in `functions`, which a caller with
+/// little stack can put on the heap.
+pub fn verify_with(image: &AppImage, functions: &mut CheckedFunctions) -> Result<(), ImageError> {
+    *functions = CheckedFunctions::NONE;
     for index in 0..image.function_count() {
         let block = CodeBlock::Function(index);
         let bad_header = ImageError::BadCode {
@@ -129,8 +136,8 @@ struct CodeSummary {
     touches_the_app: bool,
 }
 
-/// What the functions checked so far do, by number.
-struct CheckedFunctions {
+/// What the functions checked so far do, by number; `verify_with` fills it.
+pub struct CheckedFunctions {
     acts_like_handler: [u64; MOST_FUNCTIONS / 64],
     call_depth: [u8; MOST_FUNCTIONS],
     locals_needed: [u8; MOST_FUNCTIONS],
@@ -138,7 +145,7 @@ struct CheckedFunctions {
 }
 
 impl CheckedFunctions {
-    const NONE: CheckedFunctions = CheckedFunctions {
+    pub const NONE: CheckedFunctions = CheckedFunctions {
         acts_like_handler: [0; MOST_FUNCTIONS / 64],
         call_depth: [0; MOST_FUNCTIONS],
         locals_needed: [0; MOST_FUNCTIONS],

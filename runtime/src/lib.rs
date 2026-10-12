@@ -37,7 +37,7 @@ pub use state::AppState;
 pub use theme::{
     preset_matching, preset_named, ColorValue, PresetTheme, Theme, ThemeColor, DEFAULT_THEME, PRESET_THEMES,
 };
-pub use verifier::verify;
+pub use verifier::{verify, verify_with, CheckedFunctions};
 pub use widgets::{Property, PropertySource, Widget, WidgetKind, WidgetTree};
 
 #[cfg(test)]
