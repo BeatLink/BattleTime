@@ -58,10 +58,10 @@ Start A Watch Running InfiniTime's Bootloader With The Reloader As Its App
     Clear The Alive Marker
 
 NeoTime Should Be Installed And Running
-    [Documentation]           The update slot is not checked: the swap leaves the old internal flash there.
+    [Documentation]           The reloader installs the recovery firmware as the firmware too; the update slot is not checked, since the swap leaves the old internal flash there.
     Flash Should Hold File    0x0    ${BOOTLOADER_BIN}
-    Flash Should Hold File    ${RECOVERY_SLOT}    ${FIRMWARE_BIN}
-    Flash Should Hold File    ${FIRMWARE_START}    ${FIRMWARE_BIN}
+    Flash Should Hold File    ${RECOVERY_SLOT}    ${RECOVERY_BIN}
+    Flash Should Hold File    ${FIRMWARE_START}    ${RECOVERY_BIN}
     Firmware Should Be Alive
 
 Remember The Old Start Of Flash

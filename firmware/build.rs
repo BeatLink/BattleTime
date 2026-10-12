@@ -44,5 +44,13 @@ fn main() {
         .map_or(0, |elapsed| elapsed.as_millis());
     println!("cargo:rustc-env=NEOTIME_BUILD_TIME_MS={build_time}");
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_WASP_OS_REHEARSAL");
+
+    // The rehearsals and the recovery firmware leave out the shell and everything only it uses.
+    println!("cargo:rustc-check-cfg=cfg(with_shell)");
+    let rehearsal = env::var_os("CARGO_FEATURE_WASP_OS_REHEARSAL").is_some();
+    let recovery = env::var_os("CARGO_FEATURE_RECOVERY").is_some();
+    if !rehearsal && !recovery {
+        println!("cargo:rustc-cfg=with_shell");
+    }
     println!("cargo:rerun-if-changed=../boot/src/lib.rs");
 }

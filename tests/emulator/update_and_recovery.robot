@@ -40,7 +40,7 @@ A Firmware That Never Confirms Itself Is Rolled Back
 Holding The Button Through Two Resets Installs The Recovery Firmware
     Create A PineTime
     Execute Command           sysbus LoadBinary @${BOOTLOADER_BIN} 0x0
-    Execute Command           sysbus LoadBinary @${FIRMWARE_BIN} ${RECOVERY_SLOT}
+    Execute Command           sysbus LoadBinary @${RECOVERY_BIN} ${RECOVERY_SLOT}
     # Nothing in the firmware slot: a watch whose firmware was lost.
     Clear The Alive Marker
 
@@ -49,7 +49,7 @@ Holding The Button Through Two Resets Installs The Recovery Firmware
     Run For                   6
     Execute Command           ${BUTTON} Release
     Run For                   ${SWAP_SECONDS}
-    Flash Should Hold File    ${FIRMWARE_START}    ${FIRMWARE_BIN}
+    Flash Should Hold File    ${FIRMWARE_START}    ${RECOVERY_BIN}
     Firmware Should Be Alive
 
 Without A Recovery Firmware The Hold Starts The Old Firmware

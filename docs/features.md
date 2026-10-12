@@ -57,7 +57,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **A bad update rolls itself back.** A new firmware runs on trial until it confirms itself; if it
   never does, the bootloader puts the previous firmware back.
 - **A recovery firmware** kept in external flash, installed by holding the side button at start.
-  A firmware update can also replace the recovery firmware.
+  It is a small build that only shows its status and takes a new firmware over Bluetooth. A
+  firmware update can also replace it.
 - **The side button stops a stuck watch.** The firmware feeds the watchdog only while the button
   is up, so holding it restarts the watch.
 - **Status on screen.** The status page shows the firmware's mode in plain words and a colour:

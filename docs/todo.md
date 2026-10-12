@@ -82,10 +82,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   5 second watchdog and enters its update mode on a held button.
 - [ ] **Run the DFU service against more clients:** wasp-os's `dfu.py` works on the watch; the
   companion app and Gadgetbridge are next.
-- [ ] **A smaller recovery firmware.** The recovery slot holds the full firmware, now about 317 KB
-  with the app host, and the reloader carries it twice, so `tools/build_images.sh` fails at the
-  reloader. A build with only the screen, Bluetooth and DFU would fit, and is what the `recovery`
-  feature should build.
 - [ ] **Async flash in the firmware.** Flash writes block the Bluetooth host for up to a sector
   erase at a time, because the display shares the SPI bus and its driver is blocking.
 - [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.

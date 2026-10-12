@@ -7,7 +7,8 @@
 //! in by `tools/build_watch_apps.sh`; a phone sets the clock through the Current Time service.
 //!
 //! The `wasp-os-rehearsal` feature builds it as an app for wasp-os instead, which touches no flash;
-//! see docs/updates.md.
+//! see docs/updates.md. The `recovery` feature builds the small recovery firmware: the status page,
+//! Bluetooth and updates, without the shell.
 
 #![no_std]
 #![no_main]
@@ -57,31 +58,31 @@ use trouble_host::prelude::*;
 #[cfg_attr(feature = "wasp-os-storage-rehearsal", path = "storage/storage_rehearsal.rs")]
 mod storage;
 
-// The rehearsals run under wasp-os without the shell, which leaves these unused there.
-#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+// The rehearsals and the recovery firmware run without the shell, which leaves these unused there.
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod backlight;
-#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod battery;
-#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod built_in_apps;
 mod clock;
 mod diagnostics;
-#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod settings;
-#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod help;
-#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod shell;
 // Under wasp-os the firmware is never rolled back or installed as recovery.
 #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod status;
-#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod motion;
-#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod system_values;
-#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod touch;
-#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod vibration;
 
 // ============================================================================
@@ -100,9 +101,9 @@ const DEVICE_NAME: &str = "NeoTime";
 const WATCHDOG_FEED_INTERVAL: Duration = Duration::from_millis(1000);
 const DISPLAY_COMMAND_BUFFER_SIZE: usize = 512;
 /// The shell's share of the heap, which the open app's widgets and text are allocated from.
-#[cfg(not(feature = "wasp-os-rehearsal"))]
+#[cfg(with_shell)]
 const UI_HEAP_SIZE: usize = 20 * 1024;
-#[cfg(feature = "wasp-os-rehearsal")]
+#[cfg(not(with_shell))]
 const UI_HEAP_SIZE: usize = 0;
 const HEAP_SIZE: usize = storage::HEAP_SIZE + UI_HEAP_SIZE;
 /// How often the button is read, for presses and for feeding the watchdog.
@@ -111,7 +112,7 @@ const BUTTON_POLL_INTERVAL: Duration = Duration::from_millis(20);
 const LONG_PRESS: Duration = Duration::from_millis(400);
 
 type SpiBus = Mutex<NoopRawMutex, RefCell<Spim<'static>>>;
-#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
+#[cfg_attr(not(with_shell), allow(dead_code))]
 type I2cBus = embassy_sync::mutex::Mutex<NoopRawMutex, twim::Twim<'static>>;
 /// One user of the I2C bus the touch panel and the accelerometer share.
 type I2cDeviceOnBus = I2cDevice<'static, NoopRawMutex, twim::Twim<'static>>;
@@ -208,7 +209,7 @@ async fn main(spawner: Spawner) {
     screen.set_mode(mode);
 
     storage::leave_breadcrumb(stage::STORAGE_READY);
-    #[cfg(not(feature = "wasp-os-rehearsal"))]
+    #[cfg(with_shell)]
     {
         // The touch panel and the accelerometer share one I2C bus; 32 bytes holds the largest write either makes.
         static I2C_BUFFER: StaticCell<[u8; 32]> = StaticCell::new();
@@ -243,7 +244,7 @@ async fn main(spawner: Spawner) {
         spawner.spawn(vibration::run_vibrator(Output::new(chip.P0_16, Level::High, OutputDrive::Standard)).unwrap());
         spawner.spawn(shell::run_shell(screen.display, backlight, files).unwrap());
     }
-    #[cfg(feature = "wasp-os-rehearsal")]
+    #[cfg(not(with_shell))]
     let _unused = (backlight, files);
     let controller = neotime_bluetooth::start(
         neotime_bluetooth::RadioPeripherals {

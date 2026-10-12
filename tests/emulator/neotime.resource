@@ -15,6 +15,7 @@ ${BATTERY}                gpio0.battery
 ${PLATFORM}               @${EMULATOR}/scripts/pinetime.resc
 ${BOOTLOADER_BIN}         ${DIST}/bootloader.bin
 ${FIRMWARE_BIN}           ${DIST}/firmware.bin
+${RECOVERY_BIN}           ${DIST}/recovery.bin
 
 # From boot/src/lib.rs.
 ${BOOT_STATE}             0x4000

@@ -174,7 +174,6 @@ cargo build --release
 
 - **The status screen and the updater on a watch.** The first watch runs the bootloader from before
   the status screen; both have run only in the emulator.
-- **A small recovery firmware** of its own; the recovery slot holds the full firmware.
 - **Signed updates.** embassy-boot's updater can check an ed25519 signature before marking a swap.
   That check runs in the firmware, in `neotime-updates`, so it costs the bootloader nothing; it is
   not used yet.

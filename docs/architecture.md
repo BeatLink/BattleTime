@@ -550,7 +550,7 @@ the button and the backlight timeout all work.
 
 `neotime-reloader` moves a watch from InfiniTime or wasp-os onto NeoTime. It is an app for the old
 system, sent through that system's own update path, which stages the firmware and the recovery
-firmware in the external flash, writes NeoTime's bootloader over the first pages of internal
+firmware (both the small recovery build, for space) in the external flash, writes NeoTime's bootloader over the first pages of internal
 flash, and marks the swap. The order, from `neotime_boot::migration`, keeps the time when a power
 cut would leave the watch unable to start to the bootloader write, about a quarter of a second.
 Two builds, `from-wasp-os` and `from-infinitime`, link where each old system starts apps. The

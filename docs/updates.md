@@ -118,7 +118,9 @@ during an update. The bootloader's own blue screen is described in
 
 A recovery firmware installed by the button hold shows as recovery only until its next restart,
 because the note is not kept. A firmware built with `--features recovery` always does, and it is
-the image meant for `RECOVERY_FIRMWARE`.
+the image meant for `RECOVERY_FIRMWARE`. That build leaves out the shell, touch, the step counter
+and the apps, keeping the status page, the file system, Bluetooth and DFU, so it is about 144 KB
+against the full firmware's 392 KB. `tools/build_images.sh` writes it to `dist/recovery.bin`.
 
 A panic halts rather than resets, so the watchdog brings the watch back to the bootloader instead of
 the firmware restarting in a loop. It is 105 KB of flash and 25 KB of static RAM, 16 KB of that heap. Its screen writes and flash
@@ -131,7 +133,9 @@ display can share an async bus.
 A watch running InfiniTime or wasp-os has their bootloader at the start of flash. The reloader is
 an ordinary app image for the old system, sent through its own update path, that replaces that
 bootloader with NeoTime's. It carries three images: NeoTime's bootloader, the firmware, and the
-recovery firmware (the same firmware, until there is a smaller one).
+recovery firmware. The full firmware no longer fits beside the bootloader in wasp-os's 380 KB app
+slot, so `tools/build_images.sh` gives it the small recovery firmware for both, and the full
+firmware follows as an ordinary update once the watch is on NeoTime.
 
 ### What it does
 

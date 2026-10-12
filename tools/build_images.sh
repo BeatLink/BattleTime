@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds every image NeoTime ships and packs them into dist/: the bootloader, the firmware, the
-# bootloader updater, and the two reloaders that move a watch over from wasp-os or InfiniTime. Run it
+# recovery firmware, the bootloader updater, and the two reloaders that move a watch over from wasp-os or InfiniTime. Run it
 # inside `nix develop`.
 
 set -euo pipefail
@@ -16,6 +16,9 @@ echo "firmware"
 (cd firmware && cargo objcopy -q --release -- -O binary "../$dist/firmware.bin")
 python3 -I tools/package_dfu.py "$dist/firmware.bin" "$dist/firmware.zip"
 
+echo "recovery firmware (the status page, Bluetooth and updates, without the shell)"
+(cd firmware && cargo objcopy -q --release --features recovery -- -O binary "../$dist/recovery.bin")
+
 echo "rehearsal (an app for wasp-os that writes no flash)"
 (cd firmware && cargo objcopy -q --release --features wasp-os-rehearsal -- -O binary "../$dist/rehearsal-under-wasp-os.bin")
 python3 -I tools/package_dfu.py "$dist/rehearsal-under-wasp-os.bin" "$dist/rehearsal-under-wasp-os.zip" --sd-req 0xB8
@@ -30,10 +33,11 @@ echo "bootloader updater (a firmware update that installs dist/bootloader.bin on
 (cd bootloader-updater && NEOTIME_NEW_BOOTLOADER_BIN="$PWD/../$dist/bootloader.bin" cargo objcopy -q --release -- -O binary "../$dist/bootloader-updater.bin")
 python3 -I tools/package_dfu.py "$dist/bootloader-updater.bin" "$dist/bootloader-updater.zip"
 
-# Until there is a smaller recovery firmware, the firmware itself serves as the recovery image.
+# The full firmware does not fit beside the bootloader in wasp-os's app slot, so the reloader installs
+# the recovery firmware in both places, and the full firmware follows as an ordinary update.
 export NEOTIME_BOOTLOADER_BIN="$PWD/$dist/bootloader.bin"
-export NEOTIME_FIRMWARE_BIN="$PWD/$dist/firmware.bin"
-export NEOTIME_RECOVERY_BIN="$PWD/$dist/firmware.bin"
+export NEOTIME_FIRMWARE_BIN="$PWD/$dist/recovery.bin"
+export NEOTIME_RECOVERY_BIN="$PWD/$dist/recovery.bin"
 
 echo "reloader from wasp-os"
 (cd reloader && cargo objcopy -q --release --features from-wasp-os -- -O binary "../$dist/reloader-from-wasp-os.bin")
