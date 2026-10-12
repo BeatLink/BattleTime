@@ -137,11 +137,29 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   reused least recently used first. Each slot is filled by one DMA read of a whole resource, such
   as a font or picture from a resource package or a handler from `/apps`, so each costs one SPI
   transaction instead of many small reads.
-- [ ] **The remaining companion messages.** Read `call`, `musicinfo`, `musicstate`, `weather`,
-  `find` and `status` from [companion-protocol.md](companion-protocol.md): calls and music to apps
-  through `firmware/src/app_events.rs`, weather into `current_weather`, `find` as a ring that a
-  touch stops, and a `status` reply with battery, millivolts, steps and charging. Built on the
-  app-events work (`notify`, haptics and event delivery), which waspos-01 is landing.
+- [ ] **The remaining companion messages.** [companion-protocol.md](companion-protocol.md) lists
+  them under "not served yet"; the runtime already defines what apps see
+  ([app-reference.md](app-reference.md)), so the work is in `services/companion` (parse each `t`
+  into `Message`), `read_companion_line` in `firmware/src/main.rs`, and the shell's `WatchSystem`.
+  Build on the app-events work (`notify`, haptics, and event delivery through
+  `firmware/src/app_events.rs`), which waspos-01 is landing; it keeps the latest of each kind.
+  - `weather`: fill `current_weather` (temperature from kelvin, condition from `code`, low, high,
+    location, `received_at`, the forecast days) and run the `weather` subscriptions.
+  - `musicinfo` and `musicstate`: fill `current_music` (artist, track, length, is playing,
+    position) and run the `music` subscriptions.
+  - `call`: run the `call` subscriptions with its kind and caller, and wake the screen for an
+    incoming call.
+  - `find`: ring with `vibration::Request::Ring` until `n` is false or the wearer touches the watch.
+  - `vibrate`: buzz `n` times.
+  - `status`: reply `{"t":"status","bat","mv","steps","charging"}`; `battery.rs` keeps only the
+    percentage public, so expose the last reading in millivolts.
+  - `alarm` (set or report the alarms), `steps` (a day in 240 six-minute slots, which needs a step
+    history kept on the watch) and `http` (answers to an app's request).
+  - Watch to phone: carry out `music_control`, `call_control`, `find_phone`,
+    `request_music_state` and `http` as `music`, `call`, `findPhone` and `http` lines on the UART's
+    transmit characteristic.
+  - `notify-` (a dismissed notification) belongs with the notification list.
+  Update companion-protocol.md as each one is served, and test each parse and reply.
 - [ ] **Harness gaps in the app host.** The test harness works around three: `widget_bounds` has
   no clip rectangle, so it cannot tell a widget scrolled out of a List or Scroll; there is no
   iterator over the open screen's nodes; and there is no public "redraw everything" (it re-applies
