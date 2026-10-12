@@ -106,6 +106,13 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Async flash in the firmware.** Flash writes block the Bluetooth host for up to a sector
   erase at a time, because the display shares the SPI bus and its driver is blocking.
 - [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.
+- [ ] **Run the emulator suites in CI** once the faster emulator lands. CI runs none of
+  `tests/emulator/` today, so the bootloader menu's tests in `update_and_recovery.robot` (rollback,
+  recovery, the timeout) have only run by hand, and on Renode they take well over an hour.
+- [ ] **Read the bootloader in the updater with assembly loads.** `bootloader-updater`'s
+  `installed_crc` reads `BOOTLOADER.start` (address 0, the null pointer) through `Nvmc`, which is
+  undefined behaviour; the firmware's same read let the compiler delete most of the firmware. Use
+  loads like `status::BootloaderPages` in the firmware.
 - [ ] **A Gadgetbridge entry for NeoTime.** Gadgetbridge recognises InfiniTime by its advertised
   name; NeoTime advertises as "NeoTime" and needs a device coordinator of its own, or to be
   matched by the PineTime one.
