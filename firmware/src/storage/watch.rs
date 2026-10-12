@@ -15,8 +15,8 @@ use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
 use embassy_time::Delay;
 use embedded_storage::nor_flash::ReadNorFlash;
 use neotime_boot::{
-    is_firmware_vector_table, UpdaterNote, BOOT_STATE, FIRMWARE, FIRMWARE_UPDATE, PREVIOUS_FIRMWARE,
-    RECOVERY_FIRMWARE, VECTOR_TABLE_CHECK_SIZE,
+    bootloader_identity, is_firmware_vector_table, UpdaterNote, BOOT_STATE, FIRMWARE, FIRMWARE_UPDATE,
+    PREVIOUS_FIRMWARE, RECOVERY_FIRMWARE, VECTOR_TABLE_CHECK_SIZE,
 };
 use neotime_external_flash::ExternalFlash;
 use neotime_packages::commands::{refuse_command, Change};
@@ -102,7 +102,7 @@ pub async fn start(
     let external_flash = match ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), &mut Delay) {
         Ok(flash) => EXTERNAL_FLASH.init(Mutex::new(RefCell::new(flash))),
         Err(_) => {
-            screen.write_line(line::FILES, "No flash chip found");
+            screen.write_line(line::FILES, "No chip");
             return None;
         }
     };
@@ -118,9 +118,9 @@ pub async fn start(
     screen.write_line(
         line::FILES,
         match &prepared {
-            Ok(prepared) if prepared.preparation == Preparation::AlreadyFormatted => "Files OK",
-            Ok(_) => "Files set up",
-            Err(_) => "Files damaged",
+            Ok(prepared) if prepared.preparation == Preparation::AlreadyFormatted => "OK",
+            Ok(_) => "Formatted",
+            Err(_) => "Damaged",
         },
     );
     let files: &'static Files = FILES.init(Files {
@@ -174,6 +174,8 @@ pub async fn start(
     if status::recovery_was_just_installed() || status::IS_RECOVERY_BUILD {
         mode = Mode::Recovery;
     }
+    let identity = bootloader_identity(&mut status::BootloaderPages).map_err(|_| ());
+    screen.write_line(line::BOOTLOADER, &status::bootloader_words(identity, mode));
     Some((targets, confirmation, mode, files))
 }
 

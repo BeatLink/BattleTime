@@ -1,7 +1,7 @@
 //! NeoTime's bootloader: swaps in a waiting update or the recovery firmware, then starts the firmware.
 //!
-//! Holding the button for five seconds at power-on installs the recovery firmware from external
-//! flash. A firmware that does not mark itself booted before its first reset is rolled back. The
+//! Holding the button for five seconds at power-on opens a menu: start the firmware, roll back to
+//! the previous one, or install the recovery firmware from external flash. A firmware that does not mark itself booted before its first reset is rolled back. The
 //! screen stays dark on an ordinary start and turns blue with a few words while the bootloader works.
 
 #![no_std]
@@ -30,15 +30,17 @@ use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565};
 use embedded_hal_bus::spi::RefCellDevice;
 use embedded_storage::nor_flash::{ErrorType, NorFlash, ReadNorFlash};
 use neotime_boot::{
-    copy_recovery_into_update_slot, status_colour, BootNote, RecoveryCopy, BOOT_NOTE_ADDRESS, BOOT_STATE,
-    FIRMWARE, FIRMWARE_UPDATE, PAGE_SIZE, RECOVERY_BUTTON_HOLD_IN_MILLISECONDS, WATCHDOG_TIMEOUT_IN_TICKS,
+    copy_previous_into_update_slot, copy_recovery_into_update_slot, looks_like_firmware, status_colour,
+    BootNote, PreviousCopy, RecoveryCopy, BOOT_NOTE_ADDRESS, BOOT_STATE, FIRMWARE, FIRMWARE_UPDATE,
+    MENU_BUTTON_HOLD_IN_MILLISECONDS, MENU_SELECT_HOLD_IN_MILLISECONDS, MENU_TIMEOUT_IN_MILLISECONDS,
+    PAGE_SIZE, PREVIOUS_FIRMWARE, RECOVERY_FIRMWARE, WATCHDOG_TIMEOUT_IN_TICKS,
 };
 use neotime_button::Button;
 use neotime_external_flash::ExternalFlash;
 use neotime_vibrator::{OnOffMotor, Strength, Vibrator};
 use panic_reset as _;
 
-use neotime_status_screen::Screen;
+use neotime_status_screen::{page, Screen};
 
 // ============================================================================
 // PineTime wiring
@@ -145,17 +147,20 @@ fn prepare_firmware<'d>(
     let power_pin = Output::new(pins.button_enable, Level::Low, OutputDrive::Standard);
     let Ok(mut button) = Button::new(button_pin, power_pin);
     delay.delay_ms(BUTTON_SETTLE_TIME_IN_MILLISECONDS);
-    let recovery_requested = button.is_pressed() == Ok(true) && {
-        status_page.show(
-            &["NeoTime bootloader", "Keep holding for", "recovery firmware"],
-            delay,
-        );
-        button_held_for(RECOVERY_BUTTON_HOLD_IN_MILLISECONDS, &mut button, watchdog, delay)
+    let menu_requested = button.is_pressed() == Ok(true) && {
+        status_page.show("Unchanged", "Keep holding for", "the menu", delay);
+        button_held_for(MENU_BUTTON_HOLD_IN_MILLISECONDS, &mut button, watchdog, delay)
     };
     let mut vibrator = Vibrator::new(OnOffMotor {
         motor_pin: Output::new(pins.motor, Level::High, OutputDrive::Standard),
     })
     .unwrap();
+    let choice = if menu_requested {
+        buzz(&mut vibrator, 200, delay);
+        choose(&mut status_page, &mut button, &mut vibrator, watchdog, delay)
+    } else {
+        Choice::StartFirmware
+    };
 
     let Ok(flash_spi) = RefCellDevice::new_no_delay(&spi_bus, flash_chip_select);
     let Ok(external_flash) = ExternalFlash::new(flash_spi, delay) else {
@@ -172,38 +177,49 @@ fn prepare_firmware<'d>(
     }));
 
     let mut recovery_marked = false;
-    if recovery_requested {
-        buzz(&mut vibrator, 200, delay);
-        status_page.show(
-            &["NeoTime bootloader", "Installing recovery", "Do not unplug"],
-            delay,
-        );
-        let recovery_copy =
-            external_flash.lock(|flash| copy_recovery_into_update_slot(&mut *flash.borrow_mut()));
-
-        let mut state_alignment = AlignedBuffer([0; 4]);
-        let mut boot_state = BlockingFirmwareState::new(
-            BlockingPartition::new(&internal_flash, BOOT_STATE.start, BOOT_STATE.size),
-            &mut state_alignment.0,
-        );
-        recovery_marked =
-            matches!(recovery_copy, Ok(RecoveryCopy::Copied)) && boot_state.mark_updated().is_ok();
-
-        if !recovery_marked {
-            status_page.show(
-                &["NeoTime bootloader", "No recovery found", "Starting firmware"],
-                delay,
+    let source = match choice {
+        Choice::StartFirmware => None,
+        Choice::RollBack => Some((PREVIOUS_FIRMWARE.start, "Rolling back", "No previous firmware")),
+        Choice::InstallRecovery => Some((
+            RECOVERY_FIRMWARE.start,
+            "Installing recovery",
+            "No recovery found",
+        )),
+    };
+    if let Some((image_start, doing, missing)) = source {
+        let has_image = external_flash
+            .lock(|flash| looks_like_firmware(&mut *flash.borrow_mut(), image_start))
+            .unwrap_or(false);
+        // Clearing the state first drops a pending swap's progress, so the copy is installed by a
+        // fresh swap; a revert would read the slot the copy has just overwritten.
+        let marked = has_image && {
+            status_page.show("Swapping", doing, "Do not unplug", delay);
+            let mut state_alignment = AlignedBuffer([0; 4]);
+            let mut boot_state = BlockingFirmwareState::new(
+                BlockingPartition::new(&internal_flash, BOOT_STATE.start, BOOT_STATE.size),
+                &mut state_alignment.0,
             );
+            let copied = boot_state.mark_booted().is_ok()
+                && external_flash.lock(|flash| {
+                    let flash = &mut *flash.borrow_mut();
+                    match choice {
+                        Choice::RollBack => copy_previous_into_update_slot(flash) == Ok(PreviousCopy::Copied),
+                        _ => copy_recovery_into_update_slot(flash) == Ok(RecoveryCopy::Copied),
+                    }
+                });
+            copied && boot_state.mark_updated().is_ok()
+        };
+        recovery_marked = marked && choice == Choice::InstallRecovery;
+
+        if !marked {
+            status_page.show("Unchanged", missing, "Starting firmware", delay);
             for _ in 0..3 {
                 buzz(&mut vibrator, 60, delay);
                 delay.delay_ms(120);
             }
         }
     } else if boot_state_is(&internal_flash, State::Swap) {
-        status_page.show(
-            &["NeoTime bootloader", "Installing firmware", "Do not unplug"],
-            delay,
-        );
+        status_page.show("Swapping", "Installing firmware", "Do not unplug", delay);
     }
 
     let config = BootLoaderConfig {
@@ -261,8 +277,9 @@ struct StatusPage<'bus, 'd> {
 }
 
 impl<'bus, 'd> StatusPage<'bus, 'd> {
-    /// Starts the panel the first time, then replaces the three lines.
-    fn show(&mut self, lines: &[&str; 3], delay: &mut Delay) {
+    /// Starts the panel and fills the lines that never change the first time, then shows the firmware's
+    /// state, the bootloader's work and what the wearer should know.
+    fn show(&mut self, firmware: &str, action: &str, progress: &str, delay: &mut Delay) {
         if self.screen.is_none() {
             let (Some(chip_select), Some(data_or_command), Some(reset), Some(backlight)) = (
                 self.chip_select.take(),
@@ -285,13 +302,100 @@ impl<'bus, 'd> StatusPage<'bus, 'd> {
                 return;
             };
             let backlight_on = Output::new(backlight, Level::Low, OutputDrive::Standard);
+            let mut screen = screen;
+            screen.write_line(page::TITLE, "NeoTime bootloader");
+            screen.write_line(page::BOOTLOADER, "Working");
+            screen.write_line(page::FILES, "Not mounted");
+            screen.write_line(page::BLUETOOTH, "Off");
             self.screen = Some((screen, backlight_on, reset_pin));
         }
         if let Some((screen, _, _)) = &mut self.screen {
-            for (index, text) in lines.iter().enumerate() {
-                screen.write_line(index as i32, text);
-            }
+            screen.write_line(page::FIRMWARE, firmware);
+            screen.write_line(page::ACTION, action);
+            screen.write_line(page::PROGRESS, progress);
+            screen.write_line(page::BUILD, "");
+            screen.write_line(page::LAST_RUN, "");
         }
+    }
+
+    /// Lists the options from the action line down, marks the selected one, and says how to use them.
+    fn show_menu(&mut self, selected: usize, delay: &mut Delay) {
+        self.show("Unchanged", "", "", delay);
+        if let Some((screen, _, _)) = &mut self.screen {
+            for (index, (_, marked, unmarked)) in MENU.iter().enumerate() {
+                screen.write_line(
+                    page::ACTION + index,
+                    if index == selected { marked } else { unmarked },
+                );
+            }
+            screen.write_line(page::LAST_RUN, "Press: next Hold: pick");
+        }
+    }
+}
+
+// ============================================================================
+// The menu: a press moves to the next option, a long press picks it
+// ============================================================================
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Choice {
+    StartFirmware,
+    RollBack,
+    InstallRecovery,
+}
+
+/// Each option, and its line with and without the mark that shows it is the one a long press picks.
+const MENU: [(Choice, &str, &str); 3] = [
+    (Choice::StartFirmware, "> Start firmware", "  Start firmware"),
+    (Choice::RollBack, "> Roll back", "  Roll back"),
+    (
+        Choice::InstallRecovery,
+        "> Install recovery",
+        "  Install recovery",
+    ),
+];
+
+const MENU_POLL_INTERVAL_IN_MILLISECONDS: u32 = 10;
+
+/// Shows the menu until a long press picks an option, or until it has waited too long, which starts the firmware.
+fn choose(
+    status_page: &mut StatusPage<'_, '_>,
+    button: &mut Button<Input<'_>, Output<'_>>,
+    vibrator: &mut Vibrator<OnOffMotor<Output<'_>>>,
+    watchdog: &RefCell<WatchdogHandle>,
+    delay: &mut Delay,
+) -> Choice {
+    // The hold that opened the menu is still going; it must end before a press counts.
+    wait_for_release(button, watchdog, delay);
+    let mut selected = 0;
+    loop {
+        status_page.show_menu(selected, delay);
+        let mut waited = 0;
+        while button.is_pressed() != Ok(true) {
+            if waited >= MENU_TIMEOUT_IN_MILLISECONDS {
+                return Choice::StartFirmware;
+            }
+            watchdog.borrow_mut().pet();
+            delay.delay_ms(MENU_POLL_INTERVAL_IN_MILLISECONDS);
+            waited += MENU_POLL_INTERVAL_IN_MILLISECONDS;
+        }
+        if button_held_for(MENU_SELECT_HOLD_IN_MILLISECONDS, button, watchdog, delay) {
+            buzz(vibrator, 200, delay);
+            wait_for_release(button, watchdog, delay);
+            return MENU[selected].0;
+        }
+        selected = (selected + 1) % MENU.len();
+    }
+}
+
+fn wait_for_release(
+    button: &mut Button<Input<'_>, Output<'_>>,
+    watchdog: &RefCell<WatchdogHandle>,
+    delay: &mut Delay,
+) {
+    while button.is_pressed() == Ok(true) {
+        watchdog.borrow_mut().pet();
+        delay.delay_ms(MENU_POLL_INTERVAL_IN_MILLISECONDS);
     }
 }
 
@@ -301,14 +405,12 @@ fn button_held_for(
     watchdog: &RefCell<WatchdogHandle>,
     delay: &mut Delay,
 ) -> bool {
-    const POLL_INTERVAL_IN_MILLISECONDS: u32 = 10;
-
-    for _ in 0..duration_in_milliseconds / POLL_INTERVAL_IN_MILLISECONDS {
+    for _ in 0..duration_in_milliseconds / MENU_POLL_INTERVAL_IN_MILLISECONDS {
         if button.is_pressed() != Ok(true) {
             return false;
         }
         watchdog.borrow_mut().pet();
-        delay.delay_ms(POLL_INTERVAL_IN_MILLISECONDS);
+        delay.delay_ms(MENU_POLL_INTERVAL_IN_MILLISECONDS);
     }
     true
 }

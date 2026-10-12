@@ -6,7 +6,7 @@
 
 #![no_std]
 
-use embedded_storage::nor_flash::NorFlash;
+use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 
 // ============================================================================
 // Regions
@@ -103,7 +103,12 @@ pub const FIRMWARE_ALIVE_MAGIC: u32 = 0x4E45_4F54;
 pub const WATCHDOG_TIMEOUT_IN_TICKS: u32 = 5 * WATCHDOG_TICKS_PER_SECOND;
 pub const WATCHDOG_TICKS_PER_SECOND: u32 = 32768;
 
-pub const RECOVERY_BUTTON_HOLD_IN_MILLISECONDS: u32 = 5000;
+/// How long the button must stay held after a reset into the bootloader to open its menu.
+pub const MENU_BUTTON_HOLD_IN_MILLISECONDS: u32 = 5000;
+/// A press in the bootloader's menu held this long picks the option; a shorter one moves to the next.
+pub const MENU_SELECT_HOLD_IN_MILLISECONDS: u32 = 1000;
+/// The menu starts the firmware after this long without a press, so a watch is never left in it.
+pub const MENU_TIMEOUT_IN_MILLISECONDS: u32 = 30_000;
 
 // ============================================================================
 // What the bootloader tells the firmware, and the status colours
@@ -243,6 +248,46 @@ pub fn is_bootloader_vector_table(vector_table_start: [u8; VECTOR_TABLE_CHECK_SI
     stack_pointer_is_in_ram && reset_handler_is_thumb_code && reset_handler_is_in_bootloader
 }
 
+/// Names the installed bootloader by a CRC-32 of the `BOOTLOADER` region, or gives none when it holds no bootloader.
+///
+/// The erased tail is left off, so the number matches `zlib.crc32` of the bootloader's `.bin` file.
+pub fn bootloader_identity<Flash: ReadNorFlash>(flash: &mut Flash) -> Result<Option<u32>, Flash::Error> {
+    let mut vector_table_start = [0; VECTOR_TABLE_CHECK_SIZE];
+    flash.read(BOOTLOADER.start, &mut vector_table_start)?;
+    if !is_bootloader_vector_table(vector_table_start) {
+        return Ok(None);
+    }
+
+    let mut chunk = [0; IDENTITY_CHUNK_SIZE];
+    let mut image_end = BOOTLOADER.end();
+    while image_end > BOOTLOADER.start {
+        let chunk_start = image_end - (image_end - BOOTLOADER.start).min(IDENTITY_CHUNK_SIZE as u32);
+        let bytes = &mut chunk[..(image_end - chunk_start) as usize];
+        flash.read(chunk_start, bytes)?;
+        match bytes.iter().rposition(|&byte| byte != ERASED_BYTE) {
+            Some(last) => {
+                image_end = chunk_start + last as u32 + 1;
+                break;
+            }
+            None => image_end = chunk_start,
+        }
+    }
+
+    let mut crc = migration::CRC32_INITIAL;
+    let mut offset = BOOTLOADER.start;
+    while offset < image_end {
+        let bytes = &mut chunk[..(image_end - offset).min(IDENTITY_CHUNK_SIZE as u32) as usize];
+        flash.read(offset, bytes)?;
+        crc = migration::crc32(crc, bytes);
+        offset += bytes.len() as u32;
+    }
+    Ok(Some(crc))
+}
+
+/// What a flash byte reads as after an erase.
+const ERASED_BYTE: u8 = 0xFF;
+const IDENTITY_CHUNK_SIZE: usize = 256;
+
 pub fn looks_like_firmware<Flash: NorFlash>(
     flash: &mut Flash,
     image_start: u32,
@@ -286,6 +331,45 @@ pub fn copy_recovery_into_update_slot<Flash: NorFlash>(
     }
 
     Ok(RecoveryCopy::Copied)
+}
+
+// ============================================================================
+// Rolling back by hand
+// ============================================================================
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PreviousCopy {
+    Copied,
+    NoPreviousFirmware,
+}
+
+/// Moves the previous firmware from `PREVIOUS_FIRMWARE` down a page to the start of the update slot, so the next swap installs it.
+///
+/// Each page is erased only after the page above it, which holds its new contents, is still intact,
+/// so the copy can go upwards in place. A power cut part way loses the previous firmware but leaves
+/// the running one untouched.
+pub fn copy_previous_into_update_slot<Flash: NorFlash>(
+    external_flash: &mut Flash,
+) -> Result<PreviousCopy, Flash::Error> {
+    if !looks_like_firmware(external_flash, PREVIOUS_FIRMWARE.start)? {
+        return Ok(PreviousCopy::NoPreviousFirmware);
+    }
+
+    let mut chunk = [0; COPY_CHUNK_SIZE];
+    for page_start in (FIRMWARE_UPDATE.start..PREVIOUS_FIRMWARE.end()).step_by(PAGE_SIZE as usize) {
+        external_flash.erase(page_start, page_start + PAGE_SIZE)?;
+        for offset in (0..PAGE_SIZE).step_by(COPY_CHUNK_SIZE) {
+            external_flash.read(page_start + PAGE_SIZE + offset, &mut chunk)?;
+            let chunk_is_erased = chunk.iter().all(|byte| *byte == 0xFF);
+            if !chunk_is_erased {
+                external_flash.write(page_start + offset, &chunk)?;
+            }
+        }
+    }
+    let last_page = FIRMWARE_UPDATE.end() - PAGE_SIZE;
+    external_flash.erase(last_page, FIRMWARE_UPDATE.end())?;
+
+    Ok(PreviousCopy::Copied)
 }
 
 pub mod migration;

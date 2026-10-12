@@ -92,7 +92,7 @@ pub async fn start(
     let mut flash = match ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), &mut Delay) {
         Ok(flash) => flash,
         Err(_) => {
-            screen.write_line(line::FILES, "no flash chip");
+            screen.write_line(line::FILES, "No chip");
             leave_breadcrumb(STAGE_FLASH_FAILED);
             return None;
         }
@@ -106,18 +106,18 @@ pub async fn start(
             chip_id.manufacturer, chip_id.memory_type, chip_id.capacity
         ),
     );
-    screen.write_line(line::FILES, &text);
+    screen.write_line(line::ACTION, &text);
     leave_breadcrumb(STAGE_FLASH_FOUND);
 
     match exercise_the_flash(&mut flash) {
         Ok(()) => {
-            screen.write_line(line::FILES, "flash write ok");
+            screen.write_line(line::FILES, "Write OK");
             leave_breadcrumb(STAGE_FLASH_WRITTEN);
         }
         Err(offset) => {
             let mut text = heapless::String::<24>::new();
             let _ = core::fmt::write(&mut text, format_args!("flash bad {:x}", offset));
-            screen.write_line(line::FILES, &text);
+            screen.write_line(line::ACTION, &text);
             record(Breadcrumbs {
                 stage: STAGE_FLASH_FAILED,
                 detail: offset,
@@ -129,11 +129,12 @@ pub async fn start(
     let external_flash = EXTERNAL_FLASH.init(Mutex::new(RefCell::new(flash)));
     match exercise_the_file_system(external_flash) {
         Ok(()) => {
-            screen.write_line(line::FILES, "flash, files ok");
+            screen.write_line(line::FILES, "OK");
             leave_breadcrumb(STAGE_FILES_CHECKED);
         }
         Err(step) => {
-            screen.write_line(line::FILES, step);
+            screen.write_line(line::FILES, "Failed");
+            screen.write_line(line::ACTION, step);
             leave_breadcrumb(STAGE_FILES_FAILED);
         }
     }

@@ -1013,6 +1013,7 @@ dependencies = [
  "neotime-packages",
  "neotime-runtime",
  "neotime-settings",
+ "neotime-status-screen",
  "neotime-storage",
  "neotime-touch",
  "neotime-updates",
@@ -1043,6 +1044,14 @@ version = "0.1.0"
 [[package]]
 name = "neotime-settings"
 version = "0.1.0"
+
+[[package]]
+name = "neotime-status-screen"
+version = "0.1.0"
+dependencies = [
+ "embedded-graphics",
+ "embedded-hal 1.0.0",
+]
 
 [[package]]
 name = "neotime-storage"

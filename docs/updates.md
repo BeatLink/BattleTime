@@ -100,21 +100,45 @@ The first firmware (`firmware/`) does the little an update needs and not much mo
 
 ### The status page
 
-At start, and again while an update arrives, the firmware shows a status page. Its background
-colour and second and third lines say which mode the firmware is in (`firmware/src/status.rs`,
-colours in `neotime_boot::status_colour`):
+At start, and again while an update arrives, the firmware shows a status page. The firmware, the
+recovery firmware, the bootloader and the bootloader updater all lay it out through
+`neotime_status_screen::page`, so it looks the same whichever is running:
 
-| Mode | Background | Lines | How the firmware knows |
+```
+NeoTime 0.1.0+1b19aed
+Bootloader OK 1a2b3c4
+Firmware   On trial
+Filesystem OK
+Bluetooth  Connected
+Receiving firmware
+123 / 392 KB  31%
+```
+
+| Line | Says |
+|---|---|
+| Title | `NeoTime` and the version; the bootloader and its updater name themselves instead |
+| Bootloader | `OK` or, after the updater wrote it, `New`, then the first 7 hex digits of the CRC-32 of the installed bootloader with its erased tail left off, which match `zlib.crc32` of its `.bin`; `Not found` or `Unreadable` otherwise |
+| Firmware | the mode, below |
+| Filesystem | `OK`, `Formatted`, `Damaged` or `No chip` |
+| Bluetooth | `Off`, `Advertising` or `Connected` |
+| Action | what the mode means while idle; during an update `Starting`, `Receiving`, `Checking` or `Installing` with `firmware` or `recovery`, then `Restarting to install`, `Update failed` or `Update stopped` |
+| Progress | `received / size KB  percent`, or why the update stopped: `Steps out of order`, `Image not supported`, `Image too large`, `Checksum did not match`, `Could not store image`, or `Lost phone at N KB` |
+
+The background colour and the Firmware and Action lines say which mode the firmware is in
+(`firmware/src/status.rs`, colours in `neotime_boot::status_colour`):
+
+| Mode | Background | Firmware / Action | How the firmware knows |
 |---|---|---|---|
-| Confirmed | black | Firmware OK | `BOOT_STATE` says booted |
-| On trial | dark amber | New firmware on trial / Connect to keep it | `BOOT_STATE` says swap; after the first Bluetooth exchange it turns black with "Update kept" |
-| Rolled back | dark red | Update failed / Previous one restored | `BOOT_STATE` says revert, which stays until the next update |
-| Recovery | purple | Recovery firmware / Send a new firmware | the bootloader's note, or a build with the `recovery` feature |
+| Confirmed | black | OK / Idle | `BOOT_STATE` says booted |
+| On trial | dark amber | On trial / Connect to keep it | `BOOT_STATE` says swap; after the first Bluetooth exchange it turns black with "Update kept" |
+| Rolled back | dark red | Rolled back / Previous one restored | `BOOT_STATE` says revert, which stays until the next update |
+| Recovery | purple | Recovery / Send a new firmware | the bootloader's note, or a build with the `recovery` feature |
 
-The other lines are the version, the file system ("Files OK", "Files set up", "Files damaged"
-or "No flash chip found"), Bluetooth ("Ready for updates" or "Phone connected") and the size received
-during an update. The bootloader's own blue screen is described in
-[bootloader.md](bootloader.md#the-status-screen).
+When the first packet of an update arrives the page takes the screen from the shell, wakes it if it
+was dark or dimmed, and holds it lit (`shell::show_status`). When the update fails or the phone goes
+away the page stays up but lets go (`shell::release_status`): the next touch or press, or the
+screen timeout, puts the shell back. A successful update restarts into the bootloader's blue page,
+described in [bootloader.md](bootloader.md#the-status-screen).
 
 A recovery firmware installed by the button hold shows as recovery only until its next restart,
 because the note is not kept. A firmware built with `--features recovery` always does, and it is

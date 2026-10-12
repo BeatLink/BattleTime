@@ -27,7 +27,7 @@ use neotime_boot::{
     status_colour, UpdaterNote, BOOTLOADER, PAGE_SIZE, UPDATER_NOTE_ADDRESS, VECTOR_TABLE_CHECK_SIZE,
     WATCHDOG_TIMEOUT_IN_TICKS,
 };
-use neotime_status_screen::Screen;
+use neotime_status_screen::{page, Screen};
 // A panic halts, so the watchdog resets the watch; before the write that rolls the firmware back.
 use panic_halt as _;
 
@@ -91,23 +91,24 @@ fn main() -> ! {
     );
     let _backlight_on = Output::new(chip.P0_14, Level::Low, OutputDrive::Standard);
     let mut status = Status { screen };
-    status.show(&["Bootloader update", "Checking", ""]);
+    status.start();
+    status.show("Checking", "Updating bootloader", "");
 
     if !carried_bootloader_is_intact() {
-        status.show(&["Bootloader update", "Damaged download", "Hold button to quit"]);
+        status.show("Unchanged", "Download damaged", "Hold button to quit");
         wait_for_the_button_hold(&button, &mut watchdog, &mut delay);
     }
 
     let mut internal_flash = Nvmc::new(chip.NVMC);
     if installed_bootloader_matches(&mut internal_flash) {
-        status.show(&["Bootloader update", "Already up to date", "Restarting"]);
+        status.show("Up to date", "Nothing to install", "Restarting");
         hand_back(UpdaterNote::BootloaderAlreadyCurrent, &mut watchdog, &mut delay);
     }
 
     let mut asked_for_the_charger = false;
     while power_present.is_high() {
         if !asked_for_the_charger {
-            status.show(&["Plug in the charger", "Hold button to quit", ""]);
+            status.show("Unchanged", "Plug in the charger", "Hold button to quit");
             asked_for_the_charger = true;
         }
         feed_watchdog_while_button_is_up(&button, &mut watchdog);
@@ -116,16 +117,16 @@ fn main() -> ! {
 
     // From the first erase until the read-back matches, a reset would leave nothing that starts, so
     // the watchdog is fed whatever the button does and the updater never gives up.
-    status.show(&["Bootloader update", "Installing", "Do not unplug"]);
+    status.show("Writing", "Updating bootloader", "Do not unplug");
     let mut attempts = 0;
     while !write_and_check(&mut internal_flash, &mut watchdog) {
         attempts += 1;
         if attempts == WRITE_ATTEMPTS_BEFORE_WARNING {
-            status.show(&["Write failed", "Trying again", "Do not unplug"]);
+            status.show("Retrying", "Write failed, again", "Do not unplug");
         }
     }
 
-    status.show(&["Bootloader update", "Done, restarting", ""]);
+    status.show("Updated", "Done", "Restarting");
     hand_back(UpdaterNote::BootloaderWritten, &mut watchdog, &mut delay)
 }
 
@@ -239,11 +240,22 @@ struct Status<'d> {
 }
 
 impl Status<'_> {
-    fn show(&mut self, lines: &[&str; 3]) {
+    /// Fills the lines that stay the same for the whole run.
+    fn start(&mut self) {
         if let Some(screen) = &mut self.screen {
-            for (index, text) in lines.iter().enumerate() {
-                screen.write_line(index as i32, text);
-            }
+            screen.write_line(page::TITLE, "NeoTime boot updater");
+            screen.write_line(page::FIRMWARE, "Updater");
+            screen.write_line(page::FILES, "Not mounted");
+            screen.write_line(page::BLUETOOTH, "Off");
+        }
+    }
+
+    /// Shows what the updater did to the bootloader, what it is doing, and what the wearer should know.
+    fn show(&mut self, bootloader: &str, action: &str, progress: &str) {
+        if let Some(screen) = &mut self.screen {
+            screen.write_line(page::BOOTLOADER, bootloader);
+            screen.write_line(page::ACTION, action);
+            screen.write_line(page::PROGRESS, progress);
         }
     }
 }

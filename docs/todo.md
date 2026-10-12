@@ -324,8 +324,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **Try the always-on screen on the watch.** Turn on Always on in the Settings app and
   check that the dim level is steady, without flicker, that the face keeps time, and how much
   battery a night costs. It has only been built, not run.
-- [ ] **Wake the screen for an update's progress.** The status page draws over a dark or dimmed
-  screen, so an update's progress cannot be read until the screen is woken.
 - [ ] **Dim before the screen turns off.** Drop to the low backlight a few seconds before the
   timeout, so a wearer still reading can touch to keep it on, as InfiniTime does.
 - [ ] **The panel's power settings.** mipidsi starts the ST7789 with its defaults. InfiniTime also
@@ -481,10 +479,8 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   through InfiniTime's DFU, which swaps it in from SPI 0x40000. Fetch both bootloaders in the
   flake and drive the real swap.
 - [ ] **Confirm or reject a new firmware** from settings, as InfiniTime's firmware screen does.
-- [ ] **Force a rollback from the bootloader.** InfiniTime's bootloader 1.0.0 rolls back even a
-  confirmed firmware on a shorter button hold than recovery. NeoTime only has the recovery hold.
-- [ ] **Update progress as a bar with the result.** The status page counts kilobytes. Show a bar
-  and a percentage of the image size, then a pass or fail, as InfiniTime does.
+- [ ] **Update progress as a bar.** The status page shows the kilobytes, the image size and a
+  percentage in words. Draw a bar under them as well, as InfiniTime does.
 - [ ] **Give up on a stalled update.** InfiniTime aborts an update when no packet has arrived for
   10 seconds; NeoTime only aborts when the link drops.
 - [ ] **A swap progress bar on the bootloader screen.** It says "Installing firmware" for up to 30

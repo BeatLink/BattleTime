@@ -33,21 +33,19 @@ use embassy_nrf::{
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
 use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_alloc::LlffHeap;
-use embedded_graphics::{
-    mono_font::{ascii::FONT_10X20, MonoTextStyleBuilder},
-    pixelcolor::Rgb565,
-    prelude::*,
-    text::Text,
-};
+use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use mipidsi::interface::SpiInterface;
 use neotime_blefs::{service::FileTransferService, FileTransfer};
 use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
 use neotime_button::Button;
 use neotime_companion::LineAssembler;
 use neotime_crash_record::Crash;
-use neotime_dfu::{service::DfuWrite, service::LegacyDfuService, LegacyDfu};
+use neotime_dfu::{
+    service::DfuWrite, service::LegacyDfuService, write_progress, Activity, LegacyDfu, Outcome,
+};
 use neotime_display::Display;
 use neotime_runtime::events::ButtonPress;
+use neotime_updates::ImageKind;
 use static_cell::StaticCell;
 use trouble_host::prelude::*;
 
@@ -189,10 +187,12 @@ async fn main(spawner: Spawner) {
         chip.PPI_CH1,
         chip.PPI_CH2,
     );
-    let mut title = heapless::String::<22>::new();
+    let mut title = StatusLine::new();
     let _ = core::fmt::write(&mut title, format_args!("NeoTime {FIRMWARE_VERSION}"));
     screen.write_line(line::TITLE, &title);
     screen.write_line(line::BUILD, storage::BUILD_NAME);
+    screen.write_line(line::FILES, "Starting");
+    screen.write_line(line::BLUETOOTH, "Off");
     storage::leave_breadcrumb(stage::SCREEN_STARTED);
     let last_restart = restart::take_last_restart();
     // The rehearsals' breadcrumbs say more than the reset reasons, so they keep the line when there are any.
@@ -428,62 +428,38 @@ type ScreenDisplay = Display<DisplayInterfaceOnBus, Output<'static>>;
 /// The display, shared between the status page and the shell; a lock is never held across an await.
 type SharedDisplay = Mutex<NoopRawMutex, RefCell<ScreenDisplay>>;
 
-/// Where each kind of status sits on the page.
-mod line {
-    pub const TITLE: usize = 0;
-    pub const MODE: usize = 1;
-    pub const MODE_DETAIL: usize = 2;
-    pub const FILES: usize = 3;
-    pub const BLUETOOTH: usize = 4;
-    pub const UPDATE: usize = 5;
-    pub const BUILD: usize = 6;
-    pub const LAST_RUN: usize = 7;
-    pub const COUNT: usize = 8;
-}
+/// Where each kind of status sits on the page, shared with the bootloader so every page looks alike.
+use neotime_status_screen::page as line;
 
-/// Characters that fit between the left margin and the right edge.
-const LINE_CHARACTERS: usize = 22;
-
-type StatusLine = heapless::String<LINE_CHARACTERS>;
+/// One line's value, as long as the widest line allows.
+type StatusLine = heapless::String<{ line::LINE_CHARACTERS }>;
 
 /// The start-up and update status page, coloured by the firmware's mode; it keeps its lines while the shell has the screen.
 struct Screen {
     display: &'static SharedDisplay,
     mode: status::Mode,
-    lines: [StatusLine; line::COUNT],
+    lines: [StatusLine; line::LINE_COUNT],
 }
 
 impl Screen {
-    const LINE_HEIGHT: i32 = 24;
-    const FIRST_BASELINE: i32 = 40;
-
+    /// Sets a line's value, cut to the room its label leaves.
     fn write_line(&mut self, line: usize, text: &str) {
         let mut stored = StatusLine::new();
-        let _ = core::fmt::write(
-            &mut stored,
-            format_args!("{:.width$}", text, width = LINE_CHARACTERS),
-        );
+        let _ = stored.push_str(line::fitted(line, text));
         self.lines[line] = stored;
         if shell::status_is_shown() {
             self.draw_line(line);
         }
     }
 
-    /// Draws a line padded to the full width on the mode's background, so it replaces the old line in one pass.
     fn draw_line(&self, line: usize) {
-        let baseline = Self::FIRST_BASELINE + line as i32 * Self::LINE_HEIGHT;
-        let mut padded = StatusLine::new();
-        let _ = core::fmt::write(
-            &mut padded,
-            format_args!("{:<width$}", self.lines[line], width = LINE_CHARACTERS),
-        );
-        let style = MonoTextStyleBuilder::new()
-            .font(&FONT_10X20)
-            .text_color(Rgb565::WHITE)
-            .background_color(self.mode.background())
-            .build();
         self.display.lock(|display| {
-            let _ = Text::new(&padded, Point::new(12, baseline), style).draw(&mut *display.borrow_mut());
+            let _ = line::draw_line(
+                &mut *display.borrow_mut(),
+                line,
+                &self.lines[line],
+                self.mode.background(),
+            );
         });
     }
 
@@ -491,30 +467,31 @@ impl Screen {
         self.display.lock(|display| {
             let _ = display.borrow_mut().clear(self.mode.background());
         });
-        for line in 0..line::COUNT {
+        for line in 0..line::LINE_COUNT {
             self.draw_line(line);
         }
     }
 
-    /// Shows the mode as the page's colour and its two lines of words.
+    /// Shows the mode as the page's colour, the firmware's line and what the mode means.
     fn set_mode(&mut self, mode: status::Mode) {
         self.mode = mode;
-        self.write_line(line::MODE, mode.title());
-        self.write_line(line::MODE_DETAIL, mode.detail());
+        self.write_line(line::FIRMWARE, mode.word());
+        self.write_line(line::ACTION, mode.detail());
         if shell::status_is_shown() {
             self.redraw();
         }
     }
 
-    /// Takes the screen back from the shell, such as for an update's progress.
+    /// Takes the screen back from the shell and keeps it lit, such as for an update's progress.
     fn show_status(&mut self) {
         if shell::show_status() {
             self.redraw();
         }
     }
 
-    fn hide_status(&mut self) {
-        shell::hide_status();
+    /// Lets the wearer dismiss the page with a touch or a press, and the screen time out again.
+    fn release_status(&mut self) {
+        shell::release_status();
     }
 }
 
@@ -691,7 +668,7 @@ async fn run_bluetooth(
                 .await
                 .unwrap();
             if !advertising_shown {
-                screen.write_line(line::BLUETOOTH, "Ready for updates");
+                screen.write_line(line::BLUETOOTH, "Advertising");
                 storage::leave_breadcrumb(stage::ADVERTISING);
                 advertising_shown = true;
             }
@@ -702,7 +679,7 @@ async fn run_bluetooth(
             let Ok(connection) = connection.with_attribute_server(&server) else {
                 continue;
             };
-            screen.write_line(line::BLUETOOTH, "Phone connected");
+            screen.write_line(line::BLUETOOTH, "Connected");
             storage::leave_breadcrumb(stage::CONNECTED);
             phone::set_connected(true);
             serve_connection(
@@ -716,7 +693,7 @@ async fn run_bluetooth(
             )
             .await;
             phone::set_connected(false);
-            screen.write_line(line::BLUETOOTH, "Ready for updates");
+            screen.write_line(line::BLUETOOTH, "Advertising");
         }
     };
 
@@ -792,7 +769,7 @@ async fn serve_connection(
     confirmed: &mut bool,
     files: &'static storage::Files,
 ) {
-    let mut shown_kilobytes = u32::MAX;
+    let mut shown_progress = ShownProgress::default();
     let mut companion_lines = LineAssembler::new();
     let mut file_transfer = FileTransfer::new(neotime_storage::BLOCK_SIZE, neotime_storage::BLOCK_COUNT);
     // A packages command so far, on the heap since commands are short and rare.
@@ -823,8 +800,17 @@ async fn serve_connection(
         };
         match event {
             GattConnectionEvent::Disconnected { .. } => {
+                if dfu.is_updating() {
+                    let mut text = StatusLine::new();
+                    let _ = core::fmt::write(
+                        &mut text,
+                        format_args!("Lost phone at {} KB", dfu.bytes_received() / 1024),
+                    );
+                    screen.write_line(line::ACTION, "Update stopped");
+                    screen.write_line(line::PROGRESS, &text);
+                }
                 dfu.abort();
-                screen.hide_status();
+                screen.release_status();
                 return;
             }
             GattConnectionEvent::Gatt { event } => {
@@ -899,9 +885,9 @@ async fn serve_connection(
                     if screen.mode == status::Mode::OnTrial {
                         if kept {
                             screen.set_mode(status::Mode::Confirmed);
-                            screen.write_line(line::MODE_DETAIL, "Update kept");
+                            screen.write_line(line::ACTION, "Update kept");
                         } else {
-                            screen.write_line(line::MODE_DETAIL, "Could not keep it");
+                            screen.write_line(line::ACTION, "Could not keep it");
                         }
                     }
                     *confirmed = true;
@@ -920,18 +906,9 @@ async fn serve_connection(
                         .notify_raw(connection, notification, false)
                         .await;
                 }
-                let kilobytes_received = dfu.bytes_received() / 1024;
-                if dfu.is_updating() && kilobytes_received != shown_kilobytes {
-                    shown_kilobytes = kilobytes_received;
-                    screen.show_status();
-                    let mut progress = StatusLine::new();
-                    let _ = core::fmt::write(
-                        &mut progress,
-                        format_args!("Receiving {:>3} KB", kilobytes_received),
-                    );
-                    screen.write_line(line::UPDATE, &progress);
-                }
+                show_update(screen, dfu, &outcome, &mut shown_progress);
                 if outcome.reset_requested {
+                    screen.write_line(line::ACTION, "Restarting to install");
                     storage::leave_breadcrumb(stage::RESET_REQUESTED);
                     storage::reset(screen).await;
                 }
@@ -939,4 +916,64 @@ async fn serve_connection(
             _ => {}
         }
     }
+}
+
+// ============================================================================
+// An update's progress on the status page
+// ============================================================================
+
+/// What the page last showed of an update, so a packet that changes nothing draws nothing.
+#[derive(Default, PartialEq, Eq)]
+struct ShownProgress {
+    activity: Option<Activity>,
+    kilobytes_received: u32,
+}
+
+/// Puts the page up for an update, and shows its step and how much has arrived, or why it was refused.
+fn show_update(
+    screen: &mut Screen,
+    dfu: &LegacyDfu<storage::Targets>,
+    outcome: &Outcome,
+    shown: &mut ShownProgress,
+) {
+    if let Some(failure) = outcome.failure() {
+        screen.show_status();
+        screen.write_line(line::ACTION, "Update failed");
+        screen.write_line(line::PROGRESS, failure.words());
+        screen.release_status();
+        *shown = ShownProgress::default();
+        return;
+    }
+    let activity = dfu.activity();
+    if activity == Activity::Idle {
+        return;
+    }
+    let now = ShownProgress {
+        activity: Some(activity),
+        kilobytes_received: dfu.bytes_received() / 1024,
+    };
+    if now == *shown {
+        return;
+    }
+
+    screen.show_status();
+    if shown.activity != now.activity {
+        let slot = match dfu.image_kind() {
+            ImageKind::Firmware => "firmware",
+            ImageKind::Recovery => "recovery",
+        };
+        let step = match activity {
+            Activity::Idle | Activity::Starting => "Starting",
+            Activity::Receiving => "Receiving",
+            Activity::Checking => "Checking",
+            Activity::Installing => "Installing",
+        };
+        let mut text = StatusLine::new();
+        let _ = core::fmt::write(&mut text, format_args!("{step} {slot}"));
+        screen.write_line(line::ACTION, &text);
+    }
+    let mut progress = StatusLine::new();
+    let _ = write_progress(&mut progress, dfu.bytes_received(), dfu.image_size_in_bytes());
+    screen.write_line(line::PROGRESS, &progress);
+    *shown = now;
 }

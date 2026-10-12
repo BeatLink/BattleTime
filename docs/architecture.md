@@ -146,7 +146,7 @@ NeoTime/
 │   ├── bluetooth/    neotime-bluetooth: the Bluetooth LE controller for the chip's radio
 │   ├── button/       neotime-button: the side button
 │   ├── display/      neotime-display: the ST7789 screen
-│   ├── status_screen/  neotime-status-screen: the bootloader's small ST7789 status screen
+│   ├── status_screen/  neotime-status-screen: the status page's layout, and the bootloader's small ST7789 driver
 │   ├── external_flash/  neotime-external-flash: the 4 MB SPI NOR flash
 │   ├── touch/        neotime-touch: the CST816S touch panel
 │   └── vibrator/     neotime-vibrator: the vibration motor
@@ -631,7 +631,11 @@ watch face, the launcher and the apps through `neotime-app-host`:
   zone is written to `/settings/time_zone` by the Bluetooth task after the write is answered, and
   the shell reads it back at start unless a phone already wrote one.
 - **Status page.** The start-up lines and an update's progress share the display with the shell;
-  while the page is up the shell draws nothing, and when the update ends it paints again.
+  while the page is up the shell draws nothing. During an update the page holds the screen lit;
+  once the update ends or fails it gives way to the next touch or press, or to the timeout. Its
+  layout comes from `neotime_status_screen::page`, the same one the bootloader draws, and the DFU
+  state machine reports its step (`LegacyDfu::activity`) and why a step was refused
+  (`Outcome::failure`).
 - **Version.** `build.rs` sets `FIRMWARE_VERSION` from the package version in `firmware/Cargo.toml`
   and the commit `git rev-parse HEAD` gives, through `neotime_boot::version`: `0.1.0+1b19aed`, with
   a `*` when `git status` shows uncommitted changes. Where there is no `.git`, such as a Nix build,
@@ -690,8 +694,8 @@ emulator. See [updates.md](updates.md).
 
 The bootloader is built on [embassy-boot](https://embassy.dev). It swaps in a waiting firmware
 update from external flash, rolls back a new firmware that never marked itself booted, and installs
-the recovery firmware when the button is held for about ten seconds. While it works it shows a blue
-status screen, and it leaves the firmware a note in RAM. It is about 14 KB.
+the recovery firmware or the previous one from a menu the side button opens and drives. While it works it shows a blue
+status screen, and it leaves the firmware a note in RAM. It is about 15.7 KB of its 16 KB.
 
 `neotime-boot` holds the flash layout: in internal flash the bootloader, its state page, the
 running firmware and the shared library apps draw on; in external flash the update slot, the

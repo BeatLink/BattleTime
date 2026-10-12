@@ -85,6 +85,82 @@ impl Outcome {
     fn push(&mut self, bytes: &[u8]) {
         let _ = self.notifications.push(Vec::from_slice(bytes).unwrap());
     }
+
+    /// Why the watch refused a step, read from the first response that was not a success.
+    pub fn failure(&self) -> Option<Failure> {
+        self.notifications
+            .iter()
+            .filter(|notification| notification.first() == Some(&command::RESPONSE))
+            .find_map(|notification| Failure::from_result(*notification.get(2)?))
+    }
+}
+
+// ============================================================================
+// What the status page says about an update
+// ============================================================================
+
+/// The step an update is at, as the wearer sees it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Activity {
+    Idle,
+    /// The phone is sending the image's sizes and its init packet.
+    Starting,
+    Receiving,
+    /// The whole image is in; the phone asks next for its checksum to be checked.
+    Checking,
+    /// The checksum matched; the phone asks next for the image to be installed.
+    Installing,
+}
+
+/// Why a step was refused, in words that fit one line of the status page.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Failure {
+    OutOfOrder,
+    NotSupported,
+    TooLarge,
+    Damaged,
+    StepFailed,
+}
+
+impl Failure {
+    fn from_result(result: u8) -> Option<Failure> {
+        match result {
+            result::INVALID_STATE => Some(Failure::OutOfOrder),
+            result::NOT_SUPPORTED => Some(Failure::NotSupported),
+            result::DATA_SIZE_EXCEEDS_LIMIT => Some(Failure::TooLarge),
+            result::CRC_ERROR => Some(Failure::Damaged),
+            result::OPERATION_FAILED => Some(Failure::StepFailed),
+            _ => None,
+        }
+    }
+
+    pub fn words(self) -> &'static str {
+        match self {
+            Failure::OutOfOrder => "Steps out of order",
+            Failure::NotSupported => "Image not supported",
+            Failure::TooLarge => "Image too large",
+            Failure::Damaged => "Checksum did not match",
+            Failure::StepFailed => "Could not store image",
+        }
+    }
+}
+
+/// Writes how much of the image has arrived, such as `123 / 392 KB  31%`.
+pub fn write_progress(
+    writer: &mut impl core::fmt::Write,
+    bytes_received: u32,
+    image_size_in_bytes: u32,
+) -> core::fmt::Result {
+    let percent = (bytes_received as u64 * 100)
+        .checked_div(image_size_in_bytes as u64)
+        .unwrap_or(0);
+    write!(
+        writer,
+        "{:>3} / {:>3} KB {:>3}%",
+        bytes_received / 1024,
+        image_size_in_bytes.div_ceil(1024),
+        percent
+    )
 }
 
 // ============================================================================
@@ -180,6 +256,24 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
 
     pub fn release(self) -> Targets {
         self.targets
+    }
+
+    pub fn activity(&self) -> Activity {
+        match self.state {
+            State::Idle => Activity::Idle,
+            State::WaitingForSizes
+            | State::WaitingForInitPacket
+            | State::ReceivingInitPacket
+            | State::ReadyForImage => Activity::Starting,
+            State::ReceivingImage => Activity::Receiving,
+            State::ImageReceived => Activity::Checking,
+            State::Validated => Activity::Installing,
+        }
+    }
+
+    /// The slot the current or last update was for.
+    pub fn image_kind(&self) -> ImageKind {
+        self.kind
     }
 
     // ------------------------------------------------------------------------

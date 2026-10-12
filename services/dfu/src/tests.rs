@@ -440,3 +440,93 @@ fn reports_the_received_size_on_request() {
         ]]
     );
 }
+
+// ============================================================================
+// What the status page shows
+// ============================================================================
+
+#[test]
+fn the_activity_follows_each_step_of_an_update() {
+    let firmware = image(100);
+    let mut phone = Phone::new();
+    assert_eq!(phone.dfu.activity(), Activity::Idle);
+
+    phone.command(&[command::START_DFU, image_type::APPLICATION]);
+    assert_eq!(phone.dfu.activity(), Activity::Starting);
+    phone.packet(&Phone::sizes_packet(100));
+    phone.command(&[command::INITIALIZE_DFU, 0]);
+    phone.packet(&Phone::init_packet(&firmware));
+    phone.command(&[command::INITIALIZE_DFU, 1]);
+    assert_eq!(phone.dfu.activity(), Activity::Starting);
+    phone.command(&[command::RECEIVE_FIRMWARE_IMAGE]);
+    phone.packet(&firmware[..20]);
+    assert_eq!(phone.dfu.activity(), Activity::Receiving);
+    for chunk in firmware[20..].chunks(20) {
+        phone.packet(chunk);
+    }
+    assert_eq!(phone.dfu.activity(), Activity::Checking);
+    phone.command(&[command::VALIDATE_FIRMWARE]);
+    assert_eq!(phone.dfu.activity(), Activity::Installing);
+    phone.command(&[command::ACTIVATE_IMAGE_AND_RESET]);
+    assert_eq!(phone.dfu.activity(), Activity::Idle);
+}
+
+#[test]
+fn the_image_kind_says_which_slot_the_update_is_for() {
+    let mut phone = Phone::new();
+    phone.command(&[command::START_DFU, image_type::RECOVERY]);
+    assert_eq!(phone.dfu.image_kind(), ImageKind::Recovery);
+}
+
+#[test]
+fn each_refusal_names_its_failure() {
+    let cases = [
+        (result::INVALID_STATE, Failure::OutOfOrder),
+        (result::NOT_SUPPORTED, Failure::NotSupported),
+        (result::DATA_SIZE_EXCEEDS_LIMIT, Failure::TooLarge),
+        (result::CRC_ERROR, Failure::Damaged),
+        (result::OPERATION_FAILED, Failure::StepFailed),
+    ];
+    for (code, failure) in cases {
+        let outcome = Outcome::response(command::VALIDATE_FIRMWARE, code);
+        assert_eq!(outcome.failure(), Some(failure));
+        assert!(
+            failure.words().len() <= 22,
+            "{} is too long for the page",
+            failure.words()
+        );
+    }
+}
+
+#[test]
+fn successes_and_receipts_are_not_failures() {
+    let mut outcome = Outcome::response(command::START_DFU, result::SUCCESS);
+    outcome.push(&[command::PACKET_RECEIPT, 2, 6, 0, 0]);
+    assert_eq!(outcome.failure(), None);
+    assert_eq!(Outcome::none().failure(), None);
+}
+
+#[test]
+fn a_refused_upload_reports_its_failure_through_the_outcome() {
+    let outcome = block_on(
+        LegacyDfu::new(FakeTargets::new()).on_control_point(&[command::START_DFU, image_type::BOOTLOADER]),
+    );
+    assert_eq!(outcome.failure(), Some(Failure::NotSupported));
+}
+
+#[test]
+fn progress_shows_kilobytes_and_percent() {
+    let mut text = std::string::String::new();
+    write_progress(&mut text, 123 * 1024, 392 * 1024).unwrap();
+    assert_eq!(text, "123 / 392 KB  31%");
+}
+
+#[test]
+fn progress_rounds_the_image_size_up_and_survives_an_unknown_size() {
+    let mut text = std::string::String::new();
+    write_progress(&mut text, 0, 1).unwrap();
+    assert_eq!(text, "  0 /   1 KB   0%");
+    text.clear();
+    write_progress(&mut text, 0, 0).unwrap();
+    assert_eq!(text, "  0 /   0 KB   0%");
+}

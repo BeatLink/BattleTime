@@ -99,18 +99,29 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 
 - **Firmware updates over Bluetooth** with Nordic's legacy DFU, the protocol InfiniTime uses, so
   Gadgetbridge, ITD, Siglo and NeoTime's own tools can update the watch unchanged. See
-  [updates.md](updates.md). The image's CRC is checked by reading it back from the flash, and the
-  status page shows the kilobytes received.
+  [updates.md](updates.md). The image's CRC is checked by reading it back from the flash.
+- **Update progress you can watch.** While an update arrives the status page takes the screen and
+  keeps it lit: which step it is at (starting, receiving, checking, installing), the kilobytes of the
+  image received with a percentage, and the reason in words if the watch refuses it or the phone
+  goes away. A finished or failed update's page stays until the next touch or press, or until the
+  screen times out.
 - **A bad update rolls itself back.** A new firmware runs on trial until it confirms itself; if it
   never does, the bootloader puts the previous firmware back.
-- **A recovery firmware** kept in external flash, installed by holding the side button at start.
-  It is a small build that only shows its status and takes a new firmware over Bluetooth. A
-  firmware update can also replace it.
+- **A bootloader menu on the side button.** Hold the button for about 10 seconds and the watch
+  restarts into a menu: a short press moves between Start firmware, Roll back and Install recovery,
+  and a one-second hold picks one. Roll back puts back the firmware the last update replaced, even
+  one that has confirmed itself. The menu starts the firmware by itself after 30 seconds.
+- **A recovery firmware** kept in external flash, installed from the bootloader menu. It is a small
+  build that only shows its status and takes a new firmware over Bluetooth. A firmware update can
+  also replace it.
 - **The side button stops a stuck watch.** The firmware feeds the watchdog only while the button
   is up, so holding it restarts the watch.
-- **Status on screen.** The status page shows the firmware's mode in plain words and a colour:
-  black when confirmed, amber on trial, red after a rollback and purple for the recovery firmware.
-  The bootloader turns the screen blue while it waits for a recovery hold or installs an update.
+- **Status on screen.** The firmware, the recovery firmware, the bootloader and the bootloader
+  updater all show the same page: the version, then labelled lines for the bootloader, the
+  firmware, the file system and Bluetooth, then what the watch is doing and how far along it is.
+  The colour gives the mode: black when confirmed, amber on trial, red after a rollback, purple for
+  the recovery firmware, and blue while the bootloader works. The bootloader line names the
+  installed bootloader by a CRC-32, such as `OK 1a2b3c4`.
 - **The version on screen and over Bluetooth.** The status page's first line and the Device
   Information service give the firmware's version and the commit it was built from, such as
   `NeoTime 0.1.0+1b19aed`, with a `*` when the build had uncommitted changes.

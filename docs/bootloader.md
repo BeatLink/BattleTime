@@ -5,7 +5,8 @@ update or the recovery firmware, then starts the firmware. It is built on
 [embassy-boot](https://embassy.dev/book/#_bootloader), so updates survive a power cut part way, and
 a new firmware that fails to start is rolled back by itself.
 
-It is about 14 KB, in a 16 KB region; its status screen takes about 6 KB of that.
+It is about 15.7 KB, in a 16 KB region, which leaves about 300 bytes; its status screen takes
+about 6 KB of that.
 
 The work of an update is split three ways:
 
@@ -61,8 +62,8 @@ Growing `FIRMWARE` later needs a new bootloader, since the bootloader is built w
    has turned NFC back on, embassy-nrf turns it off and resets the watch.
 2. Start the watchdog with a 5 second timeout. If the firmware left it running with a different
    timeout, it cannot be changed, so wait for it to reset the watch.
-3. If the button is held, show "Keep holding for recovery firmware" and keep watching it for 5
-   seconds. If it is still held, buzz once and install the recovery firmware (below).
+3. If the button is held, show "Keep holding for the menu" and keep watching it for 5 seconds. If
+   it is still held, buzz once and open the menu (below).
 4. Wake the external flash and check that it answers as a 4 MB chip. If it does not, skip
    straight to step 6 rather than leave the watch unable to start.
 5. Let embassy-boot act on `BOOT_STATE`:
@@ -79,17 +80,25 @@ Every flash read, write and erase feeds the watchdog, so a long swap does not tr
 ## The status screen
 
 On an ordinary start the screen stays dark and the firmware starts at once. Whenever the bootloader
-has work to do, it turns the screen blue (`status_colour::BOOTLOADER`) and says what it is doing in
-white. The screen code is its own small ST7789 driver in `drivers/status_screen`, since the
-firmware's mipidsi-based driver does not fit. Text uses the 6x10 font drawn at double size. The
-simulator's tests run it against the simulator's ST7789 model, through the panel's SPI wires.
+has work to do, it turns the screen blue (`status_colour::BOOTLOADER`) and shows the same page as
+the firmware ([updates.md](updates.md#the-status-page)), titled "NeoTime bootloader", with
+Bootloader `Working`, Filesystem `Not mounted` and Bluetooth `Off`. The screen code is its own
+small ST7789 driver in `drivers/status_screen`, since the firmware's mipidsi-based driver does not
+fit. It draws the 10x20 font straight from its bitmap rather than through embedded-graphics' text
+code, which would not fit either. The simulator's tests run it against the simulator's ST7789
+model, through the panel's SPI wires.
 
-| When | Lines |
+| When | Firmware / Action / Progress |
 |---|---|
-| The button is held at start | NeoTime bootloader / Keep holding for / recovery firmware |
-| Installing the recovery firmware | NeoTime bootloader / Installing recovery / Do not unplug |
-| No valid recovery firmware | NeoTime bootloader / No recovery found / Starting firmware |
-| Swapping in an update, or rolling one back | NeoTime bootloader / Installing firmware / Do not unplug |
+| The button is held at start | Unchanged / Keep holding for / the menu |
+| The menu | Unchanged, then the three options from the action line down, the selected one marked with `>`, and "Press: next Hold: pick" |
+| Rolling back | Swapping / Rolling back / Do not unplug |
+| Installing the recovery firmware | Swapping / Installing recovery / Do not unplug |
+| No previous firmware, or no valid recovery firmware | Unchanged / No previous firmware or No recovery found / Starting firmware |
+| Swapping in an update, or rolling one back | Swapping / Installing firmware / Do not unplug |
+
+The bootloader updater shows the page titled "NeoTime boot updater", with Firmware `Updater`, and
+its Bootloader line goes `Checking`, `Writing`, then `Updated` or `Up to date`.
 
 ## The note to the firmware
 
@@ -147,24 +156,42 @@ firmware update was swapped in under the new blue screen.
 - **Keep a recovery firmware** in `RECOVERY_FIRMWARE`, written with
   `neotime_updates::RecoveryReceiver`.
 
-## Recovery
+## The menu: rollback and recovery
 
-Recovery is for a firmware that starts but is broken badly enough that it cannot take an update.
+The menu is for a firmware that starts but is broken badly enough that it cannot take an update,
+or one that should be swapped for the firmware before it. It needs only the side button.
 
 The system loop feeds the watchdog only while the button is up (see the button driver in
-[architecture.md](architecture.md)), so the whole gesture is one long hold:
+[architecture.md](architecture.md)), so the menu opens with one long hold:
 
 1. Hold the button. After about 5 seconds the watchdog resets the watch.
-2. Keep holding. After 5 more seconds in the bootloader, the watch buzzes once. Let go.
-3. The bootloader checks that `RECOVERY_FIRMWARE` holds a firmware: its first two words must be a
-   stack pointer in RAM and a reset handler inside `FIRMWARE`. If they are not, the watch buzzes
-   three times and starts the old firmware.
-4. It copies the recovery firmware into `FIRMWARE_UPDATE` and marks a swap, so the recovery firmware
-   is installed by the same power-cut-safe swap as any update. The screen stays blue with
-   "Installing recovery" meanwhile, for up to about 30 seconds.
+2. Keep holding. After 5 more seconds in the bootloader (`MENU_BUTTON_HOLD_IN_MILLISECONDS`), the
+   watch buzzes once and shows the menu. Let go.
+3. A short press moves to the next option: **Start firmware**, **Roll back**, **Install recovery**.
+   A press held for a second (`MENU_SELECT_HOLD_IN_MILLISECONDS`) picks the marked one, with a buzz.
+   After 30 seconds without a press (`MENU_TIMEOUT_IN_MILLISECONDS`) it starts the firmware, so a
+   watch is never left in the menu.
+4. **Roll back** needs the firmware the last swap replaced, which sits one page up in the update
+   slot (`PREVIOUS_FIRMWARE`). **Install recovery** needs `RECOVERY_FIRMWARE`. Either image must
+   start with a stack pointer in RAM and a reset handler inside `FIRMWARE`; if it does not, the
+   watch buzzes three times and starts the firmware it has, with nothing changed.
+5. The bootloader marks the running firmware booted, which drops the progress a swap left in
+   `BOOT_STATE`, then copies the image to the start of `FIRMWARE_UPDATE`
+   (`copy_previous_into_update_slot` moves it down a page in place; `copy_recovery_into_update_slot`
+   copies it across) and marks a swap. The image is then installed by the same power-cut-safe swap
+   as any update, with the screen blue for up to about 30 seconds.
 
-The broken firmware ends up in `FIRMWARE_UPDATE`. The recovery firmware must mark itself booted,
-or the next reset swaps the broken firmware back in.
+Clearing the state first matters for a firmware still on trial: its swap's progress is still in
+`BOOT_STATE`, and marking a swap over it would leave that progress in place, so embassy-boot would
+revert from the slot the copy has just overwritten.
+
+A power cut during the copy loses the image in the update slot, but the running firmware is
+untouched. One case is not covered: a power cut part way through a swap, then the menu, leaves a
+half-swapped firmware for Roll back to replace, and Roll back then copies whatever the half swap
+left above it; Install recovery recovers from that.
+
+The firmware that was running ends up in the update slot. The installed firmware runs on trial and
+must confirm itself, or the next reset swaps the other one back.
 
 ## Building and flashing
 

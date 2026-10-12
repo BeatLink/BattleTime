@@ -166,6 +166,51 @@ fn copies_the_recovery_image_into_the_update_slot() {
 }
 
 #[test]
+fn moves_the_previous_firmware_down_a_page_to_the_start_of_the_update_slot() {
+    let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
+    // Longer than a page, with an erased stretch, filling the whole slot, as a real previous firmware might.
+    let mut image: Vec<u8> = valid_vector_table()
+        .into_iter()
+        .chain((0..FIRMWARE.size as usize - 8).map(|index| (index % 251) as u8))
+        .collect();
+    image[6000..9000].fill(0xFF);
+    flash.put(PREVIOUS_FIRMWARE.start, &image);
+    flash.put(FIRMWARE_UPDATE.start, &[0x55; 64]);
+
+    let result = copy_previous_into_update_slot(&mut flash);
+
+    assert_eq!(result, Ok(PreviousCopy::Copied));
+    assert_eq!(flash.bytes_at(FIRMWARE_UPDATE.start, image.len()), &image[..]);
+    assert!(flash
+        .bytes_at(FIRMWARE_UPDATE.end() - PAGE_SIZE, PAGE_SIZE as usize)
+        .iter()
+        .all(|byte| *byte == 0xFF));
+}
+
+#[test]
+fn a_rollback_leaves_the_recovery_firmware_alone() {
+    let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
+    flash.put(PREVIOUS_FIRMWARE.start, &valid_vector_table());
+    flash.put(RECOVERY_FIRMWARE.start, &[0x42; 64]);
+
+    copy_previous_into_update_slot(&mut flash).unwrap();
+
+    assert_eq!(flash.bytes_at(RECOVERY_FIRMWARE.start, 64), &[0x42; 64]);
+}
+
+#[test]
+fn a_rollback_without_a_previous_firmware_changes_nothing() {
+    let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
+    // An update waiting at the start of the slot, which a page up does not look like firmware.
+    flash.put(FIRMWARE_UPDATE.start, &valid_vector_table());
+
+    let result = copy_previous_into_update_slot(&mut flash);
+
+    assert_eq!(result, Ok(PreviousCopy::NoPreviousFirmware));
+    assert_eq!(flash.erase_count, 0);
+}
+
+#[test]
 fn leaves_the_update_slot_alone_without_a_recovery_image() {
     let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
     flash.put(FIRMWARE_UPDATE.start, &[0; 64]);
@@ -352,7 +397,12 @@ mod updater_note {
 }
 
 mod bootloader_image_check {
-    use crate::{is_bootloader_vector_table, is_firmware_vector_table};
+    use super::{vec, FakeFlash};
+    use crate::{
+        bootloader_identity, is_bootloader_vector_table, is_firmware_vector_table,
+        migration::{crc32, CRC32_INITIAL},
+        BOOTLOADER, PAGE_SIZE,
+    };
 
     fn vector_table(stack_pointer: u32, reset_handler: u32) -> [u8; 8] {
         let mut start = [0; 8];
@@ -378,6 +428,41 @@ mod bootloader_image_check {
     #[test]
     fn erased_flash_is_not_a_bootloader() {
         assert!(!is_bootloader_vector_table([0xFF; 8]));
+    }
+
+    #[test]
+    fn the_identity_is_the_crc_of_the_image_without_its_erased_tail() {
+        let mut image = vector_table(0x2001_0000, 0x0000_0101).to_vec();
+        // Longer than one read and ending past a chunk boundary, with an erased byte inside it.
+        image.extend((0..700).map(|index| if index == 300 { 0xFF } else { index as u8 | 1 }));
+        let mut flash = FakeFlash::erased(BOOTLOADER.size + PAGE_SIZE);
+        flash.put(BOOTLOADER.start, &image);
+
+        assert_eq!(
+            bootloader_identity(&mut flash),
+            Ok(Some(crc32(CRC32_INITIAL, &image)))
+        );
+    }
+
+    #[test]
+    fn a_bootloader_filling_its_whole_region_is_read_to_the_end() {
+        let mut image = vec![0x5A; BOOTLOADER.size as usize];
+        image[..8].copy_from_slice(&vector_table(0x2001_0000, 0x0000_0101));
+        let mut flash = FakeFlash::erased(BOOTLOADER.size);
+        flash.put(BOOTLOADER.start, &image);
+
+        assert_eq!(
+            bootloader_identity(&mut flash),
+            Ok(Some(crc32(CRC32_INITIAL, &image)))
+        );
+    }
+
+    #[test]
+    fn a_region_without_a_bootloader_has_no_identity() {
+        assert_eq!(
+            bootloader_identity(&mut FakeFlash::erased(BOOTLOADER.size)),
+            Ok(None)
+        );
     }
 }
 

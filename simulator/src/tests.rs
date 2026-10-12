@@ -173,11 +173,14 @@ fn low_power_mode_shows_eight_colours_and_keeps_the_rest() {
 
 mod status_screen {
     use embedded_graphics::{
-        mono_font::ascii::FONT_6X10,
+        mono_font::ascii::FONT_10X20,
         pixelcolor::{raw::RawU16, Rgb565},
         prelude::RgbColor,
     };
-    use neotime_status_screen::{Screen, LINE_CHARACTERS};
+    use neotime_status_screen::{
+        page::{self, LINE_CHARACTERS},
+        Screen,
+    };
 
     use crate::{
         hardware::{ThreadDelay, UnconnectedPin},
@@ -186,7 +189,7 @@ mod status_screen {
 
     const BLUE: u16 = 0x00EB;
     const LEFT_MARGIN: u16 = 12;
-    const CHARACTER_WIDTH: u16 = 12;
+    const CHARACTER_WIDTH: u16 = 10;
 
     fn started_screen() -> (SimulatedPanel, Screen<PanelSpi, DataOrCommandPin>) {
         let panel = SimulatedPanel::new();
@@ -202,10 +205,10 @@ mod status_screen {
         (panel, screen)
     }
 
-    /// The screen rows a line's text covers: the 10-pixel font cell at double height, at the screen's baselines.
+    /// The screen rows a line's text covers: the 20-pixel font cell at the page's baselines.
     fn line_rows(line: u16) -> core::ops::Range<u16> {
-        let baseline = (50 + line * 26) / 2;
-        let top = (baseline - FONT_6X10.baseline as u16) * 2;
+        let baseline = 30 + line * 24;
+        let top = baseline - FONT_10X20.baseline as u16;
         top..top + 20
     }
 
@@ -234,8 +237,8 @@ mod status_screen {
     #[test]
     fn a_line_shows_white_text_inside_its_rows_only() {
         let (panel, mut screen) = started_screen();
-        screen.write_line(1, "Installing");
-        let rows = line_rows(1);
+        screen.write_line(page::ACTION, "Installing");
+        let rows = line_rows(page::ACTION as u16);
         assert!(count(&panel, 0..240, rows.clone(), Rgb565::WHITE) > 100);
         assert_eq!(count(&panel, 0..240, 0..rows.start, Rgb565::WHITE), 0);
         assert_eq!(count(&panel, 0..240, rows.end..240, Rgb565::WHITE), 0);
@@ -244,8 +247,8 @@ mod status_screen {
     #[test]
     fn a_shorter_line_covers_what_the_longer_one_said() {
         let (panel, mut screen) = started_screen();
-        screen.write_line(0, "Installing firmware");
-        screen.write_line(0, "Done");
+        screen.write_line(page::TITLE, "Installing firmware");
+        screen.write_line(page::TITLE, "Done");
         let right_of_done = LEFT_MARGIN + 4 * CHARACTER_WIDTH;
         assert_eq!(count(&panel, right_of_done..240, line_rows(0), Rgb565::WHITE), 0);
     }
@@ -253,15 +256,16 @@ mod status_screen {
     #[test]
     fn text_past_the_line_is_cut_at_the_edge() {
         let (panel, mut screen) = started_screen();
-        screen.write_line(2, "A line far longer than nineteen characters");
+        screen.write_line(2 + page::ACTION, "A line far longer than twenty-two characters");
         let end_of_line = LEFT_MARGIN + LINE_CHARACTERS as u16 * CHARACTER_WIDTH;
-        assert!(count(&panel, LEFT_MARGIN..end_of_line, line_rows(2), Rgb565::WHITE) > 100);
-        assert_eq!(count(&panel, end_of_line..240, line_rows(2), Rgb565::WHITE), 0);
+        let rows = line_rows(2 + page::ACTION as u16);
+        assert!(count(&panel, LEFT_MARGIN..end_of_line, rows.clone(), Rgb565::WHITE) > 100);
+        assert_eq!(count(&panel, end_of_line..240, rows, Rgb565::WHITE), 0);
     }
 
     #[test]
     fn text_that_is_not_ascii_does_not_panic() {
         let (_, mut screen) = started_screen();
-        screen.write_line(0, "é€ ünïcödé line that runs on and on");
+        screen.write_line(page::FIRMWARE, "é€ ünïcödé line that runs on and on");
     }
 }

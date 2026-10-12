@@ -23,6 +23,8 @@ ${FIRMWARE_START}         0x5000
 ${EXTERNAL_FLASH}         0x60000000
 ${UPDATE_SLOT}            ${{ 0x60000000 + 0x000000 }}
 ${RECOVERY_SLOT}          ${{ 0x60000000 + 0x065000 }}
+# Where a swap leaves the firmware it replaced: one page up in the update slot.
+${PREVIOUS_SLOT}          ${{ 0x60000000 + 0x001000 }}
 ${ALIVE_MARKER}           0x2000FFF0
 ${ALIVE_MAGIC}            0x4E454F54
 ${BOOT_COUNT}             0x2000FFF4

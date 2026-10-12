@@ -27,7 +27,7 @@ const WASP_OS_ENTER_UPDATE_MODE: u32 = 0xA8;
 
 /// Shows the result, then restarts into wasp-os's update mode, so the next image can be sent without the button.
 pub async fn reset(screen: &mut Screen) -> ! {
-    screen.write_line(line::UPDATE, "Done, back to wasp-os");
+    screen.write_line(line::ACTION, "Done, back to wasp-os");
     embassy_time::Timer::after(embassy_time::Duration::from_millis(2000)).await;
     unsafe { POWER_GENERAL_PURPOSE_RETAINED.write_volatile(WASP_OS_ENTER_UPDATE_MODE) };
     cortex_m::peripheral::SCB::sys_reset()
@@ -167,7 +167,8 @@ pub async fn start(
         OutputDrive::Standard,
     ));
     let _flash_controller_never_used = peripherals.flash_controller;
-    screen.write_line(line::FILES, "No flash writes");
+    screen.write_line(line::FILES, "Not used");
+    screen.write_line(line::BOOTLOADER, "wasp-os");
 
     let targets = Targets {
         buffer: REHEARSAL_BUFFER.init([0; LARGEST_REHEARSAL_IMAGE]),

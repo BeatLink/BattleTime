@@ -1,7 +1,10 @@
-//! Which mode the firmware is running in, and how the status page shows it: a background colour and two lines of plain words.
+//! Which mode the firmware is running in, and how the status page shows it: a background colour and plain words.
 
 use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565};
-use neotime_boot::{status_colour, BootNote, UpdaterNote, BOOT_NOTE_ADDRESS, UPDATER_NOTE_ADDRESS};
+use embedded_storage::nor_flash::{ErrorType, NorFlashErrorKind, ReadNorFlash};
+use neotime_boot::{
+    status_colour, BootNote, UpdaterNote, BOOTLOADER, BOOT_NOTE_ADDRESS, UPDATER_NOTE_ADDRESS,
+};
 
 // ============================================================================
 // Modes
@@ -36,18 +39,19 @@ impl Mode {
         Rgb565::from(RawU16::new(colour))
     }
 
-    pub fn title(self) -> &'static str {
+    /// The firmware line's value, short enough to follow its label.
+    pub fn word(self) -> &'static str {
         match self {
-            Mode::Confirmed | Mode::BootloaderUpdated | Mode::BootloaderAlreadyCurrent => "Firmware OK",
-            Mode::OnTrial => "New firmware on trial",
-            Mode::RolledBack => "Update failed",
-            Mode::Recovery => "Recovery firmware",
+            Mode::Confirmed | Mode::BootloaderUpdated | Mode::BootloaderAlreadyCurrent => "OK",
+            Mode::OnTrial => "On trial",
+            Mode::RolledBack => "Rolled back",
+            Mode::Recovery => "Recovery",
         }
     }
 
     pub fn detail(self) -> &'static str {
         match self {
-            Mode::Confirmed => "",
+            Mode::Confirmed => "Idle",
             Mode::OnTrial => "Connect to keep it",
             Mode::RolledBack => "Previous one restored",
             Mode::Recovery => "Send a new firmware",
@@ -73,6 +77,57 @@ pub fn take_updater_note() -> Option<UpdaterNote> {
     let note = UpdaterNote::from_word(unsafe { address.read_volatile() });
     unsafe { address.write_volatile(0) };
     note
+}
+
+/// The bootloader's pages, read with plain loads in assembly.
+///
+/// The bootloader starts at address 0, the null pointer to Rust, so reading it through a pointer or
+/// the flash controller's driver is undefined behaviour, and the compiler drops the code after it.
+pub struct BootloaderPages;
+
+impl ErrorType for BootloaderPages {
+    type Error = NorFlashErrorKind;
+}
+
+impl ReadNorFlash for BootloaderPages {
+    const READ_SIZE: usize = 1;
+
+    fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+        if offset as usize + bytes.len() > BOOTLOADER.end() as usize {
+            return Err(NorFlashErrorKind::OutOfBounds);
+        }
+        for (address, byte) in (offset as usize..).zip(bytes.iter_mut()) {
+            let value: u32;
+            unsafe {
+                core::arch::asm!(
+                    "ldrb {value}, [{address}]",
+                    address = in(reg) address,
+                    value = lateout(reg) value,
+                    options(nostack, readonly, preserves_flags),
+                );
+            }
+            *byte = value as u8;
+        }
+        Ok(())
+    }
+
+    fn capacity(&self) -> usize {
+        BOOTLOADER.end() as usize
+    }
+}
+
+/// The bootloader line's value: the first hex digits of its CRC-32, after "New" when the updater just wrote it.
+pub fn bootloader_words(identity: Result<Option<u32>, ()>, mode: Mode) -> heapless::String<11> {
+    let mut words = heapless::String::new();
+    let _ = match identity {
+        Ok(Some(crc)) if mode == Mode::BootloaderUpdated => {
+            core::fmt::write(&mut words, format_args!("New {:07x}", crc >> 4))
+        }
+        Ok(Some(crc)) => core::fmt::write(&mut words, format_args!("OK {:07x}", crc >> 4)),
+        Ok(None) => words.push_str("Not found").map_err(|_| core::fmt::Error),
+        Err(()) => words.push_str("Unreadable").map_err(|_| core::fmt::Error),
+    };
+    words
 }
 
 /// A build made for the recovery slot is always the recovery firmware, however it was installed.

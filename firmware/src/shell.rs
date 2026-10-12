@@ -13,7 +13,8 @@
 //! low, lights the screen on the battery app, which goes back to what was open when the screen
 //! sleeps or the wearer goes back. The phone's music and weather are kept for apps to read, an
 //! incoming call buzzes and lights the screen, and the phone can ring the watch until the wearer
-//! touches it.
+//! touches it. While an update runs, the status page holds the screen lit; once the update ends or
+//! fails, the next touch or press puts the shell back.
 
 extern crate alloc;
 
@@ -26,10 +27,10 @@ use alloc::vec;
 use core::fmt::Write;
 
 use embassy_futures::{
-    select::{select4, Either4},
+    select::{select, select4, Either, Either4},
     yield_now,
 };
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, signal::Signal};
 use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_app_host::{
@@ -67,6 +68,12 @@ static SHOWING_STATUS: AtomicBool = AtomicBool::new(true);
 /// Set when the status page goes away, so the shell paints the whole screen again.
 static REDRAW_EVERYTHING: AtomicBool = AtomicBool::new(false);
 
+/// While set, the status page gives way to the next touch or press and lets the screen time out; the start-up page begins so.
+static STATUS_DISMISSABLE: AtomicBool = AtomicBool::new(true);
+
+/// Wakes the shell when the status page takes the screen or lets it go, to light it or restart the timeout.
+static STATUS_CHANGED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
 const MILLISECONDS_PER_MINUTE: Value = 60_000;
 
 /// A chime is skipped when the shell notices it later than this, such as after the phone moved the clock on.
@@ -96,13 +103,30 @@ pub fn status_is_shown() -> bool {
     SHOWING_STATUS.load(Ordering::Relaxed)
 }
 
-/// Puts the status page up; true when it was not already showing, so the caller clears the screen.
+/// Puts the status page up and holds the screen lit; true when it was not already showing, so the caller clears the screen.
 pub fn show_status() -> bool {
-    !SHOWING_STATUS.swap(true, Ordering::Relaxed)
+    let was_dismissable = STATUS_DISMISSABLE.swap(false, Ordering::Relaxed);
+    let newly_shown = !SHOWING_STATUS.swap(true, Ordering::Relaxed);
+    if newly_shown || was_dismissable {
+        STATUS_CHANGED.signal(());
+    }
+    newly_shown
+}
+
+/// Leaves the status page up until the next touch or press, and lets the screen time out from now.
+pub fn release_status() {
+    if !STATUS_DISMISSABLE.swap(true, Ordering::Relaxed) {
+        STATUS_CHANGED.signal(());
+    }
+}
+
+/// True while the status page keeps the screen from timing out.
+fn status_holds_screen() -> bool {
+    status_is_shown() && !STATUS_DISMISSABLE.load(Ordering::Relaxed)
 }
 
 /// Takes the status page down, and has the shell paint its screen again.
-pub fn hide_status() {
+fn hide_status() {
     if SHOWING_STATUS.swap(false, Ordering::Relaxed) {
         REDRAW_EVERYTHING.store(true, Ordering::Relaxed);
     }
@@ -622,6 +646,10 @@ impl Shell {
         if let Some(showing) = self.battery_screen_returns_to {
             self.open(showing, Transition::None);
         }
+        // A finished update's page has been seen, so the next wake shows the shell.
+        if status_is_shown() {
+            hide_status();
+        }
         self.lit = false;
         self.dimmed = settings::current().is_on(Setting::AlwaysOnScreen);
         if self.dimmed {
@@ -797,7 +825,10 @@ pub async fn run_shell(
     files: &'static storage::Files,
 ) {
     Timer::after(START_PAGE_TIME).await;
-    hide_status();
+    // An update that began during the start-up page keeps it.
+    if !status_holds_screen() {
+        hide_status();
+    }
     settings::load(files);
     clock::load_time_zone(files);
     install_fonts(apps::shared_library());
@@ -860,7 +891,7 @@ pub async fn run_shell(
             Some(host) => host.next_wakeup(now).map_or(Instant::MAX, clock::instant_at),
             None => clock::instant_at(help::next_change(now)),
         };
-        if shell.lit && !shell.system.keep_screen_on {
+        if shell.lit && !shell.system.keep_screen_on && !status_holds_screen() {
             wake_at = wake_at.min(last_input + screen_timeout());
         }
         if let Some(period) = chime_period_in_milliseconds() {
@@ -879,7 +910,7 @@ pub async fn run_shell(
                         system_values::next_changes(),
                         settings::CHANGES.receive(),
                         packages::CHANGED.wait(),
-                        app_events::next(),
+                        select(app_events::next(), STATUS_CHANGED.wait()),
                     ),
                 )
                 .await
@@ -901,6 +932,12 @@ pub async fn run_shell(
                 if !shell.lit {
                     if matches!(touch, Touch::Release { .. }) {
                         shell.turn_screen_on();
+                    }
+                    continue;
+                }
+                if status_is_shown() {
+                    if !status_holds_screen() && matches!(touch, Touch::Release { .. }) {
+                        hide_status();
                     }
                     continue;
                 }
@@ -926,12 +963,18 @@ pub async fn run_shell(
                     shell.turn_screen_on();
                     continue;
                 }
+                if status_is_shown() {
+                    if !status_holds_screen() {
+                        hide_status();
+                    }
+                    continue;
+                }
                 shell.press_button(press);
             }
             Either4::Third(()) => {
                 diagnostics::set(Counter::ShellLastWake, 3);
                 let timed_out = Instant::now() >= last_input + screen_timeout();
-                if shell.lit && timed_out && !shell.system.keep_screen_on {
+                if shell.lit && timed_out && !shell.system.keep_screen_on && !status_holds_screen() {
                     shell.turn_screen_off();
                 }
                 if let Some(host) = &mut shell.host {
@@ -950,9 +993,16 @@ pub async fn run_shell(
                 diagnostics::set(Counter::ShellLastWake, 6);
                 shell.reload_apps();
             }
-            Either4::Fourth(Either4::Fourth(event)) => {
+            Either4::Fourth(Either4::Fourth(Either::First(event))) => {
                 diagnostics::set(Counter::ShellLastWake, 7);
                 shell.app_event(event);
+            }
+            Either4::Fourth(Either4::Fourth(Either::Second(()))) => {
+                diagnostics::set(Counter::ShellLastWake, 8);
+                last_input = Instant::now();
+                if status_holds_screen() && !shell.lit {
+                    shell.turn_screen_on();
+                }
             }
         }
         if shell.follow_requests() {
