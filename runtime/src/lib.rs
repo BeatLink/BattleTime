@@ -15,6 +15,7 @@ pub mod events;
 pub mod image;
 pub mod instruction;
 pub mod interpreter;
+pub mod memory_need;
 pub mod pattern;
 pub mod resources;
 pub mod state;
@@ -33,6 +34,7 @@ pub use bindings::{
 pub use image::{AppImage, AppKind, ImageError, StateVariable, ValueType};
 pub use instruction::{EffectKind, SystemValue};
 pub use interpreter::{Effect, Failure, HandlerOutcome, Interpreter, SystemValues, Value, NONE};
+pub use memory_need::{estimate_memory_need, MemoryNeed, APP_HEAP_BUDGET_BYTES};
 pub use state::AppState;
 pub use theme::{
     preset_matching, preset_named, ColorValue, PresetTheme, Theme, ThemeColor, DEFAULT_THEME, PRESET_THEMES,
@@ -47,3 +49,5 @@ mod tests;
 mod array_work_tests;
 #[cfg(test)]
 mod function_tests;
+#[cfg(test)]
+mod memory_need_tests;

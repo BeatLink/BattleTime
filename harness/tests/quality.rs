@@ -2,9 +2,9 @@
 //! `test_qa`: who it says it is, that it is documented, and that its image is sound and fits in RAM.
 
 use neotime_app_testing::{
-    compile_package, every_package, package_source, repository_root, Package, PackageKind,
+    compile_package, every_package, package_source, repository_root, Package, PackageKind, TestWatch,
 };
-use neotime_runtime::{AppImage, AppKind, Property, PropertySource, WidgetTree};
+use neotime_runtime::{estimate_memory_need, AppImage, AppKind, APP_HEAP_BUDGET_BYTES};
 
 // ============================================================================
 // Rules
@@ -21,9 +21,6 @@ const RUNTIME_WORKING_BYTES: usize = 2_168 + 2_056 + 2_440 + 256;
 
 /// The expression bytecode that fits beside the runtime's working memory.
 const MOST_EXPRESSION_BYTES: usize = OPEN_APP_BYTES - RUNTIME_WORKING_BYTES;
-
-/// How many widgets of one screen fit in the 20 KB UI heap at 240 B a node, from docs/memory-map.md.
-const MOST_WIDGETS_ON_A_SCREEN: usize = 55;
 
 /// Whether an id is lowercase words of letters and digits joined by single hyphens, like `four-in-a-row`.
 fn is_lowercase_hyphenated(id: &str) -> bool {
@@ -54,27 +51,6 @@ fn is_listed(page_text: &str, id: &str) -> bool {
         .filter_map(|line| line.strip_prefix('|'))
         .filter_map(|row| row.split('|').next())
         .any(|first_column| first_column.contains(&quoted))
-}
-
-/// How many widgets a screen has, counting the root and everything inside it.
-fn widgets_in(tree: &WidgetTree, root: u16) -> usize {
-    1 + tree
-        .children(root)
-        .map(|child| widgets_in(tree, child))
-        .sum::<usize>()
-}
-
-fn screen_name<'image>(image: &AppImage<'image>, tree: &WidgetTree<'image>, root: u16) -> &'image str {
-    let name = tree
-        .widget(root)
-        .and_then(|widget| widget.property(Property::ScreenName));
-    match name {
-        Some(PropertySource::Constant(string)) => u16::try_from(string)
-            .ok()
-            .and_then(|string| image.string(string))
-            .unwrap_or("main"),
-        _ => "main",
-    }
 }
 
 // ============================================================================
@@ -129,15 +105,12 @@ fn problems_with(package: &Package) -> Vec<String> {
             expression_bytes + function_bytes
         ));
     }
-    let tree = WidgetTree::new(image);
-    for screen in tree.screens() {
-        let widgets = widgets_in(&tree, screen);
-        if widgets > MOST_WIDGETS_ON_A_SCREEN {
-            let name = screen_name(&image, &tree, screen);
-            problems.push(format!(
-                "its screen {name:?} has {widgets} widgets, over the {MOST_WIDGETS_ON_A_SCREEN} the UI heap holds"
-            ));
-        }
+    let need = estimate_memory_need(&image);
+    if need.total_bytes > APP_HEAP_BUDGET_BYTES {
+        problems.push(format!(
+            "it needs about {} bytes of heap, over the {APP_HEAP_BUDGET_BYTES} bytes an open app has",
+            need.total_bytes
+        ));
     }
     let declared_id = image.string(image.id_string).unwrap_or_default();
     if declared_id != id {
@@ -228,4 +201,22 @@ fn a_listing_counts_only_in_the_first_column() {
     assert!(is_listed(page, "hello"));
     assert!(is_listed(page, "template"));
     assert!(!is_listed(page, "timer"));
+}
+
+#[test]
+fn no_package_builds_more_nodes_than_its_heap_estimate_counts() {
+    for package in every_package() {
+        let image_bytes = compile_package(package.kind, &package.id).unwrap();
+        let need = estimate_memory_need(&AppImage::parse(&image_bytes).unwrap());
+        let watch = TestWatch::open_package(package.kind, &package.id).unwrap();
+
+        let built = watch.host().node_count() as u32 * neotime_runtime::memory_need::NODE_BYTES;
+
+        assert!(
+            built <= need.widget_bytes,
+            "{} builds {built} bytes of nodes, more than the {} its estimate counts",
+            package.label(),
+            need.widget_bytes
+        );
+    }
 }

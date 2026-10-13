@@ -659,6 +659,11 @@ impl<'image> WidgetTree<'image> {
         WidgetTree { image }
     }
 
+    /// The image the widgets are read from.
+    pub fn image(&self) -> &AppImage<'image> {
+        &self.image
+    }
+
     pub fn widget_count(&self) -> u16 {
         self.image.widget_count()
     }

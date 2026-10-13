@@ -307,12 +307,10 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
   `neotime-ui`'s renderer and `FadedRenderer` with the screen as the clip.
 - [ ] **Terminal face overflow.** Its last line falls off the bottom of the screen and
   "[STAT] Connected" is cut in half.
-- [ ] **Apps over the RAM budget.** The quality check's `KNOWN_GAPS` lists alarm (67 widgets on
-  its main screen) and the launcher (65) against a widget budget worked out from 240 B nodes. Nodes
-  are 160 B now and the alarm opens in the emulator, at 36,188 B of the 37,888 B heap, so redo
-  the budget in the check and [memory-map.md](memory-map.md). The alarm's image has since shrunk
-  from 15 KB to 6.1 KB, so measure it again. The launcher runs on the watch, so measure the real limit and either correct
-  [memory-map.md](memory-map.md) or slim the screens.
+- [ ] **Count the heap's peak exactly.** The emulator measures the allocator's bytes in use and
+  the highest heap byte touched, which misses allocations filled with zeros. A peak counter in the
+  allocator, read over the diagnostics characteristic, would check the heap estimate against every
+  app's worst moment rather than its first screen.
 
 ## Display and SPI bus
 

@@ -207,7 +207,7 @@ The table below is the budget:
 
 | Region | Budget | Holds | Status |
 |---|---|---|---|
-| UI heap | 21 KB | The heap that `rlvgl`'s widgets allocate from. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (6,628 B), one 160 B node per widget of the open screen that is not inside a hidden one, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. Storage shares the same heap. The alarm peaked at 36,188 B of the 37,888 B heap with its 15 KB image and 67 widgets; calls and shared code have since cut its image to 6.1 KB, so measure it again. The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. A `TextFile` holds 4 B for every eighth line of its file and the text of the lines near the view, under 2 KB in the small font, and borrows a 512 B buffer while it reads; a 2,000-line note takes about 1 KB of places. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
+| UI heap | 21 KB | The heap that `rlvgl`'s widgets allocate from. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (6,628 B), one 160 B node per widget of the open screen that is not inside a hidden one, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. Storage shares the same heap. How much an app needs is worked out from its image, as [below](#how-much-heap-an-app-needs). The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. A `TextFile` holds 4 B for every eighth line of its file and the text of the lines near the view, under 2 KB in the small font, and borrows a 512 B buffer while it reads; a 2,000-line note takes about 1 KB of places. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
 | Bluetooth | 12 KB | The controller and the TrouBLE host: connection state, packet buffers and the GATT tables. | Partly measured: the controller is 1.5 KB; TrouBLE's example with it is 12.0 KB in all, executor included |
 | Apps | 6 KB | Memory for the app that is open beyond the UI heap, such as the parts of its file read from `/apps`. The runtime's working memory in it is measured: 2,168 B for the interpreter, 2,056 B for the bindings and 2,440 B for the state. `AppHost` keeps all three on the UI heap. | Partly measured |
 | Stack | 8 KB | The main stack, for interrupts and code that is not in a task. | Planned |
@@ -219,6 +219,53 @@ The table below is the budget:
 
 The 64 KB is all the chip has, so a part that needs more must take it from another row of this
 table.
+
+### How much heap an app needs
+
+`neotime_runtime::memory_need::estimate_memory_need` works out an app's need from its image alone,
+so the package manager can check it before an app is installed or turned on, and the shell before
+it opens one. The parts, in bytes:
+
+| Part | Bytes | Where the number comes from |
+|---|---:|---|
+| The image | its length | Read into the heap while the app is open |
+| Working memory | 6,628 | The host's state, interpreter and bindings, with `size_of` for the watch |
+| Subscriptions | 40 each | What the host keeps for each |
+| Saved state | `saved_state_bytes` | The buffer the shell writes it from when the app closes, and reads it into when it opens |
+| Passing use | 1,536 | Drawing, the image checks at open, and the allocator's gaps |
+| Nodes | 164 per widget of the largest screen | A node and its place in the list; every widget counts as shown, a Repeat counts each row (8 when the count is worked out at run time, only those in view down a list of fixed-height rows), and no screen more than 128 |
+| Text | each fixed text's length, 16 for text worked out at run time, 2,560 for a TextFile | |
+
+An app's need must fit `APP_HEAP_BUDGET_BYTES`, 33,792 B: the 37,888 B heap less 4 KB for the
+system while an app is open. Measured in the emulator, the system holds about 1 KB at rest (the
+mounted file system and the shell's list of apps); the rest of its share is for kept notifications
+(up to about 1 KB), files open while the app saves, and lines to and from the companion app.
+
+Measured in the PineTime emulator on 2026-10-12 with `tools/measure_heap.py`, which installs the
+`digital` face, the launcher and one app, opens each and reads the allocator's bytes in use with
+its first screen open, against the estimate (which counts hidden widgets, so it is the larger):
+
+```sh
+cargo run -p neotime-packages --example filesystem_use -- --no-theme --image flash.bin \
+    digital=digital.ntapp launcher=launcher.ntapp settings=settings.ntapp
+python3 -I tools/measure_heap.py firmware/target/thumbv7em-none-eabihf/release/neotime-firmware flash.bin shared.ntlib
+```
+
+
+| App | In use | Estimate | Highest heap byte touched |
+|---|---:|---:|---:|
+| `digital` face | 12,072 B | 12,700 B | 13,156 B |
+| `launcher`, one app listed | 7,980 B | 8,524 B | |
+| `alarm` | 12,344 B | 18,224 B | |
+| `settings` | 19,288 B | 19,628 B | 20,676 B |
+| `weather` | 10,752 B | 16,644 B | |
+| `stopwatch` | 12,016 B | 14,488 B | |
+
+In use counts the system's 1 KB too. The largest app in the repository, `settings`, needs 19.6 KB,
+so every app fits with room to spare, and `harness/tests/quality.rs` fails any app or face whose
+estimate is over the budget, or whose opening screen builds more nodes than it counts. Before the
+saved-state buffer was sized for each app, closing any app borrowed 18,694 B for it, which took
+the highest byte touched after leaving `settings` to 30,796 B.
 
 ## Measuring again
 

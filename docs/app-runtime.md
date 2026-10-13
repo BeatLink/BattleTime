@@ -870,11 +870,13 @@ state take 6,628 B together, measured with `size_of` for the watch's target. `Ap
 on the heap, boxed empty and filled in place with `AppState::load_layout` and
 `Bindings::load_into`, so opening an app needs under 1 KB of stack.
 
-The widgets themselves are allocated from the UI heap. Each widget of the open screen is a 240 B
+The widgets themselves are allocated from the UI heap. Each widget of the open screen is a 160 B
 node on the watch, measured the same way, plus its text. The stopwatch demo's screen of four widgets
 holds 1,016 B on the 64-bit computer, measured with a counting allocator in the host's tests, and
 peaks at 1,080 B while drawing. Nodes hold only values; each rlvgl widget is built when it is drawn
-and dropped afterwards. With those three parts in it, the 20 KB UI heap leaves room for about 55 widgets at 240 B each, not the 128 an image may have.
+and dropped afterwards. `estimate_memory_need` adds these parts up from an image, so an app that
+would not fit is refused when it is installed rather than failing when it opens; see
+[memory-map.md](memory-map.md#how-much-heap-an-app-needs).
 
 ## Built so far
 

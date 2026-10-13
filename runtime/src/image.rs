@@ -325,6 +325,7 @@ pub struct AppImage<'image> {
     pub has_icon: bool,
     pub id_string: u16,
     pub name_string: u16,
+    byte_count: u32,
     strings: EntryTable<'image>,
     state_count: u16,
     state_entries: &'image [u8],
@@ -375,6 +376,7 @@ impl<'image> AppImage<'image> {
             has_icon,
             id_string,
             name_string,
+            byte_count: bytes.len() as u32,
             strings: EntryTable::default(),
             state_count: 0,
             state_entries: &[],
@@ -497,6 +499,11 @@ impl<'image> AppImage<'image> {
             ValueType::Text => (0..self.strings.count as i64).contains(&value),
             ValueType::Int | ValueType::Instant | ValueType::Duration => true,
         }
+    }
+
+    /// How long the whole image is.
+    pub fn byte_count(&self) -> usize {
+        self.byte_count as usize
     }
 
     pub fn string(&self, index: u16) -> Option<&'image str> {

@@ -41,7 +41,7 @@ use neotime_app_host::{
     motion as app_motion, phone as app_phone, settings as app_settings,
     side_button::{self, ButtonAction, ButtonSituation, OpenScreen},
     AppEffect, AppFailure, AppHost, BatteryChange, EventResult, MotionKind, OpenError, PushedEvent, System,
-    Touch, Transition, LARGEST_SAVED_STATE_BYTES, STRIP_PIXELS,
+    Touch, Transition, STRIP_PIXELS,
 };
 use neotime_battery::BatteryEvent;
 use neotime_button::Gesture;
@@ -520,7 +520,12 @@ impl Shell {
         let Some(id) = host.image().string(host.image().id_string) else {
             return;
         };
-        let mut buffer = vec![0; LARGEST_SAVED_STATE_BYTES];
+        // Only as much as this app's persistent state can take, so closing a large app never runs out of heap.
+        let size = neotime_runtime::memory_need::saved_state_bytes(host.image());
+        if size == 0 {
+            return;
+        }
+        let mut buffer = vec![0; size];
         if let Ok(Some(length)) = host.save_changed_state(&mut buffer) {
             self.files.write(&state_path(id), &buffer[..length]);
         }

@@ -1126,6 +1126,11 @@ fn saved_state_comes_back_when_the_app_is_opened_again() {
         .save_changed_state(&mut saved)
         .unwrap()
         .expect("ticks changed");
+    // The size the runtime works out from the image is exactly what is written, so the shell allocates no more.
+    assert_eq!(
+        length,
+        neotime_runtime::memory_need::saved_state_bytes(&neotime_runtime::AppImage::parse(&image).unwrap())
+    );
     assert_eq!(host.save_changed_state(&mut saved).unwrap(), None);
 
     let host =

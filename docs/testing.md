@@ -127,8 +127,9 @@ cargo run -p neotime-simulator -- --script tests/scripts/timer_rings_and_dismiss
   name and launcher icon, its listing in [apps.md](apps.md) or [faces.md](faces.md), the comment
   at the top of its source, the install checks, and that it fits in RAM: its expressions and
   functions within
-  the 12 KB the open app has, beside the runtime's working memory, and each screen within the
-  55 widgets the UI heap holds. Packages that break a rule today are listed in `KNOWN_GAPS`
+  the 12 KB the open app has, beside the runtime's working memory, and its heap need within the
+  budget ([memory-map.md](memory-map.md#how-much-heap-an-app-needs)), with its opening screen
+  building no more nodes than the estimate counts. Packages that break a rule today are listed in `KNOWN_GAPS`
   with the rule they break, and the test fails once one is fixed, so the list only shrinks.
 - `harness/tests/behaviour.rs` checks what some apps do, such as the timer ringing when it ends.
 - `harness/tests/parity.rs` records the texts each app and face shows in
