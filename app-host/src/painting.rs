@@ -213,11 +213,12 @@ impl<'image> AppHost<'image> {
                 .draw_whole_screen_step(screen, strip, now_in_milliseconds)
                 .await;
         }
+        // A scroll moves the panel before any slice is painted, so nothing painted with it moves twice.
+        if let Some(scroll_move) = self.scroll_move.take() {
+            self.draw_scroll(screen, strip, scroll_move).await?;
+        }
         // Parts already promised are finished before anything new is taken on.
         if self.unpainted_regions.is_empty() {
-            if let Some(scroll_move) = self.scroll_move.take() {
-                self.draw_scroll(screen, strip, scroll_move).await?;
-            }
             self.unpainted_regions = self.dirty_regions();
             for (node_index, node) in self.nodes.iter_mut().enumerate() {
                 if self.dirty_nodes & (1 << node_index) != 0 {
@@ -534,9 +535,8 @@ impl<'image> AppHost<'image> {
     /// Lays out a list that scrolled by `rows`, and keeps the move for the panel to make if it can.
     pub(super) fn note_scroll(&mut self, node_index: usize, rows: i32) {
         self.measure_and_lay_out();
-        // A slice still to paint draws the scrolled content, which the panel must then not move again.
+        // Slices still to paint are painted after the panel moves, so a scroll can wait alongside them.
         let can_wait = !self.whole_screen_dirty
-            && self.unpainted_regions.is_empty()
             && self
                 .scroll_move
                 .is_none_or(|waiting| waiting.node_index == node_index);
@@ -573,6 +573,9 @@ impl<'image> AppHost<'image> {
         if !self.scroll_with_panel(screen, strip, scroll_move).await? {
             self.mark_subtree_dirty(scroll_move.node_index);
             return Ok(());
+        }
+        if let Some(band) = self.scroll_band_of(scroll_move.node_index) {
+            self.unpainted_regions = moved_with_band(&self.unpainted_regions, band, scroll_move.rows);
         }
         let inside = scroll_move.node_index + 1..self.nodes[scroll_move.node_index].subtree_end as usize;
         for index in inside {
@@ -732,6 +735,37 @@ impl<'image> AppHost<'image> {
         }
         edges
     }
+}
+
+/// The parts still to paint after a band's rows moved up by `rows`: what lay in the band moved with it.
+///
+/// A part pushed out of the band is dropped, since the rows coming into view there are painted afresh.
+fn moved_with_band(regions: &[Rect], band: ScrollBand, rows: i32) -> Vec<Rect> {
+    let band_area = rows_from(band.first_row, band.height());
+    let mut moved = Vec::new();
+    for &region in regions {
+        let above = Rect {
+            height: (band.first_row - region.y).min(region.height),
+            ..region
+        };
+        let below_top = band.end_row.max(region.y);
+        let below = Rect {
+            y: below_top,
+            height: region.y + region.height - below_top,
+            ..region
+        };
+        let inside = region.intersect(band_area).and_then(|part| {
+            Rect {
+                y: part.y - rows,
+                ..part
+            }
+            .intersect(band_area)
+        });
+        for part in [Some(above), inside, Some(below)].into_iter().flatten() {
+            add_region(&mut moved, part);
+        }
+    }
+    moved
 }
 
 /// Adds a region to paint, merging it with any it overlaps.

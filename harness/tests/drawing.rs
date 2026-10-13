@@ -392,6 +392,64 @@ fn a_scroll_begun_while_slices_are_left_waits_for_them_and_ends_exact() {
 }
 
 #[test]
+fn a_scroll_while_slices_are_left_moves_with_the_panel_and_ends_exact() {
+    let mut app = launcher_with_many_apps();
+    let mut watch = Watch::new();
+    watch.draw_step(&mut app);
+
+    app.touch(Touch::Press { x: 120, y: 220 });
+    app.touch(Touch::Drag {
+        x: 120,
+        y: 200,
+        start_x: 120,
+        start_y: 220,
+    });
+    watch.draw_everything(&mut app);
+
+    assert_eq!(watch.turned_rows(), 20);
+    assert_eq!(watch.pixels_unlike(&app.fresh_frame()), 0);
+}
+
+/// Two quick swipes up the launcher, 100 pixels each from a little apart, with or without the lifts and presses reaching the app.
+fn launcher_after_two_swipes(lifts_arrive: bool, presses_arrive: bool) -> Vec<String> {
+    let mut app = launcher_with_many_apps();
+    for start_y in [200, 205] {
+        if presses_arrive {
+            app.touch(Touch::Press { x: 120, y: start_y });
+        }
+        for moved in [20, 60, 100] {
+            app.touch(Touch::Drag {
+                x: 120,
+                y: start_y - moved,
+                start_x: 120,
+                start_y,
+            });
+        }
+        if lifts_arrive {
+            app.touch(Touch::Release {
+                x: 120,
+                y: start_y - 100,
+            });
+        }
+    }
+    app.visible_texts()
+}
+
+#[test]
+fn a_swipe_whose_lift_was_lost_does_not_send_the_next_back_to_where_it_began() {
+    let both_lifted = launcher_after_two_swipes(true, true);
+
+    assert_eq!(launcher_after_two_swipes(false, true), both_lifted);
+}
+
+#[test]
+fn a_swipe_whose_press_and_lift_were_both_lost_still_carries_on() {
+    let both_lifted = launcher_after_two_swipes(true, true);
+
+    assert_eq!(launcher_after_two_swipes(false, false), both_lifted);
+}
+
+#[test]
 fn a_change_while_slices_are_left_is_drawn_once_they_are_done() {
     let mut app = TestWatch::open_app("settings").unwrap();
     let mut watch = Watch::new();

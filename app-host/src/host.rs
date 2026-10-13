@@ -106,11 +106,12 @@ fn transition_following(direction: SwipeDirection) -> Transition {
 /// How far a drag must move a list that scrolls by pages to turn the page, in pixels.
 const PAGE_TURN_DISTANCE: i32 = 20;
 
-/// A drag that is scrolling a Scroll or List: which node, and its offset when the drag began.
+/// A drag that is scrolling a Scroll or List: which node, its offset when the drag began, and where the finger went down.
 #[derive(Clone, Copy)]
 struct ScrollDrag {
     node_index: usize,
     start_offset: i32,
+    finger_start: (i32, i32),
 }
 
 /// Which widget, and which row of a repeated list, a node stands for.
@@ -1476,6 +1477,10 @@ impl<'image> AppHost<'image> {
         }
         if let Touch::Press { .. } = touch {
             self.touch_scrolled = false;
+            // A scroll whose lift never arrived, such as when a full touch queue dropped it, ends here.
+            if self.scroll_drag.is_some() {
+                let _ = self.end_scroll(now, system);
+            }
         }
         if let Some(result) = self.touch_open_dropdown(touch, now, system) {
             return result;
@@ -1713,6 +1718,13 @@ impl<'image> AppHost<'image> {
         now: Value,
         system: &mut impl System,
     ) -> EventResult {
+        // A drag from another place is a new finger whose press and the last lift were both lost.
+        if self
+            .scroll_drag
+            .is_some_and(|drag| drag.finger_start != (start_x, start_y))
+        {
+            let _ = self.end_scroll(now, system);
+        }
         let drag = match self.scroll_drag {
             Some(drag) => drag,
             None => {
@@ -1729,6 +1741,7 @@ impl<'image> AppHost<'image> {
                 ScrollDrag {
                     node_index,
                     start_offset: node.scroll_offset as i32,
+                    finger_start: (start_x, start_y),
                 }
             }
         };
