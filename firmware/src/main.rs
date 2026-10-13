@@ -17,7 +17,8 @@ extern crate alloc;
 
 use core::cell::RefCell;
 
-use embassy_embedded_hal::shared_bus::{asynch::i2c::I2cDevice, blocking::spi::SpiDevice};
+use display_dma::DmaInterface;
+use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::Spawner;
 use embassy_futures::select::{select, select4, Either, Either4};
 use embassy_nrf::{
@@ -31,10 +32,9 @@ use embassy_nrf::{
     wdt::{self, SleepConfig, Watchdog, WatchdogHandle},
 };
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
-use embassy_time::{Delay, Duration, Instant, Timer};
+use embassy_time::{Delay, Duration, Timer};
 use embedded_alloc::LlffHeap;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
-use mipidsi::interface::SpiInterface;
 use neotime_blefs::{service::FileTransferService, FileTransfer};
 use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
 use neotime_button::Button;
@@ -70,6 +70,7 @@ mod clock;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod crash_screen;
 mod diagnostics;
+mod display_dma;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod foreground;
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -111,7 +112,6 @@ bind_interrupts!(struct Interrupts {
 /// The package version and the git commit, such as `0.1.0+1b19aed`, set by `build.rs`.
 const FIRMWARE_VERSION: &str = env!("NEOTIME_FIRMWARE_VERSION");
 const DEVICE_NAME: &str = "NeoTime";
-const DISPLAY_COMMAND_BUFFER_SIZE: usize = 512;
 /// The shell's share of the heap, which the open app's widgets and text are allocated from.
 #[cfg(with_shell)]
 const UI_HEAP_SIZE: usize = 21 * 1024;
@@ -206,6 +206,13 @@ async fn main(spawner: Spawner) {
         Output::new(chip.P0_25, Level::High, OutputDrive::Standard),
         Output::new(chip.P0_18, Level::Low, OutputDrive::Standard),
         Output::new(chip.P0_26, Level::High, OutputDrive::Standard),
+        display_dma::ChainPeripherals {
+            counter: chip.TIMER1,
+            restart_channel: chip.PPI_CH5,
+            count_channel: chip.PPI_CH6,
+            stop_channel: chip.PPI_CH7,
+            restart_group: chip.PPI_GROUP0,
+        },
     );
     let backlight = backlight::Backlight::new(
         OutputChannel::new(
@@ -490,34 +497,7 @@ async fn send_button_gestures(mut button: Button<Input<'static>, Output<'static>
 // The screen
 // ============================================================================
 
-type DisplayOnBus = TimedSpi<SpiDevice<'static, NoopRawMutex, Spim<'static>, Output<'static>>>;
-type DisplayInterfaceOnBus = SpiInterface<'static, DisplayOnBus, Output<'static>>;
-
-/// The display's SPI device, adding the time each transaction takes to `DisplaySendMicroseconds`.
-struct TimedSpi<Device> {
-    device: Device,
-}
-
-impl<Device: embedded_hal::spi::ErrorType> embedded_hal::spi::ErrorType for TimedSpi<Device> {
-    type Error = Device::Error;
-}
-
-impl<Device: embedded_hal::spi::SpiDevice> embedded_hal::spi::SpiDevice for TimedSpi<Device> {
-    fn transaction(
-        &mut self,
-        operations: &mut [embedded_hal::spi::Operation<'_, u8>],
-    ) -> Result<(), Self::Error> {
-        let started = Instant::now();
-        let result = self.device.transaction(operations);
-        diagnostics::add(
-            diagnostics::Counter::DisplaySendMicroseconds,
-            started.elapsed().as_micros() as u32,
-        );
-        result
-    }
-}
-
-type ScreenDisplay = Display<DisplayInterfaceOnBus, Output<'static>>;
+type ScreenDisplay = Display<DmaInterface, Output<'static>>;
 
 /// The display, shared between the status page and the shell; a lock is never held across an await.
 type SharedDisplay = Mutex<NoopRawMutex, RefCell<ScreenDisplay>>;
@@ -594,16 +574,10 @@ fn start_screen(
     chip_select: Output<'static>,
     data_or_command: Output<'static>,
     reset: Output<'static>,
+    chain: display_dma::ChainPeripherals,
 ) -> Screen {
-    static COMMAND_BUFFER: StaticCell<[u8; DISPLAY_COMMAND_BUFFER_SIZE]> = StaticCell::new();
     static DISPLAY: StaticCell<SharedDisplay> = StaticCell::new();
-    let interface = SpiInterface::new(
-        TimedSpi {
-            device: SpiDevice::new(spi_bus, chip_select),
-        },
-        data_or_command,
-        COMMAND_BUFFER.init([0; DISPLAY_COMMAND_BUFFER_SIZE]),
-    );
+    let interface = DmaInterface::new(spi_bus, chip_select, data_or_command, chain);
 
     let mut display = Display::new(interface, reset, &mut Delay).unwrap_or_else(|_| panic!("display"));
     let _ = display.clear(Rgb565::BLACK);

@@ -591,6 +591,17 @@ watch face, the launcher and the apps through `neotime-app-host`:
   swipe that opens the launcher does not also scroll it.
 - **Drawing.** `draw_host` lends the host a strip of `STRIP_PIXELS` (1,920 B) on the stack, held
   only while drawing, and draws through the display driver, whose hardware scroll the host uses.
+  It also lends the display a send buffer of the same size: each strip is copied into it and sent
+  by EasyDMA while the host draws the next strip into its own. `display_dma.rs` sends the buffer as
+  equal pieces of at most 255 bytes, the most one EasyDMA transfer moves, in array-list mode; each
+  piece's END starts the next through PPI channel 5, which sits in PPI group 0. TIMER1 counts the
+  ENDs through channel 6; one before the last its compare disables the group through channel 7, and
+  at the last its second compare marks the strip sent. Every command, every next strip and the end
+  of each drawing step wait for that mark, so the external flash never finds the bus mid-send and
+  the buffer is never written while it is read. Without a lent buffer, as for the status page and
+  the help screen, pixels go from a 64 B buffer in the interface and each send ends before it
+  returns. Screenshots of the face, the launcher and a scroll in the emulator match the blocking
+  driver's pixel for pixel.
 - **Input.** `touch.rs` turns the panel's reports into the host's touches: press, drag and release
   from the finger, and one click, long press or swipe from each touch's gesture. Touches wait in a
   queue of 4 in which drags never take the last two places, so a lift and its gesture always fit;
@@ -685,10 +696,11 @@ watch face, the launcher and the apps through `neotime-app-host`:
   the last restart, described next. Writing `01` to the characteristic says the companion app saved
   a debug report holding the crash, which dismisses it as Restart on the crash screen does. Two timing
   counters come after the last restart's words, each in microseconds and counting round: the time
-  the shell spent drawing apps, and the time spent sending to the display, the status page and help
-  screen included. Their difference is the time spent drawing strips. In the emulator the
-  launcher's slide took 219 ms to draw, 122 ms of it sending, and a launcher scroll 64 ms, 34 ms of
-  it sending.
+  the shell spent drawing apps, and the time the CPU spent sending to the display or waiting for a
+  send to end, the status page and help screen included. With blocking sends, the launcher's slide
+  in the emulator took 219 ms, 122 ms of it sending, and a launcher scroll 64 ms, 34 ms of it
+  sending; with the DMA sends below, the slide takes 176 ms, 79 ms of it waiting, and the scroll
+  44 ms, 14 ms of it waiting.
 - **Reset reasons and crash record.** `restart.rs` reads and clears `RESETREAS` at start, and reads
   the crash record the previous run left in `.uninit` RAM (see
   [memory-map.md](memory-map.md#ram-64-kb-planned)). The full firmware keeps the record until the

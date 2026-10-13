@@ -335,6 +335,39 @@ fn single_pixels_follow_the_scroll() {
 // ============================================================================
 
 #[test]
+fn a_strip_splits_into_the_fewest_equal_pieces_the_dma_can_move() {
+    assert_eq!(
+        Pieces::of(1920, 255),
+        Pieces {
+            piece_bytes: 240,
+            count: 8
+        }
+    );
+    assert_eq!(
+        Pieces::of(64, 255),
+        Pieces {
+            piece_bytes: 64,
+            count: 1
+        }
+    );
+    assert_eq!(
+        Pieces::of(2 * 251, 255),
+        Pieces {
+            piece_bytes: 251,
+            count: 2
+        }
+    );
+}
+
+#[test]
+fn a_length_with_no_large_divisor_still_splits_exactly() {
+    let pieces = Pieces::of(2 * 257, 255);
+
+    assert_eq!(pieces.piece_bytes * pieces.count, 2 * 257);
+    assert!(pieces.piece_bytes <= 255);
+}
+
+#[test]
 fn sleeping_and_waking_send_one_command_each_and_wait_only_a_few_milliseconds() {
     let mut display = new_display_with_no_commands_recorded();
     let mut delay = FakeDelay::default();

@@ -321,7 +321,10 @@ each item says what it costs and what it would save.
 
 - [ ] **Stack margin with the alarm open.** Measured in the emulator with a typical install, the
   alarm peaks at 10,516 B of 12,436 B, 1,920 B spare, under the 2 KB [memory-map.md](memory-map.md)
-  asks for. Find what makes that path deep, or win static RAM back, before anything grows.
+  asks for. Find what makes that path deep, or win static RAM back, before anything grows. On
+  2026-10-12, with drawing's 1,920 B send buffer added, opening the alarm and its editor from a
+  launcher listing only it peaked at 7,944 B, 2,536 B spare, so the deeper case needs alarms set or
+  a larger install; find it again and measure it with the send buffer.
 
 - [ ] **Shrink the storage heap.** It is 16 KB, but littlefs needs about 1.8 KB with two files
   open, and the rehearsal build runs on 4 KB. Measure the peak on the watch, including file
@@ -371,9 +374,9 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
   the screen, and the runtime reads handlers and images from external flash while screens are
   drawn. Both drivers need a shared-bus wrapper, such as the shared SPI in
   `embassy-embedded-hal`, so neither can cut into the other's transfer.
-- [ ] **Draw one band while sending the last.** After DMA transfers work, use two band buffers,
-  such as 240 by 16 pixels at 7.5 KB each, so drawing the next band hides behind sending the
-  previous one.
+- [ ] **Keep sending across drawing steps.** Each step waits for its last strip before it returns,
+  which is most of the 79 ms the launcher's slide still waits on the bus. Keeping the send buffer
+  lent from one step to the next, with the bus handed back only before other work, would hide it.
 - [ ] **12-bit colour mode.** The ST7789 can take 12 bits a pixel, which cuts the time to send a
   full screen by a quarter, from about 115 ms to 86 ms at 8 MHz. It costs banding in gradients and
   packing pixels in pairs. Measure it once real screens run on the watch.
@@ -411,9 +414,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   of a jump, and its own porches and frame rate. Send the same commands after `Display::new`, then
   compare the current drawn and the dark greys on the watch.
 - [ ] **Release the panel in sleep,** so the SPI bus can be turned off.
-- [ ] **DMA transfers,** so the CPU is free while a buffer is sent. EasyDMA reuses the buffer, so
-  wait for the transfer to end before writing it again.
-
 ### Touch panel
 
 - [ ] **Double taps in apps on the watch.** The firmware starts the panel with double taps off, so

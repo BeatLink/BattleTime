@@ -54,6 +54,31 @@ const LOW_POWER_IDLE_FRAME_RATE: [u8; 3] = [0x12, 0x1E, 0x1E];
 const DEFAULT_IDLE_FRAME_RATE: [u8; 3] = [0x00, 0x0F, 0x0F];
 
 // ============================================================================
+// Sending in pieces
+// ============================================================================
+
+/// How a send of many bytes splits into equal pieces, for a DMA engine that moves a limited number at once.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Pieces {
+    pub piece_bytes: usize,
+    pub count: usize,
+}
+
+impl Pieces {
+    /// The fewest equal pieces of at most `largest_piece_bytes` that `length` bytes split into.
+    pub fn of(length: usize, largest_piece_bytes: usize) -> Pieces {
+        let piece_bytes = (1..=largest_piece_bytes.min(length))
+            .rev()
+            .find(|piece_bytes| length % piece_bytes == 0)
+            .unwrap_or(1);
+        Pieces {
+            piece_bytes,
+            count: length.div_ceil(piece_bytes),
+        }
+    }
+}
+
+// ============================================================================
 // Display
 // ============================================================================
 
@@ -171,6 +196,12 @@ where
 
     pub fn is_in_low_power_mode(&self) -> bool {
         self.in_low_power_mode
+    }
+
+    /// The interface the panel is driven through, such as to lend it a buffer to send from.
+    pub fn interface_mut(&mut self) -> &mut DisplayInterface {
+        // SAFETY: mipidsi keeps no state about its interface, so using it directly changes nothing it tracks.
+        unsafe { self.panel.dcs() }
     }
 
     pub fn release(self) -> (DisplayInterface, Option<ResetPin>) {

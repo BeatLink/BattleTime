@@ -146,7 +146,9 @@ commands sent over the emulator's Bluetooth bridge, and on every app in the repo
 one by one with the launcher open. The alarm, the deepest app, peaked at 10.5 KB in an earlier
 measurement that the tool cannot repeat, since it cannot open the alarm, so measure it again before
 the stack shrinks further. Drawing borrows a 1,920 B strip of four screen rows from the stack while
-it runs. Under a connection the Bluetooth task's own frame is 0.6 KB and `serve_connection`'s
+it runs, and a 1,920 B buffer the strip is sent from by DMA while the next is drawn; the display
+interface keeps only a 64 B buffer of its own, where the blocking driver kept 512 B. With both
+buffers, opening the alarm and its editor peaked at 7,944 B, 2,536 B spare, against 7,864 B before. Under a connection the Bluetooth task's own frame is 0.6 KB and `serve_connection`'s
 2.1 KB; packages commands run in a task of their own, since the verifier inside one once overflowed
 the stack under those frames, and the app host verifies an image and runs its first derives outside
 the 1.7 KB frame that loads it.
