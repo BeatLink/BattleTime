@@ -42,7 +42,7 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | App host (with `neotime-ui`) | 70.7 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 43.6 KB | 43.6 KB |
 | App runtime | 34.2 KB | 0.1 KB |
-| core, alloc and compiler builtins | 27.1 KB | 11.2 KB |
+| core, alloc and compiler builtins | 27.2 KB | 11.3 KB |
 | Storage (littlefs) | 21.9 KB | 21.2 KB |
 | Embassy, allocator and Cortex-M | 18.2 KB | 15.7 KB |
 | Settings, companion and notifications (with serde) | 12.1 KB | 10.2 KB |
@@ -51,8 +51,8 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Packages | 3.8 KB | 2.1 KB |
 | Updates (DFU) | 2.1 KB | 2.2 KB |
 | BLEFS file service | 1.9 KB | 2.0 KB |
-| Other constants and padding | 24.9 KB | 10.9 KB |
-| **Used** | **369.4 KB** | **169.6 KB** |
+| Other constants and padding | 24.8 KB | 10.9 KB |
+| **Used** | **369.4 KB** | **169.7 KB** |
 | Free of the 388 KB slot, after its header | 18.3 KB | 218.1 KB |
 <!-- /measure_memory:firmware -->
 
