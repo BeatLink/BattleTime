@@ -111,6 +111,7 @@ function Menu() {
 export default define_app({
   id: "level",
   name: "Level",
+  group: "tools",
   icon: icons.level,
   screens: { main: Level, menu: Menu },
   subscriptions: [acceleration({ milliseconds: 125 }, record, { only_while_open: true })],

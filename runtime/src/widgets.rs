@@ -312,6 +312,12 @@ pub enum Property {
     CodeCount,
     /// How a Scroll, List, AppList or TextFile scrolls, as the `SCROLLS_*` flags.
     Scrolling,
+    /// The place in `installed_apps` of the first app an AppList shows.
+    FirstApp,
+    /// How many apps an AppList shows from `FirstApp` on; every app when left out.
+    AppCount,
+    /// Whether an AppList shows every app with a heading above each launcher group.
+    Sections,
 }
 
 /// A `Scrolling` flag: a drag moves a whole page at a time, and the scroll bar has a segment per page.
@@ -322,7 +328,7 @@ pub const SCROLLS_ACROSS: i32 = 2;
 pub const SCROLLS_WITHOUT_BAR: i32 = 4;
 
 impl Property {
-    const ALL: [Property; 90] = {
+    const ALL: [Property; 93] = {
         use Property::*;
         [
             X,
@@ -415,6 +421,9 @@ impl Property {
             Codes,
             CodeCount,
             Scrolling,
+            FirstApp,
+            AppCount,
+            Sections,
         ]
     };
 
@@ -426,7 +435,7 @@ impl Property {
         use Property::*;
         match self {
             Visible | ShowSeconds | Charging | SingleColor | ShowBolt | ShowPercent | TwelveHour
-            | ShowHours | ShowNumbers => PropertyValue::Bool,
+            | ShowHours | ShowNumbers | Sections => PropertyValue::Bool,
             Background | Color | BorderColor | NeedleColor | HourColor | MinuteColor | SecondColor
             | Recolor => PropertyValue::Color,
             Cells | Palette | Options | Points | Series | Labels | Skip | NumberMap | NumberColors
@@ -547,8 +556,9 @@ impl Property {
             Justify | AlignItems => kind.holds_children(),
             Columns => matches!(
                 kind,
-                Kind::Grid | Kind::ButtonMatrix | Kind::CellGrid | Kind::WeekdayPicker
+                Kind::Grid | Kind::ButtonMatrix | Kind::CellGrid | Kind::WeekdayPicker | Kind::AppList
             ),
+            FirstApp | AppCount | Sections => kind == Kind::AppList,
             Rows | CellSize | CellGap | CellShape | Cells | Palette | ShowNumbers | NumberMap
             | NumberColors => kind == Kind::CellGrid,
             Options => matches!(kind, Kind::Roller | Kind::Dropdown | Kind::ButtonMatrix),

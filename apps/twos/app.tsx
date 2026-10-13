@@ -150,6 +150,7 @@ function Twos() {
 export default define_app({
   id: "twos",
   name: "2048",
+  group: "games",
   icon: icons.game,
   screens: { main: Twos },
   onOpen: () => {

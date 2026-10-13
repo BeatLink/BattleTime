@@ -90,6 +90,7 @@ function Haiku() {
 export default define_app({
   id: "haiku",
   name: "Haiku",
+  group: "tools",
   icon: icons.notification,
   screens: { main: Haiku },
   onOpen: next_verse,

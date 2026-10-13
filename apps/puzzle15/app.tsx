@@ -150,6 +150,7 @@ function Puzzle15() {
 export default define_app({
   id: "puzzle15",
   name: "15",
+  group: "games",
   icon: icons.game,
   screens: { main: Puzzle15 },
   onOpen: () => {

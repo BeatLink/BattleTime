@@ -188,6 +188,7 @@ function Timer() {
 export default define_app({
   id: "timer",
   name: "Timer",
+  group: "time",
   icon: icons.timer,
   screens: { main: Timer },
   subscriptions: [at(ends_at, ring), at(silence_at, silence)],

@@ -115,6 +115,7 @@ function Weather() {
 export default define_app({
   id: "weather",
   name: "Weather",
+  group: "phone",
   icon: icons.weather,
   screens: { main: Weather },
 });

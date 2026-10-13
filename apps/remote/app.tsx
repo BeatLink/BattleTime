@@ -87,6 +87,7 @@ function Remote() {
 export default define_app({
   id: "remote",
   name: "Remote",
+  group: "phone",
   icon: icons.phone,
   screens: { main: Remote },
   permissions: ["phone_messages"],

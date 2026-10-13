@@ -541,8 +541,13 @@ The folders are the whole record: there is no list of installed apps to fall out
   images one at a time. Turning one off is refused for the launcher and the last face on. Other
   apps are not checked again when one is turned on, since only a launcher's need grows with it.
 - **`commands`** answers the packages characteristic's JSON lines (`apps`, `install`, `remove`,
-  `enable`, `install_library`) and says whether the apps or the library changed, so the shell can
-  read them again.
+  `enable`, `install_library`, `launcher`) and says whether the apps or the library changed, so
+  the shell can read them again.
+- **`launcher`** reads `/settings/launcher`, the bytes in which the companion says how the
+  launcher looks and where every app goes, and `arrange` puts the listed apps in group order,
+  any the file leaves out in a last group, Other. The shell keeps the file, the order and each
+  group's run of it, which apps read as `launcher_groups`, and reads the names in place. It walks
+  the bytes and the apps rather than parsing text and sorting, which keeps it near 1 KB of flash.
 - **`library`** copies a checked shared library from `/resources/shared.ntlib` into the internal
   `SHARED_LIBRARY` region behind an 8-byte header, `NTLB` and the image's length, since the erased
   tail of the region would spoil the image's CRC. It erases only the pages it needs inside the
@@ -879,7 +884,7 @@ Not done yet: heart rate, the notification count, navigation and the weather for
 as 0 or empty, and music and weather are lost on a restart; with a tap waking the screen, the
 touch panel stays awake while the screen is off.
 
-It takes 373 KB of the 388 KB firmware slot (the fonts and the accelerometers' configuration files
+It takes 376 KB of the 388 KB firmware slot (the fonts and the accelerometers' configuration files
 are in the shared library) and 53 KB of static RAM, 31 KB of it heap: 10 KB for the system and 21 KB for
 the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
 the button and the backlight timeout all work.

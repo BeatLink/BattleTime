@@ -1548,3 +1548,28 @@ fn a_text_file_path_must_be_written_out() {
         "{error}"
     );
 }
+
+// ============================================================================
+// Launcher groups
+// ============================================================================
+
+#[test]
+fn an_app_declares_its_launcher_group() {
+    let source = format!(
+        "{HEADER}\nfunction Main() {{ return <Screen />; }}\nexport default define_app({{ id: \"snake\", name: \"Snake\", group: \"games\", screens: {{ main: Main }} }});"
+    );
+    let bytes = compile(&source);
+    let image = AppImage::parse(&bytes).unwrap();
+    assert_eq!(
+        image.group_string.and_then(|index| image.string(index)),
+        Some("games")
+    );
+}
+
+#[test]
+fn a_group_must_be_a_short_plain_id() {
+    let source = format!(
+        "{HEADER}\nfunction Main() {{ return <Screen />; }}\nexport default define_app({{ id: \"snake\", group: \"Fun games!\", screens: {{ main: Main }} }});"
+    );
+    assert!(first_error(&source).contains("`group` is up to 16 letters"));
+}

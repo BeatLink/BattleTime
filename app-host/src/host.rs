@@ -21,7 +21,7 @@ use crate::drawing::pickers::{is_picker, picker_tapped};
 use crate::drawing::{
     app_list_rows, app_row_at, cell_at, dropdown_option_at, label_scrolls, matrix_buttons, measure_node,
     option_row_height, roller_rows, text_file_lines_in_view, text_file_rows, text_file_width, DrawContext,
-    LABEL_SCROLL_STEP_IN_MILLISECONDS,
+    APP_HEADING_MARK, LABEL_SCROLL_STEP_IN_MILLISECONDS,
 };
 use crate::fonts::line_height;
 use crate::layout::{clips_children, farthest_scroll, lay_out, runs_across, visible_length};
@@ -176,6 +176,8 @@ pub struct AppHost<'image> {
     unpainted_regions: Vec<Rect>,
     /// A widget was shown or hidden, so the nodes must be built again to match.
     nodes_out_of_date: bool,
+    /// An AppList's `first`, `count` or `sections` changed, so it must be filled again and scrolled to its top.
+    app_lists_out_of_date: bool,
     /// Whether the touch under way has scrolled a list, so its slide is not also a swipe.
     touch_scrolled: bool,
     scroll_move: Option<ScrollMove>,
@@ -326,6 +328,7 @@ impl<'image> AppHost<'image> {
             cleared_regions: Vec::new(),
             unpainted_regions: Vec::new(),
             nodes_out_of_date: false,
+            app_lists_out_of_date: false,
             touch_scrolled: false,
             scroll_move: None,
             next_transition: Transition::None,
@@ -647,6 +650,7 @@ impl<'image> AppHost<'image> {
         });
         self.screen_expressions = self.expressions_on_screen();
         self.nodes_out_of_date = false;
+        self.app_lists_out_of_date = false;
         self.fill_app_lists(system);
         first_failure
     }
@@ -880,6 +884,12 @@ impl<'image> AppHost<'image> {
             if property == Property::Visible {
                 self.nodes_out_of_date = true;
             }
+            if matches!(
+                property,
+                Property::FirstApp | Property::AppCount | Property::Sections
+            ) {
+                self.app_lists_out_of_date = true;
+            }
         }
         None
     }
@@ -923,6 +933,17 @@ impl<'image> AppHost<'image> {
             .any(|expression| expressions & (1 << expression) != 0);
         if self.nodes_out_of_date || rows_changed {
             first_failure = first_failure.or(self.build_nodes(now, system));
+        }
+        if self.app_lists_out_of_date {
+            self.app_lists_out_of_date = false;
+            for node in self
+                .nodes
+                .iter_mut()
+                .filter(|node| node.kind == WidgetKind::AppList)
+            {
+                node.scroll_offset = 0;
+            }
+            self.fill_app_lists(system);
         }
         first_failure = first_failure.or(self.settle_layout(now, system));
         if let Some(failure) = first_failure {
@@ -1049,24 +1070,51 @@ impl<'image> AppHost<'image> {
     }
 
     /// Reads the installed apps' names into every AppList on the screen; true when any changed.
+    ///
+    /// A list with sections holds every app with a heading line before each launcher group's first;
+    /// any other holds the apps from its `first` for its `count`.
     fn fill_app_lists(&mut self, system: &impl SystemValues) -> bool {
         let mut changed = false;
         for (node_index, node) in self.nodes.iter_mut().enumerate() {
-            if node.kind != WidgetKind::AppList {
+            let Extra::AppList {
+                first,
+                count,
+                sections,
+            } = *node.extra
+            else {
                 continue;
-            }
-            let count = system
+            };
+            let installed = system
                 .read(SystemValue::InstalledAppCount)
                 .clamp(0, i32::MAX as Value);
+            let (start, end) = match sections {
+                true => (0, installed),
+                false => {
+                    let start = (first as Value).min(installed);
+                    (start, (start + count as Value).min(installed))
+                }
+            };
+            let group_count = match sections {
+                true => system.read(SystemValue::LauncherGroupCount).max(0),
+                false => 0,
+            };
             let mut names = String::new();
-            for place in 0..count {
-                if place > 0 {
+            let mut group = 0;
+            for place in start..end {
+                while group < group_count
+                    && system.read_element(SystemValue::LauncherGroupFirst, group) <= place
+                {
+                    names.push(APP_HEADING_MARK);
+                    names.push_str(system.read_element_text(SystemValue::LauncherGroupName, group));
                     names.push('\n');
+                    group += 1;
                 }
                 names.push_str(system.read_element_text(SystemValue::InstalledAppName, place));
+                names.push('\n');
             }
-            if node.settings.value as Value != count || node.text != names {
-                node.settings.value = count as i32;
+            let shown = (end - start) as i32;
+            if node.settings.value != shown || node.text != names {
+                node.settings.value = shown;
                 node.text = names;
                 self.dirty_nodes |= 1 << node_index;
                 changed = true;
@@ -1974,9 +2022,10 @@ impl<'image> AppHost<'image> {
     /// The rows a list widget such as an AppList or a TextFile draws itself, each with its text; empty for other widgets.
     pub fn widget_rows(&self, widget_index: u16) -> Vec<(&str, Rect)> {
         match self.node(widget_index) {
-            Some(node) if node.kind == WidgetKind::AppList => {
-                app_list_rows(node).map(|(_, name, row)| (name, row)).collect()
-            }
+            Some(node) if node.kind == WidgetKind::AppList => app_list_rows(node)
+                .iter()
+                .map(|item| (item.name, item.area))
+                .collect(),
             Some(node) if node.kind == WidgetKind::TextFile => {
                 let height = line_height(node.settings.font.metrics());
                 let row = |top| Rect {

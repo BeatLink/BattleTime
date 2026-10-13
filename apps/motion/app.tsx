@@ -68,6 +68,7 @@ function Motion() {
 export default define_app({
   id: "motion",
   name: "Motion",
+  group: "system",
   icon: icons.level,
   screens: { main: Motion },
   subscriptions: [acceleration({ milliseconds: 100 }, record, { only_while_open: true })],

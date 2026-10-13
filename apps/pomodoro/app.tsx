@@ -275,6 +275,7 @@ function Pomodoro() {
 export default define_app({
   id: "pomodoro",
   name: "Pomodoro",
+  group: "time",
   icon: icons.timer,
   screens: { main: Pomodoro },
   subscriptions: [at(ends_at, ring), at(next_entry_at, start_next_entry)],

@@ -5,7 +5,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use neotime_runtime::image::{MOST_STATE_BYTES, MOST_STATE_VARIABLES, MOST_VARIABLE_BYTES};
+use neotime_runtime::image::{
+    MOST_GROUP_ID_BYTES, MOST_STATE_BYTES, MOST_STATE_VARIABLES, MOST_VARIABLE_BYTES,
+};
 use neotime_runtime::widgets::MOST_WIDGETS;
 use neotime_runtime::writer::ImageWriter;
 use neotime_runtime::{AppKind, Property, PropertySource};
@@ -1015,7 +1017,7 @@ impl<'a> Compiler<'a> {
     // The app
     // ------------------------------------------------------------------------
 
-    /// Reads the app's id, name and kind, and starts the image with them.
+    /// Reads the app's id, name, kind and launcher group, and starts the image with them.
     fn start_image(&mut self, options: &'a ObjectExpression<'a>, root: &Rc<Scope<'a>>) -> Compiled<()> {
         let text_option = |compiler: &Compiler<'a>, name: &str| -> Compiled<Option<String>> {
             match option(options, name) {
@@ -1041,6 +1043,19 @@ impl<'a> Compiler<'a> {
             }
         };
         self.writer = ImageWriter::new(&id, &name, kind, SHARED_LIBRARY_VERSION);
+        if let Some(group) = text_option(self, "group")? {
+            let is_group_id =
+                |character: char| character.is_ascii_alphanumeric() || character == '-' || character == '_';
+            if group.is_empty() || group.len() > MOST_GROUP_ID_BYTES || !group.chars().all(is_group_id) {
+                return fail(
+                    options.span,
+                    format!(
+                        "`group` is up to {MOST_GROUP_ID_BYTES} letters, digits, - and _, such as \"games\""
+                    ),
+                );
+            }
+            self.writer.set_group(&group);
+        }
         Ok(())
     }
 
@@ -1066,7 +1081,7 @@ impl<'a> Compiler<'a> {
                 return fail(property.span, "write define_app's options with plain names");
             };
             match name.as_str() {
-                "id" | "name" | "kind" | "screens" | "icon" | "subscriptions" | "permissions" => {}
+                "id" | "name" | "kind" | "group" | "screens" | "icon" | "subscriptions" | "permissions" => {}
                 other => match lifecycle_kind(other) {
                     Some(kind) => lifecycle.push((kind, &property.value)),
                     None => return fail(property.span, format!("define_app has no option `{other}`")),

@@ -260,6 +260,12 @@ pub enum Extra {
         /// Whether it holds its placeholder, because the file is missing or empty.
         is_placeholder: bool,
     },
+    /// Which installed apps an AppList shows, and whether it heads each launcher group.
+    AppList {
+        first: u16,
+        count: u16,
+        sections: bool,
+    },
     /// Which rows of a Repeat have nodes, when its rows have one fixed height and so sit in slots.
     Repeat {
         /// The rows' height, or 0 when every shown row is built.
@@ -332,6 +338,11 @@ impl Extra {
                 first_line: 0,
                 held_lines: 0,
                 is_placeholder: false,
+            },
+            WidgetKind::AppList => Extra::AppList {
+                first: 0,
+                count: u16::MAX,
+                sections: false,
             },
             WidgetKind::Repeat => Extra::Repeat {
                 slot_extent: 0,
@@ -697,6 +708,16 @@ impl Node {
                 Property::TwelveHour => replace(twelve_hour, number != 0),
                 Property::ShowHours => replace(show_hours, number != 0),
                 Property::Step => replace(step, to_u16(number).max(1)),
+                _ => false,
+            },
+            Extra::AppList {
+                first,
+                count,
+                sections,
+            } => match property {
+                Property::FirstApp => replace(first, to_u16(number)),
+                Property::AppCount => replace(count, to_u16(number)),
+                Property::Sections => replace(sections, number != 0),
                 _ => false,
             },
             Extra::TextFile { .. } | Extra::Repeat { .. } | Extra::None => false,

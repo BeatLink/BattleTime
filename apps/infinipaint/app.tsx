@@ -87,6 +87,7 @@ function InfiniPaint() {
 export default define_app({
   id: "infinipaint",
   name: "Paint",
+  group: "games",
   icon: icons.game,
   screens: { main: InfiniPaint },
 });

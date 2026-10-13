@@ -120,6 +120,19 @@ pub enum SystemValue {
     PackageRefusal,
     /// The most heap an open app may need, in bytes.
     AppMemoryBudget,
+    /// How the launcher lays out its groups: 0 one list, 1 folders, 2 sections, 3 pages.
+    LauncherStyle,
+    /// How a group's apps are drawn: 0 a list, 1 a grid.
+    LauncherView,
+    /// How many groups hold at least one app, in the launcher's order.
+    LauncherGroupCount,
+    /// Text list: each group's name.
+    LauncherGroupName,
+    /// List: each group's icon, as an image reference: a shared library icon, or its first app's icon.
+    LauncherGroupIcon,
+    /// List: the place in `installed_apps` of each group's first app, and how many apps it holds.
+    LauncherGroupFirst,
+    LauncherGroupSize,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -133,7 +146,7 @@ const SETTINGS_BIT: u32 = 22;
 const SYSTEM_INFO_BIT: u32 = 23;
 
 impl SystemValue {
-    pub const COUNT: usize = 74;
+    pub const COUNT: usize = 81;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -212,6 +225,13 @@ impl SystemValue {
             71 => PackageMemory,
             72 => PackageRefusal,
             73 => AppMemoryBudget,
+            74 => LauncherStyle,
+            75 => LauncherView,
+            76 => LauncherGroupCount,
+            77 => LauncherGroupName,
+            78 => LauncherGroupIcon,
+            79 => LauncherGroupFirst,
+            80 => LauncherGroupSize,
             _ => return None,
         })
     }
@@ -239,9 +259,9 @@ impl SystemValue {
                 NAVIGATION_BIT
             }
             InstalledAppCount | InstalledAppName | InstalledAppId | InstalledAppIcon | PackageCount
-            | PackageName | PackageId | PackageEnabled | PackageIsFace | PackageMemory | PackageRefusal => {
-                INSTALLED_APPS_BIT
-            }
+            | PackageName | PackageId | PackageEnabled | PackageIsFace | PackageMemory | PackageRefusal
+            | LauncherStyle | LauncherView | LauncherGroupCount | LauncherGroupName | LauncherGroupIcon
+            | LauncherGroupFirst | LauncherGroupSize => INSTALLED_APPS_BIT,
             ScreenTimeoutSeconds | AlwaysOnScreen | Chimes | ThemePreset | AllowsUpdates | WakeOnTouch
             | AlarmsInDoNotDisturb => SETTINGS_BIT,
             NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
@@ -279,6 +299,10 @@ impl SystemValue {
                 | PackageIsFace
                 | PackageMemory
                 | PackageRefusal
+                | LauncherGroupName
+                | LauncherGroupIcon
+                | LauncherGroupFirst
+                | LauncherGroupSize
         )
     }
 
@@ -300,6 +324,7 @@ impl SystemValue {
                 | ResetReason
                 | PackageName
                 | PackageId
+                | LauncherGroupName
         )
     }
 }

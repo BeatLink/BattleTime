@@ -12,6 +12,20 @@ second app needs into the library. RAM is the scarcest resource on the watch, an
 code all takes RAM while it is open; see
 [Building apps from shared parts](app-runtime.md#building-apps-from-shared-parts).
 
+Each app declares the launcher group it starts in with `define_app({ group })`; the companion
+can move it, and an app whose group the watch does not have goes to Other:
+
+| Group | Apps |
+|---|---|
+| `games` | dice, four-in-a-row, game-of-life, infinipaint, paddle, puzzle15, snake, twos |
+| `tools` | beacon, calculator, flashlight, haiku, hello, level, metronome, morse, notes, template |
+| `communication` | notifications |
+| `time` | alarm, pomodoro, sports, steps, stopwatch, timer |
+| `phone` | music, navigation, phone-finder, remote, weather |
+| `health` | heart |
+| `system` | disable-bluetooth, launcher, motion, software, system |
+| `settings` | settings |
+
 They compile to app images with `neotime-compiler`. They also type-check against `sdk/neotime`, a
 stand-in for the `neotime` package, and every screen renders in a test.
 
@@ -52,7 +66,7 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 | `system` | InfiniTime BatteryInfo and SystemInfo, PinetimeLite charging and low battery screens | Two pages swiped up and down, with a wasp-os scroll bar on the right edge. The battery page shows the charge in a ring that fills again and again while charging, whether it is charging, full, low or critical, the voltage, and a warning to charge below 10 %; the watch opens it when the charger is plugged in or out, or the charge goes low. The system page shows the firmware version, uptime, why the watch last restarted and free storage. The bootloader version, memory and Bluetooth address are not shown yet. | <img src="../harness/snapshots/screens/app-system.png" width="120" alt="system, battery page"> <img src="../harness/snapshots/screens/app-system-page.png" width="120" alt="system, system page"> |
 | `phone-finder` | wasp-os phone_finder | Rings the phone. It cannot yet stop the ring from the watch. | <img src="../harness/snapshots/screens/app-phone-finder.png" width="120" alt="phone finder"> |
 | `software` | NeoTime, after wasp-os's Software app | Every installed app and face with a switch to turn it on or off, and the memory it needs while open. The watch checks each change first: an app too large for the heap, one that would leave the launcher without room, the launcher itself, the last face and the open app are refused, and a tap on one says why. | <img src="../harness/snapshots/screens/app-software.png" width="120" alt="software"> <img src="../harness/snapshots/screens/app-software-refused.png" width="120" alt="software refusing an app"> |
-| `launcher` | NeoTime | The list of installed apps, each with its icon and name; a tap opens it. Any other launcher can replace it. | <img src="../harness/snapshots/screens/app-launcher.png" width="120" alt="launcher"> <img src="../harness/snapshots/screens/app-launcher-installed.png" width="120" alt="launcher installed"> |
+| `launcher` | NeoTime | The installed apps, grouped as the companion set up, each with its icon and name; a tap opens one. The companion chooses the style: folders (the groups, each opening its apps; a swipe moves to the next group), sections (one list with a heading above each group), pages (a group a page, swiped left and right) or one plain list; and whether apps are rows or a grid of icons. Any other launcher can replace it. | <img src="../harness/snapshots/screens/app-launcher.png" width="120" alt="launcher"> <img src="../harness/snapshots/screens/app-launcher-installed.png" width="120" alt="launcher installed"> <img src="../harness/snapshots/screens/app-launcher-folders.png" width="120" alt="launcher folders"> <img src="../harness/snapshots/screens/app-launcher-folder-open.png" width="120" alt="an open folder as a grid"> <img src="../harness/snapshots/screens/app-launcher-sections.png" width="120" alt="launcher sections"> <img src="../harness/snapshots/screens/app-launcher-sections-grid.png" width="120" alt="launcher sections as a grid"> <img src="../harness/snapshots/screens/app-launcher-pages.png" width="120" alt="launcher pages"> <img src="../harness/snapshots/screens/app-launcher-grid.png" width="120" alt="launcher grid"> |
 
 ## Health and phone
 

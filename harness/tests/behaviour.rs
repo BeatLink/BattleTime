@@ -83,6 +83,82 @@ fn the_launcher_lists_the_installed_apps_and_opens_the_one_tapped() {
     assert_eq!(opened[0].text(0), Some("timer"));
 }
 
+/// Games and Time, each with two apps, as the companion's launcher file would group them.
+const TWO_GROUPS: [(&str, &str, &[&str]); 2] = [
+    ("Games", "game", &["snake", "twos"]),
+    ("Time", "timer", &["stopwatch", "timer"]),
+];
+
+fn opened_app(watch: &TestWatch) -> Option<String> {
+    let opened = watch.effects_of(EffectKind::OpenApp);
+    opened.last().and_then(|effect| effect.text(0)).map(String::from)
+}
+
+#[test]
+fn the_launcher_in_folders_lists_the_groups_and_a_tap_opens_one() {
+    let mut watch = TestWatch::open_app("launcher").unwrap();
+    watch.group_launcher("folders", "list", &TWO_GROUPS).unwrap();
+    assert!(watch.shows_text("Games") && watch.shows_text("Time"));
+    assert!(!watch.shows_text("Snake"));
+
+    watch.tap_text("Time");
+
+    assert_eq!(watch.screen_name(), Some("group"));
+    assert!(watch.shows_text("Stopwatch") && watch.shows_text("Timer"));
+    assert!(!watch.shows_text("Snake"));
+    watch.tap_text("Timer");
+    assert_eq!(opened_app(&watch).as_deref(), Some("timer"));
+}
+
+#[test]
+fn an_open_folder_goes_back_to_the_groups_with_the_button() {
+    let mut watch = TestWatch::open_app("launcher").unwrap();
+    watch.group_launcher("folders", "list", &TWO_GROUPS).unwrap();
+    watch.tap_text("Games");
+
+    assert_eq!(watch.press_button(), EventResult::Handled);
+
+    assert_eq!(watch.screen_name(), Some("main"));
+    assert!(watch.shows_text("Games"));
+}
+
+#[test]
+fn the_launcher_in_pages_shows_one_group_and_swipes_to_the_next() {
+    let mut watch = TestWatch::open_app("launcher").unwrap();
+    watch.group_launcher("pages", "list", &TWO_GROUPS).unwrap();
+    assert!(watch.shows_text("Snake") && watch.shows_text("1/2"));
+    assert!(!watch.shows_text("Stopwatch"));
+
+    watch.swipe(Direction::Left);
+    assert!(watch.shows_text("Stopwatch") && watch.shows_text("2/2"));
+    assert!(!watch.shows_text("Snake"));
+
+    watch.swipe(Direction::Left);
+    assert!(watch.shows_text("2/2"));
+    watch.swipe(Direction::Right);
+    assert!(watch.shows_text("Snake"));
+}
+
+#[test]
+fn the_launcher_in_sections_heads_each_group_in_one_list() {
+    let mut watch = TestWatch::open_app("launcher").unwrap();
+    watch.group_launcher("sections", "list", &TWO_GROUPS).unwrap();
+
+    assert!(watch.shows_text("Games") && watch.shows_text("Snake") && watch.shows_text("Time"));
+    watch.tap_text("Snake");
+    assert_eq!(opened_app(&watch).as_deref(), Some("snake"));
+}
+
+#[test]
+fn the_launcher_in_a_grid_still_opens_the_app_tapped() {
+    let mut watch = TestWatch::open_app("launcher").unwrap();
+    watch.group_launcher("list", "grid", &TWO_GROUPS).unwrap();
+
+    watch.tap_text("2048");
+
+    assert_eq!(opened_app(&watch).as_deref(), Some("twos"));
+}
+
 // ============================================================================
 // Going back
 // ============================================================================

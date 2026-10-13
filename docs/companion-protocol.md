@@ -247,6 +247,27 @@ font file, or none, leaves the app's own font. The text is UTF-8; the watch show
 returns as spaces and other bytes as `?`, and draws only the characters its fonts have. Deleting
 `/notes/note.txt` brings back the app's hint to choose a file.
 
+### Launcher
+
+The launcher groups the apps as the companion app sets up, in `/settings/launcher`, which the
+companion writes whole with the file transfer above and then follows with `{"c":"launcher"}` on the
+packages characteristic, so the open launcher shows the change at once. The file says where every
+app goes; the companion places each app in the group its image declares (the last field of the
+`apps` answer) until the wearer moves it, and writes the file again after installing an app.
+
+| Bytes | Holds |
+|---|---|
+| 0 | The format version, `1`. |
+| 1 | The style: 0 one list, 1 folders, 2 sections, 3 pages. |
+| 2 | The view: 0 rows, 1 a grid. |
+| 3 | How many groups follow, in the launcher's order. |
+| then, per group | Its icon as its place in the shared library's icons (255 for none, which shows its first app's), its id's length and id (such as `games`, kept for the companion; the watch skips it), its name's length and the name in UTF-8, how many apps it holds, then each app's id length and id, in the order the group shows them. |
+
+Apps the file does not name, such as one installed another way, go in a group of their own at the
+end, named Other. Ids of apps that are not installed are skipped, and a group with no installed
+app is not shown. A group cut short ends the groups there. With no file, or one of another
+version, the launcher shows one plain list.
+
 ### Remote
 
 The remote app shows the buttons the companion app chose, and the companion app runs each one's
@@ -282,10 +303,11 @@ recovery firmware has no apps, so it refuses every command with an error.
 
 | Command | Answer |
 |---|---|
-| `{"c":"apps"}` | `{"c":"apps","room":budget,"a":[[id,name,kind,enabled,bytes,need],...]}`, `kind` being `app` or `face`, `enabled` 0 or 1 and `need` the heap in bytes the app needs while open, in id order; `room` is the most an app may need. Each image's CRC and id are checked, but its code only at install. An image larger than `room` is never read: it is listed by its id, as an app, turned off, with `need` its length |
+| `{"c":"apps"}` | `{"c":"apps","room":budget,"a":[[id,name,kind,enabled,bytes,need,group],...]}`, `kind` being `app` or `face`, `enabled` 0 or 1, `need` the heap in bytes the app needs while open and `group` the launcher group its image declares, empty when none, in id order; `room` is the most an app may need. Each image's CRC and id are checked, but its code only at install. An image larger than `room` is never read: it is listed by its id, as an app, turned off, with `need` its length |
 | `{"c":"install","id":id}` | `{"c":"install","ok":1,"need":need,"room":budget}` once `/apps/<id>/app.ntapp` passes the app checks, holds that id, is not the shared library, was built against no newer shared library than the installed one, and fits the heap, as `enable` checks; the app then appears in `installed_apps`. An app that needs a newer library or does not fit stays installed but turned off, and the answer is a refusal |
 | `{"c":"remove","id":id}` | `{"c":"remove","ok":1}`; deletes `/apps/<id>` with its saved state |
 | `{"c":"enable","id":id,"on":bool}` | `{"c":"enable","ok":1,"need":need,"room":budget}`; a disabled app stays installed but leaves the launcher. `on` is true when left out |
+| `{"c":"launcher"}` | `{"c":"launcher","ok":1}`; reads `/settings/launcher` again and regroups the launcher, as [Launcher](#launcher) describes |
 | `{"c":"install_library"}` | `{"c":"install_library","ok":1}` once `/resources/shared.ntlib`, sent first, checks out as the shared library and is copied into the internal flash's shared-library region |
 
 Before `install` and `enable` turn an app on, the package manager checks that it fits the heap

@@ -36,7 +36,7 @@ pub trait LibraryInstaller {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Change {
     None,
-    /// An app was installed, removed, shown or hidden.
+    /// An app was installed, removed, shown or hidden, or the launcher's groups changed.
     Apps,
     /// A new shared library is in internal flash.
     Library,
@@ -71,6 +71,7 @@ pub async fn handle_command<Files: FileAccess>(
                 Err(error) => (error_reply_for(name, error), Change::None),
             };
         }
+        ("launcher", _) => return (ok_reply(name), Change::Apps),
         ("remove", Some(id)) => packages.remove(id).await.map(|_| Change::Apps),
         ("enable", Some(id)) => {
             return match packages.change_enabled(id, command.on.unwrap_or(true)).await {
@@ -143,8 +144,8 @@ fn error_reply(name: &str, message: &str) -> String {
     reply
 }
 
-/// `{"c":"apps","room":budget,"a":[[id,name,kind,enabled,bytes,need],...]}`, kind being "app" or "face"
-/// and need the heap the app needs while open among the others.
+/// `{"c":"apps","room":budget,"a":[[id,name,kind,enabled,bytes,need,group],...]}`, kind being "app" or "face",
+/// need the heap the app needs while open among the others and group the launcher group it declares.
 async fn apps_reply<Files: FileAccess>(packages: &mut Packages<'_, Files>) -> String {
     let apps = match packages.list().await {
         Ok(apps) => apps,
@@ -156,14 +157,15 @@ async fn apps_reply<Files: FileAccess>(packages: &mut Packages<'_, Files>) -> St
         let kind = if app.kind == AppKind::Face { "face" } else { "app" };
         let _ = write!(
             reply,
-            "{}[\"{}\",\"{}\",\"{}\",{},{},{}]",
+            "{}[\"{}\",\"{}\",\"{}\",{},{},{},\"{}\"]",
             if index == 0 { "" } else { "," },
             escaped(&app.id),
             escaped(&app.name),
             kind,
             app.enabled as u8,
             app.image_bytes,
-            crate::checks::room_needed(app, &apps)
+            crate::checks::room_needed(app, &apps),
+            escaped(&app.group)
         );
     }
     reply.push_str("]}\n");
@@ -332,6 +334,33 @@ mod tests {
         assert!(reply.contains(r#"["timer","Timer","app",0,"#));
         assert!(reply.ends_with("]}\n"));
         assert_eq!(change, Change::None);
+    }
+
+    #[test]
+    fn apps_gives_each_apps_declared_group() {
+        let mut files = file_system();
+        let mut writer = ImageWriter::new("snake", "Snake", AppKind::App, 1);
+        writer.set_group("games");
+        put(&mut files, &app_file("snake", IMAGE_FILE), &writer.build());
+        put_app(&mut files, "timer", "Timer", AppKind::App);
+
+        let (reply, _) = run(r#"{"c":"apps"}"#, &mut files);
+
+        assert!(
+            reply.contains(r#"["snake","Snake","app",1,"#) && reply.contains(r#","games"],"#),
+            "{reply}"
+        );
+        assert!(reply.ends_with(",\"\"]]}\n"), "{reply}");
+    }
+
+    #[test]
+    fn launcher_answers_and_reports_that_the_apps_changed() {
+        let mut files = file_system();
+
+        assert_eq!(
+            run(r#"{"c":"launcher"}"#, &mut files),
+            (String::from("{\"c\":\"launcher\",\"ok\":1}\n"), Change::Apps)
+        );
     }
 
     #[test]

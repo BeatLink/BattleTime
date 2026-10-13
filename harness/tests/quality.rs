@@ -236,6 +236,11 @@ fn with_every_app_and_face_turned_on_each_still_fits_and_the_launcher_opens() {
                 id: package.id.clone(),
                 name: image.string(image.name_string).unwrap_or_default().to_string(),
                 kind: image.kind,
+                group: image
+                    .group_string
+                    .and_then(|index| image.string(index))
+                    .unwrap_or_default()
+                    .to_string(),
                 has_icon: image.has_icon,
                 enabled: true,
                 image_bytes: bytes.len() as u32,

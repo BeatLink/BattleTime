@@ -230,6 +230,9 @@ impl SystemValues for WatchSystem {
             SystemValue::InstalledAppCount => self.installed.listed_count() as Value,
             SystemValue::PackageCount => self.installed.packages.len() as Value,
             SystemValue::AppMemoryBudget => neotime_runtime::APP_HEAP_BUDGET_BYTES as Value,
+            SystemValue::LauncherStyle => self.installed.look.style as Value,
+            SystemValue::LauncherView => self.installed.look.view as Value,
+            SystemValue::LauncherGroupCount => self.installed.groups.len() as Value,
             SystemValue::StartedAt => clock::started_at(),
             SystemValue::FreeStorageKilobytes => self.free_storage_kilobytes.get().unwrap_or_else(|| {
                 self.free_storage_wanted.set(true);
@@ -275,6 +278,18 @@ impl SystemValues for WatchSystem {
                 .get(place)
                 .map_or(0, |app| (app.kind == AppKind::Face) as Value),
             SystemValue::PackageMemory => self.installed.memory_of(place).map_or(0, Value::from),
+            SystemValue::LauncherGroupIcon => self
+                .installed
+                .group_icon(place)
+                .map_or(neotime_runtime::NONE, |icon| icon.to_value() as Value),
+            SystemValue::LauncherGroupFirst | SystemValue::LauncherGroupSize => self
+                .installed
+                .groups
+                .get(place)
+                .map_or(neotime_runtime::NONE, |group| match value {
+                    SystemValue::LauncherGroupFirst => group.first as Value,
+                    _ => group.count as Value,
+                }),
             SystemValue::PackageRefusal => self.installed.refusal_of(place, &self.open_app_id) as Value,
             _ => neotime_runtime::NONE,
         }
@@ -286,6 +301,9 @@ impl SystemValues for WatchSystem {
             return self.notifications.read_element_text(value, index);
         }
         let place = usize::try_from(index).unwrap_or(usize::MAX);
+        if value == SystemValue::LauncherGroupName {
+            return self.installed.group_name(place);
+        }
         let entry = match value {
             SystemValue::InstalledAppName | SystemValue::InstalledAppId => self.installed.listed(place),
             _ => self.installed.packages.get(place),

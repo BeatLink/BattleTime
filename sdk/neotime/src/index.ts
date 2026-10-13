@@ -200,8 +200,32 @@ export interface InstalledApp {
   icon: LibraryIcon;
 }
 
-/** Every app a launcher lists, in order; kept by the system. */
+/** Every app a launcher lists, in order, group by group; kept by the system. */
 export const installed_apps = signal<InstalledApp[]>([]);
+
+/** How the launcher lays out its groups, as the companion set it: one plain list, folders, sections or pages. */
+export type LauncherStyle = "list" | "folders" | "sections" | "pages";
+
+/** How the launcher draws a group's apps: a row each, or a grid of icons. */
+export type LauncherView = "list" | "grid";
+
+export interface LauncherGroup {
+  name: string;
+  icon: LibraryIcon;
+  /** The place in `installed_apps` of the group's first app. */
+  first: number;
+  /** How many apps the group holds, which follow each other in `installed_apps`. */
+  count: number;
+}
+
+/** The launcher style the companion chose; `list` until it chooses one. */
+export const launcher_style = signal<LauncherStyle>("list");
+
+/** The launcher view the companion chose; `list` until it chooses one. */
+export const launcher_view = signal<LauncherView>("list");
+
+/** The launcher groups holding at least one app, in the order the companion set; kept by the system. */
+export const launcher_groups = signal<LauncherGroup[]>([]);
 
 export interface Package {
   /** What `set_app_enabled` takes. */
@@ -1181,6 +1205,8 @@ export interface AppOptions {
   icon: LibraryIcon | string;
   /** An app, the default, or a watch face, which has one screen and cannot take the button. */
   kind?: "app" | "face";
+  /** The launcher group the app goes in until the wearer moves it, such as `"games"`; docs/apps.md lists the usual ones. */
+  group?: string;
   screens: { main: ScreenComponent } & Record<string, ScreenComponent>;
   subscriptions?: Subscription[];
   permissions?: Permission[];

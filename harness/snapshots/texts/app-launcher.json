@@ -3,7 +3,9 @@
     {
       "name": "main",
       "reached_by": null,
-      "texts": []
+      "texts": [
+        "No apps"
+      ]
     }
   ]
 }

@@ -169,6 +169,8 @@ struct FakeSystem {
     steps_today: Value,
     is_phone_connected: bool,
     app_names: Vec<String>,
+    /// Each launcher group's name and the place of its first app.
+    groups: Vec<(String, Value)>,
     files: Vec<(String, Vec<u8>)>,
 }
 
@@ -179,7 +181,18 @@ impl SystemValues for FakeSystem {
             SystemValue::StepsToday => self.steps_today,
             SystemValue::IsPhoneConnected => self.is_phone_connected as Value,
             SystemValue::InstalledAppCount => self.app_names.len() as Value,
+            SystemValue::LauncherGroupCount => self.groups.len() as Value,
             _ => 0,
+        }
+    }
+
+    fn read_element(&self, value: SystemValue, index: Value) -> Value {
+        match value {
+            SystemValue::LauncherGroupFirst => usize::try_from(index)
+                .ok()
+                .and_then(|index| self.groups.get(index))
+                .map_or(neotime_runtime::NONE, |(_, first)| *first),
+            _ => neotime_runtime::NONE,
         }
     }
 
@@ -189,6 +202,10 @@ impl SystemValues for FakeSystem {
                 .ok()
                 .and_then(|index| self.app_names.get(index))
                 .map_or("", String::as_str),
+            SystemValue::LauncherGroupName => usize::try_from(index)
+                .ok()
+                .and_then(|index| self.groups.get(index))
+                .map_or("", |(name, _)| name.as_str()),
             _ => "",
         }
     }
@@ -1754,6 +1771,158 @@ fn an_app_list_paints_its_rows() {
     assert_eq!(screen.pixel(30, 80), surface);
     assert_eq!(screen.pixel(30, 64), background);
     assert_eq!(screen.pixel(30, 200), background);
+}
+
+/// An AppList with the extra properties given, whose `first` follows a state variable a left swipe sets to 2.
+fn app_list_image_with(extra: &[(Property, PropertySource)]) -> Vec<u8> {
+    use Instruction::*;
+
+    let mut writer = ImageWriter::new("launcher", "Apps", AppKind::App, 1);
+    writer.variable("first", ValueType::Int, false, 0);
+    let main = writer.string("main");
+    let first = writer.expression(code(|code| {
+        code.emit(ReadState(0));
+    }));
+    let next_page = writer.handler(code(|code| {
+        code.emit(PushSmall(2)).emit(WriteState(0));
+    }));
+    let report_place = writer.handler(code(|code| {
+        code.emit(ReadEvent(2)).emit(Effect(EffectKind::Vibrate));
+    }));
+    let constant = PropertySource::Constant;
+    let mut properties = std::vec![
+        (Property::ScreenName, constant(main as i32)),
+        (Property::Padding, constant(8)),
+        (Property::Gap, constant(8)),
+        (Property::FirstApp, PropertySource::Expression(first)),
+        (Property::OnClick, PropertySource::Handler(report_place)),
+        (Property::OnSwipe, PropertySource::Handler(next_page)),
+    ];
+    properties.extend_from_slice(extra);
+    writer.widget(WidgetKind::AppList, 0, &properties);
+    writer.build()
+}
+
+fn row_names(host: &AppHost) -> Vec<String> {
+    host.widget_rows(0)
+        .iter()
+        .map(|(name, _)| String::from(*name))
+        .collect()
+}
+
+#[test]
+fn an_app_list_shows_only_its_run_of_apps_and_reports_their_places() {
+    let image = app_list_image_with(&[(Property::AppCount, PropertySource::Constant(2))]);
+    let mut system = system_with_apps(5);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    assert_eq!(row_names(&host), ["App 0", "App 1"]);
+
+    host.touch(Touch::Swipe(SwipeDirection::Left), START_TIME, &mut system);
+    let second = host.widget_rows(0)[1].1;
+    host.touch(
+        Touch::Click {
+            x: 120,
+            y: second.y + 10,
+        },
+        START_TIME,
+        &mut system,
+    );
+
+    assert_eq!(row_names(&host), ["App 2", "App 3"]);
+    assert_eq!(system.effects, [(EffectKind::Vibrate, 3, None)]);
+}
+
+#[test]
+fn a_run_past_the_last_app_stops_at_it() {
+    let image = app_list_image_with(&[(Property::AppCount, PropertySource::Constant(4))]);
+    let mut system = system_with_apps(3);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    host.touch(Touch::Swipe(SwipeDirection::Left), START_TIME, &mut system);
+
+    assert_eq!(row_names(&host), ["App 2"]);
+}
+
+#[test]
+fn an_app_list_with_sections_heads_each_group_and_skips_headings_when_tapped() {
+    let image = app_list_image_with(&[(Property::Sections, PropertySource::Constant(1))]);
+    let mut system = system_with_apps(3);
+    system.groups = std::vec![(String::from("Games"), 0), (String::from("Tools"), 2)];
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    let rows = host.widget_rows(0);
+    assert_eq!(row_names(&host), ["Games", "App 0", "App 1", "Tools", "App 2"]);
+    assert_eq!(rows[0].1.height, crate::drawing::APP_HEADING_HEIGHT);
+
+    let (heading, last_app) = (rows[3].1, rows[4].1);
+    let on_heading = host.touch(
+        Touch::Click {
+            x: 120,
+            y: heading.y + 4,
+        },
+        START_TIME,
+        &mut system,
+    );
+    host.touch(
+        Touch::Click {
+            x: 120,
+            y: last_app.y + 4,
+        },
+        START_TIME,
+        &mut system,
+    );
+
+    assert_eq!(on_heading, EventResult::NotHandled);
+    assert_eq!(system.effects, [(EffectKind::Vibrate, 2, None)]);
+}
+
+#[test]
+fn an_app_list_in_columns_lays_its_apps_out_as_square_cells() {
+    let image = app_list_image_with(&[
+        (Property::Columns, PropertySource::Constant(3)),
+        (Property::Sections, PropertySource::Constant(1)),
+    ]);
+    let mut system = system_with_apps(5);
+    system.groups = std::vec![(String::from("Games"), 0), (String::from("Tools"), 4)];
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    let rows = host.widget_rows(0);
+    let cell = rows[1].1;
+    // 240 less 16 of padding and two 8 pixel gaps, in three columns.
+    assert_eq!((cell.width, cell.height), (69, 69));
+    assert_eq!(rows[2].1.x - cell.x, 77);
+    assert_eq!(rows[4].1.y - cell.y, 77);
+    // The second group's heading starts a row of its own, under the half-full one.
+    assert_eq!(rows[5].1.y, rows[4].1.y + 77);
+    // Its one app sits below it, past the screen's bottom.
+    assert_eq!(rows.len(), 6);
+
+    let mut screen = FakeScreen::new();
+    host.draw(&mut screen).unwrap();
+    let surface = rgb565(DEFAULT_THEME.color(ThemeColor::Surface));
+    assert_eq!(screen.pixel(cell.x + 2, cell.y + cell.height / 2), surface);
+}
+
+#[test]
+fn a_tall_grid_scrolls_by_its_rows() {
+    let image = app_list_image_with(&[(Property::Columns, PropertySource::Constant(3))]);
+    let mut system = system_with_apps(15);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    // Five rows of 69 with their gaps are taller than the screen, so the last is out of sight.
+    assert_eq!(host.widget_rows(0).len(), 12);
+
+    host.touch(
+        Touch::Drag {
+            x: 120,
+            y: 40,
+            start_x: 120,
+            start_y: 200,
+        },
+        START_TIME,
+        &mut system,
+    );
+
+    assert_eq!(row_names(&host).last().map(String::as_str), Some("App 14"));
 }
 
 // ============================================================================

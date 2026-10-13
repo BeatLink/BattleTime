@@ -94,6 +94,7 @@ function Flashlight() {
 export default define_app({
   id: "flashlight",
   name: "Flashlight",
+  group: "tools",
   icon: icons.flashlight,
   screens: { main: Flashlight },
   onOpen: open,

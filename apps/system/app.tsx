@@ -190,6 +190,7 @@ function SystemPage() {
 export default define_app({
   id: "system",
   name: "System",
+  group: "system",
   icon: icons.info,
   screens: { main: BatteryPage, system: SystemPage },
 });

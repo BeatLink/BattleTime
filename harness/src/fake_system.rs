@@ -68,6 +68,15 @@ pub struct InstalledApp {
     pub id: String,
 }
 
+/// A launcher group: its name, its icon as an image reference, and the run of `installed_apps` it holds.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FakeLauncherGroup {
+    pub name: String,
+    pub icon: Value,
+    pub first: Value,
+    pub count: Value,
+}
+
 /// An installed app or face as the Software app lists it, with the numbers the package manager gives.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FakePackage {
@@ -146,6 +155,8 @@ pub struct FakeSystem {
     texts: [String; SystemValue::COUNT],
     pub forecast: Vec<ForecastDay>,
     pub installed_apps: Vec<InstalledApp>,
+    /// The launcher groups holding at least one of `installed_apps`, in the launcher's order.
+    pub launcher_groups: Vec<FakeLauncherGroup>,
     /// Every installed app and face, on or off, as the Software app lists them.
     pub packages: Vec<FakePackage>,
     /// Set when an app turned a package on or off, so the watch tells the app once the call returns.
@@ -193,6 +204,7 @@ impl FakeSystem {
                 },
             ],
             installed_apps: Vec::new(),
+            launcher_groups: Vec::new(),
             packages: starting_packages(),
             packages_changed: false,
             notifications: NotificationList::new(),
@@ -302,6 +314,7 @@ impl SystemValues for FakeSystem {
             SystemValue::WeatherForecastLength => self.forecast.len().min(MOST_FORECAST_DAYS) as Value,
             SystemValue::InstalledAppCount => self.installed_apps.len() as Value,
             SystemValue::PackageCount => self.packages.len() as Value,
+            SystemValue::LauncherGroupCount => self.launcher_groups.len() as Value,
             SystemValue::StepDayCount => (self.step_hours.len() / HOURS_PER_DAY) as Value,
             SystemValue::StepHourCount => self.step_hours.len() as Value,
             other => self.values[other as usize],
@@ -326,6 +339,14 @@ impl SystemValues for FakeSystem {
                 }
                 _ => NONE,
             };
+        }
+        if let Some(group) = self.launcher_groups.get(place) {
+            match value {
+                SystemValue::LauncherGroupIcon => return group.icon,
+                SystemValue::LauncherGroupFirst => return group.first,
+                SystemValue::LauncherGroupSize => return group.count,
+                _ => {}
+            }
         }
         if let Some(package) = self.packages.get(place) {
             match value {
@@ -362,6 +383,12 @@ impl SystemValues for FakeSystem {
             return self.notifications.read_element_text(value, index);
         }
         let place = usize::try_from(index).unwrap_or(usize::MAX);
+        if value == SystemValue::LauncherGroupName {
+            return self
+                .launcher_groups
+                .get(place)
+                .map_or("", |group| group.name.as_str());
+        }
         if let Some(package) = self.packages.get(place) {
             match value {
                 SystemValue::PackageName => return &package.name,

@@ -17,6 +17,7 @@ fn app(id: &str, kind: AppKind, enabled: bool, need_bytes: u32) -> InstalledApp 
         id: String::from(id),
         name: String::from(id),
         kind,
+        group: String::new(),
         has_icon: true,
         enabled,
         image_bytes: 1_000,

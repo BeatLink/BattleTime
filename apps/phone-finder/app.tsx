@@ -59,6 +59,7 @@ function PhoneFinder() {
 export default define_app({
   id: "phone-finder",
   name: "Finder",
+  group: "phone",
   icon: icons.phone,
   screens: { main: PhoneFinder },
   permissions: ["phone"],

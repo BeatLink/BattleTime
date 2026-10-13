@@ -25,6 +25,7 @@ function Hello() {
 export default define_app({
   id: "hello",
   name: "Hello",
+  group: "tools",
   icon: icons.check,
   screens: { main: Hello },
 });

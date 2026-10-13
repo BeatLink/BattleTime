@@ -16,9 +16,9 @@ mod sources;
 mod watch;
 
 pub use fake_system::{
-    starting_packages, starting_step_hours, FakePackage, FakeSystem, ForecastDay, InstalledApp,
-    RecordedEffect, HOURS_PER_DAY, STARTING_APP_MEMORY_BUDGET, STARTING_DAY_STEPS, STARTING_NOTE,
-    STARTING_NOTE_PATH, STARTING_TRIP_STEPS, START_TIME_IN_MILLISECONDS, STEP_HISTORY_DAYS,
+    starting_packages, starting_step_hours, FakeLauncherGroup, FakePackage, FakeSystem, ForecastDay,
+    InstalledApp, RecordedEffect, HOURS_PER_DAY, STARTING_APP_MEMORY_BUDGET, STARTING_DAY_STEPS,
+    STARTING_NOTE, STARTING_NOTE_PATH, STARTING_TRIP_STEPS, START_TIME_IN_MILLISECONDS, STEP_HISTORY_DAYS,
 };
 pub use framebuffer::{Framebuffer, SCREEN_SIDE_IN_PIXELS};
 pub use script::{

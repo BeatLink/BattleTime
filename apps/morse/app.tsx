@@ -184,6 +184,7 @@ function Morse() {
 export default define_app({
   id: "morse",
   name: "Morse",
+  group: "tools",
   icon: icons.notification,
   screens: { main: Morse },
 });

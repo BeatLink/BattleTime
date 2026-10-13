@@ -89,6 +89,7 @@ function GameOfLife() {
 export default define_app({
   id: "game-of-life",
   name: "Life",
+  group: "games",
   icon: icons.game,
   screens: { main: GameOfLife },
   subscriptions: [every({ milliseconds: 625 }, step, { only_while_open: true })],

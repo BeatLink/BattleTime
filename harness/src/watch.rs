@@ -14,7 +14,7 @@ use neotime_runtime::{
 use neotime_companion::PhoneNotification;
 use neotime_notifications::cut_to_fit;
 
-use crate::fake_system::{FakeSystem, InstalledApp, RecordedEffect};
+use crate::fake_system::{FakeLauncherGroup, FakeSystem, InstalledApp, RecordedEffect};
 use crate::framebuffer::Framebuffer;
 use crate::sources::{compile_package, compile_source_text, shared_library, OpenFailure, PackageKind};
 
@@ -122,6 +122,45 @@ impl TestWatch {
         self.host
             .system_values_changed(SystemValue::InstalledAppCount.bit(), now, &mut self.system);
         Ok(())
+    }
+
+    /// Installs the apps of each group in turn and groups them as the watch would from the companion's launcher file.
+    ///
+    /// `style` and `view` are the words the file uses, such as `folders` and `grid`; each group is its name, a
+    /// shared library icon's name and its apps' ids.
+    pub fn group_launcher(
+        &mut self,
+        style: &str,
+        view: &str,
+        groups: &[(&str, &str, &[&str])],
+    ) -> Result<(), OpenFailure> {
+        let style = ["list", "folders", "sections", "pages"]
+            .iter()
+            .position(|word| *word == style);
+        let view = ["list", "grid"].iter().position(|word| *word == view);
+        self.system
+            .set(SystemValue::LauncherStyle, style.unwrap_or(0) as Value);
+        self.system
+            .set(SystemValue::LauncherView, view.unwrap_or(0) as Value);
+        let mut first = 0;
+        self.system.launcher_groups = groups
+            .iter()
+            .map(|(name, icon, ids)| {
+                let group = FakeLauncherGroup {
+                    name: name.to_string(),
+                    icon: neotime_compiler::types::icon_number(icon).unwrap_or(0) as Value,
+                    first,
+                    count: ids.len() as Value,
+                };
+                first += ids.len() as Value;
+                group
+            })
+            .collect();
+        let ids: Vec<&str> = groups
+            .iter()
+            .flat_map(|(_, _, ids)| ids.iter().copied())
+            .collect();
+        self.install_apps(&ids)
     }
 
     // ------------------------------------------------------------------------

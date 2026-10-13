@@ -262,6 +262,10 @@ pub enum ChoiceSet {
     MotionKind,
     /// The `kind` of a call event.
     CallKind,
+    /// How the launcher lays out its groups.
+    LauncherStyle,
+    /// How the launcher draws a group's apps.
+    LauncherView,
 }
 
 impl ChoiceSet {
@@ -272,6 +276,8 @@ impl ChoiceSet {
             ChoiceSet::TextAlign => &["left", "center", "right"],
             ChoiceSet::MotionKind => &["wrist_raise", "shake", "tap", "double_tap", "still", "moving"],
             ChoiceSet::CallKind => &["incoming", "answered", "ended"],
+            ChoiceSet::LauncherStyle => &["list", "folders", "sections", "pages"],
+            ChoiceSet::LauncherView => &["list", "grid"],
             ChoiceSet::CellShape => &["square", "rounded", "round"],
             ChoiceSet::HandStyle => &["line", "tapered", "rounded"],
             ChoiceSet::Font => &[
@@ -347,6 +353,8 @@ impl ChoiceSet {
             ChoiceSet::TextAlign => "text alignment",
             ChoiceSet::MotionKind => "kind of motion",
             ChoiceSet::CallKind => "kind of call event",
+            ChoiceSet::LauncherStyle => "launcher style",
+            ChoiceSet::LauncherView => "launcher view",
             ChoiceSet::CellShape => "cell shape",
             ChoiceSet::HandStyle => "hand style",
         }

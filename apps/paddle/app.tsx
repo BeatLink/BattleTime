@@ -104,6 +104,7 @@ function Paddle() {
 export default define_app({
   id: "paddle",
   name: "Paddle",
+  group: "games",
   icon: icons.game,
   screens: { main: Paddle },
   subscriptions: [every({ milliseconds: 20 }, step, { only_while_open: true })],

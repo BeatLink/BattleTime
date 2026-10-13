@@ -9,8 +9,10 @@ extern crate alloc;
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::ptr::NonNull;
 
+use neotime_packages::launcher::{self, LauncherLook, ShownGroup, LAUNCHER_FILE};
 pub use neotime_packages::LAUNCHER_ID;
 use neotime_packages::{checks, InstalledApp, Refusal};
+use neotime_runtime::resources::ImageReference;
 use neotime_runtime::{AppImage, AppKind};
 
 use crate::storage;
@@ -54,8 +56,14 @@ pub struct InstalledApps {
     pub has_launcher: bool,
     /// Every installed package, turned on or off, in id order, as the Software app lists them.
     pub packages: Vec<InstalledApp>,
-    /// The places in `packages` of the apps the launcher lists, in the same order.
+    /// The places in `packages` of the apps the launcher lists, group by group, as `/settings/launcher` arranges them.
     listed: Vec<u16>,
+    /// How the launcher lays out its groups and draws their apps, from `/settings/launcher`.
+    pub look: LauncherLook,
+    /// The groups holding at least one listed app, each a run of `listed`.
+    pub groups: Vec<ShownGroup>,
+    /// `/settings/launcher` as the companion wrote it, which holds the groups' names.
+    launcher_file: Vec<u8>,
 }
 
 impl InstalledApps {
@@ -64,6 +72,9 @@ impl InstalledApps {
         has_launcher: false,
         packages: Vec::new(),
         listed: Vec::new(),
+        look: LauncherLook { style: 0, view: 0 },
+        groups: Vec::new(),
+        launcher_file: Vec::new(),
     };
 
     pub fn read(files: &storage::Files) -> InstalledApps {
@@ -71,12 +82,12 @@ impl InstalledApps {
         apps.packages = files.installed_apps_now();
         // The list stays for as long as the watch runs, so it keeps no spare room.
         apps.packages.shrink_to_fit();
-        apps.sort_out();
+        apps.sort_out(files);
         apps
     }
 
-    /// Works out the face, the launcher and the listed apps from which packages are on.
-    fn sort_out(&mut self) {
+    /// Works out the face, the launcher and the listed apps from which packages are on, grouped as the launcher file says.
+    fn sort_out(&mut self, files: &storage::Files) {
         self.face = None;
         self.has_launcher = false;
         self.listed.clear();
@@ -88,6 +99,38 @@ impl InstalledApps {
                 _ => {}
             }
         }
+        self.launcher_file = files.read_now(LAUNCHER_FILE).unwrap_or_default();
+        let listed_apps: Vec<&InstalledApp> = self
+            .listed
+            .iter()
+            .map(|&place| &self.packages[place as usize])
+            .collect();
+        let arrangement = launcher::arrange(&self.launcher_file, &listed_apps);
+        drop(listed_apps);
+        self.listed = arrangement
+            .order
+            .iter()
+            .map(|&index| self.listed[index as usize])
+            .collect();
+        self.groups = arrangement.groups;
+        self.groups.shrink_to_fit();
+        self.look = arrangement.look;
+    }
+
+    /// A launcher group's icon: its shared library icon, or its first app's when the file gives none.
+    pub fn group_icon(&self, place: usize) -> Option<ImageReference> {
+        let group = self.groups.get(place)?;
+        Some(match group.icon {
+            Some(icon) => ImageReference::SharedLibrary(icon as u16),
+            None => ImageReference::InstalledApp(group.first),
+        })
+    }
+
+    /// A launcher group's name, read from the launcher file.
+    pub fn group_name(&self, place: usize) -> &str {
+        self.groups
+            .get(place)
+            .map_or("", |group| launcher::group_name(&self.launcher_file, group))
     }
 
     /// How many apps the launcher lists.
@@ -131,7 +174,7 @@ impl InstalledApps {
             return false;
         }
         self.packages[index].enabled = enabled;
-        self.sort_out();
+        self.sort_out(files);
         true
     }
 }

@@ -122,6 +122,7 @@ function HeartRate() {
 export default define_app({
   id: "heart",
   name: "Heart",
+  group: "health",
   icon: icons.heart,
   screens: { main: HeartRate },
   subscriptions: [heart_rate_reading({ seconds: 1 }, record, { only_while_open: true })],

@@ -139,6 +139,7 @@ function Music() {
 export default define_app({
   id: "music",
   name: "Music",
+  group: "phone",
   icon: icons.music,
   screens: { main: Music },
   subscriptions: [music(receive, { only_while_open: true })],

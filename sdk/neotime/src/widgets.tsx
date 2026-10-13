@@ -16,7 +16,7 @@ import type {
   ThemeColorName,
 } from "./index.ts";
 import { icon_symbol, icons, is_icon, type LibraryIcon } from "./icons.ts";
-import { installed_apps, preview_files } from "./index.ts";
+import { installed_apps, launcher_groups, preview_files, type InstalledApp } from "./index.ts";
 
 // ============================================================================
 // Theme
@@ -616,24 +616,77 @@ export function List(props: FlexProps & ScrollingProps) {
 export interface AppListProps extends CommonProps {
   /** Pixels between rows. */
   gap?: number;
+  /** The place in `installed_apps` of the first app shown; 0 when left out. */
+  first?: number;
+  /** How many apps to show from `first` on; every one when left out. */
+  count?: number;
+  /** Shows every app with each launcher group's name above its apps, ignoring `first` and `count`. */
+  sections?: boolean;
+  /** Lays the apps out as a grid of square icons this many across; 1, a row per app, when left out. */
+  columns?: number;
   /** Receives the place in `installed_apps` of the app whose row is tapped. */
   onClick?: (event: ChangeEvent<number>) => void;
 }
 
-/** The installed apps as a scrolling list of rows, each its icon and name, drawn by the watch as one widget. */
+/** One app, as a row with its icon and name, or as a square cell in a grid. */
+function AppEntry(props: { app: InstalledApp; place: number; in_grid: boolean; list: AppListProps }) {
+  const { app, place, in_grid, list } = props;
+  const tap = () => list.onClick && run_handler(list.onClick, { value: place });
+  if (in_grid) {
+    return (
+      <Button onClick={tap}>
+        <Column align_items="center" justify="center" gap={2} padding={4}>
+          <Icon icon={app.icon} size={48} />
+          <Label font="small" long_mode="clip">
+            {app.name}
+          </Label>
+        </Column>
+      </Button>
+    );
+  }
+  return (
+    <Button height={52} onClick={tap}>
+      <Row gap={12} align_items="center" padding={8}>
+        <Icon icon={app.icon} size={32} />
+        <Label grow={1} long_mode="clip">
+          {app.name}
+        </Label>
+      </Row>
+    </Button>
+  );
+}
+
+/** Apps at the places given, as rows, or as a grid when the list has columns. */
+function AppRun(props: { places: number[]; list: AppListProps }) {
+  const columns = props.list.columns ?? 1;
+  const entries = props.places.map((place) => (
+    <AppEntry app={installed_apps.value[place]} place={place} in_grid={columns > 1} list={props.list} />
+  ));
+  if (columns <= 1) return <>{entries}</>;
+  return (
+    <Grid columns={columns} gap={props.list.gap}>
+      {entries}
+    </Grid>
+  );
+}
+
+/** The installed apps as a scrolling list or grid, each its icon and name, drawn by the watch as one widget. */
 export function AppList(props: AppListProps) {
+  const total = installed_apps.value.length;
+  const places_from = (first: number, count: number) =>
+    Array.from({ length: Math.max(0, Math.min(total, first + count) - first) }, (_, index) => first + index);
   return (
     <List padding={props.padding} gap={props.gap} {...common_props_only(props)}>
-      {installed_apps.value.map((app, place) => (
-        <Button height={52} onClick={() => props.onClick && run_handler(props.onClick, { value: place })}>
-          <Row gap={12} align_items="center" padding={8}>
-            <Icon icon={app.icon} size={32} />
-            <Label grow={1} long_mode="clip">
-              {app.name}
-            </Label>
-          </Row>
-        </Button>
-      ))}
+      {props.sections ? (
+        launcher_groups.value.map((group) => (
+          <>
+            <Label color="accent">{group.name}</Label>
+            <AppRun places={places_from(group.first, group.count)} list={props} />
+          </>
+        ))
+      ) : (
+        <AppRun places={places_from(Math.min(props.first ?? 0, total), props.count ?? total)} list={props} />
+      )}
     </List>
   );
 }
@@ -717,7 +770,16 @@ export function TextFile(props: TextFileProps) {
 
 /** The props every widget shares, without the ones `AppList` handles itself. */
 function common_props_only(props: AppListProps): CommonProps {
-  const { gap: _gap, onClick: _on_click, padding: _padding, ...common } = props;
+  const {
+    gap: _gap,
+    onClick: _on_click,
+    padding: _padding,
+    first: _first,
+    count: _count,
+    sections: _sections,
+    columns: _columns,
+    ...common
+  } = props;
   return common;
 }
 

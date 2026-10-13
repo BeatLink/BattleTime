@@ -136,6 +136,7 @@ function Refused() {
 export default define_app({
   id: "software",
   name: "Software",
+  group: "system",
   icon: icons.chart,
   permissions: ["settings"],
   screens: { main: PackageList, refused: Refused },

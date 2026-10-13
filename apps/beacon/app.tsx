@@ -100,6 +100,7 @@ function Beacon() {
 export default define_app({
   id: "beacon",
   name: "Beacon",
+  group: "tools",
   icon: icons.flashlight,
   screens: { main: Beacon },
   permissions: ["heart_rate"],

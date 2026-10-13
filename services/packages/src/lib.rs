@@ -21,6 +21,7 @@ use neotime_runtime::{verify_with, AppImage, AppKind, CheckedFunctions, ImageErr
 
 pub mod checks;
 pub mod commands;
+pub mod launcher;
 pub mod library;
 
 pub use checks::{check_change, Refusal};
@@ -61,6 +62,8 @@ pub struct InstalledApp {
     pub id: String,
     pub name: String,
     pub kind: AppKind,
+    /// The launcher group the app declares, such as `games`, or empty when it declares none.
+    pub group: String,
     pub has_icon: bool,
     pub enabled: bool,
     pub image_bytes: u32,
@@ -192,6 +195,7 @@ fn too_large_to_read(id: &str, length: u32) -> InstalledApp {
         id: String::from(id),
         name: String::from(id),
         kind: AppKind::App,
+        group: String::new(),
         has_icon: false,
         enabled: false,
         image_bytes: length,
@@ -272,6 +276,12 @@ impl<'files, Files: FileAccess> Packages<'files, Files> {
             id: String::from(id),
             name: String::from(image.string(image.name_string).unwrap_or(id)),
             kind: image.kind,
+            group: String::from(
+                image
+                    .group_string
+                    .and_then(|index| image.string(index))
+                    .unwrap_or(""),
+            ),
             has_icon: image.has_icon,
             enabled: !self.exists(&app_file(id, DISABLED_FILE)).await,
             image_bytes: bytes.len() as u32,

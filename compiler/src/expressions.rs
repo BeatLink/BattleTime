@@ -115,6 +115,8 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
         "current_navigation.progress_percent" => (SystemValue::NavigationProgressPercent, Type::NUMBER),
         "step_history.trip" => (SystemValue::StepTrip, Type::NUMBER),
         "app_memory_budget" => (SystemValue::AppMemoryBudget, Type::NUMBER),
+        "launcher_style" => (SystemValue::LauncherStyle, Type::choice(ChoiceSet::LauncherStyle)),
+        "launcher_view" => (SystemValue::LauncherView, Type::choice(ChoiceSet::LauncherView)),
         _ => return None,
     };
     Some(SystemSignal { value, value_type })
@@ -125,6 +127,7 @@ fn list_length(list: &str) -> Option<SystemValue> {
     match list {
         "current_weather.forecast" => Some(SystemValue::WeatherForecastLength),
         "installed_apps" => Some(SystemValue::InstalledAppCount),
+        "launcher_groups" => Some(SystemValue::LauncherGroupCount),
         "notifications" => Some(SystemValue::NotificationCount),
         "packages" => Some(SystemValue::PackageCount),
         "step_history.days" => Some(SystemValue::StepDayCount),
@@ -145,6 +148,10 @@ fn list_field(list: &str, name: &str) -> Option<SystemSignal> {
         ("installed_apps", "name") => (SystemValue::InstalledAppName, Type::TEXT),
         ("installed_apps", "id") => (SystemValue::InstalledAppId, Type::TEXT),
         ("installed_apps", "icon") => (SystemValue::InstalledAppIcon, Type::ICON),
+        ("launcher_groups", "name") => (SystemValue::LauncherGroupName, Type::TEXT),
+        ("launcher_groups", "icon") => (SystemValue::LauncherGroupIcon, Type::ICON),
+        ("launcher_groups", "first") => (SystemValue::LauncherGroupFirst, Type::NUMBER),
+        ("launcher_groups", "count") => (SystemValue::LauncherGroupSize, Type::NUMBER),
         ("notifications", "id") => (SystemValue::NotificationId, Type::NUMBER),
         ("notifications", "app") => (SystemValue::NotificationApp, Type::TEXT),
         ("notifications", "title") => (SystemValue::NotificationTitle, Type::TEXT),
@@ -313,11 +320,9 @@ impl<'a> Compiler<'a> {
                 module,
                 name: format!("Math.{name}"),
             }),
-            Reference::SystemGroup(list @ ("installed_apps" | "notifications" | "packages"))
-                if name == "value" =>
-            {
-                Some(Reference::SystemList(list))
-            }
+            Reference::SystemGroup(
+                list @ ("installed_apps" | "launcher_groups" | "notifications" | "packages"),
+            ) if name == "value" => Some(Reference::SystemList(list)),
             Reference::SystemGroup(group) => {
                 if name == "value" {
                     return Some(Reference::SystemGroupValue(group));
@@ -1303,6 +1308,7 @@ fn library_reference<'a>(module: LibraryModule, name: &str) -> Reference<'a> {
                 "current_music" => Some("current_music"),
                 "current_navigation" => Some("current_navigation"),
                 "installed_apps" => Some("installed_apps"),
+                "launcher_groups" => Some("launcher_groups"),
                 "notifications" => Some("notifications"),
                 "packages" => Some("packages"),
                 "step_history" => Some("step_history"),

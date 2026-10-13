@@ -156,6 +156,36 @@ fn the_launcher_with_installed_apps_matches_its_reference_picture() {
 }
 
 #[test]
+fn the_launcher_in_each_style_and_view_matches_its_reference_pictures() {
+    const GROUPS: [(&str, &str, &[&str]); 3] = [
+        ("Games", "game", &["snake", "twos", "dice", "puzzle15"]),
+        ("Time", "timer", &["alarm", "stopwatch", "timer"]),
+        ("Tools", "calculator", &["calculator", "flashlight"]),
+    ];
+    let grouped = |style: &'static str, view: &'static str| {
+        move || {
+            let mut watch = TestWatch::open_app("launcher").unwrap();
+            watch.group_launcher(style, view, &GROUPS).unwrap();
+            watch
+        }
+    };
+    let results = vec![
+        check_screen("app-launcher-folders", grouped("folders", "list")),
+        check_screen("app-launcher-folder-open", || {
+            let mut watch = grouped("folders", "grid")();
+            watch.tap_text("Games");
+            watch
+        }),
+        check_screen("app-launcher-sections", grouped("sections", "list")),
+        check_screen("app-launcher-sections-grid", grouped("sections", "grid")),
+        check_screen("app-launcher-pages", grouped("pages", "list")),
+        check_screen("app-launcher-grid", grouped("list", "grid")),
+    ];
+
+    assert_all_match(results);
+}
+
+#[test]
 fn the_remote_with_one_four_and_nine_buttons_matches_its_reference_pictures() {
     use neotime_app_testing::{compile_package, FakeSystem};
 

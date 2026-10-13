@@ -29,6 +29,7 @@ const RESOURCES_SECTION: u16 = 7;
 const INITIAL_VALUES_SECTION: u16 = 8;
 const FONTS_SECTION: u16 = 9;
 const FUNCTIONS_SECTION: u16 = 10;
+const LAUNCHER_SECTION: u16 = 11;
 const DATA_SECTION: u16 = 12;
 
 const HEADER_BYTES: usize = 20;
@@ -54,6 +55,7 @@ pub struct ImageWriter {
     shared_library_version: u16,
     id_string: u16,
     name_string: u16,
+    group_string: Option<u16>,
     strings: Vec<String>,
     variables: Vec<VariableEntry>,
     expressions: Vec<Vec<u8>>,
@@ -75,6 +77,7 @@ impl ImageWriter {
             has_icon: false,
             id_string: 0,
             name_string: 0,
+            group_string: None,
             strings: Vec::new(),
             variables: Vec::new(),
             expressions: Vec::new(),
@@ -90,6 +93,11 @@ impl ImageWriter {
         writer.id_string = writer.string(id);
         writer.name_string = writer.string(name);
         writer
+    }
+
+    /// Names the launcher group the app declares, such as `games`.
+    pub fn set_group(&mut self, group: &str) {
+        self.group_string = Some(self.string(group));
     }
 
     /// The number of a string, adding it if the image does not hold it yet.
@@ -332,6 +340,9 @@ impl ImageWriter {
         }
         if !self.data.is_empty() {
             sections.push((DATA_SECTION, self.data.len() as u16, entry_table(&self.data)));
+        }
+        if let Some(group_string) = self.group_string {
+            sections.push((LAUNCHER_SECTION, 1, group_string.to_le_bytes().to_vec()));
         }
 
         let mut image: Vec<u8> = Vec::new();

@@ -146,6 +146,7 @@ function Stopwatch() {
 export default define_app({
   id: "stopwatch",
   name: "Stopwatch",
+  group: "time",
   icon: icons.stopwatch,
   screens: { main: Stopwatch },
   onOpen: () => keep_screen_on(is_running.value),

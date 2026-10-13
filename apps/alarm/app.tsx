@@ -359,6 +359,7 @@ function Ringing() {
 export default define_app({
   id: "alarm",
   name: "Alarm",
+  group: "time",
   icon: icons.alarm,
   screens: { main: AlarmList, edit_time: EditTime, edit_days: EditDays, ring: Ringing },
   subscriptions: [at(next_ring_at, ring), at(ring_ends_at, ring_timed_out)],

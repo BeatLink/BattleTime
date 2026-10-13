@@ -105,6 +105,7 @@ function Sports() {
 export default define_app({
   id: "sports",
   name: "Sports",
+  group: "time",
   icon: icons.stopwatch,
   screens: { main: Sports },
   onOpen: () => keep_screen_on(is_running.value),

@@ -587,6 +587,20 @@ fn parses_the_header() {
 }
 
 #[test]
+fn reads_the_launcher_group_an_app_declares() {
+    let mut writer = crate::writer::ImageWriter::new("snake", "Snake", AppKind::App, 1);
+    writer.set_group("games");
+    let bytes = writer.build();
+
+    let image = AppImage::parse(&bytes).unwrap();
+
+    assert_eq!(
+        image.group_string.and_then(|index| image.string(index)),
+        Some("games")
+    );
+}
+
+#[test]
 fn reads_the_files_the_shared_library_carries_for_the_firmware() {
     let mut writer = crate::writer::ImageWriter::new("neotime.shared", "Library", AppKind::Library, 2);
     writer.data(&[1, 2, 3]);
@@ -606,6 +620,13 @@ fn reads_the_files_the_shared_library_carries_for_the_firmware() {
         Some(6144)
     );
     assert_eq!(image.data(2), None);
+}
+
+#[test]
+fn an_app_that_declares_no_group_has_none() {
+    let bytes = crate::writer::ImageWriter::new("snake", "Snake", AppKind::App, 1).build();
+
+    assert_eq!(AppImage::parse(&bytes).unwrap().group_string, None);
 }
 
 #[test]

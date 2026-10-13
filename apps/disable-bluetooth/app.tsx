@@ -49,6 +49,7 @@ function DisableBluetooth() {
 export default define_app({
   id: "disable-bluetooth",
   name: "DisaBLE",
+  group: "system",
   icon: icons.bluetooth,
   screens: { main: DisableBluetooth },
   permissions: ["settings"],

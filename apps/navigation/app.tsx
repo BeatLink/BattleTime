@@ -82,6 +82,7 @@ function Navigation() {
 export default define_app({
   id: "navigation",
   name: "Navigation",
+  group: "phone",
   icon: icons.navigation,
   screens: { main: Navigation },
   subscriptions: [navigation(receive, { only_while_open: true })],

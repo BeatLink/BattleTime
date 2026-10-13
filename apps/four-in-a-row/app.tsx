@@ -401,6 +401,7 @@ function Game() {
 export default define_app({
   id: "four-in-a-row",
   name: "4 in a row",
+  group: "games",
   icon: icons.game,
   screens: { main: Menu, game: Game },
   subscriptions: [every({ milliseconds: 100 }, think, { only_while_open: true })],

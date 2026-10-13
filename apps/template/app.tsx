@@ -87,6 +87,7 @@ function Template() {
 export default define_app({
   id: "template",
   name: APP_NAME,
+  group: "tools",
   icon: icons.settings,
   screens: { main: Template },
   onOpen: () => {

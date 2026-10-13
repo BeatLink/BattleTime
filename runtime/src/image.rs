@@ -14,7 +14,6 @@ use crate::widgets::WidgetProblem;
 
 pub const MAGIC: [u8; 4] = *b"NTAP";
 pub const FORMAT_VERSION: u16 = 1;
-
 /// The files the shared library carries for the firmware, by their number in its data section.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LibraryData {
@@ -23,6 +22,9 @@ pub enum LibraryData {
     /// Bosch's configuration file for a BMA425 accelerometer.
     Bma425Configuration = 1,
 }
+
+/// The longest launcher group id an app may declare, such as `games`.
+pub const MOST_GROUP_ID_BYTES: usize = 16;
 
 const HEADER_BYTES: usize = 20;
 const SECTION_ENTRY_BYTES: usize = 12;
@@ -68,6 +70,8 @@ pub enum SectionKind {
     Fonts,
     /// Code that expressions, handlers and other functions run with `Call`.
     Functions,
+    /// Where the launcher puts the app: the string naming the group it declares.
+    Launcher,
     /// The shared library only: files the firmware reads, such as the accelerometer's configuration.
     Data,
 }
@@ -86,6 +90,7 @@ impl SectionKind {
             8 => InitialValues,
             9 => Fonts,
             10 => Functions,
+            11 => Launcher,
             12 => Data,
             _ => return None,
         })
@@ -353,6 +358,8 @@ pub struct AppImage<'image> {
     pub has_icon: bool,
     pub id_string: u16,
     pub name_string: u16,
+    /// The string naming the launcher group the app declares, if it declares one.
+    pub group_string: Option<u16>,
     byte_count: u32,
     strings: EntryTable<'image>,
     state_count: u16,
@@ -405,6 +412,7 @@ impl<'image> AppImage<'image> {
             has_icon,
             id_string,
             name_string,
+            group_string: None,
             byte_count: bytes.len() as u32,
             strings: EntryTable::default(),
             state_count: 0,
@@ -461,13 +469,19 @@ impl<'image> AppImage<'image> {
                     image.functions = EntryTable::parse(count, section_bytes)?
                 }
                 SectionKind::Data => image.data = EntryTable::parse(count, section_bytes)?,
+                SectionKind::Launcher => {
+                    image.group_string = Some(read_u16(section_bytes, 0).ok_or(ImageError::TableOutOfBounds)?)
+                }
             }
         }
 
         for index in 0..image.strings.count {
             image.string(index).ok_or(ImageError::BadString(index))?;
         }
-        for index in [id_string, name_string] {
+        for index in [Some(id_string), Some(name_string), image.group_string]
+            .into_iter()
+            .flatten()
+        {
             image.string(index).ok_or(ImageError::BadString(index))?;
         }
         for index in 0..image.state_count {

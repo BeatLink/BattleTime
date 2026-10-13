@@ -259,6 +259,7 @@ function Calculator() {
 export default define_app({
   id: "calculator",
   name: "Calculator",
+  group: "tools",
   icon: icons.calculator,
   screens: { main: Calculator },
 });

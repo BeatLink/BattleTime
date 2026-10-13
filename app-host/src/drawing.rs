@@ -900,94 +900,260 @@ pub const APP_ROW_HEIGHT: i32 = 52;
 const APP_ICON_SIZE: i32 = 32;
 const APP_ROW_PADDING: i32 = 8;
 const APP_ICON_GAP: i32 = 12;
+/// How tall a group's heading is in an AppList with sections.
+pub const APP_HEADING_HEIGHT: i32 = 32;
+/// The largest icon a grid cell draws, so wide cells keep room for the name.
+const GRID_ICON_SIZE: i32 = 48;
+
+/// Marks a line of an AppList's text as a group's heading rather than an app's name.
+pub const APP_HEADING_MARK: char = '\u{1}';
 
 /// How many apps an AppList holds: the host keeps the count in `value` and the names in its text.
 fn app_count(node: &Node) -> i32 {
     node.settings.value.max(0)
 }
 
-/// Where each row of an AppList starts: the first row's top and the distance to the next.
-fn app_rows(node: &Node) -> (i32, i32) {
-    let top = node.bounds.y + i32::from(node.settings.padding) - i32::from(node.scroll_offset);
-    (top, APP_ROW_HEIGHT + i32::from(node.settings.gap))
-}
-
-/// How tall an AppList's rows are together, with its padding, to bound how far it scrolls.
-pub fn app_list_height(node: &Node) -> i32 {
-    let count = app_count(node);
-    let gaps = (count - 1).max(0) * i32::from(node.settings.gap);
-    count * APP_ROW_HEIGHT + gaps + 2 * i32::from(node.settings.padding)
-}
-
-/// The place of the app whose row is under a touch, or none between rows and past the last.
-pub fn app_row_at(node: &Node, x: i32, y: i32) -> Option<i32> {
-    let (top, pitch) = app_rows(node);
-    let padding = i32::from(node.settings.padding);
-    let inside = x >= node.bounds.x + padding && x < node.bounds.x + node.bounds.width - padding;
-    if !inside || y < top {
-        return None;
+/// The place in `installed_apps` of an AppList's first app.
+fn first_app(node: &Node) -> usize {
+    match *node.extra {
+        Extra::AppList {
+            first,
+            sections: false,
+            ..
+        } => first as usize,
+        _ => 0,
     }
-    let place = (y - top) / pitch;
-    let in_row = (y - top) % pitch < APP_ROW_HEIGHT;
-    (in_row && place < app_count(node)).then_some(place)
 }
 
-/// Each row of an AppList that is at least partly inside it: the app's place, its name and the row's box.
-pub fn app_list_rows(node: &Node) -> impl Iterator<Item = (usize, &str, Rect)> + '_ {
+/// One thing an AppList draws: an app's cell, with its place in `installed_apps`, or a group's heading.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AppListItem<'text> {
+    pub place: Option<usize>,
+    pub name: &'text str,
+    pub area: Rect,
+}
+
+/// Hands `visit` every item of an AppList where it lies on the screen, scrolled, in or out of sight,
+/// until `visit` returns false.
+///
+/// With one column each app is a row; with more they sit in square cells, and a heading always
+/// takes a whole row of its own. One walk, not an iterator, so its code is in the firmware once.
+fn walk_app_list<'node>(node: &'node Node, visit: &mut dyn FnMut(AppListItem<'node>) -> bool) {
     let padding = i32::from(node.settings.padding);
-    let (top, pitch) = app_rows(node);
-    node.text
-        .split('\n')
-        .take(app_count(node) as usize)
-        .enumerate()
-        .map(move |(place, name)| {
-            let row = Rect {
-                x: node.bounds.x + padding,
-                y: top + place as i32 * pitch,
-                width: (node.bounds.width - 2 * padding).max(0),
-                height: APP_ROW_HEIGHT,
-            };
-            (place, name, row)
-        })
-        .filter(|(_, _, row)| {
-            row.y + row.height > node.bounds.y && row.y < node.bounds.y + node.bounds.height
-        })
+    let gap = i32::from(node.settings.gap);
+    let columns = i32::from(node.settings.columns).max(1);
+    let inner_width = (node.bounds.width - 2 * padding).max(0);
+    let cell_width = ((inner_width - (columns - 1) * gap) / columns).max(0);
+    let cell_height = if columns == 1 { APP_ROW_HEIGHT } else { cell_width };
+    let left = node.bounds.x + padding;
+    let mut top = node.bounds.y + padding - i32::from(node.scroll_offset);
+    let mut column = 0;
+    let mut place = first_app(node);
+    let mut apps_left = app_count(node);
+    for line in node.text.split('\n').filter(|line| !line.is_empty()) {
+        let item = match line.strip_prefix(APP_HEADING_MARK) {
+            Some(heading) => {
+                if column > 0 {
+                    top += cell_height + gap;
+                    column = 0;
+                }
+                let area = Rect {
+                    x: left,
+                    y: top,
+                    width: inner_width,
+                    height: APP_HEADING_HEIGHT,
+                };
+                top += APP_HEADING_HEIGHT + gap;
+                AppListItem {
+                    place: None,
+                    name: heading,
+                    area,
+                }
+            }
+            None if apps_left == 0 => return,
+            None => {
+                apps_left -= 1;
+                let area = Rect {
+                    x: left + column * (cell_width + gap),
+                    y: top,
+                    width: cell_width,
+                    height: cell_height,
+                };
+                column += 1;
+                if column == columns {
+                    top += cell_height + gap;
+                    column = 0;
+                }
+                place += 1;
+                AppListItem {
+                    place: Some(place - 1),
+                    name: line,
+                    area,
+                }
+            }
+        };
+        if !visit(item) {
+            return;
+        }
+    }
 }
 
-/// Each installed app as a row like a button: its icon, then its name.
+/// How tall an AppList's items are together, with its padding, to bound how far it scrolls.
+pub fn app_list_height(node: &Node) -> i32 {
+    let padding = i32::from(node.settings.padding);
+    let content_top = node.bounds.y + padding - i32::from(node.scroll_offset);
+    let mut bottom = None;
+    walk_app_list(node, &mut |item| {
+        bottom = Some(item.area.y + item.area.height);
+        true
+    });
+    bottom.map_or(0, |bottom| bottom - content_top) + 2 * padding
+}
+
+/// The place of the app whose cell is under a touch, or none on a heading, between cells and past the last.
+pub fn app_row_at(node: &Node, x: i32, y: i32) -> Option<i32> {
+    let mut touched = None;
+    walk_app_list(node, &mut |item| {
+        let area = item.area;
+        let inside = x >= area.x && x < area.x + area.width && y >= area.y && y < area.y + area.height;
+        if inside {
+            touched = item.place.map(|place| place as i32);
+        }
+        !inside
+    });
+    touched
+}
+
+/// Each item of an AppList that is at least partly inside it.
+pub fn app_list_rows(node: &Node) -> Vec<AppListItem<'_>> {
+    let mut rows = Vec::new();
+    walk_app_list(node, &mut |item| {
+        let area = item.area;
+        if area.y + area.height > node.bounds.y && area.y < node.bounds.y + node.bounds.height {
+            rows.push(item);
+        }
+        area.y < node.bounds.y + node.bounds.height
+    });
+    rows
+}
+
+/// Each installed app as a cell like a button, and each group's heading as text above its apps.
 fn draw_app_list(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
     let theme = context.theme;
     let color = resolve(node.settings.color, ThemeColor::Text, theme);
     let surface = resolve(None, ThemeColor::Surface, theme);
-    for (place, name, row) in app_list_rows(node) {
+    let in_grid = node.settings.columns > 1;
+    for item in app_list_rows(node) {
+        let Some(place) = item.place else {
+            let heading_color = resolve(None, ThemeColor::Accent, theme);
+            draw_text_block(
+                renderer,
+                FontName::Normal,
+                item.name,
+                item.area,
+                Align::Start,
+                false,
+                heading_color,
+            );
+            continue;
+        };
         let style = frame_style(&Settings::default(), surface, BUTTON_RADIUS, theme);
-        draw_widget_bg(renderer, row, &style);
-
-        let icon_area = Rect {
-            x: row.x + APP_ROW_PADDING,
-            y: row.y + (APP_ROW_HEIGHT - APP_ICON_SIZE) / 2,
-            width: APP_ICON_SIZE,
-            height: APP_ICON_SIZE,
-        };
+        draw_widget_bg(renderer, item.area, &style);
         let icon = ImageReference::InstalledApp(place as u16).to_value();
-        draw_image(context, icon, icon_area, color, renderer);
-        let text_left = icon_area.x + APP_ICON_SIZE + APP_ICON_GAP;
-        let text_area = Rect {
-            x: text_left,
-            y: row.y,
-            width: (row.x + row.width - APP_ROW_PADDING - text_left).max(0),
-            height: APP_ROW_HEIGHT,
+        if in_grid {
+            draw_grid_cell(context, icon, &item, color, renderer);
+        } else {
+            draw_list_row(context, node, icon, &item, color, renderer);
+        }
+    }
+}
+
+/// An app as a row: its icon at the left, then its name.
+fn draw_list_row(
+    context: &DrawContext,
+    node: &Node,
+    icon: i32,
+    item: &AppListItem,
+    color: Color,
+    renderer: &mut dyn Renderer,
+) {
+    let row = item.area;
+    let icon_area = Rect {
+        x: row.x + APP_ROW_PADDING,
+        y: row.y + (APP_ROW_HEIGHT - APP_ICON_SIZE) / 2,
+        width: APP_ICON_SIZE,
+        height: APP_ICON_SIZE,
+    };
+    draw_image(context, icon, icon_area, color, renderer);
+    let text_left = icon_area.x + APP_ICON_SIZE + APP_ICON_GAP;
+    let text_area = Rect {
+        x: text_left,
+        y: row.y,
+        width: (row.x + row.width - APP_ROW_PADDING - text_left).max(0),
+        height: APP_ROW_HEIGHT,
+    };
+    draw_text_block(
+        renderer,
+        node.settings.font,
+        item.name,
+        text_area,
+        Align::Start,
+        false,
+        color,
+    );
+}
+
+/// An app as a square cell: a large icon, with its name in small text below when the cell has room.
+fn draw_grid_cell(
+    context: &DrawContext,
+    icon: i32,
+    item: &AppListItem,
+    color: Color,
+    renderer: &mut dyn Renderer,
+) {
+    let cell = item.area;
+    let name_height = line_height(FontName::Small.metrics());
+    let shows_name = cell.height >= GRID_ICON_SIZE / 2 + name_height + 2 * APP_ROW_PADDING;
+    let room = cell.height - 2 * APP_ROW_PADDING - if shows_name { name_height } else { 0 };
+    let side = room
+        .min(cell.width - 2 * APP_ROW_PADDING)
+        .clamp(0, GRID_ICON_SIZE);
+    let used = side + if shows_name { name_height } else { 0 };
+    let icon_area = Rect {
+        x: cell.x + Align::Center.offset(cell.width, side),
+        y: cell.y + Align::Center.offset(cell.height, used),
+        width: side,
+        height: side,
+    };
+    draw_image(context, icon, icon_area, color, renderer);
+    if shows_name {
+        let name_area = Rect {
+            x: cell.x + 2,
+            y: icon_area.y + side,
+            width: (cell.width - 4).max(0),
+            height: name_height,
         };
+        let name = fitted(FontName::Small, item.name, name_area.width);
         draw_text_block(
             renderer,
-            node.settings.font,
+            FontName::Small,
             name,
-            text_area,
-            Align::Start,
+            name_area,
+            Align::Center,
             false,
             color,
         );
     }
+}
+
+/// As much of the start of a text as fits a width, cut between characters.
+fn fitted(font: FontName, text: &str, width: i32) -> &str {
+    let metrics = font.metrics();
+    let mut end = text.len();
+    while end > 0 && text_width(metrics, &text[..end]) > width {
+        end = text[..end].char_indices().last().map_or(0, |(index, _)| index);
+    }
+    &text[..end]
 }
 
 /// Where a CellGrid's cells are: the first cell's corner, the pitch from one to the next, and the size.

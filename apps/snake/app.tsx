@@ -202,6 +202,7 @@ function Snake() {
 export default define_app({
   id: "snake",
   name: "Snake",
+  group: "games",
   icon: icons.game,
   screens: { main: Snake },
   subscriptions: [every({ milliseconds: 250 }, tick, { only_while_open: true })],

@@ -155,6 +155,7 @@ function Metronome() {
 export default define_app({
   id: "metronome",
   name: "Metronome",
+  group: "tools",
   icon: icons.metronome,
   screens: { main: Metronome },
   subscriptions: [at(next_beat, beat, { only_while_open: true })],

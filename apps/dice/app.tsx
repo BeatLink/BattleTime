@@ -134,6 +134,7 @@ function Dice() {
 export default define_app({
   id: "dice",
   name: "Dice",
+  group: "games",
   icon: icons.dice,
   screens: { main: Dice },
   subscriptions: [motion("shake", roll_on_shake, { only_while_open: true })],

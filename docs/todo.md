@@ -667,8 +667,8 @@ full report is
 - [ ] **Widgets:** status bar, battery meter, clock, notification bar, button,
   toggle, checkbox, slider, spinner, stopwatch and confirmation view.
 - [ ] **App icons:** monochrome Font Awesome icons per app.
-- [ ] **Grid and list launchers,** chosen in settings. InfiniTime's grid shows 6 apps a page,
-  remembers the last page, and greys out apps and faces whose resources are missing.
+- [ ] **The rest of InfiniTime's grid launcher:** remember the last page, and grey out apps and
+  faces whose resources are missing. Lists and grids, chosen in the companion, are done.
 
 ### Simulator
 
