@@ -24,13 +24,21 @@ import {
 } from "neotime/preview";
 import app from "./app.tsx";
 
-/** A moment on a whole ten seconds, so the charging bar starts at the charge. */
+/** A moment on a whole ten seconds, so the charging battery starts at the charge. */
 const START = 1_767_603_600_000;
 
-/** The ring's fill and its track, as SVG paths; a full ring's fill covers the whole track. */
-function ring_paths(container: Element): { fill: string; track: string } {
-  const paths = container.querySelectorAll("[data-widget=arc] path");
-  return { track: paths[0].getAttribute("d") ?? "", fill: paths[1]?.getAttribute("d") ?? "" };
+/** The battery's fill height in pixels: the innermost of the meter's nested columns. */
+function meter_fill_height(container: Element): number {
+  const fill = container.querySelector("[data-widget=column] > [data-widget=column] > [data-widget=column]:only-child");
+  return parseInt((fill as HTMLElement).style.height, 10);
+}
+
+/** Opens the app and swipes up from the system page to the battery. */
+function open_battery_page(): Element {
+  open(app);
+  const { container } = render(<OpenScreen />);
+  act(() => swipe("up"));
+  return container;
 }
 
 /** The scroll bar's segment colours from the top, the page on show in the muted grey. */
@@ -48,13 +56,17 @@ function set_battery(percent: number, millivolts: number, charging: boolean) {
 }
 
 describe("system: the battery page", () => {
+  let stop_scheduler = () => {};
+
   beforeEach(() => {
     install_apps([app]);
     freeze_clock(START);
+    stop_scheduler = start_scheduler();
   });
 
   afterEach(() => {
     cleanup();
+    stop_scheduler();
     unfreeze_clock();
     open(null);
     set_battery(80, 3900, false);
@@ -62,17 +74,16 @@ describe("system: the battery page", () => {
 
   it("shows the charge, that it is discharging and the voltage", () => {
     set_battery(87, 4056, false);
-    open(app);
-    const { container } = render(<OpenScreen />);
+    const container = open_battery_page();
+    expect(current_screen.value).toBe("battery");
     expect(screen.getByText("87%")).toBeTruthy();
     expect(screen.getByText("Discharging")).toBeTruthy();
     expect(screen.getByText("4.05 volts")).toBeTruthy();
-    expect(scroll_bar_colors(container)).toEqual(["rgb(160, 160, 160)", "rgb(56, 56, 56)"]);
+    expect(scroll_bar_colors(container)).toEqual(["rgb(56, 56, 56)", "rgb(160, 160, 160)"]);
   });
 
   it("names a full, low and critical battery", () => {
-    open(app);
-    render(<OpenScreen />);
+    open_battery_page();
     set_battery(100, 4180, false);
     expect(screen.getByText("Fully charged")).toBeTruthy();
     set_battery(12, 3680, false);
@@ -83,28 +94,28 @@ describe("system: the battery page", () => {
   });
 
   it("warns to charge below ten percent, until the charger is on", () => {
-    open(app);
-    render(<OpenScreen />);
+    open_battery_page();
     set_battery(9, 3640, false);
-    expect(screen.getByText("Charge the watch")).toBeTruthy();
+    expect(screen.getByText("Charge now")).toBeTruthy();
+    expect(screen.getByText("3.64 volts")).toBeTruthy();
     set_battery(9, 3700, true);
-    expect(screen.queryByText("Charge the watch")).toBeNull();
+    expect(screen.queryByText("Charge now")).toBeNull();
     expect(screen.getByText("Charging")).toBeTruthy();
     expect(screen.getByText("3.70 volts")).toBeTruthy();
   });
 
-  it("fills the ring from the charge to full a second at a time while charging", () => {
+  it("fills the battery to the charge, and from there to full a second at a time while charging", () => {
+    set_battery(50, 3800, false);
+    const container = open_battery_page();
+    expect(meter_fill_height(container)).toBe(80);
     set_battery(60, 3950, true);
-    open(app);
-    const { container } = render(<OpenScreen />);
-    const at_the_charge = ring_paths(container).fill;
-    expect(at_the_charge).not.toBe(ring_paths(container).track);
+    expect(meter_fill_height(container)).toBe(96);
     act(() => advance_clock(1000));
-    expect(ring_paths(container).fill).not.toBe(at_the_charge);
+    expect(meter_fill_height(container)).toBe(112);
     act(() => advance_clock(3000));
-    expect(ring_paths(container).fill).toBe(ring_paths(container).track);
+    expect(meter_fill_height(container)).toBe(160);
     act(() => advance_clock(1000));
-    expect(ring_paths(container).fill).toBe(at_the_charge);
+    expect(meter_fill_height(container)).toBe(96);
   });
 });
 
@@ -129,18 +140,18 @@ describe("system: the system page", () => {
     open(null);
   });
 
-  it("is a swipe up from the battery and a swipe down back to it", () => {
+  it("is the first page, with the battery a swipe up and a swipe down back", () => {
     const { container } = render(<OpenScreen />);
+    expect(current_screen.value).toBe("main");
+    expect(scroll_bar_colors(container)).toEqual(["rgb(160, 160, 160)", "rgb(56, 56, 56)"]);
     act(() => swipe("up"));
-    expect(current_screen.value).toBe("system");
-    expect(scroll_bar_colors(container)).toEqual(["rgb(56, 56, 56)", "rgb(160, 160, 160)"]);
+    expect(current_screen.value).toBe("battery");
     act(() => swipe("down"));
     expect(current_screen.value).toBe("main");
   });
 
   it("shows the version, uptime, last restart and free storage", () => {
     render(<OpenScreen />);
-    act(() => swipe("up"));
     expect(screen.getByText("0.1.0+1b19aed")).toBeTruthy();
     expect(screen.getByText("1d 02:00:00")).toBeTruthy();
     expect(screen.getByText("Fault at 0x0001a2b4")).toBeTruthy();
@@ -149,7 +160,6 @@ describe("system: the system page", () => {
 
   it("counts the uptime on and follows the storage", () => {
     render(<OpenScreen />);
-    act(() => swipe("up"));
     act(() => advance_clock(5000));
     expect(screen.getByText("1d 02:00:05")).toBeTruthy();
     act(() => {

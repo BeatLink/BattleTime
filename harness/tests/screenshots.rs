@@ -78,8 +78,8 @@ fn the_stopwatch_after_three_seconds_matches_its_reference_picture() {
 }
 
 #[test]
-fn the_system_page_matches_its_reference_picture() {
-    let result = check_screen("app-system-page", || {
+fn the_battery_page_matches_its_reference_picture() {
+    let result = check_screen("app-system-battery", || {
         let mut watch = TestWatch::open_app("system").unwrap();
         watch.swipe(Direction::Up);
         watch.advance(Duration::from_secs(1));

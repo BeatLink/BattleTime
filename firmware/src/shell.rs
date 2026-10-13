@@ -1194,8 +1194,11 @@ impl Shell {
 // The battery screen
 // ============================================================================
 
-/// The app whose first page, the battery, shows when the charger is plugged in or out, or the charge goes low.
+/// The app whose battery page shows when the charger is plugged in or out, or the charge goes low.
 const BATTERY_APP_ID: &str = "system";
+
+/// The battery app's screen that opens for a battery event, in place of its first.
+const BATTERY_SCREEN: &str = "battery";
 
 /// The app `battery` subscription's name for a battery event.
 fn battery_change(event: BatteryEvent) -> BatteryChange {
@@ -1236,6 +1239,9 @@ impl Shell {
             let returns_to = self.battery_screen_returns_to.unwrap_or(self.showing);
             if self.showing != battery_app {
                 self.open(battery_app, Transition::Up);
+                if let Some(host) = &mut self.host {
+                    host.start_on_screen(BATTERY_SCREEN, clock::utc_now(), &mut self.system);
+                }
             }
             if self.showing == battery_app && returns_to != battery_app {
                 self.battery_screen_returns_to = Some(returns_to);

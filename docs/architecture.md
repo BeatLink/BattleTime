@@ -894,7 +894,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
   (`low`), once until the charger is next connected, or at start-up when it starts that low.
   They queue in `battery::EVENTS`, and the shell takes them when the battery values change. It
   hands each to the open app's `battery` subscriptions, and for the charger and, outside do not
-  disturb, the low warning, it opens the `system` app on its battery page over what is open and lights the screen. An app that keeps the screen
+  disturb, the low warning, it opens the `system` app straight onto its `battery` screen (`AppHost::start_on_screen`, which
+  leaves nothing to go back to inside the app) over what is open and lights the screen. An app that keeps the screen
   on, such as a ringing alarm, stays in front, and the screen only lights.
   The app is an ordinary installed app rather than a firmware pop-up, so it costs no firmware
   flash and can be replaced; without it the screen just lights on what is open. When the screen

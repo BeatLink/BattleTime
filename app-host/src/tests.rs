@@ -626,6 +626,24 @@ fn the_button_goes_back_a_screen_and_leaves_the_first_to_the_system() {
 }
 
 #[test]
+fn an_app_can_start_on_a_named_screen_with_nothing_to_go_back_to() {
+    let image = counter_image();
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    assert!(!host.start_on_screen("missing", START_TIME, &mut system));
+    assert!(host.start_on_screen("settings", START_TIME, &mut system));
+    assert_eq!(host.screen_name(), Some("settings"));
+    assert_eq!(
+        host.go_back_a_screen(START_TIME, &mut system),
+        EventResult::NotHandled
+    );
+
+    host.close(START_TIME, &mut system);
+    assert!(!host.start_on_screen("main", START_TIME, &mut system));
+}
+
+#[test]
 fn a_tick_redraws_a_clock_bound_label_once_a_second() {
     let image = stopwatch_image();
     let mut system = FakeSystem::default();

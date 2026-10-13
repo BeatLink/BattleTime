@@ -109,9 +109,10 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **A steady battery charge.** The voltage is smoothed and read along InfiniTime's measured curve.
   The charge only rises on the charger and only falls off it, stops at 99 % while charging, and
   reads 100 % and not charging once the charger stays connected after the battery is full.
-- **Battery screen.** The first page of the `system` app shows the charge in a ring, whether the
-  battery is charging, fully charged, discharging, low or critical, and its voltage; while charging
-  the ring fills up from the charge again and again.
+- **Battery screen.** The second page of the `system` app, a swipe up from its system page, shows a
+  tall battery on the left filled to the charge and, on the right, the charge, whether the battery
+  is charging, fully charged, discharging, low or critical, and its voltage; while charging the
+  battery fills up from the charge again and again.
 - **Charging screen and low battery warning.** Plugging the charger in or taking it off lights the
   screen on the system app's battery page, and so does the charge falling below 10 % off the charger, once until
   the next charge, when the app warns to charge the watch. Do not disturb keeps the low warning

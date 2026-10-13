@@ -1,9 +1,10 @@
-// System: the battery and how the watch is doing, as two pages swiped up and down.
-// The battery page merges InfiniTime's BatteryInfo with PinetimeLite's charging and low battery
-// screens: a ring with the charge that fills up again and again while charging, whether it is
-// charging, full, low or critical in its colour, the voltage and a warning to charge below 10 %. The shell opens it
-// when the charger is plugged in or out, or the charge goes low.
+// System: how the watch is doing and its battery, as two pages swiped up and down.
 // The system page is InfiniTime's SystemInfo: the firmware, uptime, last restart and free storage.
+// The battery page merges InfiniTime's BatteryInfo with PinetimeLite's charging and low battery
+// screens: a tall battery on the left that fills up again and again while charging, and on the right
+// the charge, whether it is charging, full, low or critical in its colour, the voltage and a warning
+// to charge below 10 %. The shell opens straight onto it when the charger is plugged in or out, or the
+// charge goes low.
 // A scroll bar down the right edge, as wasp-os draws it, shows which page is on show.
 
 import { computed } from "@preact/signals";
@@ -28,7 +29,7 @@ import {
 } from "neotime";
 import { Header, ScrollBar } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Arc, Column, Icon, Label, Row, Screen, Scroll } from "neotime/widgets";
+import { Column, Label, Row, Screen, Scroll } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -39,12 +40,21 @@ const WARNING_PERCENT = 10;
 const LOW_PERCENT = 15;
 const CRITICAL_PERCENT = 5;
 
-/** While charging the ring fills from the charge to full in this many one-second steps, then starts again. */
+/** While charging the battery fills from the charge to full in this many one-second steps, then starts again. */
 const FILL_STEPS = 4;
 
 const PAGES = 2;
-const BATTERY_PAGE = 0;
-const SYSTEM_PAGE = 1;
+const SYSTEM_PAGE = 0;
+const BATTERY_PAGE = 1;
+
+/** The battery's size, its outline and the gap between outline and fill. */
+const METER_WIDTH = 72;
+const METER_HEIGHT = 176;
+const METER_OUTLINE = 4;
+const METER_GAP = 4;
+const METER_FILL_HEIGHT = METER_HEIGHT - 2 * (METER_OUTLINE + METER_GAP);
+const TERMINAL_WIDTH = 28;
+const TERMINAL_HEIGHT = 10;
 
 const KILOBYTES_IN_A_MEGABYTE = 1024;
 
@@ -80,13 +90,15 @@ const needs_charging = computed(() => !is_charging.value && battery_percent.valu
 
 const voltage_text = computed(() => `${format_fixed(Math.floor(battery_millivolts.value / 10), 2)} volts`);
 
-/** While charging the ring fills again and again from the charge to full, one step a second; it stops with the screen. */
-const ring_percent = computed(() =>
+/** While charging the battery fills again and again from the charge to full, one step a second; it stops with the screen. */
+const meter_percent = computed(() =>
   is_charging.value
     ? battery_percent.value +
       Math.floor(((100 - battery_percent.value) * (Math.floor(now.value / SECOND) % (FILL_STEPS + 1))) / FILL_STEPS)
     : battery_percent.value,
 );
+
+const meter_fill_height = computed(() => Math.round((METER_FILL_HEIGHT * meter_percent.value) / 100));
 
 // ============================================================================
 // System values
@@ -113,36 +125,13 @@ const free_storage_text = computed(() => {
 // Handlers
 // ============================================================================
 
-function swipe_on_battery(event: SwipeEvent) {
-  if (event.direction === "up") go("system");
-}
-
 function swipe_on_system(event: SwipeEvent) {
-  if (event.direction === "down") back();
+  if (event.direction === "up") go("battery");
 }
 
-// ============================================================================
-// Battery page
-// ============================================================================
-
-function BatteryPage() {
-  return (
-    <Screen onSwipe={swipe_on_battery}>
-      <Column grow={1} align_items="center" justify="center" padding={4} gap={8}>
-        <Arc diameter={168} thickness={12} value={ring_percent.value} color={status_color.value}>
-          <Icon icon={is_charging.value ? icons.charging : icons.battery} size={24} color={status_color.value} />
-          <Label font="large">{`${battery_percent.value}%`}</Label>
-          <Label font="small" color={status_color.value}>
-            {status_text.value}
-          </Label>
-        </Arc>
-        <Label font="small" color={needs_charging.value ? "danger" : "warning"}>
-          {needs_charging.value ? "Charge the watch" : voltage_text.value}
-        </Label>
-      </Column>
-      <ScrollBar page={BATTERY_PAGE} pages={PAGES} />
-    </Screen>
-  );
+/** Back to the system page, or out of the app when the shell opened it on the battery. */
+function swipe_on_battery(event: SwipeEvent) {
+  if (event.direction === "down") back();
 }
 
 // ============================================================================
@@ -186,10 +175,59 @@ function SystemPage() {
   );
 }
 
+// ============================================================================
+// Battery page
+// ============================================================================
+
+/** A tall battery, its terminal on top, filled from the bottom to the charge in the status colour. */
+function BatteryMeter() {
+  return (
+    <Column align_items="center" gap={0}>
+      <Column width={TERMINAL_WIDTH} height={TERMINAL_HEIGHT} radius={2} background="text" />
+      <Column
+        width={METER_WIDTH}
+        height={METER_HEIGHT}
+        border_width={METER_OUTLINE}
+        border_color="text"
+        radius={10}
+        padding={METER_GAP}
+        justify="end"
+      >
+        <Column height={meter_fill_height.value} radius={4} background={status_color.value} />
+      </Column>
+    </Column>
+  );
+}
+
+function BatteryPage() {
+  return (
+    <Screen onSwipe={swipe_on_battery}>
+      <Row grow={1} align_items="center" padding={12} gap={14}>
+        <BatteryMeter />
+        <Column grow={1} gap={6}>
+          <Label font="large">{`${battery_percent.value}%`}</Label>
+          <Label font="small" color={status_color.value}>
+            {status_text.value}
+          </Label>
+          <Label font="small" color="muted">
+            {voltage_text.value}
+          </Label>
+          {needs_charging.value && (
+            <Label font="small" color="danger">
+              Charge now
+            </Label>
+          )}
+        </Column>
+      </Row>
+      <ScrollBar page={BATTERY_PAGE} pages={PAGES} />
+    </Screen>
+  );
+}
+
 export default define_app({
   id: "system",
   name: "System",
   group: "system",
   icon: icons.info,
-  screens: { main: BatteryPage, system: SystemPage },
+  screens: { main: SystemPage, battery: BatteryPage },
 });

@@ -211,28 +211,30 @@ fn the_template_shows_the_last_event_it_received() {
 // System
 // ============================================================================
 
-/// Opens the system app and swipes up from the battery to its system page.
+/// Opens the system app on its system page, the first.
 fn open_system_page() -> TestWatch {
-    let mut watch = TestWatch::open_app("system").unwrap();
-    watch.swipe(Direction::Up);
-    assert_eq!(watch.screen_name(), Some("system"));
+    let watch = TestWatch::open_app("system").unwrap();
+    assert_eq!(watch.screen_name(), Some("main"));
     watch
 }
 
 #[test]
-fn the_system_app_opens_on_the_battery_and_pages_up_and_down() {
+fn the_system_app_opens_on_the_system_page_and_pages_up_to_the_battery() {
     let mut watch = TestWatch::open_app("system").unwrap();
     assert_eq!(watch.screen_name(), Some("main"));
-    assert!(watch.shows_text("Discharging"), "{:?}", watch.visible_texts());
+    assert!(watch.shows_text("2.7 MB free"), "{:?}", watch.visible_texts());
 
     watch.swipe(Direction::Up);
-    assert_eq!(watch.screen_name(), Some("system"));
-    assert!(watch.shows_text("2.7 MB free"), "{:?}", watch.visible_texts());
+    assert_eq!(watch.screen_name(), Some("battery"));
+    assert!(watch.shows_text("Discharging"), "{:?}", watch.visible_texts());
 
     watch.swipe(Direction::Down);
     assert_eq!(watch.screen_name(), Some("main"));
     watch.swipe(Direction::Right);
-    assert!(watch.effects_of(EffectKind::Back).is_empty(), "the button goes back, not a swipe");
+    assert!(
+        watch.effects_of(EffectKind::Back).is_empty(),
+        "the button goes back, not a swipe"
+    );
     assert!(watch.failures().is_empty());
 }
 

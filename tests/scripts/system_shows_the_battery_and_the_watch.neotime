@@ -1,27 +1,6 @@
-# The system app opens on the battery: the charge, its state and the voltage, and a warning to charge below ten percent.
+# The system app opens on the firmware version, the uptime, why the watch restarted and the free storage, and keeps them current.
 open app system
-expect text "87%"
-expect text "Discharging"
-expect text "4.05 volts"
-
-set battery_percent 9
-set battery_millivolts 3640
-expect text "Battery low"
-expect text "Charge the watch"
-
-set is_charging true
-expect text "Charging"
-expect text "3.64 volts"
-expect no text "Charge the watch"
-
-set is_charging false
-set battery_percent 100
-set battery_millivolts 4180
-expect text "Fully charged"
-
-# Swiping up shows the firmware version, the uptime, why the watch restarted and the free storage, and keeps them current.
-swipe up
-expect screen system
+expect screen main
 expect text "0.1.0+1b19aed"
 expect text "0d 03:25:00"
 expect text "watchdog"
@@ -33,8 +12,30 @@ expect text "1d 00:25:02"
 set free_storage_kilobytes 512
 expect text "512 KB free"
 
-# Swiping down goes back to the battery.
+# Swiping up shows the battery: the charge, its state and the voltage, and a warning to charge below ten percent.
+swipe up
+expect screen battery
+expect text "87%"
+expect text "Discharging"
+expect text "4.05 volts"
+
+set battery_percent 9
+set battery_millivolts 3640
+expect text "Battery low"
+expect text "Charge now"
+
+set is_charging true
+expect text "Charging"
+expect text "3.64 volts"
+expect no text "Charge now"
+
+set is_charging false
+set battery_percent 100
+set battery_millivolts 4180
+expect text "Fully charged"
+
+# Swiping down goes back to the system page.
 swipe down
 expect screen main
-expect text "Fully charged"
+expect text "512 KB free"
 expect no failures

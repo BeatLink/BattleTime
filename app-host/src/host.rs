@@ -1572,6 +1572,20 @@ impl<'image> AppHost<'image> {
         EventResult::Handled
     }
 
+    /// Puts the named screen in place of the open one as if the app had opened on it, so going back never visits the first.
+    pub fn start_on_screen(&mut self, name: &str, now: Value, system: &mut impl System) -> bool {
+        let Some(root) = self.tree.screen_named(name).filter(|_| self.is_open) else {
+            return false;
+        };
+        if root != self.screen_root {
+            self.run_screen_event(Property::OnHide, &[], now, system, false);
+            self.show_screen(root, now, system);
+            self.run_screen_event(Property::OnShow, &[], now, system, false);
+        }
+        self.screen_history_length = 0;
+        true
+    }
+
     /// Whether a node, or any widget around it, is disabled.
     fn is_disabled(&self, node_index: usize) -> bool {
         let mut next = Some(node_index);
