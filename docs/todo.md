@@ -179,9 +179,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   [slot table](bootloader.md#the-slot-table), but no Bluetooth command calls it. Add one to
   `services/companion` and the companion's command line, so the recovery slot can be sized to the
   recovery image and the rest of the first 1 MB given back.
-- [ ] **Move the watch onto the 20 KB layout.** `dist/bootloader-updater-from-first-layout.zip`
-  has only run in the emulator ([bootloader.md](bootloader.md#moving-a-watch-from-the-first-layout)).
-  Send it to the watch on its charger, then the full firmware from the recovery firmware.
 - [ ] **Clippy fails on master.** CI's `Lints and types` and `Watch lints` jobs are red since run
   38325871913: a reference that is created and dereferenced at once in `runtime/src/verifier.rs`
   (lines 64, 87 and 92) and `firmware/src/main.rs` (lines 757 and 765), and a needless `mut` in

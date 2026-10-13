@@ -245,6 +245,11 @@ whole move from `tests/emulator/fixtures/first-layout-bootloader.bin`, the 16 KB
 from `89d3a63`; the one on the watch was built from an earlier commit of the same code and cannot be
 rebuilt bit for bit.
 
+On 2026-10-13 it moved the watch itself. It was sent with `neotime flash` to the full first-layout
+firmware; the watch answered as the recovery firmware, `0.1.0+23a906d`, within 30 seconds of the
+upload ending. The full firmware then went on from the recovery firmware with `neotime flash`, and
+the apps in the file system came through untouched.
+
 ## What the firmware must do
 
 - **Mark itself booted** with `neotime_updates::confirm_running_firmware` once it is sure it works,
