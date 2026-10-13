@@ -256,6 +256,26 @@ fn a_button_is_as_wide_as_its_icon_and_text_with_side_space() {
 }
 
 #[test]
+fn an_icon_in_a_button_keeps_its_own_size_in_the_middle() {
+    let mut nodes = tree(&[
+        (WidgetKind::Button, None),
+        (WidgetKind::Icon, Some(0)),
+        (WidgetKind::Image, Some(0)),
+    ]);
+    nodes[0].settings.width = Some(Length::Pixels(68));
+    nodes[0].settings.height = Some(Length::Pixels(64));
+    for child in &mut nodes[1..=2] {
+        child.content_width = 32;
+        child.content_height = 32;
+    }
+
+    let nodes = laid_out(nodes);
+
+    assert_eq!(nodes[1].bounds, rect(18, 16, 32, 32));
+    assert_eq!(nodes[2].bounds, rect(0, 0, 68, 64));
+}
+
+#[test]
 fn a_checkbox_is_its_tick_box_then_its_text() {
     let mut nodes = tree(&[(WidgetKind::Column, None), (WidgetKind::Checkbox, Some(0))]);
     nodes[0].settings.align_items = Some(Placement::Start);

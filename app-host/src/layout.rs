@@ -3,7 +3,7 @@
 //! A `Column` stacks its children down and a `Row` across, `gap` apart; spare space goes to children
 //! with `grow`, in proportion, or else `justify` places them. Across the flow a child fills the space
 //! unless it has a size, an `align`, or its parent an `align_items`. A `Stack` and a `Button` put
-//! their children on top of each other, and a `Grid` in rows of `columns` cells. A `Scroll` and a
+//! their children on top of each other, an `Icon` keeping its own size, and a `Grid` in rows of `columns` cells. A `Scroll` and a
 //! `List` are columns that clip their children and can be scrolled. A child with `x` or `y` leaves
 //! the flow and sits at that offset inside its parent, and so do lines, scales and analog clocks,
 //! which are drawn over the whole of their parent unless given a size.
@@ -622,10 +622,12 @@ fn place_in_room(nodes: &mut [Box<Node>], child: usize, room: Rect, shown: bool,
     let settings = nodes[child].settings;
     let room = inset(room, i32::from(settings.margin));
     let natural = natural_size(nodes, child, Some(room.width));
-    let length = |wanted: Option<Length>, whole: i32, natural: i32| match (wanted, settings.align) {
+    // An icon keeps the 32 pixels the sdk promises, so a button's icon leaves room around it.
+    let keeps_natural = settings.align.is_some() || nodes[child].kind == WidgetKind::Icon;
+    let length = |wanted: Option<Length>, whole: i32, natural: i32| match (wanted, keeps_natural) {
         (Some(length), _) => length.of(whole),
-        (None, Some(_)) => natural.min(whole),
-        (None, None) => whole,
+        (None, true) => natural.min(whole),
+        (None, false) => whole,
     };
     let width = length(settings.width, room.width, natural.width);
     let height = length(settings.height, room.height, natural.height);

@@ -760,7 +760,7 @@ Layout is a small flexbox, worked out again whenever a value changes:
   unless it has a size or an `align`; then it takes that size, or the size it wants, and `align`
   places it.
 - **`Stack` and `Button`** put their children on top of each other. Each fills the inside unless
-  it has a size or an `align`.
+  it has a size or an `align`, except an `Icon`, which keeps its own size in the middle.
 - **`x` and `y`** take a widget out of the flow and place it at that offset inside its parent.
 - **A hidden widget** takes no space.
 - **`padding`** is space inside a widget on every side; **`margin`** is space outside it.
