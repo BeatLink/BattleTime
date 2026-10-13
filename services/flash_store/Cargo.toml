@@ -1,0 +1,14 @@
+[package]
+name = "neotime-flash-store"
+version = "0.1.0"
+edition = "2021"
+description = "NeoTime's store in the external flash: files, records and logs, safe through power cuts, with no heap"
+license.workspace = true
+publish = false
+
+[dependencies]
+embedded-storage-async = "0.4"
+heapless = "0.9"
+
+[dev-dependencies]
+embassy-futures = "0.1"

@@ -20,3 +20,7 @@ trouble-host-macros = { path = "third_party/trouble-host-macros" }
 # littlefs-rust-core is translated from C and relies on unsigned numbers wrapping, as C's do.
 [profile.dev.package.littlefs-rust-core]
 overflow-checks = false
+
+# The flash store's power-cut test replays thousands of runs, which takes minutes unoptimised.
+[profile.dev.package.neotime-flash-store]
+opt-level = 2

@@ -224,10 +224,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   for tens of milliseconds, so the radio can miss its connection events. Updating the shared
   library or filling the internal-flash cache while the watch runs needs erases timed between
   connection events, or Bluetooth paused for the write.
-- [ ] **Key-value store for app state.** Each app's state and settings are small values that
-  change often. A log-structured key-value store, such as Zephyr's NVS or ZMS, Nordic's FDS or
-  FlashDB, appends each change instead of rewriting a file, which suits that better than whole
-  files in littlefs. FlashDB also has a time-series mode that fits step and heart-rate logs.
 - [ ] **Resource cache for external flash.** A small fixed area of RAM with two or three slots,
   reused least recently used first. Each slot is filled by one DMA read of a whole resource, such
   as a font or picture from a resource package or a handler from `/apps`, so each costs one SPI
@@ -519,6 +515,19 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 ### External flash and storage
 
 These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-updates` branches.
+
+- [ ] **Move the firmware onto `neotime-flash-store`** ([flash-store.md](flash-store.md)). The store
+  is built and tested on the computer; nothing on the watch uses it yet.
+  - Migrate the watch's littlefs file system into it once, power-cut safe, before its region is
+    reused; the store mounts littlefs blocks as empty sectors and would overwrite them.
+  - BLEFS uploads through `begin_file`, `write_file_part` and `finish_file`; packages, the notes,
+    `TextFile` and `file_bytes` through the file calls.
+  - Settings, the theme and each app's saved state as records, one group per app.
+  - The step log as a log with batched appends, and heart rate and activity logs beside it; raw
+    accelerometer recordings in a ring of their own.
+  - Measure on the watch: mount time (about a second estimated), the deepest stack, and the RAM
+    freed from the 16 KB storage heap; then update [memory-map.md](memory-map.md).
+  - A storage task that owns the store and never cancels an operation midway.
 
 - [ ] **Deep power-down in sleep.** Put the flash chip to sleep when the watch sleeps.
 - [ ] **Use the file system:** save alarms and the BLE bond there.

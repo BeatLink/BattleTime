@@ -1248,6 +1248,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-flash-store"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "embedded-storage-async",
+ "heapless 0.9.3",
+]
+
+[[package]]
 name = "neotime-foreground"
 version = "0.1.0"
 

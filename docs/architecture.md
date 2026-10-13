@@ -160,6 +160,7 @@ NeoTime/
 │   ├── crash_record/ neotime-crash-record: reset reasons in words, the crash record kept across a reset, and the crash screen
 │   ├── current_time/ neotime-current-time: the Current Time service's values and calendar arithmetic
 │   ├── dfu/          neotime-dfu: the legacy DFU update protocol over Bluetooth
+│   ├── flash_store/  neotime-flash-store: files, records and logs in the external flash, built to replace littlefs
 │   ├── foreground/   neotime-foreground: whether the wearer watches the screen move, for background work to wait on
 │   ├── liveness/     neotime-liveness: whether the shell and the radio still make progress, for the watchdog
 │   ├── packages/     neotime-packages: the apps installed in /apps and the shared library's install
@@ -408,6 +409,23 @@ across the flash; InfiniTime uses it on the same chip.
   systems written by the C littlefs.
 
 See [storage.md](storage.md).
+
+## Flash store (`services/flash_store`)
+
+`neotime-flash-store` keeps files, records and logs in the external flash, `async` and with no heap,
+and is built to replace `neotime-storage`; the firmware does not use it yet. It knows how data is
+written, not what it is, so a new kind of data needs no new format:
+
+- **Files** are named by path and written whole, at once or a part at a time as an upload arrives.
+  Each is a list of up to 64 sectors in any order, committed by a header written last. Files of
+  1 KB or less are kept as records.
+- **Records** are small values rewritten often, keyed by their owner's app number, appended to a
+  ring with a table in RAM of each key's newest copy. Writes are refused before the ring is half
+  full, and each app may use 4 KB.
+- **Logs** are appended over time, batched in RAM, and drop their oldest sector when the ring wraps.
+
+It survives a power cut at any write or erase, which its tests check exhaustively. Built for the
+watch it takes 2,700 B of RAM and about 26 KB of code. See [flash-store.md](flash-store.md).
 
 ## Updates (`services/updates`)
 

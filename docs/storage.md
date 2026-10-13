@@ -2,6 +2,8 @@
 
 NeoTime keeps its files in a [littlefs](https://github.com/littlefs-project/littlefs) file system
 in the external flash. The crate is `neotime-storage`, in `services/storage/`.
+[`neotime-flash-store`](flash-store.md) is built to replace it, with files, records and logs that
+never block; the firmware still uses littlefs until it moves over.
 
 ## Why littlefs
 
