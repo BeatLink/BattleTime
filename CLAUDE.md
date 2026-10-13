@@ -41,6 +41,10 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
 
 ## Design rules
 
+- Going back retraces navigation exactly: it revisits every screen passed on the way forward, in
+  reverse order and moving the opposite way (face, notifications, quick settings goes back through
+  quick settings, notifications, face). The shell records this in `neotime_app_host::way_back`; a new
+  way to move forward must record its step, and a new way back must take it.
 - The firmware carries only the engine, plus the notifications and quick settings screens from
   `shell/`, which it compiles in. No other built-in apps, faces, launcher, icons or fonts, and no
   fallback copies of them. Apps live in `/apps` on external flash; the shared library sits in the

@@ -3,8 +3,8 @@
 //! Swipes belong to the open app; the shell acts only on the face and the screens reached from it.
 //! On the face a swipe up opens the launcher, a swipe down pulls the notifications down, and a
 //! swipe left or right steps round the quick apps. On the notifications a swipe down pulls quick
-//! settings down after them, and a swipe up on either puts them away to the face. A swipe down on
-//! the launcher closes it to the face. On a quick app a swipe left or right steps on round the ring.
+//! settings down after them. A swipe up on either, or down on the launcher, goes back a step, the
+//! way the side button does. On a quick app a swipe left or right steps on round the ring.
 
 use neotime_runtime::events::SwipeDirection;
 
@@ -34,7 +34,7 @@ pub enum SwipeAction {
     OpenQuickSettings,
     NextQuickApp,
     PreviousQuickApp,
-    CloseToFace,
+    GoBack,
 }
 
 // ============================================================================
@@ -49,8 +49,8 @@ pub fn action_for(direction: SwipeDirection, screen: SwipeScreen) -> SwipeAction
         (SwipeScreen::Face | SwipeScreen::QuickApp, Left) => SwipeAction::NextQuickApp,
         (SwipeScreen::Face | SwipeScreen::QuickApp, Right) => SwipeAction::PreviousQuickApp,
         (SwipeScreen::Notifications, Down) => SwipeAction::OpenQuickSettings,
-        (SwipeScreen::Notifications | SwipeScreen::QuickSettings, Up) => SwipeAction::CloseToFace,
-        (SwipeScreen::Launcher, Down) => SwipeAction::CloseToFace,
+        (SwipeScreen::Notifications | SwipeScreen::QuickSettings, Up) => SwipeAction::GoBack,
+        (SwipeScreen::Launcher, Down) => SwipeAction::GoBack,
         _ => SwipeAction::Nothing,
     }
 }

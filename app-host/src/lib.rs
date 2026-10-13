@@ -26,6 +26,7 @@ pub mod swipes;
 mod system;
 mod text;
 mod text_file;
+pub mod way_back;
 mod widgets;
 
 #[cfg(any(test, feature = "demo"))]

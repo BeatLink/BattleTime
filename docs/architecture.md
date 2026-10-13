@@ -596,11 +596,18 @@ watch face, the launcher and the apps through `neotime-app-host`:
   each app's icon. Every swipe goes to the open screen first, and `neotime_app_host::swipes` says
   what the shell does with one it leaves: on the face, down pulls the notifications down and left
   and right step round the quick apps; on the notifications, down pulls quick settings down after
-  them; up on either, or down on the launcher, goes back to the face. Inside any other app the shell
+  them; up on either, or down on the launcher, goes back a step. Inside any other app the shell
   takes no swipe. `neotime_app_host::quick_apps` steps round the ring read from
   `/settings/quick_apps` on each step, with the face as the place before the first app, and the
-  shell remembers that the open app came from the ring so its own unused swipes step on and the
-  way back is the face.
+  shell remembers that the open app came from the ring so its own unused swipes step on.
+- **The way back.** Each step forward, by a swipe, the launcher, a double click, an app opening
+  another or a notification waking the screen, records the screen left and how the new one came in
+  (`neotime_app_host::way_back`, the newest 8). Going back, by the button, a swipe up on the
+  pulled-down screens, a swipe down on the launcher or an app's `back` or `close`, retraces them in
+  exactly the reverse order, each coming in by the opposite movement, so quick settings goes back to
+  the notifications and then the face. A step forward onto the screen just left counts as a step
+  back. Reaching the face forgets the way back, and so does turning an app on or off, since that
+  moves the launcher's places; with nothing recorded, back goes to the face.
 - **Built-in screens.** The notifications and quick settings are app sources in `shell/`, compiled
   by `firmware/build.rs` with `neotime-compiler` and included in the firmware, about 2.2 KB
   together. The shell opens them like any app image but straight from flash, never from `/apps`,
@@ -609,8 +616,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
   edge, sending each click, double click, long press and 2 second press to the shell.
   `neotime_app_host::side_button` decides what each does, so its rules are tested on the host:
   a dark screen only wakes; a click goes back a screen in the open app's history, and from its
-  first screen the shell goes back a step: an app to the launcher, the launcher, a quick app, the
-  notifications or quick settings to the face, and the battery screen back to what it covered; a
+  first screen the shell goes back a step along the way back, and the battery screen back to what
+  it covered; a
   click on the face puts it to sleep. Apps never hear the button. A long press or a 2 second press
   goes to the face, and a double click opens the notifications, or leaves them for the face. A separate watchdog task reads the pin straight from the port
   every 500 ms and feeds the watchdog only while it is up, so a hold of 4 to 5 seconds resets the

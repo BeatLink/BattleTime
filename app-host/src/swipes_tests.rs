@@ -57,9 +57,9 @@ fn a_swipe_down_on_the_notifications_opens_quick_settings() {
 }
 
 #[test]
-fn a_swipe_up_puts_the_notifications_or_quick_settings_away() {
+fn a_swipe_up_on_the_notifications_or_quick_settings_goes_back() {
     for screen in [SwipeScreen::Notifications, SwipeScreen::QuickSettings] {
-        assert_eq!(action_for(SwipeDirection::Up, screen), SwipeAction::CloseToFace);
+        assert_eq!(action_for(SwipeDirection::Up, screen), SwipeAction::GoBack);
     }
 }
 
@@ -81,10 +81,10 @@ fn the_pulled_down_screens_leave_left_and_right_alone() {
 // ============================================================================
 
 #[test]
-fn a_swipe_down_closes_the_launcher_and_it_keeps_the_rest() {
+fn a_swipe_down_on_the_launcher_goes_back_and_it_keeps_the_rest() {
     assert_eq!(
         action_for(SwipeDirection::Down, SwipeScreen::Launcher),
-        SwipeAction::CloseToFace
+        SwipeAction::GoBack
     );
     for direction in [SwipeDirection::Up, SwipeDirection::Left, SwipeDirection::Right] {
         assert_eq!(action_for(direction, SwipeScreen::Launcher), SwipeAction::Nothing);

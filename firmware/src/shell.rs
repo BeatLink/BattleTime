@@ -3,8 +3,8 @@
 //! The face is shown at start. A swipe up on the face opens the launcher, a tap there opens an app,
 //! a swipe down pulls the notifications and then quick settings down, and a swipe left or right
 //! steps round the quick apps, as `neotime_app_host::swipes` says. The side button's gestures act as
-//! `neotime_app_host::side_button` says: a click goes back a step, and from the face to sleep. The
-//! backlight and display turn off, or dim for an always-on screen, after the settings' timeout
+//! `neotime_app_host::side_button` says: a click goes back a step, retracing the way the wearer came,
+//! and from the face to sleep. The backlight and display turn off, or dim for an always-on screen, after the settings' timeout
 //! without input, unless the app keeps the screen on, and the next touch or button gesture turns
 //! them on without acting on it. Each app's persistent state is saved to
 //! `/apps/<id>/state` when it closes or the screen turns off, and changed settings at the same times.
@@ -44,6 +44,7 @@ use neotime_app_host::{
     settings as app_settings,
     side_button::{self, ButtonAction, ButtonSituation, OpenScreen},
     swipes::{self, SwipeAction, SwipeScreen},
+    way_back::WayBack,
     AppEffect, AppFailure, AppHost, BatteryChange, EventResult, MotionKind, OpenError, PushedEvent, System,
     Touch, Transition,
 };
@@ -166,6 +167,13 @@ enum Showing {
     Notifications,
     /// Quick settings, which the firmware carries itself.
     QuickSettings,
+}
+
+/// A screen as the way back remembers it: what showed, and whether it was reached round the quick-app ring.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Visit {
+    showing: Showing,
+    in_quick_ring: bool,
 }
 
 /// The notifications screen, compiled from `shell/notifications` when the firmware is built.
@@ -468,6 +476,8 @@ struct Shell {
     battery_screen_returns_to: Option<Showing>,
     /// Whether the open app was reached round the quick-app ring, so its swipes step on round it and the way back is the face.
     in_quick_ring: bool,
+    /// The screens moved on from, so going back retraces them in reverse; empty on the face.
+    way_back: WayBack<Visit>,
     /// Until when the phone's find ring plays, unless the wearer touches the watch first.
     finding_until: Option<Instant>,
     /// A touch taken from the queue while merging drags, handled next.
@@ -483,6 +493,10 @@ impl Shell {
     fn open(&mut self, showing: Showing, transition: Transition) {
         self.battery_screen_returns_to = None;
         self.in_quick_ring = false;
+        // The face is home, so there is nothing to go back to from it.
+        if showing == Showing::Face {
+            self.way_back.clear();
+        }
         let now = clock::utc_now();
         self.finger_left_on_old_screen = true;
         if let Some(mut host) = self.host.take() {
@@ -664,6 +678,8 @@ impl Shell {
 
     /// After the open app turned another on or off: keeps the open app's place in the launcher's list and tells it.
     fn apps_toggled(&mut self) {
+        // Places in the launcher's list move when an app is turned on or off, so remembered ones could open the wrong app.
+        self.way_back.clear();
         if let Showing::App(_) = self.showing {
             if let Some(place) = self.system.installed.place_of(&self.system.open_app_id) {
                 self.showing = Showing::App(place);
@@ -766,18 +782,39 @@ impl Shell {
         self.system.brightness = self.backlight.level();
     }
 
-    /// Goes back a step, the new screen coming in by `transition`.
+    /// Moves on to `showing`, coming in by `transition`, and records the screen left on the way back.
+    fn go_forward(&mut self, showing: Showing, transition: Transition, in_quick_ring: bool) {
+        let from = Visit {
+            showing: self.showing,
+            in_quick_ring: self.in_quick_ring,
+        };
+        self.way_back.forward(
+            from,
+            Visit {
+                showing,
+                in_quick_ring,
+            },
+            transition,
+        );
+        self.open(showing, transition);
+        self.in_quick_ring = in_quick_ring && self.showing == showing;
+    }
+
+    /// Goes back to the screen left last, the way it went, or to the face when nothing was left; the battery screen goes back to what it covered, by `transition`.
     fn go_back(&mut self, transition: Transition) {
         if let Some(showing) = self.battery_screen_returns_to {
             self.open(showing, transition);
             return;
         }
-        match self.showing {
-            Showing::Face => {}
-            Showing::Launcher => self.open(Showing::Face, transition),
-            Showing::Notifications | Showing::QuickSettings => self.open(Showing::Face, Transition::Up),
-            Showing::App(_) if self.in_quick_ring => self.open(Showing::Face, transition),
-            Showing::App(_) => self.open(Showing::Launcher, transition),
+        if self.showing == Showing::Face {
+            return;
+        }
+        match self.way_back.back() {
+            Some(step) => {
+                self.open(step.screen.showing, step.way_back());
+                self.in_quick_ring = step.screen.in_quick_ring && self.showing == step.screen.showing;
+            }
+            None => self.open(Showing::Face, transition),
         }
     }
 
@@ -828,14 +865,14 @@ impl Shell {
         };
         match swipes::action_for(direction, screen) {
             SwipeAction::Nothing => {}
-            SwipeAction::OpenLauncher => self.open(Showing::Launcher, Transition::Up),
-            SwipeAction::OpenNotifications => self.open(Showing::Notifications, Transition::Down),
-            SwipeAction::OpenQuickSettings => self.open(Showing::QuickSettings, Transition::Down),
-            // The launcher came up from below, so it goes back down; the pulled-down screens go back up.
-            SwipeAction::CloseToFace if screen == SwipeScreen::Launcher => {
-                self.open(Showing::Face, Transition::Down)
+            SwipeAction::OpenLauncher => self.go_forward(Showing::Launcher, Transition::Up, false),
+            SwipeAction::OpenNotifications => {
+                self.go_forward(Showing::Notifications, Transition::Down, false)
             }
-            SwipeAction::CloseToFace => self.open(Showing::Face, Transition::Up),
+            SwipeAction::OpenQuickSettings => {
+                self.go_forward(Showing::QuickSettings, Transition::Down, false)
+            }
+            SwipeAction::GoBack => self.go_back(Transition::Down),
             SwipeAction::NextQuickApp => self.step_round_quick_apps(Step::Next, Transition::Left),
             SwipeAction::PreviousQuickApp => self.step_round_quick_apps(Step::Previous, Transition::Right),
         }
@@ -860,11 +897,8 @@ impl Shell {
             Destination::App(id) => installed.place_of(id),
         };
         match place {
-            Some(place) => {
-                self.open(Showing::App(place), transition);
-                self.in_quick_ring = self.showing == Showing::App(place);
-            }
-            None => self.open(Showing::Face, transition),
+            Some(place) => self.go_forward(Showing::App(place), transition, true),
+            None => self.go_forward(Showing::Face, transition, false),
         }
     }
 
@@ -891,7 +925,9 @@ impl Shell {
             ButtonAction::PutToSleep => self.turn_screen_off(),
             ButtonAction::GoBack => self.go_back(Transition::Down),
             ButtonAction::GoToFace => self.open(Showing::Face, Transition::Down),
-            ButtonAction::OpenNotifications => self.open(Showing::Notifications, Transition::Down),
+            ButtonAction::OpenNotifications => {
+                self.go_forward(Showing::Notifications, Transition::Down, false)
+            }
         }
     }
 
@@ -966,7 +1002,7 @@ impl Shell {
             return;
         }
         if self.showing != Showing::Notifications && self.firmware_page.is_none() {
-            self.open(Showing::Notifications, Transition::None);
+            self.go_forward(Showing::Notifications, Transition::None, false);
         }
         self.system.screen_request = Some(true);
     }
@@ -1103,7 +1139,7 @@ impl Shell {
         }
         match core::mem::replace(&mut self.system.request, Request::Nothing) {
             Request::Nothing => {}
-            Request::Open(showing) => self.open(showing, Transition::Up),
+            Request::Open(showing) => self.go_forward(showing, Transition::Up, false),
             Request::Back => self.go_back(Transition::Down),
         }
         screen_request == Some(true)
@@ -1326,6 +1362,7 @@ pub async fn run_shell(
         library: apps::shared_library(),
         battery_screen_returns_to: None,
         in_quick_ring: false,
+        way_back: WayBack::default(),
         finding_until: None,
         waiting_touch: None,
         finger_left_on_old_screen: false,

@@ -1,9 +1,9 @@
 //! What the side button's gestures do in the shell.
 //!
 //! Any gesture on a dark screen only wakes it. Apps never hear the button. A click means back: the
-//! open app first goes back one of its own screens, then the shell goes back a step, and on the
-//! face a click puts the watch to sleep. A long press, or holding for 2 seconds, goes to the face.
-//! A double click opens the notifications, or goes from them to the face.
+//! open app first goes back one of its own screens, then the shell goes back a step along the way
+//! the wearer came, and on the face a click puts the watch to sleep. A long press, or holding for 2
+//! seconds, goes to the face. A double click opens the notifications, or goes from them to the face.
 
 use neotime_button::Gesture;
 

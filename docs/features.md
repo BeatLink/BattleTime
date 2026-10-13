@@ -34,7 +34,7 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   which use only up and down, still step round the quick apps.
 - **Swipes on the watch face.** A swipe up opens the launcher, and a swipe down in the launcher
   closes it again. A swipe down pulls the notifications down from the top, and a second swipe down
-  pulls quick settings down after them; a swipe up puts either away. Swipes left and right step
+  pulls quick settings down after them; a swipe up goes back a step. Swipes left and right step
   round the quick apps, as on wasp-os: the next or previous app in the ring, and back to the face
   past either end. A quick app's own unused left and right swipes step on round the ring. The ring
   is steps, stopwatch, heart, weather and music until the companion app writes another to
@@ -45,10 +45,14 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   Bluetooth, the always-on screen and Settings.
 - **Only what changed is drawn,** each part composed in memory first, so the screen never shows a
   half-drawn widget.
+- **Going back retraces the way.** Every way back, the button, a swipe up on the pulled-down
+  screens or a swipe down on the launcher, revisits each screen passed on the way, in exactly the
+  reverse order and moving the opposite way: quick settings goes back to the notifications and then
+  the face, Settings opened from quick settings goes back to quick settings, and a quick app goes
+  back through the ones stepped past.
 - **Side button gestures.** Any press wakes a dark screen. A click always means back: a screen
-  within an app, then a step in the shell (an app to the launcher, the launcher, a quick app, the
-  notifications or quick settings to the face, the battery screen to what was open), and on the face
-  it puts the watch to sleep. Apps never hear the button. A long press or holding for 2 seconds
+  within an app, then a step back along the way the wearer came, and on the face it puts the watch
+  to sleep. Apps never hear the button. A long press or holding for 2 seconds
   goes to the face, and a double click opens the notifications, or goes from them to the face.
   While the phone rings the watch to find it, the first gesture only stops the ring.
 - **The screen sleeps on its own.** It turns off after the time chosen in settings, 15 seconds at
