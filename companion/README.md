@@ -342,7 +342,7 @@ file service as a few hundred bytes (the layout is in NeoTime's `docs/companion-
 sends `{"c":"launcher"}` on the packages characteristic so the launcher shows it at once. Installing
 an app writes the file again, so a new app lands in its group. The file lives on the watch, so
 every phone and the command line see the same groups; with no file the screen starts from the
-default groups: Games, Tools, Communication, Time, Phone, Health, System, Settings and Other.
+default groups: Games, Tools, Communication, Time, Phone, Health, System (settings included) and Other.
 Setting up a watch writes those defaults, as folders. An app whose group is missing goes to Other,
 and so does one installed another way, until the companion next writes the file.
 

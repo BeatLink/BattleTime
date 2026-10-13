@@ -49,8 +49,7 @@ export const DEFAULT_GROUPS: LauncherGroup[] = [
   { id: 'time', name: 'Time', icon: 'clock' },
   { id: 'phone', name: 'Phone', icon: 'phone' },
   { id: 'health', name: 'Health', icon: 'heart' },
-  { id: 'system', name: 'System', icon: 'info' },
-  { id: 'settings', name: 'Settings', icon: 'settings' },
+  { id: 'system', name: 'System', icon: 'settings' },
   { id: OTHER_GROUP_ID, name: 'Other', icon: 'pine_logo' },
 ];
 
