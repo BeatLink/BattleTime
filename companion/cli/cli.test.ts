@@ -1,6 +1,6 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
 
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -11,8 +11,10 @@ import { FileService } from '@/protocol/file-service';
 import { NOTE_FONT_PATH, NOTE_PATH } from '@/protocol/notes';
 
 import type { WatchSession } from './ble';
+import { debug } from './commands/debug';
 import { flash } from './commands/flash';
 import { recovery } from './commands/recovery';
+import { diag } from './commands/send';
 import { note } from './commands/watch';
 
 // The flash command only needs the DFU link and a way to reset the watch, which is what a session gives it.
@@ -109,5 +111,58 @@ describe('the note command', () => {
 
     await expect(note(session, [])).rejects.toThrow('Give the text file');
     await expect(note(session, ['list.txt', 'huge'])).rejects.toThrow('The font is one of small, normal, medium, large');
+  });
+});
+
+describe('the debug command', () => {
+  it('saves the report as JSON and tells the watch it has the crash', async () => {
+    const session = new FakeSession('AA:BB:CC:DD:EE:00', 'neotime', true);
+    Object.assign(session, {
+      packages: async () => ({ apps: async () => [] }),
+      files: async () => ({ storage: async () => ({ free: 4096 }) }),
+    });
+    const path = join(mkdtempSync(join(tmpdir(), 'neotime-')), 'report.json');
+
+    const written = await debug(session as unknown as WatchSession, path);
+
+    const report = JSON.parse(readFileSync(written, 'utf8'));
+    expect(written).toBe(path);
+    expect(report.lastRestart.crash.kind).toBe('outOfMemory');
+    expect(report.apps).toEqual([]);
+    expect(report.freeStorageBytes).toBe(4096);
+    expect(session.debugReportsSaved).toBe(1);
+  });
+
+  it('names the file after the time when none is given', async () => {
+    const session = new FakeSession();
+    const folder = mkdtempSync(join(tmpdir(), 'neotime-'));
+    const before = process.cwd();
+    process.chdir(folder);
+    try {
+      const written = await debug(session as unknown as WatchSession);
+      expect(written).toMatch(/^neotime-debug-.*\.json$/);
+      expect(readFileSync(join(folder, written), 'utf8')).toContain('"outOfMemory"');
+    } finally {
+      process.chdir(before);
+    }
+  });
+});
+
+describe('the diag command', () => {
+  it('prints the counters, then the last restart and its crash', async () => {
+    const printed: string[] = [];
+    const write = jest.spyOn(process.stdout, 'write').mockImplementation((text) => {
+      printed.push(String(text));
+      return true;
+    });
+    try {
+      await diag(new FakeSession() as unknown as WatchSession);
+    } finally {
+      write.mockRestore();
+    }
+
+    expect(printed[0]).toBe('Shell loops: 1234\n');
+    expect(printed).toContain('Last restart: watchdog\n');
+    expect(printed).toContain('NeoTime stopped: out of memory while alarm was open.\n');
   });
 });

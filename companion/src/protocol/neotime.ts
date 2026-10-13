@@ -124,19 +124,11 @@ export const DIAGNOSTIC_COUNTERS = [
 
 export type DiagnosticCounter = { key: string; label: string; value: number };
 
-// Little-endian 32-bit counters; a counter the app does not know yet is shown by its number.
+// Little-endian 32-bit counters; the words on the last restart that follow them are read by debug-report.ts.
 export function decodeDiagnostics(bytes: Uint8Array): DiagnosticCounter[] {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const counters: DiagnosticCounter[] = [];
-  for (let index = 0; index * 4 + 4 <= bytes.length; index++) {
-    const known = DIAGNOSTIC_COUNTERS[index];
-    counters.push({
-      key: known?.key ?? `counter${index}`,
-      label: known?.label ?? `Counter ${index}`,
-      value: view.getUint32(index * 4, true),
-    });
-  }
-  return counters;
+  const sent = DIAGNOSTIC_COUNTERS.slice(0, Math.floor(bytes.length / 4));
+  return sent.map(({ key, label }, index) => ({ key, label, value: view.getUint32(index * 4, true) }));
 }
 
 export async function readDiagnostics(link: DfuLink): Promise<DiagnosticCounter[]> {

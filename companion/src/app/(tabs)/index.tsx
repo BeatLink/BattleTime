@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { DebugReportCard } from '@/components/debug-report-card';
 import { Row } from '@/components/row';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
@@ -239,6 +240,8 @@ export default function WatchScreen() {
           />
         </Card>
       ) : null}
+
+      {watchReady && capabilities.diagnostics ? <DebugReportCard /> : null}
 
       {canInstall && setupNeeded ? (
         <Card>

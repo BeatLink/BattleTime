@@ -5,6 +5,7 @@
 // differs, which is node-ble talking to BlueZ.
 
 import { WatchSession, DEFAULT_SCAN_MS } from './ble';
+import { debug, debugUsage } from './commands/debug';
 import { flash, flashUsage } from './commands/flash';
 import { recovery, recoveryUsage } from './commands/recovery';
 import { remote, REMOTE_OFFLINE, remoteUsage } from './commands/remote';
@@ -52,6 +53,8 @@ ${watchUsage}
 
 ${remoteUsage}
 
+${debugUsage}
+
 Options:
   --address <mac>   Which watch to talk to. Otherwise the last one used, or
                     the only one in range. NEOTIME_ADDRESS works too.
@@ -98,6 +101,7 @@ function parse(argv: string[]): { args: string[]; options: Options } {
 
 // Whether a command needs a connected watch, as opposed to only the adapter.
 const NEEDS_WATCH = new Set([
+  'debug',
   'flash',
   'recovery',
   'notify',
@@ -222,6 +226,10 @@ async function main(argv: string[]): Promise<number> {
 
       case 'diag':
         await diag(session);
+        break;
+
+      case 'debug':
+        await debug(session, rest[0]);
         break;
 
       case 'status':

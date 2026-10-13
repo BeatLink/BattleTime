@@ -13,7 +13,8 @@ Early. What works today against NeoTime's firmware:
 - firmware updates over Nordic legacy DFU, from a file or a GitHub release, then reconnecting so
   the watch keeps the new firmware instead of rolling it back;
 - setting the clock over the standard Current Time service on every connection;
-- reading NeoTime's diagnostic counters.
+- reading NeoTime's diagnostic counters, and saving a debug report after a crash (the Debug report
+  card on the Watch tab, or `neotime debug [file]`), which lets the watch leave its crash screen.
 
 Built and tested against the mock watch, waiting for the firmware side
 ([docs/companion-protocol.md](https://github.com/BeatLink/NeoTime/blob/master/docs/companion-protocol.md)
@@ -206,7 +207,8 @@ The app reads which services the watch serves right after connecting, in
 | Legacy DFU | `00001530-1212-efde-1523-785feabcd123` | firmware updates |
 | Current Time | `0x1805` / `0x2A2B` | the clock, set on every connection |
 | Battery | `0x180F` / `0x2A19` | the battery level |
-| NeoTime diagnostics | `6e540001-…` / `6e540002-…` | eight 32-bit counters |
+| NeoTime diagnostics | `6e540001-…` / `6e540002-…` | eight 32-bit counters and the last restart with its crash; a written `01` says a debug report holds the crash |
+| Device Information | `0x180A` / `0x2A26` | the firmware version, for debug reports |
 | File transfer (BLEFS) | `0xFEBB` / `adaf0200-…` | files, backups, apps |
 | NeoTime packages | `6e540001-…` / `6e540003-…` | installing, hiding and removing apps, the memory each needs and the watch's refusals; the shared library |
 | Nordic UART | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` | the Gadgetbridge messages |

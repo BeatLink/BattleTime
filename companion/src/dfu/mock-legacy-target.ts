@@ -7,6 +7,7 @@ import { Procedure } from './legacy';
 import { NUS_SERVICE } from '@/ble/uuids';
 import { MockFileService } from '@/protocol/mock-file-service';
 import { MockPackagesService } from '@/protocol/mock-packages-service';
+import { DEVICE_INFORMATION_SERVICE, FIRMWARE_REVISION } from '@/protocol/debug-report';
 import {
   CURRENT_TIME,
   CURRENT_TIME_SERVICE,
@@ -48,6 +49,11 @@ export class MockLegacyDfuTarget implements DfuLink {
   readonly imageTypes: number[] = [];
   // Every Current Time value written, which is what keeps a NeoTime update.
   readonly timeWrites: Uint8Array[] = [];
+  // The last restart words after the counters: a watchdog reset after running out of memory in the alarm app.
+  lastRestartWords: number[] = [2, 3, 2048, 612, 0x1a2b5, 0x5101, 0, 0, 0, 0, 0x72616c61, 0x6d, 0, 0];
+  // Whether the watch still keeps its crash for a debug report, and how often one was saved.
+  crashPending = true;
+  debugReportsSaved = 0;
 
   constructor(
     private id = 'AA:BB:CC:DD:EE:00',
@@ -95,7 +101,7 @@ export class MockLegacyDfuTarget implements DfuLink {
     if (characteristic === FILE_TRANSFER) {
       return this.neotime && this.uart && this.mode === 'application';
     }
-    if (service === CURRENT_TIME_SERVICE || service === NEOTIME_SERVICE) {
+    if (service === CURRENT_TIME_SERVICE || service === NEOTIME_SERVICE || service === DEVICE_INFORMATION_SERVICE) {
       return this.neotime && this.mode === 'application';
     }
     if (service === NUS_SERVICE) {
@@ -109,7 +115,11 @@ export class MockLegacyDfuTarget implements DfuLink {
       return Uint8Array.from([0x08, 0x00]);
     }
     if (characteristic === NEOTIME_DIAGNOSTICS && this.neotime) {
-      return concat(u32le(1234), u32le(1), u32le(1), u32le(1), u32le(56), u32le(7), u32le(3), u32le(1));
+      const counters = [1234, 1, 1, 1, 56, 7, 3, 1];
+      return concat(...[...counters, ...this.lastRestartWords].map(u32le));
+    }
+    if (characteristic === FIRMWARE_REVISION && this.neotime) {
+      return new TextEncoder().encode('0.1.0+mock');
     }
     return new Uint8Array(0);
   }
@@ -145,6 +155,11 @@ export class MockLegacyDfuTarget implements DfuLink {
     }
     if (characteristic === NEOTIME_PACKAGES) {
       this.routeControl(data);
+      return;
+    }
+    if (characteristic === NEOTIME_DIAGNOSTICS && data[0] === 1) {
+      this.crashPending = false;
+      this.debugReportsSaved += 1;
       return;
     }
     if (characteristic === FILE_TRANSFER) {
