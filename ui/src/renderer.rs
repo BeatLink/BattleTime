@@ -108,11 +108,18 @@ pub trait Renderer {
         if extent.is_empty() {
             return;
         }
+        // Only the part that can show is worked out, since a glyph's coverage is costly to sample.
+        let Some(shown) = clip_within(self.visible_area(), extent) else {
+            return;
+        };
+        let first_column = (shown.x - extent.x) as u16;
+        let end_column = first_column + shown.width as u16;
+        let first_row = (shown.y - extent.y) as u16;
         let mut coverage = [0u8; GLYPH_COVERAGE_RUN];
-        for row in 0..glyph.height {
-            let mut x_offset = 0u16;
-            while x_offset < glyph.width {
-                let run = (glyph.width - x_offset).min(GLYPH_COVERAGE_RUN as u16) as usize;
+        for row in first_row..first_row + shown.height as u16 {
+            let mut x_offset = first_column;
+            while x_offset < end_column {
+                let run = (end_column - x_offset).min(GLYPH_COVERAGE_RUN as u16) as usize;
                 let row_coverage = &mut coverage[..run];
                 if !font.glyph_coverage_row(character, row, x_offset, row_coverage) {
                     self.blend_rect(extent, color);

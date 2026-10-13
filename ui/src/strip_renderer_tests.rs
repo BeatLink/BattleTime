@@ -6,6 +6,7 @@ use embedded_graphics::pixelcolor::Rgb565;
 
 use super::*;
 use crate::geometry::PointF;
+use crate::renderer::{FontLineMetrics, FontMetrics, GlyphInfo};
 
 // ============================================================================
 // Helpers
@@ -136,4 +137,53 @@ fn plain_text_draws_whole_lines_over_what_is_there() {
 
     assert!(strip.pixels().any(|pixel| pixel == to_rgb565(RED)));
     assert!((0..40).all(|x| strip.pixel_at(x, 0) == Some(to_rgb565(BLUE))));
+}
+
+/// A 40 by 40 solid square glyph that counts the pixels it is asked to work out.
+struct CountingFont {
+    pixels_sampled: core::cell::Cell<usize>,
+}
+
+impl FontMetrics for CountingFont {
+    fn glyph_metrics(&self, _character: char) -> Option<GlyphInfo> {
+        Some(GlyphInfo {
+            advance_fp16: 40 * 16,
+            bearing_x: 0,
+            bearing_y: 40,
+            width: 40,
+            height: 40,
+        })
+    }
+
+    fn line_metrics(&self) -> FontLineMetrics {
+        FontLineMetrics {
+            line_height: 40,
+            ascent: 40,
+            descent: 0,
+        }
+    }
+
+    fn glyph_coverage_row(&self, _character: char, _row: u16, _x_offset: u16, coverage: &mut [u8]) -> bool {
+        self.pixels_sampled
+            .set(self.pixels_sampled.get() + coverage.len());
+        coverage.fill(u8::MAX);
+        true
+    }
+}
+
+#[test]
+fn a_glyph_is_worked_out_only_where_it_lands() {
+    let mut buffer = blue_buffer();
+    let mut strip = strip_on(&mut buffer);
+    let font = CountingFont {
+        pixels_sampled: core::cell::Cell::new(0),
+    };
+    {
+        let mut renderer = StripRenderer::new(&mut strip, rect(0, 0, 240, 240), OPAQUE);
+        renderer.draw_glyph(&font, '8', (-5, 50), RED);
+    }
+
+    // The strip is 10 by 4 at row 20 and the glyph covers it from column -5, so only those 40 pixels count.
+    assert_eq!(font.pixels_sampled.get(), 40);
+    assert!(strip.pixels().all(|pixel| pixel == to_rgb565(RED)));
 }
