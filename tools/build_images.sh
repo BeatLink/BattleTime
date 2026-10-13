@@ -14,6 +14,8 @@ echo "bootloader"
 
 echo "firmware"
 (cd firmware && cargo objcopy -q --release -- -O binary "../$dist/firmware.bin")
+# Its symbols, which the emulator suites look up to poke statics; the later builds share its target folder.
+cp firmware/target/thumbv7em-none-eabihf/release/neotime-firmware "$dist/firmware.elf"
 python3 -I tools/package_dfu.py "$dist/firmware.bin" "$dist/firmware.zip"
 
 echo "recovery firmware (the status page, Bluetooth and updates, without the shell)"

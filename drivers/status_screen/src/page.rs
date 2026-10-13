@@ -105,6 +105,45 @@ pub fn draw_line<Target: DrawTarget<Color = Rgb565>>(
     clear(target, value_end, SCREEN_SIZE as i32, top, background)
 }
 
+/// Characters that fit across the whole screen.
+pub const SCREEN_CHARACTERS: usize = SCREEN_SIZE as usize / CHARACTER_WIDTH as usize;
+
+/// Height of one line of text in pixels.
+pub const TEXT_HEIGHT: u32 = CHARACTER_HEIGHT as u32;
+
+/// Draws text centred in the columns from `left` to `right`, with its top at `top`, as far as it fits.
+pub fn draw_centred<Target: DrawTarget<Color = Rgb565>>(
+    target: &mut Target,
+    left: i32,
+    right: i32,
+    top: i32,
+    text: &str,
+    colours: TextColours,
+) -> Result<(), Target::Error> {
+    let fitting_characters = ((right - left) / CHARACTER_WIDTH).max(0) as usize;
+    let shown = text
+        .char_indices()
+        .nth(fitting_characters)
+        .map_or(text, |(end, _)| &text[..end]);
+    let width = shown.chars().count() as i32 * CHARACTER_WIDTH;
+    let start = left + (right - left - width) / 2;
+    draw_text(
+        target,
+        Point::new(start, top),
+        shown,
+        colours.text,
+        colours.background,
+    )?;
+    Ok(())
+}
+
+/// The colour of a text's lit pixels and of the rest of its cells.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TextColours {
+    pub text: Rgb565,
+    pub background: Rgb565,
+}
+
 /// Fills the line's height between two columns with the background.
 fn clear<Target: DrawTarget<Color = Rgb565>>(
     target: &mut Target,

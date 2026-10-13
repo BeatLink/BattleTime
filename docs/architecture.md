@@ -158,7 +158,7 @@ NeoTime/
 ├── services/
 │   ├── blefs/        neotime-blefs: Adafruit BLE file transfer, InfiniTime's file service
 │   ├── companion/    neotime-companion: the companion app's JSON lines over the UART service
-│   ├── crash_record/ neotime-crash-record: reset reasons in words and the crash record kept across a reset
+│   ├── crash_record/ neotime-crash-record: reset reasons in words, the crash record kept across a reset, and the crash screen
 │   ├── current_time/ neotime-current-time: the Current Time service's values and calendar arithmetic
 │   ├── dfu/          neotime-dfu: the legacy DFU update protocol over Bluetooth
 │   ├── foreground/   neotime-foreground: whether the wearer watches the screen move, for background work to wait on
@@ -681,25 +681,53 @@ watch face, the launcher and the apps through `neotime-app-host`:
   last woke the shell, whether the screen is lit, the touch panel's state, touch reports, touches
   sent, button presses and the accelerometer's state. It showed that the touch panel failed to
   start while the accelerometer reset on the same bus, so the panel now starts first, with retries,
-  and the accelerometer waits for it. Ten more words follow the counters, set once at start: the
-  last restart, described next.
+  and the accelerometer waits for it. Fourteen more words follow the counters, set once at start:
+  the last restart, described next. Writing `01` to the characteristic says the companion app saved
+  a debug report holding the crash, which dismisses it as Restart on the crash screen does.
 - **Reset reasons and crash record.** `restart.rs` reads and clears `RESETREAS` at start, and reads
-  and clears the crash record the previous run left in `.uninit` RAM (see
-  [memory-map.md](memory-map.md#ram-64-kb-planned)). The status page's last line shows the crash
+  the crash record the previous run left in `.uninit` RAM (see
+  [memory-map.md](memory-map.md#ram-64-kb-planned)). The full firmware keeps the record until the
+  wearer picks Restart on the crash screen or the companion app saves a debug report, so a reset in
+  between shows the crash again; the recovery firmware, which has no crash screen, clears it at
+  start. The status page's last line shows the crash
   when there was one, or else the reasons in words. The diagnostics characteristic gets
   `neotime_crash_record::last_restart_words`: the `RESETREAS` bits, the kind of crash (0 none, 1
-  panic, 2 HardFault) and eight detail words. The HardFault handler records the stacked program
-  counter and link register, `CFSR` and `BFAR`. Reading a panic's location would keep the file
+  panic, 2 HardFault, 3 out of memory), eight detail words and four words of the open app's id.
+  The shell names the open app, face or launcher to `restart::set_open_app` as it opens one, and
+  the handlers copy it into the record. The HardFault handler records the stacked program
+  counter and link register, `CFSR` and `BFAR`. The global allocator wraps the heap and tells
+  `restart` when it refuses an allocation, with the size asked for and the free bytes; Rust's
+  default allocation error handler then panics, and the panic handler records that as running out
+  of memory (the size, the free bytes and six return addresses) instead of a plain panic. An
+  allocation that succeeds clears the note, so a later unrelated panic is not mistaken for one. Reading a panic's location would keep the file
   name and line of every panic site in the firmware, 26.6 KB of flash (6.7 KB of code, 19.9 KB of
   constants), a quarter of what is free, so the panic handler records instead the first eight words on the stack above it that look like Thumb return
   addresses into the code: odd, and between `__stext` and `__etext`. The first two or three are
   usually inside `core::panicking`; the next is usually the function that panicked. A stale word can
   pass the test too, so look each one up with `addr2line -e <the firmware's ELF> <address>`. Both
-  handlers then halt, so the watchdog resets the watch. The record is 44 bytes of little-endian
-  words: `CRSH`, the kind, the eight detail words, and a CRC-32 of the rest, so RAM that came up
-  with noise never reads as a crash. `neotime-crash-record` (`services/crash_record`) holds the
-  format and the decoding, with host tests; `tests/emulator/crash_record.robot` faults the running
-  firmware and checks the next start reports it.
+  handlers then halt, so the watchdog resets the watch. The record is 60 bytes of little-endian
+  words: `CRSH`, the kind, the eight detail words, 16 bytes of the open app's id, and a CRC-32 of
+  the rest, so RAM that came up with noise never reads as a crash. `neotime-crash-record`
+  (`services/crash_record`) holds the format and the decoding, with host tests;
+  `tests/emulator/crash_record.robot` faults the running firmware, poke-calls the panic handler
+  after a refused allocation, and checks the next start reports each and shows the crash screen.
+- **Crash screen.** After a start whose previous run crashed, the shell opens no app and shows the
+  crash page instead: what stopped NeoTime in plain words ("out of memory", "out of stack space" for
+  a stack guard fault, "a processor fault", "a software error") and which app was open, with two
+  buttons. Restart dismisses the crash and opens the face; Send debug info shows a page asking for
+  the companion app and opens the face once a debug report is saved, or when the wearer skips it
+  with the side button or the Skip button, leaving the crash for the companion app and the next
+  start. A click of the side button picks the first button on each page. The crash reset already
+  stopped every app, and nothing reopens the crashed one. `neotime_crash_record::screen` lays out
+  and draws the pages in the status page's font, so they need nothing from the shared library;
+  `firmware/src/crash_screen.rs` holds them for the shell. The help screen draws in the same font.
+- **Memory check before an app opens.** Before the shell starts an app on the image it has read
+  into the heap, it compares the app's need from `neotime_runtime::memory_need` (less the image,
+  already allocated) with the heap's free bytes, and when it would not fit shows a page saying how
+  much the app needs and how much is free, with OK, instead of opening it and running the heap dry.
+  OK opens the face, or the help screen when the face itself was refused. Free bytes are the sum of
+  every free block, so a fragmented heap can still refuse a large allocation; that ends as an
+  out-of-memory crash, reported as above.
 - **Stack guard.** `stack_guard.rs` has the memory protection unit forbid the lowest 256 bytes of
   the stack, so a stack grown too deep faults instead of quietly overwriting the statics below it,
   as a packages command once overwrote the radio's state and froze the link. The MemManage handler

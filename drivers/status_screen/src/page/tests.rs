@@ -177,3 +177,33 @@ fn a_character_the_font_lacks_is_drawn_as_a_question_mark() {
     assert!(glyph_pixels('€').eq(glyph_pixels('?')));
     assert!(glyph_pixels('\n').eq(glyph_pixels('?')));
 }
+
+#[test]
+fn centred_text_sits_in_the_middle_of_its_columns() {
+    let mut screen = FrameBuffer::filled(BLUE);
+    let colours = TextColours {
+        text: VALUE_COLOUR,
+        background: BLUE,
+    };
+
+    draw_centred(&mut screen, 20, 120, 0, "OK", colours).unwrap();
+
+    assert!(screen.count(60..80, 0..CHARACTER_HEIGHT, VALUE_COLOUR) > 20);
+    assert_eq!(screen.count(0..60, 0..240, VALUE_COLOUR), 0);
+    assert_eq!(screen.count(80..240, 0..240, VALUE_COLOUR), 0);
+}
+
+#[test]
+fn centred_text_wider_than_its_columns_is_cut() {
+    let mut screen = FrameBuffer::filled(BLUE);
+    let colours = TextColours {
+        text: VALUE_COLOUR,
+        background: BLUE,
+    };
+
+    draw_centred(&mut screen, 0, 40, 0, "Too wide here", colours).unwrap();
+
+    assert!(screen.count(0..40, 0..CHARACTER_HEIGHT, VALUE_COLOUR) > 20);
+    assert_eq!(screen.count(40..240, 0..240, VALUE_COLOUR), 0);
+    assert_eq!(SCREEN_CHARACTERS, 24);
+}

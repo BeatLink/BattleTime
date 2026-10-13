@@ -46,6 +46,7 @@ use neotime_app_host::{
 use neotime_battery::BatteryEvent;
 use neotime_button::Gesture;
 use neotime_companion::{PhoneData, PhoneUpdates, SettingsChange, NOTIFICATION_SOURCE_BYTES};
+use neotime_crash_record::screen::Choice;
 use neotime_display::SLEEP_SWITCH_GAP_IN_MILLISECONDS;
 use neotime_notifications::NotificationList;
 use neotime_runtime::{
@@ -60,8 +61,9 @@ use crate::{
     apps::{self, InstalledApps, LauncherIcons, Lent},
     backlight::{self, Backlight},
     battery, clock,
+    crash_screen::{FirmwarePage, ShownPage},
     diagnostics::{self, Counter},
-    foreground, help, motion, packages, phone, settings, storage, system_values,
+    foreground, help, motion, packages, phone, restart, settings, storage, system_values,
     touch::{self, TOUCHES},
     vibration, SharedDisplay,
 };
@@ -440,6 +442,8 @@ struct Shell {
     waiting_touch: Option<Touch>,
     /// Set when a new screen opens, so the rest of a touch begun on the old one goes nowhere until the finger lifts.
     finger_left_on_old_screen: bool,
+    /// The crash or not-enough-memory page, shown in place of an app.
+    firmware_page: Option<ShownPage>,
 }
 
 impl Shell {
@@ -455,6 +459,7 @@ impl Shell {
         self.save_settings();
         vibration::request(Some(Vibration::Stop));
         self.finding_until = None;
+        self.firmware_page = None;
         self.system.keep_screen_on = false;
         self.app_set_brightness = false;
         self.set_brightness(settings::current().get(Setting::Brightness) as u8);
@@ -476,10 +481,17 @@ impl Shell {
             Showing::Launcher => installed.has_launcher.then(|| apps::LAUNCHER_ID.into()),
             Showing::App(place) => installed.listed(place).map(|entry| entry.id.clone()),
         };
+        restart::set_open_app(id.as_deref().unwrap_or(""));
         let Some(image) = id.and_then(|id| apps::read_image(self.files, &id)) else {
             self.open_failed(showing);
             return;
         };
+        if let Some(page) = crate::crash_screen::refusal_for(image.get(), showing == Showing::Face) {
+            image.release();
+            restart::set_open_app("");
+            self.firmware_page = Some(ShownPage::new(page));
+            return;
+        }
         self.system.free_storage_kilobytes.set(None);
         self.system.free_storage_wanted.set(false);
         let bytes = image.get();
@@ -548,7 +560,56 @@ impl Shell {
         self.system.installed = InstalledApps::read(self.files);
         self.library = apps::shared_library();
         install_fonts(self.library);
-        self.open(Showing::Face, Transition::None);
+        self.show_first_screen();
+    }
+
+    /// Shows the crash page while the previous run's crash waits for the wearer, or else the face; nothing is open before.
+    fn show_first_screen(&mut self) {
+        if restart::pending_crash().is_some() {
+            self.showing = Showing::Face;
+            self.firmware_page = Some(ShownPage::new(FirmwarePage::Crash));
+        } else {
+            self.open(Showing::Face, Transition::None);
+        }
+    }
+
+    /// Does what the wearer picked on the crash or not-enough-memory page.
+    fn follow_page_choice(&mut self, choice: Choice) {
+        let refused_face = matches!(
+            self.firmware_page,
+            Some(ShownPage {
+                page: FirmwarePage::NotEnoughMemory {
+                    refused_face: true,
+                    ..
+                },
+                ..
+            })
+        );
+        match choice {
+            Choice::Restart => {
+                restart::dismiss_crash();
+                self.open(Showing::Face, Transition::None);
+            }
+            Choice::SendDebugInfo => {
+                self.firmware_page = Some(ShownPage::new(FirmwarePage::WaitingForCompanion));
+            }
+            Choice::Dismiss if refused_face => {
+                self.firmware_page = None;
+                self.help_drawn_at = None;
+            }
+            Choice::Dismiss => self.open(Showing::Face, Transition::None),
+        }
+    }
+
+    /// Leaves the crash page for the face once the companion app has saved the crash.
+    fn leave_crash_page_once_dealt_with(&mut self) {
+        if self
+            .firmware_page
+            .as_ref()
+            .is_some_and(ShownPage::crash_is_dealt_with)
+        {
+            self.open(Showing::Face, Transition::None);
+        }
     }
 
     /// After the open app turned another on or off: keeps the open app's place in the launcher's list and tells it.
@@ -686,6 +747,14 @@ impl Shell {
     }
 
     fn touch(&mut self, touch: Touch) {
+        if let Some(page) = &self.firmware_page {
+            if let Touch::Click { x, y } = touch {
+                if let Some(choice) = page.choice_at(x, y, &self.system.installed) {
+                    self.follow_page_choice(choice);
+                }
+            }
+            return;
+        }
         let Some(host) = &mut self.host else {
             return;
         };
@@ -703,6 +772,12 @@ impl Shell {
 
     /// Offers the gesture to the open app first, and otherwise acts on it as `side_button` says.
     fn button_gesture(&mut self, gesture: Gesture) {
+        if let (true, Some(page)) = (self.lit, &self.firmware_page) {
+            if gesture == Gesture::Click {
+                self.follow_page_choice(page.button_press_choice(&self.system.installed));
+            }
+            return;
+        }
         let situation = self.button_situation();
         if let (Some(press), Some(host)) = (side_button::press_for_app(gesture, &situation), &mut self.host) {
             if host.press_button(press, clock::utc_now(), &mut self.system) != EventResult::NotHandled {
@@ -798,7 +873,10 @@ impl Shell {
             return;
         }
         let notifications_app = self.system.installed.place_of(side_button::NOTIFICATIONS_APP_ID);
-        if let Some(place) = notifications_app.filter(|&place| self.showing != Showing::App(place)) {
+        let over_a_page = self.firmware_page.is_some();
+        if let Some(place) =
+            notifications_app.filter(|&place| self.showing != Showing::App(place) && !over_a_page)
+        {
             self.open(Showing::App(place), Transition::None);
         }
         self.system.screen_request = Some(true);
@@ -956,8 +1034,17 @@ impl Shell {
             if let Some(host) = &mut self.host {
                 host.set_theme(*host.theme());
             }
+            if let Some(page) = &mut self.firmware_page {
+                page.drawn = false;
+            }
         }
         if (!self.lit && !self.dimmed) || status_is_shown() {
+            return;
+        }
+        if let Some(page) = &mut self.firmware_page {
+            let installed = &self.system.installed;
+            self.display
+                .lock(|display| page.draw_if_needed(&mut display.borrow_mut(), installed));
             return;
         }
         match &mut self.host {
@@ -1015,7 +1102,9 @@ impl Shell {
     /// Opens the battery app over what is open, unless that app keeps the screen on, and turns the screen on.
     fn show_battery_screen(&mut self) {
         let place = self.system.installed.place_of(BATTERY_APP_ID);
-        if let Some(place) = place.filter(|_| !self.system.keep_screen_on) {
+        // The crash and memory pages stay up until the wearer answers them.
+        let over_a_page = self.firmware_page.is_some();
+        if let Some(place) = place.filter(|_| !self.system.keep_screen_on && !over_a_page) {
             let battery_app = Showing::App(place);
             let returns_to = self.battery_screen_returns_to.unwrap_or(self.showing);
             if self.showing != battery_app {
@@ -1123,13 +1212,15 @@ pub async fn run_shell(
         finding_until: None,
         waiting_touch: None,
         finger_left_on_old_screen: false,
+        firmware_page: None,
     };
-    shell.open(Showing::Face, Transition::None);
+    shell.show_first_screen();
     let mut last_input = Instant::now();
 
     loop {
         diagnostics::add_one(Counter::ShellLoops);
         diagnostics::set(Counter::ScreenLit, shell.lit as u32);
+        shell.leave_crash_page_once_dealt_with();
         shell.draw();
         foreground::set_drawing(shell.is_drawing_under_way());
         while shell.is_drawing_under_way() {

@@ -1,20 +1,20 @@
 //! The screen the shell shows when no watch face is installed: the time and how to install one.
 //!
-//! It is drawn with the firmware's own small font, so it needs nothing from the shared library.
+//! It is drawn in the status page's font, so it needs nothing from the shared library.
 
 use embedded_graphics::{
-    mono_font::{ascii::FONT_10X20, MonoTextStyle},
     pixelcolor::{raw::RawU16, Rgb565},
     prelude::*,
-    text::{Alignment, Text},
 };
 use neotime_runtime::{Theme, ThemeColor, Value};
+use neotime_status_screen::page::{self, TextColours};
 
 use crate::ScreenDisplay;
 
 const MILLISECONDS_PER_MINUTE: Value = 60_000;
 const MINUTES_PER_DAY: Value = 24 * 60;
-const SCREEN_CENTRE_X: i32 = 120;
+/// Rows of the font's cell above its baseline.
+const FONT_BASELINE: i32 = 15;
 const TIME_BASELINE: i32 = 70;
 const FIRST_GUIDE_BASELINE: i32 = 120;
 const GUIDE_LINE_HEIGHT: i32 = 24;
@@ -28,7 +28,8 @@ const GUIDE: [&str; 4] = [
 
 /// Paints the whole screen: the time as hours and minutes, then the guide.
 pub fn draw(display: &mut ScreenDisplay, now: Value, theme: &Theme) {
-    let _ = display.clear(theme_color(theme, ThemeColor::Background));
+    let background = theme_color(theme, ThemeColor::Background);
+    let _ = display.clear(background);
 
     let minute_of_day = now
         .div_euclid(MILLISECONDS_PER_MINUTE)
@@ -38,27 +39,24 @@ pub fn draw(display: &mut ScreenDisplay, now: Value, theme: &Theme) {
         &mut time,
         format_args!("{:02}:{:02}", minute_of_day / 60, minute_of_day % 60),
     );
-    draw_centred(
-        display,
-        &time,
-        TIME_BASELINE,
-        theme_color(theme, ThemeColor::Text),
-    );
+    let time_colours = TextColours {
+        text: theme_color(theme, ThemeColor::Text),
+        background,
+    };
+    draw_centred(display, &time, TIME_BASELINE, time_colours);
+    let guide_colours = TextColours {
+        text: theme_color(theme, ThemeColor::Muted),
+        background,
+    };
     for (line, text) in GUIDE.iter().enumerate() {
         let baseline = FIRST_GUIDE_BASELINE + line as i32 * GUIDE_LINE_HEIGHT;
-        draw_centred(display, text, baseline, theme_color(theme, ThemeColor::Muted));
+        draw_centred(display, text, baseline, guide_colours);
     }
 }
 
-fn draw_centred(display: &mut ScreenDisplay, text: &str, baseline: i32, color: Rgb565) {
-    let style = MonoTextStyle::new(&FONT_10X20, color);
-    let _ = Text::with_alignment(
-        text,
-        Point::new(SCREEN_CENTRE_X, baseline),
-        style,
-        Alignment::Center,
-    )
-    .draw(display);
+fn draw_centred(display: &mut ScreenDisplay, text: &str, baseline: i32, colours: TextColours) {
+    let screen_width = page::SCREEN_SIZE as i32;
+    let _ = page::draw_centred(display, 0, screen_width, baseline - FONT_BASELINE, text, colours);
 }
 
 fn theme_color(theme: &Theme, color: ThemeColor) -> Rgb565 {

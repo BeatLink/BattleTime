@@ -1,7 +1,8 @@
 //! Counters a computer can read over Bluetooth, to see what a part of the firmware is doing on the watch.
 //!
 //! After the counters come the words of `neotime_crash_record::last_restart_words`: why the watch
-//! last restarted, and the panic or fault that ended the run before, set once at start.
+//! last restarted, and the panic or fault that ended the run before, set once at start. The
+//! companion app writes `DEBUG_REPORT_SAVED` once it has saved that crash in a debug report.
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
@@ -28,6 +29,9 @@ pub enum Counter {
 }
 
 const COUNTER_COUNT: usize = 8;
+
+/// The byte the companion app writes to the diagnostics characteristic once it saved the crash.
+pub const DEBUG_REPORT_SAVED: u8 = 1;
 const WORD_COUNT: usize = COUNTER_COUNT + LAST_RESTART_WORDS;
 pub const SNAPSHOT_BYTES: usize = WORD_COUNT * 4;
 

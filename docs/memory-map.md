@@ -134,11 +134,11 @@ the rollback after it was meant. The firmware measures 51 KB of static RAM:
 the Bluetooth host with its eight 128-byte packets, controller, display buffer and task state. The
 Bluetooth task's state is 4.8 KB: its GATT table (2.1 KB) and TrouBLE's runner (1.6 KB) are most of
 it; replies to the companion app and half-received lines wait on the heap, and the update state,
-status page and confirmation are held once in a static. That leaves 10.6 KB (10,840 B) for the
+status page and confirmation are held once in a static. That leaves 10.3 KB (10,536 B) for the
 stack, of which the lowest bytes, up to 360 B, are the stack guard: 256 B from the first 256-byte
 boundary above the statics, which the memory protection unit forbids (`firmware/src/stack_guard.rs`).
-Measured in the emulator by painting the stack before start, with 10,480 B above the guard, the
-deepest path is the start itself, at 7.7 KB (7,848 B), 2,632 B spare: the Bluetooth task builds its
+Measured in the emulator by painting the stack before start, with 10,224 B above the guard, the
+deepest path is the start itself, at 7.7 KB (7,864 B), 2,360 B spare: the Bluetooth task builds its
 attribute table out of line once, in a 6.9 KB frame. Opening the launcher, reopening the face after
 an install, and packages commands all stay below it. Those were measured on the watch's own `/apps`
 tree (16 apps and faces, saved states and an uploaded morse image) with `apps` and `install`
@@ -151,14 +151,14 @@ it runs. Under a connection the Bluetooth task's own frame is 0.6 KB and `serve_
 the stack under those frames, and the app host verifies an image and runs its first derives outside
 the 1.7 KB frame that loads it.
 
-The last 44 bytes of the firmware's static RAM, in the `.uninit` section just below the stack, are
+The last 60 bytes of the firmware's static RAM, in the `.uninit` section just below the stack, are
 the crash record (`firmware/src/restart.rs`, laid out by `neotime-crash-record`). Start-up does not
 zero `.uninit`, so a panic or HardFault written there survives the reset that follows. It sits at
-about `0x2000CEB0`, wherever the linker puts the end of the other statics, so each build has its own
+about `0x2000D68C`, wherever the linker puts the end of the other statics, so each build has its own
 address and a record from another build fails its checksum. The bootloader runs between the two
 starts but keeps clear of it: its statics are 336 B at the bottom of RAM and its stack reaches about
 4.7 KB below the alive marker in an ordinary start, measured in the emulator, against the record's
-12.3 KB. A stack that grew into the record would only happen after the firmware's own stack had
+10.3 KB. A stack that grew into the record would only happen after the firmware's own stack had
 already overflowed.
 To measure it again after a change, build the firmware and run, inside `nix develop`:
 

@@ -83,6 +83,17 @@ document for its part instead.
   - when a panic or a HardFault happens, it shows on the next start's status page and in the
     diagnostics characteristic's last-restart words, and a panic's addresses lead to its caller;
   - an ordinary start after that shows the crash no more.
+- [ ] **The crash screen on the PineTime.** It has run only in the emulator, and saving a debug report
+  only against the companion's mock watch. On the watch, check that a crash shows the crash page
+  after the restart, that Restart and the side button go on to the face, and that `neotime debug`
+  saves a report naming the crash and the open app and then takes the watch to its face.
+- [ ] **A debug report saved over the emulator's Bluetooth bridge.** The write that dismisses the
+  crash is tested only against the companion's mock; `tools/packages_over_hci.py` could write `01` to
+  the diagnostics characteristic under the pinned Renode checkout.
+- [ ] **Allocation failures inside an open app.** The app host allocates with `Vec` and `Box`, whose
+  failures abort, so an app that outgrows the heap after it opened still ends in an out-of-memory
+  crash and the crash screen rather than closing with a message. Catching it would need fallible
+  allocation through the host's nodes, text and lists.
 
 - [ ] **The notes app on the PineTime.** It has run on the emulated firmware with a 30 KB note in
   littlefs, opened from the launcher and scrolled to line 115, but not on the watch. With the
@@ -645,7 +656,7 @@ The fork has these and NeoTime has nothing for them yet. Most also appear in the
 
 | Area | What the fork has |
 |---|---|
-| App runtime | apps loaded when opened, state kept when left, a crash screen |
+| App runtime | apps loaded when opened, state kept when left |
 | Heart rate | filter-chain PPG (30 to 210 BPM), raw data logging |
 | Watch faces | Clock, Week clock, Chrono, Dual clock, Fibonacci, Resistor, Word clock, a Faces app with previews |
 | Apps | Alarm with 4 alarms and snooze, Pomodoro, Phone finder, Sports, Level, Gallery, Haiku, Morse, Snake, Four in a row, Puzzle 15, Game of Life, Beacon, Self test |

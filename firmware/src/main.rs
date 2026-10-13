@@ -67,6 +67,8 @@ mod backlight;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod battery;
 mod clock;
+#[cfg_attr(not(with_shell), allow(dead_code))]
+mod crash_screen;
 mod diagnostics;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod foreground;
@@ -128,7 +130,32 @@ type I2cBus = embassy_sync::mutex::Mutex<NoopRawMutex, twim::Twim<'static>>;
 type I2cDeviceOnBus = I2cDevice<'static, NoopRawMutex, twim::Twim<'static>>;
 
 #[global_allocator]
-static HEAP: LlffHeap = LlffHeap::empty();
+static HEAP: WatchHeap = WatchHeap {
+    heap: LlffHeap::empty(),
+};
+
+/// The heap, which tells `restart` about each allocation, so a panic after a refused one is recorded as running out of memory.
+struct WatchHeap {
+    heap: LlffHeap,
+}
+
+unsafe impl core::alloc::GlobalAlloc for WatchHeap {
+    unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
+        let pointer = unsafe { self.heap.alloc(layout) };
+        restart::note_allocation(layout.size(), pointer.is_null(), || self.heap.free());
+        pointer
+    }
+
+    unsafe fn dealloc(&self, pointer: *mut u8, layout: core::alloc::Layout) {
+        unsafe { self.heap.dealloc(pointer, layout) }
+    }
+}
+
+/// The heap's free bytes now, in all its free blocks together.
+#[cfg_attr(not(with_shell), allow(dead_code))]
+fn free_heap_bytes() -> usize {
+    HEAP.heap.free()
+}
 
 static SPI_BUS: StaticCell<SpiBus> = StaticCell::new();
 static HOST_RESOURCES: StaticCell<HostResources<DefaultPacketPool, 1, 2>> = StaticCell::new();
@@ -357,7 +384,10 @@ unsafe fn HardFault(frame: &cortex_m_rt::ExceptionFrame) -> ! {
 
 fn start_heap() {
     static mut HEAP_MEMORY: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
-    unsafe { HEAP.init(core::ptr::addr_of_mut!(HEAP_MEMORY) as usize, HEAP_SIZE) }
+    unsafe {
+        HEAP.heap
+            .init(core::ptr::addr_of_mut!(HEAP_MEMORY) as usize, HEAP_SIZE)
+    }
 }
 
 /// Lets an emulator see that the firmware reached `main`; the linker keeps these words free.
@@ -563,7 +593,7 @@ fn show_last_restart(screen: &mut Screen, last_restart: restart::LastRestart) {
     // Room for the whole text, because a short buffer drops whole pieces and `write_line` cuts it to fit anyway.
     let mut text = heapless::String::<96>::new();
     let _ = match &last_restart.crash {
-        Some(crash) => core::fmt::write(&mut text, format_args!("{crash}")),
+        Some(recorded) => core::fmt::write(&mut text, format_args!("{}", recorded.crash)),
         None => core::fmt::write(&mut text, format_args!("Reset: {}", last_restart.reasons)),
     };
     screen.write_line(line::LAST_RUN, &text);
@@ -637,7 +667,8 @@ const NOTIFICATION_BYTES: usize = 20;
 /// NeoTime's own service: the counters and last restart from `diagnostics`, and the packages commands that install apps.
 #[gatt_service(uuid = "6e540001-0000-4000-8000-4e656f54696d")]
 struct NeoTimeService {
-    #[characteristic(uuid = "6e540002-0000-4000-8000-4e656f54696d", read, value = [0; diagnostics::SNAPSHOT_BYTES])]
+    /// Read for the counters; writing `DEBUG_REPORT_SAVED` says the companion app saved the crash.
+    #[characteristic(uuid = "6e540002-0000-4000-8000-4e656f54696d", read, write, value = [0; diagnostics::SNAPSHOT_BYTES])]
     counters: [u8; diagnostics::SNAPSHOT_BYTES],
     /// One JSON command per line in, one JSON reply per line out; see docs/companion-protocol.md.
     #[characteristic(
@@ -955,6 +986,12 @@ async fn serve_connection(
                         }
                         if write.handle() == server.uart.receive.handle {
                             companion_lines.push(&written, read_companion_line);
+                        }
+                        if write.handle() == server.neotime.counters.handle
+                            && written.first() == Some(&diagnostics::DEBUG_REPORT_SAVED)
+                        {
+                            restart::dismiss_crash();
+                            ping_shell();
                         }
                         if write.handle() == server.neotime.packages.handle {
                             for &byte in written.iter() {

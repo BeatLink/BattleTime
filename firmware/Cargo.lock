@@ -942,7 +942,10 @@ dependencies = [
 name = "neotime-crash-record"
 version = "0.1.0"
 dependencies = [
+ "embedded-graphics",
+ "heapless 0.9.3",
  "neotime-boot",
+ "neotime-status-screen",
 ]
 
 [[package]]

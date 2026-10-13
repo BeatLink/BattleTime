@@ -1,13 +1,16 @@
 //! Why the watch last restarted: the chip's reset reasons in words, and a record of the last panic or fault.
 //!
-//! The firmware reads and clears the nRF52832's `RESETREAS` register at start. When it panics or
-//! takes a HardFault it writes a `Crash` into a 44-byte record in RAM that a reset keeps, and the
-//! next start reads it back and clears it. A magic word and a CRC-32 tell a real record from
-//! whatever RAM held after the power came on.
+//! The firmware reads and clears the nRF52832's `RESETREAS` register at start. When it panics, runs
+//! out of heap or takes a HardFault it writes a `RecordedCrash`, the crash and the app that was open,
+//! into a 60-byte record in RAM that a reset keeps, and the next start reads it back. A magic word
+//! and a CRC-32 tell a real record from whatever RAM held after the power came on. `screen` draws
+//! the page the wearer sees after a crash, and when an app needs more memory than is free.
 
 #![no_std]
 
 use core::fmt;
+
+pub mod screen;
 
 use neotime_boot::migration::{crc32, CRC32_INITIAL};
 
@@ -100,15 +103,26 @@ pub fn find_return_addresses(
 /// Each kind of crash fills up to this many words; a panic fills them all with return addresses.
 pub const DETAIL_WORDS: usize = PANIC_RETURN_ADDRESSES;
 
-/// The record is little-endian words: the magic, the kind, the detail words, then a CRC-32 of all before it.
-pub const RECORD_SIZE: usize = 4 * (3 + DETAIL_WORDS);
+/// Return addresses an allocation failure keeps, after the two sizes.
+pub const OUT_OF_MEMORY_RETURN_ADDRESSES: usize = DETAIL_WORDS - 2;
+
+/// Bytes of the open app's id the record keeps, padded with zeros.
+pub const OPEN_APP_BYTES: usize = 16;
+const OPEN_APP_WORDS: usize = OPEN_APP_BYTES / 4;
+
+/// The record is little-endian words: the magic, the kind, the detail words, the open app's id, then a CRC-32 of all before it.
+pub const RECORD_SIZE: usize = 4 * (3 + DETAIL_WORDS + OPEN_APP_WORDS);
 
 /// "CRSH", so a record is easy to spot in a RAM dump.
 const RECORD_MAGIC: u32 = 0x4853_5243;
 const KIND_PANIC: u32 = 1;
 const KIND_HARD_FAULT: u32 = 2;
+const KIND_OUT_OF_MEMORY: u32 = 3;
 
 const CHECKSUM_OFFSET: usize = RECORD_SIZE - 4;
+
+/// The memory management bits of the fault status register, which only the stack guard raises.
+const MEMORY_MANAGEMENT_FAULT_BITS: u32 = 0xFF;
 
 /// How the previous run ended, when it ended badly.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -123,6 +137,12 @@ pub enum Crash {
         link_register: u32,
         fault_status: u32,
         fault_address: u32,
+    },
+    /// An allocation the heap could not give: its size, the heap's free bytes then, and code addresses on the stack.
+    OutOfMemory {
+        requested_bytes: u32,
+        free_bytes: u32,
+        return_addresses: [u32; OUT_OF_MEMORY_RETURN_ADDRESSES],
     },
 }
 
@@ -149,33 +169,21 @@ impl Crash {
                     0,
                 ],
             ),
+            Crash::OutOfMemory {
+                requested_bytes,
+                free_bytes,
+                return_addresses,
+            } => {
+                let mut details = [0; DETAIL_WORDS];
+                details[0] = requested_bytes;
+                details[1] = free_bytes;
+                details[2..].copy_from_slice(&return_addresses);
+                (KIND_OUT_OF_MEMORY, details)
+            }
         }
     }
 
-    pub fn encode(&self) -> [u8; RECORD_SIZE] {
-        let (kind, details) = self.kind_and_details();
-
-        let mut record = [0; RECORD_SIZE];
-        let words = [RECORD_MAGIC, kind].into_iter().chain(details);
-        for (chunk, word) in record.as_chunks_mut::<4>().0.iter_mut().zip(words) {
-            *chunk = word.to_le_bytes();
-        }
-        let checksum = crc32(CRC32_INITIAL, &record[..CHECKSUM_OFFSET]);
-        record[CHECKSUM_OFFSET..].copy_from_slice(&checksum.to_le_bytes());
-        record
-    }
-
-    /// The crash a record holds, or `None` for a cleared record or one RAM came up with.
-    pub fn decode(record: &[u8; RECORD_SIZE]) -> Option<Crash> {
-        let mut words = [0; RECORD_SIZE / 4];
-        for (word, chunk) in words.iter_mut().zip(record.as_chunks::<4>().0) {
-            *word = u32::from_le_bytes(*chunk);
-        }
-        let [magic, kind, details @ .., checksum] = words;
-        if magic != RECORD_MAGIC || checksum != crc32(CRC32_INITIAL, &record[..CHECKSUM_OFFSET]) {
-            return None;
-        }
-
+    fn from_kind_and_details(kind: u32, details: [u32; DETAIL_WORDS]) -> Option<Crash> {
         match kind {
             KIND_PANIC => Some(Crash::Panic {
                 return_addresses: details,
@@ -186,7 +194,28 @@ impl Crash {
                 fault_status: details[2],
                 fault_address: details[3],
             }),
+            KIND_OUT_OF_MEMORY => {
+                let mut return_addresses = [0; OUT_OF_MEMORY_RETURN_ADDRESSES];
+                return_addresses.copy_from_slice(&details[2..]);
+                Some(Crash::OutOfMemory {
+                    requested_bytes: details[0],
+                    free_bytes: details[1],
+                    return_addresses,
+                })
+            }
             _ => None,
+        }
+    }
+
+    /// What went wrong in a few plain words, for the crash screen.
+    pub fn cause(&self) -> &'static str {
+        match self {
+            Crash::Panic { .. } => "a software error",
+            Crash::HardFault { fault_status, .. } if fault_status & MEMORY_MANAGEMENT_FAULT_BITS != 0 => {
+                "out of stack space"
+            }
+            Crash::HardFault { .. } => "a processor fault",
+            Crash::OutOfMemory { .. } => "out of memory",
         }
     }
 }
@@ -197,8 +226,75 @@ impl fmt::Display for Crash {
         match self {
             Crash::Panic { .. } => formatter.write_str("Last run panicked"),
             Crash::HardFault { program_counter, .. } => write!(formatter, "Fault at {program_counter:#010x}"),
+            Crash::OutOfMemory { requested_bytes, .. } => {
+                write!(formatter, "Out of memory: {requested_bytes} B")
+            }
         }
     }
+}
+
+/// A crash and the id of the app that was open, which is all zeros when none was.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RecordedCrash {
+    pub crash: Crash,
+    pub open_app: [u8; OPEN_APP_BYTES],
+}
+
+impl RecordedCrash {
+    pub fn encode(&self) -> [u8; RECORD_SIZE] {
+        let (kind, details) = self.crash.kind_and_details();
+
+        let mut record = [0; RECORD_SIZE];
+        let words = [RECORD_MAGIC, kind].into_iter().chain(details);
+        for (chunk, word) in record.as_chunks_mut::<4>().0.iter_mut().zip(words) {
+            *chunk = word.to_le_bytes();
+        }
+        let open_app_offset = 4 * (2 + DETAIL_WORDS);
+        record[open_app_offset..CHECKSUM_OFFSET].copy_from_slice(&self.open_app);
+        let checksum = crc32(CRC32_INITIAL, &record[..CHECKSUM_OFFSET]);
+        record[CHECKSUM_OFFSET..].copy_from_slice(&checksum.to_le_bytes());
+        record
+    }
+
+    /// The crash a record holds, or `None` for a cleared record or one RAM came up with.
+    pub fn decode(record: &[u8; RECORD_SIZE]) -> Option<RecordedCrash> {
+        let mut words = [0; RECORD_SIZE / 4];
+        for (word, chunk) in words.iter_mut().zip(record.as_chunks::<4>().0) {
+            *word = u32::from_le_bytes(*chunk);
+        }
+        let magic = words[0];
+        let checksum = words[RECORD_SIZE / 4 - 1];
+        if magic != RECORD_MAGIC || checksum != crc32(CRC32_INITIAL, &record[..CHECKSUM_OFFSET]) {
+            return None;
+        }
+
+        let mut details = [0; DETAIL_WORDS];
+        details.copy_from_slice(&words[2..2 + DETAIL_WORDS]);
+        let mut open_app = [0; OPEN_APP_BYTES];
+        open_app.copy_from_slice(&record[4 * (2 + DETAIL_WORDS)..CHECKSUM_OFFSET]);
+        Some(RecordedCrash {
+            crash: Crash::from_kind_and_details(words[1], details)?,
+            open_app,
+        })
+    }
+
+    /// The open app's id as text, empty when none was open or it is not text.
+    pub fn open_app_id(&self) -> &str {
+        let length = self
+            .open_app
+            .iter()
+            .position(|&byte| byte == 0)
+            .unwrap_or(OPEN_APP_BYTES);
+        core::str::from_utf8(&self.open_app[..length]).unwrap_or("")
+    }
+}
+
+/// The first bytes of an app's id, padded with zeros, as the record keeps it.
+pub fn open_app_bytes(id: &str) -> [u8; OPEN_APP_BYTES] {
+    let mut bytes = [0; OPEN_APP_BYTES];
+    let length = id.len().min(OPEN_APP_BYTES);
+    bytes[..length].copy_from_slice(&id.as_bytes()[..length]);
+    bytes
 }
 
 // ============================================================================
@@ -225,16 +321,28 @@ impl fmt::Display for RestartReason<'_> {
 // What the diagnostics service sends
 // ============================================================================
 
-pub const LAST_RESTART_WORDS: usize = 2 + DETAIL_WORDS;
+pub const LAST_RESTART_WORDS: usize = 2 + DETAIL_WORDS + OPEN_APP_WORDS;
 
-/// The reset reasons, the kind of crash (0 for none, 1 a panic, 2 a HardFault), then its detail words.
-pub fn last_restart_words(reasons: ResetReasons, crash: Option<&Crash>) -> [u32; LAST_RESTART_WORDS] {
-    let (kind, details) = crash.map_or((0, [0; DETAIL_WORDS]), Crash::kind_and_details);
+/// The reset reasons, the kind of crash (0 for none, 1 a panic, 2 a HardFault, 3 out of memory), its detail words, then the open app's id.
+pub fn last_restart_words(
+    reasons: ResetReasons,
+    recorded: Option<&RecordedCrash>,
+) -> [u32; LAST_RESTART_WORDS] {
+    let (kind, details) = recorded.map_or((0, [0; DETAIL_WORDS]), |recorded| {
+        recorded.crash.kind_and_details()
+    });
+    let open_app = recorded.map_or([0; OPEN_APP_BYTES], |recorded| recorded.open_app);
 
     let mut words = [0; LAST_RESTART_WORDS];
     words[0] = reasons.register;
     words[1] = kind;
-    words[2..].copy_from_slice(&details);
+    words[2..2 + DETAIL_WORDS].copy_from_slice(&details);
+    for (word, chunk) in words[2 + DETAIL_WORDS..]
+        .iter_mut()
+        .zip(open_app.as_chunks::<4>().0)
+    {
+        *word = u32::from_le_bytes(*chunk);
+    }
     words
 }
 

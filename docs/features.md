@@ -172,6 +172,20 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   as "Reset: watchdog" or "Reset: power on", or, when the run before crashed, "Fault at 0x0001a2b4"
   or "Last run panicked". The diagnostics service carries the same, with the addresses a panic
   passed through. It has run only in the emulator.
+- **A crash screen.** After a crash the watch starts on a page that says what stopped it, such as
+  "out of memory" or "out of stack space", and which app was open, instead of the face. Restart
+  goes on to the face; Send debug info waits for the companion app to save a debug report
+  (`neotime debug` or the app's Debug report card), then goes on to the face. Nothing reopens the
+  app that crashed. It has run only in the emulator.
+
+  ![The crash screen](../harness/snapshots/screens/firmware-crash.png)
+  ![Waiting for the companion app](../harness/snapshots/screens/firmware-crash-waiting-for-companion.png)
+
+- **No app opens without the memory it needs.** An app whose estimated need is more than the free
+  heap is not opened; a page says how much it needs and how much is free.
+
+  ![Not enough memory](../harness/snapshots/screens/firmware-not-enough-memory.png)
+
 - **A system info app** showing the firmware's version and commit, how long the watch has run since
   it started, why it last restarted, the battery and the free storage, as InfiniTime's System Info
   screen does.

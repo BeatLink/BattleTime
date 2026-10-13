@@ -2,9 +2,12 @@
 name = "neotime-crash-record"
 version = "0.1.0"
 edition = "2021"
-description = "Why the watch last restarted: the reset reasons in words, and the panic or fault record kept in RAM across a reset"
+description = "Why the watch last restarted: the reset reasons in words, the panic or fault record kept in RAM across a reset, and the screen that shows it"
 license.workspace = true
 publish = false
 
 [dependencies]
+embedded-graphics = "0.8"
+heapless = "0.9"
 neotime-boot = { path = "../../boot" }
+neotime-status-screen = { path = "../../drivers/status_screen" }

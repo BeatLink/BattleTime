@@ -1120,6 +1120,7 @@ dependencies = [
  "neotime-app-host",
  "neotime-companion",
  "neotime-compiler",
+ "neotime-crash-record",
  "neotime-display",
  "neotime-notifications",
  "neotime-packages",
@@ -1205,7 +1206,10 @@ dependencies = [
 name = "neotime-crash-record"
 version = "0.1.0"
 dependencies = [
+ "embedded-graphics",
+ "heapless 0.9.3",
  "neotime-boot",
+ "neotime-status-screen",
 ]
 
 [[package]]

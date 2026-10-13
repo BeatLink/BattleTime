@@ -238,7 +238,7 @@ Service `6e540001-0000-4000-8000-4e656f54696d`, with its characteristics on the 
 
 | Characteristic | UUID | Use | Served |
 |---|---|---|---|
-| Diagnostics | `6e540002-…` | Read: eight little-endian `u32` counters, then ten words on the last restart: the `RESETREAS` bits, the kind of crash (0 none, 1 panic, 2 HardFault) and eight detail words; see [architecture.md](architecture.md). | Yes |
+| Diagnostics | `6e540002-…` | Read: eight little-endian `u32` counters, then fourteen words on the last restart: the `RESETREAS` bits, the kind of crash (0 none, 1 panic, 2 HardFault, 3 out of memory), eight detail words and four words holding the open app's id, zero-padded; see [architecture.md](architecture.md). Write `01` once a debug report holding the crash is saved: the watch forgets the crash and leaves its crash screen for the face. | Yes |
 | Packages | `6e540003-…` | Write and notify: one JSON command per line, as in [Packages](#packages-served). | Yes |
 
 ### Packages (served)
