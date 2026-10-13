@@ -137,12 +137,37 @@ fn the_template_leaves_on_a_long_press_of_the_button() {
 }
 
 // ============================================================================
-// System info
+// System
 // ============================================================================
 
+/// Opens the system app and swipes up from the battery to its system page.
+fn open_system_page() -> TestWatch {
+    let mut watch = TestWatch::open_app("system").unwrap();
+    watch.swipe(Direction::Up);
+    assert_eq!(watch.screen_name(), Some("system"));
+    watch
+}
+
 #[test]
-fn system_info_shows_a_new_firmware_version_and_a_dirty_tree() {
-    let mut watch = TestWatch::open_app("system-info").unwrap();
+fn the_system_app_opens_on_the_battery_and_pages_up_and_down() {
+    let mut watch = TestWatch::open_app("system").unwrap();
+    assert_eq!(watch.screen_name(), Some("main"));
+    assert!(watch.shows_text("Discharging"), "{:?}", watch.visible_texts());
+
+    watch.swipe(Direction::Up);
+    assert_eq!(watch.screen_name(), Some("system"));
+    assert!(watch.shows_text("2.7 MB free"), "{:?}", watch.visible_texts());
+
+    watch.swipe(Direction::Down);
+    assert_eq!(watch.screen_name(), Some("main"));
+    watch.swipe(Direction::Right);
+    assert_eq!(watch.effects_of(EffectKind::Back).len(), 1);
+    assert!(watch.failures().is_empty());
+}
+
+#[test]
+fn the_system_page_shows_a_new_firmware_version_and_a_dirty_tree() {
+    let mut watch = open_system_page();
     assert!(watch.shows_text("0.1.0+1b19aed"), "{:?}", watch.visible_texts());
 
     watch.set_system_text(SystemValue::FirmwareVersion, "0.2.0+0a1b2c3*");
@@ -154,8 +179,8 @@ fn system_info_shows_a_new_firmware_version_and_a_dirty_tree() {
 }
 
 #[test]
-fn system_info_says_the_last_run_crashed() {
-    let mut watch = TestWatch::open_app("system-info").unwrap();
+fn the_system_page_says_the_last_run_crashed() {
+    let mut watch = open_system_page();
     assert!(watch.shows_text("watchdog"), "{:?}", watch.visible_texts());
 
     watch.set_system_text(SystemValue::ResetReason, "Fault at 0x0001a2b4");
@@ -169,8 +194,8 @@ fn system_info_says_the_last_run_crashed() {
 }
 
 #[test]
-fn system_info_counts_uptime_from_a_start_the_phone_moved() {
-    let mut watch = TestWatch::open_app("system-info").unwrap();
+fn the_system_page_counts_uptime_from_a_start_the_phone_moved() {
+    let mut watch = open_system_page();
     let now = watch.now();
 
     watch.set_system_value(SystemValue::StartedAt, now - 2 * 24 * 3_600_000 - 61_000);

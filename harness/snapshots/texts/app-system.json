@@ -4,15 +4,22 @@
       "name": "main",
       "reached_by": null,
       "texts": [
+        "4.05 volts",
+        "87%",
+        "Discharging"
+      ]
+    },
+    {
+      "name": "system",
+      "reached_by": "swipe up",
+      "texts": [
         "0.1.0+1b19aed",
         "0d 03:25:00",
         "2.7 MB free",
-        "87%",
-        "Battery",
         "Firmware",
         "Last restart",
         "Storage",
-        "System info",
+        "System",
         "Uptime",
         "watchdog"
       ]

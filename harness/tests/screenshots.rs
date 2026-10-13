@@ -5,7 +5,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::Duration;
 
 use neotime_app_testing::{
-    check_screen_snapshot, every_package, Package, PackageKind, TestWatch, WidgetKind,
+    check_screen_snapshot, every_package, Direction, Package, PackageKind, TestWatch, WidgetKind,
 };
 
 // ============================================================================
@@ -69,6 +69,18 @@ fn the_stopwatch_after_three_seconds_matches_its_reference_picture() {
         let mut watch = TestWatch::open_app("stopwatch").unwrap();
         watch.press_button();
         watch.advance(Duration::from_secs(3));
+        watch
+    });
+
+    assert_all_match(vec![result]);
+}
+
+#[test]
+fn the_system_page_matches_its_reference_picture() {
+    let result = check_screen("app-system-page", || {
+        let mut watch = TestWatch::open_app("system").unwrap();
+        watch.swipe(Direction::Up);
+        watch.advance(Duration::from_secs(1));
         watch
     });
 

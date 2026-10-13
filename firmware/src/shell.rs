@@ -1067,8 +1067,8 @@ impl Shell {
 // The battery screen
 // ============================================================================
 
-/// The app shown when the charger is plugged in or out, or the charge goes low.
-const BATTERY_APP_ID: &str = "battery";
+/// The app whose first page, the battery, shows when the charger is plugged in or out, or the charge goes low.
+const BATTERY_APP_ID: &str = "system";
 
 /// The app `battery` subscription's name for a battery event.
 fn battery_change(event: BatteryEvent) -> BatteryChange {

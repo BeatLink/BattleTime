@@ -93,6 +93,16 @@ enum Navigation {
     Back,
 }
 
+/// The transition that moves the way a swipe went, so a page swiped up slides up.
+fn transition_following(direction: SwipeDirection) -> Transition {
+    match direction {
+        SwipeDirection::Up => Transition::Up,
+        SwipeDirection::Down => Transition::Down,
+        SwipeDirection::Left => Transition::Left,
+        SwipeDirection::Right => Transition::Right,
+    }
+}
+
 /// A drag that is scrolling a Scroll or List: which node, and its offset when the drag began.
 #[derive(Clone, Copy)]
 struct ScrollDrag {
@@ -167,6 +177,8 @@ pub struct AppHost<'image> {
     touch_scrolled: bool,
     scroll_move: Option<ScrollMove>,
     next_transition: Transition,
+    /// While a swipe's handler runs, how a screen it goes to slides in, following the finger.
+    swipe_transition: Option<Transition>,
     transition_run: Option<TransitionRun>,
     whole_screen_dirty: bool,
     last_clock_update: Value,
@@ -314,6 +326,7 @@ impl<'image> AppHost<'image> {
             touch_scrolled: false,
             scroll_move: None,
             next_transition: Transition::None,
+            swipe_transition: None,
             transition_run: None,
             whole_screen_dirty: true,
             last_clock_update: now,
@@ -1405,8 +1418,10 @@ impl<'image> AppHost<'image> {
                 return EventResult::Handled
             }
             Touch::Swipe(direction) => {
+                self.swipe_transition = Some(transition_following(direction));
                 let result =
                     self.run_screen_event(Property::OnSwipe, &[swipe_value(direction)], now, system, true);
+                self.swipe_transition = None;
                 return match (result, direction) {
                     (EventResult::NotHandled, SwipeDirection::Right) => self.go_back_a_screen(now, system),
                     _ => result,
@@ -1742,10 +1757,10 @@ impl<'image> AppHost<'image> {
             }
         };
 
-        self.next_transition = match navigation {
+        self.next_transition = self.swipe_transition.unwrap_or(match navigation {
             Navigation::Go(_) => Transition::Left,
             Navigation::Back => Transition::Right,
-        };
+        });
         self.run_screen_event(Property::OnHide, &[], now, system, false);
         self.show_screen(next_screen, now, system);
         self.run_screen_event(Property::OnShow, &[], now, system, false);

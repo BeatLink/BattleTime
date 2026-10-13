@@ -130,6 +130,11 @@ impl<'image> AppHost<'image> {
         self.next_transition = transition;
     }
 
+    /// How the next new screen comes in.
+    pub fn next_transition(&self) -> Transition {
+        self.next_transition
+    }
+
     /// Whether a transition is part way through, so `draw_step` has more to do.
     pub fn is_in_transition(&self) -> bool {
         self.transition_run.is_some()

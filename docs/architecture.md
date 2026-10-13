@@ -399,7 +399,7 @@ across the flash; InfiniTime uses it on the same chip.
 - **Never formats by mistake.** It formats only when littlefs finds no file system at all. A read
   error from the flash is returned instead, so a bus fault cannot wipe the watch.
 - **Cost.** The buffers live on the heap: under 1 KB while mounted and about 400 bytes per open file.
-- **Free space.** `free_kilobytes` counts the blocks no file or folder uses, for the system info app.
+- **Free space.** `free_kilobytes` counts the blocks no file or folder uses, for the system app's system page.
 - **Erasing ahead.** `ErasedBlocks` and `next_block_to_erase_ahead` let the firmware erase the next
   few free blocks in the background, so littlefs's own erase of one returns at once; see
   [storage.md](storage.md#erasing-ahead).
@@ -595,7 +595,7 @@ watch face, the launcher and the apps through `neotime-app-host`:
   DFU image check yields every 4 KB, so the radio's host side keeps running while it reads up to
   388 KB back.
 - **Transitions.** The launcher and apps slide up over what was open, and the button's way back
-  or home slides down; a swipe right going back wipes in from the left. The shell draws a transition's steps, and
+  or home slides down; a swipe right going back wipes in from the left, and any screen an app goes to from its `onSwipe` moves the way the swipe went. The shell draws a transition's steps, and
   the slices of a large redraw, one after another, yielding to the other tasks between them, before
   it takes the next input. Once a
   new screen opens, the rest of the touch that opened it is dropped until the finger lifts, so a
@@ -838,7 +838,7 @@ watch face, the launcher and the apps through `neotime-app-host`:
   (`low`), once until the charger is next connected, or at start-up when it starts that low.
   They queue in `battery::EVENTS`, and the shell takes them when the battery values change. It
   hands each to the open app's `battery` subscriptions, and for the charger and, outside do not
-  disturb, the low warning, it opens the `battery` app over what is open and lights the screen. An app that keeps the screen
+  disturb, the low warning, it opens the `system` app on its battery page over what is open and lights the screen. An app that keeps the screen
   on, such as a ringing alarm, stays in front, and the screen only lights.
   The app is an ordinary installed app rather than a firmware pop-up, so it costs no firmware
   flash and can be replaced; without it the screen just lights on what is open. When the screen

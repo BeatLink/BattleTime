@@ -14,7 +14,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Screens slide and wipe in, as on InfiniTime.** The launcher slides up over the face, an app
   slides up over the launcher, and going back with the button slides the way back down. Going
   forward to another screen of an app wipes it in from the right, and going back wipes in from the
-  left, as does a swipe to the right.
+  left, as does a swipe to the right. A screen an app goes to on a swipe moves the way the finger
+  did, so pages swiped up slide up and swiped down slide down.
 - **Smooth scrolling.** A list follows the finger as it drags: the display moves the rows itself,
   and only the few rows that come into view are drawn. Lists below a heading, as in Settings,
   scroll to their last row with the heading kept still.
@@ -82,11 +83,11 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **A steady battery charge.** The voltage is smoothed and read along InfiniTime's measured curve.
   The charge only rises on the charger and only falls off it, stops at 99 % while charging, and
   reads 100 % and not charging once the charger stays connected after the battery is full.
-- **Battery screen.** The `battery` app shows the charge in a ring, whether the battery is
-  charging, fully charged, discharging, low or critical, and its voltage, with a bar that fills
-  while charging.
+- **Battery screen.** The first page of the `system` app shows the charge in a ring, whether the
+  battery is charging, fully charged, discharging, low or critical, and its voltage; while charging
+  the ring fills up from the charge again and again.
 - **Charging screen and low battery warning.** Plugging the charger in or taking it off lights the
-  screen on the battery app, and so does the charge falling below 10 % off the charger, once until
+  screen on the system app's battery page, and so does the charge falling below 10 % off the charger, once until
   the next charge, when the app warns to charge the watch. Do not disturb keeps the low warning
   dark, and an app that keeps the screen on, such as a ringing alarm, stays in front. The watch
   goes back to what was open when the screen sleeps or on the button. Apps hear the same changes
@@ -127,7 +128,7 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   that button's action. See [apps.md](apps.md) and
   [companion-protocol.md](companion-protocol.md#remote).
 - **32 apps** ported from InfiniTime and wasp-os, merged where both firmwares had the same app:
-  stopwatch, timer, alarm, pomodoro, calculator, dice, flashlight, phone finder, system info, heart rate, steps,
+  stopwatch, timer, alarm, pomodoro, calculator, dice, flashlight, phone finder, system, heart rate, steps,
   sports, music, weather, navigation, metronome, motion, level, beacon, Bluetooth off, 2048, paddle,
   puzzle 15, snake, four in a row, Game of Life, paint, haiku, Morse, settings, hello and a template. Each is
   described in [apps.md](apps.md).
@@ -191,9 +192,10 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 
   ![Not enough memory](../harness/snapshots/screens/firmware-not-enough-memory.png)
 
-- **A system info app** showing the firmware's version and commit, how long the watch has run since
-  it started, why it last restarted, the battery and the free storage, as InfiniTime's System Info
-  screen does.
+- **A system page,** the second page of the `system` app, showing the firmware's version and
+  commit, how long the watch has run since it started, why it last restarted and the free storage,
+  as InfiniTime's System Info screen does. A scroll bar down the right edge marks the page on show,
+  as on wasp-os.
 - **Bootloader updates over Bluetooth,** with the bootloader updater: sent like any firmware
   update, it writes the new bootloader only on the charger and hands the watch back to the firmware
   that was running. It replaced the first watch's bootloader on 2026-10-11.

@@ -245,6 +245,7 @@ For a list of entries use a `List` with a `Repeat`, and for the status row the n
 |---|---|
 | `Card` | A rounded panel, the standard block of an app's layout. |
 | `Header` | A screen's title row, with an optional icon. |
+| `ScrollBar` | One segment per page down the right edge at x 238, the `page` on show in the muted grey and the rest in the surface grey, as wasp-os draws it; nothing for a single page. Put it straight in a `Screen` without padding, which the watch would add to its place, and pad the content beside it by 4 or more. |
 | `BatteryIcon` | The battery's charge and whether it is charging, drawn the way the system does, with an optional percentage, as one widget. `single_color` draws it all in `color`, and `show_bolt={false}` hides the charging bolt. |
 | `StatusIcons` | The status row as one widget: the notifications icon while any are unread, the phone's while it is connected, the alarm's with `show_alarm` while one is set, then the battery. `icon_size`, `gap`, `color` for the icons, `battery_color`, and `align` to place them across. |
 | `StepsBadge`, `HeartRateBadge`, `TemperatureBadge` | Today's steps, the heart rate while it is measured, or the temperature in the wearer's units, beside an icon, as one widget. `icon_size`, `gap`, `icon_color` and `align`; `TemperatureBadge` takes the weather `icon` the face chooses. |
@@ -323,7 +324,7 @@ the `wake` permission for this yet.
 
 | Effect | Does |
 |---|---|
-| `go(screen)` | Shows another of this app's screens. |
+| `go(screen)` | Shows another of this app's screens. From an `onSwipe` it slides in the way the swipe went; otherwise it wipes in from the right. |
 | `back()` | Returns to the previous screen, or leaves the app from its first one. |
 | `open_app(id)` | Opens another installed app; the id may be text made while running, such as `installed_apps.value[i].id`. |
 | `close()` | Leaves the app for the watch face. |

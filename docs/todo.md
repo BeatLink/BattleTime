@@ -486,11 +486,11 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### Apps and faces
 
-- [ ] **Try the system info app on the watch.** It has run only in the harness and the simulator.
+- [ ] **Try the system app on the watch.** It has run only in the harness and the simulator.
   Install the new shared library first, which carries its `info` icon, then check the version,
   the uptime after the phone sets the clock, the reset reason after a button-hold reset, and the
   free storage before and after an install.
-- [ ] **More in the system info app:** the free heap, the Bluetooth address and the display's
+- [ ] **More on the system app's system page:** the free heap, the Bluetooth address and the display's
   state, as InfiniTime's System Info screen shows.
 - [ ] **The full set of navigation turns.** Phones send about 50 icon names, such as forks,
   merges, ramps, ferries and roundabout exits, and the distance as text. NeoTime has 10 turns and
@@ -555,14 +555,14 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **A swap progress bar on the bootloader screen.** It says "Installing firmware" for up to 30
   seconds with nothing moving. Its 20 KB has about 2.7 KB to spare.
 - [ ] **Updates on only until the next reset,** as a third choice beside the on and off switch.
-- [ ] **Show the bootloader version** in the system info app. The bootloader keeps no version
+- [ ] **Show the bootloader version** on the system app's system page. The bootloader keeps no version
   yet, so it needs one at a fixed place the firmware can read, and an update of the bootloader on
   the watch.
 
 ### Developer tools and docs
 
 - [ ] **Measure the stack with any app open.** `tools/measure_stack.py` can only swipe to the
-  launcher, so the alarm's 10.5 KB peak cannot be measured again, and neither can the system info
+  launcher, so the alarm's 10.5 KB peak cannot be measured again, and neither can the system
   app's. Let it install and open a named app in the emulator.
 - [ ] **Clippy fails with warnings denied.** `cargo clippy --release -- -D warnings` stops on two
   `needless_borrow`s in `firmware/src/main.rs` (`with_attribute_server(&server)`) and three in

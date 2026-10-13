@@ -332,7 +332,10 @@ fn counter_image() -> Vec<u8> {
     writer.widget(
         WidgetKind::Column,
         2,
-        &[(Property::ScreenName, constant(settings as i32))],
+        &[
+            (Property::ScreenName, constant(settings as i32)),
+            (Property::OnSwipe, PropertySource::Handler(go_back)),
+        ],
     );
     writer.widget(
         WidgetKind::Label,
@@ -514,6 +517,34 @@ fn a_failing_handler_leaves_the_state_unchanged() {
 // ============================================================================
 // Screens
 // ============================================================================
+
+#[test]
+fn a_screen_reached_by_a_swipe_slides_the_way_the_swipe_went() {
+    let image = counter_image();
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    click_on(
+        &mut host,
+        counter_widgets::SETTINGS_BUTTON,
+        START_TIME,
+        &mut system,
+    );
+    assert_eq!(host.next_transition(), Transition::Left);
+
+    host.touch(Touch::Swipe(SwipeDirection::Down), START_TIME, &mut system);
+    assert_eq!(host.screen_name(), Some("main"));
+    assert_eq!(host.next_transition(), Transition::Down);
+
+    click_on(
+        &mut host,
+        counter_widgets::SETTINGS_BUTTON,
+        START_TIME,
+        &mut system,
+    );
+    click_on(&mut host, counter_widgets::BACK_BUTTON, START_TIME, &mut system);
+    assert_eq!(host.next_transition(), Transition::Right);
+}
 
 #[test]
 fn go_switches_screens_and_back_returns() {

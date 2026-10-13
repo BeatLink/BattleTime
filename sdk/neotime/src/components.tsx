@@ -12,6 +12,7 @@ import {
   is_heart_rate_running,
   is_phone_connected,
   next_alarm,
+  range,
   settings,
   steps_today,
   unread_notifications,
@@ -69,6 +70,46 @@ export function Header(props: HeaderProps) {
       {props.icon && <Icon icon={props.icon} size={28} color={props.color ?? "accent"} />}
       <Label color={props.color ?? "accent"}>{props.title}</Label>
     </Row>
+  );
+}
+
+// ============================================================================
+// Scroll bar
+// ============================================================================
+
+/** The bar runs down the right edge, two pixels clear of content padded by 4 or more. */
+const SCROLL_BAR_X = 238;
+const SCROLL_BAR_WIDTH = 2;
+const SCROLL_BAR_HEIGHT = 240;
+/** Rows left clear at each end of a page's segment, so the segments stand apart. */
+const SCROLL_BAR_SEGMENT_INSET = 2;
+
+export interface ScrollBarProps {
+  /** The page on show, counted from 0. */
+  page: number;
+  /** How many pages there are; a single page draws no bar. */
+  pages: number;
+}
+
+/**
+ * One segment per page down the right edge, the page on show lighter than the rest, as wasp-os draws it.
+ * Put it straight in a `Screen` without padding, since the watch places it inside the padding.
+ */
+export function ScrollBar(props: ScrollBarProps) {
+  const pitch = Math.floor(SCROLL_BAR_HEIGHT / props.pages);
+  return (
+    <Stack x={SCROLL_BAR_X} y={0} width={SCROLL_BAR_WIDTH} height={SCROLL_BAR_HEIGHT}>
+      {props.pages > 1 &&
+        range(props.pages).map((page) => (
+          <Column
+            x={0}
+            y={page * pitch + SCROLL_BAR_SEGMENT_INSET}
+            width={SCROLL_BAR_WIDTH}
+            height={pitch - 2 * SCROLL_BAR_SEGMENT_INSET}
+            background={page === props.page ? "muted" : "surface"}
+          />
+        ))}
+    </Stack>
   );
 }
 
