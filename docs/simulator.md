@@ -94,6 +94,11 @@ hands them simulated parts in place of the chip's:
   show wrong colours here as it would on the watch.
 - **The motor** is a pin that runs the motor while low, as P0.16 does. The vibrator driver runs on
   its own thread, so a pattern waits without freezing the window.
+- **The heart rate sensor** is a model of the HRS3300 (`SimulatedHeartRateChip` in
+  `simulator/src/hardware.rs`) on a wrist with a steady 72 beats a minute, shaped like the
+  emulator's pulse. The heart rate driver and its `Monitor` run on their own thread
+  (`simulator/src/heart_rate.rs`), 24 samples a second while an app has started the sensor, and
+  each reading reaches the app as on the watch, so the Heart app settles and then shows 72.
 - **Delays** sleep the thread.
 
 An app runs through the display driver over the panel model, so its scrolled lists move with the
@@ -122,5 +127,5 @@ That builds the InfiniTime version InfiniSim pins, not the `InfiniTime/` checkou
 ## Limits
 
 - Nothing runs on the nRF52832: timing, RAM use and flash use on the watch are not simulated.
-- There is no Bluetooth, touch controller, accelerometer, heart rate sensor or battery yet. Each
+- There is no Bluetooth, touch controller, accelerometer or battery yet. Each
   arrives as a simulated part when its driver lands.

@@ -34,7 +34,7 @@ flowchart TB
     ui["UI toolkit<br/>ui: renderer, shapes, strips, started"]
     system["System<br/>settings started; planned: power, events, notifications"]
     services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/steps,<br/>services/liveness, services/foreground"]
-    drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth,<br/>drivers/external_flash, ..."]
+    drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/heart_rate,<br/>drivers/bluetooth, drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
 
@@ -148,6 +148,7 @@ NeoTime/
 │   ├── display/      neotime-display: the ST7789 screen
 │   ├── status_screen/  neotime-status-screen: the status page's layout, and the bootloader's small ST7789 driver
 │   ├── external_flash/  neotime-external-flash: the 4 MB SPI NOR flash
+│   ├── heart_rate/   neotime-heart-rate: the HRS3300 heart rate sensor and its pulse processing
 │   ├── touch/        neotime-touch: the CST816S touch panel
 │   └── vibrator/     neotime-vibrator: the vibration motor
 ├── faces/            neotime-faces: watch faces in the app language, one folder each; see faces.md
@@ -310,6 +311,33 @@ The configuration files are Bosch's, under the BSD-3-Clause licence in
   software: a reading more than 1200 milli-g from the one before, summed over the axes, is a jolt,
   three jolts within a second are a shake, and the next second is ignored, so one shake counts
   once. Readings more than half a second apart are not compared.
+
+### Heart rate sensor (`drivers/heart_rate`)
+
+`neotime-heart-rate` drives the Tianyi HRS3300 over I2C at address 0x44, on the bus the touch panel
+and the accelerometer share. Its green LED shines into the skin, and the chip measures what comes
+back (the pulse channel) beside an ambient light channel.
+
+- **The chip.** `start` checks the ID (0x21), then sets a conversion every 12.5 ms, the LED at
+  20 mA, both channels to 16 bits and a gain of one, as wasp-os does, and turns measuring on.
+  `stop` turns measuring and the LED off. `read` takes the six data registers, 0x08 to 0x0f, in
+  one read, as InfiniTime does. All three go through `perform`, so the firmware reaches the chip
+  from one place, which keeps its task small.
+- **The pulse (`ppg`).** wasp-os's filter chain, sampled 24 times a second: the first sample's
+  level is taken off, then a high-pass filter, a gain control that follows the peaks and drops
+  spikes over twice their size, and a low-pass filter leave a signed byte. A window of 200
+  samples, about eight seconds, is compared with itself shifted by 7 to 48 samples (205 down to
+  30 beats a minute); the first shift where it matches best is one beat, checked again at two,
+  three and four beats. The rate comes from the fourth beat, or the third when there is no
+  fourth. After each window the newest 104 samples stay, so readings come every four seconds.
+  wasp-os counted the beat one sample past the best match, which read about 1% low; this does not.
+  On a steady pulse it reads 45 to 180 beats a minute within two.
+- **The status (`monitor`).** `Monitor` gives the status apps read in `heart_rate_status`: 2
+  (settling) until a window yields a rate, then 3 (measuring), and back to 2 after a window with
+  none. As InfiniTime does, each good reading sets an ambient light limit at twice the light
+  then; more light than that means the watch left the wrist, so the window starts again and the
+  status is 1 (no skin). A reading's confidence is 100% for a rate matched over four beats and 75%
+  over three.
 
 Wrist raise is planned in software on top of `read_acceleration`, as InfiniTime and wasp-os do it,
 so the chip's own tap and wrist-wear detectors are not set up.
@@ -725,6 +753,18 @@ watch face, the launcher and the apps through `neotime-app-host`:
   shakes reach the shell through `app_events.rs`, which keeps only the latest of each; the host
   hands the latest reading to `acceleration` events at their period and a shake to `shake` events
   at once.
+- **Heart rate.** `heart_rate.rs` starts the sensor when the open app asks: `start_heart_rate`
+  until `stop_heart_rate`, or `measure_heart_rate` until the first reading. Opening another
+  screen stops it, so it never runs for an app that has gone. While measuring it reads 24 samples
+  a second and feeds them to the `Monitor`; between requests the LED is off and the task sleeps.
+  Each reading wakes the shell as a change of `heart_rate`, and the shell hands it to the open
+  app's `heart_rate_reading` events; the latest one, its time and the status stay for
+  `heart_rate`, `heart_rate_measured_at`, `heart_rate_status` and `is_heart_rate_running`. The
+  `Monitor`, about 280 bytes with its 200-sample window, is on the heap only while measuring. The
+  feature costs 2,060 B of flash and 256 B of task storage, and the UI heap gave up 512 B for it,
+  so static RAM ends 208 B lower than before. `tools/check_heart_rate.py` runs it in the
+  emulator: with the Heart app open, the emulated pulse of 84 reads 83, and after a change to 120
+  the next reading is 120.
 - **Phone connection.** `phone.rs` holds whether a phone is connected, which the Bluetooth task
   sets when a connection is accepted and clears when it ends. Each change wakes the shell, which
   redraws what reads `is_phone_connected` and sends the app's `phone` subscriptions `connects` or
@@ -762,15 +802,17 @@ watch face, the launcher and the apps through `neotime-app-host`:
   start while the accelerometer reset on the same bus, so the panel now starts first, with retries,
   and the accelerometer waits for it. Fourteen more words follow the counters, set once at start:
   the last restart, described next. Writing `01` to the characteristic says the companion app saved
-  a debug report holding the crash, which dismisses it as Restart on the crash screen does. Four more
+  a debug report holding the crash, which dismisses it as Restart on the crash screen does. Six more
   counters come after the last restart's words. The first two are in microseconds and count
   round: the time
   the shell spent drawing apps, and the time the CPU spent sending to the display or waiting for a
   send to end, the status page and help screen included. In the emulator, with the shared library
   installed so text and icons draw, opening the launcher drew for 1,140 ms and a scroll for 318 ms
   while widgets drew through rlvgl; drawing straight into strips (`StripRenderer`) cut them to
-  190 ms, 69 ms of it waiting on the bus, and 46 ms, 12 ms of it waiting. The last two count the sectors the flash store erased
+  190 ms, 69 ms of it waiting on the bus, and 46 ms, 12 ms of it waiting. The next two count the sectors the flash store erased
   and the store calls the shell made while another task held the store, which found nothing.
+  Two more follow: the heart rate sensor's state (1 started, 2 failed to start, 3 failed to read)
+  and its latest reading in beats per minute.
 - **Reset reasons and crash record.** `restart.rs` reads and clears `RESETREAS` at start, and reads
   the crash record the previous run left in `.uninit` RAM (see
   [memory-map.md](memory-map.md#ram-64-kb-planned)). The full firmware keeps the record until the
@@ -904,12 +946,12 @@ watch face, the launcher and the apps through `neotime-app-host`:
   sleeps, or the button goes back, the shell reopens what was open before;
   opening anything else forgets it.
 
-Not done yet: heart rate, the notification count, navigation and the weather forecast's days read
+Not done yet: the notification count, navigation and the weather forecast's days read
 as 0 or empty, and music and weather are lost on a restart; with a tap waking the screen, the
 touch panel stays awake while the screen is off.
 
 With the shared library after its code it takes all but about 8 KB of the 480 KB firmware region
-(the fonts and the accelerometers' configuration files are in the library) and 53 KB of static RAM, 31 KB of it heap: 10 KB for the system and 21 KB for
+(the fonts and the accelerometers' configuration files are in the library) and 53 KB of static RAM, 30.5 KB of it heap: 10 KB for the system and 20.5 KB for
 the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
 the button and the backlight timeout all work.
 

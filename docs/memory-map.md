@@ -134,7 +134,7 @@ below it too, so the marker survives from one firmware start to the next. Its th
 bootloader's note to the firmware (`BOOT_NOTE_ADDRESS`), which says whether the recovery firmware
 was just installed, and its fourth is the bootloader updater's (`UPDATER_NOTE_ADDRESS`), which says
 the rollback after it was meant. The firmware measures 55 KB of static RAM:
-31 KB of heap (10 KB for the system and the 21 KB UI heap), the flash store's tables (2.7 KB), and
+30.5 KB of heap (10 KB for the system and the 20.5 KB UI heap), the flash store's tables (2.7 KB), and
 the Bluetooth host with its eight 128-byte packets, controller, the display's two 1,920 B strip buffers and task state. The
 Bluetooth task's state is 4.8 KB: its GATT table (2.1 KB) and TrouBLE's runner (1.6 KB) are most of
 it; replies to the companion app and half-received lines wait on the heap, and the update state,
@@ -175,7 +175,10 @@ To measure it again after a change, build the firmware and run, inside `nix deve
 
 It fills the stack with a pattern in the PineTime emulator, starts the firmware without the reset
 its first start would cause, swipes to the launcher, and prints the peak, the spare bytes and any
-resets. Spare bytes are counted down to the top of the guard. Keep at least 2 KB spare.
+resets. Spare bytes are counted down to the top of the guard. Keep at least 2 KB spare. With
+`--flash` and `--library` for an install, `--open-first-app` also taps the launcher's first row.
+The UI heap gave up 512 B for the heart rate task, so the launcher keeps the same 2,024 B spare as
+without it, short of the 2 KB.
 
 With apps installed and packages commands sent over Bluetooth, as the companion app sends them:
 
@@ -214,7 +217,7 @@ The table below is the budget:
 
 | Region | Budget | Holds | Status |
 |---|---|---|---|
-| UI heap | 21 KB | The heap the open app lives in. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (6,628 B), one 160 B node per widget of the open screen that is not inside a hidden one, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. The system's 10 KB shares the same heap. How much an app needs is worked out from its image, as [below](#how-much-heap-an-app-needs). The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. A `TextFile` holds 4 B for every eighth line of its file and the text of the lines near the view, under 2 KB in the small font, and borrows a 512 B buffer while it reads; a 2,000-line note takes about 1 KB of places. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
+| UI heap | 20.5 KB | The heap the open app lives in. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (6,628 B), one 160 B node per widget of the open screen that is not inside a hidden one, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. The system's 10 KB shares the same heap. How much an app needs is worked out from its image, as [below](#how-much-heap-an-app-needs). The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. A `TextFile` holds 4 B for every eighth line of its file and the text of the lines near the view, under 2 KB in the small font, and borrows a 512 B buffer while it reads; a 2,000-line note takes about 1 KB of places. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
 | Bluetooth | 12 KB | The controller and the TrouBLE host: connection state, packet buffers and the GATT tables. | Partly measured: the controller is 1.5 KB; TrouBLE's example with it is 12.0 KB in all, executor included |
 | Apps | 6 KB | Memory for the app that is open beyond the UI heap, such as the parts of its file read from `/apps`. The runtime's working memory in it is measured: 2,168 B for the interpreter, 2,056 B for the bindings and 2,440 B for the state. `AppHost` keeps all three on the UI heap. | Partly measured |
 | Stack | 8 KB | The main stack, for interrupts and code that is not in a task. | Planned |

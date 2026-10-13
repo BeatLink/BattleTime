@@ -17,10 +17,13 @@ use std::{
 
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use embedded_graphics_simulator::{sdl2::Keycode, OutputSettings, SimulatorDisplay, SimulatorEvent, Window};
-use neotime_app_host::{settings, AppEffect, AppFailure, AppHost, EventResult, System, Touch, STRIP_PIXELS};
+use neotime_app_host::{
+    settings, AppEffect, AppFailure, AppHost, EventResult, PushedEvent, System, Touch, STRIP_PIXELS,
+};
 use neotime_app_testing::{
     starting_step_hours, HOURS_PER_DAY, STARTING_DAY_STEPS, STARTING_TRIP_STEPS, STEP_HISTORY_DAYS,
 };
+use neotime_heart_rate::monitor::Status;
 use neotime_runtime::{
     events::SwipeDirection, resources::ImageReference, AppImage, EffectKind, SystemValue, SystemValues,
     Theme, Value, DEFAULT_THEME, NONE,
@@ -29,7 +32,10 @@ use neotime_settings::{Setting, Settings};
 use neotime_vibrator::{Step, TAP};
 
 use super::{copy_panel_to_screen, start_vibrator, WatchDisplay, SWIPE_DISTANCE_IN_PIXELS};
-use crate::panel::SimulatedPanel;
+use crate::{
+    heart_rate::{start_heart_rate_sensor, HeartRateLink, Update},
+    panel::SimulatedPanel,
+};
 
 // ============================================================================
 // Settings
@@ -75,7 +81,7 @@ fn wall_clock_in_milliseconds() -> Value {
 // The simulated system
 // ============================================================================
 
-/// Fixed system values, the real clock, settings apps can change, and effects printed to the terminal.
+/// Fixed system values, the real clock, changeable settings, a heart rate sensor, and effects printed to the terminal.
 pub struct SimulatedSystem {
     vibrator_requests: Option<mpsc::Sender<&'static [Step]>>,
     random_state: Cell<u32>,
@@ -92,11 +98,23 @@ pub struct SimulatedSystem {
     started_at: Value,
     /// The folder standing in for the watch's storage, if one was given.
     storage_folder: Option<PathBuf>,
+    /// The simulated heart rate sensor's thread, when the simulator runs in a window.
+    heart_rate_link: Option<HeartRateLink>,
+    /// The sensor's latest reading and when it came, or none before the first.
+    latest_heart_rate: Option<HeartRateReading>,
+    heart_rate_status: Status,
+}
+
+#[derive(Clone, Copy)]
+struct HeartRateReading {
+    beats_per_minute: Value,
+    measured_at: Value,
 }
 
 impl SimulatedSystem {
     fn new(
         vibrator_requests: Option<mpsc::Sender<&'static [Step]>>,
+        heart_rate_link: Option<HeartRateLink>,
         random_seed: u32,
         files: &AppFiles,
     ) -> Self {
@@ -119,6 +137,9 @@ impl SimulatedSystem {
             theme_request: None,
             started_at: wall_clock_in_milliseconds(),
             storage_folder: files.storage_folder.map(Path::to_path_buf),
+            heart_rate_link,
+            latest_heart_rate: None,
+            heart_rate_status: Status::Stopped,
         }
     }
 
@@ -143,7 +164,37 @@ impl SimulatedSystem {
             self.theme_preset = settings::preset_number(&theme);
             host.set_theme(theme);
             let key = settings::THEME_SETTING;
-            host.deliver(neotime_app_host::PushedEvent::SettingsChange { key }, now, self);
+            host.deliver(PushedEvent::SettingsChange { key }, now, self);
+        }
+    }
+
+    /// Passes the simulated sensor's readings to the app, and tells it when the sensor's status changes.
+    pub fn take_heart_rate_updates(&mut self, host: &mut AppHost<'_>, now: Value) {
+        let updates: Vec<Update> = self
+            .heart_rate_link
+            .as_ref()
+            .map_or_else(Vec::new, |link| link.updates.try_iter().collect());
+        for update in updates {
+            let status_before = self.heart_rate_status;
+            match update {
+                Update::Status(status) => self.heart_rate_status = status,
+                Update::Reading(reading) => {
+                    self.heart_rate_status = Status::Measuring;
+                    self.latest_heart_rate = Some(HeartRateReading {
+                        beats_per_minute: reading.beats_per_minute as Value,
+                        measured_at: now,
+                    });
+                    let event = PushedEvent::HeartRate {
+                        beats_per_minute: reading.beats_per_minute as Value,
+                        confidence: reading.confidence_percent as Value,
+                    };
+                    host.deliver(event, now, self);
+                }
+            }
+            if self.heart_rate_status != status_before {
+                let changed = SystemValue::HeartRateStatus.bit() | SystemValue::IsHeartRateRunning.bit();
+                host.report_system_value_changes(changed, now, self);
+            }
         }
     }
 }
@@ -164,8 +215,14 @@ impl SystemValues for SimulatedSystem {
             BatteryMillivolts => 4056,
             StepsToday => 4321,
             Brightness => self.settings.get(Setting::Brightness) as Value,
-            HeartRate => 64,
-            HeartRateMeasuredAt => now - 5 * MINUTE_IN_MILLISECONDS,
+            HeartRate => self
+                .latest_heart_rate
+                .map_or(64, |reading| reading.beats_per_minute),
+            HeartRateMeasuredAt => self
+                .latest_heart_rate
+                .map_or(now - 5 * MINUTE_IN_MILLISECONDS, |reading| reading.measured_at),
+            HeartRateStatus => self.heart_rate_status as Value,
+            IsHeartRateRunning => (self.heart_rate_status != Status::Stopped) as Value,
             IsPhoneConnected | MusicIsPlaying => 1,
             WeatherTemperature => 18,
             WeatherLow => 11,
@@ -363,12 +420,30 @@ impl System for SimulatedSystem {
                 self.change_setting(Setting::DoNotDisturb.name(), effect.number(0))
             }
             EffectKind::SetBluetooth => self.change_setting(Setting::Bluetooth.name(), effect.number(0)),
+            EffectKind::StartHeartRate | EffectKind::StopHeartRate | EffectKind::MeasureHeartRate => {
+                if let Some(link) = &self.heart_rate_link {
+                    match effect.kind {
+                        EffectKind::StartHeartRate => link.start(),
+                        EffectKind::StopHeartRate => link.stop(),
+                        _ => link.measure_once(),
+                    }
+                }
+            }
             _ => {}
         }
     }
 
     fn app_failed(&mut self, failure: AppFailure) {
         eprintln!("app failed, so the watch would show its crash screen: {failure:?}");
+    }
+}
+
+/// A simulated system with no motor, linked to a heart rate sensor the test steps itself.
+#[cfg(test)]
+pub fn test_system_with_heart_rate(link: HeartRateLink) -> SimulatedSystem {
+    SimulatedSystem {
+        heart_rate_link: Some(link),
+        ..test_system()
     }
 }
 
@@ -385,6 +460,9 @@ pub fn test_system() -> SimulatedSystem {
         theme_request: None,
         started_at: 0,
         storage_folder: None,
+        heart_rate_link: None,
+        latest_heart_rate: None,
+        heart_rate_status: Status::Stopped,
     }
 }
 
@@ -402,7 +480,7 @@ pub fn save_screenshot(
     clicks: &[Click],
     screenshot_path: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let mut system = SimulatedSystem::new(None, 1, &files);
+    let mut system = SimulatedSystem::new(None, None, 1, &files);
     let now = wall_clock_in_milliseconds();
     let mut host = open(files, now, &mut system)?;
     for click in clicks {
@@ -466,6 +544,7 @@ pub fn run(
     let motor_running = Arc::new(AtomicBool::new(false));
     let mut system = SimulatedSystem::new(
         Some(start_vibrator(motor_running.clone())),
+        Some(start_heart_rate_sensor()),
         wall_clock_in_milliseconds() as u32 | 1,
         &files,
     );
@@ -480,6 +559,7 @@ pub fn run(
     loop {
         let now = wall_clock_in_milliseconds();
         host.tick(now, &mut system);
+        system.take_heart_rate_updates(&mut host, now);
         // A transition draws one step a frame, paced by the clock as it is on the watch.
         if host.needs_drawing() {
             host.draw_step_at(&mut display, &mut strip, now as u64)

@@ -15,6 +15,7 @@ embedded-hal-async = "1.0"
 neotime-app-host = { path = "../app-host", features = ["demo", "built-in-fonts"] }
 neotime-app-testing = { path = "../harness" }
 neotime-display = { path = "../drivers/display" }
+neotime-heart-rate = { path = "../drivers/heart_rate" }
 neotime-runtime = { path = "../runtime" }
 neotime-settings = { path = "../services/settings" }
 neotime-vibrator = { path = "../drivers/vibrator" }

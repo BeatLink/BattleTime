@@ -13,7 +13,8 @@
 //! finds the screen dark turns it on and opens the notifications. Do not
 //! disturb silences all of it, keeps the screen dark, and silences every app vibration but the
 //! alarm pattern. The accelerometer is read only while the screen is on and the open app
-//! subscribes to acceleration or shakes. Plugging the charger in or out, or the charge going low,
+//! subscribes to acceleration or shakes, and the heart rate sensor only while an app asks for it
+//! until that app closes. Plugging the charger in or out, or the charge going low,
 //! lights the screen on the battery app, which goes back to what was open when the screen sleeps
 //! or the wearer goes back. The phone's music and weather are kept for apps to read, an incoming
 //! call buzzes and lights the screen, and the phone can ring the watch until the wearer touches it.
@@ -69,7 +70,7 @@ use crate::{
     battery, clock,
     crash_screen::{FirmwarePage, ShownPage},
     diagnostics::{self, Counter},
-    foreground, help, motion, packages, phone, restart, settings, storage, system_values,
+    foreground, heart_rate, help, motion, packages, phone, restart, settings, storage, system_values,
     touch::{self, TOUCHES},
     vibration, SharedDisplay,
 };
@@ -235,6 +236,9 @@ impl SystemValues for WatchSystem {
             return phone_value;
         }
         if let Some(number) = self.notifications.read(value) {
+            return number;
+        }
+        if let Some(number) = heart_rate::read(value) {
             return number;
         }
         match value {
@@ -418,6 +422,9 @@ impl System for WatchSystem {
                 settings::set_by_name(Setting::DoNotDisturb.name(), effect.number(0))
             }
             EffectKind::ResetStepTrip => motion::reset_trip(),
+            EffectKind::StartHeartRate => heart_rate::start(),
+            EffectKind::StopHeartRate => heart_rate::stop(),
+            EffectKind::MeasureHeartRate => heart_rate::measure_once(),
             EffectKind::SetBluetooth => settings::set_by_name(Setting::Bluetooth.name(), effect.number(0)),
             EffectKind::SetAppEnabled => {
                 let id = effect.text(0).unwrap_or("");
@@ -505,6 +512,7 @@ impl Shell {
         }
         self.save_settings();
         vibration::request(Some(Vibration::Stop));
+        heart_rate::stop();
         self.finding_until = None;
         self.firmware_page = None;
         self.system.keep_screen_on = false;
@@ -943,6 +951,13 @@ impl Shell {
 
     fn system_values_changed(&mut self, changed: u32) {
         self.settings_changed();
+        if changed & SystemValue::HeartRate.bit() != 0 {
+            let (beats_per_minute, confidence) = heart_rate::latest_reading();
+            self.deliver(PushedEvent::HeartRate {
+                beats_per_minute,
+                confidence,
+            });
+        }
         if let Some(host) = &mut self.host {
             host.report_system_value_changes(changed, clock::utc_now(), &mut self.system);
         }

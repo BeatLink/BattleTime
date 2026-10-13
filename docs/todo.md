@@ -225,8 +225,9 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 
 ## UI toolkit
 
-- [ ] **Measure the UI heap on the watch.** It is 21 KB, shared with the system's 10 KB; so
-  far it is measured only in the emulator, where the alarm's editor touches 13,188 B of 31,744 B. Count what a typical screen allocates on
+- [ ] **Measure the UI heap on the watch.** It is 20.5 KB, shared with the system's 10 KB; so
+  far it is measured only in the emulator, where the alarm's editor touched 13,188 B of the 31,744 B
+  the heap had then. Count what a typical screen allocates on
   the watch, then update the "UI heap" row in
   [memory-map.md](memory-map.md) and the size in `tools/draw_memory_maps.py`, and rerun the script.
 - [ ] **App screens in the simulator.** The simulator still shows hand-drawn demo pages. Draw
@@ -478,12 +479,29 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   `open_in_background`, so an alarm or timer rings only while its app is open. Run each installed app's background subscriptions, set
   `next_alarm` from the earliest alarm so faces show the bell, and carry out `wake_screen`.
 - [ ] **Deliver the remaining sensor and phone events to apps.** The shell pushes steps,
-  acceleration, shakes and phone notifications. Push the other `motion` kinds (wrist raise, tap,
-  double tap, still, moving), heart rate, battery changes, calls, music, navigation and weather
+  acceleration, shakes, heart rate and phone notifications. Push the other `motion` kinds (wrist raise, tap,
+  double tap, still, moving), battery changes, calls, music, navigation and weather
   once those services exist.
 - [ ] **Try acceleration and shakes on the watch.** The motion and level apps should follow the
   watch's tilt with the right axes and signs, a firm shake should roll the dice once, and walking
   should not. Tune `JOLT_THRESHOLD_IN_MILLI_G` if needed.
+
+### Heart rate
+
+- [ ] **Room in the firmware slot.** With the heart rate sensor the full firmware leaves 16 B of its
+  388 KB slot, and the launcher's stack keeps 2,024 B spare, short of 2 KB. The next firmware
+  feature needs room found first.
+- [ ] **Try the heart rate sensor on the watch.** It reads the emulator's pulse, but the filter
+  chain's gain, the LED current and the no-skin limit were never tuned on a real wrist. Compare
+  readings with InfiniTime's or a chest strap at rest and walking, and read the diagnostics'
+  heart rate counters if the screen shows nothing.
+- [ ] **Measure in the background,** as InfiniTime does: a reading every few minutes with the
+  screen off, for faces and a `heart_rate_reading` subscription of an app that is not open, and a
+  log of them beside the step log.
+- [ ] **The Heart Rate service (0x180D),** so Gadgetbridge and other phone apps read the pulse.
+- [ ] **`set_heart_rate_led`.** The firmware ignores it, so the beacon app's flashes stay dark.
+- [ ] **Run `tools/check_heart_rate.py` in CI.** The emulator suites have no compiler to build the
+  apps it installs; the watch images job could build the install into `dist/` for them.
 
 ### UI toolkit
 
@@ -531,7 +549,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 ### Simulator
 
 - [ ] **Simulated parts** for touch, the accelerometer, the battery and Bluetooth, plus
-  notifications and heart rate once those exist.
+  notifications once those exist.
 - [ ] **GIF capture,** as InfiniSim has.
 
 ### External flash and storage
@@ -594,9 +612,10 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 
 ### Developer tools and docs
 
-- [ ] **Measure the stack with any app open.** `tools/measure_stack.py` can only swipe to the
-  launcher, so the alarm's 10.5 KB peak cannot be measured again, and neither can the system
-  app's. Let it install and open a named app in the emulator.
+- [ ] **Measure the stack with any app open.** `tools/measure_stack.py --open-first-app` opens
+  the launcher's first row, so with only the heart app installed it measures that: 7,080 B, 1,608 B
+  spare, under the 2 KB the rest keep. The alarm's 10.5 KB peak and the system app's still cannot
+  be measured again. Let it open a named app, and shrink the heart app's peak.
 - [ ] **Clippy fails with warnings denied.** `cargo clippy --release -- -D warnings` stops on two
   `needless_borrow`s in `firmware/src/main.rs` (`with_attribute_server(&server)`) and three in
   `neotime-runtime`.
@@ -637,7 +656,7 @@ InfiniTime has these and NeoTime has nothing for them yet:
 | Area | What InfiniTime has |
 |---|---|
 | Board and system loop | sleep and wake of the whole system, wake locks, a system monitor |
-| Heart rate | HRS3300 driver, PPG processing, background measuring, the Heart Rate service |
+| Heart rate | background measuring, the Heart Rate service |
 | Clock | the Current Time client |
 | Notifications | the Alert Notification client, Immediate Alert, the call screen for a New Alert call |
 | Other BLE services | Music, Navigation, Simple Weather |
@@ -706,7 +725,7 @@ The fork has these and NeoTime has nothing for them yet. Most also appear in the
 | Area | What the fork has |
 |---|---|
 | App runtime | apps loaded when opened, state kept when left |
-| Heart rate | filter-chain PPG (30 to 210 BPM), raw data logging |
+| Heart rate | raw data logging |
 | Watch faces | Clock, Week clock, Chrono, Dual clock, Fibonacci, Resistor, Word clock, a Faces app with previews |
 | Apps | Alarm with 4 alarms and snooze, Pomodoro, Phone finder, Sports, Level, Gallery, Haiku, Morse, Snake, Four in a row, Puzzle 15, Game of Life, Beacon, Self test |
 | Companion app | WaspOSCompanion: steps, alarms, settings, files, backup, weather, themes, face previews, firmware |

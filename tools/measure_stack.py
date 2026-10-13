@@ -2,9 +2,9 @@
 
 It presets the UICR words embassy-nrf writes on the first start, so the emulated chip is not reset
 (a reset clears RAM). It then fills the stack, from `_stack_end` to the top of RAM, with a pattern,
-starts the firmware, can swipe up to the launcher, and reports the lowest stack word that changed.
+starts the firmware, can swipe up to the launcher and open its first app, and reports the lowest stack word that changed.
 
-    python3 -I tools/measure_stack.py FIRMWARE_ELF [seconds] [--launcher] [--flash IMAGE] [--library FILE]
+    python3 -I tools/measure_stack.py FIRMWARE_ELF [seconds] [--launcher [--open-first-app]] [--flash IMAGE] [--library FILE]
                                       [--packages LINE ...]
 
 `--flash` loads a whole external flash image, such as `filesystem_use --image` writes, so apps are
@@ -46,6 +46,9 @@ PATTERN = 0xA5A5A5A5
 FIRMWARE_VECTOR_TABLE = 0x8100
 SECONDS_BEFORE_SWIPE = 4
 IMAGE_HEADER_SIZE = 256
+SECONDS_BEFORE_TAP = 3
+# The middle of the launcher's first row.
+FIRST_APP_TAP = (120, 40)
 # As in firmware/src/stack_guard.rs.
 GUARD_BYTES = 256
 
@@ -142,10 +145,13 @@ def reading_lines(end):
 # Running it
 # ============================================================================
 
-def run_in_one_go(emulator, lines, end, seconds, swipe_to_launcher):
+def run_in_one_go(emulator, lines, end, seconds, swipe_to_launcher, open_first_app):
     """Runs the emulator for a fixed time without Bluetooth, and gives back its readings."""
     if swipe_to_launcher:
         lines += [f'emulation RunFor "00:00:{SECONDS_BEFORE_SWIPE:02}"', 'sysbus.serial1.touch Swipe "up"']
+    if open_first_app:
+        x, y = FIRST_APP_TAP
+        lines += [f'emulation RunFor "00:00:{SECONDS_BEFORE_TAP:02}"', f"sysbus.serial1.touch Tap {x} {y}"]
     lines += [f'emulation RunFor "00:00:{seconds:05.2f}"'] + reading_lines(end) + ["quit"]
     with tempfile.NamedTemporaryFile("w", suffix=".resc", delete=False) as script:
         script.write("\n".join(lines) + "\n")
@@ -249,6 +255,7 @@ def main():
     parser.add_argument("firmware")
     parser.add_argument("seconds", nargs="?", type=float, default=8.0)
     parser.add_argument("--launcher", action="store_true", help="swipe up to the launcher")
+    parser.add_argument("--open-first-app", action="store_true", help="then tap the launcher's first row")
     parser.add_argument("--flash", help="an external flash image to load")
     parser.add_argument("--library", help="a compiled shared library to load")
     parser.add_argument("--packages", nargs="+", metavar="LINE", help="packages command lines to send over Bluetooth")
@@ -262,7 +269,9 @@ def main():
         if arguments.packages:
             words = run_with_bluetooth(emulator, lines, end, arguments.seconds, arguments.launcher, arguments.packages)
         else:
-            words = run_in_one_go(emulator, lines, end, arguments.seconds, arguments.launcher)
+            words = run_in_one_go(
+                emulator, lines, end, arguments.seconds, arguments.launcher, arguments.open_first_app
+            )
 
     usable_end = guard_top(end)
     print(f"stack: {end:#x} to {STACK_TOP:#x}, {STACK_TOP - usable_end} bytes above the {GUARD_BYTES}-byte guard")

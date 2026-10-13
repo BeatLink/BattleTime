@@ -315,3 +315,38 @@ fn watch_files_are_read_from_the_storage_folder() {
     );
     std::fs::remove_dir_all(&folder).unwrap();
 }
+
+#[test]
+fn a_simulated_reading_reaches_the_app_and_its_values() {
+    use crate::{
+        hardware::SimulatedHeartRateChip,
+        heart_rate::{SimulatedSensor, Update},
+    };
+    use neotime_app_host::{demo::stopwatch_image, AppHost};
+    use neotime_heart_rate::monitor::{Reading, Status};
+    use neotime_runtime::{SystemValue, SystemValues};
+
+    let (_sensor, link, updates) = SimulatedSensor::new(SimulatedHeartRateChip::new(72.0));
+    let mut system = crate::app::test_system_with_heart_rate(link);
+    let image = stopwatch_image();
+    let now = 1_000_000;
+    let mut host = AppHost::open(&image, neotime_runtime::DEFAULT_THEME, now, &mut system).unwrap();
+    assert_eq!(system.read(SystemValue::IsHeartRateRunning), 0);
+
+    updates.send(Update::Status(Status::Settling)).unwrap();
+    updates
+        .send(Update::Reading(Reading {
+            beats_per_minute: 75,
+            confidence_percent: 100,
+        }))
+        .unwrap();
+    system.take_heart_rate_updates(&mut host, now);
+
+    assert_eq!(system.read(SystemValue::HeartRate), 75);
+    assert_eq!(system.read(SystemValue::HeartRateMeasuredAt), now);
+    assert_eq!(
+        system.read(SystemValue::HeartRateStatus),
+        Status::Measuring as i64
+    );
+    assert_eq!(system.read(SystemValue::IsHeartRateRunning), 1);
+}

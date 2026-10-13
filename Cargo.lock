@@ -1264,6 +1264,15 @@ name = "neotime-foreground"
 version = "0.1.0"
 
 [[package]]
+name = "neotime-heart-rate"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+]
+
+[[package]]
 name = "neotime-liveness"
 version = "0.1.0"
 
@@ -1312,6 +1321,7 @@ dependencies = [
  "neotime-app-host",
  "neotime-app-testing",
  "neotime-display",
+ "neotime-heart-rate",
  "neotime-runtime",
  "neotime-settings",
  "neotime-status-screen",

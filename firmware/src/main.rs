@@ -76,6 +76,8 @@ mod drawing_screen;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod foreground;
 #[cfg_attr(not(with_shell), allow(dead_code))]
+mod heart_rate;
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod help;
 mod restart;
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -117,7 +119,7 @@ const FIRMWARE_VERSION: &str = env!("NEOTIME_FIRMWARE_VERSION");
 const DEVICE_NAME: &str = "NeoTime";
 /// The shell's share of the heap, which the open app's widgets and text are allocated from.
 #[cfg(with_shell)]
-const UI_HEAP_SIZE: usize = 21 * 1024;
+const UI_HEAP_SIZE: usize = 20 * 1024 + 512;
 #[cfg(not(with_shell))]
 const UI_HEAP_SIZE: usize = 0;
 const HEAP_SIZE: usize = storage::HEAP_SIZE + UI_HEAP_SIZE;
@@ -129,7 +131,7 @@ const SIDE_BUTTON_PIN: usize = 13;
 use display_dma::SpiBus;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 type I2cBus = embassy_sync::mutex::Mutex<NoopRawMutex, twim::Twim<'static>>;
-/// One user of the I2C bus the touch panel and the accelerometer share.
+/// One user of the I2C bus the touch panel, the accelerometer and the heart rate sensor share.
 type I2cDeviceOnBus = I2cDevice<'static, NoopRawMutex, twim::Twim<'static>>;
 
 #[global_allocator]
@@ -270,7 +272,7 @@ async fn main(spawner: Spawner) {
     storage::leave_breadcrumb(stage::STORAGE_READY);
     #[cfg(with_shell)]
     {
-        // The touch panel and the accelerometer share one I2C bus; 32 bytes holds the largest write either makes.
+        // The touch panel, accelerometer and heart rate sensor share one I2C bus; 32 bytes fits the largest write.
         static I2C_BUFFER: StaticCell<[u8; 32]> = StaticCell::new();
         static I2C_BUS: StaticCell<I2cBus> = StaticCell::new();
         let mut i2c_config = twim::Config::default();
@@ -300,6 +302,7 @@ async fn main(spawner: Spawner) {
             .unwrap(),
         );
         spawner.spawn(motion::run_accelerometer(I2cDevice::new(i2c_bus)).unwrap());
+        spawner.spawn(heart_rate::run_heart_rate_sensor(I2cDevice::new(i2c_bus)).unwrap());
         spawner.spawn(
             vibration::run_vibrator(Output::new(chip.P0_16, Level::High, OutputDrive::Standard)).unwrap(),
         );

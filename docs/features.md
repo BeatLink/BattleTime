@@ -107,6 +107,12 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   today against the daily goal, yesterday, a trip count that the Reset button starts again, the
   last seven days, and any of them hour by hour. The history and the trip count are kept through
   a restart, losing only the six minutes in progress.
+- **Heart rate.** The Heart app measures the pulse with the HRS3300 while it is open: it waits for
+  enough data, then shows the beats a minute, refreshed every four seconds, with a chart of the
+  latest readings, and says when the watch is off the wrist. The LED is lit only while an app
+  measures. Faces show the latest reading and how long ago it was taken. Tried in the emulator,
+  not yet on the watch.
+  ![The Heart app measuring in the emulator](images/heart-rate-emulator.png)
 - **Shake to roll the dice,** and live accelerometer readings for apps such as motion and level.
 - **Rollers that show their numbers:** the timer's minutes and seconds and the dice's count and
   sides, which were blank on the watch, and the alarm's time and days, each drawn as one widget.

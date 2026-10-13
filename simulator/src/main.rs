@@ -1,12 +1,14 @@
 //! A desktop simulator for NeoTime, in the spirit of InfiniTime's InfiniSim.
 //!
 //! The real drivers run unchanged against simulated hardware: the display driver talks to a model
-//! of the ST7789 and the vibrator driver to a motor pin. The mouse is the touch panel and the space
-//! bar is the side button. With `--app` or `--demo` it runs an app image instead of the demo pages,
-//! and with `--script` it runs a test script headless through the test watch.
+//! of the ST7789, the vibrator driver to a motor pin and the heart rate driver to a simulated
+//! HRS3300. The mouse is the touch panel and the space bar is the side button. With `--app` or
+//! `--demo` it runs an app image instead of the demo pages, and with `--script` it runs a test
+//! script headless through the test watch.
 
 mod app;
 mod hardware;
+mod heart_rate;
 mod pages;
 mod panel;
 #[cfg(test)]

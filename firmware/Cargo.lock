@@ -1276,6 +1276,7 @@ dependencies = [
  "neotime-external-flash",
  "neotime-flash-store",
  "neotime-foreground",
+ "neotime-heart-rate",
  "neotime-liveness",
  "neotime-notifications",
  "neotime-packages",
@@ -1304,6 +1305,14 @@ dependencies = [
 [[package]]
 name = "neotime-foreground"
 version = "0.1.0"
+
+[[package]]
+name = "neotime-heart-rate"
+version = "0.1.0"
+dependencies = [
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+]
 
 [[package]]
 name = "neotime-liveness"
