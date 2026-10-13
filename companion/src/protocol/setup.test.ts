@@ -6,7 +6,7 @@ import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
 import { testImage } from '@/test-support/app-images';
 
 import { PackagesClient, type FileWriter } from './packages';
-import { needsSetup, runSetup, setupItems, type SetupStep } from './setup';
+import { installBundledLibrary, needsLibrary, needsSetup, runSetup, setupItems, type SetupStep } from './setup';
 
 const bundle = [
   { file: 'timer.ntapp', base64: bytesToBase64(testImage('timer', 'Timer')) },
@@ -53,5 +53,22 @@ describe('setting up a new watch', () => {
     expect(target.packagesService.library).not.toBeNull();
     expect(needsSetup(await packages.apps())).toBe(false);
     expect(steps.at(-1)).toMatchObject({ index: 4, count: 5 });
+  });
+
+  it('offers the library while the step counter waits for one, and installs only the library', async () => {
+    const counter = (value: number) => [{ key: 'accelerometerState', label: '', value }];
+    expect(needsLibrary(counter(4))).toBe(true);
+    expect(needsLibrary(counter(1))).toBe(false);
+    expect(needsLibrary([])).toBe(false);
+
+    const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+    const files: FileWriter = { write: async (path, data) => void target.fileService.files.set(path, data) };
+    const packages = await PackagesClient.open(target);
+
+    await installBundledLibrary(files, packages, setupItems(bundle));
+
+    expect(target.packagesService.library).not.toBeNull();
+    expect(await packages.apps()).toEqual([]);
+    await expect(installBundledLibrary(files, packages, [])).rejects.toThrow('no shared library');
   });
 });

@@ -332,6 +332,10 @@ with NeoTime's `neotime-compiler`: one `.ntapp` per app (the face as `face.ntapp
 from `neotime-compiler library -o shared.ntlib`. The images must match the firmware's runtime, so
 rebuild the bundle when the widget or instruction numbering changes.
 
+The shared library also carries the accelerometer's configuration, which the firmware uploads to
+the chip. A watch whose library predates that reports accelerometer state 4 in its diagnostics,
+and the Watch tab then offers **Install the shared library**, which sends only the bundled library.
+
 ```bash
 npm run import-watch-apps path/to/images
 ```

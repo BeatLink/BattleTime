@@ -119,7 +119,7 @@ export const DIAGNOSTIC_COUNTERS = [
   { key: 'touchReports', label: 'Touch reports read' },
   { key: 'touchesSent', label: 'Touches sent to the shell' },
   { key: 'buttonPresses', label: 'Button presses' },
-  { key: 'accelerometerState', label: 'Accelerometer (1 started, 2 failed, 3 read failed)' },
+  { key: 'accelerometerState', label: 'Accelerometer (1 started, 2 failed, 3 read failed, 4 waiting for the shared library)' },
 ] as const;
 
 export type DiagnosticCounter = { key: string; label: string; value: number };

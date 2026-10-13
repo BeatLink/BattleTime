@@ -5,6 +5,7 @@ import { base64ToBytes } from '@/ble/encoding';
 import { BUNDLED_IMAGES, type BundledImage } from '@/bundles/watch-apps';
 
 import { readImageHeader, type ImageHeader } from './app-image';
+import type { DiagnosticCounter } from './neotime';
 import { installImage, type FileWriter, type PackagesClient, type WatchApp } from './packages';
 
 export type SetupItem = { file: string; header: ImageHeader; image: Uint8Array; required: boolean };
@@ -31,6 +32,24 @@ export function setupItems(bundle: BundledImage[] = BUNDLED_IMAGES): SetupItem[]
       return { file, header, image, required };
     })
     .sort((a, b) => rank(a) - rank(b) || a.header.name.localeCompare(b.header.name));
+}
+
+// The firmware's accelerometer state while it waits for a shared library carrying its configuration.
+const ACCELEROMETER_WAITING_FOR_LIBRARY = 4;
+
+// Whether the watch's step counter waits for a shared library, as after a firmware update over a library
+// that does not carry the accelerometer's configuration yet.
+export function needsLibrary(counters: readonly DiagnosticCounter[]): boolean {
+  return counters.some((counter) => counter.key === 'accelerometerState' && counter.value === ACCELEROMETER_WAITING_FOR_LIBRARY);
+}
+
+// Installs the shared library this app bundles, and nothing else.
+export async function installBundledLibrary(files: FileWriter, packages: PackagesClient, items: SetupItem[] = setupItems()): Promise<void> {
+  const library = items.find((item) => item.header.kind === 'library');
+  if (!library) {
+    throw new Error('This app bundles no shared library.');
+  }
+  await installImage(files, packages, library.image);
 }
 
 // A watch with no face shows only its help screen, which is when to offer the setup.

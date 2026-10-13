@@ -12,7 +12,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
 import type { DiagnosticCounter } from '@/protocol/neotime';
-import { needsSetup } from '@/protocol/setup';
+import { installBundledLibrary, needsLibrary, needsSetup } from '@/protocol/setup';
 import { phoneBridge } from '@/services/phone';
 import { deviceWord } from '@/services/phone/words';
 import { describeWeatherSource } from '@/services/weather';
@@ -61,6 +61,7 @@ export default function WatchScreen() {
     batteryLevel,
     readDiagnostics,
     packages,
+    files,
   } = useWatch();
   const weatherSource = describeWeatherSource(
     settings.weatherPlace,
@@ -83,6 +84,21 @@ export default function WatchScreen() {
       cancelled = true;
     };
   }, [canInstall, packages]);
+  // Whether the step counter waits for a shared library with its configuration, read once per connection.
+  const [libraryNeeded, setLibraryNeeded] = useState(false);
+  const libraryTask = useTask();
+  useEffect(() => {
+    if (!canInstall || !capabilities.diagnostics) {
+      return;
+    }
+    let cancelled = false;
+    void readDiagnostics()
+      .then((read) => !cancelled && setLibraryNeeded(needsLibrary(read)))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [canInstall, capabilities.diagnostics, readDiagnostics]);
   const diagnostics = useTask();
   const [counters, setCounters] = useState<DiagnosticCounter[] | null>(null);
   // A clock for the "last synced" line, moved on twice a minute.
@@ -242,6 +258,29 @@ export default function WatchScreen() {
       ) : null}
 
       {watchReady && capabilities.diagnostics ? <DebugReportCard /> : null}
+
+      {canInstall && libraryNeeded && !setupNeeded ? (
+        <Card>
+          <ThemedText type="smallBold" style={{ color: theme.accent }}>
+            Step counting is waiting for the shared library.
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            This firmware takes the accelerometer&apos;s configuration from the shared library, and the one
+            on the watch is older. Install the library this {deviceWord(phoneBridge.kind)} carries.
+          </ThemedText>
+          {libraryTask.error ? <ThemedText type="small" style={{ color: theme.danger }}>{libraryTask.error}</ThemedText> : null}
+          <Button
+            title="Install the shared library"
+            busy={libraryTask.busy !== null}
+            onPress={() =>
+              void libraryTask.run('Installing', async () => {
+                await installBundledLibrary(await files(), await packages());
+                setLibraryNeeded(false);
+              })
+            }
+          />
+        </Card>
+      ) : null}
 
       {canInstall && setupNeeded ? (
         <Card>
