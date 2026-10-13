@@ -3,12 +3,11 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565, RgbColor};
+use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565};
 use embedded_hal::{delay::DelayNs, digital::ErrorType, digital::OutputPin};
-use mipidsi::interface::{Interface, InterfaceKind};
 use neotime_app_host::{PAINT_STEP_PIXELS, STRIP_PIXELS, TRANSITION_TIME_IN_MILLISECONDS};
 use neotime_app_testing::{Framebuffer, TestWatch, Touch, Transition};
-use neotime_display::Display;
+use neotime_display::{Display, PanelInterface};
 
 // ============================================================================
 // A model of the panel
@@ -89,14 +88,14 @@ fn two_numbers(arguments: &[u8]) -> (usize, usize) {
     )
 }
 
-struct PanelInterface {
+/// The panel's wires as the watch drives them, lending a strip buffer as the watch's DMA interface does.
+struct PanelWires {
     state: Rc<RefCell<PanelState>>,
+    strip: Vec<u16>,
 }
 
-impl Interface for PanelInterface {
-    type Word = u8;
+impl PanelInterface for PanelWires {
     type Error = ();
-    const KIND: InterfaceKind = InterfaceKind::Serial4Line;
 
     fn send_command(&mut self, command: u8, arguments: &[u8]) -> Result<(), ()> {
         let mut state = self.state.borrow_mut();
@@ -111,18 +110,22 @@ impl Interface for PanelInterface {
         Ok(())
     }
 
-    fn send_pixels<const N: usize>(&mut self, pixels: impl IntoIterator<Item = [u8; N]>) -> Result<(), ()> {
+    fn send_pixels(&mut self, bytes: &[u8]) -> Result<(), ()> {
         let mut state = self.state.borrow_mut();
-        for pixel in pixels {
-            state.write_pixel([pixel[0], pixel[1]]);
+        for &pixel in bytes.as_chunks::<2>().0 {
+            state.write_pixel(pixel);
         }
         Ok(())
     }
 
-    fn send_repeated_pixel<const N: usize>(&mut self, pixel: [u8; N], count: u32) -> Result<(), ()> {
+    fn strip_buffer(&mut self) -> Option<&mut [u16]> {
+        Some(&mut self.strip)
+    }
+
+    fn send_strip_pixels(&mut self, first: usize, count: usize) -> Result<(), ()> {
         let mut state = self.state.borrow_mut();
-        for _ in 0..count {
-            state.write_pixel([pixel[0], pixel[1]]);
+        for &pixel in &self.strip[first..first + count] {
+            state.write_pixel(pixel.to_ne_bytes());
         }
         Ok(())
     }
@@ -156,20 +159,23 @@ impl DelayNs for FakeDelay {
 
 /// The display, over the model, with the strip the watch draws through.
 struct Watch {
-    display: Display<PanelInterface, FakePin>,
+    display: Display<PanelWires, FakePin>,
     panel: Rc<RefCell<PanelState>>,
-    strip: Vec<Rgb565>,
+    strip: Vec<u16>,
 }
 
 impl Watch {
     fn new() -> Self {
         let panel = Rc::new(RefCell::new(PanelState::new()));
-        let interface = PanelInterface { state: panel.clone() };
+        let interface = PanelWires {
+            state: panel.clone(),
+            strip: vec![0; STRIP_PIXELS],
+        };
         let display = Display::new(interface, FakePin, &mut FakeDelay).unwrap();
         Self {
             display,
             panel,
-            strip: vec![Rgb565::BLACK; STRIP_PIXELS],
+            strip: vec![0u16; STRIP_PIXELS],
         }
     }
 

@@ -9,5 +9,4 @@ publish = false
 [dependencies]
 embedded-graphics = "0.8"
 embedded-hal = "1.0"
-mipidsi = "0.10"
 neotime-display = { path = "../drivers/display" }

@@ -316,12 +316,12 @@ each item says what it costs and what it would save.
 
 ## RAM
 
-- [ ] **Stack margin with the alarm open.** Measured in the emulator with a typical install, the
-  alarm peaks at 10,516 B of 12,436 B, 1,920 B spare, under the 2 KB [memory-map.md](memory-map.md)
-  asks for. Find what makes that path deep, or win static RAM back, before anything grows. On
-  2026-10-12, with drawing's 1,920 B send buffer added, opening the alarm and its editor from a
-  launcher listing only it peaked at 7,944 B, 2,536 B spare, so the deeper case needs alarms set or
-  a larger install; find it again and measure it with the send buffer.
+- [ ] **Stack margin with the alarm open.** An earlier measurement put the alarm at 10,516 B of
+  12,436 B, with alarms set and a larger install. On 2026-10-13, with the display's strip buffers
+  static, opening the alarm and its editor from a launcher listing only it peaked at 6,152 B of
+  8,432 B, 2,280 B spare, the same as opening any app; find the deeper case again and measure it.
+  Opening an app is the deepest path: the app host's `load_into` and `run_handler` frames (860 B
+  and 876 B) and the interpreter's under them are where to win stack back.
 
 - [ ] **Shrink the storage heap.** It is 16 KB, but littlefs needs about 1.8 KB with two files
   open, and the rehearsal build runs on 4 KB. Measure the peak on the watch, including file
@@ -330,15 +330,6 @@ each item says what it costs and what it would save.
   trimmed GATT table take RAM from the 12 KB budget, at some cost to file transfer speed. The
   Bluetooth task's state is 4.8 KB, most of it TrouBLE's GATT table (39 attributes of 44 B, 2.1
   KB) and its runner (1.6 KB); shrinking those means patching `third_party/trouble-host`.
-- [ ] **Trim the stack.** 13.0 KB is left for it; in the emulator it peaks at 8.3 KB with most apps
-  and 10.4 KB with the alarm open. Measure the high-water mark on the watch before giving any of it
-  away.
-- [ ] **Measure the alarm's stack again.** About 11.3 KB is now left for the stack, after the Alert
-  Notification service took 160 B more, and the alarm's last peak of 10.5 KB would leave under the
-  2 KB minimum. `tools/measure_stack.py` cannot open the
-  alarm, so measure it with the alarm installed and open, in the emulator or on the watch.
-- [ ] **Shrink the startup stack.** The deepest stack point is now at start, 7,848 B, while the
-  Bluetooth task builds its attribute table in a 6.9 KB frame; build it in smaller pieces.
 - [ ] **Find large static RAM.** List `.bss` and `.data` by size with `nm --size-sort` and check
   for oversized embassy task state or tables that should be `const`.
 
@@ -363,13 +354,6 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
 
 ## Display and SPI bus
 
-- [ ] **Share the SPI bus between the screen and the flash.** The XT25F32B is on the same bus as
-  the screen, and the runtime reads handlers and images from external flash while screens are
-  drawn. Both drivers need a shared-bus wrapper, such as the shared SPI in
-  `embassy-embedded-hal`, so neither can cut into the other's transfer.
-- [ ] **Keep sending across drawing steps.** Each step waits for its last strip before it returns,
-  which is most of the 69 ms opening the launcher still waits on the bus. Keeping the send buffer
-  lent from one step to the next, with the bus handed back only before other work, would hide it.
 - [ ] **12-bit colour mode.** The ST7789 can take 12 bits a pixel, which cuts the time to send a
   full screen by a quarter, from about 115 ms to 86 ms at 8 MHz. It costs banding in gradients and
   packing pixels in pairs. Measure it once real screens run on the watch.
@@ -402,7 +386,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   battery a night costs. It has only been built, not run.
 - [ ] **Dim before the screen turns off.** Drop to the low backlight a few seconds before the
   timeout, so a wearer still reading can touch to keep it on, as InfiniTime does.
-- [ ] **The panel's power settings.** mipidsi starts the ST7789 with its defaults. InfiniTime also
+- [ ] **The panel's power settings.** `Display::new` starts the ST7789 with its defaults. InfiniTime also
   sets the lowest panel and gate voltages, a VDV value that makes the first grey above black less
   of a jump, and its own porches and frame rate. Send the same commands after `Display::new`, then
   compare the current drawn and the dark greys on the watch.

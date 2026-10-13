@@ -121,6 +121,17 @@ impl BitmapFont {
 
     fn glyph(&self, character: char) -> Option<GlyphEntry> {
         let wanted = u16::try_from(character as u32).ok()?;
+        // Fonts hold printable ASCII without gaps from their first glyph, so most characters are found at once.
+        let (first, _) = self.entry_at(0)?;
+        let guess = wanted
+            .checked_sub(first)
+            .map(usize::from)
+            .filter(|&index| index < self.glyph_count());
+        if let Some((found, entry)) = guess.and_then(|index| self.entry_at(index)) {
+            if found == wanted {
+                return Some(entry);
+            }
+        }
         let mut low = 0;
         let mut high = self.glyph_count();
         while low < high {

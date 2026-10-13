@@ -475,7 +475,7 @@ pub fn run(
     let mut touch = TouchTracker::default();
     let mut is_light = false;
 
-    let mut strip = vec![Rgb565::BLACK; STRIP_PIXELS];
+    let mut strip = vec![0u16; STRIP_PIXELS];
 
     print_app_controls(host.image().string(host.image().name_string).unwrap_or("app"));
     loop {

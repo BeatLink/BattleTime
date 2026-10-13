@@ -36,7 +36,7 @@ use neotime_boot::{
     migration::{crc32, plan, PayloadSizes, Step, CRC32_INITIAL},
     BOOT_STATE, FIRMWARE_UPDATE, PAGE_SIZE,
 };
-use neotime_display::Display;
+use neotime_display::{Display, MipidsiInterface};
 use neotime_external_flash::{BusyWait, ExternalFlash};
 // A panic halts, so the watchdog resets into the old update mode instead of looping through this image.
 use panic_halt as _;
@@ -441,8 +441,9 @@ impl<Flash: NorFlash> NorFlash for FeedsWatchdog<Flash> {
 // The screen
 // ============================================================================
 
-type DisplayInterfaceOnBus =
-    SpiInterface<'static, SpiDevice<'static, NoopRawMutex, Spim<'static>, Output<'static>>, Output<'static>>;
+type DisplayInterfaceOnBus = MipidsiInterface<
+    SpiInterface<'static, SpiDevice<'static, NoopRawMutex, Spim<'static>, Output<'static>>, Output<'static>>,
+>;
 
 struct Screen {
     display: Display<DisplayInterfaceOnBus, Output<'static>>,
@@ -463,11 +464,11 @@ impl Screen {
         delay: &mut Delay,
     ) -> Option<Screen> {
         static COMMAND_BUFFER: StaticCell<[u8; 512]> = StaticCell::new();
-        let interface = SpiInterface::new(
+        let interface = MipidsiInterface(SpiInterface::new(
             SpiDevice::new(spi_bus, chip_select),
             data_or_command,
             COMMAND_BUFFER.init([0; 512]),
-        );
+        ));
         let mut display = Display::new(interface, reset, delay).ok()?;
         let _ = display.clear(Rgb565::BLACK);
         let _ = Self::BAR

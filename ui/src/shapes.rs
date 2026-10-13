@@ -82,6 +82,12 @@ fn arc_reach(radius: i32, rows_from_axis: i32) -> (i32, u8) {
     ((reach_in_quarters / 4) as i32, (reach_in_quarters % 4) as u8 * 64)
 }
 
+/// Whether a row is one the renderer can show, so corner rows outside it need no working out.
+fn row_filter(renderer: &dyn Renderer) -> impl Fn(i32) -> bool {
+    let visible = renderer.visible_area();
+    move |y| visible.is_none_or(|area| y >= area.y && y < area.bottom())
+}
+
 /// One pixel at `x`, `y`.
 fn dot(x: i32, y: i32) -> Rect {
     Rect {
@@ -135,9 +141,13 @@ pub fn fill_rounded_rect(renderer: &mut dyn Renderer, rect: Rect, color: Color, 
         renderer.fill_rect(between(rect.y + rect.height - radius), color);
     }
 
+    let shows = row_filter(renderer);
     for row in 0..radius {
-        let (reach, edge_opacity) = arc_reach(radius, radius - 1 - row);
         let (top, bottom) = (rect.y + row, last_row - row);
+        if !shows(top) && !shows(bottom) {
+            continue;
+        }
+        let (reach, edge_opacity) = arc_reach(radius, radius - 1 - row);
         if reach > 0 {
             for y in [top, bottom] {
                 renderer.fill_rect(row_span(rect.x + radius - reach, y, reach), color);
@@ -179,7 +189,11 @@ pub fn draw_rounded_border(
     let last_row = rect.y + rect.height - 1;
     let right_corner = rect.x + rect.width - outer_radius;
 
+    let shows = row_filter(renderer);
     for row in 0..outer_radius {
+        if !shows(rect.y + row) && !shows(last_row - row) {
+            continue;
+        }
         let rows_from_axis = outer_radius - 1 - row;
         let (outer_reach, outer_opacity) = arc_reach(outer_radius, rows_from_axis);
         let (inner_reach, inner_opacity) = match inner_radius > 0 {
@@ -187,7 +201,6 @@ pub fn draw_rounded_border(
             false => (0, 0),
         };
         let (top, bottom) = (rect.y + row, last_row - row);
-
         let ring_width = outer_reach - inner_reach;
         if ring_width > 0 {
             for y in [top, bottom] {

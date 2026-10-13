@@ -19,11 +19,11 @@ fn rect(x: i32, y: i32, width: i32, height: i32) -> Rect {
 }
 
 /// A 10 by 4 strip at row 20, filled blue.
-fn blue_buffer() -> std::vec::Vec<Rgb565> {
-    vec![to_rgb565(BLUE); 40]
+fn blue_buffer() -> std::vec::Vec<u16> {
+    vec![neotime_display::panel_pixel(to_rgb565(BLUE)); 40]
 }
 
-fn strip_on(buffer: &mut [Rgb565]) -> Strip<'_> {
+fn strip_on(buffer: &mut [u16]) -> Strip<'_> {
     Strip::new(buffer, rect(0, 20, 10, 4))
 }
 
@@ -126,7 +126,7 @@ fn shapes_are_worked_out_only_where_they_land() {
 
 #[test]
 fn plain_text_draws_whole_lines_over_what_is_there() {
-    let mut buffer = vec![to_rgb565(BLUE); 40 * 30];
+    let mut buffer = vec![neotime_display::panel_pixel(to_rgb565(BLUE)); 40 * 30];
     let mut strip = Strip::new(&mut buffer, rect(0, 0, 40, 30));
     {
         let mut renderer = StripRenderer::new(&mut strip, rect(0, 0, 40, 30), OPAQUE);

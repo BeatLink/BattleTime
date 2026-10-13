@@ -4,6 +4,10 @@
 //! memory row appears at the top of the screen. Drawing takes screen positions and lands on whichever
 //! memory rows are on screen, split in two where the memory wraps.
 //!
+//! The driver speaks to the panel through `PanelInterface`: commands, and pixels as bytes in the
+//! panel's order. An interface may also lend strip buffers that it sends by DMA while the next one is
+//! filled, which `send_strip` uses; `MipidsiInterface` adapts any mipidsi interface.
+//!
 //! The panel also has a low-power mode for an always-on screen, and `Backlight` drives the three
 //! backlight pins that light it.
 
@@ -12,13 +16,12 @@
 use embedded_graphics_core::{
     draw_target::DrawTarget,
     geometry::{Dimensions, OriginDimensions, Size},
-    pixelcolor::Rgb565,
-    prelude::PointsIter,
+    pixelcolor::{raw::RawU16, Rgb565},
+    prelude::{PointsIter, RawData},
     primitives::Rectangle,
     Pixel,
 };
 use embedded_hal::{delay::DelayNs, digital::OutputPin};
-use mipidsi::{interface::Interface, models::ST7789, options::ColorInversion, Builder, InitError};
 
 // ============================================================================
 // Panel size
@@ -34,14 +37,37 @@ pub const MEMORY_ROWS: u16 = 320;
 
 const ENTER_SLEEP: u8 = 0x10;
 const EXIT_SLEEP: u8 = 0x11;
+const NORMAL_MODE_ON: u8 = 0x13;
+const INVERSION_ON: u8 = 0x21;
+const DISPLAY_ON: u8 = 0x29;
+const SET_COLUMN_ADDRESS: u8 = 0x2A;
+const SET_ROW_ADDRESS: u8 = 0x2B;
+const WRITE_MEMORY: u8 = 0x2C;
+const SET_SCROLL_AREA: u8 = 0x33;
+const SET_MEMORY_ORDER: u8 = 0x36;
+const SET_SCROLL_START: u8 = 0x37;
 const IDLE_MODE_OFF: u8 = 0x38;
 const IDLE_MODE_ON: u8 = 0x39;
+const SET_PIXEL_FORMAT: u8 = 0x3A;
 const SET_PORCHES: u8 = 0xB2;
 const SET_IDLE_FRAME_RATE: u8 = 0xB3;
+
+/// Rows top to bottom, columns left to right, red first.
+const MEMORY_ORDER: u8 = 0x00;
+/// 16 bits a pixel, for both the panel and its interface.
+const SIXTEEN_BITS_A_PIXEL: u8 = 0x55;
 
 /// Normal porches as the panel starts, with long porches in idle mode to slow its refresh.
 const LOW_POWER_PORCHES: [u8; 5] = [0x0C, 0x0C, 0x01, 0xED, 0xED];
 const DEFAULT_PORCHES: [u8; 5] = [0x0C, 0x0C, 0x00, 0x33, 0x33];
+
+/// How long the reset pin is held low, and how long the panel then needs before its first command.
+const RESET_PULSE_IN_MICROSECONDS: u32 = 10;
+const AFTER_RESET_IN_MICROSECONDS: u32 = 150_000;
+/// How long the panel needs after a step of starting up before the next.
+const START_STEP_IN_MICROSECONDS: u32 = 10_000;
+/// How long the panel needs after turning its display on.
+const AFTER_DISPLAY_ON_IN_MICROSECONDS: u32 = 120_000;
 
 /// How long the panel needs after going to sleep or waking before it takes the next command.
 const SLEEP_SWITCH_SETTLE_TIME_IN_MICROSECONDS: u32 = 6_000;
@@ -69,12 +95,86 @@ impl Pieces {
     pub fn of(length: usize, largest_piece_bytes: usize) -> Pieces {
         let piece_bytes = (1..=largest_piece_bytes.min(length))
             .rev()
-            .find(|piece_bytes| length % piece_bytes == 0)
+            .find(|piece_bytes| length.is_multiple_of(*piece_bytes))
             .unwrap_or(1);
         Pieces {
             piece_bytes,
             count: length.div_ceil(piece_bytes),
         }
+    }
+}
+
+// ============================================================================
+// Talking to the panel
+// ============================================================================
+
+/// A pixel as the panel takes it: RGB565 with its high byte first, ready to send as it lies in memory.
+pub fn panel_pixel(color: Rgb565) -> u16 {
+    RawU16::from(color).into_inner().to_be()
+}
+
+/// The colour of a pixel in the panel's order.
+pub fn color_of_panel_pixel(pixel: u16) -> Rgb565 {
+    Rgb565::from(RawU16::new(u16::from_be(pixel)))
+}
+
+/// How the driver reaches the panel.
+pub trait PanelInterface {
+    type Error;
+
+    /// Sends a command byte and its arguments.
+    fn send_command(&mut self, command: u8, arguments: &[u8]) -> Result<(), Self::Error>;
+
+    /// Sends pixel bytes after a memory write, two a pixel, high byte first.
+    fn send_pixels(&mut self, bytes: &[u8]) -> Result<(), Self::Error>;
+
+    /// Sends one pixel `count` times after a memory write.
+    fn send_repeated_pixel(&mut self, pixel: [u8; 2], count: u32) -> Result<(), Self::Error> {
+        const CHUNK_PIXELS: usize = 32;
+        let mut chunk = [0u8; CHUNK_PIXELS * 2];
+        chunk.as_chunks_mut::<2>().0.fill(pixel);
+        let mut left = count as usize;
+        while left > 0 {
+            let pixels = left.min(CHUNK_PIXELS);
+            self.send_pixels(&chunk[..pixels * 2])?;
+            left -= pixels;
+        }
+        Ok(())
+    }
+
+    /// A buffer of panel pixels to fill and hand to `send_strip_pixels`, when the interface lends them.
+    fn strip_buffer(&mut self) -> Option<&mut [u16]> {
+        None
+    }
+
+    /// Starts sending `count` pixels of the last strip buffer from `first`, after a memory write.
+    fn send_strip_pixels(&mut self, _first: usize, _count: usize) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    /// Says the last strip buffer is all sent or on its way, so the next one may be lent.
+    fn finish_strip(&mut self) {}
+}
+
+/// Drives the panel through any mipidsi interface, such as its `SpiInterface`.
+pub struct MipidsiInterface<Interface>(pub Interface);
+
+impl<Interface> PanelInterface for MipidsiInterface<Interface>
+where
+    Interface: mipidsi::interface::Interface<Word = u8>,
+{
+    type Error = Interface::Error;
+
+    fn send_command(&mut self, command: u8, arguments: &[u8]) -> Result<(), Self::Error> {
+        self.0.send_command(command, arguments)
+    }
+
+    fn send_pixels(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
+        self.0.send_pixels(bytes.as_chunks::<2>().0.iter().copied())
+    }
+
+    fn send_repeated_pixel(&mut self, pixel: [u8; 2], count: u32) -> Result<(), Self::Error> {
+        self.0.send_repeated_pixel(pixel, count)
     }
 }
 
@@ -89,41 +189,63 @@ pub struct ScrollArea {
     pub scrolling_rows: u16,
 }
 
-pub struct Display<DisplayInterface: Interface<Word = u8>, ResetPin: OutputPin> {
-    panel: mipidsi::Display<DisplayInterface, ST7789, ResetPin>,
+/// Why the panel did not start: its interface or its reset pin failed.
+#[derive(Debug)]
+pub enum StartError<InterfaceError, PinError> {
+    Interface(InterfaceError),
+    ResetPin(PinError),
+}
+
+pub struct Display<Interface: PanelInterface, ResetPin: OutputPin> {
+    interface: Interface,
+    reset_pin: ResetPin,
     top_fixed_rows: u16,
     scrolling_rows: u16,
     scroll_offset: u16,
     in_low_power_mode: bool,
 }
 
-impl<DisplayInterface, ResetPin> Display<DisplayInterface, ResetPin>
+impl<Interface, ResetPin> Display<Interface, ResetPin>
 where
-    DisplayInterface: Interface<Word = u8>,
+    Interface: PanelInterface,
     ResetPin: OutputPin,
 {
     /// Resets and starts the panel, with the whole of memory as one scrolling area.
     pub fn new(
-        display_interface: DisplayInterface,
-        reset_pin: ResetPin,
+        interface: Interface,
+        mut reset_pin: ResetPin,
         delay: &mut impl DelayNs,
-    ) -> Result<Self, InitError<DisplayInterface::Error, ResetPin::Error>> {
-        let panel = Builder::new(ST7789, display_interface)
-            .display_size(SCREEN_WIDTH, SCREEN_HEIGHT)
-            .invert_colors(ColorInversion::Inverted)
-            .reset_pin(reset_pin)
-            .init(delay)?;
+    ) -> Result<Self, StartError<Interface::Error, ResetPin::Error>> {
+        reset_pin.set_low().map_err(StartError::ResetPin)?;
+        delay.delay_us(RESET_PULSE_IN_MICROSECONDS);
+        reset_pin.set_high().map_err(StartError::ResetPin)?;
 
         let mut display = Display {
-            panel,
+            interface,
+            reset_pin,
             top_fixed_rows: 0,
             scrolling_rows: MEMORY_ROWS,
             scroll_offset: 0,
             in_low_power_mode: false,
         };
-        display.set_scroll_area(0, 0).map_err(InitError::Interface)?;
-
+        display.start(delay).map_err(StartError::Interface)?;
+        display.set_scroll_area(0, 0).map_err(StartError::Interface)?;
         Ok(display)
+    }
+
+    fn start(&mut self, delay: &mut impl DelayNs) -> Result<(), Interface::Error> {
+        delay.delay_us(AFTER_RESET_IN_MICROSECONDS);
+        self.send_command(EXIT_SLEEP, &[])?;
+        delay.delay_us(START_STEP_IN_MICROSECONDS);
+        self.send_command(SET_MEMORY_ORDER, &[MEMORY_ORDER])?;
+        self.send_command(INVERSION_ON, &[])?;
+        self.send_command(SET_PIXEL_FORMAT, &[SIXTEEN_BITS_A_PIXEL])?;
+        delay.delay_us(START_STEP_IN_MICROSECONDS);
+        self.send_command(NORMAL_MODE_ON, &[])?;
+        delay.delay_us(START_STEP_IN_MICROSECONDS);
+        self.send_command(DISPLAY_ON, &[])?;
+        delay.delay_us(AFTER_DISPLAY_ON_IN_MICROSECONDS);
+        Ok(())
     }
 
     /// The bottom fixed rows count from the end of memory, so they are on screen only beyond 80.
@@ -131,25 +253,28 @@ where
         &mut self,
         top_fixed_rows: u16,
         bottom_fixed_rows: u16,
-    ) -> Result<(), DisplayInterface::Error> {
+    ) -> Result<(), Interface::Error> {
         assert!(
             top_fixed_rows + bottom_fixed_rows < MEMORY_ROWS,
             "fixed areas leave no rows to scroll"
         );
-
-        self.panel
-            .set_vertical_scroll_region(top_fixed_rows, bottom_fixed_rows)?;
+        let scrolling_rows = MEMORY_ROWS - top_fixed_rows - bottom_fixed_rows;
+        let mut arguments = [0u8; 6];
+        arguments[..2].copy_from_slice(&top_fixed_rows.to_be_bytes());
+        arguments[2..4].copy_from_slice(&scrolling_rows.to_be_bytes());
+        arguments[4..].copy_from_slice(&bottom_fixed_rows.to_be_bytes());
+        self.send_command(SET_SCROLL_AREA, &arguments)?;
         self.top_fixed_rows = top_fixed_rows;
-        self.scrolling_rows = MEMORY_ROWS - top_fixed_rows - bottom_fixed_rows;
+        self.scrolling_rows = scrolling_rows;
 
         self.scroll(0)
     }
 
     /// Moves the scrolling area up, wrapping round its memory.
-    pub fn scroll(&mut self, scroll_offset: u16) -> Result<(), DisplayInterface::Error> {
+    pub fn scroll(&mut self, scroll_offset: u16) -> Result<(), Interface::Error> {
         self.scroll_offset = scroll_offset % self.scrolling_rows;
-        self.panel
-            .set_vertical_scroll_offset(self.top_fixed_rows + self.scroll_offset)
+        let start = self.top_fixed_rows + self.scroll_offset;
+        self.send_command(SET_SCROLL_START, &start.to_be_bytes())
     }
 
     pub fn scroll_offset(&self) -> u16 {
@@ -164,21 +289,21 @@ where
     }
 
     /// Turns the panel off to save power, keeping its memory; the caller keeps waking `SLEEP_SWITCH_GAP_IN_MILLISECONDS` away.
-    pub fn sleep(&mut self, delay: &mut impl DelayNs) -> Result<(), DisplayInterface::Error> {
+    pub fn sleep(&mut self, delay: &mut impl DelayNs) -> Result<(), Interface::Error> {
         self.send_command(ENTER_SLEEP, &[])?;
         delay.delay_us(SLEEP_SWITCH_SETTLE_TIME_IN_MICROSECONDS);
         Ok(())
     }
 
     /// Turns the panel back on after `sleep`; the caller keeps sleeping `SLEEP_SWITCH_GAP_IN_MILLISECONDS` away.
-    pub fn wake(&mut self, delay: &mut impl DelayNs) -> Result<(), DisplayInterface::Error> {
+    pub fn wake(&mut self, delay: &mut impl DelayNs) -> Result<(), Interface::Error> {
         self.send_command(EXIT_SLEEP, &[])?;
         delay.delay_us(SLEEP_SWITCH_SETTLE_TIME_IN_MICROSECONDS);
         Ok(())
     }
 
     /// Shows only 8 colours at a slow refresh, for an always-on screen; memory keeps every colour.
-    pub fn enter_low_power_mode(&mut self) -> Result<(), DisplayInterface::Error> {
+    pub fn enter_low_power_mode(&mut self) -> Result<(), Interface::Error> {
         self.send_command(SET_PORCHES, &LOW_POWER_PORCHES)?;
         self.send_command(SET_IDLE_FRAME_RATE, &LOW_POWER_IDLE_FRAME_RATE)?;
         self.send_command(IDLE_MODE_ON, &[])?;
@@ -186,7 +311,7 @@ where
         Ok(())
     }
 
-    pub fn leave_low_power_mode(&mut self) -> Result<(), DisplayInterface::Error> {
+    pub fn leave_low_power_mode(&mut self) -> Result<(), Interface::Error> {
         self.send_command(IDLE_MODE_OFF, &[])?;
         self.send_command(SET_IDLE_FRAME_RATE, &DEFAULT_IDLE_FRAME_RATE)?;
         self.send_command(SET_PORCHES, &DEFAULT_PORCHES)?;
@@ -198,46 +323,102 @@ where
         self.in_low_power_mode
     }
 
-    /// The interface the panel is driven through, such as to lend it a buffer to send from.
-    pub fn interface_mut(&mut self) -> &mut DisplayInterface {
-        // SAFETY: mipidsi keeps no state about its interface, so using it directly changes nothing it tracks.
-        unsafe { self.panel.dcs() }
+    /// The interface the panel is driven through.
+    pub fn interface_mut(&mut self) -> &mut Interface {
+        &mut self.interface
     }
 
-    pub fn release(self) -> (DisplayInterface, Option<ResetPin>) {
-        let (display_interface, _model, reset_pin) = self.panel.release();
-        (display_interface, reset_pin)
+    pub fn release(self) -> (Interface, ResetPin) {
+        (self.interface, self.reset_pin)
     }
 
-    fn send_command(&mut self, code: u8, arguments: &[u8]) -> Result<(), DisplayInterface::Error> {
-        // SAFETY: these commands change only whether and how the panel shows its memory, which mipidsi's drawing does not depend on.
-        unsafe { self.panel.dcs() }.send_command(code, arguments)
+    fn send_command(&mut self, command: u8, arguments: &[u8]) -> Result<(), Interface::Error> {
+        self.interface.send_command(command, arguments)
     }
 
-    fn fill_area<Colors>(&mut self, area: &Rectangle, colors: Colors) -> Result<(), DisplayInterface::Error>
+    /// Points the panel's memory writes at a rectangle of memory, rows `first_row` to `last_row`.
+    fn set_window(
+        &mut self,
+        first_column: u16,
+        last_column: u16,
+        first_row: u16,
+        last_row: u16,
+    ) -> Result<(), Interface::Error> {
+        let mut columns = [0u8; 4];
+        columns[..2].copy_from_slice(&first_column.to_be_bytes());
+        columns[2..].copy_from_slice(&last_column.to_be_bytes());
+        let mut rows = [0u8; 4];
+        rows[..2].copy_from_slice(&first_row.to_be_bytes());
+        rows[2..].copy_from_slice(&last_row.to_be_bytes());
+        self.send_command(SET_COLUMN_ADDRESS, &columns)?;
+        self.send_command(SET_ROW_ADDRESS, &rows)?;
+        self.send_command(WRITE_MEMORY, &[])
+    }
+
+    /// Calls `send` for each run of memory rows that `area`'s screen rows land on, after pointing the panel there.
+    fn for_each_memory_run(
+        &mut self,
+        area: &Rectangle,
+        mut send: impl FnMut(&mut Self, usize, usize) -> Result<(), Interface::Error>,
+    ) -> Result<(), Interface::Error> {
+        let first_column = area.top_left.x as u16;
+        let last_column = first_column + area.size.width as u16 - 1;
+        let mut first_pixel = 0;
+        for run in self
+            .memory_runs(area.top_left.y as u16, area.size.height as u16)
+            .iter()
+        {
+            let pixel_count = area.size.width as usize * run.row_count as usize;
+            let last_memory_row = run.first_memory_row + run.row_count - 1;
+            self.set_window(first_column, last_column, run.first_memory_row, last_memory_row)?;
+            send(self, first_pixel, pixel_count)?;
+            first_pixel += pixel_count;
+        }
+        Ok(())
+    }
+
+    fn fill_area<Colors>(&mut self, area: &Rectangle, colors: Colors) -> Result<(), Interface::Error>
     where
         Colors: IntoIterator<Item = Rgb565>,
     {
+        const CHUNK_PIXELS: usize = 32;
         let mut colors = colors.into_iter();
-        let first_column = area.top_left.x as u16;
-        let last_column = first_column + area.size.width as u16 - 1;
-        let first_screen_row = area.top_left.y as u16;
-        let screen_row_count = area.size.height as u16;
+        self.for_each_memory_run(area, |display, _, pixel_count| {
+            let mut chunk = [0u8; CHUNK_PIXELS * 2];
+            let mut left = pixel_count;
+            while left > 0 {
+                let pixels = left.min(CHUNK_PIXELS);
+                for pair in chunk[..pixels * 2].as_chunks_mut::<2>().0 {
+                    let color = colors.next().unwrap_or(Rgb565::new(0, 0, 0));
+                    *pair = RawU16::from(color).into_inner().to_be_bytes();
+                }
+                display.interface.send_pixels(&chunk[..pixels * 2])?;
+                left -= pixels;
+            }
+            Ok(())
+        })
+    }
 
-        for run in self.memory_runs(first_screen_row, screen_row_count).iter() {
-            let pixel_count = area.size.width as usize * run.row_count as usize;
-            let last_memory_row = run.first_memory_row + run.row_count - 1;
-            let run_colors = colors.by_ref().take(pixel_count);
+    fn fill_area_with(&mut self, area: &Rectangle, color: Rgb565) -> Result<(), Interface::Error> {
+        let pixel = RawU16::from(color).into_inner().to_be_bytes();
+        self.for_each_memory_run(area, |display, _, pixel_count| {
+            display.interface.send_repeated_pixel(pixel, pixel_count as u32)
+        })
+    }
 
-            self.panel.set_pixels(
-                first_column,
-                run.first_memory_row,
-                last_column,
-                last_memory_row,
-                run_colors,
-            )?;
+    /// The interface's free strip buffer, in panel pixels, when it lends them.
+    pub fn strip_buffer(&mut self) -> Option<&mut [u16]> {
+        self.interface.strip_buffer()
+    }
+
+    /// Sends the strip buffer's first pixels to `area` on screen, which must be all on screen.
+    pub fn send_strip(&mut self, area: &Rectangle) -> Result<(), Interface::Error> {
+        if !area.is_zero_sized() {
+            self.for_each_memory_run(area, |display, first, count| {
+                display.interface.send_strip_pixels(first, count)
+            })?;
         }
-
+        self.interface.finish_strip();
         Ok(())
     }
 }
@@ -246,9 +427,9 @@ where
 // Mapping screen rows to memory rows
 // ============================================================================
 
-impl<DisplayInterface, ResetPin> Display<DisplayInterface, ResetPin>
+impl<Interface, ResetPin> Display<Interface, ResetPin>
 where
-    DisplayInterface: Interface<Word = u8>,
+    Interface: PanelInterface,
     ResetPin: OutputPin,
 {
     fn memory_row_for_screen_row(&self, screen_row: u16) -> u16 {
@@ -320,9 +501,9 @@ impl MemoryRuns {
 // Drawing with embedded-graphics
 // ============================================================================
 
-impl<DisplayInterface, ResetPin> OriginDimensions for Display<DisplayInterface, ResetPin>
+impl<Interface, ResetPin> OriginDimensions for Display<Interface, ResetPin>
 where
-    DisplayInterface: Interface<Word = u8>,
+    Interface: PanelInterface,
     ResetPin: OutputPin,
 {
     fn size(&self) -> Size {
@@ -330,13 +511,13 @@ where
     }
 }
 
-impl<DisplayInterface, ResetPin> DrawTarget for Display<DisplayInterface, ResetPin>
+impl<Interface, ResetPin> DrawTarget for Display<Interface, ResetPin>
 where
-    DisplayInterface: Interface<Word = u8>,
+    Interface: PanelInterface,
     ResetPin: OutputPin,
 {
     type Color = Rgb565;
-    type Error = DisplayInterface::Error;
+    type Error = Interface::Error;
 
     fn draw_iter<Pixels>(&mut self, pixels: Pixels) -> Result<(), Self::Error>
     where
@@ -347,7 +528,10 @@ where
         for Pixel(point, color) in pixels {
             if screen.contains(point) {
                 let memory_row = self.memory_row_for_screen_row(point.y as u16);
-                self.panel.set_pixel(point.x as u16, memory_row, color)?;
+                let column = point.x as u16;
+                self.set_window(column, column, memory_row, memory_row)?;
+                self.interface
+                    .send_pixels(&RawU16::from(color).into_inner().to_be_bytes())?;
             }
         }
 
@@ -380,7 +564,7 @@ where
             return Ok(());
         }
 
-        self.fill_area(&visible_area, core::iter::repeat(color))
+        self.fill_area_with(&visible_area, color)
     }
 }
 

@@ -140,7 +140,7 @@ impl<'image> AppHost<'image> {
     where
         Screen: DrawTarget<Color = Rgb565>,
     {
-        let mut strip = vec![Rgb565::BLACK; STRIP_PIXELS];
+        let mut strip = vec![0u16; STRIP_PIXELS];
         let mut screen = FixedScreen::new(screen);
         while self.needs_drawing() {
             self.draw_step(&mut screen, &mut strip)?;
@@ -151,11 +151,7 @@ impl<'image> AppHost<'image> {
     /// Draws a slice of what changed since the last call, or one fixed-size step of a transition, through `strip`.
     ///
     /// The strip must hold at least one row of the screen; `STRIP_PIXELS` is the size the watch uses.
-    pub fn draw_step<Screen>(
-        &mut self,
-        screen: &mut Screen,
-        strip: &mut [Rgb565],
-    ) -> Result<(), Screen::Error>
+    pub fn draw_step<Screen>(&mut self, screen: &mut Screen, strip: &mut [u16]) -> Result<(), Screen::Error>
     where
         Screen: ScrollingScreen,
     {
@@ -168,7 +164,7 @@ impl<'image> AppHost<'image> {
     pub fn draw_step_at<Screen>(
         &mut self,
         screen: &mut Screen,
-        strip: &mut [Rgb565],
+        strip: &mut [u16],
         now_in_milliseconds: u64,
     ) -> Result<(), Screen::Error>
     where
@@ -180,7 +176,7 @@ impl<'image> AppHost<'image> {
     fn draw_paced_step<Screen>(
         &mut self,
         screen: &mut Screen,
-        strip: &mut [Rgb565],
+        strip: &mut [u16],
         now_in_milliseconds: Option<u64>,
     ) -> Result<(), Screen::Error>
     where
@@ -210,11 +206,7 @@ impl<'image> AppHost<'image> {
     }
 
     /// Paints up to `PAINT_STEP_PIXELS` of the parts still unpainted, keeping the rest for the next step.
-    fn paint_a_slice<Screen>(
-        &mut self,
-        screen: &mut Screen,
-        strip: &mut [Rgb565],
-    ) -> Result<(), Screen::Error>
+    fn paint_a_slice<Screen>(&mut self, screen: &mut Screen, strip: &mut [u16]) -> Result<(), Screen::Error>
     where
         Screen: ScrollingScreen,
     {
@@ -259,7 +251,7 @@ impl<'image> AppHost<'image> {
     fn paint<Screen>(
         &self,
         screen: &mut Screen,
-        strip: &mut [Rgb565],
+        strip: &mut [u16],
         area: Rect,
         rows_down: i32,
     ) -> Result<(), Screen::Error>
@@ -269,7 +261,9 @@ impl<'image> AppHost<'image> {
         let Some(area) = area.intersect(SCREEN_AREA) else {
             return Ok(());
         };
-        let rows_per_strip = Strip::rows_that_fit(strip.len(), area.width);
+        // A screen that sends strips by itself lends its own buffer, so a strip goes out while the next is drawn.
+        let buffer_pixels = screen.strip_buffer().map_or(strip.len(), |buffer| buffer.len());
+        let rows_per_strip = Strip::rows_that_fit(buffer_pixels, area.width);
         let end_row = area.y + area.height;
         let mut first_row = area.y;
 
@@ -279,13 +273,23 @@ impl<'image> AppHost<'image> {
                 height: rows_per_strip.min(end_row - first_row),
                 ..area
             };
-            let mut target = Strip::new(strip, part);
-            self.render(&mut target, part);
             let destination = Rectangle::new(
                 Point::new(part.x, part.y + rows_down),
                 Size::new(part.width as u32, part.height as u32),
             );
-            screen.fill_contiguous(&destination, target.pixels())?;
+            let lands_on_screen = rows_from_region(part, rows_down, part.height).intersect(SCREEN_AREA)
+                == Some(rows_from_region(part, rows_down, part.height));
+            match screen.strip_buffer().filter(|_| lands_on_screen) {
+                Some(buffer) => {
+                    self.render(&mut Strip::new(buffer, part), part);
+                    screen.send_strip(&destination)?;
+                }
+                None => {
+                    let mut target = Strip::new(strip, part);
+                    self.render(&mut target, part);
+                    screen.fill_contiguous(&destination, target.pixels())?;
+                }
+            }
             first_row += part.height;
         }
         Ok(())
@@ -335,7 +339,7 @@ impl<'image> AppHost<'image> {
     fn draw_whole_screen_step<Screen>(
         &mut self,
         screen: &mut Screen,
-        strip: &mut [Rgb565],
+        strip: &mut [u16],
         now_in_milliseconds: Option<u64>,
     ) -> Result<(), Screen::Error>
     where
@@ -497,7 +501,7 @@ impl<'image> AppHost<'image> {
     fn draw_scroll<Screen>(
         &mut self,
         screen: &mut Screen,
-        strip: &mut [Rgb565],
+        strip: &mut [u16],
         scroll_move: ScrollMove,
     ) -> Result<(), Screen::Error>
     where
@@ -530,7 +534,7 @@ impl<'image> AppHost<'image> {
     fn scroll_with_panel<Screen>(
         &self,
         screen: &mut Screen,
-        strip: &mut [Rgb565],
+        strip: &mut [u16],
         scroll_move: ScrollMove,
     ) -> Result<bool, Screen::Error>
     where

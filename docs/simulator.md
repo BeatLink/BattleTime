@@ -81,7 +81,8 @@ what it expected and what it found. It exits with 0 when every step passes, 1 wh
 
 ## How it works
 
-The drivers talk to hardware only through `embedded-hal` and `mipidsi` traits, so the simulator
+The drivers talk to hardware only through `embedded-hal` traits and `neotime-display`'s
+`PanelInterface`, so the simulator
 hands them simulated parts in place of the chip's:
 
 - **The screen** is a model of the ST7789 (`simulator/src/panel.rs`). It keeps the panel's

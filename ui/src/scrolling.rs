@@ -8,8 +8,7 @@
 
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle, Pixel};
 use embedded_hal::digital::OutputPin;
-use mipidsi::interface::Interface;
-use neotime_display::{Display, MEMORY_ROWS, SCREEN_HEIGHT};
+use neotime_display::{Display, PanelInterface, MEMORY_ROWS, SCREEN_HEIGHT};
 
 // ============================================================================
 // Scroll bands
@@ -54,15 +53,25 @@ pub trait ScrollingScreen: DrawTarget<Color = Rgb565> {
 
     /// Moves the band's content up by `rows`, or down when it is negative, wrapping round the band.
     fn scroll_by(&mut self, rows: i32) -> Result<(), Self::Error>;
+
+    /// A buffer of panel pixels the screen sends from by itself, to draw the next strip into.
+    fn strip_buffer(&mut self) -> Option<&mut [u16]> {
+        None
+    }
+
+    /// Sends the strip buffer's first pixels to `area`, which must be all on screen.
+    fn send_strip(&mut self, _area: &Rectangle) -> Result<(), Self::Error> {
+        Ok(())
+    }
 }
 
 // ============================================================================
 // The PineTime display
 // ============================================================================
 
-impl<DisplayInterface, ResetPin> ScrollingScreen for Display<DisplayInterface, ResetPin>
+impl<Interface, ResetPin> ScrollingScreen for Display<Interface, ResetPin>
 where
-    DisplayInterface: Interface<Word = u8>,
+    Interface: PanelInterface,
     ResetPin: OutputPin,
 {
     fn scroll_state(&self) -> ScrollState {
@@ -86,6 +95,14 @@ where
         let state = self.scroll_state();
         let turned_rows = (state.turned_rows + rows).rem_euclid(state.band.height());
         self.scroll(turned_rows as u16)
+    }
+
+    fn strip_buffer(&mut self) -> Option<&mut [u16]> {
+        Display::strip_buffer(self)
+    }
+
+    fn send_strip(&mut self, area: &Rectangle) -> Result<(), Self::Error> {
+        Display::send_strip(self, area)
     }
 }
 

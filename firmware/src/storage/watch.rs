@@ -1,13 +1,10 @@
 //! Storage on a watch running NeoTime's own bootloader: the file system, the update slots and the boot state.
 
-use embassy_embedded_hal::{
-    adapter::BlockingAsync, flash::partition::BlockingPartition, shared_bus::blocking::spi::SpiDevice,
-};
+use embassy_embedded_hal::{adapter::BlockingAsync, flash::partition::BlockingPartition};
 use embassy_nrf::{
     gpio::{Level, Output, OutputDrive},
     nvmc::Nvmc,
     peripherals::{NVMC, P0_05},
-    spim::Spim,
     wdt::HaltConfig,
     Peri,
 };
@@ -82,7 +79,7 @@ const BUSY_WAIT: BusyWait = BusyWait {
     cpu_frequency_in_hertz: 64_000_000,
 };
 
-type FlashOnBus = ExternalFlash<SpiDevice<'static, NoopRawMutex, Spim<'static>, Output<'static>>, BusyWait>;
+type FlashOnBus = ExternalFlash<crate::display_dma::FlashOnBus, BusyWait>;
 type SharedExternalFlash = Mutex<NoopRawMutex, RefCell<FlashOnBus>>;
 type SharedInternalFlash = Mutex<NoopRawMutex, RefCell<Nvmc<'static>>>;
 type ExternalSlot = BlockingAsync<BlockingPartition<'static, NoopRawMutex, FlashOnBus>>;
@@ -108,7 +105,10 @@ pub async fn start(
     screen: &mut Screen,
 ) -> Option<(Targets, Confirmation, Mode, &'static Files)> {
     let flash_chip_select = Output::new(peripherals.flash_chip_select, Level::High, OutputDrive::Standard);
-    let external_flash = match ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), BUSY_WAIT) {
+    let external_flash = match ExternalFlash::new(
+        crate::display_dma::FlashOnBus::new(spi_bus, flash_chip_select),
+        BUSY_WAIT,
+    ) {
         Ok(flash) => EXTERNAL_FLASH.init(Mutex::new(RefCell::new(flash))),
         Err(_) => {
             screen.write_line(line::FILES, "No chip");

@@ -73,7 +73,7 @@ const BUSY_WAIT: BusyWait = BusyWait {
     cpu_frequency_in_hertz: 64_000_000,
 };
 
-type FlashOnBus = ExternalFlash<SpiDevice<'static, NoopRawMutex, Spim<'static>, Output<'static>>, BusyWait>;
+type FlashOnBus = ExternalFlash<crate::display_dma::FlashOnBus, BusyWait>;
 type SharedExternalFlash = Mutex<NoopRawMutex, RefCell<FlashOnBus>>;
 type UpdateSlot =
     embassy_embedded_hal::adapter::BlockingAsync<BlockingPartition<'static, NoopRawMutex, FlashOnBus>>;
@@ -94,7 +94,10 @@ pub async fn start(
 ) -> Option<(Targets, Confirmation, Mode, &'static Files)> {
     let _flash_controller_never_used = peripherals.flash_controller;
     let flash_chip_select = Output::new(peripherals.flash_chip_select, Level::High, OutputDrive::Standard);
-    let mut flash = match ExternalFlash::new(SpiDevice::new(spi_bus, flash_chip_select), BUSY_WAIT) {
+    let mut flash = match ExternalFlash::new(
+        crate::display_dma::FlashOnBus::new(spi_bus, flash_chip_select),
+        BUSY_WAIT,
+    ) {
         Ok(flash) => flash,
         Err(_) => {
             screen.write_line(line::FILES, "No chip");

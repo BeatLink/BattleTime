@@ -41,7 +41,7 @@ use neotime_app_host::{
     motion as app_motion, phone as app_phone, settings as app_settings,
     side_button::{self, ButtonAction, ButtonSituation, OpenScreen},
     AppEffect, AppFailure, AppHost, BatteryChange, EventResult, MotionKind, OpenError, PushedEvent, System,
-    Touch, Transition, STRIP_PIXELS,
+    Touch, Transition,
 };
 use neotime_battery::BatteryEvent;
 use neotime_button::Gesture;
@@ -1124,19 +1124,13 @@ fn wait_until_panel_can_switch(switched_at: Instant) {
     embassy_time::block_for(can_switch_at.saturating_duration_since(Instant::now()));
 }
 
-/// Draws what changed through rows of the screen held on the stack, sending each from a second buffer while the next is drawn.
-// Kept out of the shell task, so the rows are on the stack only while drawing, never in the task's state.
+/// Draws one step of what changed into the display's strip buffers, leaving the last strip to go out by itself.
 #[inline(never)]
 fn draw_host(display: &SharedDisplay, host: &mut AppHost<'static>) {
-    let mut strip = [Rgb565::BLACK; STRIP_PIXELS];
-    let mut send_buffer = [0u8; STRIP_PIXELS * 2];
     let started = Instant::now();
     display.lock(|display| {
-        let mut display = display.borrow_mut();
-        // SAFETY: the buffer is taken back below, before this function's frame ends.
-        unsafe { display.interface_mut().lend_buffer(&mut send_buffer) };
-        let _ = host.draw_step_at(&mut *display, &mut strip, started.as_millis());
-        display.interface_mut().take_back_buffer();
+        // The display lends its own buffers, so no strip is needed here.
+        let _ = host.draw_step_at(&mut *display.borrow_mut(), &mut [], started.as_millis());
     });
     diagnostics::add(Counter::DrawMicroseconds, started.elapsed().as_micros() as u32);
 }

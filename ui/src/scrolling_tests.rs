@@ -3,7 +3,7 @@ extern crate std;
 use std::{vec, vec::Vec};
 
 use embedded_hal::{delay::DelayNs, digital::ErrorType};
-use mipidsi::interface::InterfaceKind;
+use neotime_display::PanelInterface;
 
 use super::*;
 
@@ -13,21 +13,14 @@ use super::*;
 
 struct SilentInterface;
 
-impl Interface for SilentInterface {
-    type Word = u8;
+impl PanelInterface for SilentInterface {
     type Error = ();
-    const KIND: InterfaceKind = InterfaceKind::Serial4Line;
 
     fn send_command(&mut self, _command: u8, _arguments: &[u8]) -> Result<(), ()> {
         Ok(())
     }
 
-    fn send_pixels<const N: usize>(&mut self, pixels: impl IntoIterator<Item = [u8; N]>) -> Result<(), ()> {
-        pixels.into_iter().for_each(drop);
-        Ok(())
-    }
-
-    fn send_repeated_pixel<const N: usize>(&mut self, _pixel: [u8; N], _count: u32) -> Result<(), ()> {
+    fn send_pixels(&mut self, _bytes: &[u8]) -> Result<(), ()> {
         Ok(())
     }
 }

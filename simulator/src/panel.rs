@@ -10,7 +10,7 @@ use embedded_graphics::{
     pixelcolor::{raw::RawU16, Rgb565},
     prelude::RgbColor,
 };
-use mipidsi::interface::{Interface, InterfaceKind};
+use neotime_display::PanelInterface;
 use neotime_display::{MEMORY_ROWS, SCREEN_HEIGHT, SCREEN_WIDTH};
 
 // ============================================================================
@@ -222,34 +222,25 @@ impl SimulatedPanel {
     }
 }
 
-impl Interface for SimulatedPanel {
-    type Word = u8;
+impl PanelInterface for SimulatedPanel {
     type Error = Infallible;
-    const KIND: InterfaceKind = InterfaceKind::Serial4Line;
 
     fn send_command(&mut self, code: u8, arguments: &[u8]) -> Result<(), Infallible> {
         self.state.borrow_mut().run_command(code, arguments);
         Ok(())
     }
 
-    fn send_pixels<const BYTES_PER_PIXEL: usize>(
-        &mut self,
-        pixels: impl IntoIterator<Item = [u8; BYTES_PER_PIXEL]>,
-    ) -> Result<(), Infallible> {
+    fn send_pixels(&mut self, bytes: &[u8]) -> Result<(), Infallible> {
         let mut state = self.state.borrow_mut();
-        for pixel_bytes in pixels {
-            state.write_pixel(u16::from_be_bytes([pixel_bytes[0], pixel_bytes[1]]));
+        for &pixel_bytes in bytes.as_chunks::<2>().0 {
+            state.write_pixel(u16::from_be_bytes(pixel_bytes));
         }
         Ok(())
     }
 
-    fn send_repeated_pixel<const BYTES_PER_PIXEL: usize>(
-        &mut self,
-        pixel_bytes: [u8; BYTES_PER_PIXEL],
-        repeat_count: u32,
-    ) -> Result<(), Infallible> {
+    fn send_repeated_pixel(&mut self, pixel_bytes: [u8; 2], repeat_count: u32) -> Result<(), Infallible> {
         let mut state = self.state.borrow_mut();
-        let raw_colour = u16::from_be_bytes([pixel_bytes[0], pixel_bytes[1]]);
+        let raw_colour = u16::from_be_bytes(pixel_bytes);
         for _ in 0..repeat_count {
             state.write_pixel(raw_colour);
         }
@@ -264,7 +255,7 @@ impl Interface for SimulatedPanel {
 #[cfg(test)]
 pub use wires::{DataOrCommandPin, PanelSpi};
 
-/// Only the tests drive the panel over its SPI wires so far, for the status screen, which skips mipidsi.
+/// Only the tests drive the panel over its SPI wires so far, for the status screen, which sends its bytes itself.
 #[cfg(test)]
 mod wires {
     use std::{cell::RefCell, convert::Infallible, rc::Rc};
@@ -305,7 +296,7 @@ mod wires {
     }
 
     impl SimulatedPanel {
-        /// The panel's SPI bus and data/command line, for a driver that sends the bytes itself rather than through mipidsi.
+        /// The panel's SPI bus and data/command line, for a driver that sends the bytes itself rather than through the display driver.
         pub fn spi_wires(&self) -> (PanelSpi, DataOrCommandPin) {
             let wires = Rc::new(RefCell::new(WireState::default()));
             (

@@ -184,10 +184,16 @@ Each driver, the runtime, the app host and the UI crate is a `no_std` crate with
 
 ### Display (`drivers/display`)
 
-`neotime-display` drives the ST7789 screen. It builds on
-[`mipidsi`](https://crates.io/crates/mipidsi), which sends the panel's commands, and adds what the
-PineTime needs on top:
+`neotime-display` drives the ST7789 screen with its own start-up, window, scroll and power
+commands. It reaches the panel through `PanelInterface`: commands, and pixels as bytes in the
+panel's order, high byte first. `MipidsiInterface` adapts any
+[`mipidsi`](https://crates.io/crates/mipidsi) interface, such as its `SpiInterface`, which the
+reloaders use. On top it adds what the PineTime needs:
 
+- **Strips sent by the interface.** An interface may lend strip buffers of panel pixels;
+  `strip_buffer` hands out the free one, and `send_strip` points the panel at a rectangle, split
+  where memory wraps, and has the interface send the buffer there, which it may do in the
+  background while the next strip is drawn.
 - **Hardware vertical scrolling.** `scroll(offset)` moves the picture with the panel's own scroll,
   which costs one short command instead of a redraw. `set_scroll_area(top, bottom)` keeps fixed
   areas, such as a status bar, still.
@@ -591,23 +597,29 @@ watch face, the launcher and the apps through `neotime-app-host`:
   it takes the next input. Once a
   new screen opens, the rest of the touch that opened it is dropped until the finger lifts, so a
   swipe that opens the launcher does not also scroll it.
-- **Drawing.** `draw_host` lends the host a strip of `STRIP_PIXELS` (1,920 B) on the stack, held
-  only while drawing, and draws through the display driver, whose hardware scroll the host uses.
-  It also lends the display a send buffer of the same size: each strip is copied into it and sent
-  by EasyDMA while the host draws the next strip into its own. `display_dma.rs` sends the buffer as
-  equal pieces of at most 255 bytes, the most one EasyDMA transfer moves, in array-list mode; each
+- **Drawing.** The display interface in `display_dma.rs` owns two static strip buffers of two
+  screen rows each (960 B apiece), in the panel's byte order. The host draws a strip straight into
+  the free one and hands it to `send_strip`, which starts it by EasyDMA and returns, so the next
+  strip is drawn into the other buffer while the first goes out, with no copy between them. Two
+  rows rather than four keep the stack its 2 KB margin; per strip the host skips every row of a
+  rounded corner or glyph outside it, so the narrower strips draw faster than four-row strips did
+  before. `draw_host` itself holds no buffer. The buffer is sent as equal pieces of at most 255 bytes, the most one EasyDMA transfer moves, in array-list mode; each
   piece's END starts the next through PPI channel 5, which sits in PPI group 0. TIMER1 counts the
   ENDs through channel 6; one before the last its compare disables the group through channel 7, and
-  at the last its second compare marks the strip sent. Every command, every next strip and the end
-  of each drawing step wait for that mark, so the external flash never finds the bus mid-send and
-  the buffer is never written while it is read. While it waits the CPU sleeps in WFE: the second
+  at the last its second compare marks the strip sent. Nothing waits for that mark when a strip
+  starts. The bus (`SpiBus`, the SPIM with the display's chip select and the chain) is taken for one
+  transaction at a time, and whoever takes it next, a display command, the next strip, or a flash
+  transaction through `FlashOnBus`, first waits for the strip still going out and deselects the
+  display. So a drawing step returns as soon as its last strip has started, and the shell and every
+  other task run while it goes out; a strip is never written while it is read, since a buffer is
+  only handed out again once the strip after it has started. While anything waits the CPU sleeps in WFE: the second
   compare's interrupt is enabled in TIMER1 but not in the NVIC, so with SEVONPEND set it only wakes
   the core, and no handler runs. The interrupt follows the event's level, so it is unpended when the
   next strip starts, after the event is cleared, and the wait gives back with SEV any event it took
-  from a task woken meanwhile, so the executor still sees it. Without a lent buffer, as for the status page and
-  the help screen, pixels go from a 64 B buffer in the interface and each send ends before it
-  returns. Screenshots of the face, the launcher and a scroll in the emulator match the blocking
-  driver's pixel for pixel.
+  from a task woken meanwhile, so the executor still sees it. The status page, the help screen and
+  other `embedded-graphics` drawing go through blocking writes of a few pixels at a time.
+  Screenshots of the face, the launcher and a scroll in the emulator match the earlier drivers'
+  pixel for pixel.
 - **Input.** `touch.rs` turns the panel's reports into the host's touches: press, drag and release
   from the finger, and one click, long press or swipe from each touch's gesture. Touches wait in a
   queue of 4 in which drags never take the last two places, so a lift and its gesture always fit;

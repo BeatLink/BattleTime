@@ -50,7 +50,7 @@ fn counts_the_whole_rows_a_buffer_holds() {
 
 #[test]
 fn keeps_only_the_part_of_a_fill_inside_it() {
-    let mut buffer = vec![BLACK; 64];
+    let mut buffer = vec![0u16; 64];
     let mut strip = Strip::new(&mut buffer, rect(10, 20, 4, 3));
 
     strip.fill_solid(&rectangle(12, 18, 10, 4), RED).unwrap();
@@ -60,7 +60,7 @@ fn keeps_only_the_part_of_a_fill_inside_it() {
 
 #[test]
 fn skips_the_colours_of_rows_and_columns_outside_it() {
-    let mut buffer = vec![BLACK; 64];
+    let mut buffer = vec![0u16; 64];
     let mut strip = Strip::new(&mut buffer, rect(10, 20, 4, 2));
     let pattern = [BLACK, RED, BLACK, RED, RED, BLACK];
 
@@ -73,7 +73,7 @@ fn skips_the_colours_of_rows_and_columns_outside_it() {
 
 #[test]
 fn draws_single_pixels_and_drops_those_outside() {
-    let mut buffer = vec![BLACK; 64];
+    let mut buffer = vec![0u16; 64];
     let mut strip = Strip::new(&mut buffer, rect(0, 0, 3, 2));
 
     let pixels = [Pixel(Point::new(1, 1), RED), Pixel(Point::new(5, 5), RED)];
@@ -84,7 +84,7 @@ fn draws_single_pixels_and_drops_those_outside() {
 
 #[test]
 fn shapes_are_placed_in_screen_positions() {
-    let mut buffer = vec![BLACK; 64];
+    let mut buffer = vec![0u16; 64];
     let mut strip = Strip::new(&mut buffer, rect(100, 50, 4, 2));
 
     rectangle(101, 0, 2, 51)

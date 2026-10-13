@@ -160,6 +160,29 @@ impl<'values, M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: 
         }
     }
 
+    /// NeoTime patch: builds a server straight into `slot`, filling its table with `build` there.
+    ///
+    /// A server built by value is copied several times on its way to a static, which needs a stack
+    /// frame several times its size; this one is written in place and never moves.
+    ///
+    /// # Safety
+    ///
+    /// `slot` must be valid for writes and properly aligned. On success it holds a server; on an
+    /// error it holds a partly built one that must not be used or dropped.
+    pub unsafe fn init_in_place<E>(
+        slot: *mut Self,
+        build: impl FnOnce(&mut AttributeTable<'values, M, ATT_MAX>) -> Result<(), E>,
+    ) -> Result<(), E> {
+        let table = unsafe { core::ptr::addr_of_mut!((*slot).att_table) };
+        unsafe { table.write(AttributeTable::new()) };
+        build(unsafe { &mut *table })?;
+        unsafe {
+            core::ptr::addr_of_mut!((*slot).client_att_tables).write(ClientAttTables::new(&*table));
+            core::ptr::addr_of_mut!((*slot)._p).write(PhantomData);
+        }
+        Ok(())
+    }
+
     /// Read an attribute value with permission checks for the given connection.
     pub fn read(
         &self,

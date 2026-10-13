@@ -4,7 +4,6 @@ use std::{vec, vec::Vec};
 
 use embedded_graphics::{prelude::*, primitives::PrimitiveStyle};
 use embedded_hal::digital::ErrorType;
-use mipidsi::interface::InterfaceKind;
 
 use super::*;
 
@@ -30,12 +29,14 @@ struct Command {
 struct FakeInterface {
     commands: Vec<Command>,
     pixel_count: usize,
+    /// A strip buffer to lend, for an interface that sends strips by DMA.
+    strip: Option<Vec<u16>>,
+    strip_sends: Vec<(usize, usize)>,
+    finished_strips: usize,
 }
 
-impl Interface for FakeInterface {
-    type Word = u8;
+impl PanelInterface for FakeInterface {
     type Error = ();
-    const KIND: InterfaceKind = InterfaceKind::Serial4Line;
 
     fn send_command(&mut self, code: u8, arguments: &[u8]) -> Result<(), ()> {
         self.commands.push(Command {
@@ -45,21 +46,23 @@ impl Interface for FakeInterface {
         Ok(())
     }
 
-    fn send_pixels<const BYTES_PER_PIXEL: usize>(
-        &mut self,
-        pixels: impl IntoIterator<Item = [u8; BYTES_PER_PIXEL]>,
-    ) -> Result<(), ()> {
-        self.pixel_count += pixels.into_iter().count();
+    fn send_pixels(&mut self, bytes: &[u8]) -> Result<(), ()> {
+        self.pixel_count += bytes.len() / 2;
         Ok(())
     }
 
-    fn send_repeated_pixel<const BYTES_PER_PIXEL: usize>(
-        &mut self,
-        _pixel: [u8; BYTES_PER_PIXEL],
-        repeat_count: u32,
-    ) -> Result<(), ()> {
-        self.pixel_count += repeat_count as usize;
+    fn strip_buffer(&mut self) -> Option<&mut [u16]> {
+        self.strip.as_deref_mut()
+    }
+
+    fn send_strip_pixels(&mut self, first: usize, count: usize) -> Result<(), ()> {
+        self.strip_sends.push((first, count));
+        self.pixel_count += count;
         Ok(())
+    }
+
+    fn finish_strip(&mut self) {
+        self.finished_strips += 1;
     }
 }
 
@@ -142,8 +145,7 @@ fn new_display_with_no_commands_recorded() -> Display<FakeInterface, FakePin> {
 
 impl Display<FakeInterface, FakePin> {
     fn fake_interface(&mut self) -> &mut FakeInterface {
-        // SAFETY: the tests only read and clear what the fake interface recorded.
-        unsafe { self.panel.dcs() }
+        self.interface_mut()
     }
 
     fn last_command(&mut self) -> Option<&Command> {
@@ -484,4 +486,126 @@ fn dimmer_stops_at_off() {
 
     assert_eq!(backlight.level(), BacklightLevel::Off);
     assert_eq!(lit_pins(backlight), [false, false, false]);
+}
+
+// ============================================================================
+// Starting, strips and other interfaces
+// ============================================================================
+
+#[test]
+fn starts_the_panel_as_the_st7789_needs() {
+    let mut display = new_display();
+
+    let codes = command_codes(&mut display);
+
+    assert_eq!(&codes[..6], &[0x11, 0x36, 0x21, 0x3A, 0x13, 0x29]);
+    assert_eq!(display.fake_interface().commands[3].arguments, [0x55]);
+}
+
+#[test]
+fn a_strip_goes_out_from_the_lent_buffer_split_where_memory_wraps() {
+    let mut display = new_display();
+    display.fake_interface().strip = Some(vec![0; 2400]);
+    display.scroll(310).unwrap();
+    display.fake_interface().commands.clear();
+
+    assert_eq!(display.strip_buffer().map(|buffer| buffer.len()), Some(2400));
+    display
+        .send_strip(&Rectangle::new(Point::new(0, 5), Size::new(240, 10)))
+        .unwrap();
+
+    let interface = display.fake_interface();
+    assert_eq!(interface.strip_sends, [(0, 1200), (1200, 1200)]);
+    assert_eq!(interface.finished_strips, 1);
+}
+
+#[test]
+fn an_empty_strip_only_frees_the_buffer() {
+    let mut display = new_display();
+
+    display
+        .send_strip(&Rectangle::new(Point::new(0, 0), Size::new(0, 0)))
+        .unwrap();
+
+    assert!(display.fake_interface().strip_sends.is_empty());
+    assert_eq!(display.fake_interface().finished_strips, 1);
+    assert!(display.strip_buffer().is_none());
+}
+
+#[test]
+fn panel_pixels_hold_the_high_byte_first() {
+    let pixel = panel_pixel(Rgb565::new(31, 0, 0));
+
+    assert_eq!(pixel.to_ne_bytes(), [0xF8, 0x00]);
+    assert_eq!(color_of_panel_pixel(pixel), Rgb565::new(31, 0, 0));
+}
+
+/// A mipidsi interface that counts what it is sent.
+#[derive(Default)]
+struct FakeMipidsi {
+    commands: usize,
+    pixels: usize,
+}
+
+impl mipidsi::interface::Interface for FakeMipidsi {
+    type Word = u8;
+    type Error = ();
+    const KIND: mipidsi::interface::InterfaceKind = mipidsi::interface::InterfaceKind::Serial4Line;
+
+    fn send_command(&mut self, _code: u8, _arguments: &[u8]) -> Result<(), ()> {
+        self.commands += 1;
+        Ok(())
+    }
+
+    fn send_pixels<const BYTES_PER_PIXEL: usize>(
+        &mut self,
+        pixels: impl IntoIterator<Item = [u8; BYTES_PER_PIXEL]>,
+    ) -> Result<(), ()> {
+        self.pixels += pixels.into_iter().count();
+        Ok(())
+    }
+
+    fn send_repeated_pixel<const BYTES_PER_PIXEL: usize>(
+        &mut self,
+        _pixel: [u8; BYTES_PER_PIXEL],
+        count: u32,
+    ) -> Result<(), ()> {
+        self.pixels += count as usize;
+        Ok(())
+    }
+}
+
+#[test]
+fn a_mipidsi_interface_drives_the_panel_too() {
+    let mut display = Display::new(
+        MipidsiInterface(FakeMipidsi::default()),
+        FakePin,
+        &mut FakeDelay::default(),
+    )
+    .unwrap();
+
+    display
+        .fill_solid(
+            &Rectangle::new(Point::new(0, 0), Size::new(10, 10)),
+            Rgb565::new(1, 2, 3),
+        )
+        .unwrap();
+    Pixel(Point::new(3, 3), Rgb565::new(1, 2, 3))
+        .draw(&mut display)
+        .unwrap();
+    let (MipidsiInterface(interface), _) = display.release();
+
+    assert_eq!(interface.pixels, 101);
+    assert!(interface.commands > 6);
+}
+
+#[test]
+fn the_default_repeated_pixel_goes_in_chunks() {
+    let mut interface = FakeInterface::default();
+
+    interface.send_repeated_pixel([1, 2], 70).unwrap();
+
+    assert_eq!(interface.pixel_count, 70);
+    assert_eq!(interface.strip_buffer(), None);
+    assert_eq!(interface.send_strip_pixels(0, 0), Ok(()));
 }

@@ -1115,7 +1115,6 @@ version = "0.1.0"
 dependencies = [
  "embedded-graphics",
  "embedded-hal 1.0.0",
- "mipidsi",
  "neotime-app-host",
  "neotime-companion",
  "neotime-compiler",
@@ -1298,7 +1297,6 @@ dependencies = [
  "embedded-graphics-simulator",
  "embedded-hal 1.0.0",
  "embedded-hal-async",
- "mipidsi",
  "neotime-app-host",
  "neotime-app-testing",
  "neotime-display",
@@ -1350,7 +1348,6 @@ version = "0.1.0"
 dependencies = [
  "embedded-graphics",
  "embedded-hal 1.0.0",
- "mipidsi",
  "neotime-display",
 ]
 
@@ -2058,8 +2055,6 @@ dependencies = [
 [[package]]
 name = "trouble-host-macros"
 version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbabd47f6c65856f670fd2a1857fb9d40f978bfc81aed431f8689b8a4506b2fe"
 dependencies = [
  "convert_case",
  "darling",

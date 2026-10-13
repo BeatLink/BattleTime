@@ -123,7 +123,7 @@ const WATCHDOG_CHECK_INTERVAL: Duration = Duration::from_millis(500);
 /// The side button's pin on port 0, which reads high while the button is held.
 const SIDE_BUTTON_PIN: usize = 13;
 
-type SpiBus = Mutex<NoopRawMutex, RefCell<Spim<'static>>>;
+use display_dma::SpiBus;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 type I2cBus = embassy_sync::mutex::Mutex<NoopRawMutex, twim::Twim<'static>>;
 /// One user of the I2C bus the touch panel and the accelerometer share.
@@ -192,20 +192,16 @@ async fn main(spawner: Spawner) {
 
     let mut spi_config = spim::Config::default();
     spi_config.frequency = spim::Frequency::M8;
-    let spi_bus = SPI_BUS.init(Mutex::new(RefCell::new(Spim::new(
-        chip.TWISPI0,
-        Interrupts,
-        chip.P0_02,
-        chip.P0_04,
-        chip.P0_03,
-        spi_config,
-    ))));
-
-    let mut screen = start_screen(
-        spi_bus,
+    let spi_bus = SPI_BUS.init(Mutex::new(RefCell::new(display_dma::SharedBus::new(
+        Spim::new(
+            chip.TWISPI0,
+            Interrupts,
+            chip.P0_02,
+            chip.P0_04,
+            chip.P0_03,
+            spi_config,
+        ),
         Output::new(chip.P0_25, Level::High, OutputDrive::Standard),
-        Output::new(chip.P0_18, Level::Low, OutputDrive::Standard),
-        Output::new(chip.P0_26, Level::High, OutputDrive::Standard),
         display_dma::ChainPeripherals {
             counter: chip.TIMER1,
             restart_channel: chip.PPI_CH5,
@@ -213,6 +209,12 @@ async fn main(spawner: Spawner) {
             stop_channel: chip.PPI_CH7,
             restart_group: chip.PPI_GROUP0,
         },
+    ))));
+
+    let mut screen = start_screen(
+        spi_bus,
+        Output::new(chip.P0_18, Level::Low, OutputDrive::Standard),
+        Output::new(chip.P0_26, Level::High, OutputDrive::Standard),
     );
     let backlight = backlight::Backlight::new(
         OutputChannel::new(
@@ -306,28 +308,39 @@ async fn main(spawner: Spawner) {
     core::mem::forget(backlight);
     #[cfg(not(with_shell))]
     let _unused = files;
-    let controller = neotime_bluetooth::start(
-        neotime_bluetooth::RadioPeripherals {
-            radio: chip.RADIO,
-            timer: chip.TIMER0,
-            random_number_generator: chip.RNG,
-            start_transmit_channel: chip.PPI_CH20,
-            start_receive_channel: chip.PPI_CH21,
-            give_up_channel: chip.PPI_CH22,
-            address_time_channel: chip.PPI_CH26,
-            end_time_channel: chip.PPI_CH27,
-            real_time_counter: chip.RTC0,
-            start_crystal_channel: chip.PPI_CH3,
-            start_timer_channel: chip.PPI_CH4,
-        },
-        Interrupts,
+    let radio = neotime_bluetooth::RadioPeripherals {
+        radio: chip.RADIO,
+        timer: chip.TIMER0,
+        random_number_generator: chip.RNG,
+        start_transmit_channel: chip.PPI_CH20,
+        start_receive_channel: chip.PPI_CH21,
+        give_up_channel: chip.PPI_CH22,
+        address_time_channel: chip.PPI_CH26,
+        end_time_channel: chip.PPI_CH27,
+        real_time_counter: chip.RTC0,
+        start_crystal_channel: chip.PPI_CH3,
+        start_timer_channel: chip.PPI_CH4,
+    };
+    start_bluetooth(
+        spawner,
+        radio,
+        BluetoothParts::new(targets, confirmation, screen),
+        files,
     );
+}
+
+/// Starts the radio and the tasks that serve Bluetooth and packages commands.
+// Kept out of `main`, so the tasks built here never share its stack frame with what start-up holds.
+#[inline(never)]
+fn start_bluetooth(
+    spawner: Spawner,
+    radio: neotime_bluetooth::RadioPeripherals,
+    parts: BluetoothParts,
+    files: &'static storage::Files,
+) {
+    let controller = neotime_bluetooth::start(radio, Interrupts);
     storage::leave_breadcrumb(stage::RADIO_STARTED);
-    let parts = BLUETOOTH_PARTS.init(BluetoothParts {
-        dfu: LegacyDfu::new(targets),
-        confirmation,
-        screen,
-    });
+    let parts = BLUETOOTH_PARTS.init(parts);
     spawner.spawn(packages::run_commands(files).unwrap());
     spawner.spawn(run_bluetooth(controller, parts, files).unwrap());
 }
@@ -572,13 +585,13 @@ impl Screen {
 
 fn start_screen(
     spi_bus: &'static SpiBus,
-    chip_select: Output<'static>,
     data_or_command: Output<'static>,
     reset: Output<'static>,
-    chain: display_dma::ChainPeripherals,
 ) -> Screen {
     static DISPLAY: StaticCell<SharedDisplay> = StaticCell::new();
-    let interface = DmaInterface::new(spi_bus, chip_select, data_or_command, chain);
+    static STRIP_BUFFERS: StaticCell<[[u16; display_dma::STRIP_BUFFER_PIXELS]; 2]> = StaticCell::new();
+    let buffers = STRIP_BUFFERS.init([[0; display_dma::STRIP_BUFFER_PIXELS]; 2]);
+    let interface = DmaInterface::new(spi_bus, data_or_command, buffers);
 
     let mut display = Display::new(interface, reset, &mut Delay).unwrap_or_else(|_| panic!("display"));
     let _ = display.clear(Rgb565::BLACK);
@@ -707,20 +720,27 @@ struct BluetoothParts {
     screen: Screen,
 }
 
+impl BluetoothParts {
+    fn new(targets: storage::Targets, confirmation: storage::Confirmation, screen: Screen) -> BluetoothParts {
+        BluetoothParts {
+            dfu: LegacyDfu::new(targets),
+            confirmation,
+            screen,
+        }
+    }
+}
+
 static BLUETOOTH_PARTS: StaticCell<BluetoothParts> = StaticCell::new();
 static SERVER: StaticCell<Server<'static>> = StaticCell::new();
 
-/// Builds the attribute table in a static, out of line, so the table under construction never sits in
-/// the Bluetooth task's frame, which stays on the stack under every connection.
+/// Builds the attribute table straight into its static, so it never passes through the stack.
 #[inline(never)]
 fn build_server() -> &'static Server<'static> {
-    SERVER.init(
-        Server::new_with_config(GapConfig::Peripheral(PeripheralConfig {
-            name: DEVICE_NAME,
-            appearance: &appearance::watch::GENERIC_WATCH,
-        }))
-        .unwrap(),
-    )
+    let gap = GapConfig::Peripheral(PeripheralConfig {
+        name: DEVICE_NAME,
+        appearance: &appearance::watch::GENERIC_WATCH,
+    });
+    Server::init_in_place(SERVER.uninit(), gap).unwrap()
 }
 
 /// Its own task, so the Bluetooth loop's stack frame is not added to start-up's.

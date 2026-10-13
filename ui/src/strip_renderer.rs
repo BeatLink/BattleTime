@@ -10,6 +10,8 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 
+use neotime_display::{color_of_panel_pixel, panel_pixel};
+
 use crate::geometry::{scale, Color, Rect, OPAQUE};
 use crate::renderer::Renderer;
 use crate::strip::Strip;
@@ -50,7 +52,7 @@ impl<'strip, 'buffer> StripRenderer<'strip, 'buffer> {
         (first < end).then(|| ((first - x) as usize, first..end))
     }
 
-    fn row_mut(&mut self, y: i32, columns: core::ops::Range<i32>) -> &mut [Rgb565] {
+    fn row_mut(&mut self, y: i32, columns: core::ops::Range<i32>) -> &mut [u16] {
         self.strip.row_mut(y, columns)
     }
 }
@@ -64,7 +66,7 @@ impl Renderer for StripRenderer<'_, '_> {
         let Some(area) = self.visible.and_then(|visible| rect.intersect(visible)) else {
             return;
         };
-        let pixel = to_rgb565(color);
+        let pixel = panel_pixel(to_rgb565(color));
         for y in area.y..area.bottom() {
             self.row_mut(y, area.x..area.right()).fill(pixel);
         }
@@ -80,7 +82,7 @@ impl Renderer for StripRenderer<'_, '_> {
         };
         for y in area.y..area.bottom() {
             for pixel in self.row_mut(y, area.x..area.right()) {
-                *pixel = mix(color, alpha, *pixel);
+                *pixel = panel_pixel(mix(color, alpha, color_of_panel_pixel(*pixel)));
             }
         }
     }
@@ -93,13 +95,13 @@ impl Renderer for StripRenderer<'_, '_> {
         let Some((skipped, columns)) = self.visible_run(x, y, coverage.len() as i32) else {
             return;
         };
-        let solid = to_rgb565(color);
+        let solid = panel_pixel(to_rgb565(color));
         let pixels = self.row_mut(y, columns);
         for (pixel, &amount) in pixels.iter_mut().zip(&coverage[skipped..]) {
             match scale(alpha, amount) {
                 0 => {}
                 OPAQUE => *pixel = solid,
-                share => *pixel = mix(color, share, *pixel),
+                share => *pixel = panel_pixel(mix(color, share, color_of_panel_pixel(*pixel))),
             }
         }
     }
@@ -118,8 +120,8 @@ impl Renderer for StripRenderer<'_, '_> {
             for (pixel, &color) in self.row_mut(y, columns).iter_mut().zip(&row[skipped..]) {
                 match scale(color.3, opacity) {
                     0 => {}
-                    OPAQUE => *pixel = to_rgb565(color),
-                    share => *pixel = mix(color, share, *pixel),
+                    OPAQUE => *pixel = panel_pixel(to_rgb565(color)),
+                    share => *pixel = panel_pixel(mix(color, share, color_of_panel_pixel(*pixel))),
                 }
             }
         }

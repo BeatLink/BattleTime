@@ -3,26 +3,28 @@
 //!
 //! Drawing straight onto the panel paints the background, then each widget on top, and the panel
 //! shows every step; it also sends every short run of pixels on its own. Drawing into a strip and
-//! sending the strip once shows each pixel only in its final colour, and sends it once.
+//! sending the strip once shows each pixel only in its final colour, and sends it once. Pixels are
+//! kept in the panel's own order, high byte first, so a strip can go to the panel as it lies.
 
 use core::convert::Infallible;
 
 use crate::geometry::Rect;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
+use neotime_display::{color_of_panel_pixel, panel_pixel};
 
 // ============================================================================
 // Strip
 // ============================================================================
 
-/// A rectangle of the screen held in a buffer; drawing outside it is dropped.
+/// A rectangle of the screen held in a buffer of panel pixels; drawing outside it is dropped.
 pub struct Strip<'buffer> {
-    pixels: &'buffer mut [Rgb565],
+    pixels: &'buffer mut [u16],
     area: Rect,
 }
 
 impl<'buffer> Strip<'buffer> {
     /// Holds `area` in the front of `buffer`, which must have room for all of it.
-    pub fn new(buffer: &'buffer mut [Rgb565], area: Rect) -> Self {
+    pub fn new(buffer: &'buffer mut [u16], area: Rect) -> Self {
         let pixel_count = (area.width.max(0) * area.height.max(0)) as usize;
         Self {
             pixels: &mut buffer[..pixel_count],
@@ -40,19 +42,20 @@ impl<'buffer> Strip<'buffer> {
     }
 
     /// The pixels of row `y` across `columns`, which must lie inside the strip.
-    pub(crate) fn row_mut(&mut self, y: i32, columns: core::ops::Range<i32>) -> &mut [Rgb565] {
+    pub(crate) fn row_mut(&mut self, y: i32, columns: core::ops::Range<i32>) -> &mut [u16] {
         let start = ((y - self.area.y) * self.area.width + (columns.start - self.area.x)) as usize;
         &mut self.pixels[start..start + columns.len()]
     }
 
     /// The pixel at a screen point, if it is inside the strip.
     pub(crate) fn pixel_at(&self, x: i32, y: i32) -> Option<Rgb565> {
-        self.index_of(x, y).map(|index| self.pixels[index])
+        self.index_of(x, y)
+            .map(|index| color_of_panel_pixel(self.pixels[index]))
     }
 
-    /// The strip's pixels row by row, ready for the panel.
+    /// The strip's colours row by row.
     pub fn pixels(&self) -> impl Iterator<Item = Rgb565> + '_ {
-        self.pixels.iter().copied()
+        self.pixels.iter().map(|&pixel| color_of_panel_pixel(pixel))
     }
 
     /// Where a screen point sits in the buffer, if it is inside the strip.
@@ -87,7 +90,7 @@ impl DrawTarget for Strip<'_> {
     {
         for Pixel(point, color) in pixels {
             if let Some(index) = self.index_of(point.x, point.y) {
-                self.pixels[index] = color;
+                self.pixels[index] = panel_pixel(color);
             }
         }
         Ok(())
@@ -117,7 +120,7 @@ impl DrawTarget for Strip<'_> {
                 .iter_mut()
                 .zip(row_colors.by_ref().skip(skipped_before))
             {
-                *place = color;
+                *place = panel_pixel(color);
             }
             row_colors.for_each(drop);
         }
@@ -134,7 +137,8 @@ impl DrawTarget for Strip<'_> {
         }
         for row in first_row..end_row {
             let start = (row - self.area.y) * self.area.width + (first_column - self.area.x);
-            self.pixels[start as usize..(start + end_column - first_column) as usize].fill(color);
+            self.pixels[start as usize..(start + end_column - first_column) as usize]
+                .fill(panel_pixel(color));
         }
         Ok(())
     }

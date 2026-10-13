@@ -6,7 +6,7 @@ use std::{vec, vec::Vec};
 use crate::shapes::{draw_widget_bg, Style};
 use embedded_graphics::geometry::OriginDimensions;
 use embedded_hal::{delay::DelayNs, digital::ErrorType, digital::OutputPin};
-use mipidsi::interface::{Interface, InterfaceKind};
+use neotime_display::PanelInterface;
 use neotime_display::{Display, MEMORY_ROWS, SCREEN_HEIGHT, SCREEN_WIDTH};
 
 use super::*;
@@ -277,10 +277,8 @@ fn start_and_end(arguments: &[u8]) -> (u16, u16) {
     )
 }
 
-impl Interface for FakePanel {
-    type Word = u8;
+impl PanelInterface for FakePanel {
     type Error = ();
-    const KIND: InterfaceKind = InterfaceKind::Serial4Line;
 
     fn send_command(&mut self, command: u8, arguments: &[u8]) -> Result<(), ()> {
         match command {
@@ -292,16 +290,9 @@ impl Interface for FakePanel {
         Ok(())
     }
 
-    fn send_pixels<const N: usize>(&mut self, pixels: impl IntoIterator<Item = [u8; N]>) -> Result<(), ()> {
-        for pixel in pixels {
-            self.write_pixel([pixel[0], pixel[1]]);
-        }
-        Ok(())
-    }
-
-    fn send_repeated_pixel<const N: usize>(&mut self, pixel: [u8; N], count: u32) -> Result<(), ()> {
-        for _ in 0..count {
-            self.write_pixel([pixel[0], pixel[1]]);
+    fn send_pixels(&mut self, bytes: &[u8]) -> Result<(), ()> {
+        for &pixel in bytes.as_chunks::<2>().0 {
+            self.write_pixel(pixel);
         }
         Ok(())
     }

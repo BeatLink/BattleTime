@@ -4,7 +4,7 @@ members = ["boot", "drivers/*", "services/*", "runtime", "ui", "app-host", "simu
 # The simulator and the app test harness need std, so plain builds for the watch leave them out.
 default-members = ["boot", "drivers/*", "services/*", "runtime", "ui", "app-host"]
 # The bootloader builds only for the watch, with its own settings.
-exclude = ["bootloader", "firmware", "third_party/littlefs-rust", "third_party/trouble-host"]
+exclude = ["bootloader", "firmware", "third_party/littlefs-rust", "third_party/trouble-host", "third_party/trouble-host-macros"]
 
 [workspace.package]
 license = "GPL-3.0-or-later"
@@ -14,6 +14,8 @@ license = "GPL-3.0-or-later"
 littlefs-rust = { path = "third_party/littlefs-rust" }
 # trouble-host with discovery responses that never cut a 128-bit UUID short; see third_party/trouble-host/NEOTIME.md.
 trouble-host = { path = "third_party/trouble-host" }
+# The GATT server macro that builds a server in place; see third_party/trouble-host-macros/NEOTIME.md.
+trouble-host-macros = { path = "third_party/trouble-host-macros" }
 
 # littlefs-rust-core is translated from C and relies on unsigned numbers wrapping, as C's do.
 [profile.dev.package.littlefs-rust-core]

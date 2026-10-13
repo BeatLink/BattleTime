@@ -12,7 +12,6 @@ embedded-graphics = "0.8"
 embedded-graphics-simulator = "0.7"
 embedded-hal = "1.0"
 embedded-hal-async = "1.0"
-mipidsi = "0.10"
 neotime-app-host = { path = "../app-host", features = ["demo", "built-in-fonts"] }
 neotime-app-testing = { path = "../harness" }
 neotime-display = { path = "../drivers/display" }

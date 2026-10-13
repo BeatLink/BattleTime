@@ -1,7 +1,7 @@
 //! Tests that the simulated panel follows each ST7789 command the way the datasheet describes.
 
 use embedded_graphics::{pixelcolor::Rgb565, prelude::RgbColor};
-use mipidsi::interface::Interface;
+use neotime_display::PanelInterface;
 
 use super::*;
 
@@ -49,9 +49,11 @@ fn start_writing(panel: &mut SimulatedPanel, columns: (u16, u16), rows: (u16, u1
 }
 
 fn send_raw_pixels(panel: &mut SimulatedPanel, raw_colours: &[u16]) {
-    panel
-        .send_pixels(raw_colours.iter().map(|raw_colour| raw_colour.to_be_bytes()))
-        .unwrap();
+    let bytes: Vec<u8> = raw_colours
+        .iter()
+        .flat_map(|raw_colour| raw_colour.to_be_bytes())
+        .collect();
+    panel.send_pixels(&bytes).unwrap();
 }
 
 // ============================================================================

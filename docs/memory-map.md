@@ -37,22 +37,22 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 87.9 KB | 46.0 KB |
-| App host (with `neotime-ui`) | 69.8 KB | 0.0 KB |
-| Bluetooth (controller and TrouBLE) | 43.3 KB | 43.3 KB |
+| Firmware (start-up, shell, tasks) | 87.0 KB | 44.9 KB |
+| App host (with `neotime-ui`) | 70.7 KB | 0.0 KB |
+| Bluetooth (controller and TrouBLE) | 43.6 KB | 43.6 KB |
 | App runtime | 34.2 KB | 0.1 KB |
-| core, alloc and compiler builtins | 27.2 KB | 11.4 KB |
+| core, alloc and compiler builtins | 26.9 KB | 11.4 KB |
 | Storage (littlefs) | 21.9 KB | 21.2 KB |
-| Embassy, allocator and Cortex-M | 18.4 KB | 15.9 KB |
+| Embassy, allocator and Cortex-M | 18.1 KB | 15.7 KB |
 | Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
 | Settings, companion and notifications (with serde) | 10.6 KB | 8.6 KB |
-| Display, graphics and drivers | 5.7 KB | 3.0 KB |
-| Packages | 3.8 KB | 2.1 KB |
+| Display, graphics and drivers | 5.6 KB | 3.1 KB |
+| Packages | 3.7 KB | 2.0 KB |
 | Updates (DFU) | 2.4 KB | 2.4 KB |
-| BLEFS file service | 1.8 KB | 2.0 KB |
-| Other constants and padding | 23.7 KB | 10.8 KB |
-| **Used** | **362.5 KB** | **166.6 KB** |
-| Free of 400 KB | 37.5 KB | 233.4 KB |
+| BLEFS file service | 1.8 KB | 1.9 KB |
+| Other constants and padding | 23.6 KB | 10.5 KB |
+| **Used** | **362.0 KB** | **165.5 KB** |
+| Free of 400 KB | 38.0 KB | 234.5 KB |
 <!-- /measure_memory:firmware -->
 
 The accelerometer's configuration is the largest piece of data left in it; each watch could build
@@ -129,26 +129,25 @@ firmware, which then has the whole of RAM but its last 16 bytes, the alive marke
 below it too, so the marker survives from one firmware start to the next. Its third word is the
 bootloader's note to the firmware (`BOOT_NOTE_ADDRESS`), which says whether the recovery firmware
 was just installed, and its fourth is the bootloader updater's (`UPDATER_NOTE_ADDRESS`), which says
-the rollback after it was meant. The firmware measures 51 KB of static RAM:
+the rollback after it was meant. The firmware measures 55 KB of static RAM:
 37 KB of heap (16 KB for storage and the 21 KB UI heap), and
-the Bluetooth host with its eight 128-byte packets, controller, display buffer and task state. The
+the Bluetooth host with its eight 128-byte packets, controller, the display's two 960 B strip buffers and task state. The
 Bluetooth task's state is 4.8 KB: its GATT table (2.1 KB) and TrouBLE's runner (1.6 KB) are most of
 it; replies to the companion app and half-received lines wait on the heap, and the update state,
-status page and confirmation are held once in a static. That leaves 10.3 KB (10,536 B) for the
+status page and confirmation are held once in a static. That leaves 8.6 KB (8,796 B) for the
 stack, of which the lowest bytes, up to 360 B, are the stack guard: 256 B from the first 256-byte
 boundary above the statics, which the memory protection unit forbids (`firmware/src/stack_guard.rs`).
-Measured in the emulator by painting the stack before start, with 10,224 B above the guard, the
-deepest path is the start itself, at 7.7 KB (7,864 B), 2,360 B spare: the Bluetooth task builds its
-attribute table out of line once, in a 6.9 KB frame. Opening the launcher, reopening the face after
-an install, and packages commands all stay below it. Those were measured on the watch's own `/apps`
-tree (16 apps and faces, saved states and an uploaded morse image) with `apps` and `install`
-commands sent over the emulator's Bluetooth bridge, and on every app in the repository installed
-one by one with the launcher open. The alarm, the deepest app, peaked at 10.5 KB in an earlier
-measurement that the tool cannot repeat, since it cannot open the alarm, so measure it again before
-the stack shrinks further. Drawing borrows a 1,920 B strip of four screen rows from the stack while
-it runs, and a 1,920 B buffer the strip is sent from by DMA while the next is drawn; the display
-interface keeps only a 64 B buffer of its own, where the blocking driver kept 512 B. With both
-buffers, opening the alarm and its editor peaked at 7,944 B, 2,536 B spare, against 7,864 B before. Under a connection the Bluetooth task's own frame is 0.6 KB and `serve_connection`'s
+Measured in the emulator by painting the stack before start, with 8,432 B above the guard and the
+shared library installed, the deepest path is opening an app, at 6,152 B, 2,280 B spare: the app
+host loads the image and runs its handlers, and the interpreter formats numbers with 64-bit
+division, all under the shell's task. Opening the launcher, the face and the alarm's editor all
+peak there. Start-up reaches 3,816 B: the Bluetooth server is built straight into its static
+(`third_party/trouble-host-macros`), where building it by value took a 6.9 KB frame, and the radio
+and Bluetooth tasks start out of line from `main`. Drawing holds no buffer on the stack: the
+display's two strip buffers, 1,920 B together, are static, and drawing's own frames stay under the
+interpreter's. Earlier measurements, of the watch's own `/apps` tree (16 apps and faces) with
+`apps` and `install` commands sent over the emulator's Bluetooth bridge, put packages commands
+below the start path of that time. Under a connection the Bluetooth task's own frame is 0.6 KB and `serve_connection`'s
 2.1 KB; packages commands run in a task of their own, since the verifier inside one once overflowed
 the stack under those frames, and the app host verifies an image and runs its first derives outside
 the 1.7 KB frame that loads it.
@@ -195,14 +194,14 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (storage 16 KB, UI 21 KB; the recovery build has no UI heap) | 37,888 B | 16,384 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 13,844 B | 10,445 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 15,686 B | 12,287 B |
 | Bluetooth controller | 2,545 B | 2,545 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | BLEFS file service | 122 B | 122 B |
 | App host (with `neotime-ui`) | 56 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **54,876 B** | **29,908 B** |
-| Left for the stack | 10,644 B | 35,612 B |
+| **Static RAM** (`.data` and `.bss`) | **56,724 B** | **31,756 B** |
+| Left for the stack | 8,796 B | 33,764 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:

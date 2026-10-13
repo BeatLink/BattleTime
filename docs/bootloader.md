@@ -83,7 +83,7 @@ On an ordinary start the screen stays dark and the firmware starts at once. When
 has work to do, it turns the screen blue (`status_colour::BOOTLOADER`) and shows the same page as
 the firmware ([updates.md](updates.md#the-status-page)), titled "NeoTime bootloader", with
 Bootloader `Working`, Filesystem `Not mounted` and Bluetooth `Off`. The screen code is its own
-small ST7789 driver in `drivers/status_screen`, since the firmware's mipidsi-based driver does not
+small ST7789 driver in `drivers/status_screen`, since the firmware's display driver does not
 fit. It draws the 10x20 font straight from its bitmap rather than through embedded-graphics' text
 code, which would not fit either. The simulator's tests run it against the simulator's ST7789
 model, through the panel's SPI wires.
