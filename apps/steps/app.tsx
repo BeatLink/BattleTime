@@ -177,7 +177,7 @@ function Day() {
 export default define_app({
   id: "steps",
   name: "Steps",
-  group: "time",
+  group: "health",
   icon: icons.steps,
   screens: { main: Today, week: Week, day: Day },
 });

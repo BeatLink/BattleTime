@@ -284,7 +284,7 @@ function Theme() {
 export default define_app({
   id: "settings",
   name: "Settings",
-  group: "settings",
+  group: "system",
   icon: icons.settings,
   screens: {
     main: SettingsList,

@@ -9,8 +9,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   its own: the companion app installs a face, the launcher and any apps into the watch's storage.
   The launcher, itself an ordinary app that another could replace, lists them with their icons,
   however many are installed.
-- **Apps in groups,** such as games, tools, communication, time, phone, health, system and
-  settings. Each app starts in the group it declares; the companion app renames, reorders, adds
+- **Apps in groups,** such as games, tools, communication, time, phone, health, and system and
+  settings together. Each app starts in the group it declares; the companion app renames, reorders, adds
   and removes groups, gives each an icon, and moves apps between them. The launcher shows the
   groups as folders, as sections of one list, or as pages swiped left and right, or leaves them
   out for one plain list, and draws a group's apps as rows or as a grid of icons.

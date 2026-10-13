@@ -20,13 +20,11 @@ can move it, and an app whose group the watch does not have goes to Other:
 | Group | Apps |
 |---|---|
 | `games` | dice, four-in-a-row, game-of-life, infinipaint, paddle, puzzle15, snake, twos |
-| `tools` | beacon, calculator, flashlight, haiku, hello, level, metronome, morse, notes, template |
-| `communication` | notifications |
-| `time` | alarm, pomodoro, sports, steps, stopwatch, timer |
-| `phone` | music, navigation, phone-finder, remote, weather |
-| `health` | heart |
-| `system` | disable-bluetooth, launcher, motion, software, system |
-| `settings` | settings |
+| `tools` | beacon, calculator, flashlight, haiku, hello, level, metronome, morse, template |
+| `time` | alarm, pomodoro, sports, stopwatch, timer |
+| `phone` | music, navigation, notes, phone-finder, remote, weather |
+| `health` | heart, steps |
+| `system` | launcher, motion, settings, software, system |
 
 They compile to app images with `neotime-compiler`. They also type-check against `sdk/neotime`, a
 stand-in for the `neotime` package, and every screen renders in a test.

@@ -27,7 +27,7 @@ function Note() {
 export default define_app({
   id: "notes",
   name: "Notes",
-  group: "tools",
+  group: "phone",
   icon: icons.info,
   screens: { main: Note },
 });
