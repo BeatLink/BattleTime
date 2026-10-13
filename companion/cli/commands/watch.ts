@@ -8,7 +8,7 @@ import type { SettingsMessage } from '@/protocol/gadgetbridge';
 import { createBackup, parseBackup, restoreBackup } from '@/protocol/backup';
 import { setWatchTime } from '@/protocol/neotime';
 import { NOTE_FONTS, NOTE_PATH, removeNote, syncNote, type NoteFont } from '@/protocol/notes';
-import { installImage } from '@/protocol/packages';
+import { installImage, memoryText, PackagesError } from '@/protocol/packages';
 import { runSetup, setupItems } from '@/protocol/setup';
 import { encodeForWatch, decodeWatchLine } from '@/protocol/gadgetbridge';
 import { readAlarms, readStatus, readWatchSettings, writeAlarms, writeWatchSettings } from '@/protocol/requests';
@@ -39,8 +39,9 @@ neotime listen [line] [--allow <hosts>] [--wait <seconds>]
   weekend alarm turned off, and a bare time rings once. files uses NeoTime's
   file service; paths are absolute, such as /settings. note sends a text file
   for the watch's Notes app to show, in the font given, or removes it. apps installs a .ntapp
-  or .ntlib image, and setup installs the face, launcher, apps and shared
-  library this tool bundles onto a new watch. listen stays
+  or .ntlib image, list shows each app with the memory it needs, hide and show
+  turn one off and on unless the watch refuses, saying why, and setup installs the
+  face, launcher, apps and shared library this tool bundles onto a new watch. listen stays
   connected and prints what the watch sends, answering its apps' http
   requests for the hosts given; it runs the line given first, and stops
   after --wait seconds or at Ctrl+C.`;
@@ -181,11 +182,15 @@ export async function apps(session: WatchSession, args: string[]) {
   const [action = 'list', first] = args;
   const packages = await session.packages();
   switch (action) {
-    case 'list':
-      for (const app of await packages.apps()) {
-        say(`${app.id.padEnd(16)} ${app.kind.padEnd(5)} ${app.enabled ? '      ' : 'hidden'} ${app.name}`);
+    case 'list': {
+      const listing = await packages.listing();
+      for (const app of listing.apps) {
+        const need = app.need === null ? '' : memoryText(app.need);
+        say(`${app.id.padEnd(16)} ${app.kind.padEnd(5)} ${app.enabled ? '      ' : 'hidden'} ${need.padStart(8)}  ${app.name}`);
       }
+      if (listing.room !== null) say(`Each app may use up to ${memoryText(listing.room)} while it is open.`);
       return;
+    }
     case 'install': {
       if (!first) throw new Error('Give the compiled .ntapp or .ntlib image.');
       const bar = new ProgressBar();
@@ -200,9 +205,21 @@ export async function apps(session: WatchSession, args: string[]) {
     case 'hide':
     case 'show':
       if (!first) throw new Error('Give the id of the app.');
-      if (action === 'remove') await packages.remove(first);
-      else await packages.enable(first, action === 'show');
-      say(`${action === 'remove' ? 'Removed' : action === 'hide' ? 'Hid' : 'Showed'} ${first}.`);
+      if (action === 'remove') {
+        await packages.remove(first);
+        say(`Removed ${first}.`);
+        return;
+      }
+      try {
+        const answer = await packages.enable(first, action === 'show');
+        const need = answer.need === null ? '' : `; it needs ${memoryText(answer.need)}`;
+        say(`${action === 'hide' ? 'Hid' : 'Showed'} ${first}${need}.`);
+      } catch (error) {
+        if (error instanceof PackagesError && error.why !== null) {
+          throw new Error(`The watch refused to ${action} ${first}: ${error.message}.`);
+        }
+        throw error;
+      }
       return;
     case 'setup': {
       const items = setupItems();

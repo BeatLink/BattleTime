@@ -5,7 +5,18 @@ import { testImage } from '@/test-support/app-images';
 
 import { AppImageError, readImageHeader } from './app-image';
 import { FileService } from './file-service';
-import { appImagePath, installImage, LIBRARY_UPLOAD_PATH, PackagesClient, PackagesError, type FileWriter } from './packages';
+import { MOCK_ROOM } from './mock-packages-service';
+import {
+  appDetail,
+  appImagePath,
+  installImage,
+  LIBRARY_UPLOAD_PATH,
+  memoryText,
+  PackagesClient,
+  PackagesError,
+  REFUSALS,
+  type FileWriter,
+} from './packages';
 
 function watch() {
   return new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
@@ -59,7 +70,9 @@ describe('the packages client', () => {
 
     expect(header.id).toBe('timer');
     expect(writer.folders).toEqual(['/apps/timer']);
-    expect(await client.apps()).toEqual([{ id: 'timer', name: 'Timer', kind: 'app', enabled: true, bytes: header.bytes }]);
+    const [listed] = await client.apps();
+    expect(listed).toMatchObject({ id: 'timer', name: 'Timer', kind: 'app', enabled: true, bytes: header.bytes });
+    expect(listed.need).toBeGreaterThan(header.bytes);
     await client.enable('timer', false);
     expect((await client.apps())[0].enabled).toBe(false);
     await client.enable('timer', true);
@@ -92,6 +105,43 @@ describe('the packages client', () => {
     await expect(client.installLibrary()).rejects.toThrow('no such app');
     target.fileService.files.set(LIBRARY_UPLOAD_PATH, testImage('timer', 'Timer'));
     await expect(client.installLibrary()).rejects.toThrow('not the shared library');
+  });
+
+  it('gives each app\'s memory and the most an app may have', async () => {
+    const target = watch();
+    const client = await PackagesClient.open(target);
+    const writer = writerFor(target);
+    await installImage(writer, client, testImage('timer', 'Timer'));
+
+    const listing = await client.listing();
+
+    expect(listing.room).toBe(MOCK_ROOM);
+    expect(appDetail(listing.apps[0])).toMatch(/^App · [0-9.]+ kB · needs [0-9.]+ kB$/);
+    expect(appDetail({ ...listing.apps[0], kind: 'face', enabled: false, need: null })).toMatch(/^Watch face, hidden · [0-9.]+ kB$/);
+    expect(await client.enable('timer', false)).toEqual({ need: listing.apps[0].need, room: MOCK_ROOM });
+    expect(memoryText(33792)).toBe('33.0 kB');
+  });
+
+  it('passes on the watch\'s refusals with their number and the memory', async () => {
+    const target = watch();
+    const client = await PackagesClient.open(target);
+    const writer = writerFor(target);
+    await installImage(writer, client, testImage('launcher', 'Apps'));
+    await installImage(writer, client, testImage('digital', 'Digital', 'face'));
+    const timer = testImage('huge', 'Huge');
+    const huge = new Uint8Array(timer.length + 30000);
+    huge.set(timer);
+
+    const tooLarge = await installImage(writer, client, huge).catch((error: PackagesError) => error);
+    const launcher = await client.enable('launcher', false).catch((error: PackagesError) => error);
+    const face = await client.enable('digital', false).catch((error: PackagesError) => error);
+
+    expect(tooLarge).toMatchObject({ why: 1, room: MOCK_ROOM, need: huge.length + 8000 });
+    expect((tooLarge as PackagesError).message).toBe(`${REFUSALS[1]} (needs ${memoryText(huge.length + 8000)} of 33.0 kB)`);
+    expect((await client.apps()).find((app) => app.id === 'huge')?.enabled).toBe(false);
+    await expect(client.enable('huge', true)).rejects.toMatchObject({ why: 1 });
+    expect(launcher).toMatchObject({ why: 3, need: null, message: 'the launcher stays on' });
+    expect(face).toMatchObject({ why: 4, message: 'the last watch face stays on' });
   });
 
   it('refuses a bad id before sending anything', async () => {

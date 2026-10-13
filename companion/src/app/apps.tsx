@@ -10,7 +10,7 @@ import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
-import { installImage, type WatchApp } from '@/protocol/packages';
+import { appDetail, installImage, memoryText, type WatchApp } from '@/protocol/packages';
 import { useTask } from '@/state/use-task';
 
 // Lists the apps and faces on the watch, installs a compiled image, and hides or removes one.
@@ -20,14 +20,19 @@ export default function AppsScreen() {
   const { files, packages, watchReady } = useWatch();
   const task = useTask();
   const [apps, setApps] = useState<WatchApp[] | null>(null);
+  const [room, setRoom] = useState<number | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
 
-  const refresh = useCallback(
-    () => task.run('Listing apps', async () => setApps(await (await packages()).apps())),
-    [packages, task],
-  );
+  // Lists the apps, with the memory each needs and the most one may have.
+  const list = useCallback(async () => {
+    const listing = await (await packages()).listing();
+    setApps(listing.apps);
+    setRoom(listing.room);
+  }, [packages]);
+
+  const refresh = useCallback(() => task.run('Listing apps', list), [list, task]);
 
   useEffect(() => {
     if (watchReady) {
@@ -49,16 +54,19 @@ export default function AppsScreen() {
         setProgress(`${step.file}: ${Math.round((step.sent / Math.max(1, step.total)) * 100)}%`),
       );
       setProgress(`Installed ${header.name}.`);
-      setApps(await (await packages()).apps());
+      await list();
     });
 
   const chosen = apps?.find((app) => app.id === selected) ?? null;
 
   const act = (label: string, action: () => Promise<void>) =>
     task.run(label, async () => {
-      await action();
-      setArmed(false);
-      setApps(await (await packages()).apps());
+      try {
+        await action();
+      } finally {
+        setArmed(false);
+        await list();
+      }
     });
 
   return (
@@ -67,12 +75,18 @@ export default function AppsScreen() {
         <ThemedText type="small" themeColor="textSecondary">
           Apps and faces are compiled by the NeoTime compiler into .ntapp images, and the shared
           library into a .ntlib. Installing one sends it to the watch, which checks it before using
-          it. Removing an app also deletes what it saved.
+          it. Removing an app also deletes what it saved. The watch works out how much memory each app
+          needs and refuses to turn on one that would not fit.
         </ThemedText>
         <Button title="Set up this watch" variant="secondary" onPress={() => router.push('/setup')} />
       </Card>
 
       <Card title="On the watch">
+        {room !== null ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            Each app may use up to {memoryText(room)} while it is open.
+          </ThemedText>
+        ) : null}
         {apps?.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
             Nothing installed yet.
@@ -82,7 +96,7 @@ export default function AppsScreen() {
           <Row
             key={app.id}
             label={app.name}
-            detail={`${app.kind === 'face' ? 'Watch face' : 'App'}${app.enabled ? '' : ', hidden'} · ${(app.bytes / 1024).toFixed(1)} kB`}
+            detail={appDetail(app)}
             onPress={() => {
               setSelected(app.id === selected ? null : app.id);
               setArmed(false);
@@ -98,7 +112,11 @@ export default function AppsScreen() {
             title={chosen.enabled ? 'Hide from the launcher' : 'Show in the launcher'}
             variant="secondary"
             disabled={task.busy !== null}
-            onPress={() => void act('Saving', async () => (await packages()).enable(chosen.id, !chosen.enabled))}
+            onPress={() =>
+              void act('Saving', async () => {
+                await (await packages()).enable(chosen.id, !chosen.enabled);
+              })
+            }
           />
           <Button
             title={armed ? 'Tap again to remove it and what it saved' : 'Remove'}

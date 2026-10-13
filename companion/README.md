@@ -103,6 +103,8 @@ npm run neotime -- note shopping.txt large
 npm run neotime -- remote push
 npm run neotime -- apps setup
 npm run neotime -- apps install path/to/timer.ntapp
+npm run neotime -- apps list
+npm run neotime -- apps hide dice
 npm run neotime -- backup watch-backup.json
 npm run neotime -- notify "Build finished" "All tests passed"
 npm run neotime -- status
@@ -170,7 +172,7 @@ src/app/                 Expo Router screens
   (tabs)/console.tsx     Raw UART traffic and a line to send as it is
   (tabs)/settings.tsx    App settings: weather place, hosts watch apps may fetch, GitHub builds
   scan.tsx               Modal that lists nearby watches
-  apps.tsx               Install a compiled .ntapp or .ntlib image, hide or remove an app
+  apps.tsx               Install a compiled .ntapp or .ntlib image, hide or remove an app, see its memory
   setup.tsx              Set up a new watch: the shared icons, a face, the launcher and apps
   notes.tsx              The text file the watch's Notes app shows, and its font there
   remote.tsx             The watch's Remote app: its buttons, what each runs here, and recent taps
@@ -206,7 +208,7 @@ The app reads which services the watch serves right after connecting, in
 | Battery | `0x180F` / `0x2A19` | the battery level |
 | NeoTime diagnostics | `6e540001-…` / `6e540002-…` | eight 32-bit counters |
 | File transfer (BLEFS) | `0xFEBB` / `adaf0200-…` | files, backups, apps |
-| NeoTime packages | `6e540001-…` / `6e540003-…` | installing, hiding and removing apps; the shared library |
+| NeoTime packages | `6e540001-…` / `6e540003-…` | installing, hiding and removing apps, the memory each needs and the watch's refusals; the shared library |
 | Nordic UART | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` | the Gadgetbridge messages |
 
 The NeoTime UUIDs share the base `6e54xxxx-0000-4000-8000-4e656f54696d`. The full description,

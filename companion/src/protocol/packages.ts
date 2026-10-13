@@ -11,7 +11,14 @@ import { NEOTIME_PACKAGES, NEOTIME_SERVICE } from './neotime';
 // Types
 // ============================================================================
 
-export type WatchApp = { id: string; name: string; kind: 'app' | 'face'; enabled: boolean; bytes: number };
+// `need` is the heap the app needs while open, in bytes, or null from firmware that does not say.
+export type WatchApp = { id: string; name: string; kind: 'app' | 'face'; enabled: boolean; bytes: number; need: number | null };
+
+// The installed apps, with the most heap an app may need when the watch gives it.
+export type WatchApps = { apps: WatchApp[]; room: number | null };
+
+// What the watch said about the heap after installing an app or turning it on or off.
+export type MemoryAnswer = { need: number | null; room: number | null };
 
 export type Progress = { file: string; sent: number; total: number };
 
@@ -21,9 +28,41 @@ export type FileWriter = {
   mkdir?(path: string): Promise<void>;
 };
 
-export class PackagesError extends Error {}
+// Why the watch refused, as docs/companion-protocol.md numbers it.
+export const REFUSALS: Record<number, string> = {
+  1: 'it needs more memory than an app can have',
+  2: 'the launcher would run out of memory',
+  3: 'the launcher stays on',
+  4: 'the last watch face stays on',
+  5: 'it is open on the watch',
+};
 
-type Reply = { c: string; ok?: number; err?: string; a?: [string, string, string, number, number][] };
+export class PackagesError extends Error {
+  constructor(
+    message: string,
+    // The refusal's number, the heap needed and the most an app may have, when the watch refused a change.
+    readonly why: number | null = null,
+    readonly need: number | null = null,
+    readonly room: number | null = null,
+  ) {
+    super(need !== null && room !== null ? `${message} (needs ${memoryText(need)} of ${memoryText(room)})` : message);
+  }
+}
+
+type Reply = {
+  c: string;
+  ok?: number;
+  err?: string;
+  why?: number;
+  need?: number;
+  room?: number;
+  a?: [string, string, string, number, number, number?][];
+};
+
+// Bytes as kilobytes with one decimal, as the apps screen and the command line show memory.
+export function memoryText(bytes: number): string {
+  return `${(bytes / 1024).toFixed(1)} kB`;
+}
 
 // Where a new shared library goes before install_library.
 export const LIBRARY_UPLOAD_PATH = '/resources/shared.ntlib';
@@ -68,19 +107,26 @@ export class PackagesClient {
 
   // Every installed app and face, in the order the launcher shows them.
   async apps(): Promise<WatchApp[]> {
+    return (await this.listing()).apps;
+  }
+
+  // The installed apps with each one's heap need, and the most an app may have.
+  async listing(): Promise<WatchApps> {
     const reply = await this.command({ c: 'apps' });
-    return (reply.a ?? []).map(([id, name, kind, enabled, bytes]) => ({
+    const apps = (reply.a ?? []).map(([id, name, kind, enabled, bytes, need]): WatchApp => ({
       id,
       name,
       kind: kind === 'face' ? 'face' : 'app',
       enabled: Boolean(enabled),
       bytes,
+      need: need ?? null,
     }));
+    return { apps, room: reply.room ?? null };
   }
 
-  async install(id: string): Promise<void> {
+  async install(id: string): Promise<MemoryAnswer> {
     appImagePath(id);
-    await this.command({ c: 'install', id });
+    return memoryOf(await this.command({ c: 'install', id }));
   }
 
   async remove(id: string): Promise<void> {
@@ -88,9 +134,10 @@ export class PackagesClient {
     await this.command({ c: 'remove', id });
   }
 
-  async enable(id: string, on: boolean): Promise<void> {
+  // Turns an app on or off; the watch first checks it fits, and refuses with a PackagesError that says why.
+  async enable(id: string, on: boolean): Promise<MemoryAnswer> {
     appImagePath(id);
-    await this.command({ c: 'enable', id, on });
+    return memoryOf(await this.command({ c: 'enable', id, on }));
   }
 
   async installLibrary(): Promise<void> {
@@ -108,7 +155,7 @@ export class PackagesClient {
         continue;
       }
       if (reply.err) {
-        throw new PackagesError(reply.err);
+        throw new PackagesError(reply.err, reply.why ?? null, reply.need ?? null, reply.room ?? null);
       }
       return reply;
     }
@@ -131,6 +178,16 @@ export class PackagesClient {
       }
     }
   }
+}
+
+// What the apps screen says about an app: its kind, whether it is hidden, its size and the memory it needs.
+export function appDetail(app: WatchApp): string {
+  const need = app.need === null ? '' : ` · needs ${memoryText(app.need)}`;
+  return `${app.kind === 'face' ? 'Watch face' : 'App'}${app.enabled ? '' : ', hidden'} · ${memoryText(app.bytes)}${need}`;
+}
+
+function memoryOf(reply: Reply): MemoryAnswer {
+  return { need: reply.need ?? null, room: reply.room ?? null };
 }
 
 // ============================================================================

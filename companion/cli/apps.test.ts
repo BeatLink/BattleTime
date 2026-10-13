@@ -54,10 +54,31 @@ describe('the apps command', () => {
     log.mockRestore();
 
     expect(said.join('\n')).toContain('Installed Timer as timer.');
-    expect(said.some((line) => /^timer\s+app\s+hidden Timer$/.test(line))).toBe(true);
+    expect(said.some((line) => /^timer\s+app\s+hidden\s+[0-9.]+ kB\s+Timer$/.test(line))).toBe(true);
+    expect(said).toContain('Each app may use up to 33.0 kB while it is open.');
+    expect(said.some((line) => /^Showed timer; it needs [0-9.]+ kB\.$/.test(line))).toBe(true);
     expect(said).toContain('Removed timer.');
     await expect(run('install')).rejects.toThrow('Give the compiled');
     await expect(run('frobnicate')).rejects.toThrow('Unknown apps action');
+  });
+
+  it('says when the watch refuses to show or hide an app', async () => {
+    const session = new FakeSession();
+    const log = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const run = (...args: string[]) => apps(session as unknown as WatchSession, args);
+    await run('install', imageFile(testImage('launcher', 'Apps')));
+    const small = testImage('huge', 'Huge');
+    const huge = new Uint8Array(small.length + 30000);
+    huge.set(small);
+    session.fileService.files.set('/apps/huge/app.ntapp', huge);
+    session.fileService.files.set('/apps/huge/disabled', new Uint8Array(0));
+
+    await expect(run('hide', 'launcher')).rejects.toThrow('The watch refused to hide launcher: the launcher stays on.');
+    await expect(run('show', 'huge')).rejects.toThrow(
+      /^The watch refused to show huge: it needs more memory than an app can have \(needs [0-9.]+ kB of 33\.0 kB\)\.$/,
+    );
+    await expect(run('show', 'nothing')).rejects.toThrow('no such app');
+    log.mockRestore();
   });
 
   it('sets up a new watch from the bundled images', async () => {

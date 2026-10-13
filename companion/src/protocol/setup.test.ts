@@ -32,8 +32,8 @@ describe('setting up a new watch', () => {
 
   it('is offered until a face is installed', () => {
     expect(needsSetup([])).toBe(true);
-    expect(needsSetup([{ id: 'timer', name: 'Timer', kind: 'app', enabled: true, bytes: 1 }])).toBe(true);
-    expect(needsSetup([{ id: 'digital', name: 'Digital', kind: 'face', enabled: true, bytes: 1 }])).toBe(false);
+    expect(needsSetup([{ id: 'timer', name: 'Timer', kind: 'app', enabled: true, bytes: 1, need: null }])).toBe(true);
+    expect(needsSetup([{ id: 'digital', name: 'Digital', kind: 'face', enabled: true, bytes: 1, need: null }])).toBe(false);
   });
 
   it('installs everything chosen, reporting each step', async () => {
