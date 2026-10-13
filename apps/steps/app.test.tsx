@@ -57,6 +57,8 @@ describe("steps", () => {
     act(() => { swipe("right"); });
     expect(screen.getByText("Today")).toBeTruthy();
     act(() => { swipe("right"); });
+    expect(screen.getByText("Today")).toBeTruthy();
+    act(() => { swipe("down"); });
     expect(screen.getByText("Step history")).toBeTruthy();
   });
 });

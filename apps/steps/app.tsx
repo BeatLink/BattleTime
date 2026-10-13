@@ -89,21 +89,20 @@ function show_day(days_back: number) {
 
 function swipe_on_today(event: SwipeEvent) {
   if (event.direction === "up") go("week");
-  else if (event.direction === "right") back();
 }
 
 function swipe_on_week(event: SwipeEvent) {
   if (event.direction === "up") show_day(0);
-  else if (event.direction === "down" || event.direction === "right") back();
+  else if (event.direction === "down") back();
 }
 
-/** Left goes a day further back and right a day forward, or back to the week from today. */
+/** Left goes a day further back and right a day forward; down goes back to the week. */
 function swipe_on_day(event: SwipeEvent) {
   if (event.direction === "left" && shown_days_back.value < STEP_HISTORY_DAYS - 1) {
     shown_days_back.value = shown_days_back.value + 1;
   } else if (event.direction === "right" && shown_days_back.value > 0) {
     shown_days_back.value = shown_days_back.value - 1;
-  } else if (event.direction === "down" || event.direction === "right") back();
+  } else if (event.direction === "down") back();
 }
 
 // ============================================================================

@@ -115,11 +115,10 @@ const free_storage_text = computed(() => {
 
 function swipe_on_battery(event: SwipeEvent) {
   if (event.direction === "up") go("system");
-  else if (event.direction === "right") back();
 }
 
 function swipe_on_system(event: SwipeEvent) {
-  if (event.direction === "down" || event.direction === "right") back();
+  if (event.direction === "down") back();
 }
 
 // ============================================================================

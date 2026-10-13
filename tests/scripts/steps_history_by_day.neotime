@@ -23,5 +23,7 @@ swipe right
 expect text "Today"
 expect text "4321"
 swipe right
+expect text "Today"
+swipe down
 expect screen week
 expect no failures

@@ -232,7 +232,7 @@ fn the_system_app_opens_on_the_battery_and_pages_up_and_down() {
     watch.swipe(Direction::Down);
     assert_eq!(watch.screen_name(), Some("main"));
     watch.swipe(Direction::Right);
-    assert_eq!(watch.effects_of(EffectKind::Back).len(), 1);
+    assert!(watch.effects_of(EffectKind::Back).is_empty(), "the button goes back, not a swipe");
     assert!(watch.failures().is_empty());
 }
 
