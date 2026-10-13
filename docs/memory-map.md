@@ -38,21 +38,21 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Component | Full build | Recovery build |
 |---|---:|---:|
 | App host (with `neotime-ui` and rlvgl) | 85.7 KB | 0.0 KB |
-| Firmware (start-up, shell, tasks) | 82.0 KB | 43.2 KB |
+| Firmware (start-up, shell, tasks) | 83.3 KB | 44.3 KB |
 | Bluetooth (controller and TrouBLE) | 43.3 KB | 43.3 KB |
 | App runtime | 32.6 KB | 0.1 KB |
 | core, alloc and compiler builtins | 27.0 KB | 11.3 KB |
 | Storage (littlefs) | 21.6 KB | 21.0 KB |
 | Embassy, allocator and Cortex-M | 18.2 KB | 16.1 KB |
 | Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
-| Settings, companion and notifications (with serde) | 11.0 KB | 8.8 KB |
+| Settings, companion and notifications (with serde) | 10.6 KB | 8.6 KB |
 | Display, graphics and drivers | 6.7 KB | 3.1 KB |
 | Updates (DFU) | 2.4 KB | 2.4 KB |
 | Packages | 2.3 KB | 2.1 KB |
-| BLEFS file service | 2.0 KB | 2.2 KB |
+| BLEFS file service | 1.8 KB | 2.0 KB |
 | Other constants and padding | 23.4 KB | 10.9 KB |
-| **Used** | **370.1 KB** | **164.4 KB** |
-| Free of 400 KB | 29.9 KB | 235.6 KB |
+| **Used** | **370.7 KB** | **165.0 KB** |
+| Free of 400 KB | 29.3 KB | 235.0 KB |
 <!-- /measure_memory:firmware -->
 
 The accelerometer's configuration is the largest piece of data left in it; each watch could build
@@ -113,7 +113,7 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 | Formatting: the root and the three top-level folders | | 8 |
 | `/settings/system` and `/settings/theme` | 77 | 0 |
 | 12 app folders | | 24 |
-| 12 app images, 194 B (launcher) to 3,993 B (settings) | 21,981 | 11 |
+| 12 app images, 194 B (launcher) to 3,895 B (settings) | 21,883 | 11 |
 | **In use** | | **43 of 768: 172 KB of 3 MB** |
 <!-- /measure_memory:file-system -->
 
@@ -193,14 +193,14 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (storage 16 KB, UI 21 KB; the recovery build has no UI heap) | 37,888 B | 16,384 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 13,714 B | 10,517 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 13,724 B | 10,525 B |
 | Bluetooth controller | 2,545 B | 2,545 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | BLEFS file service | 122 B | 122 B |
 | App host (with `neotime-ui` and rlvgl) | 56 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **54,740 B** | **29,980 B** |
-| Left for the stack | 10,780 B | 35,540 B |
+| **Static RAM** (`.data` and `.bss`) | **54,756 B** | **29,988 B** |
+| Left for the stack | 10,764 B | 35,532 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
