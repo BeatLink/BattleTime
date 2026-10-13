@@ -889,8 +889,9 @@ impl Shell {
     }
 
     /// Whether the open app is part way through a transition, which the shell finishes before anything else.
-    fn is_in_transition(&self) -> bool {
-        self.host.as_ref().is_some_and(|host| host.is_in_transition())
+    /// Whether a transition or a redraw is part way through, with more slices to paint before the next input.
+    fn is_drawing_under_way(&self) -> bool {
+        self.lit && !status_is_shown() && self.host.as_ref().is_some_and(|host| host.needs_drawing())
     }
 
     fn draw(&mut self) {
@@ -1074,7 +1075,7 @@ pub async fn run_shell(
         diagnostics::add_one(Counter::ShellLoops);
         diagnostics::set(Counter::ScreenLit, shell.lit as u32);
         shell.draw();
-        while shell.lit && shell.is_in_transition() {
+        while shell.is_drawing_under_way() {
             yield_now().await;
             shell.draw();
         }

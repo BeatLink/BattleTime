@@ -6,7 +6,7 @@ use std::{cell::RefCell, rc::Rc};
 use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565, RgbColor};
 use embedded_hal::{delay::DelayNs, digital::ErrorType, digital::OutputPin};
 use mipidsi::interface::{Interface, InterfaceKind};
-use neotime_app_host::{STRIP_PIXELS, TRANSITION_TIME_IN_MILLISECONDS};
+use neotime_app_host::{PAINT_STEP_PIXELS, STRIP_PIXELS, TRANSITION_TIME_IN_MILLISECONDS};
 use neotime_app_testing::{Framebuffer, TestWatch, Touch, Transition};
 use neotime_display::Display;
 
@@ -345,6 +345,53 @@ fn a_slide_after_a_lift_of_the_finger_does_not_scroll_twice() {
     });
 
     assert_eq!(app.visible_texts(), first_place);
+}
+
+// ============================================================================
+// Painting in slices
+// ============================================================================
+
+#[test]
+fn a_whole_screen_drawn_in_place_comes_a_slice_per_step() {
+    let mut app = TestWatch::open_app("settings").unwrap();
+    let mut watch = Watch::new();
+
+    let mut sent = Vec::new();
+    while app.host().needs_drawing() {
+        sent.push(watch.draw_step(&mut app));
+    }
+
+    assert_eq!(sent.len(), SIDE * SIDE / PAINT_STEP_PIXELS as usize);
+    assert!(
+        sent.iter().all(|&pixels| pixels <= PAINT_STEP_PIXELS as usize),
+        "{sent:?}"
+    );
+    assert_eq!(watch.pixels_unlike(&app.fresh_frame()), 0);
+}
+
+#[test]
+fn a_scroll_begun_while_slices_are_left_waits_for_them_and_ends_exact() {
+    let mut app = launcher_with_many_apps();
+    let mut watch = Watch::new();
+    watch.draw_step(&mut app);
+
+    drag_drawing_each_move(&mut app, &mut watch, 220, 100);
+
+    assert_eq!(watch.pixels_unlike(&app.fresh_frame()), 0);
+}
+
+#[test]
+fn a_change_while_slices_are_left_is_drawn_once_they_are_done() {
+    let mut app = TestWatch::open_app("settings").unwrap();
+    let mut watch = Watch::new();
+    watch.draw_everything(&mut app);
+    let theme = *app.host().theme();
+    app.host_mut().set_theme(theme);
+    watch.draw_step(&mut app);
+
+    drag_drawing_each_move(&mut app, &mut watch, 220, 120);
+
+    assert_eq!(watch.pixels_unlike(&app.fresh_frame()), 0);
 }
 
 // ============================================================================

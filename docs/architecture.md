@@ -567,8 +567,9 @@ watch face, the launcher and the apps through `neotime-app-host`:
   so a long job that blocks every task, such as copying the shared library, never counts.
   `tests/emulator/liveness.robot` stops the radio's interrupt and sees the reset.
 - **Transitions.** The launcher and apps slide up over what was open, and the button's way back
-  or home slides down; a swipe right going back wipes in from the left. The shell draws a transition's steps one
-  after another, yielding to the other tasks between them, before it takes the next input. Once a
+  or home slides down; a swipe right going back wipes in from the left. The shell draws a transition's steps, and
+  the slices of a large redraw, one after another, yielding to the other tasks between them, before
+  it takes the next input. Once a
   new screen opens, the rest of the touch that opened it is dropped until the finger lifts, so a
   swipe that opens the launcher does not also scroll it.
 - **Drawing.** `draw_host` lends the host a strip of `STRIP_PIXELS` (1,920 B) on the stack, held
@@ -853,6 +854,11 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
   whose value, place or visibility changed are drawn again: where each was and where it is now.
   `draw_step` paints each such region a strip at a time through a buffer the caller lends it
   (`STRIP_PIXELS`, four rows), from the background up; `draw` does the same on any plain screen.
+  Each `draw_step` paints at most `PAINT_STEP_PIXELS` (48 full rows, a fifth of the screen, about
+  23 ms over the bus) and keeps the rest, along with a whole screen drawn in place, for the steps
+  that follow, so the watch's other tasks run between slices. Changes that come in meanwhile wait
+  until those parts are painted, and a list scrolled meanwhile is drawn afresh rather than moved in
+  the panel, whose rows would otherwise move twice.
 - **Scrolling.** A drag on a Scroll or List moves its content with the finger, and only a lift of
   the finger ends it, even when the panel names a slide while the finger is still down; a vertical swipe the drag made is not also sent to
   the screen. On a `ScrollingScreen` the panel moves the list's rows: the host sets a band to the

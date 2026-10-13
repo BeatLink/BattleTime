@@ -37,7 +37,7 @@ use crate::system::{button_value, swipe_value, AppEffect, AppFailure, Clocked, E
 use crate::text::WrappedLines;
 use crate::text_file::{covers, font_from_file, LineIndex};
 use painting::{ScrollMove, TransitionRun};
-pub use painting::{Transition, STRIP_PIXELS, TRANSITION_TIME_IN_MILLISECONDS};
+pub use painting::{Transition, PAINT_STEP_PIXELS, STRIP_PIXELS, TRANSITION_TIME_IN_MILLISECONDS};
 
 // ============================================================================
 // Limits
@@ -159,6 +159,8 @@ pub struct AppHost<'image> {
     dirty_nodes: u128,
     /// Where nodes that are gone were last drawn, to paint over.
     cleared_regions: Vec<Rect>,
+    /// Parts of the screen still to paint, a slice per `draw_step`, so other work can run between slices.
+    unpainted_regions: Vec<Rect>,
     /// A widget was shown or hidden, so the nodes must be built again to match.
     nodes_out_of_date: bool,
     /// Whether the touch under way has scrolled a list, so its slide is not also a swipe.
@@ -307,6 +309,7 @@ impl<'image> AppHost<'image> {
             nodes: Vec::new(),
             dirty_nodes: 0,
             cleared_regions: Vec::new(),
+            unpainted_regions: Vec::new(),
             nodes_out_of_date: false,
             touch_scrolled: false,
             scroll_move: None,
@@ -1838,6 +1841,7 @@ impl<'image> AppHost<'image> {
             && (self.whole_screen_dirty
                 || self.dirty_nodes != 0
                 || !self.cleared_regions.is_empty()
+                || !self.unpainted_regions.is_empty()
                 || self.scroll_move.is_some())
     }
 

@@ -34,6 +34,9 @@ const SLIDE_STEP_ROWS: i32 = 8;
 /// How many columns a wipe draws at each step, at least.
 const WIPE_STEP_COLUMNS: i32 = 16;
 
+/// How many pixels a step paints at most outside a transition, a fifth of the screen.
+pub const PAINT_STEP_PIXELS: i32 = 240 * 48;
+
 /// How long a slide or a wipe takes when `draw_step_at` paces it by the clock.
 pub const TRANSITION_TIME_IN_MILLISECONDS: u64 = 250;
 
@@ -93,6 +96,15 @@ impl TransitionRun {
     }
 }
 
+/// The `row_count` rows of `region` that start `first_row` rows below its top.
+fn rows_from_region(region: Rect, first_row: i32, row_count: i32) -> Rect {
+    Rect {
+        y: region.y + first_row,
+        height: row_count,
+        ..region
+    }
+}
+
 fn rows_from(first_row: i32, row_count: i32) -> Rect {
     Rect {
         x: 0,
@@ -139,7 +151,7 @@ impl<'image> AppHost<'image> {
         Ok(())
     }
 
-    /// Draws what changed since the last call, or one fixed-size step of a transition, through `strip`.
+    /// Draws a slice of what changed since the last call, or one fixed-size step of a transition, through `strip`.
     ///
     /// The strip must hold at least one row of the screen; `STRIP_PIXELS` is the size the watch uses.
     pub fn draw_step<Screen>(
@@ -183,21 +195,49 @@ impl<'image> AppHost<'image> {
         if self.whole_screen_dirty {
             return self.draw_whole_screen_step(screen, strip, now_in_milliseconds);
         }
-        if let Some(scroll_move) = self.scroll_move.take() {
-            self.draw_scroll(screen, strip, scroll_move)?;
-        }
-
-        let regions = self.dirty_regions();
-        for region in &regions {
-            self.paint(screen, strip, *region, 0)?;
-        }
-        for (node_index, node) in self.nodes.iter_mut().enumerate() {
-            if self.dirty_nodes & (1 << node_index) != 0 {
-                node.drawn_bounds = node.covered_area();
+        // Parts already promised are finished before anything new is taken on.
+        if self.unpainted_regions.is_empty() {
+            if let Some(scroll_move) = self.scroll_move.take() {
+                self.draw_scroll(screen, strip, scroll_move)?;
             }
+            self.unpainted_regions = self.dirty_regions();
+            for (node_index, node) in self.nodes.iter_mut().enumerate() {
+                if self.dirty_nodes & (1 << node_index) != 0 {
+                    node.drawn_bounds = node.covered_area();
+                }
+            }
+            self.dirty_nodes = 0;
+            self.cleared_regions.clear();
         }
-        self.dirty_nodes = 0;
-        self.cleared_regions.clear();
+        self.paint_a_slice(screen, strip)
+    }
+
+    /// Paints up to `PAINT_STEP_PIXELS` of the parts still unpainted, keeping the rest for the next step.
+    fn paint_a_slice<Screen>(
+        &mut self,
+        screen: &mut Screen,
+        strip: &mut [Rgb565],
+    ) -> Result<(), Screen::Error>
+    where
+        Screen: ScrollingScreen,
+    {
+        let mut pixels_left = PAINT_STEP_PIXELS;
+        while pixels_left > 0 {
+            let Some(region) = self.unpainted_regions.pop() else {
+                break;
+            };
+            let rows_that_fit = (pixels_left / region.width).max(1);
+            let rows = rows_that_fit.min(region.height);
+            self.paint(screen, strip, rows_from_region(region, 0, rows), 0)?;
+            if rows < region.height {
+                self.unpainted_regions
+                    .push(rows_from_region(region, rows, region.height - rows));
+            }
+            pixels_left -= rows * region.width;
+        }
+        if self.unpainted_regions.is_empty() {
+            self.unpainted_regions = Vec::new();
+        }
         Ok(())
     }
 
@@ -341,7 +381,8 @@ impl<'image> AppHost<'image> {
         let behind = run.rows_behind_the_clock(now_in_milliseconds);
         let step = match run.kind {
             Transition::None => {
-                self.paint(screen, strip, SCREEN_AREA, 0)?;
+                self.unpainted_regions.push(SCREEN_AREA);
+                self.paint_a_slice(screen, strip)?;
                 left
             }
             Transition::Up => {
@@ -401,6 +442,7 @@ impl<'image> AppHost<'image> {
         }
         self.dirty_nodes = 0;
         self.cleared_regions.clear();
+        self.unpainted_regions.clear();
         self.scroll_move = None;
         Ok(TransitionRun {
             kind,
@@ -457,7 +499,9 @@ impl<'image> AppHost<'image> {
     /// Lays out a list that scrolled by `rows`, and keeps the move for the panel to make if it can.
     pub(super) fn note_scroll(&mut self, node_index: usize, rows: i32) {
         self.measure_and_lay_out();
+        // A slice still to paint draws the scrolled content, which the panel must then not move again.
         let can_wait = !self.whole_screen_dirty
+            && self.unpainted_regions.is_empty()
             && self
                 .scroll_move
                 .is_none_or(|waiting| waiting.node_index == node_index);
