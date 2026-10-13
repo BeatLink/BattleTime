@@ -88,16 +88,10 @@ function FolderRow(props: { place: number }) {
   );
 }
 
-/** One group's apps under its name, with the page's number when the groups are pages. */
+/** One group's apps, with no title above them, so the whole screen is theirs. */
 function GroupApps() {
   return (
     <>
-      <Row height={28} justify="center" align_items="center" gap={6}>
-        <Label color="accent">{has_groups.value ? launcher_groups.value[group_place.value].name : ""}</Label>
-        {launcher_style.value === "pages" && (
-          <Label color="muted" font="small">{`${group_place.value + 1}/${launcher_groups.value.length}`}</Label>
-        )}
-      </Row>
       <AppList
         grow={1}
         padding={SPACING}

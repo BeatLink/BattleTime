@@ -94,11 +94,11 @@ describe("launcher", () => {
       // The launcher remembers the page it was left on, so go back to the first.
       act(() => swipe("right"));
       act(() => swipe("right"));
-      expect(screen.getByText("1/2")).toBeTruthy();
+      expect(names()).toHaveLength(2);
+      expect(screen.queryByText("Games")).toBeNull();
 
       act(() => swipe("left"));
       act(() => swipe("left"));
-      expect(screen.getByText("2/2")).toBeTruthy();
       expect(names()).toEqual([expect.stringContaining("Timer")]);
 
       act(() => swipe("right"));

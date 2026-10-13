@@ -130,15 +130,15 @@ fn an_open_folder_goes_back_to_the_groups_with_the_button() {
 fn the_launcher_in_pages_shows_one_group_and_swipes_to_the_next() {
     let mut watch = TestWatch::open_app("launcher").unwrap();
     watch.group_launcher("pages", "list", &TWO_GROUPS).unwrap();
-    assert!(watch.shows_text("Snake") && watch.shows_text("1/2"));
+    assert!(watch.shows_text("Snake") && !watch.shows_text("Games"));
     assert!(!watch.shows_text("Stopwatch"));
 
     watch.swipe(Direction::Left);
-    assert!(watch.shows_text("Stopwatch") && watch.shows_text("2/2"));
+    assert!(watch.shows_text("Stopwatch"));
     assert!(!watch.shows_text("Snake"));
 
     watch.swipe(Direction::Left);
-    assert!(watch.shows_text("2/2"));
+    assert!(watch.shows_text("Stopwatch"));
     watch.swipe(Direction::Right);
     assert!(watch.shows_text("Snake"));
 }
