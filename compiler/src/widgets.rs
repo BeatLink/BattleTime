@@ -118,6 +118,7 @@ fn widget_kind(name: &str) -> Option<WidgetKind> {
         "ConfirmBox" => Confirm,
         "NumberRoller" => NumberRoller,
         "TextFile" => TextFile,
+        "TextLines" => TextLines,
         _ => return None,
     })
 }
@@ -161,6 +162,7 @@ fn property_for(name: &str) -> Option<(Property, Type)> {
         "twelve_hour" => (TwelveHour, Type::BOOL),
         "show_hours" => (ShowHours, Type::BOOL),
         "show_numbers" => (ShowNumbers, Type::BOOL),
+        "length" => (CodeCount, number),
         "digits" => (Digits, number),
         "path" => (Path, Type::TEXT),
         "font_path" => (FontPath, Type::TEXT),
@@ -254,6 +256,7 @@ fn array_property_for(name: &str, kind: WidgetKind) -> Option<(Property, Type, A
         "palette" => (Property::Palette, Type::COLOR, ArrayLayout::Plain),
         "number_map" => (Property::NumberMap, Type::NUMBER, ArrayLayout::Plain),
         "number_colors" => (Property::NumberColors, Type::COLOR, ArrayLayout::Plain),
+        "codes" => (Property::Codes, Type::NUMBER, ArrayLayout::Plain),
         "options" => (Property::Options, Type::NAME, ArrayLayout::Plain),
         "rows" if kind == WidgetKind::ButtonMatrix => (Property::Options, Type::NAME, ArrayLayout::Rows),
         "points" => (Property::Points, Type::NUMBER, ArrayLayout::Points),

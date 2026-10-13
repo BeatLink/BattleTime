@@ -92,10 +92,13 @@ pub enum WidgetKind {
     NumberRoller,
     /// A text file from the watch's storage, wrapped and scrolled, read a little at a time.
     TextFile,
+    /// The end of a text kept as character codes in an array, wrapped to the widget's width and broken at
+    /// each new line, showing as many of the last lines as fit.
+    TextLines,
 }
 
 impl WidgetKind {
-    const ALL: [WidgetKind; 50] = {
+    const ALL: [WidgetKind; 51] = {
         use WidgetKind::*;
         [
             Column,
@@ -148,6 +151,7 @@ impl WidgetKind {
             Confirm,
             NumberRoller,
             TextFile,
+            TextLines,
         ]
     };
 
@@ -302,10 +306,14 @@ pub enum Property {
     NumberMap,
     /// The state array giving the colour of a CellGrid's number for each cell value.
     NumberColors,
+    /// The state array of character codes a TextLines shows.
+    Codes,
+    /// How many of a TextLines' codes are in use.
+    CodeCount,
 }
 
 impl Property {
-    const ALL: [Property; 87] = {
+    const ALL: [Property; 89] = {
         use Property::*;
         [
             X,
@@ -395,6 +403,8 @@ impl Property {
             ShowNumbers,
             NumberMap,
             NumberColors,
+            Codes,
+            CodeCount,
         ]
     };
 
@@ -409,9 +419,8 @@ impl Property {
             | ShowHours | ShowNumbers => PropertyValue::Bool,
             Background | Color | BorderColor | NeedleColor | HourColor | MinuteColor | SecondColor
             | Recolor => PropertyValue::Color,
-            Cells | Palette | Options | Points | Series | Labels | Skip | NumberMap | NumberColors => {
-                PropertyValue::Array
-            }
+            Cells | Palette | Options | Points | Series | Labels | Skip | NumberMap | NumberColors
+            | Codes => PropertyValue::Array,
             Image | Icon => PropertyValue::Image,
             Text | ScreenName | Path | FontPath | Placeholder => PropertyValue::Text,
             OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease | OnDrag | OnSwipe | OnButton
@@ -550,6 +559,7 @@ impl Property {
             ShowHours => kind == Kind::DurationRollers,
             Digits => kind == Kind::NumberRoller,
             Path | FontPath | Placeholder => kind == Kind::TextFile,
+            Codes | CodeCount => kind == Kind::TextLines,
             OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease => {
                 is_input || kind.holds_children() || matches!(kind, Kind::CellGrid | Kind::AppList)
             }

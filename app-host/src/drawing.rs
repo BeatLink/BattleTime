@@ -4,7 +4,7 @@
 //! Array-backed widgets read their arrays at draw time rather than copying them, so a 400-cell
 //! board costs no more UI heap than a label.
 
-use alloc::vec::Vec;
+use alloc::{string::String, vec::Vec};
 
 use neotime_runtime::{
     resources::{library_image_named_by, ImageFormat, ImageReference, ImageResource},
@@ -392,6 +392,21 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
         TextFile => {
             plain_frame(renderer);
             draw_text_file(node, context, renderer);
+        }
+        TextLines => {
+            plain_frame(renderer);
+            let color = resolve(node.settings.color, ThemeColor::Text, context.theme);
+            for (line, place) in text_lines_shown(node, context) {
+                draw_text_block(
+                    renderer,
+                    node.settings.font,
+                    &line,
+                    place,
+                    Align::Start,
+                    false,
+                    color,
+                );
+            }
         }
         Battery | StatusIcons => {
             plain_frame(renderer);
@@ -1206,6 +1221,51 @@ fn draw_cell_grid(node: &Node, context: &DrawContext, renderer: &mut dyn Rendere
             .map_or(number_fallback, |color| to_color(color.resolve(context.theme)));
         draw_cell_number(renderer, node.settings.font, number, place, number_color);
     }
+}
+
+// ============================================================================
+// Text lines
+// ============================================================================
+
+/// The lines a TextLines shows, each with its place: the last lines of its text that fit, wrapped to its width.
+pub fn text_lines_shown(node: &Node, context: &DrawContext) -> Vec<(String, Rect)> {
+    let Some((codes, length)) = context.array(node.settings.array) else {
+        return Vec::new();
+    };
+    let count = (node.settings.value.max(0) as usize).min(length);
+    let text: String = (0..count)
+        .filter_map(|place| {
+            u32::try_from(context.element(codes, place))
+                .ok()
+                .and_then(char::from_u32)
+        })
+        .collect();
+    let font = node.settings.font;
+    let area = inset(node.bounds, i32::from(node.settings.padding));
+    let mut lines: Vec<&str> = WrappedLines::new(&text, font, area.width).collect();
+    // A new line at the very end starts a line of its own, still empty.
+    if text.is_empty() || text.ends_with('\n') {
+        lines.push("");
+    }
+    let height = line_height(font.metrics()).max(1);
+    let fitting = (area.height / height).max(0) as usize;
+    let first = lines.len().saturating_sub(fitting);
+    lines[first..]
+        .iter()
+        .enumerate()
+        .map(|(place, line)| {
+            let top = area.y + place as i32 * height;
+            (
+                String::from(*line),
+                Rect {
+                    x: area.x,
+                    y: top,
+                    width: area.width,
+                    height,
+                },
+            )
+        })
+        .collect()
 }
 
 /// The element of an array, such as a CellGrid's number map, for a cell value; the last for values past its end.

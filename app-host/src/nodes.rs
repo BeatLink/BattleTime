@@ -553,13 +553,13 @@ impl Node {
             Property::Visible => replace(&mut settings.visible, number != 0),
             Property::Disabled => replace(&mut settings.disabled, number != 0),
             Property::Opacity => replace(&mut settings.opacity, number.clamp(0, OPAQUE as i64) as u8),
-            Property::Value | Property::RowCount => replace(&mut settings.value, small),
+            Property::Value | Property::RowCount | Property::CodeCount => replace(&mut settings.value, small),
             Property::Minimum => replace(&mut settings.minimum, small),
             Property::Maximum => replace(&mut settings.maximum, small),
             Property::StartAngle => replace(&mut settings.start_angle, Some(pixels)),
             Property::EndAngle => replace(&mut settings.end_angle, Some(pixels)),
             Property::Columns => replace(&mut settings.columns, to_u16(number)),
-            Property::Cells | Property::Options | Property::Points | Property::Series => {
+            Property::Cells | Property::Options | Property::Points | Property::Series | Property::Codes => {
                 replace(&mut settings.array, to_variable(number))
             }
             _ => false,
@@ -750,6 +750,7 @@ pub fn is_mapped(kind: WidgetKind) -> bool {
             | CellGrid
             | AppList
             | TextFile
+            | TextLines
             | Repeat
             | Battery
             | StatusIcons

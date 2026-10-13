@@ -529,6 +529,52 @@ export function AppList(props: AppListProps) {
   );
 }
 
+export interface TextLinesProps extends CommonProps {
+  /** The text as character codes. */
+  codes: number[];
+  /** How many of the codes are in use. */
+  length: number;
+}
+
+/** About how wide a character of the monospaced UI font is, as a share of its size, for wrapping in the preview. */
+const CHARACTER_WIDTH_SHARE = 0.6;
+
+/** About how tall a line is, as a share of the font's size. */
+const LINE_HEIGHT_SHARE = 1.15;
+
+/**
+ * The end of a text kept as character codes, wrapped to the widget's width and broken at each new line,
+ * showing as many of the last lines as fit. The watch draws it as one widget.
+ */
+export function TextLines(props: TextLinesProps) {
+  const { codes, length, ...common } = props;
+  const size = FONT_SIZES_IN_PIXELS[common.font ?? "normal"];
+  const width = typeof common.width === "number" ? common.width : 224;
+  const columns = Math.max(1, Math.floor((width - 2 * (common.padding ?? 0)) / (size * CHARACTER_WIDTH_SHARE)));
+  const text = String.fromCharCode(...codes.slice(0, length));
+  const lines = text.split("\n").flatMap((line) => {
+    const pieces: string[] = [];
+    let rest = line;
+    while (rest.length > columns) {
+      const space = rest.lastIndexOf(" ", columns);
+      const end = space > 0 ? space : columns;
+      pieces.push(rest.slice(0, end).trimEnd());
+      rest = rest.slice(end).trimStart();
+    }
+    pieces.push(rest);
+    return pieces;
+  });
+  const height = typeof common.height === "number" ? common.height : 120;
+  const fitting = Math.max(0, Math.floor(height / (size * LINE_HEIGHT_SHARE)));
+  return (
+    <div data-widget="text-lines" style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", overflow: "hidden", ...css_without_color(common) }}>
+      {lines.slice(-fitting).map((line) =>
+        line === "" ? <div style={{ height: `${LINE_HEIGHT_SHARE}em` }} /> : <div data-widget="text-line">{line}</div>,
+      )}
+    </div>
+  );
+}
+
 export interface TextFileProps extends CommonProps {
   /** The file to show, written out, such as `"/notes/note.txt"`. */
   path: string;

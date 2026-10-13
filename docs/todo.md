@@ -259,7 +259,6 @@ the ones above it.
   - A `ring(title, icon, until)` system alert with dismiss and snooze events, with the vibration
     and the stop after a time limit, for the alarm, timer and pomodoro.
   - A digit-entry mode for `ButtonMatrix`, for the calculator and pomodoro.
-  - `TextLines` over an array of character codes, for morse's 120 lines of wrapping.
   - The other faces' step, heart and weather rows on `StepsBadge`, `HeartRateBadge` and
     `TemperatureBadge`: infineat, lite-digital, lite-weather, terminal and pinetime-style.
 - [ ] **Comparing with a constant array.** `arrays_equal` takes only signals, so puzzle15's check

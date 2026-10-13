@@ -209,6 +209,7 @@ from inside its parent's padding.
 | `ConfirmBox` | drawn by the runtime | A question and two buttons, its `text` the cancel button's, the confirm button's and the question on lines of their own; `onChange` sends 1 or 0. `ConfirmDialog` binds it to a signal. |
 | `AppList` | drawn by the runtime | The installed apps as a scrolling list of rows, each its icon and name, read from the system by the widget itself. One widget however many apps, so a launcher is a few bytes. |
 | `TextFile` | drawn by the runtime | A text file from the watch's storage, wrapped and scrolled, such as a note the companion app sent. Only the lines near the view are read into RAM, so a long file costs no more than a short one. |
+| `TextLines` | drawn by the runtime | The end of a text kept as character codes in an array signal, wrapped to the widget's width at spaces and broken at each new line, showing as many of the last lines as fit. One widget however many lines, for notepads such as morse. |
 | `Scale` | scale | Ticks and labels around a dial or along a ruler, with an optional needle at `value`. |
 | `AnalogClock` | clock | Clock hands bound to a time, normally `now`. |
 | `Table` | table | Rows and columns of text. |
@@ -262,6 +263,7 @@ Every angle, in every widget and function, is in degrees clockwise from twelve o
 | `AppList` | `gap` between rows, `padding`, `color` for the icons and names, and `onClick` receiving `{ value }`, the tapped app's place in `installed_apps`. Rows are 52 pixels tall. |
 | `Image` | `width` and `height`, from the common props, for an image that is not square. |
 | `TextFile` | `path`, the file to show; `font_path`, a file holding the name of a text font (`small`, `normal`, `medium` or `large`), which wins over `font` when it names one; and `placeholder`, shown in the `muted` colour while the file is missing or empty. All three are written out in the source, not worked out. Tabs and carriage returns show as spaces and bytes that are not UTF-8 as `?`. The file is read when its screen opens, so a file the phone changes shows the next time the screen opens. At most 32,767 pixels of lines are shown, such as about 2,000 lines in the small font; the rest is left out. |
+| `TextLines` | `codes`, an array signal of character codes, and `length`, how many of them are in use. A new line at the end starts an empty last line. |
 | `Chart` | `series`: up to 3 arrays, each with its colour. |
 | `Arc` | `value`, `minimum` and `maximum`. Given a signal, the arc can be dragged and writes back to it, with `onChange`. |
 | `Image` | `recolor`: draws a one-colour image, such as a logo, in this colour. |

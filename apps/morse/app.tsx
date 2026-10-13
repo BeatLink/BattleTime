@@ -1,14 +1,14 @@
 // Morse translator and notepad, from wasp-os's morse.
 // Swipe up for a line and down for a dot, then tap to end the letter; a tap with nothing keyed adds a
-// space. Swipe right for a space, twice for a new line, and left to delete. The top card shows the last
-// six lines and the bottom card the dots and lines keyed so far with the letter they make. The text
+// space. Swipe right for a space, twice for a new line, and left to delete. The top card shows as many
+// of the last lines as fit and the bottom card the dots and lines keyed so far with the letter they make. The text
 // persists, and a long press asks to clear it.
 
 import { computed, signal } from "@preact/signals";
-import { clamp, define_app, persisted, range, text_from_codes, type SwipeEvent } from "neotime";
+import { define_app, persisted, push_shift, range, text_from_codes, type SwipeEvent } from "neotime";
 import { Card, ConfirmDialog } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Label, Row, Screen } from "neotime/widgets";
+import { Label, Row, Screen, TextLines } from "neotime/widgets";
 
 // ============================================================================
 // Morse code
@@ -56,14 +56,9 @@ export function next_span(span: number): number {
 
 /** The most characters the text keeps; adding one more drops the oldest. */
 const CAPACITY = 96;
-const LINE_LENGTH = 16;
 
 const POSITIONS = range(CAPACITY);
 const KEYED_PLACES = range(LONGEST_LETTER);
-const LINE_COLUMNS = range(LINE_LENGTH);
-
-/** The six lines on show, oldest first. */
-const LINE_PLACES = range(6);
 
 /** Character codes for a new line, a space, and the dot and line keyed. */
 const NEW_LINE = 10;
@@ -78,18 +73,6 @@ export const text_codes = persisted<number[]>(
 );
 export const text_count = persisted("text_count", 0);
 
-/** The six lines on show, oldest first, as character codes copied from the text after each change. */
-export const line_0 = signal<number[]>(LINE_COLUMNS.map(() => SPACE));
-export const line_1 = signal<number[]>(LINE_COLUMNS.map(() => SPACE));
-export const line_2 = signal<number[]>(LINE_COLUMNS.map(() => SPACE));
-export const line_3 = signal<number[]>(LINE_COLUMNS.map(() => SPACE));
-export const line_4 = signal<number[]>(LINE_COLUMNS.map(() => SPACE));
-export const line_5 = signal<number[]>(LINE_COLUMNS.map(() => SPACE));
-export const line_lengths = signal<number[]>(LINE_PLACES.map(() => 0));
-
-/** Where each line on show starts in the text. */
-const line_starts = signal<number[]>(LINE_PLACES.map(() => 0));
-
 /** The dots and lines keyed for the letter in progress, as character codes. */
 const keyed_codes = signal<number[]>(KEYED_PLACES.map(() => DOT));
 const keyed_count = signal(0);
@@ -99,71 +82,6 @@ const node = signal(0);
 const span = signal(TREE_SIZE);
 
 const is_asking_to_clear = signal(false);
-
-// ============================================================================
-// Text layout
-// ============================================================================
-
-/** How many lines the text takes, counting the unfinished last one. */
-function count_lines(): number {
-  let finished_lines = 0;
-  let column = 0;
-  for (const position of POSITIONS) {
-    if (position < text_count.value) {
-      const character = text_codes.value[position];
-      if (character === NEW_LINE || column === LINE_LENGTH) {
-        finished_lines = finished_lines + 1;
-        column = 0;
-      }
-      if (character !== NEW_LINE) column = column + 1;
-    }
-  }
-  return finished_lines + 1;
-}
-
-/** Finds where each line on show starts in the text and how long it is, the first on show being `first_shown`. */
-function measure_lines(first_shown: number) {
-  for (const place of LINE_PLACES) {
-    line_starts.value[place] = 0;
-    line_lengths.value[place] = 0;
-  }
-  let line = 0;
-  let column = 0;
-  for (const position of POSITIONS) {
-    if (position < text_count.value) {
-      const character = text_codes.value[position];
-      if (character === NEW_LINE || column === LINE_LENGTH) {
-        line = line + 1;
-        column = 0;
-        if (line >= first_shown) line_starts.value[line - first_shown] = character === NEW_LINE ? position + 1 : position;
-      }
-      if (character !== NEW_LINE) {
-        if (line >= first_shown) {
-          line_lengths.value[line - first_shown] = position + 1 - line_starts.value[line - first_shown];
-        }
-        column = column + 1;
-      }
-    }
-  }
-}
-
-/** The character at a column of the line on show at a place; past the line's end it is unused. */
-function shown_code(place: number, column: number): number {
-  return text_codes.value[clamp(line_starts.value[place] + column, 0, CAPACITY - 1)];
-}
-
-/** Lays out the last six lines of the text, wrapping long lines and breaking at each new line. */
-export function refresh_lines() {
-  measure_lines(count_lines() - LINE_PLACES.length);
-  for (const column of LINE_COLUMNS) {
-    line_0.value[column] = shown_code(0, column);
-    line_1.value[column] = shown_code(1, column);
-    line_2.value[column] = shown_code(2, column);
-    line_3.value[column] = shown_code(3, column);
-    line_4.value[column] = shown_code(4, column);
-    line_5.value[column] = shown_code(5, column);
-  }
-}
 
 // ============================================================================
 // Derived values
@@ -189,10 +107,7 @@ function append(code: number) {
     text_codes.value[text_count.value] = code;
     text_count.value = text_count.value + 1;
   } else {
-    for (const position of POSITIONS) {
-      if (position < CAPACITY - 1) text_codes.value[position] = text_codes.value[position + 1];
-    }
-    text_codes.value[CAPACITY - 1] = code;
+    text_codes.value = push_shift(text_codes.value, code);
   }
 }
 
@@ -208,7 +123,6 @@ function key_symbol(is_line: boolean) {
 export function end_letter() {
   append(node.value < 0 ? UNKNOWN : CODE[node.value]);
   forget_keyed();
-  refresh_lines();
 }
 
 /** Adds a space, or turns a space just before into a new line. */
@@ -218,7 +132,6 @@ function add_space_or_new_line() {
   } else {
     append(SPACE);
   }
-  refresh_lines();
 }
 
 function delete_back() {
@@ -226,8 +139,7 @@ function delete_back() {
     forget_keyed();
   } else {
     text_count.value = Math.max(0, text_count.value - 1);
-    refresh_lines();
-  }
+    }
 }
 
 export function swipe(event: SwipeEvent) {
@@ -240,7 +152,6 @@ export function swipe(event: SwipeEvent) {
 export function clear_text() {
   text_count.value = 0;
   forget_keyed();
-  refresh_lines();
 }
 
 // ============================================================================
@@ -257,12 +168,7 @@ function Morse() {
       gap={6}
     >
       <Card grow={1} gap={0}>
-        <Label height={23} long_mode="clip">{text_from_codes(line_0.value, line_lengths.value[0])}</Label>
-        <Label height={23} long_mode="clip">{text_from_codes(line_1.value, line_lengths.value[1])}</Label>
-        <Label height={23} long_mode="clip">{text_from_codes(line_2.value, line_lengths.value[2])}</Label>
-        <Label height={23} long_mode="clip">{text_from_codes(line_3.value, line_lengths.value[3])}</Label>
-        <Label height={23} long_mode="clip">{text_from_codes(line_4.value, line_lengths.value[4])}</Label>
-        <Label height={23} long_mode="clip">{text_from_codes(line_5.value, line_lengths.value[5])}</Label>
+        <TextLines grow={1} codes={text_codes.value} length={text_count.value} />
       </Card>
       <Card height={48}>
         <Row justify="space_between">
@@ -280,5 +186,4 @@ export default define_app({
   name: "Morse",
   icon: icons.notification,
   screens: { main: Morse },
-  onOpen: refresh_lines,
 });

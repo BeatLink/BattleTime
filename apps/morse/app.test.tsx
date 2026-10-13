@@ -6,16 +6,8 @@ import app, {
   CODE_LETTERS,
   end_letter,
   keyed_text,
-  line_0,
-  line_1,
-  line_2,
-  line_3,
-  line_4,
-  line_5,
-  line_lengths,
   next_node,
   next_span,
-  refresh_lines,
   swipe,
   text_codes,
   text_count,
@@ -37,13 +29,6 @@ function decode(symbols: string): string {
 function set_text(text: string) {
   text_codes.value = text_codes.value.map((code, position) => (position < text.length ? text.charCodeAt(position) : code));
   text_count.value = text.length;
-  refresh_lines();
-}
-
-function shown_lines(): string[] {
-  return [line_0, line_1, line_2, line_3, line_4, line_5].map((line, place) =>
-    String.fromCharCode(...line.value.slice(0, line_lengths.value[place])),
-  );
 }
 
 function stored_text(): string {
@@ -81,19 +66,6 @@ describe("morse", () => {
     expect(keyed_text.value).toBe("");
     end_letter();
     expect(stored_text()).toBe("a ");
-  });
-
-  it("wraps long lines, breaks at new lines and keeps the last six", () => {
-    set_text(`${"e".repeat(20)}\ni`);
-    expect(shown_lines().slice(3)).toEqual(["e".repeat(16), "eeee", "i"]);
-  });
-
-  it("shows blank lines and an empty text", () => {
-    expect(shown_lines()).toEqual(["", "", "", "", "", ""]);
-    set_text("ab\n\ncd");
-    expect(shown_lines()).toEqual(["", "", "", "ab", "", "cd"]);
-    set_text("a\nb\nc\nd\ne\nf\ng");
-    expect(shown_lines()).toEqual(["b", "c", "d", "e", "f", "g"]);
   });
 
   it("drops the oldest character once the text is full", () => {

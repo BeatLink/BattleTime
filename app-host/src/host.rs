@@ -1921,10 +1921,18 @@ impl<'image> AppHost<'image> {
         }
     }
 
-    /// The numbers a CellGrid shows in its cells, each with the cell, for tests that read the screen.
-    pub fn widget_numbers(&self, widget_index: u16) -> Vec<(Value, Rect)> {
+    /// Texts a widget draws itself from an array, each with its place, for tests that read the screen: a
+    /// CellGrid's numbers and a TextLines' lines.
+    pub fn widget_drawn_texts(&self, widget_index: u16) -> Vec<(String, Rect)> {
+        let context = self.draw_context();
         match self.node(widget_index) {
-            Some(node) => crate::drawing::cell_grid_numbers(node, &self.draw_context()),
+            Some(node) if node.kind == WidgetKind::TextLines => {
+                crate::drawing::text_lines_shown(node, &context)
+            }
+            Some(node) => crate::drawing::cell_grid_numbers(node, &context)
+                .into_iter()
+                .map(|(number, cell)| (alloc::format!("{number}"), cell))
+                .collect(),
             None => Vec::new(),
         }
     }

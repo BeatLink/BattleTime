@@ -565,9 +565,7 @@ impl TestWatch {
                         texts.push((text.to_string(), row_area));
                     }
                 }
-                for (number, cell) in self.host.widget_numbers(widget_index) {
-                    texts.push((number.to_string(), cell));
-                }
+                texts.extend(self.host.widget_drawn_texts(widget_index));
             }
         }
         texts.retain(|(text, _)| !text.is_empty());

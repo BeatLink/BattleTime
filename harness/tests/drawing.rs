@@ -649,3 +649,52 @@ export default define_app({ id: "tiles", name: "Tiles", screens: { main: Tiles }
         .area_of_text("8")
         .is_some_and(|cell| cell.x >= 60 && cell.y >= 60));
 }
+
+/// An app showing `text` in a TextLines three lines tall, as the morse app keeps its text.
+fn text_lines_showing(text: &str) -> TestWatch {
+    let codes: Vec<String> = text
+        .chars()
+        .map(|character| (character as u32).to_string())
+        .collect();
+    let source = format!(
+        r##"
+import {{ signal }} from "@preact/signals";
+import {{ define_app }} from "neotime";
+import {{ Screen, TextLines }} from "neotime/widgets";
+
+const codes = signal([{codes}, 32, 32]);
+
+function Text() {{
+  return (
+    <Screen>
+      <TextLines x={{0}} y={{0}} width={{100}} height={{92}} codes={{codes.value}} length={{{length}}} />
+    </Screen>
+  );
+}}
+
+export default define_app({{ id: "text", name: "Text", screens: {{ main: Text }} }});
+"##,
+        codes = codes.join(", "),
+        length = codes.len(),
+    );
+    let mut app = TestWatch::open_source(&source).unwrap();
+    Watch::new().draw_everything(&mut app);
+    app
+}
+
+#[test]
+fn text_lines_wrap_break_at_new_lines_and_keep_the_last_that_fit() {
+    let app = text_lines_showing("one two three four five\nsix\n\nseven");
+
+    // The last three lines are "six", an empty one and "seven".
+    assert_eq!(app.visible_texts(), ["six", "seven"]);
+    assert_eq!(app.host().node_count(), 2);
+}
+
+#[test]
+fn text_lines_start_an_empty_line_after_a_last_new_line() {
+    let app = text_lines_showing("a\nb\nc\nd\n");
+
+    // The empty line after the last new line is the third of the three that fit.
+    assert_eq!(app.visible_texts(), ["c", "d"]);
+}
