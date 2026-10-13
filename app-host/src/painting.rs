@@ -14,8 +14,10 @@ use neotime_ui::{geometry::Rect, renderer::Renderer};
 use neotime_ui::{FixedScreen, ScrollBand, ScrollingScreen, Strip, StripRenderer};
 
 use super::{AppHost, DISABLED_OPACITY, SCREEN_AREA};
-use crate::drawing::{draw_node, DrawContext};
-use crate::layout::{clips_children, content_height};
+use crate::drawing::{
+    draw_node, draw_scroll_bar, scroll_bar_thumb_at, scroll_bar_track, DrawContext, SCROLL_BAR_INSET,
+};
+use crate::layout::{clips_children, content_length, farthest_scroll};
 use crate::nodes::{to_color, OPAQUE};
 
 // ============================================================================
@@ -320,6 +322,26 @@ impl<'image> AppHost<'image> {
             let context = DrawContext { clip, ..context };
             draw_node(node, &context, &mut renderer);
         }
+        // Scroll bars go over everything, so a child placed out to the edge never hides one.
+        for (node_index, node) in self.nodes.iter().enumerate() {
+            if !node.shown || !node.shows_scroll_bar {
+                continue;
+            }
+            let Some(clip) = scroll_bar_track(node)
+                .intersect(node.clip)
+                .and_then(|area| area.intersect(region))
+            else {
+                continue;
+            };
+            let mut renderer = StripRenderer::new(target, clip, self.opacity(node_index));
+            let context = DrawContext { clip, ..context };
+            draw_scroll_bar(
+                node,
+                content_length(&self.nodes, node_index),
+                &context,
+                &mut renderer,
+            );
+        }
     }
 
     /// How opaque a node draws: its own `opacity` times every parent's, halved if it is disabled.
@@ -455,7 +477,7 @@ impl<'image> AppHost<'image> {
     fn scrolling_list_band(&self) -> Option<ScrollBand> {
         (0..self.nodes.len())
             .filter(|&index| clips_children(self.nodes[index].kind) && self.nodes[index].shown)
-            .filter(|&index| content_height(&self.nodes, index) > self.nodes[index].bounds.height)
+            .filter(|&index| !self.nodes[index].runs_across() && farthest_scroll(&self.nodes, index) > 0)
             .find_map(|index| self.scroll_band_of(index))
     }
 
@@ -553,7 +575,13 @@ impl<'image> AppHost<'image> {
             return Ok(false);
         };
         let is_a_small_move = 2 * rows.abs() < band.height();
-        if !screen.can_scroll() || !is_a_small_move || !self.is_alone_in(scroll_move.node_index, band) {
+        // The panel only moves rows, so a list that scrolls across is drawn again instead.
+        let runs_down = !self.nodes[scroll_move.node_index].runs_across();
+        if !screen.can_scroll()
+            || !is_a_small_move
+            || !runs_down
+            || !self.is_alone_in(scroll_move.node_index, band)
+        {
             return Ok(false);
         }
         let state = screen.scroll_state();
@@ -579,7 +607,47 @@ impl<'image> AppHost<'image> {
         for edge in self.fixed_edges_in(scroll_move.node_index, band) {
             self.paint(screen, strip, edge, 0)?;
         }
+        for part in self.scroll_bar_moved_parts(scroll_move, band) {
+            self.paint(screen, strip, part, 0)?;
+        }
         Ok(true)
+    }
+
+    /// The parts of a list's scroll bar the panel moved out of place: where the thumb's ends were and
+    /// are now, and the ends of the track; all of a paged bar, whose segments all moved.
+    fn scroll_bar_moved_parts(&self, scroll_move: ScrollMove, band: ScrollBand) -> Vec<Rect> {
+        let list = &self.nodes[scroll_move.node_index];
+        let band_area = rows_from(band.first_row, band.height());
+        let Some(track) = scroll_bar_track(list)
+            .intersect(band_area)
+            .filter(|_| list.shows_scroll_bar)
+        else {
+            return Vec::new();
+        };
+        let content = content_length(&self.nodes, scroll_move.node_index);
+        let offset = i32::from(list.scroll_offset);
+        let (Some(was), Some(now)) = (
+            scroll_bar_thumb_at(list, content, offset - scroll_move.rows),
+            scroll_bar_thumb_at(list, content, offset),
+        ) else {
+            return vec![track];
+        };
+        let moved_from = Rect {
+            y: was.y - scroll_move.rows,
+            ..was
+        };
+        let end_rows = SCROLL_BAR_INSET + scroll_move.rows.abs();
+        // Only the rows where the moved thumb and the thumb now differ change: one stretch at each end of it.
+        let differing = |first: i32, second: i32| rows_from(first.min(second), (first - second).abs());
+        [
+            differing(moved_from.y, now.y),
+            differing(moved_from.y + moved_from.height, now.y + now.height),
+            rows_from(band.first_row, end_rows),
+            rows_from(band.end_row - end_rows, end_rows),
+        ]
+        .into_iter()
+        .filter_map(|part| part.intersect(track))
+        .collect()
     }
 
     /// Whether nothing but the list and the boxes around it is drawn, or was last drawn, across the band.

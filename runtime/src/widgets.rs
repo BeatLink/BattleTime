@@ -310,10 +310,19 @@ pub enum Property {
     Codes,
     /// How many of a TextLines' codes are in use.
     CodeCount,
+    /// How a Scroll, List, AppList or TextFile scrolls, as the `SCROLLS_*` flags.
+    Scrolling,
 }
 
+/// A `Scrolling` flag: a drag moves a whole page at a time, and the scroll bar has a segment per page.
+pub const SCROLLS_BY_PAGES: i32 = 1;
+/// A `Scrolling` flag: the children run across and scroll left and right; only a Scroll or List takes it.
+pub const SCROLLS_ACROSS: i32 = 2;
+/// A `Scrolling` flag: no scroll bar is drawn.
+pub const SCROLLS_WITHOUT_BAR: i32 = 4;
+
 impl Property {
-    const ALL: [Property; 89] = {
+    const ALL: [Property; 90] = {
         use Property::*;
         [
             X,
@@ -405,6 +414,7 @@ impl Property {
             NumberColors,
             Codes,
             CodeCount,
+            Scrolling,
         ]
     };
 
@@ -560,6 +570,7 @@ impl Property {
             Digits => kind == Kind::NumberRoller,
             Path | FontPath | Placeholder => kind == Kind::TextFile,
             Codes | CodeCount => kind == Kind::TextLines,
+            Scrolling => matches!(kind, Kind::Scroll | Kind::List | Kind::AppList | Kind::TextFile),
             OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease => {
                 is_input || kind.holds_children() || matches!(kind, Kind::CellGrid | Kind::AppList)
             }

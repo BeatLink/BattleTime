@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use neotime_runtime::events::EventKind;
 use neotime_runtime::instruction::Instruction;
-use neotime_runtime::widgets::PropertyValue;
+use neotime_runtime::widgets::{PropertyValue, SCROLLS_ACROSS, SCROLLS_BY_PAGES, SCROLLS_WITHOUT_BAR};
 use neotime_runtime::{Property, PropertySource, WidgetKind};
 use oxc_ast::ast::{
     CallExpression, Expression, JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXChild, JSXElement,
@@ -207,6 +207,24 @@ fn property_for(name: &str) -> Option<(Property, Type)> {
         "onHide" => (OnHide, number),
         _ => return None,
     })
+}
+
+/// The `Scrolling` flag one of a scrolling widget's props sets: `direction`, `scrolling` or `scroll_bar`.
+fn scrolling_flag(prop: &str, value: Option<Constant>, kind: WidgetKind, span: Span) -> Compiled<i32> {
+    let runs_children = matches!(kind, WidgetKind::Scroll | WidgetKind::List);
+    match (prop, value) {
+        ("direction", Some(Constant::Text(direction))) if runs_children && &*direction == "row" => {
+            Ok(SCROLLS_ACROSS)
+        }
+        ("direction", Some(Constant::Text(direction))) if runs_children && &*direction == "column" => Ok(0),
+        ("direction", _) if !runs_children => fail(span, "only a Scroll or List takes `direction`"),
+        ("direction", _) => fail(span, "`direction` must be \"row\" or \"column\", written out"),
+        ("scrolling", Some(Constant::Text(mode))) if &*mode == "pages" => Ok(SCROLLS_BY_PAGES),
+        ("scrolling", Some(Constant::Text(mode))) if &*mode == "smooth" => Ok(0),
+        ("scrolling", _) => fail(span, "`scrolling` must be \"smooth\" or \"pages\", written out"),
+        (_, Some(Constant::Bool(shown))) => Ok(if shown { 0 } else { SCROLLS_WITHOUT_BAR }),
+        _ => fail(span, "`scroll_bar` must be true or false, written out"),
+    }
 }
 
 /// Props that set other props: an Icon's `size` is its width and height, and so on.
@@ -1126,6 +1144,7 @@ impl<'a> Compiler<'a> {
         let mut bound_value: Option<u8> = None;
         let mut change_handler: Option<Reference<'a>> = None;
         let attributes = self.expand_series(expand_aliases(attributes), kind, span);
+        let mut scrolling = 0;
 
         for (prop, value) in attributes {
             if prop == "key" || prop == "children" {
@@ -1141,6 +1160,12 @@ impl<'a> Compiler<'a> {
                     continue;
                 }
                 return fail(span, "`direction` must be \"row\" or \"column\"");
+            }
+            if matches!(prop.as_str(), "direction" | "scrolling" | "scroll_bar")
+                && Property::Scrolling.belongs_to(kind)
+            {
+                scrolling |= scrolling_flag(&prop, self.reference_constant(&value), kind, span)?;
+                continue;
             }
             if prop == "src" {
                 match self.reference_constant(&value) {
@@ -1250,6 +1275,9 @@ impl<'a> Compiler<'a> {
             }
         }
 
+        if scrolling != 0 {
+            properties.push((Property::Scrolling, PropertySource::Constant(scrolling)));
+        }
         if bound_value.is_some() || change_handler.is_some() {
             if let Some(handler) = self.change_handler(bound_value, change_handler, span)? {
                 properties.push((Property::OnChange, PropertySource::Handler(handler)));

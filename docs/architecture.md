@@ -966,10 +966,14 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
   until those parts are painted, and a list scrolled meanwhile is drawn afresh rather than moved in
   the panel, whose rows would otherwise move twice.
 - **Scrolling.** A drag on a Scroll or List moves its content with the finger, and only a lift of
-  the finger ends it, even when the panel names a slide while the finger is still down; a vertical swipe the drag made is not also sent to
-  the screen. On a `ScrollingScreen` the panel moves the list's rows: the host sets a band to the
+  the finger ends it, even when the panel names a slide while the finger is still down; a swipe the drag made is not also sent to
+  the screen. A list set to scroll by pages settles on a whole page when the finger lifts. One that
+  runs across lays its children and its repeated rows' slots out along x and is drawn again on
+  each move, since the panel only moves rows. On a `ScrollingScreen` the panel moves the list's rows: the host sets a band to the
   list's rows, draws the rows coming into view over those about to leave at the other end, turns
-  the band, and redraws any rounded or bordered edge rows of the list and the boxes around it. It
+  the band, and redraws any rounded or bordered edge rows of the list and the boxes around it, and
+  the parts of the scroll bar the move put out of place: the track's ends and the rows where the
+  thumb's ends were and are, or all of a paged bar. It
   falls back to drawing the list again when anything else is drawn across those rows, the move is
   more than half the band, or the panel has another band turned. A list given `grow` takes the
   space left in its parent rather than the height of its content.

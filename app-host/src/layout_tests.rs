@@ -444,7 +444,7 @@ fn a_growing_scroll_fills_the_space_left_however_tall_its_content() {
     let nodes = laid_out(nodes);
 
     assert_eq!(nodes[2].bounds, rect(0, 40, 240, 200));
-    assert_eq!(content_height(&nodes, 2), 300);
+    assert_eq!(content_length(&nodes, 2), 300);
 }
 
 #[test]
@@ -476,7 +476,7 @@ fn the_content_height_of_a_scroll_adds_children_gaps_margins_and_padding() {
     let mut nodes = laid_out(nodes);
     nodes[3].settings.visible = false;
 
-    let height = content_height(&nodes, 0);
+    let height = content_length(&nodes, 0);
 
     assert_eq!(height, (100 + 6) + 100 + 10 + 2 * 5);
 }

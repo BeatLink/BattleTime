@@ -137,6 +137,7 @@ cargo run -p neotime-simulator -- --script tests/scripts/timer_rings_and_dismiss
 - `harness/tests/behaviour.rs` checks what some apps do, such as the timer ringing when it ends.
 - `harness/tests/parity.rs` records the texts each app and face shows in
   `harness/snapshots/texts/<kind>-<id>.json`, described under [Snapshots](#snapshots).
+- `harness/tests/scroll_bars.rs` checks scroll bars and the ways a list scrolls: down or across, smoothly or a page at a time, drawn bit by bit as a fresh draw would.
 - `harness/tests/screenshots.rs` compares each main screen, and a few screens after some taps,
   with the reference pictures in `harness/snapshots/screens/`.
 - `harness/tests/scripts.rs` plays every script in `tests/scripts`.

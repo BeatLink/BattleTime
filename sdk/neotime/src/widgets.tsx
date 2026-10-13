@@ -3,7 +3,7 @@
 
 import { batch, type Signal } from "@preact/signals";
 import type { ComponentChildren, JSX } from "preact";
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type {
   ButtonEvent,
   ChangeEvent,
@@ -464,44 +464,153 @@ export function Stack(props: StackProps) {
   );
 }
 
-/** Content taller than its space, scrolled by dragging. */
-export function Scroll(props: FlexProps) {
+// ============================================================================
+// Scrolling
+// ============================================================================
+
+export interface ScrollingProps {
+  /** Lays the children out across and scrolls them left and right; `column`, down, is the default. */
+  direction?: "column" | "row";
+  /** `pages` turns a whole page at a time and marks each page on the bar; `smooth`, the default, follows the finger. */
+  scrolling?: "smooth" | "pages";
+  /** Whether a bar shows where the view is while the content is longer than the widget; on unless set false. */
+  scroll_bar?: boolean;
+}
+
+/** How thick a scroll bar is. */
+export const SCROLL_BAR_WIDTH = 2;
+/** How much room a widget keeps beside its content for its scroll bar: the bar and a gap. */
+export const SCROLL_BAR_ROOM = 4;
+/** Pixels left clear at each end of the bar, and of each page's segment so the segments stand apart. */
+const SCROLL_BAR_INSET = 2;
+/** The shortest a smooth scroll bar's thumb gets, however long the content. */
+const SMALLEST_THUMB = 12;
+
+export interface ScrollBarPart {
+  start: number;
+  length: number;
+  /** Whether this part marks the view: the page on show, or the thumb. */
+  bright: boolean;
+}
+
+/** How many pages content of `content` pixels makes in a view of `visible`, and which one shows at `offset`. */
+export function scroll_pages(visible: number, content: number, offset: number): { pages: number; current: number } {
+  const page = Math.max(1, visible);
+  const farthest = Math.max(0, content - page);
+  const pages = 1 + Math.floor((farthest + page - 1) / page);
+  const current = offset >= farthest ? pages - 1 : Math.floor((offset + Math.floor(page / 2)) / page);
+  return { pages, current: Math.min(pages - 1, Math.max(0, current)) };
+}
+
+/**
+ * The parts of a scroll bar along a track as long as the view, as the watch draws them: a segment
+ * per page when it scrolls by pages, otherwise a dim track with a thumb as long as the share in view.
+ */
+export function scroll_bar_parts(visible: number, content: number, offset: number, by_pages: boolean): ScrollBarPart[] {
+  const { pages, current } = scroll_pages(visible, content, offset);
+  const pitch = Math.floor(visible / Math.max(1, pages));
+  if (by_pages && pitch - 2 * SCROLL_BAR_INSET >= SCROLL_BAR_WIDTH) {
+    return Array.from({ length: pages }, (_, page) => ({
+      start: page * pitch + SCROLL_BAR_INSET,
+      length: pitch - 2 * SCROLL_BAR_INSET,
+      bright: page === current,
+    }));
+  }
+  const room = Math.max(0, visible - 2 * SCROLL_BAR_INSET);
+  const farthest = Math.max(1, content - visible);
+  const thumb = Math.min(room, Math.max(Math.min(SMALLEST_THUMB, room), Math.floor((room * visible) / Math.max(1, content))));
+  const start = SCROLL_BAR_INSET + Math.floor(((room - thumb) * Math.min(farthest, Math.max(0, offset))) / farthest);
+  return [
+    { start: SCROLL_BAR_INSET, length: room, bright: false },
+    { start, length: thumb, bright: true },
+  ];
+}
+
+interface ScrollView {
+  offset: number;
+  visible: number;
+  content: number;
+}
+
+/** The body a Scroll and a List share: the content scrolls inside, and the bar sits over its edge. */
+function ScrollArea(props: FlexProps & ScrollingProps & { widget: string }) {
+  const across = props.direction === "row";
+  const scroller = useRef<HTMLDivElement>(null);
+  const [view, set_view] = useState<ScrollView>({ offset: 0, visible: 0, content: 0 });
+
+  function measure() {
+    const element = scroller.current;
+    if (!element) return;
+    const seen = across
+      ? { offset: element.scrollLeft, visible: element.clientWidth, content: element.scrollWidth }
+      : { offset: element.scrollTop, visible: element.clientHeight, content: element.scrollHeight };
+    if (seen.offset !== view.offset || seen.visible !== view.visible || seen.content !== view.content) set_view(seen);
+  }
+  useLayoutEffect(measure);
+
+  /** Paged scrolling comes to rest on the nearest whole page. */
+  function settle() {
+    const element = scroller.current;
+    if (!element || props.scrolling !== "pages" || view.visible <= 0) return;
+    const page = Math.round(view.offset / view.visible) * view.visible;
+    element.scrollTo(across ? { left: page } : { top: page });
+  }
+
+  const shows_bar = props.scroll_bar !== false && view.content > view.visible;
+  const padding = props.padding ?? 0;
+  const parts = shows_bar ? scroll_bar_parts(view.visible, view.content, view.offset, props.scrolling === "pages") : [];
+  const { padding: _padding, ...outer } = props;
   return (
     <div
-      data-widget="scroll"
-      style={{
-        position: "relative",
-        display: "flex",
-        flexDirection: "column",
-        gap: props.gap !== undefined ? `${props.gap}px` : undefined,
-        overflowY: "auto",
-        minHeight: 0,
-        ...common_style(props),
-      }}
+      data-widget={props.widget}
+      style={{ position: "relative", display: "flex", minHeight: 0, minWidth: 0, ...common_style(outer) }}
     >
-      {props.children}
+      <div
+        ref={scroller}
+        onScroll={measure}
+        onScrollEnd={settle}
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: across ? "row" : "column",
+          gap: props.gap !== undefined ? `${props.gap}px` : undefined,
+          overflowX: across ? "auto" : "hidden",
+          overflowY: across ? "hidden" : "auto",
+          scrollbarWidth: "none",
+          boxSizing: "border-box",
+          padding: `${padding}px`,
+          paddingRight: shows_bar && !across ? `${padding + SCROLL_BAR_ROOM}px` : undefined,
+          paddingBottom: shows_bar && across ? `${padding + SCROLL_BAR_ROOM}px` : undefined,
+          minHeight: 0,
+          minWidth: 0,
+        }}
+      >
+        {props.children}
+      </div>
+      {parts.map((part) => (
+        <div
+          data-widget="scroll-bar-part"
+          style={{
+            position: "absolute",
+            background: part.bright ? theme.muted : theme.surface,
+            ...(across
+              ? { left: `${part.start}px`, width: `${part.length}px`, bottom: 0, height: `${SCROLL_BAR_WIDTH}px` }
+              : { top: `${part.start}px`, height: `${part.length}px`, right: 0, width: `${SCROLL_BAR_WIDTH}px` }),
+          }}
+        />
+      ))}
     </div>
   );
 }
 
+/** Content longer than its space, scrolled by dragging, down or across, with a scroll bar while it overflows. */
+export function Scroll(props: FlexProps & ScrollingProps) {
+  return <ScrollArea {...props} widget="scroll" />;
+}
+
 /** A scrolling list of rows, drawn in the browser like a `Scroll`. */
-export function List(props: FlexProps) {
-  return (
-    <div
-      data-widget="list"
-      style={{
-        position: "relative",
-        display: "flex",
-        flexDirection: "column",
-        gap: props.gap !== undefined ? `${props.gap}px` : undefined,
-        overflowY: "auto",
-        minHeight: 0,
-        ...common_style(props),
-      }}
-    >
-      {props.children}
-    </div>
-  );
+export function List(props: FlexProps & ScrollingProps) {
+  return <ScrollArea {...props} widget="list" />;
 }
 
 export interface AppListProps extends CommonProps {
@@ -575,7 +684,7 @@ export function TextLines(props: TextLinesProps) {
   );
 }
 
-export interface TextFileProps extends CommonProps {
+export interface TextFileProps extends CommonProps, Omit<ScrollingProps, "direction"> {
   /** The file to show, written out, such as `"/notes/note.txt"`. */
   path: string;
   /** A file holding the font's name, `small`, `normal`, `medium` or `large`, which wins over `font`. */

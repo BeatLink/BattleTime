@@ -20,12 +20,12 @@ use neotime_ui::geometry::Rect;
 use crate::drawing::pickers::{is_picker, picker_tapped};
 use crate::drawing::{
     app_list_rows, app_row_at, cell_at, dropdown_option_at, label_scrolls, matrix_buttons, measure_node,
-    option_row_height, roller_rows, text_file_lines_in_view, text_file_rows, DrawContext,
+    option_row_height, roller_rows, text_file_lines_in_view, text_file_rows, text_file_width, DrawContext,
     LABEL_SCROLL_STEP_IN_MILLISECONDS,
 };
 use crate::fonts::line_height;
-use crate::layout::{clips_children, content_height, lay_out};
-use crate::nodes::{row_slots, slots_in_view, Extra, Node, PropertyValue};
+use crate::layout::{clips_children, farthest_scroll, lay_out, runs_across, visible_length};
+use crate::nodes::{row_slots, slots_in_view_along, Extra, Node, PropertyValue};
 
 #[path = "painting.rs"]
 mod painting;
@@ -102,6 +102,9 @@ fn transition_following(direction: SwipeDirection) -> Transition {
         SwipeDirection::Right => Transition::Right,
     }
 }
+
+/// How far a drag must move a list that scrolls by pages to turn the page, in pixels.
+const PAGE_TURN_DISTANCE: i32 = 20;
 
 /// A drag that is scrolling a Scroll or List: which node, and its offset when the drag began.
 #[derive(Clone, Copy)]
@@ -723,14 +726,15 @@ impl<'image> AppHost<'image> {
             .children(node.widget_index)
             .next()
             .and_then(|row| self.tree.widget(row));
-        // Rows sit in slots only down a list that scrolls; elsewhere they are laid out as their parent's own children.
-        let in_a_list = node.parent.is_some_and(|parent| {
-            matches!(
-                self.nodes[parent as usize].kind,
-                WidgetKind::List | WidgetKind::Scroll
-            )
-        });
-        let extent = match row_widget.and_then(|row| row.property(Property::Height)) {
+        // Rows sit in slots only along a list that scrolls; elsewhere they are laid out as their parent's own children.
+        let list = node
+            .parent
+            .map(usize::from)
+            .filter(|&parent| matches!(self.nodes[parent].kind, WidgetKind::List | WidgetKind::Scroll));
+        let in_a_list = list.is_some();
+        let across = list.is_some_and(|list| self.nodes[list].runs_across());
+        let length_property = if across { Property::Width } else { Property::Height };
+        let extent = match row_widget.and_then(|row| row.property(length_property)) {
             Some(PropertySource::Constant(height)) if height > 0 && in_a_list => height,
             _ => return (0..count).collect(),
         };
@@ -740,7 +744,7 @@ impl<'image> AppHost<'image> {
             .collect();
         let node = &self.nodes[node_index];
         let gap = i32::from(node.settings.gap);
-        let (first, last) = slots_in_view(node.bounds.y, node.clip, extent, gap, shown.len() as i32);
+        let (first, last) = slots_in_view_along(node, across, extent, gap, shown.len() as i32);
         if let Some(Extra::Repeat {
             slot_extent,
             slot_count,
@@ -786,12 +790,13 @@ impl<'image> AppHost<'image> {
 
     /// Whether a Repeat's rows that can be seen are no longer the rows built, after a scroll or a new layout.
     fn rows_in_view_moved(&self) -> bool {
-        self.nodes.iter().any(|node| {
+        self.nodes.iter().enumerate().any(|(index, node)| {
             let Some(slots) = row_slots(node) else {
                 return false;
             };
             let gap = i32::from(node.settings.gap);
-            let in_view = slots_in_view(node.bounds.y, node.clip, slots.extent, gap, slots.count);
+            let across = runs_across(&self.nodes, index);
+            let in_view = slots_in_view_along(node, across, slots.extent, gap, slots.count);
             in_view != (slots.first_built, slots.first_built + slots.built)
         })
     }
@@ -1107,7 +1112,8 @@ impl<'image> AppHost<'image> {
                 }
             }
             let padding = i32::from(node.settings.padding);
-            let width = (node.bounds.width - 2 * padding).max(1);
+            let full_width = (node.bounds.width - 2 * padding).max(1);
+            let mut width = text_file_width(full_width, node.shows_scroll_bar);
             let font = node.settings.font;
             let index_fits = place.is_some_and(|place| {
                 let index = &self.text_files[place].1;
@@ -1118,7 +1124,18 @@ impl<'image> AppHost<'image> {
                 _ => {
                     // The scroll offset is 16 bits, so the lines past what it reaches are left out.
                     let most_lines = (i16::MAX as i32 - 2 * padding) / line_height(font.metrics()).max(1);
-                    let index = LineIndex::build(&mut read_file, font, width, most_lines);
+                    let mut index = LineIndex::build(&mut read_file, font, width, most_lines);
+                    // A file longer than the widget keeps room for its scroll bar, so it wraps narrower.
+                    let file_height = |index: &LineIndex| {
+                        i32::from(index.line_count) * line_height(font.metrics()) + 2 * padding
+                    };
+                    let shows_scroll_bar =
+                        node.wants_scroll_bar() && file_height(&index) > node.bounds.height;
+                    if shows_scroll_bar != node.shows_scroll_bar {
+                        node.shows_scroll_bar = shows_scroll_bar;
+                        width = text_file_width(full_width, shows_scroll_bar);
+                        index = LineIndex::build(&mut read_file, font, width, most_lines);
+                    }
                     self.text_files.retain(|(held, _)| *held != key);
                     self.text_files.push((key, index));
                     self.dirty_nodes |= 1 << node_index;
@@ -1414,9 +1431,7 @@ impl<'image> AppHost<'image> {
         let (property, x, y, mut fields): (Property, i32, i32, [Value; 5]) = match touch {
             // The panel can name a slide while the finger is still down, so only a lift ends a scroll.
             Touch::Swipe(_) if self.scroll_drag.is_some() => return EventResult::Handled,
-            Touch::Swipe(SwipeDirection::Up | SwipeDirection::Down) if self.touch_scrolled => {
-                return EventResult::Handled
-            }
+            Touch::Swipe(_) if self.touch_scrolled => return EventResult::Handled,
             Touch::Swipe(direction) => {
                 self.swipe_transition = Some(transition_following(direction));
                 let result =
@@ -1451,8 +1466,8 @@ impl<'image> AppHost<'image> {
         let field_count = event.fields().len();
 
         let Some((node_index, handler_property, handler)) = self.hit_test(property, x, y) else {
-            if let Touch::Drag { y, start_y, .. } = touch {
-                return self.scroll(x, y, start_y, now, system);
+            if let Touch::Drag { start_x, start_y, .. } = touch {
+                return self.scroll(x, y, start_x, start_y, now, system);
             }
             return EventResult::NotHandled;
         };
@@ -1648,7 +1663,15 @@ impl<'image> AppHost<'image> {
     }
 
     /// Scrolls the Scroll or List under a drag, keeping its content inside it.
-    fn scroll(&mut self, x: i32, y: i32, start_y: i32, now: Value, system: &mut impl System) -> EventResult {
+    fn scroll(
+        &mut self,
+        x: i32,
+        y: i32,
+        start_x: i32,
+        start_y: i32,
+        now: Value,
+        system: &mut impl System,
+    ) -> EventResult {
         let drag = match self.scroll_drag {
             Some(drag) => drag,
             None => {
@@ -1669,16 +1692,24 @@ impl<'image> AppHost<'image> {
             }
         };
         self.scroll_drag = Some(drag);
-        let farthest =
-            (content_height(&self.nodes, drag.node_index) - self.nodes[drag.node_index].bounds.height).max(0);
-        let offset = (drag.start_offset - (y - start_y)).clamp(0, farthest);
-        let node = &mut self.nodes[drag.node_index];
+        let moved = match self.nodes[drag.node_index].runs_across() {
+            true => x - start_x,
+            false => y - start_y,
+        };
+        let offset = (drag.start_offset - moved).clamp(0, farthest_scroll(&self.nodes, drag.node_index));
+        self.scroll_to(drag.node_index, offset, now, system);
+        EventResult::Handled
+    }
+
+    /// Moves a Scroll or List to an offset, and builds the rows that come into view.
+    fn scroll_to(&mut self, node_index: usize, offset: i32, now: Value, system: &mut impl System) {
+        let node = &mut self.nodes[node_index];
         let moved_rows = offset - node.scroll_offset as i32;
         if moved_rows != 0 {
             node.scroll_offset = offset as i16;
             self.touch_scrolled = true;
             self.fill_text_files(&*system);
-            self.note_scroll(drag.node_index, moved_rows);
+            self.note_scroll(node_index, moved_rows);
             if self.rows_in_view_moved() {
                 let failure = self.build_nodes(now, system);
                 self.measure_and_lay_out();
@@ -1688,12 +1719,36 @@ impl<'image> AppHost<'image> {
                 }
             }
         }
-        EventResult::Handled
+    }
+
+    /// Settles a widget that scrolls by pages on a whole page: the next one past a short drag, or back where it was.
+    fn settle_on_a_page(&mut self, drag: ScrollDrag, now: Value, system: &mut impl System) {
+        let node = &self.nodes[drag.node_index];
+        if !node.scrolls_by_pages() {
+            return;
+        }
+        let page = visible_length(node).max(1);
+        let farthest = farthest_scroll(&self.nodes, drag.node_index);
+        let offset = i32::from(node.scroll_offset);
+        let start_page = match drag.start_offset >= farthest {
+            true => (farthest + page - 1) / page,
+            false => drag.start_offset / page,
+        };
+        let moved = offset - drag.start_offset;
+        let wanted_page = match moved {
+            moved if moved >= PAGE_TURN_DISTANCE => start_page + 1,
+            moved if moved <= -PAGE_TURN_DISTANCE => start_page - 1,
+            _ => start_page,
+        };
+        let settled = (wanted_page.max(0) * page).min(farthest);
+        self.scroll_to(drag.node_index, settled, now, system);
     }
 
     /// Ends a scroll and sends `onScrollEnd` with the offset, if the scrolled widget has one.
     fn end_scroll(&mut self, now: Value, system: &mut impl System) -> Option<EventResult> {
         let drag = self.scroll_drag.take()?;
+        self.nodes.get(drag.node_index)?;
+        self.settle_on_a_page(drag, now, system);
         let node = self.nodes.get(drag.node_index)?;
         let offset = node.scroll_offset as Value;
         let handler = self

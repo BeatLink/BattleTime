@@ -7,6 +7,7 @@
 
 use alloc::{boxed::Box, string::String};
 
+use neotime_runtime::widgets::{SCROLLS_ACROSS, SCROLLS_BY_PAGES, SCROLLS_WITHOUT_BAR};
 use neotime_runtime::{widgets::Property, ColorValue, Theme, ThemeColor, Value, WidgetKind};
 use neotime_ui::geometry::{Color, Rect};
 
@@ -148,6 +149,8 @@ pub struct Settings {
     pub columns: u16,
     /// The state array the widget's main array property names: cells, options, points, series or labels.
     pub array: Option<u8>,
+    /// How a Scroll, List, AppList or TextFile scrolls, as the runtime's `SCROLLS_*` flags.
+    pub scrolling: u8,
 }
 
 const DEFAULT_MAXIMUM: i32 = 100;
@@ -184,6 +187,7 @@ impl Default for Settings {
             end_angle: None,
             columns: 0,
             array: None,
+            scrolling: 0,
         }
     }
 }
@@ -452,8 +456,10 @@ pub struct Node {
     pub clip: Rect,
     /// Whether the widget and every widget around it is visible.
     pub shown: bool,
-    /// How far a Scroll or List has been scrolled down.
+    /// How far a Scroll or List has been scrolled down, or right when it runs across.
     pub scroll_offset: i16,
+    /// Whether layout found the content longer than the widget, so it keeps room for a scroll bar.
+    pub shows_scroll_bar: bool,
     /// Whether a Dropdown has its list open.
     pub is_open: bool,
     /// How many options a Dropdown offers, for the height of its open list.
@@ -485,10 +491,27 @@ impl Node {
             clip: screen,
             shown: false,
             scroll_offset: 0,
+            shows_scroll_bar: false,
             is_open: false,
             option_count: 0,
             drawn_bounds: None,
         }
+    }
+
+    /// Whether a Scroll or List lays its children out across and scrolls left and right.
+    pub fn runs_across(&self) -> bool {
+        self.settings.scrolling as i32 & SCROLLS_ACROSS != 0
+            && matches!(self.kind, WidgetKind::Scroll | WidgetKind::List)
+    }
+
+    /// Whether a drag moves the content a whole page at a time.
+    pub fn scrolls_by_pages(&self) -> bool {
+        self.settings.scrolling as i32 & SCROLLS_BY_PAGES != 0
+    }
+
+    /// Whether the widget wants a scroll bar when its content is longer than it.
+    pub fn wants_scroll_bar(&self) -> bool {
+        self.settings.scrolling as i32 & SCROLLS_WITHOUT_BAR == 0
     }
 
     pub fn text(&self) -> &str {
@@ -559,6 +582,7 @@ impl Node {
             Property::StartAngle => replace(&mut settings.start_angle, Some(pixels)),
             Property::EndAngle => replace(&mut settings.end_angle, Some(pixels)),
             Property::Columns => replace(&mut settings.columns, to_u16(number)),
+            Property::Scrolling => replace(&mut settings.scrolling, number.clamp(0, u8::MAX as i64) as u8),
             Property::Cells | Property::Options | Property::Points | Property::Series | Property::Codes => {
                 replace(&mut settings.array, to_variable(number))
             }
@@ -789,6 +813,21 @@ pub fn row_slots(node: &Node) -> Option<RowSlots> {
             built: built_slots.into(),
         }),
         _ => None,
+    }
+}
+
+/// The slots of a Repeat's rows that can be seen, down the screen or, in a list that runs across, along it.
+pub fn slots_in_view_along(node: &Node, across: bool, extent: i32, gap: i32, count: i32) -> (i32, i32) {
+    match across {
+        true => {
+            let clip = Rect {
+                y: node.clip.x,
+                height: node.clip.width,
+                ..node.clip
+            };
+            slots_in_view(node.bounds.x, clip, extent, gap, count)
+        }
+        false => slots_in_view(node.bounds.y, node.clip, extent, gap, count),
     }
 }
 

@@ -17,7 +17,7 @@ use neotime_ui::{
 };
 
 use crate::fonts::{self, line_height, text_width, FontName};
-use crate::layout::{TICK_BOX_GAP, TICK_BOX_SIZE};
+use crate::layout::{visible_length, TICK_BOX_GAP, TICK_BOX_SIZE};
 use crate::nodes::{
     inset, resolve, resolve_or_clear, to_color, Align, Extra, LongMode, Node, Settings, OPAQUE, TRANSPARENT,
 };
@@ -1223,6 +1223,14 @@ pub fn text_file_height(node: &Node) -> i32 {
     line_count * line_height(node.settings.font.metrics()) + 2 * i32::from(node.settings.padding)
 }
 
+/// How wide a TextFile wraps its lines: inside its padding, less the room for a scroll bar when it shows one.
+pub fn text_file_width(inner_width: i32, shows_scroll_bar: bool) -> i32 {
+    match shows_scroll_bar {
+        true => (inner_width - SCROLL_BAR_ROOM).max(1),
+        false => inner_width,
+    }
+}
+
 /// The lines a TextFile shows at its scroll offset, as the first and one past the last.
 pub fn text_file_lines_in_view(node: &Node) -> (i32, i32) {
     let height = line_height(node.settings.font.metrics()).max(1);
@@ -1268,6 +1276,123 @@ fn draw_text_file(node: &Node, context: &DrawContext, renderer: &mut dyn Rendere
     for (line, top) in text_file_rows(node).filter(|(_, top)| painted(*top)) {
         draw_line(renderer, font, line, left, top + ascent, color);
     }
+}
+
+// ============================================================================
+// Scroll bars
+// ============================================================================
+
+/// How thick a scroll bar is.
+pub const SCROLL_BAR_WIDTH: i32 = 2;
+/// How much room a widget keeps beside its content for its scroll bar: the bar and a gap.
+pub const SCROLL_BAR_ROOM: i32 = 4;
+/// Pixels left clear at each end of the bar, and of each page's segment so the segments stand apart.
+pub const SCROLL_BAR_INSET: i32 = 2;
+/// The shortest a smooth scroll bar's thumb gets, however long the content.
+const SMALLEST_THUMB: i32 = 12;
+
+/// The strip a widget's scroll bar runs along: its right edge, or its bottom edge when it scrolls across.
+pub fn scroll_bar_track(node: &Node) -> Rect {
+    let bounds = node.bounds;
+    match node.runs_across() {
+        true => Rect {
+            y: bounds.y + bounds.height - SCROLL_BAR_WIDTH,
+            height: SCROLL_BAR_WIDTH,
+            ..bounds
+        },
+        false => Rect {
+            x: bounds.x + bounds.width - SCROLL_BAR_WIDTH,
+            width: SCROLL_BAR_WIDTH,
+            ..bounds
+        },
+    }
+}
+
+/// How many pages a widget's content makes, and which one it shows: the last page ends with the content.
+pub fn scroll_pages(node: &Node, content_length: i32, offset: i32) -> (i32, i32) {
+    let page = visible_length(node).max(1);
+    let farthest = (content_length - page).max(0);
+    let pages = 1 + (farthest + page - 1) / page;
+    let current = match offset >= farthest {
+        true => pages - 1,
+        false => (offset + page / 2) / page,
+    };
+    (pages, current.clamp(0, pages - 1))
+}
+
+/// Gives each part of a scroll bar, along the track, and whether it is the bright part that marks the view.
+///
+/// Paged scrolling has a segment per page, as wasp-os draws it. Smooth scrolling has a thumb as
+/// long as the share of the content in view, over a dim track.
+pub fn for_each_scroll_bar_part(node: &Node, content_length: i32, part: impl FnMut(Rect, bool)) {
+    for_each_scroll_bar_part_at(node, content_length, i32::from(node.scroll_offset), part);
+}
+
+/// Where a smooth scroll bar's thumb lies when its widget is scrolled to `offset`; none for a paged bar.
+pub fn scroll_bar_thumb_at(node: &Node, content_length: i32, offset: i32) -> Option<Rect> {
+    let mut thumb = None;
+    for_each_scroll_bar_part_at(node, content_length, offset, |area, is_bright| {
+        if is_bright && !node.scrolls_by_pages() {
+            thumb = Some(area);
+        }
+    });
+    thumb
+}
+
+/// Gives each part of a scroll bar as it is with its widget scrolled to `offset`.
+fn for_each_scroll_bar_part_at(
+    node: &Node,
+    content_length: i32,
+    offset: i32,
+    mut part: impl FnMut(Rect, bool),
+) {
+    let track = scroll_bar_track(node);
+    let across = node.runs_across();
+    let length = if across { track.width } else { track.height };
+    let along = |start: i32, end: i32| match across {
+        true => Rect {
+            x: track.x + start,
+            width: end - start,
+            ..track
+        },
+        false => Rect {
+            y: track.y + start,
+            height: end - start,
+            ..track
+        },
+    };
+    let (pages, current) = scroll_pages(node, content_length, offset);
+    let pitch = length / pages.max(1);
+    if node.scrolls_by_pages() && pitch - 2 * SCROLL_BAR_INSET >= SCROLL_BAR_WIDTH {
+        for page in 0..pages {
+            part(
+                along(
+                    page * pitch + SCROLL_BAR_INSET,
+                    (page + 1) * pitch - SCROLL_BAR_INSET,
+                ),
+                page == current,
+            );
+        }
+        return;
+    }
+    let room = (length - 2 * SCROLL_BAR_INSET).max(0);
+    let visible = visible_length(node);
+    let farthest = (content_length - visible).max(1);
+    let thumb = (room * visible / content_length.max(1)).clamp(SMALLEST_THUMB.min(room), room);
+    let start = SCROLL_BAR_INSET + (room - thumb) * offset.clamp(0, farthest) / farthest;
+    part(along(SCROLL_BAR_INSET, SCROLL_BAR_INSET + room), false);
+    part(along(start, start + thumb), true);
+}
+
+/// Draws a widget's scroll bar over whatever lies under it: the view's part bright, the rest dim.
+pub fn draw_scroll_bar(node: &Node, content_length: i32, context: &DrawContext, renderer: &mut dyn Renderer) {
+    let bright = resolve(None, ThemeColor::Muted, context.theme);
+    let dim = resolve(None, ThemeColor::Surface, context.theme);
+    for_each_scroll_bar_part(node, content_length, |area, is_bright| {
+        if let Some(area) = area.intersect(context.clip) {
+            renderer.fill_rect(area, if is_bright { bright } else { dim });
+        }
+    });
 }
 
 // ============================================================================

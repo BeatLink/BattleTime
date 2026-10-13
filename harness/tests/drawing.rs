@@ -20,6 +20,8 @@ const SET_SCROLL_AREA: u8 = 0x33;
 const SET_SCROLL_START: u8 = 0x37;
 
 const SIDE: usize = 240;
+/// What a list's scroll bar adds to a panel scroll: the ends of its thumb and of its track, two pixels wide.
+const SCROLL_BAR_PIXELS: usize = 2 * 48;
 const MEMORY_ROWS: usize = 320;
 
 /// The ST7789's memory, its write window and its vertical scrolling registers.
@@ -314,7 +316,11 @@ fn the_settings_list_scrolls_with_the_panel_and_shows_what_drawing_afresh_would(
         .max()
         .copied()
         .unwrap();
-    assert!(most_sent <= 6 * SIDE, "a move sent {most_sent} pixels");
+    assert!(
+        most_sent <= 6 * SIDE + SCROLL_BAR_PIXELS,
+        "a move sent {most_sent} pixels"
+    );
+    assert_eq!(watch.pixels_unlike(&app.fresh_frame()), 0);
 }
 
 #[test]
@@ -577,7 +583,11 @@ fn a_list_opened_after_a_scrolled_launcher_still_scrolls_with_the_panel() {
     let sent = drag_drawing_each_move(&mut settings, &mut watch, 220, 120);
 
     assert_eq!(watch.scrolling_band(), (42, 232));
-    assert!(sent.iter().all(|&pixels| pixels <= 6 * SIDE), "{sent:?}");
+    assert!(
+        sent.iter().all(|&pixels| pixels <= 6 * SIDE + SCROLL_BAR_PIXELS),
+        "{sent:?}"
+    );
+    assert_eq!(watch.pixels_unlike(&settings.fresh_frame()), 0);
 }
 
 #[test]

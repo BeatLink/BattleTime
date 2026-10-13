@@ -769,7 +769,11 @@ Layout is a small flexbox, worked out again whenever a value changes:
 - **`opacity`** is multiplied down through parents; a **`disabled`** widget is drawn at half
   opacity and ignores touches.
 - **`Grid`** places its children in rows; **`Scroll`** and **`List`** scroll by dragging and send
-  `onScrollEnd` when a drag ends. **`Pages`** and **`Tabs`** are laid out like a `Column` for now.
+  `onScrollEnd` when a drag ends. Their **`scrolling`** property holds flags: 1 settles a drag on
+  a whole page, 2 lays the children out across and scrolls them sideways (a `Scroll` or `List`
+  only), and 4 leaves the scroll bar out. A `TextFile` takes 1 and 4. While a scrolling widget's
+  content is longer than it, layout keeps 4 pixels on its right, or bottom when it runs across,
+  and the host draws the bar there over everything else. **`Pages`** and **`Tabs`** are laid out like a `Column` for now.
 
 A widget with no size gets the size it wants: a label's text, a button's text plus room around it
 (at least 44 pixels high), and fixed sizes for the rest, such as 100 pixels for an arc.

@@ -466,6 +466,9 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### UI toolkit
 
+- [ ] **A scroll bar on the App list.** Scroll, List and TextFile draw one; the App list draws its
+  own rows to its edges, so it needs room kept for the bar once the launcher's groups and grid land.
+
 - [ ] **Double line buffers with DMA,** so one is filled while the other is sent. InfiniTime uses
   two of 240 x 4 pixels. This also fixes the text edges listed above.
 - [ ] **More fonts and pictures** loaded from the external flash, beyond the shared library's.
@@ -643,7 +646,7 @@ full report is
 ### UI toolkit
 
 - [ ] **Cards:** rounded-rectangle cards as the layout every app uses.
-- [ ] **Widgets:** status bar, battery meter, clock, notification bar, scroll indicator, button,
+- [ ] **Widgets:** status bar, battery meter, clock, notification bar, button,
   toggle, checkbox, slider, spinner, stopwatch and confirmation view.
 - [ ] **App icons:** monochrome Font Awesome icons per app.
 - [ ] **Grid and list launchers,** chosen in settings. InfiniTime's grid shows 6 apps a page,

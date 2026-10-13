@@ -19,6 +19,11 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Smooth scrolling.** A list follows the finger as it drags: the display moves the rows itself,
   and only the few rows that come into view are drawn. Lists below a heading, as in Settings,
   scroll to their last row with the heading kept still.
+- **Scroll bars, as on wasp-os.** A list, scroll view or text file longer than the screen shows a
+  thin bar on its right edge: a light thumb over a dim track, or a segment per page for a list
+  that turns a page at a time. Lists can also run across and scroll sideways, with the bar along
+  the bottom. After a panel scroll only the ends of the thumb are drawn again.
+  ![Settings with its scroll bar](../harness/snapshots/screens/app-settings.png)
 - **A right swipe goes back a screen,** within an app before leaving it, unless the app uses it
   itself.
 - **Only what changed is drawn,** each part composed in memory first, so the screen never shows a

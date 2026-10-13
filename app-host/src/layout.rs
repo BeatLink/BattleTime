@@ -12,6 +12,7 @@ use alloc::boxed::Box;
 use neotime_runtime::WidgetKind;
 use neotime_ui::geometry::Rect;
 
+use crate::drawing::SCROLL_BAR_ROOM;
 use crate::fonts::{line_height, text_width};
 use crate::nodes::{inset, row_slots, Align, Length, LongMode, Node, Placement};
 use crate::text::{wrapped_line_count, wrapped_width};
@@ -53,9 +54,12 @@ enum Flow {
     Nothing,
 }
 
-fn flow_of(kind: WidgetKind) -> Flow {
+fn flow_of(nodes: &[Box<Node>], index: usize) -> Flow {
     use WidgetKind::*;
-    match kind {
+    if runs_across(nodes, index) {
+        return Flow::Across;
+    }
+    match nodes[index].kind {
         Row => Flow::Across,
         Stack | Button => Flow::OnTop,
         Grid => Flow::Grid,
@@ -64,6 +68,17 @@ fn flow_of(kind: WidgetKind) -> Flow {
         Arc => Flow::DownCentered,
         _ => Flow::Nothing,
     }
+}
+
+/// Whether a node's children run across: a Scroll or List set to, or the slotted rows of a Repeat in one.
+pub fn runs_across(nodes: &[Box<Node>], index: usize) -> bool {
+    let node = &nodes[index];
+    node.runs_across()
+        || node.kind == WidgetKind::Repeat
+            && row_slots(node).is_some()
+            && node
+                .parent
+                .is_some_and(|parent| nodes[usize::from(parent)].runs_across())
 }
 
 /// Whether a widget's children are cut off at its edges.
@@ -275,9 +290,20 @@ fn natural_size(nodes: &[Box<Node>], index: usize, available_width: Option<i32>)
     let node = &nodes[index];
     if let Some(slots) = row_slots(node) {
         let gap = i32::from(node.settings.gap);
+        let length = slots.count * slots.extent + gaps(slots.count, gap);
+        if runs_across(nodes, index) {
+            let tallest = flowing(nodes, index)
+                .map(|row| natural_size(nodes, row, None).height + 2 * i32::from(nodes[row].settings.margin))
+                .max()
+                .unwrap_or(0);
+            return Size {
+                width: length,
+                height: tallest,
+            };
+        }
         return Size {
             width: available_width.unwrap_or(0),
-            height: slots.count * slots.extent + gaps(slots.count, gap),
+            height: length,
         };
     }
     let padding = 2 * i32::from(node.settings.padding);
@@ -298,7 +324,7 @@ fn natural_size(nodes: &[Box<Node>], index: usize, available_width: Option<i32>)
     let count = flowing(nodes, index).count() as i32;
 
     let own = content_size(node, inner_width);
-    let inside = match flow_of(node.kind) {
+    let inside = match flow_of(nodes, index) {
         Flow::Down => {
             let total = flowing(nodes, index)
                 .map(|child| with_margin(child, inner_width))
@@ -403,7 +429,11 @@ fn place_positioned_box(nodes: &[Box<Node>], index: usize, inner: Rect, fills: b
 }
 
 fn place(nodes: &mut [Box<Node>], index: usize, bounds: Rect, parent_shown: bool, clip: Rect) {
+    let across = runs_across(nodes, index);
+    nodes[index].bounds = bounds;
+    let shows_scroll_bar = wants_scroll_bar_room(nodes, index);
     let node = &mut nodes[index];
+    node.shows_scroll_bar = shows_scroll_bar;
     node.bounds = bounds;
     node.clip = clip;
     node.shown = parent_shown && node.settings.visible;
@@ -418,14 +448,27 @@ fn place(nodes: &mut [Box<Node>], index: usize, bounds: Rect, parent_shown: bool
         }),
         false => clip,
     };
+    if shows_scroll_bar {
+        match across {
+            true => inner.height = (inner.height - SCROLL_BAR_ROOM).max(0),
+            false => inner.width = (inner.width - SCROLL_BAR_ROOM).max(0),
+        }
+    }
     if clips_children(node.kind) {
-        inner.y -= node.scroll_offset as i32;
+        match across {
+            true => inner.x -= node.scroll_offset as i32,
+            false => inner.y -= node.scroll_offset as i32,
+        }
     }
     if let Some(slots) = row_slots(node) {
-        inner.y += slots.first_built * (slots.extent + i32::from(node.settings.gap));
+        let skipped = slots.first_built * (slots.extent + i32::from(node.settings.gap));
+        match across {
+            true => inner.x += skipped,
+            false => inner.y += skipped,
+        }
     }
 
-    match flow_of(node.kind) {
+    match flow_of(nodes, index) {
         Flow::Down => place_flow(nodes, index, inner, true, false, shown, children_clip),
         Flow::DownCentered => place_flow(nodes, index, inner, true, true, shown, children_clip),
         Flow::Across => place_flow(nodes, index, inner, false, false, shown, children_clip),
@@ -652,23 +695,55 @@ fn place_grid(nodes: &mut [Box<Node>], index: usize, inner: Rect, shown: bool, c
     }
 }
 
-/// How tall the content of a Scroll or List is, to bound how far it scrolls.
-pub fn content_height(nodes: &[Box<Node>], index: usize) -> i32 {
+/// How long the content of a Scroll, List, AppList or TextFile is the way it scrolls, padding included.
+pub fn content_length(nodes: &[Box<Node>], index: usize) -> i32 {
     match nodes[index].kind {
         WidgetKind::AppList => return crate::drawing::app_list_height(&nodes[index]),
         WidgetKind::TextFile => return crate::drawing::text_file_height(&nodes[index]),
         _ => {}
     }
     let settings = &nodes[index].settings;
-    let inner_width = (nodes[index].bounds.width - 2 * i32::from(settings.padding)).max(0);
+    let padding = 2 * i32::from(settings.padding);
     let count = flowing(nodes, index).count() as i32;
+    let gap = gaps(count, i32::from(settings.gap));
+    if nodes[index].runs_across() {
+        let children: i32 = flowing(nodes, index)
+            .map(|child| natural_size(nodes, child, None).width + 2 * i32::from(nodes[child].settings.margin))
+            .sum();
+        return children + gap + padding;
+    }
+    let inner_width = (nodes[index].bounds.width - padding).max(0);
     let children: i32 = flowing(nodes, index)
         .map(|child| {
             let margin = 2 * i32::from(nodes[child].settings.margin);
             natural_size(nodes, child, Some(inner_width - margin)).height + margin
         })
         .sum();
-    children + gaps(count, i32::from(settings.gap)) + 2 * i32::from(settings.padding)
+    children + gap + padding
+}
+
+/// How much of a scrolling widget's content shows at once, along the way it scrolls.
+pub fn visible_length(node: &Node) -> i32 {
+    match node.runs_across() {
+        true => node.bounds.width,
+        false => node.bounds.height,
+    }
+}
+
+/// How far a scrolling widget can scroll: how much longer its content is than the widget.
+pub fn farthest_scroll(nodes: &[Box<Node>], index: usize) -> i32 {
+    (content_length(nodes, index) - visible_length(&nodes[index])).max(0)
+}
+
+/// Whether a scrolling widget draws a scroll bar, and so keeps room beside its content for it.
+///
+/// The App list draws its own rows to its edges, so it has no bar yet.
+fn wants_scroll_bar_room(nodes: &[Box<Node>], index: usize) -> bool {
+    let node = &nodes[index];
+    clips_children(node.kind)
+        && node.kind != WidgetKind::AppList
+        && node.wants_scroll_bar()
+        && farthest_scroll(nodes, index) > 0
 }
 
 #[cfg(test)]

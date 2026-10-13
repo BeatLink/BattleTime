@@ -355,6 +355,54 @@ fn text_align_and_icon_size_map_to_their_properties() {
     );
 }
 
+#[test]
+fn the_scrolling_props_make_one_set_of_flags() {
+    use neotime_runtime::widgets::{SCROLLS_ACROSS, SCROLLS_BY_PAGES, SCROLLS_WITHOUT_BAR};
+    let image = compile(&app(r#"import { List, Scroll, TextFile } from "neotime/widgets";
+        function Main() { return <Screen>
+            <List direction="row" scrolling="pages" scroll_bar={false} />
+            <Scroll direction="column" scrolling="smooth" />
+            <TextFile path="/notes/note.txt" scrolling="pages" />
+        </Screen>; }"#));
+    let image = AppImage::parse(&image).unwrap();
+
+    assert_eq!(
+        property_of(&image, WidgetKind::List, Property::Scrolling, 0),
+        PropertySource::Constant(SCROLLS_ACROSS | SCROLLS_BY_PAGES | SCROLLS_WITHOUT_BAR)
+    );
+    assert_eq!(
+        property_of(&image, WidgetKind::TextFile, Property::Scrolling, 0),
+        PropertySource::Constant(SCROLLS_BY_PAGES)
+    );
+    let scroll = widgets(&image)
+        .into_iter()
+        .find(|(kind, _)| *kind == WidgetKind::Scroll)
+        .unwrap();
+    assert!(scroll
+        .1
+        .iter()
+        .all(|(property, _)| *property != Property::Scrolling));
+}
+
+#[test]
+fn the_scrolling_props_must_be_written_out_and_direction_fits_only_lists() {
+    let source = |widget: &str| {
+        app(&format!(
+            r#"import {{ signal }} from "@preact/signals";
+            import {{ List, TextFile }} from "neotime/widgets";
+            const paged = signal(true);
+            function Main() {{ return <Screen>{widget}</Screen>; }}"#
+        ))
+    };
+    assert!(first_error(&source(r#"<List direction="up" />"#)).contains("`direction` must be"));
+    assert!(
+        first_error(&source(r#"<TextFile path="/a.txt" direction="row" />"#))
+            .contains("only a Scroll or List")
+    );
+    assert!(first_error(&source(r#"<List scrolling="fast" />"#)).contains("`scrolling` must be"));
+    assert!(first_error(&source("<List scroll_bar={paged.value} />")).contains("`scroll_bar` must be"));
+}
+
 /// The subscriptions an image lists.
 fn subscriptions_of(image: &AppImage) -> Vec<neotime_runtime::subscriptions::Subscription> {
     (0..image.subscription_count())
