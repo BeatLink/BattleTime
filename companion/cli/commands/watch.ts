@@ -11,7 +11,19 @@ import { NOTE_FONTS, NOTE_PATH, removeNote, syncNote, type NoteFont } from '@/pr
 import { installImage, memoryText, PackagesError } from '@/protocol/packages';
 import { runSetup, setupItems } from '@/protocol/setup';
 import { encodeForWatch, decodeWatchLine } from '@/protocol/gadgetbridge';
-import { readAlarms, readStatus, readWatchSettings, writeAlarms, writeWatchSettings } from '@/protocol/requests';
+import {
+  fittedRecoverySlot,
+  moveSlots,
+  readAlarms,
+  readSlots,
+  readStatus,
+  readWatchSettings,
+  SLOT_PAGE_BYTES,
+  writeAlarms,
+  writeWatchSettings,
+  type SlotsReport,
+} from '@/protocol/requests';
+import type { SlotRange } from '@/protocol/gadgetbridge';
 import { readStepHistory } from '@/protocol/steps';
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
 import { currentWeather, findPlace } from '@/services/weather';
@@ -31,6 +43,7 @@ neotime apps [list|install <image>|remove <id>|hide <id>|show <id>|setup]
 neotime backup <file>
 neotime restore <file>
 neotime listen [line] [--allow <hosts>] [--wait <seconds>]
+neotime slots [fit|recovery <start> <size>|update <start>]
 
   status prints the battery and today's steps. time sets the watch clock from this computer's. settings with no arguments prints them;
   brightness=3, theme=ocean, theme_colors='{"accent":"#ff8000"}' and the like
@@ -44,7 +57,10 @@ neotime listen [line] [--allow <hosts>] [--wait <seconds>]
   face, launcher, apps and shared library this tool bundles onto a new watch. listen stays
   connected and prints what the watch sends, answering its apps' http
   requests for the hosts given; it runs the line given first, and stops
-  after --wait seconds or at Ctrl+C.`;
+  after --wait seconds or at Ctrl+C. slots shows where the update and recovery
+  slots sit in the external flash; fit shrinks the recovery slot to its image,
+  and recovery or update moves a slot, in bytes (0x... works). The watch copies
+  the recovery image along, then restarts.`;
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -75,6 +91,63 @@ export async function status(session: WatchSession) {
   const reply = await readStatus(session.requests);
   say(`Battery ${reply.bat}% (${(reply.mv / 1000).toFixed(2)} V)${reply.charging ? ', charging' : ''}`);
   say(reply.steps === null ? 'No step counter.' : `${reply.steps} steps today.`);
+}
+
+function hexRange([start, size]: SlotRange): string {
+  return `0x${start.toString(16).padStart(6, '0')} to 0x${(start + size).toString(16).padStart(6, '0')}, ${size / 1024} KB`;
+}
+
+export function describeSlots(report: SlotsReport): string[] {
+  return [
+    `update     ${hexRange(report.update)}`,
+    `recovery   ${hexRange(report.recovery)}${report.image ? `, image ${report.image} bytes` : ', empty'}`,
+    `slots end by 0x${report.area.toString(16)}; the update slot is ${(report.firmware + SLOT_PAGE_BYTES) / 1024} KB`,
+  ];
+}
+
+// The move the arguments ask for, worked out against where the slots are now; null when nothing would change.
+export function slotsMove(args: string[], report: SlotsReport): { update?: SlotRange; recovery?: SlotRange } | null {
+  const number = (text: string | undefined, what: string) => {
+    const value = Number(text);
+    if (text === undefined || !Number.isInteger(value) || value < 0) {
+      throw new Error(`Give the ${what} in bytes, such as 0x65000, not ${text ?? 'nothing'}.`);
+    }
+    return value;
+  };
+  const same = (first: SlotRange, second: SlotRange) => first[0] === second[0] && first[1] === second[1];
+  let move: { update?: SlotRange; recovery?: SlotRange };
+  switch (args[0]) {
+    case 'fit':
+      move = { recovery: fittedRecoverySlot(report) };
+      break;
+    case 'recovery':
+      move = { recovery: [number(args[1], 'start'), number(args[2], 'size')] };
+      break;
+    case 'update':
+      move = { update: [number(args[1], 'start'), report.firmware + SLOT_PAGE_BYTES] };
+      break;
+    default:
+      throw new Error('Use slots, slots fit, slots recovery <start> <size> or slots update <start>.');
+  }
+  const unchanged =
+    (!move.recovery || same(move.recovery, report.recovery)) && (!move.update || same(move.update, report.update));
+  return unchanged ? null : move;
+}
+
+export async function slots(session: WatchSession, args: string[]) {
+  const report = await readSlots(session.requests);
+  if (!args.length) {
+    describeSlots(report).forEach((line) => say(line));
+    return;
+  }
+  const move = slotsMove(args, report);
+  if (!move) {
+    say('The slots are already there.');
+    return;
+  }
+  const moved = await moveSlots(session.requests, move);
+  describeSlots(moved).forEach((line) => say(line));
+  say('The watch restarts to use them.');
 }
 
 export async function setTime(session: WatchSession) {

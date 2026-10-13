@@ -21,6 +21,7 @@ import {
   restore,
   settings,
   setTime,
+  slots,
   status,
   steps,
   watchUsage,
@@ -111,6 +112,7 @@ const NEEDS_WATCH = new Set([
   'line',
   'diag',
   'status',
+  'slots',
   'time',
   'settings',
   'alarms',
@@ -234,6 +236,10 @@ async function main(argv: string[]): Promise<number> {
 
       case 'status':
         await status(session);
+        break;
+
+      case 'slots':
+        await slots(session, rest);
         break;
 
       case 'time':

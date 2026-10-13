@@ -56,6 +56,12 @@ export type StepsRequestMessage = { t: 'steps'; y: number; m: number; d: number 
 
 export type StatusRequestMessage = { t: 'status' };
 
+// A slot as [start, size] in bytes in the watch's external flash.
+export type SlotRange = [number, number];
+
+// With neither key the watch only reports where its update and recovery slots are; a slot given moves.
+export type SlotsMessage = { t: 'slots'; update?: SlotRange; recovery?: SlotRange };
+
 // The answer to a watch app's http request, matched by id.
 export type HttpResponseMessage = { t: 'http'; id: string; resp?: string; err?: string };
 
@@ -107,6 +113,7 @@ export type PhoneToWatchMessage =
   | SettingsMessage
   | StepsRequestMessage
   | StatusRequestMessage
+  | SlotsMessage
   | HttpResponseMessage;
 
 export type MusicControlMessage = {
@@ -144,6 +151,21 @@ export type StatusReply = {
   steps: number | null;
 };
 
+// Where the slots are, the limits a move keeps to (slots end by `area`, the update slot is `firmware`
+// plus one page) and the recovery image's length with its header, 0 for none. `restart` is true when
+// this answers a move: the watch restarts to use the new slots. A refusal carries only `err`.
+export type SlotsReply =
+  | {
+      t: 'slots';
+      update: SlotRange;
+      recovery: SlotRange;
+      area: number;
+      firmware: number;
+      image: number;
+      restart: boolean;
+    }
+  | { t: 'slots'; err: string };
+
 // The watch's answer to an incoming call: pick up, hang up, or only stop buzzing.
 export type CallControlMessage = { t: 'call'; n: 'ACCEPT' | 'REJECT' | 'IGNORE' };
 
@@ -163,6 +185,7 @@ export type WatchToPhoneMessage =
   | AlarmReply
   | StepsReply
   | StatusReply
+  | SlotsReply
   | CallControlMessage
   | HttpRequestMessage
   | AppChannelMessage;

@@ -7,7 +7,17 @@ import { createBackup, parseBackup, restoreBackup } from './backup';
 import { FileService } from './file-service';
 import { decodeWatchLine, encodeForWatch, type PhoneToWatchMessage } from './gadgetbridge';
 import { readCapabilities } from './neotime';
-import { readAlarms, readStatus, readWatchSettings, ReplyRouter, writeAlarms, writeWatchSettings } from './requests';
+import {
+  fittedRecoverySlot,
+  moveSlots,
+  readAlarms,
+  readSlots,
+  readStatus,
+  readWatchSettings,
+  ReplyRouter,
+  writeAlarms,
+  writeWatchSettings,
+} from './requests';
 import { hourlySteps, readStepHistory } from './steps';
 import { changedColors, normaliseHex } from './theme';
 
@@ -169,5 +179,42 @@ describe('status', () => {
   it('reads the battery and step count', async () => {
     const reply = await readStatus(requestChannel());
     expect(reply).toEqual({ t: 'status', bat: 76, mv: 3912, charging: false, steps: 4321 });
+  });
+});
+
+describe('slots', () => {
+  it('reads where the slots are', async () => {
+    const report = await readSlots(requestChannel());
+    expect(report.update).toEqual([0, 392 * 1024]);
+    expect(report.recovery).toEqual([0x65000, 388 * 1024]);
+    expect(report.restart).toBe(false);
+  });
+
+  it('moves a slot and says the watch restarts', async () => {
+    const channel = requestChannel();
+    const report = await moveSlots(channel, { recovery: [0xc6000, 172 * 1024] });
+    expect(report.recovery).toEqual([0xc6000, 172 * 1024]);
+    expect(report.restart).toBe(true);
+    expect((await readSlots(channel)).recovery).toEqual([0xc6000, 172 * 1024]);
+  });
+
+  it('turns a refusal into an error that says why', async () => {
+    await expect(moveSlots(requestChannel(), { recovery: [0x1000, 172 * 1024] })).rejects.toThrow(
+      'The watch refused: the slots overlap.',
+    );
+  });
+
+  it('fits the recovery slot to its image in whole pages, never under 64 KB', () => {
+    const report = {
+      t: 'slots' as const,
+      update: [0, 392 * 1024] as [number, number],
+      recovery: [0x65000, 388 * 1024] as [number, number],
+      area: 0x100000,
+      firmware: 388 * 1024,
+      image: 171428,
+      restart: false,
+    };
+    expect(fittedRecoverySlot(report)).toEqual([0x65000, 168 * 1024]);
+    expect(fittedRecoverySlot({ ...report, image: 0 })).toEqual([0x65000, 64 * 1024]);
   });
 });

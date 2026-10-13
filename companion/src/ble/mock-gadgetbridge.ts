@@ -46,6 +46,10 @@ export class MockGadgetbridge {
     do_not_disturb: false,
   };
   private alarms: Required<Alarm>[] = [{ h: 7, m: 30, on: true, rep: 31 }];
+  private slots: { update: [number, number]; recovery: [number, number] } = {
+    update: [0, 392 * 1024],
+    recovery: [0x65000, 388 * 1024],
+  };
 
   // Handle one line from the phone. Returns the replies, or null when the line is not a GB() call.
   handle(text: string): string[] | null {
@@ -79,10 +83,32 @@ export class MockGadgetbridge {
       }
       case 'status':
         return [JSON.stringify({ t: 'status', bat: 76, mv: 3912, charging: false, steps: 4321 })];
+      case 'slots':
+        return [this.answerSlots(message)];
       default:
         // Messages the watch does not answer fall through to the transport's echo.
         return null;
     }
+  }
+
+  // Moves the slots the message names, refusing an overlap as the watch does; no other rule is checked.
+  private answerSlots(message: Record<string, unknown>): string {
+    const update = (message.update as [number, number] | undefined) ?? this.slots.update;
+    const recovery = (message.recovery as [number, number] | undefined) ?? this.slots.recovery;
+    const moves = 'update' in message || 'recovery' in message;
+    if (update[0] < recovery[0] + recovery[1] && recovery[0] < update[0] + update[1]) {
+      return JSON.stringify({ t: 'slots', err: 'the slots overlap' });
+    }
+    this.slots = { update, recovery };
+    return JSON.stringify({
+      t: 'slots',
+      update,
+      recovery,
+      area: 0x100000,
+      firmware: 388 * 1024,
+      image: 171428,
+      restart: moves,
+    });
   }
 
   // Check everything first and apply nothing on a bad value, as the watch does.

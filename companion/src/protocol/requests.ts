@@ -6,6 +6,8 @@ import type {
   AlarmReply,
   PhoneToWatchMessage,
   SettingsReply,
+  SlotRange,
+  SlotsReply,
   StatusReply,
   StepsReply,
   SettingsMessage,
@@ -13,7 +15,7 @@ import type {
 } from './gadgetbridge';
 
 // Message types that come back as the answer to a request.
-export type ReplyType = 'settings' | 'alarm' | 'steps' | 'status';
+export type ReplyType = 'settings' | 'alarm' | 'steps' | 'status' | 'slots';
 
 type ReplyOf<T extends ReplyType> = Extract<WatchToPhoneMessage, { t: T }>;
 
@@ -161,4 +163,40 @@ export async function readSteps(channel: RequestChannel, day: Date): Promise<Ste
 
 export async function readStatus(channel: RequestChannel): Promise<StatusReply> {
   return channel.request({ t: 'status' }, 'status');
+}
+
+// ============================================================================
+// Slots
+// ============================================================================
+
+export type SlotsReport = Exclude<SlotsReply, { err: string }>;
+
+export const SLOT_PAGE_BYTES = 4096;
+// The watch refuses a recovery slot smaller than this.
+export const SMALLEST_RECOVERY_SLOT_BYTES = 64 * 1024;
+
+async function slotsRequest(channel: RequestChannel, move: { update?: SlotRange; recovery?: SlotRange }) {
+  const reply = await channel.request({ t: 'slots', ...move }, 'slots');
+  if ('err' in reply) {
+    throw new Error(`The watch refused: ${reply.err}.`);
+  }
+  return reply;
+}
+
+export async function readSlots(channel: RequestChannel): Promise<SlotsReport> {
+  return slotsRequest(channel, {});
+}
+
+// Moves the slots given; the watch copies the recovery image along and then restarts.
+export async function moveSlots(
+  channel: RequestChannel,
+  move: { update?: SlotRange; recovery?: SlotRange },
+): Promise<SlotsReport> {
+  return slotsRequest(channel, move);
+}
+
+// The recovery slot at its start, shrunk to the whole pages its image needs, or the smallest slot allowed.
+export function fittedRecoverySlot(report: SlotsReport): SlotRange {
+  const pages = Math.ceil(report.image / SLOT_PAGE_BYTES) * SLOT_PAGE_BYTES;
+  return [report.recovery[0], Math.max(pages, SMALLEST_RECOVERY_SLOT_BYTES)];
 }
