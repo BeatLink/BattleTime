@@ -175,6 +175,13 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Async flash in the firmware.** Flash writes block the Bluetooth host for up to a sector
   erase at a time, because the display shares the SPI bus and its driver is blocking.
 - [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.
+- [ ] **Clippy fails on master.** CI's `Lints and types` and `Watch lints` jobs are red since run
+  38325871913: a reference that is created and dereferenced at once in `runtime/src/verifier.rs`
+  (lines 64, 87 and 92) and `firmware/src/main.rs` (lines 757 and 765), and a needless `mut` in
+  `app-host/src/host.rs:292`.
+- [ ] **Run the stack overflow test in the emulator.** `crash_record`'s "A Stack Overflow Faults At
+  The Guard And Is Reported" skips, since PineTimeEmulator has no memory protection unit yet; it
+  runs once the emulator models one.
 - [ ] **Run the wasp-os emulator tests in CI.** The `Emulator suites` job skips the tests tagged
   `wasp-os` (the rehearsals and the wasp-os migration), since they start from a wasp-os bootloader
   build with Nordic's S112 that only a local checkout has. Package that build, or its parts, so CI
