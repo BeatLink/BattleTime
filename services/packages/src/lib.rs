@@ -86,6 +86,8 @@ pub enum PackageError {
     IdMismatch,
     /// Turning the app on or off would leave an app without the heap it needs, or the watch without a launcher or face.
     Refused(Refusal),
+    /// The app was built against a newer shared library than the watch has.
+    NeedsNewerLibrary,
     /// The file system refused.
     Storage(Error),
 }
@@ -101,6 +103,7 @@ impl PackageError {
             PackageError::NotLibrary => "that image is not the shared library",
             PackageError::IdMismatch => "the image's id is not the folder's name",
             PackageError::Refused(refusal) => refusal.describe(),
+            PackageError::NeedsNewerLibrary => "the app needs a newer shared library; update the watch first",
             PackageError::Storage(Error::NoSpace) => "no room left on the flash",
             PackageError::Storage(_) => "the file system refused",
         }
@@ -277,8 +280,10 @@ impl<'files, S: Storage> Packages<'files, S> {
 
     /// Checks the image already written to `/apps/<id>/app.ntapp` and makes the app visible.
     /// On a bad image the folder is left as it was, so the phone can try again. An app that would not
-    /// fit the heap stays installed but turned off, and the refusal says why.
-    pub fn install(&self, id: &str) -> Result<InstalledApp, PackageError> {
+    /// fit the heap stays installed but turned off, and the refusal says why. So does an app built
+    /// against a newer shared library than `library_version`, the installed one's, since it would not
+    /// open; with no library installed yet, as while a watch is set up, any version is taken.
+    pub fn install(&self, id: &str, library_version: Option<u16>) -> Result<InstalledApp, PackageError> {
         check_id(id)?;
         let bytes = match self.read_image(id) {
             Err(refused @ PackageError::Refused(_)) => {
@@ -288,7 +293,14 @@ impl<'files, S: Storage> Packages<'files, S> {
             other => other?,
         };
         check_app_image(id, &bytes)?;
+        let needed = AppImage::parse(&bytes)
+            .map_err(PackageError::BadImage)?
+            .shared_library_version;
         drop(bytes);
+        if library_version.is_some_and(|installed| needed > installed) {
+            self.set_enabled(id, false)?;
+            return Err(PackageError::NeedsNewerLibrary);
+        }
         let apps = self.list()?;
         if let Err(refusal) = check_change(&apps, id, true) {
             self.set_enabled(id, false)?;

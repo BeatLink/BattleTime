@@ -369,9 +369,9 @@ using it costs no RAM.
 In the source, apps import these from the `neotime` package, for example
 `import { Card } from "neotime/components"` or `icons.heart`. The compiler refers to them by number
 instead of copying them into the image, and records the library version in the image's header. The
-watch does not open an app built against a newer library than the installed one
-(`OpenError::LibraryTooOld`); it shows the face instead, or the help screen if the face is the app
-refused.
+packages service refuses to install an app built against a newer library than the installed one, and
+the watch does not open one either (`OpenError::LibraryTooOld`); it shows the face instead, or the
+help screen if the face is the app refused.
 
 The library changes only when it is updated, never in everyday use. Anything that changes often,
 such as notifications, settings and app state, is stored on the external flash, whose file system

@@ -354,5 +354,9 @@ mod shared_library {
                 })
             })
         }
+
+        fn installed_version(&self) -> Option<u16> {
+            crate::apps::shared_library().and_then(neotime_packages::library::library_version)
+        }
     }
 }

@@ -25,6 +25,9 @@ struct Command<'line> {
 /// Copies a library file into internal flash and checks it there; the firmware gives it the flash controller.
 pub trait LibraryInstaller {
     fn install<S: Storage>(&mut self, files: &Filesystem<S>, path: &str) -> Result<(), LibraryError>;
+
+    /// The installed library's version, or None while none is installed.
+    fn installed_version(&self) -> Option<u16>;
 }
 
 /// What a command did, beyond its reply, that the shell should hear about.
@@ -51,7 +54,7 @@ pub fn handle_command<S: Storage>(
     let outcome = match (name, command.id) {
         ("apps", _) => return (apps_reply(&packages), Change::None),
         ("install", Some(id)) => {
-            return match packages.install(id) {
+            return match packages.install(id, library.installed_version()) {
                 Ok(app) => {
                     let apps = packages.list().unwrap_or_default();
                     let need = crate::checks::room_needed(&app, &apps);
@@ -288,6 +291,11 @@ mod tests {
                 let start = (SHARED_LIBRARY.start + library::LIBRARY_HEADER_BYTES) as usize;
                 crate::check_library_image(&flash.memory[start..start + length as usize])
             })
+        }
+
+        fn installed_version(&self) -> Option<u16> {
+            library::installed_library(&self.0.memory[SHARED_LIBRARY.start as usize..])
+                .and_then(library::library_version)
         }
     }
 

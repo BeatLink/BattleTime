@@ -201,8 +201,9 @@ fn main() {
                 measure(&files, &mut steps, &image_path, image.len(), |files| {
                     files.write_file(&image_path, &image).unwrap();
                 });
+                // The example writes no shared library, so any library version installs.
                 neotime_packages::Packages::new(&files)
-                    .install(id)
+                    .install(id, None)
                     .unwrap_or_else(|problem| panic!("{id} did not install: {problem:?}"));
             }
         }

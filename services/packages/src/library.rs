@@ -42,6 +42,13 @@ pub fn installed_library(region: &[u8]) -> Option<&[u8]> {
     region.get(LIBRARY_HEADER_BYTES as usize..LIBRARY_HEADER_BYTES as usize + length)
 }
 
+/// The version an installed library image records, read from its header without checking the image.
+pub fn library_version(image: &[u8]) -> Option<u16> {
+    image
+        .get(8..10)
+        .map(|bytes| u16::from_le_bytes([bytes[0], bytes[1]]))
+}
+
 /// How much of the file is copied at a time, so the library never has to fit in RAM.
 const COPY_BYTES: usize = 256;
 

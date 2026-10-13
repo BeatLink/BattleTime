@@ -65,12 +65,35 @@ fn paths_sit_inside_the_apps_folder() {
 // ============================================================================
 
 #[test]
+fn an_app_built_for_a_newer_library_than_the_watch_has_is_refused() {
+    let files = file_system();
+    put(
+        &files,
+        "timer",
+        &ImageWriter::new("timer", "Timer", AppKind::App, 3).build(),
+    );
+    let packages = Packages::new(&files);
+
+    assert_eq!(
+        packages.install("timer", Some(2)),
+        Err(PackageError::NeedsNewerLibrary)
+    );
+    assert!(!packages.list().unwrap()[0].enabled);
+    assert!(packages.install("timer", Some(3)).is_ok());
+    assert!(packages.install("timer", None).is_ok());
+    assert_eq!(
+        crate::library::library_version(&ImageWriter::new("shared", "Shared", AppKind::Library, 7).build()),
+        Some(7)
+    );
+}
+
+#[test]
 fn an_app_installs_and_is_listed_with_its_name() {
     let files = file_system();
     put(&files, "timer", &image("timer", "Timer", AppKind::App));
     let packages = Packages::new(&files);
 
-    let installed = packages.install("timer").unwrap();
+    let installed = packages.install("timer", None).unwrap();
 
     assert_eq!(installed.name, "Timer");
     assert_eq!(installed.kind, AppKind::App);
@@ -104,7 +127,7 @@ fn an_image_larger_than_the_heap_is_never_read_and_listed_as_off() {
         need_bytes: bytes.len() as u32,
     }));
     assert_eq!(packages.read_image("huge").map(|_| ()), refusal);
-    assert_eq!(packages.install("huge").map(|_| ()), refusal);
+    assert_eq!(packages.install("huge", None).map(|_| ()), refusal);
     let listed = packages.list().unwrap();
     assert_eq!((listed[0].name.as_str(), listed[0].enabled), ("huge", false));
     assert!(files.exists(&app_file("huge", DISABLED_FILE)));
@@ -116,7 +139,7 @@ fn an_app_too_large_for_the_heap_stays_installed_but_turned_off() {
     put(&files, "huge", &large_image("huge"));
     let packages = Packages::new(&files);
 
-    let result = packages.install("huge");
+    let result = packages.install("huge", None);
 
     assert!(matches!(
         result,
@@ -138,7 +161,7 @@ fn turning_an_app_on_and_off_gives_its_need() {
     let files = file_system();
     put(&files, "timer", &image("timer", "Timer", AppKind::App));
     let packages = Packages::new(&files);
-    let installed = packages.install("timer").unwrap();
+    let installed = packages.install("timer", None).unwrap();
     assert!(installed.need_bytes > 0);
     assert!(!installed.lists_apps);
 
@@ -164,7 +187,7 @@ fn a_face_installs_too() {
     let files = file_system();
     put(&files, "analog", &image("analog", "Analog", AppKind::Face));
     assert_eq!(
-        Packages::new(&files).install("analog").unwrap().kind,
+        Packages::new(&files).install("analog", None).unwrap().kind,
         AppKind::Face
     );
 }
@@ -179,7 +202,7 @@ fn a_broken_image_is_refused_and_left_for_another_try() {
     let packages = Packages::new(&files);
 
     assert!(matches!(
-        packages.install("timer"),
+        packages.install("timer", None),
         Err(PackageError::BadImage(_))
     ));
     assert!(files.exists(&app_file("timer", IMAGE_FILE)));
@@ -195,7 +218,7 @@ fn the_shared_library_is_not_an_app() {
         &image("shared", "Shared library", AppKind::Library),
     );
     assert_eq!(
-        Packages::new(&files).install("shared"),
+        Packages::new(&files).install("shared", None),
         Err(PackageError::IsLibrary)
     );
 }
@@ -205,7 +228,7 @@ fn an_image_must_be_in_its_own_folder() {
     let files = file_system();
     put(&files, "timer", &image("dice", "Dice", AppKind::App));
     assert_eq!(
-        Packages::new(&files).install("timer"),
+        Packages::new(&files).install("timer", None),
         Err(PackageError::IdMismatch)
     );
 }
@@ -214,10 +237,13 @@ fn an_image_must_be_in_its_own_folder() {
 fn installing_without_an_image_says_so() {
     let files = file_system();
     assert_eq!(
-        Packages::new(&files).install("timer"),
+        Packages::new(&files).install("timer", None),
         Err(PackageError::NotInstalled)
     );
-    assert_eq!(Packages::new(&files).install("../etc"), Err(PackageError::BadId));
+    assert_eq!(
+        Packages::new(&files).install("../etc", None),
+        Err(PackageError::BadId)
+    );
 }
 
 #[test]
@@ -256,7 +282,7 @@ fn installing_verifies_the_code_but_listing_only_parses() {
     let packages = Packages::new(&files);
 
     assert!(matches!(
-        packages.install("timer"),
+        packages.install("timer", None),
         Err(PackageError::BadImage(_))
     ));
     let ids: Vec<String> = packages.list().unwrap().into_iter().map(|app| app.id).collect();
@@ -312,7 +338,7 @@ fn installing_again_shows_a_hidden_app() {
     put(&files, "timer", &image("timer", "Timer", AppKind::App));
     let packages = Packages::new(&files);
     packages.set_enabled("timer", false).unwrap();
-    assert!(packages.install("timer").unwrap().enabled);
+    assert!(packages.install("timer", None).unwrap().enabled);
 }
 
 #[test]
