@@ -74,4 +74,31 @@ describe('neotime launcher', () => {
     await expect(launcher(watch, ['remove', 'nope'])).rejects.toThrow('group id');
     await expect(launcher(watch, ['shuffle'])).rejects.toThrow('Unknown launcher action');
   });
+
+  it('renames a group, changes its icon and its place, and places an app within a group', async () => {
+    const { session: watch, onWatch } = await session();
+    await launcher(watch, ['rename', 'games', 'Fun', 'and', 'games']);
+    await launcher(watch, ['icon', 'games', 'dice']);
+    await launcher(watch, ['order', 'games', '3']);
+    expect(onWatch()?.groups[2]).toEqual({ id: 'games', name: 'Fun and games', icon: 'dice' });
+    await launcher(watch, ['order', 'games', '99']);
+    expect(onWatch()?.groups.at(-1)?.id).toBe('games');
+
+    await launcher(watch, ['move', 'hello', 'games', '1']);
+    expect(onWatch()?.placements.filter((placement) => placement.group === 'games').map((placement) => placement.app)).toEqual([
+      'hello',
+      'snake',
+    ]);
+    expect(output()).toContain('games is called Fun and games.');
+  });
+
+  it('refuses a group, icon or place it cannot use', async () => {
+    const { session: watch } = await session();
+    await expect(launcher(watch, ['rename', 'nope', 'X'])).rejects.toThrow('group id');
+    await expect(launcher(watch, ['rename', 'games'])).rejects.toThrow('new name');
+    await expect(launcher(watch, ['icon', 'games', 'teapot'])).rejects.toThrow('shared library icon');
+    await expect(launcher(watch, ['order', 'games'])).rejects.toThrow('counting from 1');
+    await expect(launcher(watch, ['order', 'games', '0'])).rejects.toThrow('counts from 1');
+    await expect(launcher(watch, ['move', 'snake', 'games', 'first'])).rejects.toThrow('counts from 1');
+  });
 });

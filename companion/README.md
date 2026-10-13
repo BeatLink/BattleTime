@@ -346,8 +346,8 @@ default groups: Games, Tools, Communication, Time, Phone, Health, System (settin
 Setting up a watch writes those defaults, as folders. An app whose group is missing goes to Other,
 and so does one installed another way, until the companion next writes the file.
 
-`neotime launcher show|style <s>|view <v>|move <app> <group>|add <name> [icon]|remove <group>|reset`
-does the same from a terminal.
+`neotime launcher show|style <s>|view <v>|move <app> <group> [place]|add <name> [icon]|rename <group> <name>|icon <group> <icon>|order <group> <place>|remove <group>|reset`
+does all of the same from a terminal.
 
 ## Quick apps
 
