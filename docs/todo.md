@@ -261,45 +261,54 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 
 ## Shared library and smaller apps
 
-The 49 apps and faces hold 105 KB of images, down from 197 KB now that the compiler calls an app's
-own functions, shares code that repeats with other constants and names library icons (see
-[compiler.md](compiler.md#handlers)). Code that is byte-for-byte the same across apps is only
-about 4 KB, so sharing between apps pays only as library functions that take arguments. Library
-code is read in place from the internal flash and costs no RAM. The items run in order; each needs
-the ones above it.
+The apps and faces hold about 90 KB of images, down from 197 KB, now that the compiler calls an
+app's own functions and the shared library's, shares code that repeats with other constants, names
+library icons, and hands whole-array work and composite widgets to the firmware (see
+[app-runtime.md](app-runtime.md#building-apps-from-shared-parts)). What is left saves less each, so
+each item says what it costs and what it would save.
 
-- [ ] **More of the shared library's functions.** `CallLibrary` runs the pure functions in
-  `LIBRARY_FUNCTIONS`. Still open:
-  - Functions that change state, taking the variables by number as `copy array` names its arrays.
-  - Calls from the faces and apps that still compute the same things by hand. One-line helpers
-    such as `(x + 1) % n` stay inlined, since a call costs as many bytes.
-- [ ] **Native widgets with their logic built in.** Every widget node costs 160 to 240 B of the UI
-  heap wherever its record lives, so a composite drawn by the firmware as one node saves more RAM
-  than a library component. In the firmware, which has 112 KB free:
-  - `AppGrid`, the installed apps as a grid of icons, beside the `AppList` the launcher uses.
-  - The other faces' own status rows on `StatusIcons`: analog, lite-analog, lite-digital,
-    lite-rings, infineat, pinetime-style and pride-flag still build theirs from icons, in
-    colours and orders of their own; `StatusIcons` would need a colour for each icon.
-  - A `ring(title, icon, until)` system alert with dismiss and snooze events, with the vibration
-    and the stop after a time limit, for the alarm, timer and pomodoro.
-  - A digit-entry mode for `ButtonMatrix`, for the calculator and pomodoro.
-  - The other faces' step, heart and weather rows on `StepsBadge`, `HeartRateBadge` and
-    `TemperatureBadge`: infineat, lite-digital, lite-weather, terminal and pinetime-style.
-- [ ] **Comparing with a constant array.** `arrays_equal` takes only signals, so puzzle15's check
-  against its constant solved board still loops.
-- [ ] **Library functions that change state.** What is left of the shared logic writes state, so it
-  waits on library functions that take variables by number: `elapsed_clock` (start, pause and
-  reset; stopwatch, sports, metronome, heart), `countdown` (timer, pomodoro) and `record_best`
-  (twos, snake, puzzle15). The pure helpers that were on this list either moved into the library
-  or turned out to be one-liners that a call would not shrink.
-- [ ] **Library components.** Widget trees with props, for layouts that need no native logic:
-  `ActionRow` and `PlayPauseButton` (7 apps), `ToggleScreen` (phone-finder, disable-bluetooth,
-  flashlight, beacon), `SettingSwitch` and `ChoiceList` (settings), `CycleChooser` and
-  `DoneButton` (infineat, pride-flag, pinetime-style), `GameOverPanel`, `ScoreHeader`,
-  `EmptyState`, and `ClassicDial` with `DateWindow` (analog, lite-analog).
+- [ ] **A system ring alert.** A `ring(title, icon, until)` effect that the firmware shows over
+  any screen, with Dismiss and Snooze sending events back to the app, the vibration, the side
+  button stopping it, and the stop after a time limit. The alarm, timer and pomodoro each build
+  their own ringing screen and logic today, and they differ: the alarm snoozes for ten minutes and
+  stops after a minute, the timer stops on any tap, and pomodoro buzzes for its chosen seconds and
+  then starts its next entry, so the alert needs a snooze length and an "ended by itself" event.
+  A design change in the firmware shell; it removes each app's ringing screen and its timers.
+- [ ] **Library components.** Widget trees with props kept in the library and named by number,
+  for layouts that need no native logic: `ActionRow` and `PlayPauseButton` (7 apps),
+  `ToggleScreen` (phone-finder, disable-bluetooth, flashlight, beacon), `SettingSwitch` and
+  `ChoiceList` (settings), `CycleChooser` and `DoneButton` (infineat, pride-flag,
+  pinetime-style), `GameOverPanel`, `ScoreHeader`, `EmptyState`, and `ClassicDial` with
+  `DateWindow` (analog, lite-analog). Needs widget records and their bindings to live across two
+  images, with props passed into the library's expressions. Saves about 50 to 200 B of image an
+  app; the widget nodes still cost the same RAM, so a native widget pays more where one fits.
 - [ ] **Library strings and palettes.** Start, Stop, Reset, Cancel, Dismiss, Snooze, Once, Every
   day, Weekdays, Weekends, Game over; InfiniTime's 18 colours, the resistor code and a rainbow; a
-  theme colour for the `#b0b0b0` that 9 apps write out.
+  theme colour for the `#b0b0b0` that 9 apps write out. Strings need a third kind of text
+  reference, to a library string, which the host resolves when it draws; each saves about 10 B an
+  app.
+- [ ] **Library functions that change state.** Functions taking the variables they write by
+  number, as `copy array` names its arrays, such as `elapsed_clock` (start, pause and reset;
+  stopwatch, sports, metronome), `countdown` (timer, pomodoro) and `record_best` (twos, snake,
+  puzzle15). Measured first: each of these is two or three assignments in its app, which a call
+  with its slot numbers would not shrink, so it pays only if a longer shared routine turns up.
+- [ ] **Calls from apps that still compute shared things by hand.** Any app or face that repeats
+  what a `neotime/lib` function does should call it. One-line helpers such as `(x + 1) % n` stay
+  inlined, since a call costs as many bytes.
+- [ ] **Comparing with a constant array.** `arrays_equal` takes only signals, so puzzle15's check
+  against its constant solved board still loops; the compiler could compare against a constant
+  directly.
+- [ ] **More native widgets.** Every widget node costs 160 to 240 B of the UI heap, so a composite
+  drawn as one node saves RAM where a library component does not:
+  - `AppGrid`, the installed apps as a grid of icons, beside the `AppList` the launcher uses; it
+    has no user until a grid launcher is wanted.
+  - A digit-entry mode for `ButtonMatrix`. The calculator's entry (millionths, a point and a sign)
+    and pomodoro's queue of minutes differ enough that only the keypad itself is shared.
+  - The other faces' status rows and their step, heart and weather rows: analog, lite-analog,
+    lite-digital, lite-rings, infineat, pinetime-style, pride-flag, lite-weather and terminal. Their
+    icons sit apart, in colours of their own, and analog swaps the battery for a plug while
+    charging, so `StatusIcons` and the badges would need per-icon colours, places and that plug
+    mode before they fit; each face would save one to three nodes.
 
 ## RAM
 
