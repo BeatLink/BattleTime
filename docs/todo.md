@@ -69,13 +69,26 @@ document for its part instead.
   - listing, making a folder, writing a file, reading it back, moving it and deleting a folder work;
   - a long listing arrives complete, with no notification lost while packets are short;
   - free space reads back through the companion's scratch-file write.
-- [ ] **Installing apps on the PineTime.** The packages characteristic has run only in the emulator
-  and against the companion's mock watch. Once the firmware without built-in apps is on the watch,
-  run the companion's setup flow and check that:
-  - the shared library installs into internal flash and survives a restart;
-  - the face, the launcher and the apps install from `/apps` and appear without a restart;
-  - `apps` lists them, and hiding, showing and removing one updates the launcher;
+- [ ] **Installing apps on the PineTime.** On the watch, firmware ae36259 took the shared library,
+  the launcher, a face and every app through `neotime apps install` and listed them with `apps`.
+  Still check on the watch that:
+  - the shared library survives a restart;
+  - the apps appear in the launcher without a restart;
+  - hiding, showing and removing one updates the launcher;
   - an image with a bad id or a library that fails its check is refused with an error.
+- [ ] **The Software app and memory checks on the PineTime.** They have run only in the emulator.
+  On the watch, check that the Software app lists every app with its memory, that its switches turn
+  apps off and on, that the launcher and the last face refuse to turn off, and that `neotime apps
+  list` prints each app's memory.
+- [ ] **Bluetooth stopped advertising after an update.** Firmware 94e78c0, the first with the
+  crystal and TIMER0 sleeping between radio events, stopped advertising on the watch soon after it
+  was flashed; nothing was connected, and only the recovery firmware brought it back. Firmware
+  ae36259, with the same change, advertised and installed every app. Find what stops advertising,
+  starting with the sleep path.
+- [ ] **A stack overflow on the PineTime.** Before the stack guard, an overflow in a packages
+  command left the watch connected but silent, with its touch screen dead; the emulator kept
+  touch working, so the dead touch was never explained. On the watch, check that an overflow now
+  ends in the crash screen.
 - [ ] **Reset reasons and crash record on the PineTime.** They have run only in the emulator. On the
   watch, check that:
   - the status page reads "Reset: power on" after the battery is reconnected, "Reset: watchdog"
@@ -138,6 +151,10 @@ See [bluetooth.md](bluetooth.md) for the details of each.
 - [ ] **Faster transfers.** Data length extension, the 2 Mbit PHY and channel selection algorithm
   #2, mainly to speed up firmware updates.
 - [ ] **Connection parameter request** from the peripheral. TrouBLE falls back to L2CAP meanwhile.
+- [ ] **Watch the Bluetooth host task.** The liveness watchdog sees only the radio interrupt
+  count, so a stalled TrouBLE host task with a working radio still feeds it.
+- [ ] **A crash record for a watchdog reset.** A hang that the liveness watchdog resets leaves no
+  crash record, so no crash screen follows; record which task stalled before letting it bite.
 - [ ] **Skip the HCI byte layer** if flash gets tight. The controller could take TrouBLE's
   commands directly instead of encoding and decoding HCI bytes, which would save a few KB.
 
@@ -304,6 +321,8 @@ the ones above it.
   Notification service took 160 B more, and the alarm's last peak of 10.5 KB would leave under the
   2 KB minimum. `tools/measure_stack.py` cannot open the
   alarm, so measure it with the alarm installed and open, in the emulator or on the watch.
+- [ ] **Shrink the startup stack.** The deepest stack point is now at start, 7,848 B, while the
+  Bluetooth task builds its attribute table in a 6.9 KB frame; build it in smaller pieces.
 - [ ] **Find large static RAM.** List `.bss` and `.data` by size with `nm --size-sort` and check
   for oversized embassy task state or tables that should be `const`.
 
@@ -552,6 +571,12 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **Measure the stack with any app open.** `tools/measure_stack.py` can only swipe to the
   launcher, so the alarm's 10.5 KB peak cannot be measured again, and neither can the system info
   app's. Let it install and open a named app in the emulator.
+- [ ] **Clippy fails with warnings denied.** `cargo clippy --release -- -D warnings` stops on two
+  `needless_borrow`s in `firmware/src/main.rs` (`with_attribute_server(&server)`) and three in
+  `neotime-runtime`.
+- [ ] **Emulator gaps in pinetime-engine.** It models no MPU and has no Bluetooth bridge, so the
+  stack-guard test skips there and `tools/measure_stack.py --packages` needs a PineTimeEmulator
+  checkout at 97ebb02 (Renode). Move both to the Rust engine and drop the pinned checkout.
 - [ ] **A DFU upload tool in `tools/`** that sends a zip over BlueZ, as wasp-os's `dfu.py` does,
   including type `0x08` for the recovery slot, which no client sends yet.
 - [ ] **Flashing a watch over SWD.** One image with the bootloader and the firmware, a way to fill
