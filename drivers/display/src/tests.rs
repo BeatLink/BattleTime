@@ -101,10 +101,16 @@ impl OutputPin for FakeBacklightPin {
     }
 }
 
-struct FakeDelay;
+/// A delay that adds up how long it was asked to wait.
+#[derive(Default)]
+struct FakeDelay {
+    waited_in_nanoseconds: u64,
+}
 
 impl DelayNs for FakeDelay {
-    fn delay_ns(&mut self, _nanoseconds: u32) {}
+    fn delay_ns(&mut self, nanoseconds: u32) {
+        self.waited_in_nanoseconds += u64::from(nanoseconds);
+    }
 }
 
 // ============================================================================
@@ -125,7 +131,7 @@ fn write(first_memory_row: u16, last_memory_row: u16) -> MemoryWrite {
 }
 
 fn new_display() -> Display<FakeInterface, FakePin> {
-    Display::new(FakeInterface::default(), FakePin, &mut FakeDelay).unwrap()
+    Display::new(FakeInterface::default(), FakePin, &mut FakeDelay::default()).unwrap()
 }
 
 fn new_display_with_no_commands_recorded() -> Display<FakeInterface, FakePin> {
@@ -327,6 +333,22 @@ fn single_pixels_follow_the_scroll() {
 // ============================================================================
 // Low-power mode
 // ============================================================================
+
+#[test]
+fn sleeping_and_waking_send_one_command_each_and_wait_only_a_few_milliseconds() {
+    let mut display = new_display_with_no_commands_recorded();
+    let mut delay = FakeDelay::default();
+
+    display.sleep(&mut delay).unwrap();
+    display.wake(&mut delay).unwrap();
+
+    assert_eq!(command_codes(&mut display), vec![ENTER_SLEEP, EXIT_SLEEP]);
+    assert_eq!(
+        delay.waited_in_nanoseconds,
+        2 * u64::from(SLEEP_SWITCH_SETTLE_TIME_IN_MICROSECONDS) * 1_000
+    );
+    assert!(delay.waited_in_nanoseconds < SLEEP_SWITCH_GAP_IN_MILLISECONDS * 1_000_000);
+}
 
 #[test]
 fn low_power_mode_slows_the_idle_refresh_then_turns_idle_on() {

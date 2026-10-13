@@ -32,6 +32,8 @@ pub const MEMORY_ROWS: u16 = 320;
 // Panel commands
 // ============================================================================
 
+const ENTER_SLEEP: u8 = 0x10;
+const EXIT_SLEEP: u8 = 0x11;
 const IDLE_MODE_OFF: u8 = 0x38;
 const IDLE_MODE_ON: u8 = 0x39;
 const SET_PORCHES: u8 = 0xB2;
@@ -40,6 +42,12 @@ const SET_IDLE_FRAME_RATE: u8 = 0xB3;
 /// Normal porches as the panel starts, with long porches in idle mode to slow its refresh.
 const LOW_POWER_PORCHES: [u8; 5] = [0x0C, 0x0C, 0x01, 0xED, 0xED];
 const DEFAULT_PORCHES: [u8; 5] = [0x0C, 0x0C, 0x00, 0x33, 0x33];
+
+/// How long the panel needs after going to sleep or waking before it takes the next command.
+const SLEEP_SWITCH_SETTLE_TIME_IN_MICROSECONDS: u32 = 6_000;
+
+/// How long the panel needs after going to sleep or waking before it switches the other way.
+pub const SLEEP_SWITCH_GAP_IN_MILLISECONDS: u64 = 125;
 
 /// Divides the idle frame rate by four.
 const LOW_POWER_IDLE_FRAME_RATE: [u8; 3] = [0x12, 0x1E, 0x1E];
@@ -130,13 +138,18 @@ where
         }
     }
 
-    /// Turns the panel off to save power; its memory is kept.
+    /// Turns the panel off to save power, keeping its memory; the caller keeps waking `SLEEP_SWITCH_GAP_IN_MILLISECONDS` away.
     pub fn sleep(&mut self, delay: &mut impl DelayNs) -> Result<(), DisplayInterface::Error> {
-        self.panel.sleep(delay)
+        self.send_command(ENTER_SLEEP, &[])?;
+        delay.delay_us(SLEEP_SWITCH_SETTLE_TIME_IN_MICROSECONDS);
+        Ok(())
     }
 
+    /// Turns the panel back on after `sleep`; the caller keeps sleeping `SLEEP_SWITCH_GAP_IN_MILLISECONDS` away.
     pub fn wake(&mut self, delay: &mut impl DelayNs) -> Result<(), DisplayInterface::Error> {
-        self.panel.wake(delay)
+        self.send_command(EXIT_SLEEP, &[])?;
+        delay.delay_us(SLEEP_SWITCH_SETTLE_TIME_IN_MICROSECONDS);
+        Ok(())
     }
 
     /// Shows only 8 colours at a slow refresh, for an always-on screen; memory keeps every colour.
@@ -166,7 +179,7 @@ where
     }
 
     fn send_command(&mut self, code: u8, arguments: &[u8]) -> Result<(), DisplayInterface::Error> {
-        // SAFETY: these commands change only how the panel shows its memory, which mipidsi does not track.
+        // SAFETY: these commands change only whether and how the panel shows its memory, which mipidsi's drawing does not depend on.
         unsafe { self.panel.dcs() }.send_command(code, arguments)
     }
 

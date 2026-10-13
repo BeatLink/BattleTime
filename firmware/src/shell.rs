@@ -46,6 +46,7 @@ use neotime_app_host::{
 use neotime_battery::BatteryEvent;
 use neotime_button::Gesture;
 use neotime_companion::{PhoneData, PhoneUpdates, SettingsChange, NOTIFICATION_SOURCE_BYTES};
+use neotime_display::SLEEP_SWITCH_GAP_IN_MILLISECONDS;
 use neotime_notifications::NotificationList;
 use neotime_runtime::{
     events::SwipeDirection, resources::ImageReference, AppImage, EffectKind, SystemValue, SystemValues,
@@ -389,6 +390,8 @@ struct Shell {
     help_drawn_at: Option<Value>,
     /// Whether the screen went off by dimming, for an always-on screen, rather than by sleeping.
     dimmed: bool,
+    /// When the panel last went to sleep or woke, which it cannot do again too soon after.
+    panel_switched_at: Instant,
     /// Settings changed since they were last written to the flash.
     settings_unsaved: bool,
     /// The local time the chimes were last checked at.
@@ -814,9 +817,11 @@ impl Shell {
             });
         } else {
             self.backlight.turn_off();
+            wait_until_panel_can_switch(self.panel_switched_at);
             self.display.lock(|display| {
                 let _ = display.borrow_mut().sleep(&mut Delay);
             });
+            self.panel_switched_at = Instant::now();
         }
         if let Some(mut host) = self.host.take() {
             host.screen_turned_off(clock::utc_now(), &mut self.system);
@@ -834,7 +839,9 @@ impl Shell {
             if self.dimmed {
                 let _ = display.leave_low_power_mode();
             } else {
+                wait_until_panel_can_switch(self.panel_switched_at);
                 let _ = display.wake(&mut Delay);
+                self.panel_switched_at = Instant::now();
             }
         });
         self.dimmed = false;
@@ -962,6 +969,12 @@ impl Shell {
     }
 }
 
+/// Waits out what is left of the panel's gap between going to sleep and waking, which is rarely any time at all.
+fn wait_until_panel_can_switch(switched_at: Instant) {
+    let can_switch_at = switched_at + Duration::from_millis(SLEEP_SWITCH_GAP_IN_MILLISECONDS);
+    embassy_time::block_for(can_switch_at.saturating_duration_since(Instant::now()));
+}
+
 /// Draws what changed through rows of the screen held on the stack, free again once they are sent.
 // Kept out of the shell task, so the rows are on the stack only while drawing, never in the task's state.
 #[inline(never)]
@@ -1038,6 +1051,7 @@ pub async fn run_shell(
         lit: true,
         help_drawn_at: None,
         dimmed: false,
+        panel_switched_at: Instant::from_ticks(0),
         settings_unsaved: false,
         chimes_checked_at: clock::now(),
         image: None,

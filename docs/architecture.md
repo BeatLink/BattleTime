@@ -581,7 +581,9 @@ watch face, the launcher and the apps through `neotime-app-host`:
   behind.
 - **Sleep.** After the settings' screen timeout without input, 15 seconds at first, the backlight goes off, the display sleeps and the
   app gets `screen_off`, unless it called `keep_screen_on(true)`; the next touch or press turns
-  them on without acting on it. The loop sleeps until the next input or until `next_wakeup`;
+  them on without acting on it. Putting the panel to sleep or waking it waits only the 6 ms the
+  ST7789 needs before its next command; the shell keeps the two switches at least 125 ms apart,
+  as the panel also needs, and blocks for the rest of that gap only when they come closer. The loop sleeps until the next input or until `next_wakeup`;
   while the screen is dark it wakes only for the app's subscriptions (`next_subscription_due`),
   and catches the clock's redraws up when the screen turns on. An app's `wake_screen()` and
   `screen_off()` turn the screen on and off, and waking it restarts the timeout.

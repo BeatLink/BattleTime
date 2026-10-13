@@ -359,8 +359,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **The panel's power settings.** mipidsi starts the ST7789 with its defaults. InfiniTime also
   sets the lowest panel and gate voltages, a VDV value that makes the first grey above black less
   of a jump, and its own porches and frame rate. Send the same commands after `Display::new`, then
-  compare the current drawn and the dark greys on the watch. InfiniTime also waits 120 ms between
-  sleep-in and sleep-out, as the ST7789 needs.
+  compare the current drawn and the dark greys on the watch.
 - [ ] **Release the panel in sleep,** so the SPI bus can be turned off.
 - [ ] **DMA transfers,** so the CPU is free while a buffer is sent. EasyDMA reuses the buffer, so
   wait for the transfer to end before writing it again.
