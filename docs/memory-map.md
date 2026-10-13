@@ -261,11 +261,33 @@ python3 -I tools/measure_heap.py firmware/target/thumbv7em-none-eabihf/release/n
 | `weather` | 10,752 B | 16,644 B | |
 | `stopwatch` | 12,016 B | 14,488 B | |
 
-In use counts the system's 1 KB too. The largest app in the repository, `settings`, needs 19.6 KB,
+In use counts the system's 1 KB too. The shell keeps a list of every installed app, turned off
+or not, for the Software app: 62 B an app measured with 38 installed, against the
+`LISTED_APP_BYTES` (48 B) plus id and name every app's need counts for each. With every app in
+the repository and the `digital` face installed, the face held 14,356 B and the launcher, listing
+every app, 11,832 B; the harness works the launcher's need out at 17,169 B with all 55 apps and
+faces on, so it fits with room to spare. A launcher's need is its own, plus the names and icons of
+the apps it lists, plus the largest of their images, which it reads one at a time for the icons.
+
+The largest app in the repository, `settings`, needs 19.6 KB,
 so every app fits with room to spare, and `harness/tests/quality.rs` fails any app or face whose
 estimate is over the budget, or whose opening screen builds more nodes than it counts. Before the
 saved-state buffer was sized for each app, closing any app borrowed 18,694 B for it, which took
 the highest byte touched after leaving `settings` to 30,796 B.
+
+The refusals were checked the same way, over the emulator's Bluetooth bridge, with every app, the
+`digital` face and a 36,580 B test image uploaded to `/apps/huge` but not installed:
+
+```sh
+PINETIME_RENODE_EMULATOR=<that checkout> python3 -I tools/measure_stack.py <firmware> 5 --launcher \
+    --flash flash.bin --library shared.ntlib --packages '{"c":"install","id":"huge"}' \
+    '{"c":"enable","id":"launcher","on":false}' '{"c":"enable","id":"digital","on":false}' \
+    '{"c":"enable","id":"timer","on":false}' '{"c":"enable","id":"timer"}' '{"c":"apps"}'
+```
+
+`huge` was refused with `"why":1,"need":36580`, the launcher and the only face with `"why":3` and
+`"why":4`, the timer went off and on again with `"need":16104`, and the launcher still opened with
+every app listed, the stack peaking at 7,848 B, 2,632 B spare.
 
 ## Measuring again
 

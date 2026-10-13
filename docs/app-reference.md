@@ -37,6 +37,8 @@ time.
 | `next_alarm` | `Instant \| null` | The next alarm any app has set to ring, or `null` if none is set. In app code an empty optional is always `null`. |
 | `current_weather` | object | The last forecast the phone sent: `temperature`, `condition`, `low`, `high`, `sunrise`, `sunset`, `location` and `received_at` (each `null` until the phone sends it), and `forecast`, up to 5 coming days, each with `condition`, `low` and `high`: read `current_weather.value.forecast.length` and `current_weather.value.forecast[day].high`. Reading it needs no permission, so faces need no subscription of their own. |
 | `installed_apps` | list | Every app a launcher lists, in order: `installed_apps.value.length`, and `installed_apps.value[i].name`, `.id` (for `open_app`) and `.icon` (for an `Icon`). `apps/launcher` is a launcher written this way. |
+| `packages` | list | Every installed app and face, on or off, in id order: `.name`, `.id` (for `set_app_enabled`), `.is_face`, `.enabled`, `.memory` (the heap it needs while open, in bytes, as the package manager checks it) and `.refusal`, why turning it the other way would be refused: 0 it would not, 1 it needs more memory than an app can have, 2 the launcher would run out of memory, 3 the launcher stays on, 4 the last watch face stays on, 5 it is the open app. `apps/software` lists them. |
+| `app_memory_budget` | `Int` | The most heap an open app may need, in bytes. |
 | `current_music` | object | The phone's player: `artist`, `track`, `is_playing`, `position` and `length`. Needs the `phone` permission. |
 | `firmware_version` | `Text` | The firmware's version and the commit it was built from, such as `0.1.0+1b19aed`, with a `*` when the build had uncommitted changes. At most 22 characters. |
 | `started_at` | `Instant` | When the watch last started, so `now - started_at` is how long it has run. It moves with the clock when the phone sets the time. |
@@ -369,6 +371,7 @@ subscriptions keep their schedules. A subscription period under a minute needs
 | `set_do_not_disturb(on)` | Turns do not disturb on or off. |
 | `log(text)` | Writes a line to the debug log the companion app can read. |
 | `set_bluetooth(on)` | Turns Bluetooth on or off; the same as `set_setting("bluetooth", ...)`. A restart turns it on again. |
+| `set_app_enabled(id, on)` | Turns an installed app or face on or off. The watch checks the change as the package manager does and does nothing when `packages` gives it a refusal, so show why first. |
 | `set_heart_rate_led(on, brightness, period)` | Drives the heart rate sensor's LED directly, such as for a beacon. `brightness` is the drive level, 0 to 3, and `period` the flash period in milliseconds, 0 for steady. The runtime turns it off when the app closes, even with the `background` permission, to save the battery. |
 
 Settings and other values that change often are stored on the external flash, never the internal
@@ -558,7 +561,7 @@ covered, so a missing permission is a compile error, not a surprise on the watch
 | `phone` | `call_control`, `music_control`, `find_phone`, and the `call`, `music` and `navigation` subscriptions. |
 | `phone_messages` | `send_to_phone` and the `message` subscription. |
 | `internet` | `http_request`. |
-| `settings` | `set_setting`, `set_do_not_disturb` and `set_bluetooth`. |
+| `settings` | `set_setting`, `set_do_not_disturb`, `set_bluetooth` and `set_app_enabled`. |
 | `wake` | `wake_screen`, and vibration during do not disturb. |
 | `background` | Subscriptions that run while the app is closed. |
 

@@ -78,6 +78,87 @@ fn an_app_installs_and_is_listed_with_its_name() {
     assert_eq!(packages.list().unwrap(), vec![installed]);
 }
 
+/// An app whose image alone is larger than the heap an open app may have.
+fn huge_image(id: &str) -> Vec<u8> {
+    let mut writer = ImageWriter::new(id, "Huge", AppKind::App, 1);
+    writer.string(&"x".repeat(neotime_runtime::APP_HEAP_BUDGET_BYTES as usize));
+    writer.build()
+}
+
+/// An app that fits the heap by its image, but not with its widgets and working memory too.
+fn large_image(id: &str) -> Vec<u8> {
+    let mut writer = ImageWriter::new(id, "Large", AppKind::App, 1);
+    writer.string(&"x".repeat(neotime_runtime::APP_HEAP_BUDGET_BYTES as usize - 4_000));
+    writer.widget(neotime_runtime::WidgetKind::Column, 0, &[]);
+    writer.build()
+}
+
+#[test]
+fn an_image_larger_than_the_heap_is_never_read_and_listed_as_off() {
+    let files = file_system();
+    let bytes = huge_image("huge");
+    put(&files, "huge", &bytes);
+    let packages = Packages::new(&files);
+
+    let refusal = Err(PackageError::Refused(Refusal::TooLarge {
+        need_bytes: bytes.len() as u32,
+    }));
+    assert_eq!(packages.read_image("huge").map(|_| ()), refusal);
+    assert_eq!(packages.install("huge").map(|_| ()), refusal);
+    let listed = packages.list().unwrap();
+    assert_eq!((listed[0].name.as_str(), listed[0].enabled), ("huge", false));
+    assert!(files.exists(&app_file("huge", DISABLED_FILE)));
+}
+
+#[test]
+fn an_app_too_large_for_the_heap_stays_installed_but_turned_off() {
+    let files = file_system();
+    put(&files, "huge", &large_image("huge"));
+    let packages = Packages::new(&files);
+
+    let result = packages.install("huge");
+
+    assert!(matches!(
+        result,
+        Err(PackageError::Refused(Refusal::TooLarge { need_bytes })) if need_bytes > neotime_runtime::APP_HEAP_BUDGET_BYTES
+    ));
+    let listed = packages.list().unwrap();
+    assert_eq!(listed.len(), 1);
+    assert!(!listed[0].enabled);
+    assert_eq!(
+        packages.change_enabled("huge", true),
+        Err(PackageError::Refused(Refusal::TooLarge {
+            need_bytes: checks::room_needed(&listed[0], &listed)
+        }))
+    );
+}
+
+#[test]
+fn turning_an_app_on_and_off_gives_its_need() {
+    let files = file_system();
+    put(&files, "timer", &image("timer", "Timer", AppKind::App));
+    let packages = Packages::new(&files);
+    let installed = packages.install("timer").unwrap();
+    assert!(installed.need_bytes > 0);
+    assert!(!installed.lists_apps);
+
+    let listed = neotime_runtime::memory_need::listed_app_bytes("timer", "Timer");
+    assert_eq!(
+        packages.change_enabled("timer", false),
+        Ok(installed.need_bytes + listed)
+    );
+    assert!(!packages.list().unwrap()[0].enabled);
+    assert_eq!(
+        packages.change_enabled("timer", true),
+        Ok(installed.need_bytes + listed)
+    );
+    assert_eq!(
+        packages.change_enabled("dice", true),
+        Err(PackageError::NotInstalled)
+    );
+    assert_eq!(packages.change_enabled("../x", true), Err(PackageError::BadId));
+}
+
 #[test]
 fn a_face_installs_too() {
     let files = file_system();
@@ -268,6 +349,7 @@ fn every_error_explains_itself() {
         PackageError::IsLibrary,
         PackageError::NotLibrary,
         PackageError::IdMismatch,
+        PackageError::Refused(Refusal::LauncherStaysOn),
         PackageError::Storage(Error::NoSpace),
         PackageError::Storage(Error::Io),
     ] {

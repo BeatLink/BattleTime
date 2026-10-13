@@ -186,6 +186,12 @@ impl TestWatch {
             self.host
                 .report_system_value_changes(changed, now, &mut self.system);
         }
+        if std::mem::take(&mut self.system.packages_changed) {
+            let now = self.now();
+            let changed = SystemValue::PackageCount.bit();
+            self.host
+                .report_system_value_changes(changed, now, &mut self.system);
+        }
     }
 
     /// A tap as the touch panel reports one: the finger down, up, then the tap itself.

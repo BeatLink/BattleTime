@@ -310,6 +310,12 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
   `neotime-ui`'s renderer and `FadedRenderer` with the screen as the clip.
 - [ ] **Terminal face overflow.** Its last line falls off the bottom of the screen and
   "[STAT] Connected" is cut in half.
+- [ ] **Check the free heap before reading an image beside an open app.** A packages `install`, the
+  launcher reading icons and opening an app all read a whole image while another app may hold the
+  heap. The package manager now refuses images larger than an app's budget, but one inside it can
+  still meet a heap the open app has mostly taken; read `LlffHeap::free` first and refuse instead.
+- [ ] **Packages in the simulator.** The simulator gives no `packages` values, so the Software app
+  shows an empty list there; feed it the apps it loaded, through `neotime-packages`'s checks.
 - [ ] **Count the heap's peak exactly.** The emulator measures the allocator's bytes in use and
   the highest heap byte touched, which misses allocations filled with zeros. A peak counter in the
   allocator, read over the diagnostics characteristic, would check the heap estimate against every
@@ -639,7 +645,7 @@ The fork has these and NeoTime has nothing for them yet. Most also appear in the
 
 | Area | What the fork has |
 |---|---|
-| App runtime | apps loaded when opened, state kept when left, a Software app to turn apps on and off, a crash screen |
+| App runtime | apps loaded when opened, state kept when left, a crash screen |
 | Heart rate | filter-chain PPG (30 to 210 BPM), raw data logging |
 | Watch faces | Clock, Week clock, Chrono, Dual clock, Fibonacci, Resistor, Word clock, a Faces app with previews |
 | Apps | Alarm with 4 alarms and snooze, Pomodoro, Phone finder, Sports, Level, Gallery, Haiku, Morse, Snake, Four in a row, Puzzle 15, Game of Life, Beacon, Self test |

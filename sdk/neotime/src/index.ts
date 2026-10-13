@@ -203,6 +203,24 @@ export interface InstalledApp {
 /** Every app a launcher lists, in order; kept by the system. */
 export const installed_apps = signal<InstalledApp[]>([]);
 
+export interface Package {
+  /** What `set_app_enabled` takes. */
+  id: string;
+  name: string;
+  is_face: boolean;
+  enabled: boolean;
+  /** The heap it needs while open, in bytes, as the package manager checks it. */
+  memory: number;
+  /** Why turning it the other way would be refused, 0 when it would not; docs/app-reference.md lists the numbers. */
+  refusal: number;
+}
+
+/** Every installed app and face, on or off, in id order; kept by the system. */
+export const packages = signal<Package[]>([]);
+
+/** The most heap an open app may need, in bytes. */
+export const app_memory_budget = signal(33_792);
+
 /** Files a `TextFile` and `file_bytes` read in the browser preview, by path, standing in for the watch's storage. */
 export const preview_files = signal<Record<string, string>>({});
 
@@ -675,6 +693,11 @@ export function set_heart_rate_led(on: boolean, brightness: number, period: numb
 
 export function set_bluetooth(on: boolean) {
   emit({ kind: "set_bluetooth", on });
+}
+
+/** Turns an installed app or face on or off; the watch does nothing when its `refusal` says no. Needs `settings`. */
+export function set_app_enabled(id: string, on: boolean) {
+  emit({ kind: "set_app_enabled", id, on });
 }
 
 /** Takes one heart rate reading now. */

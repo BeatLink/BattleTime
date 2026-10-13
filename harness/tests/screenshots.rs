@@ -165,3 +165,15 @@ fn the_remote_with_one_four_and_nine_buttons_matches_its_reference_pictures() {
 
     assert_all_match(results);
 }
+
+#[test]
+fn the_software_app_refusing_an_app_matches_its_reference_picture() {
+    let result = check_screen("app-software-refused", || {
+        let mut watch = TestWatch::open_app("software").unwrap();
+        watch.tap_text("Atlas");
+        assert_eq!(watch.screen_name(), Some("refused"));
+        watch
+    });
+
+    assert_all_match(vec![result]);
+}

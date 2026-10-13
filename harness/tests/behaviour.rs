@@ -437,3 +437,88 @@ mod remote {
         assert!(watch.failures().is_empty());
     }
 }
+
+// ============================================================================
+// Software
+// ============================================================================
+
+/// Taps a package's row in the Software app, scrolling the list down to it first when it is out of view.
+fn tap_package(watch: &mut TestWatch, name: &str) {
+    if !watch.shows_text(name) {
+        watch.drag((120, 220), (120, 40));
+    }
+    watch.tap_text(name);
+}
+
+#[test]
+fn the_software_app_lists_every_package_with_its_memory() {
+    let watch = TestWatch::open_app("software").unwrap();
+
+    assert!(
+        watch.shows_text("Each app may use 33 KB"),
+        "{:?}",
+        watch.visible_texts()
+    );
+    assert!(watch.shows_text("Atlas"));
+    assert!(watch.shows_text("41 KB"));
+    assert!(watch.shows_text("Dice"));
+    assert!(watch.shows_text("Face, 13 KB"));
+}
+
+#[test]
+fn the_software_app_turns_an_app_on_when_the_watch_allows_it() {
+    let mut watch = TestWatch::open_app("software").unwrap();
+
+    tap_package(&mut watch, "Dice");
+
+    let asked = watch.effects_of(EffectKind::SetAppEnabled);
+    assert_eq!(asked.len(), 1);
+    assert_eq!(asked[0].text(0), Some("dice"));
+    assert_eq!(asked[0].number(1), 1);
+    assert!(watch.system().packages[1].enabled);
+    assert_eq!(watch.screen_name(), Some("main"));
+}
+
+#[test]
+fn the_software_app_turns_an_app_off_too() {
+    let mut watch = TestWatch::open_app("software").unwrap();
+
+    tap_package(&mut watch, "Timer");
+
+    assert_eq!(watch.effects_of(EffectKind::SetAppEnabled)[0].number(1), 0);
+    assert!(!watch.system().packages[5].enabled);
+}
+
+#[test]
+fn the_software_app_says_why_a_switch_is_refused_and_changes_nothing() {
+    let cases = [
+        ("Atlas", "Needs more memory than an app can have"),
+        ("Digital", "The last watch face stays on"),
+        ("Apps", "The launcher stays on"),
+        ("Software", "It is open now"),
+    ];
+    for (name, reason) in cases {
+        let mut watch = TestWatch::open_app("software").unwrap();
+
+        tap_package(&mut watch, name);
+
+        assert_eq!(watch.screen_name(), Some("refused"), "{name}");
+        assert!(watch.shows_text(reason), "{:?}", watch.visible_texts());
+        assert!(watch.effects_of(EffectKind::SetAppEnabled).is_empty());
+        watch.tap_text("OK");
+        assert_eq!(watch.screen_name(), Some("main"));
+    }
+}
+
+#[test]
+fn the_software_app_shows_the_need_against_the_budget_for_an_app_too_large() {
+    let mut watch = TestWatch::open_app("software").unwrap();
+
+    tap_package(&mut watch, "Atlas");
+
+    assert!(
+        watch.shows_text("Needs 41 KB of 33 KB"),
+        "{:?}",
+        watch.visible_texts()
+    );
+}

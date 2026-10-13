@@ -2293,6 +2293,30 @@ fn the_system_info_values_share_a_bit_and_the_version_and_reset_reason_are_text(
     assert!(!SystemValue::FreeStorageKilobytes.is_text());
 }
 
+#[test]
+fn the_package_values_change_with_the_installed_apps_and_list_names_and_ids_as_text() {
+    assert_eq!(SystemValue::from_byte(66), Some(SystemValue::PackageCount));
+    assert_eq!(SystemValue::from_byte(73), Some(SystemValue::AppMemoryBudget));
+    for value in [
+        SystemValue::PackageCount,
+        SystemValue::PackageName,
+        SystemValue::PackageEnabled,
+        SystemValue::PackageRefusal,
+    ] {
+        assert_eq!(value.bit(), SystemValue::InstalledAppCount.bit());
+    }
+    assert_eq!(
+        SystemValue::AppMemoryBudget.bit(),
+        SystemValue::FirmwareVersion.bit()
+    );
+    assert!(SystemValue::PackageMemory.is_list());
+    assert!(!SystemValue::PackageCount.is_list());
+    assert!(SystemValue::PackageId.is_text());
+    assert!(!SystemValue::PackageIsFace.is_text());
+    assert_eq!(EffectKind::from_byte(30), Some(EffectKind::SetAppEnabled));
+    assert_eq!(EffectKind::SetAppEnabled.argument_count(), 2);
+}
+
 // ============================================================================
 // Boards, cell grids and starting values
 // ============================================================================

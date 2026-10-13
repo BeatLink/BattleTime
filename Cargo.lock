@@ -1122,6 +1122,7 @@ dependencies = [
  "neotime-compiler",
  "neotime-display",
  "neotime-notifications",
+ "neotime-packages",
  "neotime-runtime",
  "neotime-ui",
  "png",

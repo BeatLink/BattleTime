@@ -4,7 +4,10 @@ It starts the firmware on an external flash image such as `filesystem_use --imag
 to the launcher, taps its first row and presses the button to go back. At each step it reads the
 allocator's bytes in use and the highest heap byte that is not zero, and saves a screenshot.
 
-    python3 -I tools/measure_heap.py FIRMWARE_ELF FLASH_IMAGE SHARED_LIBRARY [SCREENSHOT_FOLDER]
+    python3 -I tools/measure_heap.py FIRMWARE_ELF FLASH_IMAGE SHARED_LIBRARY [SCREENSHOT_FOLDER [START_SECONDS]]
+
+START_SECONDS, 5 unless given, is how long the watch starts before the face is read; a watch with
+many apps installed takes longer to read them all.
 
 Run it inside `nix develop`. It finds the emulator in $PINETIME_EMULATOR, or in a PineTimeEmulator folder beside the
 main checkout; see
@@ -33,8 +36,9 @@ SHARED_LIBRARY_START = 0x69000
 FIRMWARE_VECTOR_TABLE = 0x5000
 # The UICR words embassy-nrf writes on the first start, so the emulated chip is not reset.
 FIRST_START_UICR = [(0x10001200, 0x15), (0x10001204, 0x15), (0x1000120C, 0xFFFFFFFE)]
+START_SECONDS = 5
 STEPS = [
-    ("face", ['emulation RunFor "00:00:05"']),
+    ("face", []),
     ("launcher", ['sysbus.serial1.touch Swipe "up"', 'emulation RunFor "00:00:03"']),
     ("app", ["sysbus.serial1.touch Tap 120 40", 'emulation RunFor "00:00:04"']),
     ("back", ["sysbus.serial1.sideButton PressAndRelease", 'emulation RunFor "00:00:03"']),
@@ -68,6 +72,7 @@ def emulator_folder():
 def main():
     firmware, flash, library = (Path(argument).resolve() for argument in sys.argv[1:4])
     screenshots = Path(sys.argv[4]).resolve() if len(sys.argv) > 4 else None
+    start_seconds = int(sys.argv[5]) if len(sys.argv) > 5 else START_SECONDS
     heap, heap_size = symbol(firmware, HEAP_SYMBOL)
     memory, memory_size = symbol(firmware, HEAP_MEMORY_SYMBOL)
     emulator = emulator_folder()
@@ -87,6 +92,7 @@ def main():
             f"cpu SP `sysbus ReadDoubleWord {FIRMWARE_VECTOR_TABLE:#x}`",
             f"cpu PC `sysbus ReadDoubleWord {FIRMWARE_VECTOR_TABLE + 4:#x}`",
         ]
+        lines.append(f'emulation RunFor "00:00:{start_seconds:02}"')
         for name, commands in STEPS:
             lines += commands
             lines += [f"sysbus ReadBytes {heap:#x} {heap_size:#x}", f"sysbus ReadBytes {memory:#x} {memory_size:#x}"]

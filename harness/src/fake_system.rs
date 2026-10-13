@@ -68,6 +68,40 @@ pub struct InstalledApp {
     pub id: String,
 }
 
+/// An installed app or face as the Software app lists it, with the numbers the package manager gives.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FakePackage {
+    pub id: String,
+    pub name: String,
+    pub is_face: bool,
+    pub enabled: bool,
+    pub memory: Value,
+    pub refusal: Value,
+}
+
+/// The heap budget an open app has, as the watch gives it.
+pub const STARTING_APP_MEMORY_BUDGET: Value = 33_792;
+
+/// A watch with an app too large to turn on, a face, the launcher, the Software app and two apps.
+pub fn starting_packages() -> Vec<FakePackage> {
+    let package = |id: &str, name: &str, is_face, enabled, memory, refusal| FakePackage {
+        id: id.to_string(),
+        name: name.to_string(),
+        is_face,
+        enabled,
+        memory,
+        refusal,
+    };
+    vec![
+        package("atlas", "Atlas", false, false, 41_000, 1),
+        package("dice", "Dice", false, false, 11_700, 0),
+        package("digital", "Digital", true, true, 12_700, 4),
+        package("launcher", "Apps", false, true, 9_100, 3),
+        package("software", "Software", false, true, 12_100, 5),
+        package("timer", "Timer", false, true, 13_600, 0),
+    ]
+}
+
 // ============================================================================
 // Recorded effects
 // ============================================================================
@@ -95,7 +129,7 @@ impl RecordedEffect {
 fn text_arguments(kind: EffectKind) -> &'static [usize] {
     use EffectKind::*;
     match kind {
-        Go | OpenApp | ShowToast | Log | SetSetting => &[0],
+        Go | OpenApp | ShowToast | Log | SetSetting | SetAppEnabled => &[0],
         Notify | SendToPhone => &[0, 1],
         _ => &[],
     }
@@ -112,6 +146,10 @@ pub struct FakeSystem {
     texts: [String; SystemValue::COUNT],
     pub forecast: Vec<ForecastDay>,
     pub installed_apps: Vec<InstalledApp>,
+    /// Every installed app and face, on or off, as the Software app lists them.
+    pub packages: Vec<FakePackage>,
+    /// Set when an app turned a package on or off, so the watch tells the app once the call returns.
+    pub packages_changed: bool,
     /// The notifications the watch keeps, which `notify` and the phone add to.
     pub notifications: NotificationList,
     /// The open app's name, which a notification it makes shows as its source.
@@ -155,6 +193,8 @@ impl FakeSystem {
                 },
             ],
             installed_apps: Vec::new(),
+            packages: starting_packages(),
+            packages_changed: false,
             notifications: NotificationList::new(),
             app_name: String::new(),
             notifications_changed: false,
@@ -199,6 +239,7 @@ impl FakeSystem {
             (AllowsUpdates, 1),
             (WakeOnTouch, 1),
             (AlarmsInDoNotDisturb, 1),
+            (AppMemoryBudget, STARTING_APP_MEMORY_BUDGET),
         ];
         for (value, number) in starting_values {
             system.set(value, number);
@@ -260,6 +301,7 @@ impl SystemValues for FakeSystem {
             SystemValue::Now => self.now_in_milliseconds,
             SystemValue::WeatherForecastLength => self.forecast.len().min(MOST_FORECAST_DAYS) as Value,
             SystemValue::InstalledAppCount => self.installed_apps.len() as Value,
+            SystemValue::PackageCount => self.packages.len() as Value,
             SystemValue::StepDayCount => (self.step_hours.len() / HOURS_PER_DAY) as Value,
             SystemValue::StepHourCount => self.step_hours.len() as Value,
             other => self.values[other as usize],
@@ -284,6 +326,15 @@ impl SystemValues for FakeSystem {
                 }
                 _ => NONE,
             };
+        }
+        if let Some(package) = self.packages.get(place) {
+            match value {
+                SystemValue::PackageEnabled => return package.enabled as Value,
+                SystemValue::PackageIsFace => return package.is_face as Value,
+                SystemValue::PackageMemory => return package.memory,
+                SystemValue::PackageRefusal => return package.refusal,
+                _ => {}
+            }
         }
         if value == SystemValue::StepHourSteps {
             return self.step_hours.get(place).copied().unwrap_or(NONE);
@@ -310,10 +361,15 @@ impl SystemValues for FakeSystem {
         if value.bit() == SystemValue::UnreadNotifications.bit() {
             return self.notifications.read_element_text(value, index);
         }
-        let Some(app) = usize::try_from(index)
-            .ok()
-            .and_then(|place| self.installed_apps.get(place))
-        else {
+        let place = usize::try_from(index).unwrap_or(usize::MAX);
+        if let Some(package) = self.packages.get(place) {
+            match value {
+                SystemValue::PackageName => return &package.name,
+                SystemValue::PackageId => return &package.id,
+                _ => {}
+            }
+        }
+        let Some(app) = self.installed_apps.get(place) else {
             return "";
         };
         match value {
@@ -351,6 +407,15 @@ impl System for FakeSystem {
         let now = self.now_in_milliseconds;
         if self.notifications.carry_out(effect, &self.app_name, now) {
             self.notifications_changed = true;
+        }
+        if effect.kind == EffectKind::SetAppEnabled {
+            let id = effect.text(0).unwrap_or_default();
+            if let Some(package) = self.packages.iter_mut().find(|package| package.id == id) {
+                if package.refusal == 0 {
+                    package.enabled = effect.number(1) != 0;
+                    self.packages_changed = true;
+                }
+            }
         }
         if let Some(line) = neotime_app_host::phone::line_for_effect(effect.kind, effect.number(0)) {
             self.phone_lines.push(line.to_string());

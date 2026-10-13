@@ -114,6 +114,7 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
         "current_navigation.distance" => (SystemValue::NavigationDistance, Type::NUMBER),
         "current_navigation.progress_percent" => (SystemValue::NavigationProgressPercent, Type::NUMBER),
         "step_history.trip" => (SystemValue::StepTrip, Type::NUMBER),
+        "app_memory_budget" => (SystemValue::AppMemoryBudget, Type::NUMBER),
         _ => return None,
     };
     Some(SystemSignal { value, value_type })
@@ -125,6 +126,7 @@ fn list_length(list: &str) -> Option<SystemValue> {
         "current_weather.forecast" => Some(SystemValue::WeatherForecastLength),
         "installed_apps" => Some(SystemValue::InstalledAppCount),
         "notifications" => Some(SystemValue::NotificationCount),
+        "packages" => Some(SystemValue::PackageCount),
         "step_history.days" => Some(SystemValue::StepDayCount),
         "step_history.hours" => Some(SystemValue::StepHourCount),
         _ => None,
@@ -148,6 +150,12 @@ fn list_field(list: &str, name: &str) -> Option<SystemSignal> {
         ("notifications", "title") => (SystemValue::NotificationTitle, Type::TEXT),
         ("notifications", "body") => (SystemValue::NotificationBody, Type::TEXT),
         ("notifications", "time") => (SystemValue::NotificationTime, Type::NUMBER),
+        ("packages", "name") => (SystemValue::PackageName, Type::TEXT),
+        ("packages", "id") => (SystemValue::PackageId, Type::TEXT),
+        ("packages", "enabled") => (SystemValue::PackageEnabled, Type::BOOL),
+        ("packages", "is_face") => (SystemValue::PackageIsFace, Type::BOOL),
+        ("packages", "memory") => (SystemValue::PackageMemory, Type::NUMBER),
+        ("packages", "refusal") => (SystemValue::PackageRefusal, Type::NUMBER),
         ("step_history.days", "total") => (SystemValue::StepDayTotal, Type::NUMBER),
         ("step_history.hours", "steps") => (SystemValue::StepHourSteps, Type::NUMBER),
         _ => return None,
@@ -305,7 +313,9 @@ impl<'a> Compiler<'a> {
                 module,
                 name: format!("Math.{name}"),
             }),
-            Reference::SystemGroup(list @ ("installed_apps" | "notifications")) if name == "value" => {
+            Reference::SystemGroup(list @ ("installed_apps" | "notifications" | "packages"))
+                if name == "value" =>
+            {
                 Some(Reference::SystemList(list))
             }
             Reference::SystemGroup(group) => {
@@ -1294,6 +1304,7 @@ fn library_reference<'a>(module: LibraryModule, name: &str) -> Reference<'a> {
                 "current_navigation" => Some("current_navigation"),
                 "installed_apps" => Some("installed_apps"),
                 "notifications" => Some("notifications"),
+                "packages" => Some("packages"),
                 "step_history" => Some("step_history"),
                 _ => None,
             };

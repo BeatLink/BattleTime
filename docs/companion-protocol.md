@@ -250,11 +250,26 @@ recovery firmware has no apps, so it refuses every command with an error.
 
 | Command | Answer |
 |---|---|
-| `{"c":"apps"}` | `{"c":"apps","a":[[id,name,kind,enabled,bytes],...]}`, `kind` being `app` or `face` and `enabled` 0 or 1, in id order; each image's CRC and id are checked, but its code only at install |
-| `{"c":"install","id":id}` | `{"c":"install","ok":1}` once `/apps/<id>/app.ntapp` passes the app checks, holds that id and is not the shared library; the app then appears in `installed_apps` |
+| `{"c":"apps"}` | `{"c":"apps","room":budget,"a":[[id,name,kind,enabled,bytes,need],...]}`, `kind` being `app` or `face`, `enabled` 0 or 1 and `need` the heap in bytes the app needs while open, in id order; `room` is the most an app may need. Each image's CRC and id are checked, but its code only at install. An image larger than `room` is never read: it is listed by its id, as an app, turned off, with `need` its length |
+| `{"c":"install","id":id}` | `{"c":"install","ok":1,"need":need,"room":budget}` once `/apps/<id>/app.ntapp` passes the app checks, holds that id, is not the shared library and fits the heap, as `enable` checks; the app then appears in `installed_apps`. An app that does not fit stays installed but turned off, and the answer is a refusal |
 | `{"c":"remove","id":id}` | `{"c":"remove","ok":1}`; deletes `/apps/<id>` with its saved state |
-| `{"c":"enable","id":id,"on":bool}` | `{"c":"enable","ok":1}`; a disabled app stays installed but leaves the launcher |
+| `{"c":"enable","id":id,"on":bool}` | `{"c":"enable","ok":1,"need":need,"room":budget}`; a disabled app stays installed but leaves the launcher. `on` is true when left out |
 | `{"c":"install_library"}` | `{"c":"install_library","ok":1}` once `/resources/shared.ntlib`, sent first, checks out as the shared library and is copied into the internal flash's shared-library region |
+
+Before `install` and `enable` turn an app on, the package manager checks that it fits the heap
+beside everything else, and before `enable` turns one off that the watch keeps a launcher and a
+face. A refusal answers `{"c":...,"err":text,"why":number}`, with `"need":need,"room":budget` too
+when memory is the reason. The numbers are the same as the `refusal` apps read in `packages`:
+
+| `why` | `err` | Meaning |
+|---|---|---|
+| 1 | `it needs more memory than an app can have` | Its need, with the shell's list of apps, is over `room` |
+| 2 | `the launcher would run out of memory` | The launcher's need, which grows with each app it lists, would go over `room`; `need` is the launcher's |
+| 3 | `the launcher stays on` | The launcher is how every other app is reached |
+| 4 | `the last watch face stays on` | Another face must be on first |
+| 5 | `it is open on the watch` | Only the watch's own Software app meets this; the packages characteristic never answers it |
+
+[memory-map.md](memory-map.md#how-much-heap-an-app-needs) explains how the need is worked out.
 
 An id is 1 to 32 letters, digits, `-` and `_`. Each app keeps its folder under `/apps/<id>/`:
 `app.ntapp` is the compiled image, as `neotime-compiler` writes it, and `state` is its saved state.

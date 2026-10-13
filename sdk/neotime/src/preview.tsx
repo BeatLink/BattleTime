@@ -16,6 +16,7 @@ import {
   brightness,
   is_do_not_disturb,
   notifications,
+  packages,
   period_in_milliseconds,
   hour_of,
   settings,
@@ -183,6 +184,11 @@ function carry_out(effect: Effect) {
       break;
     case "set_bluetooth":
       change_setting("bluetooth", effect.on ? 1 : 0);
+      break;
+    case "set_app_enabled":
+      packages.value = packages
+        .peek()
+        .map((app) => (app.id === effect.id && app.refusal === 0 ? { ...app, enabled: effect.on as boolean } : app));
       break;
     case "reset_step_trip":
       step_history.value = { ...step_history.peek(), trip: 0 };

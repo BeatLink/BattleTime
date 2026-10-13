@@ -112,6 +112,13 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 
 ## Apps and watch faces
 
+- **Turn apps on and off, with their memory checked.** The Software app lists every installed app
+  and face with a switch and the memory it needs while open; the companion app's apps screen and
+  `neotime apps` show the same. Before an app is installed or turned on the watch works out from its
+  image how much heap it needs, and refuses one that would not fit, or that would leave the launcher
+  without room for its longer list, saying why. The launcher and the last face stay on. See
+  [apps.md](apps.md) and [memory-map.md](memory-map.md#how-much-heap-an-app-needs).
+
 - **Notes.** Pick a text file in the companion app and it is copied to the watch, again whenever it
   changes; the notes app shows it, read only and scrolled, in the font chosen in the companion app.
   See [apps.md](apps.md).

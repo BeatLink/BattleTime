@@ -63,6 +63,7 @@ pub fn effect_signature(name: &str) -> Option<(EffectKind, &'static [Type])> {
         "set_heart_rate_led" => (EffectKind::SetHeartRateLed, &[BOOL, NUMBER, NUMBER]),
         "set_bluetooth" => (EffectKind::SetBluetooth, &[BOOL]),
         "request_navigation_state" => (EffectKind::RequestNavigationState, &[]),
+        "set_app_enabled" => (EffectKind::SetAppEnabled, &[TEXT, BOOL]),
         _ => return None,
     })
 }

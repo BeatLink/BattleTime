@@ -9,12 +9,11 @@ extern crate alloc;
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::ptr::NonNull;
 
+pub use neotime_packages::LAUNCHER_ID;
+use neotime_packages::{checks, InstalledApp, Refusal};
 use neotime_runtime::{AppImage, AppKind};
 
 use crate::storage;
-
-/// The launcher's id; the shell opens it on a swipe up from the face.
-pub const LAUNCHER_ID: &str = "launcher";
 
 // ============================================================================
 // Bytes the app host borrows
@@ -49,46 +48,91 @@ impl<T: ?Sized> Lent<T> {
 // The list of installed apps
 // ============================================================================
 
-pub struct Entry {
-    pub id: String,
-    pub name: String,
-    has_icon: bool,
-}
-
-/// The enabled apps: the face, the launcher, and the apps the launcher lists.
+/// Every installed app and face, and which of them are on: the face, the launcher, and the apps the launcher lists.
 pub struct InstalledApps {
     pub face: Option<String>,
     pub has_launcher: bool,
-    /// What the launcher lists, in the package manager's order.
-    pub listed: Vec<Entry>,
+    /// Every installed package, turned on or off, in id order, as the Software app lists them.
+    pub packages: Vec<InstalledApp>,
+    /// The places in `packages` of the apps the launcher lists, in the same order.
+    listed: Vec<u16>,
 }
 
 impl InstalledApps {
     pub const NONE: InstalledApps = InstalledApps {
         face: None,
         has_launcher: false,
+        packages: Vec::new(),
         listed: Vec::new(),
     };
 
     pub fn read(files: &storage::Files) -> InstalledApps {
         let mut apps = InstalledApps::NONE;
-        for app in storage_apps::enabled(files) {
-            match app.kind {
-                AppKind::Face if apps.face.is_none() => apps.face = Some(app.id),
-                AppKind::App if app.id == LAUNCHER_ID => apps.has_launcher = true,
-                AppKind::App => apps.listed.push(Entry {
-                    id: app.id,
-                    name: app.name,
-                    has_icon: app.has_icon,
-                }),
-                _ => {}
-            }
-        }
+        apps.packages = storage_apps::all(files);
+        // The list stays for as long as the watch runs, so it keeps no spare room.
+        apps.packages.shrink_to_fit();
+        apps.sort_out();
         apps
     }
 
+    /// Works out the face, the launcher and the listed apps from which packages are on.
+    fn sort_out(&mut self) {
+        self.face = None;
+        self.has_launcher = false;
+        self.listed.clear();
+        for (place, app) in self.packages.iter().enumerate().filter(|(_, app)| app.enabled) {
+            match app.kind {
+                AppKind::Face if self.face.is_none() => self.face = Some(app.id.clone()),
+                AppKind::App if app.id == LAUNCHER_ID => self.has_launcher = true,
+                AppKind::App => self.listed.push(place as u16),
+                _ => {}
+            }
+        }
+    }
+
+    /// How many apps the launcher lists.
+    pub fn listed_count(&self) -> usize {
+        self.listed.len()
+    }
+
+    /// The app at a place in the launcher's list.
+    pub fn listed(&self, place: usize) -> Option<&InstalledApp> {
+        self.packages.get(*self.listed.get(place)? as usize)
+    }
+
     pub fn place_of(&self, id: &str) -> Option<usize> {
-        self.listed.iter().position(|entry| entry.id == id)
+        (0..self.listed.len()).find(|&place| self.listed(place).is_some_and(|app| app.id == id))
+    }
+
+    /// The heap a package needs while open among the others.
+    pub fn memory_of(&self, index: usize) -> Option<u32> {
+        Some(checks::room_needed(self.packages.get(index)?, &self.packages))
+    }
+
+    /// Why turning a package the other way would be refused, 0 when it would not; the open app cannot be turned off.
+    pub fn refusal_of(&self, index: usize, open_id: &str) -> u8 {
+        let Some(app) = self.packages.get(index) else {
+            return 0;
+        };
+        if app.enabled && app.id == open_id {
+            return Refusal::IsOpen.code();
+        }
+        checks::check_change(&self.packages, &app.id, !app.enabled).map_or_else(Refusal::code, |_| 0)
+    }
+
+    /// Turns a package on or off once the checks allow it, on the flash and in this list.
+    pub fn set_enabled(&mut self, files: &storage::Files, id: &str, enabled: bool) -> bool {
+        let Some(index) = self.packages.iter().position(|app| app.id == id) else {
+            return false;
+        };
+        if checks::check_change(&self.packages, id, enabled).is_err()
+            || !storage_apps::set_enabled(files, id, enabled)
+        {
+            return false;
+        }
+        self.packages[index].enabled = enabled;
+        self.sort_out();
+        true
     }
 }
 
@@ -104,9 +148,8 @@ pub struct LauncherIcons {
 
 impl LauncherIcons {
     pub fn read(files: &storage::Files, installed: &InstalledApps) -> LauncherIcons {
-        let icons: Vec<Lent<[u8]>> = installed
-            .listed
-            .iter()
+        let icons: Vec<Lent<[u8]>> = (0..installed.listed_count())
+            .filter_map(|place| installed.listed(place))
             .map(|entry| {
                 let icon = entry
                     .has_icon
@@ -173,11 +216,17 @@ mod storage_apps {
 
     use crate::storage;
 
-    pub fn enabled(files: &storage::Files) -> Vec<InstalledApp> {
+    pub fn all(files: &storage::Files) -> Vec<InstalledApp> {
         files
             .file_system()
-            .and_then(|file_system| Packages::new(file_system).enabled().ok())
+            .and_then(|file_system| Packages::new(file_system).list().ok())
             .unwrap_or_default()
+    }
+
+    pub fn set_enabled(files: &storage::Files, id: &str, enabled: bool) -> bool {
+        files
+            .file_system()
+            .is_some_and(|file_system| Packages::new(file_system).set_enabled(id, enabled).is_ok())
     }
 
     pub fn read_image(files: &storage::Files, id: &str) -> Option<Vec<u8>> {
@@ -193,8 +242,12 @@ mod storage_apps {
 
     use crate::storage;
 
-    pub fn enabled(_files: &storage::Files) -> Vec<InstalledApp> {
+    pub fn all(_files: &storage::Files) -> Vec<InstalledApp> {
         Vec::new()
+    }
+
+    pub fn set_enabled(_files: &storage::Files, _id: &str, _enabled: bool) -> bool {
+        false
     }
 
     pub fn read_image(_files: &storage::Files, _id: &str) -> Option<Vec<u8>> {

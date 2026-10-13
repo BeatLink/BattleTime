@@ -4,6 +4,7 @@
 import { act, cleanup, fireEvent, render } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  app_memory_budget,
   battery_millivolts,
   battery_percent,
   brightness,
@@ -22,6 +23,7 @@ import {
   is_heart_rate_running,
   is_phone_connected,
   next_alarm,
+  packages,
   preview_files,
   reset_persisted,
   reset_reason,
@@ -113,6 +115,12 @@ export const KNOWN_DIFFERENCES: KnownDifference[] = [
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Step goal", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Theme", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Updates", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-software", screen: "main", side: "preview_only", text: "12 KB", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-software", screen: "main", side: "preview_only", text: "14 KB", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-software", screen: "main", side: "preview_only", text: "9 KB", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-software", screen: "main", side: "preview_only", text: "Apps", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-software", screen: "main", side: "preview_only", text: "Software", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-software", screen: "main", side: "preview_only", text: "Timer", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "face-terminal", screen: "main", side: "preview_only", text: "user@watch:~ $", reason: "The last line falls below the screen on the watch, and the preview test has no layout to tell." },
 ];
 
@@ -204,6 +212,16 @@ export function set_fake_system_values() {
     progress_percent: 40,
   };
   installed_apps.value = [];
+  // As harness/src/fake_system.rs starts them.
+  packages.value = [
+    { id: "atlas", name: "Atlas", is_face: false, enabled: false, memory: 41_000, refusal: 1 },
+    { id: "dice", name: "Dice", is_face: false, enabled: false, memory: 11_700, refusal: 0 },
+    { id: "digital", name: "Digital", is_face: true, enabled: true, memory: 12_700, refusal: 4 },
+    { id: "launcher", name: "Apps", is_face: false, enabled: true, memory: 9_100, refusal: 3 },
+    { id: "software", name: "Software", is_face: false, enabled: true, memory: 12_100, refusal: 5 },
+    { id: "timer", name: "Timer", is_face: false, enabled: true, memory: 13_600, refusal: 0 },
+  ];
+  app_memory_budget.value = 33_792;
   preview_files.value = { "/notes/note.txt": STARTING_NOTE };
   clear_notifications();
   step_history.value = starting_step_history();

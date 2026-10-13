@@ -513,9 +513,11 @@ followed by their lists of `id`, `app`, `title`, `body` and `time`, the step his
 its day count and list of each day's `total`, and its hour count and list of each hour's `steps`,
 which share `steps_today`'s bit, and `firmware_version`, `started_at`, `free_storage_kilobytes`
 and `reset_reason`, then the settings' `allows_updates`, `wake_on_touch` and
-`alarms_in_do_not_disturb`, which share the other settings' bit.
+`alarms_in_do_not_disturb`, which share the other settings' bit, then the installed packages'
+count followed by their lists of `name`, `id`, `enabled`, `is_face`, `memory` and `refusal`,
+which share the installed apps' bit, and `app_memory_budget`, which shares the system info bit.
 `read system element` reads a list's elements through `SystemValues::read_element`, or
-`read_element_text` for the names, ids and notification texts. The location, artist, track,
+`read_element_text` for the names, ids and notification texts, the packages' too. The location, artist, track,
 instruction, firmware version and reset reason are text: the system hands them
 over through `SystemValues::read_text`, and `read system` copies them into the call's text buffer.
 Values the phone sends together share one bit of an input mask, so all the weather values redraw
@@ -528,7 +530,7 @@ Effects, in the order `effect` numbers them, with how many arguments each takes:
 `music_control` (1), `call_control` (1), `find_phone` (1), `measure_heart_rate`,
 `start_heart_rate`, `stop_heart_rate`, `reset_step_trip`, `set_setting` (2), `set_do_not_disturb` (1),
 `log` (1), `request_music_state`, `set_heart_rate_led` (3), `set_bluetooth` (1),
-`request_navigation_state`.
+`request_navigation_state`, `set_app_enabled` (2).
 `send_to_phone`'s two arguments are texts: the channel, and the data as the JSON object the compiler
 builds, which the firmware sends as `{"t":"app","ch":...,"d":...}`.
 `vibrate_sequence` and `http_request` need arrays and more arguments, and come later.

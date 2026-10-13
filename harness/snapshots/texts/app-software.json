@@ -1,0 +1,28 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "12 KB",
+        "41 KB",
+        "Atlas",
+        "Dice",
+        "Digital",
+        "Each app may use 33 KB",
+        "Face, 13 KB",
+        "Installed"
+      ]
+    },
+    {
+      "name": "refused",
+      "reached_by": "tap \"Atlas\"",
+      "texts": [
+        "Atlas",
+        "Needs 41 KB of 33 KB",
+        "Needs more memory than an app can have",
+        "OK"
+      ]
+    }
+  ]
+}

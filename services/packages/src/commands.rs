@@ -7,10 +7,10 @@ use alloc::string::String;
 use core::fmt::Write;
 
 use littlefs_rust::{Filesystem, Storage};
-use neotime_runtime::AppKind;
+use neotime_runtime::{AppKind, APP_HEAP_BUDGET_BYTES};
 use serde::Deserialize;
 
-use crate::{library::LibraryError, Packages};
+use crate::{library::LibraryError, PackageError, Packages};
 
 /// Where the phone puts a new shared library before `install_library`.
 pub const LIBRARY_UPLOAD_PATH: &str = "/resources/shared.ntlib";
@@ -50,11 +50,23 @@ pub fn handle_command<S: Storage>(
     let name = command.c;
     let outcome = match (name, command.id) {
         ("apps", _) => return (apps_reply(&packages), Change::None),
-        ("install", Some(id)) => packages.install(id).map(|_| Change::Apps),
+        ("install", Some(id)) => {
+            return match packages.install(id) {
+                Ok(app) => {
+                    let apps = packages.list().unwrap_or_default();
+                    let need = crate::checks::room_needed(&app, &apps);
+                    (ok_reply_with_need(name, need), Change::Apps)
+                }
+                Err(error) => (error_reply_for(name, error), Change::None),
+            };
+        }
         ("remove", Some(id)) => packages.remove(id).map(|_| Change::Apps),
-        ("enable", Some(id)) => packages
-            .set_enabled(id, command.on.unwrap_or(true))
-            .map(|_| Change::Apps),
+        ("enable", Some(id)) => {
+            return match packages.change_enabled(id, command.on.unwrap_or(true)) {
+                Ok(need) => (ok_reply_with_need(name, need), Change::Apps),
+                Err(error) => (error_reply_for(name, error), Change::None),
+            };
+        }
         ("install_library", _) => {
             return match library.install(files, LIBRARY_UPLOAD_PATH) {
                 Ok(()) => (ok_reply(name), Change::Library),
@@ -84,6 +96,37 @@ fn ok_reply(name: &str) -> String {
     reply
 }
 
+/// An answer that also gives the app's heap need and the most an app may have.
+fn ok_reply_with_need(name: &str, need_bytes: u32) -> String {
+    let mut reply = String::new();
+    let _ = writeln!(
+        reply,
+        "{{\"c\":\"{}\",\"ok\":1,\"need\":{need_bytes},\"room\":{APP_HEAP_BUDGET_BYTES}}}",
+        escaped(name)
+    );
+    reply
+}
+
+/// An error, with the refusal's number and the heap need when the checks refused it.
+fn error_reply_for(name: &str, error: PackageError) -> String {
+    let PackageError::Refused(refusal) = error else {
+        return error_reply(name, error.describe());
+    };
+    let mut reply = String::new();
+    let _ = write!(
+        reply,
+        "{{\"c\":\"{}\",\"err\":\"{}\",\"why\":{}",
+        escaped(name),
+        escaped(refusal.describe()),
+        refusal.code()
+    );
+    if let Some(need_bytes) = refusal.need_bytes() {
+        let _ = write!(reply, ",\"need\":{need_bytes},\"room\":{APP_HEAP_BUDGET_BYTES}");
+    }
+    reply.push_str("}\n");
+    reply
+}
+
 fn error_reply(name: &str, message: &str) -> String {
     let mut reply = String::new();
     let _ = writeln!(
@@ -95,24 +138,27 @@ fn error_reply(name: &str, message: &str) -> String {
     reply
 }
 
-/// `{"c":"apps","a":[[id,name,kind,enabled,bytes],...]}`, kind being "app" or "face".
+/// `{"c":"apps","room":budget,"a":[[id,name,kind,enabled,bytes,need],...]}`, kind being "app" or "face"
+/// and need the heap the app needs while open among the others.
 fn apps_reply<S: Storage>(packages: &Packages<S>) -> String {
     let apps = match packages.list() {
         Ok(apps) => apps,
         Err(error) => return error_reply("apps", error.describe()),
     };
-    let mut reply = String::from("{\"c\":\"apps\",\"a\":[");
+    let mut reply = String::new();
+    let _ = write!(reply, "{{\"c\":\"apps\",\"room\":{APP_HEAP_BUDGET_BYTES},\"a\":[");
     for (index, app) in apps.iter().enumerate() {
         let kind = if app.kind == AppKind::Face { "face" } else { "app" };
         let _ = write!(
             reply,
-            "{}[\"{}\",\"{}\",\"{}\",{},{}]",
+            "{}[\"{}\",\"{}\",\"{}\",{},{},{}]",
             if index == 0 { "" } else { "," },
             escaped(&app.id),
             escaped(&app.name),
             kind,
             app.enabled as u8,
-            app.image_bytes
+            app.image_bytes,
+            crate::checks::room_needed(app, &apps)
         );
     }
     reply.push_str("]}\n");
@@ -259,7 +305,7 @@ mod tests {
         let (reply, change) = run(r#"{"c":"apps"}"#, &files);
 
         assert!(
-            reply.starts_with(r#"{"c":"apps","a":[["analog","Analog \"classic\"","face",1,"#),
+            reply.starts_with(r#"{"c":"apps","room":33792,"a":[["analog","Analog \"classic\"","face",1,"#),
             "{reply}"
         );
         assert!(reply.contains(r#"["timer","Timer","app",0,"#));
@@ -271,9 +317,14 @@ mod tests {
     fn install_remove_and_enable_answer_and_report_a_change() {
         let files = file_system();
         put_app(&files, "timer", "Timer", AppKind::App);
+        let need = crate::Packages::new(&files).list().unwrap()[0].need_bytes;
+        let need = need + neotime_runtime::memory_need::listed_app_bytes("timer", "Timer");
         assert_eq!(
             run(r#"{"c":"install","id":"timer"}"#, &files),
-            (ok_reply("install"), Change::Apps)
+            (
+                std::format!("{{\"c\":\"install\",\"ok\":1,\"need\":{need},\"room\":33792}}\n"),
+                Change::Apps
+            )
         );
         assert_eq!(
             run(r#"{"c":"enable","id":"timer","on":false}"#, &files).1,
@@ -282,6 +333,37 @@ mod tests {
         assert!(!Packages::new(&files).list().unwrap()[0].enabled);
         assert_eq!(run(r#"{"c":"remove","id":"timer"}"#, &files).1, Change::Apps);
         assert!(Packages::new(&files).list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn refusals_give_their_number_and_the_need() {
+        let files = file_system();
+        put_app(&files, "launcher", "Apps", AppKind::App);
+        let mut huge = ImageWriter::new("huge", "Huge", AppKind::App, 1);
+        huge.string(&"x".repeat(40_000));
+        files.mkdir(&app_folder("huge")).unwrap();
+        files
+            .write_file(&app_file("huge", IMAGE_FILE), &huge.build())
+            .unwrap();
+
+        let (reply, change) = run(r#"{"c":"install","id":"huge"}"#, &files);
+        assert!(
+            reply.starts_with(
+                r#"{"c":"install","err":"it needs more memory than an app can have","why":1,"need":"#
+            ),
+            "{reply}"
+        );
+        assert!(reply.ends_with(",\"room\":33792}\n"), "{reply}");
+        assert_eq!(change, Change::None);
+
+        assert_eq!(
+            run(r#"{"c":"enable","id":"launcher","on":false}"#, &files).0,
+            "{\"c\":\"enable\",\"err\":\"the launcher stays on\",\"why\":3}\n"
+        );
+        assert_eq!(
+            run(r#"{"c":"enable","id":"nothing"}"#, &files).0,
+            "{\"c\":\"enable\",\"err\":\"no such app\"}\n"
+        );
     }
 
     #[test]

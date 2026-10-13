@@ -220,3 +220,46 @@ fn no_package_builds_more_nodes_than_its_heap_estimate_counts() {
         );
     }
 }
+
+#[test]
+fn with_every_app_and_face_turned_on_each_still_fits_and_the_launcher_opens() {
+    use neotime_packages::{check_change, checks::room_needed, InstalledApp};
+    use neotime_runtime::memory_need::launcher_share_bytes;
+
+    let apps: Vec<InstalledApp> = every_package()
+        .into_iter()
+        .map(|package| {
+            let bytes = compile_package(package.kind, &package.id).unwrap();
+            let image = AppImage::parse(&bytes).unwrap();
+            let need = estimate_memory_need(&image);
+            InstalledApp {
+                id: package.id.clone(),
+                name: image.string(image.name_string).unwrap_or_default().to_string(),
+                kind: image.kind,
+                has_icon: image.has_icon,
+                enabled: true,
+                image_bytes: bytes.len() as u32,
+                need_bytes: need.total_bytes,
+                lists_apps: need.lists_apps,
+                launcher_share_bytes: launcher_share_bytes(&image),
+            }
+        })
+        .collect();
+
+    for app in &apps {
+        let need = room_needed(app, &apps);
+        assert!(
+            need <= APP_HEAP_BUDGET_BYTES,
+            "{} needs {need} bytes with every package on",
+            app.id
+        );
+        assert!(check_change(&apps, &app.id, true).is_ok(), "{}", app.id);
+    }
+    let launcher = apps.iter().find(|app| app.id == "launcher").unwrap();
+    assert!(launcher.lists_apps);
+    std::println!(
+        "the launcher needs {} of {APP_HEAP_BUDGET_BYTES} bytes with all {} packages on",
+        room_needed(launcher, &apps),
+        apps.len()
+    );
+}

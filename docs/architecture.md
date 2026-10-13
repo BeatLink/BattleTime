@@ -506,8 +506,16 @@ The folders are the whole record: there is no list of installed apps to fall out
   so the phone can send it again. `remove` deletes the folder with the saved state. `set_enabled`
   hides an app from the launcher with a `disabled` marker, without deleting it. `list` returns
   every app whose image parses and holds its folder's id, in id order, without verifying the code
-  again, and `enabled` the ones the launcher shows. `read_image` hands the
-  shell an image to load into RAM.
+  again, with the heap it needs from `estimate_memory_need`, and `enabled` the ones the launcher
+  shows. `read_image` hands the shell an image to load into RAM. An image larger than the heap an
+  app may have is never read: `list` gives it by its id, turned off, and `read_image` refuses it.
+  `install` and `change_enabled` turn an app on or off only once `checks` allows it.
+- **`checks`** decides whether an app may be turned on or off, from the list alone. Turning one on
+  is refused when its need, with the shell's list of every installed app, is over
+  `APP_HEAP_BUDGET_BYTES`, or when it would push a launcher (an app with an `AppList` or reading
+  `installed_apps`) over, since a launcher holds each listed app's name and icon and reads their
+  images one at a time. Turning one off is refused for the launcher and the last face on. Other
+  apps are not checked again when one is turned on, since only a launcher's need grows with it.
 - **`commands`** answers the packages characteristic's JSON lines (`apps`, `install`, `remove`,
   `enable`, `install_library`) and says whether the apps or the library changed, so the shell can
   read them again.
@@ -738,9 +746,12 @@ watch face, the launcher and the apps through `neotime-app-host`:
   it reads the commit from `NEOTIME_GIT_COMMIT`, which takes Nix's `shortRev` or `dirtyShortRev`,
   and says `unknown` without either. The status page's title shows it, and the standard Device
   Information service (0x180A) answers a read of Firmware Revision (0x2A26) with it.
-- **Apps.** None are built in. `apps.rs` reads the enabled apps from `/apps` through
-  `neotime-packages`: the first face is the watch face, the app with id `launcher` is the launcher,
-  and every other app is listed in `installed_apps`. Their icons are copied out of their images
+- **Apps.** None are built in. `apps.rs` reads every installed app from `/apps` through
+  `neotime-packages` and keeps the list, turned-off apps included, for the `packages` system
+  values: the first face turned on is the watch face, the app with id `launcher` is the launcher,
+  and every other app turned on is listed in `installed_apps`. `set_app_enabled` from an app runs
+  the package manager's checks on that list, writes the `disabled` marker and tells the open app;
+  the open app itself cannot be turned off. Their icons are copied out of their images
   only while the launcher is open, and freed when it closes. The open app's image is read into the heap when it opens and freed once its
   host is gone. The shared library is read in place from the internal-flash region. With no face
   the shell shows `help.rs`: the time and how to install one. `packages::CHANGED` makes the shell read

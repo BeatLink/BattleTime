@@ -105,6 +105,21 @@ pub enum SystemValue {
     WakeOnTouch,
     /// Whether alarms and timers still ring in do not disturb.
     AlarmsInDoNotDisturb,
+    /// How many apps and faces are installed, turned on or off, in id order.
+    PackageCount,
+    /// Text list: each installed package's name, then its id.
+    PackageName,
+    PackageId,
+    /// List: whether each package is turned on.
+    PackageEnabled,
+    /// List: whether each package is a watch face.
+    PackageIsFace,
+    /// List: the heap each package needs while it is open, in bytes, as the package manager checks it.
+    PackageMemory,
+    /// List: why turning each package the other way would be refused, 0 when it would not; see `Refusal`.
+    PackageRefusal,
+    /// The most heap an open app may need, in bytes.
+    AppMemoryBudget,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -118,7 +133,7 @@ const SETTINGS_BIT: u32 = 22;
 const SYSTEM_INFO_BIT: u32 = 23;
 
 impl SystemValue {
-    pub const COUNT: usize = 66;
+    pub const COUNT: usize = 74;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -189,6 +204,14 @@ impl SystemValue {
             63 => AllowsUpdates,
             64 => WakeOnTouch,
             65 => AlarmsInDoNotDisturb,
+            66 => PackageCount,
+            67 => PackageName,
+            68 => PackageId,
+            69 => PackageEnabled,
+            70 => PackageIsFace,
+            71 => PackageMemory,
+            72 => PackageRefusal,
+            73 => AppMemoryBudget,
             _ => return None,
         })
     }
@@ -215,13 +238,18 @@ impl SystemValue {
             NavigationTurn | NavigationInstruction | NavigationDistance | NavigationProgressPercent => {
                 NAVIGATION_BIT
             }
-            InstalledAppCount | InstalledAppName | InstalledAppId | InstalledAppIcon => INSTALLED_APPS_BIT,
+            InstalledAppCount | InstalledAppName | InstalledAppId | InstalledAppIcon | PackageCount
+            | PackageName | PackageId | PackageEnabled | PackageIsFace | PackageMemory | PackageRefusal => {
+                INSTALLED_APPS_BIT
+            }
             ScreenTimeoutSeconds | AlwaysOnScreen | Chimes | ThemePreset | AllowsUpdates | WakeOnTouch
             | AlarmsInDoNotDisturb => SETTINGS_BIT,
             NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
             | NotificationTime => UnreadNotifications as u32,
             StepTrip | StepDayCount | StepDayTotal | StepHourCount | StepHourSteps => StepsToday as u32,
-            FirmwareVersion | StartedAt | FreeStorageKilobytes | ResetReason => SYSTEM_INFO_BIT,
+            FirmwareVersion | StartedAt | FreeStorageKilobytes | ResetReason | AppMemoryBudget => {
+                SYSTEM_INFO_BIT
+            }
             other => other as u32,
         };
         1 << group
@@ -245,6 +273,12 @@ impl SystemValue {
                 | NotificationTime
                 | StepDayTotal
                 | StepHourSteps
+                | PackageName
+                | PackageId
+                | PackageEnabled
+                | PackageIsFace
+                | PackageMemory
+                | PackageRefusal
         )
     }
 
@@ -264,6 +298,8 @@ impl SystemValue {
                 | NotificationBody
                 | FirmwareVersion
                 | ResetReason
+                | PackageName
+                | PackageId
         )
     }
 }
@@ -444,6 +480,8 @@ pub enum EffectKind {
     SetHeartRateLed,
     SetBluetooth,
     RequestNavigationState,
+    /// Turns an installed app or face on or off by its id, once the package manager's checks allow it.
+    SetAppEnabled,
 }
 
 impl EffectKind {
@@ -480,6 +518,7 @@ impl EffectKind {
             27 => SetHeartRateLed,
             28 => SetBluetooth,
             29 => RequestNavigationState,
+            30 => SetAppEnabled,
             _ => return None,
         })
     }
@@ -503,7 +542,7 @@ impl EffectKind {
             Vibrate | VibratePattern | SetBrightness | KeepScreenOn | Go | OpenApp | ShowToast
             | DismissNotification | MusicControl | CallControl | SetDoNotDisturb | Log | FindPhone
             | SetBluetooth => 1,
-            Notify | SendToPhone | SetSetting => 2,
+            Notify | SendToPhone | SetSetting | SetAppEnabled => 2,
             SetHeartRateLed => 3,
         }
     }

@@ -1389,6 +1389,57 @@ fn the_step_history_is_read_one_day_or_hour_at_a_time() {
     assert!(image_runs(&image, Instruction::Effect(EffectKind::ResetStepTrip)));
 }
 
+const PACKAGES_SOURCE: &str = r#"import { app_memory_budget, packages, set_app_enabled } from "neotime";
+        function toggle(place: number) {
+          set_app_enabled(packages.value[place].id, !packages.value[place].enabled);
+        }
+        function Main() {
+          return (
+            <Screen>
+              <Label>{`${packages.value.length} ${app_memory_budget.value}`}</Label>
+              <Label>{packages.value[0].name}</Label>
+              <Label>{`${packages.value[0].memory} ${packages.value[0].refusal}`}</Label>
+              <Label>{packages.value[0].is_face ? "Face" : "App"}</Label>
+              <Button onClick={() => toggle(0)}>Toggle</Button>
+            </Screen>
+          );
+        }"#;
+
+#[test]
+fn the_installed_packages_are_read_one_field_at_a_time_and_turned_on_by_id() {
+    use neotime_runtime::instruction::Instruction;
+    let source = format!(
+        "{HEADER}\n{PACKAGES_SOURCE}\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }}, permissions: [\"settings\"] }});"
+    );
+    let image = compile(&source);
+    let image = AppImage::parse(&image).unwrap();
+
+    for value in [SystemValue::PackageCount, SystemValue::AppMemoryBudget] {
+        assert!(image_runs(&image, Instruction::ReadSystem(value)), "{value:?}");
+    }
+    for value in [
+        SystemValue::PackageName,
+        SystemValue::PackageId,
+        SystemValue::PackageEnabled,
+        SystemValue::PackageIsFace,
+        SystemValue::PackageMemory,
+        SystemValue::PackageRefusal,
+    ] {
+        assert!(
+            image_runs(&image, Instruction::ReadSystemElement(value)),
+            "{value:?}"
+        );
+    }
+    assert!(image_runs(&image, Instruction::Effect(EffectKind::SetAppEnabled)));
+}
+
+#[test]
+fn turning_apps_on_and_off_needs_the_settings_permission() {
+    let message = first_error(&app(PACKAGES_SOURCE));
+
+    assert!(message.contains("`settings` permission"), "{message}");
+}
+
 #[test]
 fn a_twenty_millisecond_timer_needs_only_while_open() {
     let source = |period: u32| {

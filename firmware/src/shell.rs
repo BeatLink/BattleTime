@@ -49,8 +49,8 @@ use neotime_companion::{PhoneData, PhoneUpdates, SettingsChange, NOTIFICATION_SO
 use neotime_display::SLEEP_SWITCH_GAP_IN_MILLISECONDS;
 use neotime_notifications::NotificationList;
 use neotime_runtime::{
-    events::SwipeDirection, resources::ImageReference, AppImage, EffectKind, SystemValue, SystemValues,
-    Theme, Value,
+    events::SwipeDirection, resources::ImageReference, AppImage, AppKind, EffectKind, SystemValue,
+    SystemValues, Theme, Value,
 };
 use neotime_settings::{chimes, Setting};
 use neotime_steps::{StepHistory, DAYS_REMEMBERED, HOURS_PER_DAY};
@@ -187,6 +187,10 @@ struct WatchSystem {
     notifications_changed: bool,
     /// The open app's name, which a notification it makes shows as its source.
     open_app_name: heapless::String<NOTIFICATION_SOURCE_BYTES>,
+    /// The open app's id, which the Software app cannot turn off while it is open.
+    open_app_id: heapless::String<{ neotime_packages::MOST_ID_BYTES }>,
+    /// Set when an app turned another on or off, so the open app and the shell catch up once the host call returns.
+    apps_toggled: bool,
     files: &'static storage::Files,
     /// Counted once after an app opens and first reads it, since counting walks the file system.
     free_storage_kilobytes: Cell<Option<Value>>,
@@ -221,7 +225,9 @@ impl SystemValues for WatchSystem {
             SystemValue::IsPhoneConnected => phone::is_connected() as Value,
             SystemValue::Brightness => self.brightness as Value,
             SystemValue::NextAlarm => neotime_runtime::NONE,
-            SystemValue::InstalledAppCount => self.installed.listed.len() as Value,
+            SystemValue::InstalledAppCount => self.installed.listed_count() as Value,
+            SystemValue::PackageCount => self.installed.packages.len() as Value,
+            SystemValue::AppMemoryBudget => neotime_runtime::APP_HEAP_BUDGET_BYTES as Value,
             SystemValue::StartedAt => clock::started_at(),
             SystemValue::FreeStorageKilobytes => self.free_storage_kilobytes.get().unwrap_or_else(|| {
                 self.free_storage_wanted.set(true);
@@ -251,11 +257,23 @@ impl SystemValues for WatchSystem {
                 history.steps_in_hour(place / HOURS_PER_DAY, place % HOURS_PER_DAY)
             }) as Value,
             SystemValue::InstalledAppIcon => match u16::try_from(index) {
-                Ok(place) if (place as usize) < self.installed.listed.len() => {
+                Ok(place) if (place as usize) < self.installed.listed_count() => {
                     ImageReference::InstalledApp(place).to_value() as Value
                 }
                 _ => neotime_runtime::NONE,
             },
+            SystemValue::PackageEnabled => self
+                .installed
+                .packages
+                .get(place)
+                .map_or(0, |app| app.enabled as Value),
+            SystemValue::PackageIsFace => self
+                .installed
+                .packages
+                .get(place)
+                .map_or(0, |app| (app.kind == AppKind::Face) as Value),
+            SystemValue::PackageMemory => self.installed.memory_of(place).map_or(0, Value::from),
+            SystemValue::PackageRefusal => self.installed.refusal_of(place, &self.open_app_id) as Value,
             _ => neotime_runtime::NONE,
         }
     }
@@ -265,15 +283,17 @@ impl SystemValues for WatchSystem {
         if is_notification_value(value) {
             return self.notifications.read_element_text(value, index);
         }
-        let Some(entry) = usize::try_from(index)
-            .ok()
-            .and_then(|place| self.installed.listed.get(place))
-        else {
+        let place = usize::try_from(index).unwrap_or(usize::MAX);
+        let entry = match value {
+            SystemValue::InstalledAppName | SystemValue::InstalledAppId => self.installed.listed(place),
+            _ => self.installed.packages.get(place),
+        };
+        let Some(entry) = entry else {
             return "";
         };
         match value {
-            SystemValue::InstalledAppName => &entry.name,
-            SystemValue::InstalledAppId => &entry.id,
+            SystemValue::InstalledAppName | SystemValue::PackageName => &entry.name,
+            SystemValue::InstalledAppId | SystemValue::PackageId => &entry.id,
             _ => "",
         }
     }
@@ -360,6 +380,13 @@ impl System for WatchSystem {
             }
             EffectKind::ResetStepTrip => motion::reset_trip(),
             EffectKind::SetBluetooth => settings::set_by_name(Setting::Bluetooth.name(), effect.number(0)),
+            EffectKind::SetAppEnabled => {
+                let id = effect.text(0).unwrap_or("");
+                let allowed = !(id == self.open_app_id.as_str() && effect.number(1) == 0);
+                if allowed && self.installed.set_enabled(self.files, id, effect.number(1) != 0) {
+                    self.apps_toggled = true;
+                }
+            }
             _ => {}
         }
     }
@@ -447,7 +474,7 @@ impl Shell {
         let id = match showing {
             Showing::Face => installed.face.clone(),
             Showing::Launcher => installed.has_launcher.then(|| apps::LAUNCHER_ID.into()),
-            Showing::App(place) => installed.listed.get(place).map(|entry| entry.id.clone()),
+            Showing::App(place) => installed.listed(place).map(|entry| entry.id.clone()),
         };
         let Some(image) = id.and_then(|id| apps::read_image(self.files, &id)) else {
             self.open_failed(showing);
@@ -475,6 +502,11 @@ impl Shell {
     /// Opens a host on the image into `self.host`.
     fn start_host(&mut self, bytes: &'static [u8], saved: &[u8], now: Value) -> bool {
         self.system.open_app_name = app_name_of(bytes);
+        self.system.open_app_id = AppImage::parse(bytes)
+            .ok()
+            .and_then(|image| image.string(image.id_string))
+            .and_then(|id| heapless::String::try_from(id).ok())
+            .unwrap_or_default();
         let Ok(host) = AppHost::open_into(&mut self.host, bytes, self.theme, saved, now, &mut self.system)
         else {
             return false;
@@ -517,6 +549,19 @@ impl Shell {
         self.library = apps::shared_library();
         install_fonts(self.library);
         self.open(Showing::Face, Transition::None);
+    }
+
+    /// After the open app turned another on or off: keeps the open app's place in the launcher's list and tells it.
+    fn apps_toggled(&mut self) {
+        if let Showing::App(_) = self.showing {
+            if let Some(place) = self.system.installed.place_of(&self.system.open_app_id) {
+                self.showing = Showing::App(place);
+            }
+        }
+        if let Some(host) = &mut self.host {
+            let changed = SystemValue::InstalledAppCount.bit();
+            host.report_system_value_changes(changed, clock::utc_now(), &mut self.system);
+        }
     }
 
     /// Writes the app's persistent state when any of it changed since the last save.
@@ -867,6 +912,9 @@ impl Shell {
 
     /// Carries out what the last host call's handlers asked for, and says whether an app woke the screen.
     fn follow_requests(&mut self) -> bool {
+        if core::mem::take(&mut self.system.apps_toggled) {
+            self.apps_toggled();
+        }
         if core::mem::take(&mut self.system.notifications_changed) {
             if let Some(host) = &mut self.host {
                 let changed = SystemValue::UnreadNotifications.bit();
@@ -1051,6 +1099,8 @@ pub async fn run_shell(
             notifications: NotificationList::new(),
             notifications_changed: false,
             open_app_name: heapless::String::new(),
+            open_app_id: heapless::String::new(),
+            apps_toggled: false,
             files,
             free_storage_kilobytes: Cell::new(None),
             free_storage_wanted: Cell::new(false),
