@@ -1151,6 +1151,68 @@ impl Shell {
         self.lit && !status_is_shown() && self.host.as_ref().is_some_and(|host| host.needs_drawing())
     }
 
+    /// Acts on one touch: wakes the screen, hides the status page or goes to the open app or the shell.
+    fn take_touch(&mut self, touch: Touch, last_input: &mut Instant) {
+        let touch = self.latest_of(touch);
+        *last_input = Instant::now();
+        if self.stop_finding() {
+            return;
+        }
+        if !self.lit {
+            if app_settings::touch_wakes_screen(&settings::current(), &touch) {
+                self.turn_screen_on();
+            }
+            return;
+        }
+        if status_is_shown() {
+            if !status_holds_screen() && matches!(touch, Touch::Release { .. }) {
+                hide_status();
+            }
+            return;
+        }
+        if self.finger_left_on_old_screen {
+            match touch {
+                Touch::Press { .. } => self.finger_left_on_old_screen = false,
+                Touch::Release { .. } => {
+                    self.finger_left_on_old_screen = false;
+                    return;
+                }
+                _ => return,
+            }
+        }
+        self.touch(touch);
+    }
+
+    /// Acts on one side button gesture, unless it hides the status page or stops the phone finder.
+    fn take_button_gesture(&mut self, gesture: Gesture, last_input: &mut Instant) {
+        *last_input = Instant::now();
+        if self.stop_finding() {
+            return;
+        }
+        if self.lit && status_is_shown() {
+            if !status_holds_screen() {
+                hide_status();
+            }
+            return;
+        }
+        self.button_gesture(gesture);
+    }
+
+    /// Takes every touch and button gesture waiting, between two steps of a redraw.
+    ///
+    /// Nothing is taken while new packages wait to be loaded, since the open app may still read the old ones.
+    fn take_queued_input(&mut self, last_input: &mut Instant) {
+        while !packages::CHANGED.signaled() {
+            if let Some(touch) = self.waiting_touch.take().or_else(|| TOUCHES.try_receive().ok()) {
+                self.take_touch(touch, last_input);
+            } else if let Ok(gesture) = BUTTON_GESTURES.try_receive() {
+                self.take_button_gesture(gesture, last_input);
+            } else {
+                return;
+            }
+        }
+    }
+
     async fn draw(&mut self) {
         // Drawing below sends without waiting, so a strip still going out is awaited here rather than spun on.
         crate::display_dma::bus_is_free().await;
@@ -1386,6 +1448,8 @@ pub async fn run_shell(
         while shell.is_drawing_under_way() {
             yield_now().await;
             shell.files.wait_until_free().await;
+            // Input that came during the last step is taken now, so it never waits for the whole redraw and the queue never fills.
+            shell.take_queued_input(&mut last_input);
             OutOfLine(shell.draw()).await;
         }
         foreground::set_drawing(false);
@@ -1437,49 +1501,12 @@ pub async fn run_shell(
         }
         match woke {
             Either4::First(touch) => {
-                let touch = shell.latest_of(touch);
                 diagnostics::set(Counter::ShellLastWake, 1);
-                last_input = Instant::now();
-                if shell.stop_finding() {
-                    continue;
-                }
-                if !shell.lit {
-                    if app_settings::touch_wakes_screen(&settings::current(), &touch) {
-                        shell.turn_screen_on();
-                    }
-                    continue;
-                }
-                if status_is_shown() {
-                    if !status_holds_screen() && matches!(touch, Touch::Release { .. }) {
-                        hide_status();
-                    }
-                    continue;
-                }
-                if shell.finger_left_on_old_screen {
-                    match touch {
-                        Touch::Press { .. } => shell.finger_left_on_old_screen = false,
-                        Touch::Release { .. } => {
-                            shell.finger_left_on_old_screen = false;
-                            continue;
-                        }
-                        _ => continue,
-                    }
-                }
-                shell.touch(touch);
+                shell.take_touch(touch, &mut last_input);
             }
             Either4::Second(gesture) => {
                 diagnostics::set(Counter::ShellLastWake, 2);
-                last_input = Instant::now();
-                if shell.stop_finding() {
-                    continue;
-                }
-                if shell.lit && status_is_shown() {
-                    if !status_holds_screen() {
-                        hide_status();
-                    }
-                    continue;
-                }
-                shell.button_gesture(gesture);
+                shell.take_button_gesture(gesture, &mut last_input);
             }
             Either4::Third(()) => {
                 diagnostics::set(Counter::ShellLastWake, 3);

@@ -640,8 +640,11 @@ watch face, the launcher and the apps through `neotime-app-host`:
   or home slides down. The notifications and quick settings slide down from the top and go back up,
   a step round the quick apps wipes in from the side the finger moved away from, and any screen an
   app goes to from its `onSwipe` moves the way the swipe went. The shell draws a transition's steps, and
-  the slices of a large redraw, one after another, yielding to the other tasks between them, before
-  it takes the next input. Once a
+  the slices of a large redraw, one after another, yielding to the other tasks between them, and
+  takes every touch and button press queued during a step before drawing the next
+  (`take_queued_input`), so input waits at most a step, the touch queue never fills and drops a
+  lift, and a list follows the finger during a long redraw; nothing is taken while new packages wait
+  to be loaded. Once a
   new screen opens, the rest of the touch that opened it is dropped until the finger lifts, so a
   swipe that opens the launcher does not also scroll it.
 - **Drawing.** Drawing is async. The shell draws through `DrawingScreen` (`drawing_screen.rs`),

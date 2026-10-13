@@ -38,21 +38,21 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 100.7 KB | 47.7 KB |
+| Firmware (start-up, shell, tasks) | 100.9 KB | 48.0 KB |
 | App host (with `neotime-ui`) | 75.7 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 43.6 KB | 43.6 KB |
 | App runtime | 34.5 KB | 0.1 KB |
-| core, alloc and compiler builtins | 29.7 KB | 13.2 KB |
-| Embassy, allocator and Cortex-M | 19.0 KB | 16.5 KB |
+| core, alloc and compiler builtins | 29.9 KB | 13.0 KB |
+| Embassy, allocator and Cortex-M | 19.1 KB | 16.5 KB |
 | Storage (flash store) | 17.0 KB | 16.8 KB |
 | Settings, companion and notifications (with serde) | 12.4 KB | 10.2 KB |
-| BLEFS file service | 9.0 KB | 9.1 KB |
+| BLEFS file service | 9.1 KB | 9.2 KB |
 | Packages | 6.1 KB | 2.0 KB |
 | Display, graphics and drivers | 5.3 KB | 3.1 KB |
 | Updates (DFU) | 2.1 KB | 2.1 KB |
 | Other constants and padding | 28.4 KB | 13.5 KB |
-| **Used** | **383.5 KB** | **177.9 KB** |
-| Free of the 388 KB slot, after its header | 4.3 KB | 209.8 KB |
+| **Used** | **384.0 KB** | **178.1 KB** |
+| Free of the 388 KB slot, after its header | 3.7 KB | 209.6 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -135,7 +135,7 @@ status page and confirmation are held once in a static. That leaves 8.8 KB (8,99
 stack, of which the lowest bytes, up to 360 B, are the stack guard: 256 B from the first 256-byte
 boundary above the statics, which the memory protection unit forbids (`firmware/src/stack_guard.rs`).
 Measured in the emulator by painting the stack before start, with 8,688 B above the guard and a
-typical install, the deepest path peaks at 6,448 B, 2,240 B spare; on blank flash it is about 5.1 KB. A
+typical install, the deepest path peaks at 6,616 B, 2,072 B spare; on blank flash it is about 5.1 KB. A
 store call's state, up to 1.8 KB, is on the heap while it runs, both for the shell's calls and in
 the storage task, so neither the stack nor the task's static space holds it. Opening an app: the app
 host loads the image and runs its handlers, and the interpreter formats numbers with 64-bit
