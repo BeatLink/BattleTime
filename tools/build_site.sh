@@ -15,6 +15,7 @@ source_dir="target/site/src"
 rm -rf target/site
 mkdir -p "$source_dir/screens" "$source_dir/stylesheets"
 cp docs/*.md "$source_dir/"
+cp docs/*.html "$source_dir/"
 mkdir -p "$source_dir/apps"
 cp docs/apps/*.md "$source_dir/apps/"
 cp -r docs/images "$source_dir/images"

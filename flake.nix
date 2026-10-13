@@ -182,7 +182,7 @@
             echo "  nix run .#infinisim                                    open InfiniTime's simulator to compare"
             echo "  tools/check_coverage.sh                                run every test with coverage and check the floors"
             echo "  nix flake check                                        run all of the above as checks"
-            echo "  python3 -I tools/measure_memory.py                     measure the firmware and file system into docs/memory-map.md"
+            echo "  python3 -I tools/measure_memory.py                     measure the firmware and file system into the memory map pages"
             echo "  tools/build_site.sh                                    build the GitHub Pages site into target/site/out"
           '';
         };

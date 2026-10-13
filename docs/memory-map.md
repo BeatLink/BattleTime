@@ -2,7 +2,8 @@
 
 The PineTime has three kinds of memory: 512 KB of internal flash, 4 MB of external SPI flash and 64
 KB of RAM. This page shows how NeoTime divides each one. Each box is drawn in proportion to its
-size.
+size. The [memory treemap](memory-treemap.html) shows all three at once, as one map you can zoom
+into, from each memory down to what fills its regions.
 
 The flash layouts are set in code by the `neotime-boot` crate (`boot/src/lib.rs`), which the
 bootloader and the firmware share, so that is the source of truth. [bootloader.md](bootloader.md)
@@ -295,18 +296,20 @@ every app listed, the stack peaking at 7,848 B, 2,632 B spare.
 ## Measuring again
 
 The firmware, RAM and file-system tables above come from one script, which writes them into
-this page between the `<!-- measure_memory:... -->` markers. Run it inside `nix develop`;
-`--check` only reports whether the tables are out of date:
+this page between the `<!-- measure_memory:... -->` markers, and the same figures into the
+[memory treemap](memory-treemap.html) (`docs/memory-treemap.html`) as its `MEASURED` line. Run it
+inside `nix develop`; `--check` only reports whether either page is out of date:
 
 ```sh
 python3 -I tools/measure_memory.py
 ```
 
 CI's Memory map job (`.github/workflows/ci.yml`) runs it on every push and pull request and keeps
-the measured page as an artifact. On master, when the tables change, it commits this page as
+both measured pages as an artifact. On master, when the figures change, it commits both pages as
 `docs(memory-map): measure <commit>`, so nobody needs to run it before landing; rebase over that
-commit as over any other. The prose around the tables, and the artifact the page is published as,
-still need updating by hand.
+commit as over any other. The prose around the tables still needs updating by hand, and so does the
+treemap's hand-written part in `docs/memory-treemap.html`: the flash layouts, the bootloader and
+shared library sizes, the deepest stack path and the split of the firmware's static RAM.
 
 It builds the full and the recovery firmware, sorts their symbols by crate, and runs the
 `filesystem_use` example of `neotime-packages`. That example also writes the whole 4 MB external

@@ -13,12 +13,14 @@ Then it compiles a typical install, the face, the launcher and the apps in TYPIC
 the `filesystem_use` example of neotime-packages, which installs them into a flash store mounted
 as the watch mounts it.
 
-It writes its tables into docs/memory-map.md, between the `<!-- measure_memory:NAME -->` markers.
-With `--check` it changes nothing and fails when the doc's tables are out of date. CI's Memory map
-job runs it on every push, and on master commits the doc when its tables change.
+It writes its tables into docs/memory-map.md, between the `<!-- measure_memory:NAME -->` markers,
+and the same figures into docs/memory-treemap.html, between its `// measure_memory:treemap` lines.
+With `--check` it changes nothing and fails when either page is out of date. CI's Memory map job
+runs it on every push, and on master commits both pages when they change.
 """
 
 import argparse
+import json
 import pathlib
 import re
 import subprocess
@@ -27,6 +29,7 @@ import sys
 REPOSITORY = pathlib.Path(__file__).resolve().parent.parent
 FIRMWARE = REPOSITORY / "firmware"
 MEMORY_MAP = REPOSITORY / "docs" / "memory-map.md"
+TREEMAP = REPOSITORY / "docs" / "memory-treemap.html"
 FIRMWARE_START = 0x8100
 FIRMWARE_SLOT_BYTES = 388 * 1024 - 256
 RAM_START = 0x2000_0000
@@ -309,14 +312,46 @@ def file_system_table(values, steps):
     ]
 
 
-def with_section(document, name, lines):
-    """The document with the table between the named markers replaced."""
-    start = f"<!-- measure_memory:{name} -->"
-    end = f"<!-- /measure_memory:{name} -->"
+def treemap_figures(full, recovery, values, steps):
+    """The measured figures docs/memory-treemap.html draws, in bytes."""
+    return {
+        "firmware": {"full": full["flash"], "recovery": recovery["flash"]},
+        "ram": {
+            "full": full["ram"],
+            "static_ram": full["static_ram"],
+            "stack": full["stack"],
+            "recovery_static_ram": recovery["static_ram"],
+            "recovery_stack": recovery["stack"],
+        },
+        "file_system": {
+            "sector_size": values["sector_size"],
+            "file_sectors": values["file_sectors"],
+            "record_sectors": values["record_sectors"],
+            "log_sectors": values["log_sectors"],
+            "file_sectors_in_use": values["file_sectors_in_use"],
+            "record_bytes_in_use": values["record_bytes_in_use"],
+            "settings_bytes": sum(step[1] for step in steps if step[0].startswith("/settings/")),
+            "images": [[step[0].split("/")[2], step[1]] for step in steps if step[0].endswith(".ntapp")],
+        },
+    }
+
+
+def with_section(document, name, lines, start=None, end=None, page="docs/memory-map.md"):
+    """The document with the lines between the named markers replaced."""
+    start = start or f"<!-- measure_memory:{name} -->"
+    end = end or f"<!-- /measure_memory:{name} -->"
     pattern = re.compile(re.escape(start) + r".*?" + re.escape(end), re.DOTALL)
     if not pattern.search(document):
-        raise SystemExit(f"docs/memory-map.md has no {start} marker")
+        raise SystemExit(f"{page} has no {start} marker")
     return pattern.sub(lambda _: "\n".join([start, *lines, end]), document)
+
+
+def with_treemap(document, figures):
+    """The treemap page with its measured figures replaced."""
+    line = f"const MEASURED = {json.dumps(figures, sort_keys=True)};"
+    return with_section(
+        document, "treemap", [line], "// measure_memory:treemap", "// /measure_memory:treemap", "docs/memory-treemap.html"
+    )
 
 
 def main():
@@ -331,14 +366,20 @@ def main():
     updated = with_section(document, "firmware", firmware_table(full, recovery))
     updated = with_section(updated, "ram", ram_table(full, recovery))
     updated = with_section(updated, "file-system", file_system_table(values, steps))
-    if updated == document:
-        print("docs/memory-map.md is up to date")
+    treemap = TREEMAP.read_text()
+    updated_treemap = with_treemap(treemap, treemap_figures(full, recovery, values, steps))
+    pages = [(MEMORY_MAP, document, updated), (TREEMAP, treemap, updated_treemap)]
+    stale = [path for path, before, after in pages if before != after]
+    if not stale:
+        print("docs/memory-map.md and docs/memory-treemap.html are up to date")
         return 0
+    names = " and ".join(str(path.relative_to(REPOSITORY)) for path in stale)
     if arguments.check:
-        print("docs/memory-map.md is out of date; run python3 -I tools/measure_memory.py", file=sys.stderr)
+        print(f"{names} out of date; run python3 -I tools/measure_memory.py", file=sys.stderr)
         return 1
-    MEMORY_MAP.write_text(updated)
-    print("updated docs/memory-map.md")
+    for path, _, after in pages:
+        path.write_text(after)
+    print(f"updated {names}")
     return 0
 
 

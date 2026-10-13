@@ -111,22 +111,24 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: memory-map
-          path: docs/memory-map.md
+          path: |
+            docs/memory-map.md
+            docs/memory-treemap.html
       - name: Commit the tables when they changed
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
-          if git diff --quiet -- docs/memory-map.md; then
+          if git diff --quiet -- docs/memory-map.md docs/memory-treemap.html; then
             echo "The memory map is current."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit --quiet --message "docs(memory-map): measure ${GITHUB_SHA::7}" -- docs/memory-map.md
+          git commit --quiet --message "docs(memory-map): measure ${GITHUB_SHA::7}" -- docs/memory-map.md docs/memory-treemap.html
           # A push in the meantime is retried on top of it; a newer page there means that push's own run measures again.
           for attempt in 1 2 3; do
             if ! git pull --quiet --rebase origin master; then
               git rebase --abort
-              echo "docs/memory-map.md changed on master since this run; the newer run measures it."
+              echo "The memory map changed on master since this run; the newer run measures it."
               exit 0
             fi
             if git push --quiet origin HEAD:master; then

@@ -31,7 +31,8 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
   in `docs/apps/<id>.md` with how to use it and those pictures. A new app, or a new or changed
   screen, updates both in the same commit.
 - Docs ship with the code, never as a follow-up. A new crate gets its place in
-  `docs/architecture.md`; a change to RAM or flash use updates `docs/memory-map.md`.
+  `docs/architecture.md`; a change to RAM or flash use updates `docs/memory-map.md` and the hand-written part of
+  `docs/memory-treemap.html`.
 - Open work lives in `docs/todo.md`. When an item is done, remove it in the same change and record
   it in `docs/features.md` if the wearer sees it, or in `docs/architecture.md` or the part's own doc
   if not. Before removing an item, check in the code that it is really done; keep any open part as a

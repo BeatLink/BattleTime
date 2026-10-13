@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeoTime Memory Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one column; a zoomable nested treemap of the three memories, then the selected part's details. */
+:root {
+  --bg: #f4f6f5;
+  --surface: #ffffff;
+  --fg: #17201d;
+  --muted: #5b6863;
+  --line: #d5ddd9;
+  --accent: #1d7a5a;
+  --boot: #4563b8;
+  --firmware: #1f8f86;
+  --data: #4f9445;
+  --runtime: #c27a22;
+  --spare: #8b9691;
+  --on-region: #ffffff;
+  --display: "Chivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "Chivo", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101614; --surface: #17201d; --fg: #e4ece8; --muted: #9aa8a2; --line: #2a3632;
+    --accent: #4cc497; --boot: #5b7bd6; --firmware: #2aa79c; --data: #5ea853; --runtime: #d18a32;
+    --spare: #6b7671; --on-region: #ffffff; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101614; --surface: #17201d; --fg: #e4ece8; --muted: #9aa8a2; --line: #2a3632;
+  --accent: #4cc497; --boot: #5b7bd6; --firmware: #2aa79c; --data: #5ea853; --runtime: #d18a32;
+  --spare: #6b7671; --on-region: #ffffff; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55; padding-inline: 16px; padding-block: 32px 48px; }
+main { max-width: 1080px; margin-inline: auto; display: flex; flex-direction: column; gap: 28px; }
+header { display: flex; flex-direction: column; gap: 10px; }
+.back { font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+a { color: var(--accent); }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+h1 { font-family: var(--display); font-weight: 800; font-size: clamp(28px, 5vw, 40px); line-height: 1.1; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--display); font-weight: 800; font-size: 22px; margin: 0; text-wrap: balance; }
+p { margin: 0; max-width: 72ch; }
+.lede { color: var(--muted); font-size: 16px; }
+code { font-family: var(--mono); font-size: 0.9em; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.total { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; text-align: left; cursor: pointer; min-width: 0; }
+.total:hover { border-color: var(--accent); }
+.total[aria-current="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.total .name { font-size: 13px; color: var(--muted); }
+.total .size { font-family: var(--mono); font-weight: 600; font-size: 22px; font-variant-numeric: tabular-nums; }
+.total .used { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; font-size: 14px; min-width: 0; }
+.crumbs button { background: none; border: none; padding: 2px 4px; border-radius: 4px; cursor: pointer; color: var(--accent); }
+.crumbs button:hover { text-decoration: underline; }
+.crumbs .here { font-weight: 600; padding: 2px 4px; }
+.crumbs .sep { color: var(--muted); }
+.scale { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; font-size: 13px; }
+.scale button { background: var(--surface); border: none; padding: 4px 10px; cursor: pointer; color: var(--muted); }
+.scale button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.scale-label { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 8px; }
+
+.stage { position: relative; width: 100%; max-width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.stage.zoomed { animation: zoom-in 220ms ease-out; }
+@keyframes zoom-in { from { opacity: 0.35; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .stage.zoomed { animation: none; } }
+.box { position: absolute; border-radius: 4px; overflow: hidden; cursor: pointer; }
+.group { background: color-mix(in srgb, var(--k) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--k) 45%, var(--surface)); }
+.group:hover { border-color: var(--k); }
+.group > .head { position: absolute; left: 0; right: 0; top: 0; height: 22px; padding: 2px 6px; display: flex; gap: 6px; align-items: baseline; white-space: nowrap; overflow: hidden; font-size: 12.5px; }
+.group > .head .label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.group > .head .bytes { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.group.top { --k: var(--fg); background: var(--bg); border-color: var(--line); }
+.group.top > .head { font-size: 14px; height: 26px; padding: 3px 8px; }
+.tile { background: var(--k); color: var(--on-region); padding: 4px 6px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 1px; }
+.tile:hover { filter: brightness(1.08); }
+.tile.free { background: repeating-linear-gradient(135deg, var(--spare) 0 6px, color-mix(in srgb, var(--spare) 78%, var(--surface)) 6px 12px); }
+.tile.collapsed { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--on-region) 55%, transparent); }
+.tile .label { font-weight: 600; font-size: 12.5px; line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile .bytes { font-family: var(--mono); font-size: 11px; opacity: 0.9; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.tile .more { font-family: var(--mono); font-size: 10px; opacity: 0.85; white-space: nowrap; }
+.box.selected { outline: 2px solid var(--fg); outline-offset: -2px; z-index: 1; }
+
+.hint { font-size: 13px; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 8px; vertical-align: baseline; flex: none; }
+
+.detail { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.detail-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+.detail-head .meta { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.strip-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.strip { display: flex; height: 22px; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+.strip span { display: block; height: 100%; border-right: 1px solid var(--surface); min-width: 1px; }
+.strip span.free { background: repeating-linear-gradient(135deg, var(--spare) 0 5px, color-mix(in srgb, var(--spare) 78%, var(--surface)) 5px 10px) !important; }
+.strip-ends { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+th { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+td .part { display: inline-flex; align-items: baseline; }
+td .nest { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: 6px; white-space: nowrap; }
+
+.note { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+footer { color: var(--muted); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+</style>
+</head>
+<body>
+
+<main>
+  <header>
+    <nav class="back" aria-label="Site"><a href="./">NeoTime</a><a href="memory-map/">Memory map, in words</a></nav>
+    <div class="eyebrow">PineTime · nRF52832 · XT25F32B</div>
+    <h1>NeoTime Memory Map</h1>
+    <p class="lede">The watch's internal flash, RAM and external SPI flash, each split into its regions, and each region into what fills it, drawn to scale. Click a box to zoom into it and read what it holds; the path above the map leads back out.</p>
+  </header>
+
+  <div class="totals" id="totals"></div>
+
+  <div class="toolbar">
+    <nav class="crumbs" id="crumbs" aria-label="Zoom path"></nav>
+    <div class="scale-label" id="scale-control">
+      <span>Top level</span>
+      <span class="scale" role="group" aria-label="Top level sizing">
+        <button type="button" id="scale-equal" aria-pressed="true">Equal size</button>
+        <button type="button" id="scale-true" aria-pressed="false">To scale</button>
+      </span>
+    </div>
+  </div>
+
+  <div class="stage" id="stage" role="tree" aria-label="Memory treemap"></div>
+  <div class="legend" id="legend"></div>
+
+  <section class="detail" id="detail" aria-live="polite"></section>
+
+  <section class="note">
+    <h2>Watchdog</h2>
+    <p>The bootloader leaves the watchdog running when it starts the firmware, with a 5 second timeout. It keeps counting while the chip sleeps and pauses while a debugger has it halted. The firmware must take it over with exactly those settings.</p>
+    <p>The firmware feeds it only while the button is up. Holding the button for about 5 seconds resets the watch into the bootloader, and 5 seconds more installs the recovery firmware. An update that never confirms itself is rolled back.</p>
+  </section>
+
+  <footer>
+    <div>Flash layouts: <code>boot/src/lib.rs</code> (crate <code>neotime-boot</code>). Details: <a href="memory-map/">Memory map</a>, <a href="bootloader/">Bootloader</a> and <a href="storage/">Storage</a>; source in <a href="https://github.com/BeatLink/NeoTime">BeatLink/NeoTime</a>, this page at <code>docs/memory-treemap.html</code>.</div>
+    <div>The firmware builds, static RAM, stack and file system are measured by <code>tools/measure_memory.py</code>, which CI reruns on every push to master and writes into this page. The rest comes from the docs and is updated by hand: the bootloader and shared library sizes, the deepest stack path, and the split of the firmware's static RAM into tables, buffers and tasks.</div>
+  </footer>
+</main>
+
+<script>
+// ===== Kinds and sizes =====
+
+const KINDS = {
+  boot: { label: "Boot and recovery", token: "--boot" },
+  firmware: { label: "Firmware", token: "--firmware" },
+  data: { label: "Data and apps", token: "--data" },
+  runtime: { label: "Runtime and app system", token: "--runtime" },
+  spare: { label: "Free", token: "--spare" },
+};
+
+const KB = kilobytes => Math.round(kilobytes * 1024);
+
+// ===== Formatting =====
+
+function sizeText(bytes) {
+  if (bytes < 1024) return `${bytes.toLocaleString("en")} B`;
+  const kilobytes = bytes / 1024;
+  if (kilobytes >= 1024) return kilobytes % 1024 === 0 ? `${kilobytes / 1024} MB` : `${(kilobytes / 1024).toFixed(2)} MB`;
+  return Number.isInteger(kilobytes) ? `${kilobytes} KB` : `${kilobytes.toFixed(1)} KB`;
+}
+
+function hex(value, digits) {
+  return "0x" + value.toString(16).toUpperCase().padStart(digits || 1, "0");
+}
+
+// ===== Measured figures =====
+// tools/measure_memory.py rewrites the line between these markers; sizes are in bytes.
+// measure_memory:treemap
+const MEASURED = {"file_system": {"file_sectors": 512, "file_sectors_in_use": 11, "images": [["digital", 1272], ["launcher", 1013], ["alarm", 3043], ["timer", 1815], ["stopwatch", 1667], ["settings", 3919], ["weather", 1752], ["steps", 2290], ["heart", 1068], ["flashlight", 715], ["music", 1342], ["calculator", 2985]], "log_sectors": 192, "record_bytes_in_use": 1960, "record_sectors": 64, "sector_size": 4096, "settings_bytes": 77}, "firmware": {"full": {"App host (with `neotime-ui`)": 79062, "App runtime": 35308, "BLEFS file service": 9270, "Bluetooth (controller and TrouBLE)": 44684, "Display, graphics and drivers": 5462, "Embassy, allocator and Cortex-M": 19566, "Firmware (start-up, shell, tasks)": 103424, "Other constants and padding": 29104, "Packages": 6250, "Settings, companion and notifications (with serde)": 12650, "Storage (flash store)": 17410, "Updates (DFU)": 2112, "core, alloc and compiler builtins": 30702}, "recovery": {"App runtime": 60, "BLEFS file service": 9374, "Bluetooth (controller and TrouBLE)": 44682, "Display, graphics and drivers": 3222, "Embassy, allocator and Cortex-M": 16882, "Firmware (start-up, shell, tasks)": 49160, "Other constants and padding": 13842, "Packages": 2092, "Settings, companion and notifications (with serde)": 10410, "Storage (flash store)": 17180, "Updates (DFU)": 2180, "core, alloc and compiler builtins": 13344}}, "ram": {"full": {"App host (with `neotime-ui`)": 56, "BLEFS file service": 122, "Bluetooth (controller and TrouBLE)": 2545, "Display, graphics and drivers": 372, "Firmware (start-up, shell, tasks)": 21655, "Heap": 31744, "Other constants and padding": 1}, "recovery_stack": 38492, "recovery_static_ram": 27028, "stack": 8972, "static_ram": 56548}};
+// /measure_memory:treemap
+
+// ===== The memory tree =====
+// Sizes are in bytes. A part marked rest fills whatever its group leaves over.
+
+// The page's name for each component tools/measure_memory.py reports, and what it holds.
+const FIRMWARE_PARTS = {
+  "Firmware (start-up, shell, tasks)": ["Firmware", "firmware", "Start-up, the status page, the shell and every task with their GATT handling, plus the notifications and quick settings screens compiled in from shell/ (about 2.2 KB)."],
+  "Settings, companion and notifications (with serde)": ["Settings", "firmware", "Settings, the companion app's JSON lines (calls, music, weather, find, status, notifications) and the notification list, with serde."],
+  "Packages": ["Packages", "runtime", "The package manager: installing, listing and removing apps in /apps."],
+  "Updates (DFU)": ["Updates", "boot", "Legacy DFU and the update and recovery receivers."],
+  "App host (with `neotime-ui`)": ["App host", "runtime", "Lays out and draws an app's widget tree with neotime-ui and NeoTime's own strip renderer."],
+  "App runtime": ["App runtime", "runtime", "The interpreter with its function calls, the image parser and verifier."],
+  "Bluetooth (controller and TrouBLE)": ["Controller and host", "boot", "Our own controller in drivers/bluetooth and the TrouBLE host."],
+  "BLEFS file service": ["BLEFS", "boot", "The Adafruit BLEFS file service, async over the flash store."],
+  "core, alloc and compiler builtins": ["core and alloc", "firmware", "Rust's core and alloc libraries, compiler builtins and libm."],
+  "Embassy, allocator and Cortex-M": ["Embassy", "firmware", "The executor, timers, the allocator and Cortex-M support."],
+  "Storage (flash store)": ["Storage", "boot", "The flash store, neotime-flash-store, and NeoTime's storage layer."],
+  "Display, graphics and drivers": ["Drivers", "firmware", "Display, touch, button, vibrator, external flash, embedded-graphics and embassy-nrf."],
+  "Other constants and padding": ["Other", "spare", "Constants with no owning symbol, and padding."],
+};
+
+const FIRMWARE_GROUPS = [
+  { name: "System", kind: "firmware", holds: "Start-up, the shell and the services around it.", parts: ["Firmware (start-up, shell, tasks)", "Settings, companion and notifications (with serde)", "Packages", "Updates (DFU)"] },
+  { name: "App engine", kind: "runtime", holds: "What runs the apps from /apps. The recovery build leaves the shell out, so these go with it.", parts: ["App host (with `neotime-ui`)", "App runtime"] },
+  { name: "Bluetooth", kind: "boot", holds: "The radio stack and the file service on top of it.", parts: ["Bluetooth (controller and TrouBLE)", "BLEFS file service"] },
+  { name: "Platform", kind: "firmware", holds: "Libraries everything else stands on.", parts: ["core, alloc and compiler builtins", "Embassy, allocator and Cortex-M", "Storage (flash store)", "Display, graphics and drivers"] },
+];
+
+function firmwareBuild(name, start, sizes, holds) {
+  const part = component => {
+    const [label, kind, text] = FIRMWARE_PARTS[component] || [component, "firmware", "A component the page has no description for yet."];
+    return { name: label, size: sizes[component] || 0, kind, holds: text };
+  };
+  const grouped = new Set(FIRMWARE_GROUPS.flatMap(group => group.parts));
+  const groups = FIRMWARE_GROUPS.map(group => ({ name: group.name, kind: group.kind, holds: group.holds, children: group.parts.map(part) }));
+  // A component the page does not group yet, or Other, sits straight in the slot.
+  const loose = Object.keys(sizes).filter(component => !grouped.has(component)).map(part);
+  const used = Object.values(sizes).reduce((sum, size) => sum + size, 0);
+  return { name, start, size: KB(388), kind: "firmware", holds: `${holds} It uses ${sizeText(used)}.`, children: [
+    { name: "Header", start, size: 256, kind: "boot", holds: "The 256-byte image header: type, version, load address, size, CRC-32, build time and commit." },
+    ...groups, ...loose,
+    { name: "Free", rest: true, kind: "spare", holds: "Unused part of the 388 KB slot." },
+  ] };
+}
+
+function ramTree() {
+  const owners = MEASURED.ram.full;
+  const systemHeap = KB(10);
+  return [
+    { name: "Static RAM", size: MEASURED.ram.static_ram, kind: "runtime", holds: `The firmware's .data, .bss and .uninit: ${MEASURED.ram.static_ram.toLocaleString("en")} B in the full build and ${MEASURED.ram.recovery_static_ram.toLocaleString("en")} B in the recovery build.`, children: [
+      { name: "Heap", size: owners["Heap"] || 0, kind: "runtime", holds: "An app's need must fit the heap less 4 KB for the system while an app is open. The recovery build keeps only the system's 10 KB.", children: [
+        { name: "UI heap", rest: true, kind: "runtime", holds: "The open app: its image read from /apps, its state, interpreter and bindings (6,628 B), and one 160 B node per widget, each its own allocation, plus its text. No screen buffer. With a typical install the alarm's editor touches at most 13,188 B of the heap. Each flash store call's state, up to 1.8 KB, is here while it runs." },
+        { name: "System heap", size: systemHeap, kind: "data", holds: "The shell's list of installed apps, kept notifications (up to about 1 KB), a small file gathered while it uploads (up to 1 KB), the launcher's groups, and lines to and from the companion app." },
+      ] },
+      { name: "Firmware", size: owners["Firmware (start-up, shell, tasks)"] || 0, kind: "firmware", holds: "Embassy's task storage, the Bluetooth host's resources and its eight 128-byte packets, the flash store's tables and the display's strip buffers. The split below uses the docs' rounded figures.", children: [
+        { name: "Bluetooth task", size: KB(4.8), kind: "boot", holds: "About 4.8 KB, mostly its GATT table (2.1 KB) and TrouBLE's runner (1.6 KB). Replies and half-received companion lines wait on the heap." },
+        { name: "Display strip buffers", size: 3840, kind: "firmware", holds: "The two 1,920 B strip buffers neotime-display fills for each SPI transfer." },
+        { name: "Flash store tables", size: KB(2.7), kind: "data", holds: "About 2.7 KB: 1 KB of record keys, 512 B of files, the rings' sector order, the log batches and an upload's state." },
+        { name: "Crash record", size: 60, kind: "boot", holds: "60 B in .uninit just below the stack: a panic's return addresses or a HardFault's registers, with a checksum, kept across the reset. Start-up does not zero it, and the bootloader keeps clear of it." },
+        { name: "Other tasks and packet pool", rest: true, kind: "firmware", holds: "The other tasks' state and the Bluetooth host's packet pool." },
+      ] },
+      { name: "Bluetooth controller", size: owners["Bluetooth (controller and TrouBLE)"] || 0, kind: "boot", holds: "The controller's state in drivers/bluetooth." },
+      { name: "Drivers and services", kind: "firmware", holds: "Small statics owned by the drivers and services.", children: [
+        { name: "Drivers", size: owners["Display, graphics and drivers"] || 0, kind: "firmware", holds: "Display, graphics and driver state." },
+        { name: "BLEFS", size: owners["BLEFS file service"] || 0, kind: "boot", holds: "The BLEFS file service." },
+        { name: "App host", size: owners["App host (with `neotime-ui`)"] || 0, kind: "runtime", holds: "The app host's statics." },
+      ] },
+      { name: "Unattributed", rest: true, kind: "spare", holds: "Static bytes the measurement gives no owner, alignment among them." },
+    ] },
+    { name: "Stack", size: MEASURED.ram.stack, kind: "boot", holds: `What static RAM leaves, ${MEASURED.ram.recovery_stack.toLocaleString("en")} B in the recovery build. Keep at least 2 KB spare; tools/measure_stack.py measures the deepest path again.`, children: [
+      { name: "Deepest path", size: 6616, kind: "boot", holds: "Opening an app, painted in the emulator with a typical install: 6,616 B. Start-up reaches 3,816 B." },
+      { name: "Spare", rest: true, kind: "spare", holds: "What the deepest path leaves, its lowest bytes the stack guard (up to 360 B) that the memory protection unit forbids." },
+    ] },
+    { name: "Alive marker", size: 16, kind: "boot", holds: "The last 16 bytes: the alive marker, the boot count, the bootloader's note to the firmware and the bootloader updater's note. The bootloader keeps its stack below it." },
+  ];
+}
+
+function fileSystemTree() {
+  const store = MEASURED.file_system;
+  const images = [...store.images].sort((first, second) => first[1] - second[1]);
+  const imageBytes = images.reduce((sum, image) => sum + image[1], 0);
+  const smallest = images[0], largest = images[images.length - 1];
+  return [
+    { name: "Files", size: store.file_sectors * store.sector_size, kind: "data", holds: `${store.file_sectors} sectors of ${sizeText(store.sector_size)}, one erase sector each. A file over 1 KB takes whole sectors, the first beginning with a 224-byte header.`, children: [
+      { name: "App images", size: store.file_sectors_in_use * store.sector_size, kind: "data", holds: `${store.file_sectors_in_use} sectors for ${images.length} app images, ${smallest[1].toLocaleString("en")} B (${smallest[0]}) to ${largest[1].toLocaleString("en")} B (${largest[0]}); ${imageBytes.toLocaleString("en")} B in all. Those of 1 KB or less are records instead.` },
+      { name: "Free sectors", rest: true, kind: "spare", holds: "Room for more apps, saved state and resources." },
+    ] },
+    { name: "Records ring", size: store.record_sectors * store.sector_size, kind: "runtime", holds: "Files of 1 KB or less, which cost no sector: the settings, the theme, saved app state, a day's steps.", children: [
+      { name: "In use", size: store.record_bytes_in_use, kind: "runtime", holds: `The settings and theme (${store.settings_bytes} B) and the app images of 1 KB or less.` },
+      { name: "Free", rest: true, kind: "spare", holds: "The rest of the ring." },
+    ] },
+    { name: "Logs", size: store.log_sectors * store.sector_size, kind: "boot", holds: "Append-only logs, written in batches." },
+  ];
+}
+
+const ROOT = { name: "PineTime", children: [
+  {
+    name: "Internal flash", top: true, size: KB(512), start: 0x00000, digits: 5, status: "Fixed in code",
+    holds: "The nRF52832's own 512 KB of flash. It changes only when the firmware or the shared library is updated; anything that changes often lives on the external flash.",
+    children: [
+      { name: "Boot area", start: 0x00000, size: KB(32), kind: "boot", holds: "The bootloader and the two records it keeps, at the start of flash. There is no SoftDevice and no MBR.", children: [
+        { name: "Bootloader", start: 0x00000, size: KB(20), kind: "boot", holds: "The embassy-boot bootloader with its status screen and button menu. It never starts a firmware without a sound image header.", children: [
+          { name: "Code", size: 17752, kind: "boot", holds: "17,752 B of bootloader code and data." },
+          { name: "Unused", rest: true, kind: "spare", holds: "The rest of the bootloader's 20 KB." },
+        ] },
+        { name: "Slot table", start: 0x05000, size: KB(8), kind: "boot", holds: "Two pages logging where the update and recovery slots sit in the external flash: 32-byte records with a sequence number and a CRC. The firmware moves the slots by appending a record; with no sound record the default slots apply." },
+        { name: "Boot state", start: 0x07000, size: KB(4), kind: "boot", holds: "The bootloader's record of an update in progress, for swapping and rolling back." },
+      ] },
+      firmwareBuild("Firmware slot", 0x08000, MEASURED.firmware.full,
+        "The running firmware, the full build: a 256-byte image header, then its code, linked to start at 0x08100. No app, face, icon or font is built in apart from the notifications and quick settings screens."),
+      { name: "Shared library", start: 0x69000, size: KB(92), kind: "data", holds: "What apps share, to the end of flash. Apps name its icons rather than copying them. No apps are kept here; they live in /apps on the external flash. The installed library is 89,218 B.", children: [
+        { name: "Text fonts", size: 47919, kind: "data", holds: "The app host's text fonts." },
+        { name: "Accelerometer configs", kind: "data", holds: "Bosch's configuration file for each accelerometer, which the firmware uploads to the chip.", children: [
+          { name: "BMA421", size: 6144, kind: "data", holds: "The BMA421's configuration file." },
+          { name: "BMA425", size: 6144, kind: "data", holds: "The BMA425's configuration file; this watch has a BMA425." },
+        ] },
+        { name: "Icons, components and themes", size: 89218 - 47919 - 12288 - 8, kind: "data", holds: "Images, shared components, common functions and the preset themes." },
+        { name: "Header", size: 8, kind: "boot", holds: "NTLB and the library's length, which neotime-packages writes." },
+        { name: "Free", rest: true, kind: "spare", holds: "Room left in the 92 KB region." },
+      ] },
+    ],
+  },
+  {
+    name: "RAM", top: true, size: KB(64), start: 0x20000000, digits: 8, status: "Measured",
+    holds: "The nRF52832's 64 KB of RAM, as the full firmware uses it. While the bootloader runs it uses all of it; nothing is kept when it jumps to the firmware but the last 16 bytes.",
+    children: ramTree(),
+  },
+  {
+    name: "External SPI flash", top: true, size: KB(4096), start: 0x000000, digits: 6, status: "Fixed in code",
+    holds: "The XT25F32B, on the same SPI bus as the screen. The slots are where DEFAULT_SLOTS puts them; the slot table can move them anywhere below the file system.",
+    children: [
+      { name: "Firmware slots", start: 0x000000, size: KB(1024), kind: "firmware", holds: "The first megabyte, for the update and recovery firmware.", children: [
+        { name: "Update slot", start: 0x000000, size: KB(392), kind: "firmware", holds: "A new firmware received over Bluetooth, waiting to be swapped in: 388 KB plus one page. After a swap it holds the replaced firmware one page up, for a rollback." },
+        { name: "Free", start: 0x062000, size: KB(12), kind: "spare", holds: "Room the slot table can give to either slot." },
+        firmwareBuild("Recovery slot", 0x065000, MEASURED.firmware.recovery,
+          "A known-good firmware to fall back to, here the recovery build (--features recovery). It leaves out the shell, so the app host and the runtime go with it."),
+        { name: "Free", start: 0x0C6000, size: KB(232), kind: "spare", holds: "Room the slot table can give to either slot, up to 0x100000; slots never reach into the file system." },
+      ] },
+      { name: "File system", start: 0x100000, size: KB(3072), kind: "data", holds: "NeoTime's flash store, safe against power cuts, shown with a typical install: the digital face, the launcher and ten everyday apps. It has no folders; paths such as /apps/<id>/app.ntapp and /steps/<year>/<month>-<day> are names.", children: fileSystemTree() },
+    ],
+  },
+] };
+
+// ===== Tree preparation =====
+
+function prepare(node, parent) {
+  node.parent = parent;
+  node.top = node.top || false;
+  if (!node.kind && parent && parent.kind) node.kind = parent.kind;
+  if (!node.digits && parent) node.digits = parent.digits;
+  if (!node.children) return;
+  node.children.forEach(child => prepare(child, node));
+  const known = node.children.filter(child => !child.rest).reduce((sum, child) => sum + child.size, 0);
+  if (node.size === undefined) node.size = known;
+  for (const child of node.children.filter(child => child.rest)) child.size = Math.max(0, node.size - known);
+  node.children = node.children.filter(child => child.size > 0);
+  let address = node.start;
+  if (address !== undefined) for (const child of node.children) {
+    if (child.start === undefined) child.start = address;
+    address = child.start + child.size;
+  }
+}
+prepare(ROOT, null);
+ROOT.size = ROOT.children.reduce((sum, child) => sum + child.size, 0);
+
+function share(node) {
+  if (!node.parent || node.parent === ROOT) return "";
+  const percent = 100 * node.size / node.parent.size;
+  return percent < 0.1 ? "<0.1%" : `${percent < 10 ? percent.toFixed(1) : Math.round(percent)}%`;
+}
+
+function freeIn(node) {
+  if (!node.children) return node.kind === "spare" ? node.size : 0;
+  return node.children.reduce((sum, child) => sum + freeIn(child), 0);
+}
+
+function kindColor(node) {
+  return node.top ? "var(--fg)" : `var(${KINDS[node.kind].token})`;
+}
+
+function pathOf(node) {
+  const path = [];
+  for (let step = node; step; step = step.parent) path.unshift(step);
+  return path;
+}
+
+// ===== Squarified layout =====
+
+function worstRatio(row, side) {
+  const total = row.reduce((sum, area) => sum + area, 0);
+  return Math.max(...row.map(area => Math.max(side * side * area / (total * total), (total * total) / (side * side * area))));
+}
+
+function squarify(areas, x, y, width, height) {
+  const rectangles = [];
+  const remaining = [...areas];
+  while (remaining.length) {
+    const side = Math.min(width, height);
+    const row = [remaining.shift()];
+    while (remaining.length && worstRatio([...row, remaining[0]], side) <= worstRatio(row, side)) row.push(remaining.shift());
+    const rowTotal = row.reduce((sum, area) => sum + area, 0);
+    if (width >= height) {
+      const columnWidth = rowTotal / height;
+      let offset = y;
+      for (const area of row) { rectangles.push([x, offset, columnWidth, area / columnWidth]); offset += area / columnWidth; }
+      x += columnWidth; width -= columnWidth;
+    } else {
+      const rowHeight = rowTotal / width;
+      let offset = x;
+      for (const area of row) { rectangles.push([offset, y, area / rowHeight, rowHeight]); offset += area / rowHeight; }
+      y += rowHeight; height -= rowHeight;
+    }
+  }
+  return rectangles;
+}
+
+// ===== Drawing the treemap =====
+
+const GAP = 2, PAD = 3, HEAD = 22, TOP_HEAD = 26;
+const stage = document.getElementById("stage");
+let current = ROOT;
+let selected = ROOT;
+let equalTop = true;
+
+function element(tag, attributes = {}, text) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function layoutChildren(group, x, y, width, height) {
+  if (width < 4 || height < 4) return;
+  // At equal size the top level keeps its own order: internal flash, RAM, external flash.
+  const equal = equalTop && group === ROOT;
+  const children = equal ? group.children : [...group.children].sort((first, second) => second.size - first.size);
+  const weights = children.map(child => equal ? 1 : child.size);
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  const scale = width * height / total;
+  const rectangles = squarify(weights.map(weight => weight * scale), x, y, width, height);
+  children.forEach((child, index) => drawNode(child, ...rectangles[index]));
+}
+
+function drawNode(node, x, y, width, height) {
+  const left = x + GAP / 2, top = y + GAP / 2, boxWidth = width - GAP, boxHeight = height - GAP;
+  if (boxWidth < 1 || boxHeight < 1) return;
+  const headHeight = node.top ? TOP_HEAD : HEAD;
+  const nests = node.children && boxWidth >= 64 && boxHeight >= headHeight + 30;
+  const box = element("div", {
+    class: `box ${nests ? "group" : "tile"}${node.top ? " top" : ""}${node.kind === "spare" && !node.children ? " free" : ""}${node.children && !nests ? " collapsed" : ""}${node === selected ? " selected" : ""}`,
+    role: "treeitem", tabindex: "0",
+    title: `${node.name}, ${sizeText(node.size)}${share(node) ? ` (${share(node)} of ${node.parent.name})` : ""}${node.children ? " · click to zoom in" : ""}`,
+  });
+  box.style.cssText = `left:${left}px;top:${top}px;width:${boxWidth}px;height:${boxHeight}px;--k:${kindColor(node)}`;
+  box.addEventListener("click", event => { event.stopPropagation(); choose(node); });
+  box.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); choose(node); } });
+  if (nests) {
+    const head = element("div", { class: "head" });
+    head.append(element("span", { class: "label" }, node.name), element("span", { class: "bytes" }, sizeText(node.size)));
+    box.appendChild(head);
+    stage.appendChild(box);
+    layoutChildren(node, left + PAD, top + headHeight, boxWidth - 2 * PAD, boxHeight - headHeight - PAD);
+    return;
+  }
+  if (boxWidth >= 26 && boxHeight >= 18) {
+    box.appendChild(element("span", { class: "label" }, node.name));
+    if (boxHeight >= 34) box.appendChild(element("span", { class: "bytes" }, sizeText(node.size)));
+    if (node.children && boxHeight >= 50 && boxWidth >= 60) box.appendChild(element("span", { class: "more" }, `${node.children.length} parts ▸`));
+  }
+  stage.appendChild(box);
+}
+
+function stageHeight(width) {
+  return width < 560 ? Math.round(width * 1.35) : Math.round(Math.min(680, Math.max(440, width * 0.6)));
+}
+
+function drawStage(animate) {
+  stage.replaceChildren();
+  const width = stage.clientWidth;
+  const height = stageHeight(width);
+  stage.style.height = `${height}px`;
+  layoutChildren(current, PAD, PAD, width - 2 * PAD, height - 2 * PAD);
+  if (animate) { stage.classList.remove("zoomed"); void stage.offsetWidth; stage.classList.add("zoomed"); }
+}
+
+// ===== Navigation =====
+
+function choose(node) {
+  if (node.children) zoomTo(node);
+  else { selected = node; drawStage(false); drawDetail(); }
+}
+
+function zoomTo(node) {
+  const changed = node !== current;
+  current = node;
+  selected = node;
+  drawCrumbs();
+  drawTotals();
+  drawStage(changed);
+  drawDetail();
+}
+
+function drawCrumbs() {
+  const crumbs = document.getElementById("crumbs");
+  crumbs.replaceChildren();
+  const path = pathOf(current);
+  path.forEach((step, index) => {
+    if (index) crumbs.appendChild(element("span", { class: "sep", "aria-hidden": "true" }, "›"));
+    const name = step === ROOT ? "All memory" : step.name;
+    if (index === path.length - 1) crumbs.appendChild(element("span", { class: "here", "aria-current": "location" }, name));
+    else {
+      const button = element("button", { type: "button" }, name);
+      button.addEventListener("click", () => zoomTo(step));
+      crumbs.appendChild(button);
+    }
+  });
+  document.getElementById("scale-control").hidden = current !== ROOT;
+}
+
+function drawTotals() {
+  const totals = document.getElementById("totals");
+  totals.replaceChildren();
+  const active = pathOf(current)[1];
+  for (const memory of ROOT.children) {
+    const tile = element("button", { type: "button", class: "total", "aria-current": String(memory === active) });
+    tile.appendChild(element("span", { class: "name" }, `${memory.name} · ${memory.status}`));
+    tile.appendChild(element("span", { class: "size" }, sizeText(memory.size)));
+    const free = freeIn(memory);
+    tile.appendChild(element("span", { class: "used" }, `${sizeText(free)} free`));
+    tile.addEventListener("click", () => zoomTo(memory));
+    totals.appendChild(tile);
+  }
+}
+
+// ===== Details of the selected part =====
+
+function drawStrip(node) {
+  const wrap = element("div", { style: "display:flex;flex-direction:column;gap:4px" });
+  wrap.appendChild(element("div", { class: "strip-label" }, "In address order"));
+  const strip = element("div", { class: "strip" });
+  for (const child of node.children) {
+    const span = element("span", { title: `${child.name}, ${sizeText(child.size)}` });
+    if (child.kind === "spare" && !child.children) span.className = "free";
+    span.style.width = `${100 * child.size / node.size}%`;
+    span.style.background = kindColor(child);
+    strip.appendChild(span);
+  }
+  wrap.appendChild(strip);
+  const ends = element("div", { class: "strip-ends" });
+  ends.append(element("span", {}, hex(node.start, node.digits)), element("span", {}, hex(node.start + node.size, node.digits)));
+  wrap.appendChild(ends);
+  return wrap;
+}
+
+function drawTable(node) {
+  const wrap = element("div", { class: "table-wrap" });
+  const table = element("table");
+  const hasAddresses = node.children.every(child => child.start !== undefined);
+  const head = element("tr");
+  for (const heading of ["Part", ...(hasAddresses ? ["Start"] : []), "Size", ...(node === ROOT ? [] : ["Share"]), "Holds"]) head.appendChild(element("th", {}, heading));
+  const headSection = element("thead");
+  headSection.appendChild(head);
+  table.appendChild(headSection);
+  const body = element("tbody");
+  const rows = hasAddresses ? node.children : [...node.children].sort((first, second) => second.size - first.size);
+  for (const child of rows) {
+    const row = element("tr", { tabindex: "0" });
+    const nameCell = element("td");
+    const part = element("span", { class: "part" });
+    const swatch = element("span", { class: "swatch" });
+    swatch.style.background = kindColor(child);
+    part.append(swatch, child.name);
+    if (child.children) part.appendChild(element("span", { class: "nest" }, `${child.children.length} parts ▸`));
+    nameCell.appendChild(part);
+    row.appendChild(nameCell);
+    if (hasAddresses) row.appendChild(element("td", { class: "num" }, hex(child.start, child.digits)));
+    row.appendChild(element("td", { class: "num" }, sizeText(child.size)));
+    if (node !== ROOT) row.appendChild(element("td", { class: "num" }, share(child)));
+    row.appendChild(element("td", {}, child.holds || ""));
+    row.addEventListener("click", () => choose(child));
+    row.addEventListener("keydown", event => { if (event.key === "Enter") choose(child); });
+    body.appendChild(row);
+  }
+  table.appendChild(body);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function drawDetail() {
+  const detail = document.getElementById("detail");
+  detail.replaceChildren();
+  const node = selected;
+  const head = element("div", { class: "detail-head" });
+  head.appendChild(element("h2", {}, node === ROOT ? "All memory" : `${node.name}, ${sizeText(node.size)}`));
+  const meta = [];
+  if (node.start !== undefined && node !== ROOT) meta.push(`${hex(node.start, node.digits)} to ${hex(node.start + node.size - 1, node.digits)}`);
+  if (share(node)) meta.push(`${share(node)} of ${node.parent.name}`);
+  if (node.children && node !== ROOT && freeIn(node)) meta.push(`${sizeText(freeIn(node))} free`);
+  if (meta.length) head.appendChild(element("span", { class: "meta" }, meta.join(" · ")));
+  detail.appendChild(head);
+  const holds = node === ROOT
+    ? "The PineTime's three memories. The top level is drawn at equal size by default so each memory's parts stay readable; switch to To scale to see the external flash dwarf the other two."
+    : node.holds;
+  if (holds) detail.appendChild(element("p", {}, holds));
+  if (!node.children) {
+    const back = element("p", { class: "hint" }, `Part of ${node.parent.name}.`);
+    detail.appendChild(back);
+    return;
+  }
+  if (node !== ROOT && node.children.every(child => child.start !== undefined)) detail.appendChild(drawStrip(node));
+  detail.appendChild(drawTable(node));
+}
+
+// ===== Start =====
+
+function drawLegend() {
+  const legend = document.getElementById("legend");
+  for (const kind of Object.values(KINDS)) {
+    const item = element("span");
+    const swatch = element("span", { class: "swatch" });
+    swatch.style.background = `var(${kind.token})`;
+    item.append(swatch, kind.label);
+    legend.appendChild(item);
+  }
+  legend.appendChild(element("span", {}, "Outlined boxes hold more parts than fit; click to open them."));
+}
+
+function setScale(equal) {
+  equalTop = equal;
+  document.getElementById("scale-equal").setAttribute("aria-pressed", String(equal));
+  document.getElementById("scale-true").setAttribute("aria-pressed", String(!equal));
+  drawStage(true);
+}
+document.getElementById("scale-equal").addEventListener("click", () => setScale(true));
+document.getElementById("scale-true").addEventListener("click", () => setScale(false));
+document.addEventListener("keydown", event => { if (event.key === "Escape" && current.parent) zoomTo(current.parent); });
+
+drawLegend();
+zoomTo(ROOT);
+let lastWidth = stage.clientWidth;
+new ResizeObserver(() => { if (stage.clientWidth !== lastWidth) { lastWidth = stage.clientWidth; drawStage(false); } }).observe(stage);
+</script>
+</body>
+</html>

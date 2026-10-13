@@ -135,6 +135,7 @@ NeoTime/
 │   ├── faces.md      the watch faces ported from InfiniTime, wasp-os and PinetimeLite
 │   ├── features.md   what the watch can do, added as each feature is finished
 │   ├── memory-map.md how RAM and both flashes are divided
+│   ├── memory-treemap.html the same as a zoomable treemap, for the website
 │   ├── simulator.md
 │   ├── storage.md
 │   ├── todo.md       work not done yet
