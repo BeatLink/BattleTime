@@ -266,6 +266,126 @@ impl Confirmation {
 }
 
 // ============================================================================
+// Where the update and recovery slots sit
+// ============================================================================
+
+/// Only the full firmware moves slots: the recovery build has no room to spare in the reloaders.
+#[cfg(with_shell)]
+pub use slots::{answer_slots, slots_answer_line};
+
+#[cfg(with_shell)]
+mod slots {
+    use embassy_embedded_hal::flash::partition::BlockingPartition;
+    use neotime_boot::{
+        image_header::read_image_header, move_recovery, slot_table::read_slots, RecoveryMove, Region,
+        SlotProblem, Slots, DEFAULT_SLOTS, FIRMWARE, SLOT_AREA, SLOT_TABLE,
+    };
+    use neotime_companion::{slots_refusal, slots_report, SlotRange, SlotsReport, SlotsRequest};
+    use neotime_updates::{change_slots, UpdateError};
+
+    use super::{Confirmation, Files};
+
+    /// Answers the companion's `slots`: the slots as they now are, and whether they moved; or why not.
+    ///
+    /// A moved recovery slot gets the recovery image first, so the table never names an empty slot when
+    /// there was an image to keep. The receivers were built from the old slots, so after a move the
+    /// caller restarts.
+    pub async fn answer_slots(
+        files: &'static Files,
+        confirmation: &mut Confirmation,
+        request: SlotsRequest,
+    ) -> Result<(Slots, bool), &'static str> {
+        let mut slot_table = BlockingPartition::new(files.internal_flash, SLOT_TABLE.start, SLOT_TABLE.size);
+        let current = read_slots(&mut slot_table).unwrap_or(DEFAULT_SLOTS);
+        if !request.moves_anything() {
+            return Ok((current, false));
+        }
+
+        let region = |range: SlotRange| Region {
+            start: range.start,
+            size: range.size,
+        };
+        let wanted = Slots {
+            update: request.update.map(region).unwrap_or(current.update),
+            recovery: request.recovery.map(region).unwrap_or(current.recovery),
+        };
+        wanted.check().map_err(slot_problem_text)?;
+        if wanted.recovery != current.recovery {
+            let mut external_flash = BlockingPartition::new(files.external_flash, 0, SLOT_AREA.size);
+            match move_recovery(&mut external_flash, current.recovery, wanted.recovery) {
+                Ok(moved) if moved.may_switch() => {}
+                Ok(RecoveryMove::ImageTooLarge) => {
+                    return Err("the recovery image is larger than the new slot")
+                }
+                Ok(RecoveryMove::Overlapping) => {
+                    return Err("the new recovery slot overlaps the old one at another start")
+                }
+                _ => return Err("the recovery image could not be copied"),
+            }
+        }
+
+        match change_slots(
+            &mut slot_table,
+            &mut confirmation.boot_state,
+            confirmation.alignment,
+            wanted,
+        )
+        .await
+        {
+            Ok(()) => Ok((wanted, true)),
+            Err(UpdateError::RunningFirmwareNotConfirmed) => {
+                Err("an update is waiting or on trial; finish it first")
+            }
+            Err(UpdateError::UnsoundSlots(problem)) => Err(slot_problem_text(problem)),
+            Err(_) => Err("the slot table could not be written"),
+        }
+    }
+
+    /// The reply line for `answer_slots`' answer, with the recovery image's length read from its header.
+    pub fn slots_answer_line(
+        files: &'static Files,
+        answer: Result<(Slots, bool), &'static str>,
+    ) -> alloc::boxed::Box<str> {
+        let line = match answer {
+            Ok((slots, restarting)) => {
+                let range = |region: Region| SlotRange {
+                    start: region.start,
+                    size: region.size,
+                };
+                let mut external_flash = BlockingPartition::new(files.external_flash, 0, SLOT_AREA.size);
+                let recovery_image_size = read_image_header(&mut external_flash, slots.recovery.start)
+                    .ok()
+                    .flatten()
+                    .map_or(0, |header| header.total_size_in_bytes());
+                slots_report(&SlotsReport {
+                    update: range(slots.update),
+                    recovery: range(slots.recovery),
+                    area_end: SLOT_AREA.end(),
+                    firmware_size: FIRMWARE.size,
+                    recovery_image_size,
+                    restarting,
+                })
+            }
+            Err(reason) => slots_refusal(reason),
+        };
+        alloc::boxed::Box::from(line.as_str())
+    }
+
+    fn slot_problem_text(problem: SlotProblem) -> &'static str {
+        match problem {
+            SlotProblem::NotWholePages => "slots must start and end on 4096-byte pages",
+            SlotProblem::OutsideSlotArea => "slots must end before the file system",
+            SlotProblem::UpdateSlotNotFirmwareSizePlusOnePage => {
+                "the update slot must be the firmware's size plus one page"
+            }
+            SlotProblem::RecoverySlotTooSmall => "the recovery slot must be at least 64 KB",
+            SlotProblem::RecoverySlotTooLarge => "the recovery slot must be no larger than the firmware's",
+            SlotProblem::Overlapping => "the slots overlap",
+        }
+    }
+}
+
+// ============================================================================
 // Files for saved app state
 // ============================================================================
 

@@ -175,10 +175,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Async flash in the firmware.** Flash writes block the Bluetooth host for up to a sector
   erase at a time, because the display shares the SPI bus and its driver is blocking.
 - [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.
-- [ ] **Move the slots from the companion.** `neotime_updates::change_slots` writes the
-  [slot table](bootloader.md#the-slot-table), but no Bluetooth command calls it. Add one to
-  `services/companion` and the companion's command line, so the recovery slot can be sized to the
-  recovery image and the rest of the first 1 MB given back.
 - [ ] **Clippy fails on master.** CI's `Lints and types` and `Watch lints` jobs are red since run
   38325871913: a reference that is created and dereferenced at once in `runtime/src/verifier.rs`
   (lines 64, 87 and 92) and `firmware/src/main.rs` (lines 757 and 765), and a needless `mut` in

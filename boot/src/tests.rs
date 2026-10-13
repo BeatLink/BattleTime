@@ -602,6 +602,100 @@ fn a_rollback_without_a_previous_firmware_changes_nothing() {
 }
 
 // ============================================================================
+// Moving the recovery slot
+// ============================================================================
+
+mod recovery_moves {
+    use super::*;
+
+    fn flash_with_recovery(code_size: usize) -> (FakeFlash, Vec<u8>) {
+        let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
+        let recovery = image(image_header::ImageType::Recovery, code_size);
+        flash.put(DEFAULT_SLOTS.recovery.start, &recovery);
+        (flash, recovery)
+    }
+
+    fn region(start: u32, size: u32) -> Region {
+        Region { start, size }
+    }
+
+    #[test]
+    fn shrinking_in_place_keeps_the_image_where_it_is() {
+        let (mut flash, _) = flash_with_recovery(5000);
+
+        let result = move_recovery(
+            &mut flash,
+            DEFAULT_SLOTS.recovery,
+            region(0x6_5000, 16 * PAGE_SIZE),
+        );
+
+        assert_eq!(result, Ok(RecoveryMove::KeptInPlace));
+        assert_eq!(flash.erase_count, 0);
+    }
+
+    #[test]
+    fn a_move_to_free_space_copies_the_image_and_leaves_the_old_one() {
+        let (mut flash, recovery) = flash_with_recovery(9000);
+
+        let result = move_recovery(
+            &mut flash,
+            DEFAULT_SLOTS.recovery,
+            region(0xC_6000, 16 * PAGE_SIZE),
+        );
+
+        assert_eq!(result, Ok(RecoveryMove::Copied));
+        assert_eq!(flash.bytes_at(0xC_6000, recovery.len()), &recovery[..]);
+        assert_eq!(
+            flash.bytes_at(DEFAULT_SLOTS.recovery.start, recovery.len()),
+            &recovery[..]
+        );
+    }
+
+    #[test]
+    fn an_image_larger_than_the_new_slot_stays_put() {
+        let (mut flash, _) = flash_with_recovery(70_000);
+
+        let result = move_recovery(
+            &mut flash,
+            DEFAULT_SLOTS.recovery,
+            region(0xC_6000, 16 * PAGE_SIZE),
+        );
+
+        assert_eq!(result, Ok(RecoveryMove::ImageTooLarge));
+        assert!(!result.unwrap().may_switch());
+        assert_eq!(flash.erase_count, 0);
+    }
+
+    #[test]
+    fn a_move_onto_part_of_the_old_slot_is_refused() {
+        let (mut flash, _) = flash_with_recovery(5000);
+
+        let result = move_recovery(
+            &mut flash,
+            DEFAULT_SLOTS.recovery,
+            region(0x6_6000, 16 * PAGE_SIZE),
+        );
+
+        assert_eq!(result, Ok(RecoveryMove::Overlapping));
+        assert_eq!(flash.erase_count, 0);
+    }
+
+    #[test]
+    fn an_empty_slot_moves_freely() {
+        let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
+
+        let result = move_recovery(
+            &mut flash,
+            DEFAULT_SLOTS.recovery,
+            region(0x6_6000, 16 * PAGE_SIZE),
+        );
+
+        assert_eq!(result, Ok(RecoveryMove::NoImage));
+        assert!(result.unwrap().may_switch());
+    }
+}
+
+// ============================================================================
 // Migration plan
 // ============================================================================
 

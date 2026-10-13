@@ -20,10 +20,14 @@ mod alert;
 #[cfg(test)]
 mod alert_tests;
 mod phone;
+mod slots;
+#[cfg(test)]
+mod slots_tests;
 #[cfg(test)]
 mod tests;
 
 pub use alert::{parse_new_alert, MOST_NEW_ALERT_BYTES};
+pub use slots::{slots_refusal, slots_report, SlotRange, SlotsReport, SlotsRequest};
 
 pub use phone::{
     app_message_line, call_control_line, find_phone_line, music_control_line, status_report, CallKind,
@@ -109,6 +113,8 @@ pub enum Message<'line> {
     StatusRequest,
     /// `notify-`: the notification with this id was dismissed on the phone.
     NotificationDismissed { id: i64 },
+    /// `slots`: where the update and recovery slots are, or a request to move them.
+    Slots(SlotsRequest),
     /// A message this watch does not act on yet, by its `t`.
     Unknown { kind: &'line str },
 }
@@ -368,6 +374,7 @@ pub fn parse_line(line: &[u8]) -> Result<Message<'_>, MessageError> {
         "find" => return phone::parse_find(json),
         "vibrate" => return phone::parse_vibrate(json),
         "status" => return Ok(Message::StatusRequest),
+        "slots" => return slots::parse_slots(json),
         "notify-" => {
             return Ok(Message::NotificationDismissed {
                 id: envelope.id.unwrap_or(0),

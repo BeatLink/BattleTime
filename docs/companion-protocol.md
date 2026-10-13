@@ -150,6 +150,35 @@ digits, `_` or `-`, written out in the app; `d` holds up to 4 whole numbers, in 
 wrote them, or is `{}`. For example the remote app's third button sends
 `{"t":"app","ch":"remote","d":{"button":2}}`. The phone sends no reply.
 
+### Slots (served)
+
+`slots` reports or moves the update and recovery slots in the external flash, which the
+[slot table](bootloader.md#the-slot-table) records. The full firmware serves it; the recovery
+firmware answers `{"t":"slots","err":"the recovery firmware cannot move the slots"}`, since the
+reloaders carry it twice in wasp-os's app slot and it has no room to spare.
+
+| Line | Answer |
+|---|---|
+| `{"t":"slots"}` | `{"t":"slots","update":[0,401408],"recovery":[413696,397312],"area":1048576,"firmware":397312,"image":171428,"restart":false}` |
+| `{"t":"slots","recovery":[start,size]}`, with `update` as well or instead | The same report naming the new slots, with `"restart":true`; the watch then restarts |
+
+Each slot is `[start, size]` in bytes; one left out stays where it is. `area` is where the file
+system starts, which every slot must end by; `firmware` is the firmware slot's size, and the update
+slot must be exactly one 4096-byte page more; `image` is the recovery image's length with its
+header, or 0 when the slot holds none. The watch checks the slots as the bootloader would (whole
+pages, before `area`, a recovery slot between 64 KB and `firmware`, no overlap). It then moves the
+recovery image to a recovery slot that starts somewhere new, reading the copy back, so the table
+never names an empty slot when there was an image to keep; a slot that keeps its start but shrinks
+keeps the image where it is. Only then does it write the table, and it restarts so its update and
+recovery receivers use the new slots. Moving the update slot drops the firmware a rollback would
+use. A refusal answers `{"t":"slots","err":"..."}` and changes nothing, for example while an update
+waits or is on trial, when the image is larger than the new slot, or when the new recovery slot
+overlaps the old one at another start.
+
+The companion's command line shows them with `neotime slots`, shrinks the recovery slot to its
+image with `neotime slots fit`, and moves one with `neotime slots recovery <start> <size>` or
+`neotime slots update <start>`.
+
 ### Other messages (not served yet)
 
 Phone to watch:

@@ -120,7 +120,9 @@ start and size, the recovery slot's start and size, a spare word, and a CRC-32 o
   firmware a rollback needs. Moving a slot does not move its contents: send the recovery firmware
   again after moving the recovery slot.
 
-Nothing calls `change_slots` yet; the companion command for it is in [todo.md](todo.md).
+The companion moves them with the `slots` message ([companion-protocol.md](companion-protocol.md#slots-served)),
+which the firmware answers with `storage::answer_slots`: it carries the recovery image to a new
+recovery slot first (`neotime_boot::move_recovery`), then calls `change_slots` and restarts.
 
 ## What happens at start
 

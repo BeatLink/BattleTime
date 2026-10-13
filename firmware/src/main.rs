@@ -848,6 +848,17 @@ fn read_companion_line(line: &[u8]) {
         Ok(neotime_companion::Message::NotificationDismissed { id }) => {
             app_events::notification_dismissed(id);
         }
+        #[cfg(with_shell)]
+        Ok(neotime_companion::Message::Slots(request)) => {
+            let _ = SLOTS_REQUESTS.try_send(request);
+        }
+        // The reloaders carry the recovery firmware twice in wasp-os's app slot, so it stays without this.
+        #[cfg(not(with_shell))]
+        Ok(neotime_companion::Message::Slots(_)) => {
+            settings::send_reply(&neotime_companion::slots_refusal(
+                "the recovery firmware cannot move the slots",
+            ));
+        }
         Ok(neotime_companion::Message::Unknown { .. }) => {}
         Ok(phone_message) => app_events::phone_message_arrived(phone_message),
         Err(_) => {
@@ -855,6 +866,14 @@ fn read_companion_line(line: &[u8]) {
         }
     }
 }
+
+/// `slots` requests, answered by the Bluetooth task, which holds the flash.
+#[cfg(with_shell)]
+static SLOTS_REQUESTS: embassy_sync::channel::Channel<
+    embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,
+    neotime_companion::SlotsRequest,
+    1,
+> = embassy_sync::channel::Channel::new();
 
 /// Answers the companion app's `status` with the battery and today's steps.
 fn send_status() {
@@ -1059,6 +1078,20 @@ async fn serve_connection(
                 clock::save_time_zone_if_changed(files);
                 for command in packages_commands.drain(..) {
                     packages::COMMANDS.send(command).await;
+                }
+                #[cfg(with_shell)]
+                if let Ok(request) = SLOTS_REQUESTS.try_receive() {
+                    let answer = storage::answer_slots(files, confirmation, request).await;
+                    let must_restart = matches!(answer, Ok((_, true)));
+                    // Built on the heap after the flash work, so the connection's state never holds a reply line.
+                    let answer = storage::slots_answer_line(files, answer);
+                    for piece in answer.as_bytes().chunks(NOTIFICATION_BYTES) {
+                        let _ = server.uart.transmit.notify_raw(connection, piece, false).await;
+                    }
+                    if must_restart {
+                        screen.write_line(line::ACTION, "Slots moved");
+                        storage::reset(screen).await;
+                    }
                 }
                 if !*confirmed {
                     let kept = confirmation.confirm().await;
