@@ -51,8 +51,8 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Packages | 2.3 KB | 2.1 KB |
 | BLEFS file service | 2.0 KB | 2.2 KB |
 | Other constants and padding | 23.3 KB | 10.9 KB |
-| **Used** | **366.3 KB** | **164.4 KB** |
-| Free of 400 KB | 33.7 KB | 235.6 KB |
+| **Used** | **366.4 KB** | **164.4 KB** |
+| Free of 400 KB | 33.6 KB | 235.6 KB |
 <!-- /measure_memory:firmware -->
 
 The accelerometer's configuration is the largest piece of data left in it; each watch could build
@@ -193,14 +193,14 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (storage 16 KB, UI 21 KB; the recovery build has no UI heap) | 37,888 B | 16,384 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 13,690 B | 10,517 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 13,698 B | 10,517 B |
 | Bluetooth controller | 2,545 B | 2,545 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | BLEFS file service | 122 B | 122 B |
 | App host (with `neotime-ui` and rlvgl) | 56 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **54,716 B** | **29,980 B** |
-| Left for the stack | 10,804 B | 35,540 B |
+| **Static RAM** (`.data` and `.bss`) | **54,724 B** | **29,980 B** |
+| Left for the stack | 10,796 B | 35,540 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
