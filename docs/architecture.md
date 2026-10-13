@@ -864,7 +864,11 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
   new screen in over the old one 8 rows a step, as InfiniTime does: each step draws the new rows
   over the rows that leave next and turns the whole screen's band, so after 240 rows the band is
   unturned again. `Left` and `Right` wipe the new screen in 16 columns a step. `go` wipes from the
-  right, `back` from the left. A slide needs the whole screen as the band; when the old picture
+  right, `back` from the left. The watch and the simulator draw with `draw_step_at`, which paces a
+  transition by the clock: each step moves at least the sizes above, and more when the step came
+  late, so a slide or wipe takes `TRANSITION_TIME_IN_MILLISECONDS` (250 ms) however long other
+  work held up the steps between. `draw_step` keeps the fixed sizes, for tests that count steps.
+  A slide needs the whole screen as the band; when the old picture
   sits in a turned band that the new screen cannot use, the band is unturned at the start of the
   transition, which shows the outgoing screen out of place while it slides away. On a screen that
   cannot scroll, slides are drawn at once.

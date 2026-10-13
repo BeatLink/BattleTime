@@ -447,9 +447,9 @@ pub fn run(
     loop {
         let now = wall_clock_in_milliseconds();
         host.tick(now, &mut system);
-        // A transition draws one step a frame, so it moves as it would on the watch.
+        // A transition draws one step a frame, paced by the clock as it is on the watch.
         if host.needs_drawing() {
-            host.draw_step(&mut display, &mut strip)
+            host.draw_step_at(&mut display, &mut strip, now as u64)
                 .unwrap_or_else(|never| match never {});
         }
         copy_panel_to_screen(&panel, &mut screen, motor_running.load(Ordering::Relaxed));

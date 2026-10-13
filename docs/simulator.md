@@ -95,7 +95,7 @@ hands them simulated parts in place of the chip's:
 - **Delays** sleep the thread.
 
 An app runs through the display driver over the panel model, so its scrolled lists move with the
-hardware scroll and its transitions draw one step a frame, as on the watch. Without an app, the
+hardware scroll and its transitions draw one step a frame, paced by the clock as on the watch. Without an app, the
 simulator shows three demo pages (`simulator/src/pages.rs`), which slide 16 rows a step.
 
 The simulator's tests (`simulator/src/tests.rs`) check the display driver against the panel model,

@@ -28,11 +28,14 @@ use crate::nodes::{to_color, OPAQUE};
 /// How many pixels the strip `draw_step` draws into holds: four rows of the screen.
 pub const STRIP_PIXELS: usize = 960;
 
-/// How many rows a slide moves the screen at each step.
+/// How many rows a slide moves the screen at each step, at least.
 const SLIDE_STEP_ROWS: i32 = 8;
 
-/// How many columns a wipe draws at each step.
+/// How many columns a wipe draws at each step, at least.
 const WIPE_STEP_COLUMNS: i32 = 16;
+
+/// How long a slide or a wipe takes when `draw_step_at` paces it by the clock.
+pub const TRANSITION_TIME_IN_MILLISECONDS: u64 = 250;
 
 const SCREEN_SIDE: i32 = 240;
 
@@ -56,11 +59,12 @@ pub enum Transition {
     Right,
 }
 
-/// A transition under way, and how many rows or columns of the new screen it has shown.
+/// A transition under way, how many rows or columns of the new screen it has shown, and when it began.
 #[derive(Clone, Copy)]
 pub(super) struct TransitionRun {
     kind: Transition,
     done: i32,
+    started_at_millisecond: Option<u64>,
 }
 
 /// Scrolling not drawn yet: the Scroll or List, and how many rows its content moved up.
@@ -74,6 +78,18 @@ impl ScrollMove {
     /// The same move, for the list's node at its new place after the nodes were built again.
     pub(super) fn for_node(self, node_index: usize) -> ScrollMove {
         ScrollMove { node_index, ..self }
+    }
+}
+
+impl TransitionRun {
+    /// How many rows or columns the transition is behind where the clock says it should be by now.
+    fn rows_behind_the_clock(&self, now_in_milliseconds: Option<u64>) -> i32 {
+        let (Some(started), Some(now)) = (self.started_at_millisecond, now_in_milliseconds) else {
+            return 0;
+        };
+        let elapsed = now.saturating_sub(started).min(TRANSITION_TIME_IN_MILLISECONDS);
+        let due = SCREEN_SIDE as u64 * elapsed / TRANSITION_TIME_IN_MILLISECONDS;
+        due as i32 - self.done
     }
 }
 
@@ -123,7 +139,7 @@ impl<'image> AppHost<'image> {
         Ok(())
     }
 
-    /// Draws what changed since the last call, or one step of a transition, through `strip`.
+    /// Draws what changed since the last call, or one fixed-size step of a transition, through `strip`.
     ///
     /// The strip must hold at least one row of the screen; `STRIP_PIXELS` is the size the watch uses.
     pub fn draw_step<Screen>(
@@ -134,11 +150,38 @@ impl<'image> AppHost<'image> {
     where
         Screen: ScrollingScreen,
     {
+        self.draw_paced_step(screen, strip, None)
+    }
+
+    /// Draws like `draw_step`, with a transition catching up to where the clock says it should be.
+    ///
+    /// The time is any steady count of milliseconds; a late step shows more of the new screen at once.
+    pub fn draw_step_at<Screen>(
+        &mut self,
+        screen: &mut Screen,
+        strip: &mut [Rgb565],
+        now_in_milliseconds: u64,
+    ) -> Result<(), Screen::Error>
+    where
+        Screen: ScrollingScreen,
+    {
+        self.draw_paced_step(screen, strip, Some(now_in_milliseconds))
+    }
+
+    fn draw_paced_step<Screen>(
+        &mut self,
+        screen: &mut Screen,
+        strip: &mut [Rgb565],
+        now_in_milliseconds: Option<u64>,
+    ) -> Result<(), Screen::Error>
+    where
+        Screen: ScrollingScreen,
+    {
         if !self.is_open {
             return Ok(());
         }
         if self.whole_screen_dirty {
-            return self.draw_whole_screen_step(screen, strip);
+            return self.draw_whole_screen_step(screen, strip, now_in_milliseconds);
         }
         if let Some(scroll_move) = self.scroll_move.take() {
             self.draw_scroll(screen, strip, scroll_move)?;
@@ -285,40 +328,42 @@ impl<'image> AppHost<'image> {
         &mut self,
         screen: &mut Screen,
         strip: &mut [Rgb565],
+        now_in_milliseconds: Option<u64>,
     ) -> Result<(), Screen::Error>
     where
         Screen: ScrollingScreen,
     {
         let mut run = match self.transition_run {
             Some(run) => run,
-            None => self.start_whole_screen(screen)?,
+            None => self.start_whole_screen(screen, now_in_milliseconds)?,
         };
         let left = SCREEN_SIDE - run.done;
+        let behind = run.rows_behind_the_clock(now_in_milliseconds);
         let step = match run.kind {
             Transition::None => {
                 self.paint(screen, strip, SCREEN_AREA, 0)?;
                 left
             }
             Transition::Up => {
-                let rows = SLIDE_STEP_ROWS.min(left);
+                let rows = SLIDE_STEP_ROWS.max(behind).min(left);
                 // The next rows go over the top rows, which leave next, and the panel moves them round to the bottom.
                 self.paint(screen, strip, rows_from(run.done, rows), -run.done)?;
                 screen.scroll_by(rows)?;
                 rows
             }
             Transition::Down => {
-                let rows = SLIDE_STEP_ROWS.min(left);
+                let rows = SLIDE_STEP_ROWS.max(behind).min(left);
                 self.paint(screen, strip, rows_from(left - rows, rows), run.done)?;
                 screen.scroll_by(-rows)?;
                 rows
             }
             Transition::Left => {
-                let columns = WIPE_STEP_COLUMNS.min(left);
+                let columns = WIPE_STEP_COLUMNS.max(behind).min(left);
                 self.paint(screen, strip, columns_from(left - columns, columns), 0)?;
                 columns
             }
             Transition::Right => {
-                let columns = WIPE_STEP_COLUMNS.min(left);
+                let columns = WIPE_STEP_COLUMNS.max(behind).min(left);
                 self.paint(screen, strip, columns_from(run.done, columns), 0)?;
                 columns
             }
@@ -335,7 +380,11 @@ impl<'image> AppHost<'image> {
     }
 
     /// Starts drawing a whole new screen: every widget will be drawn, and the panel is made ready.
-    fn start_whole_screen<Screen>(&mut self, screen: &mut Screen) -> Result<TransitionRun, Screen::Error>
+    fn start_whole_screen<Screen>(
+        &mut self,
+        screen: &mut Screen,
+        now_in_milliseconds: Option<u64>,
+    ) -> Result<TransitionRun, Screen::Error>
     where
         Screen: ScrollingScreen,
     {
@@ -353,7 +402,11 @@ impl<'image> AppHost<'image> {
         self.dirty_nodes = 0;
         self.cleared_regions.clear();
         self.scroll_move = None;
-        Ok(TransitionRun { kind, done: 0 })
+        Ok(TransitionRun {
+            kind,
+            done: 0,
+            started_at_millisecond: now_in_milliseconds,
+        })
     }
 
     /// Readies the panel's band for a new screen, unturning its ring while all of it is drawn again anyway.

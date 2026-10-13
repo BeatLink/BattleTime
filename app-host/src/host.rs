@@ -37,7 +37,7 @@ use crate::system::{button_value, swipe_value, AppEffect, AppFailure, Clocked, E
 use crate::text::WrappedLines;
 use crate::text_file::{covers, font_from_file, LineIndex};
 use painting::{ScrollMove, TransitionRun};
-pub use painting::{Transition, STRIP_PIXELS};
+pub use painting::{Transition, STRIP_PIXELS, TRANSITION_TIME_IN_MILLISECONDS};
 
 // ============================================================================
 // Limits

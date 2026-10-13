@@ -6,7 +6,7 @@ use std::{cell::RefCell, rc::Rc};
 use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565, RgbColor};
 use embedded_hal::{delay::DelayNs, digital::ErrorType, digital::OutputPin};
 use mipidsi::interface::{Interface, InterfaceKind};
-use neotime_app_host::STRIP_PIXELS;
+use neotime_app_host::{STRIP_PIXELS, TRANSITION_TIME_IN_MILLISECONDS};
 use neotime_app_testing::{Framebuffer, TestWatch, Touch, Transition};
 use neotime_display::Display;
 
@@ -178,6 +178,15 @@ impl Watch {
         let before = self.panel.borrow().pixels_written;
         app.host_mut()
             .draw_step(&mut self.display, &mut self.strip)
+            .unwrap();
+        self.panel.borrow().pixels_written - before
+    }
+
+    /// Draws one step paced by the clock at `now_in_milliseconds`, and says how many pixels it sent.
+    fn draw_step_at(&mut self, app: &mut TestWatch, now_in_milliseconds: u64) -> usize {
+        let before = self.panel.borrow().pixels_written;
+        app.host_mut()
+            .draw_step_at(&mut self.display, &mut self.strip, now_in_milliseconds)
             .unwrap();
         self.panel.borrow().pixels_written - before
     }
@@ -390,6 +399,63 @@ fn a_new_screen_slides_down_over_the_old_one() {
     let steps_left = watch.draw_everything(&mut launcher);
     assert_eq!(steps_left, 25);
     assert_eq!(watch.pixels_unlike(&new), 0);
+}
+
+#[test]
+fn a_slide_paced_by_the_clock_catches_up_after_a_late_step() {
+    let mut launcher = launcher_with_many_apps();
+    let mut watch = Watch::new();
+    watch.draw_everything(&mut launcher);
+    let old = launcher.fresh_frame();
+    let mut settings = TestWatch::open_app("settings").unwrap();
+    let new = settings.fresh_frame();
+    settings.host_mut().set_next_transition(Transition::Up);
+    let theme = *settings.host().theme();
+    settings.host_mut().set_theme(theme);
+
+    let started_at = 1_000;
+    watch.draw_step_at(&mut settings, started_at);
+    watch.draw_step_at(&mut settings, started_at + TRANSITION_TIME_IN_MILLISECONDS / 2);
+
+    let moved_rows = SIDE / 2;
+    assert_eq!(watch.shown_row(0), frame_row(&old, moved_rows));
+    assert_eq!(watch.shown_row(SIDE - moved_rows), frame_row(&new, 0));
+    assert_eq!(watch.shown_row(SIDE - 1), frame_row(&new, moved_rows - 1));
+    watch.draw_step_at(&mut settings, started_at + TRANSITION_TIME_IN_MILLISECONDS);
+    assert!(!settings.host().is_in_transition());
+    assert_eq!(watch.pixels_unlike(&new), 0);
+    assert_eq!(watch.turned_rows(), 0);
+}
+
+#[test]
+fn a_transition_paced_by_the_clock_still_moves_when_steps_come_quickly() {
+    let mut settings = TestWatch::open_app("settings").unwrap();
+    let mut watch = Watch::new();
+    watch.draw_everything(&mut settings);
+    settings.tap_text("Brightness");
+
+    let mut steps = 0;
+    while settings.host().needs_drawing() {
+        watch.draw_step_at(&mut settings, 5_000);
+        steps += 1;
+    }
+
+    assert_eq!(steps, 15);
+    assert_eq!(watch.pixels_unlike(&settings.fresh_frame()), 0);
+}
+
+#[test]
+fn a_wipe_that_falls_far_behind_the_clock_finishes_in_one_step() {
+    let mut settings = TestWatch::open_app("settings").unwrap();
+    let mut watch = Watch::new();
+    watch.draw_everything(&mut settings);
+    settings.tap_text("Brightness");
+
+    watch.draw_step_at(&mut settings, 0);
+    watch.draw_step_at(&mut settings, 10 * TRANSITION_TIME_IN_MILLISECONDS);
+
+    assert!(!settings.host().needs_drawing());
+    assert_eq!(watch.pixels_unlike(&settings.fresh_frame()), 0);
 }
 
 #[test]

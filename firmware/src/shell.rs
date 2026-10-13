@@ -968,7 +968,8 @@ impl Shell {
 fn draw_host(display: &SharedDisplay, host: &mut AppHost<'static>) {
     let mut strip = [Rgb565::BLACK; STRIP_PIXELS];
     display.lock(|display| {
-        let _ = host.draw_step(&mut *display.borrow_mut(), &mut strip);
+        let now_in_milliseconds = Instant::now().as_millis();
+        let _ = host.draw_step_at(&mut *display.borrow_mut(), &mut strip, now_in_milliseconds);
     });
 }
 
