@@ -527,7 +527,11 @@ impl<'image> AppHost<'image> {
         self.scroll_drag = None;
         self.scroll_move = None;
         self.text_files = Vec::new();
+        self.build_whole_screen(now, system);
+    }
 
+    /// Builds and lays out every node afresh, and marks the whole screen to be drawn.
+    fn build_whole_screen(&mut self, now: Value, system: &mut impl System) {
         let mut failure = self.build_nodes(now, system);
         self.measure_and_lay_out();
         for _ in 0..2 {
@@ -598,7 +602,10 @@ impl<'image> AppHost<'image> {
                 }
             }
             if self.nodes[node_index].settings.visible {
-                let children: Vec<u16> = self.tree.children(widget_index).collect();
+                let mut children: Vec<u16> = self.tree.children(widget_index).collect();
+                if widget.kind == WidgetKind::Pages {
+                    children = self.page_on_show(node_index, &children);
+                }
                 let rows = match widget.kind {
                     WidgetKind::Repeat => self.rows_to_build(node_index, now, system),
                     _ => alloc::vec![row],
@@ -722,6 +729,19 @@ impl<'image> AppHost<'image> {
             }
             _ => None,
         }
+    }
+
+    /// The one page of a Pages to build, its `value` kept within the pages, noting how many there are for its bar.
+    fn page_on_show(&mut self, node_index: usize, pages: &[u16]) -> Vec<u16> {
+        let node = &mut self.nodes[node_index];
+        node.option_count = pages.len().min(u8::MAX as usize) as u8;
+        let last = (i32::from(node.option_count) - 1).max(0);
+        node.settings.value = node.settings.value.clamp(0, last);
+        pages
+            .get(node.settings.value as usize)
+            .copied()
+            .into_iter()
+            .collect()
     }
 
     /// The rows of a Repeat to build nodes for: every row, or when its rows have one fixed height,
@@ -885,7 +905,9 @@ impl<'image> AppHost<'image> {
         };
         if applied {
             self.dirty_nodes |= 1 << node_index;
-            if property == Property::Visible {
+            let turns_a_page =
+                property == Property::Value && self.nodes[node_index].kind == WidgetKind::Pages;
+            if property == Property::Visible || turns_a_page {
                 self.nodes_out_of_date = true;
             }
             if matches!(
@@ -1489,6 +1511,9 @@ impl<'image> AppHost<'image> {
             // A swipe that moved a list is the list's, even while the finger is still down; one that moved nothing goes through.
             Touch::Swipe(_) if self.touch_scrolled => return EventResult::Handled,
             Touch::Swipe(direction) => {
+                if let Some(result) = self.turn_page(direction, now, system) {
+                    return result;
+                }
                 self.swipe_transition = Some(transition_following(direction));
                 let result =
                     self.run_screen_event(Property::OnSwipe, &[swipe_value(direction)], now, system, true);
@@ -1742,8 +1767,11 @@ impl<'image> AppHost<'image> {
         let drag = match self.scroll_drag {
             Some(drag) => drag,
             None => {
+                // A drag mostly across never scrolls a list that runs down, so it can turn a page instead, and the other way round.
+                let goes_across = (x - start_x).abs() > (y - start_y).abs();
                 let found = self.nodes.iter().enumerate().rev().find(|(index, node)| {
                     clips_children(node.kind)
+                        && node.runs_across() == goes_across
                         && node.covered_area().is_some_and(|area| {
                             x >= area.x && x < area.x + area.width && y >= area.y && y < area.y + area.height
                         })
@@ -1810,6 +1838,55 @@ impl<'image> AppHost<'image> {
         };
         let settled = (wanted_page.max(0) * page).min(farthest);
         self.scroll_to(drag.node_index, settled, now, system);
+    }
+
+    /// Turns the innermost Pages that has a page that way, wiping to it, and sends `onPageChange`; none at the first or last page.
+    ///
+    /// A swipe left shows the next page and a swipe right the one before.
+    fn turn_page(
+        &mut self,
+        direction: SwipeDirection,
+        now: Value,
+        system: &mut impl System,
+    ) -> Option<EventResult> {
+        let step = match direction {
+            SwipeDirection::Left => 1,
+            SwipeDirection::Right => -1,
+            SwipeDirection::Up | SwipeDirection::Down => return None,
+        };
+        let node_index = (0..self.nodes.len()).rev().find(|&index| {
+            let node = &self.nodes[index];
+            let page = node.settings.value + step;
+            node.kind == WidgetKind::Pages
+                && node.shown
+                && (0..i32::from(node.option_count)).contains(&page)
+                && !self.is_disabled(index)
+        })?;
+        let page = self.nodes[node_index].settings.value + step;
+        self.nodes[node_index].settings.value = page;
+        self.build_whole_screen(now, system);
+        // The wipe draws the whole screen, so what the old page leaves behind needs no clearing of its own.
+        self.cleared_regions.clear();
+        self.next_transition = transition_following(direction);
+        let handler = self
+            .nodes
+            .get(node_index)
+            .and_then(|node| self.tree.widget(node.widget_index))
+            .and_then(|widget| widget.property(Property::OnPageChange));
+        if let Some(PropertySource::Handler(handler)) = handler {
+            let row = self.nodes[node_index].row;
+            self.run_handler(
+                handler,
+                EventKind::PageChange,
+                &[page as Value],
+                &[],
+                now,
+                system,
+                true,
+                row,
+            );
+        }
+        Some(EventResult::Handled)
     }
 
     /// Ends a scroll and sends `onScrollEnd` with the offset, if the scrolled widget has one.

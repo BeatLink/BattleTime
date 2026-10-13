@@ -385,6 +385,53 @@ fn the_scrolling_props_make_one_set_of_flags() {
 }
 
 #[test]
+fn a_page_is_a_growing_column_or_a_scroll_when_it_scrolls() {
+    let image = compile(&app(r#"import { Label, Page, Pages } from "neotime/widgets";
+        function Main() { return <Screen>
+            <Pages value={1} onPageChange={(event) => {}}>
+                <Page><Label>One</Label></Page>
+                <Page scrolls scroll_bar={false} grow={2}><Label>Two</Label></Page>
+                <Page scrolls={false}><Label>Three</Label></Page>
+            </Pages>
+        </Screen>; }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let kinds: Vec<(WidgetKind, Option<PropertySource>)> = widgets(&image)
+        .into_iter()
+        .filter(|(kind, _)| matches!(kind, WidgetKind::Column | WidgetKind::Scroll))
+        .skip(1)
+        .map(|(kind, properties)| {
+            let grow = properties
+                .iter()
+                .find(|(property, _)| *property == Property::Grow)
+                .map(|(_, source)| *source);
+            (kind, grow)
+        })
+        .collect();
+
+    assert_eq!(
+        kinds,
+        [
+            (WidgetKind::Column, Some(PropertySource::Constant(1))),
+            (WidgetKind::Scroll, Some(PropertySource::Constant(2))),
+            (WidgetKind::Column, Some(PropertySource::Constant(1))),
+        ]
+    );
+    assert_eq!(
+        property_of(&image, WidgetKind::Pages, Property::Value, 0),
+        PropertySource::Constant(1)
+    );
+}
+
+#[test]
+fn a_page_needs_scrolls_written_out() {
+    let source = app(r#"import { signal } from "@preact/signals";
+        import { Page, Pages } from "neotime/widgets";
+        const long = signal(true);
+        function Main() { return <Screen><Pages><Page scrolls={long.value} /></Pages></Screen>; }"#);
+    assert!(first_error(&source).contains("`scrolls` on a `Page` must be written out"));
+}
+
+#[test]
 fn the_scrolling_props_must_be_written_out_and_direction_fits_only_lists() {
     let source = |widget: &str| {
         app(&format!(

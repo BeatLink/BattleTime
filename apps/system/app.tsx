@@ -1,15 +1,14 @@
-// System: how the watch is doing and its battery, as two pages swiped up and down.
+// System: how the watch is doing and its battery, as two pages side by side, swiped left and right.
 // The system page is InfiniTime's SystemInfo: the firmware, uptime, last restart and free storage.
 // The battery page merges InfiniTime's BatteryInfo with PinetimeLite's charging and low battery
 // screens: a tall battery on the left that fills up again and again while charging, and on the right
 // the charge, whether it is charging, full, low or critical in its colour, the voltage and a warning
 // to charge below 10 %. The shell opens straight onto it when the charger is plugged in or out, or the
 // charge goes low.
-// A scroll bar down the right edge, as wasp-os draws it, shows which page is on show.
+// The engine's page bar along the bottom shows which page is on show.
 
 import { computed } from "@preact/signals";
 import {
-  back,
   battery_millivolts,
   battery_percent,
   define_app,
@@ -17,7 +16,6 @@ import {
   format_duration,
   format_fixed,
   free_storage_kilobytes,
-  go,
   is_charging,
   now,
   reset_reason,
@@ -25,11 +23,10 @@ import {
   DAY,
   SECOND,
   type Color,
-  type SwipeEvent,
 } from "neotime";
-import { Header, ScrollBar } from "neotime/components";
+import { Header } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Column, Label, Row, Screen, Scroll } from "neotime/widgets";
+import { Column, Label, Page, Pages, Row, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -43,7 +40,6 @@ const CRITICAL_PERCENT = 5;
 /** While charging the battery fills from the charge to full in this many one-second steps, then starts again. */
 const FILL_STEPS = 4;
 
-const PAGES = 2;
 const SYSTEM_PAGE = 0;
 const BATTERY_PAGE = 1;
 
@@ -122,19 +118,6 @@ const free_storage_text = computed(() => {
 });
 
 // ============================================================================
-// Handlers
-// ============================================================================
-
-function swipe_on_system(event: SwipeEvent) {
-  if (event.direction === "up") go("battery");
-}
-
-/** Back to the system page, or out of the app when the shell opened it on the battery. */
-function swipe_on_battery(event: SwipeEvent) {
-  if (event.direction === "down") back();
-}
-
-// ============================================================================
 // System page
 // ============================================================================
 
@@ -160,18 +143,13 @@ function Fact(props: { name: string; value: string }) {
 
 function SystemPage() {
   return (
-    <Screen onSwipe={swipe_on_system}>
-      <Column grow={1} padding={8} gap={4}>
-        <Header title="System" icon={icons.info} />
-        <Scroll grow={1} gap={2}>
-          <LongFact name="Firmware" value={firmware_version.value} />
-          <Fact name="Uptime" value={uptime_text.value} />
-          <LongFact name="Last restart" value={reset_reason.value} />
-          <Fact name="Storage" value={`${free_storage_text.value} free`} />
-        </Scroll>
-      </Column>
-      <ScrollBar page={SYSTEM_PAGE} pages={PAGES} />
-    </Screen>
+    <Page scrolls padding={8} gap={2}>
+      <Header title="System" icon={icons.info} />
+      <LongFact name="Firmware" value={firmware_version.value} />
+      <Fact name="Uptime" value={uptime_text.value} />
+      <LongFact name="Last restart" value={reset_reason.value} />
+      <Fact name="Storage" value={`${free_storage_text.value} free`} />
+    </Page>
   );
 }
 
@@ -201,7 +179,7 @@ function BatteryMeter() {
 
 function BatteryPage() {
   return (
-    <Screen onSwipe={swipe_on_battery}>
+    <Page>
       <Row grow={1} align_items="center" padding={12} gap={14}>
         <BatteryMeter />
         <Column grow={1} gap={6}>
@@ -219,9 +197,33 @@ function BatteryPage() {
           )}
         </Column>
       </Row>
-      <ScrollBar page={BATTERY_PAGE} pages={PAGES} />
+    </Page>
+  );
+}
+
+// ============================================================================
+// Screens
+// ============================================================================
+
+/** Both pages, opening on `start`. */
+function SystemPages(props: { start: number }) {
+  return (
+    <Screen>
+      <Pages grow={1} value={props.start}>
+        <SystemPage />
+        <BatteryPage />
+      </Pages>
     </Screen>
   );
+}
+
+function SystemScreen() {
+  return <SystemPages start={SYSTEM_PAGE} />;
+}
+
+/** The screen the shell opens for a battery event: the same pages, opening on the battery. */
+function BatteryScreen() {
+  return <SystemPages start={BATTERY_PAGE} />;
 }
 
 export default define_app({
@@ -229,5 +231,5 @@ export default define_app({
   name: "System",
   group: "system",
   icon: icons.info,
-  screens: { main: SystemPage, battery: BatteryPage },
+  screens: { main: SystemScreen, battery: BatteryScreen },
 });

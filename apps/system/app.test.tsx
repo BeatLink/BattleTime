@@ -6,6 +6,7 @@ import {
   current_screen,
   firmware_version,
   free_storage_kilobytes,
+  go,
   is_charging,
   reset_reason,
   started_at,
@@ -33,18 +34,23 @@ function meter_fill_height(container: Element): number {
   return parseInt((fill as HTMLElement).style.height, 10);
 }
 
-/** Opens the app and swipes up from the system page to the battery. */
+/** Opens the app and swipes left from the system page to the battery. */
 function open_battery_page(): Element {
   open(app);
   const { container } = render(<OpenScreen />);
-  act(() => swipe("up"));
+  act(() => swipe("left"));
   return container;
 }
 
-/** The scroll bar's segment colours from the top, the page on show in the muted grey. */
-function scroll_bar_colors(container: Element): string[] {
-  const segments = container.querySelectorAll("[data-widget=stack] > [data-widget=column]");
+/** The page bar's segment colours from the left, the page on show in the muted grey. */
+function page_bar_colors(container: Element): string[] {
+  const segments = container.querySelectorAll("[data-widget=page-bar-part]");
   return Array.from(segments).map((segment) => (segment as HTMLElement).style.background);
+}
+
+/** Which page of the app's pages is on show. */
+function page_on_show(container: Element): string | null {
+  return container.querySelector("[data-widget=pages]")?.getAttribute("data-page") ?? null;
 }
 
 function set_battery(percent: number, millivolts: number, charging: boolean) {
@@ -75,11 +81,11 @@ describe("system: the battery page", () => {
   it("shows the charge, that it is discharging and the voltage", () => {
     set_battery(87, 4056, false);
     const container = open_battery_page();
-    expect(current_screen.value).toBe("battery");
+    expect(page_on_show(container)).toBe("1");
     expect(screen.getByText("87%")).toBeTruthy();
     expect(screen.getByText("Discharging")).toBeTruthy();
     expect(screen.getByText("4.05 volts")).toBeTruthy();
-    expect(scroll_bar_colors(container)).toEqual(["rgb(56, 56, 56)", "rgb(160, 160, 160)"]);
+    expect(page_bar_colors(container)).toEqual(["rgb(56, 56, 56)", "rgb(160, 160, 160)"]);
   });
 
   it("names a full, low and critical battery", () => {
@@ -140,14 +146,24 @@ describe("system: the system page", () => {
     open(null);
   });
 
-  it("is the first page, with the battery a swipe up and a swipe down back", () => {
+  it("is the first page, with the battery a swipe left and a swipe right back", () => {
     const { container } = render(<OpenScreen />);
     expect(current_screen.value).toBe("main");
-    expect(scroll_bar_colors(container)).toEqual(["rgb(160, 160, 160)", "rgb(56, 56, 56)"]);
-    act(() => swipe("up"));
-    expect(current_screen.value).toBe("battery");
-    act(() => swipe("down"));
+    expect(page_on_show(container)).toBe("0");
+    expect(page_bar_colors(container)).toEqual(["rgb(160, 160, 160)", "rgb(56, 56, 56)"]);
+    act(() => swipe("left"));
+    expect(page_on_show(container)).toBe("1");
+    expect(page_bar_colors(container)).toEqual(["rgb(56, 56, 56)", "rgb(160, 160, 160)"]);
+    act(() => swipe("right"));
+    expect(page_on_show(container)).toBe("0");
     expect(current_screen.value).toBe("main");
+  });
+
+  it("opens on the battery page for the shell's battery screen", () => {
+    act(() => go("battery"));
+    const { container } = render(<OpenScreen />);
+    expect(page_on_show(container)).toBe("1");
+    expect(screen.getByText("Discharging")).toBeTruthy();
   });
 
   it("shows the version, uptime, last restart and free storage", () => {

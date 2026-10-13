@@ -14,15 +14,6 @@
         "Uptime",
         "watchdog"
       ]
-    },
-    {
-      "name": "battery",
-      "reached_by": "swipe up",
-      "texts": [
-        "4.05 volts",
-        "87%",
-        "Discharging"
-      ]
     }
   ]
 }

@@ -473,7 +473,7 @@ pub struct Node {
     pub shows_scroll_bar: bool,
     /// Whether a Dropdown has its list open.
     pub is_open: bool,
-    /// How many options a Dropdown offers, for the height of its open list.
+    /// How many options a Dropdown offers, for the height of its open list, or how many pages a Pages holds.
     pub option_count: u8,
     /// Where the widget was last drawn, so moving or hiding it can clear that area.
     pub drawn_bounds: Option<Rect>,

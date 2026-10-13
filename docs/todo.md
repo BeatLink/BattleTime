@@ -486,8 +486,11 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   ring cannot be dragged; only tap tempo works.
 - [ ] **A canvas widget for free drawing.** Paint fills cells of a 20 by 20 grid; InfiniTime
   paints where the finger is.
-- [ ] **Pages and Tabs widgets** that swipe between pages with a page indicator, as InfiniTime's
-  paged lists do. Both are laid out as a plain column now.
+- [ ] **A Tabs widget** that swipes between pages under a row of tabs. It is laid out as a plain
+  column now; `Pages` does the swiping without tabs.
+- [ ] **Move the other paged apps onto `Pages`.** Steps and the apps that page by `go()` and
+  `onSwipe` up and down still do it by hand; the agreed model is pages left and right through
+  `Pages`, with up and down kept for scrolling within a page.
 - [ ] **Cyrillic text.** InfiniTime's 20 px font has Cyrillic letters for notifications and music
   titles. Add them to the text fonts in `tools/generate_fonts.py`.
 - [ ] **More library icons:** brightness levels, sleep, notifications on and off, list,

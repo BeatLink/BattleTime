@@ -17,7 +17,7 @@ use neotime_ui::{
 };
 
 use crate::fonts::{self, line_height, text_width, FontName};
-use crate::layout::{visible_length, TICK_BOX_GAP, TICK_BOX_SIZE};
+use crate::layout::{has_page_bar, visible_length, TICK_BOX_GAP, TICK_BOX_SIZE};
 use crate::nodes::{
     inset, resolve, resolve_or_clear, to_color, Align, Extra, LongMode, Node, Settings, OPAQUE, TRANSPARENT,
 };
@@ -342,6 +342,12 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
             draw_roller(node, context, renderer);
         }
         Dropdown => draw_dropdown(node, context, renderer),
+        Pages => {
+            plain_frame(renderer);
+            if has_page_bar(node) {
+                draw_page_bar(node, context, renderer);
+            }
+        }
         _ => plain_frame(renderer),
     }
 }
@@ -1576,6 +1582,49 @@ pub fn draw_scroll_bar(node: &Node, content_length: i32, context: &DrawContext, 
     let bright = resolve(None, ThemeColor::Muted, context.theme);
     let dim = resolve(None, ThemeColor::Surface, context.theme);
     for_each_scroll_bar_part(node, content_length, |area, is_bright| {
+        if let Some(area) = area.intersect(context.clip) {
+            renderer.fill_rect(area, if is_bright { bright } else { dim });
+        }
+    });
+}
+
+/// Gives each part of a Pages' bar along its bottom: a segment per page with the one on show bright,
+/// or, when the segments would be too short, a bright thumb over a dim track.
+pub fn for_each_page_bar_part(node: &Node, mut part: impl FnMut(Rect, bool)) {
+    let bounds = node.bounds;
+    let pages = i32::from(node.option_count).max(1);
+    let current = node.settings.value.clamp(0, pages - 1);
+    let along = |start: i32, end: i32| Rect {
+        x: bounds.x + start,
+        y: bounds.y + bounds.height - SCROLL_BAR_WIDTH,
+        width: end - start,
+        height: SCROLL_BAR_WIDTH,
+    };
+    let pitch = bounds.width / pages;
+    if pitch - 2 * SCROLL_BAR_INSET >= SCROLL_BAR_WIDTH {
+        for page in 0..pages {
+            part(
+                along(
+                    page * pitch + SCROLL_BAR_INSET,
+                    (page + 1) * pitch - SCROLL_BAR_INSET,
+                ),
+                page == current,
+            );
+        }
+        return;
+    }
+    let room = (bounds.width - 2 * SCROLL_BAR_INSET).max(0);
+    let thumb = (room / pages).max(SMALLEST_THUMB.min(room));
+    let start = SCROLL_BAR_INSET + (room - thumb) * current / (pages - 1).max(1);
+    part(along(SCROLL_BAR_INSET, SCROLL_BAR_INSET + room), false);
+    part(along(start, start + thumb), true);
+}
+
+/// Draws a Pages' bar along its bottom, in the colours of a scroll bar.
+fn draw_page_bar(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
+    let bright = resolve(None, ThemeColor::Muted, context.theme);
+    let dim = resolve(None, ThemeColor::Surface, context.theme);
+    for_each_page_bar_part(node, |area, is_bright| {
         if let Some(area) = area.intersect(context.clip) {
             renderer.fill_rect(area, if is_bright { bright } else { dim });
         }

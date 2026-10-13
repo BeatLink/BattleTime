@@ -12,9 +12,10 @@ expect text "1d 00:25:02"
 set free_storage_kilobytes 512
 expect text "512 KB free"
 
-# Swiping up shows the battery: the charge, its state and the voltage, and a warning to charge below ten percent.
-swipe up
-expect screen battery
+# Swiping left turns to the battery page: the charge, its state and the voltage, and a warning to charge below ten percent.
+swipe left
+expect screen main
+expect no text "512 KB free"
 expect text "87%"
 expect text "Discharging"
 expect text "4.05 volts"
@@ -34,8 +35,8 @@ set battery_percent 100
 set battery_millivolts 4180
 expect text "Fully charged"
 
-# Swiping down goes back to the system page.
-swipe down
+# Swiping right turns back to the system page.
+swipe right
 expect screen main
 expect text "512 KB free"
 expect no failures

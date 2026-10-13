@@ -775,7 +775,15 @@ Layout is a small flexbox, worked out again whenever a value changes:
   a whole page, 2 lays the children out across and scrolls them sideways (a `Scroll` or `List`
   only), and 4 leaves the scroll bar out. A `TextFile` takes 1 and 4. While a scrolling widget's
   content is longer than it, layout keeps 4 pixels on its right, or bottom when it runs across,
-  and the host draws the bar there over everything else. **`Pages`** and **`Tabs`** are laid out like a `Column` for now.
+  and the host draws the bar there over everything else. A drag scrolls only a widget that runs
+  the way the drag mostly goes, so a drag across leaves a list that runs down alone.
+- **`Pages`** builds only the page on show, the child numbered by its `value`. A swipe left turns
+  to the next page and a swipe right to the one before, with a wipe the way the finger went, and
+  sends `onPageChange` with the new page; a swipe past the first or last page, or up or down, goes
+  on to the screen's `onSwipe` and then the shell. With more than one page it keeps 4 pixels along
+  its bottom for a page bar: a segment per page, the one on show in the muted grey. A growing
+  `Pages` fills the space left, whatever its page holds. **`Tabs`** is laid out like a `Column`
+  for now.
 
 A widget with no size gets the size it wants: a label's text, a button's text plus room around it
 (at least 44 pixels high), and fixed sizes for the rest, such as 100 pixels for an arc.
@@ -840,7 +848,7 @@ library has), in the order above. The app host's font slots start empty, and the
 | `ButtonMatrix` | The host | `"\n"` breaks rows; a press sends `{value}`; the button numbered `value` is highlighted. |
 | `Roller`, `Dropdown`, `Checkbox`, `Radio` | The host | A dropdown opens its list on a tap. |
 
-`Pages`, `Tabs`, `RichText`, `AnimatedImage`, `ArcLabel`, `Spinner`, `Table`, `Calendar`,
+`Tabs`, `RichText`, `AnimatedImage`, `ArcLabel`, `Spinner`, `Table`, `Calendar`,
 `ImageButton`, `Spinbox`, `TextArea` and `Keyboard` are still drawn as an empty box, with their
 `background` and border, laying out any children like a `Column`.
 

@@ -30,8 +30,13 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   the bottom. After a panel scroll only the ends of the thumb are drawn again.
   ![Settings with its scroll bar](../harness/snapshots/screens/app-settings.png)
 - **Swipes belong to the app.** Inside an app every swipe is the app's own, and a right swipe no
-  longer goes back. A swipe the app ignores goes on to the shell, so steps and the system pages,
-  which use only up and down, still step round the quick apps.
+  longer goes back. A swipe the app ignores goes on to the shell, so steps, which uses only up and
+  down, still steps round the quick apps, and an app with pages passes on the swipes past its
+  first and last page.
+- **Pages left and right.** An app's pages sit side by side: a swipe left wipes to the next and a
+  swipe right back to the one before, and a bar along the bottom marks the page on show, a segment
+  for each. A list on a page still scrolls up and down, and a drag across never moves it.
+  ![The system app's battery page](../harness/snapshots/screens/app-system-battery.png)
 - **Swipes on the watch face.** A swipe up opens the launcher, and a swipe down in the launcher
   closes it again. A swipe down pulls the notifications down from the top, and a second swipe down
   pulls quick settings down after them; a swipe up goes back a step. Swipes left and right step
@@ -109,7 +114,7 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **A steady battery charge.** The voltage is smoothed and read along InfiniTime's measured curve.
   The charge only rises on the charger and only falls off it, stops at 99 % while charging, and
   reads 100 % and not charging once the charger stays connected after the battery is full.
-- **Battery screen.** The second page of the `system` app, a swipe up from its system page, shows a
+- **Battery screen.** The second page of the `system` app, a swipe left from its system page, shows a
   tall battery on the left filled to the charge and, on the right, the charge, whether the battery
   is charging, fully charged, discharging, low or critical, and its voltage; while charging the
   battery fills up from the charge again and again.

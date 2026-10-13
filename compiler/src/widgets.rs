@@ -76,6 +76,7 @@ fn widget_kind(name: &str) -> Option<WidgetKind> {
         "Scroll" => Scroll,
         "List" => List,
         "Pages" => Pages,
+        "Page" => Column,
         "Tabs" => Tabs,
         "Label" => Label,
         "RichText" => RichText,
@@ -1119,6 +1120,22 @@ impl<'a> Compiler<'a> {
     // Widgets
     // ------------------------------------------------------------------------
 
+    /// A `Page` is a Column, or a Scroll when it has `scrolls`; takes `scrolls` out of its attributes.
+    fn page_kind(&self, attributes: &mut Vec<(String, Reference<'a>)>, span: Span) -> Compiled<WidgetKind> {
+        let Some(place) = attributes.iter().position(|(prop, _)| prop == "scrolls") else {
+            return Ok(WidgetKind::Column);
+        };
+        let (_, value) = attributes.remove(place);
+        match self.reference_constant(&value) {
+            Some(constant) if constant.is_truthy() => Ok(WidgetKind::Scroll),
+            Some(_) => Ok(WidgetKind::Column),
+            None => fail(
+                span,
+                "`scrolls` on a `Page` must be written out, as `scrolls` or `scrolls={false}`",
+            ),
+        }
+    }
+
     fn build_widget(
         &mut self,
         name: &str,
@@ -1142,6 +1159,14 @@ impl<'a> Compiler<'a> {
             );
         };
         let mut properties: Vec<(Property, PropertySource)> = Vec::new();
+        let mut attributes = attributes;
+        if name == "Page" {
+            kind = self.page_kind(&mut attributes, span)?;
+            // A page fills its Pages, whatever it holds.
+            if !attributes.iter().any(|(prop, _)| prop == "grow") {
+                properties.push((Property::Grow, PropertySource::Constant(1)));
+            }
+        }
         let mut conditions = conditions.to_vec();
         let mut bound_value: Option<u8> = None;
         let mut change_handler: Option<Reference<'a>> = None;

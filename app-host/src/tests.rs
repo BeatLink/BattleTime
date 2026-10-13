@@ -2791,3 +2791,196 @@ fn a_derive_reads_the_arrays_native_work_reads_but_not_the_one_it_writes() {
 
     assert_eq!(inputs.state_slots, (1 << asked) | (1 << source) | (1 << compared));
 }
+
+// ============================================================================
+// Pages
+// ============================================================================
+
+/// Three pages, the middle one a list taller than the screen; turning a page keeps the new page's number.
+fn pages_image(start_page: i32) -> Vec<u8> {
+    use Instruction::*;
+
+    let mut writer = ImageWriter::new("pages", "Pages", AppKind::App, 1);
+    let page = writer.variable("page", ValueType::Int, false, 0);
+    let main = writer.string("main");
+    let first = writer.string("First");
+    let row = writer.string("Row");
+    let last = writer.string("Last");
+    let keep_page = writer.handler(code(|code| {
+        code.emit(ReadEvent(0)).emit(WriteState(page));
+    }));
+    let constant = PropertySource::Constant;
+    writer.widget(
+        WidgetKind::Column,
+        1,
+        &[(Property::ScreenName, constant(main as i32))],
+    );
+    writer.widget(
+        WidgetKind::Pages,
+        3,
+        &[
+            (Property::Grow, constant(1)),
+            (Property::Value, constant(start_page)),
+            (Property::OnPageChange, PropertySource::Handler(keep_page)),
+        ],
+    );
+    writer.widget(WidgetKind::Column, 1, &[(Property::Grow, constant(1))]);
+    writer.widget(WidgetKind::Label, 0, &[(Property::Text, constant(first as i32))]);
+    writer.widget(
+        WidgetKind::Scroll,
+        LIST_ROWS as u8,
+        &[(Property::Grow, constant(1))],
+    );
+    for _ in 0..LIST_ROWS {
+        writer.widget(
+            WidgetKind::Label,
+            0,
+            &[
+                (Property::Text, constant(row as i32)),
+                (Property::Height, constant(60)),
+            ],
+        );
+    }
+    writer.widget(WidgetKind::Column, 1, &[(Property::Grow, constant(1))]);
+    writer.widget(WidgetKind::Label, 0, &[(Property::Text, constant(last as i32))]);
+    writer.build()
+}
+
+const LIST_ROWS: u16 = 6;
+const PAGES: u16 = 1;
+const FIRST_LABEL: u16 = 3;
+const LIST: u16 = 4;
+const LAST_LABEL: u16 = 6 + LIST_ROWS;
+
+/// Where the first row of the pages' list lies.
+fn row_areas(host: &AppHost) -> Option<Rect> {
+    host.widget_bounds(LIST + 1).map(|(area, _)| area)
+}
+
+#[test]
+fn only_the_page_on_show_is_built_and_it_fills_the_pages_above_the_bar() {
+    let image = pages_image(0);
+    let mut system = FakeSystem::default();
+    let host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    assert_eq!(host.widget_text(FIRST_LABEL), Some("First"));
+    assert_eq!(host.widget_bounds(LIST), None);
+    assert_eq!(host.widget_bounds(LAST_LABEL), None);
+    let (pages, _) = host.widget_bounds(PAGES).unwrap();
+    let (page, _) = host.widget_bounds(FIRST_LABEL - 1).unwrap();
+    assert_eq!(page.height, pages.height - crate::drawing::SCROLL_BAR_ROOM);
+}
+
+#[test]
+fn a_swipe_left_turns_to_the_next_page_with_a_wipe_and_tells_the_app() {
+    let image = pages_image(0);
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+    host.draw(&mut screen).unwrap();
+
+    let result = host.touch(Touch::Swipe(SwipeDirection::Left), START_TIME, &mut system);
+
+    assert_eq!(result, EventResult::Handled);
+    assert_eq!(host.widget_bounds(FIRST_LABEL), None);
+    assert!(host.widget_bounds(LIST).is_some());
+    assert_eq!(host.next_transition(), Transition::Left);
+    assert_eq!(host.state().get(0), Some(1));
+    assert!(host.needs_drawing());
+
+    host.touch(Touch::Swipe(SwipeDirection::Right), START_TIME, &mut system);
+    assert_eq!(host.widget_text(FIRST_LABEL), Some("First"));
+    assert_eq!(host.next_transition(), Transition::Right);
+    assert_eq!(host.state().get(0), Some(0));
+}
+
+#[test]
+fn a_swipe_past_the_first_or_last_page_goes_to_the_screen() {
+    let image = pages_image(0);
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let before_the_first = host.touch(Touch::Swipe(SwipeDirection::Right), START_TIME, &mut system);
+
+    let image = pages_image(2);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let past_the_last = host.touch(Touch::Swipe(SwipeDirection::Left), START_TIME, &mut system);
+    let up = host.touch(Touch::Swipe(SwipeDirection::Up), START_TIME, &mut system);
+
+    assert_eq!(
+        [before_the_first, past_the_last, up],
+        [EventResult::NotHandled; 3]
+    );
+    assert_eq!(host.widget_text(LAST_LABEL), Some("Last"));
+}
+
+#[test]
+fn a_page_out_of_range_shows_the_last_page() {
+    let image = pages_image(9);
+    let mut system = FakeSystem::default();
+    let host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    assert_eq!(host.widget_text(LAST_LABEL), Some("Last"));
+}
+
+#[test]
+fn a_drag_mostly_across_leaves_a_list_that_runs_down_alone_so_the_swipe_turns_the_page() {
+    let image = pages_image(1);
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let rows_before = row_areas(&host);
+
+    host.touch(Touch::Press { x: 200, y: 100 }, START_TIME, &mut system);
+    host.touch(
+        Touch::Drag {
+            x: 60,
+            y: 80,
+            start_x: 200,
+            start_y: 100,
+        },
+        START_TIME,
+        &mut system,
+    );
+    assert_eq!(row_areas(&host), rows_before);
+    let swipe = host.touch(Touch::Swipe(SwipeDirection::Left), START_TIME, &mut system);
+
+    assert_eq!(swipe, EventResult::Handled);
+    assert_eq!(host.widget_text(LAST_LABEL), Some("Last"));
+}
+
+#[test]
+fn a_drag_down_still_scrolls_the_list_on_its_page() {
+    let image = pages_image(1);
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let rows_before = row_areas(&host);
+
+    host.touch(Touch::Press { x: 120, y: 200 }, START_TIME, &mut system);
+    host.touch(
+        Touch::Drag {
+            x: 130,
+            y: 100,
+            start_x: 120,
+            start_y: 200,
+        },
+        START_TIME,
+        &mut system,
+    );
+
+    assert_ne!(row_areas(&host), rows_before);
+}
+
+#[test]
+fn the_page_bar_marks_the_page_on_show() {
+    let image = pages_image(1);
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+    host.draw(&mut screen).unwrap();
+    let bright = rgb565(DEFAULT_THEME.color(ThemeColor::Muted));
+    let dim = rgb565(DEFAULT_THEME.color(ThemeColor::Surface));
+    let bar_row = 239;
+
+    assert_eq!(screen.pixel(40, bar_row), dim);
+    assert_eq!(screen.pixel(120, bar_row), bright);
+    assert_eq!(screen.pixel(200, bar_row), dim);
+}

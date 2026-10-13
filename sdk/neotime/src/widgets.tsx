@@ -2,7 +2,7 @@
 // In a browser each is a Preact component styled like rlvgl's dark theme on a 240x240 screen.
 
 import { batch, type Signal } from "@preact/signals";
-import type { ComponentChildren, JSX } from "preact";
+import { toChildArray, type ComponentChildren, type JSX } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type {
   ChangeEvent,
@@ -10,6 +10,7 @@ import type {
   Color,
   DragEvent,
   Instant,
+  PageChangeEvent,
   SwipeDirection,
   SwipeEvent,
   ThemeColorName,
@@ -346,8 +347,12 @@ export function Screen(props: ScreenProps) {
   );
 }
 
-/** Gives a swipe to the screen on show; the shell's own swipes happen only on the face, which the preview leaves out. */
+/** Each `Pages` on show, which a swipe across turns before the screen hears of it; it answers whether it turned. */
+const pages_on_show: ((direction: SwipeDirection) => boolean)[] = [];
+
+/** Gives a swipe to a `Pages` that can turn that way, else to the screen on show; the shell's own swipes happen only on the face, which the preview leaves out. */
 export function swipe(direction: SwipeDirection) {
+  if (pages_on_show.some((turn) => turn(direction))) return;
   if (active_screen.onSwipe) run_handler(active_screen.onSwipe, { direction });
 }
 
@@ -604,6 +609,92 @@ export function Scroll(props: FlexProps & ScrollingProps) {
 /** A scrolling list of rows, drawn in the browser like a `Scroll`. */
 export function List(props: FlexProps & ScrollingProps) {
   return <ScrollArea {...props} widget="list" />;
+}
+
+// ============================================================================
+// Pages
+// ============================================================================
+
+export interface PagesProps extends CommonProps {
+  /** One `Page` for each page, in order. */
+  children?: ComponentChildren;
+  /** The page on show when the screen opens, counted from 0. */
+  value?: number;
+  onPageChange?: (event: PageChangeEvent) => void;
+}
+
+/**
+ * Pages side by side, one on show at a time: a swipe left shows the next and a swipe right the one
+ * before, wiping across, and a bar along the bottom marks which is on show. A swipe past the first or
+ * last page goes to the screen's `onSwipe`.
+ */
+export function Pages(props: PagesProps) {
+  const pages = toChildArray(props.children);
+  const [chosen, set_chosen] = useState(props.value ?? 0);
+  const current = Math.min(Math.max(0, chosen), Math.max(0, pages.length - 1));
+  const turn = useRef<(direction: SwipeDirection) => boolean>(() => false);
+  turn.current = (direction) => {
+    const page = current + (direction === "left" ? 1 : direction === "right" ? -1 : 0);
+    if (page === current || page < 0 || page >= pages.length) return false;
+    set_chosen(page);
+    run_handler(props.onPageChange, { page });
+    return true;
+  };
+
+  useEffect(() => {
+    if (props.value !== undefined) set_chosen(props.value);
+  }, [props.value]);
+  useEffect(() => {
+    const turner = (direction: SwipeDirection) => turn.current(direction);
+    pages_on_show.push(turner);
+    return () => {
+      pages_on_show.splice(pages_on_show.indexOf(turner), 1);
+    };
+  }, []);
+  return (
+    <div
+      data-widget="pages"
+      data-page={current}
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        minWidth: 0,
+        boxSizing: "border-box",
+        paddingBottom: pages.length > 1 ? `${SCROLL_BAR_ROOM}px` : undefined,
+        ...common_style(props),
+      }}
+    >
+      {pages[current]}
+      {pages.length > 1 && (
+        <div style={{ position: "absolute", display: "flex", left: 0, right: 0, bottom: 0, height: `${SCROLL_BAR_WIDTH}px` }}>
+          {pages.map((_, page) => (
+            <div
+              data-widget="page-bar-part"
+              style={{
+                flex: 1,
+                margin: `0 ${SCROLL_BAR_INSET}px`,
+                background: page === current ? theme.muted : theme.surface,
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export interface PageProps extends FlexProps, Omit<ScrollingProps, "direction"> {
+  /** Whether the page's content scrolls down when it is longer than the page; it fills the page either way. */
+  scrolls?: boolean;
+}
+
+/** One page of a `Pages`: a `Column` that fills it, or a `Scroll` when it `scrolls`. */
+export function Page(props: PageProps) {
+  const { scrolls, ...rest } = props;
+  const filled = { grow: 1, ...rest };
+  return scrolls ? <ScrollArea {...filled} widget="scroll" /> : <Flex {...filled} direction="column" widget="column" />;
 }
 
 export interface AppListProps extends CommonProps, Omit<ScrollingProps, "direction"> {

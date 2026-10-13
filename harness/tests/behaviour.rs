@@ -219,17 +219,18 @@ fn open_system_page() -> TestWatch {
 }
 
 #[test]
-fn the_system_app_opens_on_the_system_page_and_pages_up_to_the_battery() {
+fn the_system_app_opens_on_the_system_page_and_pages_left_to_the_battery() {
     let mut watch = TestWatch::open_app("system").unwrap();
     assert_eq!(watch.screen_name(), Some("main"));
     assert!(watch.shows_text("2.7 MB free"), "{:?}", watch.visible_texts());
 
-    watch.swipe(Direction::Up);
-    assert_eq!(watch.screen_name(), Some("battery"));
-    assert!(watch.shows_text("Discharging"), "{:?}", watch.visible_texts());
-
-    watch.swipe(Direction::Down);
+    watch.swipe(Direction::Left);
     assert_eq!(watch.screen_name(), Some("main"));
+    assert!(watch.shows_text("Discharging"), "{:?}", watch.visible_texts());
+    assert!(!watch.shows_text("2.7 MB free"));
+
+    watch.swipe(Direction::Right);
+    assert!(watch.shows_text("2.7 MB free"), "{:?}", watch.visible_texts());
     watch.swipe(Direction::Right);
     assert!(
         watch.effects_of(EffectKind::Back).is_empty(),
@@ -626,16 +627,27 @@ fn the_software_app_shows_the_need_against_the_budget_for_an_app_too_large() {
 // ============================================================================
 
 #[test]
-fn swipes_the_first_pages_of_steps_and_system_ignore_go_on_to_the_shell() {
-    for id in ["steps", "system"] {
-        let mut watch = TestWatch::open_app(id).unwrap();
+fn swipes_the_first_page_of_steps_ignores_go_on_to_the_shell() {
+    let mut watch = TestWatch::open_app("steps").unwrap();
 
-        // Left and right do nothing on the first page, so the shell can step round the quick apps.
-        assert_eq!(watch.swipe(Direction::Left), EventResult::NotHandled, "{id}");
-        assert_eq!(watch.swipe(Direction::Right), EventResult::NotHandled, "{id}");
-        assert!(watch.effects_of(EffectKind::Back).is_empty(), "{id}");
+    // Left and right do nothing on the first page, so the shell can step round the quick apps.
+    assert_eq!(watch.swipe(Direction::Left), EventResult::NotHandled);
+    assert_eq!(watch.swipe(Direction::Right), EventResult::NotHandled);
+    assert!(watch.effects_of(EffectKind::Back).is_empty());
 
-        assert_eq!(watch.swipe(Direction::Up), EventResult::Handled, "{id}");
-        assert_ne!(watch.screen_name(), Some("main"), "{id}");
-    }
+    assert_eq!(watch.swipe(Direction::Up), EventResult::Handled);
+    assert_ne!(watch.screen_name(), Some("main"));
+}
+
+#[test]
+fn a_swipe_past_the_system_apps_pages_goes_on_to_the_shell() {
+    let mut watch = TestWatch::open_app("system").unwrap();
+
+    // Before the first page and past the last, and up and down, the shell has the swipe.
+    assert_eq!(watch.swipe(Direction::Right), EventResult::NotHandled);
+    assert_eq!(watch.swipe(Direction::Up), EventResult::NotHandled);
+    assert_eq!(watch.swipe(Direction::Left), EventResult::Handled);
+    assert_eq!(watch.swipe(Direction::Left), EventResult::NotHandled);
+    assert_eq!(watch.swipe(Direction::Down), EventResult::NotHandled);
+    assert!(watch.effects_of(EffectKind::Back).is_empty());
 }

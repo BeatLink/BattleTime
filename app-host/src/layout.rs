@@ -454,6 +454,9 @@ fn place(nodes: &mut [Box<Node>], index: usize, bounds: Rect, parent_shown: bool
             false => inner.width = (inner.width - SCROLL_BAR_ROOM).max(0),
         }
     }
+    if has_page_bar(node) {
+        inner.height = (inner.height - SCROLL_BAR_ROOM).max(0);
+    }
     if clips_children(node.kind) {
         match across {
             true => inner.x -= node.scroll_offset as i32,
@@ -539,8 +542,13 @@ fn place_flow(
         let wanted = if is_down { settings.height } else { settings.width };
         match wanted {
             Some(length) => length.of(main_space),
-            // A growing Scroll or List fills the space left and scrolls the rest, so its content never sizes it.
-            None if clips_children(nodes[child].kind) && settings.grow > 0 => 2 * i32::from(settings.padding),
+            // A growing Scroll or List fills the space left and scrolls the rest, and a growing Pages fills it
+            // with one page, so their content never sizes them.
+            None if (clips_children(nodes[child].kind) || nodes[child].kind == WidgetKind::Pages)
+                && settings.grow > 0 =>
+            {
+                2 * i32::from(settings.padding)
+            }
             None => main_of(natural_size(nodes, child, is_down.then_some(cross))),
         }
     };
@@ -738,6 +746,11 @@ pub fn farthest_scroll(nodes: &[Box<Node>], index: usize) -> i32 {
 }
 
 /// Whether a scrolling widget draws a scroll bar, and so keeps room beside its content for it.
+/// Whether a widget is a Pages with more than one page, so it keeps room along its bottom for its page bar.
+pub fn has_page_bar(node: &Node) -> bool {
+    node.kind == WidgetKind::Pages && node.option_count > 1
+}
+
 fn wants_scroll_bar_room(nodes: &[Box<Node>], index: usize) -> bool {
     let node = &nodes[index];
     let overflows = match node.kind {

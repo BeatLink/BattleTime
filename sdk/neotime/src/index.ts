@@ -330,6 +330,11 @@ export interface SwipeEvent {
   direction: SwipeDirection;
 }
 
+export interface PageChangeEvent {
+  /** The page now on show, counted from 0. */
+  page: number;
+}
+
 export interface ChangeEvent<Value> {
   value: Value;
 }
