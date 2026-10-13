@@ -254,8 +254,6 @@ the ones above it.
   - The other faces' own status rows on `StatusIcons`: analog, lite-analog, lite-digital,
     lite-rings, infineat, pinetime-style and pride-flag still build theirs from icons, in
     colours and orders of their own; `StatusIcons` would need a colour for each icon.
-  - `Stepper` in the apps that step a value by hand: settings' step goal, the metronome's tempo
-    and pomodoro's buzz length, each laid out its own way today.
   - A `ring(title, icon, until)` system alert with dismiss and snooze events, with the vibration
     and the stop after a time limit, for the alarm, timer and pomodoro.
   - A digit-entry mode for `ButtonMatrix`, for the calculator and pomodoro.

@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { brightness, is_bluetooth_enabled, is_do_not_disturb, set_setting, settings } from "neotime";
 import { install_apps, open, OpenScreen, press_button, screen_stack, start_scheduler } from "neotime/preview";
 import app, {
-  change_step_goal,
   set_brightness_level,
   set_timeout,
   toggle_24_hour_clock,
@@ -91,12 +90,19 @@ describe("settings", () => {
   });
 
   it("keeps the step goal between 1,000 and 50,000", () => {
-    settings.step_goal.value = 1000;
-    change_step_goal(-500);
+    const { container } = render(<OpenScreen />);
+    open_row(container, "Step goal");
+    const button = (place: number) => widgets(container, "stepper")[0].querySelectorAll("button")[place] as HTMLElement;
+    act(() => {
+      settings.step_goal.value = 1000;
+    });
+    tap(button(0));
     expect(settings.step_goal.value).toBe(1000);
 
-    settings.step_goal.value = 49800;
-    change_step_goal(500);
+    act(() => {
+      settings.step_goal.value = 49800;
+    });
+    tap(button(1));
     expect(settings.step_goal.value).toBe(50000);
   });
 

@@ -10,7 +10,6 @@
 import { computed } from "@preact/signals";
 import {
   brightness,
-  clamp,
   define_app,
   type Color,
   go,
@@ -23,7 +22,7 @@ import {
   settings,
 } from "neotime";
 import { icons } from "neotime/icons";
-import { Button, Column, Grid, Icon, Label, Row, Screen, Scroll, Switch } from "neotime/widgets";
+import { Button, Column, Grid, Icon, Label, Row, Screen, Scroll, Stepper, Switch } from "neotime/widgets";
 
 // ============================================================================
 // Choices
@@ -72,10 +71,6 @@ export function set_brightness_level(level: number) {
 
 export function set_timeout(seconds: number) {
   set_setting("screen_timeout_seconds", seconds);
-}
-
-export function change_step_goal(by: number) {
-  set_setting("step_goal", clamp(settings.step_goal.value + by, LOWEST_STEP_GOAL, HIGHEST_STEP_GOAL));
 }
 
 export function toggle_24_hour_clock() {
@@ -209,16 +204,17 @@ function StepGoal() {
       <Label color="muted">Daily step goal</Label>
       <Column grow={1} align_items="center" justify="center">
         <Icon icon={icons.steps} size={36} color="accent" />
-        <Label font="large">{`${settings.step_goal.value}`}</Label>
       </Column>
-      <Row gap={6} height={52}>
-        <Button grow={1} height="100%" onClick={() => change_step_goal(-STEP_GOAL_STEP)}>
-          <Icon icon={icons.minus} />
-        </Button>
-        <Button grow={1} height="100%" onClick={() => change_step_goal(STEP_GOAL_STEP)}>
-          <Icon icon={icons.plus} />
-        </Button>
-      </Row>
+      <Stepper
+        height={52}
+        gap={6}
+        font="large"
+        value={settings.step_goal.value}
+        minimum={LOWEST_STEP_GOAL}
+        maximum={HIGHEST_STEP_GOAL}
+        step={STEP_GOAL_STEP}
+        onChange={(event) => set_setting("step_goal", event.value)}
+      />
     </Screen>
   );
 }
