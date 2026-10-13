@@ -1888,12 +1888,12 @@ fn an_app_list_in_columns_lays_its_apps_out_as_square_cells() {
 
     let rows = host.widget_rows(0);
     let cell = rows[1].1;
-    // 240 less 16 of padding and two 8 pixel gaps, in three columns.
-    assert_eq!((cell.width, cell.height), (69, 69));
-    assert_eq!(rows[2].1.x - cell.x, 77);
-    assert_eq!(rows[4].1.y - cell.y, 77);
+    // 240 less 16 of padding, 4 kept for the scroll bar and two 8 pixel gaps, in three columns.
+    assert_eq!((cell.width, cell.height), (68, 68));
+    assert_eq!(rows[2].1.x - cell.x, 76);
+    assert_eq!(rows[4].1.y - cell.y, 76);
     // The second group's heading starts a row of its own, under the half-full one.
-    assert_eq!(rows[5].1.y, rows[4].1.y + 77);
+    assert_eq!(rows[5].1.y, rows[4].1.y + 76);
     // Its one app sits below it, past the screen's bottom.
     assert_eq!(rows.len(), 6);
 

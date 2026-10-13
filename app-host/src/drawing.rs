@@ -938,11 +938,13 @@ pub struct AppListItem<'text> {
 ///
 /// With one column each app is a row; with more they sit in square cells, and a heading always
 /// takes a whole row of its own. One walk, not an iterator, so its code is in the firmware once.
-fn walk_app_list<'node>(node: &'node Node, visit: &mut dyn FnMut(AppListItem<'node>) -> bool) {
+///
+/// `bar_room` is the width kept on the right for a scroll bar.
+fn walk_app_list<'node>(node: &'node Node, bar_room: i32, visit: &mut dyn FnMut(AppListItem<'node>) -> bool) {
     let padding = i32::from(node.settings.padding);
     let gap = i32::from(node.settings.gap);
     let columns = i32::from(node.settings.columns).max(1);
-    let inner_width = (node.bounds.width - 2 * padding).max(0);
+    let inner_width = (node.bounds.width - 2 * padding - bar_room).max(0);
     let cell_width = ((inner_width - (columns - 1) * gap) / columns).max(0);
     let cell_height = if columns == 1 { APP_ROW_HEIGHT } else { cell_width };
     let left = node.bounds.x + padding;
@@ -998,12 +1000,31 @@ fn walk_app_list<'node>(node: &'node Node, visit: &mut dyn FnMut(AppListItem<'no
     }
 }
 
+/// The width an AppList keeps for its scroll bar: none unless layout gave it one.
+fn app_list_bar_room(node: &Node) -> i32 {
+    match node.shows_scroll_bar {
+        true => SCROLL_BAR_ROOM,
+        false => 0,
+    }
+}
+
 /// How tall an AppList's items are together, with its padding, to bound how far it scrolls.
 pub fn app_list_height(node: &Node) -> i32 {
+    app_list_height_with_room(node, app_list_bar_room(node))
+}
+
+/// How tall an AppList's items are at its full width, which decides whether it needs a scroll bar.
+///
+/// Narrower grid cells are shorter, so deciding at the width the bar leaves could turn it off again.
+pub fn app_list_height_without_bar(node: &Node) -> i32 {
+    app_list_height_with_room(node, 0)
+}
+
+fn app_list_height_with_room(node: &Node, bar_room: i32) -> i32 {
     let padding = i32::from(node.settings.padding);
     let content_top = node.bounds.y + padding - i32::from(node.scroll_offset);
     let mut bottom = None;
-    walk_app_list(node, &mut |item| {
+    walk_app_list(node, bar_room, &mut |item| {
         bottom = Some(item.area.y + item.area.height);
         true
     });
@@ -1013,7 +1034,7 @@ pub fn app_list_height(node: &Node) -> i32 {
 /// The place of the app whose cell is under a touch, or none on a heading, between cells and past the last.
 pub fn app_row_at(node: &Node, x: i32, y: i32) -> Option<i32> {
     let mut touched = None;
-    walk_app_list(node, &mut |item| {
+    walk_app_list(node, app_list_bar_room(node), &mut |item| {
         let area = item.area;
         let inside = x >= area.x && x < area.x + area.width && y >= area.y && y < area.y + area.height;
         if inside {
@@ -1027,7 +1048,7 @@ pub fn app_row_at(node: &Node, x: i32, y: i32) -> Option<i32> {
 /// Each item of an AppList that is at least partly inside it.
 pub fn app_list_rows(node: &Node) -> Vec<AppListItem<'_>> {
     let mut rows = Vec::new();
-    walk_app_list(node, &mut |item| {
+    walk_app_list(node, app_list_bar_room(node), &mut |item| {
         let area = item.area;
         if area.y + area.height > node.bounds.y && area.y < node.bounds.y + node.bounds.height {
             rows.push(item);

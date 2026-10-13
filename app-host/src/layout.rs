@@ -736,14 +736,13 @@ pub fn farthest_scroll(nodes: &[Box<Node>], index: usize) -> i32 {
 }
 
 /// Whether a scrolling widget draws a scroll bar, and so keeps room beside its content for it.
-///
-/// The App list draws its own rows to its edges, so it has no bar yet.
 fn wants_scroll_bar_room(nodes: &[Box<Node>], index: usize) -> bool {
     let node = &nodes[index];
-    clips_children(node.kind)
-        && node.kind != WidgetKind::AppList
-        && node.wants_scroll_bar()
-        && farthest_scroll(nodes, index) > 0
+    let overflows = match node.kind {
+        WidgetKind::AppList => crate::drawing::app_list_height_without_bar(node) > visible_length(node),
+        _ => farthest_scroll(nodes, index) > 0,
+    };
+    clips_children(node.kind) && node.wants_scroll_bar() && overflows
 }
 
 #[cfg(test)]

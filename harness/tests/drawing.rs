@@ -333,7 +333,11 @@ fn the_launcher_scrolls_the_whole_screen_with_the_panel() {
     drag_drawing_each_move(&mut app, &mut watch, 20, 200);
 
     assert_eq!(watch.scrolling_band(), (0, SIDE));
-    assert!(sent.iter().all(|&pixels| pixels <= 6 * SIDE), "{sent:?}");
+    assert!(
+        sent.iter().all(|&pixels| pixels <= 6 * SIDE + SCROLL_BAR_PIXELS),
+        "{sent:?}"
+    );
+    assert_eq!(watch.pixels_unlike(&app.fresh_frame()), 0);
 }
 
 #[test]

@@ -613,7 +613,7 @@ export function List(props: FlexProps & ScrollingProps) {
   return <ScrollArea {...props} widget="list" />;
 }
 
-export interface AppListProps extends CommonProps {
+export interface AppListProps extends CommonProps, Omit<ScrollingProps, "direction"> {
   /** Pixels between rows. */
   gap?: number;
   /** The place in `installed_apps` of the first app shown; 0 when left out. */
@@ -769,7 +769,7 @@ export function TextFile(props: TextFileProps) {
 }
 
 /** The props every widget shares, without the ones `AppList` handles itself. */
-function common_props_only(props: AppListProps): CommonProps {
+function common_props_only(props: AppListProps): CommonProps & Omit<ScrollingProps, "direction"> {
   const {
     gap: _gap,
     onClick: _on_click,
