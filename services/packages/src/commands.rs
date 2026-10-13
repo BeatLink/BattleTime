@@ -6,7 +6,7 @@
 use alloc::string::String;
 use core::fmt::Write;
 
-use littlefs_rust::{Filesystem, Storage};
+use neotime_flash_store::FileAccess;
 use neotime_runtime::{AppKind, APP_HEAP_BUDGET_BYTES};
 use serde::Deserialize;
 
@@ -23,8 +23,10 @@ struct Command<'line> {
 }
 
 /// Copies a library file into internal flash and checks it there; the firmware gives it the flash controller.
+#[allow(async_fn_in_trait)]
 pub trait LibraryInstaller {
-    fn install<S: Storage>(&mut self, files: &Filesystem<S>, path: &str) -> Result<(), LibraryError>;
+    async fn install<Files: FileAccess>(&mut self, files: &mut Files, path: &str)
+        -> Result<(), LibraryError>;
 
     /// The installed library's version, or None while none is installed.
     fn installed_version(&self) -> Option<u16>;
@@ -41,39 +43,39 @@ pub enum Change {
 }
 
 /// Runs one command line and returns the reply line, newline included, and what changed.
-pub fn handle_command<S: Storage>(
+pub async fn handle_command<Files: FileAccess>(
     line: &[u8],
-    files: &Filesystem<S>,
+    files: &mut Files,
     library: &mut impl LibraryInstaller,
 ) -> (String, Change) {
     let Ok((command, _)) = serde_json_core::from_slice::<Command>(line) else {
         return (error_reply("?", "could not read that command"), Change::None);
     };
-    let packages = Packages::new(files);
     let name = command.c;
+    if name == "install_library" {
+        return match library.install(files, LIBRARY_UPLOAD_PATH).await {
+            Ok(()) => (ok_reply(name), Change::Library),
+            Err(error) => (error_reply(name, error.describe()), Change::None),
+        };
+    }
+    let mut packages = Packages::new(files);
     let outcome = match (name, command.id) {
-        ("apps", _) => return (apps_reply(&packages), Change::None),
+        ("apps", _) => return (apps_reply(&mut packages).await, Change::None),
         ("install", Some(id)) => {
-            return match packages.install(id, library.installed_version()) {
+            return match packages.install(id, library.installed_version()).await {
                 Ok(app) => {
-                    let apps = packages.list().unwrap_or_default();
+                    let apps = packages.list().await.unwrap_or_default();
                     let need = crate::checks::room_needed(&app, &apps);
                     (ok_reply_with_need(name, need), Change::Apps)
                 }
                 Err(error) => (error_reply_for(name, error), Change::None),
             };
         }
-        ("remove", Some(id)) => packages.remove(id).map(|_| Change::Apps),
+        ("remove", Some(id)) => packages.remove(id).await.map(|_| Change::Apps),
         ("enable", Some(id)) => {
-            return match packages.change_enabled(id, command.on.unwrap_or(true)) {
+            return match packages.change_enabled(id, command.on.unwrap_or(true)).await {
                 Ok(need) => (ok_reply_with_need(name, need), Change::Apps),
                 Err(error) => (error_reply_for(name, error), Change::None),
-            };
-        }
-        ("install_library", _) => {
-            return match library.install(files, LIBRARY_UPLOAD_PATH) {
-                Ok(()) => (ok_reply(name), Change::Library),
-                Err(error) => (error_reply(name, error.describe()), Change::None),
             };
         }
         ("install" | "remove" | "enable", None) => {
@@ -143,8 +145,8 @@ fn error_reply(name: &str, message: &str) -> String {
 
 /// `{"c":"apps","room":budget,"a":[[id,name,kind,enabled,bytes,need],...]}`, kind being "app" or "face"
 /// and need the heap the app needs while open among the others.
-fn apps_reply<S: Storage>(packages: &Packages<S>) -> String {
-    let apps = match packages.list() {
+async fn apps_reply<Files: FileAccess>(packages: &mut Packages<'_, Files>) -> String {
+    let apps = match packages.list().await {
         Ok(apps) => apps,
         Err(error) => return error_reply("apps", error.describe()),
     };
@@ -193,45 +195,45 @@ mod tests {
 
     use std::{string::ToString, vec::Vec};
 
+    use embassy_futures::block_on;
     use embedded_storage::nor_flash::{ErrorType, NorFlash, NorFlashErrorKind, ReadNorFlash};
-    use littlefs_rust::{Config, RamStorage};
     use neotime_boot::{INTERNAL_FLASH_SIZE, PAGE_SIZE, SHARED_LIBRARY};
+    use neotime_flash_store::{ram_flash::RamFlash, FlashStore, Layout};
     use neotime_runtime::writer::ImageWriter;
 
     use super::*;
-    use crate::{app_file, app_folder, library, IMAGE_FILE};
+    use crate::{app_file, library, IMAGE_FILE};
 
-    fn file_system() -> Filesystem<RamStorage> {
-        let mut storage = RamStorage::new(4096, 64);
-        let config = Config::new(4096, 64);
-        Filesystem::format(&mut storage, &config).unwrap();
-        let files = Filesystem::mount(storage, config)
-            .map_err(|(error, _)| error)
-            .unwrap();
-        files.mkdir("/apps").unwrap();
-        files.mkdir("/resources").unwrap();
-        files
+    type TestStore = FlashStore<RamFlash, 32, 64, 8>;
+
+    fn store_of(file_sectors: usize) -> TestStore {
+        let layout = Layout {
+            start_address: 0,
+            file_sectors,
+            record_sectors: 8,
+            log_sectors: 4,
+        };
+        block_on(TestStore::mount(RamFlash::blank(layout.total_sectors()), layout)).unwrap()
     }
 
-    fn big_file_system() -> Filesystem<RamStorage> {
-        let mut storage = RamStorage::new(4096, 128);
-        let config = Config::new(4096, 128);
-        Filesystem::format(&mut storage, &config).unwrap();
-        let files = Filesystem::mount(storage, config)
-            .map_err(|(error, _)| error)
-            .unwrap();
-        files.mkdir("/resources").unwrap();
-        files
+    fn file_system() -> TestStore {
+        store_of(64)
     }
 
-    fn put_app(files: &Filesystem<RamStorage>, id: &str, name: &str, kind: AppKind) {
-        files.mkdir(&app_folder(id)).unwrap();
-        files
-            .write_file(
-                &app_file(id, IMAGE_FILE),
-                &ImageWriter::new(id, name, kind, 1).build(),
-            )
-            .unwrap();
+    fn big_file_system() -> TestStore {
+        store_of(128)
+    }
+
+    fn put(files: &mut TestStore, path: &str, bytes: &[u8]) {
+        block_on(FileAccess::write_file(files, path, bytes)).unwrap();
+    }
+
+    fn put_app(files: &mut TestStore, id: &str, name: &str, kind: AppKind) {
+        put(
+            files,
+            &app_file(id, IMAGE_FILE),
+            &ImageWriter::new(id, name, kind, 1).build(),
+        );
     }
 
     /// The whole internal flash, counting which pages were erased.
@@ -286,11 +288,16 @@ mod tests {
     struct Installer(FakeInternalFlash);
 
     impl LibraryInstaller for Installer {
-        fn install<S: Storage>(&mut self, files: &Filesystem<S>, path: &str) -> Result<(), LibraryError> {
+        async fn install<Files: FileAccess>(
+            &mut self,
+            files: &mut Files,
+            path: &str,
+        ) -> Result<(), LibraryError> {
             library::install_library_from_file(&mut self.0, files, path, |flash, length| {
                 let start = (SHARED_LIBRARY.start + library::LIBRARY_HEADER_BYTES) as usize;
                 crate::check_library_image(&flash.memory[start..start + length as usize])
             })
+            .await
         }
 
         fn installed_version(&self) -> Option<u16> {
@@ -299,21 +306,27 @@ mod tests {
         }
     }
 
-    fn run(line: &str, files: &Filesystem<RamStorage>) -> (String, Change) {
-        handle_command(line.as_bytes(), files, &mut Installer(FakeInternalFlash::new()))
+    fn run(line: &str, files: &mut TestStore) -> (String, Change) {
+        block_on(handle_command(
+            line.as_bytes(),
+            files,
+            &mut Installer(FakeInternalFlash::new()),
+        ))
     }
 
     #[test]
     fn apps_lists_each_app_with_its_kind_and_state() {
-        let files = file_system();
-        put_app(&files, "timer", "Timer", AppKind::App);
-        put_app(&files, "analog", "Analog \"classic\"", AppKind::Face);
-        Packages::new(&files).set_enabled("timer", false).unwrap();
+        let mut files = file_system();
+        put_app(&mut files, "timer", "Timer", AppKind::App);
+        put_app(&mut files, "analog", "Analog \"classic\"", AppKind::Face);
+        block_on(Packages::new(&mut files).set_enabled("timer", false)).unwrap();
 
-        let (reply, change) = run(r#"{"c":"apps"}"#, &files);
+        let (reply, change) = run(r#"{"c":"apps"}"#, &mut files);
 
         assert!(
-            reply.starts_with(r#"{"c":"apps","room":33792,"a":[["analog","Analog \"classic\"","face",1,"#),
+            reply.starts_with(&std::format!(
+                r#"{{"c":"apps","room":{APP_HEAP_BUDGET_BYTES},"a":[["analog","Analog \"classic\"","face",1,"#
+            )),
             "{reply}"
         );
         assert!(reply.contains(r#"["timer","Timer","app",0,"#));
@@ -323,77 +336,85 @@ mod tests {
 
     #[test]
     fn install_remove_and_enable_answer_and_report_a_change() {
-        let files = file_system();
-        put_app(&files, "timer", "Timer", AppKind::App);
-        let need = crate::Packages::new(&files).list().unwrap()[0].need_bytes;
+        let mut files = file_system();
+        put_app(&mut files, "timer", "Timer", AppKind::App);
+        let need = block_on(crate::Packages::new(&mut files).list()).unwrap()[0].need_bytes;
         let need = need + neotime_runtime::memory_need::listed_app_bytes("timer", "Timer");
         assert_eq!(
-            run(r#"{"c":"install","id":"timer"}"#, &files),
+            run(r#"{"c":"install","id":"timer"}"#, &mut files),
             (
-                std::format!("{{\"c\":\"install\",\"ok\":1,\"need\":{need},\"room\":33792}}\n"),
+                std::format!(
+                    "{{\"c\":\"install\",\"ok\":1,\"need\":{need},\"room\":{APP_HEAP_BUDGET_BYTES}}}\n"
+                ),
                 Change::Apps
             )
         );
         assert_eq!(
-            run(r#"{"c":"enable","id":"timer","on":false}"#, &files).1,
+            run(r#"{"c":"enable","id":"timer","on":false}"#, &mut files).1,
             Change::Apps
         );
-        assert!(!Packages::new(&files).list().unwrap()[0].enabled);
-        assert_eq!(run(r#"{"c":"remove","id":"timer"}"#, &files).1, Change::Apps);
-        assert!(Packages::new(&files).list().unwrap().is_empty());
+        assert!(!block_on(Packages::new(&mut files).list()).unwrap()[0].enabled);
+        assert_eq!(run(r#"{"c":"remove","id":"timer"}"#, &mut files).1, Change::Apps);
+        assert!(block_on(Packages::new(&mut files).list()).unwrap().is_empty());
     }
 
     #[test]
     fn refusals_give_their_number_and_the_need() {
-        let files = file_system();
-        put_app(&files, "launcher", "Apps", AppKind::App);
+        let mut files = file_system();
+        put_app(&mut files, "launcher", "Apps", AppKind::App);
         let mut huge = ImageWriter::new("huge", "Huge", AppKind::App, 1);
         huge.string(&"x".repeat(40_000));
-        files.mkdir(&app_folder("huge")).unwrap();
-        files
-            .write_file(&app_file("huge", IMAGE_FILE), &huge.build())
-            .unwrap();
+        put(&mut files, &app_file("huge", IMAGE_FILE), &huge.build());
 
-        let (reply, change) = run(r#"{"c":"install","id":"huge"}"#, &files);
+        let (reply, change) = run(r#"{"c":"install","id":"huge"}"#, &mut files);
         assert!(
             reply.starts_with(
                 r#"{"c":"install","err":"it needs more memory than an app can have","why":1,"need":"#
             ),
             "{reply}"
         );
-        assert!(reply.ends_with(",\"room\":33792}\n"), "{reply}");
+        assert!(
+            reply.ends_with(&std::format!(",\"room\":{APP_HEAP_BUDGET_BYTES}}}\n")),
+            "{reply}"
+        );
         assert_eq!(change, Change::None);
 
         assert_eq!(
-            run(r#"{"c":"enable","id":"launcher","on":false}"#, &files).0,
+            run(r#"{"c":"enable","id":"launcher","on":false}"#, &mut files).0,
             "{\"c\":\"enable\",\"err\":\"the launcher stays on\",\"why\":3}\n"
         );
         assert_eq!(
-            run(r#"{"c":"enable","id":"nothing"}"#, &files).0,
+            run(r#"{"c":"enable","id":"nothing"}"#, &mut files).0,
             "{\"c\":\"enable\",\"err\":\"no such app\"}\n"
         );
     }
 
     #[test]
     fn failures_say_why_in_the_reply() {
-        let files = file_system();
+        let mut files = file_system();
         assert_eq!(
-            run(r#"{"c":"install","id":"nothing"}"#, &files).0,
+            run(r#"{"c":"install","id":"nothing"}"#, &mut files).0,
             "{\"c\":\"install\",\"err\":\"no such app\"}\n"
         );
-        assert!(run(r#"{"c":"install"}"#, &files).0.contains("give the app's id"));
-        assert!(run(r#"{"c":"format"}"#, &files).0.contains("unknown command"));
-        assert!(run("not json", &files).0.contains("could not read"));
+        assert!(run(r#"{"c":"install"}"#, &mut files)
+            .0
+            .contains("give the app's id"));
+        assert!(run(r#"{"c":"format"}"#, &mut files).0.contains("unknown command"));
+        assert!(run("not json", &mut files).0.contains("could not read"));
     }
 
     #[test]
     fn the_library_goes_into_its_region_behind_a_header() {
-        let files = file_system();
+        let mut files = file_system();
         let image = ImageWriter::new("shared", "Shared library", AppKind::Library, 1).build();
-        files.write_file(LIBRARY_UPLOAD_PATH, &image).unwrap();
+        put(&mut files, LIBRARY_UPLOAD_PATH, &image);
         let mut installer = Installer(FakeInternalFlash::new());
 
-        let (reply, change) = handle_command(br#"{"c":"install_library"}"#, &files, &mut installer);
+        let (reply, change) = block_on(handle_command(
+            br#"{"c":"install_library"}"#,
+            &mut files,
+            &mut installer,
+        ));
 
         assert_eq!((reply, change), (ok_reply("install_library"), Change::Library));
         let flash = &installer.0;
@@ -410,33 +431,31 @@ mod tests {
 
     #[test]
     fn the_library_must_be_uploaded_and_be_a_library() {
-        let files = file_system();
-        assert!(run(r#"{"c":"install_library"}"#, &files)
+        let mut files = file_system();
+        assert!(run(r#"{"c":"install_library"}"#, &mut files)
             .0
             .contains("no such app"));
-        files
-            .write_file(
-                LIBRARY_UPLOAD_PATH,
-                &ImageWriter::new("timer", "Timer", AppKind::App, 1).build(),
-            )
-            .unwrap();
-        assert!(run(r#"{"c":"install_library"}"#, &files)
+        put(
+            &mut files,
+            LIBRARY_UPLOAD_PATH,
+            &ImageWriter::new("timer", "Timer", AppKind::App, 1).build(),
+        );
+        assert!(run(r#"{"c":"install_library"}"#, &mut files)
             .0
             .contains("not the shared library"));
     }
 
     #[test]
     fn a_library_too_large_for_the_region_is_refused_before_any_erase() {
-        let files = big_file_system();
-        files
-            .write_file(
-                LIBRARY_UPLOAD_PATH,
-                &std::vec![0; library::MOST_LIBRARY_BYTES as usize + 1],
-            )
-            .unwrap();
+        let mut files = big_file_system();
+        put(
+            &mut files,
+            LIBRARY_UPLOAD_PATH,
+            &std::vec![0; library::MOST_LIBRARY_BYTES as usize + 1],
+        );
         let mut installer = Installer(FakeInternalFlash::new());
         assert_eq!(
-            installer.install(&files, LIBRARY_UPLOAD_PATH),
+            block_on(installer.install(&mut files, LIBRARY_UPLOAD_PATH)),
             Err(LibraryError::TooLarge)
         );
         assert!(installer.0.erased.is_empty());
@@ -444,14 +463,14 @@ mod tests {
 
     #[test]
     fn a_library_failing_its_checks_in_place_gets_no_header() {
-        let files = file_system();
+        let mut files = file_system();
         let mut image = ImageWriter::new("shared", "Shared library", AppKind::Library, 1).build();
         let last = image.len() - 1;
         image[last] ^= 0xFF;
-        files.write_file(LIBRARY_UPLOAD_PATH, &image).unwrap();
+        put(&mut files, LIBRARY_UPLOAD_PATH, &image);
         let mut installer = Installer(FakeInternalFlash::new());
 
-        let result = installer.install(&files, LIBRARY_UPLOAD_PATH);
+        let result = block_on(installer.install(&mut files, LIBRARY_UPLOAD_PATH));
 
         assert!(matches!(result, Err(LibraryError::Image(_))));
         let region = &installer.0.memory[SHARED_LIBRARY.start as usize..];
@@ -460,15 +479,15 @@ mod tests {
 
     #[test]
     fn a_library_larger_than_one_copy_piece_arrives_whole() {
-        let files = big_file_system();
+        let mut files = big_file_system();
         let mut writer = ImageWriter::new("shared", "Shared library", AppKind::Library, 1);
         let pixels: Vec<u16> = (0..3000).map(|index| (index % 251) as u16).collect();
         writer.image_resource(neotime_runtime::resources::ImageFormat::Mask, 50, 60, &pixels);
         let image = writer.build();
-        files.write_file(LIBRARY_UPLOAD_PATH, &image).unwrap();
+        put(&mut files, LIBRARY_UPLOAD_PATH, &image);
         let mut installer = Installer(FakeInternalFlash::new());
 
-        installer.install(&files, LIBRARY_UPLOAD_PATH).unwrap();
+        block_on(installer.install(&mut files, LIBRARY_UPLOAD_PATH)).unwrap();
 
         let region = &installer.0.memory[SHARED_LIBRARY.start as usize..];
         assert_eq!(library::installed_library(region), Some(&image[..]));

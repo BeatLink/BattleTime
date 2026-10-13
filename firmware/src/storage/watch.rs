@@ -1,6 +1,7 @@
-//! Storage on a watch running NeoTime's own bootloader: the file system, the update slots and the boot state.
+//! Storage on a watch running NeoTime's own bootloader: the flash store, the update slots and the boot state.
 
 use embassy_embedded_hal::{adapter::BlockingAsync, flash::partition::BlockingPartition};
+use embassy_futures::block_on;
 use embassy_nrf::{
     gpio::{Level, Output, OutputDrive},
     nvmc::Nvmc,
@@ -9,29 +10,34 @@ use embassy_nrf::{
     Peri,
 };
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
+use embassy_sync::mutex::Mutex as AsyncMutex;
 
+use embassy_futures::select::{select, Either};
 use embedded_storage::nor_flash::ReadNorFlash;
+use neotime_blefs::FileTransfer;
 use neotime_boot::{
     bootloader_identity, image_header::read_image_header, slot_table::read_slots, Slots, UpdaterNote,
     BOOT_STATE, DEFAULT_SLOTS, FIRMWARE, SLOT_TABLE,
 };
 use neotime_external_flash::{BusyWait, ExternalFlash};
-use neotime_packages::commands::{refuse_command, Change};
-use neotime_storage::{
-    block_address, next_block_to_erase_ahead, prepare_file_system, ErasedBlocks, FileSystem, FileSystemFlash,
-    Preparation,
+use neotime_flash_store::{FileAccess, FlashStore, Layout, StoreError};
+use neotime_packages::{
+    commands::{refuse_command, Change},
+    InstalledApp,
 };
+use neotime_steps::{log, DayChange, DAYS_REMEMBERED};
 use neotime_updates::{
     confirm_running_firmware, forget_rollback, running_firmware_is_on_trial,
     running_firmware_was_rolled_back, Receivers, RecoveryReceiver, UpdateReceiver,
 };
 use static_cell::StaticCell;
 
-use core::cell::RefCell;
+use core::{cell::RefCell, future::Future};
 
 use crate::{
-    line,
+    foreground, line, motion, packages,
     status::{self, Mode},
+    storage_requests::{self, StorageRequest},
     Screen, SpiBus,
 };
 
@@ -47,7 +53,8 @@ pub async fn reset(_screen: &mut Screen) -> ! {
     cortex_m::peripheral::SCB::sys_reset()
 }
 
-pub const HEAP_SIZE: usize = 16 * 1024;
+/// The flash store keeps its tables in static RAM, so storage needs little of the heap.
+pub const HEAP_SIZE: usize = 10 * 1024;
 
 pub fn prepare_clocks() {}
 
@@ -92,7 +99,6 @@ static INTERNAL_FLASH: StaticCell<SharedInternalFlash> = StaticCell::new();
 static STATE_ALIGNMENT: StaticCell<[u8; 4]> = StaticCell::new();
 static CONFIRM_ALIGNMENT: StaticCell<[u8; 4]> = StaticCell::new();
 static FILES: StaticCell<Files> = StaticCell::new();
-static ERASED_AHEAD: ErasedBlocks = ErasedBlocks::new();
 
 pub struct StoragePeripherals {
     pub flash_chip_select: Peri<'static, P0_05>,
@@ -124,28 +130,19 @@ pub async fn start(
     ))
     .unwrap_or(DEFAULT_SLOTS);
 
-    let file_system_flash = FileSystemFlash::with_blocks_erased_ahead(
-        BlockingPartition::new(
-            external_flash,
-            0,
-            neotime_external_flash::CAPACITY_IN_BYTES as u32,
-        ),
-        &ERASED_AHEAD,
-    );
-    let prepared = prepare_file_system(file_system_flash);
+    let files = make_files(external_flash, internal_flash);
+    let mounted = mount_store(files);
     screen.write_line(
         line::FILES,
-        match &prepared {
-            Ok(prepared) if prepared.preparation == Preparation::AlreadyFormatted => "OK",
-            Ok(_) => "Formatted",
+        match &mounted {
+            Ok(()) => "OK",
+            Err(StoreError::OtherFormatVersion) => "Other format",
             Err(_) => "Damaged",
         },
     );
-    let files: &'static Files = FILES.init(Files {
-        file_system: prepared.ok().map(|prepared| prepared.file_system),
-        internal_flash,
-        external_flash,
-    });
+    if mounted.is_err() {
+        forget_store(files);
+    }
 
     let targets = Receivers {
         firmware: UpdateReceiver::new(
@@ -386,105 +383,330 @@ mod slots {
 }
 
 // ============================================================================
-// Files for saved app state
+// The flash store, reached a page at a time without spinning
 // ============================================================================
 
-/// The littlefs file system in the external flash.
-pub type WatchFileSystem = FileSystem<BlockingPartition<'static, NoopRawMutex, FlashOnBus>>;
+/// The 3 MB file system region: 2 MB of files, 256 KB of records and 768 KB of logs.
+const STORE_LAYOUT: Layout = Layout {
+    start_address: neotime_boot::FILE_SYSTEM.start,
+    file_sectors: 512,
+    record_sectors: 64,
+    log_sectors: 192,
+};
 
-/// The mounted file system, or nothing when it would not mount; the shell and the Bluetooth task share it.
+/// 128 files, 128 record keys and rings of up to 192 sectors: 2.7 KB of static RAM.
+type WatchStore = FlashStore<StoreFlash, 128, 128, 192>;
+
+/// How often a running erase or page program is checked while other tasks run.
+const ERASE_POLL_INTERVAL: embassy_time::Duration = embassy_time::Duration::from_millis(2);
+const PROGRAM_POLL_INTERVAL: embassy_time::Duration = embassy_time::Duration::from_micros(100);
+
+/// The external flash as the store sees it: reads are short and finish at once, while erases and page programs
+/// are started and then waited on with the timer, so the CPU and other tasks run while the chip works.
+///
+/// It shares the chip with the update slots, which use it blocking; the driver makes either wait for the other.
+struct StoreFlash {
+    flash: &'static SharedExternalFlash,
+    /// Polls the chip without the timer, for the shell's calls, which run to their end without yielding.
+    polls_without_yielding: bool,
+}
+
+impl embedded_storage_async::nor_flash::ErrorType for StoreFlash {
+    type Error = <FlashOnBus as embedded_storage::nor_flash::ErrorType>::Error;
+}
+
+impl embedded_storage_async::nor_flash::ReadNorFlash for StoreFlash {
+    const READ_SIZE: usize = 1;
+
+    async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+        self.flash.lock(|flash| flash.borrow_mut().read(offset, bytes))
+    }
+
+    fn capacity(&self) -> usize {
+        neotime_external_flash::CAPACITY_IN_BYTES
+    }
+}
+
+impl embedded_storage_async::nor_flash::NorFlash for StoreFlash {
+    const WRITE_SIZE: usize = 1;
+    const ERASE_SIZE: usize = neotime_flash_store::SECTOR_BYTES as usize;
+
+    async fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
+        for sector in (from..to).step_by(Self::ERASE_SIZE) {
+            self.flash
+                .lock(|flash| flash.borrow_mut().start_erasing_sector(sector))?;
+            self.wait_until_done(ERASE_POLL_INTERVAL).await?;
+            crate::diagnostics::add_one(crate::diagnostics::Counter::StoreSectorsErased);
+        }
+        Ok(())
+    }
+
+    async fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+        let page = neotime_external_flash::PROGRAM_PAGE_SIZE;
+        let mut done = 0;
+        while done < bytes.len() {
+            let address = offset as usize + done;
+            let length = (page - address % page).min(bytes.len() - done);
+            let piece = &bytes[done..done + length];
+            self.flash
+                .lock(|flash| flash.borrow_mut().start_programming_page(address as u32, piece))?;
+            self.wait_until_done(PROGRAM_POLL_INTERVAL).await?;
+            done += length;
+        }
+        Ok(())
+    }
+}
+
+impl StoreFlash {
+    async fn wait_until_done(
+        &mut self,
+        interval: embassy_time::Duration,
+    ) -> Result<(), <Self as embedded_storage_async::nor_flash::ErrorType>::Error> {
+        while !self
+            .flash
+            .lock(|flash| flash.borrow_mut().operation_has_finished())?
+        {
+            if !self.polls_without_yielding {
+                embassy_time::Timer::after(interval).await;
+            }
+        }
+        Ok(())
+    }
+}
+
+// ============================================================================
+// Files for apps, settings and the step log
+// ============================================================================
+
+/// Runs a store call to its end with its state on the heap, since a call's state can be 1.8 KB and the shell calls
+/// from deep in its stack.
+fn run_on_heap<Call: Future>(call: Call) -> Call::Output {
+    block_on(alloc::boxed::Box::pin(call))
+}
+
+/// The mounted store, or nothing when it would not mount; the shell, the Bluetooth task and the
+/// accelerometer task share it, each holding it only for one call.
 pub struct Files {
-    file_system: Option<WatchFileSystem>,
+    store: AsyncMutex<NoopRawMutex, Option<WatchStore>>,
     /// For copying the shared library into its region of the internal flash.
     #[cfg_attr(not(with_shell), allow(dead_code))]
     internal_flash: &'static SharedInternalFlash,
-    /// For erasing free blocks ahead of littlefs, outside it.
+    /// For moving the update and recovery slots, outside the store.
     #[cfg_attr(not(with_shell), allow(dead_code))]
     external_flash: &'static SharedExternalFlash,
 }
 
+#[cfg_attr(not(with_shell), allow(dead_code))]
 impl Files {
-    pub fn file_system(&self) -> Option<&WatchFileSystem> {
-        self.file_system.as_ref()
+    /// Waits until no other task is in the middle of a store call.
+    ///
+    /// Tasks only switch where one waits, so after this the shell's calls below find the store free until it
+    /// next waits.
+    pub async fn wait_until_free(&self) {
+        drop(self.store.lock().await);
     }
 
-    /// Starts erasing the next free block littlefs will want, if one is not erased yet; gives the block.
-    #[cfg_attr(not(with_shell), allow(dead_code))]
-    fn start_erasing_ahead(&self) -> Option<u32> {
-        let block = next_block_to_erase_ahead(self.file_system.as_ref()?, &ERASED_AHEAD)?;
-        ERASED_AHEAD.begin_erasing(block);
-        self.external_flash
-            .lock(|flash| flash.borrow_mut().start_erasing_sector(block_address(block)))
-            .ok()?;
-        Some(block)
+    /// Runs a store call to its end at once, for the shell, which does not wait; nothing if another task holds it.
+    fn now<Answer>(&self, call: impl FnOnce(&mut WatchStore) -> Answer) -> Option<Answer> {
+        let Ok(mut store) = self.store.try_lock() else {
+            crate::diagnostics::add_one(crate::diagnostics::Counter::StoreCallsFoundBusy);
+            return None;
+        };
+        let store = store.as_mut()?;
+        store.flash_mut().polls_without_yielding = true;
+        let answer = call(store);
+        store.flash_mut().polls_without_yielding = false;
+        Some(answer)
     }
 
-    /// Whether the erase `start_erasing_ahead` began is over, counting its block erased once it is.
-    #[cfg_attr(not(with_shell), allow(dead_code))]
-    fn erase_ahead_has_finished(&self, block: u32) -> bool {
-        let finished = self
-            .external_flash
-            .lock(|flash| flash.borrow_mut().erase_has_finished())
-            .unwrap_or(true);
-        if finished {
-            ERASED_AHEAD.finish_erasing(block);
-            crate::diagnostics::add_one(crate::diagnostics::Counter::BlocksErasedAhead);
-            crate::diagnostics::set(
-                crate::diagnostics::Counter::ErasesSkipped,
-                ERASED_AHEAD.erases_skipped(),
-            );
+    pub fn read_now(&self, path: &str) -> Option<alloc::vec::Vec<u8>> {
+        self.now(|store| {
+            let length = run_on_heap(FileAccess::file_length(store, path)).ok()??;
+            let mut bytes = alloc::vec![0; length];
+            run_on_heap(FileAccess::read_file(store, path, 0, &mut bytes)).ok()??;
+            Some(bytes)
+        })?
+    }
+
+    /// Reads part of a file, for the app host while it draws.
+    pub fn read_part_now(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
+        self.now(|store| run_on_heap(FileAccess::read_file(store, path, offset as usize, out)).ok()?)?
+    }
+
+    /// Writes the whole file; false when the store is missing, full or held by another task.
+    pub fn write_now(&self, path: &str, bytes: &[u8]) -> bool {
+        self.now(|store| run_on_heap(FileAccess::write_file(store, path, bytes)).is_ok()) == Some(true)
+    }
+
+    pub fn free_kilobytes_now(&self) -> Option<u32> {
+        self.now(|store| (FileAccess::free_bytes(store) / 1024) as u32)
+    }
+
+    pub fn installed_apps_now(&self) -> alloc::vec::Vec<InstalledApp> {
+        self.now(|store| run_on_heap(neotime_packages::Packages::new(store).list()).unwrap_or_default())
+            .unwrap_or_default()
+    }
+
+    pub fn set_app_enabled_now(&self, id: &str, enabled: bool) -> bool {
+        self.now(|store| run_on_heap(neotime_packages::Packages::new(store).set_enabled(id, enabled)).is_ok())
+            == Some(true)
+    }
+
+    pub fn read_app_image_now(&self, id: &str) -> Option<alloc::vec::Vec<u8>> {
+        self.now(|store| run_on_heap(neotime_packages::Packages::new(store).read_image(id)).ok())?
+    }
+
+    /// Carries out one request from another task; see `storage_requests`.
+    async fn carry_out(&self, transfer: &mut FileTransfer, request: StorageRequest) {
+        let mut store = self.store.lock().await;
+        let Some(store) = store.as_mut() else {
+            if let StorageRequest::FileTransfer { request, .. } = request {
+                storage_requests::FILE_ANSWERS
+                    .send(FileTransfer::refuse(&request))
+                    .await;
+            }
+            storage_requests::STEPS_LOADED.signal(());
+            return;
+        };
+        match request {
+            StorageRequest::FileTransfer { request, room } => {
+                foreground::wait_for_a_pause().await;
+                let answers = transfer.answer(Some(store), &request, room).await;
+                storage_requests::FILE_ANSWERS.send(answers).await;
+            }
+            StorageRequest::StartFileTransfer => {
+                transfer.abort();
+                FileAccess::abandon_file(store);
+            }
+            StorageRequest::LoadSteps => {
+                load_days(store).await;
+                if let Some(steps) = log::load_trip(store).await {
+                    motion::set_trip_steps(steps);
+                }
+                storage_requests::STEPS_LOADED.signal(());
+            }
+            StorageRequest::StoreSteps(recorded) => {
+                if let Some(finished) = recorded.finished {
+                    if log::write_slot(store, finished).await.is_ok() {
+                        let _ = log::save_trip(store, motion::trip_steps()).await;
+                    }
+                }
+                if recorded.day_change != DayChange::SameDay {
+                    let _ = log::forget_old_days(store, motion::recording_day()).await;
+                }
+                if recorded.day_change == DayChange::Jump {
+                    load_days(store).await;
+                }
+            }
+            StorageRequest::SaveTrip(steps) => {
+                let _ = log::save_trip(store, steps).await;
+            }
+            StorageRequest::WriteSmallFile { path, bytes } => {
+                let _ = FileAccess::write_file(store, path, &bytes).await;
+            }
         }
-        finished
-    }
-
-    pub fn read(&self, path: &str) -> Option<alloc::vec::Vec<u8>> {
-        self.file_system.as_ref()?.read_to_vec(path).ok()
-    }
-
-    /// Reads part of a file from `offset`, as much as `out` holds; fewer only at the file's end.
-    pub fn read_part(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
-        neotime_storage::read_part(self.file_system.as_ref()?, path, offset, out)
     }
 
     /// Runs one line from the packages characteristic, returning the reply line and what changed.
-    pub fn run_packages_command(&self, line: &[u8]) -> (alloc::string::String, Change) {
-        let Some(file_system) = &self.file_system else {
-            return refuse_command(line, "the file system is not mounted");
+    async fn run_packages_command(&self, line: &[u8]) -> (alloc::string::String, Change) {
+        let mut store = self.store.lock().await;
+        let Some(store) = store.as_mut() else {
+            return refuse_command(line, "the flash store is not mounted");
         };
-        self.run_packages_command_on(file_system, line)
+        self.run_packages_command_on(store, line).await
     }
 
     #[cfg(with_shell)]
-    fn run_packages_command_on(
+    async fn run_packages_command_on(
         &self,
-        file_system: &WatchFileSystem,
+        store: &mut WatchStore,
         line: &[u8],
     ) -> (alloc::string::String, Change) {
         let mut library = shared_library::InternalFlashLibrary(self.internal_flash);
-        neotime_packages::commands::handle_command(line, file_system, &mut library)
+        neotime_packages::commands::handle_command(line, store, &mut library).await
     }
 
     /// The recovery firmware has no apps, so it leaves the package manager out.
     #[cfg(not(with_shell))]
-    fn run_packages_command_on(
+    async fn run_packages_command_on(
         &self,
-        _file_system: &WatchFileSystem,
+        _store: &mut WatchStore,
         line: &[u8],
     ) -> (alloc::string::String, Change) {
         refuse_command(line, "the recovery firmware does not install apps")
     }
+}
 
-    /// Writes the whole file, making its folder first; false when the file system is missing or full.
-    pub fn write(&self, path: &str, bytes: &[u8]) -> bool {
-        let Some(file_system) = &self.file_system else {
-            return false;
-        };
-        if let Some((folder, _)) = path.rsplit_once('/') {
-            if !folder.is_empty() && !file_system.exists(folder) {
-                let _ = file_system.mkdir(folder);
+/// Reads each remembered day back from the log into the step history, changing nothing else in it, so steps
+/// recorded meanwhile are kept.
+async fn load_days(store: &mut WatchStore) {
+    let today = motion::recording_day();
+    for days_back in 0..DAYS_REMEMBERED {
+        let hours = log::read_hours(store, today - days_back as i64).await;
+        motion::set_day(days_back, hours);
+    }
+}
+
+/// Builds the files' state straight into its static, outside any async function, so start-up's task never holds
+/// a 2.7 KB copy of it.
+#[inline(never)]
+fn make_files(
+    external_flash: &'static SharedExternalFlash,
+    internal_flash: &'static SharedInternalFlash,
+) -> &'static Files {
+    let flash = StoreFlash {
+        flash: external_flash,
+        polls_without_yielding: false,
+    };
+    FILES.init_with(|| Files {
+        store: AsyncMutex::new(Some(WatchStore::unmounted(flash, STORE_LAYOUT))),
+        internal_flash,
+        external_flash,
+    })
+}
+
+/// Leaves the files without a store after a failed mount; nothing else holds it yet at start-up.
+#[inline(never)]
+fn forget_store(files: &Files) {
+    if let Ok(mut store) = files.store.try_lock() {
+        *store = None;
+    }
+}
+
+/// Mounts the store by polling the chip rather than waiting, outside any async function, so the mount's future
+/// lives on the stack only while it runs rather than in start-up's task for good.
+#[inline(never)]
+fn mount_store(
+    files: &Files,
+) -> Result<(), StoreError<<StoreFlash as embedded_storage_async::nor_flash::ErrorType>::Error>> {
+    files
+        .now(|store| run_on_heap(store.mount_in_place()))
+        .unwrap_or(Ok(()))
+}
+
+// ============================================================================
+// The storage task
+// ============================================================================
+
+/// Runs every store call other tasks ask for, and the packages characteristic's commands, one at a time.
+///
+/// A packages command starts near the top of the stack here, where the verifier inside it has room. Each call's
+/// state is on the heap while it runs, so the task's static space holds no store call.
+#[embassy_executor::task]
+pub async fn run_storage(files: &'static Files) {
+    let mut transfer = FileTransfer::new();
+    loop {
+        match select(storage_requests::REQUESTS.receive(), packages::COMMANDS.receive()).await {
+            Either::First(request) => alloc::boxed::Box::pin(files.carry_out(&mut transfer, request)).await,
+            Either::Second(line) => {
+                foreground::wait_for_a_pause().await;
+                let (reply, change) = alloc::boxed::Box::pin(files.run_packages_command(&line)).await;
+                packages::REPLIES.send(reply).await;
+                if change != Change::None {
+                    packages::CHANGED.signal(change);
+                }
             }
         }
-        file_system.write_file(path, bytes).is_ok()
     }
 }
 
@@ -506,56 +728,56 @@ mod shared_library {
     /// chip's flash controller. Each page erase stops the CPU for about 85 ms.
     pub struct InternalFlashLibrary(pub &'static SharedInternalFlash);
 
+    /// The internal flash reached through its shared lock one call at a time, since the copy waits between pieces.
+    struct InternalFlashBorrow(&'static SharedInternalFlash);
+
+    impl embedded_storage::nor_flash::ErrorType for InternalFlashBorrow {
+        type Error = embassy_nrf::nvmc::Error;
+    }
+
+    impl embedded_storage::nor_flash::ReadNorFlash for InternalFlashBorrow {
+        const READ_SIZE: usize = 1;
+
+        fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+            self.0.lock(|flash| flash.borrow_mut().read(offset, bytes))
+        }
+
+        fn capacity(&self) -> usize {
+            neotime_boot::INTERNAL_FLASH_SIZE as usize
+        }
+    }
+
+    impl embedded_storage::nor_flash::NorFlash for InternalFlashBorrow {
+        const WRITE_SIZE: usize = 4;
+        const ERASE_SIZE: usize = neotime_boot::PAGE_SIZE as usize;
+
+        fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
+            self.0.lock(|flash| flash.borrow_mut().erase(from, to))
+        }
+
+        fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+            self.0.lock(|flash| flash.borrow_mut().write(offset, bytes))
+        }
+    }
+
     impl LibraryInstaller for InternalFlashLibrary {
-        fn install<S: littlefs_rust::Storage>(
+        async fn install<Files: neotime_flash_store::FileAccess>(
             &mut self,
-            files: &littlefs_rust::Filesystem<S>,
+            files: &mut Files,
             path: &str,
         ) -> Result<(), LibraryError> {
-            self.0.lock(|flash| {
-                let mut flash = flash.borrow_mut();
-                install_library_from_file(&mut *flash, files, path, |_, length| {
-                    // The internal flash is mapped into the address space, so the image is read where it was written.
-                    let start = (SHARED_LIBRARY.start + LIBRARY_HEADER_BYTES) as *const u8;
-                    check_library_image(unsafe { core::slice::from_raw_parts(start, length as usize) })
-                })
+            // The internal flash is only ever written here, so it is borrowed for the whole copy.
+            let mut flash = InternalFlashBorrow(self.0);
+            install_library_from_file(&mut flash, files, path, |_, length| {
+                // The internal flash is mapped into the address space, so the image is read where it was written.
+                let start = (SHARED_LIBRARY.start + LIBRARY_HEADER_BYTES) as *const u8;
+                check_library_image(unsafe { core::slice::from_raw_parts(start, length as usize) })
             })
+            .await
         }
 
         fn installed_version(&self) -> Option<u16> {
             crate::apps::shared_library().and_then(neotime_packages::library::library_version)
-        }
-    }
-}
-
-// ============================================================================
-// Erasing free blocks ahead of littlefs
-// ============================================================================
-
-/// How often the task looks for free blocks to erase ahead of littlefs.
-#[cfg(with_shell)]
-const ERASE_AHEAD_INTERVAL: embassy_time::Duration = embassy_time::Duration::from_secs(1);
-
-/// How often the task asks the chip whether its erase is over.
-#[cfg(with_shell)]
-const ERASE_POLL_INTERVAL: embassy_time::Duration = embassy_time::Duration::from_millis(5);
-
-/// Keeps the next few free blocks erased while the wearer is not watching the screen, so littlefs's
-/// own erases return at once and the chip's tens of milliseconds pass while other tasks run.
-#[cfg(with_shell)]
-#[embassy_executor::task]
-pub async fn keep_blocks_erased_ahead(files: &'static Files) {
-    loop {
-        embassy_time::Timer::after(ERASE_AHEAD_INTERVAL).await;
-        loop {
-            crate::foreground::wait_for_a_pause().await;
-            // Choosing the block and starting its erase happen together, so littlefs cannot take it between.
-            let Some(block) = files.start_erasing_ahead() else {
-                break;
-            };
-            while !files.erase_ahead_has_finished(block) {
-                embassy_time::Timer::after(ERASE_POLL_INTERVAL).await;
-            }
         }
     }
 }

@@ -160,8 +160,8 @@ impl DelayNs for BusyWait {
 pub struct ExternalFlash<FlashSpi, Delay> {
     spi: FlashSpi,
     delay: Delay,
-    /// A sector erase started by `start_erasing_sector` may still be running in the chip.
-    erase_may_be_running: bool,
+    /// An erase or page program started without waiting may still be running in the chip.
+    operation_may_be_running: bool,
 }
 
 pub struct FlashParts<FlashSpi, Delay> {
@@ -175,7 +175,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
         let mut flash = ExternalFlash {
             spi,
             delay,
-            erase_may_be_running: false,
+            operation_may_be_running: false,
         };
 
         flash.wake()?;
@@ -200,7 +200,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
     }
 
     pub fn sleep(&mut self) -> Result<(), Error<FlashSpi::Error>> {
-        self.finish_erasing()?;
+        self.finish_running_operation()?;
         self.spi.write(&[DEEP_POWER_DOWN]).map_err(Error::Spi)
     }
 
@@ -258,30 +258,61 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
     /// Until `erase_has_finished` says so, any other call first waits for the erase to end.
     pub fn start_erasing_sector(&mut self, address: u32) -> Result<(), Error<FlashSpi::Error>> {
         check_erase(address, address + SECTOR_SIZE as u32)?;
-        self.finish_erasing()?;
+        self.finish_running_operation()?;
 
         self.enable_writing()?;
         self.spi
             .write(&command_with_address(SECTOR_ERASE, address))
             .map_err(Error::Spi)?;
-        self.erase_may_be_running = true;
+        self.operation_may_be_running = true;
+        Ok(())
+    }
+
+    /// Starts programming bytes within one 256-byte page and returns at once, while the chip works on.
+    ///
+    /// Until `operation_has_finished` says so, any other call first waits for the program to end.
+    pub fn start_programming_page(
+        &mut self,
+        address: u32,
+        data: &[u8],
+    ) -> Result<(), Error<FlashSpi::Error>> {
+        check_read_or_write(address, data.len())?;
+        if address as usize % PROGRAM_PAGE_SIZE + data.len() > PROGRAM_PAGE_SIZE {
+            return Err(Error::BadRange(NorFlashErrorKind::NotAligned));
+        }
+        self.finish_running_operation()?;
+        if data.is_empty() {
+            return Ok(());
+        }
+
+        self.enable_writing()?;
+        let header = command_with_address(PAGE_PROGRAM, address);
+        self.spi
+            .transaction(&mut [Operation::Write(&header), Operation::Write(data)])
+            .map_err(Error::Spi)?;
+        self.operation_may_be_running = true;
         Ok(())
     }
 
     /// Reads the chip's status once, and says whether the erase `start_erasing_sector` began is over.
     pub fn erase_has_finished(&mut self) -> Result<bool, Error<FlashSpi::Error>> {
-        if self.erase_may_be_running && self.is_busy()? {
+        self.operation_has_finished()
+    }
+
+    /// Reads the chip's status once, and says whether the erase or program started without waiting is over.
+    pub fn operation_has_finished(&mut self) -> Result<bool, Error<FlashSpi::Error>> {
+        if self.operation_may_be_running && self.is_busy()? {
             return Ok(false);
         }
-        self.erase_may_be_running = false;
+        self.operation_may_be_running = false;
         Ok(true)
     }
 
-    /// Waits for an erase `start_erasing_sector` began, since the chip ignores other commands meanwhile.
-    fn finish_erasing(&mut self) -> Result<(), Error<FlashSpi::Error>> {
-        if self.erase_may_be_running {
+    /// Waits for an erase or program started without waiting, since the chip ignores other commands meanwhile.
+    fn finish_running_operation(&mut self) -> Result<(), Error<FlashSpi::Error>> {
+        if self.operation_may_be_running {
             self.wait_until_ready()?;
-            self.erase_may_be_running = false;
+            self.operation_may_be_running = false;
         }
         Ok(())
     }
@@ -304,7 +335,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ReadNorFlash for ExternalFlash<FlashSp
 
     fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
         check_read_or_write(offset, bytes.len())?;
-        self.finish_erasing()?;
+        self.finish_running_operation()?;
 
         let header = command_with_address(READ_DATA, offset);
         self.spi
@@ -323,7 +354,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> NorFlash for ExternalFlash<FlashSpi, D
 
     fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
         check_erase(from, to)?;
-        self.finish_erasing()?;
+        self.finish_running_operation()?;
 
         for sector_start in sector_starts(from, to) {
             self.erase_sector(sector_start)?;
@@ -333,7 +364,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> NorFlash for ExternalFlash<FlashSpi, D
 
     fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
         check_read_or_write(offset, bytes.len())?;
-        self.finish_erasing()?;
+        self.finish_running_operation()?;
 
         for chunk in program_chunks(offset, bytes.len()) {
             self.program_page(chunk.address, &bytes[chunk.first_byte..chunk.end_byte])?;

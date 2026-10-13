@@ -11,6 +11,10 @@ publish = false
 trouble = ["dep:trouble-host", "dep:static_cell"]
 
 [dependencies]
-littlefs-rust = "0.1"
+neotime-flash-store = { path = "../flash_store" }
 static_cell = { version = "2.1", optional = true }
 trouble-host = { version = "0.8", default-features = false, features = ["peripheral", "gatt", "derive"], optional = true }
+
+[dev-dependencies]
+embassy-futures = "0.1"
+neotime-flash-store = { path = "../flash_store", features = ["ram-flash"] }

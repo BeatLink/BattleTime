@@ -219,7 +219,7 @@ export interface Package {
 export const packages = signal<Package[]>([]);
 
 /** The most heap an open app may need, in bytes. */
-export const app_memory_budget = signal(33_792);
+export const app_memory_budget = signal(27_648);
 
 /** Files a `TextFile` and `file_bytes` read in the browser preview, by path, standing in for the watch's storage. */
 export const preview_files = signal<Record<string, string>>({});

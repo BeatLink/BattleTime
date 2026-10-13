@@ -351,6 +351,34 @@ fn reading_or_writing_during_a_background_erase_waits_for_it_first() {
 }
 
 #[test]
+fn a_background_program_returns_at_once_and_a_read_waits_for_it() {
+    let mut chip = FakeChip::new();
+    chip.busy_polls_after_each_write = 2;
+    let mut flash = ExternalFlash::new(chip, CountingDelay::default()).unwrap();
+
+    flash.start_programming_page(0x7010, &[0x12, 0x34]).unwrap();
+    let first_answer = flash.operation_has_finished().unwrap();
+    let mut read_back = [0; 2];
+    flash.read(0x7010, &mut read_back).unwrap();
+
+    assert!(!first_answer);
+    assert_eq!(read_back, [0x12, 0x34]);
+    assert!(flash.operation_has_finished().unwrap());
+}
+
+#[test]
+fn a_background_program_stays_within_one_page() {
+    let mut flash = started_flash();
+
+    let crossing = flash.start_programming_page(0x70ff, &[1, 2]);
+    let nothing = flash.start_programming_page(0x7000, &[]);
+
+    assert_eq!(crossing, Err(Error::BadRange(NorFlashErrorKind::NotAligned)));
+    assert_eq!(nothing, Ok(()));
+    assert!(flash.operation_has_finished().unwrap());
+}
+
+#[test]
 fn a_background_erase_must_be_sector_aligned() {
     let mut flash = started_flash();
 

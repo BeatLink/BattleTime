@@ -3,13 +3,14 @@
 //! move and delete files on the watch.
 //!
 //! The phone writes one command to the transfer characteristic and the watch answers with one or
-//! more notifications on it. `FileTransfer` turns a command into its answers against the littlefs
-//! file system, with no Bluetooth code in it; the `trouble` feature adds the GATT service.
+//! more notifications on it. `FileTransfer` turns a command into its answers against NeoTime's flash
+//! store, with no Bluetooth code in it; the `trouble` feature adds the GATT service.
 //! Numbers are little-endian, as in Adafruit's description of the protocol.
 //!
-//! NeoTime follows Adafruit's description where InfiniTime strays from it: a write truncates the file
-//! to its total size, a write answer gives the offset of the next write, missing files report the
-//! no-file status rather than a littlefs error code, and writes and new folders make their parents.
+//! NeoTime follows Adafruit's description where InfiniTime strays from it: a write replaces the file
+//! with exactly its total size, a write answer gives the offset of the next write, and missing files
+//! report the no-file status. The store has no folders of their own, so a folder exists through the
+//! files in it, and a new upload replaces the old file only when its last piece arrives.
 
 #![no_std]
 
@@ -17,7 +18,7 @@ extern crate alloc;
 
 use alloc::{string::String, vec, vec::Vec};
 
-use littlefs_rust::{Error, FileType, Filesystem, OpenFlags, SeekFrom, Storage};
+use neotime_flash_store::{FileAccess, FileError, SMALL_FILE_BYTES};
 
 #[cfg(feature = "trouble")]
 pub mod service;
@@ -75,9 +76,6 @@ const MOVE_HEADER_SIZE: usize = 6;
 /// Directory entry flag for a folder.
 const IS_DIRECTORY: u32 = 1;
 
-/// How deep a delete follows folders inside folders before it gives up.
-const DEEPEST_DELETE: usize = 8;
-
 // ============================================================================
 // Reading the numbers in a command
 // ============================================================================
@@ -95,43 +93,53 @@ fn read_path(bytes: &[u8], at: usize, length: usize) -> Option<&str> {
     core::str::from_utf8(bytes.get(at..at + length)?).ok()
 }
 
-fn status_for(error: Error) -> u8 {
-    match error {
-        Error::NoEntry => status::NO_FILE,
-        _ => status::ERROR,
-    }
-}
-
 // ============================================================================
 // The transfer in progress
 // ============================================================================
+
+/// Files up to this size are gathered in RAM and written whole, so the store keeps them as records.
+const SMALL_UPLOAD_BYTES: u32 = SMALL_FILE_BYTES as u32;
+/// How much of a file a copy for a move holds in RAM at once.
+const COPY_PIECE_BYTES: usize = 256;
 
 /// A file being written, a piece at a time.
 struct Upload {
     path: String,
     total_size: u32,
     next_offset: u32,
+    /// A small file's bytes, written whole when the last piece arrives; empty for a large one, which streams.
+    gathered: Vec<u8>,
+}
+
+impl Upload {
+    fn is_small(&self) -> bool {
+        self.total_size <= SMALL_UPLOAD_BYTES
+    }
 }
 
 /// Answers the phone's file commands; it remembers the file being read or written between commands.
 pub struct FileTransfer {
-    capacity_in_bytes: u32,
-    block_size: u32,
     reading: Option<String>,
     writing: Option<Upload>,
 }
 
+impl Default for FileTransfer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FileTransfer {
-    pub fn new(block_size: u32, block_count: u32) -> FileTransfer {
+    pub fn new() -> FileTransfer {
         FileTransfer {
-            capacity_in_bytes: block_size * block_count,
-            block_size,
             reading: None,
             writing: None,
         }
     }
 
     /// Forgets a read or write the phone left unfinished, such as when it disconnects.
+    ///
+    /// A large upload stays open in the store, so the phone can resume it where it stopped.
     pub fn abort(&mut self) {
         self.reading = None;
         self.writing = None;
@@ -141,30 +149,39 @@ impl FileTransfer {
         self.writing.is_some()
     }
 
+    /// The error answer to one command, for a build that keeps no store.
+    pub fn refuse(request: &[u8]) -> Vec<Vec<u8>> {
+        request
+            .first()
+            .and_then(|command_byte| failure_for(*command_byte, status::ERROR))
+            .into_iter()
+            .collect()
+    }
+
     /// The answers to one command, each to be sent as its own notification of at most `notification_room` bytes.
     ///
-    /// With no file system, every command is answered with the error status.
-    pub fn answer<S: Storage>(
+    /// With no store, every command is answered with the error status.
+    pub async fn answer<Files: FileAccess>(
         &mut self,
-        file_system: Option<&Filesystem<S>>,
+        files: Option<&mut Files>,
         request: &[u8],
         notification_room: usize,
     ) -> Vec<Vec<u8>> {
         let Some(&command_byte) = request.first() else {
             return Vec::new();
         };
-        let Some(file_system) = file_system else {
+        let Some(files) = files else {
             return failure_for(command_byte, status::ERROR).into_iter().collect();
         };
         match command_byte {
-            command::READ => vec![self.start_read(file_system, request, notification_room)],
-            command::READ_PACING => vec![self.continue_read(file_system, request, notification_room)],
-            command::WRITE => vec![self.start_write(file_system, request)],
-            command::WRITE_DATA => vec![self.continue_write(file_system, request)],
-            command::DELETE => vec![delete(file_system, request)],
-            command::MAKE_DIRECTORY => vec![make_directory(file_system, request)],
-            command::LIST_DIRECTORY => list_directory(file_system, request, notification_room),
-            command::MOVE => vec![move_entry(file_system, request)],
+            command::READ => vec![self.start_read(files, request, notification_room).await],
+            command::READ_PACING => vec![self.continue_read(files, request, notification_room).await],
+            command::WRITE => vec![self.start_write(files, request).await],
+            command::WRITE_DATA => vec![self.continue_write(files, request).await],
+            command::DELETE => vec![delete(files, request).await],
+            command::MAKE_DIRECTORY => vec![make_directory(request)],
+            command::LIST_DIRECTORY => list_directory(files, request, notification_room).await,
+            command::MOVE => vec![move_entry(files, request).await],
             _ => Vec::new(),
         }
     }
@@ -173,9 +190,9 @@ impl FileTransfer {
     // Reading
     // ------------------------------------------------------------------------
 
-    fn start_read<S: Storage>(
+    async fn start_read<Files: FileAccess>(
         &mut self,
-        file_system: &Filesystem<S>,
+        files: &mut Files,
         request: &[u8],
         room: usize,
     ) -> Vec<u8> {
@@ -190,12 +207,12 @@ impl FileTransfer {
             return read_data(status::PROTOCOL_ERROR, chunk_offset, 0, &[]);
         };
         self.reading = Some(String::from(path));
-        self.read_chunk(file_system, chunk_offset, chunk_size, room)
+        self.read_chunk(files, chunk_offset, chunk_size, room).await
     }
 
-    fn continue_read<S: Storage>(
+    async fn continue_read<Files: FileAccess>(
         &mut self,
-        file_system: &Filesystem<S>,
+        files: &mut Files,
         request: &[u8],
         room: usize,
     ) -> Vec<u8> {
@@ -204,46 +221,54 @@ impl FileTransfer {
         }
         let chunk_offset = read_u32(request, 4);
         let chunk_size = read_u32(request, 8);
-        self.read_chunk(file_system, chunk_offset, chunk_size, room)
+        self.read_chunk(files, chunk_offset, chunk_size, room).await
     }
 
     /// Sends as much of the asked-for chunk as fits in one notification; the phone asks again for the rest.
-    fn read_chunk<S: Storage>(
+    async fn read_chunk<Files: FileAccess>(
         &mut self,
-        file_system: &Filesystem<S>,
+        files: &mut Files,
         chunk_offset: u32,
         chunk_size: u32,
         room: usize,
     ) -> Vec<u8> {
-        let Some(path) = &self.reading else {
+        let Some(path) = self.reading.clone() else {
             return read_data(status::PROTOCOL_ERROR, chunk_offset, 0, &[]);
         };
-        let file = match file_system.open(path, OpenFlags::READ) {
-            Ok(file) => file,
-            Err(error) => {
+        let total_length = match files.file_length(&path).await {
+            Ok(Some(length)) => length as u32,
+            Ok(None) => {
                 self.reading = None;
-                return read_data(status_for(error), chunk_offset, 0, &[]);
+                let missing = if is_directory(files, &path).await {
+                    status::ERROR
+                } else {
+                    status::NO_FILE
+                };
+                return read_data(missing, chunk_offset, 0, &[]);
+            }
+            Err(_) => {
+                self.reading = None;
+                return read_data(status::ERROR, chunk_offset, 0, &[]);
             }
         };
-        let total_length = file.size();
         let remaining = total_length.saturating_sub(chunk_offset);
         let fits = room.saturating_sub(READ_DATA_HEADER_SIZE) as u32;
         let mut chunk = vec![0; chunk_size.min(remaining).min(fits) as usize];
-        let read = file
-            .seek(SeekFrom::Start(chunk_offset))
-            .and_then(|_| file.read(&mut chunk));
-        let _ = file.close();
-        match read {
-            Ok(length) => {
-                chunk.truncate(length as usize);
-                if chunk_offset + length >= total_length {
+        match files.read_file(&path, chunk_offset as usize, &mut chunk).await {
+            Ok(Some(length)) => {
+                chunk.truncate(length);
+                if chunk_offset + length as u32 >= total_length {
                     self.reading = None;
                 }
                 read_data(status::OK, chunk_offset, total_length, &chunk)
             }
-            Err(error) => {
+            Ok(None) => {
                 self.reading = None;
-                read_data(status_for(error), chunk_offset, total_length, &[])
+                read_data(status::NO_FILE, chunk_offset, 0, &[])
+            }
+            Err(_) => {
+                self.reading = None;
+                read_data(status::ERROR, chunk_offset, total_length, &[])
             }
         }
     }
@@ -252,8 +277,10 @@ impl FileTransfer {
     // Writing
     // ------------------------------------------------------------------------
 
-    /// Opens the file, cut back to `offset` so an interrupted upload can resume, and says how much may follow.
-    fn start_write<S: Storage>(&mut self, file_system: &Filesystem<S>, request: &[u8]) -> Vec<u8> {
+    /// Starts a file, or resumes one the store still holds open at `offset`, and says how much may follow.
+    ///
+    /// The old file stays until the last piece arrives, so an upload cut short never leaves half a file.
+    async fn start_write<Files: FileAccess>(&mut self, files: &mut Files, request: &[u8]) -> Vec<u8> {
         self.writing = None;
         if request.len() < WRITE_HEADER_SIZE {
             return write_pacing(status::PROTOCOL_ERROR, 0, 0);
@@ -267,35 +294,42 @@ impl FileTransfer {
         if offset > total_size {
             return write_pacing(status::PROTOCOL_ERROR, offset, 0);
         }
-        make_parents(file_system, path);
-        let prepared = file_system
-            .open(path, OpenFlags::WRITE | OpenFlags::CREATE)
-            .and_then(|file| {
-                if file.size() < offset {
-                    let _ = file.close();
-                    return Err(Error::Invalid);
-                }
-                let truncated = file.truncate(offset);
-                file.close().and(truncated)
-            });
-        if let Err(error) = prepared {
-            return write_pacing(status_for(error), offset, 0);
+        if is_directory(files, path).await {
+            return write_pacing(status::ERROR, offset, 0);
         }
-        if offset < total_size {
-            self.writing = Some(Upload {
-                path: String::from(path),
-                total_size,
-                next_offset: offset,
-            });
+        let upload = Upload {
+            path: String::from(path),
+            total_size,
+            next_offset: offset,
+            gathered: Vec::new(),
+        };
+        let resuming = files.upload_progress() == Some((path, offset as usize));
+        if !resuming {
+            files.abandon_file();
+            if offset != 0 {
+                // Only the upload still open in the store can resume; anything else starts again from the top.
+                return write_pacing(status::ERROR, offset, 0);
+            }
+            let started = if upload.is_small() {
+                Ok(())
+            } else {
+                files.begin_file(path).await
+            };
+            if started.is_err() {
+                return write_pacing(status::ERROR, offset, 0);
+            }
         }
-        write_pacing(
-            status::OK,
-            offset,
-            self.free_space(file_system).min(total_size - offset),
-        )
+        if total_size == 0 {
+            return match files.write_file(path, &[]).await {
+                Ok(()) => write_pacing(status::OK, 0, 0),
+                Err(_) => write_pacing(status::ERROR, 0, 0),
+            };
+        }
+        self.writing = Some(upload);
+        write_pacing(status::OK, offset, free_space(files).min(total_size - offset))
     }
 
-    fn continue_write<S: Storage>(&mut self, file_system: &Filesystem<S>, request: &[u8]) -> Vec<u8> {
+    async fn continue_write<Files: FileAccess>(&mut self, files: &mut Files, request: &[u8]) -> Vec<u8> {
         if request.len() < WRITE_DATA_HEADER_SIZE {
             return write_pacing(status::PROTOCOL_ERROR, 0, 0);
         }
@@ -303,91 +337,91 @@ impl FileTransfer {
         let stated_size = read_u32(request, 8) as usize;
         let data = &request[WRITE_DATA_HEADER_SIZE..];
         let data = &data[..stated_size.min(data.len())];
-        let Some(upload) = &self.writing else {
+        let Some(upload) = &mut self.writing else {
             return write_pacing(status::PROTOCOL_ERROR, offset, 0);
         };
         let end = offset as u64 + data.len() as u64;
         if offset > upload.next_offset || end > upload.total_size as u64 {
             return write_pacing(status::PROTOCOL_ERROR, offset, 0);
         }
-        let written = file_system.open(&upload.path, OpenFlags::WRITE).and_then(|file| {
-            let result = file
-                .seek(SeekFrom::Start(offset))
-                .and_then(|_| write_all(&file, data));
-            file.close().and(result)
-        });
-        if let Err(error) = written {
+        let written = if upload.is_small() {
+            // A piece sent again overwrites what it covers; the rest extends the file.
+            let start = offset as usize;
+            upload.gathered.resize(upload.gathered.len().max(end as usize), 0);
+            upload.gathered[start..end as usize].copy_from_slice(data);
+            Ok(())
+        } else {
+            // The store appends only, so a piece sent again writes just what it adds.
+            let already_written = (upload.next_offset - offset) as usize;
+            files
+                .write_file_part(&data[already_written.min(data.len())..])
+                .await
+        };
+        if written.is_err() {
+            files.abandon_file();
             self.writing = None;
-            return write_pacing(status_for(error), offset, 0);
+            return write_pacing(status::ERROR, offset, 0);
         }
-        let next_offset = end as u32;
+        upload.next_offset = upload.next_offset.max(end as u32);
+        let next_offset = upload.next_offset;
         let total_size = upload.total_size;
         if next_offset >= total_size {
+            let finished = if upload.is_small() {
+                files.write_file(&upload.path, &upload.gathered).await
+            } else {
+                files.finish_file().await
+            };
             self.writing = None;
-        } else if let Some(upload) = &mut self.writing {
-            upload.next_offset = upload.next_offset.max(next_offset);
+            if finished.is_err() {
+                files.abandon_file();
+                return write_pacing(status::ERROR, offset, 0);
+            }
         }
         write_pacing(
             status::OK,
             next_offset,
-            self.free_space(file_system).min(total_size - next_offset),
+            free_space(files).min(total_size - next_offset),
         )
-    }
-
-    fn free_space<S: Storage>(&self, file_system: &Filesystem<S>) -> u32 {
-        let used = file_system.fs_size().unwrap_or(0).saturating_mul(self.block_size);
-        self.capacity_in_bytes.saturating_sub(used)
     }
 }
 
-fn write_all<S: Storage>(file: &littlefs_rust::File<'_, S>, data: &[u8]) -> Result<(), Error> {
-    let mut sent = 0;
-    while sent < data.len() {
-        let length = file.write(&data[sent..])? as usize;
-        if length == 0 {
-            return Err(Error::NoSpace);
-        }
-        sent += length;
-    }
-    Ok(())
+fn free_space<Files: FileAccess>(files: &Files) -> u32 {
+    files.free_bytes().min(u32::MAX as usize) as u32
 }
 
 // ============================================================================
 // Folders, deleting and moving
 // ============================================================================
 
-/// Makes every folder above `path` that is missing; any failure shows up when the file itself is made.
-fn make_parents<S: Storage>(file_system: &Filesystem<S>, path: &str) {
-    for (index, character) in path.char_indices() {
-        if character == '/' && index > 0 && !file_system.exists(&path[..index]) {
-            let _ = file_system.mkdir(&path[..index]);
-        }
-    }
+/// Every file's path under a folder, which exists only through the files inside it.
+async fn paths_under<Files: FileAccess>(files: &mut Files, folder: &str) -> Vec<String> {
+    let mut prefix = String::from(folder.trim_end_matches('/'));
+    prefix.push('/');
+    let mut paths = Vec::new();
+    let _ = files
+        .for_each_file(&prefix, &mut |path| paths.push(String::from(path)))
+        .await;
+    paths
 }
 
-fn make_directory<S: Storage>(file_system: &Filesystem<S>, request: &[u8]) -> Vec<u8> {
+async fn is_directory<Files: FileAccess>(files: &mut Files, path: &str) -> bool {
+    !paths_under(files, path).await.is_empty()
+}
+
+/// Folders exist only through the files in them, so making one always succeeds.
+fn make_directory(request: &[u8]) -> Vec<u8> {
     if request.len() < MAKE_DIRECTORY_HEADER_SIZE {
         return make_directory_status(status::PROTOCOL_ERROR);
     }
     let path_length = read_u16(request, 2) as usize;
-    let Some(path) = read_path(request, MAKE_DIRECTORY_HEADER_SIZE, path_length) else {
-        return make_directory_status(status::PROTOCOL_ERROR);
-    };
-    let path = path.trim_end_matches('/');
-    make_parents(file_system, path);
-    match file_system.mkdir(path) {
-        Ok(()) => make_directory_status(status::OK),
-        Err(Error::Exists) if is_directory(file_system, path) => make_directory_status(status::OK),
-        Err(error) => make_directory_status(status_for(error)),
+    match read_path(request, MAKE_DIRECTORY_HEADER_SIZE, path_length) {
+        Some(path) if !path.trim_end_matches('/').is_empty() => make_directory_status(status::OK),
+        _ => make_directory_status(status::PROTOCOL_ERROR),
     }
 }
 
-fn is_directory<S: Storage>(file_system: &Filesystem<S>, path: &str) -> bool {
-    matches!(file_system.stat(path), Ok(metadata) if metadata.file_type == FileType::Dir)
-}
-
 /// Deletes a file, or a folder with everything in it.
-fn delete<S: Storage>(file_system: &Filesystem<S>, request: &[u8]) -> Vec<u8> {
+async fn delete<Files: FileAccess>(files: &mut Files, request: &[u8]) -> Vec<u8> {
     if request.len() < DELETE_HEADER_SIZE {
         return two_byte_status(command::DELETE_STATUS, status::PROTOCOL_ERROR);
     }
@@ -399,33 +433,25 @@ fn delete<S: Storage>(file_system: &Filesystem<S>, request: &[u8]) -> Vec<u8> {
     if path.is_empty() {
         return two_byte_status(command::DELETE_STATUS, status::ERROR);
     }
-    match remove_with_contents(file_system, path, DEEPEST_DELETE) {
-        Ok(()) => two_byte_status(command::DELETE_STATUS, status::OK),
-        Err(error) => two_byte_status(command::DELETE_STATUS, status_for(error)),
+    let mut targets = paths_under(files, path).await;
+    if matches!(files.file_length(path).await, Ok(Some(_))) {
+        targets.push(String::from(path));
     }
-}
-
-fn remove_with_contents<S: Storage>(
-    file_system: &Filesystem<S>,
-    path: &str,
-    depth_left: usize,
-) -> Result<(), Error> {
-    if file_system.stat(path)?.file_type == FileType::Dir {
-        if depth_left == 0 {
-            return Err(Error::NotEmpty);
-        }
-        for entry in file_system.list_dir(path)? {
-            let mut inner_path = String::from(path);
-            inner_path.push('/');
-            inner_path.push_str(&entry.name);
-            remove_with_contents(file_system, &inner_path, depth_left - 1)?;
+    if targets.is_empty() {
+        return two_byte_status(command::DELETE_STATUS, status::NO_FILE);
+    }
+    for target in targets {
+        if files.delete_file(&target).await.is_err() {
+            return two_byte_status(command::DELETE_STATUS, status::ERROR);
         }
     }
-    file_system.remove(path)
+    two_byte_status(command::DELETE_STATUS, status::OK)
 }
 
 /// The old and new paths sit one after the other, with one separator byte between them.
-fn move_entry<S: Storage>(file_system: &Filesystem<S>, request: &[u8]) -> Vec<u8> {
+///
+/// The store has no rename, so a move copies each file, then deletes the old one.
+async fn move_entry<Files: FileAccess>(files: &mut Files, request: &[u8]) -> Vec<u8> {
     if request.len() < MOVE_HEADER_SIZE {
         return two_byte_status(command::MOVE_STATUS, status::PROTOCOL_ERROR);
     }
@@ -436,20 +462,70 @@ fn move_entry<S: Storage>(file_system: &Filesystem<S>, request: &[u8]) -> Vec<u8
     let (Some(old_path), Some(new_path)) = (old_path, new_path) else {
         return two_byte_status(command::MOVE_STATUS, status::PROTOCOL_ERROR);
     };
-    match file_system.rename(old_path, new_path) {
-        Ok(()) => two_byte_status(command::MOVE_STATUS, status::OK),
-        Err(error) => two_byte_status(command::MOVE_STATUS, status_for(error)),
+    let mut moves: Vec<(String, String)> = Vec::new();
+    if matches!(files.file_length(old_path).await, Ok(Some(_))) {
+        moves.push((String::from(old_path), String::from(new_path)));
     }
+    for inner in paths_under(files, old_path).await {
+        let mut moved = String::from(new_path.trim_end_matches('/'));
+        moved.push_str(&inner[old_path.trim_end_matches('/').len()..]);
+        moves.push((inner, moved));
+    }
+    if moves.is_empty() {
+        return two_byte_status(command::MOVE_STATUS, status::NO_FILE);
+    }
+    for (from, to) in moves {
+        if copy_file(files, &from, &to).await.is_err() || files.delete_file(&from).await.is_err() {
+            return two_byte_status(command::MOVE_STATUS, status::ERROR);
+        }
+    }
+    two_byte_status(command::MOVE_STATUS, status::OK)
+}
+
+/// Copies a file a piece at a time, so a large one never has to be in RAM.
+async fn copy_file<Files: FileAccess>(files: &mut Files, from: &str, to: &str) -> Result<(), FileError> {
+    let length = files.file_length(from).await?.unwrap_or(0);
+    if length <= SMALL_FILE_BYTES {
+        let mut data = vec![0; length];
+        files.read_file(from, 0, &mut data).await?;
+        return files.write_file(to, &data).await;
+    }
+    files.abandon_file();
+    files.begin_file(to).await?;
+    let mut piece = [0u8; COPY_PIECE_BYTES];
+    let mut copied = 0;
+    while copied < length {
+        let size = COPY_PIECE_BYTES.min(length - copied);
+        let read = files.read_file(from, copied, &mut piece[..size]).await;
+        let written = match read {
+            Ok(Some(_)) => files.write_file_part(&piece[..size]).await,
+            Ok(None) => Err(FileError::Damaged),
+            Err(error) => Err(error),
+        };
+        if let Err(error) = written {
+            files.abandon_file();
+            return Err(error);
+        }
+        copied += size;
+    }
+    files.finish_file().await
 }
 
 // ============================================================================
 // Listing a folder
 // ============================================================================
 
+/// What a folder holds: its files with their sizes, and the folders inside it, each once.
+struct FolderEntry {
+    name: String,
+    is_directory: bool,
+    size: u32,
+}
+
 /// One notification per entry, then a closing one whose entry number equals the total and whose name is empty.
 ///
 /// A name longer than the notification has room for is cut short.
-fn list_directory<S: Storage>(file_system: &Filesystem<S>, request: &[u8], room: usize) -> Vec<Vec<u8>> {
+async fn list_directory<Files: FileAccess>(files: &mut Files, request: &[u8], room: usize) -> Vec<Vec<u8>> {
     if request.len() < LIST_DIRECTORY_HEADER_SIZE {
         return vec![directory_entry(status::PROTOCOL_ERROR, 0, 0, 0, 0, b"")];
     }
@@ -457,24 +533,47 @@ fn list_directory<S: Storage>(file_system: &Filesystem<S>, request: &[u8], room:
     let Some(path) = read_path(request, LIST_DIRECTORY_HEADER_SIZE, path_length) else {
         return vec![directory_entry(status::PROTOCOL_ERROR, 0, 0, 0, 0, b"")];
     };
-    let path = if path.is_empty() { "/" } else { path };
-    let entries = match file_system.list_dir(path) {
-        Ok(entries) => entries,
-        Err(error) => return vec![directory_entry(status_for(error), 0, 0, 0, 0, b"")],
-    };
+    let folder = path.trim_end_matches('/');
+    let inside = paths_under(files, folder).await;
+    if inside.is_empty() && !folder.is_empty() {
+        let missing = if matches!(files.file_length(folder).await, Ok(Some(_))) {
+            status::ERROR
+        } else {
+            status::NO_FILE
+        };
+        return vec![directory_entry(missing, 0, 0, 0, 0, b"")];
+    }
+    let mut entries: Vec<FolderEntry> = Vec::new();
+    for inner in inside {
+        let rest = &inner[folder.len() + 1..];
+        let (name, is_directory) = match rest.split_once('/') {
+            Some((folder_name, _)) => (folder_name, true),
+            None => (rest, false),
+        };
+        if entries.iter().any(|entry| entry.name == name) {
+            continue;
+        }
+        let size = if is_directory {
+            0
+        } else {
+            files.file_length(&inner).await.ok().flatten().unwrap_or(0) as u32
+        };
+        entries.push(FolderEntry {
+            name: String::from(name),
+            is_directory,
+            size,
+        });
+    }
     let total = entries.len() as u32;
     let name_room = room.saturating_sub(LIST_DIRECTORY_ENTRY_HEADER_SIZE);
     let mut answers: Vec<Vec<u8>> = entries
         .iter()
         .enumerate()
         .map(|(index, entry)| {
-            let (flags, size) = match entry.file_type {
-                FileType::Dir => (IS_DIRECTORY, 0),
-                FileType::File => (0, entry.size),
-            };
+            let flags = if entry.is_directory { IS_DIRECTORY } else { 0 };
             let name = entry.name.as_bytes();
             let name = &name[..name.len().min(name_room)];
-            directory_entry(status::OK, index as u32, total, flags, size, name)
+            directory_entry(status::OK, index as u32, total, flags, entry.size, name)
         })
         .collect();
     answers.push(directory_entry(status::OK, total, total, 0, 0, b""));

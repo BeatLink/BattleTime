@@ -32,10 +32,10 @@ pub const PASSING_BYTES: u32 = 1_536;
 /// Rows of a Repeat taken to be built when their number is worked out while the app runs.
 pub const ASSUMED_ROWS: u32 = 8;
 
-/// The heap the firmware has: 16 KB for storage and 21 KB for the UI.
-pub const HEAP_BYTES: u32 = 37_888;
+/// The heap the firmware has: 10 KB for the system and 21 KB for the UI; the flash store keeps its tables outside it.
+pub const HEAP_BYTES: u32 = 31_744;
 
-/// What the system holds on the heap while an app is open: the file system, notifications and the shell.
+/// What the system holds on the heap while an app is open: notifications, file transfers and the shell.
 pub const SYSTEM_BYTES: u32 = 4_096;
 
 /// The most an open app may need, leaving the system its share.

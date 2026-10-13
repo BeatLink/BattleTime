@@ -9,16 +9,17 @@ publish = false
 [dependencies]
 embedded-storage = "0.3"
 heapless = "0.9"
-littlefs-rust = "0.1"
+neotime-flash-store = { path = "../flash_store" }
 serde = { version = "1", default-features = false, features = ["derive"] }
 serde-json-core = "0.6"
 
 neotime-boot = { path = "../../boot" }
 
 neotime-runtime = { path = "../../runtime" }
-neotime-storage = { path = "../storage" }
 
 [dev-dependencies]
+embassy-futures = "0.1"
+neotime-flash-store = { path = "../flash_store", features = ["ram-flash"] }
 neotime-runtime = { path = "../../runtime", features = ["writer"] }
 neotime-settings = { path = "../settings" }
 

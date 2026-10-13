@@ -221,7 +221,7 @@ export function set_fake_system_values() {
     { id: "software", name: "Software", is_face: false, enabled: true, memory: 12_100, refusal: 5 },
     { id: "timer", name: "Timer", is_face: false, enabled: true, memory: 13_600, refusal: 0 },
   ];
-  app_memory_budget.value = 33_792;
+  app_memory_budget.value = 27_648;
   preview_files.value = { "/notes/note.txt": STARTING_NOTE };
   clear_notifications();
   step_history.value = starting_step_history();

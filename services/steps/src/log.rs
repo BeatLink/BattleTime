@@ -1,4 +1,4 @@
-//! The step log on the file system, in wasp-os's step logger format.
+//! The step log in the flash store, in wasp-os's step logger format.
 //!
 //! Each day has a file, `/steps/<year>/<month>-<day>`, holding the steps of each six-minute slot
 //! from midnight as a little-endian `u16`. A slot is added when it ends with steps in it, so a file
@@ -7,8 +7,8 @@
 
 use core::fmt::Write;
 
-use littlefs_rust::{Error, Filesystem, OpenFlags, SeekFrom, Storage};
-use neotime_current_time::date_from_days_since_1970;
+use neotime_current_time::{date_from_days_since_1970, days_since_1970, Date};
+use neotime_flash_store::{FileAccess, FileError};
 
 use crate::{
     DayChange, FinishedSlot, Recorded, StepHistory, DAYS_REMEMBERED, HOURS_PER_DAY, SLOTS_PER_DAY,
@@ -16,6 +16,9 @@ use crate::{
 };
 
 pub const STEPS_DIRECTORY: &str = "/steps";
+/// How many days the log keeps; each is a record of up to 480 bytes, so 90 take at most about 47 KB of the
+/// store's records.
+pub const DAYS_KEPT: i64 = 90;
 pub const TRIP_PATH: &str = "/steps/trip";
 pub const BYTES_PER_SLOT: usize = 2;
 pub const LARGEST_DAY_FILE_BYTES: usize = SLOTS_PER_DAY * BYTES_PER_SLOT;
@@ -28,18 +31,29 @@ pub type DayPath = heapless::String<24>;
 // Paths
 // ============================================================================
 
-fn year_directory(year: i64) -> DayPath {
-    let mut path = DayPath::new();
-    let _ = write!(path, "{STEPS_DIRECTORY}/{year}");
-    path
-}
-
 /// The file holding a day, counted from 1970-01-01, such as `/steps/2026/01-05`.
 pub fn day_path(day: i64) -> DayPath {
     let date = date_from_days_since_1970(day);
-    let mut path = year_directory(date.year);
-    let _ = write!(path, "/{:02}-{:02}", date.month, date.day);
+    let mut path = DayPath::new();
+    let _ = write!(
+        path,
+        "{STEPS_DIRECTORY}/{}/{:02}-{:02}",
+        date.year, date.month, date.day
+    );
     path
+}
+
+/// The day a path such as `/steps/2026/01-05` holds, or nothing for any other path.
+pub fn day_of_path(path: &str) -> Option<i64> {
+    let rest = path.strip_prefix(STEPS_DIRECTORY)?.strip_prefix('/')?;
+    let (year, month_day) = rest.split_once('/')?;
+    let (month, day) = month_day.split_once('-')?;
+    let date = Date {
+        year: year.parse().ok()?,
+        month: month.parse().ok()?,
+        day: day.parse().ok()?,
+    };
+    Some(days_since_1970(date))
 }
 
 // ============================================================================
@@ -65,10 +79,21 @@ pub fn hours_from_file(bytes: &[u8]) -> [u16; HOURS_PER_DAY] {
     hours
 }
 
+/// A day's file read into RAM, as long as it can grow.
+type DayBytes = heapless::Vec<u8, LARGEST_DAY_FILE_BYTES>;
+
+async fn read_day<Files: FileAccess>(files: &mut Files, day: i64) -> Result<DayBytes, FileError> {
+    let mut bytes = DayBytes::new();
+    let _ = bytes.resize(LARGEST_DAY_FILE_BYTES, 0);
+    let length = files.read_file(&day_path(day), 0, &mut bytes).await?.unwrap_or(0);
+    bytes.truncate(length);
+    Ok(bytes)
+}
+
 /// The steps in each hour of a day; a day with no file had none.
-pub fn read_hours<S: Storage>(files: &Filesystem<S>, day: i64) -> [u16; HOURS_PER_DAY] {
-    files
-        .read_to_vec(&day_path(day))
+pub async fn read_hours<Files: FileAccess>(files: &mut Files, day: i64) -> [u16; HOURS_PER_DAY] {
+    read_day(files, day)
+        .await
         .map_or([0; HOURS_PER_DAY], |bytes| hours_from_file(&bytes))
 }
 
@@ -76,53 +101,62 @@ pub fn read_hours<S: Storage>(files: &Filesystem<S>, day: i64) -> [u16; HOURS_PE
 // Writing a slot
 // ============================================================================
 
-fn make_directory<S: Storage>(files: &Filesystem<S>, path: &str) -> Result<(), Error> {
-    match files.mkdir(path) {
-        Err(Error::Exists) => Ok(()),
-        result => result,
+/// Adds a finished slot's steps to its day's file, padding any slots before it with zeros.
+///
+/// A day's file is at most 480 bytes, so it is read, changed and written whole, and the store keeps it as a record.
+pub async fn write_slot<Files: FileAccess>(
+    files: &mut Files,
+    finished: FinishedSlot,
+) -> Result<(), FileError> {
+    let mut bytes = read_day(files, finished.time.day).await?;
+    let offset = finished.time.slot * BYTES_PER_SLOT;
+    if bytes.len() < offset + BYTES_PER_SLOT {
+        let _ = bytes.resize(offset + BYTES_PER_SLOT, 0);
     }
+    let added = finished.steps.min(u16::MAX as u32) as u16;
+    let steps = slot_steps(&bytes, finished.time.slot).saturating_add(added);
+    bytes[offset..offset + BYTES_PER_SLOT].copy_from_slice(&steps.to_le_bytes());
+    files.write_file(&day_path(finished.time.day), &bytes).await
 }
 
-/// Adds a finished slot's steps to its day's file, padding any slots before it with zeros.
-pub fn write_slot<S: Storage>(files: &Filesystem<S>, finished: FinishedSlot) -> Result<(), Error> {
-    let date = date_from_days_since_1970(finished.time.day);
-    make_directory(files, STEPS_DIRECTORY)?;
-    make_directory(files, &year_directory(date.year))?;
-    let file = files.open(
-        &day_path(finished.time.day),
-        OpenFlags::READ | OpenFlags::WRITE | OpenFlags::CREATE,
-    )?;
-    let offset = (finished.time.slot * BYTES_PER_SLOT) as u32;
-    let mut slot_bytes = [0u8; BYTES_PER_SLOT];
-    if offset < file.size() {
-        file.seek(SeekFrom::Start(offset))?;
-        file.read(&mut slot_bytes)?;
-    } else {
-        file.seek(SeekFrom::End(0))?;
-        let zeros = [0u8; BYTES_PER_SLOT];
-        while file.tell() < offset {
-            file.write(&zeros)?;
+/// Deletes the days older than the log keeps, counting back from `today`.
+pub async fn forget_old_days<Files: FileAccess>(files: &mut Files, today: i64) -> Result<(), FileError> {
+    let mut old_paths: heapless::Vec<DayPath, 8> = heapless::Vec::new();
+    loop {
+        old_paths.clear();
+        files
+            .for_each_file(STEPS_DIRECTORY, &mut |path| {
+                if day_of_path(path).is_some_and(|day| day <= today - DAYS_KEPT) {
+                    let mut kept = DayPath::new();
+                    if kept.push_str(path).is_ok() {
+                        let _ = old_paths.push(kept);
+                    }
+                }
+            })
+            .await?;
+        if old_paths.is_empty() {
+            return Ok(());
+        }
+        for path in &old_paths {
+            files.delete_file(path).await?;
         }
     }
-    let steps = u16::from_le_bytes(slot_bytes).saturating_add(finished.steps.min(u16::MAX as u32) as u16);
-    file.seek(SeekFrom::Start(offset))?;
-    file.write(&steps.to_le_bytes())?;
-    file.close()
 }
 
 // ============================================================================
 // The trip count
 // ============================================================================
 
-pub fn save_trip<S: Storage>(files: &Filesystem<S>, steps: u32) -> Result<(), Error> {
-    make_directory(files, STEPS_DIRECTORY)?;
-    files.write_file(TRIP_PATH, &steps.to_le_bytes())
+pub async fn save_trip<Files: FileAccess>(files: &mut Files, steps: u32) -> Result<(), FileError> {
+    files.write_file(TRIP_PATH, &steps.to_le_bytes()).await
 }
 
 /// The saved trip count, or `None` when there is none or it is not four bytes.
-pub fn load_trip<S: Storage>(files: &Filesystem<S>) -> Option<u32> {
-    let bytes: [u8; TRIP_FILE_BYTES] = files.read_to_vec(TRIP_PATH).ok()?.try_into().ok()?;
-    Some(u32::from_le_bytes(bytes))
+pub async fn load_trip<Files: FileAccess>(files: &mut Files) -> Option<u32> {
+    let mut bytes = [0u8; TRIP_FILE_BYTES + 1];
+    let length = files.read_file(TRIP_PATH, 0, &mut bytes).await.ok()??;
+    let trip: [u8; TRIP_FILE_BYTES] = bytes[..length].try_into().ok()?;
+    Some(u32::from_le_bytes(trip))
 }
 
 // ============================================================================
@@ -130,33 +164,39 @@ pub fn load_trip<S: Storage>(files: &Filesystem<S>) -> Option<u32> {
 // ============================================================================
 
 /// Fills the remembered days from the log, counting back from the day being recorded.
-pub fn load_days<S: Storage>(files: &Filesystem<S>, history: &mut StepHistory) {
+pub async fn load_days<Files: FileAccess>(files: &mut Files, history: &mut StepHistory) {
     let today = history.recording().day;
     for days_back in 0..DAYS_REMEMBERED {
-        history.set_day(days_back, read_hours(files, today - days_back as i64));
+        history.set_day(days_back, read_hours(files, today - days_back as i64).await);
     }
 }
 
 /// Fills the history from the log at start-up: the remembered days and the trip count.
-pub fn load_history<S: Storage>(files: &Filesystem<S>, history: &mut StepHistory) {
-    load_days(files, history);
-    if let Some(steps) = load_trip(files) {
+pub async fn load_history<Files: FileAccess>(files: &mut Files, history: &mut StepHistory) {
+    load_days(files, history).await;
+    if let Some(steps) = load_trip(files).await {
         history.set_trip_steps(steps);
     }
 }
 
 /// Writes the slot a reading ended, with the trip count, and reads the days again after the clock jumped.
-pub fn store<S: Storage>(
-    files: &Filesystem<S>,
+pub async fn store<Files: FileAccess>(
+    files: &mut Files,
     history: &mut StepHistory,
     recorded: Recorded,
-) -> Result<(), Error> {
+) -> Result<(), FileError> {
     let written = match recorded.finished {
-        Some(finished) => write_slot(files, finished).and_then(|()| save_trip(files, history.trip_steps())),
+        Some(finished) => match write_slot(files, finished).await {
+            Ok(()) => save_trip(files, history.trip_steps()).await,
+            Err(error) => Err(error),
+        },
         None => Ok(()),
     };
+    if recorded.day_change != DayChange::SameDay {
+        let _ = forget_old_days(files, history.recording().day).await;
+    }
     if recorded.day_change == DayChange::Jump {
-        load_days(files, history);
+        load_days(files, history).await;
     }
     written
 }

@@ -197,32 +197,65 @@ impl Confirmation {
 /// The rehearsal has no shell, so it keeps no files for it.
 pub struct Files;
 
-/// Stands in for the watch's file system type; the rehearsal never has one.
-pub type WatchFileSystem = littlefs_rust::Filesystem<littlefs_rust::RamStorage>;
-
+/// Every call finds nothing, so the file service answers each command with an error.
+#[allow(dead_code)]
 impl Files {
-    /// Always nothing, so the file service answers every command with an error.
-    pub fn file_system(&self) -> Option<&WatchFileSystem> {
+    pub async fn wait_until_free(&self) {}
+
+    pub fn read_now(&self, _path: &str) -> Option<alloc::vec::Vec<u8>> {
         None
     }
 
-    pub fn read_part(&self, _path: &str, _offset: u32, _out: &mut [u8]) -> Option<usize> {
+    pub fn read_part_now(&self, _path: &str, _offset: u32, _out: &mut [u8]) -> Option<usize> {
         None
     }
 
-    pub fn read(&self, _path: &str) -> Option<alloc::vec::Vec<u8>> {
-        None
-    }
-
-    pub fn write(&self, _path: &str, _bytes: &[u8]) -> bool {
+    pub fn write_now(&self, _path: &str, _bytes: &[u8]) -> bool {
         false
     }
 
-    /// The rehearsal keeps no apps, so every packages command is refused.
-    pub fn run_packages_command(
-        &self,
-        line: &[u8],
-    ) -> (alloc::string::String, neotime_packages::commands::Change) {
-        neotime_packages::commands::refuse_command(line, "this build keeps no apps")
+    pub fn free_kilobytes_now(&self) -> Option<u32> {
+        None
+    }
+
+    pub fn installed_apps_now(&self) -> alloc::vec::Vec<neotime_packages::InstalledApp> {
+        alloc::vec::Vec::new()
+    }
+
+    pub fn set_app_enabled_now(&self, _id: &str, _enabled: bool) -> bool {
+        false
+    }
+
+    pub fn read_app_image_now(&self, _id: &str) -> Option<alloc::vec::Vec<u8>> {
+        None
+    }
+}
+
+/// Answers every request as a build with no store must: file commands with an error, steps with nothing.
+#[embassy_executor::task]
+pub async fn run_storage(_files: &'static Files) {
+    use crate::storage_requests::{self, StorageRequest};
+    use embassy_futures::select::{select, Either};
+
+    loop {
+        match select(
+            storage_requests::REQUESTS.receive(),
+            crate::packages::COMMANDS.receive(),
+        )
+        .await
+        {
+            Either::First(StorageRequest::FileTransfer { request, .. }) => {
+                storage_requests::FILE_ANSWERS
+                    .send(neotime_blefs::FileTransfer::refuse(&request))
+                    .await;
+            }
+            Either::First(StorageRequest::LoadSteps) => storage_requests::STEPS_LOADED.signal(()),
+            Either::First(_) => {}
+            Either::Second(line) => {
+                let (reply, _) =
+                    neotime_packages::commands::refuse_command(&line, "this build keeps no apps");
+                crate::packages::REPLIES.send(reply).await;
+            }
+        }
     }
 }

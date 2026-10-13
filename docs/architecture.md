@@ -160,13 +160,13 @@ NeoTime/
 │   ├── crash_record/ neotime-crash-record: reset reasons in words, the crash record kept across a reset, and the crash screen
 │   ├── current_time/ neotime-current-time: the Current Time service's values and calendar arithmetic
 │   ├── dfu/          neotime-dfu: the legacy DFU update protocol over Bluetooth
-│   ├── flash_store/  neotime-flash-store: files, records and logs in the external flash, built to replace littlefs
+│   ├── flash_store/  neotime-flash-store: the watch's files, records and logs in the external flash
 │   ├── foreground/   neotime-foreground: whether the wearer watches the screen move, for background work to wait on
 │   ├── liveness/     neotime-liveness: whether the shell and the radio still make progress, for the watchdog
 │   ├── packages/     neotime-packages: the apps installed in /apps and the shared library's install
 │   ├── settings/     neotime-settings: the watch-wide settings, their limits and their file
 │   ├── steps/        neotime-steps: the step history by hour, the trip count and the daily step log
-│   ├── storage/      neotime-storage: the littlefs file system in the external flash
+│   ├── storage/      neotime-storage: littlefs in the external flash, for the wasp-os storage rehearsal
 │   └── updates/      neotime-updates: stores an uploaded firmware and hands it to the bootloader
 ├── simulator/        neotime-simulator: the drivers in a desktop window
 ├── third_party/
@@ -367,7 +367,7 @@ interpreter, 2,056 B for the bindings of up to 128 expressions and 2,440 B for t
 ### External flash (`drivers/external_flash`)
 
 `neotime-external-flash` drives the 4 MB SPI NOR flash as an `embedded-storage` `NorFlash`, the
-trait embassy-boot and littlefs are reached through:
+trait embassy-boot and the flash store are reached through:
 
 - **Any 4 MB chip.** `ExternalFlash::new` wakes the chip from deep power-down, since the firmware
   may have left it asleep before a reset, then checks that it answers as a 4 MB chip. Only standard
@@ -377,55 +377,46 @@ trait embassy-boot and littlefs are reached through:
 - **Power.** `sleep` puts the chip in deep power-down, and `wake` brings it back.
 - **Blocking and async.** While an erase or a write is in progress, both check the chip every 100
   microseconds and wait in between. `ExternalFlash` blocks, which is what the bootloader, the
-  reloader and the firmware's littlefs and update slots need; it waits on a blocking delay, and the
+  reloader and the firmware's update slots need; it waits on a blocking delay, and the
   watch passes `BusyWait` (the `cortex-m` feature), which spins the CPU without touching a
   peripheral. Back-to-back status reads made the emulator spend most of an erase in its SPI model.
   `AsyncExternalFlash` implements the `embedded-storage-async` traits and waits on an async delay,
   so other tasks run. Both share their commands, range checks and page splitting.
+- **Without waiting.** `start_erasing_sector` and `start_programming_page` start an erase or a page
+  program and return at once, and `operation_has_finished` reads the chip's status once. Until one
+  says it has finished, any other call first waits for it. The firmware's flash store polls these
+  with the timer between, so other tasks run while the chip works.
 - **Rewrites.** Both mark themselves `MultiwriteNorFlash`, since NOR flash can be written again
   without an erase as long as bits only change from 1 to 0.
 
 It keeps no buffers.
 
-## Storage (`services/storage`)
-
-`neotime-storage` puts a [littlefs](https://github.com/littlefs-project/littlefs) file system in
-the 3 MB `FILE_SYSTEM` region of the external flash, through
-[`littlefs-rust`](https://github.com/light-player/littlefs-rust), a pure Rust translation of the C
-littlefs with the same on-disk format. littlefs survives a power cut at any point and spreads wear
-across the flash; InfiniTime uses it on the same chip.
-
-- **First start.** `prepare_file_system` formats blank flash and makes the top-level folders:
-  `/apps`, `/settings` and `/resources`.
-- **Never formats by mistake.** It formats only when littlefs finds no file system at all. A read
-  error from the flash is returned instead, so a bus fault cannot wipe the watch.
-- **Cost.** The buffers live on the heap: under 1 KB while mounted and about 400 bytes per open file.
-- **Free space.** `free_kilobytes` counts the blocks no file or folder uses, for the system app's system page.
-- **Erasing ahead.** `ErasedBlocks` and `next_block_to_erase_ahead` let the firmware erase the next
-  few free blocks in the background, so littlefs's own erase of one returns at once; see
-  [storage.md](storage.md#erasing-ahead).
-- **Two fixes.** `littlefs-rust-core` is built without overflow checks, as C behaves, and a patched
-  copy of the wrapper in `third_party/littlefs-rust` turns off a 256-entry cap that panics on file
-  systems written by the C littlefs.
-
-See [storage.md](storage.md).
-
 ## Flash store (`services/flash_store`)
 
-`neotime-flash-store` keeps files, records and logs in the external flash, `async` and with no heap,
-and is built to replace `neotime-storage`; the firmware does not use it yet. It knows how data is
-written, not what it is, so a new kind of data needs no new format:
+`neotime-flash-store` keeps the watch's files, records and logs in the 3 MB `FILE_SYSTEM` region of
+the external flash, `async` and with no heap. It knows how data is written, not what it is, so a new
+kind of data needs no new format:
 
 - **Files** are named by path and written whole, at once or a part at a time as an upload arrives.
   Each is a list of up to 64 sectors in any order, committed by a header written last. Files of
-  1 KB or less are kept as records.
+  1 KB or less are kept as records. There are no folders; a path's slashes only name it.
 - **Records** are small values rewritten often, keyed by their owner's app number, appended to a
   ring with a table in RAM of each key's newest copy. Writes are refused before the ring is half
   full, and each app may use 4 KB.
 - **Logs** are appended over time, batched in RAM, and drop their oldest sector when the ring wraps.
+- **`FileAccess`** is the trait the services reach files through, so they need not name the
+  store's sizes; `ram_flash` (a feature) gives their tests a flash in RAM.
 
 It survives a power cut at any write or erase, which its tests check exhaustively. Built for the
-watch it takes 2,700 B of RAM and about 26 KB of code. See [flash-store.md](flash-store.md).
+watch it takes 2,700 B of RAM and about 26 KB of code. The firmware reaches it through its storage
+task; see [Firmware](#firmware-firmware) and [flash-store.md](flash-store.md).
+
+## littlefs (`services/storage`)
+
+`neotime-storage` puts a [littlefs](https://github.com/littlefs-project/littlefs) file system on the
+external flash through [`littlefs-rust`](https://github.com/light-player/littlefs-rust), a pure Rust
+translation of the C littlefs. Only the wasp-os storage rehearsal uses it now; see
+[storage.md](storage.md).
 
 ## Updates (`services/updates`)
 
@@ -503,7 +494,7 @@ colours; the Settings app and `settings.theme` pick and read it by preset number
 ## Step history (`services/steps`)
 
 `neotime-steps` keeps the step history the firmware serves to apps as `steps_today` and
-`step_history`, and its log in `/steps`, so all of it is tested on a computer against littlefs in
+`step_history`, and its log in `/steps`, so all of it is tested on a computer against the flash store in
 RAM.
 
 - **Readings.** `StepHistory::record` takes the chip's count and the local time. It adds what the
@@ -516,8 +507,9 @@ RAM.
 - **The log.** When a slot ends with steps, `log::store` adds them to that slot's place in the
   day's file, `/steps/<year>/<month>-<day>`, padding earlier slots with zeros, and saves the trip
   count in `/steps/trip`. Each slot is a little-endian `u16`, as wasp-os's step logger writes them,
-  so a full day is 480 bytes. Slots without steps are never written, so a quiet night costs no
-  flash writes, and nothing is ever deleted.
+  so a full day is 480 bytes, which the flash store keeps as a record. Slots without steps are never
+  written, so a quiet night costs no flash writes. When a new day starts, `log::forget_old_days`
+  deletes the days older than `DAYS_KEPT` (90), so the log stays within the store's records.
 - **Start.** `log::load_history` reads the remembered days and the trip count back. The chip starts
   its count from 0 at every start, so a restart loses only the slot in progress.
 
@@ -553,8 +545,8 @@ The folders are the whole record: there is no list of installed apps to fall out
   tail of the region would spoil the image's CRC. It erases only the pages it needs inside the
   region and writes the header last. `installed_library` finds the image again.
 
-It knows nothing of Bluetooth, so its tests run on a computer against littlefs in RAM and a fake
-internal flash.
+It knows nothing of Bluetooth, so its tests run on a computer against the flash store in RAM and a
+fake internal flash.
 
 ## Firmware updates over Bluetooth (`services/dfu`)
 
@@ -568,16 +560,21 @@ come out, and the bytes go to `neotime-updates`. Its tests run a whole update th
 
 `neotime-blefs` speaks Adafruit's BLE file transfer protocol, InfiniTime's `FSService`, so ITD,
 Gadgetbridge and the companion app reach the watch's files. `FileTransfer` turns one command into
-its answers against a littlefs `Filesystem`, with no Bluetooth in it; it remembers the file being
-read or written between commands, and opens and closes the file for each one, so the shell can use
-the file system between commands. The firmware sends each answer as a notification, waiting for a
-free packet when a folder listing fills the send queue. Its tests run against littlefs in RAM. The
+its answers against the flash store's `FileAccess`, with no Bluetooth in it; it remembers the file
+being read or written between commands. The store has no folders, so a folder is the files whose
+paths start with it: making one always succeeds, and listing, deleting or moving one acts on what
+it holds. Uploads of 1 KB or less are gathered in RAM and written whole, so they become records;
+larger ones stream into the store and replace the old file only when the last piece arrives, and
+one cut short resumes only while the store still holds it open. A move copies, then deletes. The
+firmware's storage task answers each command, and the Bluetooth task sends each answer as a
+notification, waiting for a free packet when a folder listing fills the send queue. Its tests run
+against the flash store in RAM. The
 `trouble` feature adds the GATT service. See [companion-protocol.md](companion-protocol.md#file-transfer).
 
 ## Firmware (`firmware`)
 
 `neotime-firmware` takes over the bootloader's watchdog and feeds it only while the button is up,
-shows a status page, mounts the file system, advertises as "NeoTime" with the DFU and Current Time
+shows a status page, mounts the flash store, advertises as "NeoTime" with the DFU and Current Time
 services, and confirms itself to the bootloader once Bluetooth runs. It is outside the workspace,
 like the bootloader, because it only builds for the watch. See [updates.md](updates.md).
 
@@ -604,8 +601,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
   work stopped for twelve, lets the watchdog reset the watch. Checks are counted rather than timed,
   so a long job that blocks every task, such as copying the shared library, never counts.
   `tests/emulator/liveness.robot` stops the radio's interrupt and sees the reset.
-- **Background work waits for a pause.** Every task shares one executor, and littlefs and the
-  flash chips block it while they work, a sector erase for tens of milliseconds. Work the wearer
+- **Background work waits for a pause.** Every task shares one executor, and the shell's store
+  calls and the internal flash block it while they work, a sector erase for tens of milliseconds. Work the wearer
   is not waiting on first awaits `foreground::wait_for_a_pause`: each packages command, each file
   transfer write from the phone, and each step count reading before it goes to the log. It holds
   back while the shell is part way through a transition or a sliced redraw, or a finger is down,
@@ -740,8 +737,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
   send to end, the status page and help screen included. In the emulator, with the shared library
   installed so text and icons draw, opening the launcher drew for 1,140 ms and a scroll for 318 ms
   while widgets drew through rlvgl; drawing straight into strips (`StripRenderer`) cut them to
-  190 ms, 69 ms of it waiting on the bus, and 46 ms, 12 ms of it waiting. The last two count the free blocks erased ahead of littlefs and the
-  erases of littlefs that returned at once because of it ([storage.md](storage.md#erasing-ahead)).
+  190 ms, 69 ms of it waiting on the bus, and 46 ms, 12 ms of it waiting. The last two count the sectors the flash store erased
+  and the store calls the shell made while another task held the store, which found nothing.
 - **Reset reasons and crash record.** `restart.rs` reads and clears `RESETREAS` at start, and reads
   the crash record the previous run left in `.uninit` RAM (see
   [memory-map.md](memory-map.md#ram-64-kb-planned)). The full firmware keeps the record until the
@@ -798,28 +795,39 @@ watch face, the launcher and the apps through `neotime-app-host`:
 - **Battery service.** The standard Battery service (0x180F) answers a read of 0x2A19 with the
   charge `battery.rs` last measured, and notifies a subscribed phone whenever that changes.
 - **Packages characteristic.** Lines written to 6e540003 in the NeoTime service go, once their write
-  is answered, to `packages::run_commands`, a task of their own, which runs them through
-  `storage::Files::run_packages_command`; the Bluetooth task notifies each reply in 20-byte pieces,
+  is answered, to the storage task, which runs them through `storage::Files::run_packages_command`;
+  the Bluetooth task notifies each reply in 20-byte pieces,
   waiting for a free packet when a long reply, such as the app list, fills the eight-packet pool.
   The task starts near the top of the stack, while the Bluetooth task's frames under a connection
   take about 2.7 KB, so the verifier inside an install never reaches the end of the stack. A command
   that installs, removes or hides an app, or copies a new shared library into internal flash, raises
   `packages::CHANGED` for the shell.
   Copying the library erases internal flash pages, each stopping the CPU for about 85 ms.
+- **Storage.** `storage/watch.rs` mounts the flash store at start, in place in its static and by
+  polling the chip, so no task holds a copy of it. Its flash adapter, `StoreFlash`, reads at once
+  and starts each erase and page program without waiting, then waits on the timer, so other tasks
+  run while the chip works. The **storage task** (`run_storage`) alone awaits the store: the
+  Bluetooth task's file transfers, the packages commands, the step log and the time zone reach it
+  as requests (`storage_requests.rs`). Each call's future, up to 1.8 KB, is boxed on the heap while
+  it runs, both in the task and in the shell's calls, so it costs neither static RAM nor stack. The shell does not await the store; at the top of each turn of its loop it waits
+  until no request is under way, then calls the store directly (`Files::read_now` and the like),
+  which run to their end at once by polling the chip, and no other task can take the store before
+  the shell next waits. The app host's file reads while drawing go the same way.
 - **Clock.** `clock.rs` holds one `WallClock`: UTC counted on from the build time, or from what a
   phone last set through Current Time (0x2A2B), Local Time Information (0x2A0F) or a `setTime`
   line, which `read_companion_line` hands it before reading JSON. `clock::now()` gives local time,
   for drawing, chimes and the midnight step reset; `clock::utc_now()` gives the `now` apps and the
   app host see, with `clock::utc_offset()` as `utc_offset`, and `clock::instant_at` turns a UTC
   time into a timer reading. Setting the clock signals `now`, `utc_offset` and `started_at` as
-  changed. A changed zone is written to `/settings/time_zone` by the Bluetooth task after the write
-  is answered, and the shell reads it back at start unless a phone already wrote one.
+  changed. A changed zone is written to `/settings/time_zone` by the storage task, which the
+  Bluetooth task asks once the write is answered, and the shell reads it back at start unless a
+  phone already wrote one.
 - **System info.** Apps read `firmware_version` from the build's version, `started_at` from the
   clock's UTC at uptime zero, `reset_reason` from the text `restart.rs` writes once at start into a
-  static with `neotime_crash_record::RestartReason`, and `free_storage_kilobytes` from
-  `neotime_storage::free_kilobytes`. Counting the free space walks the file system, so a read
-  before it is counted gives 0 and asks the shell's loop to count it, outside the redraw's deep
-  stack; the app then redraws with the count, which is kept until the next app opens.
+  static with `neotime_crash_record::RestartReason`, and `free_storage_kilobytes` from the flash
+  store's free file sectors. A read before it is counted gives 0 and asks the shell's loop to count
+  it, outside the redraw's deep stack; the app then redraws with the count, which is kept until the
+  next app opens.
 - **Status page.** The start-up lines and an update's progress share the display with the shell;
   while the page is up the shell draws nothing. During an update the page holds the screen lit;
   once the update ends or fails it gives way to the next touch or press, or to the timeout. Its
@@ -867,8 +875,8 @@ Not done yet: heart rate, the notification count, navigation and the weather for
 as 0 or empty, and music and weather are lost on a restart; with a tap waking the screen, the
 touch panel stays awake while the screen is off.
 
-It takes 293 KB of the 388 KB firmware slot (the two accelerometers' configuration files are 12 KB
-of it; the fonts are in the shared library) and 51 KB of static RAM, 37 KB of it heap: 16 KB for storage and 21 KB for
+It takes 385 KB of the 388 KB firmware slot (the two accelerometers' configuration files are 12 KB
+of it; the fonts are in the shared library) and 53 KB of static RAM, 31 KB of it heap: 10 KB for the system and 21 KB for
 the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
 the button and the backlight timeout all work.
 

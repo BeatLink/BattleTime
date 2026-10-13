@@ -2,36 +2,80 @@ extern crate std;
 
 use std::{vec, vec::Vec};
 
-use littlefs_rust::{Config, RamStorage};
+use embassy_futures::block_on;
+use neotime_flash_store::{ram_flash::RamFlash, FlashStore, Layout};
 use neotime_runtime::writer::ImageWriter;
 
 use super::*;
 
 // ============================================================================
-// A file system in RAM, and images to install
+// A store in RAM, and images to install
 // ============================================================================
 
-const BLOCK_SIZE: u32 = 4096;
-const BLOCK_COUNT: u32 = 64;
+type TestStore = FlashStore<RamFlash, 32, 64, 8>;
 
-fn file_system() -> Filesystem<RamStorage> {
-    let mut storage = RamStorage::new(BLOCK_SIZE, BLOCK_COUNT);
-    let config = Config::new(BLOCK_SIZE, BLOCK_COUNT);
-    Filesystem::format(&mut storage, &config).unwrap();
-    let files = Filesystem::mount(storage, config)
-        .map_err(|(error, _)| error)
-        .unwrap();
-    files.mkdir(APPS_DIRECTORY).unwrap();
-    files
+const LAYOUT: Layout = Layout {
+    start_address: 0,
+    file_sectors: 64,
+    record_sectors: 8,
+    log_sectors: 4,
+};
+
+fn file_system() -> TestStore {
+    block_on(TestStore::mount(RamFlash::blank(LAYOUT.total_sectors()), LAYOUT)).unwrap()
+}
+
+fn write_raw(files: &mut TestStore, path: &str, bytes: &[u8]) {
+    block_on(FileAccess::write_file(files, path, bytes)).unwrap();
+}
+
+/// The package manager with each call run to its end, so the tests read as before.
+struct SyncPackages<'files>(Packages<'files, TestStore>);
+
+impl SyncPackages<'_> {
+    fn list(&mut self) -> Result<Vec<InstalledApp>, PackageError> {
+        block_on(self.0.list())
+    }
+
+    fn enabled(&mut self) -> Result<Vec<InstalledApp>, PackageError> {
+        block_on(self.0.enabled())
+    }
+
+    fn read_image(&mut self, id: &str) -> Result<Vec<u8>, PackageError> {
+        block_on(self.0.read_image(id))
+    }
+
+    fn install(&mut self, id: &str, library_version: Option<u16>) -> Result<InstalledApp, PackageError> {
+        block_on(self.0.install(id, library_version))
+    }
+
+    fn change_enabled(&mut self, id: &str, enabled: bool) -> Result<u32, PackageError> {
+        block_on(self.0.change_enabled(id, enabled))
+    }
+
+    fn remove(&mut self, id: &str) -> Result<(), PackageError> {
+        block_on(self.0.remove(id))
+    }
+
+    fn set_enabled(&mut self, id: &str, enabled: bool) -> Result<(), PackageError> {
+        block_on(self.0.set_enabled(id, enabled))
+    }
+
+    fn exists(&mut self, path: &str) -> bool {
+        block_on(self.0.exists(path))
+    }
+}
+
+fn packages(files: &mut TestStore) -> SyncPackages<'_> {
+    SyncPackages(Packages::new(files))
 }
 
 fn image(id: &str, name: &str, kind: AppKind) -> Vec<u8> {
     ImageWriter::new(id, name, kind, 1).build()
 }
 
-fn put(files: &Filesystem<RamStorage>, id: &str, bytes: &[u8]) {
-    let _ = files.mkdir(&app_folder(id));
-    files.write_file(&app_file(id, IMAGE_FILE), bytes).unwrap();
+fn put(files: &mut TestStore, id: &str, bytes: &[u8]) {
+    write_raw(files, &app_file(id, IMAGE_FILE), bytes);
 }
 
 // ============================================================================
@@ -66,13 +110,13 @@ fn paths_sit_inside_the_apps_folder() {
 
 #[test]
 fn an_app_built_for_a_newer_library_than_the_watch_has_is_refused() {
-    let files = file_system();
+    let mut files = file_system();
     put(
-        &files,
+        &mut files,
         "timer",
         &ImageWriter::new("timer", "Timer", AppKind::App, 3).build(),
     );
-    let packages = Packages::new(&files);
+    let mut packages = packages(&mut files);
 
     assert_eq!(
         packages.install("timer", Some(2)),
@@ -89,9 +133,9 @@ fn an_app_built_for_a_newer_library_than_the_watch_has_is_refused() {
 
 #[test]
 fn an_app_installs_and_is_listed_with_its_name() {
-    let files = file_system();
-    put(&files, "timer", &image("timer", "Timer", AppKind::App));
-    let packages = Packages::new(&files);
+    let mut files = file_system();
+    put(&mut files, "timer", &image("timer", "Timer", AppKind::App));
+    let mut packages = packages(&mut files);
 
     let installed = packages.install("timer", None).unwrap();
 
@@ -118,10 +162,10 @@ fn large_image(id: &str) -> Vec<u8> {
 
 #[test]
 fn an_image_larger_than_the_heap_is_never_read_and_listed_as_off() {
-    let files = file_system();
+    let mut files = file_system();
     let bytes = huge_image("huge");
-    put(&files, "huge", &bytes);
-    let packages = Packages::new(&files);
+    put(&mut files, "huge", &bytes);
+    let mut packages = packages(&mut files);
 
     let refusal = Err(PackageError::Refused(Refusal::TooLarge {
         need_bytes: bytes.len() as u32,
@@ -130,14 +174,14 @@ fn an_image_larger_than_the_heap_is_never_read_and_listed_as_off() {
     assert_eq!(packages.install("huge", None).map(|_| ()), refusal);
     let listed = packages.list().unwrap();
     assert_eq!((listed[0].name.as_str(), listed[0].enabled), ("huge", false));
-    assert!(files.exists(&app_file("huge", DISABLED_FILE)));
+    assert!(packages.exists(&app_file("huge", DISABLED_FILE)));
 }
 
 #[test]
 fn an_app_too_large_for_the_heap_stays_installed_but_turned_off() {
-    let files = file_system();
-    put(&files, "huge", &large_image("huge"));
-    let packages = Packages::new(&files);
+    let mut files = file_system();
+    put(&mut files, "huge", &large_image("huge"));
+    let mut packages = packages(&mut files);
 
     let result = packages.install("huge", None);
 
@@ -158,9 +202,9 @@ fn an_app_too_large_for_the_heap_stays_installed_but_turned_off() {
 
 #[test]
 fn turning_an_app_on_and_off_gives_its_need() {
-    let files = file_system();
-    put(&files, "timer", &image("timer", "Timer", AppKind::App));
-    let packages = Packages::new(&files);
+    let mut files = file_system();
+    put(&mut files, "timer", &image("timer", "Timer", AppKind::App));
+    let mut packages = packages(&mut files);
     let installed = packages.install("timer", None).unwrap();
     assert!(installed.need_bytes > 0);
     assert!(!installed.lists_apps);
@@ -184,64 +228,64 @@ fn turning_an_app_on_and_off_gives_its_need() {
 
 #[test]
 fn a_face_installs_too() {
-    let files = file_system();
-    put(&files, "analog", &image("analog", "Analog", AppKind::Face));
+    let mut files = file_system();
+    put(&mut files, "analog", &image("analog", "Analog", AppKind::Face));
     assert_eq!(
-        Packages::new(&files).install("analog", None).unwrap().kind,
+        packages(&mut files).install("analog", None).unwrap().kind,
         AppKind::Face
     );
 }
 
 #[test]
 fn a_broken_image_is_refused_and_left_for_another_try() {
-    let files = file_system();
+    let mut files = file_system();
     let mut bytes = image("timer", "Timer", AppKind::App);
     let last = bytes.len() - 1;
     bytes[last] ^= 0xFF;
-    put(&files, "timer", &bytes);
-    let packages = Packages::new(&files);
+    put(&mut files, "timer", &bytes);
+    let mut packages = packages(&mut files);
 
     assert!(matches!(
         packages.install("timer", None),
         Err(PackageError::BadImage(_))
     ));
-    assert!(files.exists(&app_file("timer", IMAGE_FILE)));
+    assert!(packages.exists(&app_file("timer", IMAGE_FILE)));
     assert_eq!(packages.list().unwrap(), vec![]);
 }
 
 #[test]
 fn the_shared_library_is_not_an_app() {
-    let files = file_system();
+    let mut files = file_system();
     put(
-        &files,
+        &mut files,
         "shared",
         &image("shared", "Shared library", AppKind::Library),
     );
     assert_eq!(
-        Packages::new(&files).install("shared", None),
+        packages(&mut files).install("shared", None),
         Err(PackageError::IsLibrary)
     );
 }
 
 #[test]
 fn an_image_must_be_in_its_own_folder() {
-    let files = file_system();
-    put(&files, "timer", &image("dice", "Dice", AppKind::App));
+    let mut files = file_system();
+    put(&mut files, "timer", &image("dice", "Dice", AppKind::App));
     assert_eq!(
-        Packages::new(&files).install("timer", None),
+        packages(&mut files).install("timer", None),
         Err(PackageError::IdMismatch)
     );
 }
 
 #[test]
 fn installing_without_an_image_says_so() {
-    let files = file_system();
+    let mut files = file_system();
     assert_eq!(
-        Packages::new(&files).install("timer", None),
+        packages(&mut files).install("timer", None),
         Err(PackageError::NotInstalled)
     );
     assert_eq!(
-        Packages::new(&files).install("../etc", None),
+        packages(&mut files).install("../etc", None),
         Err(PackageError::BadId)
     );
 }
@@ -275,11 +319,11 @@ fn image_with_bad_code(id: &str) -> Vec<u8> {
 
 #[test]
 fn installing_verifies_the_code_but_listing_only_parses() {
-    let files = file_system();
+    let mut files = file_system();
     let bytes = image_with_bad_code("timer");
     assert!(AppImage::parse(&bytes).is_ok());
-    put(&files, "timer", &bytes);
-    let packages = Packages::new(&files);
+    put(&mut files, "timer", &bytes);
+    let mut packages = packages(&mut files);
 
     assert!(matches!(
         packages.install("timer", None),
@@ -291,13 +335,13 @@ fn installing_verifies_the_code_but_listing_only_parses() {
 
 #[test]
 fn the_list_is_in_id_order_and_skips_what_is_not_an_app() {
-    let files = file_system();
-    put(&files, "timer", &image("timer", "Timer", AppKind::App));
-    put(&files, "dice", &image("dice", "Dice", AppKind::App));
-    put(&files, "junk", &[0; 8]);
-    files.write_file("/apps/loose-file", b"x").unwrap();
+    let mut files = file_system();
+    put(&mut files, "timer", &image("timer", "Timer", AppKind::App));
+    put(&mut files, "dice", &image("dice", "Dice", AppKind::App));
+    put(&mut files, "junk", &[0; 8]);
+    write_raw(&mut files, "/apps/loose-file", b"x");
 
-    let ids: Vec<String> = Packages::new(&files)
+    let ids: Vec<String> = packages(&mut files)
         .list()
         .unwrap()
         .into_iter()
@@ -309,10 +353,10 @@ fn the_list_is_in_id_order_and_skips_what_is_not_an_app() {
 
 #[test]
 fn a_hidden_app_stays_installed_but_leaves_the_launcher() {
-    let files = file_system();
-    put(&files, "timer", &image("timer", "Timer", AppKind::App));
-    put(&files, "dice", &image("dice", "Dice", AppKind::App));
-    let packages = Packages::new(&files);
+    let mut files = file_system();
+    put(&mut files, "timer", &image("timer", "Timer", AppKind::App));
+    put(&mut files, "dice", &image("dice", "Dice", AppKind::App));
+    let mut packages = packages(&mut files);
 
     packages.set_enabled("dice", false).unwrap();
     let enabled: Vec<String> = packages
@@ -334,34 +378,33 @@ fn a_hidden_app_stays_installed_but_leaves_the_launcher() {
 
 #[test]
 fn installing_again_shows_a_hidden_app() {
-    let files = file_system();
-    put(&files, "timer", &image("timer", "Timer", AppKind::App));
-    let packages = Packages::new(&files);
+    let mut files = file_system();
+    put(&mut files, "timer", &image("timer", "Timer", AppKind::App));
+    let mut packages = packages(&mut files);
     packages.set_enabled("timer", false).unwrap();
     assert!(packages.install("timer", None).unwrap().enabled);
 }
 
 #[test]
 fn removing_deletes_the_folder_and_the_saved_state() {
-    let files = file_system();
-    put(&files, "timer", &image("timer", "Timer", AppKind::App));
-    files
-        .write_file(&app_file("timer", STATE_FILE), &[1, 2, 3])
-        .unwrap();
-    let packages = Packages::new(&files);
+    let mut files = file_system();
+    put(&mut files, "timer", &image("timer", "Timer", AppKind::App));
+    write_raw(&mut files, &app_file("timer", STATE_FILE), &[1, 2, 3]);
+    let mut packages = packages(&mut files);
 
     packages.remove("timer").unwrap();
 
-    assert!(!files.exists(&app_folder("timer")));
+    assert!(!packages.exists(&app_file("timer", STATE_FILE)));
+    assert!(!packages.exists(&app_file("timer", IMAGE_FILE)));
     assert_eq!(packages.remove("timer"), Err(PackageError::NotInstalled));
 }
 
 #[test]
 fn an_image_reads_back_for_the_app_host() {
-    let files = file_system();
+    let mut files = file_system();
     let bytes = image("timer", "Timer", AppKind::App);
-    put(&files, "timer", &bytes);
-    let packages = Packages::new(&files);
+    put(&mut files, "timer", &bytes);
+    let mut packages = packages(&mut files);
     assert_eq!(packages.read_image("timer").unwrap(), bytes);
     assert_eq!(packages.read_image("dice"), Err(PackageError::NotInstalled));
 }
@@ -376,10 +419,13 @@ fn every_error_explains_itself() {
         PackageError::NotLibrary,
         PackageError::IdMismatch,
         PackageError::Refused(Refusal::LauncherStaysOn),
-        PackageError::Storage(Error::NoSpace),
-        PackageError::Storage(Error::Io),
+        PackageError::Storage(FileError::Full),
+        PackageError::Storage(FileError::Damaged),
     ] {
         assert!(!error.describe().is_empty());
     }
-    assert_eq!(PackageError::from(Error::Io), PackageError::Storage(Error::Io));
+    assert_eq!(
+        PackageError::from(FileError::Damaged),
+        PackageError::Storage(FileError::Damaged)
+    );
 }

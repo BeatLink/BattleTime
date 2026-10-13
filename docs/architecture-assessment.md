@@ -6,6 +6,10 @@ the UI toolkit, littlefs, and how apps are stored and loaded. Figures come from
 [memory-map.md](memory-map.md) and from a release build of `firmware/` at `0068f33`, sorted by
 symbol.
 
+Two of its proposals have since been carried out: NeoTime draws its widgets with its own renderer
+instead of rlvgl, and keeps its files in `neotime-flash-store` instead of littlefs
+([flash-store.md](flash-store.md)).
+
 ## In short
 
 | Question | Answer |

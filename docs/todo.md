@@ -172,8 +172,11 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   flash, so no emulator test sends a firmware through the DFU service. Send one over the
   PineTimeEmulator Bluetooth bridge from a raw-HCI client, which also proves the controller's sleep
   between events holds through a long transfer.
-- [ ] **Async flash in the firmware.** Flash writes block the Bluetooth host for up to a sector
-  erase at a time, because the display shares the SPI bus and its driver is blocking.
+- [ ] **The shell's store calls without blocking.** The storage task lets the CPU go while the flash
+  works, but the shell calls the store directly and polls the chip, so a write it makes, such as an
+  app's saved state, blocks every task for up to a sector erase. Make the shell's loop await its
+  store calls, and the app host's `read_file`, which `TextFile` and `file_bytes` use while drawing,
+  `async`; the open path's recursion (`open` and `open_failed`) needs reworking first.
 - [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.
 - [ ] **Clippy fails on master.** CI's `Lints and types` and `Watch lints` jobs are red since run
   38325871913: a reference that is created and dereferenced at once in `runtime/src/verifier.rs`
@@ -196,8 +199,8 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 
 ## UI toolkit
 
-- [ ] **Measure the UI heap on the watch.** It is 21 KB, shared with the 16 KB storage heap; so
-  far it is measured only in the emulator, where the alarm peaks at 36,188 B of 37,888 B. Count what a typical screen allocates on
+- [ ] **Measure the UI heap on the watch.** It is 21 KB, shared with the system's 10 KB; so
+  far it is measured only in the emulator, where the alarm's editor touches 13,188 B of 31,744 B. Count what a typical screen allocates on
   the watch, then update the "UI heap" row in
   [memory-map.md](memory-map.md) and the size in `tools/draw_memory_maps.py`, and rerun the script.
 - [ ] **App screens in the simulator.** The simulator still shows hand-drawn demo pages. Draw
@@ -319,9 +322,6 @@ each item says what it costs and what it would save.
   Opening an app is the deepest path: the app host's `load_into` and `run_handler` frames (860 B
   and 876 B) and the interpreter's under them are where to win stack back.
 
-- [ ] **Shrink the storage heap.** It is 16 KB, but littlefs needs about 1.8 KB with two files
-  open, and the rehearsal build runs on 4 KB. Measure the peak on the watch, including file
-  transfer over Bluetooth, then cut it down; up to 12 KB could be freed.
 - [ ] **Smaller Bluetooth buffers.** Fewer and smaller packets in the pool, one connection and a
   trimmed GATT table take RAM from the 12 KB budget, at some cost to file transfer speed. The
   Bluetooth task's state is 4.8 KB, most of it TrouBLE's GATT table (39 attributes of 44 B, 2.1
@@ -516,31 +516,26 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-updates` branches.
 
-- [ ] **Move the firmware onto `neotime-flash-store`** ([flash-store.md](flash-store.md)). The store
-  is built and tested on the computer; nothing on the watch uses it yet.
-  - Migrate the watch's littlefs file system into it once, power-cut safe, before its region is
-    reused; the store mounts littlefs blocks as empty sectors and would overwrite them.
-  - BLEFS uploads through `begin_file`, `write_file_part` and `finish_file`; packages, the notes,
-    `TextFile` and `file_bytes` through the file calls.
-  - Settings, the theme and each app's saved state as records, one group per app.
-  - The step log as a log with batched appends, and heart rate and activity logs beside it; raw
-    accelerometer recordings in a ring of their own.
-  - Measure on the watch: mount time (about a second estimated), the deepest stack, and the RAM
-    freed from the 16 KB storage heap; then update [memory-map.md](memory-map.md).
-  - A storage task that owns the store and never cancels an operation midway.
+- [ ] **Shrink the BLEFS service.** It grew from 1.9 KB to 8.9 KB of flash when it moved onto the
+  async store, and the full firmware has 3 KB of its 388 KB slot left. Look at the copy, move and
+  listing code and at how many async state machines its `answer` builds.
+- [ ] **Try the flash store on the watch.** It runs in the emulator, apps and icons included, but
+  has not met the real chip. Measure the mount time (about a second estimated), the deepest stack
+  with apps open and saving, and read the diagnostics' store counters after a day of use.
+- [ ] **The step log in the store's log ring.** Each day is a record rewritten whole at every slot,
+  and the oldest days are deleted past 90; the log ring appends each slot alone and drops the oldest
+  days by itself. Heart rate and activity logs belong beside it, and raw accelerometer recordings in
+  a ring of their own. Until the clock is set after a restart, steps are logged under the
+  firmware's build date.
+- [ ] **A checkpoint of the store's tables,** so mounting need not read every ring record.
 
 - [ ] **Deep power-down in sleep.** Put the flash chip to sleep when the watch sleeps.
 - [ ] **Use the file system:** save alarms and the BLE bond there.
 - [ ] **Resource packages:** fonts and pictures installed from a zip over BLE, with a list of
   obsolete files that an upgrade deletes, as InfiniTime's `resources.json` has.
 - [ ] **Report failed flash writes.** After each erase and page program, read the flash's security
-  register and return an error when its erase-fail or program-fail bit is set, so littlefs moves
-  the block instead of trusting it.
-- [ ] **Room for the step log.** Each day's file past 12:48 takes a 4 KB block, so the log keeps
-  every day but fills the file system's free 2.8 MB in about two years. Pack finished days, such
-  as a month to a file, or drop the oldest when space runs low. Until the clock is set after a
-  restart, steps are logged under the firmware's build date.
-
+  register and return an error when its erase-fail or program-fail bit is set, so the store refuses
+  the write instead of trusting it.
 ### Firmware updates
 
 - [ ] **Escaping the reloader under InfiniTime leads back to the reloader.** InfiniTime's DFU

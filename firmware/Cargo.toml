@@ -51,6 +51,7 @@ neotime-blefs = { path = "../services/blefs", features = ["trouble"] }
 neotime-button = { path = "../drivers/button" }
 neotime-dfu = { path = "../services/dfu", features = ["trouble"] }
 neotime-notifications = { path = "../services/notifications" }
+neotime-flash-store = { path = "../services/flash_store" }
 neotime-packages = { path = "../services/packages" }
 neotime-display = { path = "../drivers/display" }
 neotime-external-flash = { path = "../drivers/external_flash", features = ["cortex-m"] }

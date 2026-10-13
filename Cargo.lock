@@ -1135,7 +1135,8 @@ version = "0.1.0"
 name = "neotime-blefs"
 version = "0.1.0"
 dependencies = [
- "littlefs-rust",
+ "embassy-futures",
+ "neotime-flash-store",
  "static_cell",
  "trouble-host",
 ]
@@ -1278,13 +1279,13 @@ dependencies = [
 name = "neotime-packages"
 version = "0.1.0"
 dependencies = [
+ "embassy-futures",
  "embedded-storage",
  "heapless 0.9.3",
- "littlefs-rust",
  "neotime-boot",
+ "neotime-flash-store",
  "neotime-runtime",
  "neotime-settings",
- "neotime-storage",
  "serde",
  "serde-json-core",
 ]
@@ -1327,9 +1328,10 @@ dependencies = [
 name = "neotime-steps"
 version = "0.1.0"
 dependencies = [
+ "embassy-futures",
  "heapless 0.9.3",
- "littlefs-rust",
  "neotime-current-time",
+ "neotime-flash-store",
 ]
 
 [[package]]

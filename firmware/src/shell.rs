@@ -311,7 +311,7 @@ impl SystemValues for WatchSystem {
     }
 
     fn read_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
-        self.files.read_part(path, offset, out)
+        self.files.read_part_now(path, offset, out)
     }
 }
 
@@ -326,11 +326,7 @@ impl WatchSystem {
         if !self.free_storage_wanted.replace(false) {
             return;
         }
-        let counted = self
-            .files
-            .file_system()
-            .and_then(neotime_storage::free_kilobytes)
-            .map_or(0, Value::from);
+        let counted = self.files.free_kilobytes_now().map_or(0, Value::from);
         self.free_storage_kilobytes.set(Some(counted));
         system_values::changed(&[SystemValue::FreeStorageKilobytes]);
     }
@@ -399,7 +395,7 @@ impl System for WatchSystem {
 /// Where an app's saved state lives: `/apps/<id>/state`.
 fn state_path(id: &str) -> heapless::String<64> {
     let mut path = heapless::String::new();
-    let _ = write!(path, "{}/{}/state", neotime_storage::APPS_DIRECTORY, id);
+    let _ = write!(path, "{}/{}/state", neotime_packages::APPS_DIRECTORY, id);
     path
 }
 
@@ -498,7 +494,7 @@ impl Shell {
         let saved = AppImage::parse(bytes)
             .ok()
             .and_then(|parsed| parsed.string(parsed.id_string))
-            .and_then(|id| self.files.read(&state_path(id)))
+            .and_then(|id| self.files.read_now(&state_path(id)))
             .unwrap_or_default();
         if self.start_host(bytes, &saved, now) {
             self.image = Some(image);
@@ -637,7 +633,7 @@ impl Shell {
         }
         let mut buffer = vec![0; size];
         if let Ok(Some(length)) = host.save_changed_state(&mut buffer) {
-            self.files.write(&state_path(id), &buffer[..length]);
+            self.files.write_now(&state_path(id), &buffer[..length]);
         }
     }
 
@@ -1166,8 +1162,10 @@ pub async fn run_shell(
     if !status_holds_screen() {
         hide_status();
     }
+    files.wait_until_free().await;
     settings::load(files);
     clock::load_time_zone(files);
+    files.wait_until_free().await;
     install_fonts(apps::shared_library());
 
     let theme = settings::load_theme(files);
@@ -1225,6 +1223,7 @@ pub async fn run_shell(
         foreground::set_drawing(shell.is_drawing_under_way());
         while shell.is_drawing_under_way() {
             yield_now().await;
+            shell.files.wait_until_free().await;
             shell.draw();
         }
         foreground::set_drawing(false);
@@ -1267,6 +1266,8 @@ pub async fn run_shell(
                 .await
             }
         };
+        // Another task may have taken the store while the shell waited; the shell's calls below need it free.
+        files.wait_until_free().await;
         // A new library may already lie where the open app's library was, so nothing reads it before the reload.
         if !matches!(woke, Either4::Fourth(Either4::Third(_))) && packages::CHANGED.try_take().is_some() {
             shell.reload_apps();

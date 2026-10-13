@@ -15,10 +15,9 @@ extern crate alloc;
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::fmt::Write;
 
-use littlefs_rust::{Error, FileType, Filesystem, Storage};
+use neotime_flash_store::{FileAccess, FileError};
 use neotime_runtime::memory_need::{estimate_memory_need, launcher_share_bytes, APP_HEAP_BUDGET_BYTES};
 use neotime_runtime::{verify_with, AppImage, AppKind, CheckedFunctions, ImageError};
-use neotime_storage::APPS_DIRECTORY;
 
 pub mod checks;
 pub mod commands;
@@ -33,6 +32,9 @@ mod tests;
 // Names inside an app's folder
 // ============================================================================
 
+/// Every app's folder is inside this one.
+pub const APPS_DIRECTORY: &str = "/apps";
+
 /// The compiled image, as `neotime-compiler` writes it.
 pub const IMAGE_FILE: &str = "app.ntapp";
 /// What the app saved; the shell writes it.
@@ -43,7 +45,7 @@ pub const DISABLED_FILE: &str = "disabled";
 /// The launcher's id; the shell opens it on a swipe up from the face, so it is never turned off.
 pub const LAUNCHER_ID: &str = "launcher";
 
-/// The longest id the package manager takes, which keeps every path short for littlefs.
+/// The longest id the package manager takes, which keeps every path within the store's 64 bytes.
 pub const MOST_ID_BYTES: usize = 32;
 
 /// A path inside `/apps`, long enough for any id and file name.
@@ -88,8 +90,8 @@ pub enum PackageError {
     Refused(Refusal),
     /// The app was built against a newer shared library than the watch has.
     NeedsNewerLibrary,
-    /// The file system refused.
-    Storage(Error),
+    /// The store refused.
+    Storage(FileError),
 }
 
 impl PackageError {
@@ -104,14 +106,14 @@ impl PackageError {
             PackageError::IdMismatch => "the image's id is not the folder's name",
             PackageError::Refused(refusal) => refusal.describe(),
             PackageError::NeedsNewerLibrary => "the app needs a newer shared library; update the watch first",
-            PackageError::Storage(Error::NoSpace) => "no room left on the flash",
-            PackageError::Storage(_) => "the file system refused",
+            PackageError::Storage(FileError::Full) => "no room left on the flash",
+            PackageError::Storage(_) => "the flash store refused",
         }
     }
 }
 
-impl From<Error> for PackageError {
-    fn from(error: Error) -> PackageError {
+impl From<FileError> for PackageError {
+    fn from(error: FileError) -> PackageError {
         PackageError::Storage(error)
     }
 }
@@ -199,25 +201,35 @@ fn too_large_to_read(id: &str, length: u32) -> InstalledApp {
     }
 }
 
-pub struct Packages<'files, S: Storage> {
-    files: &'files Filesystem<S>,
+pub struct Packages<'files, Files: FileAccess> {
+    files: &'files mut Files,
 }
 
-impl<'files, S: Storage> Packages<'files, S> {
-    pub fn new(files: &'files Filesystem<S>) -> Packages<'files, S> {
+impl<'files, Files: FileAccess> Packages<'files, Files> {
+    pub fn new(files: &'files mut Files) -> Packages<'files, Files> {
         Packages { files }
     }
 
     /// Every installed app in id order, which is the order the launcher shows them in.
     /// A folder whose image is missing, damaged or not its own is left out. Installing verified
     /// the code and the app host verifies it again before running it, so listing only parses each image.
-    pub fn list(&self) -> Result<Vec<InstalledApp>, PackageError> {
+    pub async fn list(&mut self) -> Result<Vec<InstalledApp>, PackageError> {
+        let mut ids: Vec<String> = Vec::new();
+        let mut prefix = String::from(APPS_DIRECTORY);
+        prefix.push('/');
+        self.files
+            .for_each_file(&prefix, &mut |path| {
+                let folder_and_file = path[prefix.len()..].split_once('/');
+                if let Some((id, IMAGE_FILE)) = folder_and_file {
+                    if check_id(id).is_ok() {
+                        ids.push(String::from(id));
+                    }
+                }
+            })
+            .await?;
         let mut apps = Vec::new();
-        for entry in self.files.list_dir(APPS_DIRECTORY)? {
-            if entry.file_type != FileType::Dir || check_id(&entry.name).is_err() {
-                continue;
-            }
-            if let Some(app) = self.describe(&entry.name) {
+        for id in ids {
+            if let Some(app) = self.describe(&id).await {
                 apps.push(app);
             }
         }
@@ -227,18 +239,29 @@ impl<'files, S: Storage> Packages<'files, S> {
     }
 
     /// The enabled apps, which the shell offers as `installed_apps`.
-    pub fn enabled(&self) -> Result<Vec<InstalledApp>, PackageError> {
-        let mut apps = self.list()?;
+    pub async fn enabled(&mut self) -> Result<Vec<InstalledApp>, PackageError> {
+        let mut apps = self.list().await?;
         apps.retain(|app| app.enabled);
         Ok(apps)
     }
 
-    fn describe(&self, id: &str) -> Option<InstalledApp> {
-        let length = self.image_length(id)?;
+    async fn exists(&mut self, path: &str) -> bool {
+        matches!(self.files.file_length(path).await, Ok(Some(_)))
+    }
+
+    async fn read_whole(&mut self, path: &str) -> Option<Vec<u8>> {
+        let length = self.files.file_length(path).await.ok()??;
+        let mut bytes = alloc::vec![0; length];
+        self.files.read_file(path, 0, &mut bytes).await.ok()??;
+        Some(bytes)
+    }
+
+    async fn describe(&mut self, id: &str) -> Option<InstalledApp> {
+        let length = self.image_length(id).await?;
         if length > APP_HEAP_BUDGET_BYTES {
             return Some(too_large_to_read(id, length));
         }
-        let bytes = self.files.read_to_vec(&app_file(id, IMAGE_FILE)).ok()?;
+        let bytes = self.read_whole(&app_file(id, IMAGE_FILE)).await?;
         // Parsing checks the image's CRC; verifying its code here would cost each listing over a kilobyte of stack per call.
         let image = AppImage::parse(&bytes).ok()?;
         if image.kind == AppKind::Library || image.string(image.id_string) != Some(id) {
@@ -250,7 +273,7 @@ impl<'files, S: Storage> Packages<'files, S> {
             name: String::from(image.string(image.name_string).unwrap_or(id)),
             kind: image.kind,
             has_icon: image.has_icon,
-            enabled: !self.files.exists(&app_file(id, DISABLED_FILE)),
+            enabled: !self.exists(&app_file(id, DISABLED_FILE)).await,
             image_bytes: bytes.len() as u32,
             need_bytes: need.total_bytes,
             lists_apps: need.lists_apps,
@@ -259,23 +282,21 @@ impl<'files, S: Storage> Packages<'files, S> {
     }
 
     /// The app's image, to load into RAM for the app host.
-    pub fn read_image(&self, id: &str) -> Result<Vec<u8>, PackageError> {
+    pub async fn read_image(&mut self, id: &str) -> Result<Vec<u8>, PackageError> {
         check_id(id)?;
-        let length = self.image_length(id).ok_or(PackageError::NotInstalled)?;
+        let length = self.image_length(id).await.ok_or(PackageError::NotInstalled)?;
         if length > APP_HEAP_BUDGET_BYTES {
             return Err(PackageError::Refused(Refusal::TooLarge { need_bytes: length }));
         }
-        self.files
-            .read_to_vec(&app_file(id, IMAGE_FILE))
-            .map_err(|_| PackageError::NotInstalled)
+        self.read_whole(&app_file(id, IMAGE_FILE))
+            .await
+            .ok_or(PackageError::NotInstalled)
     }
 
-    /// The image's length, from the file system, without reading it.
-    fn image_length(&self, id: &str) -> Option<u32> {
-        self.files
-            .stat(&app_file(id, IMAGE_FILE))
-            .ok()
-            .map(|metadata| metadata.size)
+    /// The image's length, from the store, without reading it.
+    async fn image_length(&mut self, id: &str) -> Option<u32> {
+        let length = self.files.file_length(&app_file(id, IMAGE_FILE)).await.ok()??;
+        Some(length as u32)
     }
 
     /// Checks the image already written to `/apps/<id>/app.ntapp` and makes the app visible.
@@ -283,11 +304,15 @@ impl<'files, S: Storage> Packages<'files, S> {
     /// fit the heap stays installed but turned off, and the refusal says why. So does an app built
     /// against a newer shared library than `library_version`, the installed one's, since it would not
     /// open; with no library installed yet, as while a watch is set up, any version is taken.
-    pub fn install(&self, id: &str, library_version: Option<u16>) -> Result<InstalledApp, PackageError> {
+    pub async fn install(
+        &mut self,
+        id: &str,
+        library_version: Option<u16>,
+    ) -> Result<InstalledApp, PackageError> {
         check_id(id)?;
-        let bytes = match self.read_image(id) {
+        let bytes = match self.read_image(id).await {
             Err(refused @ PackageError::Refused(_)) => {
-                self.set_enabled(id, false)?;
+                self.set_enabled(id, false).await?;
                 return Err(refused);
             }
             other => other?,
@@ -298,54 +323,55 @@ impl<'files, S: Storage> Packages<'files, S> {
             .shared_library_version;
         drop(bytes);
         if library_version.is_some_and(|installed| needed > installed) {
-            self.set_enabled(id, false)?;
+            self.set_enabled(id, false).await?;
             return Err(PackageError::NeedsNewerLibrary);
         }
-        let apps = self.list()?;
+        let apps = self.list().await?;
         if let Err(refusal) = check_change(&apps, id, true) {
-            self.set_enabled(id, false)?;
+            self.set_enabled(id, false).await?;
             return Err(PackageError::Refused(refusal));
         }
-        self.set_enabled(id, true)?;
-        self.describe(id).ok_or(PackageError::NotInstalled)
+        self.set_enabled(id, true).await?;
+        self.describe(id).await.ok_or(PackageError::NotInstalled)
     }
 
     /// Turns an installed app on or off once the checks allow it, and returns the heap it needs.
-    pub fn change_enabled(&self, id: &str, enabled: bool) -> Result<u32, PackageError> {
+    pub async fn change_enabled(&mut self, id: &str, enabled: bool) -> Result<u32, PackageError> {
         check_id(id)?;
-        let apps = self.list()?;
+        let apps = self.list().await?;
         let need = check_change(&apps, id, enabled).map_err(PackageError::Refused)?;
-        self.set_enabled(id, enabled)?;
+        self.set_enabled(id, enabled).await?;
         Ok(need)
     }
 
-    /// Deletes the app's folder, its saved state included.
-    pub fn remove(&self, id: &str) -> Result<(), PackageError> {
+    /// Deletes every file in the app's folder, its saved state included.
+    pub async fn remove(&mut self, id: &str) -> Result<(), PackageError> {
         check_id(id)?;
-        let folder = app_folder(id);
-        let entries = self
-            .files
-            .list_dir(&folder)
-            .map_err(|_| PackageError::NotInstalled)?;
-        for entry in entries {
-            if entry.file_type == FileType::File {
-                self.files.remove(&app_file(id, &entry.name))?;
-            }
+        let mut prefix = app_folder(id);
+        let _ = prefix.push('/');
+        let mut paths: Vec<String> = Vec::new();
+        self.files
+            .for_each_file(&prefix, &mut |path| paths.push(String::from(path)))
+            .await?;
+        if paths.is_empty() {
+            return Err(PackageError::NotInstalled);
         }
-        self.files.remove(&folder)?;
+        for path in paths {
+            self.files.delete_file(&path).await?;
+        }
         Ok(())
     }
 
     /// Shows or hides an installed app without deleting it.
-    pub fn set_enabled(&self, id: &str, enabled: bool) -> Result<(), PackageError> {
+    pub async fn set_enabled(&mut self, id: &str, enabled: bool) -> Result<(), PackageError> {
         check_id(id)?;
-        if !self.files.exists(&app_file(id, IMAGE_FILE)) {
+        if !self.exists(&app_file(id, IMAGE_FILE)).await {
             return Err(PackageError::NotInstalled);
         }
         let marker = app_file(id, DISABLED_FILE);
-        match (enabled, self.files.exists(&marker)) {
-            (true, true) => self.files.remove(&marker)?,
-            (false, false) => self.files.write_file(&marker, &[])?,
+        match (enabled, self.exists(&marker).await) {
+            (true, true) => self.files.delete_file(&marker).await?,
+            (false, false) => self.files.write_file(&marker, &[]).await?,
             _ => {}
         }
         Ok(())

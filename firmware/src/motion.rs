@@ -21,12 +21,14 @@ use embassy_sync::{
 use embassy_time::{Delay, Duration, Instant, Timer};
 use neotime_accelerometer::{shake::ShakeDetector, Accelerometer, Settings};
 use neotime_runtime::{SystemValue, Value};
-use neotime_steps::{log, StepHistory};
+use neotime_steps::{DayChange, StepHistory, HOURS_PER_DAY};
 
 use crate::{
     app_events, clock,
     diagnostics::{self, Counter},
-    foreground, storage, system_values, touch, I2cDeviceOnBus,
+    foreground,
+    storage_requests::{self, StorageRequest},
+    system_values, touch, I2cDeviceOnBus,
 };
 
 /// The step history, shared by this task and the shell, which both run in thread mode.
@@ -72,42 +74,58 @@ fn local_time_now() -> Value {
     clock::now()
 }
 
-/// Starts the history for a counter that starts from 0, and reads back what the log holds, even if the chip never starts.
+/// Starts the history for a counter that starts from 0, and waits while the storage task reads back what the log
+/// holds, even if the chip never starts.
 #[inline(never)]
-fn start_history(files: &storage::Files) {
-    HISTORY.lock(|history| {
-        let mut history = history.borrow_mut();
-        history.start(local_time_now());
-        if let Some(file_system) = files.file_system() {
-            log::load_history(file_system, &mut history);
-        }
-    });
+async fn start_history() {
+    HISTORY.lock(|history| history.borrow_mut().start(local_time_now()));
+    storage_requests::REQUESTS.send(StorageRequest::LoadSteps).await;
+    storage_requests::STEPS_LOADED.wait().await;
     system_values::changed(&[SystemValue::StepsToday]);
 }
 
-/// Adds a reading of the counter, and writes the slot it ended to the log.
+/// Adds a reading of the counter, and asks the storage task to write the slot it ended to the log.
 #[inline(never)]
-fn record_steps(files: &storage::Files, count: u32) {
-    let changed = HISTORY.lock(|history| {
-        let mut history = history.borrow_mut();
-        let recorded = history.record(local_time_now(), count);
-        if let Some(file_system) = files.file_system() {
-            let _ = log::store(file_system, &mut history, recorded);
-        }
-        recorded.changed
-    });
-    if changed {
+async fn record_steps(count: u32) {
+    let recorded = HISTORY.lock(|history| history.borrow_mut().record(local_time_now(), count));
+    let worth_storing = recorded.finished.is_some() || recorded.day_change == DayChange::Jump;
+    if worth_storing {
+        storage_requests::REQUESTS
+            .send(StorageRequest::StoreSteps(recorded))
+            .await;
+    }
+    if recorded.changed {
         system_values::changed(&[SystemValue::StepsToday]);
     }
 }
 
 #[inline(never)]
-fn reset_trip_now(files: &storage::Files) {
+async fn reset_trip_now() {
     HISTORY.lock(|history| history.borrow_mut().set_trip_steps(0));
-    if let Some(file_system) = files.file_system() {
-        let _ = log::save_trip(file_system, 0);
-    }
+    storage_requests::REQUESTS.send(StorageRequest::SaveTrip(0)).await;
     system_values::changed(&[SystemValue::StepTrip]);
+}
+
+// ============================================================================
+// What the storage task reads and writes
+// ============================================================================
+
+/// The day being recorded, counted from 1970-01-01 in local time.
+pub fn recording_day() -> i64 {
+    HISTORY.lock(|history| history.borrow().recording().day)
+}
+
+pub fn trip_steps() -> u32 {
+    HISTORY.lock(|history| history.borrow().trip_steps())
+}
+
+pub fn set_trip_steps(steps: u32) {
+    HISTORY.lock(|history| history.borrow_mut().set_trip_steps(steps));
+}
+
+/// Sets one remembered day's hours, read back from the log.
+pub fn set_day(days_back: usize, hours: [u16; HOURS_PER_DAY]) {
+    HISTORY.lock(|history| history.borrow_mut().set_day(days_back, hours));
 }
 
 // ============================================================================
@@ -115,8 +133,8 @@ fn reset_trip_now(files: &storage::Files) {
 // ============================================================================
 
 #[embassy_executor::task]
-pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus, files: &'static storage::Files) {
-    start_history(files);
+pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus) {
+    start_history().await;
     touch::STARTED.wait().await;
     let mut accelerometer = Accelerometer::new(i2c_device);
     if accelerometer.start(Settings::DEFAULT, &mut Delay).await.is_err() {
@@ -133,7 +151,7 @@ pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus, files: &'static stora
             match accelerometer.read_step_count().await {
                 Ok(count) => {
                     foreground::wait_for_a_pause().await;
-                    record_steps(files, count)
+                    record_steps(count).await
                 }
                 Err(_) => diagnostics::set(Counter::AccelerometerState, 3),
             }
@@ -166,7 +184,7 @@ pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus, files: &'static stora
         {
             Either3::First(()) => {}
             Either3::Second(()) => next_acceleration_read = Instant::now(),
-            Either3::Third(()) => reset_trip_now(files),
+            Either3::Third(()) => reset_trip_now().await,
         }
     }
 }

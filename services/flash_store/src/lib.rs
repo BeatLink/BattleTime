@@ -14,10 +14,15 @@
 
 #![no_std]
 
+mod access;
 mod checksum;
 mod files;
 mod flash;
+#[cfg(any(test, feature = "ram-flash"))]
+pub mod ram_flash;
 mod ring;
+
+pub use access::{FileAccess, FileError};
 
 #[cfg(test)]
 mod power_cut_tests;
@@ -101,11 +106,11 @@ pub struct Layout {
 }
 
 impl Layout {
-    fn record_start_address(&self) -> u32 {
+    const fn record_start_address(&self) -> u32 {
         self.start_address + self.file_sectors as u32 * SECTOR_BYTES
     }
 
-    fn log_start_address(&self) -> u32 {
+    const fn log_start_address(&self) -> u32 {
         self.record_start_address() + self.record_sectors as u32 * SECTOR_BYTES
     }
 
@@ -157,7 +162,7 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
     pub const RAM_BYTES: usize = core::mem::size_of::<Self>() - core::mem::size_of::<Flash>();
 
     /// Reads what is on the flash and finishes anything a power cut interrupted; blank flash mounts empty.
-    pub async fn mount(mut flash: Flash, layout: Layout) -> Result<Self, StoreError<Flash::Error>> {
+    pub async fn mount(flash: Flash, layout: Layout) -> Result<Self, StoreError<Flash::Error>> {
         const {
             assert!(
                 Flash::READ_SIZE == 1 && Flash::WRITE_SIZE == 1,
@@ -168,41 +173,48 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
                 "the store erases 4 KB sectors"
             );
         }
-        let files = FileArea::mount(&mut flash, layout.start_address, layout.file_sectors).await?;
-        let mut record_keys = Vec::new();
-        let mut no_keys = Vec::new();
-        let records = Ring::mount(
-            &mut flash,
-            layout.record_start_address(),
-            layout.record_sectors,
-            true,
-            record_keys.as_mut_view(),
-        )
-        .await?;
-        let logs = Ring::mount(
-            &mut flash,
-            layout.log_start_address(),
-            layout.log_sectors,
-            false,
-            no_keys.as_mut_view(),
-        )
-        .await?;
-        let mut store = FlashStore {
+        let mut store = Self::unmounted(flash, layout);
+        store.mount_in_place().await?;
+        Ok(store)
+    }
+
+    /// A store with nothing read yet, which `mount_in_place` fills where it lies, such as in a static, so the
+    /// mount's future never holds a copy of the store.
+    pub const fn unmounted(flash: Flash, layout: Layout) -> Self {
+        FlashStore {
             flash,
-            files,
-            records,
-            logs,
-            record_keys,
-            no_keys,
+            files: FileArea::unmounted(layout.start_address, layout.file_sectors),
+            records: Ring::unmounted(layout.record_start_address(), layout.record_sectors, true),
+            logs: Ring::unmounted(layout.log_start_address(), layout.log_sectors, false),
+            record_keys: Vec::new(),
+            no_keys: Vec::new(),
             log_batches: Vec::new(),
             upload: None,
-        };
-        store.share_sequence();
-        Ok(store)
+        }
+    }
+
+    /// Reads what is on the flash and finishes anything a power cut interrupted; blank flash mounts empty.
+    pub async fn mount_in_place(&mut self) -> Result<(), StoreError<Flash::Error>> {
+        self.upload = None;
+        self.log_batches.clear();
+        self.files.mount_in_place(&mut self.flash).await?;
+        self.records
+            .mount_in_place(&mut self.flash, self.record_keys.as_mut_view())
+            .await?;
+        self.logs
+            .mount_in_place(&mut self.flash, self.no_keys.as_mut_view())
+            .await?;
+        self.share_sequence();
+        Ok(())
     }
 
     pub fn flash(&self) -> &Flash {
         &self.flash
+    }
+
+    /// The flash driver, such as to switch how it waits; writing through it behind the store's back corrupts the store.
+    pub fn flash_mut(&mut self) -> &mut Flash {
+        &mut self.flash
     }
 
     pub fn into_flash(self) -> Flash {
@@ -222,6 +234,10 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
 
     pub fn free_file_sectors(&self) -> usize {
         self.files.free_sectors()
+    }
+
+    pub fn file_sectors(&self) -> usize {
+        self.files.sector_count()
     }
 
     // ------------------------------------------------------------------------
@@ -350,12 +366,10 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
         let key_taken_by_another =
             find_newest(&self.record_keys, key).is_some() && self.find_small_file(path).await?.is_none();
         if data.len() <= SMALL_FILE_BYTES && !key_taken_by_another {
-            let mut value: Vec<u8, { 1 + LONGEST_PATH_BYTES + SMALL_FILE_BYTES }> = Vec::new();
-            let _ = value.push(path.len() as u8);
-            let _ = value.extend_from_slice(path.as_bytes());
-            let _ = value.extend_from_slice(data);
+            let path_length = [path.len() as u8];
+            let pieces: [&[u8]; 3] = [&path_length, path.as_bytes(), data];
             self.records
-                .append(&mut self.flash, self.record_keys.as_mut_view(), key, 0, &value)
+                .append_pieces(&mut self.flash, self.record_keys.as_mut_view(), key, &pieces)
                 .await?;
             self.share_sequence();
             self.files.delete(&mut self.flash, path).await
@@ -407,6 +421,13 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
             self.share_sequence();
         }
         Ok(())
+    }
+
+    /// The path of the upload in progress and how many bytes it holds so far, so an interrupted one can resume.
+    pub fn upload_progress(&self) -> Option<(&str, usize)> {
+        self.upload
+            .as_ref()
+            .map(|upload| (upload.path().as_str(), upload.length()))
     }
 
     /// Drops an unfinished upload; the file stays as it was.

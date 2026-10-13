@@ -9,7 +9,7 @@
         "Atlas",
         "Dice",
         "Digital",
-        "Each app may use 33 KB",
+        "Each app may use 27 KB",
         "Face, 13 KB",
         "Installed"
       ]
@@ -19,7 +19,7 @@
       "reached_by": "tap \"Atlas\"",
       "texts": [
         "Atlas",
-        "Needs 41 KB of 33 KB",
+        "Needs 41 KB of 27 KB",
         "Needs more memory than an app can have",
         "OK"
       ]

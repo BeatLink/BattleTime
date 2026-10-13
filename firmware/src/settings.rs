@@ -61,7 +61,7 @@ pub fn current() -> Settings {
 
 /// Reads the saved settings at start-up; a missing or unreadable file leaves the defaults.
 pub fn load(files: &storage::Files) {
-    if let Some(bytes) = files.read(SETTINGS_PATH) {
+    if let Some(bytes) = files.read_now(SETTINGS_PATH) {
         SETTINGS.lock(|settings| settings.set(Settings::from_file(&bytes)));
     }
 }
@@ -69,7 +69,7 @@ pub fn load(files: &storage::Files) {
 pub fn save(files: &storage::Files) {
     let mut buffer = [0; FILE_BYTES];
     let length = current().write_file(&mut buffer);
-    files.write(SETTINGS_PATH, &buffer[..length]);
+    files.write_now(SETTINGS_PATH, &buffer[..length]);
 }
 
 /// Changes one setting by the name an app gave `set_setting`; unknown names and bad values do nothing.
@@ -135,13 +135,13 @@ const THEME_BYTES: usize = 2 * ThemeColor::COUNT;
 /// The saved theme, or the default when none was saved.
 pub fn load_theme(files: &storage::Files) -> Theme {
     files
-        .read(THEME_PATH)
+        .read_now(THEME_PATH)
         .and_then(|bytes| theme_from_bytes(&bytes))
         .unwrap_or(DEFAULT_THEME)
 }
 
 pub fn save_theme(files: &storage::Files, theme: &Theme) {
-    files.write(THEME_PATH, &theme_to_bytes(theme));
+    files.write_now(THEME_PATH, &theme_to_bytes(theme));
 }
 
 fn theme_to_bytes(theme: &Theme) -> [u8; THEME_BYTES] {

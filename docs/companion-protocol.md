@@ -221,11 +221,14 @@ error (a command cut short, or data with no write in progress).
 
 - **Reading.** Each answer holds as much of the asked-for chunk as fits in one notification. The
   phone asks for the rest with read pacing, from the offset it has reached, until it has the total.
-- **Writing.** A write opens the file, makes any missing folders above it, and cuts the file back
-  to the offset, so an interrupted upload resumes where it stopped and a new one starts at 0. The
-  phone then sends data pieces in order. The last answer says 0 bytes to come.
-- **Deleting** a folder deletes everything in it. **Making a folder** makes its parents and
-  succeeds if the folder is already there.
+- **Writing.** A write at offset 0 starts the file anew; the phone then sends data pieces in order,
+  and the last answer says 0 bytes to come. The old file stays until the last piece arrives, so an
+  upload cut short never leaves half a file. A write at a later offset resumes an upload only while
+  the watch still holds that upload open, at that offset; otherwise it is refused with status `2`,
+  and the phone starts again from 0. A piece sent again is taken as it was the first time.
+- **Folders** exist only through the files in them, so making a folder always succeeds, and a
+  folder listed after it is made but before a file is put in it reports no file. **Deleting** or
+  **moving** a folder acts on every file in it; a move copies, then deletes.
 - The watch keeps no file times, so every time it reports is 0.
 - **Differences from InfiniTime.** InfiniTime never cuts a file back when it is written again,
   answers a data piece with that piece's own offset, and reports some failures as negative littlefs
@@ -267,7 +270,7 @@ Service `6e540001-0000-4000-8000-4e656f54696d`, with its characteristics on the 
 
 | Characteristic | UUID | Use | Served |
 |---|---|---|---|
-| Diagnostics | `6e540002-…` | Read: eight little-endian `u32` counters, then fourteen words on the last restart: the `RESETREAS` bits, the kind of crash (0 none, 1 panic, 2 HardFault, 3 out of memory), eight detail words and four words holding the open app's id, zero-padded, then four more counters: microseconds spent drawing apps, microseconds spent sending to the display, blocks erased ahead of littlefs and littlefs erases skipped because of it; see [architecture.md](architecture.md). Write `01` once a debug report holding the crash is saved: the watch forgets the crash and leaves its crash screen for the face. | Yes |
+| Diagnostics | `6e540002-…` | Read: eight little-endian `u32` counters, then fourteen words on the last restart: the `RESETREAS` bits, the kind of crash (0 none, 1 panic, 2 HardFault, 3 out of memory), eight detail words and four words holding the open app's id, zero-padded, then four more counters: microseconds spent drawing apps, microseconds spent sending to the display, sectors the flash store erased, and store calls the shell made while another task held the store; see [architecture.md](architecture.md). Write `01` once a debug report holding the crash is saved: the watch forgets the crash and leaves its crash screen for the face. | Yes |
 | Packages | `6e540003-…` | Write and notify: one JSON command per line, as in [Packages](#packages-served). | Yes |
 
 ### Packages (served)

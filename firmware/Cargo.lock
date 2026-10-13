@@ -892,7 +892,7 @@ version = "0.1.0"
 name = "neotime-blefs"
 version = "0.1.0"
 dependencies = [
- "littlefs-rust",
+ "neotime-flash-store",
  "static_cell",
  "trouble-host",
 ]
@@ -1014,6 +1014,7 @@ dependencies = [
  "neotime-dfu",
  "neotime-display",
  "neotime-external-flash",
+ "neotime-flash-store",
  "neotime-foreground",
  "neotime-liveness",
  "neotime-notifications",
@@ -1029,6 +1030,14 @@ dependencies = [
  "nrf-pac",
  "static_cell",
  "trouble-host",
+]
+
+[[package]]
+name = "neotime-flash-store"
+version = "0.1.0"
+dependencies = [
+ "embedded-storage-async",
+ "heapless 0.9.3",
 ]
 
 [[package]]
@@ -1055,10 +1064,9 @@ version = "0.1.0"
 dependencies = [
  "embedded-storage",
  "heapless 0.9.3",
- "littlefs-rust",
  "neotime-boot",
+ "neotime-flash-store",
  "neotime-runtime",
- "neotime-storage",
  "serde",
  "serde-json-core",
 ]
@@ -1084,8 +1092,8 @@ name = "neotime-steps"
 version = "0.1.0"
 dependencies = [
  "heapless 0.9.3",
- "littlefs-rust",
  "neotime-current-time",
+ "neotime-flash-store",
 ]
 
 [[package]]

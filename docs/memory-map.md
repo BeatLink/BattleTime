@@ -38,22 +38,22 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 91.5 KB | 47.4 KB |
-| App host (with `neotime-ui`) | 74.2 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 96.0 KB | 48.4 KB |
+| App host (with `neotime-ui`) | 74.3 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 43.6 KB | 43.6 KB |
-| App runtime | 34.2 KB | 0.1 KB |
-| core, alloc and compiler builtins | 27.5 KB | 11.3 KB |
-| Storage (littlefs) | 21.9 KB | 21.2 KB |
-| Embassy, allocator and Cortex-M | 18.2 KB | 15.7 KB |
+| App runtime | 34.1 KB | 0.1 KB |
+| core, alloc and compiler builtins | 29.4 KB | 13.0 KB |
+| Embassy, allocator and Cortex-M | 18.6 KB | 16.5 KB |
+| Storage (flash store) | 16.9 KB | 16.8 KB |
 | Settings, companion and notifications (with serde) | 12.1 KB | 10.2 KB |
 | Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
-| Display, graphics and drivers | 5.6 KB | 3.1 KB |
-| Packages | 3.8 KB | 2.1 KB |
-| Updates (DFU) | 2.1 KB | 2.2 KB |
-| BLEFS file service | 1.9 KB | 2.0 KB |
-| Other constants and padding | 24.9 KB | 10.9 KB |
-| **Used** | **373.4 KB** | **169.7 KB** |
-| Free of the 388 KB slot, after its header | 14.3 KB | 218.1 KB |
+| BLEFS file service | 8.9 KB | 9.0 KB |
+| Display, graphics and drivers | 5.4 KB | 3.2 KB |
+| Packages | 5.3 KB | 2.0 KB |
+| Updates (DFU) | 2.1 KB | 2.1 KB |
+| Other constants and padding | 26.1 KB | 13.4 KB |
+| **Used** | **384.7 KB** | **178.2 KB** |
+| Free of the 388 KB slot, after its header | 3.0 KB | 209.6 KB |
 <!-- /measure_memory:firmware -->
 
 The accelerometer's configuration is the largest piece of data left in it; each watch could build
@@ -82,46 +82,43 @@ system.
 | Free | `0x062000` | 12 KB | Room the slot table can give to either slot. |
 | Recovery slot | `0x065000` | 388 KB | A known-good firmware to fall back to. |
 | Free | `0x0C6000` | 232 KB | Room the slot table can give to either slot, up to `0x100000`. |
-| File system | `0x100000` | 3 MB | A littlefs file system, with the folders `/apps`, `/settings`, `/notifications` and `/resources`. |
+| File system | `0x100000` | 3 MB | The flash store: 2 MB of files, 256 KB of records and 768 KB of logs; see [storage.md](storage.md). |
 
 Anything that changes often, such as settings, notifications and app state, is kept here, because
-littlefs spreads its writes across the chip. The internal flash changes only when the firmware or
+the store spreads its writes across the chip. The internal flash changes only when the firmware or
 the shared library is updated.
 
 ### What the file system holds
 
-littlefs works in 4 KB blocks, one erase sector each; the 3 MB region is 768 of them. Every folder
-is a metadata pair, two blocks, and a file small enough to fit in its folder's metadata, up to
-256 bytes here, costs no block of its own. Larger files take whole blocks, plus a few bytes per
-block for littlefs's list of them. So an app costs 8 KB for its folder before its image, more than
-most images.
+The flash store works in 4 KB sectors, one erase sector each. A file larger than 1 KB takes whole
+sectors, the first beginning with a 224-byte header, and a file of 1 KB or less is a record in the
+records ring, so it costs no sector. There are no folders, so an app costs nothing beyond its image.
 
 | Path | Holds |
 |---|---|
 | `/apps/<id>/app.ntapp` | The compiled app or face, as `neotime-compiler` writes it. |
-| `/apps/<id>/state` | What the app saved, written by the shell; small, so it lives in the folder's metadata. |
+| `/apps/<id>/state` | What the app saved, written by the shell; a record. |
 | `/apps/<id>/disabled` | Present when the app is installed but hidden from the launcher. |
 | `/settings/system` | The watch-wide settings, 41 bytes. |
 | `/settings/theme` | The theme's colours, 16 bytes. |
 | `/resources/` | For resource packages; empty for now. |
-| `/steps/<year>/<month>-<day>` | One day's steps in six-minute slots, up to 480 bytes. A day logged past 12:48 is too large for its folder's metadata and takes a block of its own, so a year of days takes about 1.4 MB. |
+| `/steps/<year>/<month>-<day>` | One day's steps in six-minute slots, up to 480 bytes, a record; the last 90 days are kept, at most about 47 KB. |
 | `/steps/trip` | The trip count, 4 bytes. |
 
 A typical install is the digital face, the launcher and ten everyday apps (alarm, timer,
 stopwatch, settings, weather, steps, heart, flashlight, music and calculator), which
-`tools/measure_memory.py` installs into a file system formatted as the watch formats it:
+`tools/measure_memory.py` installs into a store laid out as the watch's:
 
 <!-- measure_memory:file-system -->
-| What | Bytes | Blocks |
+| What | Bytes | File sectors |
 |---|---:|---:|
-| Formatting: the root and the three top-level folders | | 8 |
-| `/settings/system` and `/settings/theme` | 77 | 0 |
-| 12 app folders | | 24 |
-| 12 app images, 194 B (launcher) to 3,895 B (settings) | 21,883 | 11 |
-| **In use** | | **43 of 768: 172 KB of 3 MB** |
+| `/settings/system` and `/settings/theme`, kept as records | 77 | 0 |
+| 12 app images, 194 B (launcher) to 3,895 B (settings); those of 1 KB or less are records | 21,883 | 11 |
+| **In use** | | **11 of 512: 44 KB of 2 MB, and 1,116 B of records in the 256 KB records ring** |
 <!-- /measure_memory:file-system -->
 
-The rest, about 2.8 MB, is free for apps, saved state and resources.
+The rest, almost 2 MB of files and most of the records ring, is free for apps, saved state and
+resources.
 
 ## RAM (64 KB, planned)
 
@@ -133,16 +130,18 @@ firmware, which then has the whole of RAM but its last 16 bytes, the alive marke
 below it too, so the marker survives from one firmware start to the next. Its third word is the
 bootloader's note to the firmware (`BOOT_NOTE_ADDRESS`), which says whether the recovery firmware
 was just installed, and its fourth is the bootloader updater's (`UPDATER_NOTE_ADDRESS`), which says
-the rollback after it was meant. The firmware measures 55 KB of static RAM:
-37 KB of heap (16 KB for storage and the 21 KB UI heap), and
+the rollback after it was meant. The firmware measures 53 KB of static RAM:
+31 KB of heap (10 KB for the system and the 21 KB UI heap), the flash store's tables (2.7 KB), and
 the Bluetooth host with its eight 128-byte packets, controller, the display's two 960 B strip buffers and task state. The
 Bluetooth task's state is 4.8 KB: its GATT table (2.1 KB) and TrouBLE's runner (1.6 KB) are most of
 it; replies to the companion app and half-received lines wait on the heap, and the update state,
-status page and confirmation are held once in a static. That leaves 8.6 KB (8,796 B) for the
+status page and confirmation are held once in a static. That leaves 11.2 KB (11,420 B) for the
 stack, of which the lowest bytes, up to 360 B, are the stack guard: 256 B from the first 256-byte
 boundary above the statics, which the memory protection unit forbids (`firmware/src/stack_guard.rs`).
-Measured in the emulator by painting the stack before start, with 8,432 B above the guard and the
-shared library installed, the deepest path is opening an app, at 6,152 B, 2,280 B spare: the app
+Measured in the emulator by painting the stack before start, with 10,992 B above the guard and a
+typical install, the deepest path peaks at 6,456 B, 4,536 B spare; on blank flash it is about 5.1 KB. A
+store call's state, up to 1.8 KB, is on the heap while it runs, both for the shell's calls and in
+the storage task, so neither the stack nor the task's static space holds it. Opening an app: the app
 host loads the image and runs its handlers, and the interpreter formats numbers with 64-bit
 division, all under the shell's task. Opening the launcher, the face and the alarm's editor all
 peak there. Start-up reaches 3,816 B: the Bluetooth server is built straight into its static
@@ -152,7 +151,7 @@ display's two strip buffers, 1,920 B together, are static, and drawing's own fra
 interpreter's. Earlier measurements, of the watch's own `/apps` tree (16 apps and faces) with
 `apps` and `install` commands sent over the emulator's Bluetooth bridge, put packages commands
 below the start path of that time. Under a connection the Bluetooth task's own frame is 0.6 KB and `serve_connection`'s
-2.1 KB; packages commands run in a task of their own, since the verifier inside one once overflowed
+2.1 KB; packages commands run in the storage task, since the verifier inside one once overflowed
 the stack under those frames, and the app host verifies an image and runs its first derives outside
 the 1.7 KB frame that loads it.
 
@@ -197,30 +196,30 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 <!-- measure_memory:ram -->
 | Owner | Full build | Recovery build |
 |---|---:|---:|
-| Heap (storage 16 KB, UI 21 KB; the recovery build has no UI heap) | 37,888 B | 16,384 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 16,086 B | 12,623 B |
+| Heap (system 10 KB, UI 21 KB; the recovery build has no UI heap) | 31,744 B | 10,240 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 19,210 B | 15,624 B |
 | Bluetooth controller | 2,545 B | 2,545 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | BLEFS file service | 122 B | 122 B |
 | App host (with `neotime-ui`) | 56 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **57,124 B** | **32,092 B** |
-| Left for the stack | 8,396 B | 33,428 B |
+| **Static RAM** (`.data` and `.bss`) | **54,100 B** | **28,948 B** |
+| Left for the stack | 11,420 B | 36,572 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
 
 | Region | Budget | Holds | Status |
 |---|---|---|---|
-| UI heap | 21 KB | The heap the open app lives in. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (6,628 B), one 160 B node per widget of the open screen that is not inside a hidden one, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. Storage shares the same heap. How much an app needs is worked out from its image, as [below](#how-much-heap-an-app-needs). The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. A `TextFile` holds 4 B for every eighth line of its file and the text of the lines near the view, under 2 KB in the small font, and borrows a 512 B buffer while it reads; a 2,000-line note takes about 1 KB of places. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
+| UI heap | 21 KB | The heap the open app lives in. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (6,628 B), one 160 B node per widget of the open screen that is not inside a hidden one, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. The system's 10 KB shares the same heap. How much an app needs is worked out from its image, as [below](#how-much-heap-an-app-needs). The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. A `TextFile` holds 4 B for every eighth line of its file and the text of the lines near the view, under 2 KB in the small font, and borrows a 512 B buffer while it reads; a 2,000-line note takes about 1 KB of places. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
 | Bluetooth | 12 KB | The controller and the TrouBLE host: connection state, packet buffers and the GATT tables. | Partly measured: the controller is 1.5 KB; TrouBLE's example with it is 12.0 KB in all, executor included |
 | Apps | 6 KB | Memory for the app that is open beyond the UI heap, such as the parts of its file read from `/apps`. The runtime's working memory in it is measured: 2,168 B for the interpreter, 2,056 B for the bindings and 2,440 B for the state. `AppHost` keeps all three on the UI heap. | Partly measured |
 | Stack | 8 KB | The main stack, for interrupts and code that is not in a task. | Planned |
 | Tasks | 6 KB | Embassy's tasks. Each task's state is fixed in size when the firmware is built. | Planned |
-| Reserve | 4 KB | Left free, so a budget that runs over does not crash the watch. | Planned |
+| Reserve | 3 KB | Left free, so a budget that runs over does not crash the watch. | Planned |
 | System state | 4 KB | Settings, notifications, alarms and the step count. The latest 5 notifications are kept on the heap, about 200 B each, beside about 200 B of the shell task's state. | Planned |
 | Display buffer | 2 KB | The buffer `neotime-display` fills before each SPI transfer. | Planned |
-| File system buffers | 2 KB | littlefs-rust, allocated from the heap: 944 B while mounted, plus 408 B for each open file; room for two open at once. | Measured on a 64-bit computer; the watch needs a little less |
+| Flash store | 2.7 KB | The store's tables, in a static rather than the heap: 1 KB of record keys, 512 B of files, the rings' sector order, the log batches and an upload's state. Its calls borrow up to about 1 KB of stack. | Measured with `size_of` for the watch |
 
 The 64 KB is all the chip has, so a part that needs more must take it from another row of this
 table.
@@ -241,10 +240,10 @@ it opens one. The parts, in bytes:
 | Nodes | 164 per widget of the largest screen | A node and its place in the list; every widget counts as shown, a Repeat counts each row (8 when the count is worked out at run time, only those in view down a list of fixed-height rows), and no screen more than 128 |
 | Text | each fixed text's length, 16 for text worked out at run time, 2,560 for a TextFile | |
 
-An app's need must fit `APP_HEAP_BUDGET_BYTES`, 33,792 B: the 37,888 B heap less 4 KB for the
-system while an app is open. Measured in the emulator, the system holds about 1 KB at rest (the
-mounted file system and the shell's list of apps); the rest of its share is for kept notifications
-(up to about 1 KB), files open while the app saves, and lines to and from the companion app.
+An app's need must fit `APP_HEAP_BUDGET_BYTES`, 27,648 B: the 31,744 B heap less 4 KB for the
+system while an app is open. At rest the system holds the shell's list of apps; the rest of its
+share is for kept notifications (up to about 1 KB), a small file gathered while it uploads (up to
+1 KB), and lines to and from the companion app.
 
 Measured in the PineTime emulator on 2026-10-12 with `tools/measure_heap.py`, which installs the
 `digital` face, the launcher and one app, opens each and reads the allocator's bytes in use with
@@ -266,7 +265,10 @@ python3 -I tools/measure_heap.py firmware/target/thumbv7em-none-eabihf/release/n
 | `weather` | 10,752 B | 16,644 B | |
 | `stopwatch` | 12,016 B | 14,488 B | |
 
-In use counts the system's 1 KB too. The shell keeps a list of every installed app, turned off
+Those were measured with littlefs, whose buffers took about 1 KB of the heap, and in use counts
+them. Measured again with the flash store on 2026-10-13, with a typical install: the `digital`
+face 11,864 B in use, the launcher 8,156 B and the alarm 12,136 B; with the alarm's editor open the highest byte touched
+was 13,188 B of the 31,744 B heap. The shell keeps a list of every installed app, turned off
 or not, for the Software app: 62 B an app measured with 38 installed, against the
 `LISTED_APP_BYTES` (48 B) plus id and name every app's need counts for each. With every app in
 the repository and the `digital` face installed, the face held 14,356 B and the launcher, listing

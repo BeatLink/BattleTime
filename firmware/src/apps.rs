@@ -68,7 +68,7 @@ impl InstalledApps {
 
     pub fn read(files: &storage::Files) -> InstalledApps {
         let mut apps = InstalledApps::NONE;
-        apps.packages = storage_apps::all(files);
+        apps.packages = files.installed_apps_now();
         // The list stays for as long as the watch runs, so it keeps no spare room.
         apps.packages.shrink_to_fit();
         apps.sort_out();
@@ -126,7 +126,7 @@ impl InstalledApps {
             return false;
         };
         if checks::check_change(&self.packages, id, enabled).is_err()
-            || !storage_apps::set_enabled(files, id, enabled)
+            || !files.set_app_enabled_now(id, enabled)
         {
             return false;
         }
@@ -148,17 +148,16 @@ pub struct LauncherIcons {
 
 impl LauncherIcons {
     pub fn read(files: &storage::Files, installed: &InstalledApps) -> LauncherIcons {
-        let icons: Vec<Lent<[u8]>> = (0..installed.listed_count())
-            .filter_map(|place| installed.listed(place))
-            .map(|entry| {
-                let icon = entry
-                    .has_icon
-                    .then(|| storage_apps::read_image(files, &entry.id))
-                    .flatten()
-                    .and_then(|image| icon_of(&image));
-                Lent::new(icon.unwrap_or_default().into_boxed_slice())
-            })
-            .collect();
+        let mut icons: Vec<Lent<[u8]>> = Vec::new();
+        for entry in (0..installed.listed_count()).filter_map(|place| installed.listed(place)) {
+            let image = if entry.has_icon {
+                files.read_app_image_now(&entry.id)
+            } else {
+                None
+            };
+            let icon = image.and_then(|image| icon_of(&image));
+            icons.push(Lent::new(icon.unwrap_or_default().into_boxed_slice()));
+        }
         let list: Vec<&'static [u8]> = icons.iter().map(Lent::get).collect();
         LauncherIcons {
             icons,
@@ -189,7 +188,7 @@ fn icon_of(image_bytes: &[u8]) -> Option<Vec<u8>> {
 
 /// An app's image, read into the heap for an `AppHost` to borrow.
 pub fn read_image(files: &storage::Files, id: &str) -> Option<Lent<[u8]>> {
-    let bytes = storage_apps::read_image(files, id)?;
+    let bytes = files.read_app_image_now(id)?;
     Some(Lent::new(bytes.into_boxed_slice()))
 }
 
@@ -202,55 +201,4 @@ pub fn shared_library() -> Option<&'static [u8]> {
     let region = neotime_boot::SHARED_LIBRARY;
     let bytes = unsafe { core::slice::from_raw_parts(region.start as *const u8, region.size as usize) };
     neotime_packages::library::installed_library(bytes)
-}
-
-// ============================================================================
-// The package manager, or nothing in the rehearsals, which keep no files
-// ============================================================================
-
-#[cfg(not(feature = "wasp-os-rehearsal"))]
-mod storage_apps {
-    use alloc::vec::Vec;
-
-    use neotime_packages::{InstalledApp, Packages};
-
-    use crate::storage;
-
-    pub fn all(files: &storage::Files) -> Vec<InstalledApp> {
-        files
-            .file_system()
-            .and_then(|file_system| Packages::new(file_system).list().ok())
-            .unwrap_or_default()
-    }
-
-    pub fn set_enabled(files: &storage::Files, id: &str, enabled: bool) -> bool {
-        files
-            .file_system()
-            .is_some_and(|file_system| Packages::new(file_system).set_enabled(id, enabled).is_ok())
-    }
-
-    pub fn read_image(files: &storage::Files, id: &str) -> Option<Vec<u8>> {
-        Packages::new(files.file_system()?).read_image(id).ok()
-    }
-}
-
-#[cfg(feature = "wasp-os-rehearsal")]
-mod storage_apps {
-    use alloc::vec::Vec;
-
-    use neotime_packages::InstalledApp;
-
-    use crate::storage;
-
-    pub fn all(_files: &storage::Files) -> Vec<InstalledApp> {
-        Vec::new()
-    }
-
-    pub fn set_enabled(_files: &storage::Files, _id: &str, _enabled: bool) -> bool {
-        false
-    }
-
-    pub fn read_image(_files: &storage::Files, _id: &str) -> Option<Vec<u8>> {
-        None
-    }
 }

@@ -81,6 +81,7 @@ pub struct Recorded {
 // The history
 // ============================================================================
 
+#[derive(Clone)]
 pub struct StepHistory {
     recording: SlotTime,
     steps_in_slot: u32,

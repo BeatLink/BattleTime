@@ -31,10 +31,10 @@ pub enum Counter {
     DrawMicroseconds = FIRST_LATER_WORD as isize,
     /// Microseconds spent sending to the display, the status page and help screen included, counting round the same way.
     DisplaySendMicroseconds,
-    /// Free blocks erased ahead of littlefs.
-    BlocksErasedAhead,
-    /// littlefs erases that returned at once because their block was erased ahead.
-    ErasesSkipped,
+    /// Sectors the flash store erased.
+    StoreSectorsErased,
+    /// Store calls the shell made while another task held the store, which then found nothing.
+    StoreCallsFoundBusy,
 }
 
 const COUNTER_COUNT: usize = 8;

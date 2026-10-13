@@ -1,14 +1,13 @@
 # Flash store
 
-`neotime-flash-store` (`services/flash_store/`) keeps NeoTime's data in the external flash. It is
-built to replace littlefs ([storage.md](storage.md)); the firmware does not use it yet, and moving
-the firmware over is an item in [todo.md](todo.md). Why it exists, and how it compares with
-littlefs, ekv and sequential-storage, is in
+`neotime-flash-store` (`services/flash_store/`) keeps NeoTime's data in the external flash; what the
+watch keeps there, and how the firmware reaches it, is in [storage.md](storage.md). Why it exists,
+and how it compares with littlefs, ekv and sequential-storage, is in
 [architecture-assessment.md](architecture-assessment.md#apps-as-chunks-in-flash).
 
 The store knows how data is written, not what it is, so a new kind of data needs no new format and
-no new firmware. It survives a power cut at any point, spreads its wear, never blocks the CPU (it
-is `async` over `embedded-storage-async`), and needs no heap.
+no new firmware. It survives a power cut at any point, spreads its wear, is `async` over
+`embedded-storage-async`, and needs no heap.
 
 ## The three containers
 
@@ -77,8 +76,13 @@ cannot push out months of history.
 ## On the flash
 
 `Layout` gives the store's start address and how many sectors each container gets. On the watch
-the plan is the 3 MB file system region: 512 sectors (2 MB) of files, 64 (256 KB) of records and
+it is the 3 MB file system region: 512 sectors (2 MB) of files, 64 (256 KB) of records and
 192 (768 KB) of logs.
+
+`FlashStore::unmounted` builds a store with nothing read yet, which `mount_in_place` fills where it
+lies, such as in a static, so the mount's future never holds a copy of the store; `mount` does both.
+The flash must read and write single bytes and erase 4 KB sectors, which the build checks.
+`flash_mut` lends the flash driver, such as for the firmware to switch how it waits.
 
 Every ring sector starts with a 16-byte header: magic, sequence number, erase count, format version
 and checksum. Every file header carries the format version too. A store of another version is
@@ -95,11 +99,16 @@ Built for the watch with 128 files, 128 record keys and rings of up to 192 secto
 |---|---:|
 | RAM, fixed when built, no heap | 2,700 |
 | Code and constants | about 26,200 |
-| Stack, at most, while cleaning a ring | about 1,000, not yet measured on the watch |
+| Stack, at most, while cleaning a ring | about 1,000 |
 
 The RAM is mostly the key table (1 KB), the file table (512 B), the rings' sector order (384 B),
-the log batches and the state of an upload. littlefs takes 23.7 KB of code for comparison, and the
-firmware's 16 KB storage share of the heap could shrink once littlefs goes.
+the log batches and the state of an upload. littlefs takes 23.7 KB of code for comparison. With the
+store in the firmware, the heap is 6 KB smaller than it was with littlefs, which more than pays for
+the store's tables and its task; see [memory-map.md](memory-map.md).
+
+An `async` call's future holds every buffer of every call beneath it, and an Embassy task keeps
+its future in RAM for good. So the firmware awaits the store in one task only, and builds and
+mounts the store outside any `async` function.
 
 Mounting reads every file header and checks every record in both rings, about 1 MB of reads,
 roughly a second at start-up; a checkpoint of the RAM tables could shorten it later.

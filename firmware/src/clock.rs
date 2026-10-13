@@ -17,7 +17,11 @@ use neotime_current_time::{
 };
 use neotime_runtime::{SystemValue, Value};
 
-use crate::{storage, system_values};
+use crate::{
+    storage,
+    storage_requests::{self, StorageRequest},
+    system_values,
+};
 
 static CLOCK: Mutex<CriticalSectionRawMutex, Cell<WallClock>> = Mutex::new(Cell::new(
     WallClock::starting_at(parse_or_zero(env!("NEOTIME_BUILD_TIME_MS"))),
@@ -92,7 +96,7 @@ pub fn instant_at(utc: Value) -> Instant {
 /// Reads the saved zone at start-up, unless a phone already wrote one; a missing or bad file leaves UTC.
 pub fn load_time_zone(files: &storage::Files) {
     let Some(zone) = files
-        .read(TIME_ZONE_PATH)
+        .read_now(TIME_ZONE_PATH)
         .and_then(|bytes| LocalTimeInformation::decode(&bytes))
     else {
         return;
@@ -107,9 +111,15 @@ pub fn load_time_zone(files: &storage::Files) {
 }
 
 /// Saves the zone if it changed since it was last saved.
-pub fn save_time_zone_if_changed(files: &storage::Files) {
+pub async fn save_time_zone_if_changed() {
     if ZONE_UNSAVED.swap(false, Ordering::Relaxed) {
-        files.write(TIME_ZONE_PATH, &CLOCK.lock(Cell::get).zone().encode());
+        let mut bytes = heapless::Vec::new();
+        let _ = bytes.extend_from_slice(&CLOCK.lock(Cell::get).zone().encode());
+        let request = StorageRequest::WriteSmallFile {
+            path: TIME_ZONE_PATH,
+            bytes,
+        };
+        storage_requests::REQUESTS.send(request).await;
     }
 }
 

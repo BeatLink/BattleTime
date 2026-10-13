@@ -80,7 +80,7 @@ pub struct FakePackage {
 }
 
 /// The heap budget an open app has, as the watch gives it.
-pub const STARTING_APP_MEMORY_BUDGET: Value = 33_792;
+pub const STARTING_APP_MEMORY_BUDGET: Value = neotime_runtime::memory_need::APP_HEAP_BUDGET_BYTES as Value;
 
 /// A watch with an app too large to turn on, a face, the launcher, the Software app and two apps.
 pub fn starting_packages() -> Vec<FakePackage> {

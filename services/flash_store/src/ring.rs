@@ -97,6 +97,8 @@ enum SectorHeader {
 /// Where a record's data comes from when it is written.
 pub(crate) enum RecordData<'data> {
     Memory(&'data [u8]),
+    /// Pieces written one after another as one record, so they never have to be gathered in RAM.
+    Pieces(&'data [&'data [u8]]),
     /// Copied from another record in the same ring, a piece at a time, keeping its sequence number.
     Copy {
         offset: usize,
@@ -125,17 +127,9 @@ pub(crate) struct Ring<const SECTORS: usize> {
 }
 
 impl<const SECTORS: usize> Ring<SECTORS> {
-    pub(crate) async fn mount<Flash: NorFlash>(
-        flash: &mut Flash,
-        start_address: u32,
-        sector_count: usize,
-        keeps_newest: bool,
-        keys: &mut KeyTable,
-    ) -> Result<Self, StoreError<Flash::Error>> {
-        if sector_count > SECTORS || !(RESERVED_FREE_SECTORS + 2..=256).contains(&sector_count) {
-            return Err(StoreError::LayoutDoesNotFit);
-        }
-        let mut ring = Ring {
+    /// A ring with nothing read yet, which `mount_in_place` fills where it lies, so no copy of it is ever made.
+    pub(crate) const fn unmounted(start_address: u32, sector_count: usize, keeps_newest: bool) -> Self {
+        Ring {
             start_address,
             sector_count,
             keeps_newest,
@@ -145,32 +139,44 @@ impl<const SECTORS: usize> Ring<SECTORS> {
             next_sector_sequence: 1,
             next_record_sequence: 1,
             bytes_in_use: 0,
-        };
-        let mut used: Vec<(u32, u8), SECTORS> = Vec::new();
-        for index in 0..sector_count {
-            match ring.read_sector_header(flash, index).await? {
+        }
+    }
+
+    pub(crate) async fn mount_in_place<Flash: NorFlash>(
+        &mut self,
+        flash: &mut Flash,
+        keys: &mut KeyTable,
+    ) -> Result<(), StoreError<Flash::Error>> {
+        if self.sector_count > SECTORS || !(RESERVED_FREE_SECTORS + 2..=256).contains(&self.sector_count) {
+            return Err(StoreError::LayoutDoesNotFit);
+        }
+        *self = Ring::unmounted(self.start_address, self.sector_count, self.keeps_newest);
+        keys.clear();
+        // Each used sector goes into the order by its sequence as it is found, so the order ends up oldest first.
+        let mut sequences = [0u32; SECTORS];
+        for index in 0..self.sector_count {
+            match self.read_sector_header(flash, index).await? {
                 SectorHeader::Valid { sequence, .. } => {
-                    let _ = used.push((sequence, index as u8));
+                    sequences[index] = sequence;
+                    self.next_sector_sequence = self.next_sector_sequence.max(sequence + 1);
+                    let mut position = self.order.len();
+                    let _ = self.order.push(index as u8);
+                    while position > 0 && sequences[self.order[position - 1] as usize] > sequence {
+                        self.order.swap(position - 1, position);
+                        position -= 1;
+                    }
                 }
                 SectorHeader::OtherVersion => return Err(StoreError::OtherFormatVersion),
                 SectorHeader::Invalid => {}
             }
         }
-        // Few sectors, sorted once at start-up, so a plain insertion sort keeps the code small.
-        for next in 1..used.len() {
-            let mut position = next;
-            while position > 0 && used[position - 1].0 > used[position].0 {
-                used.swap(position - 1, position);
-                position -= 1;
-            }
-        }
-        for (sequence, index) in used {
-            ring.next_sector_sequence = ring.next_sector_sequence.max(sequence + 1);
-            let _ = ring.order.push(index);
+        for position in 0..self.order.len() {
+            let index = self.order[position];
             let mut table_full = false;
-            let end = scan_sector(flash, ring.start_address, index as usize, |record| {
-                ring.next_record_sequence = ring.next_record_sequence.max(record.sequence + 1);
-                if ring.note_record(keys, record).is_err() {
+            let start_address = self.start_address;
+            let end = scan_sector(flash, start_address, index as usize, |record| {
+                self.next_record_sequence = self.next_record_sequence.max(record.sequence + 1);
+                if self.note_record(keys, record).is_err() {
                     table_full = true;
                 }
             })
@@ -178,14 +184,13 @@ impl<const SECTORS: usize> Ring<SECTORS> {
             if table_full {
                 return Err(StoreError::KeyTableFull);
             }
-            ring.head_end = end as u16;
+            self.head_end = end as u16;
         }
-        if ring.order.is_empty() {
-            ring.start_new_head(flash).await?;
+        if self.order.is_empty() {
+            self.start_new_head(flash).await?;
         }
         // A power cut during cleanup can leave too few free sectors; finish the cleanup now.
-        ring.keep_free_sectors(flash, keys).await?;
-        Ok(ring)
+        self.keep_free_sectors(flash, keys).await
     }
 
     fn sector_address(&self, index: usize) -> u32 {
@@ -431,6 +436,13 @@ impl<const SECTORS: usize> Ring<SECTORS> {
                 self.next_record_sequence += 1;
                 (bytes.len(), self.next_record_sequence - 1)
             }
+            RecordData::Pieces(pieces) => {
+                self.next_record_sequence += 1;
+                (
+                    pieces.iter().map(|piece| piece.len()).sum(),
+                    self.next_record_sequence - 1,
+                )
+            }
             RecordData::Copy { offset, length } => {
                 let mut original = [0u8; RECORD_HEADER_BYTES];
                 read(
@@ -456,6 +468,12 @@ impl<const SECTORS: usize> Ring<SECTORS> {
             RecordData::Memory(bytes) => {
                 checksum.add(bytes);
                 writer.push(flash, bytes).await?;
+            }
+            RecordData::Pieces(pieces) => {
+                for piece in pieces {
+                    checksum.add(piece);
+                    writer.push(flash, piece).await?;
+                }
             }
             RecordData::Copy {
                 offset: source,
@@ -495,6 +513,20 @@ impl<const SECTORS: usize> Ring<SECTORS> {
             .map_err(|_| StoreError::KeyTableFull)
     }
 
+    /// Appends a record made of pieces, such as a small file's path and its data.
+    pub(crate) async fn append_pieces<Flash: NorFlash>(
+        &mut self,
+        flash: &mut Flash,
+        keys: &mut KeyTable,
+        key: RecordKey,
+        pieces: &[&[u8]],
+    ) -> Result<(), StoreError<Flash::Error>> {
+        let length: usize = pieces.iter().map(|piece| piece.len()).sum();
+        self.make_room(flash, keys, key, 0, length).await?;
+        self.write_record(flash, keys, key, 0, RecordData::Pieces(pieces))
+            .await
+    }
+
     /// Appends a record, refusing one that would push the newest copies past half the ring.
     pub(crate) async fn append<Flash: NorFlash>(
         &mut self,
@@ -504,7 +536,21 @@ impl<const SECTORS: usize> Ring<SECTORS> {
         flags: u8,
         data: &[u8],
     ) -> Result<(), StoreError<Flash::Error>> {
-        if data.len() > LARGEST_RECORD_BYTES {
+        self.make_room(flash, keys, key, flags, data.len()).await?;
+        self.write_record(flash, keys, key, flags, RecordData::Memory(data))
+            .await
+    }
+
+    /// Checks a record of `length` bytes may be written, then starts new sectors until it fits.
+    async fn make_room<Flash: NorFlash>(
+        &mut self,
+        flash: &mut Flash,
+        keys: &mut KeyTable,
+        key: RecordKey,
+        flags: u8,
+        length: usize,
+    ) -> Result<(), StoreError<Flash::Error>> {
+        if length > LARGEST_RECORD_BYTES {
             return Err(StoreError::TooLarge);
         }
         if self.keeps_newest {
@@ -513,17 +559,16 @@ impl<const SECTORS: usize> Ring<SECTORS> {
                 return Err(StoreError::KeyTableFull);
             }
             let replaced = existing.map_or(0, |position| record_bytes(keys[position].length()));
-            let after = self.bytes_in_use - replaced + record_bytes(data.len());
+            let after = self.bytes_in_use - replaced + record_bytes(length);
             if flags & TOMBSTONE == 0 && after > self.usable_bytes() / 2 {
                 return Err(StoreError::Full);
             }
         }
-        while !self.fits_in_head(data.len()) {
+        while !self.fits_in_head(length) {
             self.start_new_head(flash).await?;
             self.keep_free_sectors(flash, keys).await?;
         }
-        self.write_record(flash, keys, key, flags, RecordData::Memory(data))
-            .await
+        Ok(())
     }
 
     /// Reads from `offset` into a key's newest copy, as much as the buffer holds; nothing when the key is missing.

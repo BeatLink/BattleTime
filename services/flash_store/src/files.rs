@@ -92,6 +92,10 @@ impl Upload {
     pub(crate) fn path(&self) -> &String<LONGEST_PATH_BYTES> {
         &self.path
     }
+
+    pub(crate) fn length(&self) -> usize {
+        self.length
+    }
 }
 
 // ============================================================================
@@ -110,29 +114,38 @@ pub(crate) struct FileArea<const MOST_FILES: usize> {
 }
 
 impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
-    pub(crate) async fn mount<Flash: NorFlash>(
-        flash: &mut Flash,
-        start_address: u32,
-        sector_count: usize,
-    ) -> Result<Self, StoreError<Flash::Error>> {
-        if sector_count > MOST_FILE_SECTORS {
-            return Err(StoreError::LayoutDoesNotFit);
-        }
-        let mut area = FileArea {
+    /// An area with nothing read yet, which `mount_in_place` fills where it lies.
+    pub(crate) const fn unmounted(start_address: u32, sector_count: usize) -> Self {
+        FileArea {
             start_address,
             sector_count,
             used: [0; MOST_FILE_SECTORS / 8],
             files: Vec::new(),
             next_sequence: 1,
             cursor: 0,
-        };
+        }
+    }
+
+    pub(crate) async fn mount_in_place<Flash: NorFlash>(
+        &mut self,
+        flash: &mut Flash,
+    ) -> Result<(), StoreError<Flash::Error>> {
+        if self.sector_count > MOST_FILE_SECTORS {
+            return Err(StoreError::LayoutDoesNotFit);
+        }
+        // Cleared field by field, since a fresh area built here would put the whole file table on the stack.
+        self.used = [0; MOST_FILE_SECTORS / 8];
+        self.files.clear();
+        self.next_sequence = 1;
+        self.cursor = 0;
+        let sector_count = self.sector_count;
         for index in 0..sector_count {
-            let header = match area.read_header(flash, index).await? {
+            let header = match self.read_header(flash, index).await? {
                 HeaderAt::Valid(header) => header,
                 HeaderAt::OtherVersion => return Err(StoreError::OtherFormatVersion),
                 HeaderAt::Invalid => continue,
             };
-            area.next_sequence = area.next_sequence.max(header.sequence + 1);
+            self.next_sequence = self.next_sequence.max(header.sequence + 1);
             let sectors_fit = header
                 .sectors
                 .iter()
@@ -141,14 +154,14 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
                 continue;
             }
             // Two live versions of one path mean the power went before the older was retired; retire it now.
-            match area.find(flash, &header.path).await? {
+            match self.find(flash, &header.path).await? {
                 Some((position, older)) if older.sequence < header.sequence => {
-                    area.retire(flash, position, &older).await?;
+                    self.retire(flash, position, &older).await?;
                 }
                 Some(_) => {
                     write(
                         flash,
-                        area.sector_address(index) + RETIRED_AT as u32,
+                        self.sector_address(index) + RETIRED_AT as u32,
                         &0u32.to_le_bytes(),
                     )
                     .await?;
@@ -156,9 +169,9 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
                 }
                 None => {}
             }
-            area.add(index, &header).map_err(|_| StoreError::FileTableFull)?;
+            self.add(index, &header).map_err(|_| StoreError::FileTableFull)?;
         }
-        Ok(area)
+        Ok(())
     }
 
     fn sector_address(&self, index: usize) -> u32 {
@@ -218,6 +231,10 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
             }
         }
         Ok(None)
+    }
+
+    pub(crate) fn sector_count(&self) -> usize {
+        self.sector_count
     }
 
     pub(crate) fn free_sectors(&self) -> usize {

@@ -10,8 +10,8 @@ the crate that owns it. The firmware is linked with LTO into one object, so a li
 say where a byte came from; demangled symbol paths can. Unnamed constants are matched by content
 against the files the firmware embeds (fonts, built-in apps, the accelerometer's configuration).
 Then it compiles a typical install, the face, the launcher and the apps in TYPICAL_APPS, and runs
-the `filesystem_use` example of neotime-packages, which installs them into a file system formatted
-as the watch formats it.
+the `filesystem_use` example of neotime-packages, which installs them into a flash store mounted
+as the watch mounts it.
 
 It writes its tables into docs/memory-map.md, between the `<!-- measure_memory:NAME -->` markers.
 With `--check` it changes nothing and fails when the doc's tables are out of date. CI's Memory map
@@ -55,8 +55,9 @@ COMPONENTS = [
     ("neotime_dfu", "Updates (DFU)"),
     ("neotime_updates", "Updates (DFU)"),
     ("embassy_boot", "Updates (DFU)"),
-    ("neotime_storage", "Storage (littlefs)"),
-    ("littlefs_rust", "Storage (littlefs)"),
+    ("neotime_flash_store", "Storage (flash store)"),
+    ("neotime_storage", "Storage (littlefs, wasp-os rehearsal only)"),
+    ("littlefs_rust", "Storage (littlefs, wasp-os rehearsal only)"),
     ("neotime_display", "Display, graphics and drivers"),
     ("neotime_touch", "Display, graphics and drivers"),
     ("neotime_accelerometer", "Display, graphics and drivers"),
@@ -247,7 +248,7 @@ def file_system_use():
 
 # RAM owners are named for what they hold.
 RAM_LABELS = {
-    HEAP: "Heap (storage 16 KB, UI 21 KB; the recovery build has no UI heap)",
+    HEAP: "Heap (system 10 KB, UI 21 KB; the recovery build has no UI heap)",
     "Firmware (start-up, shell, tasks)": "Firmware: task storage, the Bluetooth host's resources and packet pool",
     "Bluetooth (controller and TrouBLE)": "Bluetooth controller",
     UNATTRIBUTED: "Other",
@@ -282,11 +283,10 @@ def ram_table(full, recovery):
 
 
 def file_system_table(values, steps):
-    block_size = values["block_size"]
-    total = values["block_count"]
-    formatting = steps[0][2]
+    sector_size = values["sector_size"]
+    file_sectors = values["file_sectors"]
+    record_ring_bytes = values["record_sectors"] * sector_size
     settings = [step for step in steps if step[0].startswith("/settings/")]
-    folders = [step for step in steps if step[0].startswith("/apps/") and step[0].endswith("/")]
     images = [step for step in steps if step[0].endswith(".ntapp")]
     smallest = min(images, key=lambda step: step[1])
     largest = max(images, key=lambda step: step[1])
@@ -295,16 +295,18 @@ def file_system_table(values, steps):
         return step[0].split("/")[2]
 
     image_bytes = sum(step[1] for step in images)
-    in_use = values["in_use"]
+    in_use = values["file_sectors_in_use"]
+    record_bytes = values["record_bytes_in_use"]
     return [
-        "| What | Bytes | Blocks |",
+        "| What | Bytes | File sectors |",
         "|---|---:|---:|",
-        f"| Formatting: the root and the three top-level folders | | {formatting} |",
-        f"| `/settings/system` and `/settings/theme` | {sum(step[1] for step in settings):,} | {sum(step[2] for step in settings)} |",
-        f"| {len(folders)} app folders | | {sum(step[2] for step in folders)} |",
-        f"| {len(images)} app images, {smallest[1]:,} B ({app_id(smallest)}) to {largest[1]:,} B ({app_id(largest)}) "
-        f"| {image_bytes:,} | {sum(step[2] for step in images)} |",
-        f"| **In use** | | **{in_use} of {total}: {in_use * block_size // 1024} KB of {total * block_size // 1024 // 1024} MB** |",
+        f"| `/settings/system` and `/settings/theme`, kept as records | {sum(step[1] for step in settings):,} | "
+        f"{sum(step[2] for step in settings)} |",
+        f"| {len(images)} app images, {smallest[1]:,} B ({app_id(smallest)}) to {largest[1]:,} B ({app_id(largest)}); "
+        f"those of 1 KB or less are records | {image_bytes:,} | {sum(step[2] for step in images)} |",
+        f"| **In use** | | **{in_use} of {file_sectors}: {in_use * sector_size // 1024} KB of "
+        f"{file_sectors * sector_size // 1024 // 1024} MB, and {record_bytes:,} B of records in the "
+        f"{record_ring_bytes // 1024} KB records ring** |",
     ]
 
 

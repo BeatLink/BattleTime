@@ -42,10 +42,10 @@ MEMORIES = {
             ("Apps", "", 6, "runtime"),
             ("Stack", "", 8, "boot"),
             ("Tasks", "", 6, "boot"),
-            ("Reserve", "", 4, "spare"),
+            ("Reserve", "", 3, "spare"),
             ("System state", "", 4, "data"),
             ("Display buffer", "", 2, "firmware"),
-            ("File system buffers", "", 2, "data"),
+            ("Flash store", "", 3, "data"),
         ],
     ),
 }

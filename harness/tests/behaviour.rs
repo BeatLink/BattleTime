@@ -480,7 +480,7 @@ fn the_software_app_lists_every_package_with_its_memory() {
     let watch = TestWatch::open_app("software").unwrap();
 
     assert!(
-        watch.shows_text("Each app may use 33 KB"),
+        watch.shows_text("Each app may use 27 KB"),
         "{:?}",
         watch.visible_texts()
     );
@@ -542,7 +542,7 @@ fn the_software_app_shows_the_need_against_the_budget_for_an_app_too_large() {
     tap_package(&mut watch, "Atlas");
 
     assert!(
-        watch.shows_text("Needs 41 KB of 33 KB"),
+        watch.shows_text("Needs 41 KB of 27 KB"),
         "{:?}",
         watch.visible_texts()
     );

@@ -5,8 +5,8 @@
 //! region is ever erased or written.
 
 use embedded_storage::nor_flash::NorFlash;
-use littlefs_rust::{Filesystem, OpenFlags, Storage};
 use neotime_boot::{PAGE_SIZE, SHARED_LIBRARY};
+use neotime_flash_store::FileAccess;
 
 use crate::PackageError;
 
@@ -57,15 +57,18 @@ const COPY_BYTES: usize = 256;
 /// `flash` addresses the whole internal flash. `check_in_place` is given the image's length and must
 /// check the bytes now at `SHARED_LIBRARY.start + LIBRARY_HEADER_BYTES`; on the watch it reads them
 /// straight from the memory-mapped flash.
-pub fn install_library_from_file<S: Storage, Flash: NorFlash>(
+pub async fn install_library_from_file<Files: FileAccess, Flash: NorFlash>(
     flash: &mut Flash,
-    files: &Filesystem<S>,
+    files: &mut Files,
     path: &str,
     check_in_place: impl FnOnce(&mut Flash, u32) -> Result<(), PackageError>,
 ) -> Result<(), LibraryError> {
     let missing = LibraryError::Image(PackageError::NotInstalled);
-    let file = files.open(path, OpenFlags::READ).map_err(|_| missing)?;
-    let length = file.size();
+    let length = files
+        .file_length(path)
+        .await
+        .map_err(|_| LibraryError::Flash)?
+        .ok_or(missing)? as u32;
     if length > MOST_LIBRARY_BYTES {
         return Err(LibraryError::TooLarge);
     }
@@ -78,14 +81,18 @@ pub fn install_library_from_file<S: Storage, Flash: NorFlash>(
     let mut address = SHARED_LIBRARY.start + LIBRARY_HEADER_BYTES;
     let mut piece = [0xFF; COPY_BYTES];
     loop {
-        let read = file.read(&mut piece).map_err(|_| LibraryError::Flash)? as usize;
+        let copied = (address - SHARED_LIBRARY.start - LIBRARY_HEADER_BYTES) as usize;
+        let read = files
+            .read_file(path, copied, &mut piece)
+            .await
+            .map_err(|_| LibraryError::Flash)?
+            .unwrap_or(0);
         if read == 0 {
             break;
         }
         write_padded(flash, address, &piece[..read])?;
         address += read as u32;
     }
-    drop(file);
     if address - SHARED_LIBRARY.start - LIBRARY_HEADER_BYTES != length {
         return Err(LibraryError::Flash);
     }

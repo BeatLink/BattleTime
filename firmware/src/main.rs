@@ -35,7 +35,7 @@ use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
 use embassy_time::{Delay, Duration, Timer};
 use embedded_alloc::LlffHeap;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
-use neotime_blefs::{service::FileTransferService, FileTransfer};
+use neotime_blefs::service::FileTransferService;
 use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
 use neotime_button::Button;
 use neotime_companion::{LineAssembler, MOST_NEW_ALERT_BYTES};
@@ -56,6 +56,7 @@ use trouble_host::prelude::*;
 )]
 #[cfg_attr(feature = "wasp-os-storage-rehearsal", path = "storage/storage_rehearsal.rs")]
 mod storage;
+mod storage_requests;
 
 // The rehearsals and the recovery firmware run without the shell, which leaves these unused there.
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -296,12 +297,11 @@ async fn main(spawner: Spawner) {
             )
             .unwrap(),
         );
-        spawner.spawn(motion::run_accelerometer(I2cDevice::new(i2c_bus), files).unwrap());
+        spawner.spawn(motion::run_accelerometer(I2cDevice::new(i2c_bus)).unwrap());
         spawner.spawn(
             vibration::run_vibrator(Output::new(chip.P0_16, Level::High, OutputDrive::Standard)).unwrap(),
         );
         spawner.spawn(shell::run_shell(screen.display, backlight, files).unwrap());
-        spawner.spawn(storage::keep_blocks_erased_ahead(files).unwrap());
     }
     // Kept for the whole run without a shell to own it: dropping the backlight releases its pins and the screen goes dark.
     #[cfg(not(with_shell))]
@@ -329,7 +329,7 @@ async fn main(spawner: Spawner) {
     );
 }
 
-/// Starts the radio and the tasks that serve Bluetooth and packages commands.
+/// Starts the radio and the tasks that serve Bluetooth and storage.
 // Kept out of `main`, so the tasks built here never share its stack frame with what start-up holds.
 #[inline(never)]
 fn start_bluetooth(
@@ -341,7 +341,7 @@ fn start_bluetooth(
     let controller = neotime_bluetooth::start(radio, Interrupts);
     storage::leave_breadcrumb(stage::RADIO_STARTED);
     let parts = BLUETOOTH_PARTS.init(parts);
-    spawner.spawn(packages::run_commands(files).unwrap());
+    spawner.spawn(storage::run_storage(files).unwrap());
     spawner.spawn(run_bluetooth(controller, parts, files).unwrap());
 }
 
@@ -931,6 +931,8 @@ async fn send_packages_reply(
 }
 
 /// The first data a phone exchanges proves the radio works end to end, so that is when the firmware confirms itself.
+// Only the shell's builds move slots, the one use of `files` here.
+#[cfg_attr(not(with_shell), allow(unused_variables))]
 async fn serve_connection(
     connection: &GattConnection<'_, '_, DefaultPacketPool>,
     server: &Server<'_>,
@@ -942,7 +944,9 @@ async fn serve_connection(
 ) {
     let mut shown_progress = ShownProgress::default();
     let mut companion_lines = LineAssembler::new();
-    let mut file_transfer = FileTransfer::new(neotime_storage::BLOCK_SIZE, neotime_storage::BLOCK_COUNT);
+    storage_requests::REQUESTS
+        .send(storage_requests::StorageRequest::StartFileTransfer)
+        .await;
     // A packages command so far, on the heap since commands are short and rare.
     let mut packages_line: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
     // Complete packages commands, handed to their task once the write that finished them is answered.
@@ -1001,6 +1005,7 @@ async fn serve_connection(
             GattConnectionEvent::Gatt { event } => {
                 let mut written = heapless::Vec::<u8, 64>::new();
                 let mut file_answers = alloc::vec::Vec::new();
+                let mut file_request = heapless::Vec::<u8, { storage_requests::FILE_REQUEST_BYTES }>::new();
                 let target = match &event {
                     GattEvent::Write(write) => {
                         write.with_data(|_, bytes| {
@@ -1010,8 +1015,11 @@ async fn serve_connection(
                             foreground::wait_for_a_pause().await;
                             let room = connection.raw().att_mtu() as usize - NOTIFICATION_HEADER_BYTES;
                             write.with_data(|_, bytes| {
-                                file_answers = file_transfer.answer(files.file_system(), bytes, room);
+                                let _ = file_request.extend_from_slice(
+                                    &bytes[..bytes.len().min(storage_requests::FILE_REQUEST_BYTES)],
+                                );
                             });
+                            file_answers = storage_requests::answer_file_transfer(&file_request, room).await;
                         }
                         if write.handle() == server.alert_notification.new_alert.handle {
                             write.with_data(|_, bytes| {
@@ -1075,7 +1083,7 @@ async fn serve_connection(
                 if let Ok(reply) = reply {
                     reply.send().await;
                 }
-                clock::save_time_zone_if_changed(files);
+                clock::save_time_zone_if_changed().await;
                 for command in packages_commands.drain(..) {
                     packages::COMMANDS.send(command).await;
                 }

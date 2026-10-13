@@ -10,5 +10,9 @@ publish = false
 embedded-storage-async = "0.4"
 heapless = "0.9"
 
+[features]
+# An in-memory flash for other crates' tests.
+ram-flash = []
+
 [dev-dependencies]
 embassy-futures = "0.1"
