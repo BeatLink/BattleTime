@@ -180,6 +180,8 @@ pub struct AppHost<'image> {
     app_lists_out_of_date: bool,
     /// Whether the touch under way has scrolled a list, so its slide is not also a swipe.
     touch_scrolled: bool,
+    /// Whether the last handler run changed no state and asked for no effect, so a swipe it got goes on to the system.
+    last_handler_did_nothing: bool,
     scroll_move: Option<ScrollMove>,
     next_transition: Transition,
     /// While a swipe's handler runs, how a screen it goes to slides in, following the finger.
@@ -330,6 +332,7 @@ impl<'image> AppHost<'image> {
             nodes_out_of_date: false,
             app_lists_out_of_date: false,
             touch_scrolled: false,
+            last_handler_did_nothing: false,
             scroll_move: None,
             next_transition: Transition::None,
             swipe_transition: None,
@@ -1012,6 +1015,7 @@ impl<'image> AppHost<'image> {
             }
         };
 
+        self.last_handler_did_nothing = outcome.effects().is_empty() && outcome.changed_variables() == 0;
         let may_navigate = may_navigate && self.is_open;
         let mut navigation = None;
         for effect in outcome.effects() {
@@ -1484,7 +1488,11 @@ impl<'image> AppHost<'image> {
                 let result =
                     self.run_screen_event(Property::OnSwipe, &[swipe_value(direction)], now, system, true);
                 self.swipe_transition = None;
-                return result;
+                // A handler that ignored this direction leaves the swipe to the system, as no handler would.
+                return match result {
+                    EventResult::Handled if self.last_handler_did_nothing => EventResult::NotHandled,
+                    result => result,
+                };
             }
             Touch::Release { .. } if self.scroll_drag.is_some() => {
                 return self.end_scroll(now, system).unwrap_or(EventResult::Handled);

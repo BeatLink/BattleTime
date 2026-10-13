@@ -1040,7 +1040,8 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
   transition, which shows the outgoing screen out of place while it slides away. On a screen that
   cannot scroll, slides are drawn at once.
 - **Going back.** `go_back_a_screen`, which the side button calls, returns to the previous screen,
-  and is left to the embedder on the first one. A swipe goes only to the screen's `onSwipe`.
+  and is left to the embedder on the first one. A swipe goes only to the screen's `onSwipe`, and one
+the handler ignores, changing no state and carrying out no effect, is left to the embedder too.
 - **Time and subscriptions.** `tick` runs due timers and redraws what the clock changed, and
   `next_wakeup` says when that next happens, so the watch can sleep in between. `deliver` hands
   sensor and phone events to the app's subscriptions. `listens_for` and `shortest_period_of` say

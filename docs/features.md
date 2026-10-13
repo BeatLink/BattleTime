@@ -30,7 +30,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   the bottom. After a panel scroll only the ends of the thumb are drawn again.
   ![Settings with its scroll bar](../harness/snapshots/screens/app-settings.png)
 - **Swipes belong to the app.** Inside an app every swipe is the app's own, and a right swipe no
-  longer goes back.
+  longer goes back. A swipe the app ignores goes on to the shell, so steps and the system pages,
+  which use only up and down, still step round the quick apps.
 - **Swipes on the watch face.** A swipe up opens the launcher, and a swipe down in the launcher
   closes it again. A swipe down pulls the notifications down from the top, and a second swipe down
   pulls quick settings down after them; a swipe up puts either away. Swipes left and right step

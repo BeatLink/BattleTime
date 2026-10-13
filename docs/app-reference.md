@@ -75,8 +75,9 @@ pass to the widget behind it, and then to the screen.
 Inside an app every swipe is the app's own: the shell takes none, and a right swipe does not go
 back. The shell acts on swipes only on the watch face, the launcher, the notifications and quick
 settings, and an app opened from the quick-app ring, whose left and right swipes step on round the
-ring when its screen has no `onSwipe`. An empty `onSwipe` keeps even those, as an alarm's ringing
-screen needs.
+ring. A swipe the screen's `onSwipe` ignores, changing nothing and asking for nothing, goes on to
+the shell as if the screen had no handler, so an app that uses only up and down still steps round
+the ring.
 
 ### Side button
 

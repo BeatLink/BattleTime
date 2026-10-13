@@ -618,3 +618,22 @@ fn the_software_app_shows_the_need_against_the_budget_for_an_app_too_large() {
         watch.visible_texts()
     );
 }
+
+// ============================================================================
+// Swipes a screen ignores
+// ============================================================================
+
+#[test]
+fn swipes_the_first_pages_of_steps_and_system_ignore_go_on_to_the_shell() {
+    for id in ["steps", "system"] {
+        let mut watch = TestWatch::open_app(id).unwrap();
+
+        // Left and right do nothing on the first page, so the shell can step round the quick apps.
+        assert_eq!(watch.swipe(Direction::Left), EventResult::NotHandled, "{id}");
+        assert_eq!(watch.swipe(Direction::Right), EventResult::NotHandled, "{id}");
+        assert!(watch.effects_of(EffectKind::Back).is_empty(), "{id}");
+
+        assert_eq!(watch.swipe(Direction::Up), EventResult::Handled, "{id}");
+        assert_ne!(watch.screen_name(), Some("main"), "{id}");
+    }
+}

@@ -338,7 +338,7 @@ function EditDays() {
 
 function Ringing() {
   return (
-    <Screen padding={8} gap={6} onSwipe={() => {}} onHide={stop_ringing}>
+    <Screen padding={8} gap={6} onHide={stop_ringing}>
       <Column grow={1} align_items="center" justify="center" gap={4}>
         <Icon icon={icons.alarm} size={48} color="warning" />
         <Label font="large">{format_time(now.value, "clock")}</Label>
