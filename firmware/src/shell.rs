@@ -1129,10 +1129,12 @@ fn wait_until_panel_can_switch(switched_at: Instant) {
 #[inline(never)]
 fn draw_host(display: &SharedDisplay, host: &mut AppHost<'static>) {
     let mut strip = [Rgb565::BLACK; STRIP_PIXELS];
+    let started = Instant::now();
     display.lock(|display| {
-        let now_in_milliseconds = Instant::now().as_millis();
+        let now_in_milliseconds = started.as_millis();
         let _ = host.draw_step_at(&mut *display.borrow_mut(), &mut strip, now_in_milliseconds);
     });
+    diagnostics::add(Counter::DrawMicroseconds, started.elapsed().as_micros() as u32);
 }
 
 /// The name an app image gives itself, cut to fit a notification's source.

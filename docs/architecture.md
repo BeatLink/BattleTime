@@ -683,7 +683,12 @@ watch face, the launcher and the apps through `neotime-app-host`:
   start while the accelerometer reset on the same bus, so the panel now starts first, with retries,
   and the accelerometer waits for it. Fourteen more words follow the counters, set once at start:
   the last restart, described next. Writing `01` to the characteristic says the companion app saved
-  a debug report holding the crash, which dismisses it as Restart on the crash screen does.
+  a debug report holding the crash, which dismisses it as Restart on the crash screen does. Two timing
+  counters come after the last restart's words, each in microseconds and counting round: the time
+  the shell spent drawing apps, and the time spent sending to the display, the status page and help
+  screen included. Their difference is the time spent drawing strips. In the emulator the
+  launcher's slide took 219 ms to draw, 122 ms of it sending, and a launcher scroll 64 ms, 34 ms of
+  it sending.
 - **Reset reasons and crash record.** `restart.rs` reads and clears `RESETREAS` at start, and reads
   the crash record the previous run left in `.uninit` RAM (see
   [memory-map.md](memory-map.md#ram-64-kb-planned)). The full firmware keeps the record until the

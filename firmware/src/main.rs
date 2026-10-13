@@ -31,7 +31,7 @@ use embassy_nrf::{
     wdt::{self, SleepConfig, Watchdog, WatchdogHandle},
 };
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
-use embassy_time::{Delay, Duration, Timer};
+use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_alloc::LlffHeap;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use mipidsi::interface::SpiInterface;
@@ -490,8 +490,32 @@ async fn send_button_gestures(mut button: Button<Input<'static>, Output<'static>
 // The screen
 // ============================================================================
 
-type DisplayInterfaceOnBus =
-    SpiInterface<'static, SpiDevice<'static, NoopRawMutex, Spim<'static>, Output<'static>>, Output<'static>>;
+type DisplayOnBus = TimedSpi<SpiDevice<'static, NoopRawMutex, Spim<'static>, Output<'static>>>;
+type DisplayInterfaceOnBus = SpiInterface<'static, DisplayOnBus, Output<'static>>;
+
+/// The display's SPI device, adding the time each transaction takes to `DisplaySendMicroseconds`.
+struct TimedSpi<Device> {
+    device: Device,
+}
+
+impl<Device: embedded_hal::spi::ErrorType> embedded_hal::spi::ErrorType for TimedSpi<Device> {
+    type Error = Device::Error;
+}
+
+impl<Device: embedded_hal::spi::SpiDevice> embedded_hal::spi::SpiDevice for TimedSpi<Device> {
+    fn transaction(
+        &mut self,
+        operations: &mut [embedded_hal::spi::Operation<'_, u8>],
+    ) -> Result<(), Self::Error> {
+        let started = Instant::now();
+        let result = self.device.transaction(operations);
+        diagnostics::add(
+            diagnostics::Counter::DisplaySendMicroseconds,
+            started.elapsed().as_micros() as u32,
+        );
+        result
+    }
+}
 
 type ScreenDisplay = Display<DisplayInterfaceOnBus, Output<'static>>;
 
@@ -574,7 +598,9 @@ fn start_screen(
     static COMMAND_BUFFER: StaticCell<[u8; DISPLAY_COMMAND_BUFFER_SIZE]> = StaticCell::new();
     static DISPLAY: StaticCell<SharedDisplay> = StaticCell::new();
     let interface = SpiInterface::new(
-        SpiDevice::new(spi_bus, chip_select),
+        TimedSpi {
+            device: SpiDevice::new(spi_bus, chip_select),
+        },
         data_or_command,
         COMMAND_BUFFER.init([0; DISPLAY_COMMAND_BUFFER_SIZE]),
     );

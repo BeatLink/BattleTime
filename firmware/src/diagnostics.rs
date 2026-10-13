@@ -1,8 +1,9 @@
 //! Counters a computer can read over Bluetooth, to see what a part of the firmware is doing on the watch.
 //!
 //! After the counters come the words of `neotime_crash_record::last_restart_words`: why the watch
-//! last restarted, and the panic or fault that ended the run before, set once at start. The
-//! companion app writes `DEBUG_REPORT_SAVED` once it has saved that crash in a debug report.
+//! last restarted, and the panic or fault that ended the run before, set once at start, and then
+//! the timing counters, so the words before them keep their places. The companion app writes
+//! `DEBUG_REPORT_SAVED` once it has saved that crash in a debug report.
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
@@ -26,13 +27,19 @@ pub enum Counter {
     ButtonPresses,
     /// The accelerometer: 1 started, 2 failed to start, 3 failed to read.
     AccelerometerState,
+    /// Microseconds the shell has spent drawing apps, counting round past the largest `u32`.
+    DrawMicroseconds = FIRST_TIMING_WORD as isize,
+    /// Microseconds spent sending to the display, the status page and help screen included, counting round the same way.
+    DisplaySendMicroseconds,
 }
 
 const COUNTER_COUNT: usize = 8;
 
 /// The byte the companion app writes to the diagnostics characteristic once it saved the crash.
 pub const DEBUG_REPORT_SAVED: u8 = 1;
-const WORD_COUNT: usize = COUNTER_COUNT + LAST_RESTART_WORDS;
+const FIRST_TIMING_WORD: usize = COUNTER_COUNT + LAST_RESTART_WORDS;
+const TIMING_COUNTER_COUNT: usize = 2;
+const WORD_COUNT: usize = FIRST_TIMING_WORD + TIMING_COUNTER_COUNT;
 pub const SNAPSHOT_BYTES: usize = WORD_COUNT * 4;
 
 static COUNTERS: [AtomicU32; WORD_COUNT] = [const { AtomicU32::new(0) }; WORD_COUNT];
@@ -46,6 +53,10 @@ pub fn get(counter: Counter) -> u32 {
     COUNTERS[counter as usize].load(Ordering::Relaxed)
 }
 
+pub fn add(counter: Counter, amount: u32) {
+    COUNTERS[counter as usize].fetch_add(amount, Ordering::Relaxed);
+}
+
 pub fn set(counter: Counter, value: u32) {
     COUNTERS[counter as usize].store(value, Ordering::Relaxed);
 }
@@ -56,7 +67,7 @@ pub fn set_last_restart(words: [u32; LAST_RESTART_WORDS]) {
     }
 }
 
-/// Every counter, little-endian, in the order of `Counter`, then the last restart's words.
+/// Every counter, little-endian: the first eight of `Counter`, the last restart's words, then the timing counters.
 pub fn snapshot() -> [u8; SNAPSHOT_BYTES] {
     let mut bytes = [0; SNAPSHOT_BYTES];
     for (counter, chunk) in COUNTERS.iter().zip(bytes.as_chunks_mut::<4>().0) {
