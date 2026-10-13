@@ -9,6 +9,7 @@ use super::*;
 use crate::{
     monitor::{Monitor, Reading, Status},
     ppg::{Ppg, WindowResult, SAMPLES_PER_SECOND, WINDOW_SAMPLES},
+    schedule::{flash_request, AppRequest, Background, Mode, Schedule, BACKGROUND_ATTEMPT_IN_MILLISECONDS},
 };
 
 // ============================================================================
@@ -154,6 +155,19 @@ fn reading_unpacks_both_channels_from_one_read() {
 }
 
 #[test]
+fn flashing_sets_the_wait_time_and_both_drive_bits() {
+    let mut sensor = HeartRateSensor::new(FakeChip::new());
+
+    block_on(sensor.perform(Command::Flash { drive: 3, wait: 2 })).unwrap();
+    block_on(sensor.perform(Command::Flash { drive: 0, wait: 7 })).unwrap();
+
+    assert_eq!(
+        sensor.bus.writes,
+        [[0x01, 0xa8], [0x0c, 0x6e], [0x01, 0xf0], [0x0c, 0x2e]]
+    );
+}
+
+#[test]
 fn a_bus_error_is_passed_on() {
     let mut chip = FakeChip::new();
     chip.is_broken = true;
@@ -292,4 +306,115 @@ fn a_window_without_a_beat_goes_back_to_settling() {
     }
 
     assert_eq!(monitor.status(), Status::Settling);
+}
+
+// ============================================================================
+// The schedule
+// ============================================================================
+
+const EVERY_MINUTE: Background = Background::Every { seconds: 60 };
+
+#[test]
+fn an_app_comes_before_the_background_setting() {
+    let mut schedule = Schedule::new();
+    let flash = AppRequest::Flash { drive: 1, wait: 3 };
+
+    assert_eq!(
+        schedule.mode(AppRequest::Measure, Background::Off, 0),
+        Mode::Measure
+    );
+    assert_eq!(
+        schedule.mode(flash, Background::Continuous, 0),
+        Mode::Flash { drive: 1, wait: 3 }
+    );
+    assert_eq!(schedule.mode(AppRequest::Nothing, Background::Off, 0), Mode::Off);
+    assert_eq!(
+        schedule.mode(AppRequest::Nothing, Background::Continuous, 0),
+        Mode::Measure
+    );
+    assert_eq!(schedule.wake_at_in_milliseconds(), None);
+}
+
+#[test]
+fn an_interval_measures_at_once_then_waits_the_interval_after_a_reading() {
+    let mut schedule = Schedule::new();
+
+    assert_eq!(
+        schedule.mode(AppRequest::Nothing, EVERY_MINUTE, 1_000),
+        Mode::Measure
+    );
+    assert_eq!(
+        schedule.mode(AppRequest::Nothing, EVERY_MINUTE, 9_000),
+        Mode::Measure
+    );
+    schedule.reading_taken(EVERY_MINUTE, 10_000);
+
+    assert_eq!(
+        schedule.mode(AppRequest::Nothing, EVERY_MINUTE, 10_000),
+        Mode::Off
+    );
+    assert_eq!(schedule.wake_at_in_milliseconds(), Some(70_000));
+    assert_eq!(
+        schedule.mode(AppRequest::Nothing, EVERY_MINUTE, 69_999),
+        Mode::Off
+    );
+    assert_eq!(
+        schedule.mode(AppRequest::Nothing, EVERY_MINUTE, 70_000),
+        Mode::Measure
+    );
+}
+
+#[test]
+fn a_background_measurement_with_no_reading_gives_up_until_the_next_interval() {
+    let mut schedule = Schedule::new();
+    schedule.mode(AppRequest::Nothing, EVERY_MINUTE, 0);
+    assert_eq!(
+        schedule.wake_at_in_milliseconds(),
+        Some(BACKGROUND_ATTEMPT_IN_MILLISECONDS)
+    );
+
+    let given_up = schedule.mode(
+        AppRequest::Nothing,
+        EVERY_MINUTE,
+        BACKGROUND_ATTEMPT_IN_MILLISECONDS,
+    );
+
+    assert_eq!(given_up, Mode::Off);
+    assert_eq!(
+        schedule.wake_at_in_milliseconds(),
+        Some(BACKGROUND_ATTEMPT_IN_MILLISECONDS + 60_000)
+    );
+}
+
+#[test]
+fn a_reading_for_an_app_leaves_the_background_schedule_alone() {
+    let mut schedule = Schedule::new();
+
+    schedule.reading_taken(EVERY_MINUTE, 5_000);
+    schedule.reading_taken(Background::Off, 5_000);
+
+    assert_eq!(schedule, Schedule::new());
+}
+
+#[test]
+fn turning_the_interval_off_forgets_the_schedule() {
+    let mut schedule = Schedule::new();
+    schedule.mode(AppRequest::Nothing, EVERY_MINUTE, 0);
+
+    assert_eq!(
+        schedule.mode(AppRequest::Nothing, Background::Off, 1_000),
+        Mode::Off
+    );
+
+    assert_eq!(schedule.wake_at_in_milliseconds(), None);
+}
+
+#[test]
+fn a_beacon_request_picks_the_chips_drive_and_wait_time() {
+    assert_eq!(flash_request(0, 800), AppRequest::Flash { drive: 0, wait: 0 });
+    assert_eq!(flash_request(3, 12), AppRequest::Flash { drive: 3, wait: 6 });
+    assert_eq!(flash_request(2, 0), AppRequest::Flash { drive: 2, wait: 7 });
+    assert_eq!(flash_request(9, 5_000), AppRequest::Flash { drive: 3, wait: 0 });
+    assert_eq!(flash_request(-1, 150), AppRequest::Flash { drive: 0, wait: 3 });
+    assert_eq!(flash_request(1, -5), AppRequest::Flash { drive: 1, wait: 7 });
 }

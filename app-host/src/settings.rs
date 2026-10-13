@@ -21,6 +21,7 @@ pub fn system_value_of(setting: Setting) -> SystemValue {
         Setting::AllowsUpdates => SystemValue::AllowsUpdates,
         Setting::WakeOnTouch => SystemValue::WakeOnTouch,
         Setting::AlarmsInDoNotDisturb => SystemValue::AlarmsInDoNotDisturb,
+        Setting::HeartRateInterval => SystemValue::HeartRateInterval,
     }
 }
 

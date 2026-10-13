@@ -16,6 +16,9 @@ saved on the watch, so the companion app sees it too.
 - **24 hour clock** and **Metric units**.
 - **Step goal**: the daily goal, set with **-** and **+** in steps of 500, from 1000 to 50000.
 - **Chimes**: off, every hour or every half hour.
+- **Heart rate**: how often the watch measures your heart rate when no app asks, as InfiniTime
+  offers: off, always, or every 30 seconds, minute, 5, 10 or 30 minutes. Each measurement lasts
+  until a reading, or 30 seconds at most, and runs with the screen off too.
 - **Do not disturb**, and **Alarms in DND**: whether alarms still ring while it is on.
 - **Theme**: one of six preset themes, each shown in its own colours. The companion app can set
   colours of your own, which show here as **Own**.
@@ -51,6 +54,10 @@ The daily step goal, opened from **Step goal**.
 ![The chime choices](../../harness/snapshots/screens/app-settings-chimes.png)
 
 Chimes, opened from its row.
+
+![The heart rate interval choices](../../harness/snapshots/screens/app-settings-heart-rate.png)
+
+How often to measure the heart rate in the background, opened from **Heart rate**.
 
 ![The six themes](../../harness/snapshots/screens/app-settings-theme.png)
 

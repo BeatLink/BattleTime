@@ -109,8 +109,11 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   a restart, losing only the six minutes in progress.
 - **Heart rate.** The Heart app measures the pulse with the HRS3300 while it is open: it waits for
   enough data, then shows the beats a minute, refreshed every four seconds, with a chart of the
-  latest readings, and says when the watch is off the wrist. The LED is lit only while an app
-  measures. Faces show the latest reading and how long ago it was taken. Tried in the emulator,
+  latest readings, and says when the watch is off the wrist. As on InfiniTime, Settings can have
+  the watch measure in the background, with the screen off too: always, or every 30 seconds,
+  minute, 5, 10 or 30 minutes, each time until a reading or for 30 seconds at most. Faces show the
+  latest reading and how long ago it was taken. The LED is lit only while measuring, or flashing
+  for the beacon app, which sets its brightness and how often it flashes. Tried in the emulator,
   not yet on the watch.
   ![The Heart app measuring in the emulator](images/heart-rate-emulator.png)
 - **Shake to roll the dice,** and live accelerometer readings for apps such as motion and level.

@@ -1,10 +1,13 @@
-//! The heart rate sensor: measured only while an app asks, 24 times a second, with its LED off otherwise.
+//! The heart rate sensor: measured while an app asks or the background interval comes due, 24 times
+//! a second, or flashed as a beacon, with its LED off otherwise.
 //!
-//! An app's `start_heart_rate` keeps it measuring until `stop_heart_rate` or the app closes, and
-//! `measure_heart_rate` measures until the first reading. Each reading wakes the shell as a system
+//! An app's `start_heart_rate` keeps it measuring until `stop_heart_rate` or the app closes,
+//! `measure_heart_rate` measures until the first reading, and `set_heart_rate_led` flashes it until
+//! the app closes. With no app asking, the heart rate interval setting measures always, never or
+//! now and then, as `neotime_heart_rate::schedule` decides. Each reading wakes the shell as a system
 //! value change, which passes it to the open app, and the latest one, its time and the sensor's
-//! status stay for apps to read. The sample window lives on the heap only while measuring, so the
-//! sensor costs little RAM the rest of the time.
+//! status stay for apps and faces to read. The sample window lives on the heap only while
+//! measuring, so the sensor costs little RAM the rest of the time.
 
 extern crate alloc;
 
@@ -23,14 +26,16 @@ use embassy_time::{Duration, Instant, Timer};
 use neotime_heart_rate::{
     monitor::{Monitor, Reading, Status},
     ppg::SAMPLES_PER_SECOND,
-    Command, HeartRateSensor, Sample,
+    schedule::{self, AppRequest, Background, Mode, Schedule},
+    Command, HeartRateSensor,
 };
 use neotime_runtime::{SystemValue, Value};
+use neotime_settings::{heart_rate_interval, Setting};
 
 use crate::{
     clock,
     diagnostics::{self, Counter},
-    system_values, I2cDeviceOnBus,
+    settings, system_values, I2cDeviceOnBus,
 };
 
 // ============================================================================
@@ -40,8 +45,11 @@ use crate::{
 const OFF: u8 = 0;
 const UNTIL_STOPPED: u8 = 1;
 const UNTIL_A_READING: u8 = 2;
+const FLASHING: u8 = 3;
 
 static REQUEST: AtomicU8 = AtomicU8::new(OFF);
+static FLASH_DRIVE: AtomicU8 = AtomicU8::new(0);
+static FLASH_WAIT: AtomicU8 = AtomicU8::new(0);
 static REQUEST_CHANGED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 fn request(wanted: u8) {
@@ -63,6 +71,45 @@ pub fn stop() {
 pub fn measure_once() {
     let _ = REQUEST.compare_exchange(OFF, UNTIL_A_READING, Ordering::Relaxed, Ordering::Relaxed);
     REQUEST_CHANGED.signal(());
+}
+
+/// Flashes the LED at this brightness (0 to 3) and period in milliseconds, or stops flashing.
+pub fn flash_led(is_on: bool, brightness: Value, period_in_milliseconds: Value) {
+    if !is_on {
+        let _ = REQUEST.compare_exchange(FLASHING, OFF, Ordering::Relaxed, Ordering::Relaxed);
+    } else if let AppRequest::Flash { drive, wait } =
+        schedule::flash_request(brightness, period_in_milliseconds)
+    {
+        FLASH_DRIVE.store(drive, Ordering::Relaxed);
+        FLASH_WAIT.store(wait, Ordering::Relaxed);
+        REQUEST.store(FLASHING, Ordering::Relaxed);
+    }
+    REQUEST_CHANGED.signal(());
+}
+
+/// Wakes the task to read the heart rate interval setting again.
+pub fn interval_changed() {
+    REQUEST_CHANGED.signal(());
+}
+
+fn app_request() -> AppRequest {
+    match REQUEST.load(Ordering::Relaxed) {
+        OFF => AppRequest::Nothing,
+        FLASHING => AppRequest::Flash {
+            drive: FLASH_DRIVE.load(Ordering::Relaxed),
+            wait: FLASH_WAIT.load(Ordering::Relaxed),
+        },
+        _ => AppRequest::Measure,
+    }
+}
+
+fn background() -> Background {
+    let choice = settings::current().get(Setting::HeartRateInterval);
+    match heart_rate_interval::seconds_between(choice) {
+        Some(seconds) => Background::Every { seconds },
+        None if choice == heart_rate_interval::CONTINUOUS => Background::Continuous,
+        None => Background::Off,
+    }
 }
 
 // ============================================================================
@@ -118,66 +165,90 @@ fn keep_reading(reading: Reading) {
 
 const SAMPLE_PERIOD: Duration = Duration::from_micros(1_000_000 / SAMPLES_PER_SECOND as u64);
 
-/// Starts the sensor when an app asks, samples it while measuring, and stops it when no app wants it.
+/// What the sensor is doing.
+enum Running {
+    Off,
+    Measuring(Box<Monitor>),
+    Flashing(Mode),
+}
+
+/// Starts, samples, flashes or stops the sensor as the schedule says.
 ///
 /// The chip is reached from one place only, which keeps this task small in flash.
 #[embassy_executor::task]
 pub async fn run_heart_rate_sensor(i2c_device: I2cDeviceOnBus) {
     let mut sensor = HeartRateSensor::new(i2c_device);
-    let mut monitor: Option<Box<Monitor>> = None;
+    let mut schedule = Schedule::new();
+    let mut running = Running::Off;
     let mut next_sample = Instant::now();
     loop {
-        let is_wanted = REQUEST.load(Ordering::Relaxed) != OFF;
-        let command = match (is_wanted, monitor.is_some()) {
-            (false, false) => {
-                REQUEST_CHANGED.wait().await;
-                continue;
-            }
-            (true, false) => Command::Start,
-            (false, true) => Command::Stop,
-            (true, true) => {
+        let background = background();
+        let mode = schedule.mode(app_request(), background, Instant::now().as_millis());
+        let command = match (mode, &running) {
+            (Mode::Measure, Running::Measuring(_)) => {
                 if let Either::Second(()) = select(Timer::at(next_sample), REQUEST_CHANGED.wait()).await {
                     continue;
                 }
                 next_sample += SAMPLE_PERIOD;
                 Command::Read
             }
+            (Mode::Measure, _) => Command::Start,
+            (Mode::Flash { drive, wait }, Running::Flashing(flashing)) if *flashing != mode => {
+                Command::Flash { drive, wait }
+            }
+            (Mode::Flash { drive, wait }, Running::Off | Running::Measuring(_)) => {
+                Command::Flash { drive, wait }
+            }
+            (Mode::Off, Running::Measuring(_) | Running::Flashing(_)) => Command::Stop,
+            (Mode::Off | Mode::Flash { .. }, _) => {
+                let wake_at = schedule
+                    .wake_at_in_milliseconds()
+                    .map_or(Instant::MAX, Instant::from_millis);
+                select(Timer::at(wake_at), REQUEST_CHANGED.wait()).await;
+                continue;
+            }
         };
 
         let result = sensor.perform(command).await;
 
+        let now = Instant::now().as_millis();
         match (command, result) {
             (Command::Start, Ok(_)) => {
                 diagnostics::set(Counter::HeartRateState, 1);
                 let started = Box::new(Monitor::new());
                 set_status(started.status());
-                monitor = Some(started);
+                running = Running::Measuring(started);
                 next_sample = Instant::now();
             }
-            (Command::Start, Err(_)) => {
-                diagnostics::set(Counter::HeartRateState, 2);
-                REQUEST.store(OFF, Ordering::Relaxed);
-            }
-            (Command::Stop, _) => {
-                monitor = None;
-                set_status(Status::Stopped);
-            }
             (Command::Read, Ok(sample)) => {
-                if let Some(monitor) = &mut monitor {
-                    take_sample(monitor, sample);
+                let Running::Measuring(monitor) = &mut running else {
+                    continue;
+                };
+                let reading = monitor.feed(sample);
+                set_status(monitor.status());
+                if let Some(reading) = reading {
+                    keep_reading(reading);
+                    let _ =
+                        REQUEST.compare_exchange(UNTIL_A_READING, OFF, Ordering::Relaxed, Ordering::Relaxed);
+                    schedule.reading_taken(background, now);
                 }
             }
+            (Command::Flash { .. }, Ok(_)) => {
+                running = Running::Flashing(mode);
+                set_status(Status::Stopped);
+            }
+            (Command::Stop, _) => {
+                running = Running::Off;
+                set_status(Status::Stopped);
+            }
             (Command::Read, Err(_)) => diagnostics::set(Counter::HeartRateState, 3),
+            (Command::Start | Command::Flash { .. }, Err(_)) => {
+                // A chip that does not answer is left alone until something new is asked of it.
+                diagnostics::set(Counter::HeartRateState, 2);
+                REQUEST.store(OFF, Ordering::Relaxed);
+                schedule.reading_taken(background, now);
+                REQUEST_CHANGED.wait().await;
+            }
         }
-    }
-}
-
-/// Feeds one sample to the monitor, and keeps and passes on any reading, which ends a `measure_once`.
-fn take_sample(monitor: &mut Monitor, sample: Sample) {
-    let reading = monitor.feed(sample);
-    set_status(monitor.status());
-    if let Some(reading) = reading {
-        keep_reading(reading);
-        let _ = REQUEST.compare_exchange(UNTIL_A_READING, OFF, Ordering::Relaxed, Ordering::Relaxed);
     }
 }

@@ -180,4 +180,37 @@ fn a_file_from_before_the_newer_settings_reads_them_as_their_defaults() {
     assert!(settings.is_on(Setting::AllowsUpdates));
     assert!(settings.is_on(Setting::AlarmsInDoNotDisturb));
     assert_eq!(settings.get(Setting::WakeOnTouch), wake_on_touch::TAP);
+    assert_eq!(settings.get(Setting::HeartRateInterval), heart_rate_interval::OFF);
+}
+
+#[test]
+fn the_heart_rate_interval_gives_seconds_only_for_measuring_now_and_then() {
+    assert_eq!(
+        heart_rate_interval::seconds_between(heart_rate_interval::OFF),
+        None
+    );
+    assert_eq!(
+        heart_rate_interval::seconds_between(heart_rate_interval::CONTINUOUS),
+        None
+    );
+    assert_eq!(
+        heart_rate_interval::seconds_between(heart_rate_interval::EVERY_30_SECONDS),
+        Some(30)
+    );
+    assert_eq!(
+        heart_rate_interval::seconds_between(heart_rate_interval::EVERY_MINUTE),
+        Some(60)
+    );
+    assert_eq!(
+        heart_rate_interval::seconds_between(heart_rate_interval::EVERY_5_MINUTES),
+        Some(300)
+    );
+    assert_eq!(
+        heart_rate_interval::seconds_between(heart_rate_interval::EVERY_10_MINUTES),
+        Some(600)
+    );
+    assert_eq!(
+        heart_rate_interval::seconds_between(heart_rate_interval::EVERY_30_MINUTES),
+        Some(1800)
+    );
 }

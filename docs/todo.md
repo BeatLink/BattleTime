@@ -225,7 +225,7 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 
 ## UI toolkit
 
-- [ ] **Measure the UI heap on the watch.** It is 20.5 KB, shared with the system's 10 KB; so
+- [ ] **Measure the UI heap on the watch.** It is 20.25 KB, shared with the system's 10 KB; so
   far it is measured only in the emulator, where the alarm's editor touched 13,188 B of the 31,744 B
   the heap had then. Count what a typical screen allocates on
   the watch, then update the "UI heap" row in
@@ -452,7 +452,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 ### Settings
 
 - [ ] **The rest of InfiniTime's settings screens:** Watch face, Date and time, Shake calibration,
-  Firmware, Heart rate and About. Each needs its feature first, such as choosing among installed
+  Firmware and About. Each needs its feature first, such as choosing among installed
   faces or setting the clock by hand.
 
 ### Bluetooth
@@ -488,18 +488,16 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### Heart rate
 
-- [ ] **Room in the firmware slot.** With the heart rate sensor the full firmware leaves 16 B of its
-  388 KB slot, and the launcher's stack keeps 2,024 B spare, short of 2 KB. The next firmware
-  feature needs room found first.
 - [ ] **Try the heart rate sensor on the watch.** It reads the emulator's pulse, but the filter
   chain's gain, the LED current and the no-skin limit were never tuned on a real wrist. Compare
   readings with InfiniTime's or a chest strap at rest and walking, and read the diagnostics'
   heart rate counters if the screen shows nothing.
-- [ ] **Measure in the background,** as InfiniTime does: a reading every few minutes with the
-  screen off, for faces and a `heart_rate_reading` subscription of an app that is not open, and a
-  log of them beside the step log.
+- [ ] **Heart rate for apps that are not open.** The interval setting measures in the background,
+  but only the open app's `heart_rate_reading` subscriptions hear of it, and no log of the
+  readings is kept beside the step log.
 - [ ] **The Heart Rate service (0x180D),** so Gadgetbridge and other phone apps read the pulse.
-- [ ] **`set_heart_rate_led`.** The firmware ignores it, so the beacon app's flashes stay dark.
+- [ ] **Try the beacon on the watch.** The driver's register writes match wasp-os's, but the
+  emulator cannot show the LED.
 - [ ] **Run `tools/check_heart_rate.py` in CI.** The emulator suites have no compiler to build the
   apps it installs; the watch images job could build the install into `dist/` for them.
 
@@ -656,7 +654,7 @@ InfiniTime has these and NeoTime has nothing for them yet:
 | Area | What InfiniTime has |
 |---|---|
 | Board and system loop | sleep and wake of the whole system, wake locks, a system monitor |
-| Heart rate | background measuring, the Heart Rate service |
+| Heart rate | the Heart Rate service |
 | Clock | the Current Time client |
 | Notifications | the Alert Notification client, Immediate Alert, the call screen for a New Alert call |
 | Other BLE services | Music, Navigation, Simple Weather |

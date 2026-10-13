@@ -253,7 +253,7 @@ def file_system_use():
 
 # RAM owners are named for what they hold.
 RAM_LABELS = {
-    HEAP: "Heap (system 10 KB, UI 20.5 KB; the recovery build has no UI heap)",
+    HEAP: "Heap (system 10 KB, UI 20.25 KB; the recovery build has no UI heap)",
     "Firmware (start-up, shell, tasks)": "Firmware: task storage, the Bluetooth host's resources and packet pool",
     "Bluetooth (controller and TrouBLE)": "Bluetooth controller",
     UNATTRIBUTED: "Other",

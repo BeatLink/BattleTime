@@ -525,7 +525,9 @@ which share `steps_today`'s bit, and `firmware_version`, `started_at`, `free_sto
 and `reset_reason`, then the settings' `allows_updates`, `wake_on_touch` and
 `alarms_in_do_not_disturb`, which share the other settings' bit, then the installed packages'
 count followed by their lists of `name`, `id`, `enabled`, `is_face`, `memory` and `refusal`,
-which share the installed apps' bit, and `app_memory_budget`, which shares the system info bit.
+which share the installed apps' bit, and `app_memory_budget`, which shares the system info bit,
+then the launcher's look and groups, and the settings' `heart_rate_interval`, which shares the
+other settings' bit.
 `read system element` reads a list's elements through `SystemValues::read_element`, or
 `read_element_text` for the names, ids and notification texts, the packages' too. The location, artist, track,
 instruction, firmware version and reset reason are text: the system hands them

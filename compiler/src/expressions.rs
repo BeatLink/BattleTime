@@ -90,6 +90,7 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
         "settings.allows_updates" => (SystemValue::AllowsUpdates, Type::BOOL),
         "settings.wake_on_touch" => (SystemValue::WakeOnTouch, Type::NUMBER),
         "settings.alarms_in_do_not_disturb" => (SystemValue::AlarmsInDoNotDisturb, Type::BOOL),
+        "settings.heart_rate_interval" => (SystemValue::HeartRateInterval, Type::NUMBER),
         "current_weather.temperature" => (SystemValue::WeatherTemperature, Type::NUMBER.or_null()),
         "current_weather.condition" => (
             SystemValue::WeatherCondition,

@@ -249,7 +249,8 @@ fn the_report_gives_every_setting_and_reads_back_the_same() {
     assert!(report.contains("\"units\":\"Imperial\""), "{report}");
     assert!(report.contains("\"clock_24h\":true"), "{report}");
     assert!(report.contains("\"do_not_disturb\":false"), "{report}");
-    assert!(report.ends_with("\"alarms_in_dnd\":true}\n"), "{report}");
+    assert!(report.contains("\"alarms_in_dnd\":true"), "{report}");
+    assert!(report.ends_with("\"heart_rate_interval\":0}\n"), "{report}");
     let Ok(Message::Settings(reread)) = parse_line(report.trim_end().as_bytes()) else {
         panic!("{report}");
     };

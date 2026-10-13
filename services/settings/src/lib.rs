@@ -28,6 +28,7 @@ pub enum Setting {
     AllowsUpdates = 9,
     WakeOnTouch = 10,
     AlarmsInDoNotDisturb = 11,
+    HeartRateInterval = 12,
 }
 
 /// The lowest and highest value a setting takes, both included, and the value it starts at.
@@ -45,6 +46,29 @@ pub mod chimes {
     pub const EVERY_HALF_HOUR: i32 = 2;
 }
 
+/// What `Setting::HeartRateInterval` holds: InfiniTime's choices for measuring with no app asking.
+pub mod heart_rate_interval {
+    pub const OFF: i32 = 0;
+    pub const CONTINUOUS: i32 = 1;
+    pub const EVERY_30_SECONDS: i32 = 2;
+    pub const EVERY_MINUTE: i32 = 3;
+    pub const EVERY_5_MINUTES: i32 = 4;
+    pub const EVERY_10_MINUTES: i32 = 5;
+    pub const EVERY_30_MINUTES: i32 = 6;
+
+    /// How long between measurements for a choice that measures now and then, or `None` for off and continuous.
+    pub fn seconds_between(choice: i32) -> Option<u32> {
+        Some(match choice {
+            EVERY_30_SECONDS => 30,
+            EVERY_MINUTE => 60,
+            EVERY_5_MINUTES => 5 * 60,
+            EVERY_10_MINUTES => 10 * 60,
+            EVERY_30_MINUTES => 30 * 60,
+            _ => return None,
+        })
+    }
+}
+
 /// What `Setting::WakeOnTouch` holds.
 pub mod wake_on_touch {
     pub const OFF: i32 = 0;
@@ -53,7 +77,7 @@ pub mod wake_on_touch {
 }
 
 impl Setting {
-    pub const COUNT: usize = 12;
+    pub const COUNT: usize = 13;
 
     pub const ALL: [Setting; Setting::COUNT] = [
         Setting::Uses24HourClock,
@@ -68,6 +92,7 @@ impl Setting {
         Setting::AllowsUpdates,
         Setting::WakeOnTouch,
         Setting::AlarmsInDoNotDisturb,
+        Setting::HeartRateInterval,
     ];
 
     pub fn from_number(number: u8) -> Option<Setting> {
@@ -93,6 +118,7 @@ impl Setting {
             Setting::AllowsUpdates => "allows_updates",
             Setting::WakeOnTouch => "wake_on_touch",
             Setting::AlarmsInDoNotDisturb => "alarms_in_do_not_disturb",
+            Setting::HeartRateInterval => "heart_rate_interval",
         }
     }
 
@@ -121,6 +147,11 @@ impl Setting {
             Setting::AllowsUpdates => limits(0, 1, 1),
             Setting::WakeOnTouch => limits(wake_on_touch::OFF, wake_on_touch::DOUBLE_TAP, wake_on_touch::TAP),
             Setting::AlarmsInDoNotDisturb => limits(0, 1, 1),
+            Setting::HeartRateInterval => limits(
+                heart_rate_interval::OFF,
+                heart_rate_interval::EVERY_30_MINUTES,
+                heart_rate_interval::OFF,
+            ),
         }
     }
 

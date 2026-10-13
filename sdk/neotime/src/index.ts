@@ -139,6 +139,8 @@ export const settings = {
   wake_on_touch: signal(1),
   /** Whether alarms and timers still ring in do not disturb. */
   alarms_in_do_not_disturb: signal(true),
+  /** How often the watch measures the heart rate with no app asking: 0 off, 1 continuously, then every 30 seconds, minute, 5, 10 or 30 minutes. */
+  heart_rate_interval: signal(0),
 };
 
 /** Whether the heart rate sensor is measuring for any app. */

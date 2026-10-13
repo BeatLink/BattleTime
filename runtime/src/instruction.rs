@@ -133,6 +133,8 @@ pub enum SystemValue {
     /// List: the place in `installed_apps` of each group's first app, and how many apps it holds.
     LauncherGroupFirst,
     LauncherGroupSize,
+    /// 0 off, 1 continuous, then every 30 seconds, minute, 5, 10 or 30 minutes; see `neotime_settings::heart_rate_interval`.
+    HeartRateInterval,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -146,7 +148,7 @@ const SETTINGS_BIT: u32 = 22;
 const SYSTEM_INFO_BIT: u32 = 23;
 
 impl SystemValue {
-    pub const COUNT: usize = 81;
+    pub const COUNT: usize = 82;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -232,6 +234,7 @@ impl SystemValue {
             78 => LauncherGroupIcon,
             79 => LauncherGroupFirst,
             80 => LauncherGroupSize,
+            81 => HeartRateInterval,
             _ => return None,
         })
     }
@@ -263,7 +266,7 @@ impl SystemValue {
             | LauncherStyle | LauncherView | LauncherGroupCount | LauncherGroupName | LauncherGroupIcon
             | LauncherGroupFirst | LauncherGroupSize => INSTALLED_APPS_BIT,
             ScreenTimeoutSeconds | AlwaysOnScreen | Chimes | ThemePreset | AllowsUpdates | WakeOnTouch
-            | AlarmsInDoNotDisturb => SETTINGS_BIT,
+            | AlarmsInDoNotDisturb | HeartRateInterval => SETTINGS_BIT,
             NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
             | NotificationTime => UnreadNotifications as u32,
             StepTrip | StepDayCount | StepDayTotal | StepHourCount | StepHourSteps => StepsToday as u32,

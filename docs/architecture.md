@@ -312,6 +312,12 @@ The configuration files are Bosch's, under the BSD-3-Clause licence in
   three jolts within a second are a shake, and the next second is ignored, so one shake counts
   once. Readings more than half a second apart are not compared.
 
+Wrist raise is planned in software on top of `read_acceleration`, as InfiniTime and wasp-os do it,
+so the chip's own tap and wrist-wear detectors are not set up.
+
+The `bma423` crate was looked at first. It is blocking, accepts only chip ID 0x13, and has no step
+counter, so NeoTime has its own.
+
 ### Heart rate sensor (`drivers/heart_rate`)
 
 `neotime-heart-rate` drives the Tianyi HRS3300 over I2C at address 0x44, on the bus the touch panel
@@ -321,8 +327,9 @@ back (the pulse channel) beside an ambient light channel.
 - **The chip.** `start` checks the ID (0x21), then sets a conversion every 12.5 ms, the LED at
   20 mA, both channels to 16 bits and a gain of one, as wasp-os does, and turns measuring on.
   `stop` turns measuring and the LED off. `read` takes the six data registers, 0x08 to 0x0f, in
-  one read, as InfiniTime does. All three go through `perform`, so the firmware reaches the chip
-  from one place, which keeps its task small.
+  one read, as InfiniTime does. `Command::Flash` lights the LED at one of four drive levels (12.5
+  to 40 mA) once every wait time (800 ms down to none) for wasp-os's beacon. All of them go
+  through `perform`, so the firmware reaches the chip from one place, which keeps its task small.
 - **The pulse (`ppg`).** wasp-os's filter chain, sampled 24 times a second: the first sample's
   level is taken off, then a high-pass filter, a gain control that follows the peaks and drops
   spikes over twice their size, and a low-pass filter leave a signed byte. A window of 200
@@ -338,12 +345,12 @@ back (the pulse channel) beside an ambient light channel.
   then; more light than that means the watch left the wrist, so the window starts again and the
   status is 1 (no skin). A reading's confidence is 100% for a rate matched over four beats and 75%
   over three.
-
-Wrist raise is planned in software on top of `read_acceleration`, as InfiniTime and wasp-os do it,
-so the chip's own tap and wrist-wear detectors are not set up.
-
-The `bma423` crate was looked at first. It is blocking, accepts only chip ID 0x13, and has no step
-counter, so NeoTime has its own.
+- **What it does (`schedule`).** `Schedule::mode` puts the open app first: flashing for a beacon,
+  measuring until stopped or for one reading. With no app asking, the heart rate interval setting
+  decides, as InfiniTime's does: off, always, or a measurement every 30 seconds, minute, 5, 10 or
+  30 minutes. Each lasts until a reading, or gives up after 30 seconds, as off the wrist, and
+  the next starts the whole interval later. `flash_request` turns the beacon's brightness and
+  period in milliseconds into the chip's drive level and wait time.
 
 ### Bluetooth controller (`drivers/bluetooth`)
 
@@ -508,7 +515,8 @@ refuses values the field does not allow, while taking its "unknown" values, whic
 
 `neotime-settings` defines the watch-wide settings: the 12 or 24 hour clock, units, the step goal,
 the brightness, the screen timeout, the always-on screen, chimes, do not disturb, whether alarms
-ring in do not disturb, which touch wakes the screen, Bluetooth and whether updates are taken.
+ring in do not disturb, which touch wakes the screen, Bluetooth, whether updates are taken and how
+often the heart rate is measured in the background.
 
 - **One place for limits.** Each `Setting` has a fixed number, the name apps pass to `set_setting`,
   and its lowest, highest and default values. `Settings::set` refuses a value outside them, so
@@ -753,18 +761,22 @@ watch face, the launcher and the apps through `neotime-app-host`:
   shakes reach the shell through `app_events.rs`, which keeps only the latest of each; the host
   hands the latest reading to `acceleration` events at their period and a shake to `shake` events
   at once.
-- **Heart rate.** `heart_rate.rs` starts the sensor when the open app asks: `start_heart_rate`
-  until `stop_heart_rate`, or `measure_heart_rate` until the first reading. Opening another
-  screen stops it, so it never runs for an app that has gone. While measuring it reads 24 samples
-  a second and feeds them to the `Monitor`; between requests the LED is off and the task sleeps.
+- **Heart rate.** `heart_rate.rs` runs the sensor as `Schedule::mode` says. The open app asks
+  with `start_heart_rate` until `stop_heart_rate`, `measure_heart_rate` until the first reading,
+  or `set_heart_rate_led` to flash it as a beacon; opening another screen ends what it asked, so
+  the sensor never runs for an app that has gone. With no app asking, the `heart_rate_interval`
+  setting measures always or now and then, with the screen on or off; the shell wakes the task
+  when the setting changes and once the saved settings are read at start. While measuring it
+  reads 24 samples a second and feeds them to the `Monitor`; otherwise the LED is off, or flashing
+  by itself for a beacon, and the task sleeps until the next background measurement.
   Each reading wakes the shell as a change of `heart_rate`, and the shell hands it to the open
   app's `heart_rate_reading` events; the latest one, its time and the status stay for
   `heart_rate`, `heart_rate_measured_at`, `heart_rate_status` and `is_heart_rate_running`. The
   `Monitor`, about 280 bytes with its 200-sample window, is on the heap only while measuring. The
-  feature costs 2,060 B of flash and 256 B of task storage, and the UI heap gave up 512 B for it,
-  so static RAM ends 208 B lower than before. `tools/check_heart_rate.py` runs it in the
+  feature, background measuring and the beacon included, costs 4,008 B of flash and 320 B of task
+  storage, and the UI heap gave up 768 B for it, so static RAM ends 376 B lower than before. `tools/check_heart_rate.py` runs it in the
   emulator: with the Heart app open, the emulated pulse of 84 reads 83, and after a change to 120
-  the next reading is 120.
+  the next reading is 120; with the interval on always and no app open, a pulse of 66 reads 66.
 - **Phone connection.** `phone.rs` holds whether a phone is connected, which the Bluetooth task
   sets when a connection is accepted and clears when it ends. Each change wakes the shell, which
   redraws what reads `is_phone_connected` and sends the app's `phone` subscriptions `connects` or
@@ -951,7 +963,7 @@ as 0 or empty, and music and weather are lost on a restart; with a tap waking th
 touch panel stays awake while the screen is off.
 
 With the shared library after its code it takes all but about 8 KB of the 480 KB firmware region
-(the fonts and the accelerometers' configuration files are in the library) and 53 KB of static RAM, 30.5 KB of it heap: 10 KB for the system and 20.5 KB for
+(the fonts and the accelerometers' configuration files are in the library) and 53 KB of static RAM, 30.25 KB of it heap: 10 KB for the system and 20.25 KB for
 the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
 the button and the backlight timeout all work.
 

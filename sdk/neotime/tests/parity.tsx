@@ -110,7 +110,9 @@ export const KNOWN_DIFFERENCES: KnownDifference[] = [
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Chimes", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Dark", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Do not disturb", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Heart rate", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Metric units", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Off", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Off", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Step goal", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Theme", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
@@ -181,6 +183,7 @@ export function set_fake_system_values() {
   settings.allows_updates.value = true;
   settings.wake_on_touch.value = 1;
   settings.alarms_in_do_not_disturb.value = true;
+  settings.heart_rate_interval.value = 0;
   is_heart_rate_running.value = false;
   heart_rate_status.value = 0;
   is_bluetooth_enabled.value = true;

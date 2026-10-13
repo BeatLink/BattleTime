@@ -45,6 +45,7 @@ describe("settings", () => {
     set_setting("allows_updates", 1);
     set_setting("wake_on_touch", 1);
     set_setting("alarms_in_do_not_disturb", 1);
+    set_setting("heart_rate_interval", 0);
     open(app);
   });
 
@@ -127,6 +128,7 @@ describe("settings", () => {
       ["Screen off", "timeout"],
       ["Step goal", "step_goal"],
       ["Chimes", "chimes"],
+      ["Heart rate", "heart_rate_interval"],
       ["Wake", "wake"],
       ["Theme", "theme"],
     ];
@@ -157,6 +159,9 @@ describe("settings", () => {
     open_row(container, "Wake");
     widgets(container, "button").forEach(tap);
     act(() => press_button());
+    open_row(container, "Heart rate");
+    widgets(container, "button").forEach(tap);
+    act(() => press_button());
     open_row(container, "Step goal");
     const [fewer, more] = widgets(container, "button");
     tap(more);
@@ -168,6 +173,7 @@ describe("settings", () => {
     expect(settings.chimes.value).toBe(2);
     expect(settings.theme.value).toBe(5);
     expect(settings.wake_on_touch.value).toBe(2);
+    expect(settings.heart_rate_interval.value).toBe(6);
     expect(settings.step_goal.value).toBe(10500);
   });
 });

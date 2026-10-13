@@ -300,6 +300,7 @@ fn the_settings_list_scrolls_with_the_panel_and_shows_what_drawing_afresh_would(
     let mut sent_going_down = drag_drawing_each_move(&mut app, &mut watch, 220, 50);
     sent_going_down.extend(drag_drawing_each_move(&mut app, &mut watch, 220, 50));
     sent_going_down.extend(drag_drawing_each_move(&mut app, &mut watch, 220, 50));
+    sent_going_down.extend(drag_drawing_each_move(&mut app, &mut watch, 220, 50));
     assert!(app.shows_text("Updates"), "{:?}", app.visible_texts());
     let sent_going_up = drag_drawing_each_move(&mut app, &mut watch, 60, 160);
 

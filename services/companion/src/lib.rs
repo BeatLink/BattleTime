@@ -227,6 +227,7 @@ const KEYS: [(Setting, &str, Shape); Setting::COUNT] = [
     (Setting::AllowsUpdates, "updates", Shape::TrueOrFalse),
     (Setting::WakeOnTouch, "wake_on_touch", Shape::Number),
     (Setting::AlarmsInDoNotDisturb, "alarms_in_dnd", Shape::TrueOrFalse),
+    (Setting::HeartRateInterval, "heart_rate_interval", Shape::Number),
 ];
 
 const METRIC: &str = "Metric";
@@ -264,6 +265,8 @@ struct Envelope<'line> {
     #[serde(default)]
     alarms_in_dnd: Option<bool>,
     #[serde(default)]
+    heart_rate_interval: Option<i64>,
+    #[serde(default)]
     id: Option<i64>,
     #[serde(default, borrow)]
     src: Option<EscapedStr<'line>>,
@@ -298,6 +301,7 @@ impl Envelope<'_> {
                 Setting::AllowsUpdates => self.updates.map(i32::from),
                 Setting::WakeOnTouch => number(self.wake_on_touch),
                 Setting::AlarmsInDoNotDisturb => self.alarms_in_dnd.map(i32::from),
+                Setting::HeartRateInterval => number(self.heart_rate_interval),
             };
         }
         let mut checked = Settings::default();

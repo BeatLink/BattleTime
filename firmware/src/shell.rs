@@ -13,8 +13,8 @@
 //! finds the screen dark turns it on and opens the notifications. Do not
 //! disturb silences all of it, keeps the screen dark, and silences every app vibration but the
 //! alarm pattern. The accelerometer is read only while the screen is on and the open app
-//! subscribes to acceleration or shakes, and the heart rate sensor only while an app asks for it
-//! until that app closes. Plugging the charger in or out, or the charge going low,
+//! subscribes to acceleration or shakes, and the heart rate sensor while an app asks for it until
+//! that app closes, or as often as the heart rate interval setting says. Plugging the charger in or out, or the charge going low,
 //! lights the screen on the battery app, which goes back to what was open when the screen sleeps
 //! or the wearer goes back. The phone's music and weather are kept for apps to read, an incoming
 //! call buzzes and lights the screen, and the phone can ring the watch until the wearer touches it.
@@ -425,6 +425,9 @@ impl System for WatchSystem {
             EffectKind::StartHeartRate => heart_rate::start(),
             EffectKind::StopHeartRate => heart_rate::stop(),
             EffectKind::MeasureHeartRate => heart_rate::measure_once(),
+            EffectKind::SetHeartRateLed => {
+                heart_rate::flash_led(effect.number(0) != 0, effect.number(1), effect.number(2))
+            }
             EffectKind::SetBluetooth => settings::set_by_name(Setting::Bluetooth.name(), effect.number(0)),
             EffectKind::SetAppEnabled => {
                 let id = effect.text(0).unwrap_or("");
@@ -759,6 +762,9 @@ impl Shell {
         }
         if let Some(host) = &mut self.host {
             app_settings::tell_app_about_changes(host, changed, clock::utc_now(), &mut self.system);
+        }
+        if changed & Setting::HeartRateInterval.bit() != 0 {
+            heart_rate::interval_changed();
         }
         if !self.lit {
             if changed & Setting::WakeOnTouch.bit() != 0 {
@@ -1392,6 +1398,8 @@ pub async fn run_shell(
     }
     files.wait_until_free().await;
     settings::load(files);
+    // The heart rate task started before the saved interval was read.
+    heart_rate::interval_changed();
     clock::load_time_zone(files);
     files.wait_until_free().await;
     install_fonts(apps::shared_library());

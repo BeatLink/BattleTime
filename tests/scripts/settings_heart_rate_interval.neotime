@@ -1,0 +1,11 @@
+# Settings offers InfiniTime's background heart rate choices and saves the one tapped.
+open app settings
+drag 120 220 120 50
+drag 120 220 120 120
+tap "Heart rate"
+expect screen heart_rate_interval
+expect text "Always"
+expect text "30 min"
+tap "5 min"
+expect effect set-setting "heart_rate_interval" 4
+expect no failures

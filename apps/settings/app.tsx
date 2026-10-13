@@ -1,6 +1,7 @@
 // Settings, merged from InfiniTime's Settings and wasp-os's settings app.
 // From InfiniTime: one list of what can be changed, each opening its own screen of choices, the
-// display timeout, the 12 or 24 hour clock, the step goal and the hourly chimes.
+// display timeout, the 12 or 24 hour clock, the step goal, the hourly chimes and how often the heart
+// rate is measured in the background.
 // From wasp-os: brightness in three steps, units, and do not disturb.
 // Also: what touch wakes the screen, whether alarms ring in do not disturb, Bluetooth until the next
 // restart, and whether the watch takes firmware updates.
@@ -37,6 +38,10 @@ const CHIME_NAMES = ["Off", "Every hour", "Every half hour"];
 
 const WAKE_NAMES = ["Button only", "Tap", "Double tap"];
 
+/** InfiniTime's background heart rate choices, in the order the watch numbers them. */
+const HEART_RATE_INTERVAL_NAMES = ["Off", "Always", "30 s", "1 min", "5 min", "10 min", "30 min"];
+const HEART_RATE_INTERVAL_COUNT = 7;
+
 /** The watch's preset themes in its own order, each shown by its background and accent colours. */
 const THEME_NAMES = ["Dark", "Light", "Ocean", "Forest", "Sunset", "Contrast"];
 const THEME_BACKGROUNDS: Color[] = ["#000000", "#ffffff", "#000a1e", "#08140a", "#180810", "#000000"];
@@ -58,6 +63,8 @@ const timeout_text = computed(() => `${settings.screen_timeout_seconds.value} s`
 const chime_name = computed(() => CHIME_NAMES[settings.chimes.value]);
 
 const wake_name = computed(() => WAKE_NAMES[settings.wake_on_touch.value]);
+
+const heart_rate_interval_name = computed(() => HEART_RATE_INTERVAL_NAMES[settings.heart_rate_interval.value]);
 
 const theme_name = computed(() => (settings.theme.value < 0 ? "Own" : THEME_NAMES[settings.theme.value]));
 
@@ -141,6 +148,11 @@ function SettingsList() {
         <SwitchRow title="Metric units" value={settings.uses_metric_units.value} onChange={toggle_metric_units} />
         <ChoiceRow title="Step goal" value={`${settings.step_goal.value}`} onClick={() => go("step_goal")} />
         <ChoiceRow title="Chimes" value={chime_name.value} onClick={() => go("chimes")} />
+        <ChoiceRow
+          title="Heart rate"
+          value={heart_rate_interval_name.value}
+          onClick={() => go("heart_rate_interval")}
+        />
         <SwitchRow title="Do not disturb" value={is_do_not_disturb.value} onChange={toggle_do_not_disturb} />
         <SwitchRow
           title="Alarms in DND"
@@ -236,6 +248,23 @@ function Chimes() {
   );
 }
 
+function HeartRateInterval() {
+  return (
+    <Screen padding={8} gap={6}>
+      <Label color="muted">Measure heart rate</Label>
+      <Grid columns={2} gap={6} grow={1}>
+        {range(HEART_RATE_INTERVAL_COUNT).map((place) => (
+          <Choice
+            label={HEART_RATE_INTERVAL_NAMES[place]}
+            chosen={settings.heart_rate_interval.value === place}
+            onClick={() => set_setting("heart_rate_interval", place)}
+          />
+        ))}
+      </Grid>
+    </Screen>
+  );
+}
+
 function Wake() {
   return (
     <Screen padding={8} gap={6}>
@@ -292,6 +321,7 @@ export default define_app({
     timeout: Timeout,
     step_goal: StepGoal,
     chimes: Chimes,
+    heart_rate_interval: HeartRateInterval,
     wake: Wake,
     theme: Theme,
   },

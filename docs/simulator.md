@@ -98,7 +98,8 @@ hands them simulated parts in place of the chip's:
   `simulator/src/hardware.rs`) on a wrist with a steady 72 beats a minute, shaped like the
   emulator's pulse. The heart rate driver and its `Monitor` run on their own thread
   (`simulator/src/heart_rate.rs`), 24 samples a second while an app has started the sensor, and
-  each reading reaches the app as on the watch, so the Heart app settles and then shows 72.
+  each reading reaches the app as on the watch, so the Heart app settles and then shows 72. The
+  background interval and the beacon's flashing are not simulated; the effects are printed.
 - **Delays** sleep the thread.
 
 An app runs through the display driver over the panel model, so its scrolled lists move with the

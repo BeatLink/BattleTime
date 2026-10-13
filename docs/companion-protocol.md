@@ -87,6 +87,7 @@ it changes nothing. Either way the watch answers with the settings as they now a
 | `updates` | `false` refuses firmware updates until turned on again. |
 | `wake_on_touch` | What turns a dark screen on besides the button: `0` nothing, `1` a tap, `2` a double tap. |
 | `alarms_in_dnd` | `false` silences alarms and timers in do not disturb too. |
+| `heart_rate_interval` | How often the watch measures the heart rate with no app asking: `0` off, `1` continuously, then `2` to `6` for every 30 seconds, minute, 5, 10 or 30 minutes. |
 
 The key names after `theme_colors` are the ones the wasp-os companion's settings screen already
 sends. An unknown preset, a colour not written `#rrggbb`, `units` other than the two names, or any
@@ -100,7 +101,7 @@ The reply:
  "danger":"#e74539"},"themes":["dark","light","ocean","forest","sunset","contrast"],
  "clock_24h":true,"units":"Metric","step_goal":10000,"brightness":2,"blank_after":15,
  "always_on":false,"chimes":0,"do_not_disturb":false,"bluetooth":true,"updates":true,
- "wake_on_touch":1,"alarms_in_dnd":true}
+ "wake_on_touch":1,"alarms_in_dnd":true,"heart_rate_interval":0}
 ```
 
 `theme` is the preset whose colours match exactly, or `custom`. Colours are stored as RGB565, so a

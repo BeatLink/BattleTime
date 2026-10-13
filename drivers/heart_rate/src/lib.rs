@@ -2,7 +2,8 @@
 //!
 //! The chip shines its green LED into the skin and measures what comes back, the pulse channel,
 //! alongside an ambient light channel. `ppg` turns the pulse channel into beats per minute, and
-//! `monitor::Monitor` adds the sensor's status and spots a watch taken off the wrist.
+//! `monitor::Monitor` adds the sensor's status and spots a watch taken off the wrist. `schedule`
+//! decides between measuring for an app, measuring in the background and flashing the LED as a beacon.
 
 #![no_std]
 
@@ -11,6 +12,7 @@ use embedded_hal_async::i2c::I2c;
 
 pub mod monitor;
 pub mod ppg;
+pub mod schedule;
 
 // ============================================================================
 // Chip registers
@@ -24,9 +26,15 @@ const HRS3300_ID: u8 = 0x21;
 const ENABLE_REGISTER: u8 = 0x01;
 const MEASURING_ON: u8 = 0x80;
 const WAIT_12_5_MILLISECONDS: u8 = 0x60;
+const WAIT_TIME_SHIFT: u8 = 4;
+/// The drive level's high bit lives in the enable register, its low bit in the LED drive register.
+const DRIVE_HIGH_BIT_IN_ENABLE: u8 = 0x08;
+const DRIVE_LOW_BIT_IN_LED_DRIVE: u8 = 0x40;
 
 const LED_DRIVE_REGISTER: u8 = 0x0c;
-const LED_DRIVE_20_MILLIAMPS: u8 = 0x6e;
+/// The low bits the LED drive register needs, as wasp-os and InfiniTime both set them.
+const LED_DRIVE_RESERVED_BITS: u8 = 0x2e;
+const LED_DRIVE_20_MILLIAMPS: u8 = LED_DRIVE_RESERVED_BITS | DRIVE_LOW_BIT_IN_LED_DRIVE;
 const LED_OFF: u8 = 0x00;
 
 const RESOLUTION_REGISTER: u8 = 0x16;
@@ -100,6 +108,9 @@ pub enum Command {
     Stop,
     /// Reads the latest conversion of both channels.
     Read,
+    /// Flashes the LED at drive level 0 (12.5 mA) to 3 (40 mA), waiting between flashes by wait time 0
+    /// (800 ms) to 7 (none), as wasp-os's beacon does.
+    Flash { drive: u8, wait: u8 },
 }
 
 pub struct HeartRateSensor<Bus> {
@@ -126,10 +137,31 @@ impl<Bus: I2c> HeartRateSensor<Bus> {
     /// Carries out the command, and gives the sample a `Read` took, or an empty one.
     pub async fn perform(&mut self, command: Command) -> Result<Sample, Error<<Bus as I2cErrorType>::Error>> {
         let mut registers = [0; DATA_LENGTH];
+        let flash_writes;
         let (first_register_read, length_read, writes): (u8, usize, &[[u8; 2]]) = match command {
             Command::Start => (ID_REGISTER, 1, &START_WRITES),
             Command::Stop => (ID_REGISTER, 0, &STOP_WRITES),
             Command::Read => (FIRST_DATA_REGISTER, DATA_LENGTH, &[]),
+            Command::Flash { drive, wait } => {
+                let high_drive = if drive & 0x02 != 0 {
+                    DRIVE_HIGH_BIT_IN_ENABLE
+                } else {
+                    0
+                };
+                let low_drive = if drive & 0x01 != 0 {
+                    DRIVE_LOW_BIT_IN_LED_DRIVE
+                } else {
+                    0
+                };
+                flash_writes = [
+                    [
+                        ENABLE_REGISTER,
+                        MEASURING_ON | (wait & 0x07) << WAIT_TIME_SHIFT | high_drive,
+                    ],
+                    [LED_DRIVE_REGISTER, LED_DRIVE_RESERVED_BITS | low_drive],
+                ];
+                (ID_REGISTER, 0, &flash_writes)
+            }
         };
 
         if length_read > 0 {

@@ -54,6 +54,19 @@ swipe up
 swipe up
 swipe up
 swipe up
+tap "Heart rate"            # the heart rate interval row
+expect screen heart_rate_interval
+set settings.heart_rate_interval 4
+expect text "5 min"
+snapshot heart-rate
+tap "Always"
+expect effect set-setting heart_rate_interval 1
+button
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
 swipe up
 tap "Theme"                 # the theme row
 expect screen theme

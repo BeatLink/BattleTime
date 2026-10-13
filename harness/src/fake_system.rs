@@ -251,6 +251,7 @@ impl FakeSystem {
             (AllowsUpdates, 1),
             (WakeOnTouch, 1),
             (AlarmsInDoNotDisturb, 1),
+            (HeartRateInterval, 0),
             (AppMemoryBudget, STARTING_APP_MEMORY_BUDGET),
         ];
         for (value, number) in starting_values {
