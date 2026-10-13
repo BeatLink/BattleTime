@@ -2984,3 +2984,63 @@ fn the_page_bar_marks_the_page_on_show() {
     assert_eq!(screen.pixel(120, bar_row), bright);
     assert_eq!(screen.pixel(200, bar_row), dim);
 }
+
+/// Two pages whose page on show follows the app's `page`, and a button on the first that jumps to the second.
+fn bound_pages_image() -> Vec<u8> {
+    use Instruction::*;
+
+    let mut writer = ImageWriter::new("bound", "Bound", AppKind::App, 1);
+    let page = writer.variable("page", ValueType::Int, false, 0);
+    let main = writer.string("main");
+    let jump = writer.string("Jump");
+    let second = writer.string("Second");
+    let go_to_second = writer.handler(code(|code| {
+        code.emit(PushSmall(1)).emit(WriteState(page));
+    }));
+    let page_on_show = writer.expression(code(|code| {
+        code.emit(ReadState(page));
+    }));
+    let constant = PropertySource::Constant;
+    writer.widget(
+        WidgetKind::Column,
+        1,
+        &[(Property::ScreenName, constant(main as i32))],
+    );
+    writer.widget(
+        WidgetKind::Pages,
+        2,
+        &[
+            (Property::Grow, constant(1)),
+            (Property::Value, PropertySource::Expression(page_on_show)),
+        ],
+    );
+    writer.widget(WidgetKind::Column, 1, &[(Property::Grow, constant(1))]);
+    writer.widget(
+        WidgetKind::Button,
+        0,
+        &[
+            (Property::Text, constant(jump as i32)),
+            (Property::Height, constant(BUTTON_HEIGHT)),
+            (Property::OnClick, PropertySource::Handler(go_to_second)),
+        ],
+    );
+    writer.widget(WidgetKind::Column, 1, &[(Property::Grow, constant(1))]);
+    writer.widget(WidgetKind::Label, 0, &[(Property::Text, constant(second as i32))]);
+    writer.build()
+}
+
+#[test]
+fn a_page_the_app_turns_to_wipes_in_the_way_a_swipe_would() {
+    let image = bound_pages_image();
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+    host.draw(&mut screen).unwrap();
+
+    click_on(&mut host, 3, START_TIME, &mut system);
+
+    assert_eq!(host.widget_text(5), Some("Second"));
+    assert_eq!(host.widget_bounds(3), None);
+    assert_eq!(host.next_transition(), Transition::Left);
+    assert!(host.needs_drawing());
+}

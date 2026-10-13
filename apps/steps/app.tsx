@@ -1,14 +1,13 @@
 // Step counter, merged from InfiniTime's Steps and wasp-os's step_counter and steplogger.
 // The main screen is InfiniTime's goal ring with yesterday's count and a resettable trip meter,
-// turning green once the goal is met as wasp-os's bar does. Swipe up for the week, and tap a day
-// for wasp-os's graph of it by hour. The system keeps the history, so nothing here runs in the background.
+// turning green once the goal is met as wasp-os's bar does. Swipe left for the week, and again, or tap
+// a day, for wasp-os's graph of a day by hour. The system keeps the history, so nothing here runs in
+// the background.
 
 import { computed, signal } from "@preact/signals";
 import {
-  back,
   define_app,
   format_time,
-  go,
   now,
   range,
   reset_step_trip,
@@ -17,11 +16,11 @@ import {
   steps_today,
   DAY,
   STEP_HISTORY_DAYS,
-  type SwipeEvent,
+  type PageChangeEvent,
 } from "neotime";
 import { Header } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Arc, Button, Chart, Column, Label, Row, Screen } from "neotime/widgets";
+import { Arc, Button, Chart, Column, Label, Page, Pages, Row, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -33,7 +32,12 @@ const HOURS_PER_DAY = 24;
 /** Days back from today that the week shows, oldest first. */
 const DAYS_SHOWN = [6, 5, 4, 3, 2, 1, 0];
 
-/** The day the day screen shows, counted back from today. */
+const DAY_PAGE = 2;
+
+/** The page on show: today, the week, then one day. */
+const page = signal(0);
+
+/** The day the day page shows, counted back from today. */
 const shown_days_back = signal(0);
 
 // ============================================================================
@@ -84,34 +88,28 @@ const shown_day_name = computed(() => {
 
 function show_day(days_back: number) {
   shown_days_back.value = days_back;
-  go("day");
+  page.value = DAY_PAGE;
 }
 
-function swipe_on_today(event: SwipeEvent) {
-  if (event.direction === "up") go("week");
+function turn_page(event: PageChangeEvent) {
+  page.value = event.page;
 }
 
-function swipe_on_week(event: SwipeEvent) {
-  if (event.direction === "up") show_day(0);
-  else if (event.direction === "down") back();
+function show_earlier_day() {
+  shown_days_back.value = Math.min(shown_days_back.value + 1, STEP_HISTORY_DAYS - 1);
 }
 
-/** Left goes a day further back and right a day forward; down goes back to the week. */
-function swipe_on_day(event: SwipeEvent) {
-  if (event.direction === "left" && shown_days_back.value < STEP_HISTORY_DAYS - 1) {
-    shown_days_back.value = shown_days_back.value + 1;
-  } else if (event.direction === "right" && shown_days_back.value > 0) {
-    shown_days_back.value = shown_days_back.value - 1;
-  } else if (event.direction === "down") back();
+function show_later_day() {
+  shown_days_back.value = Math.max(shown_days_back.value - 1, 0);
 }
 
 // ============================================================================
-// Screens
+// Pages
 // ============================================================================
 
 function Today() {
   return (
-    <Screen align_items="center" padding={2} onSwipe={swipe_on_today}>
+    <Page align_items="center" padding={2}>
       <Arc
         diameter={236}
         thickness={10}
@@ -125,10 +123,10 @@ function Today() {
         <Label font="small" color="#00ffff">{`Goal: ${settings.step_goal.value}`}</Label>
         <Label font="small" color="#ffff00">{`Trip: ${trip_text.value}`}</Label>
       </Arc>
-      <Button x={60} y={188} width={120} height={50} radius={25} onClick={reset_step_trip}>
+      <Button x={60} y={188} width={120} height={46} radius={23} onClick={reset_step_trip}>
         Reset
       </Button>
-    </Screen>
+    </Page>
   );
 }
 
@@ -142,7 +140,7 @@ function DayButton(props: { days_back: number }) {
 
 function Week() {
   return (
-    <Screen padding={8} gap={6} onSwipe={swipe_on_week}>
+    <Page padding={8} gap={6}>
       <Header title="Step history" icon={icons.steps} />
       <Label font="small" color="muted">Last 7 days; tap one</Label>
       <Chart width={224} height={96} values={week_totals.value} maximum={week_most.value} color="accent" />
@@ -151,15 +149,23 @@ function Week() {
           <DayButton days_back={days_back} />
         ))}
       </Row>
-    </Screen>
+    </Page>
   );
 }
 
 function Day() {
   return (
-    <Screen padding={8} gap={6} onSwipe={swipe_on_day}>
+    <Page padding={8} gap={6}>
       <Header title={shown_day_name.value} icon={icons.steps} />
-      <Label font="large" color="success">{`${step_history.value.days[shown_days_back.value].total}`}</Label>
+      <Row justify="space_between" align_items="center">
+        <Button width={44} height={36} disabled={shown_days_back.value >= STEP_HISTORY_DAYS - 1} onClick={show_earlier_day}>
+          {"<"}
+        </Button>
+        <Label font="large" color="success">{`${step_history.value.days[shown_days_back.value].total}`}</Label>
+        <Button width={44} height={36} disabled={shown_days_back.value === 0} onClick={show_later_day}>
+          {">"}
+        </Button>
+      </Row>
       <Column grow={1} justify="end" gap={2}>
         <Chart width={224} height={96} values={shown_hours.value} maximum={shown_hour_most.value} color="success" />
         <Row justify="space_between" width={224}>
@@ -170,6 +176,22 @@ function Day() {
           <Label font="small" color="muted">24</Label>
         </Row>
       </Column>
+    </Page>
+  );
+}
+
+// ============================================================================
+// Screen
+// ============================================================================
+
+function Steps() {
+  return (
+    <Screen>
+      <Pages grow={1} value={page.value} onPageChange={turn_page}>
+        <Today />
+        <Week />
+        <Day />
+      </Pages>
     </Screen>
   );
 }
@@ -179,5 +201,5 @@ export default define_app({
   name: "Steps",
   group: "health",
   icon: icons.steps,
-  screens: { main: Today, week: Week, day: Day },
+  screens: { main: Steps },
 });

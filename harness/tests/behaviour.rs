@@ -627,16 +627,17 @@ fn the_software_app_shows_the_need_against_the_budget_for_an_app_too_large() {
 // ============================================================================
 
 #[test]
-fn swipes_the_first_page_of_steps_ignores_go_on_to_the_shell() {
+fn a_swipe_past_the_steps_pages_goes_on_to_the_shell() {
     let mut watch = TestWatch::open_app("steps").unwrap();
 
-    // Left and right do nothing on the first page, so the shell can step round the quick apps.
-    assert_eq!(watch.swipe(Direction::Left), EventResult::NotHandled);
+    // Before the first page and past the last, and up and down, the shell has the swipe.
     assert_eq!(watch.swipe(Direction::Right), EventResult::NotHandled);
+    assert_eq!(watch.swipe(Direction::Up), EventResult::NotHandled);
+    assert_eq!(watch.swipe(Direction::Left), EventResult::Handled);
+    assert!(watch.shows_text("Step history"), "{:?}", watch.visible_texts());
+    assert_eq!(watch.swipe(Direction::Left), EventResult::Handled);
+    assert_eq!(watch.swipe(Direction::Left), EventResult::NotHandled);
     assert!(watch.effects_of(EffectKind::Back).is_empty());
-
-    assert_eq!(watch.swipe(Direction::Up), EventResult::Handled);
-    assert_ne!(watch.screen_name(), Some("main"));
 }
 
 #[test]

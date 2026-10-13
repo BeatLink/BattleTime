@@ -179,7 +179,7 @@ The second column of each table names the LVGL widget it matches. Each one takes
 | `Stack` | container | Children on top of each other, such as text over an image. |
 | `Scroll` | scroll view | Content longer than its space, down or, with `direction="row"`, across. |
 | `List` | list | A scrolling list of rows, from a fixed-length array. A `.map` inside it is one repeated row, so a long list costs an app one row of code, and when the row has a fixed `height` the watch builds only the rows on screen. |
-| `Pages` | tile view | Pages side by side, one on show at a time, swiped left and right with a wipe, and a bar along the bottom marking which is on show. `value` is the page it opens on; `onPageChange` hears each turn. A swipe past the first or last page goes to the screen's `onSwipe`. |
+| `Pages` | tile view | Pages side by side, one on show at a time, swiped left and right with a wipe, and a bar along the bottom marking which is on show. `value` is the page on show; `onPageChange` hears each turn, and an app that turns pages itself binds `value` to a signal it also sets there. A swipe past the first or last page goes to the screen's `onSwipe`. |
 | `Page` | | One page of a `Pages`: a `Column` that fills it, or with `scrolls` a `Scroll` that scrolls down when its content is longer. `scrolls` must be written out. |
 | `Tabs` | tab view | Pages with a row of tabs. |
 

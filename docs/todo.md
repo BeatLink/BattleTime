@@ -488,9 +488,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   paints where the finger is.
 - [ ] **A Tabs widget** that swipes between pages under a row of tabs. It is laid out as a plain
   column now; `Pages` does the swiping without tabs.
-- [ ] **Move the other paged apps onto `Pages`.** Steps and the apps that page by `go()` and
-  `onSwipe` up and down still do it by hand; the agreed model is pages left and right through
-  `Pages`, with up and down kept for scrolling within a page.
 - [ ] **Cyrillic text.** InfiniTime's 20 px font has Cyrillic letters for notifications and music
   titles. Add them to the text fonts in `tools/generate_fonts.py`.
 - [ ] **More library icons:** brightness levels, sleep, notifications on and off, list,

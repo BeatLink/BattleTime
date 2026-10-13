@@ -782,7 +782,9 @@ Layout is a small flexbox, worked out again whenever a value changes:
   sends `onPageChange` with the new page; a swipe past the first or last page, or up or down, goes
   on to the screen's `onSwipe` and then the shell. With more than one page it keeps 4 pixels along
   its bottom for a page bar: a segment per page, the one on show in the muted grey. A growing
-  `Pages` fills the space left, whatever its page holds. **`Tabs`** is laid out like a `Column`
+  `Pages` fills the space left, whatever its page holds. An app that turns the page itself binds
+  `value` to a signal and sets it in `onPageChange` too; when the bound value changes, the new page
+  wipes in from the side it lies on. **`Tabs`** is laid out like a `Column`
   for now.
 
 A widget with no size gets the size it wants: a label's text, a button's text plus room around it

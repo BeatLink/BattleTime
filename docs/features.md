@@ -30,9 +30,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   the bottom. After a panel scroll only the ends of the thumb are drawn again.
   ![Settings with its scroll bar](../harness/snapshots/screens/app-settings.png)
 - **Swipes belong to the app.** Inside an app every swipe is the app's own, and a right swipe no
-  longer goes back. A swipe the app ignores goes on to the shell, so steps, which uses only up and
-  down, still steps round the quick apps, and an app with pages passes on the swipes past its
-  first and last page.
+  longer goes back. A swipe the app ignores goes on to the shell, and an app with pages, such as
+  steps, passes on the swipes past its first and last page, so they still step round the quick
+  apps.
 - **Pages left and right.** An app's pages sit side by side: a swipe left wipes to the next and a
   swipe right back to the one before, and a bar along the bottom marks the page on show, a segment
   for each. A list on a page still scrolls up and down, and a drag across never moves it.

@@ -731,6 +731,14 @@ impl<'image> AppHost<'image> {
         }
     }
 
+    /// Each Pages on screen, by its widget, with the page it shows.
+    fn pages_on_show(&self) -> impl Iterator<Item = (u16, i32)> + '_ {
+        self.nodes
+            .iter()
+            .filter(|node| node.kind == WidgetKind::Pages)
+            .map(|node| (node.widget_index, node.settings.value))
+    }
+
     /// The one page of a Pages to build, its `value` kept within the pages, noting how many there are for its bar.
     fn page_on_show(&mut self, node_index: usize, pages: &[u16]) -> Vec<u16> {
         let node = &mut self.nodes[node_index];
@@ -933,6 +941,7 @@ impl<'image> AppHost<'image> {
             }
         }
 
+        let pages_before: Vec<(u16, i32)> = self.pages_on_show().collect();
         let mut first_failure = None;
         if expressions != 0 {
             for node_index in 0..self.nodes.len() {
@@ -957,7 +966,20 @@ impl<'image> AppHost<'image> {
             .iter()
             .filter_map(|node| self.row_visibility_expression(node))
             .any(|expression| expressions & (1 << expression) != 0);
-        if self.nodes_out_of_date || rows_changed {
+        let turned = self
+            .pages_on_show()
+            .zip(pages_before)
+            .find(|(after, before)| after != before);
+        if let Some(((_, after), (_, before))) = turned {
+            // The app turned a page itself, so it wipes in as a swipe would have brought it.
+            self.next_transition = if after > before {
+                Transition::Left
+            } else {
+                Transition::Right
+            };
+            self.build_whole_screen(now, system);
+            self.cleared_regions.clear();
+        } else if self.nodes_out_of_date || rows_changed {
             first_failure = first_failure.or(self.build_nodes(now, system));
         }
         if self.app_lists_out_of_date {

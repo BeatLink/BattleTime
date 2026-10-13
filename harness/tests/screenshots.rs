@@ -89,6 +89,19 @@ fn the_battery_page_matches_its_reference_picture() {
     assert_all_match(vec![result]);
 }
 
+#[test]
+fn the_steps_day_page_matches_its_reference_picture() {
+    let result = check_screen("app-steps-day", || {
+        let mut watch = TestWatch::open_app("steps").unwrap();
+        watch.swipe(Direction::Left);
+        watch.swipe(Direction::Left);
+        watch.advance(Duration::from_secs(1));
+        watch
+    });
+
+    assert_all_match(vec![result]);
+}
+
 /// One key of a keypad, by its row, its place in the row and how many keys the row has.
 struct KeypadKey {
     row: i32,

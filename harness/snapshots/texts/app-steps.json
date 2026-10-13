@@ -11,21 +11,6 @@
         "Trip: 23456",
         "Yest: 8765"
       ]
-    },
-    {
-      "name": "week",
-      "reached_by": "swipe up",
-      "texts": [
-        "Fri",
-        "Last 7 days; tap one",
-        "Mon",
-        "Sat",
-        "Step history",
-        "Sun",
-        "Thu",
-        "Tue",
-        "Wed"
-      ]
     }
   ]
 }

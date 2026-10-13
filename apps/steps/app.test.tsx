@@ -41,24 +41,27 @@ describe("steps", () => {
     expect(screen.getByText("Trip: 99999+")).toBeTruthy();
   });
 
-  it("opens a day from the week and steps between days with swipes", () => {
+  it("pages left to the week and a day, opens a day from the week, and steps between days with buttons", () => {
     open(steps_app);
     render(<OpenScreen />);
     act(() => { steps_today.value = 900; });
     act(() => { advance_clock(3 * 60 * 1000); });
-    act(() => { swipe("up"); });
+    act(() => { swipe("left"); });
     expect(screen.getByText("Step history")).toBeTruthy();
+    act(() => { swipe("left"); });
+    expect(screen.getByText("Today")).toBeTruthy();
+    act(() => { swipe("right"); });
     act(() => { screen.getByText("Thu").click(); });
     expect(screen.getByText("Yesterday")).toBeTruthy();
     expect(screen.getByText("900")).toBeTruthy();
-    act(() => { swipe("left"); });
+    act(() => { screen.getByText("<").click(); });
     expect(screen.getByText("Wednesday")).toBeTruthy();
-    act(() => { swipe("right"); });
-    act(() => { swipe("right"); });
+    act(() => { screen.getByText(">").click(); });
+    act(() => { screen.getByText(">").click(); });
+    expect(screen.getByText("Today")).toBeTruthy();
+    act(() => { screen.getByText(">").click(); });
     expect(screen.getByText("Today")).toBeTruthy();
     act(() => { swipe("right"); });
-    expect(screen.getByText("Today")).toBeTruthy();
-    act(() => { swipe("down"); });
     expect(screen.getByText("Step history")).toBeTruthy();
   });
 });
