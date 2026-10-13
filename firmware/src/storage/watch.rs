@@ -12,8 +12,8 @@ use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
 
 use embedded_storage::nor_flash::ReadNorFlash;
 use neotime_boot::{
-    bootloader_identity, is_firmware_vector_table, UpdaterNote, BOOT_STATE, FIRMWARE, FIRMWARE_UPDATE,
-    PREVIOUS_FIRMWARE, RECOVERY_FIRMWARE, VECTOR_TABLE_CHECK_SIZE,
+    bootloader_identity, image_header::read_image_header, slot_table::read_slots, Slots, UpdaterNote,
+    BOOT_STATE, DEFAULT_SLOTS, FIRMWARE, SLOT_TABLE,
 };
 use neotime_external_flash::{BusyWait, ExternalFlash};
 use neotime_packages::commands::{refuse_command, Change};
@@ -117,6 +117,12 @@ pub async fn start(
     };
     let internal_flash =
         INTERNAL_FLASH.init(Mutex::new(RefCell::new(Nvmc::new(peripherals.flash_controller))));
+    let slots = read_slots(&mut BlockingPartition::new(
+        internal_flash,
+        SLOT_TABLE.start,
+        SLOT_TABLE.size,
+    ))
+    .unwrap_or(DEFAULT_SLOTS);
 
     let file_system_flash = FileSystemFlash::with_blocks_erased_ahead(
         BlockingPartition::new(
@@ -145,8 +151,8 @@ pub async fn start(
         firmware: UpdateReceiver::new(
             BlockingAsync::new(BlockingPartition::new(
                 external_flash,
-                FIRMWARE_UPDATE.start,
-                FIRMWARE_UPDATE.size,
+                slots.update.start,
+                slots.update.size,
             )),
             BlockingAsync::new(BlockingPartition::new(
                 internal_flash,
@@ -157,8 +163,8 @@ pub async fn start(
         ),
         recovery: RecoveryReceiver::new(BlockingAsync::new(BlockingPartition::new(
             external_flash,
-            RECOVERY_FIRMWARE.start,
-            RECOVERY_FIRMWARE.size,
+            slots.recovery.start,
+            slots.recovery.size,
         ))),
     };
     let mut confirmation = Confirmation {
@@ -170,7 +176,10 @@ pub async fn start(
         alignment: CONFIRM_ALIGNMENT.init([0; 4]),
     };
     let mut mode = confirmation.mode().await;
-    if mode == Mode::OnTrial && !rolling_back_would_help(external_flash) && confirmation.confirm().await {
+    if mode == Mode::OnTrial
+        && !rolling_back_would_help(external_flash, slots)
+        && confirmation.confirm().await
+    {
         mode = Mode::Confirmed;
     }
     if mode == Mode::RolledBack {
@@ -194,18 +203,16 @@ pub async fn start(
 
 /// A rollback restores the update slot, which after a migration holds the old system's leftovers and after
 /// a recovery holds the broken firmware; in both cases this firmware must stay.
-fn rolling_back_would_help(external_flash: &'static SharedExternalFlash) -> bool {
-    let mut previous_firmware =
-        BlockingPartition::new(external_flash, PREVIOUS_FIRMWARE.start, PREVIOUS_FIRMWARE.size);
-    let mut vector_table_start = [0; VECTOR_TABLE_CHECK_SIZE];
-    let previous_is_firmware = previous_firmware.read(0, &mut vector_table_start).is_ok()
-        && is_firmware_vector_table(vector_table_start);
+fn rolling_back_would_help(external_flash: &'static SharedExternalFlash, slots: Slots) -> bool {
+    let previous = slots.previous_firmware();
+    let mut previous_firmware = BlockingPartition::new(external_flash, previous.start, previous.size);
+    let previous_is_firmware = read_image_header(&mut previous_firmware, 0)
+        .is_ok_and(|header| header.is_some_and(|header| header.runs_as_firmware()));
     if !previous_is_firmware {
         return false;
     }
 
-    let mut recovery =
-        BlockingPartition::new(external_flash, RECOVERY_FIRMWARE.start, RECOVERY_FIRMWARE.size);
+    let mut recovery = BlockingPartition::new(external_flash, slots.recovery.start, slots.recovery.size);
     !running_firmware_is(&mut recovery)
 }
 

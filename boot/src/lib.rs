@@ -2,7 +2,8 @@
 //!
 //! The bootloader and the firmware both build on these numbers, so they must change together. The
 //! running firmware sits in internal flash; updates and the recovery firmware wait in external flash
-//! until the bootloader swaps them in with embassy-boot.
+//! until the bootloader swaps them in with embassy-boot. Every image starts with an `ImageHeader`, and
+//! where the external slots sit is read from the `slot_table`, which the firmware may change.
 
 #![no_std]
 
@@ -39,20 +40,28 @@ pub const INTERNAL_FLASH_SIZE: u32 = 512 * 1024;
 /// There is no Nordic master boot record; the bootloader is the first code to run.
 pub const BOOTLOADER: Region = Region {
     start: 0x0000_0000,
-    size: 16 * 1024,
+    size: 20 * 1024,
+};
+/// Two pages that record where the external slots sit; see `slot_table`.
+pub const SLOT_TABLE: Region = Region {
+    start: BOOTLOADER.end(),
+    size: 2 * PAGE_SIZE,
 };
 pub const BOOT_STATE: Region = Region {
-    start: BOOTLOADER.end(),
+    start: SLOT_TABLE.end(),
     size: PAGE_SIZE,
 };
+/// The running firmware: its `ImageHeader`, then its code from `FIRMWARE_VECTOR_TABLE` on.
 pub const FIRMWARE: Region = Region {
     start: BOOT_STATE.end(),
-    size: 400 * 1024,
+    size: SHARED_LIBRARY.start - BOOT_STATE.end(),
 };
+/// Where the firmware is linked to start; the bootloader jumps here.
+pub const FIRMWARE_VECTOR_TABLE: u32 = FIRMWARE.start + image_header::IMAGE_HEADER_SIZE;
 /// Images, fonts, components and common code that apps share; apps themselves live in /apps on the external flash.
 pub const SHARED_LIBRARY: Region = Region {
-    start: FIRMWARE.end(),
-    size: INTERNAL_FLASH_SIZE - FIRMWARE.end(),
+    start: 0x0006_9000,
+    size: INTERNAL_FLASH_SIZE - 0x0006_9000,
 };
 
 // ============================================================================
@@ -61,27 +70,88 @@ pub const SHARED_LIBRARY: Region = Region {
 
 pub const EXTERNAL_FLASH_SIZE: u32 = 4 * 1024 * 1024;
 
-pub const FIRMWARE_UPDATE: Region = Region {
-    start: 0x0000_0000,
-    size: FIRMWARE.size + PAGE_SIZE,
-};
-/// Where the replaced firmware sits after the bootloader's swap: embassy-boot moves each page one page up.
-pub const PREVIOUS_FIRMWARE: Region = Region {
-    start: FIRMWARE_UPDATE.start + PAGE_SIZE,
-    size: FIRMWARE.size,
-};
-pub const RECOVERY_FIRMWARE: Region = Region {
-    start: FIRMWARE_UPDATE.end(),
-    size: FIRMWARE.size,
-};
-pub const RESERVED_FOR_GROWTH: Region = Region {
-    start: RECOVERY_FIRMWARE.end(),
-    size: FILE_SYSTEM.start - RECOVERY_FIRMWARE.end(),
+/// Where the update and recovery slots may sit: everything below the file system.
+pub const SLOT_AREA: Region = Region {
+    start: 0,
+    size: FILE_SYSTEM.start,
 };
 pub const FILE_SYSTEM: Region = Region {
     start: 1024 * 1024,
     size: EXTERNAL_FLASH_SIZE - 1024 * 1024,
 };
+
+/// Where the external slots are when the slot table holds no sound record.
+pub const DEFAULT_SLOTS: Slots = Slots {
+    update: Region {
+        start: 0x0000_0000,
+        size: FIRMWARE.size + PAGE_SIZE,
+    },
+    recovery: Region {
+        start: 0x0006_5000,
+        size: FIRMWARE.size,
+    },
+};
+
+/// The two slots in external flash; the firmware's own slot in internal flash never moves, since it is linked there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Slots {
+    /// A new firmware waiting to be swapped in; after a swap it holds the replaced firmware one page up.
+    pub update: Region,
+    pub recovery: Region,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SlotProblem {
+    NotWholePages,
+    OutsideSlotArea,
+    UpdateSlotNotFirmwareSizePlusOnePage,
+    RecoverySlotTooSmall,
+    RecoverySlotTooLarge,
+    Overlapping,
+}
+
+impl Slots {
+    /// Where the replaced firmware sits after the bootloader's swap: embassy-boot moves each page one page up.
+    pub const fn previous_firmware(self) -> Region {
+        Region {
+            start: self.update.start + PAGE_SIZE,
+            size: FIRMWARE.size,
+        }
+    }
+
+    /// The rules the bootloader holds every slot table record to before it trusts one.
+    pub const fn check(self) -> Result<(), SlotProblem> {
+        let regions = [self.update, self.recovery];
+        let mut index = 0;
+        while index < regions.len() {
+            let region = regions[index];
+            if !region.start.is_multiple_of(PAGE_SIZE) || !region.size.is_multiple_of(PAGE_SIZE) {
+                return Err(SlotProblem::NotWholePages);
+            }
+            let end = region.start as u64 + region.size as u64;
+            if end > SLOT_AREA.end() as u64 {
+                return Err(SlotProblem::OutsideSlotArea);
+            }
+            index += 1;
+        }
+        if self.update.size != FIRMWARE.size + PAGE_SIZE {
+            return Err(SlotProblem::UpdateSlotNotFirmwareSizePlusOnePage);
+        }
+        if self.recovery.size < MINIMUM_RECOVERY_SLOT_SIZE {
+            return Err(SlotProblem::RecoverySlotTooSmall);
+        }
+        if self.recovery.size > FIRMWARE.size {
+            return Err(SlotProblem::RecoverySlotTooLarge);
+        }
+        if self.update.start < self.recovery.end() && self.recovery.start < self.update.end() {
+            return Err(SlotProblem::Overlapping);
+        }
+        Ok(())
+    }
+}
+
+/// A header and some code: anything smaller cannot hold a firmware.
+pub const MINIMUM_RECOVERY_SLOT_SIZE: u32 = 16 * PAGE_SIZE;
 
 // ============================================================================
 // RAM and the watchdog
@@ -190,15 +260,16 @@ pub mod status_colour {
 
 const BOOT_STATE_WRITE_SIZE: u32 = 4;
 const FIRMWARE_PAGES: u32 = FIRMWARE.size / PAGE_SIZE;
+/// The Cortex-M4 wants the vector table aligned to a power of two at least its own size, 220 bytes here.
+const VECTOR_TABLE_ALIGNMENT: u32 = 256;
 
 const _: () = {
     let regions = [
         BOOTLOADER,
+        SLOT_TABLE,
         BOOT_STATE,
         FIRMWARE,
         SHARED_LIBRARY,
-        FIRMWARE_UPDATE,
-        RECOVERY_FIRMWARE,
         FILE_SYSTEM,
     ];
     let mut index = 0;
@@ -211,31 +282,19 @@ const _: () = {
 
     assert!(SHARED_LIBRARY.end() == INTERNAL_FLASH_SIZE);
     assert!(FILE_SYSTEM.end() == EXTERNAL_FLASH_SIZE);
-    assert!(RECOVERY_FIRMWARE.end() <= FILE_SYSTEM.start);
+    assert!(FIRMWARE_VECTOR_TABLE.is_multiple_of(VECTOR_TABLE_ALIGNMENT));
+    assert!(DEFAULT_SLOTS.check().is_ok());
 
     // These are the rules embassy-boot checks at boot; breaking them here fails the build instead.
-    assert!(FIRMWARE_UPDATE.size >= FIRMWARE.size + PAGE_SIZE);
+    assert!(DEFAULT_SLOTS.update.size >= FIRMWARE.size + PAGE_SIZE);
     assert!(2 + 4 * FIRMWARE_PAGES <= BOOT_STATE.size / BOOT_STATE_WRITE_SIZE);
 };
 
 // ============================================================================
-// Firmware image check
+// Bootloader image check
 // ============================================================================
 
 pub const VECTOR_TABLE_CHECK_SIZE: usize = 8;
-
-/// Checks the vector table at the start of an image: a stack pointer in RAM and a reset handler in `FIRMWARE`.
-pub fn is_firmware_vector_table(vector_table_start: [u8; VECTOR_TABLE_CHECK_SIZE]) -> bool {
-    let [stack_pointer, reset_handler] = [&vector_table_start[..4], &vector_table_start[4..]]
-        .map(|word| u32::from_le_bytes(word.try_into().unwrap()));
-    let reset_handler_address = reset_handler & !1;
-
-    let stack_pointer_is_in_ram = stack_pointer > RAM.start && stack_pointer <= RAM.end();
-    let reset_handler_is_thumb_code = reset_handler & 1 == 1;
-    let reset_handler_is_in_firmware = FIRMWARE.contains(reset_handler_address);
-
-    stack_pointer_is_in_ram && reset_handler_is_thumb_code && reset_handler_is_in_firmware
-}
 
 /// Checks the vector table at the start of a bootloader image: a stack pointer in RAM and a reset handler in `BOOTLOADER`.
 pub fn is_bootloader_vector_table(vector_table_start: [u8; VECTOR_TABLE_CHECK_SIZE]) -> bool {
@@ -288,91 +347,82 @@ pub fn bootloader_identity<Flash: ReadNorFlash>(flash: &mut Flash) -> Result<Opt
 const ERASED_BYTE: u8 = 0xFF;
 const IDENTITY_CHUNK_SIZE: usize = 256;
 
-pub fn looks_like_firmware<Flash: NorFlash>(
-    flash: &mut Flash,
-    image_start: u32,
-) -> Result<bool, Flash::Error> {
-    let mut vector_table_start = [0; VECTOR_TABLE_CHECK_SIZE];
-    flash.read(image_start, &mut vector_table_start)?;
-
-    Ok(is_firmware_vector_table(vector_table_start))
+/// True when `FIRMWARE` holds a sound header for an image linked to run there; the image itself is not read.
+pub fn firmware_is_runnable<Flash: ReadNorFlash>(internal_flash: &mut Flash) -> Result<bool, Flash::Error> {
+    Ok(image_header::read_image_header(internal_flash, FIRMWARE.start)?
+        .is_some_and(|header| header.runs_as_firmware()))
 }
 
 // ============================================================================
-// Recovery install
+// Installing the recovery or the previous firmware
 // ============================================================================
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RecoveryCopy {
+pub enum ImageCopy {
     Copied,
-    NoRecoveryImage,
+    NoImage,
 }
 
 const COPY_CHUNK_SIZE: usize = 1024;
 
-/// Copies the recovery firmware into the update slot, so the next swap installs it like any update.
-pub fn copy_recovery_into_update_slot<Flash: NorFlash>(
+/// Copies the image in `source` into the update slot, so the next swap installs it like any update.
+///
+/// Only a whole image with a matching CRC is copied, and the update slot is left alone otherwise.
+pub fn copy_image_into_update_slot<Flash: NorFlash>(
     external_flash: &mut Flash,
-) -> Result<RecoveryCopy, Flash::Error> {
-    if !looks_like_firmware(external_flash, RECOVERY_FIRMWARE.start)? {
-        return Ok(RecoveryCopy::NoRecoveryImage);
-    }
+    slots: Slots,
+    source: Region,
+) -> Result<ImageCopy, Flash::Error> {
+    let Some(header) = image_header::installable_image(external_flash, source.start, source.size)? else {
+        return Ok(ImageCopy::NoImage);
+    };
 
-    external_flash.erase(FIRMWARE_UPDATE.start, FIRMWARE_UPDATE.end())?;
+    external_flash.erase(slots.update.start, slots.update.end())?;
 
     let mut chunk = [0; COPY_CHUNK_SIZE];
-    for offset in (0..RECOVERY_FIRMWARE.size).step_by(COPY_CHUNK_SIZE) {
-        external_flash.read(RECOVERY_FIRMWARE.start + offset, &mut chunk)?;
-
-        let chunk_is_erased = chunk.iter().all(|byte| *byte == 0xFF);
-        if !chunk_is_erased {
-            external_flash.write(FIRMWARE_UPDATE.start + offset, &chunk)?;
-        }
+    for offset in (0..header.total_size_in_bytes()).step_by(COPY_CHUNK_SIZE) {
+        let length = (header.total_size_in_bytes() - offset).min(COPY_CHUNK_SIZE as u32) as usize;
+        external_flash.read(source.start + offset, &mut chunk[..length])?;
+        external_flash.write(slots.update.start + offset, &chunk[..length])?;
     }
 
-    Ok(RecoveryCopy::Copied)
+    Ok(ImageCopy::Copied)
 }
 
-// ============================================================================
-// Rolling back by hand
-// ============================================================================
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PreviousCopy {
-    Copied,
-    NoPreviousFirmware,
-}
-
-/// Moves the previous firmware from `PREVIOUS_FIRMWARE` down a page to the start of the update slot, so the next swap installs it.
+/// Moves the previous firmware down a page to the start of the update slot, so the next swap installs it.
 ///
 /// Each page is erased only after the page above it, which holds its new contents, is still intact,
 /// so the copy can go upwards in place. A power cut part way loses the previous firmware but leaves
 /// the running one untouched.
 pub fn copy_previous_into_update_slot<Flash: NorFlash>(
     external_flash: &mut Flash,
-) -> Result<PreviousCopy, Flash::Error> {
-    if !looks_like_firmware(external_flash, PREVIOUS_FIRMWARE.start)? {
-        return Ok(PreviousCopy::NoPreviousFirmware);
+    slots: Slots,
+) -> Result<ImageCopy, Flash::Error> {
+    let previous = slots.previous_firmware();
+    if image_header::installable_image(external_flash, previous.start, previous.size)?.is_none() {
+        return Ok(ImageCopy::NoImage);
     }
 
     let mut chunk = [0; COPY_CHUNK_SIZE];
-    for page_start in (FIRMWARE_UPDATE.start..PREVIOUS_FIRMWARE.end()).step_by(PAGE_SIZE as usize) {
+    for page_start in (slots.update.start..previous.end()).step_by(PAGE_SIZE as usize) {
         external_flash.erase(page_start, page_start + PAGE_SIZE)?;
         for offset in (0..PAGE_SIZE).step_by(COPY_CHUNK_SIZE) {
             external_flash.read(page_start + PAGE_SIZE + offset, &mut chunk)?;
-            let chunk_is_erased = chunk.iter().all(|byte| *byte == 0xFF);
+            let chunk_is_erased = chunk.iter().all(|byte| *byte == ERASED_BYTE);
             if !chunk_is_erased {
                 external_flash.write(page_start + offset, &chunk)?;
             }
         }
     }
-    let last_page = FIRMWARE_UPDATE.end() - PAGE_SIZE;
-    external_flash.erase(last_page, FIRMWARE_UPDATE.end())?;
+    let last_page = slots.update.end() - PAGE_SIZE;
+    external_flash.erase(last_page, slots.update.end())?;
 
-    Ok(PreviousCopy::Copied)
+    Ok(ImageCopy::Copied)
 }
 
+pub mod image_header;
 pub mod migration;
+pub mod slot_table;
 pub mod version;
 
 #[cfg(test)]

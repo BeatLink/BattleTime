@@ -34,7 +34,7 @@ use embedded_storage::nor_flash::{ErrorType, NorFlash, ReadNorFlash};
 use mipidsi::interface::SpiInterface;
 use neotime_boot::{
     migration::{crc32, plan, PayloadSizes, Step, CRC32_INITIAL},
-    BOOT_STATE, FIRMWARE_UPDATE, PAGE_SIZE,
+    BOOT_STATE, DEFAULT_SLOTS, PAGE_SIZE,
 };
 use neotime_display::{Display, MipidsiInterface};
 use neotime_external_flash::{BusyWait, ExternalFlash};
@@ -347,7 +347,11 @@ fn stage_firmware<External: NorFlash, Internal: NorFlash>(
     let mut alignment = AlignedBuffer([0; 4]);
     let mut updater = BlockingFirmwareUpdater::new(
         FirmwareUpdaterConfig {
-            dfu: BlockingPartition::new(external_flash, FIRMWARE_UPDATE.start, FIRMWARE_UPDATE.size),
+            dfu: BlockingPartition::new(
+                external_flash,
+                DEFAULT_SLOTS.update.start,
+                DEFAULT_SLOTS.update.size,
+            ),
             state: BlockingPartition::new(internal_flash, BOOT_STATE.start, BOOT_STATE.size),
         },
         &mut alignment.0,
@@ -367,7 +371,11 @@ fn stage_firmware<External: NorFlash, Internal: NorFlash>(
             }
             screen.progress(index * COPY_CHUNK_SIZE, FIRMWARE.padded().len());
         }
-        let mut slot = BlockingPartition::new(external_flash, FIRMWARE_UPDATE.start, FIRMWARE_UPDATE.size);
+        let mut slot = BlockingPartition::new(
+            external_flash,
+            DEFAULT_SLOTS.update.start,
+            DEFAULT_SLOTS.update.size,
+        );
         if written && read_back_matches(&mut slot, &FIRMWARE) {
             return true;
         }
@@ -382,7 +390,11 @@ fn mark_swap<External: NorFlash, Internal: NorFlash>(
     let mut alignment = AlignedBuffer([0; 4]);
     let mut updater = BlockingFirmwareUpdater::new(
         FirmwareUpdaterConfig {
-            dfu: BlockingPartition::new(external_flash, FIRMWARE_UPDATE.start, FIRMWARE_UPDATE.size),
+            dfu: BlockingPartition::new(
+                external_flash,
+                DEFAULT_SLOTS.update.start,
+                DEFAULT_SLOTS.update.size,
+            ),
             state: BlockingPartition::new(internal_flash, BOOT_STATE.start, BOOT_STATE.size),
         },
         &mut alignment.0,

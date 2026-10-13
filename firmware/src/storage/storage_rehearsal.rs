@@ -27,7 +27,7 @@ use embedded_storage_async::nor_flash::{
     ErrorType as AsyncErrorType, NorFlash as AsyncNorFlash, NorFlashErrorKind,
     ReadNorFlash as AsyncReadNorFlash,
 };
-use neotime_boot::{FIRMWARE_UPDATE, PAGE_SIZE};
+use neotime_boot::{DEFAULT_SLOTS, PAGE_SIZE};
 use neotime_external_flash::{BusyWait, ExternalFlash};
 use neotime_storage::{prepare_file_system, FileSystemFlash, Preparation};
 use neotime_updates::{ImageKind, UpdateError, UpdateReceiver, UpdateTargets};
@@ -154,8 +154,8 @@ pub async fn start(
         firmware: UpdateReceiver::new(
             embassy_embedded_hal::adapter::BlockingAsync::new(BlockingPartition::new(
                 external_flash,
-                FIRMWARE_UPDATE.start,
-                FIRMWARE_UPDATE.size,
+                DEFAULT_SLOTS.update.start,
+                DEFAULT_SLOTS.update.size,
             )),
             boot_state,
             STATE_ALIGNMENT.init([0; 4]),
@@ -174,7 +174,7 @@ fn test_byte(offset: u32) -> u8 {
 
 /// Erases, writes and reads back the start of the update slot; returns the first offset that reads back wrong.
 fn exercise_the_flash(flash: &mut FlashOnBus) -> Result<(), u32> {
-    let start = FIRMWARE_UPDATE.start;
+    let start = DEFAULT_SLOTS.update.start;
     let end = start + FLASH_TEST_SIZE;
     for sector in (start..end).step_by(PAGE_SIZE as usize) {
         feed_watchdog();

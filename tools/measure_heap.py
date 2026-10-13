@@ -33,7 +33,7 @@ HEAP_MEMORY_SYMBOL = "neotime_firmware::start_heap::HEAP_MEMORY"
 # The allocator's bytes in use are its second word.
 USED_WORD = 1
 SHARED_LIBRARY_START = 0x69000
-FIRMWARE_VECTOR_TABLE = 0x5000
+FIRMWARE_VECTOR_TABLE = 0x8100
 # The UICR words embassy-nrf writes on the first start, so the emulated chip is not reset.
 FIRST_START_UICR = [(0x10001200, 0x15), (0x10001204, 0x15), (0x1000120C, 0xFFFFFFFE)]
 START_SECONDS = 5

@@ -6,7 +6,7 @@ use std::{env, fs, path::PathBuf, process::Command};
 
 use neotime_boot::{
     version::{read_commit, write_version, BuildCommit},
-    FIRMWARE, FIRMWARE_ALIVE_MARKER, RAM,
+    FIRMWARE, FIRMWARE_ALIVE_MARKER, FIRMWARE_VECTOR_TABLE, RAM,
 };
 
 const WASP_OS_APP_START: u32 = 0x19000;
@@ -27,7 +27,12 @@ fn main() {
             WASP_OS_APP_RAM_START,
         )
     } else {
-        (FIRMWARE.start, FIRMWARE.size, RAM.start)
+        // The image header sits in front, so the code starts after it.
+        (
+            FIRMWARE_VECTOR_TABLE,
+            FIRMWARE.end() - FIRMWARE_VECTOR_TABLE,
+            RAM.start,
+        )
     };
     let memory_map = format!(
         "MEMORY\n{{\n  FLASH : ORIGIN = {:#010x}, LENGTH = {:#x}\n  RAM : ORIGIN = {:#010x}, LENGTH = {:#x}\n}}\n",

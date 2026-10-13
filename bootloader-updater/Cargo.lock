@@ -430,8 +430,20 @@ dependencies = [
  "embedded-hal-bus",
  "embedded-storage",
  "neotime-boot",
+ "neotime-external-flash",
  "neotime-status-screen",
  "panic-halt",
+]
+
+[[package]]
+name = "neotime-external-flash"
+version = "0.1.0"
+dependencies = [
+ "cortex-m",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "embedded-storage",
+ "embedded-storage-async",
 ]
 
 [[package]]

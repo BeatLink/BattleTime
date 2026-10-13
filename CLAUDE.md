@@ -58,7 +58,7 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
 - Keep at least 2 KB of stack spare, measured with `tools/measure_stack.py`. Large state goes in a
   `Box` or lives on the stack only while it is used; a big stack frame overflows the watch's stack,
   which shows as a blank screen and then a rollback.
-- The full firmware nearly fills its 400 KB slot, so a new firmware feature must find room first.
+- The full firmware nearly fills its 388 KB slot, so a new firmware feature must find room first.
 - CI measures `docs/memory-map.md` with `tools/measure_memory.py`.
 
 ## The watch cannot be recovered by wire

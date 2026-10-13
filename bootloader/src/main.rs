@@ -1,7 +1,8 @@
 //! NeoTime's bootloader: swaps in a waiting update or the recovery firmware, then starts the firmware.
 //!
 //! Holding the button for five seconds at power-on opens a menu: start the firmware, roll back to
-//! the previous one, or install the recovery firmware from external flash. A firmware that does not mark itself booted before its first reset is rolled back. The
+//! the previous one, or install the recovery firmware from external flash. A firmware that does not mark itself booted before its first reset is rolled back,
+//! and one without a sound image header is replaced by the previous or the recovery firmware. The
 //! screen stays dark on an ordinary start and turns blue with a few words while the bootloader works.
 
 #![no_std]
@@ -30,10 +31,11 @@ use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565};
 use embedded_hal_bus::spi::RefCellDevice;
 use embedded_storage::nor_flash::{ErrorType, NorFlash, ReadNorFlash};
 use neotime_boot::{
-    copy_previous_into_update_slot, copy_recovery_into_update_slot, looks_like_firmware, status_colour,
-    BootNote, PreviousCopy, RecoveryCopy, BOOT_NOTE_ADDRESS, BOOT_STATE, FIRMWARE, FIRMWARE_UPDATE,
+    copy_image_into_update_slot, copy_previous_into_update_slot, firmware_is_runnable,
+    image_header::installable_image, slot_table::read_slots, status_colour, BootNote, ImageCopy, Slots,
+    BOOT_NOTE_ADDRESS, BOOT_STATE, DEFAULT_SLOTS, FIRMWARE, FIRMWARE_VECTOR_TABLE,
     MENU_BUTTON_HOLD_IN_MILLISECONDS, MENU_SELECT_HOLD_IN_MILLISECONDS, MENU_TIMEOUT_IN_MILLISECONDS,
-    PAGE_SIZE, PREVIOUS_FIRMWARE, RECOVERY_FIRMWARE, WATCHDOG_TIMEOUT_IN_TICKS,
+    PAGE_SIZE, SLOT_TABLE, WATCHDOG_TIMEOUT_IN_TICKS,
 };
 use neotime_button::Button;
 use neotime_external_flash::{BusyWait, ExternalFlash};
@@ -181,40 +183,27 @@ fn prepare_firmware<'d>(
         watchdog,
     }));
 
-    let mut recovery_marked = false;
+    let slots = read_slots(&mut BlockingPartition::new(
+        &internal_flash,
+        SLOT_TABLE.start,
+        SLOT_TABLE.size,
+    ))
+    .unwrap_or(DEFAULT_SLOTS);
+
+    let mut recovery_installed = false;
     let source = match choice {
         Choice::StartFirmware => None,
-        Choice::RollBack => Some((PREVIOUS_FIRMWARE.start, "Rolling back", "No previous firmware")),
-        Choice::InstallRecovery => Some((
-            RECOVERY_FIRMWARE.start,
-            "Installing recovery",
-            "No recovery found",
-        )),
+        Choice::RollBack => Some(Source::Previous),
+        Choice::InstallRecovery => Some(Source::Recovery),
     };
-    if let Some((image_start, doing, missing)) = source {
-        let has_image = external_flash
-            .lock(|flash| looks_like_firmware(&mut *flash.borrow_mut(), image_start))
-            .unwrap_or(false);
-        // Clearing the state first drops a pending swap's progress, so the copy is installed by a
-        // fresh swap; a revert would read the slot the copy has just overwritten.
-        let marked = has_image && {
-            status_page.show("Swapping", doing, "Do not unplug", delay);
-            let mut state_alignment = AlignedBuffer([0; 4]);
-            let mut boot_state = BlockingFirmwareState::new(
-                BlockingPartition::new(&internal_flash, BOOT_STATE.start, BOOT_STATE.size),
-                &mut state_alignment.0,
-            );
-            let copied = boot_state.mark_booted().is_ok()
-                && external_flash.lock(|flash| {
-                    let flash = &mut *flash.borrow_mut();
-                    match choice {
-                        Choice::RollBack => copy_previous_into_update_slot(flash) == Ok(PreviousCopy::Copied),
-                        _ => copy_recovery_into_update_slot(flash) == Ok(RecoveryCopy::Copied),
-                    }
-                });
-            copied && boot_state.mark_updated().is_ok()
+    if let Some(source) = source {
+        let (doing, missing) = match source {
+            Source::Previous => ("Rolling back", "No previous firmware"),
+            Source::Recovery => ("Installing recovery", "No recovery found"),
         };
-        recovery_marked = marked && choice == Choice::InstallRecovery;
+        status_page.show("Swapping", doing, "Do not unplug", delay);
+        let marked = mark_install(source, slots, &internal_flash, &external_flash);
+        recovery_installed = marked && source == Source::Recovery;
 
         if !marked {
             status_page.show("Unchanged", missing, "Starting firmware", delay);
@@ -227,18 +216,90 @@ fn prepare_firmware<'d>(
         status_page.show("Swapping", "Installing firmware", "Do not unplug", delay);
     }
 
-    let config = BootLoaderConfig {
-        active: BlockingPartition::new(&internal_flash, FIRMWARE.start, FIRMWARE.size),
-        dfu: BlockingPartition::new(&external_flash, FIRMWARE_UPDATE.start, FIRMWARE_UPDATE.size),
-        state: BlockingPartition::new(&internal_flash, BOOT_STATE.start, BOOT_STATE.size),
-    };
-    let _ = BootLoader::<{ PAGE_SIZE as usize }>::try_prepare(config);
+    prepare(slots, &internal_flash, &external_flash);
 
-    if recovery_marked {
+    let runnable = internal_flash
+        .lock(|flash| firmware_is_runnable(&mut *flash.borrow_mut()))
+        .unwrap_or(false);
+    if !runnable {
+        status_page.show("Damaged", "Repairing firmware", "Do not unplug", delay);
+        let repaired_by = [Source::Previous, Source::Recovery]
+            .into_iter()
+            .find(|&source| mark_install(source, slots, &internal_flash, &external_flash));
+        if repaired_by.is_none() {
+            // Nothing to install: wait for the watchdog, which tries again from the start.
+            status_page.show("Damaged", "No firmware found", "Send an update", delay);
+            loop {
+                cortex_m::asm::wfe();
+            }
+        }
+        prepare(slots, &internal_flash, &external_flash);
+        recovery_installed = repaired_by == Some(Source::Recovery);
+    }
+
+    if recovery_installed {
         BootNote::RecoveryInstalled
     } else {
         BootNote::Normal
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Source {
+    Previous,
+    Recovery,
+}
+
+/// Puts the previous or the recovery firmware in the update slot and marks a swap; false when it has no whole image.
+///
+/// Clearing the state first drops a pending swap's progress, so the copy is installed by a fresh swap;
+/// a revert would read the slot the copy has just overwritten.
+fn mark_install<InternalFlash: NorFlash, ExternalFlash: NorFlash>(
+    source: Source,
+    slots: Slots,
+    internal_flash: &Mutex<NoopRawMutex, RefCell<InternalFlash>>,
+    external_flash: &Mutex<NoopRawMutex, RefCell<ExternalFlash>>,
+) -> bool {
+    let region = match source {
+        Source::Previous => slots.previous_firmware(),
+        Source::Recovery => slots.recovery,
+    };
+    let has_image = external_flash
+        .lock(|flash| installable_image(&mut *flash.borrow_mut(), region.start, region.size))
+        .is_ok_and(|header| header.is_some());
+    if !has_image {
+        return false;
+    }
+
+    let mut state_alignment = AlignedBuffer([0; 4]);
+    let mut boot_state = BlockingFirmwareState::new(
+        BlockingPartition::new(internal_flash, BOOT_STATE.start, BOOT_STATE.size),
+        &mut state_alignment.0,
+    );
+    let copied = boot_state.mark_booted().is_ok()
+        && external_flash.lock(|flash| {
+            let flash = &mut *flash.borrow_mut();
+            let copy = match source {
+                Source::Previous => copy_previous_into_update_slot(flash, slots),
+                Source::Recovery => copy_image_into_update_slot(flash, slots, slots.recovery),
+            };
+            matches!(copy, Ok(ImageCopy::Copied))
+        });
+    copied && boot_state.mark_updated().is_ok()
+}
+
+/// Lets embassy-boot swap, roll back or do nothing, as `BOOT_STATE` says.
+fn prepare<InternalFlash: NorFlash, ExternalFlash: NorFlash>(
+    slots: Slots,
+    internal_flash: &Mutex<NoopRawMutex, RefCell<InternalFlash>>,
+    external_flash: &Mutex<NoopRawMutex, RefCell<ExternalFlash>>,
+) {
+    let config = BootLoaderConfig {
+        active: BlockingPartition::new(internal_flash, FIRMWARE.start, FIRMWARE.size),
+        dfu: BlockingPartition::new(external_flash, slots.update.start, slots.update.size),
+        state: BlockingPartition::new(internal_flash, BOOT_STATE.start, BOOT_STATE.size),
+    };
+    let _ = BootLoader::<{ PAGE_SIZE as usize }>::try_prepare(config);
 }
 
 fn boot_state_is<Flash: NorFlash>(
@@ -445,7 +506,7 @@ fn hand_over_to_firmware() -> ! {
         }
     }
 
-    unsafe { BootLoader::<{ PAGE_SIZE as usize }>.load(FIRMWARE.start) }
+    unsafe { BootLoader::<{ PAGE_SIZE as usize }>.load(FIRMWARE_VECTOR_TABLE) }
 }
 
 // ============================================================================

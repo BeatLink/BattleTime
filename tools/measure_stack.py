@@ -43,7 +43,7 @@ BOOT_COUNT = 0x2000FFF4
 # RESETREAS: a non-zero value means the chip reset during the run, which clears the stack pattern.
 RESET_REASON = 0x40000400
 PATTERN = 0xA5A5A5A5
-FIRMWARE_VECTOR_TABLE = 0x5000
+FIRMWARE_VECTOR_TABLE = 0x8100
 SECONDS_BEFORE_SWIPE = 4
 # Where the shared library goes, behind `NTLB` and its length; see services/packages/src/library.rs.
 SHARED_LIBRARY_START = 0x69000

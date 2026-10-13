@@ -118,7 +118,7 @@ NeoTime/
 ├── rustfmt.toml      formatting rules
 ├── flake.nix       development shell, simulator package and checks
 ├── rust-toolchain.toml  the Rust version and the watch's target
-├── boot/             neotime-boot: the flash layout and migration plan, shared by every program
+├── boot/             neotime-boot: the flash layout, image header, slot table and migration plan, shared by every program
 ├── bootloader/       neotime-bootloader: the bootloader program, built only for the watch
 ├── bootloader-updater/  neotime-bootloader-updater: a firmware update that replaces the bootloader
 ├── firmware/         neotime-firmware: the firmware program, built only for the watch
@@ -416,14 +416,17 @@ uploads an image and the bootloader that installs it. It knows nothing of the up
 
 - **`UpdateReceiver`** takes a firmware image with `begin(size)`, then `receive(chunk)` in order,
   then `finish()`. It writes through embassy-boot's `FirmwareUpdater` into the update slot, erasing
-  each sector just before writing it. `finish` checks that every byte arrived and that the image
-  starts with a firmware vector table, then marks a swap for the next reset. `read_back` lets the
+  each sector just before writing it. `finish` checks that every byte arrived, that the image's
+  header is sound and linked for `FIRMWARE`, and that its CRC-32 matches, then marks a swap for the
+  next reset. `read_back` lets the
   protocol above check its own checksum first.
 - **`confirm_running_firmware`** tells the bootloader the running firmware works. Until it is called
   the next reset rolls back, and no new update is accepted.
 - **`RecoveryReceiver`** writes the recovery firmware into its own slot the same way. It erases the
-  start of the slot first and writes the vector table last, so the bootloader never sees a
+  start of the slot first and writes the header's magic last, so the bootloader never sees a
   half-written recovery firmware.
+- **`change_slots`** moves the update and recovery slots by writing a slot table record, refused
+  while a firmware is on trial.
 
 ## Companion messages (`services/companion`)
 
@@ -590,7 +593,7 @@ watch face, the launcher and the apps through `neotime-app-host`:
   back while the shell is part way through a transition or a sliced redraw, or a finger is down,
   checking every 20 ms, and starts anyway after a second, as `neotime-foreground` decides. The
   DFU image check yields every 4 KB, so the radio's host side keeps running while it reads up to
-  400 KB back.
+  388 KB back.
 - **Transitions.** The launcher and apps slide up over what was open, and the button's way back
   or home slides down; a swipe right going back wipes in from the left. The shell draws a transition's steps, and
   the slices of a large redraw, one after another, yielding to the other tasks between them, before
@@ -846,7 +849,7 @@ Not done yet: heart rate, the notification count, navigation and the weather for
 as 0 or empty, and music and weather are lost on a restart; with a tap waking the screen, the
 touch panel stays awake while the screen is off.
 
-It takes 293 KB of the 400 KB firmware slot (the two accelerometers' configuration files are 12 KB
+It takes 293 KB of the 388 KB firmware slot (the two accelerometers' configuration files are 12 KB
 of it; the fonts are in the shared library) and 51 KB of static RAM, 37 KB of it heap: 16 KB for storage and 21 KB for
 the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
 the button and the backlight timeout all work.
@@ -867,11 +870,16 @@ emulator. See [updates.md](updates.md).
 The bootloader is built on [embassy-boot](https://embassy.dev). It swaps in a waiting firmware
 update from external flash, rolls back a new firmware that never marked itself booted, and installs
 the recovery firmware or the previous one from a menu the side button opens and drives. While it works it shows a blue
-status screen, and it leaves the firmware a note in RAM. It is about 15.7 KB of its 16 KB.
+status screen, and it leaves the firmware a note in RAM. It never starts a firmware whose image
+header is missing or damaged; it installs the previous or the recovery firmware instead. It is
+about 17.3 KB of its 20 KB.
 
-`neotime-boot` holds the flash layout: in internal flash the bootloader, its state page, the
-running firmware and the shared library apps draw on; in external flash the update slot, the
-recovery firmware and the file system. The firmware will use the same crate, so both sides agree.
+`neotime-boot` holds the flash layout: in internal flash the bootloader, the slot table, its state
+page, the running firmware and the shared library apps draw on; in external flash the default
+update and recovery slots and the file system. It also holds the 256-byte image header every
+firmware image starts with (`image_header`) and the slot table log that says where the external
+slots sit (`slot_table`). The bootloader, the firmware, the updater and the reloaders all build on
+it, so every side agrees; [bootloader.md](bootloader.md) has the details.
 
 See [bootloader.md](bootloader.md) for the layout, the start-up steps, recovery and what the firmware
 must do.

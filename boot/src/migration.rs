@@ -8,7 +8,7 @@
 //! because the bootloader's button hold can install the staged recovery firmware. The boot state
 //! is written last, so the first start installs the staged firmware on its own.
 
-use crate::{Region, BOOTLOADER, BOOT_STATE, FIRMWARE, FIRMWARE_UPDATE, PAGE_SIZE, RECOVERY_FIRMWARE};
+use crate::{Region, BOOTLOADER, BOOT_STATE, DEFAULT_SLOTS, FIRMWARE, PAGE_SIZE};
 
 // ============================================================================
 // What the reloader carries
@@ -37,7 +37,7 @@ impl PayloadSizes {
             return Err(PayloadProblem::FirmwareTooLarge);
         }
         if let Some(recovery_in_bytes) = self.recovery_in_bytes {
-            if recovery_in_bytes > RECOVERY_FIRMWARE.size {
+            if recovery_in_bytes > DEFAULT_SLOTS.recovery.size {
                 return Err(PayloadProblem::RecoveryTooLarge);
             }
         }
@@ -100,7 +100,7 @@ pub fn plan(sizes: PayloadSizes) -> ([Step; MOST_STEPS], usize) {
     if let Some(recovery_in_bytes) = sizes.recovery_in_bytes {
         steps[count] = Step::StageRecovery {
             region: Region {
-                start: RECOVERY_FIRMWARE.start,
+                start: DEFAULT_SLOTS.recovery.start,
                 size: whole_pages(recovery_in_bytes),
             },
         };
@@ -108,7 +108,7 @@ pub fn plan(sizes: PayloadSizes) -> ([Step; MOST_STEPS], usize) {
     }
     steps[count] = Step::StageFirmware {
         region: Region {
-            start: FIRMWARE_UPDATE.start,
+            start: DEFAULT_SLOTS.update.start,
             size: whole_pages(sizes.firmware_in_bytes),
         },
     };

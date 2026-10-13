@@ -42,8 +42,9 @@ One update, as the companion app and Gadgetbridge drive it:
    and answers success when the last byte is in.
 5. `VALIDATE_FIRMWARE` (4). The watch reads the whole slot back, computes the CRC-16 and compares
    it with the init packet's. A mismatch answers `CRC_ERROR` and forgets the upload.
-6. `ACTIVATE_IMAGE_AND_RESET` (5). The watch checks the image is whole and starts with a firmware
-   vector table, marks it for the bootloader, and resets. The bootloader swaps it in.
+6. `ACTIVATE_IMAGE_AND_RESET` (5). The watch checks the image is whole, that its
+   [header](bootloader.md#the-image-header) is sound and linked for `FIRMWARE`, and that the image's
+   CRC-32 matches the header's, marks it for the bootloader, and resets. The bootloader swaps it in.
 
 Responses are three bytes: 16, the command, and a result (1 success, 2 wrong state, 3 not
 supported, 4 too large, 5 CRC error, 6 failed). A command out of turn gets "wrong state"; an
@@ -51,7 +52,7 @@ image larger than the slot gets "too large" at step 1; a SoftDevice or bootloade
 supported".
 
 NeoTime's one addition is an image type for the recovery slot: `START_DFU` with type `0x08` (the
-standard types are 1, 2 and 4) sends the image to `RECOVERY_FIRMWARE` instead of the update slot.
+standard types are 1, 2 and 4) sends the image to the recovery slot instead of the update slot.
 The companion's command line tool sends it with `neotime recovery dist/recovery.zip`, which
 `tools/build_images.sh` packages; the running firmware stores the image and restarts, with nothing
 swapped, and the bootloader menu's Install recovery puts it in when it is needed.
@@ -72,11 +73,14 @@ would an InfiniTime release.
 
 - **`UpdateReceiver`** takes an image with `begin(size)`, `receive(chunk)` in order, and
   `finish()`, writing through embassy-boot's updater into the update slot and erasing each sector
-  just before it is first written. `finish` checks the size and the vector table and marks the
-  swap. `read_back` serves the protocol's CRC check.
-- **`RecoveryReceiver`** does the same into the recovery slot. It erases the first sector before
-  anything else and writes the 8-byte vector table last, so a half-written image never passes for
-  a whole one when the bootloader looks.
+  just before it is first written. `finish` checks the size, the header and the image's CRC-32,
+  and marks the swap. `read_back` serves the protocol's CRC check.
+- **`RecoveryReceiver`** does the same into the recovery slot, whose size it takes from the
+  partition it is given. It erases the first sector before anything else and writes the header's
+  first 8 bytes, its magic, last, so a half-written image never passes for a whole one when the
+  bootloader looks.
+- **`change_slots`** writes a new [slot table](bootloader.md#the-slot-table) record, and refuses
+  while a firmware is on trial.
 - **`confirm_running_firmware`** marks the running firmware as working. Until it is called the
   bootloader rolls the firmware back at the next reset, and no new update is accepted.
 - **`Receivers`** holds both behind the `UpdateTargets` trait, which the protocol drives with an
@@ -93,7 +97,7 @@ The first firmware (`firmware/`) does the little an update needs and not much mo
   advertising alone proves nothing, since the host is told it started whether or not anything
   went out on air;
 - confirms itself at start instead when a rollback could not help: when the replaced firmware,
-  which embassy-boot keeps one page into the update slot (`PREVIOUS_FIRMWARE`), is not a firmware
+  which embassy-boot keeps one page into the update slot (`Slots::previous_firmware`), has no sound header
   at all, as after a migration, or when the running image is the recovery image, which must stay;
 - serves the DFU service on every connection, shows progress on the screen, and resets when the
   protocol asks;
@@ -144,7 +148,7 @@ described in [bootloader.md](bootloader.md#the-status-screen).
 
 A recovery firmware installed by the button hold shows as recovery only until its next restart,
 because the note is not kept. A firmware built with `--features recovery` always does, and it is
-the image meant for `RECOVERY_FIRMWARE`. That build leaves out the shell, touch, the step counter
+the image meant for the recovery slot. That build leaves out the shell, touch, the step counter
 and the apps, keeping the status page, the file system, Bluetooth and DFU, so it is about 144 KB
 against the full firmware's 392 KB. `tools/build_images.sh` writes it to `dist/recovery.bin`.
 
@@ -169,8 +173,8 @@ The order comes from `neotime_boot::migration`, and its tests hold it to these r
 
 1. **Wait for the charger.** It does nothing until power is present on P0.19, and shows why.
 2. **Check its cargo.** Each image carries a CRC-32 from the build; a damaged download stops here.
-3. **Stage the recovery firmware** in `RECOVERY_FIRMWARE` and **the firmware** in
-   `FIRMWARE_UPDATE`, both in the external flash. The old system still starts during this; it has
+3. **Stage the recovery firmware** in the default recovery slot and **the firmware** in the
+   default update slot, both in the external flash. The old system still starts during this; it has
    only lost its own files in the external flash.
 4. **Write the bootloader** over the first pages of internal flash. From the first erase until the
    last word is in place, nothing on the watch starts. The bootloader is about 13 KB, four pages:
@@ -339,9 +343,9 @@ read the replaced image from the wrong page after a swap. The plan:
 1. **Boot chain.** Flash the bootloader at 0 and the firmware at `FIRMWARE.start`. Run. The
    firmware's alive marker (`FIRMWARE_ALIVE_MARKER`) must hold `FIRMWARE_ALIVE_MAGIC`, and
    `BOOT_STATE` must read as booted after the firmware confirms itself.
-2. **Update.** Place a second firmware in `FIRMWARE_UPDATE`, mark the swap, reset. The bootloader
+2. **Update.** Place a second firmware in the update slot, mark the swap, reset. The bootloader
    must swap it in and start it; without a confirmation the next reset must swap the old one back.
-3. **Recovery.** Place an image in `RECOVERY_FIRMWARE`, erase `FIRMWARE`, hold the button through
+3. **Recovery.** Place an image in the recovery slot, erase `FIRMWARE`, hold the button through
    two resets. The recovery image must be running afterwards.
 4. **Migration from wasp-os.** Start MBR, S112 and wasp-os's bootloader with the reloader in the
    app slot and the charger present. Afterwards the bootloader must be at 0, the staged images in

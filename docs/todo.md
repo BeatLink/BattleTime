@@ -175,6 +175,13 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Async flash in the firmware.** Flash writes block the Bluetooth host for up to a sector
   erase at a time, because the display shares the SPI bus and its driver is blocking.
 - [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.
+- [ ] **Move the slots from the companion.** `neotime_updates::change_slots` writes the
+  [slot table](bootloader.md#the-slot-table), but no Bluetooth command calls it. Add one to
+  `services/companion` and the companion's command line, so the recovery slot can be sized to the
+  recovery image and the rest of the first 1 MB given back.
+- [ ] **Move the watch onto the 20 KB layout.** `dist/bootloader-updater-from-first-layout.zip`
+  has only run in the emulator ([bootloader.md](bootloader.md#moving-a-watch-from-the-first-layout)).
+  Send it to the watch on its charger, then the full firmware from the recovery firmware.
 - [ ] **Clippy fails on master.** CI's `Lints and types` and `Watch lints` jobs are red since run
   38325871913: a reference that is created and dereferenced at once in `runtime/src/verifier.rs`
   (lines 64, 87 and 92) and `firmware/src/main.rs` (lines 757 and 765), and a needless `mut` in
@@ -553,7 +560,7 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **Give up on a stalled update.** InfiniTime aborts an update when no packet has arrived for
   10 seconds; NeoTime only aborts when the link drops.
 - [ ] **A swap progress bar on the bootloader screen.** It says "Installing firmware" for up to 30
-  seconds with nothing moving. Its 16 KB has about 2 KB to spare.
+  seconds with nothing moving. Its 20 KB has about 2.7 KB to spare.
 - [ ] **Updates on only until the next reset,** as a third choice beside the on and off switch.
 - [ ] **Show the bootloader version** in the system info app. The bootloader keeps no version
   yet, so it needs one at a fixed place the firmware can read, and an update of the bootloader on

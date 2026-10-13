@@ -9,17 +9,29 @@ cd "$(dirname "$0")/.."
 dist=dist
 mkdir -p "$dist"
 
+# Every image the NeoTime bootloader runs carries a header naming its type, version, commit and CRC.
+version=$(sed -n 's/^version = "\(.*\)"/\1/p' firmware/Cargo.toml | head -1)
+commit=$(git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)
+if ! git diff --quiet HEAD 2>/dev/null; then commit="$commit*"; fi
+commit_time=$(git log -1 --format=%ct 2>/dev/null || echo 0)
+add_header() { # type, code .bin, output .bin
+  python3 -I tools/image_header.py --type "$1" --version "$version" --commit "$commit" --build-time "$commit_time" "$2" "$3"
+  rm "$2"
+}
+
 echo "bootloader"
 (cd bootloader && cargo objcopy -q --release -- -O binary "../$dist/bootloader.bin")
 
 echo "firmware"
-(cd firmware && cargo objcopy -q --release -- -O binary "../$dist/firmware.bin")
+(cd firmware && cargo objcopy -q --release -- -O binary "../$dist/firmware.code.bin")
+add_header firmware "$dist/firmware.code.bin" "$dist/firmware.bin"
 # Its symbols, which the emulator suites look up to poke statics; the later builds share its target folder.
 cp firmware/target/thumbv7em-none-eabihf/release/neotime-firmware "$dist/firmware.elf"
 python3 -I tools/package_dfu.py "$dist/firmware.bin" "$dist/firmware.zip"
 
 echo "recovery firmware (the status page, Bluetooth and updates, without the shell)"
-(cd firmware && cargo objcopy -q --release --features recovery -- -O binary "../$dist/recovery.bin")
+(cd firmware && cargo objcopy -q --release --features recovery -- -O binary "../$dist/recovery.code.bin")
+add_header recovery "$dist/recovery.code.bin" "$dist/recovery.bin"
 python3 -I tools/package_dfu.py "$dist/recovery.bin" "$dist/recovery.zip"
 
 echo "rehearsal (an app for wasp-os that writes no flash)"
@@ -33,8 +45,14 @@ python3 -I -c "import random; random.seed(1); open('$dist/rehearsal-upload.bin',
 python3 -I tools/package_dfu.py "$dist/rehearsal-upload.bin" "$dist/rehearsal-upload.zip"
 
 echo "bootloader updater (a firmware update that installs dist/bootloader.bin on a watch already on NeoTime)"
-(cd bootloader-updater && NEOTIME_NEW_BOOTLOADER_BIN="$PWD/../$dist/bootloader.bin" cargo objcopy -q --release -- -O binary "../$dist/bootloader-updater.bin")
+(cd bootloader-updater && NEOTIME_NEW_BOOTLOADER_BIN="$PWD/../$dist/bootloader.bin" cargo objcopy -q --release -- -O binary "../$dist/bootloader-updater.code.bin")
+add_header bootloader-updater "$dist/bootloader-updater.code.bin" "$dist/bootloader-updater.bin"
 python3 -I tools/package_dfu.py "$dist/bootloader-updater.bin" "$dist/bootloader-updater.zip"
+
+echo "bootloader updater from the first layout (16 KB bootloader, firmware at 0x5000; carries the recovery firmware)"
+(cd bootloader-updater && NEOTIME_NEW_BOOTLOADER_BIN="$PWD/../$dist/bootloader.bin" NEOTIME_RECOVERY_BIN="$PWD/../$dist/recovery.bin" \
+  CARGO_TARGET_DIR=target/from-first-layout cargo objcopy -q --release --features from-first-layout -- -O binary "../$dist/bootloader-updater-from-first-layout.bin")
+python3 -I tools/package_dfu.py "$dist/bootloader-updater-from-first-layout.bin" "$dist/bootloader-updater-from-first-layout.zip"
 
 # The full firmware does not fit beside the bootloader in wasp-os's app slot, so the reloader installs
 # the recovery firmware in both places, and the full firmware follows as an ordinary update.

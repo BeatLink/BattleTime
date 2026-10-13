@@ -27,8 +27,8 @@ import sys
 REPOSITORY = pathlib.Path(__file__).resolve().parent.parent
 FIRMWARE = REPOSITORY / "firmware"
 MEMORY_MAP = REPOSITORY / "docs" / "memory-map.md"
-FIRMWARE_START = 0x5000
-FIRMWARE_SLOT_BYTES = 400 * 1024
+FIRMWARE_START = 0x8100
+FIRMWARE_SLOT_BYTES = 388 * 1024 - 256
 RAM_START = 0x2000_0000
 # The alive marker keeps the last 16 bytes of RAM.
 RAM_FOR_THE_FIRMWARE = 64 * 1024 - 16
@@ -266,7 +266,7 @@ def firmware_table(full, recovery):
         lines.append(f"| {name} | {kilobytes(full['flash'].get(name, 0))} | {kilobytes(recovery['flash'].get(name, 0))} |")
     lines.append(f"| **Used** | **{kilobytes(full['flash_used'])}** | **{kilobytes(recovery['flash_used'])}** |")
     free = [FIRMWARE_SLOT_BYTES - build["flash_used"] for build in (full, recovery)]
-    lines.append(f"| Free of 400 KB | {kilobytes(free[0])} | {kilobytes(free[1])} |")
+    lines.append(f"| Free of the 388 KB slot, after its header | {kilobytes(free[0])} | {kilobytes(free[1])} |")
     return lines
 
 

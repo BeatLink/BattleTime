@@ -2,6 +2,7 @@
 Documentation     Shared keywords for running NeoTime's images on the PineTime emulator.
 ...               Set EMULATOR to the PineTimeEmulator checkout and DIST to the folder tools/build_images.sh fills.
 Resource          ${RENODEKEYWORDS}
+Library           test_images.py
 
 *** Variables ***
 # The projects folder is the nearest ancestor holding the emulator, which works from a worktree too.
@@ -17,8 +18,9 @@ ${FIRMWARE_BIN}           ${DIST}/firmware.bin
 ${RECOVERY_BIN}           ${DIST}/recovery.bin
 
 # From boot/src/lib.rs.
-${BOOT_STATE}             0x4000
-${FIRMWARE_START}         0x5000
+${SLOT_TABLE}             0x5000
+${BOOT_STATE}             0x7000
+${FIRMWARE_START}         0x8000
 ${EXTERNAL_FLASH}         0x60000000
 ${UPDATE_SLOT}            ${{ 0x60000000 + 0x000000 }}
 ${RECOVERY_SLOT}          ${{ 0x60000000 + 0x065000 }}
@@ -89,8 +91,7 @@ Run For
     Execute Command           emulation RunFor "${seconds}"
 
 Write A Firmware That Never Confirms Itself
-    [Documentation]           Two words of vector table and a branch to self at the given address: the bootloader starts it, it never confirms, the watchdog resets.
+    [Documentation]           A sound header, two words of vector table and a branch to self at the given address: the bootloader starts it, it never confirms, the watchdog resets.
     [Arguments]    ${address}
-    Execute Command           sysbus WriteDoubleWord ${address} 0x2000FFF0
-    Execute Command           sysbus WriteDoubleWord ${{ ${address} + 4 }} ${{ ${FIRMWARE_START} + 9 }}
-    Execute Command           sysbus WriteDoubleWord ${{ ${address} + 8 }} 0xE7FEE7FE
+    ${path}=                  Write Never Confirming Image    ${OUTPUT DIR}/never-confirms.bin
+    Execute Command           sysbus LoadBinary @${path} ${address}

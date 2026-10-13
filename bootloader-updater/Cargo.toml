@@ -20,7 +20,12 @@ embedded-storage = "0.3"
 panic-halt = "1.0"
 
 neotime-boot = { path = "../boot" }
+neotime-external-flash = { path = "../drivers/external_flash", features = ["cortex-m"] }
 neotime-status-screen = { path = "../drivers/status_screen" }
+
+[features]
+# Moves a watch from the first layout (16 KB bootloader, firmware at 0x5000) to the current one.
+from-first-layout = []
 
 [build-dependencies]
 neotime-boot = { path = "../boot" }

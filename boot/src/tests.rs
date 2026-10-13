@@ -69,12 +69,27 @@ impl NorFlash for FakeFlash {
     }
 }
 
-fn vector_table(stack_pointer: u32, reset_handler: u32) -> Vec<u8> {
-    [stack_pointer.to_le_bytes(), reset_handler.to_le_bytes()].concat()
+/// A firmware image as `tools/image_header.py` writes it: a sound header, then `code_size` bytes of code.
+fn image(image_type: image_header::ImageType, code_size: usize) -> Vec<u8> {
+    let code: Vec<u8> = (0..code_size).map(|index| (index % 251) as u8).collect();
+    let header = image_header::ImageHeader {
+        image_type,
+        version: image_header::Version {
+            major: 0,
+            minor: 1,
+            patch: 0,
+        },
+        load_address: FIRMWARE_VECTOR_TABLE,
+        image_size_in_bytes: code_size as u32,
+        image_crc32: crate::migration::crc32(crate::migration::CRC32_INITIAL, &code),
+        build_time_in_seconds: 1_760_000_000,
+        commit: *b"1b19aed*",
+    };
+    [header.encode().to_vec(), code].concat()
 }
 
-fn valid_vector_table() -> Vec<u8> {
-    vector_table(RAM.end(), FIRMWARE.start + 0x101)
+fn firmware_image(code_size: usize) -> Vec<u8> {
+    image(image_header::ImageType::Firmware, code_size)
 }
 
 // ============================================================================
@@ -83,106 +98,482 @@ fn valid_vector_table() -> Vec<u8> {
 
 #[test]
 fn internal_regions_follow_each_other_without_gaps() {
-    assert_eq!(BOOT_STATE.start, BOOTLOADER.end());
+    assert_eq!(SLOT_TABLE.start, BOOTLOADER.end());
+    assert_eq!(BOOT_STATE.start, SLOT_TABLE.end());
     assert_eq!(FIRMWARE.start, BOOT_STATE.end());
     assert_eq!(SHARED_LIBRARY.start, FIRMWARE.end());
 }
 
 #[test]
-fn firmware_starts_where_the_reloader_expects_it() {
+fn the_bootloader_block_fills_the_first_32_kb() {
     assert_eq!(BOOTLOADER.start, 0x0000);
-    assert_eq!(BOOT_STATE.start, 0x4000);
-    assert_eq!(FIRMWARE.start, 0x5000);
+    assert_eq!(SLOT_TABLE.start, 0x5000);
+    assert_eq!(BOOT_STATE.start, 0x7000);
+    assert_eq!(FIRMWARE.start, 0x8000);
+    assert_eq!(FIRMWARE_VECTOR_TABLE, 0x8100);
+    assert_eq!(FIRMWARE.size, 388 * 1024);
+}
+
+#[test]
+fn the_shared_library_stays_where_apps_expect_it() {
+    assert_eq!(SHARED_LIBRARY.start, 0x6_9000);
+    assert_eq!(SHARED_LIBRARY.size, 92 * 1024);
 }
 
 #[test]
 fn the_replaced_firmware_fits_in_the_update_slot_one_page_up() {
-    assert_eq!(PREVIOUS_FIRMWARE.start, FIRMWARE_UPDATE.start + PAGE_SIZE);
-    assert_eq!(PREVIOUS_FIRMWARE.end(), FIRMWARE_UPDATE.end());
+    let previous = DEFAULT_SLOTS.previous_firmware();
+
+    assert_eq!(previous.start, DEFAULT_SLOTS.update.start + PAGE_SIZE);
+    assert_eq!(previous.end(), DEFAULT_SLOTS.update.end());
 }
 
 #[test]
-fn update_slot_has_one_spare_page_for_the_swap() {
-    assert_eq!(FIRMWARE_UPDATE.size, FIRMWARE.size + PAGE_SIZE);
+fn the_default_slots_keep_the_recovery_firmware_where_the_first_layout_had_it() {
+    assert_eq!(DEFAULT_SLOTS.update.start, 0x00_0000);
+    assert_eq!(DEFAULT_SLOTS.update.size, FIRMWARE.size + PAGE_SIZE);
+    assert_eq!(DEFAULT_SLOTS.recovery.start, 0x06_5000);
+    assert!(DEFAULT_SLOTS.recovery.end() <= FILE_SYSTEM.start);
+    assert_eq!(FILE_SYSTEM.start, 0x10_0000);
 }
 
 // ============================================================================
-// Firmware image check
+// Slot rules
 // ============================================================================
 
-#[test]
-fn accepts_an_image_with_a_valid_vector_table() {
-    let mut flash = FakeFlash::erased(PAGE_SIZE);
-    flash.put(0, &valid_vector_table());
+mod slot_rules {
+    use super::super::*;
 
-    assert_eq!(looks_like_firmware(&mut flash, 0), Ok(true));
-}
+    fn with_recovery(start: u32, size: u32) -> Slots {
+        Slots {
+            recovery: Region { start, size },
+            ..DEFAULT_SLOTS
+        }
+    }
 
-#[test]
-fn rejects_erased_flash() {
-    let mut flash = FakeFlash::erased(PAGE_SIZE);
+    #[test]
+    fn the_default_slots_are_sound() {
+        assert_eq!(DEFAULT_SLOTS.check(), Ok(()));
+    }
 
-    assert_eq!(looks_like_firmware(&mut flash, 0), Ok(false));
-}
+    #[test]
+    fn a_recovery_slot_sized_to_its_image_is_sound() {
+        assert_eq!(with_recovery(0x6_3000, 172 * 1024).check(), Ok(()));
+    }
 
-#[test]
-fn rejects_an_image_linked_for_another_address() {
-    let mut flash = FakeFlash::erased(PAGE_SIZE);
-    flash.put(0, &vector_table(RAM.end(), SHARED_LIBRARY.start + 0x101));
+    #[test]
+    fn slots_must_be_whole_pages() {
+        assert_eq!(
+            with_recovery(0x6_3001, 172 * 1024).check(),
+            Err(SlotProblem::NotWholePages)
+        );
+        assert_eq!(
+            with_recovery(0x6_3000, 172 * 1024 + 1).check(),
+            Err(SlotProblem::NotWholePages)
+        );
+    }
 
-    assert_eq!(looks_like_firmware(&mut flash, 0), Ok(false));
-}
+    #[test]
+    fn slots_never_reach_into_the_file_system() {
+        assert_eq!(
+            with_recovery(FILE_SYSTEM.start - PAGE_SIZE, 172 * 1024).check(),
+            Err(SlotProblem::OutsideSlotArea)
+        );
+        assert_eq!(
+            with_recovery(0xFFFF_F000, 172 * 1024).check(),
+            Err(SlotProblem::OutsideSlotArea)
+        );
+    }
 
-#[test]
-fn rejects_a_reset_handler_without_the_thumb_bit() {
-    let mut flash = FakeFlash::erased(PAGE_SIZE);
-    flash.put(0, &vector_table(RAM.end(), FIRMWARE.start + 0x100));
+    #[test]
+    fn the_update_slot_must_be_one_page_more_than_the_firmware() {
+        let slots = Slots {
+            update: Region {
+                start: 0,
+                size: FIRMWARE.size,
+            },
+            ..DEFAULT_SLOTS
+        };
 
-    assert_eq!(looks_like_firmware(&mut flash, 0), Ok(false));
+        assert_eq!(
+            slots.check(),
+            Err(SlotProblem::UpdateSlotNotFirmwareSizePlusOnePage)
+        );
+    }
+
+    #[test]
+    fn the_recovery_slot_holds_at_least_a_small_firmware_and_at_most_a_full_one() {
+        assert_eq!(
+            with_recovery(0x6_3000, PAGE_SIZE).check(),
+            Err(SlotProblem::RecoverySlotTooSmall)
+        );
+        assert_eq!(
+            with_recovery(0x6_3000, FIRMWARE.size + PAGE_SIZE).check(),
+            Err(SlotProblem::RecoverySlotTooLarge)
+        );
+    }
+
+    #[test]
+    fn the_slots_must_not_overlap() {
+        assert_eq!(
+            with_recovery(0x6_1000, 172 * 1024).check(),
+            Err(SlotProblem::Overlapping)
+        );
+    }
 }
 
 // ============================================================================
-// Recovery install
+// Image headers
+// ============================================================================
+
+mod image_headers {
+    use super::super::image_header::*;
+    use super::*;
+
+    fn header_of(image: &[u8]) -> [u8; IMAGE_HEADER_SIZE as usize] {
+        image[..IMAGE_HEADER_SIZE as usize].try_into().unwrap()
+    }
+
+    #[test]
+    fn a_header_reads_back_as_itself() {
+        let image = firmware_image(1000);
+
+        let header = ImageHeader::decode(&header_of(&image)).unwrap();
+
+        assert_eq!(header.image_type, ImageType::Firmware);
+        assert_eq!(header.load_address, FIRMWARE_VECTOR_TABLE);
+        assert_eq!(header.image_size_in_bytes, 1000);
+        assert_eq!(header.build_time_in_seconds, 1_760_000_000);
+        assert_eq!(&header.commit, b"1b19aed*");
+        assert_eq!(header.encode(), header_of(&image));
+    }
+
+    /// The same bytes `tools/image_header.py --self-test` checks, so the tool and the watch agree.
+    #[test]
+    fn the_header_matches_the_one_the_packaging_tool_writes() {
+        let header = ImageHeader {
+            image_type: ImageType::Recovery,
+            version: Version {
+                major: 1,
+                minor: 2,
+                patch: 3,
+            },
+            load_address: 0x8100,
+            image_size_in_bytes: 9,
+            image_crc32: crate::migration::crc32(crate::migration::CRC32_INITIAL, b"123456789"),
+            build_time_in_seconds: 1_760_000_000,
+            commit: *b"abcdef0\0",
+        };
+
+        let bytes = header.encode();
+
+        assert_eq!(&bytes[..4], b"NTIM");
+        assert_eq!(u32::from_le_bytes(bytes[20..24].try_into().unwrap()), 0xCBF4_3926);
+        assert_eq!(
+            u32::from_le_bytes(bytes[252..].try_into().unwrap()),
+            PACKAGING_TOOL_HEADER_CRC
+        );
+    }
+
+    #[test]
+    fn erased_flash_has_no_header() {
+        assert_eq!(ImageHeader::decode(&[0xFF; IMAGE_HEADER_SIZE as usize]), None);
+    }
+
+    #[test]
+    fn a_changed_byte_spoils_the_header() {
+        let mut bytes = header_of(&firmware_image(1000));
+        bytes[16] ^= 1;
+
+        assert_eq!(ImageHeader::decode(&bytes), None);
+    }
+
+    #[test]
+    fn an_unknown_image_type_is_refused() {
+        let mut header = ImageHeader::decode(&header_of(&firmware_image(10)))
+            .unwrap()
+            .encode();
+        header[8] = 9;
+        let crc = crate::migration::crc32(crate::migration::CRC32_INITIAL, &header[..252]);
+        header[252..].copy_from_slice(&crc.to_le_bytes());
+
+        assert_eq!(ImageHeader::decode(&header), None);
+    }
+
+    #[test]
+    fn an_image_linked_for_the_first_layout_does_not_run_as_firmware() {
+        let mut header = ImageHeader::decode(&header_of(&firmware_image(10))).unwrap();
+        header.load_address = 0x5000;
+
+        assert!(!header.runs_as_firmware());
+    }
+
+    #[test]
+    fn an_image_larger_than_the_firmware_slot_does_not_run_as_firmware() {
+        let mut header = ImageHeader::decode(&header_of(&firmware_image(10))).unwrap();
+        header.image_size_in_bytes = FIRMWARE.size - IMAGE_HEADER_SIZE + 1;
+
+        assert!(!header.runs_as_firmware());
+    }
+
+    #[test]
+    fn a_whole_image_is_installable() {
+        let mut flash = FakeFlash::erased(PAGE_SIZE * 4);
+        flash.put(0, &firmware_image(5000));
+
+        let header = installable_image(&mut flash, 0, PAGE_SIZE * 4).unwrap();
+
+        assert_eq!(header.map(|header| header.image_size_in_bytes), Some(5000));
+    }
+
+    #[test]
+    fn a_damaged_image_is_not_installable() {
+        let mut flash = FakeFlash::erased(PAGE_SIZE * 4);
+        let mut image = firmware_image(5000);
+        image[3000] ^= 0x10;
+        flash.put(0, &image);
+
+        assert_eq!(installable_image(&mut flash, 0, PAGE_SIZE * 4), Ok(None));
+    }
+
+    #[test]
+    fn an_image_longer_than_its_slot_is_not_installable() {
+        let mut flash = FakeFlash::erased(PAGE_SIZE * 4);
+        flash.put(0, &firmware_image(5000));
+
+        assert_eq!(installable_image(&mut flash, 0, PAGE_SIZE), Ok(None));
+    }
+
+    #[test]
+    fn the_firmware_slot_is_runnable_only_with_a_sound_header() {
+        let mut flash = FakeFlash::erased(INTERNAL_FLASH_SIZE);
+        assert_eq!(firmware_is_runnable(&mut flash), Ok(false));
+
+        flash.put(FIRMWARE.start, &firmware_image(100));
+        assert_eq!(firmware_is_runnable(&mut flash), Ok(true));
+    }
+}
+
+/// The header CRC `tools/image_header.py --self-test` expects for the same fields.
+const PACKAGING_TOOL_HEADER_CRC: u32 = 0x0479_BFAA;
+
+// ============================================================================
+// Slot table
+// ============================================================================
+
+mod slot_table_log {
+    use super::super::slot_table::*;
+    use super::*;
+
+    fn table() -> FakeFlash {
+        FakeFlash::erased(SLOT_TABLE.size)
+    }
+
+    fn recovery_at(start: u32) -> Slots {
+        Slots {
+            recovery: Region {
+                start,
+                size: 172 * 1024,
+            },
+            ..DEFAULT_SLOTS
+        }
+    }
+
+    #[test]
+    fn an_empty_table_reads_as_the_default_slots() {
+        assert_eq!(read_slots(&mut table()), Ok(DEFAULT_SLOTS));
+    }
+
+    #[test]
+    fn a_written_change_reads_back() {
+        let mut table = table();
+
+        write_slots(&mut table, recovery_at(0x6_3000)).unwrap();
+
+        assert_eq!(read_slots(&mut table), Ok(recovery_at(0x6_3000)));
+    }
+
+    #[test]
+    fn the_newest_record_wins() {
+        let mut table = table();
+
+        write_slots(&mut table, recovery_at(0x6_3000)).unwrap();
+        write_slots(&mut table, recovery_at(0x8_0000)).unwrap();
+
+        assert_eq!(read_slots(&mut table), Ok(recovery_at(0x8_0000)));
+        assert_eq!(table.erase_count, 1);
+    }
+
+    #[test]
+    fn a_full_page_moves_the_log_to_the_other_page() {
+        let mut table = table();
+        let records_per_page = PAGE_SIZE / RECORD_SIZE;
+
+        for index in 0..records_per_page + 1 {
+            write_slots(&mut table, recovery_at(0x6_3000 + (index % 2) * 0x1_D000)).unwrap();
+        }
+
+        assert_eq!(
+            read_slots(&mut table),
+            Ok(recovery_at(0x6_3000 + (records_per_page % 2) * 0x1_D000))
+        );
+        assert_ne!(table.bytes_at(PAGE_SIZE, 4), &[0xFF; 4]);
+    }
+
+    #[test]
+    fn filling_the_second_page_reuses_the_first() {
+        let mut table = table();
+        let records_per_page = PAGE_SIZE / RECORD_SIZE;
+
+        for index in 0..2 * records_per_page + 1 {
+            write_slots(&mut table, recovery_at(0x6_3000 + (index % 3) * 0x1000)).unwrap();
+        }
+
+        let last = 2 * records_per_page;
+        assert_eq!(
+            read_slots(&mut table),
+            Ok(recovery_at(0x6_3000 + (last % 3) * 0x1000))
+        );
+        assert_eq!(table.erase_count, 3);
+    }
+
+    #[test]
+    fn a_record_cut_short_by_a_power_cut_leaves_the_one_before() {
+        let mut table = table();
+        write_slots(&mut table, recovery_at(0x6_3000)).unwrap();
+        let mut cut_short = table.bytes_at(0, RECORD_SIZE as usize).to_vec();
+        cut_short[28..].fill(0xFF);
+        cut_short[8..12].copy_from_slice(&0x8_0000u32.to_le_bytes());
+        table.put(RECORD_SIZE, &cut_short);
+
+        assert_eq!(read_slots(&mut table), Ok(recovery_at(0x6_3000)));
+
+        write_slots(&mut table, recovery_at(0x9_0000)).unwrap();
+        assert_eq!(read_slots(&mut table), Ok(recovery_at(0x9_0000)));
+    }
+
+    #[test]
+    fn code_left_in_the_pages_reads_as_the_default_slots_and_is_written_over() {
+        let mut table = table();
+        let code: Vec<u8> = (0..SLOT_TABLE.size)
+            .map(|index| (index * 7 % 256) as u8)
+            .collect();
+        table.put(0, &code);
+
+        assert_eq!(read_slots(&mut table), Ok(DEFAULT_SLOTS));
+
+        write_slots(&mut table, recovery_at(0x6_3000)).unwrap();
+        assert_eq!(read_slots(&mut table), Ok(recovery_at(0x6_3000)));
+    }
+
+    #[test]
+    fn unsound_slots_are_never_written() {
+        let mut table = table();
+        let overlapping = recovery_at(0x1000);
+
+        assert_eq!(
+            write_slots(&mut table, overlapping),
+            Err(SlotTableError::Unsound(SlotProblem::Overlapping))
+        );
+        assert_eq!(table.erase_count, 0);
+        assert_eq!(read_slots(&mut table), Ok(DEFAULT_SLOTS));
+    }
+}
+
+// ============================================================================
+// Installing the recovery or the previous firmware
 // ============================================================================
 
 #[test]
 fn copies_the_recovery_image_into_the_update_slot() {
     let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
-    let image: Vec<u8> = valid_vector_table()
-        .into_iter()
-        .chain((0..5000).map(|index| index as u8))
-        .collect();
-    flash.put(RECOVERY_FIRMWARE.start, &image);
-    flash.put(FIRMWARE_UPDATE.start, &[0; 64]);
+    let recovery = image(image_header::ImageType::Recovery, 5000);
+    flash.put(DEFAULT_SLOTS.recovery.start, &recovery);
+    flash.put(DEFAULT_SLOTS.update.start + 8192, &[0; 64]);
 
-    let result = copy_recovery_into_update_slot(&mut flash);
+    let result = copy_image_into_update_slot(&mut flash, DEFAULT_SLOTS, DEFAULT_SLOTS.recovery);
 
-    assert_eq!(result, Ok(RecoveryCopy::Copied));
-    assert_eq!(flash.bytes_at(FIRMWARE_UPDATE.start, image.len()), &image[..]);
+    assert_eq!(result, Ok(ImageCopy::Copied));
+    assert_eq!(
+        flash.bytes_at(DEFAULT_SLOTS.update.start, recovery.len()),
+        &recovery[..]
+    );
     assert!(flash
-        .bytes_at(FIRMWARE_UPDATE.start + image.len() as u32, 64)
+        .bytes_at(DEFAULT_SLOTS.update.start + recovery.len() as u32, 64)
         .iter()
         .all(|byte| *byte == 0xFF));
 }
 
 #[test]
+fn copies_from_wherever_the_slot_table_puts_the_recovery_slot() {
+    let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
+    let slots = Slots {
+        recovery: Region {
+            start: 0x8_0000,
+            size: 172 * 1024,
+        },
+        ..DEFAULT_SLOTS
+    };
+    let recovery = image(image_header::ImageType::Recovery, 5000);
+    flash.put(slots.recovery.start, &recovery);
+
+    assert_eq!(
+        copy_image_into_update_slot(&mut flash, slots, slots.recovery),
+        Ok(ImageCopy::Copied)
+    );
+    assert_eq!(flash.bytes_at(slots.update.start, recovery.len()), &recovery[..]);
+}
+
+#[test]
+fn a_damaged_recovery_image_leaves_the_update_slot_alone() {
+    let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
+    let mut recovery = image(image_header::ImageType::Recovery, 5000);
+    recovery[4000] ^= 1;
+    flash.put(DEFAULT_SLOTS.recovery.start, &recovery);
+    flash.put(DEFAULT_SLOTS.update.start, &[0; 64]);
+
+    let result = copy_image_into_update_slot(&mut flash, DEFAULT_SLOTS, DEFAULT_SLOTS.recovery);
+
+    assert_eq!(result, Ok(ImageCopy::NoImage));
+    assert_eq!(flash.erase_count, 0);
+    assert_eq!(flash.bytes_at(DEFAULT_SLOTS.update.start, 64), &[0; 64]);
+}
+
+#[test]
+fn a_first_layout_recovery_image_is_not_installed() {
+    let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
+    // What the first layout's recovery slot held: a bare vector table for 0x5000, with no header.
+    flash.put(
+        DEFAULT_SLOTS.recovery.start,
+        &[0x00, 0x00, 0x01, 0x20, 0x01, 0x51, 0x00, 0x00],
+    );
+
+    let result = copy_image_into_update_slot(&mut flash, DEFAULT_SLOTS, DEFAULT_SLOTS.recovery);
+
+    assert_eq!(result, Ok(ImageCopy::NoImage));
+}
+
+#[test]
 fn moves_the_previous_firmware_down_a_page_to_the_start_of_the_update_slot() {
     let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
-    // Longer than a page, with an erased stretch, filling the whole slot, as a real previous firmware might.
-    let mut image: Vec<u8> = valid_vector_table()
-        .into_iter()
-        .chain((0..FIRMWARE.size as usize - 8).map(|index| (index % 251) as u8))
-        .collect();
-    image[6000..9000].fill(0xFF);
-    flash.put(PREVIOUS_FIRMWARE.start, &image);
-    flash.put(FIRMWARE_UPDATE.start, &[0x55; 64]);
+    // Filling the whole slot, with an erased stretch, as a real previous firmware might.
+    let mut previous = firmware_image(FIRMWARE.size as usize - image_header::IMAGE_HEADER_SIZE as usize);
+    previous[6000..9000].fill(0xFF);
+    let code_crc = crate::migration::crc32(crate::migration::CRC32_INITIAL, &previous[256..]);
+    let mut header = image_header::ImageHeader::decode(&previous[..256].try_into().unwrap()).unwrap();
+    header.image_crc32 = code_crc;
+    previous[..256].copy_from_slice(&header.encode());
+    flash.put(DEFAULT_SLOTS.previous_firmware().start, &previous);
 
-    let result = copy_previous_into_update_slot(&mut flash);
+    let result = copy_previous_into_update_slot(&mut flash, DEFAULT_SLOTS);
 
-    assert_eq!(result, Ok(PreviousCopy::Copied));
-    assert_eq!(flash.bytes_at(FIRMWARE_UPDATE.start, image.len()), &image[..]);
+    assert_eq!(result, Ok(ImageCopy::Copied));
+    assert_eq!(
+        flash.bytes_at(DEFAULT_SLOTS.update.start, previous.len()),
+        &previous[..]
+    );
     assert!(flash
-        .bytes_at(FIRMWARE_UPDATE.end() - PAGE_SIZE, PAGE_SIZE as usize)
+        .bytes_at(DEFAULT_SLOTS.update.end() - PAGE_SIZE, PAGE_SIZE as usize)
         .iter()
         .all(|byte| *byte == 0xFF));
 }
@@ -190,44 +581,24 @@ fn moves_the_previous_firmware_down_a_page_to_the_start_of_the_update_slot() {
 #[test]
 fn a_rollback_leaves_the_recovery_firmware_alone() {
     let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
-    flash.put(PREVIOUS_FIRMWARE.start, &valid_vector_table());
-    flash.put(RECOVERY_FIRMWARE.start, &[0x42; 64]);
+    flash.put(DEFAULT_SLOTS.previous_firmware().start, &firmware_image(100));
+    flash.put(DEFAULT_SLOTS.recovery.start, &[0x42; 64]);
 
-    copy_previous_into_update_slot(&mut flash).unwrap();
+    copy_previous_into_update_slot(&mut flash, DEFAULT_SLOTS).unwrap();
 
-    assert_eq!(flash.bytes_at(RECOVERY_FIRMWARE.start, 64), &[0x42; 64]);
+    assert_eq!(flash.bytes_at(DEFAULT_SLOTS.recovery.start, 64), &[0x42; 64]);
 }
 
 #[test]
 fn a_rollback_without_a_previous_firmware_changes_nothing() {
     let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
-    // An update waiting at the start of the slot, which a page up does not look like firmware.
-    flash.put(FIRMWARE_UPDATE.start, &valid_vector_table());
+    // An update waiting at the start of the slot, which a page up has no header.
+    flash.put(DEFAULT_SLOTS.update.start, &firmware_image(100));
 
-    let result = copy_previous_into_update_slot(&mut flash);
+    let result = copy_previous_into_update_slot(&mut flash, DEFAULT_SLOTS);
 
-    assert_eq!(result, Ok(PreviousCopy::NoPreviousFirmware));
+    assert_eq!(result, Ok(ImageCopy::NoImage));
     assert_eq!(flash.erase_count, 0);
-}
-
-#[test]
-fn leaves_the_update_slot_alone_without_a_recovery_image() {
-    let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
-    flash.put(FIRMWARE_UPDATE.start, &[0; 64]);
-
-    let result = copy_recovery_into_update_slot(&mut flash);
-
-    assert_eq!(result, Ok(RecoveryCopy::NoRecoveryImage));
-    assert_eq!(flash.erase_count, 0);
-    assert_eq!(flash.bytes_at(FIRMWARE_UPDATE.start, 64), &[0; 64]);
-}
-
-#[test]
-fn external_slots_fit_before_the_file_system() {
-    assert_eq!(FIRMWARE_UPDATE.start, 0x00_0000);
-    assert_eq!(RECOVERY_FIRMWARE.start, 0x06_5000);
-    assert_eq!(RESERVED_FOR_GROWTH.start, 0x0C_9000);
-    assert_eq!(FILE_SYSTEM.start, 0x10_0000);
 }
 
 // ============================================================================
@@ -289,12 +660,12 @@ mod migration {
 
     #[test]
     fn no_step_writes_outside_its_slot() {
-        let (steps, count) = plan(sizes(Some(RECOVERY_FIRMWARE.size)));
+        let (steps, count) = plan(sizes(Some(DEFAULT_SLOTS.recovery.size)));
 
         for step in &steps[..count] {
             let slot = match step {
-                Step::StageRecovery { .. } => RECOVERY_FIRMWARE,
-                Step::StageFirmware { .. } => FIRMWARE_UPDATE,
+                Step::StageRecovery { .. } => DEFAULT_SLOTS.recovery,
+                Step::StageFirmware { .. } => DEFAULT_SLOTS.update,
                 Step::WriteBootloader { .. } => BOOTLOADER,
                 Step::MarkSwap { .. } => BOOT_STATE,
             };
@@ -333,7 +704,7 @@ mod migration {
             Err(PayloadProblem::FirmwareTooLarge)
         );
         assert_eq!(
-            sizes(Some(RECOVERY_FIRMWARE.size + 1)).check(),
+            sizes(Some(DEFAULT_SLOTS.recovery.size + 1)).check(),
             Err(PayloadProblem::RecoveryTooLarge)
         );
     }
@@ -399,9 +770,9 @@ mod updater_note {
 mod bootloader_image_check {
     use super::{vec, FakeFlash};
     use crate::{
-        bootloader_identity, is_bootloader_vector_table, is_firmware_vector_table,
+        bootloader_identity, is_bootloader_vector_table,
         migration::{crc32, CRC32_INITIAL},
-        BOOTLOADER, PAGE_SIZE,
+        BOOTLOADER, FIRMWARE_VECTOR_TABLE, PAGE_SIZE,
     };
 
     fn vector_table(stack_pointer: u32, reset_handler: u32) -> [u8; 8] {
@@ -417,12 +788,11 @@ mod bootloader_image_check {
     }
 
     #[test]
-    fn a_firmware_is_not_a_bootloader_and_the_other_way_round() {
+    fn a_firmware_is_not_a_bootloader() {
         assert!(!is_bootloader_vector_table(vector_table(
             0x2000_FFF0,
-            0x0000_50DD
+            FIRMWARE_VECTOR_TABLE + 0xDD
         )));
-        assert!(!is_firmware_vector_table(vector_table(0x2001_0000, 0x0000_0101)));
     }
 
     #[test]

@@ -7,9 +7,9 @@
 use std::{env, fs, path::PathBuf};
 
 use neotime_boot::{
-    is_firmware_vector_table,
+    image_header::{ImageHeader, IMAGE_HEADER_SIZE},
     migration::{crc32, PayloadSizes, CRC32_INITIAL},
-    BOOTLOADER, FIRMWARE_ALIVE_MARKER, VECTOR_TABLE_CHECK_SIZE,
+    BOOTLOADER, FIRMWARE_ALIVE_MARKER,
 };
 
 /// Where wasp-os's bootloader on S112 starts apps, up to where that bootloader itself begins.
@@ -140,10 +140,21 @@ fn check_bootloader(bytes: &[u8]) {
     );
 }
 
+/// A sound image header, linked to run from `FIRMWARE`, with the length and CRC it gives.
 fn check_firmware(bytes: &[u8], what: &str) {
-    let start: [u8; VECTOR_TABLE_CHECK_SIZE] = bytes[..VECTOR_TABLE_CHECK_SIZE].try_into().unwrap();
+    let header = bytes
+        .get(..IMAGE_HEADER_SIZE as usize)
+        .and_then(|header| ImageHeader::decode(header.try_into().unwrap()));
+    let Some(header) = header else {
+        panic!("the {what} image has no sound image header; run tools/image_header.py");
+    };
     assert!(
-        is_firmware_vector_table(start),
-        "the {what} image does not start with a firmware vector table"
+        header.runs_as_firmware(),
+        "the {what} image is not linked to run from FIRMWARE"
+    );
+    assert!(
+        header.total_size_in_bytes() as usize == bytes.len()
+            && crc32(CRC32_INITIAL, &bytes[IMAGE_HEADER_SIZE as usize..]) == header.image_crc32,
+        "the {what} image does not match its header's length and CRC"
     );
 }

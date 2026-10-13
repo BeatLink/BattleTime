@@ -27,8 +27,8 @@ ${MCUBOOT_SLOT}           0x8000
 # How long the reloader needs, with the flash's real busy times, plus the first NeoTime boot.
 ${RELOADER_SECONDS}       40
 ${FIRST_BOOT_SECONDS}     30
-# The bootloader's 16 KB and the boot state page after it.
-${OLD_START_LENGTH}       0x5000
+# The bootloader's 20 KB, the slot table and the boot state page after it.
+${OLD_START_LENGTH}       0x8000
 
 *** Keywords ***
 Start A Watch Running wasp-os With The Reloader As Its App
@@ -63,7 +63,7 @@ NeoTime Should Be Installed And Running
     Firmware Should Be Alive
 
 Remember The Old Start Of Flash
-    [Documentation]           Everything the reloader may write in internal flash: the bootloader's pages and the boot state page.
+    [Documentation]           Everything the reloader may write in internal flash: the bootloader's pages, the slot table and the boot state page.
     ${start}=                 Execute Command    sysbus ReadBytes 0x0 ${OLD_START_LENGTH}
     Set Test Variable         ${OLD_START}    ${start}
 

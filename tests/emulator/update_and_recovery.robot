@@ -1,5 +1,6 @@
 *** Settings ***
-Documentation     The bootloader swaps a staged update in, rolls a bad one back, and installs the recovery firmware on a long button hold.
+Documentation     The bootloader swaps a staged update in, rolls a bad one back, installs the recovery firmware on a long button hold,
+...               and never starts a firmware without a sound image header.
 Suite Setup       Setup
 Suite Teardown    Teardown
 Test Setup        Reset Emulation
@@ -7,7 +8,7 @@ Test Teardown     Test Teardown
 Resource          neotime.resource
 
 *** Variables ***
-# A swap of the whole 400 KB firmware slot through the external flash takes a few seconds of emulated time.
+# A swap of the whole 388 KB firmware slot through the external flash takes a few seconds of emulated time.
 ${SWAP_SECONDS}           25
 
 *** Test Cases ***
@@ -104,6 +105,82 @@ The Menu Starts The Firmware When Left Alone
     Run For                   32
     Firmware Should Be Alive
     Flash Should Hold File    ${FIRMWARE_START}    ${FIRMWARE_BIN}
+
+A Firmware With A Damaged Header Is Replaced By The Recovery Firmware
+    Create A PineTime
+    Execute Command           sysbus LoadBinary @${BOOTLOADER_BIN} 0x0
+    ${damaged}=               Write Damaged Copy    ${FIRMWARE_BIN}    ${OUTPUT DIR}/damaged.bin    16
+    Execute Command           sysbus LoadBinary @${damaged} ${FIRMWARE_START}
+    Execute Command           sysbus LoadBinary @${RECOVERY_BIN} ${RECOVERY_SLOT}
+    Clear The Alive Marker
+
+    Run For                   ${SWAP_SECONDS}
+    Flash Should Hold File    ${FIRMWARE_START}    ${RECOVERY_BIN}
+    Firmware Should Be Alive
+
+A Firmware With A Damaged Header Is Replaced By The Previous Firmware First
+    Create A PineTime
+    Execute Command           sysbus LoadBinary @${BOOTLOADER_BIN} 0x0
+    ${damaged}=               Write Damaged Copy    ${RECOVERY_BIN}    ${OUTPUT DIR}/damaged.bin    16
+    Execute Command           sysbus LoadBinary @${damaged} ${FIRMWARE_START}
+    Execute Command           sysbus LoadBinary @${FIRMWARE_BIN} ${PREVIOUS_SLOT}
+    Execute Command           sysbus LoadBinary @${RECOVERY_BIN} ${RECOVERY_SLOT}
+    Clear The Alive Marker
+
+    Run For                   ${SWAP_SECONDS}
+    Flash Should Hold File    ${FIRMWARE_START}    ${FIRMWARE_BIN}
+    Firmware Should Be Alive
+
+A Damaged Recovery Firmware Is Never Installed
+    Create A PineTime
+    Load Bootloader And Firmware
+    ${damaged}=               Write Damaged Copy    ${RECOVERY_BIN}    ${OUTPUT DIR}/damaged.bin    5000
+    Execute Command           sysbus LoadBinary @${damaged} ${RECOVERY_SLOT}
+    Clear The Alive Marker
+
+    Open The Menu
+    Pick Menu Option          2
+    Run For                   5
+    Firmware Should Be Alive
+    Flash Should Hold File    ${FIRMWARE_START}    ${FIRMWARE_BIN}
+
+With No Firmware Anywhere The Bootloader Waits And Starts Nothing
+    Create A PineTime
+    Execute Command           sysbus LoadBinary @${BOOTLOADER_BIN} 0x0
+    Clear The Alive Marker
+
+    Run For                   12
+    Firmware Should Not Have Run
+
+The Slot Table Moves The Recovery Slot
+    [Documentation]           A record in the slot table puts the recovery slot at 0x80000, sized to the recovery image.
+    Create A PineTime
+    Load Bootloader And Firmware
+    ${record}=                Write Slot Table Record    ${OUTPUT DIR}/slots.bin    0x0    ${{ 388 * 1024 + 4096 }}    0x80000    ${{ 172 * 1024 }}
+    Execute Command           sysbus LoadBinary @${record} ${SLOT_TABLE}
+    Execute Command           sysbus LoadBinary @${RECOVERY_BIN} ${{ ${EXTERNAL_FLASH} + 0x80000 }}
+    Clear The Alive Marker
+
+    Open The Menu
+    Pick Menu Option          2
+    Run For                   ${SWAP_SECONDS}
+    Flash Should Hold File    ${FIRMWARE_START}    ${RECOVERY_BIN}
+    Firmware Should Be Alive
+
+An Unsound Slot Table Record Is Ignored
+    [Documentation]           A recovery slot overlapping the update slot is refused, so the default slot is used.
+    Create A PineTime
+    Load Bootloader And Firmware
+    ${record}=                Write Slot Table Record    ${OUTPUT DIR}/slots.bin    0x0    ${{ 388 * 1024 + 4096 }}    0x10000    ${{ 172 * 1024 }}
+    Execute Command           sysbus LoadBinary @${record} ${SLOT_TABLE}
+    Execute Command           sysbus LoadBinary @${RECOVERY_BIN} ${RECOVERY_SLOT}
+    Clear The Alive Marker
+
+    Open The Menu
+    Pick Menu Option          2
+    Run For                   ${SWAP_SECONDS}
+    Flash Should Hold File    ${FIRMWARE_START}    ${RECOVERY_BIN}
+    Firmware Should Be Alive
 
 *** Keywords ***
 Open The Menu

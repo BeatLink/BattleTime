@@ -3,15 +3,18 @@
 The bootloader is the first code that runs when the watch starts. It installs a waiting firmware
 update or the recovery firmware, then starts the firmware. It is built on
 [embassy-boot](https://embassy.dev/book/#_bootloader), so updates survive a power cut part way, and
-a new firmware that fails to start is rolled back by itself.
+a new firmware that fails to start is rolled back by itself. Every firmware image carries a
+256-byte [header](#the-image-header), and the bootloader never starts one whose header is missing,
+damaged or linked for another address. Where the update and recovery slots sit in the external
+flash is read from the [slot table](#the-slot-table), which the firmware can change.
 
-It is about 15.7 KB, in a 16 KB region, which leaves about 300 bytes; its status screen takes
+It is about 17.3 KB, in a 20 KB region, which leaves about 2.7 KB; its status screen takes
 about 6 KB of that.
 
 The work of an update is split three ways:
 
 - **The bootloader** only acts on the watch: it swaps, rolls back and installs recovery.
-- **The firmware's Bluetooth** only uploads: it writes the new image into `FIRMWARE_UPDATE`, marks it,
+- **The firmware's Bluetooth** only uploads: it writes the new image into the update slot, marks it,
   and resets. It will speak Nordic's legacy DFU, as InfiniTime does, so Gadgetbridge and the other
   companion apps can update NeoTime unchanged.
 - **A reloader image** moves a watch onto NeoTime once, from InfiniTime or wasp-os (below).
@@ -21,7 +24,7 @@ The work of an update is split three ways:
 | Crate | Path | Runs on | What it holds |
 |---|---|---|---|
 | `neotime-bootloader` | `bootloader/` | the watch only | the bootloader program |
-| `neotime-boot` | `boot/` | the watch and in tests | the flash layout, the watchdog timeout, the recovery copy |
+| `neotime-boot` | `boot/` | the watch and in tests | the flash layout, the image header, the slot table, the watchdog timeout, the recovery copy |
 | `neotime-external-flash` | `drivers/external_flash/` | the watch and in tests | the external flash driver |
 | `neotime-status-screen` | `drivers/status_screen/` | the watch, and in the simulator's tests | the small ST7789 driver for the blue status screen |
 | `neotime-bootloader-updater` | `bootloader-updater/` | the watch only | the image that replaces this bootloader on a watch already on NeoTime |
@@ -40,21 +43,84 @@ Internal flash, 512 KB:
 
 | Region | Start | Size | Holds |
 |---|---|---|---|
-| `BOOTLOADER` | `0x00000` | 16 KB | this bootloader, the first code to run; there is no Nordic MBR or SoftDevice |
-| `BOOT_STATE` | `0x04000` | 4 KB | embassy-boot's record of what to do at the next start |
-| `FIRMWARE` | `0x05000` | 400 KB | the running firmware, which is linked to start here |
+| `BOOTLOADER` | `0x00000` | 20 KB | this bootloader, the first code to run; there is no Nordic MBR or SoftDevice |
+| `SLOT_TABLE` | `0x05000` | 8 KB | two pages recording where the external slots sit ([below](#the-slot-table)) |
+| `BOOT_STATE` | `0x07000` | 4 KB | embassy-boot's record of what to do at the next start |
+| `FIRMWARE` | `0x08000` | 388 KB | the running firmware: its image header, then its code from `FIRMWARE_VECTOR_TABLE` (`0x08100`), where it is linked |
 | `SHARED_LIBRARY` | `0x69000` | 92 KB | images, fonts, components and common code that apps share; apps live on the external flash |
 
-External flash, 4 MB:
+The first 32 KB, from the bootloader to the boot state, belong to the bootloader; the firmware never
+writes the bootloader's pages, only the slot table and the boot state through their own APIs.
+
+External flash, 4 MB, with the slots where `DEFAULT_SLOTS` puts them:
 
 | Region | Start | Size | Holds |
 |---|---|---|---|
-| `FIRMWARE_UPDATE` | `0x000000` | 404 KB | a new firmware waiting to be installed; one page more than `FIRMWARE`, which the swap needs |
-| `RECOVERY_FIRMWARE` | `0x065000` | 400 KB | a small firmware that can only receive a new firmware over BLE |
-| `RESERVED_FOR_GROWTH` | `0x0C9000` | 220 KB | lets the two slots grow without moving the file system |
+| update slot | `0x000000` | 392 KB | a new firmware waiting to be installed, then the one it replaced, one page up; one page more than `FIRMWARE`, which the swap needs |
+| (free) | `0x062000` | 12 KB | room the slot table can give to either slot |
+| recovery slot | `0x065000` | 388 KB | a small firmware that can only receive a new firmware over BLE, where the first layout kept it |
+| (free) | `0x0C6000` | 232 KB | room the slot table can give to either slot |
 | `FILE_SYSTEM` | `0x100000` | 3 MB | littlefs: apps, settings and shared resources (see [storage.md](storage.md)) |
 
-Growing `FIRMWARE` later needs a new bootloader, since the bootloader is built with these numbers.
+Both slots must lie in `SLOT_AREA`, everything below `FILE_SYSTEM`, so an image and the file system
+never share a sector. `FIRMWARE` cannot move, since the firmware is linked to run there, and it
+cannot grow past the shared library at `0x69000`, whose address the apps rely on.
+
+## The image header
+
+Every image the bootloader runs, the firmware, the recovery firmware and the bootloader updater,
+starts with a 256-byte header (`neotime_boot::image_header`), which `tools/image_header.py` puts in
+front of the `.bin` after the build. All numbers are little-endian:
+
+| Offset | Size | Field |
+|---:|---:|---|
+| 0 | 4 | magic, `NTIM` |
+| 4 | 2 | header version, 1 |
+| 6 | 2 | header size, 256 |
+| 8 | 1 | image type: 1 firmware, 2 recovery, 3 bootloader updater |
+| 9 | 3 | version: major, minor, patch |
+| 12 | 4 | load address: where the vector table must sit, `0x08100` |
+| 16 | 4 | image size, the bytes after the header |
+| 20 | 4 | CRC-32 of the image |
+| 24 | 4 | build time, seconds since 1970 (the commit's time from `tools/build_images.sh`) |
+| 28 | 8 | short commit hash in ASCII, `*` after it for uncommitted changes, zero padded |
+| 36 | 216 | reserved, zero |
+| 252 | 4 | CRC-32 of the 252 bytes before it |
+
+The vector table follows at offset 256, which is 256-byte aligned as the Cortex-M4 requires, and
+the bootloader points VTOR there before it jumps. `python3 tools/image_header.py --describe
+dist/firmware.bin` prints a header and checks both CRCs; its `--self-test` and
+`the_header_matches_the_one_the_packaging_tool_writes` in `boot/src/tests.rs` check the same bytes,
+so the tool and the watch cannot drift apart.
+
+The checks are split by cost. On every start the bootloader reads only the header in `FIRMWARE`:
+magic, header CRC and load address. Before it installs the previous or the recovery firmware, it
+also reads the whole image in the external flash and checks its CRC. The firmware checks the
+header and the image CRC before it marks an uploaded update or keeps an uploaded recovery
+firmware, so a damaged upload is refused while the phone is still connected.
+
+## The slot table
+
+`SLOT_TABLE` holds where the update and recovery slots sit, so the firmware can move them without
+a new bootloader, for example to size the recovery slot to the recovery image. It is a log of
+32-byte records (`neotime_boot::slot_table`): magic `NTST`, a sequence number, the update slot's
+start and size, the recovery slot's start and size, a spare word, and a CRC-32 of the rest.
+
+- **Reading** takes the newest record whose CRC matches and whose slots pass `Slots::check`: whole
+  pages, inside `SLOT_AREA`, the update slot exactly one page more than `FIRMWARE`, the recovery
+  slot between 64 KB and `FIRMWARE`'s size, and no overlap. With no such record, the slots are
+  `DEFAULT_SLOTS`, so an erased table, or pages still holding an old system's code, read as the
+  defaults.
+- **Writing** (`write_slots`) appends a record after the last one, so nothing is erased until a
+  page fills. A full page moves the log to the other page, which is erased first; the old page keeps
+  the newest record until the new one is whole, so a power cut leaves the old slots or the new ones,
+  never neither. Each record is read back after it is written.
+- **The firmware** changes the slots with `neotime_updates::change_slots`, which refuses while a
+  swap is pending or a firmware is on trial, since moving the update slot then would lose the
+  firmware a rollback needs. Moving a slot does not move its contents: send the recovery firmware
+  again after moving the recovery slot.
+
+Nothing calls `change_slots` yet; the companion command for it is in [todo.md](todo.md).
 
 ## What happens at start
 
@@ -65,15 +131,20 @@ Growing `FIRMWARE` later needs a new bootloader, since the bootloader is built w
 3. If the button is held, show "Keep holding for the menu" and keep watching it for 5 seconds. If
    it is still held, buzz once and open the menu (below).
 4. Wake the external flash and check that it answers as a 4 MB chip. If it does not, skip
-   straight to step 6 rather than leave the watch unable to start.
-5. Let embassy-boot act on `BOOT_STATE`:
+   straight to step 8 rather than leave the watch unable to start.
+5. Read the slot table.
+6. Let embassy-boot act on `BOOT_STATE`:
    - **Boot**: nothing to do.
-   - **Swap**: show "Installing firmware, Do not unplug", then swap `FIRMWARE` with
-     `FIRMWARE_UPDATE` page by page, recording progress in `BOOT_STATE`, so a power cut resumes
-     where it stopped.
+   - **Swap**: show "Installing firmware, Do not unplug", then swap `FIRMWARE` with the update
+     slot page by page, recording progress in `BOOT_STATE`, so a power cut resumes where it
+     stopped.
    - **Revert**: the last swapped-in firmware never marked itself booted, so swap the old one back.
-6. Leave a note for the firmware in RAM (below), turn off every interrupt, then jump to the
-   firmware at `FIRMWARE`.
+7. Check the header in `FIRMWARE`. If it is not sound, show "Damaged, Repairing firmware" and
+   install the previous firmware, or failing that the recovery firmware, as the menu does (below),
+   then run step 6 again. With neither, show "No firmware found, Send an update" and wait for the
+   watchdog, which starts the bootloader over.
+8. Leave a note for the firmware in RAM (below), turn off every interrupt, point VTOR at
+   `FIRMWARE_VECTOR_TABLE` and jump there.
 
 Every flash read, write and erase feeds the watchdog, so a long swap does not trip it.
 
@@ -95,6 +166,8 @@ model, through the panel's SPI wires.
 | Rolling back | Swapping / Rolling back / Do not unplug |
 | Installing the recovery firmware | Swapping / Installing recovery / Do not unplug |
 | No previous firmware, or no valid recovery firmware | Unchanged / No previous firmware or No recovery found / Starting firmware |
+| The firmware has no sound header | Damaged / Repairing firmware / Do not unplug |
+| Nothing anywhere has a sound header | Damaged / No firmware found / Send an update |
 | Swapping in an update, or rolling one back | Swapping / Installing firmware / Do not unplug |
 
 The bootloader updater shows the page titled "NeoTime boot updater", with Firmware `Updater`, and
@@ -105,7 +178,7 @@ its Bootloader line goes `Checking`, `Writing`, then `Updated` or `Up to date`.
 The firmware cannot tell from `BOOT_STATE` alone that it was just installed as the recovery
 firmware, so the bootloader leaves a note in RAM at `BOOT_NOTE_ADDRESS`, the third word of the
 alive marker, which every program's linker keeps free. `BootNote::RecoveryInstalled` means the
-button hold installed the recovery firmware on this start, and `BootNote::Normal` means anything
+button hold, or the repair in step 7, installed the recovery firmware on this start, and `BootNote::Normal` means anything
 else. The top half of the word is a fixed pattern, so whatever RAM held at power-on never reads
 as a note.
 
@@ -117,6 +190,7 @@ the bootloader updater (`bootloader-updater/`, built into `dist/bootloader-updat
 trial. It then:
 
 1. Checks the bootloader it carries: its CRC, and a vector table that starts inside `BOOTLOADER`.
+   The updater is itself an image with a header, of type bootloader updater.
    A damaged one is never written; holding the button quits.
 2. Compares it with the installed bootloader. If they match, nothing is written.
 3. Waits for the charger, since a power cut during the write leaves nothing that starts. Holding
@@ -136,10 +210,40 @@ Only a firmware from `db985cf` on reads the note. An older one shows the red "Up
 after the hand-back even though the bootloader was written, as on the first watch; the Revert mark
 it leaves clears with the next firmware update.
 
-`tests/emulator/bootloader_update.robot` runs it from the bootloader the reloader put on the first
-watch, kept in `tests/emulator/fixtures/` because it cannot be rebuilt bit for bit. On 2026-10-11
-it replaced that bootloader on the watch itself: the rollback showed "Update failed", and the next
-firmware update was swapped in under the new blue screen.
+`tests/emulator/bootloader_update.robot` runs it over a copy of the built bootloader with one byte
+of its title changed. On 2026-10-11 the first-layout updater replaced the reloader's bootloader on the
+watch itself: the rollback showed "Update failed", and the next firmware update was swapped in under
+the new blue screen.
+
+## Moving a watch from the first layout
+
+Until 2026-10-13 the bootloader was 16 KB, the boot state sat at `0x04000` and the firmware ran from
+`0x05000` with no header. A firmware or recovery firmware built for that layout cannot run under
+this one, and that firmware's recovery receiver refuses an image that starts with a header, so the
+move is one image, `dist/bootloader-updater-from-first-layout.zip`
+(`bootloader-updater/ --features from-first-layout`):
+
+1. It is sent as an ordinary firmware update to the first-layout firmware, which the old bootloader
+   swaps in at `0x05000`. It is linked so its vector table is at `0x05000`, as the old bootloader
+   expects, and its code starts at `0x08000`; the pages between, which become the slot table and the
+   boot state, are left zero, which reads as no record and as an ordinary boot.
+2. It checks the bootloader and the recovery firmware it carries, then waits for the charger;
+   holding the button quits with nothing written, and the old bootloader rolls back.
+3. It writes the recovery firmware into the default recovery slot, which is where the first layout
+   kept its recovery slot too, and checks its header and CRC. On a failure it stops before the
+   bootloader is touched.
+4. It writes the 20 KB bootloader over `0x00000` to `0x05000`, which covers the old boot state, reads
+   it back, and resets.
+5. The new bootloader finds no sound header at `0x08000`, where the updater's code is, and no
+   previous firmware with one, so it installs the recovery firmware and leaves the
+   `RecoveryInstalled` note. The full firmware follows as an ordinary update from the recovery firmware.
+
+A power cut before step 4 leaves the old bootloader and the old firmware; the recovery slot then
+holds an image the old bootloader cannot use, which it reports as "No recovery found". A power cut in
+step 4 is the same window as any bootloader update. `tests/emulator/bootloader_update.robot` runs the
+whole move from `tests/emulator/fixtures/first-layout-bootloader.bin`, the 16 KB bootloader as built
+from `89d3a63`; the one on the watch was built from an earlier commit of the same code and cannot be
+rebuilt bit for bit.
 
 ## What the firmware must do
 
@@ -150,11 +254,12 @@ firmware update was swapped in under the new blue screen.
   so.
 - **Feed the watchdog.** It is still running when the firmware starts. Take it over with the
   same timeout, `WATCHDOG_TIMEOUT_IN_TICKS`, and feed it from the system loop.
-- **Install updates** by feeding the new image, a raw `.bin` linked at `FIRMWARE`, to
-  `neotime_updates::UpdateReceiver`, which stores it in `FIRMWARE_UPDATE` and marks the swap, then
-  resetting.
-- **Keep a recovery firmware** in `RECOVERY_FIRMWARE`, written with
-  `neotime_updates::RecoveryReceiver`.
+- **Install updates** by feeding the new image, a `.bin` with its header, linked at
+  `FIRMWARE_VECTOR_TABLE`, to `neotime_updates::UpdateReceiver`, which stores it in the update slot,
+  checks its header and CRC, and marks the swap, then resetting.
+- **Keep a recovery firmware** in the recovery slot, written with
+  `neotime_updates::RecoveryReceiver`, which writes the header's first bytes last.
+- **Read the slot table** with `neotime_boot::slot_table::read_slots` before using either slot.
 
 ## The menu: rollback and recovery
 
@@ -175,13 +280,13 @@ one long hold:
    firmware still on trial, such as one Roll back just installed that no phone has connected to
    yet, is swapped back out, as on any reset.
 4. **Roll back** needs the firmware the last swap replaced, which sits one page up in the update
-   slot (`PREVIOUS_FIRMWARE`). **Install recovery** needs `RECOVERY_FIRMWARE`. Either image must
-   start with a stack pointer in RAM and a reset handler inside `FIRMWARE`; if it does not, the
-   watch buzzes three times and starts the firmware it has, with nothing changed.
+   slot (`Slots::previous_firmware`). **Install recovery** needs the recovery slot. Either image must
+   have a sound header for `FIRMWARE` and a matching CRC; if it does not, the watch buzzes three
+   times and starts the firmware it has, with nothing changed.
 5. The bootloader marks the running firmware booted, which drops the progress a swap left in
-   `BOOT_STATE`, then copies the image to the start of `FIRMWARE_UPDATE`
-   (`copy_previous_into_update_slot` moves it down a page in place; `copy_recovery_into_update_slot`
-   copies it across) and marks a swap. The image is then installed by the same power-cut-safe swap
+   `BOOT_STATE`, then copies the image to the start of the update slot
+   (`copy_previous_into_update_slot` moves it down a page in place; `copy_image_into_update_slot`
+   copies the recovery image across, only as far as its header says it runs) and marks a swap. The image is then installed by the same power-cut-safe swap
    as any update, with the screen blue for up to about 30 seconds.
 
 Clearing the state first matters for a firmware still on trial: its swap's progress is still in

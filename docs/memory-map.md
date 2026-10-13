@@ -21,9 +21,10 @@ python3 tools/draw_memory_maps.py
 
 | Region | Start | Size | Holds |
 |---|---|---|---|
-| Bootloader | `0x00000` | 16 KB | The `embassy-boot` bootloader with its status screen and button menu, 16,056 bytes of it used. There is no SoftDevice and no MBR. |
-| Boot state | `0x04000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
-| Firmware | `0x05000` | 400 KB | The running firmware. It is linked to start here. No app, face, icon or font is built in; [What fills the firmware](#what-fills-the-firmware) shows what is. |
+| Bootloader | `0x00000` | 20 KB | The `embassy-boot` bootloader with its status screen and button menu, 17,752 bytes of it used. There is no SoftDevice and no MBR. |
+| Slot table | `0x05000` | 8 KB | Two pages recording where the update and recovery slots sit in the external flash; see [bootloader.md](bootloader.md#the-slot-table). |
+| Boot state | `0x07000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
+| Firmware | `0x08000` | 388 KB | The running firmware: a 256-byte [image header](bootloader.md#the-image-header), then its code, linked to start at `0x08100`. No app, face, icon or font is built in; [What fills the firmware](#what-fills-the-firmware) shows what is. |
 | Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, the app host's text fonts (47,919 B; the library with them is 74,333 B), components, common functions and the preset themes. No apps are kept here; they live in `/apps` on the external flash. An installed library starts with an 8-byte header, `NTLB` and its length, which `neotime-packages` writes. See [app-runtime.md](app-runtime.md#the-shared-library). |
 
 
@@ -37,22 +38,22 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 87.0 KB | 45.3 KB |
+| Firmware (start-up, shell, tasks) | 88.8 KB | 46.7 KB |
 | App host (with `neotime-ui`) | 70.7 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 43.6 KB | 43.6 KB |
 | App runtime | 34.2 KB | 0.1 KB |
-| core, alloc and compiler builtins | 27.1 KB | 11.3 KB |
+| core, alloc and compiler builtins | 26.9 KB | 11.4 KB |
 | Storage (littlefs) | 21.9 KB | 21.2 KB |
-| Embassy, allocator and Cortex-M | 18.1 KB | 15.7 KB |
+| Embassy, allocator and Cortex-M | 18.2 KB | 15.7 KB |
 | Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
 | Settings, companion and notifications (with serde) | 10.6 KB | 8.6 KB |
 | Display, graphics and drivers | 5.6 KB | 3.1 KB |
-| Packages | 3.8 KB | 2.1 KB |
-| Updates (DFU) | 2.4 KB | 2.4 KB |
+| Packages | 3.7 KB | 2.0 KB |
+| Updates (DFU) | 2.2 KB | 2.2 KB |
 | BLEFS file service | 1.8 KB | 2.0 KB |
 | Other constants and padding | 23.6 KB | 10.5 KB |
-| **Used** | **362.3 KB** | **165.7 KB** |
-| Free of 400 KB | 37.7 KB | 234.3 KB |
+| **Used** | **363.8 KB** | **167.2 KB** |
+| Free of the 388 KB slot, after its header | 24.0 KB | 220.6 KB |
 <!-- /measure_memory:firmware -->
 
 The accelerometer's configuration is the largest piece of data left in it; each watch could build
@@ -71,13 +72,16 @@ features).
 
 ![External flash treemap](images/external-flash.svg)
 
-The chip is an XT25F32B, on the same SPI bus as the screen.
+The chip is an XT25F32B, on the same SPI bus as the screen. The slots are where `DEFAULT_SLOTS`
+puts them; the [slot table](bootloader.md#the-slot-table) can move them anywhere below the file
+system.
 
 | Region | Start | Size | Holds |
 |---|---|---|---|
-| Firmware update | `0x000000` | 404 KB | A new firmware received over Bluetooth, waiting for the bootloader to swap it in: the firmware's 400 KB plus one page. |
-| Recovery firmware | `0x065000` | 400 KB | A known-good firmware to fall back to. |
-| Reserved for growth | `0x0C9000` | 220 KB | Kept free so the slots above can grow, up to `0x100000`. |
+| Update slot | `0x000000` | 392 KB | A new firmware received over Bluetooth, waiting for the bootloader to swap it in: the firmware's 388 KB plus one page. |
+| Free | `0x062000` | 12 KB | Room the slot table can give to either slot. |
+| Recovery slot | `0x065000` | 388 KB | A known-good firmware to fall back to. |
+| Free | `0x0C6000` | 232 KB | Room the slot table can give to either slot, up to `0x100000`. |
 | File system | `0x100000` | 3 MB | A littlefs file system, with the folders `/apps`, `/settings`, `/notifications` and `/resources`. |
 
 Anything that changes often, such as settings, notifications and app state, is kept here, because
@@ -194,14 +198,14 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (storage 16 KB, UI 21 KB; the recovery build has no UI heap) | 37,888 B | 16,384 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 15,686 B | 12,287 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 16,022 B | 12,623 B |
 | Bluetooth controller | 2,545 B | 2,545 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | BLEFS file service | 122 B | 122 B |
 | App host (with `neotime-ui`) | 56 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **56,724 B** | **31,756 B** |
-| Left for the stack | 8,796 B | 33,764 B |
+| **Static RAM** (`.data` and `.bss`) | **57,060 B** | **32,092 B** |
+| Left for the stack | 8,460 B | 33,428 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:

@@ -3,11 +3,15 @@
 //! It is sent as an ordinary firmware update, so the bootloader swaps it in on trial. It checks the
 //! bootloader it carries, waits for the charger, writes the bootloader pages and reads them back. It
 //! never confirms itself, so its reset makes the new bootloader roll back to the firmware before it,
-//! and a note in RAM tells that firmware the rollback was meant. See docs/bootloader.md.
+//! and a note in RAM tells that firmware the rollback was meant. Built `from-first-layout`, it first
+//! writes the recovery firmware it carries into the recovery slot, since the firmware before it cannot
+//! run under the new layout; the new bootloader installs that recovery firmware on its first start.
+//! See docs/bootloader.md.
 
 #![no_std]
 #![no_main]
 
+use core::cell::RefCell;
 use cortex_m::delay::Delay;
 use cortex_m_rt::entry;
 use embassy_nrf::{
@@ -18,8 +22,9 @@ use embassy_nrf::{
     spim::{self, Spim},
     wdt::{self, HaltConfig, SleepConfig, Watchdog, WatchdogHandle},
 };
+
 use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565};
-use embedded_hal_bus::spi::ExclusiveDevice;
+use embedded_hal_bus::spi::RefCellDevice;
 use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 use neotime_boot::{
     is_bootloader_vector_table,
@@ -33,6 +38,11 @@ use panic_halt as _;
 
 mod new_bootloader {
     include!(concat!(env!("OUT_DIR"), "/new_bootloader.rs"));
+}
+
+#[cfg(feature = "from-first-layout")]
+mod recovery {
+    include!(concat!(env!("OUT_DIR"), "/recovery.rs"));
 }
 
 // ============================================================================
@@ -66,20 +76,20 @@ fn main() -> ! {
     let _button_power = Output::new(chip.P0_15, Level::High, OutputDrive::Standard);
     let button = Input::new(chip.P0_13, Pull::Down);
     let power_present = Input::new(chip.P0_19, Pull::Up);
-    let _flash_kept_off_the_bus = Output::new(chip.P0_05, Level::High, OutputDrive::Standard);
+    let flash_chip_select = Output::new(chip.P0_05, Level::High, OutputDrive::Standard);
 
     let mut spi_config = spim::Config::default();
     spi_config.frequency = spim::Frequency::M8;
-    let spi_bus = Spim::new(
+    let spi_bus = RefCell::new(Spim::new(
         chip.TWISPI0,
         Interrupts,
         chip.P0_02,
         chip.P0_04,
         chip.P0_03,
         spi_config,
-    );
+    ));
     let display_chip_select = Output::new(chip.P0_25, Level::High, OutputDrive::Standard);
-    let Ok(display_spi) = ExclusiveDevice::new_no_delay(spi_bus, display_chip_select);
+    let Ok(display_spi) = RefCellDevice::new_no_delay(&spi_bus, display_chip_select);
     // Kept driven for the whole run: a dropped pin floats, and a floating reset blanks the panel.
     let mut display_reset = Output::new(chip.P0_26, Level::High, OutputDrive::Standard);
     let screen = Screen::start(
@@ -114,6 +124,25 @@ fn main() -> ! {
         feed_watchdog_while_button_is_up(&button, &mut watchdog);
         delay.delay_ms(POLL_INTERVAL_IN_MILLISECONDS);
     }
+
+    #[cfg(feature = "from-first-layout")]
+    {
+        status.show("Writing", "Writing recovery", "Do not unplug");
+        let Ok(flash_spi) = RefCellDevice::new_no_delay(&spi_bus, flash_chip_select);
+        let recovery_staged = neotime_external_flash::ExternalFlash::new(
+            flash_spi,
+            neotime_external_flash::BusyWait {
+                cpu_frequency_in_hertz: CPU_FREQUENCY_IN_HERTZ,
+            },
+        )
+        .is_ok_and(|mut external_flash| stage_recovery(&mut external_flash, &mut watchdog));
+        if !recovery_staged {
+            status.show("Unchanged", "Recovery write failed", "Hold button to quit");
+            wait_for_the_button_hold(&button, &mut watchdog, &mut delay);
+        }
+    }
+    #[cfg(not(feature = "from-first-layout"))]
+    drop(flash_chip_select);
 
     // From the first erase until the read-back matches, a reset would leave nothing that starts, so
     // the watchdog is fed whatever the button does and the updater never gives up.
@@ -228,18 +257,59 @@ fn write_and_check(internal_flash: &mut Nvmc<'_>, watchdog: &mut WatchdogHandle)
 }
 
 // ============================================================================
+// Writing the recovery firmware, when moving from the first layout
+// ============================================================================
+
+/// Writes the carried recovery firmware into the default recovery slot and checks it reads back whole.
+#[cfg(feature = "from-first-layout")]
+fn stage_recovery<Flash: NorFlash>(external_flash: &mut Flash, watchdog: &mut WatchdogHandle) -> bool {
+    use neotime_boot::{image_header::installable_image, DEFAULT_SLOTS};
+
+    let slot = DEFAULT_SLOTS.recovery;
+    let image = &recovery::PADDED[..recovery::LENGTH_IN_BYTES];
+    let erase_end =
+        slot.start + (image.len() as u32).div_ceil(Flash::ERASE_SIZE as u32) * Flash::ERASE_SIZE as u32;
+    for sector_start in (slot.start..erase_end).step_by(Flash::ERASE_SIZE) {
+        watchdog.pet();
+        if external_flash
+            .erase(sector_start, sector_start + Flash::ERASE_SIZE as u32)
+            .is_err()
+        {
+            return false;
+        }
+    }
+
+    // The SPI peripheral reads only from RAM, so each chunk is copied there first.
+    for (index, chunk) in image.chunks(COPY_CHUNK_SIZE).enumerate() {
+        watchdog.pet();
+        let mut in_ram = [0xFF; COPY_CHUNK_SIZE];
+        in_ram[..chunk.len()].copy_from_slice(chunk);
+        let offset = slot.start + (index * COPY_CHUNK_SIZE) as u32;
+        if external_flash.write(offset, &in_ram[..chunk.len()]).is_err() {
+            return false;
+        }
+    }
+
+    watchdog.pet();
+    matches!(
+        installable_image(external_flash, slot.start, slot.size),
+        Ok(Some(_))
+    )
+}
+
+// ============================================================================
 // The screen
 // ============================================================================
 
-type StatusScreen<'d> =
-    Screen<ExclusiveDevice<Spim<'d>, Output<'d>, embedded_hal_bus::spi::NoDelay>, Output<'d>>;
+type StatusScreen<'bus, 'd> =
+    Screen<RefCellDevice<'bus, Spim<'d>, Output<'d>, embedded_hal_bus::spi::NoDelay>, Output<'d>>;
 
 /// The status screen, if the panel started; the update goes ahead without it.
-struct Status<'d> {
-    screen: Option<StatusScreen<'d>>,
+struct Status<'bus, 'd> {
+    screen: Option<StatusScreen<'bus, 'd>>,
 }
 
-impl Status<'_> {
+impl Status<'_, '_> {
     /// Fills the lines that stay the same for the whole run.
     fn start(&mut self) {
         if let Some(screen) = &mut self.screen {
