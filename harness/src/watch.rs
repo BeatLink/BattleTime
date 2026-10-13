@@ -612,6 +612,23 @@ impl TestWatch {
         self.system.failures()
     }
 
+    /// Every line the app's effects sent the phone, such as a `send_to_phone` message.
+    pub fn phone_lines(&self) -> &[String] {
+        &self.system.phone_lines
+    }
+
+    /// Writes a whole file, as the phone does over Bluetooth, replacing any file at that path.
+    pub fn write_file(&mut self, path: &str, bytes: &[u8]) {
+        self.system.write_file(path, bytes);
+    }
+
+    /// Sends the app to the background and brings it back, as leaving it and opening it again does.
+    pub fn reopen(&mut self) {
+        let now = self.now();
+        self.host.close(now, &mut self.system);
+        self.host.bring_to_front(now, &mut self.system);
+    }
+
     /// Draws what changed since the last frame, as the watch would, and gives the whole screen.
     pub fn frame(&mut self) -> &Framebuffer {
         let Ok(()) = self.host.draw(&mut self.framebuffer);

@@ -143,8 +143,12 @@ shell takes it, so a burst of messages leaves only the newest of each kind.
 
 Watch to phone, sent as apps ask: `music` with `n` (`play`, `pause`, `next`, `previous`,
 `volumeup`, `volumedown`) for `music_control`; `call` with `n` (`ACCEPT`, `REJECT`, `IGNORE`) for
-`call_control`'s `answer`, `reject` and `mute`; and `findPhone` with `n`, `true` or `false`, for
-`find_phone`.
+`call_control`'s `answer`, `reject` and `mute`; `findPhone` with `n`, `true` or `false`, for
+`find_phone`; and `app` for an app's `send_to_phone(channel, data)`:
+`{"t":"app","ch":"<channel>","d":{"<key>":<number>,...}}`. The channel and keys are 1 to 32 letters,
+digits, `_` or `-`, written out in the app; `d` holds up to 4 whole numbers, in the order the app
+wrote them, or is `{}`. For example the remote app's third button sends
+`{"t":"app","ch":"remote","d":{"button":2}}`. The phone sends no reply.
 
 ### Other messages (not served yet)
 
@@ -210,6 +214,23 @@ the name of the font to show it in: `small`, `normal`, `medium` or `large`, with
 font file, or none, leaves the app's own font. The text is UTF-8; the watch shows tabs and carriage
 returns as spaces and other bytes as `?`, and draws only the characters its fonts have. Deleting
 `/notes/note.txt` brings back the app's hint to choose a file.
+
+### Remote
+
+The remote app shows the buttons the companion app chose, and the companion app runs each one's
+action when the watch says it was tapped. The companion app writes `/remote/buttons` whole with
+the file transfer above whenever the buttons change:
+
+| Byte | Holds |
+|---|---|
+| 0 | The format version, `1`. |
+| 1 | How many buttons, `N`, 0 to 9. |
+| 2 to 2 + N - 1 | Each button's icon, as its place in the shared library's icons, `ICON_NAMES` in `compiler/src/types.rs` (`phone` is 31, `play` 32). |
+
+The watch reads the file when the app opens and when the screen turns on. A missing file, another
+version or no buttons show a hint to choose buttons in the companion app; a count above 9 shows 9,
+and an icon beyond the library shows none. A tap sends `{"t":"app","ch":"remote","d":{"button":i}}`,
+`i` being the button's place in the file counting from 0.
 
 ## The NeoTime service
 

@@ -353,6 +353,9 @@ pub enum ArrayWork {
     /// Takes a first place and a count, and writes the source with the elements in those places in a random
     /// order.
     Shuffle,
+    /// Takes a path and writes the first bytes of that file, one per element, with 0 past its end or for a
+    /// missing file; `source` is the destination.
+    FileBytes,
 }
 
 impl ArrayWork {
@@ -364,6 +367,7 @@ impl ArrayWork {
             3 => ArrayWork::PushLast,
             4 => ArrayWork::PushFirst,
             5 => ArrayWork::Shuffle,
+            6 => ArrayWork::FileBytes,
             _ => return None,
         })
     }
@@ -667,7 +671,7 @@ impl Instruction {
                 ..
             } => (0, 1),
             WorkArray {
-                work: ArrayWork::PushLast | ArrayWork::PushFirst,
+                work: ArrayWork::PushLast | ArrayWork::PushFirst | ArrayWork::FileBytes,
                 ..
             } => (1, 0),
             WorkArray { .. } => (2, 0),

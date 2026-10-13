@@ -417,3 +417,145 @@ fn bindings_see_the_arrays_a_question_reads() {
 
     assert_eq!(info.inputs.state_slots, (1 << board) | (1 << other));
 }
+
+// ============================================================================
+// File bytes
+// ============================================================================
+
+/// A system holding one file, `/remote/buttons`.
+struct SystemWithFile {
+    bytes: Vec<u8>,
+}
+
+impl SystemValues for SystemWithFile {
+    fn read(&self, _value: SystemValue) -> Value {
+        0
+    }
+
+    fn random_number(&self) -> u32 {
+        7
+    }
+
+    fn read_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
+        if path != "/remote/buttons" {
+            return None;
+        }
+        let rest = self.bytes.get(offset as usize..).unwrap_or(&[]);
+        let length = rest.len().min(out.len());
+        out[..length].copy_from_slice(&rest[..length]);
+        Some(length)
+    }
+}
+
+/// The array of `length` elements after a handler reads the file at `path` into it.
+fn file_bytes(path: &str, length: u16, bytes: &[u8]) -> Result<Vec<Value>, Failure> {
+    let mut writer = ImageWriter::new("arrays", "Arrays", AppKind::App, 1);
+    let array = writer.array("buttons", ValueType::Int, false, length, 2, 7);
+    let path = writer.string(path);
+    writer.handler(code(&[
+        Instruction::PushText(path),
+        Instruction::WorkArray {
+            work: Work::FileBytes,
+            destination: array,
+            source: array,
+        },
+    ]));
+    let bytes_of_image = writer.build();
+    let image = AppImage::parse(&bytes_of_image).unwrap();
+    assert_eq!(verify(&image), Ok(()));
+    let mut state = AppState::new(&image).unwrap();
+    let system = SystemWithFile {
+        bytes: bytes.to_vec(),
+    };
+    Interpreter::new().run_handler(&image, 0, &mut state, &[], &system)?;
+    Ok((0..length)
+        .map(|index| state.element(array, index as Value).unwrap())
+        .collect())
+}
+
+#[test]
+fn file_bytes_reads_the_file_and_fills_past_its_end_with_zeros() {
+    assert_eq!(
+        file_bytes("/remote/buttons", 6, &[1, 3, 255, 0, 9]),
+        Ok(std::vec![1, 3, 255, 0, 9, 0])
+    );
+}
+
+#[test]
+fn file_bytes_reads_a_long_array_in_several_pieces() {
+    let bytes: Vec<u8> = (0..100).collect();
+
+    let read = file_bytes("/remote/buttons", 70, &bytes).unwrap();
+
+    assert_eq!(read, (0..70).collect::<Vec<Value>>());
+}
+
+#[test]
+fn file_bytes_gives_zeros_for_a_missing_file() {
+    assert_eq!(
+        file_bytes("/remote/missing", 3, &[1, 2, 3]),
+        Ok(std::vec![0, 0, 0])
+    );
+}
+
+#[test]
+fn file_bytes_needs_a_path_from_the_image() {
+    let mut writer = ImageWriter::new("arrays", "Arrays", AppKind::App, 1);
+    let array = writer.array("buttons", ValueType::Int, false, 2, 2, 0);
+    writer.handler(code(&[
+        Instruction::PushSmall(4),
+        Instruction::FormatNumber(0),
+        Instruction::WorkArray {
+            work: Work::FileBytes,
+            destination: array,
+            source: array,
+        },
+    ]));
+    let bytes = writer.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut state = AppState::new(&image).unwrap();
+    let system = SystemWithFile { bytes: std::vec![1] };
+
+    let result = Interpreter::new().run_handler(&image, 0, &mut state, &[], &system);
+
+    assert_eq!(result.err(), Some(Failure::BadText));
+}
+
+#[test]
+fn an_expression_may_not_read_file_bytes() {
+    let mut writer = ImageWriter::new("arrays", "Arrays", AppKind::App, 1);
+    let array = writer.array("buttons", ValueType::Int, false, 2, 2, 0);
+    let path = writer.string("/remote/buttons");
+    writer.expression(code(&[
+        Instruction::PushText(path),
+        Instruction::WorkArray {
+            work: Work::FileBytes,
+            destination: array,
+            source: array,
+        },
+        Instruction::PushSmall(0),
+    ]));
+    let bytes = writer.build();
+
+    let error = verify(&AppImage::parse(&bytes).unwrap()).unwrap_err();
+
+    assert!(matches!(
+        error,
+        ImageError::BadCode {
+            problem: CodeProblem::WriteInExpression,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn file_bytes_encodes_and_decodes() {
+    let work = Instruction::WorkArray {
+        work: Work::FileBytes,
+        destination: 2,
+        source: 2,
+    };
+
+    assert_eq!(work.encode().as_bytes(), &[0x65, 6, 2, 2]);
+    assert_eq!(decode(work.encode().as_bytes(), 0), Ok((work, 4)));
+}

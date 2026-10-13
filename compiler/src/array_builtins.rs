@@ -8,6 +8,7 @@ use oxc_ast::ast::Expression;
 use oxc_span::{GetSpan, Span};
 
 use crate::compiler::Compiler;
+use crate::constants::Constant;
 use crate::diagnostics::{fail, Compiled};
 use crate::emitter::Emitter;
 use crate::expressions::Typed;
@@ -21,8 +22,17 @@ const MOST_SLIDE_LEVEL: i64 = 62;
 const ANY_DIRECTION: i64 = 4;
 
 /// The functions that give back a new array, which only an assignment to an array signal can take.
-pub const ARRAY_WORK_FUNCTIONS: [&str; 5] =
-    ["slide_grid", "life_step", "push_shift", "unshift_pop", "shuffled"];
+pub const ARRAY_WORK_FUNCTIONS: [&str; 6] = [
+    "slide_grid",
+    "life_step",
+    "push_shift",
+    "unshift_pop",
+    "shuffled",
+    "file_bytes",
+];
+
+/// The largest byte a file holds, the most `file_bytes` writes to an element.
+const LARGEST_BYTE: i64 = 255;
 
 /// Whether `name` is one of the array questions `compile_array_question` compiles.
 pub fn is_array_question(name: &str) -> bool {
@@ -130,6 +140,9 @@ impl<'a> Compiler<'a> {
                 format!("`{name}` rewrites an array, which only a handler may do"),
             );
         }
+        if name == "file_bytes" {
+            return self.compile_file_bytes(emitter, target, arguments, scope, span);
+        }
         let (work, numbers, takes) = match name {
             "slide_grid" => (ArrayWork::Slide, 2, "a grid, its width and a direction"),
             "life_step" => (ArrayWork::LifeStep, 2, "a grid, its width and the live value"),
@@ -184,6 +197,53 @@ impl<'a> Compiler<'a> {
                 work,
                 destination: target,
                 source,
+            },
+            span,
+        )?;
+        Ok(())
+    }
+
+    /// `target.value = file_bytes(path, length)`: the file's first bytes, read when the handler runs.
+    fn compile_file_bytes(
+        &mut self,
+        emitter: &mut Emitter,
+        target: u8,
+        arguments: &[&'a Expression<'a>],
+        scope: &Rc<Scope<'a>>,
+        span: Span,
+    ) -> Compiled<()> {
+        let [path, length] = arguments else {
+            return fail(span, "`file_bytes` takes a path and a length");
+        };
+        let Some(Constant::Text(path_text)) = self.evaluate_constant(path, scope) else {
+            return fail(
+                path.span(),
+                "`file_bytes` needs the path written out, such as \"/remote/buttons\"",
+            );
+        };
+        let Some(Constant::Number(length_value)) = self.evaluate_constant(length, scope) else {
+            return fail(length.span(), "`file_bytes` needs a length known when compiling");
+        };
+        if length_value != self.slots[target as usize].length as i64 {
+            return fail(
+                span,
+                format!("`file_bytes` reads {length_value} bytes, so it needs an array of {length_value}"),
+            );
+        }
+        let path_string = self.string(&path_text);
+        emitter.emit(Instruction::PushText(path_string), span)?;
+        self.note_write(
+            target,
+            Range {
+                lowest: 0,
+                highest: LARGEST_BYTE,
+            },
+        );
+        emitter.emit(
+            Instruction::WorkArray {
+                work: ArrayWork::FileBytes,
+                destination: target,
+                source: target,
             },
             span,
         )?;

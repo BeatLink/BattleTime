@@ -91,6 +91,12 @@ document for its part instead.
   - a font chosen in the companion app shows the next time the app opens;
   - a long note scrolls smoothly to its last line, with no line drawn twice or out of place;
   - the stack keeps its margin with the app open, which in the emulator matches the launcher's.
+- [ ] **The remote app on the PineTime.** It has run only in the test harness. With the companion
+  app's remote screen, check that:
+  - buttons chosen in the companion app reach `/remote/buttons` and show the next time the app
+    opens or the screen turns on;
+  - each tap's `{"t":"app","ch":"remote",...}` line reaches the phone, which runs that button;
+  - the stack keeps its margin while a tap's line is sent.
 - [ ] **Transitions and scrolling on the PineTime.** Slides, wipes and hardware-scrolled lists have
   run only in the emulator and against a model of the panel; none of it is on the watch yet. Flash
   the bootloader first, then a firmware built from master at e78fc7a or later. On the watch, check
@@ -196,7 +202,7 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   transaction instead of many small reads.
 - [ ] **The remaining companion messages.** [companion-protocol.md](companion-protocol.md) lists
   them under "not served yet". `call`, `musicinfo`, `musicstate`, `weather`, `find`, `vibrate`,
-  `status` and the `music`, `call` and `findPhone` lines are served (`services/companion/src/phone.rs`).
+  `status` and the `music`, `call`, `findPhone` and `app` lines are served (`services/companion/src/phone.rs`).
   - `alarm` (set or report the alarms), `steps` (a day in 240 six-minute slots, read from the
     step log with `neotime_steps::log`) and `http` (answers to an app's request, and the watch's `http`
     line).

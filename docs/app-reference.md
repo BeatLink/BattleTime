@@ -275,6 +275,11 @@ Every angle, in every widget and function, is in degrees clockwise from twelve o
 Besides the system icons, the shared library holds a `pine_logo` image and icons for `alarm`,
 `info`, `weather_night_clear`, `weather_night_cloudy` and `none`, the empty icon.
 
+`library_icon(index)`, from `neotime/icons`, gives the icon at that place in the library's own
+order, `ICON_NAMES` in `compiler/src/types.rs`, or `none` outside it, for an icon chosen by number
+while the app runs, such as one the phone wrote to a file. The order keeps every icon's number, and
+new icons go at the end.
+
 ### Left out
 
 - **Canvas.** It needs a buffer for its pixels, and a full screen is 115 KB, more than the watch's
@@ -332,7 +337,7 @@ the `wake` permission for this yet.
 
 | Effect | Does |
 |---|---|
-| `send_to_phone(channel, data)` | Sends a message to the companion app on this app's channel. |
+| `send_to_phone(channel, data)` | Sends the companion app a message on `channel`, such as `send_to_phone("remote", { button: 2 })`. `data` is an object of up to 4 whole numbers; the channel and the keys are written out, each 1 to 32 letters, digits, `_` or `-`. The phone receives `{"t":"app","ch":"remote","d":{"button":2}}`, as [companion-protocol.md](companion-protocol.md#calls-music-weather-and-the-rest-served) describes. |
 | `http_request(request_id, method, url, body)` | Asks the phone to make a web request. The reply arrives as an `http_response` event. |
 | `music_control(command)` | `play`, `pause`, `next`, `previous`, `volume_up` or `volume_down`. |
 | `call_control(command)` | `answer`, `reject` or `mute` the current call. |
@@ -518,6 +523,7 @@ An app's state is at most 2 KB, and one array at most 1 KB. Each array stores it
 | `shuffled(array, first, count)` | The array with the `count` elements from `first` on in a random order. Handlers only. |
 | `push_shift(array, value)`, `unshift_pop(array, value)` | The array moved one place along with the value added at the end or the front, dropping the element at the other end: a history of readings or laps. |
 | `life_step(grid, width, live_value)` | The next generation of the Game of Life on a grid that wraps at its edges; each live cell holds `live_value`. At most 16 wide. |
+| `file_bytes(path, length)` | The first `length` bytes of a file on the watch, each 0 to 255, with 0 past the file's end or when it is missing, such as a file the companion app wrote. `path` is written out and `length` known when compiling. The file is read when the handler runs, so `onOpen` sees what the phone last wrote. The browser preview reads it from `preview_files` as UTF-8. |
 | `array.map(...)` | A new array of the same length. Allowed in views, `computed` and handlers. |
 
 Loops over fixed-length arrays are allowed in `computed` and handlers as well as views.
@@ -525,8 +531,9 @@ Loops over fixed-length arrays are allowed in `computed` and handlers as well as
 The interpreter answers the functions from `count_of` down natively, so they cost a few bytes of
 the image where a loop costs dozens, and run far faster; `indexOf` and `includes` on an array signal
 do the same. Their arrays must be signals of numbers, such as `board.value`, or parameters given one.
-`slide_grid`, `life_step`, `push_shift`, `unshift_pop` and `shuffled` give a whole array, so they may only be assigned to an array signal of
-the same length in a handler, as in `board.value = life_step(board.value, 16, 1)`. A grid is
+`slide_grid`, `life_step`, `push_shift`, `unshift_pop`, `shuffled` and `file_bytes` give a whole array, so they may only be assigned to an array signal of
+the same length in a handler, as in `board.value = life_step(board.value, 16, 1)` or
+`layout.value = file_bytes("/remote/buttons", 11)`. A grid is
 numbered across each row from the top left; a slide's lines are at most 16 long.
 
 ### Control flow
@@ -553,4 +560,4 @@ covered, so a missing permission is a compile error, not a surprise on the watch
 | `wake` | `wake_screen`, and vibration during do not disturb. |
 | `background` | Subscriptions that run while the app is closed. |
 
-Reading system values, the screen, haptics and navigation need no permission.
+Reading system values and files, the screen, haptics and navigation need no permission.

@@ -297,3 +297,143 @@ mod notes {
         assert!(watch.shows_text("No note yet."), "{:?}", watch.visible_texts());
     }
 }
+
+// ============================================================================
+// Remote
+// ============================================================================
+
+mod remote {
+    use super::*;
+    use neotime_app_testing::{compile_package, FakeSystem, PackageKind};
+
+    const BUTTONS_PATH: &str = "/remote/buttons";
+    const SCREEN_PADDING: i32 = 8;
+    const GAP: i32 = 8;
+
+    /// The remote opened on a watch whose button file holds `bytes`.
+    fn open_with_buttons(bytes: &[u8]) -> TestWatch {
+        let mut system = FakeSystem::new();
+        system.write_file(BUTTONS_PATH, bytes);
+        let image = compile_package(PackageKind::App, "remote").unwrap();
+        TestWatch::open_image_on(image, system).unwrap()
+    }
+
+    /// A file of `count` buttons, each with the same icon.
+    fn file_of(count: usize) -> Vec<u8> {
+        let mut file = std::vec![1, count as u8];
+        file.extend(std::iter::repeat_n(18, count));
+        file
+    }
+
+    /// The middle of each place a grid of `columns` by `rows` buttons has, across each row from the top left.
+    fn button_middles(columns: i32, rows: i32) -> Vec<(i32, i32)> {
+        let inside = 240 - 2 * SCREEN_PADDING;
+        let width = (inside - (columns - 1) * GAP) / columns;
+        let height = (inside - (rows - 1) * GAP) / rows;
+        (0..rows)
+            .flat_map(|row| (0..columns).map(move |column| (column, row)))
+            .map(|(column, row)| {
+                (
+                    SCREEN_PADDING + column * (width + GAP) + width / 2,
+                    SCREEN_PADDING + row * (height + GAP) + height / 2,
+                )
+            })
+            .collect()
+    }
+
+    /// The button number each tap at these points sends the phone, or none for a tap that sends nothing.
+    fn buttons_tapped(watch: &mut TestWatch, points: &[(i32, i32)]) -> Vec<Option<String>> {
+        points
+            .iter()
+            .map(|&(x, y)| {
+                let before = watch.phone_lines().len();
+                watch.tap(x, y);
+                watch.phone_lines().get(before).map(|line| {
+                    let start = line.find("\"button\":").unwrap() + "\"button\":".len();
+                    line[start..line.find('}').unwrap()].to_string()
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_remote_asks_for_buttons_while_the_phone_has_set_none() {
+        for bytes in [&[][..], &[1, 0], &[2, 3, 1, 2, 3]] {
+            let mut watch = open_with_buttons(bytes);
+
+            assert!(
+                watch.shows_text("Choose buttons"),
+                "{bytes:?}: {:?}",
+                watch.visible_texts()
+            );
+            watch.tap(120, 120);
+            assert!(watch.phone_lines().is_empty(), "{bytes:?}");
+        }
+    }
+
+    #[test]
+    fn the_remote_lays_its_buttons_out_by_how_many_there_are() {
+        let layouts = [
+            (1, 1, 1),
+            (2, 2, 1),
+            (3, 2, 2),
+            (4, 2, 2),
+            (5, 3, 2),
+            (6, 3, 2),
+            (7, 3, 3),
+            (9, 3, 3),
+        ];
+        for (count, columns, rows) in layouts {
+            let mut watch = open_with_buttons(&file_of(count));
+
+            let tapped = buttons_tapped(&mut watch, &button_middles(columns, rows));
+
+            let expected: Vec<Option<String>> = (0..(columns * rows) as usize)
+                .map(|place| (place < count).then(|| place.to_string()))
+                .collect();
+            assert_eq!(tapped, expected, "{count} buttons");
+            assert!(!watch.shows_text("Choose buttons"));
+            assert!(watch.failures().is_empty());
+        }
+    }
+
+    #[test]
+    fn tapping_a_button_buzzes_and_tells_the_phone_its_number() {
+        let mut watch = open_with_buttons(&[1, 4, 26, 32, 30, 28]);
+        let (x, y) = button_middles(2, 2)[2];
+
+        watch.tap(x, y);
+
+        assert_eq!(watch.effects_of(EffectKind::VibratePattern)[0].number(0), 0);
+        assert_eq!(
+            watch.phone_lines(),
+            ["{\"t\":\"app\",\"ch\":\"remote\",\"d\":{\"button\":2}}\n"]
+        );
+        assert!(watch.failures().is_empty());
+    }
+
+    #[test]
+    fn the_remote_shows_the_buttons_the_phone_sends_while_it_was_away() {
+        let mut watch = open_with_buttons(&file_of(1));
+        watch.write_file(BUTTONS_PATH, &file_of(3));
+
+        watch.reopen();
+
+        let third = button_middles(2, 2)[2];
+        assert_eq!(buttons_tapped(&mut watch, &[third]), [Some("2".to_string())]);
+        watch.write_file(BUTTONS_PATH, &file_of(2));
+        watch.screen_off();
+        watch.screen_on();
+        let second = button_middles(2, 1)[1];
+        assert_eq!(buttons_tapped(&mut watch, &[second]), [Some("1".to_string())]);
+        assert!(watch.failures().is_empty());
+    }
+
+    #[test]
+    fn the_remote_draws_an_icon_beyond_the_library_as_none() {
+        let mut watch = open_with_buttons(&[1, 2, 200, 32]);
+
+        assert_eq!(watch.pixels_left_stale(), 0);
+        assert!(watch.failures().is_empty());
+    }
+}

@@ -16,6 +16,7 @@ pub mod functions;
 pub mod images;
 pub mod library;
 pub mod permissions;
+pub mod phone_messages;
 pub mod scope;
 pub mod shared_functions;
 pub mod statements;

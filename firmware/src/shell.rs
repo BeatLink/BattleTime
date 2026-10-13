@@ -336,6 +336,10 @@ impl System for WatchSystem {
             settings::send_reply(&line);
             return;
         }
+        if let Some(line) = app_phone::app_line_for_effect(effect) {
+            settings::send_reply(&line);
+            return;
+        }
         match effect.kind {
             EffectKind::OpenApp => {
                 if let Some(index) = effect.text(0).and_then(|id| self.installed.place_of(id)) {

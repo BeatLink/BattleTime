@@ -4,6 +4,9 @@
 use std::{
     cell::Cell,
     error::Error,
+    fs::File,
+    io::{Read, Seek, SeekFrom},
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc, Arc,
@@ -88,6 +91,8 @@ pub struct SimulatedSystem {
     theme_request: Option<Theme>,
     /// When the simulator started, as `started_at` reads.
     started_at: Value,
+    /// The folder standing in for the watch's storage, if one was given.
+    storage_folder: Option<PathBuf>,
 }
 
 impl SimulatedSystem {
@@ -114,6 +119,7 @@ impl SimulatedSystem {
             theme_preset: 0,
             theme_request: None,
             started_at: wall_clock_in_milliseconds(),
+            storage_folder: files.storage_folder.map(Path::to_path_buf),
         }
     }
 
@@ -238,6 +244,10 @@ impl SystemValues for SimulatedSystem {
         }
     }
 
+    fn read_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
+        read_storage_file(self.storage_folder.as_deref()?, path, offset, out)
+    }
+
     fn random_number(&self) -> u32 {
         let mut state = self.random_state.get();
         state ^= state << 13;
@@ -246,6 +256,27 @@ impl SystemValues for SimulatedSystem {
         self.random_state.set(state);
         state
     }
+}
+
+/// Reads part of a watch file from the folder standing in for the watch's storage, as `read_file` does.
+pub fn read_storage_file(folder: &Path, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
+    let relative = path.strip_prefix('/')?;
+    if relative
+        .split('/')
+        .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return None;
+    }
+    let mut file = File::open(folder.join(relative)).ok()?;
+    file.seek(SeekFrom::Start(offset as u64)).ok()?;
+    let mut filled = 0;
+    while filled < out.len() {
+        match file.read(&mut out[filled..]).ok()? {
+            0 => break,
+            read => filled += read,
+        }
+    }
+    Some(filled)
 }
 
 /// The step history the test watch starts with, by day or by hour.
@@ -270,8 +301,8 @@ fn simulated_steps(value: SystemValue, index: Value) -> Option<Value> {
 fn text_arguments(kind: EffectKind) -> &'static [usize] {
     use EffectKind::*;
     match kind {
-        Go | OpenApp | ShowToast | Log | SendToPhone | SetSetting => &[0],
-        Notify => &[0, 1],
+        Go | OpenApp | ShowToast | Log | SetSetting => &[0],
+        Notify | SendToPhone => &[0, 1],
         _ => &[],
     }
 }
@@ -354,6 +385,7 @@ pub fn test_system() -> SimulatedSystem {
         theme_preset: 0,
         theme_request: None,
         started_at: 0,
+        storage_folder: None,
     }
 }
 
@@ -404,6 +436,8 @@ pub struct AppFiles<'image> {
     pub installed_apps: &'image [&'image [u8]],
     /// Each of those apps' icon, or empty for none.
     pub installed_app_icons: &'image [&'image [u8]],
+    /// A folder on the computer standing in for the watch's storage, so `/remote/buttons` is `<folder>/remote/buttons`.
+    pub storage_folder: Option<&'image Path>,
 }
 
 /// Opens the app, with the shared library when one was given.

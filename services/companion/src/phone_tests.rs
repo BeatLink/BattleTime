@@ -361,3 +361,28 @@ fn updates_with_no_music_or_weather_change_nothing() {
     assert_eq!(data.apply(&mut updates, 0), PhoneChanges::default());
     assert_eq!(updates.find, Some(true));
 }
+
+#[test]
+fn an_app_message_names_its_channel_and_carries_its_data() {
+    assert_eq!(
+        app_message_line("remote", "{\"button\":2}").as_deref(),
+        Some("{\"t\":\"app\",\"ch\":\"remote\",\"d\":{\"button\":2}}\n")
+    );
+    assert_eq!(
+        app_message_line("my_app-2", "{}").as_deref(),
+        Some("{\"t\":\"app\",\"ch\":\"my_app-2\",\"d\":{}}\n")
+    );
+}
+
+#[test]
+fn an_app_message_that_could_break_the_line_is_not_sent() {
+    let long_data = format!("{{\"a\":\"{}\"}}", "x".repeat(500));
+
+    assert_eq!(app_message_line("", "{}"), None);
+    assert_eq!(app_message_line("a\"b", "{}"), None);
+    assert_eq!(app_message_line(&"c".repeat(33), "{}"), None);
+    assert_eq!(app_message_line("remote", "2"), None);
+    assert_eq!(app_message_line("remote", "{\"a\":1}\n{"), None);
+    assert_eq!(app_message_line("remote", "{\"a\":1"), None);
+    assert_eq!(app_message_line("remote", &long_data), None);
+}

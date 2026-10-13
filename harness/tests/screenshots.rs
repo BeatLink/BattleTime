@@ -142,3 +142,26 @@ fn the_launcher_with_installed_apps_matches_its_reference_picture() {
 
     assert_all_match(vec![result]);
 }
+
+#[test]
+fn the_remote_with_one_four_and_nine_buttons_matches_its_reference_pictures() {
+    use neotime_app_testing::{compile_package, FakeSystem};
+
+    // Icons in library order: phone, play, next, previous, music, volume up, volume down, flashlight and bell.
+    let icons = [31, 32, 28, 34, 26, 56, 55, 16, 3];
+    let results = [1, 4, 9]
+        .into_iter()
+        .map(|count| {
+            check_screen(&format!("app-remote-{count}"), || {
+                let mut file = vec![1, count as u8];
+                file.extend(&icons[..count]);
+                let mut system = FakeSystem::new();
+                system.write_file("/remote/buttons", &file);
+                let image = compile_package(PackageKind::App, "remote").unwrap();
+                TestWatch::open_image_on(image, system).unwrap()
+            })
+        })
+        .collect();
+
+    assert_all_match(results);
+}

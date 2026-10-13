@@ -37,22 +37,22 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| App host (with `neotime-ui` and rlvgl) | 84.1 KB | 0.0 KB |
-| Firmware (start-up, shell, tasks) | 81.9 KB | 43.2 KB |
+| App host (with `neotime-ui` and rlvgl) | 84.5 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 82.0 KB | 43.3 KB |
 | Bluetooth (controller and TrouBLE) | 43.3 KB | 43.3 KB |
-| App runtime | 31.4 KB | 0.1 KB |
-| core, alloc and compiler builtins | 26.2 KB | 11.3 KB |
+| App runtime | 32.5 KB | 0.1 KB |
+| core, alloc and compiler builtins | 26.6 KB | 11.4 KB |
 | Storage (littlefs) | 21.6 KB | 21.0 KB |
 | Embassy, allocator and Cortex-M | 18.2 KB | 16.1 KB |
 | Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
 | Settings, companion and notifications (with serde) | 11.0 KB | 8.8 KB |
 | Display, graphics and drivers | 6.7 KB | 3.1 KB |
 | Updates (DFU) | 2.4 KB | 2.4 KB |
-| Packages | 2.3 KB | 2.1 KB |
+| Packages | 2.3 KB | 2.0 KB |
 | BLEFS file service | 2.0 KB | 2.2 KB |
 | Other constants and padding | 23.3 KB | 10.9 KB |
-| **Used** | **366.4 KB** | **164.4 KB** |
-| Free of 400 KB | 33.6 KB | 235.6 KB |
+| **Used** | **368.4 KB** | **164.6 KB** |
+| Free of 400 KB | 31.6 KB | 235.4 KB |
 <!-- /measure_memory:firmware -->
 
 The accelerometer's configuration is the largest piece of data left in it; each watch could build
@@ -193,14 +193,14 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (storage 16 KB, UI 21 KB; the recovery build has no UI heap) | 37,888 B | 16,384 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 13,698 B | 10,517 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 13,714 B | 10,517 B |
 | Bluetooth controller | 2,545 B | 2,545 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | BLEFS file service | 122 B | 122 B |
 | App host (with `neotime-ui` and rlvgl) | 56 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **54,724 B** | **29,980 B** |
-| Left for the stack | 10,796 B | 35,540 B |
+| **Static RAM** (`.data` and `.bss`) | **54,740 B** | **29,980 B** |
+| Left for the stack | 10,780 B | 35,540 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:

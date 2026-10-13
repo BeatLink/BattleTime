@@ -1,6 +1,6 @@
 //! The array questions and work the interpreter does natively, so apps carry no loops for them.
 
-use super::{Failure, Interpreter, Value};
+use super::{Failure, Interpreter, SystemValues, Value};
 use crate::instruction::{ArrayQuestion, ArrayWork};
 use crate::state::AppState;
 
@@ -13,6 +13,9 @@ pub const MOST_GRID_SIDE: usize = 16;
 
 /// The longest array `Inversions` counts in, since it compares every pair.
 pub const MOST_INVERSION_ELEMENTS: usize = 64;
+
+/// How many bytes of a file `FileBytes` reads at a time, so a long array never needs a long buffer.
+const FILE_CHUNK_BYTES: usize = 32;
 
 /// Directions as the swipe event gives them.
 const UP: Value = 0;
@@ -216,6 +219,8 @@ impl Interpreter {
                 self.slide(state, source, Some(destination), grid, direction)
                     .map(|_| ())
             }
+            // The interpreter reads files itself, since only it has the system and the path's text.
+            ArrayWork::FileBytes => Err(Failure::BadInstruction),
             ArrayWork::Shuffle => {
                 let count = self.pop()?;
                 let first = self.pop()?;
@@ -269,6 +274,39 @@ impl Interpreter {
                 self.write_element(state, destination, end as Value, value, true)
             }
         }
+    }
+
+    /// Writes the first bytes of the file at `path` into `array`, one per element, with 0 past the file's end.
+    #[inline(never)]
+    pub(super) fn read_file_bytes(
+        &mut self,
+        state: &AppState,
+        array: u8,
+        path: &str,
+        system: &impl SystemValues,
+    ) -> Result<(), Failure> {
+        let length = Self::array_length(state, array)?;
+        let mut chunk = [0u8; FILE_CHUNK_BYTES];
+        let mut offset = 0;
+        let mut file_ended = false;
+
+        while offset < length {
+            let wanted = (length - offset).min(FILE_CHUNK_BYTES);
+            let read = match file_ended {
+                true => 0,
+                false => system
+                    .read_file(path, offset as u32, &mut chunk[..wanted])
+                    .unwrap_or(0)
+                    .min(wanted),
+            };
+            file_ended = read < wanted;
+            chunk[read..wanted].fill(0);
+            for (place, byte) in chunk[..wanted].iter().enumerate() {
+                self.write_element(state, array, (offset + place) as Value, *byte as Value, true)?;
+            }
+            offset += wanted;
+        }
+        Ok(())
     }
 
     /// The longest line of `value` through `cell`, counting the cell itself as holding it.

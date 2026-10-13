@@ -94,7 +94,7 @@ fn rejected_call_advice(name: &str) -> Option<&'static str> {
         "every" | "at" | "daily" | "clock_change" | "heart_rate_reading" | "steps" | "step_goal" | "motion"
         | "acceleration" | "battery" | "phone" | "notification" | "call" | "music" | "weather" | "navigation"
         | "message" | "http_response" | "settings_change" => "is a subscription; list it in define_app's `subscriptions`",
-        "vibrate_sequence" | "http_request" | "send_to_phone" => {
+        "vibrate_sequence" | "http_request" => {
             "is not in the bytecode yet, because it needs an array or object argument"
         }
         "sine" | "cosine" | "point_on_circle" => {
@@ -248,6 +248,16 @@ impl<'a> Compiler<'a> {
             }
         }
 
+        if name == "send_to_phone" && module == LibraryModule::Neotime {
+            if !emitter.is_handler() || !as_statement {
+                return fail(
+                    span,
+                    "`send_to_phone` is an effect, so it goes on its own line in a handler",
+                );
+            }
+            self.compile_send_to_phone(emitter, arguments, scope, span)?;
+            return Ok(None);
+        }
         if let Some((effect, argument_types)) = effect_signature(name) {
             if module != LibraryModule::Neotime {
                 return fail(span, format!("`{name}` is not a function here"));
@@ -382,6 +392,7 @@ impl<'a> Compiler<'a> {
                 self.compile_start_of(emitter, name, argument(0)?, scope, span)?
             }
             "icon_named" => self.compile_icon_named(emitter, argument(0)?, scope, span)?,
+            "library_icon" => self.compile_library_icon(emitter, argument(0)?, scope, span)?,
             "day_of_year" => self.compile_day_of_year(emitter, argument(0)?, scope, span)?,
             "iso_week_of" => self.compile_iso_week(emitter, argument(0)?, scope, span)?,
             "count_where" => self.compile_array_search(
@@ -553,6 +564,42 @@ impl<'a> Compiler<'a> {
         };
         cases.push((KeyValue::Number(-1), none));
         self.compile_match_on_stack(emitter, &cases, Some(Type::ICON), span)
+    }
+
+    /// `library_icon(index)`: the library icon at that place in `ICON_NAMES`, or `none` outside it.
+    fn compile_library_icon(
+        &mut self,
+        emitter: &mut Emitter,
+        index: &'a Expression<'a>,
+        scope: &Rc<Scope<'a>>,
+        span: Span,
+    ) -> Compiled<Typed> {
+        let first_icon = icon_number(ICON_NAMES[0]).unwrap_or(0);
+        let none = icon_number("none").unwrap_or(0);
+        let mark = emitter.locals_in_use();
+        let index_local = emitter.take_local(span)?;
+        let outside = emitter.label();
+        let end = emitter.label();
+
+        self.compile_value_of_type(emitter, index, scope, Type::NUMBER)?;
+        emitter.emit(Instruction::WriteLocal(index_local), span)?;
+        emitter.emit(Instruction::ReadLocal(index_local), span)?;
+        self.emit_number(emitter, 0, span)?;
+        emitter.emit(Instruction::GreaterOrEqual, span)?;
+        emitter.emit(Instruction::ReadLocal(index_local), span)?;
+        self.emit_number(emitter, ICON_NAMES.len() as i64, span)?;
+        emitter.emit(Instruction::Less, span)?;
+        emitter.emit(Instruction::BitAnd, span)?;
+        emitter.jump_if_false(outside, span)?;
+        emitter.emit(Instruction::ReadLocal(index_local), span)?;
+        self.emit_number(emitter, first_icon, span)?;
+        emitter.emit(Instruction::Add, span)?;
+        emitter.jump(end, span)?;
+        emitter.place(outside);
+        self.emit_number(emitter, none, span)?;
+        emitter.place(end);
+        emitter.release_locals(mark);
+        Ok(Typed::new(Type::ICON))
     }
 
     /// `Math.floor`, `Math.trunc`, `Math.round` and `Math.ceil`, which only change a division.

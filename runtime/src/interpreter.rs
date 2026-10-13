@@ -15,7 +15,9 @@ mod array_work;
 pub use array_work::MOST_GRID_SIDE;
 
 use crate::image::{AppImage, Function};
-use crate::instruction::{decode, EffectKind, Instruction, SystemValue, TimeUnit, MOST_EFFECT_ARGUMENTS};
+use crate::instruction::{
+    decode, ArrayWork, EffectKind, Instruction, SystemValue, TimeUnit, MOST_EFFECT_ARGUMENTS,
+};
 use crate::pattern;
 use crate::state::{read_packed, write_packed, AppState, Placement};
 use crate::text::{DateTime, TextReference, TextWriter, MOST_FIXED_PLACES};
@@ -873,6 +875,20 @@ impl Interpreter {
                 }
             }
             AskArray { question, array } => self.ask_array(call.state, question, array)?,
+            WorkArray {
+                work: ArrayWork::FileBytes,
+                destination,
+                ..
+            } => {
+                Self::require_handler(call)?;
+                let image = call.image;
+                let path = match TextReference::from_value(self.pop()?) {
+                    Some(TextReference::ImageString(index)) => image.string(index),
+                    _ => None,
+                }
+                .ok_or(Failure::BadText)?;
+                self.read_file_bytes(call.state, destination, path, call.system)?;
+            }
             WorkArray {
                 work,
                 destination,

@@ -63,6 +63,7 @@ struct Options {
     app: Option<AppSource>,
     library_path: Option<String>,
     installed_paths: Vec<String>,
+    storage_folder: Option<String>,
     clicks: Vec<Click>,
     script_path: Option<String>,
 }
@@ -116,6 +117,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             library: &library,
             installed_apps: &installed_apps,
             installed_app_icons: &installed_app_icons,
+            storage_folder: options.storage_folder.as_deref().map(std::path::Path::new),
         };
         return match &options.screenshot_path {
             Some(path) => app::save_screenshot(
@@ -167,6 +169,7 @@ fn read_options() -> Result<Options, String> {
         app: None,
         library_path: None,
         installed_paths: Vec::new(),
+        storage_folder: None,
         clicks: Vec::new(),
         script_path: None,
     };
@@ -182,12 +185,13 @@ fn read_options() -> Result<Options, String> {
             "--demo" => options.app = Some(AppSource::Demo),
             "--library" => options.library_path = Some(value()?),
             "--installed" => options.installed_paths.push(value()?),
+            "--files" => options.storage_folder = Some(value()?),
             "--click" => options.clicks.push(parse_click(&value()?)?),
             "--script" => options.script_path = Some(value()?),
             _ => {
                 return Err(format!(
                     "unknown option {argument}; use --screenshot PATH, --page N, --scale N, --app PATH, \
-                     --demo, --click X,Y, --script PATH"
+                     --demo, --library PATH, --installed PATH, --files FOLDER, --click X,Y, --script PATH"
                 ))
             }
         }

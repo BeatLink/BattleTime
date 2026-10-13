@@ -87,6 +87,16 @@ export function icon_named(name: IconName): LibraryIcon {
   return icons[name];
 }
 
+/** The icons in the shared library's own order, which puts `none` straight after `weather`. */
+const LIBRARY_ORDER: readonly IconName[] = (Object.keys(ICON_SYMBOLS) as IconName[]).flatMap((name) =>
+  name === "none" ? [] : name === "weather" ? [name, "none"] : [name],
+);
+
+/** The shared library icon at this place in the library, or `none` outside it, such as for an icon the phone chose by number. */
+export function library_icon(index: number): LibraryIcon {
+  return icons[LIBRARY_ORDER[index] ?? "none"];
+}
+
 export function icon_symbol(icon: LibraryIcon): string {
   return ICON_SYMBOLS[icon.library_icon];
 }

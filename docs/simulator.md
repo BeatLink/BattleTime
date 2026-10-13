@@ -36,8 +36,9 @@ nix run . -- --demo --click 120,138 --screenshot out.png    # click Start, save 
 
 The built-in stopwatch is written with the runtime's image writer (`app-host/src/demo.rs`), so it
 runs before the compiler exists. `--click X,Y` taps the screen before a screenshot and may be
-given more than once. `--library path/to/shared.ntlib` gives the app the shared library, for the
-icons apps take from it:
+given more than once. `--files FOLDER` stands a folder in for the watch's storage, so an app reading
+`/remote/buttons` reads `FOLDER/remote/buttons`. `--library path/to/shared.ntlib` gives the app the
+shared library, for the icons apps take from it:
 
 ```sh
 cargo run -q -p neotime-compiler -- faces/digital/face.tsx -o face.ntapp

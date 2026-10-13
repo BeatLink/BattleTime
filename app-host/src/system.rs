@@ -148,6 +148,10 @@ impl<Values: SystemValues + ?Sized> SystemValues for Clocked<'_, Values> {
     fn random_number(&self) -> u32 {
         self.values.random_number()
     }
+
+    fn read_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
+        self.values.read_file(path, offset, out)
+    }
 }
 
 #[cfg(test)]

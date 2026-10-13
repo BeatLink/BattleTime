@@ -16,7 +16,7 @@ They compile to app images with `neotime-compiler`. They also type-check against
 stand-in for the `neotime` package, and every screen renders in a test.
 
 The Screen column shows each app's main screen as the simulator draws it, and for the stopwatch,
-the calculator and the launcher a second screen after some use. The pictures are the reference
+the calculator and the launcher a second screen after some use, and for the remote its layouts with 1, 4 and 9 buttons. The pictures are the reference
 screenshots in `harness/snapshots/screens/`, which the screenshot test keeps current; see
 [Reference screenshots](testing.md#reference-screenshots).
 
@@ -62,6 +62,7 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 | `steps` | InfiniTime Steps, wasp-os step_counter and steplogger | Goal ring with yesterday's steps and a resettable trip meter, the last seven days, and any of them by hour, all from the system's step history. | <img src="../harness/snapshots/screens/app-steps.png" width="120" alt="steps"> |
 | `sports` | wasp-os sports | A stopwatch with the steps taken since it started. | <img src="../harness/snapshots/screens/app-sports.png" width="120" alt="sports"> |
 | `music` | InfiniTime Music, wasp-os music_player | Track, progress, play and skip by swipe, and a volume row. | <img src="../harness/snapshots/screens/app-music.png" width="120" alt="music"> |
+| `remote` | new | Up to 9 buttons the companion app sets up, each with a library icon; a tap buzzes and tells the phone which button it was, and the phone runs that button's action. It reads `/remote/buttons` when it opens and when the screen turns on. | <img src="../harness/snapshots/screens/app-remote.png" width="120" alt="remote"> <img src="../harness/snapshots/screens/app-remote-1.png" width="120" alt="remote with one button"> <img src="../harness/snapshots/screens/app-remote-4.png" width="120" alt="remote with four buttons"> <img src="../harness/snapshots/screens/app-remote-9.png" width="120" alt="remote with nine buttons"> |
 | `notifications` | InfiniTime Notifications, wasp-os notification list | The latest 5 notifications from the phone and from apps, newest first; a tap reads one in full and Dismiss removes it. Opens by itself when a notification wakes the screen. | <img src="../harness/snapshots/screens/app-notifications.png" width="120" alt="notifications"> |
 | `weather` | InfiniTime Weather, wasp-os weather | Conditions, low and high, and a 5 day forecast, all read from `current_weather`. | <img src="../harness/snapshots/screens/app-weather.png" width="120" alt="weather"> |
 | `navigation` | InfiniTime Navigation | The next turn, its distance in the wearer's units and the trip's progress. | <img src="../harness/snapshots/screens/app-navigation.png" width="120" alt="navigation"> |

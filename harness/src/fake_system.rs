@@ -95,8 +95,8 @@ impl RecordedEffect {
 fn text_arguments(kind: EffectKind) -> &'static [usize] {
     use EffectKind::*;
     match kind {
-        Go | OpenApp | ShowToast | Log | SendToPhone | SetSetting => &[0],
-        Notify => &[0, 1],
+        Go | OpenApp | ShowToast | Log | SetSetting => &[0],
+        Notify | SendToPhone => &[0, 1],
         _ => &[],
     }
 }
@@ -122,6 +122,8 @@ pub struct FakeSystem {
     pub step_hours: Vec<Value>,
     /// The watch's files by path, such as the note the phone sent.
     pub files: Vec<(String, Vec<u8>)>,
+    /// Every line the app's effects sent the phone, newline included, as the firmware sends them.
+    pub phone_lines: Vec<String>,
     random_state: Cell<u32>,
     effects: Vec<RecordedEffect>,
     failures: Vec<AppFailure>,
@@ -158,6 +160,7 @@ impl FakeSystem {
             notifications_changed: false,
             step_hours: starting_step_hours(),
             files: vec![(STARTING_NOTE_PATH.to_string(), STARTING_NOTE.as_bytes().to_vec())],
+            phone_lines: Vec::new(),
             random_state: Cell::new(RANDOM_SEED),
             effects: Vec::new(),
             failures: Vec::new(),
@@ -348,6 +351,12 @@ impl System for FakeSystem {
         let now = self.now_in_milliseconds;
         if self.notifications.carry_out(effect, &self.app_name, now) {
             self.notifications_changed = true;
+        }
+        if let Some(line) = neotime_app_host::phone::line_for_effect(effect.kind, effect.number(0)) {
+            self.phone_lines.push(line.to_string());
+        }
+        if let Some(line) = neotime_app_host::phone::app_line_for_effect(effect) {
+            self.phone_lines.push(line);
         }
         let argument_count = effect.kind.argument_count();
         let text_positions = text_arguments(effect.kind);

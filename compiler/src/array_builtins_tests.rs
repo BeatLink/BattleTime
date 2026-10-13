@@ -22,7 +22,7 @@ fn source(body: &str, screen: &str) -> String {
     format!(
         r#"
 import {{ signal }} from "@preact/signals";
-import {{ define_app, count_of, nth_index_of, line_through, can_slide, slide_changes, slide_points, slide_grid, life_step, arrays_equal, push_shift, unshift_pop, shuffled, count_inversions, format_fixed, type SwipeEvent }} from "neotime";
+import {{ define_app, count_of, nth_index_of, line_through, can_slide, slide_changes, slide_points, slide_grid, life_step, arrays_equal, push_shift, unshift_pop, shuffled, count_inversions, format_fixed, file_bytes, type SwipeEvent }} from "neotime";
 import {{ Label, Screen }} from "neotime/widgets";
 
 const board = signal([1, 0, 1, 2]);
@@ -199,4 +199,43 @@ fn shuffles_inversions_and_fixed_point_text_compile_to_single_instructions() {
             ..
         }
     )));
+}
+
+#[test]
+fn file_bytes_compiles_to_one_instruction_with_the_path_written_out() {
+    let bytes = compiled(
+        "function swipe(event: SwipeEvent) { board.value = file_bytes(\"/remote/buttons\", 4); }",
+        "<Label>{`${board.value[0]}`}</Label>",
+    );
+    let image = AppImage::parse(&bytes).unwrap();
+    let handler = instructions(image.handler_code(0).unwrap());
+
+    let Instruction::PushText(path) = handler[0] else {
+        panic!("{handler:?}");
+    };
+    assert_eq!(image.string(path), Some("/remote/buttons"));
+    assert_eq!(
+        handler[1],
+        Instruction::WorkArray {
+            work: ArrayWork::FileBytes,
+            destination: 0,
+            source: 0,
+        }
+    );
+    assert!(image.state_variable(0).unwrap().element_bytes >= 2);
+}
+
+#[test]
+fn file_bytes_needs_a_written_path_a_known_length_and_an_array_that_long() {
+    let call = |arguments: &str| {
+        first_error(
+            &format!("function swipe(event: SwipeEvent) {{ board.value = file_bytes({arguments}); }}"),
+            "<Label>{`${board.value[0]}`}</Label>",
+        )
+    };
+
+    assert!(call("`/x${board.value[0]}`, 4").contains("path written out"));
+    assert!(call("\"/x\", board.value[0]").contains("known when compiling"));
+    assert!(call("\"/x\", 5").contains("needs an array of 5"));
+    assert!(call("\"/x\"").contains("takes a path and a length"));
 }

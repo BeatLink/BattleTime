@@ -1,10 +1,12 @@
 //! The phone as apps see it: its calls, music and weather delivered as events, and the lines an
-//! app's phone effects send back, such as `music_control`.
+//! app's phone effects send back, such as `music_control` and `send_to_phone`.
 
 use neotime_companion::{PhoneCall, PhoneChanges, ShortLine};
 use neotime_runtime::{EffectKind, Value};
 
-use crate::{AppHost, CallKind, PushedEvent, System};
+use alloc::string::String;
+
+use crate::{AppEffect, AppHost, CallKind, PushedEvent, System};
 
 /// The `call` event for a call from the phone.
 pub fn call_event(call: &PhoneCall) -> PushedEvent<'_> {
@@ -44,6 +46,14 @@ pub fn line_for_effect(kind: EffectKind, first_argument: Value) -> Option<ShortL
         EffectKind::MusicControl => neotime_companion::music_control_line(first_argument),
         EffectKind::CallControl => neotime_companion::call_control_line(first_argument),
         EffectKind::FindPhone => Some(neotime_companion::find_phone_line(first_argument != 0)),
+        _ => None,
+    }
+}
+
+/// The `app` line a `send_to_phone` effect sends, or `None` for another effect or one that cannot be sent.
+pub fn app_line_for_effect(effect: &AppEffect) -> Option<String> {
+    match effect.kind {
+        EffectKind::SendToPhone => neotime_companion::app_message_line(effect.text(0)?, effect.text(1)?),
         _ => None,
     }
 }

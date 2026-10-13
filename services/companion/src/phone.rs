@@ -8,6 +8,7 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
+use alloc::string::String;
 use core::fmt::Write;
 
 use neotime_runtime::{SystemValue, Value, NONE};
@@ -466,6 +467,29 @@ pub fn find_phone_line(is_on: bool) -> ShortLine {
     let mut line = ShortLine::new();
     let _ = writeln!(line, "{{\"t\":\"findPhone\",\"n\":{is_on}}}");
     line
+}
+
+/// The longest an app's channel name may be, as the compiler allows.
+const LONGEST_APP_CHANNEL: usize = 32;
+
+/// The `app` line for an app's `send_to_phone`: `{"t":"app","ch":"<channel>","d":<data>}`.
+///
+/// The compiler writes `data` as a JSON object of whole numbers; a channel or data that could break the
+/// line, or a line longer than the phone reads, gives `None`.
+pub fn app_message_line(channel: &str, data: &str) -> Option<String> {
+    let channel_fits = (1..=LONGEST_APP_CHANNEL).contains(&channel.len())
+        && channel
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-');
+    let data_fits = data.starts_with('{')
+        && data.ends_with('}')
+        && data.bytes().all(|byte| (b' '..=b'~').contains(&byte));
+    if !channel_fits || !data_fits {
+        return None;
+    }
+    let mut line = String::new();
+    let _ = writeln!(line, "{{\"t\":\"app\",\"ch\":\"{channel}\",\"d\":{data}}}");
+    (line.len() <= crate::MOST_LINE_BYTES).then_some(line)
 }
 
 #[cfg(test)]

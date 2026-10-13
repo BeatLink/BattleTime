@@ -45,12 +45,14 @@ tests and given to every app.
 | `deliver(PushedEvent::Steps { .. })` | An event from the phone or a sensor, with the system values it carries. |
 | `receive_from_phone(line)` | A companion line from the phone, read by `neotime-companion` as the watch reads it. |
 | `set_system_value`, `set_system_text`, `screen_off`, `screen_on`, `install_apps(&["timer"])` | Change the battery, the firmware version or another value, the screen, or the launcher's list. |
+| `write_file(path, bytes)`, `reopen()` | Write a file as the phone does, and leave the app and open it again, so it reads the file afresh. |
 
 | Inspect | Gives |
 |---|---|
 | `visible_texts()`, `shows_text("…")` | The text of every widget that can be seen; whether one contains the text. |
 | `screen_name()`, `tappable_widgets()`, `visible_area(index)` | The open screen and what on it answers taps. |
 | `effects()`, `effects_of(kind)`, `take_effects()` | Every effect the app asked for, with text arguments as text. |
+| `phone_lines()` | Every line the app's effects sent the phone, as the firmware builds them, such as `send_to_phone`'s `app` line. |
 | `failures()` | Every `AppFailure` of the app's code. |
 | `frame()`, `pixels_left_stale()` | The drawn 240x240 RGB565 screen; how far drawing only the changes strays from drawing afresh. |
 
@@ -165,7 +167,7 @@ The preview test leaves out what the test watch cannot read: an icon's symbol an
 ### Reference screenshots
 
 `harness/tests/screenshots.rs` draws each app's and face's main screen, plus the stopwatch three
-seconds after starting, the calculator after 7 + 5 = and the launcher listing four apps, and
+seconds after starting, the calculator after 7 + 5 =, the launcher listing four apps and the remote with 1, 4 and 9 buttons, and
 compares the 240x240 frame pixel for pixel with `harness/snapshots/screens/<name>.png`.
 [apps.md](apps.md) shows the apps' pictures in its Screen column, so a new app's row there needs
 its picture too.

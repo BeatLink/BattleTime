@@ -283,3 +283,35 @@ mod status_screen {
         screen.write_line(page::FIRMWARE, "é€ ünïcödé line that runs on and on");
     }
 }
+
+#[test]
+fn watch_files_are_read_from_the_storage_folder() {
+    use crate::app::read_storage_file;
+    use neotime_runtime::SystemValues;
+
+    let folder = std::env::temp_dir().join(format!("neotime-simulator-storage-{}", std::process::id()));
+    std::fs::create_dir_all(folder.join("remote")).unwrap();
+    std::fs::write(folder.join("remote/buttons"), [1, 3, 26, 32, 28]).unwrap();
+    let mut out = [0u8; 4];
+
+    assert_eq!(
+        read_storage_file(&folder, "/remote/buttons", 1, &mut out),
+        Some(4)
+    );
+    assert_eq!(out, [3, 26, 32, 28]);
+    assert_eq!(
+        read_storage_file(&folder, "/remote/buttons", 3, &mut out),
+        Some(2)
+    );
+    assert_eq!(read_storage_file(&folder, "/remote/missing", 0, &mut out), None);
+    assert_eq!(
+        read_storage_file(&folder, "/remote/../remote/buttons", 0, &mut out),
+        None
+    );
+    assert_eq!(read_storage_file(&folder, "remote/buttons", 0, &mut out), None);
+    assert_eq!(
+        crate::app::test_system().read_file("/remote/buttons", 0, &mut out),
+        None
+    );
+    std::fs::remove_dir_all(&folder).unwrap();
+}

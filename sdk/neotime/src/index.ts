@@ -203,7 +203,7 @@ export interface InstalledApp {
 /** Every app a launcher lists, in order; kept by the system. */
 export const installed_apps = signal<InstalledApp[]>([]);
 
-/** Files a `TextFile` reads in the browser preview, by path, standing in for the watch's storage. */
+/** Files a `TextFile` and `file_bytes` read in the browser preview, by path, standing in for the watch's storage. */
 export const preview_files = signal<Record<string, string>>({});
 
 /** How many days the step history holds: today and the six before it. */
@@ -1001,6 +1001,16 @@ export function life_step(grid: readonly number[], width: number, live_value: nu
     }
     return neighbours === 3 || (cell !== 0 && neighbours === 2) ? live_value : 0;
   });
+}
+
+/**
+ * The first `length` bytes of a file on the watch, 0 to 255 each, with 0 past its end or when it is missing. The
+ * path is written out and the length known when compiling. Assign it to an array signal of that length in a
+ * handler, such as `onOpen`. The preview reads the file from `preview_files` as UTF-8.
+ */
+export function file_bytes(path: string, length: number): number[] {
+  const bytes = new TextEncoder().encode(preview_files.value[path] ?? "");
+  return Array.from({ length }, (_, index) => bytes[index] ?? 0);
 }
 
 /**

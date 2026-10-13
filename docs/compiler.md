@@ -109,6 +109,13 @@ Inside handlers and the functions they call:
 - Writes to `signal.value`, `array.value[index]` and `record.value.field`, with `=`, `+=` and the
   other compound operators except `/=`, and `++` and `--`.
 - Effect calls from `neotime`, and `random_int`.
+- `send_to_phone(channel, { key: number, ... })` (`phone_messages.rs`), with the channel and keys
+  written out and up to 4 whole-number values. The data becomes JSON text built while the handler
+  runs, the literal pieces joined with each value's `FormatNumber`, such as `{"button":` and the
+  number and `}`; the effect takes the channel's text and that text.
+- `target.value = file_bytes(path, length)`, with the path written out and the length equal to the
+  array's, compiles to the path's `PushText` and one `WorkArray` (`FileBytes`), and lets the array
+  hold 0 to 255.
 
 A whole array assigned at once follows JavaScript: the new value is worked out from the old array
 before anything is written.
@@ -164,6 +171,8 @@ to locals, because a loop needs an empty stack.
 - The array functions from `count_of` to `life_step` (`array_builtins.rs`) take array signals and
   compile to `AskArray`, or to `WorkArray` for `arrays_equal`. `slide_grid`, `life_step`, `push_shift`, `unshift_pop` and
   `shuffled` compile only as the whole right side of an assignment to an array signal, written straight into it.
+- `library_icon(index)`: the index plus 32768 while it is from 0 to the last of `ICON_NAMES`, else
+  `none`, worked out with a local and one jump.
 - `icon_named(name)` with a literal, a choice such as a weather condition, fixed text, or a
   template such as `` `turn_${turn.value}` ``.
 - A constant array or object indexed at run time: numbers that go up evenly are computed, other
@@ -251,6 +260,8 @@ them the same way.
 | `music_control` | 0 play, 1 pause, 2 next, 3 previous, 4 volume_up, 5 volume_down |
 | `call_control` | 0 answer, 1 reject, 2 mute |
 | `find_phone()` | 1 when no argument is given |
+| `send_to_phone` | two texts: the channel, and the data as JSON, such as `{"button":2}` |
+| `file_bytes` | `WorkArray` work 6, `FileBytes`, with the array as destination and source and the path's text on the stack |
 | `request_navigation_state()` | the `RequestNavigationState` effect, with no arguments |
 | `current_weather.condition`, `WeatherCondition` | 0 clear, 1 few_clouds, 2 clouds, 3 heavy_clouds, 4 rain, 5 showers, 6 thunderstorm, 7 snow, 8 mist |
 | `NavigationTurn` | 0 straight, 1 left, 2 right, 3 slight_left, 4 slight_right, 5 sharp_left, 6 sharp_right, 7 u_turn, 8 roundabout, 9 arrive |
@@ -301,7 +312,7 @@ arguments.
 
 - `message` and `http_response` subscriptions, `daily` days from a signal, ButtonMatrix
   `highlighted` (an array of labels, which `Value` cannot hold), and a Chart's second and third series.
-- `vibrate_sequence`, `http_request` and `send_to_phone`.
+- `vibrate_sequence` and `http_request`.
 - More than 16 loops, or more than 16 branches waiting to join, in one handler or expression.
 - A screen component that returns different roots, such as an early `return <Screen>`.
 - Fonts by name beyond the built-in set.
