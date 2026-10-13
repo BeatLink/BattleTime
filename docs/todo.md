@@ -203,9 +203,9 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Text edges over colour.** The display cannot be read back, so the soft edges of letters are
   mixed with one set background colour. Text on a coloured button gets dark fringes. A small line
   buffer would let edges mix with what is really underneath.
-- [ ] **rlvgl screens in the simulator.** The simulator still shows hand-drawn demo pages. Draw
-  real rlvgl screens there through `ScreenRenderer`.
-- [ ] **Touch input.** Turn `neotime-touch` gestures into rlvgl events.
+- [ ] **App screens in the simulator.** The simulator still shows hand-drawn demo pages. Draw
+  real app screens there through `ScreenRenderer`.
+- [ ] **Touch input.** Turn `neotime-touch` gestures into the app host's touch events.
 
 ## App runtime
 
@@ -351,10 +351,6 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
 
 - [ ] **Calculator's 7 key is always highlighted,** because the compiler cannot pass labels to
   `highlighted` (see [compiler.md](compiler.md)).
-- [ ] **Lines are never drawn.** rlvgl's default `stroke_line_aa` clips to a rectangle whose right
-  and bottom edges are at -1, so every line is clipped away: the analog faces show no hands or
-  ticks, and charts, such as the steps app's day and week, show only their points. Override it in
-  `neotime-ui`'s renderer and `FadedRenderer` with the screen as the clip.
 - [ ] **Terminal face overflow.** Its last line falls off the bottom of the screen and
   "[STAT] Connected" is cut in half.
 - [ ] **Check the free heap before reading an image beside an open app.** A packages `install`, the

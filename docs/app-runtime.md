@@ -8,7 +8,7 @@ lists the events, widgets and effects apps can use.
 
 - **Apps are data, not programs.** An app declares its name, icon, state, screens, the events it
   answers and the sensors it wants. The runtime owns everything that runs: it schedules work,
-  calls the app's functions, persists state and draws the screen with rlvgl.
+  calls the app's functions, persists state and draws the screen with `neotime-ui`.
 - **Functions are pure.** An app function takes the current state and an event, and returns the
   state changes and the effects it wants, such as a vibration. It cannot touch hardware, loop
   forever or keep anything between calls.
@@ -206,7 +206,7 @@ names the declarative form to use instead:
 ### Previewing in a browser
 
 The `neotime` package also has a browser version. It draws each widget as a Preact component
-inside a 240x240 frame styled like rlvgl, keeps `persisted` values in the browser's storage,
+inside a 240x240 frame styled like the watch, keeps `persisted` values in the browser's storage,
 updates `now` from the computer's clock, and has a panel to fire sensor readings and subscriptions
 by hand. An app can therefore be developed with Vite's hot reload and the Preact devtools.
 
@@ -599,7 +599,7 @@ flash; no runtime code is.
 
 1. Open the image from `/apps` and read its header, checking the shared library version.
 2. Load the state: defaults, overlaid with the values saved in the key-value store.
-3. Copy the expressions into RAM, create the rlvgl widgets for the first screen and evaluate every
+3. Copy the expressions into RAM, build the nodes for the first screen and evaluate every
    expression once.
 4. Work out from the code which inputs each expression reads, and how often the clock changes
    what it shows.
@@ -678,8 +678,8 @@ not yet read an image a section at a time from the external flash.
 `AppHost::open` parses and verifies the image, sets up the state and the bindings, and opens the
 first screen:
 
-1. It makes one node for each widget of the screen whose parents are all visible, with an rlvgl
-   widget to draw it. A hidden widget keeps its own node, which holds its `visible`, but nothing
+1. It makes one node for each widget of the screen whose parents are all visible, which the host
+   draws from its values. A hidden widget keeps its own node, which holds its `visible`, but nothing
    inside it has one, so a closed dialog costs no UI heap.
 2. It reads each node's properties once: constants straight from the image, expressions through
    the interpreter. Text comes from `Interpreter::text`.
@@ -790,7 +790,7 @@ the numbers mean. These are the meanings the host uses now:
 | `align` | 0 `start`, 1 `center`, 2 `end`. Any other number means not set. |
 | `visible` | 0 or 1. |
 | `value`, `minimum`, `maximum` | Whole numbers. `minimum` is 0 and `maximum` 100 unless set. |
-| `start_angle`, `end_angle` | Degrees clockwise from twelve o'clock, as everywhere in the app API. Used only when both are set; an arc otherwise runs from 225 to 135, leaving a gap at the bottom. The host turns them into rlvgl's angles, which start at three o'clock. |
+| `start_angle`, `end_angle` | Degrees clockwise from twelve o'clock, as everywhere in the app API. Used only when both are set; an arc otherwise runs from 225 to 135, leaving a gap at the bottom. The host turns them into its arc drawing's angles, which start at three o'clock. |
 | `long_mode` | 0 `wrap`, 1 `scroll`, 2 `clip`. Labels wrap at spaces by default. |
 | `image`, `icon` | An image number: below 32768 the app's own, 32768 to 65535 the shared library's, 65536 and up an installed app's icon. |
 
@@ -817,14 +817,14 @@ library has), in the order above. The app host's font slots start empty, and the
 
 | Widget | Drawn with | Notes |
 |---|---|---|
-| `Column`, `Row`, `Stack`, `Grid` | rlvgl container | Transparent unless they have a `background`. |
-| `Scroll`, `List` | rlvgl container | Drag to scroll; `onScrollEnd` when the drag ends. One that grows takes only the room left over and scrolls the rest. |
+| `Column`, `Row`, `Stack`, `Grid` | The host's frame | Transparent unless they have a `background`. |
+| `Scroll`, `List` | The host's frame | Drag to scroll; `onScrollEnd` when the drag ends. One that grows takes only the room left over and scrolls the rest. |
 | `Repeat` | The host | Its one child, the row, built once for each of `row_count` rows, each run with its row number for `ReadRow`. Laid out as its parent's own children, so `justify`, `gap` and grid columns treat its rows as before. Down a `List` or `Scroll`, when the row has a fixed `height`, the host instead works out which rows show without building them, leaves a slot for each, and builds nodes only for the rows that can be seen, building and dropping rows as the list scrolls. |
-| `Label` | rlvgl label | Wraps at spaces; `long_mode` scroll and clip work. `align` places the text across. |
-| `Button` | rlvgl button with a label or icon | `background` defaults to the theme's `surface`, and `radius` to 12. |
+| `Label` | The host's text drawing | Wraps at spaces; `long_mode` scroll and clip work. `align` places the text across. |
+| `Button` | The host's frame with a label or icon | `background` defaults to the theme's `surface`, and `radius` to 12. |
 | `Image`, `Icon` | The host's image drawing | Colour images as they are, masks in `color`. A missing image draws a placeholder box. |
-| `Arc` | rlvgl arc | `background` is the track and `color` the filled part; `border_width` is the ring's thickness. Its children are laid out as a column centred in it. Not draggable yet. |
-| `Bar`, `Slider`, `Switch`, `Led`, `ClickArea` | rlvgl | A tap on a `Switch`, or a tap or drag on a `Slider`, sends `onChange`. |
+| `Arc` | `widgets::draw_arc` | `background` is the track and `color` the filled part; `border_width` is the ring's thickness. Its children are laid out as a column centred in it. Not draggable yet. |
+| `Bar`, `Slider`, `Switch`, `Led`, `ClickArea` | `widgets.rs` | A tap on a `Switch`, or a tap or drag on a `Slider`, sends `onChange`. |
 | `CellGrid` | The host | Cells from an array and a palette, with `gap` and shape; click and drag send `{value}`, the cell's index. |
 | `Battery`, `StatusIcons`, `Badge` | The host | Drawn as the rows of icons, battery outline and label they replace drew them, each piece in the middle of the widget's height, from bound values such as the charge and which icons show. The icons they draw are the library's by fixed numbers in `resources::library_icon`. |
 | `NumberRoller`, `TimeRollers`, `DurationRollers`, `WeekdayPicker`, `Stepper`, `Confirm` | The host | Drawn from their `value` as the rollers, buttons and labels they replace, with no list of options kept in the app's state. A tap works out the value it makes, such as the number above or below in the tapped roller, and sends it to `onChange`. |
@@ -877,8 +877,8 @@ on the heap, boxed empty and filled in place with `AppState::load_layout` and
 The widgets themselves are allocated from the UI heap. Each widget of the open screen is a 160 B
 node on the watch, measured the same way, plus its text. The stopwatch demo's screen of four widgets
 holds 1,016 B on the 64-bit computer, measured with a counting allocator in the host's tests, and
-peaks at 1,080 B while drawing. Nodes hold only values; each rlvgl widget is built when it is drawn
-and dropped afterwards. `estimate_memory_need` adds these parts up from an image, so an app that
+peaks at 1,080 B while drawing. Nodes hold only values, and each widget is drawn straight from them,
+allocating nothing. `estimate_memory_need` adds these parts up from an image, so an app that
 would not fit is refused when it is installed rather than failing when it opens; see
 [memory-map.md](memory-map.md#how-much-heap-an-app-needs).
 
@@ -917,7 +917,7 @@ watch.
 - Whether themes should also set fonts and corner rounding, not only colours.
 
 - Whether to build the Preact front end first, or start with KDL to get the runtime running.
-- How closely the browser preview must match rlvgl's layout before it is useful.
+- How closely the browser preview must match the watch's layout before it is useful.
 - How screens slide in and out, once the UI toolkit has page transitions.
 - Which Bluetooth protocol carries phone data, such as the weather, music and app messages, to the runtime.
 - Whether the step limit should be one number or depend on the event.

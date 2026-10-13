@@ -3,12 +3,11 @@ extern crate std;
 
 use std::{vec, vec::Vec};
 
+use crate::shapes::{draw_widget_bg, Style};
 use embedded_graphics::geometry::OriginDimensions;
 use embedded_hal::{delay::DelayNs, digital::ErrorType, digital::OutputPin};
 use mipidsi::interface::{Interface, InterfaceKind};
 use neotime_display::{Display, MEMORY_ROWS, SCREEN_HEIGHT, SCREEN_WIDTH};
-use rlvgl_core::widget::Widget;
-use rlvgl_widgets::button::Button;
 
 use super::*;
 
@@ -192,12 +191,15 @@ fn text_sits_on_its_baseline() {
 }
 
 #[test]
-fn an_rlvgl_button_draws_onto_the_screen() {
+fn a_rounded_box_draws_onto_the_screen() {
     let mut screen = FakeScreen::new();
-    let button = Button::new("OK", rect(20, 20, 100, 40));
+    let style = Style {
+        radius: 8,
+        ..Style::default()
+    };
 
     let mut renderer = ScreenRenderer::new(&mut screen);
-    button.draw(&mut renderer);
+    draw_widget_bg(&mut renderer, rect(20, 20, 100, 40), &style);
     renderer.finish().unwrap();
 
     assert!(screen.painted_pixels() > 0);
@@ -328,13 +330,12 @@ impl DelayNs for FakeDelay {
 }
 
 #[test]
-fn a_button_reaches_the_pinetime_display_memory() {
+fn a_box_reaches_the_pinetime_display_memory() {
     let mut display = Display::new(FakePanel::new(), FakePin, &mut FakeDelay).unwrap();
-    let button = Button::new("OK", rect(0, 0, 100, 40));
 
     let mut renderer = ScreenRenderer::new(&mut display);
     renderer.fill_rect(rect(0, 0, 100, 40), WHITE);
-    button.draw(&mut renderer);
+    draw_widget_bg(&mut renderer, rect(0, 0, 100, 40), &Style::default());
     renderer.finish().unwrap();
 
     let (panel, _) = display.release();

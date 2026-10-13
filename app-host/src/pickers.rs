@@ -7,7 +7,7 @@
 use alloc::{format, string::String, vec::Vec};
 
 use neotime_runtime::{ThemeColor, Value, WidgetKind};
-use rlvgl_core::{renderer::Renderer, widget::Rect};
+use neotime_ui::{geometry::Rect, renderer::Renderer};
 
 use super::{
     draw_text_block, fill_rounded_rect, line_height, option_row_height, resolve, roller_rows, text_width,

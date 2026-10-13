@@ -1,6 +1,6 @@
 //! One node per widget of the open screen: the values its properties hold and where layout put it.
 //!
-//! A node keeps only values. The rlvgl widget that draws it is built from them each time it is
+//! A node keeps only values. What draws it is worked out from them each time it is
 //! drawn and dropped after, so a screen costs little UI heap between redraws. Colours are kept as
 //! the app gave them, fixed or a theme reference, and resolved only when drawn, so a new theme
 //! needs no app code to run.
@@ -8,7 +8,7 @@
 use alloc::{boxed::Box, string::String};
 
 use neotime_runtime::{widgets::Property, ColorValue, Theme, ThemeColor, Value, WidgetKind};
-use rlvgl_core::widget::{Color, Rect};
+use neotime_ui::geometry::{Color, Rect};
 
 use crate::fonts::FontName;
 
@@ -382,7 +382,7 @@ fn replace<Value: PartialEq>(place: &mut Value, new: Value) -> bool {
 
 pub const TRANSPARENT: Color = Color(0, 0, 0, 0);
 
-/// Spreads an RGB565 colour to rlvgl's eight bits a channel.
+/// Spreads an RGB565 colour to eight bits a channel.
 pub fn to_color(rgb565: u16) -> Color {
     let red = (rgb565 >> 11) & 0x1F;
     let green = (rgb565 >> 5) & 0x3F;

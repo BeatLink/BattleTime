@@ -7,8 +7,8 @@
 
 use core::convert::Infallible;
 
+use crate::geometry::Rect;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
-use rlvgl_core::widget::Rect;
 
 // ============================================================================
 // Strip

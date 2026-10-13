@@ -1876,8 +1876,8 @@ fn a_text_file_paints_its_letters() {
 
 #[test]
 fn a_text_file_draws_only_the_lines_inside_the_part_being_painted() {
-    use rlvgl_core::renderer::Renderer;
-    use rlvgl_core::widget::{Color, Rect};
+    use neotime_ui::geometry::{Color, Rect};
+    use neotime_ui::renderer::Renderer;
 
     /// Records the top of everything drawn.
     #[derive(Default)]
@@ -1940,8 +1940,8 @@ fn a_text_file_draws_only_the_lines_inside_the_part_being_painted() {
 
 #[test]
 fn text_over_a_row_is_mixed_with_the_rows_colour() {
-    use rlvgl_core::renderer::Renderer;
-    use rlvgl_core::widget::{Color, Rect};
+    use neotime_ui::geometry::{Color, Rect};
+    use neotime_ui::renderer::Renderer;
 
     #[derive(Default)]
     struct Recorder {

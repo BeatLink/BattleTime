@@ -10,7 +10,7 @@
 
 use alloc::boxed::Box;
 use neotime_runtime::WidgetKind;
-use rlvgl_core::widget::Rect;
+use neotime_ui::geometry::Rect;
 
 use crate::fonts::{line_height, text_width};
 use crate::nodes::{inset, row_slots, Align, Length, LongMode, Node, Placement};

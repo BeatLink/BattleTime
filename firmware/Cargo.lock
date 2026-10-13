@@ -876,13 +876,12 @@ name = "neotime-app-host"
 version = "0.1.0"
 dependencies = [
  "embedded-graphics",
+ "libm",
  "neotime-button",
  "neotime-companion",
  "neotime-runtime",
  "neotime-settings",
  "neotime-ui",
- "rlvgl-core",
- "rlvgl-widgets",
 ]
 
 [[package]]
@@ -1116,7 +1115,6 @@ dependencies = [
  "embedded-hal 1.0.0",
  "mipidsi",
  "neotime-display",
- "rlvgl-core",
 ]
 
 [[package]]
@@ -1245,45 +1243,6 @@ dependencies = [
  "const-default",
  "libc",
  "rustversion",
-]
-
-[[package]]
-name = "rlvgl-audio-meters-core"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de588434d76f375ffe3049307f08de5287573bb359679a8d60e8d95adc3258c2"
-dependencies = [
- "libm",
-]
-
-[[package]]
-name = "rlvgl-core"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74877e1144205001c3e74e1d9c053b43b55d8d776ba95c04b314d75580f35c7d"
-
-[[package]]
-name = "rlvgl-platform"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5699409b0e14b647e2292134bdf627c4735411f6f8fe7043edafd7e211920682"
-dependencies = [
- "bitflags",
- "heapless 0.8.0",
- "portable-atomic",
- "rlvgl-core",
-]
-
-[[package]]
-name = "rlvgl-widgets"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77e9755e06fdeb733c8dab48a152bb0bffd734dd963693b261c7097a91cf003c"
-dependencies = [
- "libm",
- "rlvgl-audio-meters-core",
- "rlvgl-core",
- "rlvgl-platform",
 ]
 
 [[package]]

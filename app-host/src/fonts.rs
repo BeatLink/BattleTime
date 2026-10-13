@@ -1,4 +1,4 @@
-//! The fonts an app picks with its `font` property, drawn through rlvgl's anti-aliased glyph path.
+//! The fonts an app picks with its `font` property, drawn with soft edges.
 //!
 //! The text fonts are bitmaps made from JetBrains Mono and Open Sans by `tools/generate_fonts.py`,
 //! with 4-bit coverage and runs of empty and solid pixels shortened, read in place from flash. The
@@ -8,10 +8,9 @@
 use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
 use neotime_runtime::AppImage;
-use rlvgl_core::{
-    font::{FontLineMetrics, FontMetrics, GlyphInfo},
-    renderer::Renderer,
-    widget::{Color, Rect},
+use neotime_ui::{
+    geometry::{Color, Rect},
+    renderer::{FontLineMetrics, FontMetrics, GlyphInfo, Renderer},
 };
 
 // ============================================================================

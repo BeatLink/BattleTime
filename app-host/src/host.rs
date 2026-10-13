@@ -15,7 +15,7 @@ use neotime_runtime::{
     AppImage, AppKind, AppState, Bindings, CheckedFunctions, EffectKind, Failure, ImageError, Inputs,
     Interpreter, PropertySource, SystemValue, SystemValues, Theme, Value, WidgetKind, WidgetTree, NONE,
 };
-use rlvgl_core::widget::Rect;
+use neotime_ui::geometry::Rect;
 
 use crate::drawing::pickers::{is_picker, picker_tapped};
 use crate::drawing::{

@@ -146,8 +146,8 @@ never falls behind.
 
 ## Widgets
 
-Widgets map onto [rlvgl](https://github.com/softoboros/rlvgl) widgets, which the runtime creates
-when a screen opens. Each one takes the common props below plus its own.
+Widgets follow LVGL's set, and the app host draws each one from its values when a screen opens.
+The second column of each table names the LVGL widget it matches. Each one takes the common props below plus its own.
 
 ### Common props
 
@@ -169,7 +169,7 @@ when a screen opens. Each one takes the common props below plus its own.
 
 ### Layout
 
-| Widget | rlvgl | Use |
+| Widget | LVGL | Use |
 |---|---|---|
 | `Column`, `Row` | container, flex layout | Children one after another, down or across. |
 | `Grid` | container, grid layout | Children in rows and columns, such as a keypad. |
@@ -187,7 +187,7 @@ from inside its parent's padding.
 
 ### Showing things
 
-| Widget | rlvgl | Use |
+| Widget | LVGL | Use |
 |---|---|---|
 | `Label` | label | Text. Long text wraps, or scrolls with `long_mode="scroll"`. |
 | `RichText` | span group | Text in several colours or fonts on one line. |
@@ -219,7 +219,7 @@ from inside its parent's padding.
 
 ### Input
 
-| Widget | rlvgl | Use |
+| Widget | LVGL | Use |
 |---|---|---|
 | `Button` | button | A tappable button with text or an icon. |
 | `ImageButton` | image button | A button drawn as an image. |
@@ -289,7 +289,7 @@ new icons go at the end.
 - **Canvas.** It needs a buffer for its pixels, and a full screen is 115 KB, more than the watch's
   RAM. Draw with `Line`, `Arc` and `Image` instead.
 - **Window and message box.** `Header` and `ConfirmDialog` cover them.
-- **rlvgl's audio meters and motion effects,** which have no use on a watch.
+- **Audio meters and motion effects,** which have no use on a watch.
 
 ## Effects
 

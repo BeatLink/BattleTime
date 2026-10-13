@@ -31,7 +31,7 @@ flowchart TB
     host["App host<br/>app-host: runs an open app, started"]
     compiler["App compiler, on the computer<br/>compiler: TSX to app images, started"]
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
-    ui["UI toolkit<br/>ui: rlvgl widgets, started"]
+    ui["UI toolkit<br/>ui: renderer, shapes, strips, started"]
     system["System<br/>settings started; planned: power, events, notifications"]
     services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/steps,<br/>services/liveness, services/foreground"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth,<br/>drivers/external_flash, ..."]
@@ -80,14 +80,13 @@ Each layer uses only the layers below it.
 - **System** runs the watch: it sleeps and wakes, turns button, touch and motion into events, and
   holds settings and notifications. **(started: the watch-wide settings, in `services/settings` and
   the firmware's `settings.rs`)**
-- **UI toolkit** gives apps widgets, fonts and page transitions. Widgets come from
-  [rlvgl](https://github.com/softoboros/rlvgl), a pure Rust rewrite of LVGL, and are drawn through
-  `embedded-graphics` onto the display driver. **(started: drawing works, nothing else yet)**
+- **UI toolkit** gives apps widgets, fonts and page transitions. Its own renderer, soft-edged
+  shapes and strips draw through `embedded-graphics` onto the display driver. **(started: drawing works, nothing else yet)**
 - **App runtime** loads apps installed over BLE, starts and stops them, and passes them events.
   Apps are written as Preact components with signals and compiled on the computer into images
   that a small bytecode interpreter runs; see [app-runtime.md](app-runtime.md). **(started: the
   image format, its checks, the interpreter and the bindings work)**
-- **App host** runs one open app on top of the runtime: it builds the screen's rlvgl widgets, sends
+- **App host** runs one open app on top of the runtime: it builds the screen's widgets, sends
   touches to handlers, hands effects to the system and redraws what changed. **(started: runs apps
   in the simulator; not yet on the watch)**
 - **App compiler** runs on the computer, not the watch. It turns an app's source into an image
@@ -113,7 +112,7 @@ vibration pattern, waits without blocking the others. **(planned)**
 NeoTime/
 ├── Cargo.toml        one Cargo workspace for every crate except the bootloader
 ├── package.json      the npm workspace for apps/, faces/ and sdk/neotime
-├── app-host/         neotime-app-host: runs an open app with rlvgl widgets
+├── app-host/         neotime-app-host: runs an open app and draws its widgets
 ├── apps/             neotime-apps: apps in the app language, one folder each; see apps.md
 ├── compiler/         neotime-compiler: compiles apps and faces into app images; see compiler.md
 ├── rustfmt.toml      formatting rules
@@ -173,7 +172,7 @@ NeoTime/
 │   ├── littlefs-rust/  littlefs-rust with its panicking loop caps turned off
 │   └── trouble-host/   TrouBLE with discovery responses that never cut a 128-bit UUID short
 ├── tools/            scripts: drawing the memory maps, packaging images, building every image
-└── ui/               neotime-ui: draws rlvgl widgets on the screen
+└── ui/               neotime-ui: renderer, shapes and strips that draw on the screen
 ```
 
 Each driver, the runtime, the app host and the UI crate is a `no_std` crate with its code in
@@ -885,9 +884,14 @@ and compile every app and face to report which compile.
 
 ## UI toolkit (`ui`)
 
-`neotime-ui` lets [rlvgl](https://github.com/softoboros/rlvgl) widgets draw on the watch.
-`ScreenRenderer` wraps any `embedded-graphics` `DrawTarget` for `Rgb565`, such as the display
-driver's `Display`, and carries out rlvgl's drawing calls on it:
+`neotime-ui` is the drawing layer every widget goes through. `geometry` holds `Rect`, `PointF` and
+`Color`; `renderer` holds the `Renderer` trait widgets draw through, the `FontMetrics` trait fonts
+implement, and `ClipRenderer`, which drops every pixel outside a rectangle; `raster` works out how
+much of each pixel a disc, a line or part of a ring covers, a row at a time and only inside the
+clip; and `shapes` builds rounded boxes and borders with soft corners from plain fills. The
+rasterizers and shapes follow [rlvgl](https://github.com/softoboros/rlvgl)'s (MIT licensed).
+`ScreenRenderer` wraps any `embedded-graphics` `DrawTarget` for
+`Rgb565`, such as the display driver's `Display`, and carries out the drawing calls on it:
 
 - **Strips instead of a screen buffer.** A full 240x240 picture takes 115 KB, more than the watch's
   64 KB of RAM. A `Strip` holds a few rows of the screen in a small buffer and is a `DrawTarget`
@@ -898,8 +902,8 @@ driver's `Display`, and carries out rlvgl's drawing calls on it:
   with a set background colour (`with_background_color`, black by default). Fully transparent
   pixels are skipped, so what is underneath stays.
 - **Plain text.** `draw_text` uses an `embedded-graphics` mono font, 10x20 by default
-  (`with_font`). Widgets that use rlvgl's own fonts draw through its anti-aliased glyph path.
-- **Errors.** rlvgl's drawing calls cannot fail, so the first error from the screen is kept and
+  (`with_font`). The app host's fonts draw their own glyphs as rows of coverage.
+- **Errors.** Drawing calls cannot fail, so the first error from the screen is kept and
   returned by `finish`.
 - **Hardware scrolling.** `ScrollingScreen` is a screen whose panel can move a band of rows by
   itself, as the ST7789 does; `Display` implements it. A `ScrollBand` names the rows that move, and
@@ -912,10 +916,11 @@ driver's `Display`, and carries out rlvgl's drawing calls on it:
 
 `neotime-app-host` runs one open app. It ties the runtime to the UI toolkit and to whatever embeds
 it: the firmware's system layer on the watch, or the simulator on a computer. It is `no_std` with
-`alloc`, because rlvgl's widgets need a heap.
+`alloc`, for the open app's nodes and state.
 
 - **Opening.** `AppHost::open` checks the image, sets up the state and bindings, and builds the
-  first screen: one node per widget whose parents are all visible, each drawn by an rlvgl widget,
+  first screen: one node per widget whose parents are all visible, each drawn from its values by a
+  function of the host (`drawing.rs`, and `widgets.rs` for arcs, bars, LEDs, switches and sliders),
   laid out by a small flexbox. Showing or hiding a widget builds or frees the nodes inside it.
 - **Events.** A touch goes to the topmost widget under it that has a handler for it. The handler's
   effects go to the embedder through the `System` trait, except `go` and `back`, which the host

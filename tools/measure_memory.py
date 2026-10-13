@@ -39,9 +39,8 @@ RAM_FOR_THE_FIRMWARE = 64 * 1024 - 16
 
 # Crate name prefixes, in the order they are tried, and the component each belongs to.
 COMPONENTS = [
-    ("neotime_app_host", "App host (with `neotime-ui` and rlvgl)"),
-    ("rlvgl", "App host (with `neotime-ui` and rlvgl)"),
-    ("neotime_ui", "App host (with `neotime-ui` and rlvgl)"),
+    ("neotime_app_host", "App host (with `neotime-ui`)"),
+    ("neotime_ui", "App host (with `neotime-ui`)"),
     ("neotime_runtime", "App runtime"),
     ("neotime_bluetooth", "Bluetooth (controller and TrouBLE)"),
     ("trouble_host", "Bluetooth (controller and TrouBLE)"),

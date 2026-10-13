@@ -1,4 +1,4 @@
-//! Draws rlvgl widgets onto any embedded-graphics screen, such as the PineTime display.
+//! Draws widgets onto any embedded-graphics screen, such as the PineTime display.
 //!
 //! The watch has no room for a whole-screen picture in memory, so every drawing call goes straight
 //! to the screen. The screen cannot be read back either, so see-through colours are mixed with a
@@ -6,9 +6,11 @@
 
 #![no_std]
 
-pub use rlvgl_core;
-
+pub mod geometry;
+pub mod raster;
+pub mod renderer;
 mod scrolling;
+pub mod shapes;
 mod strip;
 
 pub use scrolling::{FixedScreen, ScrollBand, ScrollState, ScrollingScreen};
@@ -21,10 +23,8 @@ use embedded_graphics::{
     primitives::Rectangle,
     text::{Baseline, Text},
 };
-use rlvgl_core::{
-    renderer::Renderer,
-    widget::{Color, Rect},
-};
+use geometry::{Color, Rect};
+use renderer::Renderer;
 
 // ============================================================================
 // Screen renderer
@@ -33,7 +33,7 @@ use rlvgl_core::{
 const OPAQUE: u8 = 255;
 const INVISIBLE: u8 = 0;
 
-/// An rlvgl renderer that draws onto a screen.
+/// A renderer that draws onto a screen.
 pub struct ScreenRenderer<'screen, Screen>
 where
     Screen: DrawTarget<Color = Rgb565>,
@@ -110,7 +110,7 @@ where
 }
 
 // ============================================================================
-// Drawing calls from rlvgl
+// Drawing calls
 // ============================================================================
 
 impl<Screen> Renderer for ScreenRenderer<'_, Screen>
@@ -164,7 +164,7 @@ where
         };
 
         let style = MonoTextStyle::new(self.font, mixed_color);
-        // rlvgl letters stand on the row above the baseline, embedded-graphics letters on it.
+        // Renderer letters stand on the row above the baseline, embedded-graphics letters on it.
         let baseline_start = Point::new(position.0, position.1 - 1);
         let result = Text::with_baseline(text, baseline_start, style, Baseline::Alphabetic)
             .draw(self.screen)
@@ -220,3 +220,7 @@ fn to_rectangle(rect: Rect) -> Option<Rectangle> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "drawing_tests.rs"]
+mod drawing_tests;

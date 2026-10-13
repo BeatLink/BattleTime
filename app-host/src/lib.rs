@@ -1,6 +1,6 @@
 //! Runs a NeoTime app: the loop between an app image, the UI toolkit and the system.
 //!
-//! `AppHost` opens an image, builds the first screen's widgets as rlvgl widgets and lays them out.
+//! `AppHost` opens an image, builds the first screen's widgets and lays them out.
 //! Touches go to the handlers the widgets name; a handler's effects go to the embedder's `System`,
 //! and only the widgets whose bound values changed are drawn again. The clock redraws only what
 //! shows it, and `next_wakeup` says when, so the watch can sleep in between. The same code runs on
@@ -24,6 +24,7 @@ mod subscriptions;
 mod system;
 mod text;
 mod text_file;
+mod widgets;
 
 #[cfg(any(test, feature = "demo"))]
 pub mod demo;
@@ -33,8 +34,8 @@ pub use host::{
     AppHost, OpenError, Transition, LARGEST_SAVED_STATE_BYTES, PAINT_STEP_PIXELS, SCREEN_AREA,
     SCREEN_HISTORY_DEPTH, STRIP_PIXELS, TRANSITION_TIME_IN_MILLISECONDS,
 };
+pub use neotime_ui::geometry::Rect;
 pub use nodes::{is_mapped, Align, Length};
-pub use rlvgl_core::widget::Rect;
 pub use subscriptions::{BatteryChange, CallKind, MotionKind, PushedEvent};
 pub use system::{AppEffect, AppFailure, EventResult, System, Touch};
 pub use text::WrappedLines;

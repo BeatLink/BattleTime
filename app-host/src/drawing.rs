@@ -1,5 +1,5 @@
-//! Draws one node: builds its rlvgl widget from the node's values, or draws widgets the host
-//! shapes itself, such as cell grids, dials and lists of options, straight from the app's state.
+//! Draws one node from its values: value widgets through `widgets`, and the rest, such as
+//! the ones the host shapes itself, such as cell grids, dials and lists of options, straight from the app's state.
 //!
 //! Array-backed widgets read their arrays at draw time rather than copying them, so a 400-cell
 //! board costs no more UI heap than a label.
@@ -10,12 +10,10 @@ use neotime_runtime::{
     resources::{library_image_named_by, ImageFormat, ImageReference, ImageResource},
     AppImage, AppState, ColorValue, Theme, ThemeColor, Value,
 };
-use rlvgl_core::{
-    draw::{draw_widget_bg, fill_rounded_rect},
-    raster::PointF,
+use neotime_ui::{
+    geometry::{Color, PointF, Rect},
     renderer::Renderer,
-    style::Style,
-    widget::{Color, Rect, Widget},
+    shapes::{draw_widget_bg, fill_rounded_rect, Style},
 };
 
 use crate::fonts::{line_height, text_width, FontName};
@@ -24,6 +22,7 @@ use crate::nodes::{
     inset, resolve, resolve_or_clear, to_color, Align, Extra, LongMode, Node, Settings, OPAQUE, TRANSPARENT,
 };
 use crate::text::{draw_line, WrappedLines};
+use crate::widgets::{draw_arc, draw_bar, draw_led, draw_slider, draw_switch, ArcLook};
 
 // ============================================================================
 // What drawing needs
@@ -109,7 +108,7 @@ const SECOND_HAND_WIDTH: f32 = 2.0;
 const CLOCK_CAP_RADIUS: f32 = 5.0;
 const HAND_SHARE_PERCENT: [i32; 3] = [50, 75, 85];
 
-/// App angles count clockwise from twelve o'clock and rlvgl's from three, so arcs turn back 90 degrees.
+/// App angles count clockwise from twelve o'clock and arc angles from three, so arcs turn back 90 degrees.
 const TWELVE_TO_RIGHT_IN_DEGREES: i32 = -90;
 
 /// An arc's default gap at the bottom, in app degrees: from about eight o'clock round to four.
@@ -323,61 +322,54 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
             draw_label_text(node, context, renderer);
         }
         Button => {
-            let mut body = rlvgl_widgets::button::Button::new(alloc::string::String::new(), bounds);
-            *body.style_mut() = frame_style(settings, track(settings.background), BUTTON_RADIUS, theme);
-            body.draw(renderer);
+            let style = frame_style(settings, track(settings.background), BUTTON_RADIUS, theme);
+            draw_widget_bg(renderer, bounds, &style);
             draw_button_content(node, context, renderer);
         }
         Arc => {
-            let mut arc = rlvgl_widgets::arc::Arc::new(bounds, settings.minimum, settings.maximum);
-            let (start, end) = match (
+            let (start_angle, end_angle) = match (
                 settings.start_angle.map(i32::from),
                 settings.end_angle.map(i32::from),
             ) {
                 (Some(start), Some(end)) => (start, end),
                 _ => (ARC_DEFAULT_START_ANGLE, ARC_DEFAULT_END_ANGLE),
             };
-            arc.set_bg_angles(start, end);
-            arc.set_rotation(TWELVE_TO_RIGHT_IN_DEGREES);
-            arc.set_value(settings.value);
-            arc.style.border_color = track(settings.background);
-            arc.style.border_width = to_u8(settings.border_width.map(i32::from).unwrap_or(ARC_STROKE_WIDTH));
-            arc.indicator_color = accent(settings.color);
-            arc.knob_color = TRANSPARENT;
-            arc.draw(renderer);
+            let look = ArcLook {
+                minimum: settings.minimum,
+                maximum: settings.maximum,
+                value: settings.value,
+                start_angle,
+                end_angle,
+                rotation: TWELVE_TO_RIGHT_IN_DEGREES,
+                stroke_width: to_u8(settings.border_width.map(i32::from).unwrap_or(ARC_STROKE_WIDTH)),
+                track_color: track(settings.background),
+                indicator_color: accent(settings.color),
+            };
+            draw_arc(renderer, bounds, &look);
         }
         Bar => {
-            let mut bar = rlvgl_widgets::bar::Bar::new(bounds, settings.minimum, settings.maximum);
-            bar.set_value(settings.value);
-            bar.style = frame_style(settings, track(settings.background), BAR_RADIUS, theme);
-            bar.indicator_color = accent(settings.color);
-            bar.draw(renderer);
+            let style = frame_style(settings, track(settings.background), BAR_RADIUS, theme);
+            let range = (settings.minimum, settings.maximum, settings.value);
+            draw_bar(renderer, bounds, &style, range, accent(settings.color));
         }
         Led => {
-            let mut led = rlvgl_widgets::led::Led::new(bounds);
-            led.set_color(accent(settings.color));
-            led.set_brightness(to_u8(settings.value));
-            led.draw(renderer);
+            draw_led(renderer, bounds, accent(settings.color), to_u8(settings.value));
         }
         Switch => {
-            let mut switch = rlvgl_widgets::switch::Switch::new(bounds);
             let is_on = settings.value != 0;
             let on_track = if is_on {
                 accent(settings.background)
             } else {
                 track(settings.background)
             };
-            switch.style = frame_style(settings, on_track, bounds.height / 2, theme);
-            switch.knob_color = resolve(settings.color, ThemeColor::Text, theme);
-            switch.set_on(is_on);
-            switch.draw(renderer);
+            let style = frame_style(settings, on_track, bounds.height / 2, theme);
+            let knob_color = resolve(settings.color, ThemeColor::Text, theme);
+            draw_switch(renderer, bounds, &style, knob_color, is_on);
         }
         Slider => {
-            let mut slider = rlvgl_widgets::slider::Slider::new(bounds, settings.minimum, settings.maximum);
-            slider.style = frame_style(settings, track(settings.background), bounds.height / 2, theme);
-            slider.knob_color = accent(settings.color);
-            slider.set_value(settings.value);
-            slider.draw(renderer);
+            let style = frame_style(settings, track(settings.background), bounds.height / 2, theme);
+            let range = (settings.minimum, settings.maximum, settings.value);
+            draw_slider(renderer, bounds, &style, range, accent(settings.color));
         }
         ClickArea => {}
         Checkbox | Radio => draw_tick_box(node, context, renderer),
@@ -1078,9 +1070,8 @@ fn draw_app_list(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
     let color = resolve(node.settings.color, ThemeColor::Text, theme);
     let surface = resolve(None, ThemeColor::Surface, theme);
     for (place, name, row) in app_list_rows(node) {
-        let mut body = rlvgl_widgets::button::Button::new(alloc::string::String::new(), row);
-        *body.style_mut() = frame_style(&Settings::default(), surface, BUTTON_RADIUS, theme);
-        body.draw(renderer);
+        let style = frame_style(&Settings::default(), surface, BUTTON_RADIUS, theme);
+        draw_widget_bg(renderer, row, &style);
 
         let icon_area = Rect {
             x: row.x + APP_ROW_PADDING,

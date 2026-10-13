@@ -1,6 +1,6 @@
 //! Lines of text: wrapping a label on spaces to fit its width, and drawing a line glyph by glyph.
 
-use rlvgl_core::{renderer::Renderer, widget::Color};
+use neotime_ui::{geometry::Color, renderer::Renderer};
 
 use crate::fonts::{character_advance, text_width, FontName};
 

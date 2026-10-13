@@ -10,11 +10,11 @@ use alloc::{vec, vec::Vec};
 
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
 use neotime_runtime::ThemeColor;
-use neotime_ui::{FixedScreen, ScreenRenderer, ScrollBand, ScrollingScreen, Strip};
-use rlvgl_core::{
+use neotime_ui::{
+    geometry::{Color, Rect},
     renderer::{ClipRenderer, Renderer},
-    widget::{Color, Rect},
 };
+use neotime_ui::{FixedScreen, ScreenRenderer, ScrollBand, ScrollingScreen, Strip};
 
 use super::{AppHost, DISABLED_OPACITY, SCREEN_AREA};
 use crate::drawing::{draw_node, DrawContext, FadedRenderer};
