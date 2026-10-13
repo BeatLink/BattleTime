@@ -7,10 +7,9 @@ license.workspace = true
 publish = false
 
 [features]
-default = ["bma421", "bma425"]
-# Each chip needs its own 6 KB configuration file from Bosch, so a watch build can leave one out.
-bma421 = []
-bma425 = []
+# Gives Bosch's 6 KB configuration file for each chip as constants, for the compiler to put in the
+# shared library; the firmware takes them from there, so it leaves this off.
+configuration-files = []
 
 [dependencies]
 embedded-hal = "1.0"

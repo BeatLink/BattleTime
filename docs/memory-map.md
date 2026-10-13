@@ -25,7 +25,7 @@ python3 tools/draw_memory_maps.py
 | Slot table | `0x05000` | 8 KB | Two pages recording where the update and recovery slots sit in the external flash; see [bootloader.md](bootloader.md#the-slot-table). |
 | Boot state | `0x07000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
 | Firmware | `0x08000` | 388 KB | The running firmware: a 256-byte [image header](bootloader.md#the-image-header), then its code, linked to start at `0x08100`. No app, face, icon or font is built in; [What fills the firmware](#what-fills-the-firmware) shows what is. |
-| Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, the app host's text fonts (47,919 B; the library with them is 74,333 B), components, common functions and the preset themes. No apps are kept here; they live in `/apps` on the external flash. An installed library starts with an 8-byte header, `NTLB` and its length, which `neotime-packages` writes. See [app-runtime.md](app-runtime.md#the-shared-library). |
+| Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, the app host's text fonts (47,919 B), Bosch's configuration file for each accelerometer (6,144 B each, which the firmware uploads to the chip; the library with all of it is 89,218 B), components, common functions and the preset themes. No apps are kept here; they live in `/apps` on the external flash. An installed library starts with an 8-byte header, `NTLB` and its length, which `neotime-packages` writes. See [app-runtime.md](app-runtime.md#the-shared-library). |
 
 
 ### What fills the firmware
@@ -38,35 +38,30 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 96.0 KB | 47.9 KB |
-| App host (with `neotime-ui`) | 74.3 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 96.5 KB | 48.4 KB |
+| App host (with `neotime-ui`) | 74.2 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 43.6 KB | 43.6 KB |
-| App runtime | 34.1 KB | 0.1 KB |
-| core, alloc and compiler builtins | 29.2 KB | 13.2 KB |
+| App runtime | 34.3 KB | 0.1 KB |
+| core, alloc and compiler builtins | 29.4 KB | 13.0 KB |
 | Embassy, allocator and Cortex-M | 18.6 KB | 16.5 KB |
 | Storage (flash store) | 16.9 KB | 16.8 KB |
 | Settings, companion and notifications (with serde) | 12.1 KB | 10.2 KB |
-| Accelerometer configuration (BMA421 and BMA425) | 12.0 KB | 0.0 KB |
-| BLEFS file service | 9.0 KB | 9.1 KB |
+| BLEFS file service | 8.9 KB | 9.0 KB |
 | Display, graphics and drivers | 5.4 KB | 3.2 KB |
 | Packages | 5.3 KB | 2.0 KB |
 | Updates (DFU) | 2.1 KB | 2.1 KB |
-| Other constants and padding | 26.0 KB | 13.4 KB |
-| **Used** | **384.5 KB** | **178.0 KB** |
-| Free of the 388 KB slot, after its header | 3.2 KB | 209.7 KB |
+| Other constants and padding | 26.1 KB | 13.4 KB |
+| **Used** | **373.3 KB** | **178.2 KB** |
+| Free of the 388 KB slot, after its header | 14.5 KB | 209.6 KB |
 <!-- /measure_memory:firmware -->
 
-The accelerometer's configuration is the largest piece of data left in it; each watch could build
-in only its own chip's. The recovery build (`--features recovery`) leaves out the shell, so the app
+The recovery build (`--features recovery`) leaves out the shell, so the app
 host and the runtime go with it.
 
-The watch face, the launcher and the apps live in `/apps` on the external flash, and the icons and
-the app host's text fonts in the shared-library region; none is inside the firmware. See
+The watch face, the launcher and the apps live in `/apps` on the external flash, and the icons,
+the app host's text fonts and the accelerometers' configuration files in the shared-library
+region; none is inside the firmware. See
 [app-runtime.md](app-runtime.md#property-values).
-
-Also inside the firmware, the accelerometer's configuration files from Bosch take 6 KB for each chip
-built in, 12 KB with both the BMA421 and the BMA425 (see the `neotime-accelerometer` cargo
-features).
 
 ## External SPI flash (4 MB)
 
@@ -197,14 +192,14 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (system 10 KB, UI 21 KB; the recovery build has no UI heap) | 31,744 B | 10,240 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 19,210 B | 15,624 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 19,310 B | 15,624 B |
 | Bluetooth controller | 2,545 B | 2,545 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | BLEFS file service | 122 B | 122 B |
 | App host (with `neotime-ui`) | 56 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **54,100 B** | **28,948 B** |
-| Left for the stack | 11,420 B | 36,572 B |
+| **Static RAM** (`.data` and `.bss`) | **54,204 B** | **28,948 B** |
+| Left for the stack | 11,316 B | 36,572 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:

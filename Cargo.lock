@@ -1192,6 +1192,7 @@ version = "0.1.0"
 dependencies = [
  "ab_glyph",
  "miniz_oxide 0.8.9",
+ "neotime-accelerometer",
  "neotime-runtime",
  "oxc_allocator",
  "oxc_ast",

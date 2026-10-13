@@ -556,6 +556,7 @@ impl Shell {
         self.system.installed = InstalledApps::read(self.files);
         self.library = apps::shared_library();
         install_fonts(self.library);
+        crate::motion::library_installed();
         self.show_first_screen();
     }
 

@@ -29,6 +29,7 @@ const RESOURCES_SECTION: u16 = 7;
 const INITIAL_VALUES_SECTION: u16 = 8;
 const FONTS_SECTION: u16 = 9;
 const FUNCTIONS_SECTION: u16 = 10;
+const DATA_SECTION: u16 = 12;
 
 const HEADER_BYTES: usize = 20;
 const SECTION_ENTRY_BYTES: usize = 12;
@@ -63,6 +64,7 @@ pub struct ImageWriter {
     resources: Vec<Vec<u8>>,
     fonts: Vec<Vec<u8>>,
     functions: Vec<Vec<u8>>,
+    data: Vec<Vec<u8>>,
 }
 
 impl ImageWriter {
@@ -83,6 +85,7 @@ impl ImageWriter {
             resources: Vec::new(),
             fonts: Vec::new(),
             functions: Vec::new(),
+            data: Vec::new(),
         };
         writer.id_string = writer.string(id);
         writer.name_string = writer.string(name);
@@ -156,6 +159,12 @@ impl ImageWriter {
     pub fn font(&mut self, bytes: &[u8]) -> u16 {
         self.fonts.push(bytes.to_vec());
         (self.fonts.len() - 1) as u16
+    }
+
+    /// Adds a file for the firmware to the shared library's data section and returns its number.
+    pub fn data(&mut self, bytes: &[u8]) -> u16 {
+        self.data.push(bytes.to_vec());
+        (self.data.len() - 1) as u16
     }
 
     /// Adds an image that only names a shared library image, such as an app's icon.
@@ -320,6 +329,9 @@ impl ImageWriter {
                 self.functions.len() as u16,
                 entry_table(&self.functions),
             ));
+        }
+        if !self.data.is_empty() {
+            sections.push((DATA_SECTION, self.data.len() as u16, entry_table(&self.data)));
         }
 
         let mut image: Vec<u8> = Vec::new();

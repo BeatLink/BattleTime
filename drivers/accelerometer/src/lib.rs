@@ -1,7 +1,9 @@
 //! Driver for the PineTime's Bosch BMA421 or BMA425 accelerometer, on I2C address 0x18.
 //!
 //! The chip counts steps by itself once Bosch's configuration file for it has been uploaded, so the
-//! watch only reads the count. Acceleration is read on demand, turned to the watch's own axes, and
+//! watch only reads the count. The files are not built into the firmware: the shared library
+//! carries them, and `start` takes them from the caller. The `configuration-files` feature gives
+//! them to the compiler, which puts them in the library. Acceleration is read on demand, turned to the watch's own axes, and
 //! `shake::ShakeDetector` finds shakes in those readings.
 
 #![no_std]
@@ -72,10 +74,18 @@ const CONFIGURATION_LOAD_IN_MILLISECONDS: u32 = 150;
 // Chip models
 // ============================================================================
 
-#[cfg(feature = "bma421")]
-const BMA421_CONFIGURATION_FILE: &[u8] = include_bytes!("configuration/bma421.bin");
-#[cfg(feature = "bma425")]
-const BMA425_CONFIGURATION_FILE: &[u8] = include_bytes!("configuration/bma425.bin");
+/// Bosch's configuration file for each chip, for the compiler to put in the shared library.
+#[cfg(any(test, feature = "configuration-files"))]
+pub const BMA421_CONFIGURATION_FILE: &[u8] = include_bytes!("configuration/bma421.bin");
+#[cfg(any(test, feature = "configuration-files"))]
+pub const BMA425_CONFIGURATION_FILE: &[u8] = include_bytes!("configuration/bma425.bin");
+
+/// The configuration files `start` can upload, each where the caller found it, or none.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Configurations<'files> {
+    pub bma421: Option<&'files [u8]>,
+    pub bma425: Option<&'files [u8]>,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ChipModel {
@@ -92,15 +102,10 @@ impl ChipModel {
         }
     }
 
-    /// Gives None for a chip whose cargo feature was left out of this build.
-    fn configuration_file(self) -> Option<&'static [u8]> {
+    fn configuration_file(self, configurations: Configurations<'_>) -> Option<&[u8]> {
         match self {
-            #[cfg(feature = "bma421")]
-            ChipModel::Bma421 => Some(BMA421_CONFIGURATION_FILE),
-            #[cfg(feature = "bma425")]
-            ChipModel::Bma425 => Some(BMA425_CONFIGURATION_FILE),
-            #[allow(unreachable_patterns)]
-            _ => None,
+            ChipModel::Bma421 => configurations.bma421,
+            ChipModel::Bma425 => configurations.bma425,
         }
     }
 }
@@ -266,9 +271,16 @@ impl Default for Settings {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error<BusError> {
     Bus(BusError),
-    UnknownChip { chip_id: u8 },
-    ChipLeftOutOfBuild { chip_model: ChipModel },
-    ConfigurationRejected { internal_status: u8 },
+    UnknownChip {
+        chip_id: u8,
+    },
+    /// The caller has no configuration file for this chip, such as before a shared library is installed.
+    NoConfiguration {
+        chip_model: ChipModel,
+    },
+    ConfigurationRejected {
+        internal_status: u8,
+    },
 }
 
 pub type AccelerometerError<I2cBus> = Error<<I2cBus as I2cErrorType>::Error>;
@@ -294,11 +306,12 @@ where
         }
     }
 
-    /// Resets the chip, uploads its configuration file and starts it measuring and counting steps.
+    /// Resets the chip, uploads its configuration file from `configurations` and starts it measuring and counting steps.
     pub async fn start(
         &mut self,
         settings: Settings,
         delay: &mut impl DelayNs,
+        configurations: Configurations<'_>,
     ) -> Result<ChipModel, AccelerometerError<I2cBus>> {
         self.settings = settings;
 
@@ -308,8 +321,8 @@ where
         let chip_id = self.read_register(CHIP_ID_REGISTER).await?;
         let chip_model = ChipModel::from_chip_id(chip_id).ok_or(Error::UnknownChip { chip_id })?;
         let configuration_file = chip_model
-            .configuration_file()
-            .ok_or(Error::ChipLeftOutOfBuild { chip_model })?;
+            .configuration_file(configurations)
+            .ok_or(Error::NoConfiguration { chip_model })?;
 
         self.write_register(
             INTERFACE_WATCHDOG_REGISTER,
@@ -462,5 +475,5 @@ where
     }
 }
 
-#[cfg(all(test, feature = "bma421", feature = "bma425"))]
+#[cfg(test)]
 mod tests;

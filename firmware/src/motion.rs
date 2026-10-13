@@ -19,12 +19,12 @@ use embassy_sync::{
     signal::Signal,
 };
 use embassy_time::{Delay, Duration, Instant, Timer};
-use neotime_accelerometer::{shake::ShakeDetector, Accelerometer, Settings};
-use neotime_runtime::{SystemValue, Value};
+use neotime_accelerometer::{shake::ShakeDetector, Accelerometer, Configurations, Error, Settings};
+use neotime_runtime::{AppImage, LibraryData, SystemValue, Value};
 use neotime_steps::{DayChange, StepHistory, HOURS_PER_DAY};
 
 use crate::{
-    app_events, clock,
+    app_events, apps, clock,
     diagnostics::{self, Counter},
     foreground,
     storage_requests::{self, StorageRequest},
@@ -36,6 +36,9 @@ static HISTORY: Mutex<ThreadModeRawMutex, RefCell<StepHistory>> =
     Mutex::new(RefCell::new(StepHistory::new()));
 
 static TRIP_RESET: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
+/// Raised when a shared library is installed, which may bring the accelerometer's configuration.
+static LIBRARY_INSTALLED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 /// How often acceleration is read, in milliseconds, or 0 while no app wants readings.
 static READING_PERIOD_IN_MILLISECONDS: AtomicU32 = AtomicU32::new(0);
@@ -58,6 +61,22 @@ pub fn reset_trip() {
 }
 
 /// Starts or stops reading acceleration; `None` stops it, so the chip is read only for steps.
+/// Tells the accelerometer a shared library was installed, so one still waiting for its configuration starts.
+pub fn library_installed() {
+    LIBRARY_INSTALLED.signal(());
+}
+
+/// The chips' configuration files from the installed shared library, or none before one is installed.
+fn configurations() -> Configurations<'static> {
+    let Some(library) = apps::shared_library().and_then(|bytes| AppImage::parse(bytes).ok()) else {
+        return Configurations::default();
+    };
+    Configurations {
+        bma421: library.data(LibraryData::Bma421Configuration as u16),
+        bma425: library.data(LibraryData::Bma425Configuration as u16),
+    }
+}
+
 pub fn read_acceleration_every(period_in_milliseconds: Option<Value>) {
     let period = period_in_milliseconds.map_or(0, |period| period.clamp(1, u32::MAX as Value) as u32);
     if READING_PERIOD_IN_MILLISECONDS.swap(period, Ordering::Relaxed) != period {
@@ -137,9 +156,21 @@ pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus) {
     start_history().await;
     touch::STARTED.wait().await;
     let mut accelerometer = Accelerometer::new(i2c_device);
-    if accelerometer.start(Settings::DEFAULT, &mut Delay).await.is_err() {
-        diagnostics::set(Counter::AccelerometerState, 2);
-        return;
+    loop {
+        match accelerometer
+            .start(Settings::DEFAULT, &mut Delay, configurations())
+            .await
+        {
+            Ok(_) => break,
+            Err(Error::NoConfiguration { .. }) => {
+                diagnostics::set(Counter::AccelerometerState, 4);
+                LIBRARY_INSTALLED.wait().await;
+            }
+            Err(_) => {
+                diagnostics::set(Counter::AccelerometerState, 2);
+                return;
+            }
+        }
     }
     diagnostics::set(Counter::AccelerometerState, 1);
     let mut shakes = ShakeDetector::new();

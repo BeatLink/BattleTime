@@ -279,9 +279,10 @@ The driver keeps no buffers: it uses a few bytes of RAM in the task that owns it
 the touch panel. PineTimes carry either a BMA421 (chip ID 0x11) or a BMA425 (chip ID 0x13).
 
 - **Configuration file.** The chip counts steps with its own small processor, which runs a 6 KB
-  program from Bosch. `start` resets the chip, reads its ID, uploads that chip's file 16 bytes at
-  a time, and fails with `ConfigurationRejected` if the chip does not report it ready 150 ms later.
-  Starting takes a few tenths of a second.
+  program from Bosch. `start` resets the chip, reads its ID, uploads that chip's file from the
+  `Configurations` it is given 16 bytes at a time, and fails with `ConfigurationRejected` if the
+  chip does not report it ready 150 ms later, or `NoConfiguration` when it is given none for that
+  chip. Starting takes a few tenths of a second.
 - **Steps.** `start` turns the step counter on. `read_step_count` reads the count since the last
   `reset_step_count`. The count lives in the chip, so the firmware only reads it.
 - **Acceleration.** `read_acceleration` gives the latest sample in milli-g, sampled at 100 Hz with
@@ -293,9 +294,11 @@ the touch panel. PineTimes carry either a BMA421 (chip ID 0x11) or a BMA425 (chi
 - **Bus watchdog.** The chip's I2C watchdog is on, so a transfer cut off part way frees the bus
   after 40 ms instead of holding it.
 
-Each chip's file costs 6 KB of firmware flash. The cargo features `bma421` and `bma425` are both on
-by default; a build for one known watch can keep just its chip's. A watch whose chip was left out
-fails `start` with `ChipLeftOutOfBuild`.
+The files are not in the firmware: the shared library carries both, as its data 0 and 1
+(`LibraryData`), which saves the firmware 12 KB and keeps one image for every watch. The
+`configuration-files` feature gives them to the compiler, which puts them in the library. The
+firmware's `motion.rs` passes the installed library's files to `start`; before a library is
+installed it waits, with diagnostic state 4, and starts once the shell says one arrived.
 
 The configuration files are Bosch's, under the BSD-3-Clause licence in
 `src/configuration/LICENSE`, taken from the `BMA42X-Sensor-API` that wasp-os uses.
@@ -726,7 +729,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
 - **Diagnostics.** A NeoTime GATT service (`6e540001-…`) has one readable characteristic
   (`6e540002-…`) of eight little-endian `u32` counters from `diagnostics.rs`: shell loops, what
   last woke the shell, whether the screen is lit, the touch panel's state, touch reports, touches
-  sent, button presses and the accelerometer's state. It showed that the touch panel failed to
+  sent, button presses and the accelerometer's state (4 while it waits for a shared library
+  with its configuration). It showed that the touch panel failed to
   start while the accelerometer reset on the same bus, so the panel now starts first, with retries,
   and the accelerometer waits for it. Fourteen more words follow the counters, set once at start:
   the last restart, described next. Writing `01` to the characteristic says the companion app saved
@@ -875,8 +879,8 @@ Not done yet: heart rate, the notification count, navigation and the weather for
 as 0 or empty, and music and weather are lost on a restart; with a tap waking the screen, the
 touch panel stays awake while the screen is off.
 
-It takes 385 KB of the 388 KB firmware slot (the two accelerometers' configuration files are 12 KB
-of it; the fonts are in the shared library) and 53 KB of static RAM, 31 KB of it heap: 10 KB for the system and 21 KB for
+It takes 373 KB of the 388 KB firmware slot (the fonts and the accelerometers' configuration files
+are in the shared library) and 53 KB of static RAM, 31 KB of it heap: 10 KB for the system and 21 KB for
 the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
 the button and the backlight timeout all work.
 

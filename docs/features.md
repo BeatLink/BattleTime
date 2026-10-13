@@ -76,7 +76,7 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   presses the button. The phone can also buzz the watch one to five times, and ask for its battery
   level, voltage, charging state and steps.
 - **Step counting and history.** The accelerometer counts today's steps for the steps app and
-  faces. The watch keeps the steps of every six minutes in a file for each day, with no limit on
+  faces, once the shared library that carries its configuration is installed. The watch keeps the steps of every six minutes in a file for each day, with no limit on
   how many days, and starts a new day at local midnight without any app open. The steps app shows
   today against the daily goal, yesterday, a trip count that the Reset button starts again, the
   last seven days, and any of them hour by hour. The history and the trip count are kept through

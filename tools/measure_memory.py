@@ -93,7 +93,6 @@ COMPONENTS = [
 # Files the firmware embeds with include_bytes!, by the component they count towards.
 EMBEDDED_FILES = [
     ("app-host/fonts/*.ntfont", "Fonts"),
-    ("drivers/accelerometer/src/configuration/*.bin", "Accelerometer configuration (BMA421 and BMA425)"),
 ]
 
 UNATTRIBUTED = "Other constants and padding"

@@ -277,6 +277,7 @@ Each kind of section appears at most once:
 | 8 | Initial values | Optional. For arrays whose elements do not all start the same: a table of (offset, length) pairs, then per array its number (1 byte) followed by its elements packed exactly as they are stored in RAM. Every element is checked against the array's type. |
 | 9 | Fonts | The shared library only; see [Property values](#property-values). |
 | 10 | Functions | Optional. Up to 256 functions, the same layout as expressions. Each function's bytes start with its argument count, its result count (0 or 1) and how many locals it uses, then its code. |
+| 12 | Data | The shared library only. Files the firmware reads, the same layout as resources: number 0 is Bosch's configuration for a BMA421 accelerometer and 1 for a BMA425, in `LibraryData` order. |
 
 Widgets are stored depth first, so a widget's children follow it, each with everything inside
 it. Each root is one screen, and the first is the screen the app opens on. A widget record is:
@@ -424,7 +425,7 @@ What is built so far: the runtime runs an app's own functions with `call` and th
 with `call library` (see [The bytecode](#the-bytecode)). The compiler compiles an app function it
 would otherwise copy into several places once and calls it, and turns code that repeats with only
 its constants changed into shared functions. The shared library holds the icons, the fonts and the
-functions of `neotime/lib`. The firmware draws the native composites, such as `AppList`,
+functions of `neotime/lib`, and for the firmware alone the accelerometers' configuration files. The firmware draws the native composites, such as `AppList`,
 `StatusIcons`, the pickers and `ConfirmBox`, and answers the array functions of `neotime` (from
 `count_of` to `life_step`) natively. Together they took the 49 apps and faces from 197 KB to about
 90 KB. Library components, more functions and more native builtins are open work, listed under

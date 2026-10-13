@@ -137,7 +137,7 @@ impl DelayNs for FakeDelay {
 
 fn started_accelerometer(chip: FakeChip, settings: Settings) -> Accelerometer<FakeChip> {
     let mut accelerometer = Accelerometer::new(chip);
-    block_on(accelerometer.start(settings, &mut FakeDelay::default())).unwrap();
+    block_on(accelerometer.start(settings, &mut FakeDelay::default(), BOTH_FILES)).unwrap();
     accelerometer
 }
 
@@ -152,6 +152,12 @@ fn chip_reading(chip_x: i16, chip_y: i16, chip_z: i16) -> FakeChip {
         .copy_from_slice(&[x_low, x_high, y_low, y_high, z_low, z_high]);
     chip
 }
+
+/// Both chips' files, as the shared library gives them.
+const BOTH_FILES: Configurations<'static> = Configurations {
+    bma421: Some(BMA421_CONFIGURATION_FILE),
+    bma425: Some(BMA425_CONFIGURATION_FILE),
+};
 
 // ============================================================================
 // Tests
@@ -185,7 +191,8 @@ fn start_resets_the_chip_first() {
 fn start_uploads_the_bma425_configuration_file_whole() {
     let mut accelerometer = Accelerometer::new(FakeChip::with_chip_id(BMA425_CHIP_ID));
 
-    let chip_model = block_on(accelerometer.start(Settings::DEFAULT, &mut FakeDelay::default())).unwrap();
+    let chip_model =
+        block_on(accelerometer.start(Settings::DEFAULT, &mut FakeDelay::default(), BOTH_FILES)).unwrap();
 
     assert_eq!(chip_model, ChipModel::Bma425);
     assert_eq!(accelerometer.release().uploaded_file, BMA425_CONFIGURATION_FILE);
@@ -195,10 +202,34 @@ fn start_uploads_the_bma425_configuration_file_whole() {
 fn start_uploads_the_bma421_configuration_file_whole() {
     let mut accelerometer = Accelerometer::new(FakeChip::with_chip_id(BMA421_CHIP_ID));
 
-    let chip_model = block_on(accelerometer.start(Settings::DEFAULT, &mut FakeDelay::default())).unwrap();
+    let chip_model =
+        block_on(accelerometer.start(Settings::DEFAULT, &mut FakeDelay::default(), BOTH_FILES)).unwrap();
 
     assert_eq!(chip_model, ChipModel::Bma421);
     assert_eq!(accelerometer.release().uploaded_file, BMA421_CONFIGURATION_FILE);
+}
+
+#[test]
+fn start_without_the_chips_file_refuses_and_uploads_nothing() {
+    let mut accelerometer = Accelerometer::new(FakeChip::with_chip_id(BMA425_CHIP_ID));
+    let only_bma421 = Configurations {
+        bma421: Some(BMA421_CONFIGURATION_FILE),
+        bma425: None,
+    };
+
+    let result = block_on(accelerometer.start(Settings::DEFAULT, &mut FakeDelay::default(), only_bma421));
+
+    assert_eq!(
+        result,
+        Err(Error::NoConfiguration {
+            chip_model: ChipModel::Bma425
+        })
+    );
+    assert!(accelerometer
+        .release()
+        .uploaded_file
+        .iter()
+        .all(|&byte| byte == 0));
 }
 
 #[test]
@@ -230,7 +261,7 @@ fn start_waits_for_the_reset_and_the_configuration_load() {
     let mut accelerometer = Accelerometer::new(FakeChip::with_chip_id(BMA425_CHIP_ID));
     let mut delay = FakeDelay::default();
 
-    block_on(accelerometer.start(Settings::DEFAULT, &mut delay)).unwrap();
+    block_on(accelerometer.start(Settings::DEFAULT, &mut delay, BOTH_FILES)).unwrap();
 
     assert_eq!(
         delay.total_nanoseconds,
@@ -242,7 +273,7 @@ fn start_waits_for_the_reset_and_the_configuration_load() {
 fn start_rejects_an_unknown_chip() {
     let mut accelerometer = Accelerometer::new(FakeChip::with_chip_id(0x42));
 
-    let result = block_on(accelerometer.start(Settings::DEFAULT, &mut FakeDelay::default()));
+    let result = block_on(accelerometer.start(Settings::DEFAULT, &mut FakeDelay::default(), BOTH_FILES));
 
     assert_eq!(result, Err(Error::UnknownChip { chip_id: 0x42 }));
 }
@@ -253,7 +284,7 @@ fn start_reports_a_configuration_the_chip_did_not_accept() {
     chip.rejects_configuration = true;
     let mut accelerometer = Accelerometer::new(chip);
 
-    let result = block_on(accelerometer.start(Settings::DEFAULT, &mut FakeDelay::default()));
+    let result = block_on(accelerometer.start(Settings::DEFAULT, &mut FakeDelay::default(), BOTH_FILES));
 
     assert_eq!(
         result,
@@ -270,7 +301,7 @@ fn a_bus_error_is_passed_on() {
     chip.refuses_writes = true;
     let mut accelerometer = Accelerometer::new(chip);
 
-    let result = block_on(accelerometer.start(Settings::DEFAULT, &mut FakeDelay::default()));
+    let result = block_on(accelerometer.start(Settings::DEFAULT, &mut FakeDelay::default(), BOTH_FILES));
 
     assert_eq!(result, Err(Error::Bus(FakeBusError)));
 }

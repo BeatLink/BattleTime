@@ -359,3 +359,24 @@ fn the_icons_native_widgets_draw_have_the_numbers_the_runtime_expects() {
     assert_eq!(number_of("charging"), library_icon::CHARGING);
     assert_eq!(number_of("notification"), library_icon::NOTIFICATION);
 }
+
+// ============================================================================
+// Files for the firmware
+// ============================================================================
+
+#[test]
+fn the_library_carries_each_accelerometers_configuration_in_library_data_order() {
+    use neotime_runtime::LibraryData;
+
+    let bytes = build_library().unwrap();
+    let image = AppImage::parse(&bytes).unwrap();
+
+    assert_eq!(
+        image.data(LibraryData::Bma421Configuration as u16),
+        Some(neotime_accelerometer::BMA421_CONFIGURATION_FILE)
+    );
+    assert_eq!(
+        image.data(LibraryData::Bma425Configuration as u16),
+        Some(neotime_accelerometer::BMA425_CONFIGURATION_FILE)
+    );
+}

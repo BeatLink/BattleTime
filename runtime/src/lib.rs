@@ -31,7 +31,7 @@ pub use bindings::{
     analyse_expression, analyse_expression_in, for_each_reached_instruction, for_each_reached_instruction_in,
     Bindings, ExpressionInfo, Inputs,
 };
-pub use image::{AppImage, AppKind, ImageError, StateVariable, ValueType};
+pub use image::{AppImage, AppKind, ImageError, LibraryData, StateVariable, ValueType};
 pub use instruction::{EffectKind, SystemValue};
 pub use interpreter::{Effect, Failure, HandlerOutcome, Interpreter, SystemValues, Value, NONE};
 pub use memory_need::{estimate_memory_need, MemoryNeed, APP_HEAP_BUDGET_BYTES};

@@ -15,6 +15,15 @@ use crate::widgets::WidgetProblem;
 pub const MAGIC: [u8; 4] = *b"NTAP";
 pub const FORMAT_VERSION: u16 = 1;
 
+/// The files the shared library carries for the firmware, by their number in its data section.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LibraryData {
+    /// Bosch's configuration file for a BMA421 accelerometer.
+    Bma421Configuration = 0,
+    /// Bosch's configuration file for a BMA425 accelerometer.
+    Bma425Configuration = 1,
+}
+
 const HEADER_BYTES: usize = 20;
 const SECTION_ENTRY_BYTES: usize = 12;
 const TABLE_ENTRY_BYTES: usize = 4;
@@ -59,6 +68,8 @@ pub enum SectionKind {
     Fonts,
     /// Code that expressions, handlers and other functions run with `Call`.
     Functions,
+    /// The shared library only: files the firmware reads, such as the accelerometer's configuration.
+    Data,
 }
 
 impl SectionKind {
@@ -75,6 +86,7 @@ impl SectionKind {
             8 => InitialValues,
             9 => Fonts,
             10 => Functions,
+            12 => Data,
             _ => return None,
         })
     }
@@ -354,6 +366,7 @@ pub struct AppImage<'image> {
     resources: EntryTable<'image>,
     fonts: EntryTable<'image>,
     functions: EntryTable<'image>,
+    data: EntryTable<'image>,
 }
 
 impl<'image> AppImage<'image> {
@@ -405,6 +418,7 @@ impl<'image> AppImage<'image> {
             resources: EntryTable::default(),
             fonts: EntryTable::default(),
             functions: EntryTable::default(),
+            data: EntryTable::default(),
         };
 
         let mut seen_sections = 0u32;
@@ -446,6 +460,7 @@ impl<'image> AppImage<'image> {
                     }
                     image.functions = EntryTable::parse(count, section_bytes)?
                 }
+                SectionKind::Data => image.data = EntryTable::parse(count, section_bytes)?,
             }
         }
 
@@ -629,6 +644,11 @@ impl<'image> AppImage<'image> {
     /// One text font's bytes, as `tools/generate_fonts.py` writes them.
     pub fn font(&self, index: u16) -> Option<&'image [u8]> {
         self.fonts.get(index)
+    }
+
+    /// One of the shared library's files for the firmware, numbered as `LibraryData` says.
+    pub fn data(&self, index: u16) -> Option<&'image [u8]> {
+        self.data.get(index)
     }
 
     pub fn initial_values_count(&self) -> u16 {

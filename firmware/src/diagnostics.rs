@@ -25,7 +25,7 @@ pub enum Counter {
     TouchesSent,
     /// Button gestures sent to the shell.
     ButtonPresses,
-    /// The accelerometer: 1 started, 2 failed to start, 3 failed to read.
+    /// The accelerometer: 1 started, 2 failed to start, 3 failed to read, 4 waiting for a shared library with its configuration.
     AccelerometerState,
     /// Microseconds the shell has spent drawing apps, counting round past the largest `u32`.
     DrawMicroseconds = FIRST_LATER_WORD as isize,
