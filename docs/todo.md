@@ -252,7 +252,6 @@ the ones above it.
     and pomodoro's buzz length, each laid out its own way today.
   - A `ring(title, icon, until)` system alert with dismiss and snooze events, with the vibration
     and the stop after a time limit, for the alarm, timer and pomodoro.
-  - Numbers drawn in `CellGrid` cells, so twos and puzzle15 need 1 widget instead of 16 labels.
   - A digit-entry mode for `ButtonMatrix`, for the calculator and pomodoro.
   - `TextLines` over an array of character codes, for morse's 120 lines of wrapping.
   - The other faces' step, heart and weather rows on `StepsBadge`, `HeartRateBadge` and

@@ -1917,6 +1917,14 @@ impl<'image> AppHost<'image> {
         }
     }
 
+    /// The numbers a CellGrid shows in its cells, each with the cell, for tests that read the screen.
+    pub fn widget_numbers(&self, widget_index: u16) -> Vec<(Value, Rect)> {
+        match self.node(widget_index) {
+            Some(node) => crate::drawing::cell_grid_numbers(node, &self.draw_context()),
+            None => Vec::new(),
+        }
+    }
+
     /// How many widgets the open screen has, which is how many nodes the UI heap holds.
     pub fn node_count(&self) -> usize {
         self.nodes.len()

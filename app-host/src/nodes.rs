@@ -198,6 +198,9 @@ pub enum Extra {
         cell_gap: u16,
         cell_shape: u8,
         palette: Option<u8>,
+        show_numbers: bool,
+        number_map: Option<u8>,
+        number_colors: Option<u8>,
     },
     Scale {
         ticks: u16,
@@ -273,6 +276,9 @@ impl Extra {
                 cell_gap: 0,
                 cell_shape: 0,
                 palette: None,
+                show_numbers: false,
+                number_map: None,
+                number_colors: None,
             },
             WidgetKind::Scale => Extra::Scale {
                 ticks: 0,
@@ -574,12 +580,18 @@ impl Node {
                 cell_gap,
                 cell_shape,
                 palette,
+                show_numbers,
+                number_map,
+                number_colors,
             } => match property {
                 Property::Rows => replace(rows, to_u16(number)),
                 Property::CellSize => replace(cell_size, to_u16(number)),
                 Property::CellGap => replace(cell_gap, to_u16(number)),
                 Property::CellShape => replace(cell_shape, number.clamp(0, 2) as u8),
                 Property::Palette => replace(palette, to_variable(number)),
+                Property::ShowNumbers => replace(show_numbers, number != 0),
+                Property::NumberMap => replace(number_map, to_variable(number)),
+                Property::NumberColors => replace(number_colors, to_variable(number)),
                 _ => false,
             },
             Extra::Scale {

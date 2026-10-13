@@ -3,16 +3,24 @@
 // count and the fewest moves to a solution persist, and a solved board says so.
 
 import { computed, signal } from "@preact/signals";
-import { count_inversions, define_app, persisted, range, shuffled, vibrate_pattern, type SwipeEvent } from "neotime";
+import { count_inversions, define_app, persisted, range, shuffled, vibrate_pattern, type Color, type SwipeEvent } from "neotime";
 import { ConfirmDialog } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Grid, Label, Row, Screen } from "neotime/widgets";
+import { CellGrid, Label, Row, Screen } from "neotime/widgets";
 
 // ============================================================================
 // Rules
 // ============================================================================
 
 const CELLS = range(16);
+
+/** Each tile's side and the space between tiles, in pixels, and the whole board's side. */
+const CELL_SIZE = 45;
+const CELL_GAP = 6;
+const BOARD_SIDE = 4 * CELL_SIZE + 3 * CELL_GAP;
+
+/** The gap, 0, shows the background, and every tile the surface colour. */
+const TILE_COLORS: Color[] = CELLS.map((tile) => (tile === 0 ? "background" : "surface"));
 
 /** Tiles in order with the gap, written 0, in the bottom right corner. */
 export const SOLVED_BOARD = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0];
@@ -105,15 +113,6 @@ function tap() {
 // ============================================================================
 
 /** One tile is one label, its own background drawn behind its centred number. */
-function Tile(props: { cell: number }) {
-  const tile = board.value[props.cell];
-  return (
-    <Label width="100%" height="100%" background={tile === 0 ? "background" : "surface"} radius={8} padding={8} text_align="center" font="normal">
-      {tile === 0 ? "" : `${tile}`}
-    </Label>
-  );
-}
-
 function Puzzle15() {
   return (
     <Screen padding={8} gap={6} onSwipe={slide} onClick={tap}>
@@ -125,11 +124,20 @@ function Puzzle15() {
           {solved.value ? "Tap to play" : fewest_moves.value > 0 ? `Best ${fewest_moves.value}` : ""}
         </Label>
       </Row>
-      <Grid columns={4} gap={6} grow={1}>
-        {CELLS.map((cell) => (
-          <Tile cell={cell} />
-        ))}
-      </Grid>
+      <Row grow={1} justify="center">
+        <CellGrid
+          width={BOARD_SIDE}
+          height={BOARD_SIDE}
+          columns={4}
+          rows={4}
+          cell_size={CELL_SIZE}
+          cell_gap={CELL_GAP}
+          cell_shape="rounded"
+          cells={board.value}
+          palette={TILE_COLORS}
+          show_numbers
+        />
+      </Row>
       <ConfirmDialog
         open={is_asking_to_restart}
         question={`${move_count.value} moves. Again?`}

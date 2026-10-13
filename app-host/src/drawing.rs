@@ -4,6 +4,8 @@
 //! Array-backed widgets read their arrays at draw time rather than copying them, so a 400-cell
 //! board costs no more UI heap than a label.
 
+use alloc::vec::Vec;
+
 use neotime_runtime::{
     resources::{library_image_named_by, ImageFormat, ImageReference, ImageResource},
     AppImage, AppState, ColorValue, Theme, ThemeColor, Value,
@@ -1149,11 +1151,19 @@ fn draw_cell_grid(node: &Node, context: &DrawContext, renderer: &mut dyn Rendere
         return;
     };
     let Extra::CellGrid {
-        cell_shape, palette, ..
+        cell_shape,
+        palette,
+        show_numbers,
+        number_map,
+        number_colors,
+        ..
     } = *node.extra
     else {
         return;
     };
+    let number_map = context.array(number_map);
+    let number_colors = context.array(number_colors);
+    let number_fallback = resolve(node.settings.color, ThemeColor::Text, context.theme);
     let Some((cell_array, cell_count)) = context.array(node.settings.array) else {
         return;
     };
@@ -1171,21 +1181,87 @@ fn draw_cell_grid(node: &Node, context: &DrawContext, renderer: &mut dyn Rendere
             None if value != 0 => fallback,
             None => TRANSPARENT,
         };
-        if color.3 == 0 {
-            continue;
-        }
         let place = Rect {
             x: cells.left + (cell % cells.columns) * cells.pitch,
             y: cells.top + (cell / cells.columns) * cells.pitch,
             width: cells.cell_size,
             height: cells.cell_size,
         };
-        match cell_shape {
-            0 => renderer.fill_rect(place, color),
-            1 => fill_rounded_rect(renderer, place, color, to_u8(cells.cell_size / 4)),
-            _ => renderer.fill_disc_aa(centre_of(place), cells.cell_size as f32 / 2.0, color),
+        if color.3 != 0 {
+            match cell_shape {
+                0 => renderer.fill_rect(place, color),
+                1 => fill_rounded_rect(renderer, place, color, to_u8(cells.cell_size / 4)),
+                _ => renderer.fill_disc_aa(centre_of(place), cells.cell_size as f32 / 2.0, color),
+            }
         }
+        if !show_numbers {
+            continue;
+        }
+        let number = by_value(context, number_map, value).unwrap_or(value);
+        if number == 0 {
+            continue;
+        }
+        let number_color = by_value(context, number_colors, value)
+            .and_then(ColorValue::from_value)
+            .map_or(number_fallback, |color| to_color(color.resolve(context.theme)));
+        draw_cell_number(renderer, node.settings.font, number, place, number_color);
     }
+}
+
+/// The element of an array, such as a CellGrid's number map, for a cell value; the last for values past its end.
+fn by_value(context: &DrawContext, array: Option<(u8, usize)>, value: Value) -> Option<Value> {
+    array.map(|(array, length)| context.element(array, value.clamp(0, length as Value - 1) as usize))
+}
+
+/// The numbers a CellGrid shows, each with its cell, in drawing order.
+pub fn cell_grid_numbers(node: &Node, context: &DrawContext) -> Vec<(Value, Rect)> {
+    let (
+        Some(cells),
+        Extra::CellGrid {
+            show_numbers: true,
+            number_map,
+            ..
+        },
+    ) = (cell_layout(node), *node.extra)
+    else {
+        return Vec::new();
+    };
+    let Some((cell_array, cell_count)) = context.array(node.settings.array) else {
+        return Vec::new();
+    };
+    let number_map = context.array(number_map);
+    (0..(cells.columns * cells.rows).min(cell_count as i32))
+        .filter_map(|cell| {
+            let value = context.element(cell_array, cell as usize);
+            let number = by_value(context, number_map, value).unwrap_or(value);
+            let place = Rect {
+                x: cells.left + (cell % cells.columns) * cells.pitch,
+                y: cells.top + (cell / cells.columns) * cells.pitch,
+                width: cells.cell_size,
+                height: cells.cell_size,
+            };
+            (number != 0).then_some((number, place))
+        })
+        .collect()
+}
+
+/// Draws a number centred in a cell, in a smaller font when it is too wide for the one asked for.
+fn draw_cell_number(renderer: &mut dyn Renderer, font: FontName, number: Value, place: Rect, color: Color) {
+    let mut digits = [0u8; 20];
+    let mut writer = neotime_runtime::text::TextWriter::new(&mut digits, 0);
+    if writer.write_number(number, 1).is_err() {
+        return;
+    }
+    let length = writer.position();
+    let Ok(text) = core::str::from_utf8(&digits[..length]) else {
+        return;
+    };
+    let fits = |font: FontName| text_width(font.metrics(), text) <= place.width;
+    let font = [font, FontName::Small]
+        .into_iter()
+        .find(|&font| fits(font))
+        .unwrap_or(FontName::Small);
+    draw_text_block(renderer, font, text, place, Align::Center, false, color);
 }
 
 // ============================================================================

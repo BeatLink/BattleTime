@@ -559,3 +559,46 @@ export default define_app({ id: "rows", name: "Rows", screens: { main: Rows } })
     let most_sent = sent.iter().max().copied().unwrap();
     assert!(most_sent <= 8 * SIDE, "a move sent {most_sent} pixels");
 }
+
+#[test]
+fn a_cell_grid_draws_its_numbers_as_one_widget() {
+    let source = r##"
+import { signal } from "@preact/signals";
+import { define_app } from "neotime";
+import { CellGrid, Screen } from "neotime/widgets";
+
+const board = signal([0, 1, 2, 3]);
+
+function Tiles() {
+  return (
+    <Screen>
+      <CellGrid
+        x={0}
+        y={0}
+        columns={2}
+        rows={2}
+        cell_size={60}
+        cells={board.value}
+        palette={["background", "surface", "surface", "surface"]}
+        show_numbers
+        number_map={[0, 2, 4, 8]}
+        number_colors={["text", "text", "text", "#ff0000"]}
+      />
+    </Screen>
+  );
+}
+
+export default define_app({ id: "tiles", name: "Tiles", screens: { main: Tiles } });
+"##;
+    let mut app = TestWatch::open_source(source).unwrap();
+    let mut watch = Watch::new();
+    watch.draw_everything(&mut app);
+
+    let mut texts = app.visible_texts();
+    texts.sort();
+    assert_eq!(texts, ["2", "4", "8"]);
+    assert_eq!(app.host().node_count(), 2);
+    assert!(app
+        .area_of_text("8")
+        .is_some_and(|cell| cell.x >= 60 && cell.y >= 60));
+}

@@ -20,7 +20,7 @@ import {
 } from "neotime";
 import { ConfirmDialog } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Grid, Label, Row, Screen } from "neotime/widgets";
+import { CellGrid, Label, Row, Screen } from "neotime/widgets";
 
 // ============================================================================
 // Rules
@@ -31,6 +31,11 @@ export const CELLS = range(16);
 
 /** The board is four cells wide. */
 const WIDTH = 4;
+
+/** Each tile's side and the space between tiles, in pixels, and the whole board's side. */
+const CELL_SIZE = 45;
+const CELL_GAP = 6;
+const BOARD_SIDE = 4 * CELL_SIZE + 3 * CELL_GAP;
 
 /** Tiles are stored as levels, 1 for a 2, 2 for a 4 and so on, with 0 for an empty cell. */
 const TILE_VALUES = [
@@ -106,24 +111,8 @@ const TILE_BACKGROUNDS: Color[] = [
 const DARK_TILE_TEXT: Color = "#776e65";
 const LIGHT_TILE_TEXT: Color = "#f9f6f2";
 
-/** One tile is one label, its own background drawn behind its centred number. */
-function Tile(props: { cell: number }) {
-  const level = board.value[props.cell];
-  return (
-    <Label
-      background={TILE_BACKGROUNDS[level]}
-      width="100%"
-      height="100%"
-      radius={6}
-      padding={8}
-      text_align="center"
-      font={level >= 14 ? "small" : "normal"}
-      color={level <= 2 ? DARK_TILE_TEXT : LIGHT_TILE_TEXT}
-    >
-      {level === 0 ? "" : `${TILE_VALUES[level]}`}
-    </Label>
-  );
-}
+/** The number's colour on each level's tile: dark on the two lightest, light above them. */
+const TILE_TEXT_COLORS: Color[] = TILE_BACKGROUNDS.map((_background, level) => (level <= 2 ? DARK_TILE_TEXT : LIGHT_TILE_TEXT));
 
 function Twos() {
   return (
@@ -137,11 +126,22 @@ function Twos() {
           {is_game_over.value ? "Game over, tap" : `Best ${best_score.value}`}
         </Label>
       </Row>
-      <Grid columns={4} gap={6} grow={1}>
-        {CELLS.map((cell) => (
-          <Tile cell={cell} />
-        ))}
-      </Grid>
+      <Row grow={1} justify="center">
+        <CellGrid
+          width={BOARD_SIDE}
+          height={BOARD_SIDE}
+          columns={4}
+          rows={4}
+          cell_size={CELL_SIZE}
+          cell_gap={CELL_GAP}
+          cell_shape="rounded"
+          cells={board.value}
+          palette={TILE_BACKGROUNDS}
+          show_numbers
+          number_map={TILE_VALUES}
+          number_colors={TILE_TEXT_COLORS}
+        />
+      </Row>
       <ConfirmDialog open={is_asking_to_restart} question="Restart game?" onConfirm={start_game} />
     </Screen>
   );

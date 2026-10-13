@@ -160,6 +160,7 @@ fn property_for(name: &str) -> Option<(Property, Type)> {
         "icon_size" => (IconSize, number),
         "twelve_hour" => (TwelveHour, Type::BOOL),
         "show_hours" => (ShowHours, Type::BOOL),
+        "show_numbers" => (ShowNumbers, Type::BOOL),
         "digits" => (Digits, number),
         "path" => (Path, Type::TEXT),
         "font_path" => (FontPath, Type::TEXT),
@@ -251,6 +252,8 @@ fn array_property_for(name: &str, kind: WidgetKind) -> Option<(Property, Type, A
     Some(match name {
         "cells" => (Property::Cells, Type::NUMBER, ArrayLayout::Plain),
         "palette" => (Property::Palette, Type::COLOR, ArrayLayout::Plain),
+        "number_map" => (Property::NumberMap, Type::NUMBER, ArrayLayout::Plain),
+        "number_colors" => (Property::NumberColors, Type::COLOR, ArrayLayout::Plain),
         "options" => (Property::Options, Type::NAME, ArrayLayout::Plain),
         "rows" if kind == WidgetKind::ButtonMatrix => (Property::Options, Type::NAME, ArrayLayout::Rows),
         "points" => (Property::Points, Type::NUMBER, ArrayLayout::Points),

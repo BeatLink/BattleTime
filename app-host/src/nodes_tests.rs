@@ -119,7 +119,7 @@ fn each_kind_starts_with_its_own_extra_properties_empty() {
 }
 
 #[test]
-fn a_cell_grid_stores_its_rows_cells_shape_and_palette() {
+fn a_cell_grid_stores_its_rows_cells_shape_palette_and_numbers() {
     let mut grid = node(WidgetKind::CellGrid);
 
     let changed = [
@@ -128,9 +128,12 @@ fn a_cell_grid_stores_its_rows_cells_shape_and_palette() {
         grid.apply(Property::CellGap, number(2)),
         grid.apply(Property::CellShape, number(7)),
         grid.apply(Property::Palette, number(3)),
+        grid.apply(Property::ShowNumbers, number(1)),
+        grid.apply(Property::NumberMap, number(4)),
+        grid.apply(Property::NumberColors, number(5)),
     ];
 
-    assert_eq!(changed, [true; 5]);
+    assert_eq!(changed, [true; 8]);
     assert_eq!(
         *grid.extra,
         Extra::CellGrid {
@@ -139,6 +142,9 @@ fn a_cell_grid_stores_its_rows_cells_shape_and_palette() {
             cell_gap: 2,
             cell_shape: 2,
             palette: Some(3),
+            show_numbers: true,
+            number_map: Some(4),
+            number_colors: Some(5),
         }
     );
 }

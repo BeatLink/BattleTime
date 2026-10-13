@@ -296,10 +296,16 @@ pub enum Property {
     FontPath,
     /// What a TextFile shows while its file is missing or empty.
     Placeholder,
+    /// Whether a CellGrid draws a number in each cell that is not 0.
+    ShowNumbers,
+    /// The state array giving the number a CellGrid shows for each cell value, such as 2048's tile values.
+    NumberMap,
+    /// The state array giving the colour of a CellGrid's number for each cell value.
+    NumberColors,
 }
 
 impl Property {
-    const ALL: [Property; 84] = {
+    const ALL: [Property; 87] = {
         use Property::*;
         [
             X,
@@ -386,6 +392,9 @@ impl Property {
             Path,
             FontPath,
             Placeholder,
+            ShowNumbers,
+            NumberMap,
+            NumberColors,
         ]
     };
 
@@ -397,10 +406,12 @@ impl Property {
         use Property::*;
         match self {
             Visible | ShowSeconds | Charging | SingleColor | ShowBolt | ShowPercent | TwelveHour
-            | ShowHours => PropertyValue::Bool,
+            | ShowHours | ShowNumbers => PropertyValue::Bool,
             Background | Color | BorderColor | NeedleColor | HourColor | MinuteColor | SecondColor
             | Recolor => PropertyValue::Color,
-            Cells | Palette | Options | Points | Series | Labels | Skip => PropertyValue::Array,
+            Cells | Palette | Options | Points | Series | Labels | Skip | NumberMap | NumberColors => {
+                PropertyValue::Array
+            }
             Image | Icon => PropertyValue::Image,
             Text | ScreenName | Path | FontPath | Placeholder => PropertyValue::Text,
             OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease | OnDrag | OnSwipe | OnButton
@@ -519,7 +530,8 @@ impl Property {
                 kind,
                 Kind::Grid | Kind::ButtonMatrix | Kind::CellGrid | Kind::WeekdayPicker
             ),
-            Rows | CellSize | CellGap | CellShape | Cells | Palette => kind == Kind::CellGrid,
+            Rows | CellSize | CellGap | CellShape | Cells | Palette | ShowNumbers | NumberMap
+            | NumberColors => kind == Kind::CellGrid,
             Options => matches!(kind, Kind::Roller | Kind::Dropdown | Kind::ButtonMatrix),
             Points => kind == Kind::Line,
             Series => kind == Kind::Chart,

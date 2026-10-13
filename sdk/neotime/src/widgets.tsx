@@ -1163,6 +1163,12 @@ export interface CellGridProps extends CommonProps {
   /** Pixels left empty between cells. */
   cell_gap?: number;
   cell_shape?: "square" | "rounded" | "round";
+  /** Draws a number in each cell that is not 0: the cell's own value, or what `number_map` gives for it. */
+  show_numbers?: boolean;
+  /** The number shown for each cell value, such as 2048's tile values; 0 shows nothing. */
+  number_map?: number[];
+  /** The colour of the number for each cell value; `color` otherwise. */
+  number_colors?: Color[];
   /** Receives the number of the cell touched. */
   onClick?: (event: ChangeEvent<number>) => void;
   /** Receives the number of each cell a finger moves over. */
@@ -1186,6 +1192,23 @@ export function CellGrid(props: CellGridProps) {
         fill={color}
       />,
     );
+    const value = props.cells[cell] ?? 0;
+    const number = props.number_map ? (props.number_map[value] ?? 0) : value;
+    if (props.show_numbers && number !== 0) {
+      squares.push(
+        <text
+          data-widget="cell-number"
+          x={(cell % props.columns) * props.cell_size + props.cell_size / 2}
+          y={Math.floor(cell / props.columns) * props.cell_size + props.cell_size / 2}
+          text-anchor="middle"
+          dominant-baseline="central"
+          fill={css_color(props.number_colors?.[value] ?? props.color) ?? theme.text}
+          style={{ fontSize: `${FONT_SIZES_IN_PIXELS[props.font ?? "normal"]}px` }}
+        >
+          {`${number}`}
+        </text>,
+      );
+    }
   }
 
   function cell_at(event: MouseEvent): number {
