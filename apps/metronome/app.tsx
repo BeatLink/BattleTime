@@ -117,9 +117,6 @@ function Metronome() {
       padding={8}
       align_items="center"
       gap={6}
-      onButton={(event) => {
-        if (event.kind === "press") start_or_stop();
-      }}
     >
       <Arc
         diameter={150}

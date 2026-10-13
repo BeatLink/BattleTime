@@ -6,7 +6,8 @@
   "workspaces": [
     "sdk/neotime",
     "apps",
-    "faces"
+    "faces",
+    "shell"
   ],
   "scripts": {
     "check": "tsc --noEmit",

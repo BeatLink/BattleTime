@@ -330,10 +330,6 @@ export interface SwipeEvent {
   direction: SwipeDirection;
 }
 
-export interface ButtonEvent {
-  kind: "press" | "long_press";
-}
-
 export interface ChangeEvent<Value> {
   value: Value;
 }

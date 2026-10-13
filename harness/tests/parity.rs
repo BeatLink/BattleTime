@@ -17,6 +17,7 @@ use neotime_app_testing::{
 fn snapshot_name(package: &Package) -> String {
     let kind = match package.kind {
         PackageKind::App => "app",
+        PackageKind::Shell => "shell",
         PackageKind::Face => "face",
     };
     format!("{kind}-{}", package.id)

@@ -99,7 +99,6 @@ double-tap 30 40
 drag 1 2 3 4
 swipe left
 button
-long-button
 wait 250ms
 set battery_percent 15
 notify "Hello" "From the phone"
@@ -151,7 +150,6 @@ screenshot out/frame.png
             },
             ScriptCommand::Swipe(SwipeDirection::Left),
             ScriptCommand::PressButton,
-            ScriptCommand::LongPressButton,
             ScriptCommand::Wait(Duration::from_millis(250)),
             ScriptCommand::SetSystemValue {
                 value: SystemValue::BatteryPercent,
@@ -362,7 +360,7 @@ fn unknown_names_and_values_a_script_cannot_set_are_refused() {
 
 #[test]
 fn a_passing_script_reports_every_step_in_order() {
-    let script = parse_script("open app stopwatch\nbutton\nwait 3s\nexpect text \"00:03\"\n").unwrap();
+    let script = parse_script("open app stopwatch\ntap 178 200\nwait 3s\nexpect text \"00:03\"\n").unwrap();
     let mut printed = Vec::new();
 
     let run = run_script(&script, &std::env::temp_dir(), |outcome| {

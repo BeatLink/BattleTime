@@ -51,7 +51,7 @@ nix run . -- --app face.ntapp --library shared.ntlib
 | Click | A tap; held for half a second, a long press |
 | Drag | Drag events while the button is down |
 | Drag 40 pixels or more | A swipe in that direction |
-| Space, L | Press or hold the side button |
+| Space | The side button, which goes back a screen |
 | T | Switch between the default theme and a light one |
 | Q or Escape | Quit |
 

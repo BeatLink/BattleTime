@@ -113,7 +113,6 @@ function Message() {
 export default define_app({
   id: "notifications",
   name: "Notifications",
-  group: "communication",
   icon: icons.notification,
   permissions: ["notifications"],
   screens: { main: NotificationList, message: Message },

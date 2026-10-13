@@ -27,7 +27,7 @@ const SENSOR_NO_SKIN = 1;
 const SENSOR_SETTLING = 2;
 const SENSOR_MEASURING = 3;
 
-/** Whether this app asked for readings, which the button turns on and off. */
+/** Whether this app asked for readings, which the Start button turns on and off. */
 const is_measuring = signal(false);
 
 /** The latest reading this session, or 0 before the first. */
@@ -93,9 +93,6 @@ function HeartRate() {
     <Screen
       padding={8} gap={6}
       align_items="center"
-      onButton={(event) => {
-        if (event.kind === "press") start_or_stop();
-      }}
     >
       <Row gap={6} justify="center">
         <Icon icon={icons.heart} size={20} color={is_heart_rate_running.value ? "danger" : "muted"} />

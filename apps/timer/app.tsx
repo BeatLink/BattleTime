@@ -6,7 +6,6 @@
 import { computed } from "@preact/signals";
 import {
   at,
-  back,
   define_app,
   format_duration,
   now,
@@ -117,10 +116,6 @@ function silence() {
 function Timer() {
   return (
     <Screen padding={8} gap={6}
-      onButton={() => {
-        if (is_ringing.value) dismiss();
-        else back();
-      }}
       onClick={() => {
         if (is_ringing.value) dismiss();
       }}
@@ -193,4 +188,7 @@ export default define_app({
   screens: { main: Timer },
   subscriptions: [at(ends_at, ring), at(silence_at, silence)],
   permissions: ["wake", "background"],
+  onClose: () => {
+    if (is_ringing.value) dismiss();
+  },
 });

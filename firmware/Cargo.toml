@@ -66,6 +66,7 @@ neotime-updates = { path = "../services/updates" }
 
 [build-dependencies]
 neotime-boot = { path = "../boot" }
+neotime-compiler = { path = "../compiler" }
 
 # littlefs-rust with the core's panicking loop caps turned off; see third_party/littlefs-rust/NEOTIME.md.
 [patch.crates-io]

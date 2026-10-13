@@ -22,9 +22,8 @@ use neotime_app_testing::{
     starting_step_hours, HOURS_PER_DAY, STARTING_DAY_STEPS, STARTING_TRIP_STEPS, STEP_HISTORY_DAYS,
 };
 use neotime_runtime::{
-    events::{ButtonPress, SwipeDirection},
-    resources::ImageReference,
-    AppImage, EffectKind, SystemValue, SystemValues, Theme, Value, DEFAULT_THEME, NONE,
+    events::SwipeDirection, resources::ImageReference, AppImage, EffectKind, SystemValue, SystemValues,
+    Theme, Value, DEFAULT_THEME, NONE,
 };
 use neotime_settings::{Setting, Settings};
 use neotime_vibrator::{Step, TAP};
@@ -500,13 +499,7 @@ pub fn run(
                     ..
                 } => match keycode {
                     Keycode::Q | Keycode::Escape => return Ok(()),
-                    Keycode::Space => {
-                        report(host.press_button(ButtonPress::Press, now, &mut system), "button")
-                    }
-                    Keycode::L => report(
-                        host.press_button(ButtonPress::LongPress, now, &mut system),
-                        "long press of the button",
-                    ),
+                    Keycode::Space => report(host.go_back_a_screen(now, &mut system), "button"),
                     Keycode::T => {
                         is_light = !is_light;
                         host.set_theme(if is_light { LIGHT_THEME } else { DEFAULT_THEME });
@@ -543,7 +536,7 @@ fn print_app_controls(name: &str) {
     println!("NeoTime simulator running {name}");
     println!("  click, hold or drag      touch the screen");
     println!("  swipe with the mouse     swipe");
-    println!("  space, l                 press or hold the side button");
+    println!("  space                    press the side button, which goes back");
     println!("  t                        switch between the default and a light theme");
     println!("  q or Escape              quit");
 }

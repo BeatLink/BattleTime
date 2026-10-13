@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { reset_persisted, SECOND } from "neotime";
-import { advance_clock, effect_log, freeze_clock, install_apps, open, OpenScreen, press_button, start_scheduler } from "neotime/preview";
+import { advance_clock, effect_log, freeze_clock, install_apps, open, OpenScreen, start_scheduler } from "neotime/preview";
 import app from "./app.tsx";
 
 let stop_scheduler = () => {};
@@ -53,7 +53,7 @@ describe("stopwatch", () => {
 
   it("lists laps newest first with each lap's own time and the total", () => {
     render(<OpenScreen />);
-    act(() => press_button());
+    act(() => start_or_pause_button().click());
     act(() => advance_clock(10 * SECOND));
     act(() => lap_or_reset_button().click());
     act(() => advance_clock(15 * SECOND));
@@ -67,10 +67,10 @@ describe("stopwatch", () => {
 
   it("blinks the time while paused and resets from the stop button", () => {
     render(<OpenScreen />);
-    act(() => press_button());
+    act(() => start_or_pause_button().click());
     act(() => advance_clock(10 * SECOND));
     act(() => lap_or_reset_button().click());
-    act(() => press_button());
+    act(() => start_or_pause_button().click());
     const colors = [time_color()];
     act(() => advance_clock(SECOND));
     colors.push(time_color());
@@ -83,7 +83,7 @@ describe("stopwatch", () => {
 
   it("switches to hours after an hour and shows one lap fewer", () => {
     render(<OpenScreen />);
-    act(() => press_button());
+    act(() => start_or_pause_button().click());
     for (let lap = 1; lap <= 4; lap++) {
       act(() => advance_clock(SECOND));
       act(() => lap_or_reset_button().click());

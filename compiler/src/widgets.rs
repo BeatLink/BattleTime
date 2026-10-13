@@ -202,7 +202,6 @@ fn property_for(name: &str) -> Option<(Property, Type)> {
         "onRelease" => (OnRelease, number),
         "onDrag" => (OnDrag, number),
         "onSwipe" => (OnSwipe, number),
-        "onButton" => (OnButton, number),
         "onChange" => (OnChange, number),
         "onPageChange" => (OnPageChange, number),
         "onScrollEnd" => (OnScrollEnd, number),

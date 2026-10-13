@@ -1,9 +1,11 @@
 // The launcher: the installed apps, grouped as the companion app set up, each with its icon and name; a tap opens one.
 // The companion chooses the style: one plain list, folders that each open a group, one list with a heading per
-// group, or a page per group swiped left and right; and the view: a row per app or a grid of icons.
+// group, or a page per group swiped left and right; and the view: a row per app or a grid of icons. A swipe down
+// closes it to the watch face.
 // The watch draws the apps itself from `installed_apps`, so this is an ordinary app that any other launcher can replace.
 import { computed, signal } from "@preact/signals";
 import {
+  close,
   define_app,
   go,
   installed_apps,
@@ -53,6 +55,10 @@ function open_folder(place: number) {
 }
 
 function turn_page(event: SwipeEvent) {
+  if (event.direction === "down") {
+    close();
+    return;
+  }
   if (launcher_style.value !== "pages" && launcher_style.value !== "folders") return;
   const last = launcher_groups.value.length - 1;
   if (event.direction === "left") shown_group.value = Math.min(group_place.value + 1, last);

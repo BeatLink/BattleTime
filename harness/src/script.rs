@@ -87,7 +87,6 @@ pub enum ScriptCommand {
     Drag { from: ScreenPoint, to: ScreenPoint },
     Swipe(SwipeDirection),
     PressButton,
-    LongPressButton,
     Wait(Duration),
     SetSystemValue { value: SystemValue, number: Value },
     Notify { title: String, body: String },
@@ -288,7 +287,6 @@ fn parse_command(words: &[Word]) -> Result<ScriptCommand, String> {
         "drag" => parse_drag(arguments),
         "swipe" => parse_swipe(arguments),
         "button" => expect_no_arguments(name, arguments, ScriptCommand::PressButton),
-        "long-button" => expect_no_arguments(name, arguments, ScriptCommand::LongPressButton),
         "wait" => match arguments {
             [duration] => parse_duration(duration.text()).map(ScriptCommand::Wait),
             _ => Err("write `wait <duration>`, such as `wait 3s`".to_string()),
@@ -727,9 +725,6 @@ impl ScriptRunner<'_> {
             }
             ScriptCommand::PressButton => {
                 watch.press_button();
-            }
-            ScriptCommand::LongPressButton => {
-                watch.long_press_button();
             }
             ScriptCommand::Wait(duration) => watch.advance(*duration),
             ScriptCommand::SetSystemValue { value, number } => watch.set_system_value(*value, *number),

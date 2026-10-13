@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use neotime_app_host::{AppFailure, AppHost, EventResult, PushedEvent, Rect, Touch, SCREEN_AREA};
 use neotime_companion::{PhoneData, PhoneUpdates, MUSIC_TEXTS, MUSIC_VALUES, WEATHER_TEXTS, WEATHER_VALUES};
-use neotime_runtime::events::{ButtonPress, SwipeDirection};
+use neotime_runtime::events::SwipeDirection;
 use neotime_runtime::{
     AppImage, EffectKind, Property, PropertySource, SystemValue, Value, WidgetKind, WidgetTree,
     DEFAULT_THEME, NONE,
@@ -16,7 +16,9 @@ use neotime_notifications::cut_to_fit;
 
 use crate::fake_system::{FakeLauncherGroup, FakeSystem, InstalledApp, RecordedEffect};
 use crate::framebuffer::Framebuffer;
-use crate::sources::{compile_package, compile_source_text, shared_library, OpenFailure, PackageKind};
+use crate::sources::{
+    compile_package, compile_source_text, package_source, shared_library, OpenFailure, PackageKind,
+};
 
 // ============================================================================
 // Limits
@@ -50,9 +52,17 @@ pub struct TestWatch {
 }
 
 impl TestWatch {
-    /// Compiles `apps/<id>/app.tsx` and opens it.
+    /// Compiles `apps/<id>/app.tsx`, or else the shell's own `shell/<id>/app.tsx`, and opens it.
     pub fn open_app(id: &str) -> Result<TestWatch, OpenFailure> {
-        TestWatch::open_package(PackageKind::App, id)
+        let is_app = package_source(PackageKind::App, id).is_file();
+        TestWatch::open_package(
+            if is_app {
+                PackageKind::App
+            } else {
+                PackageKind::Shell
+            },
+            id,
+        )
     }
 
     /// Compiles `faces/<id>/face.tsx` and opens it.
@@ -293,18 +303,10 @@ impl TestWatch {
         self.send(Touch::Swipe(direction))
     }
 
+    /// A click of the side button, which goes back a screen in the app; on its first screen the shell takes it.
     pub fn press_button(&mut self) -> EventResult {
         let now = self.now();
-        let result = self.host.press_button(ButtonPress::Press, now, &mut self.system);
-        self.report_notification_changes();
-        result
-    }
-
-    pub fn long_press_button(&mut self) -> EventResult {
-        let now = self.now();
-        let result = self
-            .host
-            .press_button(ButtonPress::LongPress, now, &mut self.system);
+        let result = self.host.go_back_a_screen(now, &mut self.system);
         self.report_notification_changes();
         result
     }

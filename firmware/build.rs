@@ -62,7 +62,31 @@ fn main() {
     }
     println!("cargo:rerun-if-changed=../boot/src/lib.rs");
 
+    compile_shell_screens(&output_directory);
     set_firmware_version();
+}
+
+// ============================================================================
+// The shell's own screens
+// ============================================================================
+
+/// The screens the shell carries in the firmware, each compiled from `shell/<id>/app.tsx`.
+const SHELL_SCREENS: [&str; 2] = ["notifications", "quick-settings"];
+
+/// Compiles each of the shell's screens to `<id>.ntapp` in the build folder, for the firmware to include.
+fn compile_shell_screens(output_directory: &std::path::Path) {
+    let shell_folder = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../shell");
+    for id in SHELL_SCREENS {
+        let source = shell_folder.join(id).join("app.tsx");
+        println!("cargo:rerun-if-changed={}", source.display());
+        let (_, output) =
+            neotime_compiler::compile_file(&source).unwrap_or_else(|problem| panic!("{id}: {problem}"));
+        let errors: Vec<String> = output.errors().map(|error| format!("{error:?}")).collect();
+        let image = output
+            .image
+            .unwrap_or_else(|| panic!("shell/{id} does not compile: {}", errors.join("; ")));
+        fs::write(output_directory.join(format!("{id}.ntapp")), image).unwrap();
+    }
 }
 
 // ============================================================================

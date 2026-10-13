@@ -11,6 +11,6 @@
     "allowImportingTsExtensions": true,
     "types": ["vite/client"]
   },
-  "include": ["sdk/**/*.ts", "sdk/**/*.tsx", "apps/**/*.ts", "apps/**/*.tsx", "faces/**/*.ts", "faces/**/*.tsx", "vite.config.ts"],
+  "include": ["sdk/**/*.ts", "sdk/**/*.tsx", "apps/**/*.ts", "apps/**/*.tsx", "faces/**/*.ts", "faces/**/*.tsx", "shell/**/*.ts", "shell/**/*.tsx", "vite.config.ts"],
   "exclude": ["**/node_modules"]
 }

@@ -28,29 +28,23 @@ describe("template", () => {
     expect(last_event_text(container)).toBe("");
   });
 
-  it("names the last button press, swipe or touch", () => {
+  it("names the last swipe or touch", () => {
     const { container } = render(<OpenScreen />);
-    act(() => press_button());
-    expect(last_event_text(container)).toBe("Button");
     act(() => swipe("up"));
     expect(last_event_text(container)).toBe("Swipe up");
     act(() => swipe("down"));
     expect(last_event_text(container)).toBe("Swipe down");
     act(() => swipe("left"));
     expect(last_event_text(container)).toBe("Swipe left");
+    act(() => swipe("right"));
+    expect(last_event_text(container)).toBe("Swipe right");
     act(() => (container.querySelector("[data-widget=screen]") as HTMLElement).click());
     expect(last_event_text(container)).toBe("(0, 0)");
   });
 
-  it("leaves on a right swipe", () => {
+  it("leaves on the button", () => {
     render(<OpenScreen />);
-    act(() => swipe("right"));
-    expect(open_app.value).toBeNull();
-  });
-
-  it("leaves on a long press of the button", () => {
-    render(<OpenScreen />);
-    act(() => press_button("long_press"));
+    act(() => press_button());
     expect(open_app.value).toBeNull();
   });
 });

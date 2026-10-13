@@ -137,13 +137,12 @@ fn the_stopwatch_runs_on_the_runtime() {
 // Every app and face
 // ============================================================================
 
-/// The apps and faces that are expected to compile, so a change that breaks one is caught: all of them.
-const EXPECTED_TO_COMPILE: [&str; 50] = [
+/// The apps, shell screens and faces that are expected to compile, so a change that breaks one is caught: all of them.
+const EXPECTED_TO_COMPILE: [&str; 51] = [
     "apps/alarm",
     "apps/beacon",
     "apps/calculator",
     "apps/dice",
-    "apps/disable-bluetooth",
     "apps/flashlight",
     "apps/four-in-a-row",
     "apps/game-of-life",
@@ -171,6 +170,8 @@ const EXPECTED_TO_COMPILE: [&str; 50] = [
     "apps/timer",
     "apps/twos",
     "apps/weather",
+    "shell/notifications",
+    "shell/quick-settings",
     "faces/analog",
     "faces/casio",
     "faces/digital",
@@ -195,7 +196,7 @@ const EXPECTED_TO_COMPILE: [&str; 50] = [
 fn every_app_and_face_compiles_or_reports_why() {
     let root = repository_root();
     let mut sources: Vec<PathBuf> = Vec::new();
-    for (folder, file) in [("apps", "app.tsx"), ("faces", "face.tsx")] {
+    for (folder, file) in [("apps", "app.tsx"), ("shell", "app.tsx"), ("faces", "face.tsx")] {
         let Ok(entries) = std::fs::read_dir(root.join(folder)) else {
             continue;
         };

@@ -7,7 +7,7 @@
 use alloc::{boxed::Box, string::String, vec::Vec};
 
 use neotime_runtime::{
-    events::{ButtonPress, EventKind, SwipeDirection},
+    events::{EventKind, SwipeDirection},
     state::SaveBufferFull,
     subscriptions::{Subscription, SubscriptionKind},
     verify_with,
@@ -33,7 +33,7 @@ mod painting;
 use crate::subscriptions::{
     derive_inputs_in, load_subscriptions, PushedEvent, SubscriptionMemory, FAILURES_BEFORE_TURNING_OFF,
 };
-use crate::system::{button_value, swipe_value, AppEffect, AppFailure, Clocked, EventResult, System, Touch};
+use crate::system::{swipe_value, AppEffect, AppFailure, Clocked, EventResult, System, Touch};
 use crate::text::WrappedLines;
 use crate::text_file::{covers, font_from_file, LineIndex};
 use painting::{ScrollMove, TransitionRun};
@@ -1477,18 +1477,14 @@ impl<'image> AppHost<'image> {
             return result;
         }
         let (property, x, y, mut fields): (Property, i32, i32, [Value; 5]) = match touch {
-            // The panel can name a slide while the finger is still down, so only a lift ends a scroll.
-            Touch::Swipe(_) if self.scroll_drag.is_some() => return EventResult::Handled,
+            // A swipe that moved a list is the list's, even while the finger is still down; one that moved nothing goes through.
             Touch::Swipe(_) if self.touch_scrolled => return EventResult::Handled,
             Touch::Swipe(direction) => {
                 self.swipe_transition = Some(transition_following(direction));
                 let result =
                     self.run_screen_event(Property::OnSwipe, &[swipe_value(direction)], now, system, true);
                 self.swipe_transition = None;
-                return match (result, direction) {
-                    (EventResult::NotHandled, SwipeDirection::Right) => self.go_back_a_screen(now, system),
-                    _ => result,
-                };
+                return result;
             }
             Touch::Release { .. } if self.scroll_drag.is_some() => {
                 return self.end_scroll(now, system).unwrap_or(EventResult::Handled);
@@ -1554,20 +1550,9 @@ impl<'image> AppHost<'image> {
         )
     }
 
-    /// Sends a side button press to the screen's `onButton`.
-    pub fn press_button(&mut self, press: ButtonPress, now: Value, system: &mut impl System) -> EventResult {
-        if !self.is_open {
-            return EventResult::NotHandled;
-        }
-        match self.run_screen_event(Property::OnButton, &[button_value(press)], now, system, true) {
-            EventResult::NotHandled => self.go_back_a_screen(now, system),
-            result => result,
-        }
-    }
-
-    /// Returns to the previous screen, as an unused button or right swipe does; not handled on the first screen.
-    fn go_back_a_screen(&mut self, now: Value, system: &mut impl System) -> EventResult {
-        if self.screen_history_length == 0 {
+    /// Returns to the app's previous screen, as a click of the side button does; not handled on the first screen.
+    pub fn go_back_a_screen(&mut self, now: Value, system: &mut impl System) -> EventResult {
+        if !self.is_open || self.screen_history_length == 0 {
             return EventResult::NotHandled;
         }
         self.navigate(Navigation::Back, now, system);

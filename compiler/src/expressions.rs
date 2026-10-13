@@ -180,7 +180,6 @@ pub fn event_field_type(kind: EventKind, field: &str) -> Type {
     }
     match (kind, field) {
         (EventKind::Swipe, "direction") => Type::choice(ChoiceSet::SwipeDirection),
-        (EventKind::Button, "kind") => Type::choice(ChoiceSet::ButtonPress),
         (EventKind::Motion, "kind") => Type::choice(ChoiceSet::MotionKind),
         (EventKind::Call, "kind") => Type::choice(ChoiceSet::CallKind),
         (EventKind::Phone, "is_connected") => Type::BOOL,

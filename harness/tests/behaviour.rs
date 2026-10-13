@@ -11,6 +11,10 @@ use neotime_app_testing::{Direction, EffectKind, EventResult, SystemValue, TestW
 /// `vibrate_pattern("alarm")`, as the compiler numbers the patterns.
 const ALARM_PATTERN: i64 = 3;
 
+/// The middle of the stopwatch's start button, at the bottom right.
+const STOPWATCH_START_X: i32 = 178;
+const STOPWATCH_START_Y: i32 = 200;
+
 // ============================================================================
 // Stopwatch
 // ============================================================================
@@ -20,7 +24,7 @@ fn the_stopwatch_counts_up_after_starting() {
     let mut watch = TestWatch::open_app("stopwatch").unwrap();
     assert!(watch.shows_text("00:00"));
 
-    watch.press_button();
+    watch.tap(STOPWATCH_START_X, STOPWATCH_START_Y);
     watch.advance(Duration::from_secs(3));
 
     assert!(watch.shows_text("00:03"), "{:?}", watch.visible_texts());
@@ -32,10 +36,10 @@ fn the_stopwatch_counts_up_after_starting() {
 #[test]
 fn the_stopwatch_holds_its_time_while_paused() {
     let mut watch = TestWatch::open_app("stopwatch").unwrap();
-    watch.press_button();
+    watch.tap(STOPWATCH_START_X, STOPWATCH_START_Y);
     watch.advance(Duration::from_secs(7));
 
-    watch.press_button();
+    watch.tap(STOPWATCH_START_X, STOPWATCH_START_Y);
     watch.advance(Duration::from_secs(60));
 
     assert!(watch.shows_text("00:07"), "{:?}", watch.visible_texts());
@@ -176,13 +180,13 @@ fn the_button_returns_from_a_settings_screen_to_the_list_and_then_leaves() {
 }
 
 #[test]
-fn a_right_swipe_returns_to_the_previous_screen() {
+fn a_right_swipe_stays_on_the_screen() {
     let mut watch = TestWatch::open_app("settings").unwrap();
     watch.tap_text("Brightness");
 
-    assert_eq!(watch.swipe(Direction::Right), EventResult::Handled);
+    assert_eq!(watch.swipe(Direction::Right), EventResult::NotHandled);
 
-    assert_eq!(watch.screen_name(), Some("main"));
+    assert_eq!(watch.screen_name(), Some("brightness"));
 }
 
 // ============================================================================
@@ -199,17 +203,8 @@ fn the_template_shows_the_last_event_it_received() {
     watch.swipe(Direction::Up);
     assert!(watch.shows_text("Swipe up"));
 
-    watch.press_button();
-    assert!(watch.shows_text("Button"));
-}
-
-#[test]
-fn the_template_leaves_on_a_long_press_of_the_button() {
-    let mut watch = TestWatch::open_app("template").unwrap();
-
-    watch.long_press_button();
-
-    assert_eq!(watch.effects_of(EffectKind::Back).len(), 1);
+    watch.swipe(Direction::Right);
+    assert!(watch.shows_text("Swipe right"));
 }
 
 // ============================================================================

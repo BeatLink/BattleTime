@@ -14,7 +14,7 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   and removes groups, gives each an icon, and moves apps between them. The launcher shows the
   groups as folders, as sections of one list, or as pages swiped left and right, or leaves them
   out for one plain list, and draws a group's apps as rows or as a grid of icons.
-  Touches and the side button reach the open app.
+  Touches and swipes reach the open app; the side button belongs to the shell.
 - **A help screen** with the time and how to install a face, shown while no face is installed.
 - **Screens slide and wipe in, as on InfiniTime.** The launcher slides up over the face, an app
   slides up over the launcher, and going back with the button slides the way back down. Going
@@ -29,16 +29,27 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   that turns a page at a time. Lists can also run across and scroll sideways, with the bar along
   the bottom. After a panel scroll only the ends of the thumb are drawn again.
   ![Settings with its scroll bar](../harness/snapshots/screens/app-settings.png)
-- **A right swipe goes back a screen,** within an app before leaving it, unless the app uses it
-  itself.
+- **Swipes belong to the app.** Inside an app every swipe is the app's own, and a right swipe no
+  longer goes back.
+- **Swipes on the watch face.** A swipe up opens the launcher, and a swipe down in the launcher
+  closes it again. A swipe down pulls the notifications down from the top, and a second swipe down
+  pulls quick settings down after them; a swipe up puts either away. Swipes left and right step
+  round the quick apps, as on wasp-os: the next or previous app in the ring, and back to the face
+  past either end. A quick app's own unused left and right swipes step on round the ring. The ring
+  is steps, stopwatch, heart, weather and music until the companion app writes another to
+  `/settings/quick_apps`, one app id a line; apps not installed are skipped.
+- **Notifications and quick settings are part of the firmware.** They are written like apps but
+  compiled into the firmware, so they are always there and never in the launcher. Quick settings
+  shows the time and battery over six buttons: brightness, the flashlight, do not disturb,
+  Bluetooth, the always-on screen and Settings.
 - **Only what changed is drawn,** each part composed in memory first, so the screen never shows a
   half-drawn widget.
-- **Side button gestures.** Any press wakes a dark screen. A click goes back a screen within an
-  app, and from an app's first screen to the watch face; a click on the face puts the watch to
-  sleep, and on the battery screen goes back to what was open. A long press goes back a step, a
-  double click opens the notifications app when one is installed, and holding for 2 seconds goes
-  to the face whatever the app does. An app's own button handler gets clicks and long presses
-  first. While the phone rings the watch to find it, the first gesture only stops the ring.
+- **Side button gestures.** Any press wakes a dark screen. A click always means back: a screen
+  within an app, then a step in the shell (an app to the launcher, the launcher, a quick app, the
+  notifications or quick settings to the face, the battery screen to what was open), and on the face
+  it puts the watch to sleep. Apps never hear the button. A long press or holding for 2 seconds
+  goes to the face, and a double click opens the notifications, or goes from them to the face.
+  While the phone rings the watch to find it, the first gesture only stops the ring.
 - **The screen sleeps on its own.** It turns off after the time chosen in settings, 15 seconds at
   first, unless the open app keeps it on. While it is dark the watch stays idle until the open app
   has something to do, and the clock is up to date the moment the screen comes back. The open app
@@ -62,14 +73,14 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   Do not disturb silences everything but alarms and timers, and those too if the wearer chooses.
 - **Notifications from the phone.** Gadgetbridge's `notify` message, sent through the companion
   app's UART service, buzzes twice and goes to the open app. The watch keeps the latest 5, from the
-  phone and from apps, and the notifications app lists them newest first: a tap reads one in full
+  phone and from apps, and the notifications list them newest first: a tap reads one in full
   and Dismiss removes it. A notification dismissed on the phone goes from the watch too. Faces show
   when some are unread.
 - **Notifications from any Bluetooth tool.** A New Alert written to the standard Alert Notification
   service shows as a notification, as on InfiniTime, so BlueZ's `bluetoothctl`, ITD or Amazfish can
   send one without the companion app.
 - **A notification wakes the screen.** One that arrives while the screen is dark turns it on and
-  opens the notifications app, when it is installed, so it can be read at once. Do not disturb
+  opens the notifications, so it can be read at once. Do not disturb
   keeps the screen dark and the watch still, and the notification is still kept. While the phone
   rings the watch to find it, a notification is kept without a buzz or a wake.
 - **Music, weather and calls from the phone.** Gadgetbridge's `musicinfo`, `musicstate` and

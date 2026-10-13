@@ -160,15 +160,13 @@ describe("timer screen", () => {
     expect(rang_at.value).toBeNull();
   });
 
-  it("stops the ring with the side button, which otherwise leaves the app", () => {
+  it("stops the ring when the side button leaves the app", () => {
     chosen_duration.value = 10 * SECOND;
     render(<OpenScreen />);
     tap(buttons()[0]);
     act(() => advance_clock(10 * SECOND));
     act(() => press_button());
     expect(rang_at.value).toBeNull();
-    expect(open_app.value).toBe(app);
-    act(() => press_button());
     expect(open_app.value).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 // Sports timer, ported from wasp-os's sports app: a stopwatch that also counts the steps taken while
-// it runs. The button starts and stops it, and a tap clears it once stopped.
+// it runs. The Start button starts and stops it, and a tap clears it once stopped.
 
 import { computed } from "@preact/signals";
 import {
@@ -80,9 +80,6 @@ function Sports() {
       padding={8}
       gap={6}
       onClick={clear}
-      onButton={(event) => {
-        if (event.kind === "press") start_or_stop();
-      }}
     >
       <Card grow={1} padding={6}>
         <Column grow={1} align_items="center" justify="center">

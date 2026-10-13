@@ -1,10 +1,14 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { reset_persisted } from "neotime";
-import { advance_clock, effect_log, freeze_clock, install_apps, open, OpenScreen, press_button, start_scheduler } from "neotime/preview";
+import { advance_clock, effect_log, freeze_clock, install_apps, open, OpenScreen, start_scheduler } from "neotime/preview";
 import metronome from "./app.tsx";
 
 let stop_scheduler = () => {};
+
+function start_or_stop_button(): HTMLButtonElement {
+  return screen.getAllByRole("button").at(-1) as HTMLButtonElement;
+}
 
 /** The buzz lengths asked for so far. */
 function buzzes(): number[] {
@@ -37,10 +41,10 @@ describe("metronome", () => {
   });
 
   it("beats on time with a long buzz opening each bar", () => {
-    press_button();
+    start_or_stop_button().click();
     advance_in_small_steps(2000);
     expect(buzzes()).toEqual([90, 30, 30, 30, 90]);
-    press_button();
+    start_or_stop_button().click();
     advance_in_small_steps(2000);
     expect(buzzes().length).toBe(5);
   });
@@ -93,7 +97,7 @@ describe("metronome", () => {
   });
 
   it("stops when it closes", () => {
-    press_button();
+    start_or_stop_button().click();
     open(null);
     expect(effect_log.value.at(-1)).toEqual({ kind: "keep_screen_on", on: false });
     open(metronome);

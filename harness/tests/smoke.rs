@@ -127,7 +127,6 @@ fn poke_at(package: &Package) -> Outcome {
     }
     watch.press_button();
     check_frame(&mut watch, "pressing the button");
-    watch.long_press_button();
     watch.advance(TEN_MINUTES);
     check_frame(&mut watch, "ten minutes");
     watch.deliver(PushedEvent::Notification {

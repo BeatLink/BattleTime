@@ -98,12 +98,6 @@ fn random_numbers_are_taken_from_the_system() {
 // ============================================================================
 
 #[test]
-fn a_press_is_zero_and_a_long_press_is_one() {
-    assert_eq!(button_value(ButtonPress::Press), 0);
-    assert_eq!(button_value(ButtonPress::LongPress), 1);
-}
-
-#[test]
 fn swipes_are_numbered_up_down_left_right() {
     let directions = [
         SwipeDirection::Up,

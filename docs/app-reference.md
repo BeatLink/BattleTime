@@ -72,22 +72,21 @@ pass to the widget behind it, and then to the screen.
 | `onDrag` | `x`, `y`, `start_x`, `start_y` | A finger moving while down, for sliders and drawing. At most once per redraw. |
 | `onSwipe` | `direction` | A slide `up`, `down`, `left` or `right`, set on a screen. |
 
-Without an `onSwipe`, swipes keep their system meaning: right goes back and down opens the quick
-settings. A screen with an `onSwipe` receives every swipe instead, and the system meanings no
-longer apply, so the handler calls `back()` itself if right should still go back. An empty
-`onSwipe` therefore blocks swipes, as an alarm's ringing screen needs.
+Inside an app every swipe is the app's own: the shell takes none, and a right swipe does not go
+back. The shell acts on swipes only on the watch face, the launcher, the notifications and quick
+settings, and an app opened from the quick-app ring, whose left and right swipes step on round the
+ring when its screen has no `onSwipe`. An empty `onSwipe` keeps even those, as an alarm's ringing
+screen needs.
 
 ### Side button
 
-| Prop | Fields | When |
-|---|---|---|
-| `onButton` | `kind`: `press` or `long_press` | The side button, set on a screen. |
-
-A press reaches the handler as a click, once the double click window has closed. Without a handler
-a press or long press goes back one of the app's screens; on its first screen a press goes to the
-watch face and a long press goes back a step, and on the watch face a press turns the screen off. A double click and a 2 second hold always belong to the system. Watch faces
-cannot take the button. A watch face may still have more screens, such as its settings opened with
-a long press and `go("settings")`. Holding it for 5 seconds always resets the watch, whatever the app does.
+Apps never hear the side button. A click goes back one of the app's screens, running the
+screen's `onHide` as it leaves, so a screen that must stop something when the wearer leaves it,
+such as a ringing alarm, does so there; on the app's first screen the shell goes back a step. On
+the watch face a click turns the screen off. A long press or a 2 second hold goes to the face, and
+a double click opens the notifications. Holding it for 5 seconds always resets the watch, whatever
+the app does. A watch face may still have more screens, such as its settings opened with a long
+press on the screen and `go("settings")`.
 
 ### Widget values
 

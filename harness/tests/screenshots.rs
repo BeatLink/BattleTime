@@ -16,6 +16,7 @@ use neotime_app_testing::{
 fn snapshot_name(package: &Package) -> String {
     let kind = match package.kind {
         PackageKind::App => "app",
+        PackageKind::Shell => "shell",
         PackageKind::Face => "face",
     };
     format!("{kind}-{}", package.id)
@@ -67,7 +68,8 @@ fn every_main_screen_matches_its_reference_picture() {
 fn the_stopwatch_after_three_seconds_matches_its_reference_picture() {
     let result = check_screen("app-stopwatch-running", || {
         let mut watch = TestWatch::open_app("stopwatch").unwrap();
-        watch.press_button();
+        // The start button, at the bottom right.
+        watch.tap(178, 200);
         watch.advance(Duration::from_secs(3));
         watch
     });

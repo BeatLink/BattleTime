@@ -24,7 +24,7 @@ python3 tools/draw_memory_maps.py
 | Bootloader | `0x00000` | 20 KB | The `embassy-boot` bootloader with its status screen and button menu, 17,752 bytes of it used. There is no SoftDevice and no MBR. |
 | Slot table | `0x05000` | 8 KB | Two pages recording where the update and recovery slots sit in the external flash; see [bootloader.md](bootloader.md#the-slot-table). |
 | Boot state | `0x07000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
-| Firmware | `0x08000` | 388 KB | The running firmware: a 256-byte [image header](bootloader.md#the-image-header), then its code, linked to start at `0x08100`. No app, face, icon or font is built in; [What fills the firmware](#what-fills-the-firmware) shows what is. |
+| Firmware | `0x08000` | 388 KB | The running firmware: a 256-byte [image header](bootloader.md#the-image-header), then its code, linked to start at `0x08100`. No app, face, icon or font is built in apart from the notifications and quick settings screens (about 2.2 KB, compiled from `shell/`); [What fills the firmware](#what-fills-the-firmware) shows what is. |
 | Shared library | `0x69000` | 92 KB | What apps share, up to the end of flash: images, the app host's text fonts (47,919 B), Bosch's configuration file for each accelerometer (6,144 B each, which the firmware uploads to the chip; the library with all of it is 89,218 B), components, common functions and the preset themes. No apps are kept here; they live in `/apps` on the external flash. An installed library starts with an 8-byte header, `NTLB` and its length, which `neotime-packages` writes. See [app-runtime.md](app-runtime.md#the-shared-library). |
 
 
@@ -38,21 +38,21 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 97.6 KB | 47.9 KB |
-| App host (with `neotime-ui`) | 74.9 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 98.2 KB | 48.4 KB |
+| App host (with `neotime-ui`) | 75.1 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 43.6 KB | 43.6 KB |
 | App runtime | 34.3 KB | 0.1 KB |
-| core, alloc and compiler builtins | 29.4 KB | 13.2 KB |
+| core, alloc and compiler builtins | 29.8 KB | 13.0 KB |
 | Embassy, allocator and Cortex-M | 18.6 KB | 16.5 KB |
 | Storage (flash store) | 16.9 KB | 16.8 KB |
 | Settings, companion and notifications (with serde) | 12.1 KB | 10.2 KB |
-| BLEFS file service | 9.0 KB | 9.1 KB |
+| BLEFS file service | 8.9 KB | 9.0 KB |
 | Packages | 6.0 KB | 2.0 KB |
 | Display, graphics and drivers | 5.4 KB | 3.2 KB |
 | Updates (DFU) | 2.1 KB | 2.1 KB |
-| Other constants and padding | 26.0 KB | 13.4 KB |
-| **Used** | **376.0 KB** | **178.0 KB** |
-| Free of the 388 KB slot, after its header | 11.8 KB | 209.7 KB |
+| Other constants and padding | 28.4 KB | 13.4 KB |
+| **Used** | **379.4 KB** | **178.2 KB** |
+| Free of the 388 KB slot, after its header | 8.3 KB | 209.5 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -109,7 +109,7 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 | What | Bytes | File sectors |
 |---|---:|---:|
 | `/settings/system` and `/settings/theme`, kept as records | 77 | 0 |
-| 12 app images, 715 B (flashlight) to 3,909 B (settings); those of 1 KB or less are records | 23,153 | 12 |
+| 12 app images, 715 B (flashlight) to 3,909 B (settings); those of 1 KB or less are records | 23,084 | 12 |
 | **In use** | | **12 of 512: 48 KB of 2 MB, and 904 B of records in the 256 KB records ring** |
 <!-- /measure_memory:file-system -->
 

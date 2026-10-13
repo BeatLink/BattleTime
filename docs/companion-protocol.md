@@ -117,7 +117,7 @@ undone, and the watch keeps up to 24 bytes of `src`, 32 of `title` and 120 of `b
 character. Gadgetbridge's other keys, such as `sender`, are ignored. The watch keeps the latest 5,
 newest first, for apps to read as `notifications`; one with the `id` of one already kept replaces
 it. While the screen is dark, outside do not disturb, it turns the screen on and opens the
-notifications app. It sends no reply.
+notifications. It sends no reply.
 
 `{"t":"notify-","id":1234}` says the notification with that `id` was dismissed on the phone; the
 watch removes it from the list, and sends no reply.

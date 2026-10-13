@@ -1,7 +1,7 @@
 // Alarms, merged from wasp-os's alarm and InfiniTime's Alarm.
 // From wasp-os: up to twelve alarms, each repeating on chosen weekdays, and a ten minute snooze.
 // From InfiniTime: the 12 hour clock, a repeat button that cycles common patterns, the time until the
-// next alarm, the side button stopping the ring, and a ring that stops itself after a minute.
+// next alarm, the side button stopping the ring as it leaves the ringing screen, and a ring that stops itself after a minute.
 // One `at` subscription follows whichever alarm is due first, so nothing ticks while waiting.
 
 import { computed, signal } from "@preact/signals";
@@ -338,7 +338,7 @@ function EditDays() {
 
 function Ringing() {
   return (
-    <Screen padding={8} gap={6} onButton={dismiss} onSwipe={() => {}}>
+    <Screen padding={8} gap={6} onSwipe={() => {}} onHide={stop_ringing}>
       <Column grow={1} align_items="center" justify="center" gap={4}>
         <Icon icon={icons.alarm} size={48} color="warning" />
         <Label font="large">{format_time(now.value, "clock")}</Label>

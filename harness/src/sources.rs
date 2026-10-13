@@ -10,10 +10,12 @@ use neotime_app_host::OpenError;
 // Packages
 // ============================================================================
 
-/// Whether a package is an app, in `apps/<id>/app.tsx`, or a watch face, in `faces/<id>/face.tsx`.
+/// Whether a package is an app, in `apps/<id>/app.tsx`, one of the screens the firmware carries, in
+/// `shell/<id>/app.tsx`, or a watch face, in `faces/<id>/face.tsx`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PackageKind {
     App,
+    Shell,
     Face,
 }
 
@@ -21,13 +23,14 @@ impl PackageKind {
     pub fn folder(self) -> &'static str {
         match self {
             PackageKind::App => "apps",
+            PackageKind::Shell => "shell",
             PackageKind::Face => "faces",
         }
     }
 
     pub fn source_file(self) -> &'static str {
         match self {
-            PackageKind::App => "app.tsx",
+            PackageKind::App | PackageKind::Shell => "app.tsx",
             PackageKind::Face => "face.tsx",
         }
     }
@@ -61,10 +64,10 @@ pub fn package_source(kind: PackageKind, id: &str) -> PathBuf {
         .join(kind.source_file())
 }
 
-/// Every app and face whose folder holds its source file, apps first, each sorted by id.
+/// Every app, shell screen and face whose folder holds its source file, in that order, each sorted by id.
 pub fn every_package() -> Vec<Package> {
     let mut packages = Vec::new();
-    for kind in [PackageKind::App, PackageKind::Face] {
+    for kind in [PackageKind::App, PackageKind::Shell, PackageKind::Face] {
         let Ok(entries) = std::fs::read_dir(repository_root().join(kind.folder())) else {
             continue;
         };

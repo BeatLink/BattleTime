@@ -1,15 +1,16 @@
 //! The shell: shows the watch face, the launcher and the open app through the app host.
 //!
 //! The face is shown at start. A swipe up on the face opens the launcher, a tap there opens an app,
-//! and a swipe right that the app does not use goes back a step. The side button's gestures act as
-//! `neotime_app_host::side_button` says: a click goes to the face and from the face to sleep. The
+//! a swipe down pulls the notifications and then quick settings down, and a swipe left or right
+//! steps round the quick apps, as `neotime_app_host::swipes` says. The side button's gestures act as
+//! `neotime_app_host::side_button` says: a click goes back a step, and from the face to sleep. The
 //! backlight and display turn off, or dim for an always-on screen, after the settings' timeout
 //! without input, unless the app keeps the screen on, and the next touch or button gesture turns
 //! them on without acting on it. Each app's persistent state is saved to
 //! `/apps/<id>/state` when it closes or the screen turns off, and changed settings at the same times.
 //! The watch buzzes on the local hour or half hour when the chimes setting asks, and for each notification
 //! from the phone, which also goes to the open app and into the kept list. A notification that
-//! finds the screen dark turns it on and opens the notifications app, when one is installed. Do not
+//! finds the screen dark turns it on and opens the notifications. Do not
 //! disturb silences all of it, keeps the screen dark, and silences every app vibration but the
 //! alarm pattern. The accelerometer is read only while the screen is on and the open app
 //! subscribes to acceleration or shakes. Plugging the charger in or out, or the charge going low,
@@ -38,8 +39,11 @@ use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_app_host::{
     haptics::{self, Vibration},
-    motion as app_motion, phone as app_phone, settings as app_settings,
+    motion as app_motion, phone as app_phone,
+    quick_apps::{self, Destination, Step},
+    settings as app_settings,
     side_button::{self, ButtonAction, ButtonSituation, OpenScreen},
+    swipes::{self, SwipeAction, SwipeScreen},
     AppEffect, AppFailure, AppHost, BatteryChange, EventResult, MotionKind, OpenError, PushedEvent, System,
     Touch, Transition,
 };
@@ -157,7 +161,17 @@ enum Showing {
     Face,
     Launcher,
     App(usize),
+    /// The notifications, which the firmware carries itself.
+    Notifications,
+    /// Quick settings, which the firmware carries itself.
+    QuickSettings,
 }
+
+/// The notifications screen, compiled from `shell/notifications` when the firmware is built.
+static NOTIFICATIONS_IMAGE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/notifications.ntapp"));
+
+/// The quick settings screen, compiled from `shell/quick-settings` when the firmware is built.
+static QUICK_SETTINGS_IMAGE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/quick-settings.ntapp"));
 
 /// What a handler asked the shell to do, carried out once the host call returns.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -450,6 +464,8 @@ struct Shell {
     library: Option<&'static [u8]>,
     /// While the battery app shows because of a battery event, what was open before it.
     battery_screen_returns_to: Option<Showing>,
+    /// Whether the open app was reached round the quick-app ring, so its swipes step on round it and the way back is the face.
+    in_quick_ring: bool,
     /// Until when the phone's find ring plays, unless the wearer touches the watch first.
     finding_until: Option<Instant>,
     /// A touch taken from the queue while merging drags, handled next.
@@ -464,6 +480,7 @@ impl Shell {
     /// Closes what is open and opens another, coming in by `transition`; the face is the fallback when an image will not open.
     fn open(&mut self, showing: Showing, transition: Transition) {
         self.battery_screen_returns_to = None;
+        self.in_quick_ring = false;
         let now = clock::utc_now();
         self.finger_left_on_old_screen = true;
         if let Some(mut host) = self.host.take() {
@@ -490,37 +507,53 @@ impl Shell {
             self.launcher_icons = Some(LauncherIcons::read(self.files, &self.system.installed));
         }
         let installed = &self.system.installed;
-        let id = match showing {
-            Showing::Face => installed.face.clone(),
-            Showing::Launcher => installed.has_launcher.then(|| apps::LAUNCHER_ID.into()),
-            Showing::App(place) => installed.listed(place).map(|entry| entry.id.clone()),
+        let (id, built_in) = match showing {
+            Showing::Face => (installed.face.clone(), None),
+            Showing::Launcher => (installed.has_launcher.then(|| apps::LAUNCHER_ID.into()), None),
+            Showing::App(place) => (installed.listed(place).map(|entry| entry.id.clone()), None),
+            Showing::Notifications => (Some("notifications".into()), Some(NOTIFICATIONS_IMAGE)),
+            Showing::QuickSettings => (Some("quick-settings".into()), Some(QUICK_SETTINGS_IMAGE)),
         };
         restart::set_open_app(id.as_deref().unwrap_or(""));
-        let Some(image) = id.and_then(|id| apps::read_image(self.files, &id)) else {
-            self.open_failed(showing);
-            return;
+        let image = match built_in {
+            Some(_) => None,
+            None => match id.and_then(|id| apps::read_image(self.files, &id)) {
+                Some(image) => Some(image),
+                None => {
+                    self.open_failed(showing);
+                    return;
+                }
+            },
         };
-        if let Some(page) = crate::crash_screen::refusal_for(image.get(), showing == Showing::Face) {
-            image.release();
+        let bytes = match (&image, built_in) {
+            (Some(image), _) => image.get(),
+            (None, Some(bytes)) => bytes,
+            (None, None) => return,
+        };
+        if let Some(page) = crate::crash_screen::refusal_for(bytes, showing == Showing::Face) {
+            if let Some(image) = image {
+                image.release();
+            }
             restart::set_open_app("");
             self.firmware_page = Some(ShownPage::new(page));
             return;
         }
         self.system.free_storage_kilobytes.set(None);
         self.system.free_storage_wanted.set(false);
-        let bytes = image.get();
         let saved = AppImage::parse(bytes)
             .ok()
             .and_then(|parsed| parsed.string(parsed.id_string))
             .and_then(|id| self.files.read_now(&state_path(id)))
             .unwrap_or_default();
         if self.start_host(bytes, &saved, now) {
-            self.image = Some(image);
+            self.image = image;
             if let Some(host) = &mut self.host {
                 host.set_next_transition(transition);
             }
         } else {
-            image.release();
+            if let Some(image) = image {
+                image.release();
+            }
             self.open_failed(showing);
         }
     }
@@ -740,6 +773,8 @@ impl Shell {
         match self.showing {
             Showing::Face => {}
             Showing::Launcher => self.open(Showing::Face, transition),
+            Showing::Notifications | Showing::QuickSettings => self.open(Showing::Face, Transition::Up),
+            Showing::App(_) if self.in_quick_ring => self.open(Showing::Face, transition),
             Showing::App(_) => self.open(Showing::Launcher, transition),
         }
     }
@@ -774,14 +809,60 @@ impl Shell {
             return;
         };
         let result = host.touch(touch, clock::utc_now(), &mut self.system);
-        if result == EventResult::NotHandled {
-            match (touch, self.showing) {
-                (Touch::Swipe(SwipeDirection::Up), Showing::Face) => {
-                    self.open(Showing::Launcher, Transition::Up)
-                }
-                (Touch::Swipe(SwipeDirection::Right), _) => self.go_back(Transition::Right),
-                _ => {}
+        if let (EventResult::NotHandled, Touch::Swipe(direction)) = (result, touch) {
+            self.swipe(direction);
+        }
+    }
+
+    /// Acts on a swipe the open screen did not take, as `swipes` says.
+    fn swipe(&mut self, direction: SwipeDirection) {
+        let screen = match self.showing {
+            Showing::Face => SwipeScreen::Face,
+            Showing::Launcher => SwipeScreen::Launcher,
+            Showing::Notifications => SwipeScreen::Notifications,
+            Showing::QuickSettings => SwipeScreen::QuickSettings,
+            Showing::App(_) if self.in_quick_ring => SwipeScreen::QuickApp,
+            Showing::App(_) => SwipeScreen::Other,
+        };
+        match swipes::action_for(direction, screen) {
+            SwipeAction::Nothing => {}
+            SwipeAction::OpenLauncher => self.open(Showing::Launcher, Transition::Up),
+            SwipeAction::OpenNotifications => self.open(Showing::Notifications, Transition::Down),
+            SwipeAction::OpenQuickSettings => self.open(Showing::QuickSettings, Transition::Down),
+            // The launcher came up from below, so it goes back down; the pulled-down screens go back up.
+            SwipeAction::CloseToFace if screen == SwipeScreen::Launcher => {
+                self.open(Showing::Face, Transition::Down)
             }
+            SwipeAction::CloseToFace => self.open(Showing::Face, Transition::Up),
+            SwipeAction::NextQuickApp => self.step_round_quick_apps(Step::Next, Transition::Left),
+            SwipeAction::PreviousQuickApp => self.step_round_quick_apps(Step::Previous, Transition::Right),
+        }
+    }
+
+    /// Opens the next or previous app in the quick-app ring, or the face once past either end.
+    fn step_round_quick_apps(&mut self, step: Step, transition: Transition) {
+        let saved_ring = self.files.read_now(quick_apps::QUICK_APPS_PATH);
+        let ring = saved_ring
+            .as_deref()
+            .and_then(|bytes| core::str::from_utf8(bytes).ok())
+            .unwrap_or(quick_apps::DEFAULT_RING);
+        let installed = &self.system.installed;
+        let current = match self.showing {
+            Showing::App(place) if self.in_quick_ring => {
+                installed.listed(place).map(|entry| entry.id.as_str())
+            }
+            _ => None,
+        };
+        let place = match quick_apps::step(ring, current, step, |id| installed.place_of(id).is_some()) {
+            Destination::Face => None,
+            Destination::App(id) => installed.place_of(id),
+        };
+        match place {
+            Some(place) => {
+                self.open(Showing::App(place), transition);
+                self.in_quick_ring = self.showing == Showing::App(place);
+            }
+            None => self.open(Showing::Face, transition),
         }
     }
 
@@ -794,8 +875,11 @@ impl Shell {
             return;
         }
         let situation = self.button_situation();
-        if let (Some(press), Some(host)) = (side_button::press_for_app(gesture, &situation), &mut self.host) {
-            if host.press_button(press, clock::utc_now(), &mut self.system) != EventResult::NotHandled {
+        if let (true, Some(host)) = (
+            side_button::goes_back_in_the_app_first(gesture, &situation),
+            &mut self.host,
+        ) {
+            if host.go_back_a_screen(clock::utc_now(), &mut self.system) != EventResult::NotHandled {
                 return;
             }
         }
@@ -805,28 +889,20 @@ impl Shell {
             ButtonAction::PutToSleep => self.turn_screen_off(),
             ButtonAction::GoBack => self.go_back(Transition::Down),
             ButtonAction::GoToFace => self.open(Showing::Face, Transition::Down),
-            ButtonAction::OpenNotifications => {
-                if let Some(place) = self.system.installed.place_of(side_button::NOTIFICATIONS_APP_ID) {
-                    self.open(Showing::App(place), Transition::Up);
-                }
-            }
+            ButtonAction::OpenNotifications => self.open(Showing::Notifications, Transition::Down),
         }
     }
 
     fn button_situation(&self) -> ButtonSituation {
-        let installed = &self.system.installed;
-        let notifications_place = installed.place_of(side_button::NOTIFICATIONS_APP_ID);
         let open_screen = match self.showing {
             Showing::Face => OpenScreen::Face,
             Showing::Launcher => OpenScreen::Launcher,
-            Showing::App(place) if Some(place) == notifications_place => OpenScreen::NotificationsApp,
-            Showing::App(_) => OpenScreen::App,
+            Showing::Notifications => OpenScreen::Notifications,
+            Showing::App(_) | Showing::QuickSettings => OpenScreen::App,
         };
         ButtonSituation {
             screen_is_lit: self.lit,
             open_screen,
-            notifications_app_is_installed: notifications_place.is_some(),
-            covers_an_earlier_screen: self.battery_screen_returns_to.is_some(),
         }
     }
 
@@ -880,19 +956,15 @@ impl Shell {
         }
     }
 
-    /// Asks for a dark screen to turn on outside do not disturb, showing the notifications app when one is installed.
+    /// Asks for a dark screen to turn on outside do not disturb, showing the notifications.
     ///
     /// The screen turns on through `follow_requests`, as for the battery screen, so it wakes once and counts as input.
     fn wake_for_notification(&mut self) {
         if self.lit || is_do_not_disturb() {
             return;
         }
-        let notifications_app = self.system.installed.place_of(side_button::NOTIFICATIONS_APP_ID);
-        let over_a_page = self.firmware_page.is_some();
-        if let Some(place) =
-            notifications_app.filter(|&place| self.showing != Showing::App(place) && !over_a_page)
-        {
-            self.open(Showing::App(place), Transition::None);
+        if self.showing != Showing::Notifications && self.firmware_page.is_none() {
+            self.open(Showing::Notifications, Transition::None);
         }
         self.system.screen_request = Some(true);
     }
@@ -1226,6 +1298,7 @@ pub async fn run_shell(
         launcher_icons: None,
         library: apps::shared_library(),
         battery_screen_returns_to: None,
+        in_quick_ring: false,
         finding_until: None,
         waiting_touch: None,
         finger_left_on_old_screen: false,

@@ -111,7 +111,7 @@ vibration pattern, waits without blocking the others. **(planned)**
 ```text
 NeoTime/
 ├── Cargo.toml        one Cargo workspace for every crate except the bootloader
-├── package.json      the npm workspace for apps/, faces/ and sdk/neotime
+├── package.json      the npm workspace for apps/, faces/, shell/ and sdk/neotime
 ├── app-host/         neotime-app-host: runs an open app and draws its widgets
 ├── apps/             neotime-apps: apps in the app language, one folder each; see apps.md
 ├── compiler/         neotime-compiler: compiles apps and faces into app images; see compiler.md
@@ -154,6 +154,7 @@ NeoTime/
 ├── runtime/          neotime-runtime: app images, their checks, the interpreter and bindings
 ├── sdk/
 │   └── neotime/      the neotime package apps and faces import, as a stand-in for now
+├── shell/            the notifications and quick settings, in the app language, built into the firmware; see apps.md
 ├── services/
 │   ├── blefs/        neotime-blefs: Adafruit BLE file transfer, InfiniTime's file service
 │   ├── companion/    neotime-companion: the companion app's JSON lines over the UART service
@@ -592,15 +593,26 @@ watch face, the launcher and the apps through `neotime-app-host`:
 - **Navigation.** The face shows first. A swipe up the face does not use opens the launcher, an
   ordinary app (`apps/launcher`) that lists `installed_apps` with their icons; a tap opens one.
   The shell answers `installed_apps` from `/apps` and, while the launcher is open, gives the host
-  each app's icon. A swipe right the app does not use goes back a step: app to launcher,
-  launcher to face.
+  each app's icon. Every swipe goes to the open screen first, and `neotime_app_host::swipes` says
+  what the shell does with one it leaves: on the face, down pulls the notifications down and left
+  and right step round the quick apps; on the notifications, down pulls quick settings down after
+  them; up on either, or down on the launcher, goes back to the face. Inside any other app the shell
+  takes no swipe. `neotime_app_host::quick_apps` steps round the ring read from
+  `/settings/quick_apps` on each step, with the face as the place before the first app, and the
+  shell remembers that the open app came from the ring so its own unused swipes step on and the
+  way back is the face.
+- **Built-in screens.** The notifications and quick settings are app sources in `shell/`, compiled
+  by `firmware/build.rs` with `neotime-compiler` and included in the firmware, about 2.2 KB
+  together. The shell opens them like any app image but straight from flash, never from `/apps`,
+  so they are not installed packages and the launcher never lists them.
 - **Side button.** `send_button_gestures` owns the `neotime-button` driver and sleeps on the pin's
   edge, sending each click, double click, long press and 2 second press to the shell.
   `neotime_app_host::side_button` decides what each does, so its rules are tested on the host:
-  a dark screen only wakes; a click or long press goes to the open app first, whose `onButton`
-  or screen history may take it; then a click goes to the face, or from the face to sleep, or from the battery screen
-  back to what it covered; a long press goes back a step; a double click opens the app with the id
-  `notifications`, or leaves it for the face; a 2 second press goes to the face. A separate watchdog task reads the pin straight from the port
+  a dark screen only wakes; a click goes back a screen in the open app's history, and from its
+  first screen the shell goes back a step: an app to the launcher, the launcher, a quick app, the
+  notifications or quick settings to the face, and the battery screen back to what it covered; a
+  click on the face puts it to sleep. Apps never hear the button. A long press or a 2 second press
+  goes to the face, and a double click opens the notifications, or leaves them for the face. A separate watchdog task reads the pin straight from the port
   every 500 ms and feeds the watchdog only while it is up, so a hold of 4 to 5 seconds resets the
   watch whatever the button task does. It also feeds it only while the shell and the radio make
   progress, as `neotime-liveness` judges: the shell's loop count must move, and a quiet shell is
@@ -618,7 +630,9 @@ watch face, the launcher and the apps through `neotime-app-host`:
   DFU image check yields every 4 KB, so the radio's host side keeps running while it reads up to
   388 KB back.
 - **Transitions.** The launcher and apps slide up over what was open, and the button's way back
-  or home slides down; a swipe right going back wipes in from the left, and any screen an app goes to from its `onSwipe` moves the way the swipe went. The shell draws a transition's steps, and
+  or home slides down. The notifications and quick settings slide down from the top and go back up,
+  a step round the quick apps wipes in from the side the finger moved away from, and any screen an
+  app goes to from its `onSwipe` moves the way the swipe went. The shell draws a transition's steps, and
   the slices of a large redraw, one after another, yielding to the other tasks between them, before
   it takes the next input. Once a
   new screen opens, the rest of the touch that opened it is dropped until the finger lifts, so a
@@ -717,8 +731,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
   `unread_notifications` system values; apps' `notify`, `dismiss_notification` and
   `mark_notifications_read` change it, as does a `notify-` dismissal from the phone, and the shell
   tells the open app through `report_system_value_changes` once the host call returns. A
-  notification that finds the screen dark, outside do not disturb, opens the `notifications` app
-  when it is installed and asks for the screen to turn on, as an incoming call does, so it counts
+  notification that finds the screen dark, outside do not disturb, opens the notifications
+  and asks for the screen to turn on, as an incoming call does, so it counts
   as input for the screen timeout; while `find` rings, a notification neither buzzes nor wakes.
   Calls, music, weather, `find` and `vibrate`
   wait together in `app_events.rs` as one `PhoneUpdates`, the latest of each kind; the shell keeps
@@ -877,7 +891,7 @@ watch face, the launcher and the apps through `neotime-app-host`:
   on, such as a ringing alarm, stays in front, and the screen only lights.
   The app is an ordinary installed app rather than a firmware pop-up, so it costs no firmware
   flash and can be replaced; without it the screen just lights on what is open. When the screen
-  sleeps, or the button or a swipe right goes back, the shell reopens what was open before;
+  sleeps, or the button goes back, the shell reopens what was open before;
   opening anything else forgets it.
 
 Not done yet: heart rate, the notification count, navigation and the weather forecast's days read
@@ -1025,8 +1039,8 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
   sits in a turned band that the new screen cannot use, the band is unturned at the start of the
   transition, which shows the outgoing screen out of place while it slides away. On a screen that
   cannot scroll, slides are drawn at once.
-- **Going back.** An unused side button or right swipe returns to the previous screen, and is
-  left to the embedder on the first one.
+- **Going back.** `go_back_a_screen`, which the side button calls, returns to the previous screen,
+  and is left to the embedder on the first one. A swipe goes only to the screen's `onSwipe`.
 - **Time and subscriptions.** `tick` runs due timers and redraws what the clock changed, and
   `next_wakeup` says when that next happens, so the watch can sleep in between. `deliver` hands
   sensor and phone events to the app's subscriptions. `listens_for` and `shortest_period_of` say

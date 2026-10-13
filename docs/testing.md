@@ -22,14 +22,14 @@ use neotime_app_testing::{EffectKind, TestWatch};
 #[test]
 fn the_stopwatch_counts_up_after_starting() {
     let mut watch = TestWatch::open_app("stopwatch").unwrap();
-    watch.press_button();
+    watch.tap(178, 200); // the start button
     watch.advance(Duration::from_secs(3));
     assert!(watch.shows_text("00:03"));
     assert_eq!(watch.effects_of(EffectKind::KeepScreenOn).last().unwrap().number(0), 1);
 }
 ```
 
-`open_app` and `open_face` read `apps/<id>/app.tsx` and `faces/<id>/face.tsx`; a source that does
+`open_app` and `open_face` read `apps/<id>/app.tsx` (or the shell's own `shell/<id>/app.tsx`) and `faces/<id>/face.tsx`; a source that does
 not compile fails with the compiler's messages. `open_source` compiles source written in the test
 itself, and `open_image` opens an image already built. The shared library is built once for all
 tests and given to every app.
@@ -40,7 +40,7 @@ tests and given to every app.
 | `tap_text("Dismiss")` | Taps the middle of the shown widget with exactly that text, or fails listing the texts shown. |
 | `tap_widget(index)`, `tap_all_over(index, n)` | Taps a widget by its number, or at n by n points across it, such as every key of a keypad. |
 | `drag(from, to)`, `swipe(Direction::Up)` | Drag reports between press and release; a swipe ends with the swipe itself. |
-| `press_button()`, `long_press_button()` | The side button. |
+| `press_button()` | A click of the side button, which goes back a screen. |
 | `advance(Duration)` | Moves the clock on, waking the app at each time it asked for on the way, in order. |
 | `deliver(PushedEvent::Steps { .. })` | An event from the phone or a sensor, with the system values it carries. |
 | `receive_from_phone(line)` | A companion line from the phone, read by `neotime-companion` as the watch reads it. |
@@ -68,11 +68,11 @@ double quotes, where `\"` is a quote and `\\` a backslash:
 ```text
 # The stopwatch counts up once started and holds its time while paused.
 open app stopwatch
-button                      # start
+tap 178 200                 # the start button
 wait 3s
 expect text "00:03"
 expect effect keep-screen-on true
-button                      # pause
+tap 178 200                 # pause
 wait 1min
 expect text "00:03"
 expect no failures
@@ -80,13 +80,13 @@ expect no failures
 
 | Command | Does |
 |---|---|
-| `open app <id>`, `open face <id>` | Compiles and opens `apps/<id>` or `faces/<id>`; a script starts with one, and may open another later. |
+| `open app <id>`, `open face <id>` | Compiles and opens `apps/<id>` (or `shell/<id>`) or `faces/<id>`; a script starts with one, and may open another later. |
 | `install <id> ...` | Installs these apps, so a launcher lists them. |
 | `tap X Y`, `tap "text"` | Taps a point, or the middle of the shown widget whose text is exactly that. |
 | `long-press ...`, `double-tap ...` | The same, held or tapped twice. |
 | `drag X1 Y1 X2 Y2` | Presses, drags in steps and lifts. |
 | `swipe up`, `down`, `left`, `right` | A swipe across the middle of the screen. |
-| `button`, `long-button` | Presses or holds the side button. |
+| `button` | Clicks the side button, which goes back a screen. |
 | `wait 250ms`, `3s`, `10min`, `2h` | Moves the clock on, waking the app at each time it asked for. |
 | `set <system value> <number>` | Sets a value by the name apps read, such as `battery_percent` or `settings.step_goal`; `true` and `false` are 1 and 0. As on the watch, `steps_today` also sends the `steps` event and `is_phone_connected` the `phone` event. |
 | `notify "title" "body"` | Delivers a notification from the phone. |

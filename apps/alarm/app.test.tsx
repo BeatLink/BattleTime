@@ -208,7 +208,7 @@ describe("alarm screens", () => {
     expect(screen_stack.value).toEqual(["main"]);
   });
 
-  it("rings with the time and stops on the side button", () => {
+  it("rings with the time and stops when the side button goes back to the list", () => {
     add_alarm(6, 1, 0);
     open(app);
     render(<OpenScreen />);
@@ -217,7 +217,7 @@ describe("alarm screens", () => {
     expect(screen.getByText("06:01")).toBeTruthy();
     act(() => press_button());
     expect(rang_at.value).toBeNull();
-    expect(open_app.value).toBeNull();
+    expect(screen_stack.value).toEqual(["main"]);
   });
 
   it("snoozes from the Snooze button", () => {

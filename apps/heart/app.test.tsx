@@ -1,10 +1,14 @@
 import { act, cleanup, render, screen } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { heart_rate_status } from "neotime";
-import { deliver, effect_log, install_apps, open, OpenScreen, press_button, start_scheduler } from "neotime/preview";
+import { deliver, effect_log, install_apps, open, OpenScreen, start_scheduler } from "neotime/preview";
 import app from "./app.tsx";
 
 let stop_scheduler = () => {};
+
+function start_or_stop_button(): HTMLButtonElement {
+  return screen.getByRole("button") as HTMLButtonElement;
+}
 
 describe("heart", () => {
   beforeEach(() => {
@@ -40,7 +44,7 @@ describe("heart", () => {
     expect(effect_log.value.some((effect) => effect.kind === "stop_heart_rate")).toBe(true);
     act(() => deliver("heart_rate_reading", { beats_per_minute: 99, confidence: 90 }));
     expect(screen.getByText("---")).toBeTruthy();
-    act(() => press_button());
+    act(() => start_or_stop_button().click());
     expect(screen.getByText("Stop")).toBeTruthy();
     expect(screen.getByText("060")).toBeTruthy();
   });

@@ -19,6 +19,7 @@ pub enum EventKind {
     Release,
     Drag,
     Swipe,
+    /// Never sent, since the side button belongs to the shell; kept so later numbers stay the same.
     Button,
     Change,
     PageChange,
@@ -127,13 +128,6 @@ pub enum SwipeDirection {
     Down,
     Left,
     Right,
-}
-
-/// The `kind` of a side button press.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ButtonPress {
-    Press,
-    LongPress,
 }
 
 #[cfg(test)]

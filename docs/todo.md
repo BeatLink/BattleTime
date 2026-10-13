@@ -293,7 +293,7 @@ each item says what it costs and what it would save.
   A design change in the firmware shell; it removes each app's ringing screen and its timers.
 - [ ] **Library components.** Widget trees with props kept in the library and named by number,
   for layouts that need no native logic: `ActionRow` and `PlayPauseButton` (7 apps),
-  `ToggleScreen` (phone-finder, disable-bluetooth, flashlight, beacon), `SettingSwitch` and
+  `ToggleScreen` (phone-finder, flashlight, beacon), `SettingSwitch` and
   `ChoiceList` (settings), `CycleChooser` and `DoneButton` (infineat, pride-flag,
   pinetime-style), `GameOverPanel`, `ScoreHeader`, `EmptyState`, and `ClassicDial` with
   `DateWindow` (analog, lite-analog). Needs widget records and their bindings to live across two
@@ -413,15 +413,18 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   image so the watch can check `wake` instead of trusting any app that plays the `alarm` pattern.
 - [ ] **Try the buzzes on the watch:** a phone notification buzzes twice and stays silent in do
   not disturb, and the alarm pattern still rings there. Check too that a notification on a dark
-  screen turns it on into the notifications app, that a `notify-` from Gadgetbridge removes it, and
+  screen turns it on into the notifications, that a `notify-` from Gadgetbridge removes it, and
   that the heap holds with five kept beside the alarm app.
 
 ### Side button
 
 - [ ] **Try the gestures on the watch:** a click, a double click, a long press and a 2 second
   hold each do what docs/features.md says, and a 5 second hold still resets into the bootloader.
-- [ ] **Double clicks and 2 second holds for apps.** `onButton` hears only presses and long
-  presses; the shell keeps the other two.
+- [ ] **Try the face's swipes on the watch:** down to the notifications and again to quick
+  settings, up to put them away, down in the launcher, and left and right round the quick apps.
+  They are tested on the host and in the harness only.
+- [ ] **Edit the quick apps from the companion app:** a list of installed apps to pick and order,
+  written to `/settings/quick_apps` one id a line. The watch reads it on every step round the ring.
 
 ### Accelerometer
 
@@ -716,11 +719,8 @@ only by its Gadgetbridge fork and web app, so they are not worth copying.
 
 ### Quick settings
 
-- [ ] **A quick settings screen** on a swipe down from the watch face, as
-  [app-reference.md](app-reference.md) already promises: the time and battery at the top, then
-  brightness, the flashlight, a switch that silences the vibration for notifications, and a
-  shortcut to settings. InfiniTime's switch has a third mode, sleep, which also turns off the wake
-  gestures and the always-on screen.
+- [ ] **A sleep mode in quick settings,** as InfiniTime's do not disturb switch has: a third
+  setting that also turns off the wake gestures and the always-on screen.
 
 ### Notifications
 

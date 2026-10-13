@@ -22,16 +22,16 @@ export default defineConfig({
     environment: "jsdom",
     // The watch tests run in UTC, so the preview does too and both show the same times.
     env: { TZ: "UTC" },
-    include: ["apps/**/*.test.tsx", "faces/**/*.test.tsx", "sdk/**/*.test.tsx"],
+    include: ["apps/**/*.test.tsx", "faces/**/*.test.tsx", "shell/**/*.test.tsx", "sdk/**/*.test.tsx"],
     exclude: ["**/node_modules/**"],
     coverage: {
       provider: "v8",
-      include: ["apps/**/*.tsx", "faces/**/*.tsx", "sdk/neotime/src/**"],
+      include: ["apps/**/*.tsx", "faces/**/*.tsx", "shell/**/*.tsx", "sdk/neotime/src/**"],
       exclude: ["**/*.test.tsx", "**/tests/**"],
       reporter: ["text-summary", "text", "lcov"],
       reportsDirectory: "target/coverage-typescript",
       // Raise these whenever coverage rises, so it never slips back.
-      thresholds: { lines: 94, statements: 94, branches: 89, functions: 90 },
+      thresholds: { lines: 95, statements: 95, branches: 89, functions: 90 },
     },
   },
 });

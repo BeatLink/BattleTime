@@ -1,10 +1,14 @@
 import { act, cleanup, render, screen } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { reset_persisted, steps_today, SECOND } from "neotime";
-import { advance_clock, effect_log, freeze_clock, install_apps, open, OpenScreen, press_button, start_scheduler } from "neotime/preview";
+import { advance_clock, effect_log, freeze_clock, install_apps, open, OpenScreen, start_scheduler } from "neotime/preview";
 import app from "./app.tsx";
 
 let stop_scheduler = () => {};
+
+function start_or_stop_button(): HTMLButtonElement {
+  return screen.getByRole("button") as HTMLButtonElement;
+}
 
 function tap_screen() {
   act(() => (document.querySelector("[data-widget=screen]") as HTMLElement).click());
@@ -29,7 +33,7 @@ describe("sports", () => {
 
   it("times a run and counts the steps taken during it", () => {
     render(<OpenScreen />);
-    act(() => press_button());
+    act(() => start_or_stop_button().click());
     act(() => advance_clock(12 * SECOND));
     act(() => { steps_today.value = 1040; });
     expect(screen.getByText("00:12.00")).toBeTruthy();
@@ -39,7 +43,7 @@ describe("sports", () => {
 
   it("holds the time and steps while stopped and adds the next run to them", () => {
     render(<OpenScreen />);
-    act(() => press_button());
+    act(() => start_or_stop_button().click());
     act(() => advance_clock(10 * SECOND));
     act(() => { steps_today.value = 1010; });
     act(() => screen.getByRole("button").click());
@@ -47,7 +51,7 @@ describe("sports", () => {
     act(() => { steps_today.value = 1500; });
     expect(screen.getByText("00:10.00")).toBeTruthy();
     expect(screen.getByText("10")).toBeTruthy();
-    act(() => press_button());
+    act(() => start_or_stop_button().click());
     act(() => advance_clock(5 * SECOND));
     act(() => { steps_today.value = 1505; });
     expect(screen.getByText("00:15.00")).toBeTruthy();
@@ -56,11 +60,11 @@ describe("sports", () => {
 
   it("clears on a tap only once stopped", () => {
     render(<OpenScreen />);
-    act(() => press_button());
+    act(() => start_or_stop_button().click());
     act(() => advance_clock(10 * SECOND));
     tap_screen();
     expect(screen.getByText("00:10.00")).toBeTruthy();
-    act(() => press_button());
+    act(() => start_or_stop_button().click());
     tap_screen();
     expect(screen.getByText("00:00.00")).toBeTruthy();
     expect(screen.getByText("0")).toBeTruthy();
@@ -68,14 +72,14 @@ describe("sports", () => {
 
   it("keeps counting steps when the day's count starts again at midnight", () => {
     render(<OpenScreen />);
-    act(() => press_button());
+    act(() => start_or_stop_button().click());
     act(() => { steps_today.value = 25; });
     expect(screen.getByText("25")).toBeTruthy();
   });
 
   it("shows hours once a run passes one", () => {
     render(<OpenScreen />);
-    act(() => press_button());
+    act(() => start_or_stop_button().click());
     act(() => freeze_clock(Date.UTC(2026, 9, 11, 9, 0, 5)));
     expect(screen.getByText("1:00:05")).toBeTruthy();
   });

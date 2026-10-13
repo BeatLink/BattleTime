@@ -35,7 +35,7 @@ import {
   type TimeOfDay,
   type WeatherDay,
 } from "./index.ts";
-import { active_screen, run_handler, swipe_fallback, type ScreenHandlers } from "./widgets.tsx";
+import { run_handler } from "./widgets.tsx";
 
 export { clear_storage } from "./host.ts";
 export { swipe } from "./widgets.tsx";
@@ -246,16 +246,13 @@ function change_setting(key: string, value: number) {
 }
 
 // ============================================================================
-// Side button and system swipes
+// Side button
 // ============================================================================
 
-/** The side button: the screen's handler if it has one, otherwise back. */
-export function press_button(kind: "press" | "long_press" = "press") {
+/** The side button: back in an app, and on the face the screen turns off or on. */
+export function press_button() {
   const app = open_app.peek();
-  const handlers: ScreenHandlers = active_screen;
-  if (app && app.kind !== "face" && handlers.onButton) {
-    run_app_handler(app, handlers.onButton, { kind });
-  } else if (app && app.kind !== "face") {
+  if (app && app.kind !== "face") {
     emit({ kind: "back" });
   } else {
     is_screen_on.value = !is_screen_on.peek();
@@ -393,9 +390,6 @@ export function start_scheduler(): () => void {
     previous = current;
   });
   const stop_listening = listen_for_effects(carry_out);
-  swipe_fallback.handle = (direction) => {
-    if (direction === "right") emit({ kind: "back" });
-  };
   start_clock();
   return () => {
     stop_counting_steps();

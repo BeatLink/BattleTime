@@ -105,6 +105,17 @@ describe("launcher", () => {
       expect(names()).toHaveLength(2);
     });
 
+    it("closes to the face on a swipe down, whatever its style", () => {
+      for (const style of ["list", "pages"] as const) {
+        launcher_style.value = style;
+        open(launcher);
+        render(<OpenScreen />);
+        act(() => swipe("down"));
+        expect(open_app.value).toBeNull();
+        cleanup();
+      }
+    });
+
     it("draws a grid that still opens the app tapped", () => {
       launcher_view.value = "grid";
       render(<OpenScreen />);

@@ -1,7 +1,7 @@
 //! What the host needs from the firmware or the simulator around it, and what it hands back.
 
 use neotime_runtime::{
-    events::{ButtonPress, EventKind, SwipeDirection},
+    events::{EventKind, SwipeDirection},
     instruction::MOST_EFFECT_ARGUMENTS,
     AppImage, EffectKind, Failure, Interpreter, SystemValue, SystemValues, Value,
 };
@@ -93,17 +93,10 @@ pub enum Touch {
 pub enum EventResult {
     /// A handler ran to the end.
     Handled,
-    /// No handler takes it, so the system's own meaning applies, such as a swipe right going back.
+    /// No handler takes it, so the system's own meaning applies, such as a swipe up on the face opening the launcher.
     NotHandled,
     /// The handler failed and changed nothing; the system has been told.
     Failed,
-}
-
-pub(crate) fn button_value(press: ButtonPress) -> Value {
-    match press {
-        ButtonPress::Press => 0,
-        ButtonPress::LongPress => 1,
-    }
 }
 
 pub(crate) fn swipe_value(direction: SwipeDirection) -> Value {

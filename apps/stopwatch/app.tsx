@@ -104,9 +104,6 @@ function LapRow(props: { place: number }) {
 function Stopwatch() {
   return (
     <Screen padding={8} gap={6}
-      onButton={(event) => {
-        if (event.kind === "press") start_or_pause();
-      }}
     >
       <Column align_items="center">
         <Label font={shows_hours.value ? "large" : "seven_segment"} color={is_dimmed.value ? "muted" : "text"}>

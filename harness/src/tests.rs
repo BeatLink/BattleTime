@@ -239,7 +239,6 @@ fn gestures_nobody_answers_are_left_to_the_system() {
 
     assert_eq!(watch.swipe(Direction::Right), EventResult::NotHandled);
     assert_eq!(watch.press_button(), EventResult::NotHandled);
-    assert_eq!(watch.long_press_button(), EventResult::NotHandled);
     assert_eq!(watch.long_press(5, 5), EventResult::NotHandled);
     assert_eq!(watch.double_tap(5, 5), EventResult::NotHandled);
     assert_eq!(watch.drag((5, 5), (100, 5)), EventResult::NotHandled);

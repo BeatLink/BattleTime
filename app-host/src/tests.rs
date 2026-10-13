@@ -13,7 +13,7 @@ use embedded_graphics::{
     prelude::*,
 };
 use neotime_runtime::{
-    events::{ButtonPress, SwipeDirection},
+    events::SwipeDirection,
     instruction::Instruction,
     widgets::Property,
     writer::{CodeWriter, ImageWriter},
@@ -331,10 +331,7 @@ fn counter_image() -> Vec<u8> {
     writer.widget(
         WidgetKind::Column,
         5,
-        &[
-            (Property::ScreenName, constant(main as i32)),
-            (Property::OnButton, PropertySource::Handler(go_back)),
-        ],
+        &[(Property::ScreenName, constant(main as i32))],
     );
     writer.widget(
         WidgetKind::Label,
@@ -606,7 +603,7 @@ fn go_switches_screens_and_back_returns() {
 }
 
 #[test]
-fn back_from_the_first_screen_goes_to_the_system() {
+fn the_button_goes_back_a_screen_and_leaves_the_first_to_the_system() {
     let image = counter_image();
     let mut system = FakeSystem::default();
     let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
@@ -616,18 +613,17 @@ fn back_from_the_first_screen_goes_to_the_system() {
         START_TIME,
         &mut system,
     );
-    click_on(&mut host, counter_widgets::BACK_BUTTON, START_TIME, &mut system);
 
-    let result = host.press_button(ButtonPress::Press, START_TIME, &mut system);
+    let from_settings = host.go_back_a_screen(START_TIME, &mut system);
+    let from_main = host.go_back_a_screen(START_TIME, &mut system);
 
-    assert_eq!(result, EventResult::Handled);
+    assert_eq!(
+        [from_settings, from_main],
+        [EventResult::Handled, EventResult::NotHandled]
+    );
     assert_eq!(host.screen_name(), Some("main"));
-    assert_eq!(system.effects, vec![(EffectKind::Back, 0, None)]);
+    assert!(system.effects.is_empty());
 }
-
-// ============================================================================
-// Time
-// ============================================================================
 
 #[test]
 fn a_tick_redraws_a_clock_bound_label_once_a_second() {
@@ -1740,6 +1736,40 @@ fn a_long_app_list_scrolls_and_keeps_its_rows_inside_it() {
     assert!(rows.iter().all(|(_, row)| row.y + row.height > 0 && row.y < 240));
     assert_eq!(rows.first().map(|(name, _)| *name), Some("App 2"));
     assert_eq!(rows.last().map(|(name, _)| *name), Some("App 6"));
+}
+
+#[test]
+fn a_swipe_goes_through_a_list_that_did_not_move_but_not_one_that_scrolled() {
+    let image = app_list_image();
+    let mut system = system_with_apps(8);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let drag_down = Touch::Drag {
+        x: 120,
+        y: 200,
+        start_x: 120,
+        start_y: 40,
+    };
+    let drag_up = Touch::Drag {
+        x: 120,
+        y: 40,
+        start_x: 120,
+        start_y: 200,
+    };
+
+    // At the top a drag down cannot move the list, so the swipe is left to the system.
+    host.touch(Touch::Press { x: 120, y: 40 }, START_TIME, &mut system);
+    host.touch(drag_down, START_TIME, &mut system);
+    let at_the_top = host.touch(Touch::Swipe(SwipeDirection::Down), START_TIME, &mut system);
+    host.touch(Touch::Release { x: 120, y: 200 }, START_TIME, &mut system);
+
+    host.touch(Touch::Press { x: 120, y: 200 }, START_TIME, &mut system);
+    host.touch(drag_up, START_TIME, &mut system);
+    let after_scrolling = host.touch(Touch::Swipe(SwipeDirection::Up), START_TIME, &mut system);
+
+    assert_eq!(
+        [at_the_top, after_scrolling],
+        [EventResult::NotHandled, EventResult::Handled]
+    );
 }
 
 #[test]

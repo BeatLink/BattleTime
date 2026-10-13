@@ -41,7 +41,8 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
 
 ## Design rules
 
-- The firmware carries only the engine. No built-in apps, faces, launcher, icons or fonts, and no
+- The firmware carries only the engine, plus the notifications and quick settings screens from
+  `shell/`, which it compiles in. No other built-in apps, faces, launcher, icons or fonts, and no
   fallback copies of them. Apps live in `/apps` on external flash; the shared library sits in the
   last 92 KB of internal flash (0x69000).
 - Anything that changes often (notifications, settings, app state) goes on external flash, never

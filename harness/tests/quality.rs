@@ -36,7 +36,7 @@ fn is_lowercase_hyphenated(id: &str) -> bool {
 /// The page that lists a package, and its text.
 fn listing_page(kind: PackageKind) -> (&'static str, String) {
     let page = match kind {
-        PackageKind::App => "docs/apps.md",
+        PackageKind::App | PackageKind::Shell => "docs/apps.md",
         PackageKind::Face => "docs/faces.md",
     };
     let text = std::fs::read_to_string(repository_root().join(page)).unwrap_or_default();
@@ -127,7 +127,7 @@ fn problems_with(package: &Package) -> Vec<String> {
         problems.push("define_app gives no name".into());
     }
     let expected_kind = match package.kind {
-        PackageKind::App => AppKind::App,
+        PackageKind::App | PackageKind::Shell => AppKind::App,
         PackageKind::Face => AppKind::Face,
     };
     if image.kind != expected_kind {

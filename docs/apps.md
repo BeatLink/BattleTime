@@ -4,7 +4,9 @@ NeoTime's first apps are ports of the apps in [InfiniTime](https://github.com/In
 and [wasp-os](https://github.com/wasp-os/wasp-os), written in the app language described in
 [app-runtime.md](app-runtime.md) and [app-reference.md](app-reference.md). Where both firmwares have
 the same app, the port merges them into one. Each app lives in `apps/<id>/app.tsx`, which names its
-sources at the top. Watch faces are a separate package, listed in [faces.md](faces.md).
+sources at the top. Watch faces are a separate package, listed in [faces.md](faces.md), and the
+screens the firmware carries itself live in `shell/<id>/app.tsx`, listed under
+[Built into the firmware](#built-into-the-firmware).
 
 An app should be a thin layer over the shared parts in the firmware and the shared library: use
 the SDK's widgets, components and functions rather than writing your own, and move anything a
@@ -47,7 +49,7 @@ npm test        # renders every screen of every app and face, plus their own tes
 To compile them, inside `nix develop`:
 
 ```sh
-for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler -- --check "$f"; done
+for f in apps/*/app.tsx shell/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler -- --check "$f"; done
 ```
 
 `-o <file>.ntapp` in place of `--check` writes the image, which the simulator opens with `--app`.
@@ -56,7 +58,7 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 
 | App | From | Notes | Screen |
 |---|---|---|---|
-| `stopwatch` | InfiniTime StopWatch, wasp-os stopwatch | Laps with split and total times. The side button starts and pauses. | <img src="../harness/snapshots/screens/app-stopwatch.png" width="120" alt="stopwatch"> <img src="../harness/snapshots/screens/app-stopwatch-running.png" width="120" alt="stopwatch running"> |
+| `stopwatch` | InfiniTime StopWatch, wasp-os stopwatch | Laps with split and total times. | <img src="../harness/snapshots/screens/app-stopwatch.png" width="120" alt="stopwatch"> <img src="../harness/snapshots/screens/app-stopwatch-running.png" width="120" alt="stopwatch running"> |
 | `timer` | InfiniTime Timer, wasp-os timer | Pause, resume and reset. A progress ring, and a count of time since it rang. | <img src="../harness/snapshots/screens/app-timer.png" width="120" alt="timer"> |
 | `alarm` | InfiniTime Alarm, wasp-os alarm | 12 alarms with weekday repeats, a 10 minute snooze, and a ring that stops itself after a minute. | <img src="../harness/snapshots/screens/app-alarm.png" width="120" alt="alarm"> |
 | `pomodoro` | wasp-os pomodoro | A queue of up to 6 lengths, with presets and the buzz length set by swiping. | <img src="../harness/snapshots/screens/app-pomodoro.png" width="120" alt="pomodoro"> |
@@ -68,6 +70,17 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 | `software` | NeoTime, after wasp-os's Software app | Every installed app and face with a switch to turn it on or off, and the memory it needs while open. The watch checks each change first: an app too large for the heap, one that would leave the launcher without room, the launcher itself, the last face and the open app are refused, and a tap on one says why. | <img src="../harness/snapshots/screens/app-software.png" width="120" alt="software"> <img src="../harness/snapshots/screens/app-software-refused.png" width="120" alt="software refusing an app"> |
 | `launcher` | NeoTime | The installed apps, grouped as the companion set up, each with its icon and name; a tap opens one. The companion chooses the style: folders (the groups, each opening its apps; a swipe moves to the next group), sections (one list with a heading above each group), pages (a group a page, swiped left and right) or one plain list; and whether apps are rows or a grid of icons. Any other launcher can replace it. | <img src="../harness/snapshots/screens/app-launcher.png" width="120" alt="launcher"> <img src="../harness/snapshots/screens/app-launcher-installed.png" width="120" alt="launcher installed"> <img src="../harness/snapshots/screens/app-launcher-folders.png" width="120" alt="launcher folders"> <img src="../harness/snapshots/screens/app-launcher-folder-open.png" width="120" alt="an open folder as a grid"> <img src="../harness/snapshots/screens/app-launcher-sections.png" width="120" alt="launcher sections"> <img src="../harness/snapshots/screens/app-launcher-sections-grid.png" width="120" alt="launcher sections as a grid"> <img src="../harness/snapshots/screens/app-launcher-pages.png" width="120" alt="launcher pages"> <img src="../harness/snapshots/screens/app-launcher-grid.png" width="120" alt="launcher grid"> |
 
+## Built into the firmware
+
+These are written like apps but compiled into the firmware when it is built, so they are always
+there, never listed in the launcher, and cannot be removed. The shell opens them from the face; see
+[Navigation](architecture.md#firmware-firmware).
+
+| Screen | From | Notes | Screen |
+|---|---|---|---|
+| `notifications` | InfiniTime Notifications, wasp-os notification list | A swipe down on the face pulls it down, as does a double click from anywhere. The latest 5 notifications from the phone and from apps, newest first; a tap reads one in full and Dismiss removes it. Opens by itself when a notification wakes the screen. | <img src="../harness/snapshots/screens/shell-notifications.png" width="120" alt="notifications"> |
+| `quick-settings` | InfiniTime QuickSettings, Android's pull-down shade | A swipe down on the notifications pulls it down. The time and battery over six buttons: brightness, the flashlight, do not disturb, Bluetooth, the always-on screen and Settings. | <img src="../harness/snapshots/screens/shell-quick-settings.png" width="120" alt="quick settings"> |
+
 ## Health and phone
 
 | App | From | Notes | Screen |
@@ -77,14 +90,12 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 | `sports` | wasp-os sports | A stopwatch with the steps taken since it started. | <img src="../harness/snapshots/screens/app-sports.png" width="120" alt="sports"> |
 | `music` | InfiniTime Music, wasp-os music_player | Track, progress, play and skip by swipe, and a volume row. | <img src="../harness/snapshots/screens/app-music.png" width="120" alt="music"> |
 | `remote` | new | Up to 9 buttons the companion app sets up, each with a library icon; a tap buzzes and tells the phone which button it was, and the phone runs that button's action. It reads `/remote/buttons` when it opens and when the screen turns on. | <img src="../harness/snapshots/screens/app-remote.png" width="120" alt="remote"> <img src="../harness/snapshots/screens/app-remote-1.png" width="120" alt="remote with one button"> <img src="../harness/snapshots/screens/app-remote-4.png" width="120" alt="remote with four buttons"> <img src="../harness/snapshots/screens/app-remote-9.png" width="120" alt="remote with nine buttons"> |
-| `notifications` | InfiniTime Notifications, wasp-os notification list | The latest 5 notifications from the phone and from apps, newest first; a tap reads one in full and Dismiss removes it. Opens by itself when a notification wakes the screen. | <img src="../harness/snapshots/screens/app-notifications.png" width="120" alt="notifications"> |
 | `weather` | InfiniTime Weather, wasp-os weather | Conditions, low and high, and a 5 day forecast, all read from `current_weather`. | <img src="../harness/snapshots/screens/app-weather.png" width="120" alt="weather"> |
 | `navigation` | InfiniTime Navigation | The next turn, its distance in the wearer's units and the trip's progress. | <img src="../harness/snapshots/screens/app-navigation.png" width="120" alt="navigation"> |
 | `metronome` | InfiniTime Metronome | Beats scheduled from the start time so they never drift; tap tempo. | <img src="../harness/snapshots/screens/app-metronome.png" width="120" alt="metronome"> |
 | `motion` | InfiniTime Motion | Charts of the raw x, y and z acceleration. | <img src="../harness/snapshots/screens/app-motion.png" width="120" alt="motion"> |
 | `level` | wasp-os level | A spirit level with a saved calibration. | <img src="../harness/snapshots/screens/app-level.png" width="120" alt="level"> |
 | `beacon` | wasp-os beacon | Flashes the heart rate sensor's LED, while the app is in front. | <img src="../harness/snapshots/screens/app-beacon.png" width="120" alt="beacon"> |
-| `disable-bluetooth` | wasp-os disa_b_l_e | Turns Bluetooth off and on again, without the reboot wasp-os needed. | <img src="../harness/snapshots/screens/app-disable-bluetooth.png" width="120" alt="disable bluetooth"> |
 
 ## Games and others
 
@@ -108,8 +119,9 @@ for f in apps/*/app.tsx faces/*/face.tsx; do cargo run -q -p neotime-compiler --
 | App | From | Why |
 |---|---|---|
 | `demo`, `gallery` | wasp-os | Need full-screen images and reading files. |
+| `disa_b_l_e` | wasp-os | The Bluetooth switch in Settings and quick settings does the same. |
 | `read_me`, `test` | wasp-os | Developer tools, not apps. |
-| Quick settings, firmware update | both | Part of the system, not apps. |
+| Firmware update | both | Part of the system, not an app. |
 
 ## Limits
 

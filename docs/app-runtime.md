@@ -139,7 +139,7 @@ stopwatch runs. The Reset button's `{... && ...}` becomes a binding on its `visi
 | JSX that reads `.value` | Expressions bound to widget properties. |
 | `{condition && <Widget/>}` | The widget's `visible` property. |
 | `array.value.map(...)` over a fixed-length array | A repeated row, one copy per element. |
-| `onClick`, `onSwipe`, `onButton` | Handlers. An arrow function written inline is lifted out into a handler of its own. |
+| `onClick`, `onSwipe` | Handlers. An arrow function written inline is lifted out into a handler of its own. |
 | `now`, `heart_rate`, `steps`, `battery` from `neotime` | System values the runtime provides. |
 | `neotime/components`, `neotime/lib`, `icons`, fonts | References by number into the [shared library](#the-shared-library), never copied into the app. |
 
@@ -624,7 +624,6 @@ compiler and the runtime both follow it:
 | `onClick`, `onLongPress`, `onDoubleClick`, `onPress`, `onRelease` | `x`, `y`, `value` |
 | `onDrag` | `x`, `y`, `start_x`, `start_y`, `value` |
 | `onSwipe` | `direction`: 0 up, 1 down, 2 left, 3 right |
-| `onButton` | `kind`: 0 press, 1 long press |
 | `onChange` | `value` |
 | `onPageChange` | `page` |
 | `onScrollEnd` | `offset` |
@@ -704,7 +703,7 @@ What happens next is driven by the embedder:
 | Call | Does |
 |---|---|
 | `touch(touch, now, system)` | Finds the topmost shown widget under the finger that has a handler for the event, and runs it. A swipe goes to the screen's `onSwipe`. A tap on a `Switch`, or a tap or drag on a `Slider`, sends `onChange` with the new value. |
-| `press_button(press, now, system)` | Runs the screen's `onButton`. |
+| `go_back_a_screen(now, system)` | Goes back one of the app's screens, as a click of the side button does; not handled on the first screen. |
 | `tick(now, system)` | Runs the timer-like subscriptions that are due, and works out again the open screen's expressions that `Bindings::due_between_among` says the clock has changed. |
 | `next_wakeup(now)` | The earliest of: when the clock next changes something on the open screen, the next due subscription, and the next step of a scrolling label. None means sleep until an event. |
 | `bring_to_front`, `close`, `screen_turned_on`, `screen_turned_off` | Run the `Open`, `Close`, `ScreenOn` and `ScreenOff` subscriptions. A closed app keeps only subscriptions without `only_while_open`. |

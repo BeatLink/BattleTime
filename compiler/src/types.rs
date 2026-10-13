@@ -244,7 +244,6 @@ pub enum ChoiceSet {
     Align,
     LongMode,
     SwipeDirection,
-    ButtonPress,
     VibrationPattern,
     MusicCommand,
     CallCommand,
@@ -294,7 +293,6 @@ impl ChoiceSet {
             ChoiceSet::Align => &["start", "center", "end"],
             ChoiceSet::LongMode => &["wrap", "scroll", "clip"],
             ChoiceSet::SwipeDirection => &["up", "down", "left", "right"],
-            ChoiceSet::ButtonPress => &["press", "long_press"],
             ChoiceSet::VibrationPattern => {
                 &["tap", "double_tap", "notification", "alarm", "success", "failure"]
             }
@@ -342,7 +340,6 @@ impl ChoiceSet {
             ChoiceSet::Align => "alignment",
             ChoiceSet::LongMode => "long text mode",
             ChoiceSet::SwipeDirection => "swipe direction",
-            ChoiceSet::ButtonPress => "button press",
             ChoiceSet::VibrationPattern => "vibration pattern",
             ChoiceSet::MusicCommand => "music command",
             ChoiceSet::CallCommand => "call command",

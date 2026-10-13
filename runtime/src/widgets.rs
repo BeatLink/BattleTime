@@ -230,6 +230,7 @@ pub enum Property {
     OnRelease,
     OnDrag,
     OnSwipe,
+    /// Never run, since the side button belongs to the shell; kept so later numbers stay the same.
     OnButton,
     OnChange,
     OnPageChange,

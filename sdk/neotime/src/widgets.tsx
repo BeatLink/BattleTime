@@ -5,7 +5,6 @@ import { batch, type Signal } from "@preact/signals";
 import type { ComponentChildren, JSX } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type {
-  ButtonEvent,
   ChangeEvent,
   ClickEvent,
   Color,
@@ -263,11 +262,10 @@ function use_touch(props: TouchProps, disabled = false) {
 // ============================================================================
 
 export interface ScreenHandlers {
-  onButton?: (event: ButtonEvent) => void;
   onSwipe?: (event: SwipeEvent) => void;
 }
 
-/** The handlers of the screen on show, which the preview calls for the button and swipes. */
+/** The handlers of the screen on show, which the preview calls for swipes. */
 export const active_screen: ScreenHandlers = {};
 
 const SWIPE_DISTANCE_IN_PIXELS = 40;
@@ -289,13 +287,11 @@ export interface ScreenProps extends ScreenHandlers, TouchProps {
 export function Screen(props: ScreenProps) {
   const swipe_start = useRef<ClickEvent | null>(null);
   const touch = use_touch(props);
-  active_screen.onButton = props.onButton;
   active_screen.onSwipe = props.onSwipe;
 
   useEffect(() => {
     run_handler(props.onShow, undefined);
     return () => {
-      active_screen.onButton = undefined;
       active_screen.onSwipe = undefined;
       run_handler(props.onHide, undefined);
     };
@@ -350,12 +346,9 @@ export function Screen(props: ScreenProps) {
   );
 }
 
-/** Gives a swipe to the screen on show, or to the preview's system handling if it has none. */
-export const swipe_fallback: { handle: (direction: SwipeDirection) => void } = { handle: () => {} };
-
+/** Gives a swipe to the screen on show; the shell's own swipes happen only on the face, which the preview leaves out. */
 export function swipe(direction: SwipeDirection) {
   if (active_screen.onSwipe) run_handler(active_screen.onSwipe, { direction });
-  else swipe_fallback.handle(direction);
 }
 
 // ============================================================================
