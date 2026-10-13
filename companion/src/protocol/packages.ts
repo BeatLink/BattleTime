@@ -5,14 +5,24 @@
 import { NotifyQueue, type DfuLink } from '@/dfu/link';
 
 import { readImageHeader, type ImageHeader } from './app-image';
+import { placeNewApps } from './launcher';
 import { NEOTIME_PACKAGES, NEOTIME_SERVICE } from './neotime';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-// `need` is the heap the app needs while open, in bytes, or null from firmware that does not say.
-export type WatchApp = { id: string; name: string; kind: 'app' | 'face'; enabled: boolean; bytes: number; need: number | null };
+// `need` is the heap the app needs while open, in bytes, or null from firmware that does not say; `group` is the
+// launcher group the app declares, empty when it declares none or the firmware does not say.
+export type WatchApp = {
+  id: string;
+  name: string;
+  kind: 'app' | 'face';
+  enabled: boolean;
+  bytes: number;
+  need: number | null;
+  group: string;
+};
 
 // The installed apps, with the most heap an app may need when the watch gives it.
 export type WatchApps = { apps: WatchApp[]; room: number | null };
@@ -22,10 +32,11 @@ export type MemoryAnswer = { need: number | null; room: number | null };
 
 export type Progress = { file: string; sent: number; total: number };
 
-// What installing needs from the file transfer service.
+// What installing needs from the file transfer service; with `read`, a new app also takes its place in the launcher's groups.
 export type FileWriter = {
   write(path: string, data: Uint8Array, onProgress?: (progress: Progress) => void): Promise<void>;
   mkdir?(path: string): Promise<void>;
+  read?(path: string): Promise<Uint8Array>;
 };
 
 // Why the watch refused, as docs/companion-protocol.md numbers it.
@@ -56,7 +67,7 @@ type Reply = {
   why?: number;
   need?: number;
   room?: number;
-  a?: [string, string, string, number, number, number?][];
+  a?: [string, string, string, number, number, number?, string?][];
 };
 
 // Bytes as kilobytes with one decimal, as the apps screen and the command line show memory.
@@ -68,7 +79,7 @@ export function memoryText(bytes: number): string {
 export const LIBRARY_UPLOAD_PATH = '/resources/shared.ntlib';
 
 // The commands this client sends, so it can ignore lines meant for anyone else on the characteristic.
-const COMMANDS = new Set(['apps', 'install', 'remove', 'enable', 'install_library']);
+const COMMANDS = new Set(['apps', 'install', 'remove', 'enable', 'install_library', 'launcher']);
 
 // How long a command may take; copying the library into internal flash is the slowest.
 const REPLY_TIMEOUT_MS = 20000;
@@ -113,13 +124,14 @@ export class PackagesClient {
   // The installed apps with each one's heap need, and the most an app may have.
   async listing(): Promise<WatchApps> {
     const reply = await this.command({ c: 'apps' });
-    const apps = (reply.a ?? []).map(([id, name, kind, enabled, bytes, need]): WatchApp => ({
+    const apps = (reply.a ?? []).map(([id, name, kind, enabled, bytes, need, group]): WatchApp => ({
       id,
       name,
       kind: kind === 'face' ? 'face' : 'app',
       enabled: Boolean(enabled),
       bytes,
       need: need ?? null,
+      group: group ?? '',
     }));
     return { apps, room: reply.room ?? null };
   }
@@ -138,6 +150,11 @@ export class PackagesClient {
   async enable(id: string, on: boolean): Promise<MemoryAnswer> {
     appImagePath(id);
     return memoryOf(await this.command({ c: 'enable', id, on }));
+  }
+
+  // Has the launcher read /settings/launcher again, after it was written.
+  async reloadLauncher(): Promise<void> {
+    await this.command({ c: 'launcher' });
   }
 
   async installLibrary(): Promise<void> {
@@ -211,5 +228,8 @@ export async function installImage(
   await files.mkdir?.(`/apps/${header.id}`).catch(() => {});
   await files.write(path, image, onProgress);
   await packages.install(header.id);
+  if (files.read) {
+    await placeNewApps({ read: files.read.bind(files), write: files.write.bind(files) }, packages);
+  }
   return header;
 }

@@ -7,6 +7,7 @@
 import { WatchSession, DEFAULT_SCAN_MS } from './ble';
 import { debug, debugUsage } from './commands/debug';
 import { flash, flashUsage } from './commands/flash';
+import { launcher, launcherUsage } from './commands/launcher';
 import { recovery, recoveryUsage } from './commands/recovery';
 import { remote, REMOTE_OFFLINE, remoteUsage } from './commands/remote';
 import { scan, scanUsage } from './commands/scan';
@@ -53,6 +54,8 @@ ${sendUsage}
 ${watchUsage}
 
 ${remoteUsage}
+
+${launcherUsage}
 
 ${debugUsage}
 
@@ -121,6 +124,7 @@ const NEEDS_WATCH = new Set([
   'files',
   'note',
   'remote',
+  'launcher',
   'apps',
   'backup',
   'restore',
@@ -279,6 +283,10 @@ async function main(argv: string[]): Promise<number> {
 
       case 'apps':
         await apps(session, rest);
+        break;
+
+      case 'launcher':
+        await launcher(session, rest);
         break;
 
       case 'backup':

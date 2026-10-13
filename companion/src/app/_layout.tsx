@@ -45,6 +45,7 @@ export default function RootLayout() {
           <Stack.Screen name="remote" options={{ headerShown: true, title: 'Remote' }} />
           <Stack.Screen name="backup" options={{ headerShown: true, title: 'Backup' }} />
           <Stack.Screen name="apps" options={{ headerShown: true, title: 'Apps' }} />
+          <Stack.Screen name="launcher" options={{ headerShown: true, title: 'Launcher' }} />
           <Stack.Screen name="setup" options={{ headerShown: true, title: 'Set up the watch' }} />
         </Stack>
       </WatchProvider>

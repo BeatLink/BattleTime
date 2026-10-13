@@ -5,6 +5,7 @@ import { base64ToBytes } from '@/ble/encoding';
 import { BUNDLED_IMAGES, type BundledImage } from '@/bundles/watch-apps';
 
 import { readImageHeader, type ImageHeader } from './app-image';
+import { DEFAULT_LAUNCHER, writeLauncher } from './launcher';
 import type { DiagnosticCounter } from './neotime';
 import { installImage, type FileWriter, type PackagesClient, type WatchApp } from './packages';
 
@@ -57,7 +58,8 @@ export function needsSetup(apps: WatchApp[]): boolean {
   return !apps.some((app) => app.kind === 'face');
 }
 
-// Installs each chosen item in order, reporting progress, and stops at the first failure.
+// Installs each chosen item in order, reporting progress, and stops at the first failure. When the launcher was
+// among them it starts with the default groups, as folders; firmware without groups ignores the file.
 export async function runSetup(
   files: FileWriter,
   packages: PackagesClient,
@@ -69,5 +71,8 @@ export async function runSetup(
     await installImage(files, packages, item.image, (progress) =>
       onStep?.({ item, index, count: items.length, sent: progress.sent, total: progress.total }),
     );
+  }
+  if (items.some((item) => item.header.id === LAUNCHER_ID)) {
+    await writeLauncher(files, packages, DEFAULT_LAUNCHER).catch(() => {});
   }
 }

@@ -103,6 +103,7 @@ npm run neotime -- diag
 npm run neotime -- files ls /settings
 npm run neotime -- note shopping.txt large
 npm run neotime -- remote push
+npm run neotime -- launcher style folders
 npm run neotime -- apps setup
 npm run neotime -- apps install path/to/timer.ntapp
 npm run neotime -- apps list
@@ -178,6 +179,7 @@ src/app/                 Expo Router screens
   setup.tsx              Set up a new watch: the shared icons, a face, the launcher and apps
   notes.tsx              The text file the watch's Notes app shows, and its font there
   remote.tsx             The watch's Remote app: its buttons, what each runs here, and recent taps
+  launcher.tsx           The launcher's style, view and groups, and which group each app is in
   files.tsx              The watch's file system: browse, send, read, delete, free space
   backup.tsx             Copy the watch's settings and app state off and back
   steps.tsx              The last week of steps, by day and by hour
@@ -321,6 +323,29 @@ picker draws each icon from the shared library image in the setup bundle
 `neotime remote list|push|run <n>|listen` does the same from a terminal, with the buttons in
 `~/.config/neotime-companion/remote.json` (or `--buttons <file>`) in the form the app stores them.
 In the browser's mock mode each button has a "Tap as the watch" button.
+
+## Launcher
+
+The watch's launcher groups the apps, and the Launcher screen arranges it. The **style** is how it
+shows the groups: folders (a list of groups, each opening its apps), sections (one list with a
+heading above each group), pages (a page per group, swiped left and right) or one plain list. The
+**view** is how a group's apps are drawn: a row each, or a grid of icons. Groups can be renamed,
+given a shared library icon, reordered, added and removed, and an app moved to another group or
+to another place in its own.
+
+Each app's image declares the group it starts in, such as `games`, and the `apps` reply carries it.
+[src/protocol/launcher.ts](src/protocol/launcher.ts) works out where every installed app goes, each
+in the group it declares until the wearer moves it, and writes that to `/settings/launcher` over the
+file service as a few hundred bytes (the layout is in NeoTime's `docs/companion-protocol.md`), then
+sends `{"c":"launcher"}` on the packages characteristic so the launcher shows it at once. Installing
+an app writes the file again, so a new app lands in its group. The file lives on the watch, so
+every phone and the command line see the same groups; with no file the screen starts from the
+default groups: Games, Tools, Communication, Time, Phone, Health, System, Settings and Other.
+Setting up a watch writes those defaults, as folders. An app whose group is missing goes to Other,
+and so does one installed another way, until the companion next writes the file.
+
+`neotime launcher show|style <s>|view <v>|move <app> <group>|add <name> [icon]|remove <group>|reset`
+does the same from a terminal.
 
 ## Apps and the first run
 

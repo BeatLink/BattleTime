@@ -1,16 +1,15 @@
-import { useMemo, useState } from 'react';
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ChoiceRow, ErrorNote, TextRow } from '@/components/fields';
+import { IconPicker, LibraryIcon } from '@/components/library-icon';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { LIBRARY_ICON_NAMES } from '@/bundles/icon-names';
-import { Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
-import { libraryIconUris } from '@/protocol/library-icons';
 import { BUILTIN_ACTIONS, HTTP_METHODS, MOST_REMOTE_BUTTONS, type RemoteActionKind } from '@/protocol/remote';
 import { BUILTIN_LABELS, buttonName, describeAction } from '@/services/remote-actions';
 import {
@@ -58,42 +57,6 @@ function describeStatus(status: RemoteStatus, connected: boolean): string {
     case 'failed':
       return status.message;
   }
-}
-
-// A library icon as the watch draws it, tinted in the text colour, or its name where the bundle has no picture.
-function LibraryIcon({ name, size = 28 }: { name: string; size?: number }) {
-  const theme = useTheme();
-  const uris = useMemo(() => libraryIconUris(), []);
-  const uri = uris[(LIBRARY_ICON_NAMES as readonly string[]).indexOf(name)];
-  if (!uri) {
-    return (
-      <ThemedText type="small" style={{ width: size * 2 }} numberOfLines={1}>
-        {name}
-      </ThemedText>
-    );
-  }
-  return <Image source={{ uri }} style={{ width: size, height: size, tintColor: theme.text }} accessibilityLabel={name} />;
-}
-
-// A grid of every library icon; the chosen one is outlined in the accent colour.
-function IconPicker({ value, onChange }: { value: string; onChange: (name: string) => void }) {
-  const theme = useTheme();
-  return (
-    <View style={styles.grid}>
-      {LIBRARY_ICON_NAMES.filter((name) => name !== 'none').map((name) => (
-        <Pressable
-          key={name}
-          accessibilityLabel={name}
-          onPress={() => onChange(name)}
-          style={[
-            styles.gridCell,
-            { borderColor: name === value ? theme.accent : 'transparent', backgroundColor: theme.backgroundSelected },
-          ]}>
-          <LibraryIcon name={name} />
-        </Pressable>
-      ))}
-    </View>
-  );
 }
 
 // The fields for one button's action, by kind.
@@ -307,8 +270,6 @@ export default function RemoteScreen() {
 }
 
 const styles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one },
-  gridCell: { padding: Spacing.one, borderWidth: 2, borderRadius: Radius.small },
   button: { gap: Spacing.two, paddingVertical: Spacing.two, borderTopWidth: StyleSheet.hairlineWidth },
   buttonHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   buttonText: { flex: 1 },

@@ -89,7 +89,7 @@ describe('a debug report', () => {
 
   it('holds the firmware, the counters, the crash, the apps and the free storage', async () => {
     const watch = new MockLegacyDfuTarget();
-    const apps = [{ id: 'alarm', name: 'Alarm', kind: 'app' as const, enabled: true, bytes: 6100, need: 9000 }];
+    const apps = [{ id: 'alarm', name: 'Alarm', kind: 'app' as const, enabled: true, bytes: 6100, need: 9000, group: 'time' }];
 
     const report = await readDebugReport(watch, { apps: async () => apps, freeStorageBytes: async () => 123456, now });
 

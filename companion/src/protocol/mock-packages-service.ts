@@ -16,6 +16,9 @@ export class MockPackagesService {
   // The library last copied into internal flash, for tests to check.
   library: Uint8Array | null = null;
 
+  // How many times the launcher was told to read its groups again, for tests to check.
+  launcherReloads = 0;
+
   constructor(
     // The mock watch's files, shared with its file transfer service.
     private readonly files: Map<string, Uint8Array>,
@@ -24,7 +27,7 @@ export class MockPackagesService {
 
   // The commands this service answers.
   static handles(command: string): boolean {
-    return ['apps', 'install', 'remove', 'enable', 'install_library'].includes(command);
+    return ['apps', 'install', 'remove', 'enable', 'install_library', 'launcher'].includes(command);
   }
 
   handle(message: { c: string; id?: string; on?: boolean }) {
@@ -32,6 +35,10 @@ export class MockPackagesService {
     if (c === 'apps') {
       this.reply({ c, room: MOCK_ROOM, a: this.list() });
       return;
+    }
+    if (c === 'launcher') {
+      this.launcherReloads += 1;
+      return this.reply({ c, ok: 1 });
     }
     if (c === 'install_library') {
       const image = this.files.get(LIBRARY_UPLOAD_PATH);
@@ -100,8 +107,8 @@ export class MockPackagesService {
     }
   }
 
-  private list(): [string, string, string, number, number, number][] {
-    const apps: [string, string, string, number, number, number][] = [];
+  private list(): [string, string, string, number, number, number, string][] {
+    const apps: [string, string, string, number, number, number, string][] = [];
     for (const [path, image] of this.files) {
       const match = /^\/apps\/([^/]+)\/app\.ntapp$/.exec(path);
       if (!match) continue;
@@ -109,7 +116,7 @@ export class MockPackagesService {
         const header = readImageHeader(image);
         if (header.kind === 'library' || header.id !== match[1]) continue;
         const enabled = this.files.has(`/apps/${match[1]}/disabled`) ? 0 : 1;
-        apps.push([header.id, header.name, header.kind, enabled, image.length, this.needOf(image)]);
+        apps.push([header.id, header.name, header.kind, enabled, image.length, this.needOf(image), header.group]);
       } catch {
         // Not a valid image, so not listed, as on the watch.
       }

@@ -314,6 +314,7 @@ export default function WatchScreen() {
           {capabilities.files ? (
             <>
               <Row label="Notes" detail="Show a text file on the watch, kept up to date" onPress={() => router.push('/notes')} />
+              <Row label="Launcher" detail="Group the apps and choose how the launcher shows them" onPress={() => router.push('/launcher')} />
               <Row label="Remote" detail="Buttons on the watch that run actions here" onPress={() => router.push('/remote')} />
               <Row label="Files" detail="Browse, send and delete files, and check free space" onPress={() => router.push('/files')} />
               <Row label="Backup" detail="Save the watch's settings and app state, and put them back" onPress={() => router.push('/backup')} />

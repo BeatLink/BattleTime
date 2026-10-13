@@ -6,6 +6,7 @@ import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
 import { testImage } from '@/test-support/app-images';
 
 import { PackagesClient, type FileWriter } from './packages';
+import { DEFAULT_LAUNCHER, LAUNCHER_PATH, readLauncherFile } from './launcher';
 import { installBundledLibrary, needsLibrary, needsSetup, runSetup, setupItems, type SetupStep } from './setup';
 
 const bundle = [
@@ -32,8 +33,8 @@ describe('setting up a new watch', () => {
 
   it('is offered until a face is installed', () => {
     expect(needsSetup([])).toBe(true);
-    expect(needsSetup([{ id: 'timer', name: 'Timer', kind: 'app', enabled: true, bytes: 1, need: null }])).toBe(true);
-    expect(needsSetup([{ id: 'digital', name: 'Digital', kind: 'face', enabled: true, bytes: 1, need: null }])).toBe(false);
+    expect(needsSetup([{ id: 'timer', name: 'Timer', kind: 'app', enabled: true, bytes: 1, need: null, group: '' }])).toBe(true);
+    expect(needsSetup([{ id: 'digital', name: 'Digital', kind: 'face', enabled: true, bytes: 1, need: null, group: '' }])).toBe(false);
   });
 
   it('installs everything chosen, reporting each step', async () => {
@@ -53,6 +54,8 @@ describe('setting up a new watch', () => {
     expect(target.packagesService.library).not.toBeNull();
     expect(needsSetup(await packages.apps())).toBe(false);
     expect(steps.at(-1)).toMatchObject({ index: 4, count: 5 });
+    expect(readLauncherFile(target.fileService.files.get(LAUNCHER_PATH)!)?.groups).toEqual(DEFAULT_LAUNCHER.groups);
+    expect(target.packagesService.launcherReloads).toBe(1);
   });
 
   it('offers the library while the step counter waits for one, and installs only the library', async () => {
