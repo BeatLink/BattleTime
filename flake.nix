@@ -163,7 +163,7 @@
             pkgs.nodejs_24
             pkgs.pkg-config
             pkgs.probe-rs-tools
-            pkgs.python3
+            (pkgs.python3.withPackages (python: [ python.mkdocs-material ]))
             pkgs.SDL2
           ];
 
@@ -183,6 +183,7 @@
             echo "  tools/check_coverage.sh                                run every test with coverage and check the floors"
             echo "  nix flake check                                        run all of the above as checks"
             echo "  python3 -I tools/measure_memory.py                     measure the firmware and file system into docs/memory-map.md"
+            echo "  tools/build_site.sh                                    build the GitHub Pages site into target/site/out"
           '';
         };
       });

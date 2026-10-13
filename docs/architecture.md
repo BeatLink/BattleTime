@@ -170,6 +170,7 @@ NeoTime/
 │   ├── storage/      neotime-storage: littlefs in the external flash, for the wasp-os storage rehearsal
 │   └── updates/      neotime-updates: stores an uploaded firmware and hands it to the bootloader
 ├── simulator/        neotime-simulator: the drivers in a desktop window
+├── site/             the GitHub Pages site: its MkDocs config, front page and colours
 ├── third_party/
 │   ├── littlefs-rust/  littlefs-rust with its panicking loop caps turned off
 │   └── trouble-host/   TrouBLE with discovery responses that never cut a 128-bit UUID short
@@ -1144,3 +1145,11 @@ cd firmware && cargo build --release
 ```
 
 [updates.md](updates.md) says how to put these images on a watch.
+
+## Website
+
+The GitHub Pages site at <https://beatlink.github.io/NeoTime/> is built with MkDocs Material from
+`site/`: `site/home.md` is the front page, the README is the About page, and these docs follow.
+`tools/build_site.sh` builds it into `target/site/out`, and `.github/workflows/pages.yml` builds it on
+every pull request and publishes it from `master`. Every page in `docs/` must be in the nav in
+`site/mkdocs.yml`, and the build is strict, so a broken link or a renamed screenshot fails it.

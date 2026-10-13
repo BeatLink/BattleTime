@@ -5,7 +5,7 @@ NeoTime is a firmware for the PineTime smartwatch, written in Rust.
 It aims to combine the best parts of the two existing PineTime firmwares:
 
 - from [InfiniTime](https://github.com/InfiniTimeOrg/InfiniTime): a polished UI, long battery
-  life, safe updates with rollback, and wide companion app support through standard BLE services;
+  life, speed, and wide companion app support through standard BLE services;
 - from [wasp-os](https://github.com/wasp-os/wasp-os): apps that are easy to write and install over
   Bluetooth without reflashing, a desktop simulator, and a live console for development.
 
@@ -30,6 +30,8 @@ and firmware updates over Bluetooth and the button-hold recovery have worked on 
 watch from InfiniTime has run only in the emulator.
 
 ## Documentation
+
+The docs are also on the website, <https://beatlink.github.io/NeoTime/>.
 
 - [Architecture](docs/architecture.md): how the code is laid out and how the parts fit together.
 - [Coding guidelines](docs/coding-guidelines.md): how NeoTime code is written.
