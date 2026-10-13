@@ -39,7 +39,7 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Component | Full build | Recovery build |
 |---|---:|---:|
 | Firmware (start-up, shell, tasks) | 101.0 KB | 47.7 KB |
-| App host (with `neotime-ui`) | 76.8 KB | 0.0 KB |
+| App host (with `neotime-ui`) | 77.2 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 43.6 KB | 43.6 KB |
 | App runtime | 34.5 KB | 0.1 KB |
 | core, alloc and compiler builtins | 29.8 KB | 13.2 KB |
@@ -51,8 +51,8 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Display, graphics and drivers | 5.3 KB | 3.1 KB |
 | Updates (DFU) | 2.1 KB | 2.1 KB |
 | Other constants and padding | 28.4 KB | 13.5 KB |
-| **Used** | **385.1 KB** | **177.9 KB** |
-| Free of the 388 KB slot, after its header | 2.6 KB | 209.8 KB |
+| **Used** | **385.5 KB** | **177.9 KB** |
+| Free of the 388 KB slot, after its header | 2.3 KB | 209.8 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -109,7 +109,7 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 | What | Bytes | File sectors |
 |---|---:|---:|
 | `/settings/system` and `/settings/theme`, kept as records | 77 | 0 |
-| 12 app images, 715 B (flashlight) to 3,919 B (settings); those of 1 KB or less are records | 22,801 | 11 |
+| 12 app images, 715 B (flashlight) to 3,919 B (settings); those of 1 KB or less are records | 22,881 | 11 |
 | **In use** | | **11 of 512: 44 KB of 2 MB, and 1,960 B of records in the 256 KB records ring** |
 <!-- /measure_memory:file-system -->
 
