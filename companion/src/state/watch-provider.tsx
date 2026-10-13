@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { createTransport, detectTransportKind } from '@/ble/create-transport';
+import { remoteTapLine } from '@/ble/mock-gadgetbridge';
+import { MockTransport } from '@/ble/mock-transport';
 import type {
   ConnectionState,
   DiscoveredWatch,
@@ -20,6 +22,7 @@ import {
 import type { DfuLink } from '@/dfu/link';
 import { FileService } from '@/protocol/file-service';
 import { removeNote } from '@/protocol/notes';
+import type { RemoteAction } from '@/protocol/remote';
 import { PackagesClient } from '@/protocol/packages';
 import {
   NO_CAPABILITIES,
@@ -34,9 +37,19 @@ import { readStatus, ReplyRouter, type RequestChannel } from '@/protocol/request
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
 import { noteFileAccess, type NoteFileAccess } from '@/services/note-file';
 import { phoneBridge, type PhoneEvent } from '@/services/phone';
+import {
+  buttonName,
+  handleRemoteTap,
+  REMOTE_LOG_LIMIT,
+  runRemoteAction,
+  unavailableReason,
+  type RemoteLogEntry,
+} from '@/services/remote-actions';
+import { remotePlatform } from '@/services/remote-platform';
 import { currentWeather, weatherPlace } from '@/services/weather';
 import { watchClockChanges } from '@/state/clock-changes';
 import { NoteSync, type NoteStatus } from '@/state/note-sync';
+import { RemoteSync, type RemoteStatus } from '@/state/remote-sync';
 import { defaultSettings, loadSettings, saveSettings, type Settings } from '@/state/settings';
 
 export type ConsoleEntry = {
@@ -104,6 +117,19 @@ type WatchContextValue = {
   syncNote: () => Promise<void>;
   // Stops keeping a note on the watch and takes it off.
   forgetNote: () => Promise<void>;
+  // How sending the remote layout to the watch last went.
+  remoteStatus: RemoteStatus;
+  // Recent remote button taps and tests, newest first, and how each went.
+  remoteLog: RemoteLogEntry[];
+  clearRemoteLog: () => void;
+  // Writes the remote layout to the watch now, even if it looks unchanged.
+  sendRemoteLayout: () => Promise<void>;
+  // Runs a stored button's action here, as a tap on the watch would.
+  testRemoteButton: (index: number) => Promise<void>;
+  // Why this device cannot run an action, or null when it can.
+  remoteUnavailable: (action: RemoteAction) => string | null;
+  // Delivers a tap as the mock watch, or is null with a real watch.
+  simulateRemoteTap: ((index: number) => void) | null;
 };
 
 export type NowPlaying = Extract<PhoneEvent, { type: 'media' }>;
@@ -157,6 +183,26 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   }, [settings]);
   const sendMessageRef = useRef<(message: PhoneToWatchMessage) => Promise<void>>(async () => {});
   const [router] = useState(() => new ReplyRouter());
+  // What this device can do for remote buttons; play/pause follows what is playing now.
+  const playing = nowPlaying?.playing ?? false;
+  const remoteDevice = useMemo(
+    () =>
+      remotePlatform({
+        media: phoneBridge.available ? (command) => phoneBridge.mediaCommand(command) : null,
+        isPlaying: () => playing,
+        findPhone: () => setFindPhoneActive(true),
+      }),
+    [playing],
+  );
+  // Taps arrive in a callback that outlives a render, so it reads the device from here.
+  const remoteDeviceRef = useRef(remoteDevice);
+  useEffect(() => {
+    remoteDeviceRef.current = remoteDevice;
+  }, [remoteDevice]);
+  const [remoteLog, setRemoteLog] = useState<RemoteLogEntry[]>([]);
+  const addRemoteLog = useCallback((entry: RemoteLogEntry) => {
+    setRemoteLog((entries) => [entry, ...entries].slice(0, REMOTE_LOG_LIMIT));
+  }, []);
 
 
   // Pure check, so it needs neither state nor an effect.
@@ -199,13 +245,19 @@ export function WatchProvider({ children }: { children: ReactNode }) {
         void answer.then((reply) => sendMessageRef.current(reply));
         break;
       }
+      case 'app':
+        // Only the button's index comes from the watch; its action is looked up in this app's settings.
+        void handleRemoteTap(message, settingsRef.current.remoteButtons, remoteDeviceRef.current).then((entry) => {
+          if (entry) addRemoteLog(entry);
+        });
+        break;
       case 'error':
         setLastError(message.msg);
         break;
       case 'info':
         break;
     }
-  }, [router]);
+  }, [router, addRemoteLog]);
 
   useEffect(() => {
     const transport = createTransport();
@@ -588,6 +640,71 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     }
   }, [updateSettings, watchReady, capabilities.files, files]);
 
+  // Keep the watch's remote layout matching the buttons here, once any have been set up.
+  const [remoteStatus, setRemoteStatus] = useState<RemoteStatus>({ kind: 'idle' });
+  const remoteSyncRef = useRef<RemoteSync | null>(null);
+  const remoteButtons = settings.remoteButtons;
+  const remoteInUse = remoteButtons.length > 0 || settings.remoteOnWatch !== null;
+  const remoteOn = watchReady && capabilities.files && remoteInUse && watchId !== null;
+  useEffect(() => {
+    if (!remoteOn || watchId === null) {
+      remoteSyncRef.current = null;
+      return;
+    }
+    const sync = new RemoteSync({
+      files,
+      watchId,
+      current: () => ({ buttons: settingsRef.current.remoteButtons, onWatch: settingsRef.current.remoteOnWatch }),
+      remember: (onWatch) => void updateSettings({ remoteOnWatch: onWatch }),
+      onStatus: setRemoteStatus,
+    });
+    remoteSyncRef.current = sync;
+    void sync.sync();
+    return () => {
+      remoteSyncRef.current = null;
+    };
+  }, [remoteOn, watchId, files, updateSettings]);
+
+  useEffect(() => {
+    void remoteSyncRef.current?.sync();
+  }, [remoteButtons]);
+
+  const sendRemoteLayout = useCallback(async () => {
+    if (!remoteSyncRef.current) {
+      throw new Error('Connect to a watch that serves files first.');
+    }
+    await remoteSyncRef.current.sync(true);
+  }, []);
+
+  const testRemoteButton = useCallback(
+    async (index: number) => {
+      const button = settingsRef.current.remoteButtons[index];
+      if (!button) {
+        return;
+      }
+      const outcome = await runRemoteAction(button.action, remoteDevice);
+      addRemoteLog({ at: Date.now(), button: index, label: buttonName(button), source: 'test', ...outcome });
+    },
+    [remoteDevice, addRemoteLog],
+  );
+
+  const remoteUnavailable = useCallback((action: RemoteAction) => unavailableReason(action, remoteDevice), [remoteDevice]);
+
+  const clearRemoteLog = useCallback(() => setRemoteLog([]), []);
+
+  const simulateRemoteTap = useMemo(
+    () =>
+      transportKind === 'mock'
+        ? (index: number) => {
+            const transport = transportRef.current;
+            if (transport instanceof MockTransport) {
+              transport.simulateWatchLine(remoteTapLine(index));
+            }
+          }
+        : null,
+    [transportKind],
+  );
+
   const value = useMemo<WatchContextValue>(
     () => ({
       transportKind,
@@ -626,8 +743,22 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       noteStatus,
       syncNote,
       forgetNote,
+      remoteStatus,
+      remoteLog,
+      clearRemoteLog,
+      sendRemoteLayout,
+      testRemoteButton,
+      remoteUnavailable,
+      simulateRemoteTap,
     }),
     [
+      remoteStatus,
+      remoteLog,
+      clearRemoteLog,
+      sendRemoteLayout,
+      testRemoteButton,
+      remoteUnavailable,
+      simulateRemoteTap,
       noteFiles,
       noteStatus,
       syncNote,

@@ -68,6 +68,13 @@ describe('settings', () => {
     await expect(loadSettings()).resolves.toEqual(settings);
   });
 
+  it('reads back remote buttons, leaving out malformed ones', async () => {
+    const play = { icon: 'play', label: 'Music', action: { kind: 'builtin', name: 'playpause' } };
+    const stored = { remoteButtons: [play, { icon: 'play', action: { kind: 'shell', command: 'x' } }] };
+    await AsyncStorage.setItem('neotime.settings.v1', JSON.stringify(stored));
+    await expect(loadSettings()).resolves.toEqual({ ...defaultSettings, remoteButtons: [play] });
+  });
+
   it('fills settings added since the blob was saved from the defaults', async () => {
     await AsyncStorage.setItem('neotime.settings.v1', JSON.stringify({ autoReconnect: false }));
     await expect(loadSettings()).resolves.toEqual({ ...defaultSettings, autoReconnect: false });

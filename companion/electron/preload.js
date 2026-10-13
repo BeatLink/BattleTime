@@ -61,9 +61,15 @@ const notes = {
   },
 };
 
+// Shell commands for remote buttons, run by src/services/remote-platform.ts.
+const remote = {
+  runCommand: (command) => ipcRenderer.invoke('remote:run-command', command),
+};
+
 contextBridge.exposeInMainWorld('neotime', {
   desktop,
   notes,
+  remote,
   startScan: () => ipcRenderer.invoke('ble:start-scan'),
   stopScan: () => ipcRenderer.invoke('ble:stop-scan'),
   connect: (id) => ipcRenderer.invoke('ble:connect', id),

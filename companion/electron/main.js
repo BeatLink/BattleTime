@@ -9,6 +9,7 @@ const { basename, join } = require('node:path');
 const { WatchBle } = require('../node/ble');
 const { DesktopIntegration } = require('../node/desktop');
 const { NoteFileWatches, readNoteFile } = require('../node/note-file');
+const { runShellCommand } = require('../node/remote-command');
 const { serve } = require('./server');
 
 const DIST = join(__dirname, '..', 'dist');
@@ -124,6 +125,16 @@ function wireNotes() {
   handle('notes:unwatch', (id) => noteWatches.stop(id));
 }
 
+// Shell commands that remote buttons run; the window passes the command from the user's own button settings.
+function wireRemote() {
+  handle('remote:run-command', (command) => {
+    if (typeof command !== 'string' || command.trim() === '') {
+      throw new Error('Give a command to run.');
+    }
+    return runShellCommand(command);
+  });
+}
+
 // The desktop's location service and notification server know the app by its desktop file.
 app.setName('NeoTime Companion');
 if (process.platform === 'linux') {
@@ -134,6 +145,7 @@ app.whenReady().then(async () => {
   wireBluetooth();
   wireDesktop();
   wireNotes();
+  wireRemote();
   await createWindow();
 
   app.on('activate', () => {

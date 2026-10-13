@@ -150,6 +150,9 @@ export type CallControlMessage = { t: 'call'; n: 'ACCEPT' | 'REJECT' | 'IGNORE' 
 // A watch app asking the phone to fetch a URL for it; a plain GET carries no method or body.
 export type HttpRequestMessage = { t: 'http'; url: string; id: string; method?: string; body?: string };
 
+// A watch app speaking on its own channel, such as the remote app's {"t":"app","ch":"remote","d":{"button":2}}.
+export type AppChannelMessage = { t: 'app'; ch: string; d?: unknown };
+
 // Everything the watch can send to the phone.
 export type WatchToPhoneMessage =
   | MusicControlMessage
@@ -161,7 +164,8 @@ export type WatchToPhoneMessage =
   | StepsReply
   | StatusReply
   | CallControlMessage
-  | HttpRequestMessage;
+  | HttpRequestMessage
+  | AppChannelMessage;
 
 // JSON with every character outside printable ASCII escaped, since the watch's line editor drops those bytes.
 export function asciiJson(value: unknown): string {

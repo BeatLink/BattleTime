@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { NoteFont, NoteOnWatch } from '@/protocol/notes';
+import { readRemoteButtons, type RemoteButton, type RemoteOnWatch } from '@/protocol/remote';
 import type { NoteFileRef } from '@/services/note-file';
 import type { Place } from '@/services/weather';
 
@@ -31,6 +32,9 @@ export type Settings = {
   noteFile: NoteFileRef | null;
   noteFont: NoteFont;
   noteOnWatch: NoteOnWatch | null;
+  // The watch's remote buttons, in order, and the layout the watch was last sent.
+  remoteButtons: RemoteButton[];
+  remoteOnWatch: RemoteOnWatch | null;
 };
 
 export const defaultSettings: Settings = {
@@ -53,6 +57,8 @@ export const defaultSettings: Settings = {
   noteFile: null,
   noteFont: 'normal',
   noteOnWatch: null,
+  remoteButtons: [],
+  remoteOnWatch: null,
 };
 
 const STORAGE_KEY = 'neotime.settings.v1';
@@ -60,7 +66,12 @@ const STORAGE_KEY = 'neotime.settings.v1';
 export async function loadSettings(): Promise<Settings> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    return raw ? { ...defaultSettings, ...JSON.parse(raw) } : defaultSettings;
+    if (!raw) {
+      return defaultSettings;
+    }
+    const stored = { ...defaultSettings, ...JSON.parse(raw) };
+    // Buttons are checked one by one, so a malformed one never reaches the watch or runs.
+    return { ...stored, remoteButtons: readRemoteButtons(stored.remoteButtons) };
   } catch {
     return defaultSettings;
   }

@@ -16,7 +16,8 @@
     "desktop:dev": "node scripts/electron.mjs",
     "build:cli": "esbuild cli/neotime.ts --bundle --platform=node --target=node20 --format=cjs --external:node-ble --alias:@=./src --outfile=build/neotime.cjs",
     "neotime": "npm run build:cli --silent && node build/neotime.cjs",
-    "import-watch-apps": "node scripts/import-watch-apps.mjs"
+    "import-watch-apps": "node scripts/import-watch-apps.mjs",
+    "import-icon-names": "node scripts/import-icon-names.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -82,10 +83,10 @@
     ],
     "coverageThreshold": {
       "global": {
-        "lines": 72,
-        "statements": 71,
-        "branches": 66,
-        "functions": 70
+        "lines": 74,
+        "statements": 74,
+        "branches": 72,
+        "functions": 71
       }
     }
   },

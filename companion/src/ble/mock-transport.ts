@@ -87,6 +87,13 @@ export class MockTransport implements WatchTransport {
     this.listener.onLine?.(`{"t":"info","msg":"mock received ${text.trim().length} bytes"}\r\n`);
   }
 
+  // Delivers a line as if the watch had sent it, such as a remote button tap; ignored while disconnected.
+  simulateWatchLine(line: string) {
+    if (this.state === 'connected' && this.mode === 'application') {
+      this.listener.onLine?.(`${line}\r\n`);
+    }
+  }
+
   setListener(listener: TransportListener) {
     this.listener = listener;
   }

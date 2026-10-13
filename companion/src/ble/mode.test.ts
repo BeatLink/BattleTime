@@ -3,6 +3,7 @@ import { describe, expect, it } from '@jest/globals';
 import { NO_CAPABILITIES, type WatchCapabilities } from '@/protocol/neotime';
 import { isTabVisible, visibleTabs } from '@/state/visible-tabs';
 
+import { remoteTapLine } from './mock-gadgetbridge';
 import { MockTransport } from './mock-transport';
 import type { DiscoveredWatch, WatchMode } from './transport';
 
@@ -20,6 +21,24 @@ function watch(transport: MockTransport): { modes: WatchMode[]; lines: string[] 
   transport.setListener({ onMode: (mode) => modes.push(mode), onLine: (line) => lines.push(line) });
   return { modes, lines };
 }
+
+describe('simulated remote taps', () => {
+  it('arrive as the line the watch sends, only while a watch running firmware is connected', async () => {
+    const transport = new MockTransport();
+    const seen = watch(transport);
+    transport.simulateWatchLine(remoteTapLine(2));
+    expect(seen.lines).toEqual([]);
+
+    await transport.connect('AA:BB:CC:DD:EE:00');
+    transport.simulateWatchLine(remoteTapLine(2));
+    expect(seen.lines.at(-1)).toBe('{"t":"app","ch":"remote","d":{"button":2}}\r\n');
+
+    await transport.connect('AA:BB:CC:DD:EE:11');
+    const before = seen.lines.length;
+    transport.simulateWatchLine(remoteTapLine(0));
+    expect(seen.lines).toHaveLength(before);
+  });
+});
 
 describe('the mock watches', () => {
   it('turns up in a scan, marked as a bootloader', async () => {

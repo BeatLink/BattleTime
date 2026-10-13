@@ -4,8 +4,10 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.content.Context
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.telecom.TelecomManager
@@ -21,7 +23,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
 
 private const val EVENT = "onPhoneEvent"
 
-// The JavaScript face of the phone bridge: notification access, calls, media, Do Not Disturb and the keep-alive service.
+// The JavaScript face of the phone bridge: notification access, calls, media, Do Not Disturb, the keep-alive service and remote button intents.
 class PhoneBridgeModule : Module() {
   private val forward: PhoneEventListener = { event -> sendEvent(EVENT, event) }
 
@@ -115,6 +117,40 @@ class PhoneBridgeModule : Module() {
 
     AsyncFunction("stopKeepAlive") {
       KeepAliveService.stop(context)
+    }
+
+    AsyncFunction("openUri") { uri: String ->
+      launch(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))
+    }
+
+    AsyncFunction("startActivity") { packageName: String, className: String, action: String?, extras: Map<String, String> ->
+      val intent = Intent().setClassName(packageName, className)
+      action?.let { intent.action = it }
+      extras.forEach { (key, value) -> intent.putExtra(key, value) }
+      launch(intent)
+    }
+
+    AsyncFunction("sendBroadcast") { action: String, packageName: String?, extras: Map<String, String> ->
+      val intent = Intent(action)
+      packageName?.let { intent.setPackage(it) }
+      extras.forEach { (key, value) -> intent.putExtra(key, value) }
+      context.sendBroadcast(intent)
+    }
+  }
+
+  // Starts an activity for a remote button, from the open screen when there is one.
+  private fun launch(intent: Intent) {
+    try {
+      val activity = appContext.currentActivity
+      if (activity != null) {
+        activity.startActivity(intent)
+      } else {
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      }
+    } catch (e: ActivityNotFoundException) {
+      throw CodedException("ERR_NO_ACTIVITY", "No app on this phone handles that: ${e.message}", e)
+    } catch (e: SecurityException) {
+      throw CodedException("ERR_NOT_ALLOWED", "Android refused to start it: ${e.message}", e)
     }
   }
 

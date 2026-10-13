@@ -27,6 +27,11 @@ function sampleDay(seed: number): number[] {
   });
 }
 
+// The line the watch's remote app sends when a button is tapped, for simulating taps.
+export function remoteTapLine(button: number): string {
+  return JSON.stringify({ t: 'app', ch: 'remote', d: { button } });
+}
+
 export class MockGadgetbridge {
   private settings: WatchSettingValues = {
     brightness: 2,

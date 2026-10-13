@@ -7,6 +7,7 @@
 import { WatchSession, DEFAULT_SCAN_MS } from './ble';
 import { flash, flashUsage } from './commands/flash';
 import { recovery, recoveryUsage } from './commands/recovery';
+import { remote, REMOTE_OFFLINE, remoteUsage } from './commands/remote';
 import { scan, scanUsage } from './commands/scan';
 import { diag, line, send, sendUsage } from './commands/send';
 import {
@@ -33,6 +34,7 @@ type Options = {
   timeout?: number;
   wait?: number;
   allow?: string;
+  buttons?: string;
   verbose: boolean;
 };
 
@@ -47,6 +49,8 @@ ${recoveryUsage}
 ${sendUsage}
 
 ${watchUsage}
+
+${remoteUsage}
 
 Options:
   --address <mac>   Which watch to talk to. Otherwise the last one used, or
@@ -78,6 +82,9 @@ function parse(argv: string[]): { args: string[]; options: Options } {
       case '--allow':
         options.allow = argv[++i];
         break;
+      case '--buttons':
+        options.buttons = argv[++i];
+        break;
       case '--verbose':
       case '-v':
         options.verbose = true;
@@ -107,6 +114,7 @@ const NEEDS_WATCH = new Set([
   'weather',
   'files',
   'note',
+  'remote',
   'apps',
   'backup',
   'restore',
@@ -130,6 +138,12 @@ async function main(argv: string[]): Promise<number> {
   try {
     if (command === 'scan') {
       await scan(session, options.timeout ?? DEFAULT_SCAN_MS);
+      return 0;
+    }
+
+    // Listing and running remote buttons happen on this computer alone.
+    if (command === 'remote' && REMOTE_OFFLINE.has(rest[0] ?? 'list')) {
+      await remote(null, rest, options.buttons);
       return 0;
     }
 
@@ -243,6 +257,10 @@ async function main(argv: string[]): Promise<number> {
 
       case 'note':
         await note(session, rest);
+        break;
+
+      case 'remote':
+        await remote(session, rest, options.buttons);
         break;
 
       case 'apps':

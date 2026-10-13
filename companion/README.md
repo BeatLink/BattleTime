@@ -100,6 +100,7 @@ npm run neotime -- time
 npm run neotime -- diag
 npm run neotime -- files ls /settings
 npm run neotime -- note shopping.txt large
+npm run neotime -- remote push
 npm run neotime -- apps setup
 npm run neotime -- apps install path/to/timer.ntapp
 npm run neotime -- backup watch-backup.json
@@ -172,6 +173,7 @@ src/app/                 Expo Router screens
   apps.tsx               Install a compiled .ntapp or .ntlib image, hide or remove an app
   setup.tsx              Set up a new watch: the shared icons, a face, the launcher and apps
   notes.tsx              The text file the watch's Notes app shows, and its font there
+  remote.tsx             The watch's Remote app: its buttons, what each runs here, and recent taps
   files.tsx              The watch's file system: browse, send, read, delete, free space
   backup.tsx             Copy the watch's settings and app state off and back
   steps.tsx              The last week of steps, by day and by hour
@@ -281,6 +283,39 @@ in a file dialog and reads it from disk in the main process
 moment. A phone or a browser keeps the document picker's link and reads it again on each check; a
 browser can read it only until the page reloads, and a phone may withdraw the app's access to it
 after a restart, in which case the screen asks for the file again.
+
+## Remote
+
+The watch's `remote` app shows up to nine buttons and reports taps; the companion runs what each
+button does. The Remote screen sets them up: each has an icon from the shared library, a label that
+only the companion shows, and an action.
+
+| Action | Where it runs | How |
+| --- | --- | --- |
+| Web request | everywhere | `fetch`, with the method, headers and body given, 15 s timeout |
+| Command | desktop app | the user's shell in the Electron main process ([node/remote-command.js](node/remote-command.js)), 30 s timeout |
+| Android | Android app | a link opened with `ACTION_VIEW`, an activity or a broadcast, through `modules/phone-bridge` |
+| Ready-made | Android and desktop app | play/pause, play, pause, next, previous and volume through `phoneBridge.mediaCommand`; "find this device" everywhere, which shows the same card the watch's find phone does |
+
+An action the device cannot run is marked unavailable in the screen and skipped, with the reason
+in the screen's log, when tapped. [src/protocol/remote.ts](src/protocol/remote.ts) writes the
+layout to `/remote/buttons` over the file service: byte 0 is the format version (1), byte 1 the
+button count, then each button's icon as its place in the shared library's icon order. A tap
+arrives as `{"t":"app","ch":"remote","d":{"button":<index>}}`; only that index is read, and the
+action is always looked up in the companion's own settings
+([src/services/remote-actions.ts](src/services/remote-actions.ts)), so the watch can never send a
+command, URL or intent. [src/state/remote-sync.ts](src/state/remote-sync.ts) sends the layout when
+a watch connects and on every change, as notes are kept.
+
+The icon names are copied from `ICON_NAMES` in NeoTime's `compiler/src/types.rs` into
+[src/bundles/icon-names.ts](src/bundles/icon-names.ts) with `npm run import-icon-names
+path/to/NeoTime`; a test compares the two whenever a NeoTime checkout sits beside this one. The
+picker draws each icon from the shared library image in the setup bundle
+([src/protocol/library-icons.ts](src/protocol/library-icons.ts)), as the watch does.
+
+`neotime remote list|push|run <n>|listen` does the same from a terminal, with the buttons in
+`~/.config/neotime-companion/remote.json` (or `--buttons <file>`) in the form the app stores them.
+In the browser's mock mode each button has a "Tap as the watch" button.
 
 ## Apps and the first run
 

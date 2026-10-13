@@ -52,6 +52,19 @@ mock watch only.
   which may stop working after the app restarts; keeping access would need
   `takePersistableUriPermission` in the native module.
 
+## Remote
+
+- **Untried with a watch.** The layout file and taps have run only against the mock watch. Check
+  that a pushed layout shows the right icons, in order, and that each tap runs its button.
+- **Android intents.** `openUri`, `startActivity` and `sendBroadcast` in `PhoneBridgeModule.kt`
+  have not been compiled or run on a phone. Android 10 and later may refuse to start an activity
+  while the app is in the background, which is where a tap usually finds it; broadcasts are not
+  affected.
+- **Media keys on a phone and the desktop.** The ready-made media actions reuse the forwarding
+  bridge, which has not run against a real player from a tap yet.
+- **The command line's buttons file.** `neotime remote` reads its own JSON file; the desktop app
+  could export its buttons there.
+
 ## Notification forwarding
 
 The Android bridge in [src/services/phone](src/services/phone/README.md) is wired into the
