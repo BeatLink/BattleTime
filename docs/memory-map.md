@@ -38,11 +38,11 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 100.9 KB | 47.7 KB |
-| App host (with `neotime-ui`) | 75.7 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 101.0 KB | 47.7 KB |
+| App host (with `neotime-ui`) | 76.8 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 43.6 KB | 43.6 KB |
 | App runtime | 34.5 KB | 0.1 KB |
-| core, alloc and compiler builtins | 29.7 KB | 13.2 KB |
+| core, alloc and compiler builtins | 29.8 KB | 13.2 KB |
 | Embassy, allocator and Cortex-M | 19.1 KB | 16.5 KB |
 | Storage (flash store) | 17.0 KB | 16.8 KB |
 | Settings, companion and notifications (with serde) | 12.4 KB | 10.2 KB |
@@ -51,8 +51,8 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Display, graphics and drivers | 5.3 KB | 3.1 KB |
 | Updates (DFU) | 2.1 KB | 2.1 KB |
 | Other constants and padding | 28.4 KB | 13.5 KB |
-| **Used** | **383.8 KB** | **177.9 KB** |
-| Free of the 388 KB slot, after its header | 4.0 KB | 209.8 KB |
+| **Used** | **385.1 KB** | **177.9 KB** |
+| Free of the 388 KB slot, after its header | 2.6 KB | 209.8 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
