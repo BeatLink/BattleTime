@@ -51,7 +51,7 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Display, graphics and drivers | 5.3 KB | 3.1 KB |
 | Updates (DFU) | 2.1 KB | 2.1 KB |
 | Other constants and padding | 28.4 KB | 13.5 KB |
-| **Used** | **382.7 KB** | **177.9 KB** |
+| **Used** | **382.8 KB** | **177.9 KB** |
 | Free of the 388 KB slot, after its header | 5.0 KB | 209.8 KB |
 <!-- /measure_memory:firmware -->
 
@@ -109,7 +109,7 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 | What | Bytes | File sectors |
 |---|---:|---:|
 | `/settings/system` and `/settings/theme`, kept as records | 77 | 0 |
-| 12 app images, 715 B (flashlight) to 3,909 B (settings); those of 1 KB or less are records | 23,045 | 12 |
+| 12 app images, 715 B (flashlight) to 3,909 B (settings); those of 1 KB or less are records | 23,035 | 12 |
 | **In use** | | **12 of 512: 48 KB of 2 MB, and 904 B of records in the 256 KB records ring** |
 <!-- /measure_memory:file-system -->
 
