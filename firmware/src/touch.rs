@@ -11,7 +11,7 @@ use neotime_touch::{FingerEvent, Gesture, Settings, TouchPanel, TouchReport};
 
 use crate::{
     diagnostics::{self, Counter},
-    I2cDeviceOnBus,
+    foreground, I2cDeviceOnBus,
 };
 
 /// Touches waiting for the UI, which merges queued drags.
@@ -64,6 +64,7 @@ impl Finger {
                     start: Some((x, y)),
                     ..Finger::default()
                 };
+                foreground::set_finger_down(true);
                 send(Touch::Press { x, y });
             }
             FingerEvent::StillTouching => {
@@ -79,7 +80,10 @@ impl Finger {
                     });
                 }
             }
-            FingerEvent::LiftedUp => send(Touch::Release { x, y }),
+            FingerEvent::LiftedUp => {
+                foreground::set_finger_down(false);
+                send(Touch::Release { x, y })
+            }
             FingerEvent::NoEvent => {}
         }
 

@@ -8,7 +8,7 @@ use alloc::{string::String, vec::Vec};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, signal::Signal};
 use neotime_packages::commands::Change;
 
-use crate::storage;
+use crate::{foreground, storage};
 
 /// Raised after a packages command changes the installed apps or the shared library, so the shell
 /// reads its app list again or lets go of the old library before using it.
@@ -25,6 +25,7 @@ pub static REPLIES: Channel<CriticalSectionRawMutex, String, 2> = Channel::new()
 pub async fn run_commands(files: &'static storage::Files) {
     loop {
         let line = COMMANDS.receive().await;
+        foreground::wait_for_a_pause().await;
         let (reply, change) = files.run_packages_command(&line);
         REPLIES.send(reply).await;
         if change != Change::None {

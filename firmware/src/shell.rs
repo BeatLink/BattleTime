@@ -61,7 +61,7 @@ use crate::{
     backlight::{self, Backlight},
     battery, clock,
     diagnostics::{self, Counter},
-    help, motion, packages, phone, settings, storage, system_values,
+    foreground, help, motion, packages, phone, settings, storage, system_values,
     touch::{self, TOUCHES},
     vibration, SharedDisplay,
 };
@@ -817,6 +817,8 @@ impl Shell {
             hide_status();
         }
         self.lit = false;
+        // A finger still down as the panel stops reporting would otherwise never be seen to lift.
+        foreground::set_finger_down(false);
         touch::listen_for(listening_while_dark());
         self.dimmed = settings::current().is_on(Setting::AlwaysOnScreen);
         if self.dimmed {
@@ -1079,10 +1081,12 @@ pub async fn run_shell(
         diagnostics::add_one(Counter::ShellLoops);
         diagnostics::set(Counter::ScreenLit, shell.lit as u32);
         shell.draw();
+        foreground::set_drawing(shell.is_drawing_under_way());
         while shell.is_drawing_under_way() {
             yield_now().await;
             shell.draw();
         }
+        foreground::set_drawing(false);
         shell.system.count_free_storage_if_wanted();
         shell.match_accelerometer_to_app();
 

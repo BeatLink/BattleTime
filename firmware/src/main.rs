@@ -69,6 +69,8 @@ mod battery;
 mod clock;
 mod diagnostics;
 #[cfg_attr(not(with_shell), allow(dead_code))]
+mod foreground;
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod help;
 mod restart;
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -934,6 +936,7 @@ async fn serve_connection(
                             let _ = written.extend_from_slice(&bytes[..bytes.len().min(64)]);
                         });
                         if write.handle() == server.file_transfer.transfer.handle {
+                            foreground::wait_for_a_pause().await;
                             let room = connection.raw().att_mtu() as usize - NOTIFICATION_HEADER_BYTES;
                             write.with_data(|_, bytes| {
                                 file_answers = file_transfer.answer(files.file_system(), bytes, room);

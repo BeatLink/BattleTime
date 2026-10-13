@@ -33,7 +33,7 @@ flowchart TB
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: rlvgl widgets, started"]
     system["System<br/>settings started; planned: power, events, notifications"]
-    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/steps,<br/>services/liveness"]
+    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/steps,<br/>services/liveness, services/foreground"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/bluetooth,<br/>drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
@@ -161,6 +161,7 @@ NeoTime/
 │   ├── crash_record/ neotime-crash-record: reset reasons in words and the crash record kept across a reset
 │   ├── current_time/ neotime-current-time: the Current Time service's values and calendar arithmetic
 │   ├── dfu/          neotime-dfu: the legacy DFU update protocol over Bluetooth
+│   ├── foreground/   neotime-foreground: whether the wearer watches the screen move, for background work to wait on
 │   ├── liveness/     neotime-liveness: whether the shell and the radio still make progress, for the watchdog
 │   ├── packages/     neotime-packages: the apps installed in /apps and the shared library's install
 │   ├── settings/     neotime-settings: the watch-wide settings, their limits and their file
@@ -566,6 +567,14 @@ watch face, the launcher and the apps through `neotime-app-host`:
   work stopped for twelve, lets the watchdog reset the watch. Checks are counted rather than timed,
   so a long job that blocks every task, such as copying the shared library, never counts.
   `tests/emulator/liveness.robot` stops the radio's interrupt and sees the reset.
+- **Background work waits for a pause.** Every task shares one executor, and littlefs and the
+  flash chips block it while they work, a sector erase for tens of milliseconds. Work the wearer
+  is not waiting on first awaits `foreground::wait_for_a_pause`: each packages command, each file
+  transfer write from the phone, and each step count reading before it goes to the log. It holds
+  back while the shell is part way through a transition or a sliced redraw, or a finger is down,
+  checking every 20 ms, and starts anyway after a second, as `neotime-foreground` decides. The
+  DFU image check yields every 4 KB, so the radio's host side keeps running while it reads up to
+  400 KB back.
 - **Transitions.** The launcher and apps slide up over what was open, and the button's way back
   or home slides down; a swipe right going back wipes in from the left. The shell draws a transition's steps, and
   the slices of a large redraw, one after another, yielding to the other tasks between them, before

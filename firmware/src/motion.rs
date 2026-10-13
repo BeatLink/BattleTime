@@ -26,7 +26,7 @@ use neotime_steps::{log, StepHistory};
 use crate::{
     app_events, clock,
     diagnostics::{self, Counter},
-    storage, system_values, touch, I2cDeviceOnBus,
+    foreground, storage, system_values, touch, I2cDeviceOnBus,
 };
 
 /// The step history, shared by this task and the shell, which both run in thread mode.
@@ -131,7 +131,10 @@ pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus, files: &'static stora
         let now = Instant::now();
         if now >= next_step_read {
             match accelerometer.read_step_count().await {
-                Ok(count) => record_steps(files, count),
+                Ok(count) => {
+                    foreground::wait_for_a_pause().await;
+                    record_steps(files, count)
+                }
                 Err(_) => diagnostics::set(Counter::AccelerometerState, 3),
             }
             next_step_read = now + STEP_READ_INTERVAL;

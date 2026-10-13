@@ -1,0 +1,9 @@
+[package]
+name = "neotime-foreground"
+version = "0.1.0"
+edition = "2021"
+description = "Whether the wearer is watching the screen move, so background work that blocks every task waits for a pause"
+license.workspace = true
+publish = false
+
+[dependencies]

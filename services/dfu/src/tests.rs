@@ -1,6 +1,6 @@
 extern crate std;
 
-use std::{vec, vec::Vec as StdVec};
+use std::{future::Future, vec, vec::Vec as StdVec};
 
 use embassy_futures::block_on;
 
@@ -208,6 +208,40 @@ fn a_full_update_stores_the_image_and_asks_for_a_reset() {
             Call::Begin(ImageKind::Firmware, 5000),
             Call::Finish(ImageKind::Firmware)
         ]
+    );
+}
+
+#[test]
+fn checking_a_large_image_lets_the_other_tasks_run_every_4_kb() {
+    let firmware = image(8192);
+    let mut phone = Phone::new();
+    phone.command(&[command::START_DFU, image_type::APPLICATION]);
+    phone.packet(&Phone::sizes_packet(firmware.len() as u32));
+    phone.command(&[command::INITIALIZE_DFU, 0]);
+    phone.packet(&Phone::init_packet(&firmware));
+    phone.command(&[command::INITIALIZE_DFU, 1]);
+    phone.command(&[command::RECEIVE_FIRMWARE_IMAGE]);
+    for chunk in firmware.chunks(20) {
+        phone.packet(chunk);
+    }
+
+    let mut validate = core::pin::pin!(phone.dfu.on_control_point(&[command::VALIDATE_FIRMWARE]));
+    let mut context = core::task::Context::from_waker(std::task::Waker::noop());
+    let mut times_put_off = 0;
+    let outcome = loop {
+        match validate.as_mut().poll(&mut context) {
+            core::task::Poll::Ready(outcome) => break outcome,
+            core::task::Poll::Pending => times_put_off += 1,
+        }
+    };
+
+    assert_eq!(times_put_off, 2);
+    assert_eq!(
+        outcome
+            .notifications
+            .last()
+            .map(|notification| notification.to_vec()),
+        Some(response(command::VALIDATE_FIRMWARE, result::SUCCESS))
     );
 }
 

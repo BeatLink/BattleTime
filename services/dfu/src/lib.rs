@@ -57,6 +57,8 @@ const LARGEST_PACKET: usize = 20;
 /// Writes to the flash go in whole program pages, not 20 bytes at a time.
 const WRITE_BUFFER_SIZE: usize = 256;
 const CRC_READ_CHUNK: usize = 256;
+/// How many chunks the check reads before it lets the other tasks run, 4 KB.
+const CRC_CHUNKS_BETWEEN_YIELDS: u32 = 16;
 
 // ============================================================================
 // What the firmware must do after a packet
@@ -404,6 +406,9 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
             }
             crc = crc16(crc, &chunk[..length]);
             offset += length as u32;
+            if (offset / CRC_READ_CHUNK as u32) % CRC_CHUNKS_BETWEEN_YIELDS == 0 {
+                embassy_futures::yield_now().await;
+            }
         }
 
         if crc != self.expected_crc {
