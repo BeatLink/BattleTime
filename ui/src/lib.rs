@@ -14,7 +14,7 @@ pub mod shapes;
 mod strip;
 mod strip_renderer;
 
-pub use scrolling::{FixedScreen, ScrollBand, ScrollState, ScrollingScreen};
+pub use scrolling::{BufferedScreen, FixedScreen, ScrollBand, ScrollState, ScrollingScreen};
 pub use strip::Strip;
 pub use strip_renderer::StripRenderer;
 

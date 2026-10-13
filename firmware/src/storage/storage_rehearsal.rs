@@ -13,11 +13,10 @@ mod wasp_os;
 
 use core::cell::RefCell;
 
-use embassy_embedded_hal::{flash::partition::BlockingPartition, shared_bus::blocking::spi::SpiDevice};
+use embassy_embedded_hal::flash::partition::BlockingPartition;
 use embassy_nrf::{
     gpio::{Level, Output, OutputDrive},
     peripherals::{NVMC, P0_05},
-    spim::Spim,
     Peri,
 };
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};

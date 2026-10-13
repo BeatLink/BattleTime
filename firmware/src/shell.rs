@@ -60,6 +60,7 @@ use neotime_runtime::{
 use neotime_settings::{chimes, Setting};
 use neotime_steps::{StepHistory, DAYS_REMEMBERED, HOURS_PER_DAY};
 
+use crate::drawing_screen::{DrawingScreen, StripBuffers, STRIP_BUFFER_PIXELS};
 use crate::{
     app_events::{self, AppEvent},
     apps::{self, InstalledApps, LauncherIcons, Lent},
@@ -446,6 +447,7 @@ struct Shell {
     app_set_brightness: bool,
     backlight: Backlight,
     display: &'static SharedDisplay,
+    drawing_screen: DrawingScreen,
     lit: bool,
     /// While the help screen shows, when its time changes next, so it is painted once a minute.
     help_drawn_at: Option<Value>,
@@ -1113,7 +1115,9 @@ impl Shell {
         self.lit && !status_is_shown() && self.host.as_ref().is_some_and(|host| host.needs_drawing())
     }
 
-    fn draw(&mut self) {
+    async fn draw(&mut self) {
+        // Drawing below sends without waiting, so a strip still going out is awaited here rather than spun on.
+        crate::display_dma::bus_is_free().await;
         if REDRAW_EVERYTHING.swap(false, Ordering::Relaxed) {
             self.display.lock(|display| {
                 let _ = display.borrow_mut().clear(Rgb565::BLACK);
@@ -1135,7 +1139,7 @@ impl Shell {
             return;
         }
         match &mut self.host {
-            Some(host) if host.needs_drawing() => draw_host(self.display, host),
+            Some(host) if host.needs_drawing() => draw_host(&mut self.drawing_screen, host).await,
             Some(_) => {}
             None if self.help_drawn_at != Some(help::next_change(clock::utc_now())) => {
                 let now = clock::utc_now();
@@ -1211,14 +1215,31 @@ fn wait_until_panel_can_switch(switched_at: Instant) {
     embassy_time::block_for(can_switch_at.saturating_duration_since(Instant::now()));
 }
 
-/// Draws one step of what changed into the display's strip buffers, leaving the last strip to go out by itself.
-#[inline(never)]
-fn draw_host(display: &SharedDisplay, host: &mut AppHost<'static>) {
+/// Polls a future in a stack frame of its own, so its locals never add to the frame of the task awaiting it.
+struct OutOfLine<Inner>(Inner);
+
+impl<Inner: core::future::Future> core::future::Future for OutOfLine<Inner> {
+    type Output = Inner::Output;
+
+    #[inline(never)]
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        context: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Inner::Output> {
+        // SAFETY: the inner future is never moved out of the pinned wrapper.
+        unsafe { self.map_unchecked_mut(|wrapper| &mut wrapper.0) }.poll(context)
+    }
+}
+
+/// Draws one step of what changed into the screen's strip buffers, awaiting each strip before the next starts.
+///
+/// The last strip is left to go out by itself; the time counted includes the waits for the bus.
+async fn draw_host(screen: &mut DrawingScreen, host: &mut AppHost<'static>) {
     let started = Instant::now();
-    display.lock(|display| {
-        // The display lends its own buffers, so no strip is needed here.
-        let _ = host.draw_step_at(&mut *display.borrow_mut(), &mut [], started.as_millis());
-    });
+    // The screen lends its own buffers, so no strip is needed here.
+    let _ = host
+        .draw_step_at_async(screen, &mut [], started.as_millis())
+        .await;
     diagnostics::add(Counter::DrawMicroseconds, started.elapsed().as_micros() as u32);
 }
 
@@ -1288,6 +1309,12 @@ pub async fn run_shell(
         files,
         backlight,
         display,
+        drawing_screen: {
+            // Zeroed in the static itself, so the 3,840 B never pass through the stack.
+            static STRIP_BUFFERS: static_cell::ConstStaticCell<StripBuffers> =
+                static_cell::ConstStaticCell::new([[0; STRIP_BUFFER_PIXELS]; 2]);
+            DrawingScreen::new(display, STRIP_BUFFERS.take())
+        },
         lit: true,
         help_drawn_at: None,
         dimmed: false,
@@ -1311,12 +1338,12 @@ pub async fn run_shell(
         diagnostics::add_one(Counter::ShellLoops);
         diagnostics::set(Counter::ScreenLit, shell.lit as u32);
         shell.leave_crash_page_once_dealt_with();
-        shell.draw();
+        OutOfLine(shell.draw()).await;
         foreground::set_drawing(shell.is_drawing_under_way());
         while shell.is_drawing_under_way() {
             yield_now().await;
             shell.files.wait_until_free().await;
-            shell.draw();
+            OutOfLine(shell.draw()).await;
         }
         foreground::set_drawing(false);
         shell.system.count_free_storage_if_wanted();

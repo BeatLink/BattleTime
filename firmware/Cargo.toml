@@ -39,6 +39,7 @@ trouble-host = { version = "0.8", default-features = false, features = ["periphe
 
 neotime-accelerometer = { path = "../drivers/accelerometer" }
 neotime-app-host = { path = "../app-host" }
+neotime-ui = { path = "../ui" }
 neotime-bluetooth = { path = "../drivers/bluetooth" }
 neotime-boot = { path = "../boot" }
 neotime-companion = { path = "../services/companion" }

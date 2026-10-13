@@ -5,8 +5,8 @@
 //! memory rows are on screen, split in two where the memory wraps.
 //!
 //! The driver speaks to the panel through `PanelInterface`: commands, and pixels as bytes in the
-//! panel's order. An interface may also lend strip buffers that it sends by DMA while the next one is
-//! filled, which `send_strip` uses; `MipidsiInterface` adapts any mipidsi interface.
+//! panel's order. An interface may send a strip of panel pixels in the background, such as by DMA,
+//! while the caller fills the next one; `MipidsiInterface` adapts any mipidsi interface.
 //!
 //! The panel also has a low-power mode for an always-on screen, and `Backlight` drives the three
 //! backlight pins that light it.
@@ -142,18 +142,15 @@ pub trait PanelInterface {
         Ok(())
     }
 
-    /// A buffer of panel pixels to fill and hand to `send_strip_pixels`, when the interface lends them.
-    fn strip_buffer(&mut self) -> Option<&mut [u16]> {
-        None
-    }
-
-    /// Starts sending `count` pixels of the last strip buffer from `first`, after a memory write.
-    fn send_strip_pixels(&mut self, _first: usize, _count: usize) -> Result<(), Self::Error> {
+    /// Sends panel pixels after a memory write; an interface may still be reading them after it returns.
+    ///
+    /// The caller leaves `pixels` untouched until the interface is next called, which finishes the send.
+    fn send_strip_pixels(&mut self, pixels: &[u16]) -> Result<(), Self::Error> {
+        for &pixel in pixels {
+            self.send_pixels(&pixel.to_ne_bytes())?;
+        }
         Ok(())
     }
-
-    /// Says the last strip buffer is all sent or on its way, so the next one may be lent.
-    fn finish_strip(&mut self) {}
 }
 
 /// Drives the panel through any mipidsi interface, such as its `SpiInterface`.
@@ -406,20 +403,16 @@ where
         })
     }
 
-    /// The interface's free strip buffer, in panel pixels, when it lends them.
-    pub fn strip_buffer(&mut self) -> Option<&mut [u16]> {
-        self.interface.strip_buffer()
-    }
-
-    /// Sends the strip buffer's first pixels to `area` on screen, which must be all on screen.
-    pub fn send_strip(&mut self, area: &Rectangle) -> Result<(), Interface::Error> {
-        if !area.is_zero_sized() {
-            self.for_each_memory_run(area, |display, first, count| {
-                display.interface.send_strip_pixels(first, count)
-            })?;
+    /// Sends panel pixels to `area`, which must be all on screen; the interface may still be sending on return.
+    ///
+    /// `pixels` holds the area row by row and must stay untouched until the display is next used.
+    pub fn send_strip(&mut self, area: &Rectangle, pixels: &[u16]) -> Result<(), Interface::Error> {
+        if area.is_zero_sized() {
+            return Ok(());
         }
-        self.interface.finish_strip();
-        Ok(())
+        self.for_each_memory_run(area, |display, first, count| {
+            display.interface.send_strip_pixels(&pixels[first..first + count])
+        })
     }
 }
 

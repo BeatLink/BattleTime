@@ -29,10 +29,8 @@ struct Command {
 struct FakeInterface {
     commands: Vec<Command>,
     pixel_count: usize,
-    /// A strip buffer to lend, for an interface that sends strips by DMA.
-    strip: Option<Vec<u16>>,
-    strip_sends: Vec<(usize, usize)>,
-    finished_strips: usize,
+    /// The length of each strip send, for an interface that sends strips by DMA.
+    strip_sends: Vec<usize>,
 }
 
 impl PanelInterface for FakeInterface {
@@ -51,18 +49,10 @@ impl PanelInterface for FakeInterface {
         Ok(())
     }
 
-    fn strip_buffer(&mut self) -> Option<&mut [u16]> {
-        self.strip.as_deref_mut()
-    }
-
-    fn send_strip_pixels(&mut self, first: usize, count: usize) -> Result<(), ()> {
-        self.strip_sends.push((first, count));
-        self.pixel_count += count;
+    fn send_strip_pixels(&mut self, pixels: &[u16]) -> Result<(), ()> {
+        self.strip_sends.push(pixels.len());
+        self.pixel_count += pixels.len();
         Ok(())
-    }
-
-    fn finish_strip(&mut self) {
-        self.finished_strips += 1;
     }
 }
 
@@ -503,33 +493,19 @@ fn starts_the_panel_as_the_st7789_needs() {
 }
 
 #[test]
-fn a_strip_goes_out_from_the_lent_buffer_split_where_memory_wraps() {
+fn a_strip_goes_out_split_where_memory_wraps() {
     let mut display = new_display();
-    display.fake_interface().strip = Some(vec![0; 2400]);
     display.scroll(310).unwrap();
     display.fake_interface().commands.clear();
 
-    assert_eq!(display.strip_buffer().map(|buffer| buffer.len()), Some(2400));
     display
-        .send_strip(&Rectangle::new(Point::new(0, 5), Size::new(240, 10)))
+        .send_strip(&Rectangle::new(Point::new(0, 5), Size::new(240, 10)), &[0; 2400])
+        .unwrap();
+    display
+        .send_strip(&Rectangle::new(Point::new(0, 0), Size::new(0, 0)), &[])
         .unwrap();
 
-    let interface = display.fake_interface();
-    assert_eq!(interface.strip_sends, [(0, 1200), (1200, 1200)]);
-    assert_eq!(interface.finished_strips, 1);
-}
-
-#[test]
-fn an_empty_strip_only_frees_the_buffer() {
-    let mut display = new_display();
-
-    display
-        .send_strip(&Rectangle::new(Point::new(0, 0), Size::new(0, 0)))
-        .unwrap();
-
-    assert!(display.fake_interface().strip_sends.is_empty());
-    assert_eq!(display.fake_interface().finished_strips, 1);
-    assert!(display.strip_buffer().is_none());
+    assert_eq!(display.fake_interface().strip_sends, [1200, 1200]);
 }
 
 #[test]
@@ -593,9 +569,12 @@ fn a_mipidsi_interface_drives_the_panel_too() {
     Pixel(Point::new(3, 3), Rgb565::new(1, 2, 3))
         .draw(&mut display)
         .unwrap();
+    display
+        .send_strip(&Rectangle::new(Point::new(0, 0), Size::new(2, 1)), &[1, 2])
+        .unwrap();
     let (MipidsiInterface(interface), _) = display.release();
 
-    assert_eq!(interface.pixels, 101);
+    assert_eq!(interface.pixels, 103);
     assert!(interface.commands > 6);
 }
 
@@ -606,6 +585,5 @@ fn the_default_repeated_pixel_goes_in_chunks() {
     interface.send_repeated_pixel([1, 2], 70).unwrap();
 
     assert_eq!(interface.pixel_count, 70);
-    assert_eq!(interface.strip_buffer(), None);
-    assert_eq!(interface.send_strip_pixels(0, 0), Ok(()));
+    assert_eq!(interface.send_strip_pixels(&[1, 2]), Ok(()));
 }

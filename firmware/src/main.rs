@@ -72,6 +72,7 @@ mod clock;
 mod crash_screen;
 mod diagnostics;
 mod display_dma;
+mod drawing_screen;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod foreground;
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -108,6 +109,7 @@ bind_interrupts!(struct Interrupts {
     TWISPI1 => twim::InterruptHandler<peripherals::TWISPI1>;
     SAADC => embassy_nrf::saadc::InterruptHandler;
     RADIO => neotime_bluetooth::RadioInterruptHandler;
+    TIMER1 => display_dma::StripSentHandler;
 });
 
 /// The package version and the git commit, such as `0.1.0+1b19aed`, set by `build.rs`.
@@ -589,9 +591,7 @@ fn start_screen(
     reset: Output<'static>,
 ) -> Screen {
     static DISPLAY: StaticCell<SharedDisplay> = StaticCell::new();
-    static STRIP_BUFFERS: StaticCell<[[u16; display_dma::STRIP_BUFFER_PIXELS]; 2]> = StaticCell::new();
-    let buffers = STRIP_BUFFERS.init([[0; display_dma::STRIP_BUFFER_PIXELS]; 2]);
-    let interface = DmaInterface::new(spi_bus, data_or_command, buffers);
+    let interface = DmaInterface::new(spi_bus, data_or_command);
 
     let mut display = Display::new(interface, reset, &mut Delay).unwrap_or_else(|_| panic!("display"));
     let _ = display.clear(Rgb565::BLACK);

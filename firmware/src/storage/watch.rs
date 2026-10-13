@@ -419,6 +419,7 @@ impl embedded_storage_async::nor_flash::ReadNorFlash for StoreFlash {
     const READ_SIZE: usize = 1;
 
     async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+        self.wait_for_free_bus().await;
         self.flash.lock(|flash| flash.borrow_mut().read(offset, bytes))
     }
 
@@ -433,6 +434,7 @@ impl embedded_storage_async::nor_flash::NorFlash for StoreFlash {
 
     async fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
         for sector in (from..to).step_by(Self::ERASE_SIZE) {
+            self.wait_for_free_bus().await;
             self.flash
                 .lock(|flash| flash.borrow_mut().start_erasing_sector(sector))?;
             self.wait_until_done(ERASE_POLL_INTERVAL).await?;
@@ -448,6 +450,7 @@ impl embedded_storage_async::nor_flash::NorFlash for StoreFlash {
             let address = offset as usize + done;
             let length = (page - address % page).min(bytes.len() - done);
             let piece = &bytes[done..done + length];
+            self.wait_for_free_bus().await;
             self.flash
                 .lock(|flash| flash.borrow_mut().start_programming_page(address as u32, piece))?;
             self.wait_until_done(PROGRAM_POLL_INTERVAL).await?;
@@ -458,14 +461,25 @@ impl embedded_storage_async::nor_flash::NorFlash for StoreFlash {
 }
 
 impl StoreFlash {
+    /// Waits for a strip going out to the display, letting other tasks run, unless this call may not yield.
+    async fn wait_for_free_bus(&self) {
+        if !self.polls_without_yielding {
+            crate::display_dma::bus_is_free().await;
+        }
+    }
+
     async fn wait_until_done(
         &mut self,
         interval: embassy_time::Duration,
     ) -> Result<(), <Self as embedded_storage_async::nor_flash::ErrorType>::Error> {
-        while !self
-            .flash
-            .lock(|flash| flash.borrow_mut().operation_has_finished())?
-        {
+        loop {
+            self.wait_for_free_bus().await;
+            if self
+                .flash
+                .lock(|flash| flash.borrow_mut().operation_has_finished())?
+            {
+                break;
+            }
             if !self.polls_without_yielding {
                 embassy_time::Timer::after(interval).await;
             }

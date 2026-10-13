@@ -1,27 +1,38 @@
 //! The SPI bus the display and the external flash share, and the display's side of it.
 //!
-//! The display draws through two strip buffers in RAM: while one goes out by EasyDMA the next is
-//! drawn into the other. EasyDMA moves at most 255 bytes at a time, so a strip is sent as equal
-//! pieces in array-list mode, each piece's END starting the next through PPI. A counter timer counts
-//! the ENDs; one before the last it disables the channel that restarts the transfer, and at the last
-//! it marks the strip sent. Nothing waits for that mark when a strip starts: the bus is taken for
-//! one transaction at a time, and whoever takes it next, a display command or a flash transaction,
-//! first finishes the strip still going out. So a drawing step returns as soon as its last strip has
-//! started, and the shell and every other task run while it goes out. A wait sleeps in WFE: the last
-//! END pends the counter timer's interrupt, which is left off in the NVIC but wakes WFE through
-//! SEVONPEND, so no handler runs.
+//! The display's strips go out by EasyDMA while the next is drawn. EasyDMA moves at most 255 bytes
+//! at a time, so a strip is sent as equal pieces in array-list mode, each piece's END starting the
+//! next through PPI. A counter timer counts the ENDs; one before the last it disables the channel
+//! that restarts the transfer, and at the last its interrupt ends the send: it puts the bus back as
+//! embassy's driver expects it, deselects the display and wakes whoever waits for the bus. Nothing
+//! waits when a strip starts. Async callers, such as drawing and the flash store, await
+//! `bus_is_free` and let every other task run meanwhile; a blocking caller sleeps in WFE until the
+//! interrupt. The bus is taken for one transaction at a time.
 
-use core::{cell::RefCell, ptr::NonNull};
+use core::{
+    cell::RefCell,
+    future::poll_fn,
+    ptr::NonNull,
+    sync::atomic::{AtomicBool, Ordering},
+    task::Poll,
+};
 
 use embassy_nrf::{
     gpio::Output,
+    interrupt::{
+        self,
+        typelevel::{Handler, Interrupt},
+    },
     peripherals::{PPI_CH5, PPI_CH6, PPI_CH7, PPI_GROUP0, TIMER1},
     ppi::{Event, Ppi, PpiGroup, Task},
     spim::{self, Spim},
     timer::Timer,
     Peri,
 };
-use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
+use embassy_sync::{
+    blocking_mutex::{raw::NoopRawMutex, Mutex},
+    waitqueue::AtomicWaker,
+};
 use embassy_time::{Delay, Instant};
 use embedded_hal::{
     delay::DelayNs,
@@ -43,8 +54,8 @@ const LARGEST_PIECE_BYTES: usize = 255;
 const LAST_RESTART_COMPARE: usize = 0;
 const ALL_SENT_COMPARE: usize = 1;
 
-/// The SCR bit that makes an interrupt becoming pending wake WFE, even one left off in the NVIC.
-const SEND_EVENT_ON_PENDING: u32 = 1 << 4;
+/// The display's chip select, P0.25, which the interrupt raises when a strip is sent.
+const DISPLAY_SELECT_PIN: usize = 25;
 
 // ============================================================================
 // The peripherals it takes
@@ -91,12 +102,9 @@ impl Chain {
         pac::TIMER1
             .intenset()
             .write(|w| w.set_compare(ALL_SENT_COMPARE, true));
-        // SAFETY: setting SEVONPEND only makes a pending interrupt wake WFE; nothing else reads it.
-        unsafe {
-            (*cortex_m::peripheral::SCB::PTR)
-                .scr
-                .modify(|value| value | SEND_EVENT_ON_PENDING)
-        };
+        interrupt::typelevel::TIMER1::unpend();
+        // SAFETY: the handler touches only the chain's registers, the display's chip select and atomics.
+        unsafe { interrupt::typelevel::TIMER1::enable() };
         Chain {
             counter,
             restart_group,
@@ -115,8 +123,6 @@ impl Chain {
         self.counter.clear();
         self.counter.cc(ALL_SENT_COMPARE).clear_events();
         self.counter.cc(LAST_RESTART_COMPARE).clear_events();
-        // The interrupt follows the event's level, so it is unpended only once the event is clear.
-        cortex_m::peripheral::NVIC::unpend(pac::Interrupt::TIMER1);
         self.counter.cc(ALL_SENT_COMPARE).write(pieces);
         self.counter.cc(LAST_RESTART_COMPARE).write(pieces - 1);
         registers.events_end().write_value(0);
@@ -138,18 +144,30 @@ impl Chain {
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
         registers.tasks_start().write_value(1);
     }
+}
 
-    /// Sleeps until the last piece has gone out, then puts the bus back as embassy's driver expects it.
-    fn wait_until_sent(&mut self) {
-        let all_sent = self.counter.cc(ALL_SENT_COMPARE).event_compare();
-        // A wake for any other reason just checks again; the event already set makes WFE return at once.
-        while !all_sent.is_triggered() {
-            cortex_m::asm::wfe();
+// ============================================================================
+// The end of a send
+// ============================================================================
+
+/// Whether a strip is still going out to the display.
+static IS_SENDING: AtomicBool = AtomicBool::new(false);
+/// The task waiting for the bus to come free, woken when a strip has gone out.
+static BUS_FREED: AtomicWaker = AtomicWaker::new();
+
+/// Ends a strip's send when its last piece has gone out.
+pub struct StripSentHandler {
+    _private: (),
+}
+
+impl Handler<interrupt::typelevel::TIMER1> for StripSentHandler {
+    unsafe fn on_interrupt() {
+        let timer = pac::TIMER1;
+        if timer.events_compare(ALL_SENT_COMPARE).read() == 0 {
+            return;
         }
-        // A task woken meanwhile signalled the executor with an event this WFE took, so it is given back.
-        cortex_m::asm::sev();
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-        self.restart_group.disable_all();
+        timer.events_compare(ALL_SENT_COMPARE).write_value(0);
+        pac::PPI.tasks_chg(0).dis().write_value(1);
         let registers = pac::SPIM0;
         registers
             .dma()
@@ -157,19 +175,50 @@ impl Chain {
             .list()
             .write(|w| w.set_list(pac::spim::vals::TxdListList::Disabled));
         registers.events_end().write_value(0);
+        pac::P0.outset().write(|w| w.set_pin(DISPLAY_SELECT_PIN, true));
+        IS_SENDING.store(false, Ordering::Release);
+        BUS_FREED.wake();
     }
+}
+
+/// Waits, letting other tasks run, until no strip is going out to the display.
+pub async fn bus_is_free() {
+    poll_fn(|context| {
+        BUS_FREED.register(context.waker());
+        match IS_SENDING.load(Ordering::Acquire) {
+            true => Poll::Pending,
+            false => Poll::Ready(()),
+        }
+    })
+    .await
+}
+
+/// Sleeps until no strip is going out, for a caller that cannot await.
+fn wait_for_free_bus() {
+    if !IS_SENDING.load(Ordering::Acquire) {
+        return;
+    }
+    let started = Instant::now();
+    while IS_SENDING.load(Ordering::Acquire) {
+        cortex_m::asm::wfe();
+    }
+    // A task woken meanwhile signalled the executor with an event this WFE took, so it is given back.
+    cortex_m::asm::sev();
+    diagnostics::add(
+        Counter::DisplaySendMicroseconds,
+        started.elapsed().as_micros() as u32,
+    );
 }
 
 // ============================================================================
 // The shared bus
 // ============================================================================
 
-/// The SPI peripheral and what the display leaves on it while a strip goes out.
+/// The SPI peripheral, the display's chip select and the chain that sends its strips.
 pub struct SharedBus {
     spim: Spim<'static>,
     display_select: Output<'static>,
     chain: Chain,
-    is_sending: bool,
 }
 
 /// The bus, taken for one transaction at a time.
@@ -186,23 +235,7 @@ impl SharedBus {
             spim,
             display_select,
             chain: Chain::new(peripherals),
-            is_sending: false,
         }
-    }
-
-    /// Waits for a strip still going out to end, and lets go of the display.
-    fn finish_display_send(&mut self) {
-        if !self.is_sending {
-            return;
-        }
-        let started = Instant::now();
-        self.chain.wait_until_sent();
-        self.display_select.set_high();
-        self.is_sending = false;
-        diagnostics::add(
-            Counter::DisplaySendMicroseconds,
-            started.elapsed().as_micros() as u32,
-        );
     }
 
     /// Sends `bytes` to the display by blocking writes, the chip selected only while they go.
@@ -221,30 +254,15 @@ impl SharedBus {
 // The display
 // ============================================================================
 
-/// The pixels a strip buffer holds: two rows of the screen, so the pair costs 1,920 B of RAM.
-pub const STRIP_BUFFER_PIXELS: usize = 480;
-
-/// The display's panel interface: commands by blocking writes, strips by chained EasyDMA from two buffers.
+/// The display's panel interface: commands by blocking writes, strips by chained EasyDMA.
 pub struct DmaInterface {
     bus: &'static SpiBus,
     data_or_command: Output<'static>,
-    buffers: &'static mut [[u16; STRIP_BUFFER_PIXELS]; 2],
-    /// The buffer to draw the next strip into; the other may still be going out.
-    filling: usize,
 }
 
 impl DmaInterface {
-    pub fn new(
-        bus: &'static SpiBus,
-        data_or_command: Output<'static>,
-        buffers: &'static mut [[u16; STRIP_BUFFER_PIXELS]; 2],
-    ) -> DmaInterface {
-        DmaInterface {
-            bus,
-            data_or_command,
-            buffers,
-            filling: 0,
-        }
+    pub fn new(bus: &'static SpiBus, data_or_command: Output<'static>) -> DmaInterface {
+        DmaInterface { bus, data_or_command }
     }
 }
 
@@ -252,9 +270,9 @@ impl PanelInterface for DmaInterface {
     type Error = spim::Error;
 
     fn send_command(&mut self, command: u8, arguments: &[u8]) -> Result<(), Self::Error> {
+        wait_for_free_bus();
         self.bus.lock(|bus| {
             let mut bus = bus.borrow_mut();
-            bus.finish_display_send();
             let started = Instant::now();
             self.data_or_command.set_low();
             let result = bus.write_to_display(&[command]);
@@ -269,11 +287,10 @@ impl PanelInterface for DmaInterface {
     }
 
     fn send_pixels(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
+        wait_for_free_bus();
         self.bus.lock(|bus| {
-            let mut bus = bus.borrow_mut();
-            bus.finish_display_send();
             let started = Instant::now();
-            let result = bus.write_to_display(bytes);
+            let result = bus.borrow_mut().write_to_display(bytes);
             diagnostics::add(
                 Counter::DisplaySendMicroseconds,
                 started.elapsed().as_micros() as u32,
@@ -282,29 +299,20 @@ impl PanelInterface for DmaInterface {
         })
     }
 
-    fn strip_buffer(&mut self) -> Option<&mut [u16]> {
-        Some(&mut self.buffers[self.filling])
-    }
-
-    fn send_strip_pixels(&mut self, first: usize, count: usize) -> Result<(), Self::Error> {
-        let pixels = &self.buffers[self.filling][first..first + count];
+    /// Starts the send and returns; the interrupt ends it, and the pixels must stay untouched till then.
+    fn send_strip_pixels(&mut self, pixels: &[u16]) -> Result<(), Self::Error> {
         let (address, length) = (pixels.as_ptr() as u32, core::mem::size_of_val(pixels));
         if length == 0 {
             return Ok(());
         }
+        wait_for_free_bus();
         self.bus.lock(|bus| {
             let mut bus = bus.borrow_mut();
-            bus.finish_display_send();
             bus.display_select.set_low();
+            IS_SENDING.store(true, Ordering::Release);
             bus.chain.start(address, length);
-            bus.is_sending = true;
         });
         Ok(())
-    }
-
-    /// The buffer just sent is left to go out, and the other, already sent, is drawn into next.
-    fn finish_strip(&mut self) {
-        self.filling = 1 - self.filling;
     }
 }
 
@@ -312,7 +320,7 @@ impl PanelInterface for DmaInterface {
 // The external flash
 // ============================================================================
 
-/// The flash's side of the bus: each transaction first finishes a strip going out to the display.
+/// The flash's side of the bus: each transaction first waits for a strip going out to the display.
 pub struct FlashOnBus {
     bus: &'static SpiBus,
     chip_select: Output<'static>,
@@ -330,9 +338,9 @@ impl ErrorType for FlashOnBus {
 
 impl SpiDevice for FlashOnBus {
     fn transaction(&mut self, operations: &mut [Operation<'_, u8>]) -> Result<(), Self::Error> {
+        wait_for_free_bus();
         self.bus.lock(|bus| {
             let mut bus = bus.borrow_mut();
-            bus.finish_display_send();
             self.chip_select.set_low();
             let result = operations.iter_mut().try_for_each(|operation| match operation {
                 Operation::Read(words) => bus.spim.blocking_read(words),

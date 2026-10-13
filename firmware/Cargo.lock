@@ -1117,6 +1117,7 @@ dependencies = [
 name = "neotime-app-host"
 version = "0.1.0"
 dependencies = [
+ "embassy-futures",
  "embedded-graphics",
  "libm",
  "neotime-button",
@@ -1284,6 +1285,7 @@ dependencies = [
  "neotime-steps",
  "neotime-storage",
  "neotime-touch",
+ "neotime-ui",
  "neotime-updates",
  "neotime-vibrator",
  "nrf-pac",

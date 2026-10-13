@@ -8,6 +8,8 @@
 
 use alloc::{vec, vec::Vec};
 
+use embassy_futures::block_on;
+
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
 use neotime_runtime::ThemeColor;
 use neotime_ui::{geometry::Rect, renderer::Renderer};
@@ -162,7 +164,7 @@ impl<'image> AppHost<'image> {
     where
         Screen: ScrollingScreen,
     {
-        self.draw_paced_step(screen, strip, None)
+        block_on(self.draw_paced_step(screen, strip, None))
     }
 
     /// Draws like `draw_step`, with a transition catching up to where the clock says it should be.
@@ -177,10 +179,24 @@ impl<'image> AppHost<'image> {
     where
         Screen: ScrollingScreen,
     {
-        self.draw_paced_step(screen, strip, Some(now_in_milliseconds))
+        block_on(self.draw_step_at_async(screen, strip, now_in_milliseconds))
     }
 
-    fn draw_paced_step<Screen>(
+    /// Draws like `draw_step_at`, awaiting the screen between strips so other work runs while it sends.
+    pub async fn draw_step_at_async<Screen>(
+        &mut self,
+        screen: &mut Screen,
+        strip: &mut [u16],
+        now_in_milliseconds: u64,
+    ) -> Result<(), Screen::Error>
+    where
+        Screen: ScrollingScreen,
+    {
+        self.draw_paced_step(screen, strip, Some(now_in_milliseconds))
+            .await
+    }
+
+    async fn draw_paced_step<Screen>(
         &mut self,
         screen: &mut Screen,
         strip: &mut [u16],
@@ -193,12 +209,14 @@ impl<'image> AppHost<'image> {
             return Ok(());
         }
         if self.whole_screen_dirty {
-            return self.draw_whole_screen_step(screen, strip, now_in_milliseconds);
+            return self
+                .draw_whole_screen_step(screen, strip, now_in_milliseconds)
+                .await;
         }
         // Parts already promised are finished before anything new is taken on.
         if self.unpainted_regions.is_empty() {
             if let Some(scroll_move) = self.scroll_move.take() {
-                self.draw_scroll(screen, strip, scroll_move)?;
+                self.draw_scroll(screen, strip, scroll_move).await?;
             }
             self.unpainted_regions = self.dirty_regions();
             for (node_index, node) in self.nodes.iter_mut().enumerate() {
@@ -209,11 +227,15 @@ impl<'image> AppHost<'image> {
             self.dirty_nodes = 0;
             self.cleared_regions.clear();
         }
-        self.paint_a_slice(screen, strip)
+        self.paint_a_slice(screen, strip).await
     }
 
     /// Paints up to `PAINT_STEP_PIXELS` of the parts still unpainted, keeping the rest for the next step.
-    fn paint_a_slice<Screen>(&mut self, screen: &mut Screen, strip: &mut [u16]) -> Result<(), Screen::Error>
+    async fn paint_a_slice<Screen>(
+        &mut self,
+        screen: &mut Screen,
+        strip: &mut [u16],
+    ) -> Result<(), Screen::Error>
     where
         Screen: ScrollingScreen,
     {
@@ -224,7 +246,8 @@ impl<'image> AppHost<'image> {
             };
             let rows_that_fit = (pixels_left / region.width).max(1);
             let rows = rows_that_fit.min(region.height);
-            self.paint(screen, strip, rows_from_region(region, 0, rows), 0)?;
+            self.paint(screen, strip, rows_from_region(region, 0, rows), 0)
+                .await?;
             if rows < region.height {
                 self.unpainted_regions
                     .push(rows_from_region(region, rows, region.height - rows));
@@ -255,7 +278,7 @@ impl<'image> AppHost<'image> {
     }
 
     /// Paints `area` a strip at a time, each strip sent `rows_down` lower on the screen than it belongs.
-    fn paint<Screen>(
+    async fn paint<Screen>(
         &self,
         screen: &mut Screen,
         strip: &mut [u16],
@@ -289,6 +312,7 @@ impl<'image> AppHost<'image> {
             match screen.strip_buffer().filter(|_| lands_on_screen) {
                 Some(buffer) => {
                     self.render(&mut Strip::new(buffer, part), part);
+                    screen.ready().await;
                     screen.send_strip(&destination)?;
                 }
                 None => {
@@ -363,7 +387,7 @@ impl<'image> AppHost<'image> {
     // ------------------------------------------------------------------------
 
     /// Draws the whole screen at once, or the next step of its transition.
-    fn draw_whole_screen_step<Screen>(
+    async fn draw_whole_screen_step<Screen>(
         &mut self,
         screen: &mut Screen,
         strip: &mut [u16],
@@ -374,37 +398,44 @@ impl<'image> AppHost<'image> {
     {
         let mut run = match self.transition_run {
             Some(run) => run,
-            None => self.start_whole_screen(screen, now_in_milliseconds)?,
+            None => self.start_whole_screen(screen, now_in_milliseconds).await?,
         };
         let left = SCREEN_SIDE - run.done;
         let behind = run.rows_behind_the_clock(now_in_milliseconds);
         let step = match run.kind {
             Transition::None => {
                 self.unpainted_regions.push(SCREEN_AREA);
-                self.paint_a_slice(screen, strip)?;
+                self.paint_a_slice(screen, strip).await?;
                 left
             }
             Transition::Up => {
                 let rows = SLIDE_STEP_ROWS.max(behind).min(left);
                 // The next rows go over the top rows, which leave next, and the panel moves them round to the bottom.
-                self.paint(screen, strip, rows_from(run.done, rows), -run.done)?;
+                self.paint(screen, strip, rows_from(run.done, rows), -run.done)
+                    .await?;
+                screen.ready().await;
+                screen.ready().await;
                 screen.scroll_by(rows)?;
                 rows
             }
             Transition::Down => {
                 let rows = SLIDE_STEP_ROWS.max(behind).min(left);
-                self.paint(screen, strip, rows_from(left - rows, rows), run.done)?;
+                self.paint(screen, strip, rows_from(left - rows, rows), run.done)
+                    .await?;
+                screen.ready().await;
                 screen.scroll_by(-rows)?;
                 rows
             }
             Transition::Left => {
                 let columns = WIPE_STEP_COLUMNS.max(behind).min(left);
-                self.paint(screen, strip, columns_from(left - columns, columns), 0)?;
+                self.paint(screen, strip, columns_from(left - columns, columns), 0)
+                    .await?;
                 columns
             }
             Transition::Right => {
                 let columns = WIPE_STEP_COLUMNS.max(behind).min(left);
-                self.paint(screen, strip, columns_from(run.done, columns), 0)?;
+                self.paint(screen, strip, columns_from(run.done, columns), 0)
+                    .await?;
                 columns
             }
         };
@@ -420,7 +451,7 @@ impl<'image> AppHost<'image> {
     }
 
     /// Starts drawing a whole new screen: every widget will be drawn, and the panel is made ready.
-    fn start_whole_screen<Screen>(
+    async fn start_whole_screen<Screen>(
         &mut self,
         screen: &mut Screen,
         now_in_milliseconds: Option<u64>,
@@ -434,7 +465,7 @@ impl<'image> AppHost<'image> {
             true => Transition::None,
             false => wanted,
         };
-        self.prepare_scroll_band(screen, kind)?;
+        self.prepare_scroll_band(screen, kind).await?;
 
         for node in &mut self.nodes {
             node.drawn_bounds = node.covered_area();
@@ -454,7 +485,11 @@ impl<'image> AppHost<'image> {
     ///
     /// A slide needs the whole screen to scroll. The screen's list needs its own band, which can
     /// only be set later while the ring is unturned, and this is the last chance to unturn it.
-    fn prepare_scroll_band<Screen>(&self, screen: &mut Screen, kind: Transition) -> Result<(), Screen::Error>
+    async fn prepare_scroll_band<Screen>(
+        &self,
+        screen: &mut Screen,
+        kind: Transition,
+    ) -> Result<(), Screen::Error>
     where
         Screen: ScrollingScreen,
     {
@@ -468,6 +503,7 @@ impl<'image> AppHost<'image> {
         let must_unturn = state.turned_rows != 0
             && wanted.is_some_and(|band| band != state.band || (slides && band != ScrollBand::WHOLE_SCREEN));
         if must_scroll_whole_screen || must_unturn {
+            screen.ready().await;
             screen.set_scroll_band(ScrollBand::WHOLE_SCREEN)?;
         }
         Ok(())
@@ -525,7 +561,7 @@ impl<'image> AppHost<'image> {
     }
 
     /// Draws a scrolled list, by moving its rows in the panel when it can and by drawing them all when not.
-    fn draw_scroll<Screen>(
+    async fn draw_scroll<Screen>(
         &mut self,
         screen: &mut Screen,
         strip: &mut [u16],
@@ -534,7 +570,7 @@ impl<'image> AppHost<'image> {
     where
         Screen: ScrollingScreen,
     {
-        if !self.scroll_with_panel(screen, strip, scroll_move)? {
+        if !self.scroll_with_panel(screen, strip, scroll_move).await? {
             self.mark_subtree_dirty(scroll_move.node_index);
             return Ok(());
         }
@@ -558,7 +594,7 @@ impl<'image> AppHost<'image> {
     }
 
     /// Moves a list's rows in the panel and draws only the rows that came into view; false when it cannot.
-    fn scroll_with_panel<Screen>(
+    async fn scroll_with_panel<Screen>(
         &self,
         screen: &mut Screen,
         strip: &mut [u16],
@@ -589,6 +625,7 @@ impl<'image> AppHost<'image> {
             if state.turned_rows != 0 {
                 return Ok(false);
             }
+            screen.ready().await;
             screen.set_scroll_band(band)?;
         }
 
@@ -596,19 +633,21 @@ impl<'image> AppHost<'image> {
         match rows > 0 {
             true => {
                 let incoming = rows_from(band.end_row - rows, rows);
-                self.paint(screen, strip, incoming, band.first_row - incoming.y)?;
+                self.paint(screen, strip, incoming, band.first_row - incoming.y)
+                    .await?;
             }
             false => {
                 let incoming = rows_from(band.first_row, -rows);
-                self.paint(screen, strip, incoming, band.end_row + rows - band.first_row)?;
+                self.paint(screen, strip, incoming, band.end_row + rows - band.first_row)
+                    .await?;
             }
         }
         screen.scroll_by(rows)?;
         for edge in self.fixed_edges_in(scroll_move.node_index, band) {
-            self.paint(screen, strip, edge, 0)?;
+            self.paint(screen, strip, edge, 0).await?;
         }
         for part in self.scroll_bar_moved_parts(scroll_move, band) {
-            self.paint(screen, strip, part, 0)?;
+            self.paint(screen, strip, part, 0).await?;
         }
         Ok(true)
     }

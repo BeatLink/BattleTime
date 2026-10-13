@@ -8,6 +8,7 @@ use embedded_hal::{delay::DelayNs, digital::ErrorType, digital::OutputPin};
 use neotime_app_host::{PAINT_STEP_PIXELS, STRIP_PIXELS, TRANSITION_TIME_IN_MILLISECONDS};
 use neotime_app_testing::{Framebuffer, TestWatch, Touch, Transition};
 use neotime_display::{Display, PanelInterface};
+use neotime_ui::BufferedScreen;
 
 // ============================================================================
 // A model of the panel
@@ -90,10 +91,9 @@ fn two_numbers(arguments: &[u8]) -> (usize, usize) {
     )
 }
 
-/// The panel's wires as the watch drives them, lending a strip buffer as the watch's DMA interface does.
+/// The panel's wires as the watch drives them, strips included.
 struct PanelWires {
     state: Rc<RefCell<PanelState>>,
-    strip: Vec<u16>,
 }
 
 impl PanelInterface for PanelWires {
@@ -120,13 +120,9 @@ impl PanelInterface for PanelWires {
         Ok(())
     }
 
-    fn strip_buffer(&mut self) -> Option<&mut [u16]> {
-        Some(&mut self.strip)
-    }
-
-    fn send_strip_pixels(&mut self, first: usize, count: usize) -> Result<(), ()> {
+    fn send_strip_pixels(&mut self, pixels: &[u16]) -> Result<(), ()> {
         let mut state = self.state.borrow_mut();
-        for &pixel in &self.strip[first..first + count] {
+        for &pixel in pixels {
             state.write_pixel(pixel.to_ne_bytes());
         }
         Ok(())
@@ -159,42 +155,41 @@ impl DelayNs for FakeDelay {
 // Helpers
 // ============================================================================
 
-/// The display, over the model, with the strip the watch draws through.
+/// The display, over the model, with the two strip buffers the watch draws through.
 struct Watch {
     display: Display<PanelWires, FakePin>,
     panel: Rc<RefCell<PanelState>>,
-    strip: Vec<u16>,
+    buffers: [Vec<u16>; 2],
 }
 
 impl Watch {
     fn new() -> Self {
         let panel = Rc::new(RefCell::new(PanelState::new()));
-        let interface = PanelWires {
-            state: panel.clone(),
-            strip: vec![0; STRIP_PIXELS],
-        };
+        let interface = PanelWires { state: panel.clone() };
         let display = Display::new(interface, FakePin, &mut FakeDelay).unwrap();
         Self {
             display,
             panel,
-            strip: vec![0u16; STRIP_PIXELS],
+            buffers: [vec![0; STRIP_PIXELS], vec![0; STRIP_PIXELS]],
         }
     }
 
     /// Draws one step and says how many pixels it sent to the panel.
     fn draw_step(&mut self, app: &mut TestWatch) -> usize {
         let before = self.panel.borrow().pixels_written;
-        app.host_mut()
-            .draw_step(&mut self.display, &mut self.strip)
-            .unwrap();
+        let [first, second] = &mut self.buffers;
+        let mut screen = BufferedScreen::new(&mut self.display, first, second);
+        app.host_mut().draw_step(&mut screen, &mut []).unwrap();
         self.panel.borrow().pixels_written - before
     }
 
     /// Draws one step paced by the clock at `now_in_milliseconds`, and says how many pixels it sent.
     fn draw_step_at(&mut self, app: &mut TestWatch, now_in_milliseconds: u64) -> usize {
         let before = self.panel.borrow().pixels_written;
+        let [first, second] = &mut self.buffers;
+        let mut screen = BufferedScreen::new(&mut self.display, first, second);
         app.host_mut()
-            .draw_step_at(&mut self.display, &mut self.strip, now_in_milliseconds)
+            .draw_step_at(&mut screen, &mut [], now_in_milliseconds)
             .unwrap();
         self.panel.borrow().pixels_written - before
     }
