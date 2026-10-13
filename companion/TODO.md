@@ -65,6 +65,13 @@ mock watch only.
 - **The command line's buttons file.** `neotime remote` reads its own JSON file; the desktop app
   could export its buttons there.
 
+## Quick apps
+
+- **Untried with a watch.** Reading and writing `/settings/quick_apps` has run only against the
+  mock watch, and the firmware's ring has not landed yet. Check that a saved ring changes what a
+  swipe on the face opens at once, that "Use the default" brings back the built-in ring, and that
+  `neotime quick-apps` works over BlueZ.
+
 ## Notification forwarding
 
 The Android bridge in [src/services/phone](src/services/phone/README.md) is wired into the

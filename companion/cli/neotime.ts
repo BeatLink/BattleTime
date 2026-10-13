@@ -19,6 +19,7 @@ import {
   files,
   listen,
   note,
+  quickApps,
   restore,
   settings,
   setTime,
@@ -126,6 +127,7 @@ const NEEDS_WATCH = new Set([
   'remote',
   'launcher',
   'apps',
+  'quick-apps',
   'backup',
   'restore',
   'listen',
@@ -287,6 +289,10 @@ async function main(argv: string[]): Promise<number> {
 
       case 'launcher':
         await launcher(session, rest);
+        break;
+
+      case 'quick-apps':
+        await quickApps(session, rest);
         break;
 
       case 'backup':

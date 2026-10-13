@@ -108,6 +108,7 @@ npm run neotime -- apps setup
 npm run neotime -- apps install path/to/timer.ntapp
 npm run neotime -- apps list
 npm run neotime -- apps hide dice
+npm run neotime -- quick-apps set steps stopwatch heart
 npm run neotime -- backup watch-backup.json
 npm run neotime -- notify "Build finished" "All tests passed"
 npm run neotime -- status
@@ -180,6 +181,7 @@ src/app/                 Expo Router screens
   notes.tsx              The text file the watch's Notes app shows, and its font there
   remote.tsx             The watch's Remote app: its buttons, what each runs here, and recent taps
   launcher.tsx           The launcher's style, view and groups, and which group each app is in
+  quick-apps.tsx         The apps a swipe left or right on the watch face steps through
   files.tsx              The watch's file system: browse, send, read, delete, free space
   backup.tsx             Copy the watch's settings and app state off and back
   steps.tsx              The last week of steps, by day and by hour
@@ -346,6 +348,21 @@ and so does one installed another way, until the companion next writes the file.
 
 `neotime launcher show|style <s>|view <v>|move <app> <group>|add <name> [icon]|remove <group>|reset`
 does the same from a terminal.
+
+## Quick apps
+
+A swipe left or right on NeoTime's watch face opens the next or previous app in its quick-app
+ring, and a step past either end comes back to the face. The watch reads the ring from
+`/settings/quick_apps` on every step: UTF-8 text, one app id a line, in ring order, with blank
+lines, surrounding spaces and `\r` ignored and ids that are not installed skipped. Without the
+file the ring is `steps, stopwatch, heart, weather, music`.
+
+The Quick apps screen reads the ring when it opens, falling back to that default when the file is
+missing, and lists it next to the installed apps that could join it (faces and the launcher are
+left out). Apps are added, removed and moved up or down, and Save writes the file over the file
+service; "Use the default" deletes it. [src/protocol/quick-apps.ts](src/protocol/quick-apps.ts)
+reads and writes the file, and `neotime quick-apps [list|set <id> ...|reset]` does the same from a
+terminal.
 
 ## Apps and the first run
 

@@ -9,6 +9,7 @@ import { createBackup, parseBackup, restoreBackup } from '@/protocol/backup';
 import { setWatchTime } from '@/protocol/neotime';
 import { NOTE_FONTS, NOTE_PATH, removeNote, syncNote, type NoteFont } from '@/protocol/notes';
 import { installImage, memoryText, PackagesError } from '@/protocol/packages';
+import { readQuickApps, resetQuickApps, writeQuickApps } from '@/protocol/quick-apps';
 import { runSetup, setupItems } from '@/protocol/setup';
 import { encodeForWatch, decodeWatchLine } from '@/protocol/gadgetbridge';
 import {
@@ -40,6 +41,7 @@ neotime weather <place>
 neotime files [ls [dir]|get <path> [dest]|put <file> <path>|rm <path>|df]
 neotime note <file> [small|normal|medium|large]|remove
 neotime apps [list|install <image>|remove <id>|hide <id>|show <id>|setup]
+neotime quick-apps [list|set <id> ...|reset]
 neotime backup <file>
 neotime restore <file>
 neotime listen [line] [--allow <hosts>] [--wait <seconds>]
@@ -54,7 +56,9 @@ neotime slots [fit|recovery <start> <size>|update <start>]
   for the watch's Notes app to show, in the font given, or removes it. apps installs a .ntapp
   or .ntlib image, list shows each app with the memory it needs, hide and show
   turn one off and on unless the watch refuses, saying why, and setup installs the
-  face, launcher, apps and shared library this tool bundles onto a new watch. listen stays
+  face, launcher, apps and shared library this tool bundles onto a new watch. quick-apps
+  lists the apps a swipe left or right on the face steps through, set replaces them with
+  the ids given in order, and reset goes back to the watch's default. listen stays
   connected and prints what the watch sends, answering its apps' http
   requests for the hosts given; it runs the line given first, and stops
   after --wait seconds or at Ctrl+C. slots shows where the update and recovery
@@ -361,6 +365,33 @@ export async function listen(
 }
 
 // Sends a text file for the watch's Notes app, or takes it off with `remove`.
+// The watch face's quick-app ring: list it, replace it, or go back to the default.
+export async function quickApps(session: WatchSession, args: string[]) {
+  const [action = 'list', ...ids] = args;
+  const service = await session.files();
+  switch (action) {
+    case 'list': {
+      const onWatch = await readQuickApps(service);
+      const installed = new Set((await (await session.packages()).apps()).map((app) => app.id));
+      onWatch.ids.forEach((id, index) => say(`${String(index + 1).padStart(2)}. ${id}${installed.has(id) ? '' : '  (not installed, skipped)'}`));
+      if (onWatch.ids.length === 0) say('The ring is empty.');
+      if (!onWatch.fromFile) say("This is the watch's default ring.");
+      return;
+    }
+    case 'set':
+      if (ids.length === 0) throw new Error('Give the app ids in ring order, or use reset.');
+      await writeQuickApps(service, ids);
+      say(`The ring is now ${ids.join(', ')}.`);
+      return;
+    case 'reset':
+      await resetQuickApps(service);
+      say("The watch is back on its default ring.");
+      return;
+    default:
+      throw new Error(`quick-apps takes list, set or reset, not ${action}.`);
+  }
+}
+
 export async function note(session: WatchSession, args: string[]) {
   const [file, font = 'normal'] = args;
   if (!file) {

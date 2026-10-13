@@ -5,7 +5,9 @@ import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
 
 import {
   COMMAND,
+  FileMissingError,
   FileService,
+  FileServiceError,
   LONGEST_WRITE,
   STATUS,
   checkPath,
@@ -184,6 +186,8 @@ describe('file service on the mock watch', () => {
   it('keeps going after a command fails', async () => {
     const service = await FileService.open(mockWatch());
     await expect(service.read('/nope')).rejects.toThrow('does not exist');
+    await expect(service.read('/nope')).rejects.toBeInstanceOf(FileMissingError);
+    await expect(service.read('/nope')).rejects.toBeInstanceOf(FileServiceError);
     expect(await service.read('/apps/clock/state')).toEqual(Uint8Array.from([1, 2, 3]));
   });
 

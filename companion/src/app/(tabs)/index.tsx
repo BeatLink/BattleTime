@@ -309,7 +309,14 @@ export default function WatchScreen() {
             </>
           ) : null}
           {canInstall ? (
-            <Row label="Apps" detail="Install, hide or remove apps and faces" onPress={() => router.push('/apps')} />
+            <>
+              <Row label="Apps" detail="Install, hide or remove apps and faces" onPress={() => router.push('/apps')} />
+              <Row
+                label="Quick apps"
+                detail="The apps a swipe left or right on the watch face steps through"
+                onPress={() => router.push('/quick-apps')}
+              />
+            </>
           ) : null}
           {capabilities.files ? (
             <>

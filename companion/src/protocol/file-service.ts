@@ -18,6 +18,9 @@ export type Progress = { file: string; sent: number; total: number };
 
 export class FileServiceError extends Error {}
 
+// The watch has no file or folder at the path asked for.
+export class FileMissingError extends FileServiceError {}
+
 // ============================================================================
 // The protocol's numbers
 // ============================================================================
@@ -347,7 +350,7 @@ export class FileService {
       case STATUS.ok:
         return answer;
       case STATUS.noFile:
-        throw new FileServiceError(`${path} does not exist.`);
+        throw new FileMissingError(`${path} does not exist.`);
       case STATUS.protocolError:
         throw new FileServiceError(`${path}: the watch did not understand the request.`);
       default:
