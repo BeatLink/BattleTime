@@ -74,6 +74,7 @@ Old System Still Starts
 
 *** Test Cases ***
 Moves A wasp-os Watch Onto NeoTime
+    [Tags]                    wasp-os
     Start A Watch Running wasp-os With The Reloader As Its App
 
     Run For                   ${RELOADER_SECONDS}
@@ -106,6 +107,7 @@ The Reloader Waits For The Charger
     Flash Should Hold File    0x0    ${BOOTLOADER_BIN}
 
 Holding The Button Leaves The Reloader For The Old Update Mode
+    [Tags]                    wasp-os
     [Documentation]           Waiting for the charger, the reloader stops feeding the watchdog while the button is held, so the watchdog resets into wasp-os's bootloader, and nothing is changed.
     Start A Watch Running wasp-os With The Reloader As Its App, Unplugged
     Run For                   ${5}

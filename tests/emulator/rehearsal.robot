@@ -5,6 +5,8 @@ Suite Teardown    Teardown
 Test Setup        Reset Emulation
 Test Teardown     Test Teardown
 Resource          neotime.resource
+# These start from a wasp-os bootloader build, which only a local wasp-os checkout has.
+Test Tags         wasp-os
 Library           OperatingSystem
 
 *** Variables ***

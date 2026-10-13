@@ -141,10 +141,10 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Async flash in the firmware.** Flash writes block the Bluetooth host for up to a sector
   erase at a time, because the display shares the SPI bus and its driver is blocking.
 - [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.
-- [ ] **Run the emulator suites in CI.** CI runs none of `tests/emulator/` today, though they are
-  the only tests of the firmware, bootloader and reloaders, which build only for the watch. All of
-  them take about 25 minutes with PineTimeEmulator's
-  `pinetime-test`; add a job that runs it from that flake.
+- [ ] **Run the wasp-os emulator tests in CI.** The `Emulator suites` job skips the tests tagged
+  `wasp-os` (the rehearsals and the wasp-os migration), since they start from a wasp-os bootloader
+  build with Nordic's S112 that only a local checkout has. Package that build, or its parts, so CI
+  can run them too.
 - [ ] **Read the bootloader in the updater with assembly loads.** `bootloader-updater`'s
   `installed_crc` reads `BOOTLOADER.start` (address 0, the null pointer) through `Nvmc`, which is
   undefined behaviour; the firmware's same read let the compiler delete most of the firmware. Use

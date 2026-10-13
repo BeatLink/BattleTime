@@ -331,8 +331,8 @@ process:
 pinetime-test --variable EMULATOR:<emulator checkout> tests/emulator/<suite>.robot
 ```
 
-The emulator has
-already caught two faults that would have stranded a watch: the reloader sent 256-byte pages from
+CI's `Emulator suites` job runs them on every push, except the tests tagged `wasp-os`, which need a
+local wasp-os bootloader build. The emulator has already caught two faults that would have stranded a watch: the reloader sent 256-byte pages from
 its own flash, which embassy's SPI driver cannot do (it panics above 255 bytes), and the firmware
 read the replaced image from the wrong page after a swap. The plan:
 
