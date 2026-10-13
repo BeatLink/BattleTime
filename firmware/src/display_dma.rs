@@ -4,7 +4,9 @@
 //! mode, each piece's END starting the next through PPI. A counter timer counts the ENDs; one
 //! before the last it disables the channel that restarts the transfer, and at the last it marks the
 //! strip sent. The bus is never handed to anyone else while a strip is still going out: every
-//! command, every new strip and the end of each drawing step first waits for it.
+//! command, every new strip and the end of each drawing step first waits for it. While it waits the
+//! CPU sleeps: the last END pends the counter timer's interrupt, which is left off in the NVIC but
+//! wakes a WFE through SEVONPEND, so no handler runs and other interrupts still wake it as usual.
 
 use core::ptr::NonNull;
 
@@ -39,6 +41,9 @@ const FALLBACK_BUFFER_BYTES: usize = 64;
 /// The counter timer's compare channels: one disables the restart, the other marks the strip sent.
 const LAST_RESTART_COMPARE: usize = 0;
 const ALL_SENT_COMPARE: usize = 1;
+
+/// The SCR bit that makes an interrupt becoming pending wake WFE, even one left off in the NVIC.
+const SEND_EVENT_ON_PENDING: u32 = 1 << 4;
 
 // ============================================================================
 // The peripherals it takes
@@ -82,6 +87,9 @@ impl Chain {
         count.enable();
         stop.enable();
         counter.start();
+        pac::TIMER1.intenset().write(|w| w.set_compare(ALL_SENT_COMPARE, true));
+        // SAFETY: setting SEVONPEND only makes a pending interrupt wake WFE; nothing else reads it.
+        unsafe { (*cortex_m::peripheral::SCB::PTR).scr.modify(|value| value | SEND_EVENT_ON_PENDING) };
         Chain {
             counter,
             restart_group,
@@ -100,6 +108,8 @@ impl Chain {
         self.counter.clear();
         self.counter.cc(ALL_SENT_COMPARE).clear_events();
         self.counter.cc(LAST_RESTART_COMPARE).clear_events();
+        // The interrupt follows the event's level, so it is unpended only once the event is clear.
+        cortex_m::peripheral::NVIC::unpend(pac::Interrupt::TIMER1);
         self.counter.cc(ALL_SENT_COMPARE).write(pieces);
         self.counter.cc(LAST_RESTART_COMPARE).write(pieces - 1);
         registers.events_end().write_value(0);
@@ -122,10 +132,15 @@ impl Chain {
         registers.tasks_start().write_value(1);
     }
 
-    /// Waits until the last piece has gone out, then puts the bus back as embassy's driver expects it.
+    /// Sleeps until the last piece has gone out, then puts the bus back as embassy's driver expects it.
     fn wait_until_sent(&mut self) {
         let all_sent = self.counter.cc(ALL_SENT_COMPARE).event_compare();
-        while !all_sent.is_triggered() {}
+        // A wake for any other reason just checks again; the event already set makes WFE return at once.
+        while !all_sent.is_triggered() {
+            cortex_m::asm::wfe();
+        }
+        // A task woken meanwhile signalled the executor with an event this WFE took, so it is given back.
+        cortex_m::asm::sev();
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
         self.restart_group.disable_all();
         let registers = pac::SPIM0;

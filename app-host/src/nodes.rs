@@ -679,24 +679,6 @@ impl Node {
         }
     }
 
-    /// The colour behind the node's own content, if it paints one.
-    pub fn own_background(&self, theme: &Theme) -> Option<Color> {
-        let default = match self.kind {
-            WidgetKind::Button | WidgetKind::Dropdown => Some(ColorValue::Theme(ThemeColor::Surface)),
-            _ => None,
-        };
-        match self.kind {
-            WidgetKind::Arc | WidgetKind::Bar | WidgetKind::Switch | WidgetKind::Slider | WidgetKind::Led => {
-                None
-            }
-            _ => self
-                .settings
-                .background
-                .or(default)
-                .map(|color| to_color(color.resolve(theme))),
-        }
-    }
-
     /// The state arrays the widget shows, which redraw it when a handler changes them.
     pub fn arrays_read(&self) -> u64 {
         let mut variables = 0u64;

@@ -12,9 +12,11 @@ pub mod renderer;
 mod scrolling;
 pub mod shapes;
 mod strip;
+mod strip_renderer;
 
 pub use scrolling::{FixedScreen, ScrollBand, ScrollState, ScrollingScreen};
 pub use strip::Strip;
+pub use strip_renderer::StripRenderer;
 
 use embedded_graphics::{
     mono_font::{ascii::FONT_10X20, MonoFont, MonoTextStyle},

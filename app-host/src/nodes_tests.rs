@@ -386,24 +386,6 @@ fn an_unset_colour_resolves_to_the_fallback_or_to_clear() {
     );
 }
 
-#[test]
-fn buttons_paint_the_surface_and_indicators_paint_no_background_of_their_own() {
-    let theme = neotime_runtime::DEFAULT_THEME;
-    let mut bar = node(WidgetKind::Bar);
-    bar.apply(Property::Background, number(RED));
-    let mut label = node(WidgetKind::Label);
-    let unpainted = label.own_background(&theme);
-    label.apply(Property::Background, number(RED));
-
-    assert_eq!(
-        node(WidgetKind::Button).own_background(&theme),
-        Some(to_color(theme.color(ThemeColor::Surface)))
-    );
-    assert_eq!(bar.own_background(&theme), None);
-    assert_eq!(unpainted, None);
-    assert_eq!(label.own_background(&theme), Some(to_color(RED as u16)));
-}
-
 // ============================================================================
 // Areas and arrays
 // ============================================================================

@@ -200,9 +200,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   far it is measured only in the emulator, where the alarm peaks at 36,188 B of 37,888 B. Count what a typical screen allocates on
   the watch, then update the "UI heap" row in
   [memory-map.md](memory-map.md) and the size in `tools/draw_memory_maps.py`, and rerun the script.
-- [ ] **Text edges over colour.** The display cannot be read back, so the soft edges of letters are
-  mixed with one set background colour. Text on a coloured button gets dark fringes. A small line
-  buffer would let edges mix with what is really underneath.
 - [ ] **App screens in the simulator.** The simulator still shows hand-drawn demo pages. Draw
   real app screens there through `ScreenRenderer`.
 - [ ] **Touch input.** Turn `neotime-touch` gestures into the app host's touch events.
@@ -371,7 +368,7 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
   drawn. Both drivers need a shared-bus wrapper, such as the shared SPI in
   `embassy-embedded-hal`, so neither can cut into the other's transfer.
 - [ ] **Keep sending across drawing steps.** Each step waits for its last strip before it returns,
-  which is most of the 79 ms the launcher's slide still waits on the bus. Keeping the send buffer
+  which is most of the 69 ms opening the launcher still waits on the bus. Keeping the send buffer
   lent from one step to the next, with the bus handed back only before other work, would hide it.
 - [ ] **12-bit colour mode.** The ST7789 can take 12 bits a pixel, which cuts the time to send a
   full screen by a quarter, from about 115 ms to 86 ms at 8 MHz. It costs banding in gradients and

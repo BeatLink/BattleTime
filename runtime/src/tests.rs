@@ -2767,6 +2767,27 @@ fn an_image_is_stored_as_runs_and_read_back() {
 }
 
 #[test]
+fn runs_can_start_at_any_pixel_without_reading_the_ones_before() {
+    let mut writer = ImageWriter::new("logo", "Logo", AppKind::App, 1);
+    let pixels = [0xF800, 0xF800, 0xF800, 0x001F, 0x001F, 0x07E0];
+    let logo = writer.image_resource(ImageFormat::Color, 3, 2, &pixels);
+    let bytes = writer.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let resource = image.resource(logo).unwrap();
+
+    let from = |pixel| {
+        let (start, runs) = resource.runs_from(pixel);
+        (start, runs.map(|run| run.value).collect::<Vec<_>>())
+    };
+
+    assert_eq!(from(0), (0, std::vec![0xF800, 0x001F, 0x07E0]));
+    assert_eq!(from(2), (0, std::vec![0xF800, 0x001F, 0x07E0]));
+    assert_eq!(from(3), (3, std::vec![0x001F, 0x07E0]));
+    assert_eq!(from(5), (5, std::vec![0x07E0]));
+    assert_eq!(from(9), (6, std::vec![]));
+}
+
+#[test]
 fn refuses_an_image_whose_runs_do_not_fill_it_and_a_missing_image() {
     let mut short = ImageWriter::new("logo", "Logo", AppKind::App, 1);
     short.image_resource(ImageFormat::Mask, 4, 4, &[255, 255]);
@@ -3020,4 +3041,14 @@ fn format_fixed_writes_a_number_with_its_decimal_places() {
     assert_eq!(fixed(3_000_000, 6, 1), "3");
     assert_eq!(fixed(7, 0, 0), "7");
     assert_eq!(fixed(5, 40, 1), "0.000000000000000005");
+}
+
+#[test]
+fn the_checksum_is_the_standard_crc_32() {
+    assert_eq!(image::crc32(b"123456789"), 0xCBF4_3926);
+    assert_eq!(image::crc32(b""), 0);
+    assert_eq!(
+        image::crc32(b"The quick brown fox jumps over the lazy dog"),
+        0x414F_A339
+    );
 }

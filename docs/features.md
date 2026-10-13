@@ -135,7 +135,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   [faces.md](faces.md).
 - **A 5 day weather forecast** in the weather app, read from the forecast the phone last sent.
 - **Lines with soft edges.** Clock hands and ticks, chart lines and the level's cross hairs are
-  drawn anti-aliased, as are arcs, circles and rounded corners.
+  drawn anti-aliased, as are arcs, circles and rounded corners, and soft edges mix with the colour
+  really underneath, so text and icons on coloured buttons and stripes have no dark fringes.
 - **Screens with room to breathe.** Content keeps 8 pixels from the screen edges and controls keep
   apart, except game boards and dials that fill the screen.
 

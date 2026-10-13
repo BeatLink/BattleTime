@@ -10,14 +10,11 @@ use alloc::{vec, vec::Vec};
 
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
 use neotime_runtime::ThemeColor;
-use neotime_ui::{
-    geometry::{Color, Rect},
-    renderer::{ClipRenderer, Renderer},
-};
-use neotime_ui::{FixedScreen, ScreenRenderer, ScrollBand, ScrollingScreen, Strip};
+use neotime_ui::{geometry::Rect, renderer::Renderer};
+use neotime_ui::{FixedScreen, ScrollBand, ScrollingScreen, Strip, StripRenderer};
 
 use super::{AppHost, DISABLED_OPACITY, SCREEN_AREA};
-use crate::drawing::{draw_node, DrawContext, FadedRenderer};
+use crate::drawing::{draw_node, DrawContext};
 use crate::layout::{clips_children, content_height};
 use crate::nodes::{to_color, OPAQUE};
 
@@ -297,9 +294,7 @@ impl<'image> AppHost<'image> {
     /// Draws the background and every shown widget that reaches into `region`; open lists last.
     fn render(&self, target: &mut Strip, region: Rect) {
         let background = to_color(self.theme.color(ThemeColor::Background));
-        let mut renderer = ScreenRenderer::new(&mut *target).with_background_color(background);
-        renderer.fill_rect(region, background);
-        renderer.finish().unwrap_or_else(|never| match never {});
+        StripRenderer::new(target, region, OPAQUE).fill_rect(region, background);
 
         let context = self.draw_context();
         let in_front_last = self
@@ -312,23 +307,9 @@ impl<'image> AppHost<'image> {
             let Some(clip) = node.covered_area().and_then(|area| area.intersect(region)) else {
                 continue;
             };
-            let backdrop = self.backdrop(node_index, background);
-            let opacity = self.opacity(node_index);
-            let mut renderer = ScreenRenderer::new(&mut *target).with_background_color(backdrop);
+            let mut renderer = StripRenderer::new(target, clip, self.opacity(node_index));
             let context = DrawContext { clip, ..context };
-            {
-                let mut clipped = ClipRenderer::new(&mut renderer, clip);
-                if opacity == OPAQUE {
-                    draw_node(node, &context, &mut clipped);
-                } else {
-                    let mut faded = FadedRenderer {
-                        inner: &mut clipped,
-                        opacity,
-                    };
-                    draw_node(node, &context, &mut faded);
-                }
-            }
-            renderer.finish().unwrap_or_else(|never| match never {});
+            draw_node(node, &context, &mut renderer);
         }
     }
 
@@ -344,19 +325,6 @@ impl<'image> AppHost<'image> {
             opacity = opacity * DISABLED_OPACITY as u32 / OPAQUE as u32;
         }
         opacity as u8
-    }
-
-    /// The colour behind a node's content, for mixing the soft edges of its text and shapes.
-    fn backdrop(&self, node_index: usize, screen_background: Color) -> Color {
-        let mut next = Some(node_index);
-        while let Some(index) = next {
-            let node = &self.nodes[index];
-            if let Some(color) = node.own_background(&self.theme) {
-                return color;
-            }
-            next = node.parent.map(|parent| parent as usize);
-        }
-        screen_background
     }
 
     // ------------------------------------------------------------------------

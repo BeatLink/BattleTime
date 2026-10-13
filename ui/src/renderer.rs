@@ -129,22 +129,31 @@ pub trait Renderer {
         }
     }
 
+    /// The only part of the screen drawing can reach, when the renderer knows it, so callers skip the rest.
+    fn visible_area(&self) -> Option<Rect> {
+        None
+    }
+
     /// Fills a circle with soft edges.
     fn fill_disc_aa(&mut self, centre: PointF, radius: f32, color: Color) {
+        let Some(clip) = clip_within(self.visible_area(), padded_square(centre, radius)) else {
+            return;
+        };
         let mut sink = RowBlender {
             renderer: self,
             color,
         };
-        rasterize_disc(centre, radius, padded_square(centre, radius), &mut sink);
+        rasterize_disc(centre, radius, clip, &mut sink);
     }
 
     /// Draws a straight line `width` pixels wide with square ends and soft edges.
     fn stroke_line_aa(&mut self, from: PointF, to: PointF, width: f32, color: Color) {
+        let clip = self.visible_area().unwrap_or(EVERYWHERE);
         let mut sink = RowBlender {
             renderer: self,
             color,
         };
-        rasterize_line(from, to, width, EVERYWHERE, &mut sink);
+        rasterize_line(from, to, width, clip, &mut sink);
     }
 
     /// Fills part of a ring between two angles, whose cosines and sines are given, with soft edges.
@@ -161,6 +170,9 @@ pub trait Renderer {
         extent_in_radians: f32,
         color: Color,
     ) {
+        let Some(clip) = clip_within(self.visible_area(), padded_square(centre, outer_radius)) else {
+            return;
+        };
         let mut sink = RowBlender {
             renderer: self,
             color,
@@ -174,7 +186,7 @@ pub trait Renderer {
             end_cos,
             end_sin,
             extent_in_radians,
-            padded_square(centre, outer_radius),
+            clip,
             &mut sink,
         );
     }
@@ -196,6 +208,14 @@ fn padded_square(centre: PointF, radius: f32) -> Rect {
         y: (centre.y - reach) as i32 - 1,
         width: (reach * 2.0) as i32 + 3,
         height: (reach * 2.0) as i32 + 3,
+    }
+}
+
+/// A shape's own clip cut to the renderer's visible area, or nothing if they do not meet.
+fn clip_within(visible: Option<Rect>, shape: Rect) -> Option<Rect> {
+    match visible {
+        Some(visible) => shape.intersect(visible),
+        None => Some(shape),
     }
 }
 
@@ -234,6 +254,11 @@ impl<'inner> ClipRenderer<'inner> {
 }
 
 impl Renderer for ClipRenderer<'_> {
+    fn visible_area(&self) -> Option<Rect> {
+        let clip = self.clip?;
+        clip_within(self.inner.visible_area(), clip)
+    }
+
     fn fill_rect(&mut self, rect: Rect, color: Color) {
         if let Some(visible) = self.clip.and_then(|clip| rect.intersect(clip)) {
             self.inner.fill_rect(visible, color);

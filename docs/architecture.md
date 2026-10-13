@@ -600,7 +600,11 @@ watch face, the launcher and the apps through `neotime-app-host`:
   ENDs through channel 6; one before the last its compare disables the group through channel 7, and
   at the last its second compare marks the strip sent. Every command, every next strip and the end
   of each drawing step wait for that mark, so the external flash never finds the bus mid-send and
-  the buffer is never written while it is read. Without a lent buffer, as for the status page and
+  the buffer is never written while it is read. While it waits the CPU sleeps in WFE: the second
+  compare's interrupt is enabled in TIMER1 but not in the NVIC, so with SEVONPEND set it only wakes
+  the core, and no handler runs. The interrupt follows the event's level, so it is unpended when the
+  next strip starts, after the event is cleared, and the wait gives back with SEV any event it took
+  from a task woken meanwhile, so the executor still sees it. Without a lent buffer, as for the status page and
   the help screen, pixels go from a 64 B buffer in the interface and each send ends before it
   returns. Screenshots of the face, the launcher and a scroll in the emulator match the blocking
   driver's pixel for pixel.
@@ -700,10 +704,10 @@ watch face, the launcher and the apps through `neotime-app-host`:
   counters come after the last restart's words. The first two are in microseconds and count
   round: the time
   the shell spent drawing apps, and the time the CPU spent sending to the display or waiting for a
-  send to end, the status page and help screen included. With blocking sends, the launcher's slide
-  in the emulator took 219 ms, 122 ms of it sending, and a launcher scroll 64 ms, 34 ms of it
-  sending; with the DMA sends below, the slide takes 176 ms, 79 ms of it waiting, and the scroll
-  44 ms, 14 ms of it waiting. The last two count the free blocks erased ahead of littlefs and the
+  send to end, the status page and help screen included. In the emulator, with the shared library
+  installed so text and icons draw, opening the launcher drew for 1,140 ms and a scroll for 318 ms
+  while widgets drew through rlvgl; drawing straight into strips (`StripRenderer`) cut them to
+  190 ms, 69 ms of it waiting on the bus, and 46 ms, 12 ms of it waiting. The last two count the free blocks erased ahead of littlefs and the
   erases of littlefs that returned at once because of it ([storage.md](storage.md#erasing-ahead)).
 - **Reset reasons and crash record.** `restart.rs` reads and clears `RESETREAS` at start, and reads
   the crash record the previous run left in `.uninit` RAM (see
@@ -898,9 +902,16 @@ rasterizers and shapes follow [rlvgl](https://github.com/softoboros/rlvgl)'s (MI
   itself, so a part of the screen is drawn there, background first and widgets on top, and sent to
   the display in one go. The panel then never shows a half-drawn widget, and each pixel crosses the
   bus once.
-- **See-through colours.** A partly transparent colour, such as the soft edge of a letter, is mixed
-  with a set background colour (`with_background_color`, black by default). Fully transparent
-  pixels are skipped, so what is underneath stays.
+- **Drawing into a strip.** The app host draws each widget through a `StripRenderer`, which writes
+  straight into the strip's pixels, clipped to the widget and faded by its opacity. A partly
+  transparent colour, such as the soft edge of a letter, is mixed with the pixel really underneath,
+  so text on a coloured button has clean edges. Every call works on whole runs of a row, and
+  `visible_area` tells widgets which rows the strip holds, so glyphs, images, circles, lines and
+  arcs skip the rest: a glyph or image reads its packed runs by length alone down to the first row
+  it shows.
+- **See-through colours on a screen.** `ScreenRenderer` cannot read a screen back, so it mixes a
+  partly transparent colour with a set background colour (`with_background_color`, black by
+  default). Fully transparent pixels are skipped, so what is underneath stays.
 - **Plain text.** `draw_text` uses an `embedded-graphics` mono font, 10x20 by default
   (`with_font`). The app host's fonts draw their own glyphs as rows of coverage.
 - **Errors.** Drawing calls cannot fail, so the first error from the screen is kept and

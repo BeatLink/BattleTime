@@ -91,6 +91,28 @@ impl<'image> ImageResource<'image> {
             })
     }
 
+    /// The runs from the one holding pixel `first_pixel` on, with the pixel that run starts at.
+    ///
+    /// Only the run lengths are read on the way, so starting part way down an image costs little.
+    pub fn runs_from(&self, first_pixel: u32) -> (u32, impl Iterator<Item = Run> + 'image) {
+        let run_bytes = self.run_bytes();
+        let mut start = 0u32;
+        let mut skipped_runs = 0;
+        for run in self.runs.chunks_exact(run_bytes) {
+            let end = start + run[0] as u32;
+            if end > first_pixel {
+                break;
+            }
+            start = end;
+            skipped_runs += 1;
+        }
+        let rest = ImageResource {
+            runs: &self.runs[skipped_runs * run_bytes..],
+            ..*self
+        };
+        (start, rest.runs())
+    }
+
     /// Whether the runs cover exactly every pixel, with no empty run and no stray bytes.
     pub fn is_well_formed(&self) -> bool {
         let sides_fit =

@@ -260,19 +260,35 @@ fn read_i64(bytes: &[u8], offset: usize) -> Option<i64> {
     ))
 }
 
-/// The standard CRC-32 (IEEE 802.3), computed a bit at a time to keep no table in flash.
-pub fn crc32(bytes: &[u8]) -> u32 {
+/// The CRC-32 of each four-bit value, so a byte takes two lookups rather than eight shifts.
+const CRC32_OF_NIBBLE: [u32; 16] = {
     const REVERSED_POLYNOMIAL: u32 = 0xEDB8_8320;
+    let mut table = [0u32; 16];
+    let mut nibble = 0;
+    while nibble < 16 {
+        let mut crc = nibble as u32;
+        let mut bit = 0;
+        while bit < 4 {
+            crc = if crc & 1 != 0 {
+                crc >> 1 ^ REVERSED_POLYNOMIAL
+            } else {
+                crc >> 1
+            };
+            bit += 1;
+        }
+        table[nibble] = crc;
+        nibble += 1;
+    }
+    table
+};
+
+/// The standard CRC-32 (IEEE 802.3), four bits at a time from a 64-byte table.
+pub fn crc32(bytes: &[u8]) -> u32 {
     let mut crc = !0u32;
     for &byte in bytes {
         crc ^= byte as u32;
-        for _ in 0..8 {
-            let low_bit_set = crc & 1 != 0;
-            crc >>= 1;
-            if low_bit_set {
-                crc ^= REVERSED_POLYNOMIAL;
-            }
-        }
+        crc = crc >> 4 ^ CRC32_OF_NIBBLE[(crc & 0xF) as usize];
+        crc = crc >> 4 ^ CRC32_OF_NIBBLE[(crc & 0xF) as usize];
     }
     !crc
 }

@@ -39,6 +39,17 @@ impl<'buffer> Strip<'buffer> {
         self.area
     }
 
+    /// The pixels of row `y` across `columns`, which must lie inside the strip.
+    pub(crate) fn row_mut(&mut self, y: i32, columns: core::ops::Range<i32>) -> &mut [Rgb565] {
+        let start = ((y - self.area.y) * self.area.width + (columns.start - self.area.x)) as usize;
+        &mut self.pixels[start..start + columns.len()]
+    }
+
+    /// The pixel at a screen point, if it is inside the strip.
+    pub(crate) fn pixel_at(&self, x: i32, y: i32) -> Option<Rgb565> {
+        self.index_of(x, y).map(|index| self.pixels[index])
+    }
+
     /// The strip's pixels row by row, ready for the panel.
     pub fn pixels(&self) -> impl Iterator<Item = Rgb565> + '_ {
         self.pixels.iter().copied()

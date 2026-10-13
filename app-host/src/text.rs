@@ -2,7 +2,7 @@
 
 use neotime_ui::{geometry::Color, renderer::Renderer};
 
-use crate::fonts::{character_advance, text_width, FontName};
+use crate::fonts::{character_advance, line_height, text_width, FontName};
 
 // ============================================================================
 // Wrapping
@@ -102,6 +102,13 @@ pub fn draw_line(
     baseline: i32,
     color: Color,
 ) {
+    // A line height above and below the baseline holds every glyph, so a line outside that is skipped.
+    let reach = line_height(font.metrics());
+    if let Some(visible) = renderer.visible_area() {
+        if baseline + reach < visible.y || baseline - 2 * reach > visible.bottom() {
+            return;
+        }
+    }
     let mut pen = x;
     for character in line.chars() {
         pen += font.draw_character(renderer, character, (pen, baseline), color);

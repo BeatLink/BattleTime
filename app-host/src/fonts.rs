@@ -136,25 +136,14 @@ impl BitmapFont {
     }
 
     /// The glyph's coverage, pixel by pixel from its top-left corner, as 0 to 255.
-    fn coverage(&self, glyph: GlyphEntry) -> impl Iterator<Item = u8> + '_ {
+    fn coverage(&self, glyph: GlyphEntry) -> CoverageReader<'_> {
         let start = self.data_start() + glyph.offset;
-        let data = self.bytes().get(start..).unwrap_or(&[]);
-        let mut halves = data.iter().flat_map(|byte| [byte >> 4, byte & 0x0F].into_iter());
-        let mut repeat_value = 0;
-        let mut repeats_left = 0u8;
-        let pixel_count = glyph.width as usize * glyph.height as usize;
-        (0..pixel_count).map(move |_| {
-            if repeats_left > 0 {
-                repeats_left -= 1;
-                return repeat_value * COVERAGE_PER_STEP;
-            }
-            let value = halves.next().unwrap_or(0);
-            if value == EMPTY_RUN || value == SOLID_RUN {
-                repeat_value = value;
-                repeats_left = halves.next().unwrap_or(0);
-            }
-            value * COVERAGE_PER_STEP
-        })
+        CoverageReader {
+            data: self.bytes().get(start..).unwrap_or(&[]),
+            next_half: 0,
+            repeat_value: 0,
+            repeats_left: 0,
+        }
     }
 
     /// Draws one glyph with its pen at `origin` on the baseline, decoding it once.
@@ -168,9 +157,14 @@ impl BitmapFont {
         }
         let left = origin.0 + glyph.left as i32;
         let top = origin.1 - glyph.top as i32;
+        let (first_row, end_row) = rows_to_draw(renderer, top, glyph.height as i32);
+        if first_row >= end_row {
+            return;
+        }
         let mut row = [0u8; WIDEST_GLYPH_ROW];
         let mut pixels = self.coverage(glyph);
-        for row_index in 0..glyph.height as i32 {
+        pixels.skip_pixels(first_row as usize * width);
+        for row_index in first_row..end_row {
             let mut column = 0;
             while column < width {
                 let piece = (width - column).min(WIDEST_GLYPH_ROW);
@@ -181,6 +175,61 @@ impl BitmapFont {
                 column += piece;
             }
         }
+    }
+}
+
+/// Reads a glyph's packed coverage: four bits a pixel, with runs of empty or solid pixels shortened.
+struct CoverageReader<'font> {
+    data: &'font [u8],
+    /// Which four bits come next, counted in halves of bytes.
+    next_half: usize,
+    repeat_value: u8,
+    repeats_left: u8,
+}
+
+impl CoverageReader<'_> {
+    fn half(&mut self) -> u8 {
+        let byte = self.data.get(self.next_half / 2).copied().unwrap_or(0);
+        self.next_half += 1;
+        match self.next_half % 2 {
+            1 => byte >> 4,
+            _ => byte & 0x0F,
+        }
+    }
+
+    /// Moves past `count` pixels, a whole run at a time where it can.
+    fn skip_pixels(&mut self, mut count: usize) {
+        while count > 0 {
+            if self.repeats_left > 0 {
+                let skipped = (self.repeats_left as usize).min(count);
+                self.repeats_left -= skipped as u8;
+                count -= skipped;
+                continue;
+            }
+            let value = self.half();
+            if value == EMPTY_RUN || value == SOLID_RUN {
+                self.repeat_value = value;
+                self.repeats_left = self.half();
+            }
+            count -= 1;
+        }
+    }
+}
+
+impl Iterator for CoverageReader<'_> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<u8> {
+        if self.repeats_left > 0 {
+            self.repeats_left -= 1;
+            return Some(self.repeat_value * COVERAGE_PER_STEP);
+        }
+        let value = self.half();
+        if value == EMPTY_RUN || value == SOLID_RUN {
+            self.repeat_value = value;
+            self.repeats_left = self.half();
+        }
+        Some(value * COVERAGE_PER_STEP)
     }
 }
 
@@ -209,7 +258,8 @@ impl FontMetrics for BitmapFont {
             return false;
         };
         let skipped = row as usize * glyph.width as usize + x_offset as usize;
-        let mut pixels = self.coverage(glyph).skip(skipped);
+        let mut pixels = self.coverage(glyph);
+        pixels.skip_pixels(skipped);
         let row_left = (glyph.width as usize).saturating_sub(x_offset as usize);
         for (index, slot) in coverage.iter_mut().enumerate() {
             *slot = if index < row_left {
@@ -219,6 +269,17 @@ impl FontMetrics for BitmapFont {
             };
         }
         true
+    }
+}
+
+/// Which of `height` rows from `top` the renderer can show, counted from `top`, end not included.
+pub fn rows_to_draw(renderer: &dyn Renderer, top: i32, height: i32) -> (i32, i32) {
+    match renderer.visible_area() {
+        Some(visible) => (
+            (visible.y - top).clamp(0, height),
+            (visible.bottom() - top).clamp(0, height),
+        ),
+        None => (0, height),
     }
 }
 

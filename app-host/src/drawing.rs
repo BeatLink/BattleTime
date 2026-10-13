@@ -16,7 +16,7 @@ use neotime_ui::{
     shapes::{draw_widget_bg, fill_rounded_rect, Style},
 };
 
-use crate::fonts::{line_height, text_width, FontName};
+use crate::fonts::{self, line_height, text_width, FontName};
 use crate::layout::{TICK_BOX_GAP, TICK_BOX_SIZE};
 use crate::nodes::{
     inset, resolve, resolve_or_clear, to_color, Align, Extra, LongMode, Node, Settings, OPAQUE, TRANSPARENT,
@@ -186,116 +186,6 @@ fn round_line(renderer: &mut dyn Renderer, from: PointF, to: PointF, width: f32,
     if width > 2.0 {
         renderer.fill_disc_aa(from, width / 2.0, color);
         renderer.fill_disc_aa(to, width / 2.0, color);
-    }
-}
-
-// ============================================================================
-// Drawing over a known colour
-// ============================================================================
-
-/// Passes drawing on with the soft edges of text and masks already mixed with `backdrop`.
-///
-/// The screen renderer mixes them with the colour behind the whole widget, which is wrong for parts
-/// a widget draws over a colour of its own, such as the rows of an AppList.
-pub struct OverColorRenderer<'inner> {
-    pub inner: &'inner mut dyn Renderer,
-    pub backdrop: Color,
-}
-
-impl Renderer for OverColorRenderer<'_> {
-    fn fill_rect(&mut self, rect: Rect, color: Color) {
-        self.inner.fill_rect(rect, color);
-    }
-
-    fn blend_rect(&mut self, rect: Rect, color: Color) {
-        self.inner.blend_rect(rect, color);
-    }
-
-    fn blend_row(&mut self, x: i32, y: i32, color: Color, coverage: &[u8]) {
-        let mix = |front: u8, back: u8, amount: u8| {
-            ((front as u16 * amount as u16 + back as u16 * (OPAQUE - amount) as u16) / OPAQUE as u16) as u8
-        };
-        for (offset, &amount) in coverage.iter().enumerate() {
-            if amount == 0 {
-                continue;
-            }
-            let mixed = Color(
-                mix(color.0, self.backdrop.0, amount),
-                mix(color.1, self.backdrop.1, amount),
-                mix(color.2, self.backdrop.2, amount),
-                color.3,
-            );
-            let dot = Rect {
-                x: x + offset as i32,
-                y,
-                width: 1,
-                height: 1,
-            };
-            self.inner.blend_rect(dot, mixed);
-        }
-    }
-
-    fn draw_pixels(&mut self, position: (i32, i32), pixels: &[Color], width: u32, height: u32) {
-        self.inner.draw_pixels(position, pixels, width, height);
-    }
-
-    fn draw_text(&mut self, position: (i32, i32), text: &str, color: Color) {
-        self.inner.draw_text(position, text, color);
-    }
-}
-
-// ============================================================================
-// Opacity
-// ============================================================================
-
-/// Passes drawing on with every colour made more see-through, for `opacity` and `disabled`.
-pub struct FadedRenderer<'inner> {
-    pub inner: &'inner mut dyn Renderer,
-    pub opacity: u8,
-}
-
-impl FadedRenderer<'_> {
-    fn fade(&self, color: Color) -> Color {
-        let alpha = (color.3 as u16 * self.opacity as u16 / OPAQUE as u16) as u8;
-        with_alpha(color, alpha)
-    }
-}
-
-impl Renderer for FadedRenderer<'_> {
-    fn fill_rect(&mut self, rect: Rect, color: Color) {
-        let faded = self.fade(color);
-        self.inner.blend_rect(rect, faded);
-    }
-
-    fn blend_rect(&mut self, rect: Rect, color: Color) {
-        let faded = self.fade(color);
-        self.inner.blend_rect(rect, faded);
-    }
-
-    fn blend_row(&mut self, x: i32, y: i32, color: Color, coverage: &[u8]) {
-        let faded = self.fade(color);
-        self.inner.blend_row(x, y, faded, coverage);
-    }
-
-    fn draw_pixels(&mut self, position: (i32, i32), pixels: &[Color], width: u32, height: u32) {
-        let width = width as usize;
-        for (row_index, row) in pixels.chunks(width.max(1)).take(height as usize).enumerate() {
-            for (column, &pixel) in row.iter().enumerate() {
-                let dot = Rect {
-                    x: position.0 + column as i32,
-                    y: position.1 + row_index as i32,
-                    width: 1,
-                    height: 1,
-                };
-                let faded = self.fade(pixel);
-                self.inner.blend_rect(dot, faded);
-            }
-        }
-    }
-
-    fn draw_text(&mut self, position: (i32, i32), text: &str, color: Color) {
-        let faded = self.fade(color);
-        self.inner.draw_text(position, text, faded);
     }
 }
 
@@ -1080,11 +970,7 @@ fn draw_app_list(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
             height: APP_ICON_SIZE,
         };
         let icon = ImageReference::InstalledApp(place as u16).to_value();
-        let mut over_row = OverColorRenderer {
-            inner: renderer,
-            backdrop: surface,
-        };
-        draw_image(context, icon, icon_area, color, &mut over_row);
+        draw_image(context, icon, icon_area, color, renderer);
         let text_left = icon_area.x + APP_ICON_SIZE + APP_ICON_GAP;
         let text_area = Rect {
             x: text_left,
@@ -1093,7 +979,7 @@ fn draw_app_list(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
             height: APP_ROW_HEIGHT,
         };
         draw_text_block(
-            &mut over_row,
+            renderer,
             node.settings.font,
             name,
             text_area,
@@ -1743,45 +1629,60 @@ pub fn draw_resource(
     let height = image.height as i32;
     let scaled_x = |column: i32| column * place.width / width;
     let scaled_y = |row: i32| row * place.height / height;
+    // Screen rows the renderer can show, relative to the image's top; the runs are read in order, so rows below end it.
+    let (first_shown, end_shown) = fonts::rows_to_draw(renderer, place.y, place.height);
+    let mask_coverage_of = |value: u16| match (image.format, recolors) {
+        (ImageFormat::Mask, _) => Some(value as u8),
+        (ImageFormat::Color, true) => Some(brightness(value)),
+        (ImageFormat::Color, false) => None,
+    };
+    if first_shown >= end_shown {
+        return;
+    }
+    // The first source row that reaches a shown row; the runs before it are skipped by length alone.
+    let mut row = first_shown * height / place.height.max(1);
+    while row > 0 && scaled_y(row) > first_shown {
+        row -= 1;
+    }
+    while scaled_y(row + 1) <= first_shown {
+        row += 1;
+    }
+    let first_pixel = (row * width) as u32;
+    let (run_start, runs) = image.runs_from(first_pixel);
     let mut coverage = [0u8; LONGEST_SPAN];
-    let mut pixel = 0i32;
-    for run in image.runs() {
-        let mut left = run.count as i32;
+    let mut column = 0i32;
+    let (mut row_top, mut row_bottom) = (scaled_y(row), scaled_y(row + 1));
+    for (index, run) in runs.enumerate() {
+        // The first run may begin rows above, and only the part from the first pixel on is drawn.
+        let skipped = match index {
+            0 => (first_pixel - run_start) as i32,
+            _ => 0,
+        };
+        let mut left = run.count as i32 - skipped;
         while left > 0 {
-            let row = pixel / width;
-            let column = pixel % width;
+            if row_top >= end_shown {
+                return;
+            }
             let span = left.min(width - column);
-            let (y_from, y_to) = (scaled_y(row), scaled_y(row + 1));
-            let (x_from, x_to) = (scaled_x(column), scaled_x(column + span));
-            if y_to > y_from && x_to > x_from {
+            let (y_from, y_to) = (row_top.max(first_shown), row_bottom.min(end_shown));
+            let (x_from, x_to) = match y_to > y_from {
+                true => (scaled_x(column), scaled_x(column + span)),
+                false => (0, 0),
+            };
+            if x_to > x_from {
                 let x = place.x + x_from;
                 let draw_span = x_to - x_from;
-                let mask_coverage = match (image.format, recolors) {
-                    (ImageFormat::Mask, _) => Some(run.value as u8),
-                    (ImageFormat::Color, true) => Some(brightness(run.value)),
-                    (ImageFormat::Color, false) => None,
-                };
                 for y in place.y + y_from..place.y + y_to {
-                    match mask_coverage {
-                        None => renderer.fill_rect(
-                            Rect {
-                                x,
-                                y,
-                                width: draw_span,
-                                height: 1,
-                            },
-                            to_color(run.value),
-                        ),
+                    let line = Rect {
+                        x,
+                        y,
+                        width: draw_span,
+                        height: 1,
+                    };
+                    match mask_coverage_of(run.value) {
+                        None => renderer.fill_rect(line, to_color(run.value)),
                         Some(0) => {}
-                        Some(OPAQUE) => renderer.fill_rect(
-                            Rect {
-                                x,
-                                y,
-                                width: draw_span,
-                                height: 1,
-                            },
-                            color,
-                        ),
+                        Some(OPAQUE) => renderer.fill_rect(line, color),
                         Some(value) => {
                             let mut drawn = 0;
                             while drawn < draw_span {
@@ -1794,8 +1695,13 @@ pub fn draw_resource(
                     }
                 }
             }
-            pixel += span;
+            column += span;
             left -= span;
+            if column == width {
+                column = 0;
+                row += 1;
+                (row_top, row_bottom) = (row_bottom, scaled_y(row + 1));
+            }
         }
     }
 }
