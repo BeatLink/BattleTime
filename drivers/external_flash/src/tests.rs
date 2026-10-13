@@ -100,6 +100,10 @@ impl SpiDevice for FakeChip {
             }
             return Ok(());
         }
+        assert!(
+            self.busy_polls_left == 0 || command[0] == READ_STATUS,
+            "the chip ignores every command but a status read while it is busy"
+        );
 
         match (command[0], &mut operations[1..]) {
             (READ_CHIP_ID, [Operation::Read(id_bytes)]) => {
@@ -303,6 +307,56 @@ fn erasing_clears_each_sector_in_the_range() {
     assert!(read_back[..SECTOR_SIZE].iter().all(|byte| *byte == 0));
     assert!(read_back[SECTOR_SIZE..].iter().all(|byte| *byte == 0xFF));
     assert_eq!(flash.release().spi.erased_addresses, [0x3000, 0x4000]);
+}
+
+#[test]
+fn a_background_erase_returns_at_once_and_reports_when_the_chip_is_done() {
+    let mut chip = FakeChip::new();
+    chip.busy_polls_after_each_write = 2;
+    let mut flash = ExternalFlash::new(chip, CountingDelay::default()).unwrap();
+
+    flash.start_erasing_sector(0x7000).unwrap();
+    let answers = [
+        flash.erase_has_finished().unwrap(),
+        flash.erase_has_finished().unwrap(),
+        flash.erase_has_finished().unwrap(),
+        flash.erase_has_finished().unwrap(),
+    ];
+
+    assert_eq!(answers, [false, false, true, true]);
+    let parts = flash.release();
+    assert_eq!(parts.spi.erased_addresses, [0x7000]);
+    assert_eq!(parts.spi.status_polls, 3);
+    assert_eq!(parts.delay.microseconds_waited, WAKE_UP_TIME_IN_MICROSECONDS);
+}
+
+#[test]
+fn reading_or_writing_during_a_background_erase_waits_for_it_first() {
+    let mut chip = FakeChip::new();
+    chip.busy_polls_after_each_write = 3;
+    let mut flash = ExternalFlash::new(chip, CountingDelay::default()).unwrap();
+    flash.write(0x7000, &[0x12; 4]).unwrap();
+
+    flash.start_erasing_sector(0x7000).unwrap();
+    let mut read_back = [0; 4];
+    flash.read(0x7000, &mut read_back).unwrap();
+    flash.start_erasing_sector(0x8000).unwrap();
+    flash.write(0x7000, &[0x34]).unwrap();
+
+    assert_eq!(read_back, [0xFF; 4]);
+    assert!(flash.erase_has_finished().unwrap());
+    let mut written = [0];
+    flash.read(0x7000, &mut written).unwrap();
+    assert_eq!(written, [0x34]);
+}
+
+#[test]
+fn a_background_erase_must_be_sector_aligned() {
+    let mut flash = started_flash();
+
+    let result = flash.start_erasing_sector(0x7001);
+
+    assert_eq!(result, Err(Error::BadRange(NorFlashErrorKind::NotAligned)));
 }
 
 #[test]

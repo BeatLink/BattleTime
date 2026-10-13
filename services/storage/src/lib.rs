@@ -7,6 +7,8 @@
 
 #![no_std]
 
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
 use embedded_storage::nor_flash::NorFlash;
 use littlefs_rust::{Config, Error, Filesystem, OpenFlags, SeekFrom, Storage};
 use neotime_boot::FILE_SYSTEM;
@@ -52,11 +54,26 @@ pub fn file_system_config() -> Config {
 
 pub struct FileSystemFlash<Flash> {
     flash: Flash,
+    erased_ahead: Option<&'static ErasedBlocks>,
 }
 
 impl<Flash: NorFlash> FileSystemFlash<Flash> {
     pub fn new(flash: Flash) -> FileSystemFlash<Flash> {
-        FileSystemFlash { flash }
+        FileSystemFlash {
+            flash,
+            erased_ahead: None,
+        }
+    }
+
+    /// Skips littlefs's erase of any block `erased_ahead` says was erased ahead of it.
+    pub fn with_blocks_erased_ahead(
+        flash: Flash,
+        erased_ahead: &'static ErasedBlocks,
+    ) -> FileSystemFlash<Flash> {
+        FileSystemFlash {
+            flash,
+            erased_ahead: Some(erased_ahead),
+        }
     }
 
     pub fn release(self) -> Flash {
@@ -64,8 +81,13 @@ impl<Flash: NorFlash> FileSystemFlash<Flash> {
     }
 
     fn flash_address(block: u32, offset_in_block: u32) -> u32 {
-        FILE_SYSTEM.start + block * BLOCK_SIZE + offset_in_block
+        block_address(block) + offset_in_block
     }
+}
+
+/// Where a littlefs block starts in the external flash.
+pub fn block_address(block: u32) -> u32 {
+    FILE_SYSTEM.start + block * BLOCK_SIZE
 }
 
 impl<Flash: NorFlash> Storage for FileSystemFlash<Flash> {
@@ -76,17 +98,150 @@ impl<Flash: NorFlash> Storage for FileSystemFlash<Flash> {
     }
 
     fn write(&mut self, block: u32, offset_in_block: u32, bytes: &[u8]) -> Result<(), Error> {
+        if let Some(erased_ahead) = self.erased_ahead {
+            erased_ahead.forget(block);
+        }
         self.flash
             .write(Self::flash_address(block, offset_in_block), bytes)
             .map_err(|_| Error::Io)
     }
 
     fn erase(&mut self, block: u32) -> Result<(), Error> {
+        if let Some(erased_ahead) = self.erased_ahead {
+            if erased_ahead.take_erased(block) {
+                return Ok(());
+            }
+        }
         let block_start = Self::flash_address(block, 0);
         self.flash
             .erase(block_start, block_start + BLOCK_SIZE)
             .map_err(|_| Error::Io)
     }
+}
+
+// ============================================================================
+// Erasing ahead
+// ============================================================================
+
+const BLOCK_WORDS: usize = BLOCK_COUNT.div_ceil(u32::BITS) as usize;
+
+/// Blocks erased ahead of littlefs, so its own erase of one returns at once instead of waiting on the chip.
+///
+/// A block is first marked as being erased, and counts as erased only if littlefs neither erased nor
+/// wrote it while that erase ran. Any write or erase by littlefs forgets the block again.
+pub struct ErasedBlocks {
+    erased: [AtomicU32; BLOCK_WORDS],
+    being_erased: [AtomicU32; BLOCK_WORDS],
+    /// The block littlefs last erased itself, near which it allocates next.
+    last_erased_by_littlefs: AtomicU32,
+    /// littlefs makes itself consistent before its first erase, after which no orphan block remains.
+    littlefs_has_erased: AtomicBool,
+    erases_skipped: AtomicU32,
+}
+
+impl Default for ErasedBlocks {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ErasedBlocks {
+    pub const fn new() -> ErasedBlocks {
+        ErasedBlocks {
+            erased: [const { AtomicU32::new(0) }; BLOCK_WORDS],
+            being_erased: [const { AtomicU32::new(0) }; BLOCK_WORDS],
+            last_erased_by_littlefs: AtomicU32::new(0),
+            littlefs_has_erased: AtomicBool::new(false),
+            erases_skipped: AtomicU32::new(0),
+        }
+    }
+
+    /// How many of littlefs's erases returned at once because their block was erased ahead.
+    pub fn erases_skipped(&self) -> u32 {
+        self.erases_skipped.load(Ordering::Relaxed)
+    }
+
+    pub fn is_erased(&self, block: u32) -> bool {
+        has_bit(&self.erased, block)
+    }
+
+    /// Marks `block` as about to be erased ahead of littlefs.
+    pub fn begin_erasing(&self, block: u32) {
+        set_bit(&self.being_erased, block, true);
+    }
+
+    /// Counts `block` as erased, unless littlefs used it since `begin_erasing`.
+    pub fn finish_erasing(&self, block: u32) {
+        if has_bit(&self.being_erased, block) {
+            set_bit(&self.being_erased, block, false);
+            set_bit(&self.erased, block, true);
+        }
+    }
+
+    fn forget(&self, block: u32) {
+        set_bit(&self.being_erased, block, false);
+        set_bit(&self.erased, block, false);
+    }
+
+    /// Says whether `block` is already erased, and notes littlefs is about to write it either way.
+    fn take_erased(&self, block: u32) -> bool {
+        let was_erased = self.is_erased(block);
+        self.forget(block);
+        self.last_erased_by_littlefs.store(block, Ordering::Relaxed);
+        self.littlefs_has_erased.store(true, Ordering::Relaxed);
+        if was_erased {
+            self.erases_skipped.fetch_add(1, Ordering::Relaxed);
+        }
+        was_erased
+    }
+}
+
+fn has_bit(words: &[AtomicU32; BLOCK_WORDS], block: u32) -> bool {
+    let Some(word) = words.get((block / u32::BITS) as usize) else {
+        return false;
+    };
+    word.load(Ordering::Relaxed) & (1 << (block % u32::BITS)) != 0
+}
+
+fn set_bit(words: &[AtomicU32; BLOCK_WORDS], block: u32, value: bool) {
+    let Some(word) = words.get((block / u32::BITS) as usize) else {
+        return;
+    };
+    let bit = 1 << (block % u32::BITS);
+    match value {
+        true => word.fetch_or(bit, Ordering::Relaxed),
+        false => word.fetch_and(!bit, Ordering::Relaxed),
+    };
+}
+
+/// How many free blocks past littlefs's last erase are kept erased ahead of it.
+pub const BLOCKS_KEPT_ERASED: usize = 4;
+
+/// The next free block past where littlefs last erased that is not erased yet, or none when the
+/// blocks kept erased are all done, or littlefs has not erased anything since it mounted.
+pub fn next_block_to_erase_ahead<AnyStorage: Storage>(
+    file_system: &Filesystem<AnyStorage>,
+    erased_ahead: &ErasedBlocks,
+) -> Option<u32> {
+    if !erased_ahead.littlefs_has_erased.load(Ordering::Relaxed) {
+        return None;
+    }
+    let mut used = [0u32; BLOCK_WORDS];
+    file_system
+        .for_each_used_block(&mut |block| {
+            if let Some(word) = used.get_mut((block / u32::BITS) as usize) {
+                *word |= 1 << (block % u32::BITS);
+            }
+        })
+        .ok()?;
+    let is_used = |block: u32| used[(block / u32::BITS) as usize] & (1 << (block % u32::BITS)) != 0;
+
+    let start = erased_ahead.last_erased_by_littlefs.load(Ordering::Relaxed);
+    (1..BLOCK_COUNT)
+        .map(|step| (start + step) % BLOCK_COUNT)
+        .filter(|&block| !is_used(block))
+        .take(BLOCKS_KEPT_ERASED)
+        .find(|&block| !erased_ahead.is_erased(block))
 }
 
 // ============================================================================

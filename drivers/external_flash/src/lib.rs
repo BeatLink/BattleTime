@@ -160,6 +160,8 @@ impl DelayNs for BusyWait {
 pub struct ExternalFlash<FlashSpi, Delay> {
     spi: FlashSpi,
     delay: Delay,
+    /// A sector erase started by `start_erasing_sector` may still be running in the chip.
+    erase_may_be_running: bool,
 }
 
 pub struct FlashParts<FlashSpi, Delay> {
@@ -170,7 +172,11 @@ pub struct FlashParts<FlashSpi, Delay> {
 impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
     /// Wakes the chip and checks that it answers as a 4 MB chip, so a second-source part works too.
     pub fn new(spi: FlashSpi, delay: Delay) -> Result<Self, Error<FlashSpi::Error>> {
-        let mut flash = ExternalFlash { spi, delay };
+        let mut flash = ExternalFlash {
+            spi,
+            delay,
+            erase_may_be_running: false,
+        };
 
         flash.wake()?;
         let chip_id = flash.read_chip_id()?;
@@ -194,6 +200,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
     }
 
     pub fn sleep(&mut self) -> Result<(), Error<FlashSpi::Error>> {
+        self.finish_erasing()?;
         self.spi.write(&[DEEP_POWER_DOWN]).map_err(Error::Spi)
     }
 
@@ -245,6 +252,47 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
         self.spi.write(&command).map_err(Error::Spi)?;
         self.wait_until_ready()
     }
+
+    /// Starts erasing the sector at `address` and returns at once, while the chip works on.
+    ///
+    /// Until `erase_has_finished` says so, any other call first waits for the erase to end.
+    pub fn start_erasing_sector(&mut self, address: u32) -> Result<(), Error<FlashSpi::Error>> {
+        check_erase(address, address + SECTOR_SIZE as u32)?;
+        self.finish_erasing()?;
+
+        self.enable_writing()?;
+        self.spi
+            .write(&command_with_address(SECTOR_ERASE, address))
+            .map_err(Error::Spi)?;
+        self.erase_may_be_running = true;
+        Ok(())
+    }
+
+    /// Reads the chip's status once, and says whether the erase `start_erasing_sector` began is over.
+    pub fn erase_has_finished(&mut self) -> Result<bool, Error<FlashSpi::Error>> {
+        if self.erase_may_be_running && self.is_busy()? {
+            return Ok(false);
+        }
+        self.erase_may_be_running = false;
+        Ok(true)
+    }
+
+    /// Waits for an erase `start_erasing_sector` began, since the chip ignores other commands meanwhile.
+    fn finish_erasing(&mut self) -> Result<(), Error<FlashSpi::Error>> {
+        if self.erase_may_be_running {
+            self.wait_until_ready()?;
+            self.erase_may_be_running = false;
+        }
+        Ok(())
+    }
+
+    fn is_busy(&mut self) -> Result<bool, Error<FlashSpi::Error>> {
+        let mut status = [0];
+        self.spi
+            .transaction(&mut [Operation::Write(&[READ_STATUS]), Operation::Read(&mut status)])
+            .map_err(Error::Spi)?;
+        Ok(status[0] & WRITE_IN_PROGRESS_BIT != 0)
+    }
 }
 
 impl<FlashSpi: SpiDevice, Delay: DelayNs> ErrorType for ExternalFlash<FlashSpi, Delay> {
@@ -256,6 +304,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ReadNorFlash for ExternalFlash<FlashSp
 
     fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
         check_read_or_write(offset, bytes.len())?;
+        self.finish_erasing()?;
 
         let header = command_with_address(READ_DATA, offset);
         self.spi
@@ -274,6 +323,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> NorFlash for ExternalFlash<FlashSpi, D
 
     fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
         check_erase(from, to)?;
+        self.finish_erasing()?;
 
         for sector_start in sector_starts(from, to) {
             self.erase_sector(sector_start)?;
@@ -283,6 +333,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> NorFlash for ExternalFlash<FlashSpi, D
 
     fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
         check_read_or_write(offset, bytes.len())?;
+        self.finish_erasing()?;
 
         for chunk in program_chunks(offset, bytes.len()) {
             self.program_page(chunk.address, &bytes[chunk.first_byte..chunk.end_byte])?;

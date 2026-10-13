@@ -395,6 +395,9 @@ across the flash; InfiniTime uses it on the same chip.
   error from the flash is returned instead, so a bus fault cannot wipe the watch.
 - **Cost.** The buffers live on the heap: under 1 KB while mounted and about 400 bytes per open file.
 - **Free space.** `free_kilobytes` counts the blocks no file or folder uses, for the system info app.
+- **Erasing ahead.** `ErasedBlocks` and `next_block_to_erase_ahead` let the firmware erase the next
+  few free blocks in the background, so littlefs's own erase of one returns at once; see
+  [storage.md](storage.md#erasing-ahead).
 - **Two fixes.** `littlefs-rust-core` is built without overflow checks, as C behaves, and a patched
   copy of the wrapper in `third_party/littlefs-rust` turns off a 256-entry cap that panics on file
   systems written by the C littlefs.
@@ -694,13 +697,15 @@ watch face, the launcher and the apps through `neotime-app-host`:
   start while the accelerometer reset on the same bus, so the panel now starts first, with retries,
   and the accelerometer waits for it. Fourteen more words follow the counters, set once at start:
   the last restart, described next. Writing `01` to the characteristic says the companion app saved
-  a debug report holding the crash, which dismisses it as Restart on the crash screen does. Two timing
-  counters come after the last restart's words, each in microseconds and counting round: the time
+  a debug report holding the crash, which dismisses it as Restart on the crash screen does. Four more
+  counters come after the last restart's words. The first two are in microseconds and count
+  round: the time
   the shell spent drawing apps, and the time the CPU spent sending to the display or waiting for a
   send to end, the status page and help screen included. With blocking sends, the launcher's slide
   in the emulator took 219 ms, 122 ms of it sending, and a launcher scroll 64 ms, 34 ms of it
   sending; with the DMA sends below, the slide takes 176 ms, 79 ms of it waiting, and the scroll
-  44 ms, 14 ms of it waiting.
+  44 ms, 14 ms of it waiting. The last two count the free blocks erased ahead of littlefs and the
+  erases of littlefs that returned at once because of it ([storage.md](storage.md#erasing-ahead)).
 - **Reset reasons and crash record.** `restart.rs` reads and clears `RESETREAS` at start, and reads
   the crash record the previous run left in `.uninit` RAM (see
   [memory-map.md](memory-map.md#ram-64-kb-planned)). The full firmware keeps the record until the

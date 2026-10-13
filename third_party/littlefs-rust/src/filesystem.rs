@@ -323,6 +323,23 @@ impl<S: Storage> Filesystem<S> {
         from_lfs_size(rc)
     }
 
+    /// Call `found` with every block the file system uses, open files included; a block may come more than once.
+    pub fn for_each_used_block(&self, found: &mut dyn FnMut(u32)) -> Result<(), Error> {
+        unsafe extern "C" fn call(data: *mut c_void, block: u32) -> i32 {
+            let found = unsafe { &mut *(data as *mut &mut dyn FnMut(u32)) };
+            found(block);
+            0
+        }
+        let mut inner = self.inner.borrow_mut();
+        let mut found = found;
+        let rc = littlefs_rust_core::lfs_fs_traverse(
+            inner.lfs.as_mut_ptr(),
+            call,
+            &mut found as *mut &mut dyn FnMut(u32) as *mut c_void,
+        );
+        from_lfs_result(rc)
+    }
+
     /// Run garbage collection to reclaim unused blocks.
     pub fn gc(&self) -> Result<(), Error> {
         let mut inner = self.inner.borrow_mut();

@@ -299,6 +299,7 @@ async fn main(spawner: Spawner) {
             vibration::run_vibrator(Output::new(chip.P0_16, Level::High, OutputDrive::Standard)).unwrap(),
         );
         spawner.spawn(shell::run_shell(screen.display, backlight, files).unwrap());
+        spawner.spawn(storage::keep_blocks_erased_ahead(files).unwrap());
     }
     // Kept for the whole run without a shell to own it: dropping the backlight releases its pins and the screen goes dark.
     #[cfg(not(with_shell))]

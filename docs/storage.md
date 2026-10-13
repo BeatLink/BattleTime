@@ -78,6 +78,36 @@ It reports whether it formatted, so the system can tell a first start from a nor
 | Lookahead | 32 bytes, 256 blocks | how many blocks littlefs scans at once for free space |
 | Block cycles | 500 | erases before littlefs moves metadata elsewhere |
 
+## Erasing ahead
+
+A sector erase holds the flash chip for tens of milliseconds, and littlefs waits for it inside
+every write that needs a fresh block, blocking every task. So the firmware erases free blocks
+before littlefs asks:
+
+- `neotime_storage::ErasedBlocks` remembers which blocks are erased. `FileSystemFlash`, made with
+  `with_blocks_erased_ahead`, returns from littlefs's erase of such a block at once, and forgets a
+  block whenever littlefs erases or writes it.
+- `next_block_to_erase_ahead` walks the blocks littlefs uses, open files included, through
+  `Filesystem::for_each_used_block` (added in the local littlefs-rust copy), and picks the next of
+  the `BLOCKS_KEPT_ERASED` (4) free blocks past littlefs's last erase that is not erased yet.
+  littlefs allocates from there onwards. Until littlefs has erased once since it mounted, it picks
+  nothing: littlefs makes itself consistent before its first erase, so no orphaned block, which
+  the walk would miss, is left by then.
+- The firmware's `keep_blocks_erased_ahead` task looks once a second. After a pause in what the
+  wearer watches, it picks a block and starts its erase in one go, with no await between, so
+  littlefs cannot take the block in between. It then asks the chip every 5 ms whether the erase is
+  over, letting every other task run meanwhile. A block is marked as being erased first and counts
+  as erased only if littlefs neither erased nor wrote it while the erase ran.
+- `ExternalFlash::start_erasing_sector` starts the erase without waiting; every other call to the
+  driver first waits for it to end, since the chip ignores commands while it erases.
+- The map lives in RAM and starts empty at every start, so it never claims a block erased that a
+  reset interrupted.
+- The diagnostics count the blocks erased ahead and littlefs's erases skipped. In the emulator,
+  after formatting a blank flash, the task erased four blocks ahead with no fault.
+- The tests run a mixed workload of writes and removals with erases ahead between them on a fake
+  flash that refuses to program any byte that is not erased; making the skip claim every block
+  erased trips it at once.
+
 ## Cost
 
 littlefs-rust keeps the file system's buffers on the heap, which the firmware needs for the UI
@@ -89,4 +119,5 @@ the watch uses somewhat less:
 ## Not done yet
 
 - Both problems above are worth reporting to littlefs-rust, so the local copy can go.
-- Flash writes block the Bluetooth host, because the external flash's driver is not async yet.
+- Flash writes still block every task while a page is programmed, about 1 to 3 ms each, and an
+  erase littlefs needs before the task has caught up still waits for the chip.

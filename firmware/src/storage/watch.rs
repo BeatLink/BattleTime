@@ -20,7 +20,10 @@ use neotime_boot::{
 };
 use neotime_external_flash::{BusyWait, ExternalFlash};
 use neotime_packages::commands::{refuse_command, Change};
-use neotime_storage::{prepare_file_system, FileSystem, FileSystemFlash, Preparation};
+use neotime_storage::{
+    block_address, next_block_to_erase_ahead, prepare_file_system, ErasedBlocks, FileSystem, FileSystemFlash,
+    Preparation,
+};
 use neotime_updates::{
     confirm_running_firmware, forget_rollback, running_firmware_is_on_trial,
     running_firmware_was_rolled_back, Receivers, RecoveryReceiver, UpdateReceiver,
@@ -92,6 +95,7 @@ static INTERNAL_FLASH: StaticCell<SharedInternalFlash> = StaticCell::new();
 static STATE_ALIGNMENT: StaticCell<[u8; 4]> = StaticCell::new();
 static CONFIRM_ALIGNMENT: StaticCell<[u8; 4]> = StaticCell::new();
 static FILES: StaticCell<Files> = StaticCell::new();
+static ERASED_AHEAD: ErasedBlocks = ErasedBlocks::new();
 
 pub struct StoragePeripherals {
     pub flash_chip_select: Peri<'static, P0_05>,
@@ -114,11 +118,14 @@ pub async fn start(
     let internal_flash =
         INTERNAL_FLASH.init(Mutex::new(RefCell::new(Nvmc::new(peripherals.flash_controller))));
 
-    let file_system_flash = FileSystemFlash::new(BlockingPartition::new(
-        external_flash,
-        0,
-        neotime_external_flash::CAPACITY_IN_BYTES as u32,
-    ));
+    let file_system_flash = FileSystemFlash::with_blocks_erased_ahead(
+        BlockingPartition::new(
+            external_flash,
+            0,
+            neotime_external_flash::CAPACITY_IN_BYTES as u32,
+        ),
+        &ERASED_AHEAD,
+    );
     let prepared = prepare_file_system(file_system_flash);
     screen.write_line(
         line::FILES,
@@ -131,6 +138,7 @@ pub async fn start(
     let files: &'static Files = FILES.init(Files {
         file_system: prepared.ok().map(|prepared| prepared.file_system),
         internal_flash,
+        external_flash,
     });
 
     let targets = Receivers {
@@ -263,11 +271,43 @@ pub struct Files {
     /// For copying the shared library into its region of the internal flash.
     #[cfg_attr(not(with_shell), allow(dead_code))]
     internal_flash: &'static SharedInternalFlash,
+    /// For erasing free blocks ahead of littlefs, outside it.
+    #[cfg_attr(not(with_shell), allow(dead_code))]
+    external_flash: &'static SharedExternalFlash,
 }
 
 impl Files {
     pub fn file_system(&self) -> Option<&WatchFileSystem> {
         self.file_system.as_ref()
+    }
+
+    /// Starts erasing the next free block littlefs will want, if one is not erased yet; gives the block.
+    #[cfg_attr(not(with_shell), allow(dead_code))]
+    fn start_erasing_ahead(&self) -> Option<u32> {
+        let block = next_block_to_erase_ahead(self.file_system.as_ref()?, &ERASED_AHEAD)?;
+        ERASED_AHEAD.begin_erasing(block);
+        self.external_flash
+            .lock(|flash| flash.borrow_mut().start_erasing_sector(block_address(block)))
+            .ok()?;
+        Some(block)
+    }
+
+    /// Whether the erase `start_erasing_ahead` began is over, counting its block erased once it is.
+    #[cfg_attr(not(with_shell), allow(dead_code))]
+    fn erase_ahead_has_finished(&self, block: u32) -> bool {
+        let finished = self
+            .external_flash
+            .lock(|flash| flash.borrow_mut().erase_has_finished())
+            .unwrap_or(true);
+        if finished {
+            ERASED_AHEAD.finish_erasing(block);
+            crate::diagnostics::add_one(crate::diagnostics::Counter::BlocksErasedAhead);
+            crate::diagnostics::set(
+                crate::diagnostics::Counter::ErasesSkipped,
+                ERASED_AHEAD.erases_skipped(),
+            );
+        }
+        finished
     }
 
     pub fn read(&self, path: &str) -> Option<alloc::vec::Vec<u8>> {
@@ -357,6 +397,38 @@ mod shared_library {
 
         fn installed_version(&self) -> Option<u16> {
             crate::apps::shared_library().and_then(neotime_packages::library::library_version)
+        }
+    }
+}
+
+// ============================================================================
+// Erasing free blocks ahead of littlefs
+// ============================================================================
+
+/// How often the task looks for free blocks to erase ahead of littlefs.
+#[cfg(with_shell)]
+const ERASE_AHEAD_INTERVAL: embassy_time::Duration = embassy_time::Duration::from_secs(1);
+
+/// How often the task asks the chip whether its erase is over.
+#[cfg(with_shell)]
+const ERASE_POLL_INTERVAL: embassy_time::Duration = embassy_time::Duration::from_millis(5);
+
+/// Keeps the next few free blocks erased while the wearer is not watching the screen, so littlefs's
+/// own erases return at once and the chip's tens of milliseconds pass while other tasks run.
+#[cfg(with_shell)]
+#[embassy_executor::task]
+pub async fn keep_blocks_erased_ahead(files: &'static Files) {
+    loop {
+        embassy_time::Timer::after(ERASE_AHEAD_INTERVAL).await;
+        loop {
+            crate::foreground::wait_for_a_pause().await;
+            // Choosing the block and starting its erase happen together, so littlefs cannot take it between.
+            let Some(block) = files.start_erasing_ahead() else {
+                break;
+            };
+            while !files.erase_ahead_has_finished(block) {
+                embassy_time::Timer::after(ERASE_POLL_INTERVAL).await;
+            }
         }
     }
 }
