@@ -1,0 +1,62 @@
+# Every screen of the settings app, for docs/apps/settings.md: the list and each screen of choices.
+open app settings
+set settings.screen_timeout_seconds 15
+set settings.always_on_screen false
+expect text "15 s"
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+expect text "Updates"
+snapshot list-end
+open app settings
+set settings.screen_timeout_seconds 15
+tap "Brightness"            # the brightness row
+expect screen brightness
+snapshot brightness
+tap "High"
+expect effect set-setting brightness 3
+button
+tap "Screen off"            # the screen timeout row
+expect screen timeout
+tap "30 s"
+expect effect set-setting screen_timeout_seconds 30
+snapshot timeout
+button
+tap "Wake"                  # the wake row
+expect screen wake
+snapshot wake
+button
+swipe up
+swipe up
+tap "Step goal"             # the step goal row
+expect screen step_goal
+expect text "Daily step goal"
+snapshot step-goal
+button
+expect screen main
+swipe up
+swipe up
+swipe up
+tap "Chimes"                # the chimes row
+expect screen chimes
+set settings.chimes 1
+expect text "Every hour"
+snapshot chimes
+button
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+tap "Theme"                 # the theme row
+expect screen theme
+expect text "Ocean"
+snapshot theme
+expect no failures

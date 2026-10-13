@@ -1,0 +1,12 @@
+# Every screen of the phone finder, for docs/apps/phone-finder.md: ringing, then with no phone connected.
+open app phone-finder
+tap "Ring"                  # make the phone ring
+expect effect find-phone true
+expect text "Stop"
+snapshot ringing
+tap "Stop"                  # stop it ringing
+expect text "Ring"
+set is_phone_connected false
+expect text "Phone not connected"
+snapshot not-connected
+expect no failures

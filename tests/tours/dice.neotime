@@ -1,0 +1,17 @@
+# Every screen of the dice, for docs/apps/dice.md: three dice rolled, then a coin toss.
+open app dice
+tap 33 138                  # one more die
+tap 33 138                  # one more die
+tap 120 206                 # roll
+expect text "+"
+snapshot three-dice
+tap 33 52                   # one die fewer
+tap 33 52                   # one die fewer
+tap 90 52                   # one side fewer
+tap 90 52                   # one side fewer
+tap 90 52                   # one side fewer
+tap 90 52                   # one side fewer
+tap 120 206                 # roll
+expect text "TAILS"
+snapshot coin
+expect no failures

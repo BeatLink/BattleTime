@@ -1,0 +1,64 @@
+# Every screen of 15, for docs/apps/puzzle15.md: a few moves, the restart question, then the board solved.
+open app puzzle15
+swipe right                 # slide 12 into the gap
+swipe right                 # slide 7 into the gap
+expect text "2 moves"
+snapshot moves
+tap 120 120                 # ask to start again
+expect text "2 moves. Again?"
+snapshot restart
+tap 74 89                   # no
+swipe left                  # slide 7 back
+swipe left                  # slide 12 back
+# The shortest solution of the dealt board, 48 slides.
+swipe right
+swipe right
+swipe down
+swipe down
+swipe left
+swipe left
+swipe down
+swipe right
+swipe up
+swipe left
+swipe up
+swipe right
+swipe right
+swipe right
+swipe down
+swipe down
+swipe left
+swipe up
+swipe up
+swipe right
+swipe up
+swipe left
+swipe down
+swipe right
+swipe down
+swipe left
+swipe left
+swipe left
+swipe up
+swipe right
+swipe right
+swipe right
+swipe down
+swipe left
+swipe down
+swipe left
+swipe up
+swipe left
+swipe up
+swipe right
+swipe up
+swipe right
+swipe down
+swipe down
+swipe left
+swipe up
+swipe left
+swipe up
+expect text "Solved in 52"
+snapshot solved
+expect no failures

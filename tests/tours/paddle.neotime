@@ -1,0 +1,7 @@
+# Every screen of Paddle, for docs/apps/paddle.md: the ball in play after the first return.
+open app paddle
+tap 120 200                 # move the paddle down
+wait 5s
+expect text "Best 1"
+snapshot playing
+expect no failures

@@ -1,0 +1,28 @@
+# Every screen of the motion app, for docs/apps/motion.md: the chart after a second of readings.
+open app motion
+set steps_today 5280
+acceleration 20 -40 990
+wait 100ms
+acceleration 180 -120 960
+wait 100ms
+acceleration 420 -260 870
+wait 100ms
+acceleration 650 -380 640
+wait 100ms
+acceleration 810 -300 420
+wait 100ms
+acceleration 700 -90 520
+wait 100ms
+acceleration 460 140 760
+wait 100ms
+acceleration 210 310 900
+wait 100ms
+acceleration -60 220 970
+wait 100ms
+acceleration -240 60 940
+wait 100ms
+expect text "-240"
+expect text "940"
+expect text "Steps 5280"
+snapshot readings
+expect no failures

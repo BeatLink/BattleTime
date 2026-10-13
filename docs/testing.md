@@ -93,6 +93,10 @@ expect no failures
 | `phone "line"` | Reads a companion line as the watch does, such as `phone "GB({\"t\":\"weather\",\"temp\":291,\"loc\":\"Test City\"})"`, and passes its call, music or weather to the app; the music and weather then replace the fake system's. A line the watch cannot read fails the step. |
 | `shake` | Delivers a shake from the accelerometer. |
 | `acceleration X Y Z` | Delivers an accelerometer reading in thousandths of g, which `acceleration` subscriptions get at their next period. |
+| `heart 72` | Delivers a heart rate reading in beats per minute; `set heart_rate_status 3` first makes it count as measuring. |
+| `navigation` | Tells the app the phone's navigation changed; the turn comes from the system values. |
+| `write "/path" "text"` | Writes a whole text file, as the phone does. |
+| `reopen` | Leaves the app and opens it again with its state kept, so it reads its files afresh. |
 | `screen off`, `screen on` | Turns the screen off or on. |
 | `expect text "…"`, `expect no text "…"` | Whether some shown widget's text contains this. |
 | `expect screen <name>` | The open screen, by its name in `screens`. |
@@ -100,6 +104,7 @@ expect no failures
 | `expect no effect <name> [arguments]` | No such effect. |
 | `expect no failures` | No code of the app has failed. |
 | `screenshot <path.png>` | Saves the 240x240 screen as a PNG. |
+| `snapshot <name>` | Compares the screen with the reference picture `harness/snapshots/screens/<kind>-<id>-<name>.png`, named after the open app, such as `app-stopwatch-paused.png`. |
 
 Names take hyphens or underscores alike. An effect check gives only the arguments it cares
 about, and looks at the effects asked for since the step after the previous effect check, so
@@ -141,6 +146,7 @@ cargo run -p neotime-simulator -- --script tests/scripts/timer_rings_and_dismiss
 - `harness/tests/screenshots.rs` compares each main screen, and a few screens after some taps,
   with the reference pictures in `harness/snapshots/screens/`.
 - `harness/tests/scripts.rs` plays every script in `tests/scripts`.
+- `harness/tests/tours.rs` plays each app's tour, described under [App tours](#app-tours).
 
 ## Snapshots
 
@@ -173,6 +179,15 @@ seconds after starting, the calculator after 7 + 5 =, the launcher listing four 
 compares the 240x240 frame pixel for pixel with `harness/snapshots/screens/<name>.png`.
 [apps.md](apps.md) shows the apps' pictures in its Screen column, so a new app's row there needs
 its picture too.
+
+### App tours
+
+Every app and shell screen has a tour, `tests/tours/<id>.neotime`: a script that opens it, visits
+each of its screens, pages and states, and takes a `snapshot` of each. Its page, `docs/apps/<id>.md`,
+says how to use the app and shows its main screen and every picture the tour takes; the website
+gives each app its page from there. `harness/tests/tours.rs` plays every tour and fails when an app
+has no tour or page, a tour does not open its own app, or a page leaves out a picture. A change to
+what an app shows updates its tour, pictures and page in the same commit.
 
 ### Reading a failure
 

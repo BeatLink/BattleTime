@@ -1,0 +1,27 @@
+# Every screen of the pomodoro timer, for docs/apps/pomodoro.md: a typed queue, a preset, running and buzzing.
+open app pomodoro
+tap 45 203                  # Del: drop the 5
+tap 45 203                  # Del: drop the comma
+tap 45 203                  # Del: 25 becomes 2
+tap 45 203                  # Del: and the queue is empty
+tap 165 87                  # 4
+tap 210 87                  # 5
+tap 120 203                 # Then
+tap 30 87                   # 1
+tap 210 87                  # 5
+swipe up                    # one more second of buzzing
+expect text "45,15"
+expect text "V11"
+snapshot typed
+swipe left                  # the last preset
+expect text "25,5,25,5,25,15"
+snapshot preset
+tap 195 203                 # Go
+wait 1min
+expect text "24:00"
+snapshot running
+wait 24min
+expect text "Pomodoro"
+snapshot ringing
+tap "Stop"
+expect no failures

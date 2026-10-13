@@ -1,0 +1,16 @@
+# Every screen of the stopwatch, for docs/apps/stopwatch.md: counting with laps, then paused.
+open app stopwatch
+tap 178 200                 # start
+wait 12s
+tap 62 200                  # lap
+wait 9s
+tap 62 200                  # lap
+wait 4s
+expect text "00:25"
+snapshot laps
+tap 178 200                 # pause
+expect effect keep-screen-on false
+snapshot paused
+tap 62 200                  # reset
+expect text "00:00"
+expect no failures

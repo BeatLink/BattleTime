@@ -23,6 +23,7 @@ use neotime_runtime::{EffectKind, SystemValue, Value};
 
 use crate::fake_system::RecordedEffect;
 use crate::framebuffer::{Framebuffer, SCREEN_SIDE_IN_PIXELS};
+use crate::sources::{package_source, PackageKind};
 use crate::watch::TestWatch;
 
 // ============================================================================
@@ -83,16 +84,43 @@ pub enum ScriptCommand {
     OpenApp(String),
     OpenFace(String),
     InstallApps(Vec<String>),
-    Touch { kind: TouchKind, target: TouchTarget },
-    Drag { from: ScreenPoint, to: ScreenPoint },
+    Touch {
+        kind: TouchKind,
+        target: TouchTarget,
+    },
+    Drag {
+        from: ScreenPoint,
+        to: ScreenPoint,
+    },
     Swipe(SwipeDirection),
     PressButton,
     Wait(Duration),
-    SetSystemValue { value: SystemValue, number: Value },
-    Notify { title: String, body: String },
+    SetSystemValue {
+        value: SystemValue,
+        number: Value,
+    },
+    Notify {
+        title: String,
+        body: String,
+    },
     Phone(String),
     Shake,
-    Acceleration { x: Value, y: Value, z: Value },
+    Acceleration {
+        x: Value,
+        y: Value,
+        z: Value,
+    },
+    /// A heart rate reading, as the sensor gives one while measuring.
+    HeartRate(Value),
+    /// Tells the app the phone's navigation changed; the turn itself is in the system values.
+    Navigation,
+    /// Writes a whole text file, as the phone does over Bluetooth.
+    WriteFile {
+        path: String,
+        text: String,
+    },
+    /// Leaves the app and opens it again with its state kept, so it reads its files afresh.
+    Reopen,
     ScreenOn,
     ScreenOff,
     ExpectText(String),
@@ -102,6 +130,8 @@ pub enum ScriptCommand {
     ExpectNoEffect(EffectCheck),
     ExpectNoFailures,
     Screenshot(PathBuf),
+    /// Compares the screen with the reference picture `<kind>-<id>-<name>.png` in `harness/snapshots/screens`.
+    Snapshot(String),
 }
 
 impl ScriptCommand {
@@ -118,6 +148,7 @@ impl ScriptCommand {
                 | ScriptCommand::ExpectNoEffect(_)
                 | ScriptCommand::ExpectNoFailures
                 | ScriptCommand::Screenshot(_)
+                | ScriptCommand::Snapshot(_)
         )
     }
 }
@@ -242,7 +273,19 @@ fn split_words(line: &str) -> Result<SplitLine, String> {
 // ============================================================================
 
 const COMMAND_NAMES: &str = "open, install, tap, long-press, double-tap, drag, swipe, button, long-button, \
-                             wait, set, notify, phone, shake, acceleration, screen, expect, screenshot";
+                             wait, set, notify, phone, shake, acceleration, heart, navigation, write, reopen, screen, expect, screenshot, snapshot";
+
+/// A script's heart rate readings are as sure as the sensor ever reports.
+const FULL_HEART_RATE_CONFIDENCE: Value = 100;
+
+/// A snapshot name becomes part of a file name, so it keeps to lowercase letters, digits and hyphens.
+fn is_snapshot_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with('-')
+        && name
+            .chars()
+            .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-')
+}
 
 /// Reads a whole script, or names the first line it cannot read.
 pub fn parse_script(text: &str) -> Result<Script, ScriptError> {
@@ -304,6 +347,23 @@ fn parse_command(words: &[Word]) -> Result<ScriptCommand, String> {
             _ => Err("write `phone \"<line>\"`, with each quote in the line written \\\"".to_string()),
         },
         "shake" => expect_no_arguments(name, arguments, ScriptCommand::Shake),
+        "heart" => match arguments {
+            [bpm] => bpm
+                .bare()
+                .and_then(parse_number)
+                .map(ScriptCommand::HeartRate)
+                .ok_or_else(|| "write `heart <beats per minute>`, such as `heart 72`".to_string()),
+            _ => Err("write `heart <beats per minute>`, such as `heart 72`".to_string()),
+        },
+        "navigation" => expect_no_arguments(name, arguments, ScriptCommand::Navigation),
+        "reopen" => expect_no_arguments(name, arguments, ScriptCommand::Reopen),
+        "write" => match arguments {
+            [Word::Quoted(path), Word::Quoted(text)] => Ok(ScriptCommand::WriteFile {
+                path: path.clone(),
+                text: text.clone(),
+            }),
+            _ => Err("write `write \"/path\" \"text\"`".to_string()),
+        },
         "acceleration" => parse_acceleration(arguments),
         "screen" => match arguments.first().and_then(Word::bare) {
             Some("on") if arguments.len() == 1 => Ok(ScriptCommand::ScreenOn),
@@ -314,6 +374,12 @@ fn parse_command(words: &[Word]) -> Result<ScriptCommand, String> {
         "screenshot" => match arguments {
             [path] => Ok(ScriptCommand::Screenshot(PathBuf::from(path.text()))),
             _ => Err("write `screenshot <path.png>`".to_string()),
+        },
+        "snapshot" => match arguments {
+            [name] if is_snapshot_name(name.text()) => Ok(ScriptCommand::Snapshot(name.text().to_string())),
+            _ => {
+                Err("write `snapshot <name>`, the name in lowercase letters, digits and hyphens".to_string())
+            }
         },
         unknown => Err(format!(
             "unknown command `{unknown}`; the commands are {COMMAND_NAMES}"
@@ -634,6 +700,7 @@ fn run_steps(
         first_effect_to_check: 0,
         has_checked_effects_since_driving: false,
         next_notification_id: 1,
+        opened_name: String::new(),
     };
     let mut passed_steps = Vec::new();
     for step in &script.steps {
@@ -682,12 +749,20 @@ struct ScriptRunner<'folder> {
     first_effect_to_check: usize,
     has_checked_effects_since_driving: bool,
     next_notification_id: Value,
+    /// The open package as reference pictures name it, such as `app-stopwatch`.
+    opened_name: String,
 }
 
 impl ScriptRunner<'_> {
     fn carry_out(&mut self, command: &ScriptCommand) -> Result<(), Mismatch> {
         match command {
-            ScriptCommand::OpenApp(id) => return self.open(TestWatch::open_app(id), "app", id),
+            ScriptCommand::OpenApp(id) => {
+                // The shell's screens open as apps too, but their pictures are named `shell-<id>`.
+                let is_shell = !package_source(PackageKind::App, id).is_file()
+                    && package_source(PackageKind::Shell, id).is_file();
+                let kind = if is_shell { "shell" } else { "app" };
+                return self.open(TestWatch::open_app(id), kind, id);
+            }
             ScriptCommand::OpenFace(id) => return self.open(TestWatch::open_face(id), "face", id),
             _ => {}
         }
@@ -751,6 +826,21 @@ impl ScriptRunner<'_> {
             ScriptCommand::Acceleration { x, y, z } => {
                 watch.deliver(PushedEvent::Acceleration { x: *x, y: *y, z: *z });
             }
+            ScriptCommand::HeartRate(beats_per_minute) => {
+                watch.deliver(PushedEvent::HeartRate {
+                    beats_per_minute: *beats_per_minute,
+                    confidence: FULL_HEART_RATE_CONFIDENCE,
+                });
+            }
+            ScriptCommand::Navigation => {
+                watch.deliver(PushedEvent::Navigation);
+            }
+            ScriptCommand::WriteFile { path, text } => {
+                watch.write_file(path, text.as_bytes());
+            }
+            ScriptCommand::Reopen => {
+                watch.reopen();
+            }
             ScriptCommand::ScreenOn => {
                 watch.screen_on();
             }
@@ -803,6 +893,17 @@ impl ScriptRunner<'_> {
                 save_png(watch.frame(), &path)
                     .map_err(|problem| mismatch(format!("to save {}", path.display()), problem))?;
             }
+            ScriptCommand::Snapshot(_) if self.opened_name.is_empty() => {
+                return Err(mismatch(
+                    "an app or face opened by the script, which names the picture",
+                    "a watch opened before the script",
+                ));
+            }
+            ScriptCommand::Snapshot(name) => {
+                let picture = format!("{}-{name}", self.opened_name);
+                crate::snapshots::check_screen_snapshot(&picture, watch.frame())
+                    .map_err(|problem| mismatch(format!("the screen to match {picture}.png"), problem))?;
+            }
         }
         Ok(())
     }
@@ -816,6 +917,7 @@ impl ScriptRunner<'_> {
         let watch =
             opened.map_err(|failure| mismatch(format!("the {kind} {id} to open"), failure.to_string()))?;
         self.watch = Some(watch);
+        self.opened_name = format!("{kind}-{id}");
         self.first_effect_to_check = 0;
         self.has_checked_effects_since_driving = false;
         Ok(())

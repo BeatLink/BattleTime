@@ -15,6 +15,8 @@ source_dir="target/site/src"
 rm -rf target/site
 mkdir -p "$source_dir/screens" "$source_dir/stylesheets"
 cp docs/*.md "$source_dir/"
+mkdir -p "$source_dir/apps"
+cp docs/apps/*.md "$source_dir/apps/"
 cp -r docs/images "$source_dir/images"
 cp harness/snapshots/screens/*.png "$source_dir/screens/"
 cp site/home.md "$source_dir/index.md"
@@ -24,6 +26,9 @@ cp site/neotime.css "$source_dir/stylesheets/neotime.css"
 sed -e 's#](docs/#](#g' README.md > "$source_dir/introduction.md"
 
 # Screens point into the staged copy; any other link out of docs/ goes to the file on GitHub.
+for page in "$source_dir"/apps/*.md; do
+    sed -i -e 's#](\.\./\.\./harness/snapshots/screens/#](../screens/#g' -e 's#](\.\./\([a-z-]*\.md\)#](../\1#g' "$page"
+done
 for page in "$source_dir"/*.md; do
     sed -i \
         -e 's#](\.\./harness/snapshots/screens/#](screens/#g' \
@@ -42,12 +47,24 @@ for page in docs/*.md; do
     fi
 done
 
+# Each app's page joins the Apps tab, in order of its title, under the line that marks their place.
+app_entries="$(for page in docs/apps/*.md; do
+    printf '      - "%s": apps/%s\n' "$(sed -n 's/^# //p;q' "$page")" "$(basename "$page")"
+done | sort)"
+config="target/site/mkdocs.yml"
+while IFS= read -r line; do
+    printf '%s\n' "$line"
+    if [[ "$line" == *"lists a page for each app"* ]]; then
+        printf '%s\n' "$app_entries"
+    fi
+done < site/mkdocs.yml | sed -e 's#\.\./target/site/##' > "$config"
+
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
 
 # Strict mode fails on a broken link or a missing image, such as a renamed snapshot on the front page.
-python3 -I -m mkdocs build --strict --config-file site/mkdocs.yml
+python3 -I -m mkdocs build --strict --config-file "$config"
 
 # The front page and the About page are not in docs/, so their edit buttons open the files they come from.
 edit_url="https://github.com/BeatLink/NeoTime/edit/master"

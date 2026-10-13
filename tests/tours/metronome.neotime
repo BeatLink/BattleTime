@@ -1,0 +1,23 @@
+# Every screen of the metronome, for docs/apps/metronome.md: a tapped tempo in 3/4, beating.
+open app metronome
+tap "4 bpb"                 # the bar length, round to 1
+tap "5 bpb"
+tap "6 bpb"
+tap "7 bpb"
+tap "8 bpb"
+tap "9 bpb"
+tap "1 bpb"
+tap "2 bpb"
+expect text "3 bpb"
+tap 120 80                  # the tempo, tapped
+wait 600ms
+tap 120 80                  # and again 0.6 s later
+expect text "100"
+tap 191 189                 # play
+expect effect vibrate 90
+expect effect keep-screen-on true
+wait 1200ms
+snapshot running
+tap 191 189                 # pause
+expect effect keep-screen-on false
+expect no failures

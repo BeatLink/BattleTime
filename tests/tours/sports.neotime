@@ -1,0 +1,14 @@
+# Every screen of the sports timer, for docs/apps/sports.md: running with steps, then stopped.
+open app sports
+tap 120 210                 # start
+wait 2min
+set steps_today 4521
+wait 5s
+expect effect keep-screen-on true
+snapshot running
+tap 120 210                 # stop
+expect effect keep-screen-on false
+snapshot stopped
+tap 120 60                  # a tap clears it
+expect text "00:00.00"
+expect no failures

@@ -1,0 +1,22 @@
+# Every screen of the morse notepad, for docs/apps/morse.md: some keyed text, a letter in progress, and the clear question.
+open app morse
+swipe down                  # h: four dots
+swipe down
+swipe down
+swipe down
+tap 120 120                 # end the letter
+swipe down                  # i: two dots
+swipe down
+tap 120 120
+swipe right                 # a space
+swipe up                    # a letter in progress: dot, line
+swipe down
+expect text "hi"
+expect text "-."
+snapshot keying
+long-press 120 120
+expect text "Clear all the text?"
+snapshot clear
+tap 181 115                 # yes
+expect no text "hi"
+expect no failures

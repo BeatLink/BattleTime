@@ -1,0 +1,9 @@
+# Every screen of the app template, for docs/apps/template.md: the last touch, then the last swipe.
+open app template
+tap 60 180                  # a touch low on the left
+expect text "(60, 180)"
+snapshot touch
+swipe left
+expect text "Swipe left"
+snapshot swipe
+expect no failures

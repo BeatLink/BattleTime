@@ -27,6 +27,9 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
   `vite.config.ts`). When coverage rises, raise the floor in the same change.
 - App behaviour is tested in `harness/` ([docs/testing.md](docs/testing.md)), not vitest. A change to
   what an app shows rewrites its snapshots with `NEOTIME_UPDATE_SNAPSHOTS=1` in the same commit.
+- Every app has a tour in `tests/tours/<id>.neotime` that snapshots each of its screens, and a page
+  in `docs/apps/<id>.md` with how to use it and those pictures. A new app, or a new or changed
+  screen, updates both in the same commit.
 - Docs ship with the code, never as a follow-up. A new crate gets its place in
   `docs/architecture.md`; a change to RAM or flash use updates `docs/memory-map.md`.
 - Open work lives in `docs/todo.md`. When an item is done, remove it in the same change and record

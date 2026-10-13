@@ -1,0 +1,9 @@
+# Every screen of the navigation app, for docs/apps/navigation.md: waiting, then the next turn.
+open app navigation
+expect screen main
+expect text "Navigation"
+expect text "--M"
+navigation                  # the phone sends the next turn
+expect text "Main Street"
+snapshot turn
+expect no failures

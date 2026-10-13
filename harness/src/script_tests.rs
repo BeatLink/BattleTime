@@ -329,6 +329,16 @@ fn commands_with_the_wrong_arguments_are_refused() {
         "expect effect vibrate-pattern siren",
         "expect effect vibrate many",
         "screenshot",
+        "snapshot",
+        "snapshot Running",
+        "snapshot -running",
+        "snapshot two words",
+        "heart",
+        "heart fast",
+        "navigation now",
+        "write /notes/note.txt text",
+        "write \"/notes/note.txt\"",
+        "reopen now",
         "\"tap\" 1 2",
         "phone",
         "phone settings",
@@ -552,6 +562,75 @@ fn a_screenshot_that_cannot_be_saved_fails() {
         .unwrap()
         .expected
         .starts_with("to save /proc/neotime/frame.png"));
+}
+
+#[test]
+fn a_snapshot_names_its_picture_after_the_open_app() {
+    let script = parse_script("snapshot after-start-2\n").unwrap();
+    assert_eq!(
+        script.steps[0].command,
+        ScriptCommand::Snapshot("after-start-2".to_string())
+    );
+
+    let run = run_script(
+        &parse_script("open app stopwatch\ntap 178 200\nwait 3s\nsnapshot running\n").unwrap(),
+        &std::env::temp_dir(),
+        |_| {},
+    );
+
+    assert_eq!(run.failure, None);
+}
+
+#[test]
+fn heart_navigation_write_and_reopen_reach_the_app() {
+    let script = parse_script(
+        "open app heart\nset heart_rate_status 3\nheart 74\nexpect text \"074\"\n\
+         open app navigation\nnavigation\nexpect text \"Main Street\"\n\
+         open app notes\nwrite \"/notes/note.txt\" \"\"\nreopen\nexpect text \"No note yet\"\n",
+    )
+    .unwrap();
+    assert_eq!(script.steps[2].command, ScriptCommand::HeartRate(74));
+    assert_eq!(script.steps[5].command, ScriptCommand::Navigation);
+    assert_eq!(
+        script.steps[8].command,
+        ScriptCommand::WriteFile {
+            path: "/notes/note.txt".to_string(),
+            text: String::new(),
+        }
+    );
+    assert_eq!(script.steps[9].command, ScriptCommand::Reopen);
+
+    let run = run_script(&script, &std::env::temp_dir(), |_| {});
+
+    assert_eq!(run.failure, None);
+}
+
+#[test]
+fn a_snapshot_that_differs_from_its_picture_fails() {
+    if crate::snapshots::is_updating_snapshots() {
+        return;
+    }
+
+    let run = run_script(
+        &parse_script("open app stopwatch\nsnapshot running\n").unwrap(),
+        &std::env::temp_dir(),
+        |_| {},
+    );
+
+    let failure = run.failure.unwrap();
+    assert_eq!(failure.line_number, 2);
+    assert_eq!(failure.expected, "the screen to match app-stopwatch-running.png");
+}
+
+#[test]
+fn a_snapshot_needs_the_script_to_open_the_app() {
+    let run = run_on_scripted_app("snapshot main\n");
+
+    assert!(run
+        .failure
+        .unwrap()
+        .expected
+        .starts_with("an app or face opened by the script"));
 }
 
 #[test]

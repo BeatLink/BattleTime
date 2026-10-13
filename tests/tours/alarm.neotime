@@ -1,0 +1,30 @@
+# Every screen of the alarm app, for docs/apps/alarm.md: a new weekday alarm, the list, the editor and the ring.
+open app alarm
+expect text "No alarm set"
+tap 120 66                  # the plus button
+expect screen edit_time
+snapshot time
+tap 178 206                 # next
+expect screen edit_days
+tap "Once"                  # the repeat button cycles to every day
+tap "Every day"             # and on to weekdays
+expect text "Weekdays"
+snapshot days
+tap 178 206                 # save
+button                      # save stops at the time screen, see the report
+expect screen main
+expect text "Tue 08:00"
+snapshot list
+tap 60 70                   # the alarm's time
+tap 178 206                 # next
+expect text "Delete"
+snapshot edit
+button                      # back to the time
+button                      # back to the list
+wait 23h
+expect screen ring
+expect effect vibrate-pattern alarm
+snapshot ringing
+tap "Snooze"
+expect effect stop-vibrating
+expect no failures

@@ -1149,7 +1149,8 @@ cd firmware && cargo build --release
 ## Website
 
 The GitHub Pages site at <https://beatlink.github.io/NeoTime/> is built with MkDocs Material from
-`site/`: `site/home.md` is the front page, the README is the About page, and these docs follow.
-`tools/build_site.sh` builds it into `target/site/out`, and `.github/workflows/pages.yml` builds it on
-every pull request and publishes it from `master`. Every page in `docs/` must be in the nav in
-`site/mkdocs.yml`, and the build is strict, so a broken link or a renamed screenshot fails it.
+`site/`: `site/home.md` is the front page, the README is the About page, and these docs follow,
+with a page for each app from `docs/apps`. `tools/build_site.sh` builds it into `target/site/out`,
+and `.github/workflows/pages.yml` builds it on every pull request and publishes it from `master`.
+Every page in `docs/` must be in the nav in `site/mkdocs.yml`, while the build adds each app's page
+to the Apps tab itself. The build is strict, so a broken link or a renamed screenshot fails it.

@@ -1,0 +1,55 @@
+# Every screen of Paint, for docs/apps/infinipaint.md: a painted picture, a colour change and the clear question.
+open app infinipaint
+tap 66 114          # white walls
+drag 66 114 66 162
+drag 66 162 66 210
+tap 174 114
+drag 174 114 174 162
+drag 174 162 174 210
+tap 66 114
+drag 66 114 114 114
+drag 114 114 162 114
+drag 162 114 174 114
+tap 66 210
+drag 66 210 114 210
+drag 114 210 162 210
+drag 162 210 174 210
+tap 102 162
+drag 102 162 102 198
+tap 126 162
+drag 126 162 126 198
+tap 102 162
+drag 102 162 126 162
+long-press 30 222            # next colour, red
+expect effect vibrate 35
+tap 54 114          # red roof
+drag 54 114 102 66
+drag 102 66 114 54
+tap 126 54
+drag 126 54 174 102
+drag 174 102 186 114
+long-press 30 222            # next colour, cyan
+long-press 30 222            # next colour, yellow
+tap 186 18          # yellow sun
+drag 186 18 210 18
+tap 174 30
+drag 174 30 222 30
+tap 174 42
+drag 174 42 222 42
+tap 186 54
+drag 186 54 210 54
+long-press 30 222            # next colour, blue
+long-press 30 222            # next colour, black
+long-press 30 222            # next colour, magenta
+long-press 30 222            # next colour, green
+tap 6 222          # green grass
+drag 6 222 54 222
+drag 54 222 102 222
+drag 102 222 150 222
+drag 150 222 198 222
+drag 198 222 234 222
+snapshot picture
+double-tap 120 120          # ask to clear
+expect text "Clear the picture?"
+snapshot clear
+expect no failures

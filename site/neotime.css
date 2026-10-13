@@ -20,7 +20,8 @@
 .md-search__input { color: #1b1f24; }
 
 /* The PineTime screen is square, so screenshots sit in a square bezel, never a round one. */
-.md-typeset img.screen {
+.md-typeset img.screen,
+.md-typeset img[src*="screens/"] {
   display: block;
   width: 100%;
   max-width: 240px;

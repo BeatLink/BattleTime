@@ -1,0 +1,24 @@
+# Every screen of the heart rate app, for docs/apps/heart.md: the sensor's states, then stopped.
+open app heart
+set heart_rate_status 1
+expect text "No touch detected"
+snapshot no-touch
+set heart_rate_status 2
+expect text "Not enough data"
+snapshot settling
+set heart_rate_status 3
+heart 68
+wait 1s
+heart 71
+wait 1s
+heart 76
+wait 1s
+heart 74
+expect text "074"
+expect text "Measuring..."
+snapshot measuring
+tap "Stop"
+expect text "Stopped"
+expect effect keep-screen-on false
+snapshot stopped
+expect no failures

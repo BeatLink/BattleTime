@@ -1,0 +1,5 @@
+# The only screen of the hello app, for docs/apps/hello.md: one card with its greeting.
+open app hello
+expect text "Hello, world!"
+expect screen main
+expect no failures

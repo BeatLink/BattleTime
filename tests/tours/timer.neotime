@@ -1,0 +1,15 @@
+# Every screen of the timer, for docs/apps/timer.md: running, paused and ringing.
+open app timer
+tap 120 202                 # start
+wait 150s
+expect text "07:30"
+snapshot running
+tap 120 202                 # pause
+snapshot paused
+tap 175 202                 # resume
+wait 8min
+expect text "Time's up"
+wait 5s
+snapshot ringing
+tap "Dismiss"
+expect no failures

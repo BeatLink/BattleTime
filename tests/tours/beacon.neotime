@@ -1,0 +1,10 @@
+# Every screen of the beacon, for docs/apps/beacon.md: switched on at full intensity and a fast rate.
+open app beacon
+expect text "Beacon"
+tap 187 28                  # the switch
+tap 224 93                  # the right end of the intensity slider
+tap 160 153                 # most of the way along the frequency slider
+expect text "Frequency"
+snapshot on
+tap 187 28                  # the switch, off again
+expect no failures

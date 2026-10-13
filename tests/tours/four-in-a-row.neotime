@@ -1,0 +1,29 @@
+# Every screen of Four in a Row, for docs/apps/four-in-a-row.md: a game at level 2, lost, then the menu.
+open app four-in-a-row
+tap "2"                     # level 2
+expect text "at level 2"
+swipe down
+expect screen game
+snapshot game
+tap 18 120                  # aim at the left column
+swipe down                  # drop
+wait 3s
+swipe down                  # drop
+expect text "Thinking..."
+snapshot thinking
+wait 3s
+swipe down                  # drop
+wait 3s
+tap 222 120                 # aim at the right column
+swipe down                  # drop
+wait 3s
+swipe down                  # drop
+wait 3s
+swipe down                  # drop
+wait 3s
+expect text "You lose!"
+snapshot lost
+swipe down                  # back to the menu
+expect screen main
+expect text "Won 0%"
+expect no failures

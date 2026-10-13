@@ -1,0 +1,24 @@
+# Every screen of the system app, for docs/apps/system.md: the system page and each state of the battery page.
+open app system
+expect text "0d 03:25:00"
+swipe left
+expect text "Discharging"
+set is_charging true
+wait 2s
+expect text "Charging"
+snapshot battery-charging
+set is_charging false
+set battery_percent 100
+set battery_millivolts 4180
+expect text "Fully charged"
+snapshot battery-full
+set battery_percent 9
+set battery_millivolts 3640
+expect text "Battery low"
+expect text "Charge now"
+snapshot battery-low
+set battery_percent 4
+set battery_millivolts 3420
+expect text "Battery critical"
+snapshot battery-critical
+expect no failures

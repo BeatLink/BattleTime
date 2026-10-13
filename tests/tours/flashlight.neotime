@@ -1,0 +1,15 @@
+# Every screen of the flashlight, for docs/apps/flashlight.md: dimmed, red, then switched off.
+open app flashlight
+expect effect keep-screen-on true
+swipe left                  # one level dimmer
+swipe left                  # the lowest level
+snapshot dim
+swipe up                    # the red light
+snapshot red
+swipe down                  # back to white
+swipe right                 # brighter again
+swipe right
+tap 120 120                 # anywhere, switching the light off
+snapshot off
+tap 120 120                 # on again
+expect no failures

@@ -1,0 +1,19 @@
+# Every screen of the music app, for docs/apps/music.md: playing, the volume row, then nothing playing.
+open app music
+expect text "Test Pattern"
+phone "GB({\"t\":\"musicinfo\",\"artist\":\"Night Owls\",\"album\":\"Live\",\"track\":\"Late Train Home\",\"dur\":200})"
+phone "GB({\"t\":\"musicstate\",\"state\":\"play\",\"position\":30,\"shuffle\":1,\"repeat\":1})"
+wait 12s
+expect text "00:42/03:20"
+expect text "Late Train Home"
+snapshot playing
+swipe up                    # bring in the volume buttons
+expect text "Night Owls"
+snapshot volume
+swipe down                  # hide them again
+phone "GB({\"t\":\"musicinfo\",\"artist\":\"\",\"album\":\"\",\"track\":\"\",\"dur\":0})"
+phone "GB({\"t\":\"musicstate\",\"state\":\"pause\",\"position\":0})"
+expect text "Nothing playing"
+expect text "--:--/--:--"
+snapshot nothing-playing
+expect no failures

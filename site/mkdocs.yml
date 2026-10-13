@@ -1,4 +1,4 @@
-# The GitHub Pages site, built with MkDocs Material; tools/build_site.sh stages docs/ into docs_dir first.
+# The GitHub Pages site, built with MkDocs Material; tools/build_site.sh stages docs/ and builds from a copy of this file.
 site_name: NeoTime
 site_description: A firmware for the PineTime smartwatch, written in Rust, with apps that install over Bluetooth.
 site_url: https://beatlink.github.io/NeoTime/
@@ -54,8 +54,10 @@ nav:
       - About: introduction.md
       - Features: features.md
       - Watch faces: faces.md
-      - Apps: apps.md
       - Firmware updates: updates.md
+  - Apps:
+      - All apps: apps.md
+      # tools/build_site.sh lists a page for each app in docs/apps here.
   - Writing apps:
       - App runtime: app-runtime.md
       - App reference: app-reference.md

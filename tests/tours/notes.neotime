@@ -1,0 +1,11 @@
+# Every screen of the notes app, for docs/apps/notes.md: the top of the note, scrolled down, then with no note.
+open app notes
+expect text "Packing list"
+drag 120 200 120 40         # scroll down the note
+expect text "before Friday."
+snapshot scrolled
+write "/notes/note.txt" ""   # the phone clears the note
+reopen
+expect text "No note yet"
+snapshot empty
+expect no failures

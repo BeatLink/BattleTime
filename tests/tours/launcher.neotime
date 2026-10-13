@@ -1,0 +1,9 @@
+# The launcher's screens, for docs/apps/launcher.md: empty, then listing installed apps and opening one.
+open app launcher
+expect text "No apps"
+install stopwatch timer calculator alarm
+expect no text "No apps"
+expect text "Stopwatch"
+tap "Timer"                 # the timer's row
+expect effect open-app timer
+expect no failures

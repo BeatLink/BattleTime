@@ -1,0 +1,7 @@
+# Every screen of the haiku viewer, for docs/apps/haiku.md: a tap moves on to the next verse.
+open app haiku
+expect text "Morning on my wrist"
+tap 120 120                 # anywhere, the next verse
+expect text "Rain against the glass"
+snapshot next
+expect no failures

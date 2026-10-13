@@ -9,6 +9,9 @@ hide:
 NeoTime combines the best of the two PineTime firmwares: the polish, battery life and speed of
 InfiniTime, with the easy, loadable apps and desktop simulator of wasp-os.
 
+Apps are written in **Preact and TypeScript**, the way you would build a web page. No Rust or
+embedded knowledge is needed: the compiler turns an app into bytecode the watch runs.
+
 [Read the docs](introduction.md){ .md-button .md-button--primary }
 [Source on GitHub](https://github.com/BeatLink/NeoTime){ .md-button }
 
@@ -22,6 +25,13 @@ Early work. The firmware, bootloader and updates run on a real PineTime.
 ## What it aims for
 
 <div class="grid cards" markdown>
+
+-   :material-language-typescript: **Apps in Preact, no Rust needed**
+
+    Write an app as Preact components in TypeScript, with Signals for state, and preview it in a
+    browser. The compiler turns it into compact bytecode, so web skills are all it takes.
+
+    [How apps are written](app-runtime.md)
 
 -   :material-download-network: **Loadable apps**
 

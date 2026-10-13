@@ -1,0 +1,9 @@
+# Every screen of Life, for docs/apps/game-of-life.md: the acorn grown for a while, then a random soup.
+open app game-of-life
+wait 10s
+expect screen main
+snapshot grown
+long-press 120 120          # scatter a soup
+expect screen main
+snapshot soup
+expect no failures

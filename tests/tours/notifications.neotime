@@ -1,0 +1,16 @@
+# Every screen of the notifications shade, for docs/apps/notifications.md: empty, a list, and one read in full.
+open app notifications
+expect text "No notifications"
+notify "Sam" "On my way, see you at the station in ten minutes"
+notify "Calendar" "Team meeting at 10:00 in room 4"
+notify "Alex" "Running late, start without me"
+expect text "Alex"
+snapshot list
+tap "Alex"                  # the newest notification
+expect screen message
+expect text "Running late"
+snapshot message
+tap "Dismiss"
+expect screen main
+expect no text "Alex"
+expect no failures

@@ -1,0 +1,20 @@
+# Every screen of the calculator, for docs/apps/calculator.md: a decimal product, then a division by zero.
+open app calculator
+tap 120 170                 # 3
+tap 92 211                  # the point
+tap 75 128                  # 5
+expect text "3.5"
+tap 165 170                 # times
+tap 75 87                   # 8
+tap 204 211                 # equals
+expect text "28"
+snapshot result
+tap 75 87                   # 8, starting a new sum
+tap 210 170                 # divide
+tap 36 211                  # 0
+tap 204 211                 # equals
+expect text "zero division"
+expect effect vibrate 100
+snapshot zero-division
+tap 210 87                  # clear
+expect no failures

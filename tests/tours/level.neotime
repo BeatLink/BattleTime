@@ -1,0 +1,13 @@
+# Every screen of the spirit level, for docs/apps/level.md: tilted, then its calibration menu.
+open app level
+acceleration 150 -90 1000
+wait 250ms
+expect screen main
+snapshot tilted
+tap 120 120                 # anywhere, opening the menu
+expect screen menu
+expect text "Calibrate on a flat surface"
+snapshot menu
+tap "Calibrate"
+expect screen main
+expect no failures

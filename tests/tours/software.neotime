@@ -1,0 +1,16 @@
+# Every screen of the software app, for docs/apps/software.md: the list, a switch turned on, and refusals.
+open app software
+tap "Dice"                  # turns Dice on
+expect effect set-app-enabled dice
+swipe up
+swipe up
+expect text "Timer"
+snapshot list-end
+open app software
+tap "Digital"               # the only watch face
+expect screen refused
+expect text "The last watch face stays on"
+snapshot last-face
+tap "OK"
+expect screen main
+expect no failures

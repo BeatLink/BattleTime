@@ -11,6 +11,11 @@ It aims to combine the best parts of the two existing PineTime firmwares:
 
 ## Goals
 
+- **Apps in Preact, no Rust needed.** Apps and watch faces are written as
+  [Preact](https://preactjs.com) components in TypeScript, with
+  [Signals](https://preactjs.com/guide/v10/signals/) for state, and previewed in a browser. The
+  compiler turns them into compact bytecode for the watch, so writing an app takes web skills,
+  not Rust or embedded knowledge.
 - **Loadable apps.** Apps and watch faces install over BLE, with no reflash.
 - **Apps built from shared parts.** Widgets, functions, images and fonts that apps have in common
   live in the firmware and its shared library, and apps assemble them, so each app is small, easy

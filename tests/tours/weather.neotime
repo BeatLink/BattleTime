@@ -1,0 +1,14 @@
+# Every screen of the weather app, for docs/apps/weather.md: in Fahrenheit, gone stale, then with no weather.
+open app weather
+expect text "Test City"
+set settings.uses_metric_units false
+expect text "64"
+snapshot fahrenheit
+set settings.uses_metric_units true
+wait 4h
+expect text "Clear sky"
+snapshot stale
+set current_weather.received_at -9223372036854775808
+expect text "No weather data."
+snapshot empty
+expect no failures

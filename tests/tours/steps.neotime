@@ -1,0 +1,10 @@
+# Every screen of the steps app, for docs/apps/steps.md: the goal met and the week; screenshots.rs covers a day.
+open app steps
+expect text "Trip:"
+set steps_today 10500
+expect text "10500"
+snapshot goal-met
+swipe left
+expect text "Step history"
+snapshot week
+expect no failures

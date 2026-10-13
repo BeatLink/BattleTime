@@ -1,0 +1,12 @@
+# Every screen of Snake, for docs/apps/snake.md: the snake after its first meal, then game over.
+open app snake
+swipe down                  # head for the food below
+wait 1s
+swipe right
+wait 500ms
+expect screen main
+snapshot playing
+wait 5s
+expect text "GAME"
+snapshot game-over
+expect no failures

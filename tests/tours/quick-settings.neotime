@@ -1,0 +1,17 @@
+# Every screen of quick settings, for docs/apps/quick-settings.md: the tiles, then with some turned on.
+open app quick-settings
+expect text "Medium"
+tap "Medium"                # the brightness tile
+expect effect set-setting brightness 3
+tap "Silent"                # do not disturb
+tap "Always on"             # the always-on screen
+expect effect set-setting always_on_screen 1
+set brightness 3
+set is_do_not_disturb true
+set settings.always_on_screen true
+set is_charging true
+expect text "High"
+snapshot tiles-on
+tap "Settings"              # the settings tile
+expect effect open-app settings
+expect no failures
