@@ -178,6 +178,20 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   store calls, and the app host's `read_file`, which `TextFile` and `file_bytes` use while drawing,
   `async`; the open path's recursion (`open` and `open_failed`) needs reworking first.
 - [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.
+- [ ] **Choose what runs over Bluetooth.** Rolling back to the previous firmware or installing the
+  recovery firmware needs the bootloader's button menu. A companion command such as
+  `neotime boot previous|recovery` could do the same from the firmware: check the image's header and
+  CRC, copy it into the update slot (`copy_previous_into_update_slot`, `copy_image_into_update_slot`),
+  mark a swap and restart, so it runs on trial like any update.
+- [ ] **Find why the first `slots` after a flash timed out.** On 2026-10-13 the first
+  `neotime slots`, sent right after `neotime flash` and `neotime time`, got no reply; every later
+  request answered at once and it did not happen again.
+- [ ] **Install recovery from a resized slot on the watch.** After `neotime slots fit` shrank the
+  watch's recovery slot to 168 KB, the firmware read the record back, but the bootloader menu's
+  Install recovery from that slot has only run in the emulator; it needs a button hold.
+- [ ] **Drop `tests/emulator/fixtures/first-watch-bootloader.bin`.** No suite loads it since the
+  20 KB layout; `first-layout-bootloader.bin` replaced it. Delete it, or keep it as the record of what
+  the reloader first put on the watch.
 - [ ] **Clippy fails on master.** CI's `Lints and types` and `Watch lints` jobs are red since run
   38325871913: a reference that is created and dereferenced at once in `runtime/src/verifier.rs`
   (lines 64, 87 and 92) and `firmware/src/main.rs` (lines 757 and 765), and a needless `mut` in
