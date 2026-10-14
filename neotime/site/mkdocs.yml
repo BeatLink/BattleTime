@@ -65,6 +65,8 @@ nav:
       - Testing apps: testing.md
       - Companion protocol: companion-protocol.md
       - Companion plugins: plugins.md
+      - The app store: app-store.md
+      - Companion sync: sync.md
   - How it is built:
       - Architecture: architecture.md
       - Architecture assessment: architecture-assessment.md

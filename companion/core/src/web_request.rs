@@ -312,7 +312,7 @@ mod tests {
     use rustls::{ServerConfig, ServerConnection};
 
     // The test certificate in node/testdata, made with openssl for localhost and 127.0.0.1.
-    const PINNED: &str = "cea33b3710ae855abf9478448811ed363a0135e0210947e3d027b96118554160";
+    const PINNED: &str = "296bae6abfcd699ccb20a5a7465321a23a62785e5be1b7f3697d6bd437dc2415";
 
     fn testdata(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))

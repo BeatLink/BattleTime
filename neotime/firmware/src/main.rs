@@ -11,6 +11,8 @@
 
 #![no_std]
 #![no_main]
+// The gatt_service expansion trips this lint in the recovery build only.
+#![cfg_attr(feature = "recovery", allow(clippy::identity_op))]
 
 extern crate alloc;
 

@@ -14,7 +14,7 @@ import { webRequest } from './web-request';
 // ============================================================================
 
 // The test certificate in testdata/, made with openssl for localhost and 127.0.0.1.
-const PINNED = 'cea33b3710ae855abf9478448811ed363a0135e0210947e3d027b96118554160';
+const PINNED = '296bae6abfcd699ccb20a5a7465321a23a62785e5be1b7f3697d6bd437dc2415';
 
 let server: Server;
 let base = '';
