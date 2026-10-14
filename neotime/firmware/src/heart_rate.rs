@@ -38,7 +38,7 @@ use neotime_slot_log::Average;
 use crate::{
     clock,
     diagnostics::{self, Counter},
-    settings, system_values, I2cDeviceOnBus,
+    motion, settings, system_values, I2cDeviceOnBus,
 };
 
 // ============================================================================
@@ -212,7 +212,14 @@ pub async fn run_heart_rate_sensor(i2c_device: I2cDeviceOnBus) {
     let mut schedule = Schedule::new();
     let mut running = Running::Off;
     let mut next_sample = Instant::now();
+    let mut last_movement = (0, 0);
     loop {
+        // The wrist has moved unless it lies still with no new steps or movements since the last look.
+        let movement = (motion::steps_today(), motion::movements());
+        if movement != last_movement || !motion::is_still() {
+            schedule.wrist_moved();
+            last_movement = movement;
+        }
         let background = background();
         let mode = schedule.mode(app_request(), background, Instant::now().as_millis());
         let command = match (mode, &running) {

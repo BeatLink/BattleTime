@@ -198,8 +198,10 @@ back (the pulse channel) beside an ambient light channel.
 - **What it does (`schedule`).** `Schedule::mode` puts the open app first: flashing for a beacon,
   measuring until stopped or for one reading. With no app asking, the heart rate interval setting
   decides, as InfiniTime's does: off, always, or a measurement every 30 seconds, minute, 5, 10 or
-  30 minutes. Each lasts until a reading, or gives up after 30 seconds, as off the wrist, and
-  the next starts the whole interval later. `flash_request` turns the beacon's brightness and
+  30 minutes. Each lasts until a reading, or gives up after 15 seconds, as off the wrist, and
+  the next starts the whole interval later; after one gives up, the next is skipped until
+  `wrist_moved` says the wrist has moved, which the firmware tells it from new steps or the motion
+  task's stillness detector. `flash_request` turns the beacon's brightness and
   period in milliseconds into the chip's drive level and wait time.
 
 ## Bluetooth controller (`drivers/bluetooth`)

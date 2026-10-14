@@ -24,6 +24,12 @@ document for its part instead.
   minute, then check that picking it up and tapping wakes the screen within about 2 s, that a tap
   while worn wakes it as before, and that the idle drain over a night falls.
 
+- [ ] **Background heart rate waiting for movement on the PineTime.** Background measurements now
+  give up after 15 s, and after one gives up the next waits for new steps or movement. With the
+  interval at every minute, check that readings still come while worn, and that with the watch
+  lying on a table the sensor stops flashing after the first try and starts again once it is
+  picked up.
+
 - [ ] **Paging on the PineTime.** `Pages` (2f9524a) and the system and steps apps built on it
   (5957275) have run only in the harness and the emulator; the watch still runs 3a5abe9. Flash a
   build with them and check on the watch that a swipe left or right wipes to the next page and

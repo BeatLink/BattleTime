@@ -28,7 +28,8 @@ keep still.
 
 As on InfiniTime, **Heart rate** in Settings can have the watch measure in the background, with the
 screen off too: always, or every 30 seconds, minute, 5, 10 or 30 minutes. Each measurement lasts
-until a reading, or 30 seconds at most. Faces show the latest reading and how long ago it was
+until a reading, or 15 seconds at most. After one finds no pulse, as with the watch lying off your
+wrist, the next waits until the watch has moved. Faces show the latest reading and how long ago it was
 taken, and a phone app such as Gadgetbridge receives each reading through the standard Heart Rate
 service while the heart app or the background setting is measuring.
 

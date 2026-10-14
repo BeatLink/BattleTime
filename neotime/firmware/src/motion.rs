@@ -64,6 +64,9 @@ const WAKE_GESTURE_PERIOD_IN_MILLISECONDS: u32 = 100;
 static STILLNESS_WANTED: AtomicBool = AtomicBool::new(false);
 static IS_STILL: AtomicBool = AtomicBool::new(false);
 
+/// Counts the readings that showed the wrist moving, so others can tell whether it moved since they last looked.
+static MOVEMENTS: AtomicU32 = AtomicU32::new(0);
+
 /// Raised when the wrist turns still or starts moving again.
 pub static STILLNESS_CHANGED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
@@ -91,6 +94,11 @@ pub fn watch_for_stillness(wanted: bool) {
 /// Whether the wrist has been still for a minute while stillness is watched for.
 pub fn is_still() -> bool {
     IS_STILL.load(Ordering::Relaxed)
+}
+
+/// How many readings so far showed the wrist moving.
+pub fn movements() -> u32 {
+    MOVEMENTS.load(Ordering::Relaxed)
 }
 
 /// Reads the step history, as apps see it.
@@ -215,6 +223,7 @@ impl StillnessDetector {
         });
         self.last_reading = Some(reading);
         if has_moved {
+            MOVEMENTS.fetch_add(1, Ordering::Relaxed);
             self.moved_at = Some(now);
         }
         let moved_at = *self.moved_at.get_or_insert(now);

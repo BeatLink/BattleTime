@@ -3,7 +3,8 @@
 //! An app can have it measure, until stopped or until one reading, or flash the LED as a beacon.
 //! With no app asking, the heart rate interval setting measures always, never, or now and then: it
 //! measures until a reading or until `BACKGROUND_ATTEMPT_IN_MILLISECONDS` pass, as with the watch
-//! off the wrist, then waits the interval before the next.
+//! off the wrist, then waits the interval before the next. After one gives up, the next is skipped
+//! until the wrist has moved, since a watch lying still off the wrist would only give up again.
 
 /// What the open app asks of the sensor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,7 +35,7 @@ pub enum Background {
 }
 
 /// How long a background measurement tries before it gives up until the next interval.
-pub const BACKGROUND_ATTEMPT_IN_MILLISECONDS: u64 = 30_000;
+pub const BACKGROUND_ATTEMPT_IN_MILLISECONDS: u64 = 15_000;
 
 /// The chip's wait times between flashes, in milliseconds, slowest first, as the beacon app names them.
 const WAIT_TIMES_IN_MILLISECONDS: [u32; 8] = [800, 400, 200, 100, 75, 50, 12, 0];
@@ -59,6 +60,8 @@ pub struct Schedule {
     next_start_in_milliseconds: Option<u64>,
     /// When the background measurement under way gives up, or `None` while none is.
     gives_up_at_in_milliseconds: Option<u64>,
+    /// The last background measurement gave up and the wrist has not moved since.
+    waits_for_movement: bool,
 }
 
 impl Schedule {
@@ -66,7 +69,13 @@ impl Schedule {
         Schedule {
             next_start_in_milliseconds: None,
             gives_up_at_in_milliseconds: None,
+            waits_for_movement: false,
         }
+    }
+
+    /// Notes that the wrist moved, so a measurement skipped after a failed one may start again.
+    pub fn wrist_moved(&mut self) {
+        self.waits_for_movement = false;
     }
 
     /// What the sensor should do at `now`, starting or giving up a background measurement as it comes due.
@@ -92,10 +101,15 @@ impl Schedule {
                 return Mode::Measure;
             }
             self.gives_up_at_in_milliseconds = None;
+            self.waits_for_movement = true;
             self.next_start_in_milliseconds = Some(now_in_milliseconds + seconds * 1000);
         }
         let next_start = *self.next_start_in_milliseconds.get_or_insert(now_in_milliseconds);
         if now_in_milliseconds < next_start {
+            return Mode::Off;
+        }
+        if self.waits_for_movement {
+            self.next_start_in_milliseconds = Some(now_in_milliseconds + seconds * 1000);
             return Mode::Off;
         }
         self.gives_up_at_in_milliseconds = Some(now_in_milliseconds + BACKGROUND_ATTEMPT_IN_MILLISECONDS);

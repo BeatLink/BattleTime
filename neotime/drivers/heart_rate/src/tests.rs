@@ -387,6 +387,27 @@ fn a_background_measurement_with_no_reading_gives_up_until_the_next_interval() {
 }
 
 #[test]
+fn after_giving_up_the_next_measurement_waits_for_the_wrist_to_move() {
+    let mut schedule = Schedule::new();
+    schedule.mode(AppRequest::Nothing, EVERY_MINUTE, 0);
+    schedule.mode(
+        AppRequest::Nothing,
+        EVERY_MINUTE,
+        BACKGROUND_ATTEMPT_IN_MILLISECONDS,
+    );
+    let next_start = BACKGROUND_ATTEMPT_IN_MILLISECONDS + 60_000;
+
+    let while_still = schedule.mode(AppRequest::Nothing, EVERY_MINUTE, next_start);
+    schedule.wrist_moved();
+    let still_waiting = schedule.mode(AppRequest::Nothing, EVERY_MINUTE, next_start + 1);
+    let after_moving = schedule.mode(AppRequest::Nothing, EVERY_MINUTE, next_start + 60_000);
+
+    assert_eq!(while_still, Mode::Off);
+    assert_eq!(still_waiting, Mode::Off);
+    assert_eq!(after_moving, Mode::Measure);
+}
+
+#[test]
 fn a_reading_for_an_app_leaves_the_background_schedule_alone() {
     let mut schedule = Schedule::new();
 
