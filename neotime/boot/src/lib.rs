@@ -261,13 +261,7 @@ const FIRMWARE_PAGES: u32 = FIRMWARE.size / PAGE_SIZE;
 const VECTOR_TABLE_ALIGNMENT: u32 = 256;
 
 const _: () = {
-    let regions = [
-        BOOTLOADER,
-        SLOT_TABLE,
-        BOOT_STATE,
-        FIRMWARE,
-        FILE_SYSTEM,
-    ];
+    let regions = [BOOTLOADER, SLOT_TABLE, BOOT_STATE, FIRMWARE, FILE_SYSTEM];
     let mut index = 0;
     while index < regions.len() {
         assert!(

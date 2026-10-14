@@ -340,7 +340,10 @@ mod image_headers {
 
     #[test]
     fn a_library_reaching_past_the_image_spoils_the_header() {
-        assert_eq!(ImageHeader::decode(&with_library(IMAGE_HEADER_SIZE + 600, 401)), None);
+        assert_eq!(
+            ImageHeader::decode(&with_library(IMAGE_HEADER_SIZE + 600, 401)),
+            None
+        );
     }
 
     #[test]

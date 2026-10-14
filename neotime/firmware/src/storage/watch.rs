@@ -636,7 +636,8 @@ impl Files {
         store: &mut WatchStore,
         line: &[u8],
     ) -> (alloc::string::String, Change) {
-        let library_version = crate::apps::shared_library().and_then(neotime_packages::library::library_version);
+        let library_version =
+            crate::apps::shared_library().and_then(neotime_packages::library::library_version);
         neotime_packages::commands::handle_command(line, store, library_version).await
     }
 

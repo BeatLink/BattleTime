@@ -40,7 +40,10 @@ pub async fn handle_command<Files: FileAccess>(
     };
     let name = command.c;
     if name == "install_library" {
-        return (error_reply(name, PackageError::IsLibrary.describe()), Change::None);
+        return (
+            error_reply(name, PackageError::IsLibrary.describe()),
+            Change::None,
+        );
     }
     let mut packages = Packages::new(files);
     let outcome = match (name, command.id) {
@@ -353,7 +356,11 @@ mod tests {
             &ImageWriter::new("timer", "Timer", AppKind::App, 3).build(),
         );
 
-        let (reply, _) = block_on(handle_command(br#"{"c":"install","id":"timer"}"#, &mut files, Some(2)));
+        let (reply, _) = block_on(handle_command(
+            br#"{"c":"install","id":"timer"}"#,
+            &mut files,
+            Some(2),
+        ));
 
         assert!(reply.contains("newer shared library"));
     }

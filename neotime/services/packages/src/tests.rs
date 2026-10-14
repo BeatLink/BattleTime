@@ -148,7 +148,11 @@ fn firmware_image_with(library: &[u8]) -> Vec<u8> {
         image_crc32: 0,
         build_time_in_seconds: 0,
         commit: [0; 8],
-        library_offset: if library.is_empty() { 0 } else { IMAGE_HEADER_SIZE + code.len() as u32 },
+        library_offset: if library.is_empty() {
+            0
+        } else {
+            IMAGE_HEADER_SIZE + code.len() as u32
+        },
         library_size_in_bytes: library.len() as u32,
     };
     [header.encode().to_vec(), body].concat()
