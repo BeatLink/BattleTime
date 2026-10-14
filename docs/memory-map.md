@@ -59,7 +59,7 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Display, graphics and drivers | 5.3 KB | 3.3 KB |
 | Updates (DFU) | 2.1 KB | 2.2 KB |
 | Other constants and padding | 29.0 KB | 14.5 KB |
-| **Code and data** | **401.3 KB** | **149.8 KB** |
+| **Code and data** | **401.4 KB** | **149.8 KB** |
 | Shared library, after the code | 45.7 KB | none |
 | Free of the 480 KB region, after its header | 32.7 KB | 330.0 KB |
 <!-- /measure_memory:firmware -->
