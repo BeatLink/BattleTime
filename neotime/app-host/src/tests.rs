@@ -2070,6 +2070,107 @@ fn a_tall_grid_scrolls_by_its_rows() {
 }
 
 // ============================================================================
+// Gliding lists
+// ============================================================================
+
+/// Drags a list up from the bottom and lifts the finger moving at this many pixels a second.
+fn fling_up(host: &mut AppHost, system: &mut FakeSystem, y_speed: i32) {
+    host.touch(Touch::Press { x: 120, y: 200 }, START_TIME, system);
+    let drag = Touch::Drag {
+        x: 120,
+        y: 150,
+        start_x: 120,
+        start_y: 200,
+    };
+    host.touch(drag, START_TIME, system);
+    host.touch(Touch::Fling { x_speed: 0, y_speed }, START_TIME, system);
+    host.touch(Touch::Release { x: 120, y: 150 }, START_TIME, system);
+}
+
+/// The first row on show and how far down the screen it sits.
+fn first_row(host: &AppHost) -> (String, i32) {
+    let (name, place) = host.widget_rows(0)[0];
+    (name.into(), place.y)
+}
+
+#[test]
+fn a_flung_list_glides_on_then_slows_to_a_stop() {
+    let image = app_list_image();
+    let mut system = system_with_apps(30);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    fling_up(&mut host, &mut system, -1200);
+    let lifted = first_row(&host);
+
+    assert_eq!(host.next_wakeup(START_TIME), Some(START_TIME + 20));
+    let mut now = START_TIME + 20;
+    host.tick(now, &mut system);
+    let gliding = first_row(&host);
+    while now < START_TIME + 3000 {
+        now += 20;
+        host.tick(now, &mut system);
+    }
+    let settled = first_row(&host);
+    host.tick(now + 20, &mut system);
+
+    assert_ne!(gliding, lifted);
+    assert_ne!(settled, gliding);
+    assert_eq!(first_row(&host), settled);
+}
+
+#[test]
+fn a_slow_lift_leaves_the_list_where_the_finger_left_it() {
+    let image = app_list_image();
+    let mut system = system_with_apps(30);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    fling_up(&mut host, &mut system, -100);
+    let lifted = first_row(&host);
+
+    host.tick(START_TIME + 20, &mut system);
+
+    assert_eq!(first_row(&host), lifted);
+}
+
+#[test]
+fn a_touch_that_stops_a_glide_presses_nothing() {
+    let image = app_list_image();
+    let mut system = system_with_apps(30);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    fling_up(&mut host, &mut system, -1200);
+    host.tick(START_TIME + 20, &mut system);
+
+    host.touch(Touch::Press { x: 120, y: 100 }, START_TIME + 30, &mut system);
+    let stopped_at = first_row(&host);
+    let stopping_click = host.touch(Touch::Click { x: 120, y: 100 }, START_TIME + 60, &mut system);
+    host.touch(Touch::Release { x: 120, y: 100 }, START_TIME + 60, &mut system);
+    host.tick(START_TIME + 100, &mut system);
+    let effects_after_stopping = system.effects.len();
+    host.touch(Touch::Press { x: 120, y: 100 }, START_TIME + 200, &mut system);
+    host.touch(Touch::Click { x: 120, y: 100 }, START_TIME + 250, &mut system);
+
+    assert_eq!(stopping_click, EventResult::Handled);
+    assert_eq!(first_row(&host), stopped_at);
+    assert_eq!(effects_after_stopping, 0);
+    assert_eq!(system.effects.len(), 1);
+}
+
+#[test]
+fn a_fling_with_no_scroll_under_way_moves_nothing() {
+    let image = app_list_image();
+    let mut system = system_with_apps(30);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    host.touch(
+        Touch::Fling {
+            x_speed: 0,
+            y_speed: -1200,
+        },
+        START_TIME,
+        &mut system,
+    );
+
+    assert_eq!(host.next_wakeup(START_TIME), None);
+}
+
+// ============================================================================
 // Text files
 // ============================================================================
 

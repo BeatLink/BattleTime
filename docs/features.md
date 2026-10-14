@@ -23,7 +23,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   left, as does a swipe to the right. A screen an app goes to on a swipe moves the way the finger
   did, so pages swiped up slide up and swiped down slide down.
 - **Smooth scrolling.** A list follows the finger as it drags: the display moves the rows itself,
-  and only the few rows that come into view are drawn. Lists below a heading, as in Settings,
+  and only the few rows that come into view are drawn. Flicked, a list glides on and slows to a
+  stop, and a touch stops it where it is without pressing a row. Lists below a heading, as in Settings,
   scroll to their last row with the heading kept still.
 - **Scroll bars, as on wasp-os.** The launcher, a list, scroll view or text file longer than the screen shows a
   thin bar on its right edge: a light thumb over a dim track, or a segment per page for a list

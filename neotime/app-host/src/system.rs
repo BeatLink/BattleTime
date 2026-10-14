@@ -86,6 +86,11 @@ pub enum Touch {
         start_y: i32,
     },
     Swipe(SwipeDirection),
+    /// How fast the finger was moving, in pixels a second, as it lifted from a drag; sent just before its `Release`.
+    Fling {
+        x_speed: i32,
+        y_speed: i32,
+    },
 }
 
 /// What became of an event.

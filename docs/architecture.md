@@ -227,17 +227,25 @@ interrupt is P0.28 and its reset P0.10, on the I2C bus at SDA P0.06 and SCL P0.0
 
 - **Reports.** The panel pulses its interrupt pin low when a finger lands, moves or lifts and when
   it sees a gesture, and keeps pulsing while the finger stays down. `wait_for_report` waits for the
-  next pulse and reads one `TouchReport`: the position in display columns and rows, the `Gesture`
+  next pulse and reads one `TouchReport`, or `wait_for_pulse` and `read_report` do it in two
+  steps, so the caller can time the report by its pulse: the position in display columns and rows, the `Gesture`
   (tap, long press, a slide in one of four directions, or a double tap), whether the finger went
   down, lifted or is still touching, and whether anything is touching at all.
 - **Garbled reads are dropped.** A report with a position off the 240x240 panel or an unknown
   gesture is skipped, as InfiniTime does.
+- **One finger, with noise and lost reports allowed for.** `Finger` turns reports into landing,
+  moving and lifting. A position more than 60 px from the last is ignored unless the next report
+  lands near it too, a move while no finger is down lands one, and a second lift is nothing.
+  `lift` ends a touch whose lift report never came, at the last position.
 - **Gestures come from the finger's path.** The panel's own gestures arrive late and only for long
   straight strokes, so `GestureFinder` works out each touch's one gesture from where and when the
   finger lands, moves and lifts. A finger that moves 10 px is dragging; a drag 40 px along one
-  direction is a swipe at once, and a flick of 20 px within 250 ms is a swipe when it lifts. A
-  finger held still for 500 ms is a long press, and one lifted sooner a tap. A diagonal stroke,
-  whose main direction is not half as long again as the other, is no swipe.
+  direction is a swipe at once, and a stroke of 20 px whose finger is still moving at 400 px/s that
+  way as it lifts is a flick, a swipe at the lift. The speed is read over the last 80 ms of
+  reports, so a slow drag that ends in a quick toss is a flick, and `speed` gives it, capped at
+  2500 px/s, for lists to glide on. A finger held still for 500 ms is a long press, and one lifted
+  sooner a tap, unless it touched for under 30 ms, which is a bounce or a brushing sleeve. A
+  diagonal stroke, whose main direction is not half as long again as the other, is no swipe.
 - **Double taps are off by default.** With them on, the panel holds back every single tap while it
   waits to see if a second follows. `Settings { report_double_taps: true }` turns them on.
 - **Sleep.** `sleep` puts the panel into deep sleep, holding it in reset if it does not answer.
@@ -762,15 +770,20 @@ watch face, the launcher and the apps through `neotime-app-host`:
   of a few pixels at a time. Screenshots of the face, the launcher and a scroll in the emulator
   match the earlier drivers' pixel for pixel.
 - **Input.** `touch.rs` turns the panel's reports into the host's touches: press, drag and release
-  from the finger, and one click, long press or swipe from each touch's `GestureFinder`. Once a
-  swipe is sent the rest of its touch sends no drags, so a screen the swipe opened is not dragged. Touches wait in a
-  queue of 4 in which drags never take the last two places, so a lift and its gesture always fit;
+  from the finger, a `Fling` with the finger's speed just before the lift of a drag, and one click,
+  long press or swipe from each touch's `GestureFinder`. Each report is timed when its interrupt
+  pulse comes, not after the I2C read, so speeds come out right. A drag's start is where the
+  finger crossed the 10 px threshold, so dragged content does not jump by it. The panel reports
+  again and again while a finger is down, so 300 ms without a report ends the touch as if it had
+  lifted. A swipe that opens another screen leaves the rest of its touch to the shell, which
+  ignores it there until the finger lifts. Touches wait in a
+  queue of 5 in which drags never take the last three places, so a lift's fling, the lift and its gesture always fit;
   while the queue is that full, only the newest drag is held back. The shell merges the drags
   waiting in the queue into the latest one, so a list follows the finger however far drawing falls
   behind.
 - **Sleep.** After the settings' screen timeout without input, 15 seconds at first, the backlight goes off, the display sleeps and the
   app gets `screen_off`, unless it called `keep_screen_on(true)`; the next touch or press turns
-  them on without acting on it. Putting the panel to sleep or waking it waits only the 6 ms the
+  them on without acting on it, and `WakingTouch` holds back the rest of a touch that woke them. Putting the panel to sleep or waking it waits only the 6 ms the
   ST7789 needs before its next command; the shell keeps the two switches at least 125 ms apart,
   as the panel also needs, and blocks for the rest of that gap only when they come closer. The loop sleeps until the next input or until `next_wakeup`;
   while the screen is dark it wakes only for the app's subscriptions (`next_subscription_due`),
@@ -1209,7 +1222,11 @@ it: the firmware's system layer on the watch, or the simulator on a computer. It
   the panel, whose rows would otherwise move twice.
 - **Scrolling.** A drag on a Scroll or List moves its content with the finger, and only a lift of
   the finger ends it, even when the panel names a slide while the finger is still down; a swipe the drag made is not also sent to
-  the screen. A list set to scroll by pages settles on a whole page when the finger lifts. One that
+  the screen. A drag the finger lifts from at 300 px/s or more, by the `Fling` before the lift,
+  glides on: `tick` moves the list every 20 ms, its speed falling by about two thirds each 325 ms,
+  until it slows under 40 px/s or reaches an end, and only then is the scroll ended and
+  `onScrollEnd` sent. A finger landing stops a glide where it is, and that touch's click, long
+  press or double click goes nowhere. A list set to scroll by pages settles on a whole page when the finger lifts instead. One that
   runs across lays its children and its repeated rows' slots out along x and is drawn again on
   each move, since the panel only moves rows. On a `ScrollingScreen` the panel moves the list's rows: the host sets a band to the
   list's rows, draws the rows coming into view over those about to leave at the other end, turns

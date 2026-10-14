@@ -152,3 +152,37 @@ fn a_double_tap_from_the_panel_counts_unless_the_face_took_it() {
     assert!(finder.touch(&double_tap, false, 0));
     assert!(!finder.touch(&double_tap, true, 100));
 }
+
+// ============================================================================
+// The touch that woke the screen
+// ============================================================================
+
+#[test]
+fn the_rest_of_a_waking_touch_goes_nowhere() {
+    let mut waking = WakingTouch::default();
+    waking.woke_screen();
+
+    let click = waking.lets_through(&Touch::Click { x: 120, y: 120 });
+    let release = waking.lets_through(&Touch::Release { x: 120, y: 120 });
+
+    assert_eq!([click, release], [false, false]);
+}
+
+#[test]
+fn the_next_touch_after_a_waking_one_goes_through() {
+    let mut waking = WakingTouch::default();
+    waking.woke_screen();
+    waking.lets_through(&Touch::Click { x: 120, y: 120 });
+
+    let press = waking.lets_through(&Touch::Press { x: 60, y: 60 });
+    let click = waking.lets_through(&Touch::Click { x: 60, y: 60 });
+
+    assert_eq!([press, click], [true, true]);
+}
+
+#[test]
+fn touches_go_through_when_none_woke_the_screen() {
+    let mut waking = WakingTouch::default();
+
+    assert!(waking.lets_through(&Touch::Click { x: 120, y: 120 }));
+}

@@ -569,8 +569,8 @@ fn a_quick_short_flick_is_a_swipe_when_it_lifts() {
     let gestures = gestures_for(
         (120, 120),
         &[
-            (FingerStep::Moves, 100, 121, 60),
-            (FingerStep::Lifts, 95, 121, 120),
+            (FingerStep::Moves, 110, 121, 20),
+            (FingerStep::Lifts, 95, 121, 40),
         ],
     );
 
@@ -641,5 +641,135 @@ fn a_move_whose_landing_was_lost_starts_the_touch_there() {
     assert_eq!(
         finder.step(FingerStep::Moves, Point::new(120, 60), 40),
         Gesture::SlideUp
+    );
+}
+
+#[test]
+fn a_slow_drag_that_ends_in_a_quick_toss_is_a_flick() {
+    let gestures = gestures_for(
+        (120, 120),
+        &[
+            (FingerStep::Moves, 115, 120, 200),
+            (FingerStep::Moves, 113, 120, 400),
+            (FingerStep::Lifts, 95, 120, 440),
+        ],
+    );
+
+    assert_eq!(gestures.last(), Some(&Gesture::SlideLeft));
+}
+
+#[test]
+fn a_short_drag_that_slows_before_lifting_is_no_flick() {
+    let gestures = gestures_for(
+        (120, 120),
+        &[
+            (FingerStep::Moves, 100, 120, 30),
+            (FingerStep::Moves, 96, 120, 150),
+            (FingerStep::Lifts, 95, 120, 200),
+        ],
+    );
+
+    assert_eq!(gestures.last(), Some(&Gesture::None));
+}
+
+#[test]
+fn a_touch_too_short_for_a_tap_is_no_gesture() {
+    let gestures = gestures_for((120, 120), &[(FingerStep::Lifts, 120, 120, 20)]);
+
+    assert_eq!(gestures, vec![Gesture::None, Gesture::None]);
+}
+
+#[test]
+fn the_speed_is_capped_at_the_fastest_fling() {
+    let mut finder = GestureFinder::default();
+    finder.step(FingerStep::Lands, Point::new(120, 200), 0);
+    finder.step(FingerStep::Moves, Point::new(110, 100), 10);
+
+    assert_eq!(
+        finder.speed(),
+        Point::new(-250, -FASTEST_FLING_IN_PIXELS_PER_SECOND)
+    );
+}
+
+#[test]
+fn the_speed_is_read_over_the_last_moments() {
+    let mut finder = GestureFinder::default();
+    finder.step(FingerStep::Lands, Point::new(120, 200), 0);
+    finder.step(FingerStep::Moves, Point::new(120, 190), 500);
+    finder.step(FingerStep::Moves, Point::new(120, 170), 540);
+    finder.step(FingerStep::Lifts, Point::new(120, 150), 580);
+
+    assert_eq!(finder.speed(), Point::new(0, -500));
+}
+
+// ============================================================================
+// Positions that jump
+// ============================================================================
+
+fn report_at(finger_event: FingerEvent, column: u16, row: u16) -> TouchReport {
+    TouchReport {
+        position: TouchPosition { column, row },
+        gesture: Gesture::None,
+        finger_event,
+        is_touching: finger_event != FingerEvent::LiftedUp,
+    }
+}
+
+#[test]
+fn a_lone_far_jump_is_ignored() {
+    let mut finger = Finger::default();
+    finger.step(&report_at(FingerEvent::PressedDown, 120, 120));
+
+    let jump = finger.step(&report_at(FingerEvent::StillTouching, 120, 20));
+    let back = finger.step(&report_at(FingerEvent::StillTouching, 120, 125));
+
+    assert_eq!([jump, back], [FingerStep::Nothing, FingerStep::Moves]);
+}
+
+#[test]
+fn a_far_jump_the_next_report_agrees_with_is_a_move() {
+    let mut finger = Finger::default();
+    finger.step(&report_at(FingerEvent::PressedDown, 120, 200));
+
+    let jump = finger.step(&report_at(FingerEvent::StillTouching, 120, 100));
+    let agreeing = finger.step(&report_at(FingerEvent::StillTouching, 120, 90));
+
+    assert_eq!([jump, agreeing], [FingerStep::Nothing, FingerStep::Moves]);
+}
+
+// ============================================================================
+// Lifts the panel never reported
+// ============================================================================
+
+#[test]
+fn lift_ends_a_touch_where_the_finger_was_last() {
+    let mut finger = Finger::default();
+    finger.step(&report_at(FingerEvent::PressedDown, 120, 120));
+    finger.step(&report_at(FingerEvent::StillTouching, 130, 125));
+
+    assert_eq!(finger.lift(), Some(Point::new(130, 125)));
+    assert!(!finger.is_down());
+    assert_eq!(finger.lift(), None);
+}
+
+#[test]
+fn a_lift_reported_after_lift_is_nothing() {
+    let mut finger = Finger::default();
+    finger.step(&report_at(FingerEvent::PressedDown, 120, 120));
+    finger.lift();
+
+    assert_eq!(
+        finger.step(&report_at(FingerEvent::LiftedUp, 120, 120)),
+        FingerStep::Nothing
+    );
+}
+
+#[test]
+fn a_move_while_no_finger_is_down_lands_it() {
+    let mut finger = Finger::default();
+
+    assert_eq!(
+        finger.step(&report_at(FingerEvent::StillTouching, 120, 120)),
+        FingerStep::Lands
     );
 }

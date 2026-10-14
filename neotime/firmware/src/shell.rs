@@ -57,7 +57,7 @@ use neotime_app_host::{
     settings as app_settings,
     side_button::{self, ButtonAction, ButtonSituation, OpenScreen},
     swipes::{self, SwipeAction, SwipeScreen},
-    wake::{self as wake_gestures, DoubleTapFinder, ScreenState},
+    wake::{self as wake_gestures, DoubleTapFinder, ScreenState, WakingTouch},
     way_back::WayBack,
     AppEffect, AppFailure, AppHost, BatteryChange, EventResult, MotionKind, OpenError, PushedEvent, System,
     Touch, Transition,
@@ -698,6 +698,7 @@ struct Shell {
     waiting_touch: Option<Touch>,
     /// Set when a new screen opens, so the rest of a touch begun on the old one goes nowhere until the finger lifts.
     finger_left_on_old_screen: bool,
+    waking_touch: WakingTouch,
     /// The crash or not-enough-memory page, shown in place of an app.
     firmware_page: Option<ShownPage>,
     /// The id of the temporary app the phone ran, until it closes it or disconnects.
@@ -1578,7 +1579,11 @@ impl Shell {
         if !self.lit {
             if app_settings::touch_wakes_screen(&settings::current(), &touch) {
                 self.turn_screen_on();
+                self.waking_touch.woke_screen();
             }
+            return;
+        }
+        if !self.waking_touch.lets_through(&touch) {
             return;
         }
         if status_is_shown() {
@@ -1905,6 +1910,7 @@ pub async fn run_shell(
         finding_until: None,
         waiting_touch: None,
         finger_left_on_old_screen: false,
+        waking_touch: WakingTouch::default(),
         firmware_page: None,
         temporary_id: None,
         temporary_outcome: None,

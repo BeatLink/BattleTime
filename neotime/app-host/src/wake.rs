@@ -4,7 +4,8 @@
 //! is lit for a lowered arm, each only when its setting is on, and none in sleep mode. A lit screen
 //! held on by the open app or a status page is never lowered to sleep. A double tap on the face
 //! that the face does not take for itself puts the watch to sleep; the panel reports no double taps
-//! while the screen is lit, so two taps close together in time and place count as one.
+//! while the screen is lit, so two taps close together in time and place count as one. The rest of
+//! a touch that wakes the screen goes nowhere.
 
 use neotime_runtime::Value;
 use neotime_settings::{Setting, Settings};
@@ -102,6 +103,31 @@ impl DoubleTapFinder {
         });
         self.first_tap = if completes { None } else { Some(tap) };
         completes
+    }
+}
+
+// ============================================================================
+// The touch that woke the screen
+// ============================================================================
+
+/// Holds back the rest of a touch that woke the screen, so it does not also press what lay under the finger.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WakingTouch {
+    is_holding_back: bool,
+}
+
+impl WakingTouch {
+    /// Notes that a touch just woke the screen.
+    pub fn woke_screen(&mut self) {
+        self.is_holding_back = true;
+    }
+
+    /// Whether a touch on the lit screen goes on to it; nothing does until the next finger lands.
+    pub fn lets_through(&mut self, touch: &Touch) -> bool {
+        if let Touch::Press { .. } = touch {
+            self.is_holding_back = false;
+        }
+        !self.is_holding_back
     }
 }
 

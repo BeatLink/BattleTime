@@ -116,6 +116,32 @@ struct ScrollDrag {
     finger_start: (i32, i32),
 }
 
+/// A lift slower than this, in pixels a second, leaves the list where the finger left it.
+const SLOWEST_FLING_IN_PIXELS_PER_SECOND: i32 = 300;
+
+/// A glide stops once it slows below this many pixels a second.
+const GLIDE_STOP_SPEED_IN_PIXELS_PER_SECOND: i32 = 40;
+
+/// How quickly a glide slows: its speed falls by about two thirds in this long.
+const GLIDE_TIME_CONSTANT_IN_MILLISECONDS: i64 = 325;
+
+/// How often a glide moves its list on.
+const GLIDE_STEP_IN_MILLISECONDS: Value = 20;
+
+/// The longest step a glide takes at once, so a late tick does not throw the list far.
+const LONGEST_GLIDE_STEP_IN_MILLISECONDS: Value = 100;
+
+/// A list gliding on after the finger flung it, slowing as it goes.
+#[derive(Clone, Copy)]
+struct Glide {
+    drag: ScrollDrag,
+    /// Pixels a second, positive towards the list's end.
+    speed: i32,
+    /// The offset in thousandths of a pixel, so a slow glide still creeps on.
+    offset_in_thousandths: i64,
+    last_step: Value,
+}
+
 /// Which widget, and which row of a repeated list, a node stands for.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct NodeKey {
@@ -204,6 +230,11 @@ pub struct AppHost<'image> {
     latest_heart_rate: [Value; 2],
     latest_acceleration: [Value; 3],
     scroll_drag: Option<ScrollDrag>,
+    /// How fast the finger lifted from its drag, from the `Fling` just before the lift.
+    lift_speed: Option<(i32, i32)>,
+    glide: Option<Glide>,
+    /// Whether the touch under way stopped a glide, so it only stops it and presses nothing.
+    touch_stopped_glide: bool,
     /// Where each TextFile on the screen finds its lines in its file.
     text_files: Vec<(NodeKey, LineIndex)>,
     /// Each BitmapFile's picture on the screen, read when the screen opens or its number changes.
@@ -372,6 +403,9 @@ impl<'image> AppHost<'image> {
             latest_heart_rate: [0; 2],
             latest_acceleration: [0; 3],
             scroll_drag: None,
+            lift_speed: None,
+            glide: None,
+            touch_stopped_glide: false,
             text_files: Vec::new(),
             bitmap_files: Vec::new(),
         };
@@ -490,6 +524,7 @@ impl<'image> AppHost<'image> {
         self.dirty_nodes = 0;
         self.redraw_whole_screen();
         self.scroll_drag = None;
+        self.glide = None;
         self.scroll_move = None;
     }
 
@@ -548,6 +583,7 @@ impl<'image> AppHost<'image> {
         self.screen_root = root;
         self.last_clock_update = now;
         self.scroll_drag = None;
+        self.glide = None;
         self.scroll_move = None;
         self.text_files = Vec::new();
         self.bitmap_files = Vec::new();
@@ -1613,10 +1649,25 @@ impl<'image> AppHost<'image> {
         }
         if let Touch::Press { .. } = touch {
             self.touch_scrolled = false;
+            self.lift_speed = None;
+            self.touch_stopped_glide = self.glide.is_some();
+            self.stop_gliding(now, system);
             // A scroll whose lift never arrived, such as when a full touch queue dropped it, ends here.
             if self.scroll_drag.is_some() {
                 let _ = self.end_scroll(now, system);
             }
+        }
+        match touch {
+            Touch::Fling { x_speed, y_speed } => {
+                self.lift_speed = Some((x_speed, y_speed));
+                return EventResult::Handled;
+            }
+            Touch::Click { .. } | Touch::LongPress { .. } | Touch::DoubleClick { .. }
+                if self.touch_stopped_glide =>
+            {
+                return EventResult::Handled;
+            }
+            _ => {}
         }
         if let Some(result) = self.touch_open_dropdown(touch, now, system) {
             return result;
@@ -1639,8 +1690,12 @@ impl<'image> AppHost<'image> {
                 };
             }
             Touch::Release { .. } if self.scroll_drag.is_some() => {
+                if self.start_gliding(now) {
+                    return EventResult::Handled;
+                }
                 return self.end_scroll(now, system).unwrap_or(EventResult::Handled);
             }
+            Touch::Fling { .. } => return EventResult::Handled,
             Touch::Click { x, y } => (Property::OnClick, x, y, [x as Value, y as Value, 0, 0, 0]),
             Touch::LongPress { x, y } => (Property::OnLongPress, x, y, [x as Value, y as Value, 0, 0, 0]),
             Touch::DoubleClick { x, y } => (Property::OnDoubleClick, x, y, [x as Value, y as Value, 0, 0, 0]),
@@ -2004,6 +2059,67 @@ impl<'image> AppHost<'image> {
     }
 
     /// Ends a scroll and sends `onScrollEnd` with the offset, if the scrolled widget has one.
+    /// Lets a list the finger flung glide on, in place of ending its scroll; false when the lift was too slow or the list turns pages.
+    fn start_gliding(&mut self, now: Value) -> bool {
+        let (Some(drag), Some((x_speed, y_speed))) = (self.scroll_drag, self.lift_speed.take()) else {
+            return false;
+        };
+        let Some(node) = self.nodes.get(drag.node_index) else {
+            return false;
+        };
+        if node.scrolls_by_pages() {
+            return false;
+        }
+        // A finger moving up, or left, carries the list on towards its end.
+        let speed = match node.runs_across() {
+            true => -x_speed,
+            false => -y_speed,
+        };
+        if speed.abs() < SLOWEST_FLING_IN_PIXELS_PER_SECOND {
+            return false;
+        }
+        self.glide = Some(Glide {
+            drag,
+            speed,
+            offset_in_thousandths: i64::from(node.scroll_offset) * 1000,
+            last_step: now,
+        });
+        self.scroll_drag = None;
+        true
+    }
+
+    /// Moves a gliding list on to where it has reached by now, ending the glide at the list's end or once it has slowed enough.
+    fn glide_on(&mut self, now: Value, system: &mut impl System) {
+        let Some(mut glide) = self.glide else {
+            return;
+        };
+        if self.nodes.get(glide.drag.node_index).is_none() {
+            self.glide = None;
+            return;
+        }
+        let elapsed = (now - glide.last_step).clamp(0, LONGEST_GLIDE_STEP_IN_MILLISECONDS);
+        glide.last_step = now;
+        glide.offset_in_thousandths += i64::from(glide.speed) * elapsed;
+        glide.speed = (i64::from(glide.speed) * GLIDE_TIME_CONSTANT_IN_MILLISECONDS
+            / (GLIDE_TIME_CONSTANT_IN_MILLISECONDS + elapsed)) as i32;
+        let farthest = i64::from(farthest_scroll(&self.nodes, glide.drag.node_index)) * 1000;
+        let reached = glide.offset_in_thousandths.clamp(0, farthest);
+        self.scroll_to(glide.drag.node_index, (reached / 1000) as i32, now, system);
+        self.glide = Some(glide);
+        if reached != glide.offset_in_thousandths || glide.speed.abs() < GLIDE_STOP_SPEED_IN_PIXELS_PER_SECOND
+        {
+            self.stop_gliding(now, system);
+        }
+    }
+
+    /// Ends a glide where it is, as the scroll it carried on ends.
+    fn stop_gliding(&mut self, now: Value, system: &mut impl System) {
+        if let Some(glide) = self.glide.take() {
+            self.scroll_drag = Some(glide.drag);
+            let _ = self.end_scroll(now, system);
+        }
+    }
+
     fn end_scroll(&mut self, now: Value, system: &mut impl System) -> Option<EventResult> {
         let drag = self.scroll_drag.take()?;
         self.nodes.get(drag.node_index)?;
@@ -2109,6 +2225,7 @@ impl<'image> AppHost<'image> {
         if !self.is_open {
             return;
         }
+        self.glide_on(now, system);
         let due = mask_of(self.bindings.due_between_among(
             self.last_clock_update,
             now,
@@ -2123,7 +2240,7 @@ impl<'image> AppHost<'image> {
         self.refresh(due, 0, now, system);
     }
 
-    /// When the host next has work: a clock redraw, a scrolling label or a subscription coming due.
+    /// When the host next has work: a clock redraw, a scrolling label, a gliding list or a subscription coming due.
     pub fn next_wakeup(&self, now: Value) -> Option<Value> {
         let redraw = match self.is_open {
             true => self
@@ -2133,7 +2250,8 @@ impl<'image> AppHost<'image> {
         };
         let scrolling = (self.is_open && self.nodes.iter().any(|node| node.shown && label_scrolls(node)))
             .then_some(now + LABEL_SCROLL_STEP_IN_MILLISECONDS);
-        [redraw, scrolling, self.next_timer(now)]
+        let gliding = self.glide.map(|_| now + GLIDE_STEP_IN_MILLISECONDS);
+        [redraw, scrolling, gliding, self.next_timer(now)]
             .into_iter()
             .flatten()
             .min()

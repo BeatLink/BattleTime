@@ -140,6 +140,9 @@ impl TouchReport {
 // One finger from landing to lifting
 // ============================================================================
 
+/// The farthest a finger moves between two reports; a report farther off is noise, unless the next one agrees with it.
+pub const LARGEST_JUMP_IN_PIXELS: i32 = 60;
+
 /// What a report means for the finger on the panel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FingerStep {
@@ -149,34 +152,71 @@ pub enum FingerStep {
     Nothing,
 }
 
-/// Whether a finger is on the panel, so a landing reported while one is already down counts as a move.
+/// Whether a finger is on the panel and where it was last, so a landing reported while one is already down counts as a move.
 ///
 /// While a finger slides left or right the panel repeats the slide, and can report the finger landing again with each repeat.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Finger {
     is_down: bool,
+    last_position: Point,
+    /// A far-off position held back, taken as real only if the next report lands near it.
+    doubtful_position: Option<Point>,
 }
 
 impl Finger {
     pub fn step(&mut self, report: &TouchReport) -> FingerStep {
+        let position = Point::from(report.position);
         match report.finger_event {
-            FingerEvent::PressedDown if !self.is_down => {
-                self.is_down = true;
+            // A move whose landing was lost lands the finger where it is.
+            FingerEvent::PressedDown | FingerEvent::StillTouching if !self.is_down => {
+                *self = Finger {
+                    is_down: true,
+                    last_position: position,
+                    doubtful_position: None,
+                };
                 FingerStep::Lands
             }
-            FingerEvent::PressedDown | FingerEvent::StillTouching => {
-                self.is_down = true;
-                FingerStep::Moves
-            }
-            FingerEvent::LiftedUp => {
+            FingerEvent::PressedDown | FingerEvent::StillTouching => match self.is_believable(position) {
+                true => FingerStep::Moves,
+                false => FingerStep::Nothing,
+            },
+            FingerEvent::LiftedUp if self.is_down => {
                 self.is_down = false;
                 FingerStep::Lifts
             }
+            // A lift `lift` already ended, or the same lift reported twice.
+            FingerEvent::LiftedUp => FingerStep::Nothing,
             FingerEvent::NoEvent => {
                 self.is_down &= report.is_touching;
                 FingerStep::Nothing
             }
         }
+    }
+
+    pub fn is_down(&self) -> bool {
+        self.is_down
+    }
+
+    /// Ends a touch whose lift the panel never reported, giving where the finger was last.
+    pub fn lift(&mut self) -> Option<Point> {
+        let was_down = self.is_down;
+        self.is_down = false;
+        was_down.then_some(self.last_position)
+    }
+
+    /// Whether a position is near the last one, or near a far-off one the report before gave too.
+    fn is_believable(&mut self, position: Point) -> bool {
+        let is_near = |other: Point| {
+            let gap = position - other;
+            gap.x.abs().max(gap.y.abs()) <= LARGEST_JUMP_IN_PIXELS
+        };
+        if is_near(self.last_position) || self.doubtful_position.is_some_and(is_near) {
+            self.last_position = position;
+            self.doubtful_position = None;
+            return true;
+        }
+        self.doubtful_position = Some(position);
+        false
     }
 }
 
@@ -190,14 +230,26 @@ pub const DRAG_THRESHOLD_IN_PIXELS: i32 = 10;
 /// How far a finger moves along one direction before the touch is a swipe, while it is still down.
 pub const SWIPE_DISTANCE_IN_PIXELS: i32 = 40;
 
-/// How far a quick flick moves before its lift counts as a swipe.
+/// How far a flick moves before its lift can count as a swipe.
 pub const FLICK_DISTANCE_IN_PIXELS: i32 = 20;
 
-/// How long a flick may last from landing to lifting.
-pub const FLICK_MILLISECONDS: u64 = 250;
+/// How fast a finger must be moving the flick's way as it lifts.
+pub const FLICK_SPEED_IN_PIXELS_PER_SECOND: i32 = 400;
+
+/// The finger's speed is measured over about this long before it lifts.
+pub const SPEED_WINDOW_MILLISECONDS: u64 = 80;
+
+/// The fastest a lift's speed is given, so a short list does not shoot past its end.
+pub const FASTEST_FLING_IN_PIXELS_PER_SECOND: i32 = 2500;
 
 /// How long a finger stays still before the touch is a long press.
 pub const LONG_PRESS_MILLISECONDS: u64 = 500;
+
+/// A touch shorter than this is a bounce or a brush of a sleeve, not a tap.
+pub const SHORTEST_TAP_MILLISECONDS: u64 = 30;
+
+/// How many recent reports the finger's speed is read from.
+const RECENT_REPORTS: usize = 8;
 
 /// Finds a touch's one tap, long press or swipe from where and when the finger lands, moves and lifts.
 ///
@@ -205,6 +257,9 @@ pub const LONG_PRESS_MILLISECONDS: u64 = 500;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct GestureFinder {
     landing: Option<(Point, u64)>,
+    recent: [(Point, u64); RECENT_REPORTS],
+    reports_seen: usize,
+    speed: Point,
     dragged: bool,
     found: bool,
 }
@@ -212,22 +267,28 @@ pub struct GestureFinder {
 impl GestureFinder {
     /// Takes one finger step, where the finger was and when, and gives the touch's gesture once.
     pub fn step(&mut self, step: FingerStep, position: Point, now_in_milliseconds: u64) -> Gesture {
-        if step == FingerStep::Lands {
-            *self = GestureFinder {
-                landing: Some((position, now_in_milliseconds)),
-                ..GestureFinder::default()
-            };
+        let lifted = match (step, self.landing) {
+            // A move whose landing was lost starts the touch where it is.
+            (FingerStep::Lands, _) | (FingerStep::Moves, None) => {
+                *self = GestureFinder {
+                    landing: Some((position, now_in_milliseconds)),
+                    ..GestureFinder::default()
+                };
+                self.remember(position, now_in_milliseconds);
+                return Gesture::None;
+            }
+            (FingerStep::Nothing, _) | (FingerStep::Lifts, None) => return Gesture::None,
+            (FingerStep::Moves, Some(_)) => false,
+            (FingerStep::Lifts, Some(_)) => true,
+        };
+        let Some((start, landed_at)) = self.landing else {
             return Gesture::None;
-        }
-        if step == FingerStep::Nothing {
-            return Gesture::None;
-        }
-        // A move whose landing was lost starts the touch where it is.
-        let (start, landed_at) = *self.landing.get_or_insert((position, now_in_milliseconds));
+        };
+        self.speed = self.speed_at(position, now_in_milliseconds);
+        self.remember(position, now_in_milliseconds);
         let moved = position - start;
         let held_for = now_in_milliseconds.saturating_sub(landed_at);
         self.dragged |= moved.x.abs().max(moved.y.abs()) > DRAG_THRESHOLD_IN_PIXELS;
-        let lifted = step == FingerStep::Lifts;
         if lifted {
             self.landing = None;
         }
@@ -239,14 +300,59 @@ impl GestureFinder {
             (false, true) => swipe_along(moved, SWIPE_DISTANCE_IN_PIXELS),
             (false, false) if held_for >= LONG_PRESS_MILLISECONDS => Gesture::LongPress,
             (false, false) => Gesture::None,
-            (true, true) if held_for <= FLICK_MILLISECONDS => swipe_along(moved, FLICK_DISTANCE_IN_PIXELS),
-            (true, true) => swipe_along(moved, SWIPE_DISTANCE_IN_PIXELS),
+            (true, true) => match swipe_along(moved, FLICK_DISTANCE_IN_PIXELS) {
+                flick if is_fast_along(self.speed, flick) => flick,
+                _ => swipe_along(moved, SWIPE_DISTANCE_IN_PIXELS),
+            },
             (true, false) if held_for >= LONG_PRESS_MILLISECONDS => Gesture::LongPress,
+            (true, false) if held_for < SHORTEST_TAP_MILLISECONDS => Gesture::None,
             (true, false) => Gesture::Tap,
         };
         self.found = gesture != Gesture::None;
         gesture
     }
+
+    /// How fast the finger was moving, in pixels a second, at its last report, capped at the fastest fling.
+    pub fn speed(&self) -> Point {
+        let fastest = self.speed.x.abs().max(self.speed.y.abs());
+        if fastest <= FASTEST_FLING_IN_PIXELS_PER_SECOND {
+            return self.speed;
+        }
+        self.speed * FASTEST_FLING_IN_PIXELS_PER_SECOND / fastest
+    }
+
+    fn remember(&mut self, position: Point, now_in_milliseconds: u64) {
+        self.recent[self.reports_seen % RECENT_REPORTS] = (position, now_in_milliseconds);
+        self.reports_seen += 1;
+    }
+
+    /// The speed from the earliest report inside the speed window, or the latest before it when none is.
+    fn speed_at(&self, position: Point, now_in_milliseconds: u64) -> Point {
+        let earlier = self.recent[..self.reports_seen.min(RECENT_REPORTS)]
+            .iter()
+            .filter(|(_, time)| *time < now_in_milliseconds);
+        let inside_window = earlier
+            .clone()
+            .filter(|(_, time)| now_in_milliseconds - time <= SPEED_WINDOW_MILLISECONDS)
+            .min_by_key(|(_, time)| *time);
+        let Some(&(from, time)) = inside_window.or_else(|| earlier.max_by_key(|(_, time)| *time)) else {
+            return Point::zero();
+        };
+        let elapsed = (now_in_milliseconds - time).min(i32::MAX as u64 / 1000) as i32;
+        (position - from) * 1000 / elapsed
+    }
+}
+
+/// Whether a speed goes at least the flick speed the way a swipe does.
+fn is_fast_along(speed: Point, swipe: Gesture) -> bool {
+    let along = match swipe {
+        Gesture::SlideUp => -speed.y,
+        Gesture::SlideDown => speed.y,
+        Gesture::SlideLeft => -speed.x,
+        Gesture::SlideRight => speed.x,
+        _ => return false,
+    };
+    along >= FLICK_SPEED_IN_PIXELS_PER_SECOND
 }
 
 /// The swipe a movement makes when it goes at least this far, mostly along one direction.
@@ -368,15 +474,19 @@ where
         &mut self,
     ) -> Result<TouchReport, PanelError<I2cBus, InterruptPin, ResetPin>> {
         loop {
-            self.interrupt_pin
-                .wait_for_falling_edge()
-                .await
-                .map_err(Error::InterruptPin)?;
-
+            self.wait_for_pulse().await?;
             if let Some(report) = self.read_report().await.map_err(Error::Bus)? {
                 return Ok(report);
             }
         }
+    }
+
+    /// Waits for the next interrupt pulse, so the caller can note when it came before reading the report.
+    pub async fn wait_for_pulse(&mut self) -> Result<(), PanelError<I2cBus, InterruptPin, ResetPin>> {
+        self.interrupt_pin
+            .wait_for_falling_edge()
+            .await
+            .map_err(Error::InterruptPin)
     }
 
     /// Reads the latest report now, or gives None when its numbers make no sense.
