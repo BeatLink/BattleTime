@@ -560,16 +560,7 @@ impl<'image> AppImage<'image> {
         for index in 0..image.initial_values.count {
             image.check_initial_values(index)?;
         }
-        let state_bytes: usize = (0..image.state_count)
-            .filter_map(|index| image.state_variable(index))
-            .map(|variable| variable.stored_bytes())
-            .sum();
-        let largest_variable = (0..image.state_count())
-            .filter_map(|index| image.state_variable(index))
-            .map(|variable| variable.stored_bytes())
-            .max()
-            .unwrap_or(0);
-        if state_bytes > MOST_STATE_BYTES || largest_variable > MOST_VARIABLE_BYTES {
+        if image.state_bytes() > MOST_STATE_BYTES || image.largest_variable_bytes() > MOST_VARIABLE_BYTES {
             return Err(ImageError::StateTooLarge);
         }
         Ok(image)
@@ -651,6 +642,23 @@ impl<'image> AppImage<'image> {
             element_bytes,
             default_value: read_i64(self.state_entries, entry + 8)?,
         })
+    }
+
+    /// The RAM every variable takes together, which the open app's state holds.
+    pub fn state_bytes(&self) -> usize {
+        (0..self.state_count)
+            .filter_map(|index| self.state_variable(index))
+            .map(|variable| variable.stored_bytes())
+            .sum()
+    }
+
+    /// The RAM the largest variable takes, which a handler copies to change it.
+    pub fn largest_variable_bytes(&self) -> usize {
+        (0..self.state_count)
+            .filter_map(|index| self.state_variable(index))
+            .map(|variable| variable.stored_bytes())
+            .max()
+            .unwrap_or(0)
     }
 
     pub fn expression_count(&self) -> u16 {

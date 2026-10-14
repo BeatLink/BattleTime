@@ -220,8 +220,10 @@ byte-level format.
   bytecode with labels, for the compiler and tests. `share_repeated_code` turns code that repeats
   with only its constants changed into calls to one function.
 
-It never allocates and never panics on bad input. Its working memory is 2,168 B for the
-interpreter, 2,056 B for the bindings of up to 128 expressions and 2,440 B for the state.
+It never panics on bad input. Its working memory is sized to the open app's image: the interpreter
+is 1,156 B on the watch plus scratch room as large as the app's variables (at most 1 KB), the
+bindings 16 B for each expression (at most 128), and the state the variables' bytes (at most 2 KB)
+plus 6 B for each variable's place.
 
 ## UI toolkit (`ui`)
 
@@ -318,9 +320,10 @@ describes its calls, the layout rules and what each property value means.
 - **Demo.** With the `demo` feature, `demo::stopwatch_image` builds a stopwatch image with the
   runtime's writer, for the simulator and tests without the compiler.
 
-On the watch, `AppHost` keeps its state, interpreter and bindings on the UI heap, 6,628 B. Each is
-boxed empty and filled in place, never built on the stack, so opening an app needs under 1 KB of
-stack; each widget of the open screen takes 160 B more plus its text. See
+On the watch, `AppHost` keeps its state, interpreter and bindings on the UI heap, about 1.2 KB
+plus what the image's expressions and variables take. The interpreter is boxed from a constant and
+the rest are slices of the image's size, never built on the stack, so opening an app needs under
+1 KB of stack; each widget of the open screen takes 160 B more plus its text. See
 [memory-map.md](memory-map.md#how-much-heap-an-app-needs).
 
 ## App compiler (`compiler`)

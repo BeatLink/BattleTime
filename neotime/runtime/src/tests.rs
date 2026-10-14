@@ -3084,11 +3084,14 @@ fn working_memory_stays_inside_the_budget() {
         "interpreter {interpreter} B, handler outcome {handler_outcome} B, bindings {bindings} B, state {state} B"
     );
 
-    assert!(interpreter <= 2_170);
+    assert!(interpreter <= 1_200);
     assert!(handler_outcome <= 300);
-    assert!(bindings <= 2_100);
-    assert!(state <= 2_600);
-    assert!(interpreter + bindings + state <= 6_670);
+    assert!(bindings <= 48);
+    assert!(state <= 32);
+    assert_eq!(
+        core::mem::size_of::<crate::state::Placement>() as u32,
+        crate::memory_need::PLACEMENT_BYTES
+    );
 }
 
 #[test]
@@ -3117,23 +3120,56 @@ fn a_list_system_value_is_read_one_element_at_a_time() {
 }
 
 #[test]
-fn state_and_bindings_load_in_place_as_they_do_when_made() {
+fn bindings_worked_out_again_match_those_made_fresh() {
     let stopwatch = stopwatch();
     let image = AppImage::parse(&stopwatch.bytes).unwrap();
+    let empty_bytes = ImageBuilder::new().build();
+    let empty = AppImage::parse(&empty_bytes).unwrap();
 
-    let mut state = AppState::EMPTY;
-    state.load_layout(&image).unwrap();
-    let mut bindings = Bindings::EMPTY;
-    bindings.load_into(&image).unwrap();
+    let mut reloaded_in_place = Bindings::load(&image).unwrap();
+    reloaded_in_place.load_into_with_library(&image, None).unwrap();
+    let mut resized = Bindings::load(&empty).unwrap();
+    resized.load_into_with_library(&image, None).unwrap();
 
-    let made = AppState::new(&image).unwrap();
-    for variable in 0..image.state_count() as u8 {
-        assert_eq!(state.placement(variable), made.placement(variable));
-        assert_eq!(state.get(variable), made.get(variable));
-    }
     let loaded = Bindings::load(&image).unwrap();
+    assert_eq!(resized.count(), image.expression_count() as usize);
     for expression in 0..image.expression_count() as usize {
-        assert_eq!(bindings.info(expression), loaded.info(expression));
+        assert_eq!(reloaded_in_place.info(expression), loaded.info(expression));
+        assert_eq!(resized.info(expression), loaded.info(expression));
+    }
+}
+
+#[test]
+fn working_memory_is_sized_to_the_image() {
+    let stopwatch = stopwatch();
+    let image = AppImage::parse(&stopwatch.bytes).unwrap();
+    let empty_bytes = ImageBuilder::new().build();
+    let empty = AppImage::parse(&empty_bytes).unwrap();
+
+    let bindings = Bindings::load(&image).unwrap();
+    let state = AppState::new(&image).unwrap();
+
+    assert_eq!(bindings.count(), image.expression_count() as usize);
+    assert!(bindings.info(image.expression_count() as usize).is_none());
+    assert!(state.placement(image.state_count() as u8).is_none());
+    assert_eq!(
+        crate::interpreter::scratch_bytes_for(&image),
+        image.state_bytes().min(crate::interpreter::SCRATCH_BYTES)
+    );
+    assert_eq!(Bindings::load(&empty).unwrap().count(), 0);
+    assert_eq!(crate::interpreter::scratch_bytes_for(&empty), 0);
+}
+
+#[test]
+fn an_interpreter_sized_to_an_app_changes_every_variable_once() {
+    let stopwatch = stopwatch();
+    let image = AppImage::parse(&stopwatch.bytes).unwrap();
+    let mut state = AppState::new(&image).unwrap();
+    let mut interpreter = Interpreter::for_image(&image);
+
+    for handler in 0..image.handler_count() {
+        let outcome = interpreter.run_handler(&image, handler, &mut state, &[], &FakeSystem::default());
+        assert!(!matches!(outcome, Err(Failure::ScratchFull)));
     }
 }
 

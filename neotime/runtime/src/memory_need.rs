@@ -5,14 +5,21 @@
 
 use crate::image::AppImage;
 use crate::instruction::{decode, EffectKind, Instruction, SystemValue};
+use crate::interpreter::scratch_bytes_for;
 use crate::widgets::{Property, PropertySource, WidgetKind, WidgetTree, DEEPEST_NESTING, MOST_WIDGETS};
 
 // ============================================================================
 // Sizes measured on the watch
 // ============================================================================
 
-/// The app host's state, interpreter and bindings, which every open app holds whatever its size.
-pub const WORKING_BYTES: u32 = 6_628;
+/// The interpreter without its scratch room, which every open app holds whatever its size.
+pub const WORKING_BYTES: u32 = 1_156;
+
+/// Each expression's bindings: the state and system values it reads and how often it redraws.
+pub const EXPRESSION_BINDING_BYTES: u32 = 16;
+
+/// Each variable's place in the state.
+pub const PLACEMENT_BYTES: u32 = 6;
 
 /// One node of the open screen, as `size_of` gives it on the watch, plus its place in the list.
 pub const NODE_BYTES: u32 = 164;
@@ -128,6 +135,7 @@ pub fn estimate_memory_need(image: &AppImage) -> MemoryNeed {
 /// The host's working memory, its subscriptions, its saved state and what drawing borrows.
 fn working_bytes_of(image: &AppImage) -> u32 {
     WORKING_BYTES
+        + sized_working_bytes(image)
         + SUBSCRIPTION_BYTES * image.subscription_count() as u32
         + rounded(saved_state_bytes(image) as u32)
         + PASSING_BYTES
@@ -141,6 +149,14 @@ fn working_bytes_of(image: &AppImage) -> u32 {
         } else {
             0
         }
+}
+
+/// The working memory sized to the app: its bindings, its variables' places and bytes, and the interpreter's scratch room.
+pub fn sized_working_bytes(image: &AppImage) -> u32 {
+    EXPRESSION_BINDING_BYTES * image.expression_count() as u32
+        + rounded(PLACEMENT_BYTES * image.state_count() as u32)
+        + rounded(image.state_bytes() as u32)
+        + rounded(scratch_bytes_for(image) as u32)
 }
 
 /// The heap a closed app needs while its subscriptions run: its image and the host's working memory, with no screen.

@@ -3,6 +3,8 @@
 
 use crate::image::{AppImage, ImageError, StateVariable, MOST_STATE_BYTES, MOST_STATE_VARIABLES};
 use crate::interpreter::Value;
+use alloc::boxed::Box;
+use alloc::vec;
 
 // ============================================================================
 // Reading and writing packed values
@@ -82,43 +84,29 @@ impl Placement {
 // App state
 // ============================================================================
 
-/// The state of the open app.
+/// The state of the open app, with room for exactly the image's variables.
 pub struct AppState {
-    bytes: [u8; MOST_STATE_BYTES],
-    placements: [Placement; MOST_STATE_VARIABLES],
-    count: usize,
+    bytes: Box<[u8]>,
+    placements: Box<[Placement]>,
 }
 
 impl AppState {
-    /// A state holding no variables, to be laid out in place with `load_layout`.
-    pub const EMPTY: AppState = AppState {
-        bytes: [0; MOST_STATE_BYTES],
-        placements: [Placement::EMPTY; MOST_STATE_VARIABLES],
-        count: 0,
-    };
-
     /// Lays out the image's variables and fills each with its default value.
     pub fn new(image: &AppImage) -> Result<AppState, ImageError> {
-        let mut state = AppState::EMPTY;
-        state.load_layout(image)?;
-        Ok(state)
-    }
-
-    /// Does what `new` does in place, so a state kept on the heap is never built on the stack.
-    pub fn load_layout(&mut self, image: &AppImage) -> Result<(), ImageError> {
-        *self = AppState {
-            count: image.state_count() as usize,
-            ..AppState::EMPTY
+        let count = image.state_count() as usize;
+        let state_bytes = image.state_bytes();
+        if count > MOST_STATE_VARIABLES || state_bytes > MOST_STATE_BYTES {
+            return Err(ImageError::StateTooLarge);
+        }
+        let mut state = AppState {
+            bytes: vec![0; state_bytes].into_boxed_slice(),
+            placements: vec![Placement::EMPTY; count].into_boxed_slice(),
         };
-        let state = self;
         let mut offset = 0;
         for index in 0..image.state_count() {
             let variable = image.state_variable(index).ok_or(ImageError::TableOutOfBounds)?;
             let placement = Placement::new(offset, &variable);
             offset += placement.stored_bytes();
-            if offset > MOST_STATE_BYTES {
-                return Err(ImageError::StateTooLarge);
-            }
             state.placements[index as usize] = placement;
             state
                 .fill(index as u8, variable.default_value)
@@ -136,11 +124,11 @@ impl AppState {
             }
             stored.copy_from_slice(bytes);
         }
-        Ok(())
+        Ok(state)
     }
 
     pub fn placement(&self, variable: u8) -> Option<Placement> {
-        self.placements[..self.count].get(variable as usize).copied()
+        self.placements.get(variable as usize).copied()
     }
 
     /// The bytes one variable is stored in.

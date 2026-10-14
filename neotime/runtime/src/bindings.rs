@@ -7,6 +7,8 @@
 use crate::image::{AppImage, ImageError, MOST_FUNCTIONS};
 use crate::instruction::{decode, Instruction, SystemValue, TimePart};
 use crate::pattern;
+use alloc::boxed::Box;
+use alloc::vec;
 
 // ============================================================================
 // Walking code
@@ -223,63 +225,67 @@ pub const MOST_EXPRESSIONS: usize = 128;
 
 /// What every expression of the open app reads, kept in RAM while the app is open.
 ///
-/// The parts are kept in separate arrays, which avoids padding and makes each entry 16 bytes.
+/// The parts are kept in separate heap slices, one entry per expression of the image, which avoids
+/// padding and makes each entry 16 bytes.
 pub struct Bindings {
-    state_slots: [u64; MOST_EXPRESSIONS],
-    system_values: [u32; MOST_EXPRESSIONS],
-    redraw_periods_in_milliseconds: [u32; MOST_EXPRESSIONS],
-    count: usize,
+    state_slots: Box<[u64]>,
+    system_values: Box<[u32]>,
+    redraw_periods_in_milliseconds: Box<[u32]>,
 }
 
 impl Bindings {
-    /// Bindings for no expressions, to be filled in place with `load_into`.
-    pub const EMPTY: Bindings = Bindings {
-        state_slots: [0; MOST_EXPRESSIONS],
-        system_values: [0; MOST_EXPRESSIONS],
-        redraw_periods_in_milliseconds: [0; MOST_EXPRESSIONS],
-        count: 0,
-    };
-
     pub fn load(image: &AppImage) -> Result<Bindings, ImageError> {
-        let mut bindings = Bindings::EMPTY;
-        bindings.load_into(image)?;
+        Self::load_with_library(image, None)
+    }
+
+    /// Like `load`, looking into the shared library's functions the expressions call.
+    pub fn load_with_library(image: &AppImage, library: Option<&AppImage>) -> Result<Bindings, ImageError> {
+        let count = image.expression_count() as usize;
+        if count > MOST_EXPRESSIONS {
+            return Err(ImageError::TableOutOfBounds);
+        }
+        let mut bindings = Bindings {
+            state_slots: vec![0; count].into_boxed_slice(),
+            system_values: vec![0; count].into_boxed_slice(),
+            redraw_periods_in_milliseconds: vec![0; count].into_boxed_slice(),
+        };
+        bindings.fill(image, library)?;
         Ok(bindings)
     }
 
-    /// Does what `load` does in place, so bindings kept on the heap are never built on the stack.
-    pub fn load_into(&mut self, image: &AppImage) -> Result<(), ImageError> {
-        self.load_into_with_library(image, None)
-    }
-
-    /// Like `load_into`, looking into the shared library's functions the expressions call.
+    /// Works the bindings out again with the shared library, in place when the image is the same size.
     pub fn load_into_with_library(
         &mut self,
         image: &AppImage,
         library: Option<&AppImage>,
     ) -> Result<(), ImageError> {
-        let count = image.expression_count() as usize;
-        if count > MOST_EXPRESSIONS {
-            return Err(ImageError::TableOutOfBounds);
+        if self.count() != image.expression_count() as usize {
+            *self = Self::load_with_library(image, library)?;
+            return Ok(());
         }
-        *self = Bindings {
-            count,
-            ..Bindings::EMPTY
-        };
-        let bindings = self;
-        for index in 0..count {
+        self.fill(image, library)
+    }
+
+    fn fill(&mut self, image: &AppImage, library: Option<&AppImage>) -> Result<(), ImageError> {
+        for index in 0..self.count() {
             let code = image
                 .expression_code(index as u16)
                 .ok_or(ImageError::TableOutOfBounds)?;
             let info = analyse_expression_in(image, library, code).ok_or(ImageError::TableOutOfBounds)?;
-            bindings.state_slots[index] = info.inputs.state_slots;
-            bindings.system_values[index] = info.inputs.system_values;
-            bindings.redraw_periods_in_milliseconds[index] = info.redraw_period_in_milliseconds;
+            self.state_slots[index] = info.inputs.state_slots;
+            self.system_values[index] = info.inputs.system_values;
+            self.redraw_periods_in_milliseconds[index] = info.redraw_period_in_milliseconds;
         }
         Ok(())
     }
 
+    /// How many expressions the bindings cover.
+    pub fn count(&self) -> usize {
+        self.state_slots.len()
+    }
+
     pub fn info(&self, expression: usize) -> Option<ExpressionInfo> {
-        if expression >= self.count {
+        if expression >= self.count() {
             return None;
         }
         Some(ExpressionInfo {
@@ -292,7 +298,7 @@ impl Bindings {
     }
 
     fn infos(&self) -> impl Iterator<Item = (usize, ExpressionInfo)> + '_ {
-        (0..self.count).filter_map(|index| Some((index, self.info(index)?)))
+        (0..self.count()).filter_map(|index| Some((index, self.info(index)?)))
     }
 
     /// The expressions that read any of `changed`, and so need working out again.
@@ -316,7 +322,7 @@ impl Bindings {
 
     /// Like `next_redraw_after`, but only among the expressions whose bits are set in `expressions`.
     pub fn next_redraw_after_among(&self, now: i64, expressions: u128) -> Option<i64> {
-        self.redraw_periods_in_milliseconds[..self.count]
+        self.redraw_periods_in_milliseconds
             .iter()
             .enumerate()
             .filter(|(index, &period)| period != 0 && expressions & (1 << index) != 0)
@@ -338,7 +344,7 @@ impl Bindings {
 
     /// When the clock next changes something on screen, or `None` if nothing shown reads it.
     pub fn next_redraw_after(&self, now: i64) -> Option<i64> {
-        self.redraw_periods_in_milliseconds[..self.count]
+        self.redraw_periods_in_milliseconds
             .iter()
             .map(|&period| period as i64)
             .filter(|&period| period != 0)

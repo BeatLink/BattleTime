@@ -140,9 +140,12 @@ fn subscriptions_and_saved_state_add_to_the_working_memory() {
 
     // The header, then one entry: its header, the key "count" and eight bytes.
     assert_eq!(saved_state_bytes(&parsed), 6 + 5 + 5 + 8);
+    // Two places of six bytes, two eight-byte variables and their scratch copies.
+    let sized = 12 + 16 + 16;
+    assert_eq!(sized_working_bytes(&parsed), sized);
     assert_eq!(
         estimate_memory_need(&parsed).working_bytes,
-        WORKING_BYTES + SUBSCRIPTION_BYTES + 24 + PASSING_BYTES
+        WORKING_BYTES + sized + SUBSCRIPTION_BYTES + 24 + PASSING_BYTES
     );
 }
 

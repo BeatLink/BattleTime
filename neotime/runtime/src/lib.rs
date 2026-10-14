@@ -1,13 +1,13 @@
 //! The core of NeoTime's app runtime: app images, the checks run when one is installed, the bytecode
 //! interpreter, and the bindings that decide which widgets to redraw and when.
 //!
-//! Nothing here touches hardware, allocates or panics on bad input, so the same code runs on the
-//! watch, in tests and in the simulator. The one exception is `writer`, which allocates and is only
-//! built for the compiler and tests. docs/app-runtime.md describes the design.
+//! Nothing here touches hardware or panics on bad input, so the same code runs on the watch, in
+//! tests and in the simulator. The open app's state, bindings and scratch room are allocated at the
+//! size its image asks for; `writer` allocates freely and is only built for the compiler and tests.
+//! docs/app-runtime.md describes the design.
 
 #![no_std]
 
-#[cfg(any(test, feature = "writer"))]
 extern crate alloc;
 
 pub mod bindings;

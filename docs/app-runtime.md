@@ -384,7 +384,7 @@ Each instruction is one opcode byte followed by its operands:
 Only `loop back` goes backward. A call stops with a failure after 200,000 instructions.
 
 A handler never writes to the app's state directly. The first time it writes to a variable, the
-interpreter copies the whole variable into a 1 KB scratch area, and every later read and write of
+interpreter copies the whole variable into a scratch area as large as the app's variables, at most 1 KB, and every later read and write of
 that variable uses the copy. When the handler finishes, the copies are written back and the outcome
 lists which variables changed; when it fails, the copies are dropped. So one handler can change at
 most 16 variables and 1 KB of state.
@@ -753,18 +753,19 @@ stored by an app changes. A watch face that wants its own look uses fixed colour
 
 ## Memory
 
-`neotime-runtime` never allocates. Its working memory, measured with `size_of`:
+`neotime-runtime` allocates only the open app's working memory, sized to its image:
 
 | Part | Size |
 |---|---|
-| Interpreter: a stack of 32 values, 48 locals shared by the code and the functions it calls, 8 call frames, the 256-byte text buffer and the 1 KB scratch area | 2,168 B |
+| Interpreter: a stack of 32 values, 48 locals shared by the code and the functions it calls, 8 call frames and the 256-byte text buffer | 1,156 B |
+| The interpreter's scratch area: as large as the app's variables together | up to 1 KB |
 | A handler's results: which variables changed and up to 8 effects | 272 B, only while a handler runs |
-| Bindings: what each of up to 128 expressions reads and its redraw period | 2,056 B |
-| State: up to 2 KB of variables and arrays, and where each lies | 2,440 B |
+| Bindings: what each of up to 128 expressions reads and its redraw period | 16 B each |
+| State: up to 2 KB of variables and arrays, and 6 B for where each lies | the variables' bytes |
 
-On the watch the interpreter, the bindings and the state take 6,628 B together. `AppHost` keeps each
-on the heap, boxed empty and filled in place with `AppState::load_layout` and `Bindings::load_into`,
-so opening an app needs under 1 KB of stack. Each widget of the open screen is a node of about
+The largest app allowed takes about 6.6 KB of working memory, and a small one about 1.3 KB. `AppHost`
+keeps it on the heap, the interpreter boxed from a constant and the rest in slices of the image's
+size, so opening an app needs under 1 KB of stack. Each widget of the open screen is a node of about
 160 B plus its text, and nodes hold only values, so drawing allocates nothing.
 
 `memory_need::estimate_memory_need` adds up an app's heap need from its image: the image itself,

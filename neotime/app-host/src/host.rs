@@ -183,10 +183,10 @@ pub struct AppHost<'image> {
     tree: WidgetTree<'image>,
     library: Option<AppImage<'image>>,
     installed_app_icons: &'image [&'image [u8]],
-    // The three big parts live on the heap, so opening an app never copies kilobytes across the stack.
-    state: Box<AppState>,
+    state: AppState,
+    // The interpreter lives on the heap, so opening an app never copies its stacks across the watch's.
     interpreter: Box<Interpreter>,
-    bindings: Box<Bindings>,
+    bindings: Bindings,
     theme: Theme,
     is_open: bool,
     screen_root: u16,
@@ -343,14 +343,15 @@ impl<'image> AppHost<'image> {
         system: &mut impl System,
     ) -> Result<Self, OpenError> {
         let image = AppImage::parse(image_bytes)?;
-        // Each big part is boxed empty and filled in place, so none is ever built on the stack.
-        let mut state = Box::new(AppState::EMPTY);
-        state.load_layout(&image)?;
+        // The state and bindings hold the image's variables and expressions on the heap, sized to it.
+        let mut state = AppState::new(&image)?;
         if !saved_state.is_empty() {
             state.load_persistent(&image, saved_state);
         }
-        let mut bindings = Box::new(Bindings::EMPTY);
-        bindings.load_into(&image)?;
+        let bindings = Bindings::load(&image)?;
+        // Made a constant, so the box is filled from flash rather than from a 1 KB copy on the stack.
+        let mut interpreter = Box::new(const { Interpreter::without_scratch() });
+        interpreter.allot_scratch(neotime_runtime::interpreter::scratch_bytes_for(&image));
         let tree = WidgetTree::new(image);
         let first_screen = tree.screens().next().ok_or(OpenError::NoScreens)?;
 
@@ -370,8 +371,7 @@ impl<'image> AppHost<'image> {
             library: None,
             installed_app_icons: &[],
             state,
-            // Made a constant, so the box is filled from flash rather than from a 2 KB copy on the stack.
-            interpreter: Box::new(const { Interpreter::new() }),
+            interpreter,
             bindings,
             theme,
             is_open: false,

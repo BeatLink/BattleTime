@@ -21,6 +21,8 @@ use crate::instruction::{
 use crate::pattern;
 use crate::state::{read_packed, write_packed, AppState, Placement};
 use crate::text::{DateTime, TextReference, TextWriter, MOST_FIXED_PLACES};
+use alloc::vec;
+use alloc::vec::Vec;
 
 // ============================================================================
 // Values and limits
@@ -47,8 +49,13 @@ pub const MOST_EFFECTS: usize = 8;
 /// How many variables one handler may change.
 pub const MOST_CHANGED_VARIABLES: usize = 16;
 
-/// Room for the copies of the variables a handler changes; it holds the largest variable allowed.
+/// The most room for the copies of the variables a handler changes; an app's interpreter gets no more than its state takes.
 pub const SCRATCH_BYTES: usize = crate::image::MOST_VARIABLE_BYTES;
+
+/// The scratch room an app needs: every variable could be copied once, up to the most allowed.
+pub fn scratch_bytes_for(image: &AppImage) -> usize {
+    image.state_bytes().min(SCRATCH_BYTES)
+}
 
 /// The most instructions one call may run, about a fifth of a second on the watch.
 pub const MOST_STEPS: u32 = 200_000;
@@ -233,7 +240,8 @@ pub struct Interpreter {
     row: Value,
     text_buffer: [u8; TEXT_BUFFER_BYTES],
     text_used: usize,
-    scratch: [u8; SCRATCH_BYTES],
+    /// A Vec rather than a boxed slice, so an interpreter with no scratch yet can be a constant built from flash.
+    scratch: Vec<u8>,
     scratch_used: usize,
     copies: [WorkingCopy; MOST_CHANGED_VARIABLES],
     copy_count: usize,
@@ -246,7 +254,28 @@ impl Default for Interpreter {
 }
 
 impl Interpreter {
-    pub const fn new() -> Self {
+    /// An interpreter with room to change variables of any allowed size, for apps whose image is not at hand.
+    pub fn new() -> Self {
+        let mut interpreter = Self::without_scratch();
+        interpreter.allot_scratch(SCRATCH_BYTES);
+        interpreter
+    }
+
+    /// An interpreter sized to one app, whose handlers can copy every variable the app has.
+    pub fn for_image(image: &AppImage) -> Self {
+        let mut interpreter = Self::without_scratch();
+        interpreter.allot_scratch(scratch_bytes_for(image));
+        interpreter
+    }
+
+    /// Gives the interpreter its scratch room, so a handler can change variables.
+    pub fn allot_scratch(&mut self, bytes: usize) {
+        self.scratch = vec![0; bytes];
+        self.scratch_used = 0;
+    }
+
+    /// An interpreter that cannot change variables until `allot_scratch`, which a constant can hold.
+    pub const fn without_scratch() -> Self {
         Interpreter {
             stack: [0; STACK_DEPTH],
             depth: 0,
@@ -266,7 +295,7 @@ impl Interpreter {
             row: 0,
             text_buffer: [0; TEXT_BUFFER_BYTES],
             text_used: 0,
-            scratch: [0; SCRATCH_BYTES],
+            scratch: Vec::new(),
             scratch_used: 0,
             copies: [WorkingCopy {
                 variable: 0,
@@ -941,7 +970,7 @@ impl Interpreter {
             return Err(Failure::TooManyChangedVariables);
         }
         let end = self.scratch_used + original.len();
-        if end > SCRATCH_BYTES {
+        if end > self.scratch.len() {
             return Err(Failure::ScratchFull);
         }
         self.scratch[self.scratch_used..end].copy_from_slice(original);
