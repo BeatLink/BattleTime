@@ -523,6 +523,51 @@ fn joins_take_the_nearest_shape_so_they_are_no_darker() {
 }
 
 #[test]
+fn rings_settled_without_a_root_match_their_exact_distance() {
+    // A whole ring and a part of one, each pixel worked out quickly and by its exact distance.
+    for (start, end) in [(0, 0), (20, 150), (200, 100)] {
+        let ring = Placed::Arc {
+            x: 30.0,
+            y: 30.0,
+            across: 12.0,
+            down: 12.0,
+            start: direction_of(start),
+            end: direction_of(end),
+            sweep: Sweep::of(start, end),
+        };
+        for half in [1.0, 2.5] {
+            for row in 10..50 {
+                let y = row as f32 + 0.5;
+                let mut quick = [0u8; 60];
+                cover_row(&[ring], half, y, 0, &mut quick);
+                for (column, &ink) in quick.iter().enumerate() {
+                    let exact = ink_of(half - ring.distance(column as f32 + 0.5, y) + 0.5);
+                    assert!(
+                        ink.abs_diff(exact) <= 1,
+                        "{start}-{end} at {column}, {row}: {ink} and {exact}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn an_ellipse_is_never_settled_without_its_distance() {
+    let ellipse = Placed::Arc {
+        x: 0.0,
+        y: 0.0,
+        across: 20.0,
+        down: 10.0,
+        start: direction_of(0),
+        end: direction_of(0),
+        sweep: Sweep::Whole,
+    };
+    assert_eq!(ellipse.ring_ink(20.0, 0.0, 2.0, 1.0), None);
+    assert_eq!(Placed::Dot { x: 0.0, y: 0.0 }.ring_ink(0.0, 0.0, 2.0, 1.0), None);
+}
+
+#[test]
 fn coverage_ramps_over_one_pixel() {
     assert_eq!(ink_of(-0.1), 0);
     assert_eq!(ink_of(0.5), 128);

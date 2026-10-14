@@ -868,6 +868,46 @@ impl Placed {
         }
     }
 
+    /// The ink of a pixel plainly outside a circle's stroke, or plainly inside it away from its ends.
+    ///
+    /// Squared distances from the centre settle most pixels of a ring without a root; nothing for the rest.
+    fn ring_ink(&self, px: f32, py: f32, outer: f32, inner: f32) -> Option<u8> {
+        let Placed::Arc {
+            x,
+            y,
+            across,
+            down,
+            start,
+            end,
+            sweep,
+        } = *self
+        else {
+            return None;
+        };
+        if (across - down).abs() >= 0.01 {
+            return None;
+        }
+        let (dx, dy) = (px - x, y - py);
+        let squared = dx * dx + dy * dy;
+        // An arc's round ends lie on its circle, so nothing outside the ring's band has ink.
+        let nearest = (across - outer).max(0.0);
+        if squared <= nearest * nearest || squared >= (across + outer) * (across + outer) {
+            return Some(0);
+        }
+        let past_start = start.0 * dy - start.1 * dx >= 0.0;
+        let before_end = dx * end.1 - dy * end.0 >= 0.0;
+        let inside = match sweep {
+            Sweep::Whole => true,
+            Sweep::UpToHalf => past_start && before_end,
+            Sweep::MoreThanHalf => past_start || before_end,
+        };
+        let (low, high) = (across - inner, across + inner);
+        match inside && low > 0.0 && squared >= low * low && squared <= high * high {
+            true => Some(255),
+            false => None,
+        }
+    }
+
     /// How far a pixel centre is from the shape's centre line.
     fn distance(&self, px: f32, py: f32) -> f32 {
         match *self {
@@ -1016,7 +1056,10 @@ fn cover_row(shapes: &[Placed], half: f32, y: f32, left: i32, coverage: &mut [u8
                     Some(squared) if squared >= outer_squared => 0,
                     Some(squared) if squared <= inner_squared => 255,
                     Some(squared) => ink_of(radius - square_root(squared) + 0.5),
-                    None => ink_of(radius - shape.distance(px, y) + 0.5),
+                    None => match shape.ring_ink(px, y, outer, inner) {
+                        Some(ink) => ink,
+                        None => ink_of(radius - shape.distance(px, y) + 0.5),
+                    },
                 };
                 let slot = &mut coverage[(column - left) as usize];
                 *slot = (*slot).max(ink);

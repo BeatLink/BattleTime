@@ -336,14 +336,43 @@ pub fn rasterize_arc(
 // Arithmetic without a maths library
 // ============================================================================
 
+/// The square root: by the chip's own instruction on the watch, by Heron's method everywhere else.
 #[inline]
 pub fn square_root(value: f32) -> f32 {
     if value <= 0.0 {
         return 0.0;
     }
-    let mut root = f32::from_bits((value.to_bits() + (127 << 23)) >> 1);
-    root = 0.5 * (root + value / root);
-    0.5 * (root + value / root)
+    #[cfg(all(target_arch = "arm", target_abi = "eabihf"))]
+    {
+        // An eabihf target always has the floating-point unit the instruction needs.
+        unsafe { hardware_square_root(value) }
+    }
+    #[cfg(not(all(target_arch = "arm", target_abi = "eabihf")))]
+    {
+        let mut root = f32::from_bits((value.to_bits() + (127 << 23)) >> 1);
+        root = 0.5 * (root + value / root);
+        0.5 * (root + value / root)
+    }
+}
+
+/// The Cortex-M4F's VSQRT, which takes 14 cycles where Heron's two divisions take about twice that.
+///
+/// The value goes in and out through a core register, and the float register it borrows is saved and
+/// put back, since stable Rust cannot name float registers for this target.
+#[cfg(all(target_arch = "arm", target_abi = "eabihf"))]
+#[inline]
+unsafe fn hardware_square_root(value: f32) -> f32 {
+    let mut bits = value.to_bits();
+    core::arch::asm!(
+        "vpush {{s0}}",
+        "vmov s0, {bits}",
+        "vsqrt.f32 s0, s0",
+        "vmov {bits}, s0",
+        "vpop {{s0}}",
+        bits = inout(reg) bits,
+        options(pure, nomem),
+    );
+    f32::from_bits(bits)
 }
 
 #[inline]
