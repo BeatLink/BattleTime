@@ -203,7 +203,8 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    /// `target.value = file_bytes(path, length)`: the file's first bytes, read when the handler runs.
+    /// `target.value = file_bytes(path, length, offset)`: the file's bytes from `offset`, or its first bytes
+    /// without one, read when the handler runs.
     fn compile_file_bytes(
         &mut self,
         emitter: &mut Emitter,
@@ -212,8 +213,10 @@ impl<'a> Compiler<'a> {
         scope: &Rc<Scope<'a>>,
         span: Span,
     ) -> Compiled<()> {
-        let [path, length] = arguments else {
-            return fail(span, "`file_bytes` takes a path and a length");
+        let (path, length, offset) = match arguments {
+            [path, length] => (path, length, None),
+            [path, length, offset] => (path, length, Some(offset)),
+            _ => return fail(span, "`file_bytes` takes a path, a length and an optional offset"),
         };
         let Some(Constant::Text(path_text)) = self.evaluate_constant(path, scope) else {
             return fail(
@@ -232,6 +235,9 @@ impl<'a> Compiler<'a> {
         }
         let path_string = self.string(&path_text);
         emitter.emit(Instruction::PushText(path_string), span)?;
+        if let Some(offset) = offset {
+            self.compile_value_of_type(emitter, offset, scope, Type::NUMBER)?;
+        }
         self.note_write(
             target,
             Range {
@@ -241,7 +247,10 @@ impl<'a> Compiler<'a> {
         );
         emitter.emit(
             Instruction::WorkArray {
-                work: ArrayWork::FileBytes,
+                work: match offset {
+                    Some(_) => ArrayWork::FileBytesFrom,
+                    None => ArrayWork::FileBytes,
+                },
                 destination: target,
                 source: target,
             },

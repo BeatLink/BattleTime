@@ -4,7 +4,7 @@
 //! opens one. docs/memory-map.md explains each part and how it was measured on the watch.
 
 use crate::image::AppImage;
-use crate::instruction::{decode, Instruction, SystemValue};
+use crate::instruction::{decode, EffectKind, Instruction, SystemValue};
 use crate::widgets::{Property, PropertySource, WidgetKind, WidgetTree, DEEPEST_NESTING, MOST_WIDGETS};
 
 // ============================================================================
@@ -28,6 +28,9 @@ pub const TEXT_FILE_BYTES: u32 = 2_560;
 
 /// A BitmapFile's picture, held while its screen is open.
 pub const BITMAP_FILE_BYTES: u32 = rounded(crate::widgets::BITMAP_FILE_MOST_BYTES as u32);
+
+/// The most bytes one `prefetch_file` reads ahead; an app that asks for one holds that much until a `file_bytes` takes it.
+pub const PREFETCH_BYTES: u32 = 4096;
 
 /// What drawing borrows from the heap for a moment, and the image checks when the app opens.
 pub const PASSING_BYTES: u32 = 1_536;
@@ -62,7 +65,7 @@ const ALLOCATION_STEP: u32 = 4;
 pub struct MemoryNeed {
     /// The image itself, which is read into the heap while the app is open.
     pub image_bytes: u32,
-    /// The host's working memory, its subscriptions, its saved state and what drawing borrows.
+    /// The host's working memory, its subscriptions, its saved state, what drawing borrows and a file part read ahead.
     pub working_bytes: u32,
     /// The nodes of its largest screen.
     pub widget_bytes: u32,
@@ -93,7 +96,8 @@ pub fn estimate_memory_need(image: &AppImage) -> MemoryNeed {
     let working_bytes = WORKING_BYTES
         + SUBSCRIPTION_BYTES * image.subscription_count() as u32
         + rounded(saved_state_bytes(image) as u32)
-        + PASSING_BYTES;
+        + PASSING_BYTES
+        + if prefetches(image) { PREFETCH_BYTES } else { 0 };
     let widget_bytes = NODE_BYTES * largest.node_count;
     let text_bytes = largest.text_bytes;
     let reads = system_values_read(image);
@@ -310,12 +314,29 @@ fn bit_of(value: SystemValue) -> u128 {
 /// One bit for each system value any of the app's code reads, by the value's number.
 fn system_values_read(image: &AppImage) -> u128 {
     let mut reads = 0;
+    for_each_instruction(image, |instruction| {
+        if let Instruction::ReadSystem(value) | Instruction::ReadSystemElement(value) = instruction {
+            reads |= bit_of(value);
+        }
+    });
+    reads
+}
+
+/// Whether the app reads part of a file ahead with `prefetch_file`.
+fn prefetches(image: &AppImage) -> bool {
+    let mut found = false;
+    for_each_instruction(image, |instruction| {
+        found |= instruction == Instruction::Effect(EffectKind::PrefetchFile);
+    });
+    found
+}
+
+/// Gives every instruction of the image's expressions, handlers and functions to `visit`.
+fn for_each_instruction(image: &AppImage, mut visit: impl FnMut(Instruction)) {
     let mut scan = |code: &[u8]| {
         let mut offset = 0;
         while let Ok((instruction, next)) = decode(code, offset) {
-            if let Instruction::ReadSystem(value) | Instruction::ReadSystemElement(value) = instruction {
-                reads |= bit_of(value);
-            }
+            visit(instruction);
             offset = next;
         }
     };
@@ -328,7 +349,6 @@ fn system_values_read(image: &AppImage) -> u128 {
     for function in 0..image.function_count() {
         scan(image.function(function).map_or(&[][..], |function| function.code));
     }
-    reads
 }
 
 /// A size rounded up to the heap's allocation step, and none for nothing.

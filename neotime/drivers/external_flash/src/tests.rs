@@ -548,3 +548,52 @@ fn async_driver_rejects_a_write_beyond_the_end() {
 
     assert_eq!(result, Err(Error::BadRange(NorFlashErrorKind::OutOfBounds)));
 }
+
+// ============================================================================
+// Reads a DMA engine moves itself
+// ============================================================================
+
+#[test]
+fn the_read_command_carries_the_address_high_byte_first() {
+    assert_eq!(read_command(0x12_3456), [0x03, 0x12, 0x34, 0x56]);
+}
+
+#[test]
+fn read_pieces_are_as_large_as_one_transfer_moves() {
+    assert_eq!(next_read_piece(0), 0);
+    assert_eq!(next_read_piece(1), 1);
+    assert_eq!(next_read_piece(255), 255);
+    assert_eq!(next_read_piece(4096), 255);
+}
+
+#[test]
+fn a_read_piece_never_leaves_a_single_byte_behind() {
+    assert_eq!(next_read_piece(256), 254);
+    let mut bytes_left = 4096;
+    while bytes_left > 0 {
+        let piece = next_read_piece(bytes_left);
+        bytes_left -= piece;
+        assert_ne!(bytes_left, 1);
+    }
+}
+
+#[test]
+fn preparing_a_read_waits_for_a_background_erase() {
+    let mut chip = FakeChip::new();
+    chip.busy_polls_after_each_write = 2;
+    let mut flash = ExternalFlash::new(chip, CountingDelay::default()).unwrap();
+
+    flash.start_erasing_sector(0x7000).unwrap();
+    flash.prepare_read(0x7000, 16).unwrap();
+
+    assert_eq!(flash.release().spi.status_polls, 3);
+}
+
+#[test]
+fn preparing_a_read_beyond_the_end_fails() {
+    let mut flash = started_flash();
+
+    let result = flash.prepare_read(CAPACITY_IN_BYTES as u32 - 1, 2);
+
+    assert_eq!(result, Err(Error::BadRange(NorFlashErrorKind::OutOfBounds)));
+}

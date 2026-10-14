@@ -449,17 +449,32 @@ impl SystemValues for SystemWithFile {
 
 /// The array of `length` elements after a handler reads the file at `path` into it.
 fn file_bytes(path: &str, length: u16, bytes: &[u8]) -> Result<Vec<Value>, Failure> {
+    file_bytes_from(path, None, length, bytes)
+}
+
+/// The array of `length` elements after a handler reads the file at `path` from `offset` into it.
+fn file_bytes_from(
+    path: &str,
+    offset: Option<i32>,
+    length: u16,
+    bytes: &[u8],
+) -> Result<Vec<Value>, Failure> {
     let mut writer = ImageWriter::new("arrays", "Arrays", AppKind::App, 1);
     let array = writer.array("buttons", ValueType::Int, false, length, 2, 7);
     let path = writer.string(path);
-    writer.handler(code(&[
-        Instruction::PushText(path),
-        Instruction::WorkArray {
-            work: Work::FileBytes,
-            destination: array,
-            source: array,
+    let mut instructions = std::vec![Instruction::PushText(path)];
+    if let Some(offset) = offset {
+        instructions.push(Instruction::PushInt(offset));
+    }
+    instructions.push(Instruction::WorkArray {
+        work: match offset {
+            Some(_) => Work::FileBytesFrom,
+            None => Work::FileBytes,
         },
-    ]));
+        destination: array,
+        source: array,
+    });
+    writer.handler(code(&instructions));
     let bytes_of_image = writer.build();
     let image = AppImage::parse(&bytes_of_image).unwrap();
     assert_eq!(verify(&image), Ok(()));
@@ -558,4 +573,36 @@ fn file_bytes_encodes_and_decodes() {
 
     assert_eq!(work.encode().as_bytes(), &[0x65, 6, 2, 2]);
     assert_eq!(decode(work.encode().as_bytes(), 0), Ok((work, 4)));
+}
+
+#[test]
+fn file_bytes_from_an_offset_pages_through_the_file() {
+    let bytes: Vec<u8> = (0..100).collect();
+
+    let read = file_bytes_from("/remote/buttons", Some(60), 50, &bytes).unwrap();
+
+    let mut expected: Vec<Value> = (60..100).collect();
+    expected.resize(50, 0);
+    assert_eq!(read, expected);
+}
+
+#[test]
+fn file_bytes_from_a_negative_offset_fails() {
+    assert_eq!(
+        file_bytes_from("/remote/buttons", Some(-1), 2, &[1, 2]),
+        Err(Failure::IndexOutOfRange)
+    );
+}
+
+#[test]
+fn file_bytes_from_encodes_and_decodes() {
+    let work = Instruction::WorkArray {
+        work: Work::FileBytesFrom,
+        destination: 2,
+        source: 2,
+    };
+
+    assert_eq!(work.encode().as_bytes(), &[0x65, 7, 2, 2]);
+    assert_eq!(decode(work.encode().as_bytes(), 0), Ok((work, 4)));
+    assert_eq!(work.stack_effect().taken, 2);
 }

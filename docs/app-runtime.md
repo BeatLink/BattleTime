@@ -520,7 +520,7 @@ Each instruction is one opcode byte followed by its operands:
 | `62` | copy array | destination and source arrays, 1 byte each | Copies every element; the two must be the same length. Handlers only. |
 | `63` | fill array | array, 1 byte | Takes a value and writes it to every element. Handlers only. |
 | `64` | ask array | question, 1 byte; array, 1 byte | Takes the question's arguments and pushes the answer: how many elements equal a value, where the `n`th one is, the longest line of a value through a cell of a grid, whether a 2048 slide would change the grid, what it scores, or how many pairs are out of order. |
-| `65` | work array | work, 1 byte; destination, 1 byte; source, 1 byte | Compares two arrays of one length, or writes the destination from the source: the Game of Life's next generation, the grid after a 2048 slide, the source moved one place along with a value taken from the stack added at the end or the front, or the source with some of its places shuffled, or (work 6) the first bytes of the file whose path, an image string, is taken from the stack, read through `SystemValues::read_file` with 0 past its end. Works are numbered 0 equal, 1 life step, 2 slide, 3 push last, 4 push first, 5 shuffle and 6 file bytes. Writing is for handlers only, and the source may be the destination. |
+| `65` | work array | work, 1 byte; destination, 1 byte; source, 1 byte | Compares two arrays of one length, or writes the destination from the source: the Game of Life's next generation, the grid after a 2048 slide, the source moved one place along with a value taken from the stack added at the end or the front, or the source with some of its places shuffled, or (work 6) the first bytes of the file whose path, an image string, is taken from the stack, read through `SystemValues::read_file` with 0 past its end, or (work 7) the same from an offset taken from the stack after the path. Works are numbered 0 equal, 1 life step, 2 slide, 3 push last, 4 push first, 5 shuffle, 6 file bytes and 7 file bytes from. Writing is for handlers only, and the source may be the destination. |
 
 System values, in the order `read system` numbers them: `now`, `utc_offset`, `battery_percent`,
 `is_charging`, `steps_today`, `heart_rate`, `heart_rate_measured_at`, `is_phone_connected`,
@@ -562,7 +562,7 @@ Effects, in the order `effect` numbers them, with how many arguments each takes:
 `music_control` (1), `call_control` (1), `find_phone` (1), `measure_heart_rate`,
 `start_heart_rate`, `stop_heart_rate`, `reset_step_trip`, `set_setting` (2), `set_do_not_disturb` (1),
 `log` (1), `request_music_state`, `set_heart_rate_led` (3), `set_bluetooth` (1),
-`request_navigation_state`, `set_app_enabled` (2).
+`request_navigation_state`, `set_app_enabled` (2), `prefetch_file` (3).
 `send_to_phone`'s two arguments are texts: the channel, and the data as the JSON object the compiler
 builds, which the firmware sends as `{"t":"app","ch":...,"d":...}`.
 `vibrate_sequence` and `http_request` need arrays and more arguments, and come later.

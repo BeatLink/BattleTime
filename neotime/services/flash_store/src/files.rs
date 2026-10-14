@@ -6,7 +6,7 @@ use heapless::{String, Vec};
 use crate::{
     checksum::{path_hash, Checksum},
     flash::{erase, half_word, read, word, write},
-    StoreError, FORMAT_VERSION, LONGEST_PATH_BYTES, MOST_SECTORS_PER_FILE, SECTOR_BYTES,
+    Extent, FileExtents, StoreError, FORMAT_VERSION, LONGEST_PATH_BYTES, MOST_SECTORS_PER_FILE, SECTOR_BYTES,
 };
 
 // ============================================================================
@@ -385,6 +385,40 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
             self.retire(flash, position, &header).await?;
         }
         Ok(())
+    }
+
+    /// Fills `extents` with where `length` bytes from `offset` lie, joining sectors that follow one another.
+    ///
+    /// Gives how many extents and bytes that took, fewer bytes than `length` only at the file's end, or none when
+    /// `extents` is too short.
+    pub(crate) fn extents(
+        &self,
+        header: &FileHeader,
+        offset: usize,
+        length: usize,
+        extents: &mut [Extent],
+    ) -> Option<FileExtents> {
+        let sector_bytes = SECTOR_BYTES as usize;
+        let wanted = header.length.saturating_sub(offset).min(length);
+        let (mut done, mut count) = (0, 0);
+        while done < wanted {
+            let position = FILE_HEADER_BYTES + offset + done;
+            let (part, in_sector) = (position / sector_bytes, position % sector_bytes);
+            let size = (sector_bytes - in_sector).min(wanted - done);
+            let address = self.sector_address(header.sectors[part] as usize) + in_sector as u32;
+            let follows_last = count > 0 && extents[count - 1].address + extents[count - 1].length == address;
+            if follows_last {
+                extents[count - 1].length += size as u32;
+            } else {
+                *extents.get_mut(count)? = Extent {
+                    address,
+                    length: size as u32,
+                };
+                count += 1;
+            }
+            done += size;
+        }
+        Some(FileExtents { count, bytes: wanted })
     }
 
     /// Reads from `offset` into the buffer, across sectors; the whole file read at once is checked against its checksum.

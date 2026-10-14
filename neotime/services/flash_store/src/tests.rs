@@ -758,3 +758,92 @@ fn the_ram_it_keeps_is_known_when_built() {
 
     assert!(ram < 3 * 1024, "{ram} B");
 }
+
+// ============================================================================
+// File extents
+// ============================================================================
+
+/// Reads what `file_extents` points at straight from the flash's bytes, as a DMA reader would.
+fn read_extents(store: &TestStore, extents: &[Extent]) -> Vec<u8> {
+    let bytes = &store.flash().bytes;
+    extents
+        .iter()
+        .flat_map(|extent| bytes[extent.address as usize..(extent.address + extent.length) as usize].to_vec())
+        .collect()
+}
+
+#[test]
+fn file_extents_point_at_the_bytes_read_file_gives() {
+    let mut store = blank_store();
+    let data = filler(9000, 3);
+    block_on(store.write_file("/apps/game/levels", &data)).unwrap();
+    let mut extents = [Extent::default(); 4];
+
+    let found = block_on(store.file_extents("/apps/game/levels", 3000, 4096, &mut extents))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(found.bytes, 4096);
+    assert_eq!(read_extents(&store, &extents[..found.count]), data[3000..7096]);
+}
+
+#[test]
+fn file_extents_stop_at_the_end_of_the_file() {
+    let mut store = blank_store();
+    let data = filler(5000, 4);
+    block_on(store.write_file("/large", &data)).unwrap();
+    let mut extents = [Extent::default(); 4];
+
+    let found = block_on(store.file_extents("/large", 4500, 4096, &mut extents))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(found.bytes, 500);
+    assert_eq!(read_extents(&store, &extents[..found.count]), data[4500..]);
+}
+
+#[test]
+fn sectors_that_follow_one_another_make_one_extent() {
+    let mut store = blank_store();
+    block_on(store.write_file("/large", &filler(9000, 5))).unwrap();
+    let mut extents = [Extent::default(); 4];
+
+    let found = block_on(store.file_extents("/large", 0, 9000, &mut extents))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(found.count, 1);
+    assert_eq!(extents[0].length, 9000);
+}
+
+#[test]
+fn file_extents_give_none_for_a_record_a_missing_file_or_too_few_extents() {
+    let mut store = blank_store();
+    block_on(store.write_file("/small", b"tiny")).unwrap();
+    block_on(store.write_file("/large", &filler(5000, 6))).unwrap();
+    let mut no_extents: [Extent; 0] = [];
+    let mut extents = [Extent::default(); 4];
+
+    let small = block_on(store.file_extents("/small", 0, 4, &mut extents)).unwrap();
+    let missing = block_on(store.file_extents("/missing", 0, 4, &mut extents)).unwrap();
+    let too_few = block_on(store.file_extents("/large", 0, 5000, &mut no_extents)).unwrap();
+
+    assert_eq!((small, missing, too_few), (None, None, None));
+}
+
+#[test]
+fn file_extents_follow_a_file_whose_sectors_are_scattered() {
+    let mut store = blank_store();
+    block_on(store.write_file("/first", &filler(5000, 7))).unwrap();
+    block_on(store.write_file("/between", &filler(5000, 8))).unwrap();
+    block_on(store.delete_file("/first")).unwrap();
+    let data = filler(20_000, 9);
+    block_on(store.write_file("/scattered", &data)).unwrap();
+    let mut extents = [Extent::default(); 8];
+
+    let found = block_on(store.file_extents("/scattered", 100, 19_000, &mut extents))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(read_extents(&store, &extents[..found.count]), data[100..19_100]);
+}

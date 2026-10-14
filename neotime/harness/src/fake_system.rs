@@ -156,7 +156,7 @@ impl RecordedEffect {
 fn text_arguments(kind: EffectKind) -> &'static [usize] {
     use EffectKind::*;
     match kind {
-        Go | OpenApp | ShowToast | Log | SetSetting | SetAppEnabled => &[0],
+        Go | OpenApp | ShowToast | Log | SetSetting | SetAppEnabled | PrefetchFile => &[0],
         Notify | SendToPhone => &[0, 1],
         _ => &[],
     }

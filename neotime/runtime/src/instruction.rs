@@ -491,6 +491,8 @@ pub enum ArrayWork {
     /// Takes a path and writes the first bytes of that file, one per element, with 0 past its end or for a
     /// missing file; `source` is the destination.
     FileBytes,
+    /// Takes a path and an offset, and writes the file's bytes from that offset on, as `FileBytes` does.
+    FileBytesFrom,
 }
 
 impl ArrayWork {
@@ -503,6 +505,7 @@ impl ArrayWork {
             4 => ArrayWork::PushFirst,
             5 => ArrayWork::Shuffle,
             6 => ArrayWork::FileBytes,
+            7 => ArrayWork::FileBytesFrom,
             _ => return None,
         })
     }
@@ -581,6 +584,9 @@ pub enum EffectKind {
     RequestNavigationState,
     /// Turns an installed app or face on or off by its id, once the package manager's checks allow it.
     SetAppEnabled,
+    /// Starts reading a path's bytes from an offset into RAM in the background, at most
+    /// `PREFETCH_BYTES` of them, so a later `file_bytes` of that part finds them there.
+    PrefetchFile,
 }
 
 impl EffectKind {
@@ -618,6 +624,7 @@ impl EffectKind {
             28 => SetBluetooth,
             29 => RequestNavigationState,
             30 => SetAppEnabled,
+            31 => PrefetchFile,
             _ => return None,
         })
     }
@@ -642,7 +649,7 @@ impl EffectKind {
             | DismissNotification | MusicControl | CallControl | SetDoNotDisturb | Log | FindPhone
             | SetBluetooth => 1,
             Notify | SendToPhone | SetSetting | SetAppEnabled => 2,
-            SetHeartRateLed => 3,
+            SetHeartRateLed | PrefetchFile => 3,
         }
     }
 }

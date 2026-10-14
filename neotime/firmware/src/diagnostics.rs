@@ -39,6 +39,12 @@ pub enum Counter {
     HeartRateState,
     /// The heart rate sensor's latest reading, in beats per minute.
     HeartRateBeatsPerMinute,
+    /// Bytes the external flash's DMA reads have moved, counting round past the largest `u32`.
+    FlashReadBytes,
+    /// Times a flash read stopped after a piece to give the bus to the display.
+    FlashReadPauses,
+    /// App file reads served from a part read ahead with `prefetch_file`, without reading the flash.
+    PrefetchedReads,
 }
 
 const COUNTER_COUNT: usize = 8;
@@ -46,7 +52,7 @@ const COUNTER_COUNT: usize = 8;
 /// The byte the companion app writes to the diagnostics characteristic once it saved the crash.
 pub const DEBUG_REPORT_SAVED: u8 = 1;
 const FIRST_LATER_WORD: usize = COUNTER_COUNT + LAST_RESTART_WORDS;
-const LATER_COUNTER_COUNT: usize = 6;
+const LATER_COUNTER_COUNT: usize = 9;
 const WORD_COUNT: usize = FIRST_LATER_WORD + LATER_COUNTER_COUNT;
 pub const SNAPSHOT_BYTES: usize = WORD_COUNT * 4;
 

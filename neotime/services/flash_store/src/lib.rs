@@ -96,6 +96,20 @@ pub enum StoreError<FlashError> {
     Corrupted,
 }
 
+/// A run of bytes that lie one after another in the flash.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Extent {
+    pub address: u32,
+    pub length: u32,
+}
+
+/// How much of `file_extents`'s slice it filled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FileExtents {
+    pub count: usize,
+    pub bytes: usize,
+}
+
 /// Where the store lives in the flash and how its sectors are divided.
 #[derive(Clone, Copy, Debug)]
 pub struct Layout {
@@ -461,6 +475,26 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
             (None, Some(large)) => self.files.read(&mut self.flash, &large, offset, buffer).await,
             (None, None) => Ok(None),
         }
+    }
+
+    /// Where part of a file lies in the flash, for a caller that reads it itself, such as by DMA.
+    ///
+    /// Gives none when the file is missing, is kept as a record rather than in sectors, or needs more extents
+    /// than the slice holds; the caller then reads it with `read_file`. Bytes read this way skip the
+    /// checksum a whole-file `read_file` checks.
+    pub async fn file_extents(
+        &mut self,
+        path: &str,
+        offset: usize,
+        length: usize,
+        extents: &mut [Extent],
+    ) -> Result<Option<FileExtents>, StoreError<Flash::Error>> {
+        let large = match self.locate(path).await? {
+            (Some(small), Some(large)) if large.sequence > small.sequence => large,
+            (None, Some(large)) => large,
+            _ => return Ok(None),
+        };
+        Ok(self.files.extents(&large, offset, length, extents))
     }
 
     pub async fn file_length(&mut self, path: &str) -> Result<Option<usize>, StoreError<Flash::Error>> {

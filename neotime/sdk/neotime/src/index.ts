@@ -1207,13 +1207,24 @@ export function life_step(grid: readonly number[], width: number, live_value: nu
 }
 
 /**
- * The first `length` bytes of a file on the watch, 0 to 255 each, with 0 past its end or when it is missing. The
- * path is written out and the length known when compiling. Assign it to an array signal of that length in a
- * handler, such as `onOpen`. The preview reads the file from `preview_files` as UTF-8.
+ * `length` bytes of a file on the watch from `offset`, its first bytes without one, 0 to 255 each, with 0 past its
+ * end or when it is missing. The path is written out and the length known when compiling; the offset may be worked
+ * out, so one array can page through a large file. Assign it to an array signal of that length in a handler, such
+ * as `onOpen`. After `prefetch_file` of the same part the bytes are already in RAM. The preview reads the file from
+ * `preview_files` as UTF-8.
  */
-export function file_bytes(path: string, length: number): number[] {
+export function file_bytes(path: string, length: number, offset = 0): number[] {
   const bytes = new TextEncoder().encode(preview_files.value[path] ?? "");
-  return Array.from({ length }, (_, index) => bytes[index] ?? 0);
+  return Array.from({ length }, (_, index) => bytes[offset + index] ?? 0);
+}
+
+/**
+ * Starts reading `length` bytes of a file from `offset` into RAM in the background, at most 4,096, so the screen
+ * keeps drawing while they arrive and a later `file_bytes` of that part takes them without waiting for the flash.
+ * One part is held at a time, until a `file_bytes` takes it or the next `prefetch_file` replaces it.
+ */
+export function prefetch_file(path: string, offset: number, length: number) {
+  emit({ kind: "prefetch_file", path, offset, length });
 }
 
 /**

@@ -2403,6 +2403,8 @@ fn the_package_values_change_with_the_installed_apps_and_list_names_and_ids_as_t
     assert!(!SystemValue::PackageIsFace.is_text());
     assert_eq!(EffectKind::from_byte(30), Some(EffectKind::SetAppEnabled));
     assert_eq!(EffectKind::SetAppEnabled.argument_count(), 2);
+    assert_eq!(EffectKind::from_byte(31), Some(EffectKind::PrefetchFile));
+    assert_eq!(EffectKind::PrefetchFile.argument_count(), 3);
 }
 
 // ============================================================================

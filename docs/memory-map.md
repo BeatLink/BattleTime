@@ -265,6 +265,7 @@ it opens one. The parts, in bytes:
 | Subscriptions | 40 each | What the host keeps for each |
 | Saved state | `saved_state_bytes` | The buffer the shell writes it from when the app closes, and reads it into when it opens |
 | Passing use | 1,536 | Drawing, the image checks at open, and the allocator's gaps |
+| Read ahead | 4,096 when the app calls `prefetch_file` | The one file part it holds until a `file_bytes` takes it |
 | Nodes | 164 per widget of the largest screen | A node and its place in the list; every widget counts as shown, a Repeat counts each row (8 when the count is worked out at run time, only those in view down a list of fixed-height rows), and no screen more than 128 |
 | Text | each fixed text's length, 16 for text worked out at run time, 2,560 for a TextFile | |
 

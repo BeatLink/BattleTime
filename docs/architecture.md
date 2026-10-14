@@ -722,6 +722,19 @@ watch face, the launcher and the apps through `neotime-app-host`:
   display command from the status page or a store call the shell runs to its end, sleeps in WFE
   until the interrupt. In the emulator, opening the launcher spends 3 ms blocked on the bus
   against 40 ms when each strip was waited for, and the face draws in 114 ms instead of 139 ms.
+  Flash reads move by EasyDMA too (`read_flash`, and `start_flash_read`, which returns at once
+  with a `FlashReadInProgress` that owns its buffer and whose drop waits for the read to end),
+  over up to four extents one after another, a piece of at most 255 bytes at a time: a 4-byte
+  read command for each extent, then pieces into RAM, each started by the same TIMER1 interrupt, never chained by
+  PPI, so the nRF52832's EasyDMA anomaly 109 cannot touch them. They use the bus only while no strip
+  is going out; a display call sets `DISPLAY_IS_WAITING`, and the read stops after its current
+  piece and starts again with a fresh command once the display is done. The flash's own commands
+  wait for a read to end, so no erase or program lands inside one. A piece never leaves a single
+  byte, since a one-byte transfer clocks out an extra byte (anomaly 58).
+  An app's `prefetch_file` is one such read: the shell asks the flash store's `file_extents`
+  where that part of the file lies, starts the read into a heap buffer and returns, and
+  `WatchSystem::read_file` serves the next `file_bytes` of that part from the buffer, then drops it.
+  A part kept as a record, never over 1 KB, is read at once instead.
   The status page, the help screen and other `embedded-graphics` drawing go through blocking writes
   of a few pixels at a time. Screenshots of the face, the launcher and a scroll in the emulator
   match the earlier drivers' pixel for pixel.
@@ -845,7 +858,9 @@ watch face, the launcher and the apps through `neotime-app-host`:
   190 ms, 69 ms of it waiting on the bus, and 46 ms, 12 ms of it waiting. The next two count the sectors the flash store erased
   and the store calls the shell made while another task held the store, which found nothing.
   Two more follow: the heart rate sensor's state (1 started, 2 failed to start, 3 failed to read)
-  and its latest reading in beats per minute.
+  and its latest reading in beats per minute. The next two count the bytes the external flash's DMA reads moved
+  and the times a flash read stopped after a piece to give the bus to the display, and the last the
+  app file reads served from a part read ahead with `prefetch_file`.
 - **Reset reasons and crash record.** `restart.rs` reads and clears `RESETREAS` at start, and reads
   the crash record the previous run left in `.uninit` RAM (see
   [memory-map.md](memory-map.md#ram-64-kb-planned)). The full firmware keeps the record until the

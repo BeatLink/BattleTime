@@ -220,7 +220,7 @@ impl Interpreter {
                     .map(|_| ())
             }
             // The interpreter reads files itself, since only it has the system and the path's text.
-            ArrayWork::FileBytes => Err(Failure::BadInstruction),
+            ArrayWork::FileBytes | ArrayWork::FileBytesFrom => Err(Failure::BadInstruction),
             ArrayWork::Shuffle => {
                 let count = self.pop()?;
                 let first = self.pop()?;
@@ -276,13 +276,14 @@ impl Interpreter {
         }
     }
 
-    /// Writes the first bytes of the file at `path` into `array`, one per element, with 0 past the file's end.
+    /// Writes the bytes of the file at `path` from `start` on into `array`, one per element, with 0 past the file's end.
     #[inline(never)]
     pub(super) fn read_file_bytes(
         &mut self,
         state: &AppState,
         array: u8,
         path: &str,
+        start: u32,
         system: &impl SystemValues,
     ) -> Result<(), Failure> {
         let length = Self::array_length(state, array)?;
@@ -295,7 +296,7 @@ impl Interpreter {
             let read = match file_ended {
                 true => 0,
                 false => system
-                    .read_file(path, offset as u32, &mut chunk[..wanted])
+                    .read_file(path, start.saturating_add(offset as u32), &mut chunk[..wanted])
                     .unwrap_or(0)
                     .min(wanted),
             };

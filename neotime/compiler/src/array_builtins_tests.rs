@@ -1,7 +1,7 @@
 //! Tests for the `neotime` array functions the interpreter answers natively.
 
 use neotime_runtime::instruction::{decode, ArrayQuestion, ArrayWork, Instruction};
-use neotime_runtime::{AppImage, AppState, Interpreter, SystemValue, SystemValues, Value};
+use neotime_runtime::{AppImage, AppState, EffectKind, Interpreter, SystemValue, SystemValues, Value};
 
 use crate::compile_source;
 
@@ -22,7 +22,7 @@ fn source(body: &str, screen: &str) -> String {
     format!(
         r#"
 import {{ signal }} from "@preact/signals";
-import {{ define_app, count_of, nth_index_of, line_through, can_slide, slide_changes, slide_points, slide_grid, life_step, arrays_equal, push_shift, unshift_pop, shuffled, count_inversions, format_fixed, file_bytes, type SwipeEvent }} from "neotime";
+import {{ define_app, count_of, nth_index_of, line_through, can_slide, slide_changes, slide_points, slide_grid, life_step, arrays_equal, push_shift, unshift_pop, shuffled, count_inversions, format_fixed, file_bytes, prefetch_file, type SwipeEvent }} from "neotime";
 import {{ Label, Screen }} from "neotime/widgets";
 
 const board = signal([1, 0, 1, 2]);
@@ -237,5 +237,41 @@ fn file_bytes_needs_a_written_path_a_known_length_and_an_array_that_long() {
     assert!(call("`/x${board.value[0]}`, 4").contains("path written out"));
     assert!(call("\"/x\", board.value[0]").contains("known when compiling"));
     assert!(call("\"/x\", 5").contains("needs an array of 5"));
-    assert!(call("\"/x\"").contains("takes a path and a length"));
+    assert!(call("\"/x\"").contains("takes a path, a length and an optional offset"));
+}
+
+#[test]
+fn file_bytes_with_an_offset_works_it_out_after_the_path() {
+    let bytes = compiled(
+        "function swipe(event: SwipeEvent) { board.value = file_bytes(\"/remote/buttons\", 4, board.value[0] * 4); }",
+        "<Label>{`${board.value[0]}`}</Label>",
+    );
+    let image = AppImage::parse(&bytes).unwrap();
+    let handler = instructions(image.handler_code(0).unwrap());
+
+    assert!(matches!(handler[0], Instruction::PushText(_)));
+    assert_eq!(
+        handler.last(),
+        Some(&Instruction::WorkArray {
+            work: ArrayWork::FileBytesFrom,
+            destination: 0,
+            source: 0,
+        })
+    );
+}
+
+#[test]
+fn prefetch_file_is_an_effect_taking_a_path_an_offset_and_a_length() {
+    let bytes = compiled(
+        "function swipe(event: SwipeEvent) { prefetch_file(\"/remote/buttons\", board.value[0] * 4, 4); }",
+        "<Label>{`${board.value[0]}`}</Label>",
+    );
+    let image = AppImage::parse(&bytes).unwrap();
+    let handler = instructions(image.handler_code(0).unwrap());
+
+    assert!(matches!(handler[0], Instruction::PushText(_)));
+    assert_eq!(
+        handler.last(),
+        Some(&Instruction::Effect(EffectKind::PrefetchFile))
+    );
 }

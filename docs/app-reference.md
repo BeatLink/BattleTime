@@ -407,6 +407,7 @@ app cannot keep the sensor on all the time.
 | `log(text)` | Writes a line to the debug log the companion app can read. |
 | `set_bluetooth(on)` | Turns Bluetooth on or off; the same as `set_setting("bluetooth", ...)`. A restart turns it on again. |
 | `set_app_enabled(id, on)` | Turns an installed app or face on or off. The watch checks the change as the package manager does and does nothing when `packages` gives it a refusal, so show why first. |
+| `prefetch_file(path, offset, length)` | Starts reading `length` bytes of a file from `offset` into RAM in the background, at most 4,096, so the screen keeps drawing while they arrive. The next `file_bytes` of that part takes them from RAM instead of the flash, as the file was when `prefetch_file` ran. One part is held at a time, until a `file_bytes` reads its last byte, the next `prefetch_file` replaces it or the app closes. An app that calls it needs 4 KB more heap. Read the next page ahead as the wearer turns one, as `file_bytes(path, 256, page * 256)` then `prefetch_file(path, (page + 1) * 256, 256)`. |
 | `set_heart_rate_led(on, brightness, period)` | Drives the heart rate sensor's LED directly, such as for a beacon. `brightness` is the drive level, 0 to 3, and `period` the flash period in milliseconds, 0 for steady. The runtime turns it off when the app closes, even with the `background` permission, to save the battery. |
 
 Settings and other values that change often are stored on the external flash, never the internal
@@ -563,7 +564,7 @@ An app's state is at most 2 KB, and one array at most 1 KB. Each array stores it
 | `shuffled(array, first, count)` | The array with the `count` elements from `first` on in a random order. Handlers only. |
 | `push_shift(array, value)`, `unshift_pop(array, value)` | The array moved one place along with the value added at the end or the front, dropping the element at the other end: a history of readings or laps. |
 | `life_step(grid, width, live_value)` | The next generation of the Game of Life on a grid that wraps at its edges; each live cell holds `live_value`. At most 16 wide. |
-| `file_bytes(path, length)` | The first `length` bytes of a file on the watch, each 0 to 255, with 0 past the file's end or when it is missing, such as a file the companion app wrote. `path` is written out and `length` known when compiling. The file is read when the handler runs, so `onOpen` sees what the phone last wrote. The browser preview reads it from `preview_files` as UTF-8. |
+| `file_bytes(path, length, offset)` | `length` bytes of a file on the watch from `offset`, its first bytes without one, each 0 to 255, with 0 past the file's end or when it is missing, such as a file the companion app wrote. `path` is written out and `length` known when compiling; `offset` may be worked out, so one array can page through a file far larger than RAM. The file is read when the handler runs, so `onOpen` sees what the phone last wrote, unless `prefetch_file` already read that part. The browser preview reads it from `preview_files` as UTF-8. |
 | `array.map(...)` | A new array of the same length. Allowed in views, `computed` and handlers. |
 
 Loops over fixed-length arrays are allowed in `computed` and handlers as well as views.

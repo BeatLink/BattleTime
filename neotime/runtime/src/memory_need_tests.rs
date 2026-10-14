@@ -263,3 +263,22 @@ fn a_listed_app_costs_its_entry_and_its_words() {
 fn the_budget_leaves_the_system_its_share() {
     assert_eq!(APP_HEAP_BUDGET_BYTES + SYSTEM_BYTES, HEAP_BYTES);
 }
+
+#[test]
+fn an_app_that_reads_ahead_holds_room_for_one_prefetch() {
+    let mut plain = writer();
+    plain.widget(WidgetKind::Column, 0, &[]);
+    let mut reads_ahead = writer();
+    reads_ahead.widget(WidgetKind::Column, 0, &[]);
+    let mut code = CodeWriter::new();
+    code.emit(Instruction::PushSmall(0));
+    code.emit(Instruction::PushSmall(0));
+    code.emit(Instruction::PushSmall(0));
+    code.emit(Instruction::Effect(crate::EffectKind::PrefetchFile));
+    reads_ahead.handler(code.finish().unwrap());
+
+    assert_eq!(
+        need_of(&reads_ahead).working_bytes,
+        need_of(&plain).working_bytes + PREFETCH_BYTES
+    );
+}

@@ -22,7 +22,7 @@ use neotime_boot::{
     BOOT_STATE, DEFAULT_SLOTS, FIRMWARE, SLOT_TABLE,
 };
 use neotime_external_flash::{BusyWait, ExternalFlash};
-use neotime_flash_store::{FileAccess, FlashStore, Layout, StoreError};
+use neotime_flash_store::{Extent, FileAccess, FlashStore, Layout, StoreError};
 use neotime_packages::{
     commands::{refuse_command, Change},
     InstalledApp,
@@ -35,11 +35,14 @@ use neotime_updates::{
 };
 use static_cell::StaticCell;
 
+use alloc::boxed::Box;
 use core::{
     cell::RefCell,
     future::Future,
     sync::atomic::{AtomicBool, Ordering},
 };
+
+use crate::display_dma::{start_flash_read, FlashReadInProgress, MOST_READ_EXTENTS};
 
 use crate::{
     foreground, line, packages,
@@ -394,7 +397,7 @@ type WatchStore = FlashStore<StoreFlash, 128, 128, 192>;
 const ERASE_POLL_INTERVAL: embassy_time::Duration = embassy_time::Duration::from_millis(2);
 const PROGRAM_POLL_INTERVAL: embassy_time::Duration = embassy_time::Duration::from_micros(100);
 
-/// The external flash as the store sees it: reads are short and finish at once, while erases and page programs
+/// The external flash as the store sees it: reads move by EasyDMA while the CPU sleeps, and erases and page programs
 /// are started and then waited on with the timer, so the CPU and other tasks run while the chip works.
 ///
 /// It shares the chip with the update slots, which use it blocking; the driver makes either wait for the other.
@@ -411,10 +414,13 @@ impl embedded_storage_async::nor_flash::ErrorType for StoreFlash {
 impl embedded_storage_async::nor_flash::ReadNorFlash for StoreFlash {
     const READ_SIZE: usize = 1;
 
+    /// Moves the bytes by EasyDMA in the moments the display leaves the bus free, so a strip going out is not slowed.
     async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
-        self.wait_for_free_bus().await;
         self.wake_chip()?;
-        self.flash.lock(|flash| flash.borrow_mut().read(offset, bytes))
+        self.flash
+            .lock(|flash| flash.borrow_mut().prepare_read(offset, bytes.len()))?;
+        crate::display_dma::read_flash(offset, bytes);
+        Ok(())
     }
 
     fn capacity(&self) -> usize {
@@ -490,6 +496,39 @@ impl StoreFlash {
 }
 
 // ============================================================================
+// Parts of files read ahead
+// ============================================================================
+
+/// Part of a file on its way into RAM by DMA, or already there.
+pub enum FilePart {
+    Moving(FlashReadInProgress),
+    Arrived(Box<[u8]>),
+}
+
+impl FilePart {
+    /// How many bytes it holds, or will once they have all arrived.
+    pub fn len(&self) -> usize {
+        match self {
+            FilePart::Moving(read) => read.len(),
+            FilePart::Arrived(bytes) => bytes.len(),
+        }
+    }
+
+    /// The bytes, once every one has arrived; sleeps until then if some are still moving.
+    pub fn bytes(&mut self) -> &[u8] {
+        if let FilePart::Moving(_) = self {
+            if let FilePart::Moving(read) = core::mem::replace(self, FilePart::Arrived(Box::default())) {
+                *self = FilePart::Arrived(read.finish());
+            }
+        }
+        match self {
+            FilePart::Arrived(bytes) => bytes,
+            FilePart::Moving(_) => &[],
+        }
+    }
+}
+
+// ============================================================================
 // Files for apps, settings and the step log
 // ============================================================================
 
@@ -554,6 +593,33 @@ impl Files {
         if self.flash_may_sleep.load(Ordering::Relaxed) {
             let _ = self.external_flash.lock(|flash| flash.borrow_mut().sleep());
         }
+    }
+
+    /// Starts reading up to `length` bytes of a file from `offset` into RAM and returns at once, so
+    /// the screen keeps drawing while they arrive; nothing when the file is missing or the store busy.
+    ///
+    /// A part of a file kept as a record, never more than 1 KB, is read at once instead.
+    pub fn start_reading_part(&self, path: &str, offset: u32, length: usize) -> Option<FilePart> {
+        self.now(|store| {
+            let mut extents = [Extent::default(); MOST_READ_EXTENTS];
+            let found = run_on_heap(store.file_extents(path, offset as usize, length, &mut extents)).ok()?;
+            let Some(found) = found else {
+                let mut bytes = alloc::vec![0; length];
+                let read =
+                    run_on_heap(FileAccess::read_file(store, path, offset as usize, &mut bytes)).ok()??;
+                bytes.truncate(read);
+                return Some(FilePart::Arrived(bytes.into_boxed_slice()));
+            };
+            let first = extents[0];
+            self.external_flash
+                .lock(|flash| flash.borrow_mut().prepare_read(first.address, found.bytes))
+                .ok()?;
+            let buffer = alloc::vec![0; found.bytes].into_boxed_slice();
+            Some(FilePart::Moving(start_flash_read(
+                &extents[..found.count],
+                buffer,
+            )))
+        })?
     }
 
     pub fn read_now(&self, path: &str) -> Option<alloc::vec::Vec<u8>> {

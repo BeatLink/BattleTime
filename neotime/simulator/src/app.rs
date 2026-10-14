@@ -371,7 +371,7 @@ fn simulated_steps(value: SystemValue, index: Value) -> Option<Value> {
 fn text_arguments(kind: EffectKind) -> &'static [usize] {
     use EffectKind::*;
     match kind {
-        Go | OpenApp | ShowToast | Log | SetSetting => &[0],
+        Go | OpenApp | ShowToast | Log | SetSetting | PrefetchFile => &[0],
         Notify | SendToPhone => &[0, 1],
         _ => &[],
     }

@@ -825,18 +825,24 @@ impl Interpreter {
             }
             AskArray { question, array } => self.ask_array(call.state, question, array)?,
             WorkArray {
-                work: ArrayWork::FileBytes,
+                work: work @ (ArrayWork::FileBytes | ArrayWork::FileBytesFrom),
                 destination,
                 ..
             } => {
                 Self::require_handler(call)?;
+                let start = match work {
+                    ArrayWork::FileBytesFrom => {
+                        u32::try_from(self.pop()?).map_err(|_| Failure::IndexOutOfRange)?
+                    }
+                    _ => 0,
+                };
                 let image = call.image;
                 let path = match TextReference::from_value(self.pop()?) {
                     Some(TextReference::ImageString(index)) => image.string(index),
                     _ => None,
                 }
                 .ok_or(Failure::BadText)?;
-                self.read_file_bytes(call.state, destination, path, call.system)?;
+                self.read_file_bytes(call.state, destination, path, start, call.system)?;
             }
             WorkArray {
                 work,

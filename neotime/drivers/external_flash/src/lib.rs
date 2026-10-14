@@ -137,6 +137,30 @@ fn sector_starts(from: u32, to: u32) -> impl Iterator<Item = u32> {
 }
 
 // ============================================================================
+// Reads a DMA engine moves itself
+// ============================================================================
+
+/// The most bytes one EasyDMA transfer moves on the nRF52832.
+const LARGEST_DMA_PIECE: usize = 255;
+
+/// The command that reads from `address`, for a driver that sends it itself.
+pub fn read_command(address: u32) -> [u8; 4] {
+    command_with_address(READ_DATA, address)
+}
+
+/// How many of `bytes_left` the next DMA piece of a read takes.
+///
+/// It never leaves one byte behind, since the nRF52832 clocks out an extra byte when a transfer
+/// reads only one, and the chip would then skip a byte.
+pub fn next_read_piece(bytes_left: usize) -> usize {
+    match bytes_left {
+        0..=LARGEST_DMA_PIECE => bytes_left,
+        one_piece_and_a_byte if one_piece_and_a_byte == LARGEST_DMA_PIECE + 1 => LARGEST_DMA_PIECE - 1,
+        _ => LARGEST_DMA_PIECE,
+    }
+}
+
+// ============================================================================
 // Busy wait
 // ============================================================================
 
@@ -342,6 +366,12 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
         Ok(())
     }
 
+    /// Checks a read's range and waits for an erase or program still running, for a caller that sends the read itself.
+    pub fn prepare_read(&mut self, offset: u32, length: usize) -> Result<(), Error<FlashSpi::Error>> {
+        check_read_or_write(offset, length)?;
+        self.finish_running_operation()
+    }
+
     fn is_busy(&mut self) -> Result<bool, Error<FlashSpi::Error>> {
         let mut status = [0];
         self.spi
@@ -359,8 +389,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ReadNorFlash for ExternalFlash<FlashSp
     const READ_SIZE: usize = 1;
 
     fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
-        check_read_or_write(offset, bytes.len())?;
-        self.finish_running_operation()?;
+        self.prepare_read(offset, bytes.len())?;
 
         let header = command_with_address(READ_DATA, offset);
         self.spi

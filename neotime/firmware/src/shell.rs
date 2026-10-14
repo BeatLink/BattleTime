@@ -28,7 +28,7 @@
 extern crate alloc;
 
 use core::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     sync::atomic::{AtomicBool, Ordering},
 };
 
@@ -63,7 +63,7 @@ use neotime_packages::{
     commands::{run_reply, Change},
     AppId, PackageError, Refusal,
 };
-use neotime_runtime::memory_need::estimate_memory_need;
+use neotime_runtime::memory_need::{estimate_memory_need, PREFETCH_BYTES};
 use neotime_runtime::{
     events::SwipeDirection, resources::ImageReference, AppImage, AppKind, EffectKind, SystemValue,
     SystemValues, Theme, Value,
@@ -248,6 +248,17 @@ struct WatchSystem {
     call_ringing_until: Option<Instant>,
     /// Whether an app read the free storage before it was counted, so the loop counts it.
     free_storage_wanted: Cell<bool>,
+    /// The part of a file the open app read ahead with `prefetch_file`, until a `file_bytes` takes it.
+    prefetch: RefCell<Option<Prefetch>>,
+}
+
+/// A part of a file read ahead into RAM, as the file was when `prefetch_file` asked for it.
+struct Prefetch {
+    path: heapless::String<{ neotime_flash_store::LONGEST_PATH_BYTES }>,
+    offset: u32,
+    /// Whether it holds fewer bytes than were asked for because the file ends there.
+    reaches_file_end: bool,
+    part: storage::FilePart,
 }
 
 impl SystemValues for WatchSystem {
@@ -407,7 +418,8 @@ impl SystemValues for WatchSystem {
     }
 
     fn read_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
-        self.files.read_part_now(path, offset, out)
+        self.read_prefetched(path, offset, out)
+            .or_else(|| self.files.read_part_now(path, offset, out))
     }
 }
 
@@ -417,6 +429,49 @@ fn is_notification_value(value: SystemValue) -> bool {
 }
 
 impl WatchSystem {
+    /// Starts reading part of a file ahead, dropping the part read ahead before so its memory is free first.
+    fn prefetch_file(&mut self, path: &str, offset: Value, length: Value) {
+        *self.prefetch.get_mut() = None;
+        let length = length.clamp(0, PREFETCH_BYTES as Value) as usize;
+        let (Ok(offset), Ok(kept_path)) = (u32::try_from(offset), heapless::String::try_from(path)) else {
+            return;
+        };
+        if length == 0 {
+            return;
+        }
+        let Some(part) = self.files.start_reading_part(path, offset, length) else {
+            return;
+        };
+        *self.prefetch.get_mut() = Some(Prefetch {
+            path: kept_path,
+            offset,
+            reaches_file_end: part.len() < length,
+            part,
+        });
+    }
+
+    /// Copies a read the part read ahead covers, waiting for its last bytes if they are still moving.
+    ///
+    /// The part is dropped once its last byte is taken; a read it does not cover goes to the flash.
+    fn read_prefetched(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
+        let mut held = self.prefetch.borrow_mut();
+        let prefetch = held.as_mut().filter(|prefetch| prefetch.path == path)?;
+        let start = offset.checked_sub(prefetch.offset)? as usize;
+        let reaches_file_end = prefetch.reaches_file_end;
+        let bytes = prefetch.part.bytes();
+        let available = bytes.len().checked_sub(start)?;
+        if available < out.len() && !reaches_file_end {
+            return None;
+        }
+        let count = available.min(out.len());
+        out[..count].copy_from_slice(&bytes[start..start + count]);
+        if count == available {
+            *held = None;
+        }
+        crate::diagnostics::add_one(crate::diagnostics::Counter::PrefetchedReads);
+        Some(count)
+    }
+
     /// Walks the file system from the loop rather than deep inside a redraw, so its frames stay off the peak stack.
     fn count_free_storage_if_wanted(&self) {
         if !self.free_storage_wanted.replace(false) {
@@ -505,6 +560,9 @@ impl System for WatchSystem {
                 heart_rate::flash_led(effect.number(0) != 0, effect.number(1), effect.number(2))
             }
             EffectKind::SetBluetooth => settings::set_by_name(Setting::Bluetooth.name(), effect.number(0)),
+            EffectKind::PrefetchFile => {
+                self.prefetch_file(effect.text(0).unwrap_or(""), effect.number(1), effect.number(2))
+            }
             EffectKind::SetAppEnabled => {
                 let id = effect.text(0).unwrap_or("");
                 let allowed = !(id == self.open_app_id.as_str() && effect.number(1) == 0);
@@ -695,6 +753,7 @@ impl Shell {
             host.close(now, &mut self.system);
             self.save_state_of(&mut host);
         }
+        *self.system.prefetch.get_mut() = None;
     }
 
     /// Opens a host on the image into `self.host`.
@@ -1682,6 +1741,7 @@ pub async fn run_shell(
             files,
             free_storage_kilobytes: Cell::new(None),
             free_storage_wanted: Cell::new(false),
+            prefetch: RefCell::new(None),
             call_ringing_until: None,
         },
         theme,

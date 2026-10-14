@@ -904,3 +904,41 @@ mod prompt {
         );
     }
 }
+
+// ============================================================================
+// Paging through a file
+// ============================================================================
+
+const PAGING_APP: &str = r#"
+import { signal } from "@preact/signals";
+import { define_app, file_bytes, prefetch_file } from "neotime";
+import { Label, Screen } from "neotime/widgets";
+const page = signal(0);
+const bytes = signal([0, 0, 0, 0]);
+function turn() {
+  bytes.value = file_bytes("/apps/pager/data", 4, page.value * 4);
+  page.value = page.value + 1;
+  prefetch_file("/apps/pager/data", page.value * 4, 4);
+}
+function Main() {
+  return <Screen onClick={turn}><Label>{`${bytes.value[0]} ${bytes.value[3]}`}</Label></Screen>;
+}
+export default define_app({ id: "pager", name: "Pager", screens: { main: Main } });
+"#;
+
+#[test]
+fn an_app_pages_through_a_file_and_reads_the_next_page_ahead() {
+    let mut system = neotime_app_testing::FakeSystem::new();
+    system.write_file("/apps/pager/data", &(10..30).collect::<Vec<u8>>());
+    let image = neotime_app_testing::compile_source_text(PAGING_APP).unwrap();
+    let mut watch = TestWatch::open_image_on(image, system).unwrap();
+
+    watch.tap(120, 120);
+    watch.tap(120, 120);
+
+    assert!(watch.shows_text("14 17"), "{:?}", watch.visible_texts());
+    let prefetches = watch.effects_of(EffectKind::PrefetchFile);
+    assert_eq!(prefetches.len(), 2);
+    assert_eq!(prefetches[1].text(0), Some("/apps/pager/data"));
+    assert_eq!((prefetches[1].number(1), prefetches[1].number(2)), (8, 4));
+}

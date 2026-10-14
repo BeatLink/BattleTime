@@ -346,7 +346,8 @@ fn is_handler_only(instruction: Instruction) -> bool {
                     | ArrayWork::PushLast
                     | ArrayWork::PushFirst
                     | ArrayWork::Shuffle
-                    | ArrayWork::FileBytes,
+                    | ArrayWork::FileBytes
+                    | ArrayWork::FileBytesFrom,
                 ..
             }
             | Instruction::ReadEvent(_)
