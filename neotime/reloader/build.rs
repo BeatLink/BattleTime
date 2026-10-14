@@ -73,6 +73,10 @@ fn main() {
     source.push_str(&bootloader.as_rust("BOOTLOADER"));
     source.push_str(&firmware.as_rust("FIRMWARE"));
     match &recovery {
+        // Both slots taking the same image share one copy, since two do not fit wasp-os's app slot.
+        Some(recovery) if recovery.bytes == firmware.bytes => {
+            source.push_str("pub const RECOVERY: Option<Payload> = Some(FIRMWARE);\n")
+        }
         Some(recovery) => source.push_str(&recovery.as_rust("RECOVERY")),
         None => source.push_str("pub const RECOVERY: Option<Payload> = None;\n"),
     }

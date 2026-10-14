@@ -171,13 +171,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Check why wasp-os's update mode gives way to the reloader** about 4 seconds after the
   button escape in the emulator, with no reset between. Its advertising never times out, so this may
   be the emulator's SoftDevice; if a watch does the same, the escape leaves the reloader running.
-- [ ] **Updates over Bluetooth drop part way.** Since 5fc998d, `dfu.py --legacy` to the running
-  firmware often stops with "No notification received" (at 80 %, 51 %, 10 % and 50 % on
-  2026-10-13, and again for 3a5abe9). A broken upload is never swapped in, and a retry or an
-  upload to the recovery firmware gets through. Find where the firmware stops answering.
-- [ ] **The recovery firmware no longer fits the reloader.** `recovery.bin` overflows the reloader
-  by about 11.4 KB, so `tools/build_images.sh` stops at the reloader and the two migration suites
-  fail. Shrink the recovery build or give the reloader the room.
 - [ ] **Run the DFU service against more clients:** wasp-os's `dfu.py` works on the watch; the
   companion app and Gadgetbridge are next.
 - [ ] **An update over Bluetooth in the emulator.** The update suites write images straight into
@@ -211,10 +204,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Run the stack overflow test in the emulator.** `crash_record`'s "A Stack Overflow Faults At
   The Guard And Is Reported" skips, since PineTimeEmulator has no memory protection unit yet; it
   runs once the emulator models one.
-- [ ] **Run the wasp-os emulator tests in CI.** The `Emulator suites` job skips the tests tagged
-  `wasp-os` (the rehearsals and the wasp-os migration), since they start from a wasp-os bootloader
-  build with Nordic's S112 that only a local checkout has. Package that build, or its parts, so CI
-  can run them too.
 - [ ] **Read the bootloader in the updater with assembly loads.** `bootloader-updater`'s
   `installed_crc` reads `BOOTLOADER.start` (address 0, the null pointer) through `Nvmc`, which is
   undefined behaviour; the firmware's same read let the compiler delete most of the firmware. Use

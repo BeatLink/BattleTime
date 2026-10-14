@@ -201,7 +201,7 @@ jobs:
       - name: Run the suites, except those that need a wasp-os build
         run: >
           nix develop ./PineTimeEmulator --command pinetime-test -r emulator-results
-          --variable DIST:$PWD/dist --exclude wasp-os NeoTime/neotime/tests/emulator/*.robot
+          --variable DIST:$PWD/dist NeoTime/neotime/tests/emulator/*.robot
       - name: Keep the suite logs
         if: always()
         uses: actions/upload-artifact@v4

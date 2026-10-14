@@ -156,7 +156,7 @@ wrote them, or is `{}`. For example the remote app's third button sends
 `slots` reports or moves the update and recovery slots in the external flash, which the
 [slot table](bootloader.md#the-slot-table) records. The full firmware serves it; the recovery
 firmware answers `{"t":"slots","err":"the recovery firmware cannot move the slots"}`, since the
-reloaders carry it twice in wasp-os's app slot and it has no room to spare.
+reloaders carry it in wasp-os's app slot and it has no room to spare.
 
 | Line | Answer |
 |---|---|

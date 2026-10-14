@@ -8,18 +8,16 @@ Resource          neotime.resource
 Library           OperatingSystem
 
 *** Variables ***
-${WASP_OS}                ${PROJECTS}/wasp-os
 # MBR, S112 and wasp-os's bootloader on S112, merged, as `make BOARD=pinetime SD=s112 bootloader` leaves it.
-${WASP_BOOTLOADER_HEX}    ${WASP_OS}/build-pinetime-s112/bootloader.hex
+${WASP_BOOTLOADER_HEX}    ${CURDIR}/fixtures/wasp-os-s112-bootloader.hex
 ${WASP_RELOADER_BIN}      ${DIST}/reloader-from-wasp-os.bin
 ${WASP_APP_START}         0x19000
 ${WASP_APP_END}           0x78000
 ${WASP_SETTINGS}          0x7F000
 ${BANK_VALID_APP}         0x1
 
-${INFINITIME}             ${PROJECTS}/InfiniTime
 # Copied to a plain name before loading, since Renode refuses the dots in the release file name.
-${MCUBOOT_RELEASE}        ${INFINITIME}/bootloader/bootloader-5.0.4.bin
+${MCUBOOT_RELEASE}        ${CURDIR}/fixtures/infinitime-mcuboot-5.0.4.bin
 ${MCUBOOT_BIN}            ${TEMPDIR}/neotime_mcuboot.bin
 ${INFINITIME_RELOADER}    ${DIST}/reloader-from-infinitime.mcuboot.bin
 ${MCUBOOT_SLOT}           0x8000
@@ -74,7 +72,6 @@ Old System Still Starts
 
 *** Test Cases ***
 Moves A wasp-os Watch Onto NeoTime
-    [Tags]                    wasp-os
     Start A Watch Running wasp-os With The Reloader As Its App
 
     Run For                   ${RELOADER_SECONDS}
@@ -107,7 +104,6 @@ The Reloader Waits For The Charger
     Flash Should Hold File    0x0    ${BOOTLOADER_BIN}
 
 Holding The Button Leaves The Reloader For The Old Update Mode
-    [Tags]                    wasp-os
     [Documentation]           Waiting for the charger, the reloader stops feeding the watchdog while the button is held, so the watchdog resets into wasp-os's bootloader, and nothing is changed.
     Start A Watch Running wasp-os With The Reloader As Its App, Unplugged
     Run For                   ${5}

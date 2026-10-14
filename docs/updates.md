@@ -165,7 +165,8 @@ an ordinary app image for the old system, sent through its own update path, that
 bootloader with NeoTime's. It carries three images: NeoTime's bootloader, the firmware, and the
 recovery firmware. The full firmware no longer fits beside the bootloader in wasp-os's 380 KB app
 slot, so `tools/build_images.sh` gives it the small recovery firmware for both, and the full
-firmware follows as an ordinary update once the watch is on NeoTime.
+firmware follows as an ordinary update once the watch is on NeoTime. When both are the same
+image, the reloader's build keeps one copy for both slots, since two copies overflow that slot.
 
 ### What it does
 
@@ -335,8 +336,8 @@ process:
 pinetime-test --variable EMULATOR:<emulator checkout> tests/emulator/<suite>.robot
 ```
 
-CI's `Emulator suites` job runs them on every push, except the tests tagged `wasp-os`, which need a
-local wasp-os bootloader build. The emulator has already caught two faults that would have stranded a watch: the reloader sent 256-byte pages from
+CI's `Emulator suites` job runs them on every push. The old systems' bootloaders they start from, wasp-os's
+on Nordic's S112 and InfiniTime's MCUBoot 5.0.4, are kept in `tests/emulator/fixtures`. The emulator has already caught two faults that would have stranded a watch: the reloader sent 256-byte pages from
 its own flash, which embassy's SPI driver cannot do (it panics above 255 bytes), and the firmware
 read the replaced image from the wrong page after a swap. The plan:
 

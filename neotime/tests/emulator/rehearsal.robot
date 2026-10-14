@@ -5,12 +5,10 @@ Suite Teardown    Teardown
 Test Setup        Reset Emulation
 Test Teardown     Test Teardown
 Resource          neotime.resource
-# These start from a wasp-os bootloader build, which only a local wasp-os checkout has.
-Test Tags         wasp-os
 Library           OperatingSystem
 
 *** Variables ***
-${WASP_BOOTLOADER_HEX}    ${PROJECTS}/wasp-os/build-pinetime-s112/bootloader.hex
+${WASP_BOOTLOADER_HEX}    ${CURDIR}/fixtures/wasp-os-s112-bootloader.hex
 ${REHEARSAL_BIN}          ${DIST}/rehearsal-under-wasp-os.bin
 ${WASP_APP_START}         0x19000
 # wasp-os's bootloader, which holds its update mode.
