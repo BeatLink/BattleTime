@@ -2,7 +2,8 @@
 //
 // - `/apps/<id>/state`, decoded, with whether the app is hidden, as `apps/<id>`;
 // - every file under `/settings` as `files/settings/<name>`;
-// - every file under the logged folders (`/steps`, `/logs`); a past day is read again only when its size changed.
+// - every file under the logged folders (`/steps`, `/logs`), steps, heart rate and battery days decoded;
+//   a past day is read again only when its size changed.
 
 use serde_json::{json, Value};
 
@@ -168,8 +169,26 @@ async fn sync_logged(files: &FileClient, store: &SyncStore, folder: &str, report
     }
 }
 
-// A day of steps is 240 six-minute counts; anything else keeps its bytes until it has a reader here.
+// A battery slot with this byte had no reading; otherwise the top bit means charging and the rest is the percent.
+const NO_BATTERY_READING: u8 = 0xff;
+const CHARGING_BIT: u8 = 0x80;
+
+// A day of steps is 240 six-minute counts, and a day of heart rate or battery 240 bytes; anything else keeps its bytes.
 fn logged_json(folder: &str, bytes: &[u8]) -> Value {
+    if folder.starts_with("/logs/heart/") {
+        return json!({ "size": bytes.len(), "slots": bytes });
+    }
+    if folder.starts_with("/logs/battery/") {
+        let slots: Vec<Option<u8>> = bytes
+            .iter()
+            .map(|&byte| (byte != NO_BATTERY_READING).then_some(byte & !CHARGING_BIT))
+            .collect();
+        let charging: Vec<bool> = bytes
+            .iter()
+            .map(|&byte| byte != NO_BATTERY_READING && byte & CHARGING_BIT != 0)
+            .collect();
+        return json!({ "size": bytes.len(), "slots": slots, "charging": charging });
+    }
     if folder.starts_with("/steps/") {
         let slots: Vec<u16> = bytes
             .as_chunks::<2>()
@@ -242,6 +261,66 @@ mod tests {
             ("/steps/2026/10-14", &day),
             ("/steps/trip", &1234u32.to_le_bytes()),
         ])
+    }
+
+    #[test]
+    fn heart_rate_and_battery_days_read_as_slots() {
+        assert_eq!(
+            logged_json("/logs/heart/2026", &[0, 64, 71]),
+            json!({ "size": 3, "slots": [0, 64, 71] })
+        );
+        assert_eq!(
+            logged_json("/logs/battery/2026", &[0xff, 90, 0x80 | 55]),
+            json!({ "size": 3, "slots": [null, 90, 55], "charging": [false, false, true] })
+        );
+        assert_eq!(
+            logged_json("/logs/other/2026", &[1]),
+            json!({ "size": 1, "bytes": [1] })
+        );
+    }
+
+    #[tokio::test]
+    async fn past_heart_rate_and_battery_days_are_skipped_until_their_size_changes() {
+        let root = tempfile::tempdir().unwrap();
+        let store = SyncStore::new(root.path());
+        let watch = FakeWatch::with(&[
+            ("/logs/heart/2026/10-13", &[0u8, 70][..]),
+            ("/logs/heart/2026/10-14", &[65u8][..]),
+            ("/logs/battery/2026/10-13", &[80u8, 79][..]),
+            ("/logs/battery/2026/10-14", &[0x80u8 | 50][..]),
+        ]);
+        let client = watch.client();
+        let report = sync_files(&client, &store).await;
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        assert_eq!(
+            store.get("logs/heart/2026/10-13").unwrap()["slots"],
+            json!([0, 70])
+        );
+        assert_eq!(
+            store.get("logs/battery/2026/10-14").unwrap()["charging"],
+            json!([true])
+        );
+
+        watch.commands.lock().unwrap().clear();
+        watch
+            .files
+            .lock()
+            .unwrap()
+            .insert("/logs/battery/2026/10-13".into(), vec![80, 79, 78]);
+        sync_files(&client, &store).await;
+        let reads = watch
+            .commands
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|&&c| c == 0x10)
+            .count();
+        // Both newest days, and the past battery day whose size changed.
+        assert_eq!(reads, 3);
+        assert_eq!(
+            store.get("logs/battery/2026/10-13").unwrap()["slots"],
+            json!([80, 79, 78])
+        );
     }
 
     #[tokio::test]

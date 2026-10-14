@@ -154,8 +154,7 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   presses the button. The phone can also buzz the watch one to five times, and ask for its battery
   level, voltage, charging state and steps.
 - **Step counting and history.** The accelerometer counts today's steps for the steps app and
-  faces, from the configuration the shared library inside the firmware carries. The watch keeps the steps of every six minutes in a file for each day, with no limit on
-  how many days, and starts a new day at local midnight without any app open. The steps app shows
+  faces, from the configuration the shared library inside the firmware carries. The watch keeps the steps of every six minutes in a file for each day, for 90 days, and starts a new day at local midnight without any app open. The steps app shows
   today against the daily goal, yesterday, a trip count that the Reset button starts again, the
   last seven days, and any of them hour by hour. The history and the trip count are kept through
   a restart, losing only the six minutes in progress.
@@ -168,6 +167,10 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   for the beacon app, which sets its brightness and how often it flashes. Tried in the emulator,
   not yet on the watch.
   ![The Heart app measuring in the emulator](images/heart-rate-emulator.png)
+- **Heart rate and battery history.** The watch logs, for every six minutes, the average heart rate
+  measured in them and the battery charge at their end with whether it was charging, in a file for
+  each day under `/logs`, for 90 days. The companion syncs them and shows each day's average,
+  lowest and highest on the Heart and System plugin pages. Tried in tests, not yet on the watch.
 - **Shake to roll the dice,** and live accelerometer readings for apps such as motion and level.
 - **Rollers that show their numbers:** the timer's minutes and seconds and the dice's count and
   sides, which were blank on the watch, and the alarm's time and days, each drawn as one widget.
@@ -207,8 +210,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Apps remember where they were.** An app's saved state is written to the watch's storage when
   it closes or the screen turns off, and put back when it opens.
 - **Everything synced to the companion app.** While connected, the companion reads every setting,
-  every app's saved state and the step log again every five minutes, or as often as its Sync
-  setting says. Plugins can change an app's state from the phone, and an open app redraws with the
+  every app's saved state, the step, heart rate and battery logs and the sports app's last five
+  sessions again every five minutes, or as often as its Sync setting says. Plugins can change an app's state from the phone, and an open app redraws with the
   change at once. See [sync.md](sync.md).
 - **Text in one clear, smooth font at every size,** drawn from lines and arcs with its stems
   and curves on whole pixels, in 4.9 KB where seven bitmap fonts took 48 KB. It has the Latin-1

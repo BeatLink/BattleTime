@@ -173,3 +173,30 @@ export function stepDays(days: { source: string; slots: number[] }[]): StepDay[]
     .filter((day) => /^\d+-\d{2}-\d{2}$/.test(day.date))
     .sort((a, b) => b.date.localeCompare(a.date));
 }
+
+// ============================================================================
+// Heart rate and battery
+// ============================================================================
+
+export type LogDay = { date: string; average: number; lowest: number; highest: number };
+
+// The days a heart rate or battery source list holds, newest first, with the average, lowest and highest slot.
+// A slot that is null, or equal to `empty`, had no reading; a day without any is left out.
+export function logDays(days: { source: string; slots: (number | null)[] }[], empty?: number): LogDay[] {
+  const out: LogDay[] = [];
+  for (const { source, slots } of days) {
+    const [, , year, monthDay] = source.split('/');
+    const date = `${year}-${monthDay}`;
+    const readings = slots.filter((slot): slot is number => typeof slot === 'number' && slot !== empty);
+    if (!/^\d+-\d{2}-\d{2}$/.test(date) || readings.length === 0) {
+      continue;
+    }
+    out.push({
+      date,
+      average: Math.round(readings.reduce((sum, value) => sum + value, 0) / readings.length),
+      lowest: Math.min(...readings),
+      highest: Math.max(...readings),
+    });
+  }
+  return out.sort((a, b) => b.date.localeCompare(a.date));
+}

@@ -1,7 +1,7 @@
-// The settings page every app's plugin shares: the app's synced state, editable, and the watch's settings or steps when the plugin shows them.
+// The settings page every app's plugin shares: the app's synced state, editable, and the watch's settings, steps, heart rate or battery when the plugin shows them.
 // The build script bundles it with __PLUGIN_NAME__ and __PLUGIN_FIELDS__ filled in.
 
-import { change, display, parse, rows, stepDays, type Cell, type FieldNotes, type SyncedKinds } from '../state-view';
+import { change, display, logDays, parse, rows, stepDays, type Cell, type FieldNotes, type SyncedKinds } from '../state-view';
 
 declare const __PLUGIN_NAME__: string;
 declare const __PLUGIN_FIELDS__: FieldNotes;
@@ -10,6 +10,8 @@ type Snapshot = {
   app: { hidden: boolean; state: Record<string, unknown> | null; kinds?: SyncedKinds } | null;
   settings?: Record<string, unknown> | null;
   steps?: { source: string; slots: number[] }[];
+  heart?: { source: string; slots: number[] }[];
+  battery?: { source: string; slots: (number | null)[] }[];
 };
 
 const send = (message: unknown) => parent.postMessage({ neotime: message }, '*');
@@ -117,6 +119,26 @@ function stepsSection(days: Snapshot['steps']): HTMLElement {
   return section;
 }
 
+// Each day of a heart rate or battery log as its average, with the lowest and highest after it.
+function logSection(title: string, unit: string, days: { source: string; slots: (number | null)[] }[], empty?: number) {
+  const section = element('section');
+  section.append(element('h2', title));
+  const shown = logDays(days, empty);
+  if (shown.length === 0) {
+    section.append(element('p', 'Nothing logged yet.', 'note'));
+  }
+  for (const day of shown) {
+    const line = element('div', undefined, 'row');
+    line.append(
+      element('span', day.date, 'label'),
+      element('span', `${day.average}${unit}`),
+      element('small', `${day.lowest}${unit} to ${day.highest}${unit}`, 'note'),
+    );
+    section.append(line);
+  }
+  return section;
+}
+
 // ============================================================================
 // Messages from the plugin
 // ============================================================================
@@ -139,6 +161,12 @@ window.addEventListener('message', (event) => {
   }
   if ('steps' in snapshot) {
     content.append(stepsSection(snapshot.steps));
+  }
+  if ('heart' in snapshot) {
+    content.append(logSection('Heart rate by day', ' bpm', snapshot.heart ?? [], 0));
+  }
+  if ('battery' in snapshot) {
+    content.append(logSection('Battery by day', ' %', snapshot.battery ?? []));
   }
 });
 

@@ -97,8 +97,10 @@ The shared page shows the app's synced state and changes it on the watch. Times 
 durations are edited in seconds. Two more keys in `plugin.json` shape the page; the build script
 takes both out of the manifest:
 
-- `views` adds sections: `settings` shows and changes the watch's settings, and `steps` lists the
-  last two weeks of steps. Each needs the matching `permissions.data`.
+- `views` adds sections: `settings` shows and changes the watch's settings, `steps` lists the last
+  two weeks of steps, and `heart` and `battery` list the last two weeks of heart rate and battery
+  charge, each day's average with its lowest and highest. Each needs the matching
+  `permissions.data`: `settings`, `steps`, or `logs` for both of the last two.
 - `fields` labels values by key, or `record.field`. `{ "kind": "hidden" }` leaves a value out,
   `{ "kind": "minutes" }` shows minutes of the day as `hh:mm`, and a record's `countedBy` names the
   value that counts its entries in use.
@@ -149,7 +151,9 @@ in its settings ([sync.md](sync.md) has the details). A plugin reads that copy b
 | `steps/<year>/<MM>-<DD>` | `{ slots }`: that day's steps in six-minute slots |
 | `steps/trip` | `{ count }`: the trip counter |
 | `files/settings/<name>` | a file from `/settings` |
-| `logs/...` | the logs' raw bytes |
+| `logs/heart/<year>/<MM>-<DD>` | `{ slots }`: that day's average heart rate in six-minute slots, 0 for none |
+| `logs/battery/<year>/<MM>-<DD>` | `{ slots, charging }`: the charge in percent at each slot's end, `null` while the watch was off, and whether it was charging |
+| `logs/...` | any other log's raw bytes |
 
 `neotime.data.get` returns `undefined` for a source not synced yet. It throws for one the manifest
 does not allow. `neotime.data.list("steps")` lists the sources under a prefix that the plugin may

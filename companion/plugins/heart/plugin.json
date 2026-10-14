@@ -2,11 +2,16 @@
   "id": "heart",
   "name": "Heart",
   "version": "1.0.0",
-  "description": "A heart rate monitor, merged from InfiniTime's HeartRate and wasp-os's heart app. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "description": "A heart rate monitor, merged from InfiniTime's HeartRate and wasp-os's heart app. Its plugin keeps the app's state in sync with the companion and changes it from here. Its page lists each day's average, lowest and highest heart rate from the watch's log.",
   "app": "heart",
+  "views": [
+    "heart"
+  ],
   "permissions": {
     "messages": [],
     "hosts": [],
-    "data": []
+    "data": [
+      "logs"
+    ]
   }
 }

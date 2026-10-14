@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { change, display, humanize, parse, rows, stepDays } from './state-view';
+import { change, display, humanize, logDays, parse, rows, stepDays } from './state-view';
 
 const alarm = {
   alarm_count: 2,
@@ -85,5 +85,30 @@ describe('steps', () => {
       { date: '2026-10-14', total: 5 },
       { date: '2026-10-13', total: 3 },
     ]);
+  });
+});
+
+describe('heart rate and battery', () => {
+  it('gives each day its average, lowest and highest, newest first, skipping slots without a reading', () => {
+    expect(
+      logDays(
+        [
+          { source: 'logs/heart/2026/10-13', slots: [0, 60, 0, 81] },
+          { source: 'logs/heart/2026/10-14', slots: [70] },
+          { source: 'logs/heart/2026/10-12', slots: [0, 0] },
+        ],
+        0,
+      ),
+    ).toEqual([
+      { date: '2026-10-14', average: 70, lowest: 70, highest: 70 },
+      { date: '2026-10-13', average: 71, lowest: 60, highest: 81 },
+    ]);
+  });
+
+  it('keeps a battery at 0 % and skips the slots the watch was off', () => {
+    expect(logDays([{ source: 'logs/battery/2026/10-14', slots: [null, 0, 40] }])).toEqual([
+      { date: '2026-10-14', average: 20, lowest: 0, highest: 40 },
+    ]);
+    expect(logDays([{ source: 'logs/battery/x', slots: [5] }])).toEqual([]);
   });
 });

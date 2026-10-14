@@ -21,7 +21,9 @@ Each pass reads the following. Each item is kept as one JSON file, named by its 
 | `files/settings/<name>` | every file in `/settings` | `quick_apps` as `{ "apps": [ids] }`, the rest as `{ "bytes": [...] }` |
 | `steps/<year>/<MM>-<DD>` | that day's file | `{ "size": n, "slots": [...] }`, steps in each six-minute slot from midnight |
 | `steps/trip` | `/steps/trip` | `{ "size": 4, "count": n }` |
-| `logs/...` | every file under `/logs` | `{ "size": n, "bytes": [...] }` |
+| `logs/heart/<year>/<MM>-<DD>` | that day's file | `{ "size": n, "slots": [...] }`, the average beats per minute in each six-minute slot from midnight, 0 for none |
+| `logs/battery/<year>/<MM>-<DD>` | that day's file | `{ "size": n, "slots": [...], "charging": [...] }`, the charge in percent at each slot's end, `null` while the watch was off, and whether it was charging |
+| `logs/...` | every other file under `/logs` | `{ "size": n, "bytes": [...] }` |
 
 A past day's file is read again only when its size has changed. The newest day, loose counters and
 everything else are read on every pass, since they change in place.
@@ -43,6 +45,9 @@ The format is decoded into JSON as follows:
 - text is the string's number in the app's image;
 - a record's fields, saved as `name.field`, come back together as one object.
 
+The sports app keeps its last five cleared sessions this way, as `session_count` and a `sessions`
+record of `started_at`, `duration` and `steps`, newest first.
+
 For example, the alarm app's state reads as:
 
 ```json
@@ -60,6 +65,8 @@ Changes go back the same two ways:
 - **App state** is changed in place. The core first reads the file again, then takes the new values,
   keeping each value's type, length and width so the app still loads it, and writes the file back. It
   then sends `{"t":"state","app":"<id>"}` ([companion-protocol.md](companion-protocol.md#app-state-served)).
+  The watch runs a closed app only once no store write is under way, so the run loads what was
+  written; a run that saves between the core's read and its write is still lost under the write.
   An open app then opens again on the new state rather than saving over it, and a closed alarm or
   timer notes its new time. A value that would not fit its width, or a list of the wrong length, is refused, and
   nothing is written.

@@ -150,9 +150,6 @@ and lets plugins read them and change their own app's state.
   companion reads `/apps/<id>/state`, changes it and writes it back in separate requests, so a run
   that saves between them, such as an alarm switching itself off, is lost under the companion's
   write. Closing that needs the write to name what it read, or the watch to apply the change itself.
-- **Logs for heart rate, battery and sports sessions** under `/logs` on external flash, so there is
-  history to sync. Sync already reads anything under `/logs`; each log needs a decoder in
-  `core/src/sync/pass.rs`.
 - **Untried with a watch.** The sync has run only against the core's fake watch.
 
 ## Not started

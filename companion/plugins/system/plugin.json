@@ -2,11 +2,16 @@
   "id": "system",
   "name": "System",
   "version": "1.0.0",
-  "description": "How the watch is doing, on seven pages, as InfiniTime's SystemInfo screens show it: the system, the battery, memory, the bootloader, the hardware, the tasks and the licence. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "description": "How the watch is doing, on seven pages, as InfiniTime's SystemInfo screens show it: the system, the battery, memory, the bootloader, the hardware, the tasks and the licence. Its plugin keeps the app's state in sync with the companion and changes it from here. Its page lists each day's average, lowest and highest battery charge from the watch's log.",
   "app": "system",
+  "views": [
+    "battery"
+  ],
   "permissions": {
     "messages": [],
     "hosts": [],
-    "data": []
+    "data": [
+      "logs"
+    ]
   }
 }

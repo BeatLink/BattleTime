@@ -15,8 +15,18 @@ declare const neotime: {
 declare const __PLUGIN_ID__: string;
 declare const __PLUGIN_VIEWS__: string[];
 
-// How many days of steps the page is sent.
+// How many days of steps, heart rate or battery the page is sent.
 const STEP_DAYS_SHOWN = 14;
+
+// The newest days of a log under `logs/<folder>/<year>/<MM>-<DD>`, with their slots.
+function logDays(folder: string) {
+  return neotime.data
+    .list(`logs/${folder}`)
+    .filter((source) => source.split('/').length === 4)
+    .sort()
+    .slice(-STEP_DAYS_SHOWN)
+    .map((source) => ({ source, slots: neotime.data.get(source)?.slots ?? [] }));
+}
 
 // What the page shows, read afresh from the companion's copy.
 function snapshot() {
@@ -31,6 +41,11 @@ function snapshot() {
       .sort()
       .slice(-STEP_DAYS_SHOWN)
       .map((source) => ({ source, slots: neotime.data.get(source)?.slots ?? [] }));
+  }
+  for (const log of ['heart', 'battery']) {
+    if (__PLUGIN_VIEWS__.includes(log)) {
+      shown[log] = logDays(log);
+    }
   }
   return shown;
 }
