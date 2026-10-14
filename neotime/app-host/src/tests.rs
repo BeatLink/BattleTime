@@ -625,6 +625,69 @@ fn the_button_goes_back_a_screen_and_leaves_the_first_to_the_system() {
     assert!(system.effects.is_empty());
 }
 
+/// Three screens in a row, the last with a button that goes back twice.
+fn three_screen_image() -> Vec<u8> {
+    use Instruction::*;
+
+    let mut writer = ImageWriter::new("steps", "Steps", AppKind::App, 1);
+    let screen_names = [
+        writer.string("main"),
+        writer.string("middle"),
+        writer.string("last"),
+    ];
+    let label = writer.string("Next");
+    let go_to_middle = writer.handler(code(|code| {
+        code.emit(PushText(screen_names[1])).emit(Effect(EffectKind::Go));
+    }));
+    let go_to_last = writer.handler(code(|code| {
+        code.emit(PushText(screen_names[2])).emit(Effect(EffectKind::Go));
+    }));
+    let go_back_twice = writer.handler(code(|code| {
+        code.emit(Effect(EffectKind::Back)).emit(Effect(EffectKind::Back));
+    }));
+
+    let constant = PropertySource::Constant;
+    for (screen_name, handler) in screen_names
+        .into_iter()
+        .zip([go_to_middle, go_to_last, go_back_twice])
+    {
+        writer.widget(
+            WidgetKind::Column,
+            1,
+            &[(Property::ScreenName, constant(screen_name as i32))],
+        );
+        writer.widget(
+            WidgetKind::Button,
+            0,
+            &[
+                (Property::Text, constant(label as i32)),
+                (Property::Height, constant(BUTTON_HEIGHT)),
+                (Property::OnClick, PropertySource::Handler(handler)),
+            ],
+        );
+    }
+    writer.build()
+}
+
+#[test]
+fn a_handler_going_back_twice_retraces_two_screens() {
+    let image = three_screen_image();
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    click_on(&mut host, 1, START_TIME, &mut system);
+    click_on(&mut host, 3, START_TIME, &mut system);
+    assert_eq!(host.screen_name(), Some("last"));
+
+    click_on(&mut host, 5, START_TIME, &mut system);
+
+    assert_eq!(host.screen_name(), Some("main"));
+    assert_eq!(
+        host.go_back_a_screen(START_TIME, &mut system),
+        EventResult::NotHandled
+    );
+    assert!(system.effects.is_empty());
+}
+
 #[test]
 fn an_app_can_start_on_a_named_screen_with_nothing_to_go_back_to() {
     let image = counter_image();

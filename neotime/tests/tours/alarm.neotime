@@ -10,8 +10,7 @@ tap "Once"                  # the repeat button cycles to every day
 tap "Every day"             # and on to weekdays
 expect text "Weekdays"
 snapshot days
-tap 178 206                 # save
-button                      # save stops at the time screen, see the report
+tap 178 206                 # save, back to the list
 expect screen main
 expect text "Tue 08:00"
 snapshot list

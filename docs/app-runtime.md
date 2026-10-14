@@ -737,7 +737,9 @@ After a handler finishes, the host:
 `go(screen)` and `back()` are handled by the host. It finds the screen with
 `WidgetTree::screen_named`, and keeps a history of up to 8 screens for `back()`. `back()` on the
 first screen, a `go` to a screen that does not exist, and a `go` or `back` from `onShow` or `onHide`
-are passed on to the embedder. Every other effect goes to the embedder's `System`, whose
+are passed on to the embedder. A handler may call them more than once: each takes its own step
+through the history, as in the browser preview, so two `back()` calls return two screens, and only
+the screen they end on is shown. Every other effect goes to the embedder's `System`, whose
 `carry_out` gets the effect with its arguments readable as numbers or text.
 
 Effects are carried out as soon as the handler returns, before the interpreter runs anything else,

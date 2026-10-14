@@ -1062,7 +1062,8 @@ impl<'image> AppHost<'image> {
 
         self.last_handler_did_nothing = outcome.effects().is_empty() && outcome.changed_variables() == 0;
         let may_navigate = may_navigate && self.is_open;
-        let mut navigation = None;
+        let mut navigated_root = self.screen_root;
+        let mut last_navigation = None;
         for effect in outcome.effects() {
             let app_effect = AppEffect {
                 kind: effect.kind,
@@ -1079,14 +1080,17 @@ impl<'image> AppHost<'image> {
                 _ => None,
             };
             match wanted {
-                Some(wanted) => navigation = Some(wanted),
+                Some(wanted) => {
+                    navigated_root = self.step_screen_history(wanted, navigated_root);
+                    last_navigation = Some(wanted);
+                }
                 None => system.carry_out(&app_effect),
             }
         }
 
         self.after_change(outcome.changed_variables(), 0, now, system);
-        if let Some(navigation) = navigation {
-            self.navigate(navigation, now, system);
+        if let Some(navigation) = last_navigation {
+            self.show_navigated_screen(navigated_root, navigation, now, system);
         }
         EventResult::Handled
     }
@@ -1961,14 +1965,20 @@ impl<'image> AppHost<'image> {
     }
 
     fn navigate(&mut self, navigation: Navigation, now: Value, system: &mut impl System) {
-        let next_screen = match navigation {
-            Navigation::Go(root) if root == self.screen_root => return,
+        let next_screen = self.step_screen_history(navigation, self.screen_root);
+        self.show_navigated_screen(next_screen, navigation, now, system);
+    }
+
+    /// Records one step forward or back from a screen in the history, and gives the screen it reaches.
+    fn step_screen_history(&mut self, navigation: Navigation, from_root: u16) -> u16 {
+        match navigation {
+            Navigation::Go(root) if root == from_root => from_root,
             Navigation::Go(root) => {
                 if self.screen_history_length == SCREEN_HISTORY_DEPTH {
                     self.screen_history.copy_within(1.., 0);
                     self.screen_history_length -= 1;
                 }
-                self.screen_history[self.screen_history_length] = self.screen_root;
+                self.screen_history[self.screen_history_length] = from_root;
                 self.screen_history_length += 1;
                 root
             }
@@ -1976,8 +1986,20 @@ impl<'image> AppHost<'image> {
                 self.screen_history_length -= 1;
                 self.screen_history[self.screen_history_length]
             }
-        };
+        }
+    }
 
+    /// Shows the screen the history reached, sliding the way its last step went.
+    fn show_navigated_screen(
+        &mut self,
+        next_screen: u16,
+        navigation: Navigation,
+        now: Value,
+        system: &mut impl System,
+    ) {
+        if next_screen == self.screen_root {
+            return;
+        }
         self.next_transition = self.swipe_transition.unwrap_or(match navigation {
             Navigation::Go(_) => Transition::Left,
             Navigation::Back => Transition::Right,
