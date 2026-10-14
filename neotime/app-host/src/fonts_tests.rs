@@ -330,6 +330,19 @@ fn only_the_columns_the_renderer_shows_are_worked_out() {
 }
 
 #[test]
+fn the_glyph_kept_from_the_last_strip_is_never_taken_for_another() {
+    let giant_w = drawn(FontName::Giant, 'W').rows;
+
+    let giant_i = drawn(FontName::Giant, 'I').rows;
+    let large_w = drawn(FontName::Large, 'W').rows;
+    let again = drawn(FontName::Giant, 'W').rows;
+
+    assert_ne!(giant_i, giant_w);
+    assert_ne!(large_w, giant_w);
+    assert_eq!(again, giant_w);
+}
+
+#[test]
 fn a_glyph_drawn_in_pieces_matches_one_drawn_whole() {
     let whole = drawn(FontName::Giant, 'W');
     // The giant W is wider than one piece would be if pieces were small; check every pixel against the metrics box.

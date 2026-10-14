@@ -5,7 +5,10 @@
 //! strokes and the edges of its arcs onto whole pixels, so stems stay sharp and bowls stay even. The
 //! dot-matrix display font is worked out from its dots as it is drawn. docs/app-runtime.md lists the sizes.
 
-use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU8, AtomicUsize, Ordering};
+use core::{
+    cell::UnsafeCell,
+    sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicU8, AtomicUsize, Ordering},
+};
 
 use neotime_runtime::AppImage;
 use neotime_ui::{
@@ -566,6 +569,30 @@ impl StyledFont {
         count
     }
 
+    /// The glyph's shapes placed with its pen at `origin`, taken from the last glyph placed when it is the same.
+    fn placed_glyph(&self, data: &FontData, character: char, origin: (i32, i32)) -> Option<PlacedGlyph> {
+        let key = PlacedGlyphKey {
+            font_address: self as *const StyledFont as usize,
+            font_file_address: data.bytes.as_ptr() as usize,
+            character,
+            origin,
+        };
+        if let Some(placed) = LAST_PLACED_GLYPH.get(key) {
+            return Some(placed);
+        }
+        let glyph = data.glyph(character)?;
+        let mut shapes = [Placed::NOTHING; MOST_SHAPES];
+        let count = self.place(data, glyph, origin, &mut shapes);
+        let placed = PlacedGlyph {
+            key,
+            shapes,
+            count,
+            ink_box: self.ink_box(&shapes[..count]),
+        };
+        LAST_PLACED_GLYPH.set(placed);
+        Some(placed)
+    }
+
     /// The pixels a glyph's ink can reach with its pen at `origin`, with room for its soft edges.
     fn ink_box(&self, shapes: &[Placed]) -> Option<Rect> {
         let reach = self.stroke / 2.0 * DOT_GROWTH + 1.0;
@@ -630,13 +657,11 @@ impl StyledFont {
                 return;
             }
         }
-        let Some(glyph) = data.glyph(character) else {
+        let Some(placed) = self.placed_glyph(&data, character, origin) else {
             return;
         };
-        let mut placed = [Placed::NOTHING; MOST_SHAPES];
-        let count = self.place(&data, glyph, origin, &mut placed);
-        let shapes = &placed[..count];
-        let Some(area) = self.ink_box(shapes) else {
+        let shapes = &placed.shapes[..placed.count];
+        let Some(area) = placed.ink_box else {
             return;
         };
         let (first_row, end_row) = rows_to_draw(renderer, area.y, area.height);
@@ -750,6 +775,68 @@ pub fn columns_to_draw(renderer: &dyn Renderer, left: i32, width: i32) -> (i32, 
             (visible.right() - left).clamp(0, width),
         ),
         None => (0, width),
+    }
+}
+
+// ============================================================================
+// The last placed glyph
+// ============================================================================
+
+/// What a placed glyph depends on: the font size, the font file, the character and where its pen sits.
+#[derive(Clone, Copy, PartialEq)]
+struct PlacedGlyphKey {
+    font_address: usize,
+    font_file_address: usize,
+    character: char,
+    origin: (i32, i32),
+}
+
+/// A glyph's shapes in pixels and the box their ink reaches.
+#[derive(Clone, Copy)]
+struct PlacedGlyph {
+    key: PlacedGlyphKey,
+    shapes: [Placed; MOST_SHAPES],
+    count: usize,
+    ink_box: Option<Rect>,
+}
+
+/// The last glyph placed, since each strip a glyph crosses draws it again from the same place.
+///
+/// Whoever finds it in use, such as a second test thread, places the glyph itself instead of waiting.
+struct LastPlacedGlyph {
+    is_in_use: AtomicBool,
+    entry: UnsafeCell<Option<PlacedGlyph>>,
+}
+
+// The entry is only read or written by whoever set `is_in_use`.
+unsafe impl Sync for LastPlacedGlyph {}
+
+static LAST_PLACED_GLYPH: LastPlacedGlyph = LastPlacedGlyph {
+    is_in_use: AtomicBool::new(false),
+    entry: UnsafeCell::new(None),
+};
+
+impl LastPlacedGlyph {
+    /// The glyph kept for `key`, if it is the one kept and no one else is using it.
+    fn get(&self, key: PlacedGlyphKey) -> Option<PlacedGlyph> {
+        if self.is_in_use.swap(true, Ordering::Acquire) {
+            return None;
+        }
+        // Safety: `is_in_use` was false, so nothing else holds the entry until it is cleared below.
+        let entry = unsafe { &*self.entry.get() };
+        let found = entry.filter(|placed| placed.key == key);
+        self.is_in_use.store(false, Ordering::Release);
+        found
+    }
+
+    /// Keeps `placed` in place of the last glyph, unless someone else is using it.
+    fn set(&self, placed: PlacedGlyph) {
+        if self.is_in_use.swap(true, Ordering::Acquire) {
+            return;
+        }
+        // Safety: `is_in_use` was false, so nothing else holds the entry until it is cleared below.
+        unsafe { *self.entry.get() = Some(placed) };
+        self.is_in_use.store(false, Ordering::Release);
     }
 }
 
