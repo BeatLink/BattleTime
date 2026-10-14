@@ -2201,6 +2201,7 @@ name = "neotime-companion-core"
 version = "0.1.0"
 dependencies = [
  "btleplug",
+ "chrono",
  "futures",
  "rquickjs",
  "rustls",

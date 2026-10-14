@@ -3,5 +3,6 @@
 pub mod ble;
 pub mod gadgetbridge;
 pub mod plugins;
+pub mod protocol;
 pub mod text;
 pub mod web_request;

@@ -144,6 +144,9 @@ struct Subscription {
     key: String,
 }
 
+// Rust code that hears a characteristic's notifications, such as the packages client.
+pub type ValueListener = Arc<dyn Fn(&[u8]) + Send + Sync>;
+
 #[derive(Default)]
 struct Link {
     peripheral: Option<Peripheral>,
@@ -151,6 +154,7 @@ struct Link {
     characteristics: Vec<Characteristic>,
     rx: Option<Characteristic>,
     subscriptions: Vec<Subscription>,
+    listeners: Vec<(Uuid, ValueListener)>,
     notification_task: Option<JoinHandle<()>>,
 }
 
@@ -372,6 +376,7 @@ impl WatchBle {
             link.characteristics = characteristics;
             link.rx = rx;
             link.subscriptions.clear();
+            link.listeners.clear();
             link.notification_task = Some(notification_task);
         }
         self.emit("mode", json!(mode));
@@ -451,14 +456,24 @@ impl WatchBle {
                     }
                     continue;
                 }
-                let keys: Vec<String> = {
+                let (keys, listeners): (Vec<String>, Vec<ValueListener>) = {
                     let link = ble.inner.link.lock().unwrap();
-                    link.subscriptions
-                        .iter()
-                        .filter(|subscription| subscription.characteristic == notification.uuid)
-                        .map(|subscription| subscription.key.clone())
-                        .collect()
+                    (
+                        link.subscriptions
+                            .iter()
+                            .filter(|subscription| subscription.characteristic == notification.uuid)
+                            .map(|subscription| subscription.key.clone())
+                            .collect(),
+                        link.listeners
+                            .iter()
+                            .filter(|(characteristic, _)| *characteristic == notification.uuid)
+                            .map(|(_, listener)| listener.clone())
+                            .collect(),
+                    )
                 };
+                for listener in listeners {
+                    listener(&notification.value);
+                }
                 for key in keys {
                     ble.emit("notify", json!({ "key": key, "value": notification.value }));
                 }
@@ -578,6 +593,19 @@ impl WatchBle {
             peripheral.write(&found, data, write_type),
         )
         .await
+    }
+
+    // Subscribes and hands every notification to `listener` as well, until the link drops.
+    pub async fn listen(
+        &self,
+        service: &str,
+        characteristic: &str,
+        listener: ValueListener,
+    ) -> Result<(), BleError> {
+        let uuid = parse_uuid(characteristic)?;
+        self.gatt_subscribe(service, characteristic).await?;
+        self.inner.link.lock().unwrap().listeners.push((uuid, listener));
+        Ok(())
     }
 
     pub async fn gatt_subscribe(&self, service: &str, characteristic: &str) -> Result<(), BleError> {

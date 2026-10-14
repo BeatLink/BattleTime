@@ -123,8 +123,10 @@ Android 13 and later.
   update from its window have worked on a watch, it replaces `.#companion`, and Electron, `node/`
   and their npm dependencies go.
 - **The command line tool in Rust**, on the core crate, once the protocols move there.
-- **Protocols in the core crate**: the packages, BLEFS, DFU and Gadgetbridge code, in crates shared
-  with the firmware where it defines the format.
+- **Protocols in the core crate**: the NeoTime service, packages, image header and Gadgetbridge lines
+  are in `core/src/protocol`, but nothing uses them yet; the window still runs the TypeScript ones.
+  BLEFS (waspos-12's `core/src/sync/files.rs`) and DFU are still to come, then the window and the
+  plugin host move onto them, and the formats the firmware defines move into shared crates.
 - **Tauri on Android**, with the phone bridge as a Tauri plugin; try btleplug on a phone first.
 - **Plugins on the phone.** [Plugins](../docs/plugins.md) run only in the desktop app, whose Rust
   core hosts them; the phone gets them with Tauri on Android.
