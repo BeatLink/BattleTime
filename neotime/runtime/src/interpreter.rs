@@ -753,7 +753,7 @@ impl Interpreter {
                 self.write_text(|writer| pattern::write_time(writer, &time, pattern, uses_24_hour_clock))?;
             }
             Join => self.join(call.image)?,
-            ToUpper => self.to_upper(call.image)?,
+            ToUpper => self.uppercase_text(call.image)?,
             TextLength => self.text_length(call.image)?,
             SliceText => self.slice_text(call.image)?,
             FormatFixed => {
@@ -999,7 +999,7 @@ impl Interpreter {
     // into `execute`, their copies would stay in `run`'s frame for every handler.
 
     #[inline(never)]
-    fn to_upper(&mut self, image: &AppImage) -> Result<(), Failure> {
+    fn uppercase_text(&mut self, image: &AppImage) -> Result<(), Failure> {
         let value = self.pop()?;
         let (source, length) = self.copy_of_text(image, value)?;
         let text = core::str::from_utf8(&source[..length]).map_err(|_| Failure::BadText)?;

@@ -214,9 +214,8 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   watch's recovery slot to 168 KB, the firmware read the record back, but the bootloader menu's
   Install recovery from that slot has only run in the emulator; it needs a button hold.
 - [ ] **Clippy fails on master.** CI's `Lints and types` and the four `Watch lints` jobs are red at
-  04005694: `to_upper(&mut self, …)` in `neotime/runtime/src/interpreter.rs:1002` breaks the `to_*`
-  naming rule, and eight operations with no effect sit in `neotime/firmware/src/main.rs` (lines 651,
-  683, 690, 692, 706, 714, 721 and 723).
+  04005694: eight operations with no effect sit in `neotime/firmware/src/main.rs` (lines 651, 683,
+  690, 692, 706, 714, 721 and 723).
 - [ ] **Run the stack overflow test in the emulator.** `crash_record`'s "A Stack Overflow Faults At
   The Guard And Is Reported" skips, since PineTimeEmulator has no memory protection unit yet; it
   runs once the emulator models one.
