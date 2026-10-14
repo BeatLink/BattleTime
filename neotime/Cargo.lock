@@ -1357,6 +1357,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-task-table"
+version = "0.1.0"
+
+[[package]]
 name = "neotime-touch"
 version = "0.1.0"
 dependencies = [

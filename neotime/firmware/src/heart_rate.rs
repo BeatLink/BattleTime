@@ -177,6 +177,7 @@ enum Running {
 /// The chip is reached from one place only, which keeps this task small in flash.
 #[embassy_executor::task]
 pub async fn run_heart_rate_sensor(i2c_device: I2cDeviceOnBus) {
+    crate::tasks::name_this_task("heart");
     let mut sensor = HeartRateSensor::new(i2c_device);
     let mut schedule = Schedule::new();
     let mut running = Running::Off;

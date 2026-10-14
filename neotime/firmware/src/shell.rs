@@ -71,13 +71,14 @@ use neotime_steps::{StepHistory, DAYS_REMEMBERED, HOURS_PER_DAY};
 
 use crate::drawing_screen::{DrawingScreen, StripBuffers, STRIP_BUFFER_PIXELS};
 use crate::{
+    about,
     app_events::{self, AppEvent},
     apps::{self, InstalledApps, LauncherIcons, Lent},
     backlight::{self, Backlight},
     battery, clock,
     crash_screen::{FirmwarePage, ShownPage},
     diagnostics::{self, Counter},
-    foreground, heart_rate, help, motion, packages, phone, restart, settings, storage, system_values,
+    foreground, heart_rate, help, motion, packages, phone, restart, settings, storage, system_values, tasks,
     touch::{self, TOUCHES},
     vibration, SharedDisplay,
 };
@@ -279,6 +280,19 @@ impl SystemValues for WatchSystem {
                 self.free_storage_wanted.set(true);
                 0
             }),
+            SystemValue::BootloaderCrc => about::bootloader_crc(),
+            SystemValue::BluetoothAddress => about::bluetooth_address(),
+            SystemValue::FlashId => about::flash_id(),
+            SystemValue::TouchChipId => about::touch_chip_id(),
+            SystemValue::TouchFirmwareVersion => about::touch_firmware_version(),
+            SystemValue::AccelerometerChipId => about::accelerometer_chip_id(),
+            SystemValue::FreeHeapBytes => crate::free_heap_bytes() as Value,
+            SystemValue::LeastFreeHeapBytes => {
+                crate::restart::least_free_heap_bytes(crate::free_heap_bytes()) as Value
+            }
+            SystemValue::AllocationFailures => crate::restart::allocation_failures() as Value,
+            SystemValue::StackOverflows => crate::restart::stack_overflows() as Value,
+            SystemValue::TaskCount => tasks::count() as Value,
             _ => 0,
         }
     }
@@ -287,6 +301,9 @@ impl SystemValues for WatchSystem {
         match value {
             SystemValue::FirmwareVersion => crate::FIRMWARE_VERSION,
             SystemValue::ResetReason => crate::restart::restart_reason(),
+            SystemValue::FirmwareBuildDate => crate::FIRMWARE_BUILD_DATE,
+            SystemValue::BootloaderVersion => about::bootloader_version(),
+            SystemValue::BootloaderBuildDate => about::bootloader_build_date(),
             _ => self.phone.read_text(value).unwrap_or(""),
         }
     }
@@ -332,6 +349,12 @@ impl SystemValues for WatchSystem {
                     _ => group.count as Value,
                 }),
             SystemValue::PackageRefusal => self.installed.refusal_of(place, &self.open_app_id) as Value,
+            SystemValue::TaskRuns => {
+                tasks::task(place).map_or(neotime_runtime::NONE, |task| task.runs as Value)
+            }
+            SystemValue::TaskBusyMilliseconds => tasks::task(place).map_or(neotime_runtime::NONE, |task| {
+                tasks::busy_milliseconds(&task) as Value
+            }),
             _ => neotime_runtime::NONE,
         }
     }
@@ -344,6 +367,9 @@ impl SystemValues for WatchSystem {
         let place = usize::try_from(index).unwrap_or(usize::MAX);
         if value == SystemValue::LauncherGroupName {
             return self.installed.group_name(place);
+        }
+        if value == SystemValue::TaskName {
+            return tasks::task(place).map_or("", |task| task.name());
         }
         let entry = match value {
             SystemValue::InstalledAppName | SystemValue::InstalledAppId => self.installed.listed(place),
@@ -388,6 +414,13 @@ impl WatchSystem {
         let counted = self.files.free_kilobytes_now().map_or(0, Value::from);
         self.free_storage_kilobytes.set(Some(counted));
         system_values::changed(&[SystemValue::FreeStorageKilobytes]);
+    }
+
+    /// Looks for the bootloader's version record from the loop the first time an app reads it, as the free storage is counted.
+    fn find_bootloader_record_if_wanted(&self) {
+        if about::find_record_if_wanted() {
+            system_values::changed(&[SystemValue::BootloaderVersion]);
+        }
     }
 }
 
@@ -1573,6 +1606,7 @@ pub async fn run_shell(
     backlight: Backlight,
     files: &'static storage::Files,
 ) {
+    crate::tasks::name_this_task("shell");
     Timer::after(START_PAGE_TIME).await;
     // An update that began during the start-up page keeps it.
     if !status_holds_screen() {
@@ -1659,6 +1693,7 @@ pub async fn run_shell(
         }
         foreground::set_drawing(false);
         shell.system.count_free_storage_if_wanted();
+        shell.system.find_bootloader_record_if_wanted();
         shell.match_accelerometer_to_app();
 
         let now = clock::utc_now();

@@ -167,6 +167,56 @@ export const free_storage_kilobytes = signal(2840);
 /** Why the watch last restarted, such as `watchdog`, `power on` or `Fault at 0x0001a2b4`. */
 export const reset_reason = signal("power on");
 
+/** The day the firmware was built, such as `2026-10-13`. */
+export const firmware_build_date = signal("2026-10-13");
+
+/** The bootloader's version and commit, or `""` when it carries no version record. */
+export const bootloader_version = signal("0.1.0+preview");
+
+/** The day the bootloader was built, or `""` when it does not say. */
+export const bootloader_build_date = signal("2026-10-11");
+
+/** The bootloader's CRC-32, or null when it could not be read. */
+export const bootloader_crc = signal<number | null>(0x1a2b3c4d);
+
+/** The Bluetooth address the watch advertises with, as a 48-bit number: 0xD12A5C7E903B is `D1:2A:5C:7E:90:3B`. */
+export const bluetooth_address = signal(0xd12a5c7e903b);
+
+/** The external flash chip's three-byte JEDEC ID, 0x0B4016 for the PineTime's XT25F32B, or 0 when it never answered. */
+export const flash_id = signal(0x0b4016);
+
+/** The touch panel's chip ID, 0xB4 for a CST816S, or 0 when it never answered. */
+export const touch_chip_id = signal(0xb4);
+
+/** The touch panel's firmware version, or 0 when it never answered. */
+export const touch_firmware_version = signal(2);
+
+/** The accelerometer's chip ID, 0x11 for a BMA421 and 0x13 for a BMA425, or 0 when it never answered. */
+export const accelerometer_chip_id = signal(0x13);
+
+/** The heap's free bytes when the app read it. */
+export const free_heap_bytes = signal(18_432);
+
+/** The fewest free heap bytes since the watch started. */
+export const least_free_heap_bytes = signal(12_288);
+
+/** How many allocations the heap has refused since the watch started. */
+export const allocation_failures = signal(0);
+
+/** How many times the stack has overflowed into its guard, kept across restarts. */
+export const stack_overflows = signal(0);
+
+export interface Task {
+  name: string;
+  /** How many times the task has run since the watch started. */
+  runs: number;
+  /** How long it has spent running, in milliseconds. */
+  busy_milliseconds: number;
+}
+
+/** The firmware's tasks, in the order they started; kept by the system. */
+export const tasks = signal<Task[]>([]);
+
 export interface CurrentWeather {
   temperature: number;
   condition: WeatherCondition;

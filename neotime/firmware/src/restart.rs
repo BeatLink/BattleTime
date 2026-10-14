@@ -60,14 +60,33 @@ static REFUSED_ALLOCATION_BYTES: AtomicU32 = AtomicU32::new(0);
 /// The heap's free bytes when it refused that allocation.
 static FREE_BYTES_AT_REFUSAL: AtomicU32 = AtomicU32::new(0);
 
+/// How many allocations the heap has refused this run.
+static ALLOCATION_FAILURES: AtomicU32 = AtomicU32::new(0);
+/// The fewest free heap bytes after any allocation this run.
+static LEAST_FREE_HEAP_BYTES: AtomicU32 = AtomicU32::new(u32::MAX);
+
 /// Called by the heap after each allocation, so a panic straight after a refusal is recorded as running out of memory.
 pub fn note_allocation(requested_bytes: usize, refused: bool, free_bytes: impl FnOnce() -> usize) {
+    let free_bytes = free_bytes() as u32;
+    LEAST_FREE_HEAP_BYTES.fetch_min(free_bytes, Ordering::Relaxed);
     if refused {
+        ALLOCATION_FAILURES.fetch_add(1, Ordering::Relaxed);
         REFUSED_ALLOCATION_BYTES.store(requested_bytes as u32, Ordering::Relaxed);
-        FREE_BYTES_AT_REFUSAL.store(free_bytes() as u32, Ordering::Relaxed);
+        FREE_BYTES_AT_REFUSAL.store(free_bytes, Ordering::Relaxed);
     } else if REFUSED_ALLOCATION_BYTES.load(Ordering::Relaxed) != 0 {
         REFUSED_ALLOCATION_BYTES.store(0, Ordering::Relaxed);
     }
+}
+
+#[cfg_attr(not(with_shell), allow(dead_code))]
+pub fn allocation_failures() -> u32 {
+    ALLOCATION_FAILURES.load(Ordering::Relaxed)
+}
+
+/// The fewest free heap bytes this run, or `now_free` before the first allocation.
+#[cfg_attr(not(with_shell), allow(dead_code))]
+pub fn least_free_heap_bytes(now_free: usize) -> u32 {
+    LEAST_FREE_HEAP_BYTES.load(Ordering::Relaxed).min(now_free as u32)
 }
 
 /// The most stack words a panic looks through for return addresses.
@@ -115,6 +134,36 @@ fn read_previous_crash() -> Option<RecordedCrash> {
 
 fn clear_record() {
     unsafe { crash_record_address().write_volatile([0; RECORD_SIZE]) };
+}
+
+// ============================================================================
+// Stack overflows, counted across restarts
+// ============================================================================
+
+/// The count and the count's bits flipped, so RAM after the power came on reads as no count.
+#[link_section = ".uninit.STACK_OVERFLOWS"]
+static mut STACK_OVERFLOWS: MaybeUninit<[u32; 2]> = MaybeUninit::uninit();
+
+/// How many times the stack has overflowed into its guard since the power came on.
+#[cfg_attr(not(with_shell), allow(dead_code))]
+pub fn stack_overflows() -> u32 {
+    let [count, check] = unsafe { addr_of!(STACK_OVERFLOWS).cast::<[u32; 2]>().read_volatile() };
+    if check == !count {
+        count
+    } else {
+        0
+    }
+}
+
+/// Called from the stack guard's fault handler, so it takes no lock and no stack to speak of.
+#[cfg(not(feature = "wasp-os-rehearsal"))]
+pub fn count_stack_overflow() {
+    let count = stack_overflows().wrapping_add(1);
+    unsafe {
+        addr_of_mut!(STACK_OVERFLOWS)
+            .cast::<[u32; 2]>()
+            .write_volatile([count, !count])
+    };
 }
 
 // ============================================================================

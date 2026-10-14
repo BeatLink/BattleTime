@@ -166,6 +166,30 @@ fn text_arguments(kind: EffectKind) -> &'static [usize] {
 // The fake system
 // ============================================================================
 
+/// One of the firmware's tasks, with how often it ran and for how long.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FakeTask {
+    pub name: String,
+    pub runs: Value,
+    pub busy_milliseconds: Value,
+}
+
+/// Three tasks, as sdk/neotime/tests/parity.tsx starts them too.
+pub fn starting_tasks() -> Vec<FakeTask> {
+    [
+        ("main", 1, 412),
+        ("shell", 5_210, 61_250),
+        ("bluetooth", 830, 2_470),
+    ]
+    .into_iter()
+    .map(|(name, runs, busy_milliseconds)| FakeTask {
+        name: name.to_string(),
+        runs,
+        busy_milliseconds,
+    })
+    .collect()
+}
+
 /// Everything the app host asks of the firmware, kept in memory for a test to set and read.
 pub struct FakeSystem {
     pub now_in_milliseconds: Value,
@@ -185,6 +209,8 @@ pub struct FakeSystem {
     pub app_name: String,
     /// Set when an effect changed the notifications, so the watch tells the app once the call returns.
     pub notifications_changed: bool,
+    /// The firmware's tasks, as the system app's task page lists them.
+    pub tasks: Vec<FakeTask>,
     /// The steps in each hour of the step history, at `days_back * 24 + hour`.
     pub step_hours: Vec<Value>,
     /// The watch's files by path, such as the note the phone sent.
@@ -229,6 +255,7 @@ impl FakeSystem {
             app_name: String::new(),
             notifications_changed: false,
             step_hours: starting_step_hours(),
+            tasks: starting_tasks(),
             files: vec![
                 (STARTING_NOTE_PATH.to_string(), STARTING_NOTE.as_bytes().to_vec()),
                 (
@@ -283,6 +310,16 @@ impl FakeSystem {
             (HeartRateInterval, 0),
             (CallState, 2),
             (AppMemoryBudget, STARTING_APP_MEMORY_BUDGET),
+            (BootloaderCrc, 0x0C4E_2D17),
+            (BluetoothAddress, 0xD12A_5C7E_903B),
+            (FlashId, 0x0B_4016),
+            (TouchChipId, 0xB4),
+            (TouchFirmwareVersion, 2),
+            (AccelerometerChipId, 0x13),
+            (FreeHeapBytes, 18_432),
+            (LeastFreeHeapBytes, 12_288),
+            (AllocationFailures, 1),
+            (StackOverflows, 0),
         ];
         for (value, number) in starting_values {
             system.set(value, number);
@@ -293,6 +330,9 @@ impl FakeSystem {
         system.set_text(NavigationInstruction, "Turn left onto Main Street");
         system.set_text(FirmwareVersion, "0.1.0+1b19aed");
         system.set_text(ResetReason, "watchdog");
+        system.set_text(FirmwareBuildDate, "2026-01-04");
+        system.set_text(BootloaderVersion, "0.1.0+0c4e2d1");
+        system.set_text(BootloaderBuildDate, "2025-12-20");
         system
     }
 
@@ -348,6 +388,7 @@ impl SystemValues for FakeSystem {
             SystemValue::LauncherGroupCount => self.launcher_groups.len() as Value,
             SystemValue::StepDayCount => (self.step_hours.len() / HOURS_PER_DAY) as Value,
             SystemValue::StepHourCount => self.step_hours.len() as Value,
+            SystemValue::TaskCount => self.tasks.len() as Value,
             other => self.values[other as usize],
         }
     }
@@ -376,6 +417,13 @@ impl SystemValues for FakeSystem {
                 SystemValue::LauncherGroupIcon => return group.icon,
                 SystemValue::LauncherGroupFirst => return group.first,
                 SystemValue::LauncherGroupSize => return group.count,
+                _ => {}
+            }
+        }
+        if let Some(task) = self.tasks.get(place) {
+            match value {
+                SystemValue::TaskRuns => return task.runs,
+                SystemValue::TaskBusyMilliseconds => return task.busy_milliseconds,
                 _ => {}
             }
         }
@@ -419,6 +467,9 @@ impl SystemValues for FakeSystem {
                 .launcher_groups
                 .get(place)
                 .map_or("", |group| group.name.as_str());
+        }
+        if value == SystemValue::TaskName {
+            return self.tasks.get(place).map_or("", |task| task.name.as_str());
         }
         if let Some(package) = self.packages.get(place) {
             match value {

@@ -76,8 +76,17 @@ bind_interrupts!(struct Interrupts {
 // Start
 // ============================================================================
 
+/// The bootloader's version and build date, on a word boundary, where the firmware looks for the record's magic bytes.
+#[repr(C, align(4))]
+struct VersionRecord([u8; neotime_boot::version::VERSION_RECORD_BYTES]);
+
+static VERSION_RECORD: VersionRecord =
+    VersionRecord(*include_bytes!(concat!(env!("OUT_DIR"), "/version_record.bin")));
+
 #[entry]
 fn main() -> ! {
+    // Nothing else reads the record, so this keeps the linker from leaving it out.
+    core::hint::black_box(&VERSION_RECORD);
     let chip = embassy_nrf::init(Default::default());
     let core = cortex_m::Peripherals::take().unwrap();
     let mut delay = Delay::new(core.SYST, CPU_FREQUENCY_IN_HERTZ);

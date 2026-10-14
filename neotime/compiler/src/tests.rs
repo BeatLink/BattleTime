@@ -1612,6 +1612,45 @@ fn the_installed_packages_are_read_one_field_at_a_time_and_turned_on_by_id() {
 }
 
 #[test]
+fn the_about_facts_and_the_task_table_are_read_from_the_system() {
+    use neotime_runtime::instruction::Instruction;
+    let image = compile(&app(
+        r#"import { bootloader_version, flash_id, free_heap_bytes, stack_overflows, tasks, touch_chip_id } from "neotime";
+        function Main() {
+          return (
+            <Screen>
+              <Label>{`${bootloader_version.value} ${flash_id.value & 255}`}</Label>
+              <Label>{`${free_heap_bytes.value} ${stack_overflows.value} ${touch_chip_id.value}`}</Label>
+              <Label>{`${tasks.value.length} ${tasks.value[0].name} ${tasks.value[0].runs} ${tasks.value[0].busy_milliseconds}`}</Label>
+            </Screen>
+          );
+        }"#,
+    ));
+    let image = AppImage::parse(&image).unwrap();
+
+    for value in [
+        SystemValue::BootloaderVersion,
+        SystemValue::FlashId,
+        SystemValue::FreeHeapBytes,
+        SystemValue::StackOverflows,
+        SystemValue::TouchChipId,
+        SystemValue::TaskCount,
+    ] {
+        assert!(image_runs(&image, Instruction::ReadSystem(value)), "{value:?}");
+    }
+    for value in [
+        SystemValue::TaskName,
+        SystemValue::TaskRuns,
+        SystemValue::TaskBusyMilliseconds,
+    ] {
+        assert!(
+            image_runs(&image, Instruction::ReadSystemElement(value)),
+            "{value:?}"
+        );
+    }
+}
+
+#[test]
 fn turning_apps_on_and_off_needs_the_settings_permission() {
     let output = compile_source(&app(PACKAGES_SOURCE));
 

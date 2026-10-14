@@ -546,9 +546,12 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **Try the system app on the watch.** It has run only in the harness and the simulator.
   Flash a firmware whose library carries its `info` icon first, then check the version,
   the uptime after the phone sets the clock, the reset reason after a button-hold reset, and the
-  free storage before and after an install.
-- [ ] **More on the system app's system page:** the free heap, the Bluetooth address and the display's
-  state, as InfiniTime's System Info screen shows.
+  free storage before and after an install. On the About pages, check the Bluetooth address
+  against the computer's, the flash, touch and accelerometer chips (a BMA425 here), that the
+  touch panel's three ID registers read in one go, and that the task table's shares add up to
+  something sensible. The bootloader page shows `CRC` until a bootloader with the version record
+  is sent with the bootloader updater.
+- [ ] **The display's state on the system app's pages,** as InfiniTime's System Info screen shows.
 - [ ] **The full set of navigation turns.** Phones send about 50 icon names, such as forks,
   merges, ramps, ferries and roundabout exits, and the distance as text. NeoTime has 10 turns and
   always prints metres. Add InfiniTime's navigation pictures, map each name to one, and show the
@@ -624,9 +627,6 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **A swap progress bar on the bootloader screen.** It says "Installing firmware" for up to 30
   seconds with nothing moving. Its 20 KB has about 2.7 KB to spare.
 - [ ] **Updates on only until the next reset,** as a third choice beside the on and off switch.
-- [ ] **Show the bootloader version** on the system app's system page. The bootloader keeps no version
-  yet, so it needs one at a fixed place the firmware can read, and an update of the bootloader on
-  the watch.
 
 ### Developer tools and docs
 

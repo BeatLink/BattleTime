@@ -5,13 +5,11 @@
       "reached_by": null,
       "texts": [
         "0.1.0+1b19aed",
-        "0d 03:25:00",
-        "2.7 MB free",
+        "Built      2026-01-04",
         "Firmware",
         "Last restart",
-        "Storage",
         "System",
-        "Uptime",
+        "Uptime    0d 03:25:00",
         "watchdog"
       ]
     }

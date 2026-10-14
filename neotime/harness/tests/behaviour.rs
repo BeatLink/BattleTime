@@ -2,7 +2,9 @@
 
 use std::time::Duration;
 
-use neotime_app_testing::{Direction, EffectKind, EventResult, SystemValue, TestWatch, WidgetKind};
+use neotime_app_testing::{
+    Direction, EffectKind, EventResult, FakeTask, SystemValue, TestWatch, WidgetKind, NONE,
+};
 
 // ============================================================================
 // Named numbers
@@ -238,21 +240,85 @@ fn open_system_page() -> TestWatch {
 fn the_system_app_opens_on_the_system_page_and_pages_left_to_the_battery() {
     let mut watch = TestWatch::open_app("system").unwrap();
     assert_eq!(watch.screen_name(), Some("main"));
-    assert!(watch.shows_text("2.7 MB free"), "{:?}", watch.visible_texts());
+    assert!(watch.shows_text("Last restart"), "{:?}", watch.visible_texts());
 
     watch.swipe(Direction::Left);
     assert_eq!(watch.screen_name(), Some("main"));
     assert!(watch.shows_text("Discharging"), "{:?}", watch.visible_texts());
-    assert!(!watch.shows_text("2.7 MB free"));
+    assert!(!watch.shows_text("Last restart"));
 
     watch.swipe(Direction::Right);
-    assert!(watch.shows_text("2.7 MB free"), "{:?}", watch.visible_texts());
+    assert!(watch.shows_text("Last restart"), "{:?}", watch.visible_texts());
     watch.swipe(Direction::Right);
     assert!(
         watch.effects_of(EffectKind::Back).is_empty(),
         "the button goes back, not a swipe"
     );
     assert!(watch.failures().is_empty());
+}
+
+#[test]
+fn the_hardware_page_writes_the_chip_numbers_in_hex_and_names_the_chips() {
+    let mut watch = open_system_page();
+    watch.set_system_value(SystemValue::BluetoothAddress, 0x0A0B_0C0D_0E0F);
+    watch.set_system_value(SystemValue::FlashId, 0xC8_4016);
+    watch.set_system_value(SystemValue::TouchChipId, 0xB6);
+    watch.set_system_value(SystemValue::AccelerometerChipId, 0);
+    for _ in 0..4 {
+        watch.swipe(Direction::Left);
+    }
+
+    for text in ["0A:0B:0C:0D:0E:0F", "C84016", "CST816D v2", "No answer"] {
+        assert!(watch.shows_text(text), "{text}: {:?}", watch.visible_texts());
+    }
+    assert!(!watch.shows_text("XT25F32B"));
+}
+
+#[test]
+fn the_bootloader_page_shows_the_crc_of_a_bootloader_without_a_version_record() {
+    let mut watch = open_system_page();
+    watch.set_system_text(SystemValue::BootloaderVersion, "");
+    watch.set_system_text(SystemValue::BootloaderBuildDate, "");
+    watch.set_system_value(SystemValue::BootloaderCrc, 0x1A2B_3C4D);
+    for _ in 0..3 {
+        watch.swipe(Direction::Left);
+    }
+
+    assert!(watch.shows_text("CRC 1a2b3c4"), "{:?}", watch.visible_texts());
+    assert!(!watch.shows_text("Built"));
+    watch.set_system_value(SystemValue::BootloaderCrc, NONE);
+    assert!(watch.shows_text("Unreadable"), "{:?}", watch.visible_texts());
+}
+
+#[test]
+fn the_tasks_page_counts_runs_in_thousands_past_a_hundred_thousand_and_shares_the_time() {
+    let mut watch = open_system_page();
+    watch.set_tasks(vec![
+        FakeTask {
+            name: "motion".to_string(),
+            runs: 2_400_000,
+            busy_milliseconds: 1_230_000,
+        },
+        FakeTask {
+            name: "storage".to_string(),
+            runs: 999,
+            busy_milliseconds: 0,
+        },
+    ]);
+    for _ in 0..5 {
+        watch.swipe(Direction::Left);
+    }
+
+    assert!(watch.failures().is_empty(), "{:?}", watch.failures());
+    assert!(watch.shows_text("2400k"), "{:?}", watch.visible_texts());
+    assert!(watch.shows_text("10.0%"), "{:?}", watch.visible_texts());
+    assert!(
+        watch.shows_text("storage      999 0.0%"),
+        "{:?}",
+        watch.visible_texts()
+    );
+    assert!(!watch.shows_text("bluetooth"));
+    assert!(watch.failures().is_empty(), "{:?}", watch.failures());
 }
 
 #[test]
@@ -689,10 +755,13 @@ fn a_swipe_past_the_steps_pages_goes_on_to_the_shell() {
 fn a_swipe_past_the_system_apps_pages_goes_on_to_the_shell() {
     let mut watch = TestWatch::open_app("system").unwrap();
 
-    // Before the first page and past the last, and up and down, the shell has the swipe.
+    // Before the first page and past the seventh, the last, and up and down, the shell has the swipe.
     assert_eq!(watch.swipe(Direction::Right), EventResult::NotHandled);
     assert_eq!(watch.swipe(Direction::Up), EventResult::NotHandled);
-    assert_eq!(watch.swipe(Direction::Left), EventResult::Handled);
+    for _ in 0..6 {
+        assert_eq!(watch.swipe(Direction::Left), EventResult::Handled);
+    }
+    assert!(watch.shows_text("Licence"), "{:?}", watch.visible_texts());
     assert_eq!(watch.swipe(Direction::Left), EventResult::NotHandled);
     assert_eq!(watch.swipe(Direction::Down), EventResult::NotHandled);
     assert!(watch.effects_of(EffectKind::Back).is_empty());

@@ -58,6 +58,7 @@ fn steps_of(pattern: VibrationPattern) -> &'static [Step] {
 
 #[embassy_executor::task]
 pub async fn run_vibrator(motor_pin: Output<'static>) {
+    crate::tasks::name_this_task("vibrator");
     // A plain pin never fails to set.
     let Ok(mut vibrator) = Vibrator::new(OnOffMotor { motor_pin });
     let mut next = REQUESTS.receive().await;

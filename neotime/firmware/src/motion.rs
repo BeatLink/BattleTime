@@ -145,6 +145,7 @@ pub fn set_day(days_back: usize, hours: [u16; HOURS_PER_DAY]) {
 
 #[embassy_executor::task]
 pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus) {
+    crate::tasks::name_this_task("motion");
     start_history().await;
     touch::STARTED.wait().await;
     let mut accelerometer = Accelerometer::new(i2c_device);
@@ -152,9 +153,10 @@ pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus) {
         .start(Settings::DEFAULT, &mut Delay, configurations())
         .await
     {
-        Ok(_) => {}
+        Ok(chip_model) => crate::about::note_accelerometer_chip(chip_model.chip_id()),
         // The library comes only with a firmware update, so a build without one never counts steps.
-        Err(Error::NoConfiguration { .. }) => {
+        Err(Error::NoConfiguration { chip_model }) => {
+            crate::about::note_accelerometer_chip(chip_model.chip_id());
             diagnostics::set(Counter::AccelerometerState, 4);
             return;
         }

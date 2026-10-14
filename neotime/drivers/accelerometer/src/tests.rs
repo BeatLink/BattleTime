@@ -195,6 +195,7 @@ fn start_uploads_the_bma425_configuration_file_whole() {
         block_on(accelerometer.start(Settings::DEFAULT, &mut FakeDelay::default(), BOTH_FILES)).unwrap();
 
     assert_eq!(chip_model, ChipModel::Bma425);
+    assert_eq!(chip_model.chip_id(), BMA425_CHIP_ID);
     assert_eq!(accelerometer.release().uploaded_file, BMA425_CONFIGURATION_FILE);
 }
 
@@ -206,6 +207,7 @@ fn start_uploads_the_bma421_configuration_file_whole() {
         block_on(accelerometer.start(Settings::DEFAULT, &mut FakeDelay::default(), BOTH_FILES)).unwrap();
 
     assert_eq!(chip_model, ChipModel::Bma421);
+    assert_eq!(chip_model.chip_id(), BMA421_CHIP_ID);
     assert_eq!(accelerometer.release().uploaded_file, BMA421_CONFIGURATION_FILE);
 }
 

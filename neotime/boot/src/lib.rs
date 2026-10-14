@@ -478,6 +478,8 @@ pub fn move_recovery<Flash: NorFlash>(
     }
 }
 
+#[cfg(feature = "build-script")]
+pub mod build_script;
 pub mod image_header;
 pub mod migration;
 pub mod slot_table;

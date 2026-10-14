@@ -139,6 +139,7 @@ pub async fn read_touches(
     interrupt_pin: Input<'static>,
     reset_pin: Output<'static>,
 ) {
+    crate::tasks::name_this_task("touch");
     let mut panel = TouchPanel::new(i2c_bus, interrupt_pin, reset_pin);
     // Double taps are left off, because the panel would hold back every single tap waiting for one.
     let mut started = false;
@@ -156,6 +157,9 @@ pub async fn read_touches(
         return;
     }
     diagnostics::set(Counter::TouchState, 1);
+    if let Ok(info) = panel.read_chip_info().await {
+        crate::about::note_touch_chip(info.chip_id, info.firmware_version);
+    }
     let mut finger = Finger::default();
     let mut sender = TouchSender::default();
     let mut listening = Listening::Everything;

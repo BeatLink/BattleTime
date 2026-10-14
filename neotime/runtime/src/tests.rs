@@ -2337,6 +2337,39 @@ fn the_system_info_values_share_a_bit_and_the_version_and_reset_reason_are_text(
 }
 
 #[test]
+fn the_about_values_share_the_system_info_bit_with_the_addresses_and_task_names_as_text() {
+    assert_eq!(SystemValue::from_byte(84), Some(SystemValue::FirmwareBuildDate));
+    assert_eq!(
+        SystemValue::from_byte(100),
+        Some(SystemValue::TaskBusyMilliseconds)
+    );
+    for value in [
+        SystemValue::BootloaderVersion,
+        SystemValue::BluetoothAddress,
+        SystemValue::TouchChipId,
+        SystemValue::FreeHeapBytes,
+        SystemValue::StackOverflows,
+        SystemValue::TaskCount,
+        SystemValue::TaskRuns,
+    ] {
+        assert_eq!(value.bit(), SystemValue::FirmwareVersion.bit());
+    }
+    assert!(SystemValue::BootloaderBuildDate.is_text());
+    assert!(!SystemValue::FlashId.is_text());
+    assert!(!SystemValue::BluetoothAddress.is_text());
+    assert_eq!(
+        SystemValue::BootloaderCrc.bit(),
+        SystemValue::FirmwareVersion.bit()
+    );
+    assert!(!SystemValue::AccelerometerChipId.is_text());
+    assert!(SystemValue::TaskName.is_text());
+    assert!(SystemValue::TaskName.is_list());
+    assert!(SystemValue::TaskBusyMilliseconds.is_list());
+    assert!(!SystemValue::TaskBusyMilliseconds.is_text());
+    assert!(!SystemValue::TaskCount.is_list());
+}
+
+#[test]
 fn the_package_values_change_with_the_installed_apps_and_list_names_and_ids_as_text() {
     assert_eq!(SystemValue::from_byte(66), Some(SystemValue::PackageCount));
     assert_eq!(SystemValue::from_byte(73), Some(SystemValue::AppMemoryBudget));

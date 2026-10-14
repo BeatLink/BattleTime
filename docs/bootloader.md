@@ -198,6 +198,19 @@ button hold, or the repair in step 7, installed the recovery firmware on this st
 else. The top half of the word is a fixed pattern, so whatever RAM held at power-on never reads
 as a note.
 
+## The version record
+
+The bootloader carries its version and build date in a 42-byte record in its constants: the magic
+`NTBootV1`, the version text such as `0.1.0+1b19aed`, padded with zeros to 24 bytes, and the UTC
+build date as `YYYY-MM-DD`. `bootloader/build.rs` writes it with
+`neotime_boot::version::VersionRecord` and the same version text the firmware's build uses, and
+the record starts on a word boundary. Nothing in the bootloader reads it, so `main` keeps it with
+`black_box`. The firmware's system app shows it: `VersionRecord::find` reads the bootloader's
+pages a word at a time for the magic, the first time an app asks. A bootloader built before the
+record has none, and the app shows the start of its CRC-32 instead, as the status page does.
+Because the record holds the commit, every build of a new commit is a new bootloader to the
+updater, which then writes it rather than reporting it up to date.
+
 ## Updating the bootloader
 
 Nothing on the watch can replace the bootloader once it is installed, so a new one goes out inside

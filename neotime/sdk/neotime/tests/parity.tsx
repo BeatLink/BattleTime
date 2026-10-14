@@ -4,14 +4,23 @@
 import { act, cleanup, fireEvent, render } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  accelerometer_chip_id,
+  allocation_failures,
   app_memory_budget,
   battery_millivolts,
+  bluetooth_address,
+  bootloader_build_date,
+  bootloader_crc,
+  bootloader_version,
   battery_percent,
   brightness,
   current_music,
   current_navigation,
   current_weather,
+  firmware_build_date,
   firmware_version,
+  flash_id,
+  free_heap_bytes,
   free_storage_kilobytes,
   heart_rate,
   heart_rate_measured_at,
@@ -22,15 +31,20 @@ import {
   is_do_not_disturb,
   is_heart_rate_running,
   is_phone_connected,
+  least_free_heap_bytes,
   next_alarm,
   packages,
   preview_files,
   reset_persisted,
   reset_reason,
   settings,
+  stack_overflows,
   started_at,
   step_history,
   steps_today,
+  tasks,
+  touch_chip_id,
+  touch_firmware_version,
   unread_notifications,
   utc_offset,
   HOUR,
@@ -206,6 +220,25 @@ export function set_fake_system_values() {
   started_at.value = now - 3 * HOUR - 25 * MINUTE;
   free_storage_kilobytes.value = 2840;
   reset_reason.value = "watchdog";
+  // As harness/src/fake_system.rs starts them.
+  firmware_build_date.value = "2026-01-04";
+  bootloader_version.value = "0.1.0+0c4e2d1";
+  bootloader_build_date.value = "2025-12-20";
+  bootloader_crc.value = 0x0c4e2d17;
+  bluetooth_address.value = 0xd12a5c7e903b;
+  flash_id.value = 0x0b4016;
+  touch_chip_id.value = 0xb4;
+  touch_firmware_version.value = 2;
+  accelerometer_chip_id.value = 0x13;
+  free_heap_bytes.value = 18_432;
+  least_free_heap_bytes.value = 12_288;
+  allocation_failures.value = 1;
+  stack_overflows.value = 0;
+  tasks.value = [
+    { name: "main", runs: 1, busy_milliseconds: 412 },
+    { name: "shell", runs: 5_210, busy_milliseconds: 61_250 },
+    { name: "bluetooth", runs: 830, busy_milliseconds: 2_470 },
+  ];
   current_weather.value = {
     temperature: 18,
     condition: "clear",

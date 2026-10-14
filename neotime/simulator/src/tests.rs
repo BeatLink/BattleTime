@@ -164,6 +164,12 @@ fn the_simulator_gives_its_own_version_and_start() {
     assert_eq!(system.read_text(SystemValue::ResetReason), "power on");
     assert_eq!(system.read(SystemValue::StartedAt), 0);
     assert!(system.read(SystemValue::FreeStorageKilobytes) > 0);
+    assert_eq!(system.read(SystemValue::TaskCount), 1);
+    assert_eq!(system.read_element_text(SystemValue::TaskName, 0), "simulator");
+    assert_eq!(system.read_element_text(SystemValue::TaskName, 1), "");
+    assert_eq!(system.read(SystemValue::TouchChipId), 0xB4);
+    assert_eq!(system.read(SystemValue::FlashId), 0);
+    assert_eq!(system.read(SystemValue::BootloaderCrc), neotime_runtime::NONE);
 }
 
 #[test]

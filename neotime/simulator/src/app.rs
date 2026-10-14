@@ -51,6 +51,11 @@ const SIMULATED_FORECAST: [(Value, Value, Value); 3] = [(0, 12, 22), (2, 10, 17)
 const HOUR_IN_MILLISECONDS: Value = 60 * MINUTE_IN_MILLISECONDS;
 const SIMULATED_FIRMWARE_VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "+simulator");
 const SIMULATED_FREE_STORAGE_KILOBYTES: Value = 2840;
+/// The simulator runs as one task on the computer, so the task page lists just that.
+const SIMULATED_TASK_NAME: &str = "simulator";
+/// What a PineTime's touch panel and accelerometer usually report: a CST816S and a BMA425.
+const SIMULATED_TOUCH_CHIP_ID: Value = 0xB4;
+const SIMULATED_ACCELEROMETER_CHIP_ID: Value = 0x13;
 
 /// A light theme, for trying `set_theme` with the T key.
 pub const LIGHT_THEME: Theme = Theme::new([0xFFFF, 0xDEFB, 0x0000, 0x6B4D, 0x04B3, 0x2589, 0xFC40, 0xD8A7]);
@@ -244,11 +249,18 @@ impl SystemValues for SimulatedSystem {
             FreeStorageKilobytes => SIMULATED_FREE_STORAGE_KILOBYTES,
             // No call has come.
             CallState => 2,
+            TouchChipId => SIMULATED_TOUCH_CHIP_ID,
+            AccelerometerChipId => SIMULATED_ACCELEROMETER_CHIP_ID,
+            TaskCount => 1,
+            BootloaderCrc => NONE,
             _ => 0,
         }
     }
 
     fn read_element_text(&self, value: SystemValue, index: Value) -> &str {
+        if value == SystemValue::TaskName {
+            return if index == 0 { SIMULATED_TASK_NAME } else { "" };
+        }
         let Some((name, id)) = usize::try_from(index)
             .ok()
             .and_then(|place| self.installed_apps.get(place))

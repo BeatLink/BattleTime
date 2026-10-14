@@ -1055,6 +1055,65 @@ mod version {
         assert_eq!(version_of("0.1.0", None), "0.1.0+unknown");
     }
 
+    fn date_of(unix_milliseconds: u64) -> String {
+        let mut text = String::new();
+        write_date(&mut text, unix_milliseconds).unwrap();
+        text
+    }
+
+    #[test]
+    fn a_date_is_written_as_year_month_and_day() {
+        const DAY: u64 = 24 * 60 * 60 * 1000;
+        assert_eq!(date_of(0), "1970-01-01");
+        assert_eq!(date_of(1_791_946_182_482), "2026-10-14");
+        assert_eq!(date_of(11_016 * DAY), "2000-02-29");
+        assert_eq!(date_of(11_017 * DAY - 1), "2000-02-29");
+        assert_eq!(date_of(20_819 * DAY), "2027-01-01");
+        assert_eq!(date_of(20_819 * DAY - 1), "2026-12-31");
+    }
+
+    #[test]
+    fn a_version_record_is_found_anywhere_in_the_region_and_read_back() {
+        let record = VersionRecord::new("0.1.0+1b19aed*", "2026-10-13");
+        for place in [0, 4, 212, 216, 300, 0x5000 - 44] {
+            let mut flash = super::FakeFlash::erased(0x5000);
+            flash.put(place, &record.bytes());
+
+            let found = VersionRecord::find(&mut flash, crate::BOOTLOADER)
+                .unwrap()
+                .unwrap();
+
+            assert_eq!(found.version(), "0.1.0+1b19aed*", "at {place}");
+            assert_eq!(found.date(), "2026-10-13");
+        }
+    }
+
+    #[test]
+    fn a_bootloader_without_a_whole_aligned_record_has_none() {
+        let mut flash = super::FakeFlash::erased(0x5000);
+        flash.put(100, &VERSION_RECORD_MAGIC[..7]);
+        flash.put(201, &VersionRecord::new("0.1.0", "2026-10-13").bytes());
+
+        assert_eq!(VersionRecord::find(&mut flash, crate::BOOTLOADER), Ok(None));
+    }
+
+    #[test]
+    fn a_record_cuts_text_too_long_and_reads_nothing_from_bad_bytes() {
+        let record = VersionRecord::new("0.1.0+1b19aed and a great deal more", "2026-10-13T12:00");
+
+        assert_eq!(record.version().len(), RECORD_VERSION_BYTES);
+        assert_eq!(record.date(), "2026-10-13");
+
+        let mut bytes = record.bytes();
+        bytes[VERSION_RECORD_MAGIC.len()] = 0xFF;
+        let mut flash = super::FakeFlash::erased(0x5000);
+        flash.put(0, &bytes);
+        let found = VersionRecord::find(&mut flash, crate::BOOTLOADER)
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.version(), "");
+    }
+
     #[test]
     fn the_longest_version_fits_the_status_page_title() {
         const STATUS_LINE_CHARACTERS: usize = 22;

@@ -32,7 +32,7 @@ neotime-status-screen = { path = "../drivers/status_screen" }
 neotime-vibrator = { path = "../drivers/vibrator" }
 
 [build-dependencies]
-neotime-boot = { path = "../boot" }
+neotime-boot = { path = "../boot", features = ["build-script"] }
 
 [profile.release]
 codegen-units = 1

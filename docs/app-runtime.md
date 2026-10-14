@@ -533,10 +533,15 @@ and `reset_reason`, then the settings' `allows_updates`, `wake_on_touch` and
 count followed by their lists of `name`, `id`, `enabled`, `is_face`, `memory` and `refusal`,
 which share the installed apps' bit, and `app_memory_budget`, which shares the system info bit,
 then the launcher's look and groups, and the settings' `heart_rate_interval`, which shares the
-other settings' bit, then the latest call's `caller` and `state`, which share a bit of their own.
+other settings' bit, then the latest call's `caller` and `state`, which share a bit of their own,
+then the About facts `firmware_build_date`, `bootloader_version`, `bootloader_build_date`,
+`bootloader_crc`, `bluetooth_address`, `flash_id`, `touch_chip_id`, `touch_firmware_version`,
+`accelerometer_chip_id`, `free_heap_bytes`, `least_free_heap_bytes`, `allocation_failures` and
+`stack_overflows`, and the tasks' count followed by their lists of `name`, `runs` and
+`busy_milliseconds`, which all share the system info bit.
 `read system element` reads a list's elements through `SystemValues::read_element`, or
 `read_element_text` for the names, ids and notification texts, the packages' too. The location, artist, track,
-instruction, firmware version and reset reason are text: the system hands them
+instruction, firmware version, reset reason, build dates, bootloader version and task names are text: the system hands them
 over through `SystemValues::read_text`, and `read system` copies them into the call's text buffer.
 Values the phone sends together share one bit of an input mask, so all the weather values redraw
 together, and the four a system info screen shows share another; that keeps the mask in 32 bits.

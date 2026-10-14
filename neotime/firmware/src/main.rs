@@ -58,6 +58,8 @@ use trouble_host::prelude::*;
 mod storage;
 mod storage_requests;
 
+#[cfg_attr(not(with_shell), allow(dead_code))]
+mod about;
 // The rehearsals and the recovery firmware run without the shell, which leaves these unused there.
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod app_events;
@@ -97,6 +99,7 @@ mod phone;
 mod status;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod system_values;
+mod tasks;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod touch;
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -116,6 +119,9 @@ bind_interrupts!(struct Interrupts {
 
 /// The package version and the git commit, such as `0.1.0+1b19aed`, set by `build.rs`.
 const FIRMWARE_VERSION: &str = env!("NEOTIME_FIRMWARE_VERSION");
+/// The UTC day `build.rs` ran, such as `2026-10-13`.
+#[cfg_attr(not(with_shell), allow(dead_code))]
+const FIRMWARE_BUILD_DATE: &str = env!("NEOTIME_BUILD_DATE");
 const DEVICE_NAME: &str = "NeoTime";
 /// The shell's share of the heap, which the open app's widgets and text are allocated from.
 #[cfg(with_shell)]
@@ -173,6 +179,7 @@ static HOST_RESOURCES: StaticCell<HostResources<DefaultPacketPool, 1, 2>> = Stat
 async fn main(spawner: Spawner) {
     #[cfg(not(feature = "wasp-os-rehearsal"))]
     stack_guard::start();
+    crate::tasks::name_this_task("main");
     let previous_run = storage::previous_breadcrumbs();
     storage::leave_breadcrumb(stage::ENTERED_MAIN);
     storage::prepare_clocks();
@@ -451,6 +458,7 @@ fn take_over_watchdog(watchdog_peripheral: embassy_nrf::Peri<'static, peripheral
 /// It reads the pin itself rather than through the button task, so it works whatever that task does.
 #[embassy_executor::task]
 async fn feed_watchdog_while_button_is_up(mut watchdog: WatchdogHandle) {
+    crate::tasks::name_this_task("watchdog");
     let mut liveness = neotime_liveness::Liveness::new();
     loop {
         // The radio's events end a silent connection; this ends one whose radio stopped sending them.
@@ -505,6 +513,7 @@ fn side_button_is_held() -> bool {
 /// Sends each click, double click and long press to the shell; it sleeps until the pin changes.
 #[embassy_executor::task]
 async fn send_button_gestures(mut button: Button<Input<'static>, Output<'static>>) {
+    crate::tasks::name_this_task("button");
     loop {
         let Ok(gesture) = button.next_gesture(&mut Delay).await;
         diagnostics::add_one(diagnostics::Counter::ButtonPresses);
@@ -757,6 +766,7 @@ async fn run_bluetooth(
     parts: &'static mut BluetoothParts,
     files: &'static storage::Files,
 ) {
+    crate::tasks::name_this_task("bluetooth");
     let BluetoothParts {
         dfu,
         confirmation,

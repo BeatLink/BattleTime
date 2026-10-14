@@ -1,21 +1,18 @@
-# The system app opens on the firmware version, the uptime, why the watch restarted and the free storage, and keeps them current.
+# The system app opens on the firmware version and build date, the uptime and why the watch restarted, and keeps them current.
 open app system
 expect screen main
 expect text "0.1.0+1b19aed"
+expect text "2026-01-04"
 expect text "0d 03:25:00"
 expect text "watchdog"
-expect text "2.7 MB free"
 wait 2s
 expect text "0d 03:25:02"
 wait 21h
 expect text "1d 00:25:02"
-set free_storage_kilobytes 512
-expect text "512 KB free"
 
 # Swiping left turns to the battery page: the charge, its state and the voltage, and a warning to charge below ten percent.
 swipe left
 expect screen main
-expect no text "512 KB free"
 expect text "87%"
 expect text "Discharging"
 expect text "4.05 volts"
@@ -35,8 +32,17 @@ set battery_percent 100
 set battery_millivolts 4180
 expect text "Fully charged"
 
-# Swiping right turns back to the system page.
+# Two more swipes left reach the memory page, with the free storage and heap.
+swipe left
+expect text "2.7 MB"
+expect text "18.0 KB"
+set free_storage_kilobytes 512
+expect text "512 KB"
+
+# Swiping right twice turns back to the system page.
+swipe right
+expect text "Fully charged"
 swipe right
 expect screen main
-expect text "512 KB free"
+expect text "1d 00:25"
 expect no failures

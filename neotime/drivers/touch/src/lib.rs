@@ -26,9 +26,8 @@ const FINGER_EVENT_SHIFT: u8 = 6;
 const POWER_MODE_REGISTER: u8 = 0xa5;
 const DEEP_SLEEP: u8 = 0x03;
 
+/// The chip ID, then the project ID and the firmware version in the two registers after it.
 const CHIP_ID_REGISTER: u8 = 0xa7;
-const PROJECT_ID_REGISTER: u8 = 0xa8;
-const FIRMWARE_VERSION_REGISTER: u8 = 0xa9;
 
 const MOTION_MASK_REGISTER: u8 = 0xec;
 const REPEAT_LEFT_RIGHT_SLIDES: u8 = 0b0000_0100;
@@ -262,11 +261,18 @@ where
     }
 
     /// The panel answers only while awake, so read this right after `start` or a touch.
+    ///
+    /// The three registers follow each other, so one read takes them all, as a report's does.
     pub async fn read_chip_info(&mut self) -> Result<ChipInfo, I2cBus::Error> {
+        let mut registers = [0; 3];
+        self.i2c_bus
+            .write_read(I2C_ADDRESS, &[CHIP_ID_REGISTER], &mut registers)
+            .await?;
+        let [chip_id, project_id, firmware_version] = registers;
         Ok(ChipInfo {
-            chip_id: self.read_register(CHIP_ID_REGISTER).await?,
-            project_id: self.read_register(PROJECT_ID_REGISTER).await?,
-            firmware_version: self.read_register(FIRMWARE_VERSION_REGISTER).await?,
+            chip_id,
+            project_id,
+            firmware_version,
         })
     }
 
@@ -326,15 +332,6 @@ where
         delay.delay_ms(RESET_SETTLE_IN_MILLISECONDS).await;
 
         Ok(())
-    }
-
-    async fn read_register(&mut self, register: u8) -> Result<u8, I2cBus::Error> {
-        let mut value = [0];
-        self.i2c_bus
-            .write_read(I2C_ADDRESS, &[register], &mut value)
-            .await?;
-
-        Ok(value[0])
     }
 
     async fn write_register(

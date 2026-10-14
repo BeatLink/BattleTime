@@ -93,6 +93,7 @@ unsafe extern "C" fn record_memory_fault(faulting_stack_pointer: u32) -> ! {
         }
     };
     let program_counter = stacked_word(6);
+    restart::count_stack_overflow();
     storage::record(storage::Breadcrumbs {
         stage: stage::FAULTED,
         detail: program_counter,

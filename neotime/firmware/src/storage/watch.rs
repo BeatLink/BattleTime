@@ -115,7 +115,12 @@ pub async fn start(
         crate::display_dma::FlashOnBus::new(spi_bus, flash_chip_select),
         BUSY_WAIT,
     ) {
-        Ok(flash) => EXTERNAL_FLASH.init(Mutex::new(RefCell::new(flash))),
+        Ok(mut flash) => {
+            if let Ok(id) = flash.read_chip_id() {
+                crate::about::note_flash_id(id.manufacturer, id.memory_type, id.capacity);
+            }
+            EXTERNAL_FLASH.init(Mutex::new(RefCell::new(flash)))
+        }
         Err(_) => {
             screen.write_line(line::FILES, "No chip");
             return None;
@@ -194,6 +199,9 @@ pub async fn start(
         mode = Mode::Recovery;
     }
     let identity = bootloader_identity(&mut status::BootloaderPages).map_err(|_| ());
+    if let Ok(Some(crc)) = identity {
+        crate::about::note_bootloader_crc(crc);
+    }
     screen.write_line(line::BOOTLOADER, &status::bootloader_words(identity, mode));
     Some((targets, confirmation, mode, files))
 }
@@ -720,6 +728,7 @@ impl neotime_packages::commands::ReplySink for ToBluetooth {
 /// state is on the heap while it runs, so the task's static space holds no store call.
 #[embassy_executor::task]
 pub async fn run_storage(files: &'static Files) {
+    crate::tasks::name_this_task("storage");
     let mut transfer = FileTransfer::new();
     loop {
         match select(storage_requests::REQUESTS.receive(), packages::COMMANDS.receive()).await {

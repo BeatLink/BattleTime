@@ -94,6 +94,14 @@ pub enum ChipModel {
 }
 
 impl ChipModel {
+    /// The ID the chip reports in its chip ID register.
+    pub fn chip_id(self) -> u8 {
+        match self {
+            ChipModel::Bma421 => BMA421_CHIP_ID,
+            ChipModel::Bma425 => BMA425_CHIP_ID,
+        }
+    }
+
     fn from_chip_id(chip_id: u8) -> Option<ChipModel> {
         match chip_id {
             BMA421_CHIP_ID => Some(ChipModel::Bma421),

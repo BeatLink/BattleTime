@@ -139,6 +139,37 @@ pub enum SystemValue {
     CallCaller,
     /// The latest call's state: 0 ringing, 1 answered, 2 ended or none.
     CallState,
+    /// Text: the day the firmware was built, such as `2026-10-13`.
+    FirmwareBuildDate,
+    /// Text: the bootloader's version and commit, or nothing when it carries no version record.
+    BootloaderVersion,
+    /// Text: the day the bootloader was built, or nothing when it does not say.
+    BootloaderBuildDate,
+    /// The bootloader's CRC-32, or none when it could not be read.
+    BootloaderCrc,
+    /// The Bluetooth address the watch advertises with, as a 48-bit number.
+    BluetoothAddress,
+    /// The external flash chip's three-byte JEDEC ID, such as 0x0B4016, or 0 when it never answered.
+    FlashId,
+    /// The touch panel's chip ID and firmware version, or 0 when the panel never answered.
+    TouchChipId,
+    TouchFirmwareVersion,
+    /// The accelerometer's chip ID, or 0 when it never answered.
+    AccelerometerChipId,
+    /// The heap's free bytes now, and the fewest it has had since the watch started.
+    FreeHeapBytes,
+    LeastFreeHeapBytes,
+    /// How many allocations the heap has refused since the watch started.
+    AllocationFailures,
+    /// How many times the stack has overflowed into its guard, kept across restarts.
+    StackOverflows,
+    /// How many tasks the firmware runs.
+    TaskCount,
+    /// Text list: each task's name.
+    TaskName,
+    /// List: how many times each task has run, and the milliseconds it has spent running.
+    TaskRuns,
+    TaskBusyMilliseconds,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -154,7 +185,7 @@ const SYSTEM_INFO_BIT: u32 = 23;
 const CALL_BIT: u32 = 24;
 
 impl SystemValue {
-    pub const COUNT: usize = 84;
+    pub const COUNT: usize = 101;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -243,6 +274,23 @@ impl SystemValue {
             81 => HeartRateInterval,
             82 => CallCaller,
             83 => CallState,
+            84 => FirmwareBuildDate,
+            85 => BootloaderVersion,
+            86 => BootloaderBuildDate,
+            87 => BootloaderCrc,
+            88 => BluetoothAddress,
+            89 => FlashId,
+            90 => TouchChipId,
+            91 => TouchFirmwareVersion,
+            92 => AccelerometerChipId,
+            93 => FreeHeapBytes,
+            94 => LeastFreeHeapBytes,
+            95 => AllocationFailures,
+            96 => StackOverflows,
+            97 => TaskCount,
+            98 => TaskName,
+            99 => TaskRuns,
+            100 => TaskBusyMilliseconds,
             _ => return None,
         })
     }
@@ -278,9 +326,11 @@ impl SystemValue {
             NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
             | NotificationTime => UnreadNotifications as u32,
             StepTrip | StepDayCount | StepDayTotal | StepHourCount | StepHourSteps => StepsToday as u32,
-            FirmwareVersion | StartedAt | FreeStorageKilobytes | ResetReason | AppMemoryBudget => {
-                SYSTEM_INFO_BIT
-            }
+            FirmwareVersion | StartedAt | FreeStorageKilobytes | ResetReason | AppMemoryBudget
+            | FirmwareBuildDate | BootloaderVersion | BootloaderBuildDate | BootloaderCrc
+            | BluetoothAddress | FlashId | TouchChipId | TouchFirmwareVersion | AccelerometerChipId
+            | FreeHeapBytes | LeastFreeHeapBytes | AllocationFailures | StackOverflows | TaskCount
+            | TaskName | TaskRuns | TaskBusyMilliseconds => SYSTEM_INFO_BIT,
             CallCaller | CallState => CALL_BIT,
             other => other as u32,
         };
@@ -315,6 +365,9 @@ impl SystemValue {
                 | LauncherGroupIcon
                 | LauncherGroupFirst
                 | LauncherGroupSize
+                | TaskName
+                | TaskRuns
+                | TaskBusyMilliseconds
         )
     }
 
@@ -338,6 +391,10 @@ impl SystemValue {
                 | PackageId
                 | LauncherGroupName
                 | CallCaller
+                | FirmwareBuildDate
+                | BootloaderVersion
+                | BootloaderBuildDate
+                | TaskName
         )
     }
 }

@@ -234,6 +234,7 @@ impl Files {
 /// Answers every request as a build with no store must: file commands with an error, steps with nothing.
 #[embassy_executor::task]
 pub async fn run_storage(_files: &'static Files) {
+    crate::tasks::name_this_task("storage");
     use crate::storage_requests::{self, StorageRequest};
     use embassy_futures::select::{select, Either};
 

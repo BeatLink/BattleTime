@@ -1,15 +1,27 @@
 import { act, cleanup, render, screen } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  accelerometer_chip_id,
+  allocation_failures,
   battery_millivolts,
   battery_percent,
+  bluetooth_address,
+  bootloader_build_date,
+  bootloader_crc,
+  bootloader_version,
   current_screen,
   firmware_version,
+  flash_id,
+  free_heap_bytes,
   free_storage_kilobytes,
   go,
   is_charging,
+  least_free_heap_bytes,
   reset_reason,
+  stack_overflows,
   started_at,
+  tasks,
+  touch_chip_id,
   DAY,
   HOUR,
 } from "neotime";
@@ -48,6 +60,10 @@ function page_bar_colors(container: Element): string[] {
   return Array.from(segments).map((segment) => (segment as HTMLElement).style.background);
 }
 
+/** The page bar's seven segments with the system page on show, and with the battery page. */
+const PAGE_BAR_ON_SYSTEM = ["rgb(160, 160, 160)", "rgb(56, 56, 56)", "rgb(56, 56, 56)", "rgb(56, 56, 56)", "rgb(56, 56, 56)", "rgb(56, 56, 56)", "rgb(56, 56, 56)"];
+const PAGE_BAR_ON_BATTERY = ["rgb(56, 56, 56)", "rgb(160, 160, 160)", "rgb(56, 56, 56)", "rgb(56, 56, 56)", "rgb(56, 56, 56)", "rgb(56, 56, 56)", "rgb(56, 56, 56)"];
+
 /** Which page of the app's pages is on show. */
 function page_on_show(container: Element): string | null {
   return container.querySelector("[data-widget=pages]")?.getAttribute("data-page") ?? null;
@@ -85,7 +101,7 @@ describe("system: the battery page", () => {
     expect(screen.getByText("87%")).toBeTruthy();
     expect(screen.getByText("Discharging")).toBeTruthy();
     expect(screen.getByText("4.05 volts")).toBeTruthy();
-    expect(page_bar_colors(container)).toEqual(["rgb(56, 56, 56)", "rgb(160, 160, 160)"]);
+    expect(page_bar_colors(container)).toEqual(PAGE_BAR_ON_BATTERY);
   });
 
   it("names a full, low and critical battery", () => {
@@ -150,10 +166,10 @@ describe("system: the system page", () => {
     const { container } = render(<OpenScreen />);
     expect(current_screen.value).toBe("main");
     expect(page_on_show(container)).toBe("0");
-    expect(page_bar_colors(container)).toEqual(["rgb(160, 160, 160)", "rgb(56, 56, 56)"]);
+    expect(page_bar_colors(container)).toEqual(PAGE_BAR_ON_SYSTEM);
     act(() => swipe("left"));
     expect(page_on_show(container)).toBe("1");
-    expect(page_bar_colors(container)).toEqual(["rgb(56, 56, 56)", "rgb(160, 160, 160)"]);
+    expect(page_bar_colors(container)).toEqual(PAGE_BAR_ON_BATTERY);
     act(() => swipe("right"));
     expect(page_on_show(container)).toBe("0");
     expect(current_screen.value).toBe("main");
@@ -166,21 +182,126 @@ describe("system: the system page", () => {
     expect(screen.getByText("Discharging")).toBeTruthy();
   });
 
-  it("shows the version, uptime, last restart and free storage", () => {
+  it("shows the version, uptime and last restart, and the free storage on the memory page", () => {
     render(<OpenScreen />);
     expect(screen.getByText("0.1.0+1b19aed")).toBeTruthy();
-    expect(screen.getByText("1d 02:00:00")).toBeTruthy();
+    expect(screen.getByText(/Uptime +1d 02:00:00/)).toBeTruthy();
     expect(screen.getByText("Fault at 0x0001a2b4")).toBeTruthy();
-    expect(screen.getByText("2.7 MB free")).toBeTruthy();
+    act(() => swipe("left"));
+    act(() => swipe("left"));
+    expect(screen.getByText(/Storage free +2\.7 MB/)).toBeTruthy();
   });
 
   it("counts the uptime on and follows the storage", () => {
     render(<OpenScreen />);
     act(() => advance_clock(5000));
-    expect(screen.getByText("1d 02:00:05")).toBeTruthy();
+    expect(screen.getByText(/1d 02:00:05/)).toBeTruthy();
+    act(() => swipe("left"));
+    act(() => swipe("left"));
     act(() => {
       free_storage_kilobytes.value = 300;
     });
-    expect(screen.getByText("300 KB free")).toBeTruthy();
+    expect(screen.getByText(/Storage free +300 KB/)).toBeTruthy();
+  });
+});
+
+describe("system: the about pages", () => {
+  beforeEach(() => {
+    freeze_clock(START);
+    started_at.value = START - 10 * HOUR;
+    install_apps([app]);
+    open(app);
+  });
+
+  afterEach(() => {
+    cleanup();
+    unfreeze_clock();
+    open(null);
+    bootloader_version.value = "0.1.0+preview";
+    bootloader_crc.value = 0x1a2b3c4d;
+    touch_chip_id.value = 0xb4;
+    accelerometer_chip_id.value = 0x13;
+    flash_id.value = 0x0b4016;
+    tasks.value = [];
+  });
+
+  /** Renders the app and swipes left `count` times, to the page that far from the system page. */
+  function turn_to_page(count: number) {
+    render(<OpenScreen />);
+    for (let page = 0; page < count; page++) act(() => swipe("left"));
+  }
+
+  it("shows the heap and its counts on the memory page", () => {
+    free_heap_bytes.value = 18_432;
+    least_free_heap_bytes.value = 12_288;
+    allocation_failures.value = 2;
+    stack_overflows.value = 1;
+    turn_to_page(2);
+    expect(screen.getByText(/Heap free +18\.0 KB/)).toBeTruthy();
+    expect(screen.getByText(/Least free +12\.0 KB/)).toBeTruthy();
+    expect(screen.getByText(/Failed allocs +2/)).toBeTruthy();
+    expect(screen.getByText(/Stack overflows +1/)).toBeTruthy();
+  });
+
+  it("shows the bootloader's version and build date, or the start of its CRC", () => {
+    bootloader_version.value = "0.1.0+0c4e2d1";
+    bootloader_build_date.value = "2025-12-20";
+    turn_to_page(3);
+    expect(screen.getByText(/0\.1\.0\+0c4e2d1/)).toBeTruthy();
+    expect(screen.getByText(/Built 2025-12-20/)).toBeTruthy();
+    act(() => {
+      bootloader_version.value = "";
+    });
+    expect(screen.getByText("CRC 1a2b3c4")).toBeTruthy();
+    act(() => {
+      bootloader_crc.value = null;
+    });
+    expect(screen.getByText("Unreadable")).toBeTruthy();
+  });
+
+  it("writes the address and IDs in hex and names the chips it knows", () => {
+    bluetooth_address.value = 0xd12a5c7e903b;
+    turn_to_page(4);
+    expect(screen.getByText("D1:2A:5C:7E:90:3B")).toBeTruthy();
+    expect(screen.getByText(/Flash +XT25F32B 0B4016/)).toBeTruthy();
+    expect(screen.getByText(/Touch +CST816S v2/)).toBeTruthy();
+    expect(screen.getByText(/Accelerometer +BMA425/)).toBeTruthy();
+    act(() => {
+      flash_id.value = 0xc84016;
+      touch_chip_id.value = 0xb5;
+      accelerometer_chip_id.value = 0x11;
+    });
+    expect(screen.getByText(/Flash +C84016/)).toBeTruthy();
+    expect(screen.getByText(/CST816T v2/)).toBeTruthy();
+    expect(screen.getByText(/BMA421/)).toBeTruthy();
+    act(() => {
+      flash_id.value = 0;
+      touch_chip_id.value = 0x20;
+      accelerometer_chip_id.value = 0;
+    });
+    expect(screen.getByText(/Flash +No answer/)).toBeTruthy();
+    expect(screen.getByText(/Chip 32 v2/)).toBeTruthy();
+    expect(screen.getByText(/Accelerometer +No answer/)).toBeTruthy();
+    act(() => {
+      touch_chip_id.value = 0xb6;
+    });
+    expect(screen.getByText(/CST816D v2/)).toBeTruthy();
+  });
+
+  it("lists each task's runs, in thousands past a hundred thousand, and its share of the time", () => {
+    tasks.value = [
+      { name: "shell", runs: 52_100, busy_milliseconds: 360_000 },
+      { name: "motion", runs: 2_400_000, busy_milliseconds: 0 },
+      { name: "storage", runs: 9, busy_milliseconds: 36_000 },
+    ];
+    turn_to_page(5);
+    expect(screen.getByText(/shell +52100 +1\.0%/)).toBeTruthy();
+    expect(screen.getByText(/motion +2400k +0\.0%/)).toBeTruthy();
+    expect(screen.getByText(/storage +9 +0\.1%/)).toBeTruthy();
+  });
+
+  it("ends on the licence", () => {
+    turn_to_page(6);
+    expect(screen.getByText(/GNU GPL, version 3 or later/)).toBeTruthy();
   });
 });

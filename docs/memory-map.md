@@ -162,11 +162,13 @@ below the start path of that time. Under a connection the Bluetooth task's own f
 the stack under those frames, and the app host verifies an image and runs its first derives outside
 the 1.7 KB frame that loads it.
 
-The last 60 bytes of the firmware's static RAM, in the `.uninit` section just below the stack, are
-the crash record (`firmware/src/restart.rs`, laid out by `neotime-crash-record`). Start-up does not
+The last 68 bytes of the firmware's static RAM, in the `.uninit` section just below the stack, are
+the crash record (`firmware/src/restart.rs`, laid out by `neotime-crash-record`) and the 8-byte
+stack overflow count, kept as the count and its bits flipped. Start-up does not
 zero `.uninit`, so a panic or HardFault written there survives the reset that follows. It sits at
 about `0x2000D68C`, wherever the linker puts the end of the other statics, so each build has its own
-address and a record from another build fails its checksum. The bootloader runs between the two
+address and a record from another build fails its checksum; the overflow count starts again
+from 0 the same way. The bootloader runs between the two
 starts but keeps clear of it: its statics are 336 B at the bottom of RAM and its stack reaches about
 4.7 KB below the alive marker in an ordinary start, measured in the emulator, against the record's
 10.3 KB. A stack that grew into the record would only happen after the firmware's own stack had

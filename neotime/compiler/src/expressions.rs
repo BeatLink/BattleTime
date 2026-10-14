@@ -87,6 +87,19 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
         "started_at" => (SystemValue::StartedAt, instant),
         "free_storage_kilobytes" => (SystemValue::FreeStorageKilobytes, Type::NUMBER),
         "reset_reason" => (SystemValue::ResetReason, Type::TEXT),
+        "firmware_build_date" => (SystemValue::FirmwareBuildDate, Type::TEXT),
+        "bootloader_version" => (SystemValue::BootloaderVersion, Type::TEXT),
+        "bootloader_build_date" => (SystemValue::BootloaderBuildDate, Type::TEXT),
+        "bootloader_crc" => (SystemValue::BootloaderCrc, Type::NUMBER.or_null()),
+        "bluetooth_address" => (SystemValue::BluetoothAddress, Type::NUMBER),
+        "flash_id" => (SystemValue::FlashId, Type::NUMBER),
+        "touch_chip_id" => (SystemValue::TouchChipId, Type::NUMBER),
+        "touch_firmware_version" => (SystemValue::TouchFirmwareVersion, Type::NUMBER),
+        "accelerometer_chip_id" => (SystemValue::AccelerometerChipId, Type::NUMBER),
+        "free_heap_bytes" => (SystemValue::FreeHeapBytes, Type::NUMBER),
+        "least_free_heap_bytes" => (SystemValue::LeastFreeHeapBytes, Type::NUMBER),
+        "allocation_failures" => (SystemValue::AllocationFailures, Type::NUMBER),
+        "stack_overflows" => (SystemValue::StackOverflows, Type::NUMBER),
         "settings.allows_updates" => (SystemValue::AllowsUpdates, Type::BOOL),
         "settings.wake_on_touch" => (SystemValue::WakeOnTouch, Type::NUMBER),
         "settings.alarms_in_do_not_disturb" => (SystemValue::AlarmsInDoNotDisturb, Type::BOOL),
@@ -135,6 +148,7 @@ fn list_length(list: &str) -> Option<SystemValue> {
         "packages" => Some(SystemValue::PackageCount),
         "step_history.days" => Some(SystemValue::StepDayCount),
         "step_history.hours" => Some(SystemValue::StepHourCount),
+        "tasks" => Some(SystemValue::TaskCount),
         _ => None,
     }
 }
@@ -168,6 +182,9 @@ fn list_field(list: &str, name: &str) -> Option<SystemSignal> {
         ("packages", "refusal") => (SystemValue::PackageRefusal, Type::NUMBER),
         ("step_history.days", "total") => (SystemValue::StepDayTotal, Type::NUMBER),
         ("step_history.hours", "steps") => (SystemValue::StepHourSteps, Type::NUMBER),
+        ("tasks", "name") => (SystemValue::TaskName, Type::TEXT),
+        ("tasks", "runs") => (SystemValue::TaskRuns, Type::NUMBER),
+        ("tasks", "busy_milliseconds") => (SystemValue::TaskBusyMilliseconds, Type::NUMBER),
         _ => return None,
     };
     Some(SystemSignal { value, value_type })
@@ -323,7 +340,7 @@ impl<'a> Compiler<'a> {
                 name: format!("Math.{name}"),
             }),
             Reference::SystemGroup(
-                list @ ("installed_apps" | "launcher_groups" | "notifications" | "packages"),
+                list @ ("installed_apps" | "launcher_groups" | "notifications" | "packages" | "tasks"),
             ) if name == "value" => Some(Reference::SystemList(list)),
             Reference::SystemGroup(group) => {
                 if name == "value" {
@@ -1315,6 +1332,7 @@ fn library_reference<'a>(module: LibraryModule, name: &str) -> Reference<'a> {
                 "notifications" => Some("notifications"),
                 "packages" => Some("packages"),
                 "step_history" => Some("step_history"),
+                "tasks" => Some("tasks"),
                 _ => None,
             };
             if let Some(group) = group {

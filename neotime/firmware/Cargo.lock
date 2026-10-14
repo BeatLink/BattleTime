@@ -1278,6 +1278,7 @@ dependencies = [
  "neotime-status-screen",
  "neotime-steps",
  "neotime-storage",
+ "neotime-task-table",
  "neotime-touch",
  "neotime-ui",
  "neotime-updates",
@@ -1367,6 +1368,10 @@ dependencies = [
  "littlefs-rust",
  "neotime-boot",
 ]
+
+[[package]]
+name = "neotime-task-table"
+version = "0.1.0"
 
 [[package]]
 name = "neotime-touch"

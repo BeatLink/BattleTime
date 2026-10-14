@@ -6,5 +6,9 @@ description = "NeoTime's flash layout and recovery install, shared by the bootlo
 license.workspace = true
 publish = false
 
+[features]
+# The helpers the firmware's and the bootloader's build scripts share, which need the standard library.
+build-script = []
+
 [dependencies]
 embedded-storage = "0.3"

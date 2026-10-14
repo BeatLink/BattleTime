@@ -50,6 +50,7 @@ pub async fn watch_battery(
     mut charging_pin: Input<'static>,
     mut power_present_pin: Input<'static>,
 ) {
+    crate::tasks::name_this_task("battery");
     adc.calibrate().await;
     let mut battery = Battery::new();
     loop {

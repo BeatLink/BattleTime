@@ -33,7 +33,7 @@ flowchart TB
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: renderer, shapes, strips, started"]
     system["System<br/>settings started; planned: power, events, notifications"]
-    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/steps,<br/>services/liveness, services/foreground"]
+    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/steps,<br/>services/liveness, services/foreground,<br/>services/task_table"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/heart_rate,<br/>drivers/bluetooth, drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
@@ -171,6 +171,7 @@ NeoTime/
 │   ├── settings/     neotime-settings: the watch-wide settings, their limits and their file
 │   ├── steps/        neotime-steps: the step history by hour, the trip count and the daily step log
 │   ├── storage/      neotime-storage: littlefs in the external flash, for the wasp-os storage rehearsal
+│   ├── task_table/   neotime-task-table: the firmware's tasks with their runs and busy time, for the system app
 │   └── updates/      neotime-updates: stores an uploaded firmware and hands it to the bootloader
 ├── simulator/        neotime-simulator: the drivers in a desktop window
 ├── site/             the GitHub Pages site: its MkDocs config, front page and colours
@@ -928,6 +929,20 @@ watch face, the launcher and the apps through `neotime-app-host`:
   store's free file sectors. A read before it is counted gives 0 and asks the shell's loop to count
   it, outside the redraw's deep stack; the app then redraws with the count, which is kept until the
   next app opens.
+- **About facts.** `about.rs` keeps what the system app's About pages show as numbers for the app
+  to format: the bootloader's CRC-32 from start-up, the external flash's JEDEC ID, which storage
+  start reads, the touch panel's chip ID and firmware version, read in one transaction once it
+  starts, the accelerometer's chip ID, and the Bluetooth address from FICR. The bootloader's
+  version record is looked for the first time an app reads it, from the shell's loop as the free
+  storage is counted: `neotime_boot::version::VersionRecord::find` reads the bootloader's pages
+  word by word for its magic. The firmware's build date comes from `build.rs`. The heap wrapper
+  counts refused allocations and the fewest free bytes after any allocation, and the stack
+  guard's fault handler adds one to a count kept in `.uninit` beside the crash record.
+- **Task table.** The firmware enables embassy-executor's `trace` feature, and `tasks.rs`
+  implements its hooks over a `neotime_task_table::TaskTable`: a task is added when spawned,
+  removed when it ends, and each poll adds a run and its time in RTC ticks. The hooks know a task
+  only by its address, so every task calls `tasks::name_this_task` first. Only thread mode touches
+  the table, the executor's hooks and the tasks it polls, so it takes no lock.
 - **Status page.** The start-up lines and an update's progress share the display with the shell;
   while the page is up the shell draws nothing. During an update the page holds the screen lit;
   once the update ends or fails it gives way to the next touch or press, or to the timeout. Its

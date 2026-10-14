@@ -48,6 +48,20 @@ time.
 | `started_at` | `Instant` | When the watch last started, so `now - started_at` is how long it has run. It moves with the clock when the phone sets the time. |
 | `free_storage_kilobytes` | `Int` | The space left in the watch's file system, counted when the app opens. |
 | `reset_reason` | `Text` | Why the watch last restarted: `Fault at 0x…` or `Last run panicked` when the run before crashed, or else the chip's reset reasons, such as `watchdog`, `reset pin` or `power on`. |
+| `firmware_build_date` | `Text` | The UTC day the firmware was built, such as `2026-10-13`. |
+| `bootloader_version` | `Text` | The bootloader's version and commit from its version record, or `""` for a bootloader older than the record. Looked up the first time an app reads it, so it reads `""` until the next redraw. |
+| `bootloader_build_date` | `Text` | The day the bootloader was built, from the same record, or `""`. |
+| `bootloader_crc` | `Int` or `null` | The bootloader's CRC-32, as its status page line shows the first seven hex digits, or `null` when it could not be read. |
+| `bluetooth_address` | `Int` | The address the watch advertises with, as one 48-bit number, highest byte first. |
+| `flash_id` | `Int` | The external flash chip's three-byte JEDEC ID, `0x0B4016` for the PineTime's XT25F32B, or 0 when it never answered. |
+| `touch_chip_id` | `Int` | The touch panel's chip ID, `0xB4` for a CST816S, or 0 when it never answered. |
+| `touch_firmware_version` | `Int` | The touch panel's firmware version. |
+| `accelerometer_chip_id` | `Int` | The accelerometer's chip ID, `0x11` for a BMA421 and `0x13` for a BMA425, or 0 when it never answered. |
+| `free_heap_bytes` | `Int` | The heap's free bytes, read when the app opens. |
+| `least_free_heap_bytes` | `Int` | The fewest free heap bytes since the watch started. |
+| `allocation_failures` | `Int` | How many allocations the heap has refused since the watch started. |
+| `stack_overflows` | `Int` | How many times the stack has run into its guard, counted across restarts until the power goes. |
+| `tasks` | list | The firmware's tasks, in the order they started: `.name`, `.runs`, how many times the executor has polled it, and `.busy_milliseconds`, how long those polls took. Read when the app opens. |
 | `current_navigation` | object | The phone's navigation: `turn`, `instruction` (text), `distance` in metres and `progress_percent`. Needs the `phone` permission. |
 
 The system keeps the latest weather, music and navigation, including their text, and keeps them

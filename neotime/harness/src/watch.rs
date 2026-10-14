@@ -17,7 +17,7 @@ use neotime_runtime::{
 use neotime_companion::PhoneNotification;
 use neotime_notifications::cut_to_fit;
 
-use crate::fake_system::{FakeLauncherGroup, FakeSystem, InstalledApp, RecordedEffect};
+use crate::fake_system::{FakeLauncherGroup, FakeSystem, FakeTask, InstalledApp, RecordedEffect};
 use crate::framebuffer::Framebuffer;
 use crate::sources::{
     compile_package, compile_source_text, package_source, shared_library, OpenFailure, PackageKind,
@@ -473,6 +473,14 @@ impl TestWatch {
         let now = self.now();
         self.host
             .report_system_value_changes(value.bit(), now, &mut self.system);
+    }
+
+    /// Replaces the firmware's tasks, as the system app's task page lists them, and redraws what shows them.
+    pub fn set_tasks(&mut self, tasks: Vec<FakeTask>) {
+        self.system.tasks = tasks;
+        let now = self.now();
+        self.host
+            .report_system_value_changes(SystemValue::TaskCount.bit(), now, &mut self.system);
     }
 
     /// Changes a text system value, such as the firmware version, and redraws what shows it.

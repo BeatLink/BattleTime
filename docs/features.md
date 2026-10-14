@@ -254,10 +254,15 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 
   ![Not enough memory](../neotime/harness/snapshots/screens/firmware-not-enough-memory.png)
 
-- **A system page,** the second page of the `system` app, showing the firmware's version and
-  commit, how long the watch has run since it started, why it last restarted and the free storage,
-  as InfiniTime's System Info screen does. A scroll bar down the right edge marks the page on show,
-  as on wasp-os.
+- **A system page,** the first page of the `system` app, showing the firmware's version and
+  commit, the day it was built, how long the watch has run since it started and why it last
+  restarted, as InfiniTime's System Info screen does. A scroll bar down the right edge marks the
+  page on show, as on wasp-os.
+- **About pages** after the battery page in the `system` app, as InfiniTime's System Info screens:
+  memory (free storage, free heap and the least it has been, refused allocations and stack
+  overflows), the bootloader's version and build date, the hardware (Bluetooth address, the flash
+  chip and its JEDEC ID, the touch panel's chip and firmware, the accelerometer), a task table with
+  each task's runs and share of the time, and the licence.
 - **Bootloader updates over Bluetooth,** with the bootloader updater: sent like any firmware
   update, it writes the new bootloader only on the charger and hands the watch back to the firmware
   that was running. It replaced the first watch's bootloader on 2026-10-11.

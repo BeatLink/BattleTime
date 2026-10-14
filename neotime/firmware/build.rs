@@ -1,11 +1,11 @@
 //! Writes the linker's memory map from the shared flash layout, so the firmware starts where the bootloader expects it.
 //!
-//! The last words of RAM are left out, for the alive marker. It also sets the version the firmware reports.
+//! The last words of RAM are left out, for the alive marker. It also sets the version and build date the firmware reports.
 
-use std::{env, fs, path::PathBuf, process::Command};
+use std::{env, fs, path::PathBuf};
 
 use neotime_boot::{
-    version::{read_commit, write_version, BuildCommit},
+    build_script::{build_date, build_time_in_milliseconds, version_text},
     FIRMWARE, FIRMWARE_ALIVE_MARKER, FIRMWARE_VECTOR_TABLE, RAM,
 };
 
@@ -47,9 +47,7 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
     // The clock starts from the build time until a phone sets it.
-    let build_time = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_millis());
+    let build_time = build_time_in_milliseconds();
     println!("cargo:rustc-env=NEOTIME_BUILD_TIME_MS={build_time}");
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_WASP_OS_REHEARSAL");
 
@@ -63,7 +61,7 @@ fn main() {
     println!("cargo:rerun-if-changed=../boot/src/lib.rs");
 
     compile_shell_screens(&output_directory);
-    set_firmware_version();
+    set_firmware_version(build_time);
 }
 
 // ============================================================================
@@ -93,61 +91,11 @@ fn compile_shell_screens(output_directory: &std::path::Path) {
 // Version
 // ============================================================================
 
-/// Set by the Nix flake, or by hand, where the source has no `.git` to read the commit from.
-const COMMIT_VARIABLE: &str = "NEOTIME_GIT_COMMIT";
-
-/// Gives the firmware `NEOTIME_FIRMWARE_VERSION`: the package version and the commit, from git or else the variable.
-fn set_firmware_version() {
-    let package_version = env::var("CARGO_PKG_VERSION").unwrap();
-    let git_commit = run_git(&["rev-parse", "HEAD"]);
-    let variable_commit = env::var(COMMIT_VARIABLE).ok();
-    let commit = match git_commit.as_deref().and_then(read_commit) {
-        Some(commit) => Some(BuildCommit {
-            has_uncommitted_changes: tree_has_uncommitted_changes(),
-            ..commit
-        }),
-        None => variable_commit.as_deref().and_then(read_commit),
-    };
-
-    let mut version = String::new();
-    write_version(&mut version, &package_version, commit).unwrap();
-    println!("cargo:rustc-env=NEOTIME_FIRMWARE_VERSION={version}");
-    println!("cargo:rerun-if-env-changed={COMMIT_VARIABLE}");
-    rerun_when_the_commit_moves();
-}
-
-/// Runs git in the firmware's folder and gives what it printed, or none when git or the repository is missing.
-fn run_git(arguments: &[&str]) -> Option<String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(env::var("CARGO_MANIFEST_DIR").ok()?)
-        .args(arguments)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    String::from_utf8(output.stdout).ok()
-}
-
-fn tree_has_uncommitted_changes() -> bool {
-    run_git(&["status", "--porcelain", "--untracked-files=no"])
-        .is_some_and(|changes| !changes.trim().is_empty())
-}
-
-/// Reruns this script when HEAD, the branch it points to or the index changes, as git keeps them.
-fn rerun_when_the_commit_moves() {
-    let mut watched_names = vec![
-        String::from("HEAD"),
-        String::from("index"),
-        String::from("packed-refs"),
-    ];
-    if let Some(branch) = run_git(&["symbolic-ref", "--quiet", "HEAD"]) {
-        watched_names.push(branch.trim().to_owned());
-    }
-    for name in watched_names {
-        if let Some(path) = run_git(&["rev-parse", "--path-format=absolute", "--git-path", &name]) {
-            println!("cargo:rerun-if-changed={}", path.trim());
-        }
-    }
+/// Gives the firmware `NEOTIME_FIRMWARE_VERSION`, the package version and the commit, and `NEOTIME_BUILD_DATE`.
+fn set_firmware_version(build_time_in_milliseconds: u64) {
+    println!("cargo:rustc-env=NEOTIME_FIRMWARE_VERSION={}", version_text());
+    println!(
+        "cargo:rustc-env=NEOTIME_BUILD_DATE={}",
+        build_date(build_time_in_milliseconds)
+    );
 }

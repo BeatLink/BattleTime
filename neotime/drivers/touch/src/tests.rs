@@ -71,8 +71,10 @@ impl I2c for FakeBus {
                 let report = self.queued_reports.pop_front().expect("no report queued");
                 buffer.copy_from_slice(&report);
             }
-            [Operation::Write(&[register]), Operation::Read([value])] => {
-                *value = self.value_of(register);
+            [Operation::Write(&[register]), Operation::Read(values)] => {
+                for (next_register, value) in (register..).zip(values.iter_mut()) {
+                    *value = self.value_of(next_register);
+                }
             }
             _ => panic!("unexpected I2C transaction"),
         }
@@ -298,11 +300,11 @@ fn chip_info_reads_three_registers() {
             value: 0xb4,
         },
         RegisterWrite {
-            register: PROJECT_ID_REGISTER,
+            register: CHIP_ID_REGISTER + 1,
             value: 0x00,
         },
         RegisterWrite {
-            register: FIRMWARE_VERSION_REGISTER,
+            register: CHIP_ID_REGISTER + 2,
             value: 0x01,
         },
     ];
