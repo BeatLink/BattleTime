@@ -245,6 +245,10 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   and the companion can send one by hand (`neotime apps run`, `neotime ask`), but nothing sends a
   call screen, a custom notification page or a game score when a call, a notification or a score
   arrives on the phone, and the companion app has no screen for choosing them.
+- [ ] **Try temporary apps on the watch.** They have run only in the emulator. On the watch, check
+  that `neotime ask` opens the prompt over the face and over another app with the screen dark and
+  lit, that Yes and No reach the computer and go back, that a second `neotime ask` reuses the cached
+  image, and that turning Bluetooth off on the computer closes the prompt.
 - [ ] **Phone data as inputs.** Values the phone sends, such as the next calendar event, unread
   count, music track or a game score, become inputs like steps, so many apps are only a layout
   bound to phone data. Settles the open question in [app-runtime.md](app-runtime.md) about how
