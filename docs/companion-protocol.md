@@ -244,7 +244,7 @@ in `/temp/<id>/`, as [Temporary apps](#temporary-apps-served) describes.
 ### Notes
 
 The notes app shows `/notes/note.txt`, read only. The companion app writes it whole with the
-file transfer above whenever the chosen file is new or has changed, and writes `/notes/font` with
+file transfer above whenever the note, typed there or read from a chosen file or URL, is new or has changed, and writes `/notes/font` with
 the name of the font to show it in: `small`, `normal`, `medium` or `large`, without quotes. Any other
 font file, or none, leaves the app's own font. The text is UTF-8; the watch shows tabs and carriage
 returns as spaces and other bytes as `?`, and draws only the characters its fonts have. Deleting

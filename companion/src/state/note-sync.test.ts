@@ -2,7 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import type { WatchFile } from '@/protocol/file-service';
 import { NOTE_FONT_PATH, NOTE_PATH, type NoteFiles, type NoteFont, type NoteOnWatch } from '@/protocol/notes';
-import type { NoteFileAccess, NoteFileRef } from '@/services/note-file';
+import type { NoteReader } from '@/services/note-source';
 
 import { NoteSync, type NoteStatus } from './note-sync';
 
@@ -35,30 +35,23 @@ class FakeWatchFiles implements NoteFiles {
   }
 }
 
-const FILE: NoteFileRef = { name: 'note.txt', uri: '/home/me/note.txt' };
-
-function setUp(text: string, file: NoteFileRef | null = FILE) {
+function setUp(text: string, hasSource = true) {
   const watchFiles = new FakeWatchFiles();
   const disk = { text, reads: 0, fails: false };
-  const settings: { file: NoteFileRef | null; font: NoteFont; onWatch: NoteOnWatch | null } = {
-    file,
+  const read: NoteReader = async () => {
+    disk.reads++;
+    if (disk.fails) {
+      throw new Error('note.txt could not be read; choose it again.');
+    }
+    return new TextEncoder().encode(disk.text);
+  };
+  const settings: { read: NoteReader | null; font: NoteFont; onWatch: NoteOnWatch | null } = {
+    read: hasSource ? read : null,
     font: 'normal',
     onWatch: null,
   };
   const statuses: NoteStatus[] = [];
-  const access: NoteFileAccess = {
-    pick: async () => FILE,
-    read: async () => {
-      disk.reads++;
-      if (disk.fails) {
-        throw new Error('note.txt could not be read; choose it again.');
-      }
-      return new TextEncoder().encode(disk.text);
-    },
-    watch: () => null,
-  };
   const sync = new NoteSync({
-    access,
     files: async () => watchFiles,
     watchId: 'watch-1',
     current: () => settings,
@@ -78,7 +71,7 @@ const text = (bytes: Uint8Array | undefined) => new TextDecoder().decode(bytes);
 // ============================================================================
 
 describe('NoteSync', () => {
-  it('sends the chosen file and its font, and remembers what it sent', async () => {
+  it('sends the chosen note and its font, and remembers what it sent', async () => {
     const { sync, watchFiles, settings, statuses } = setUp('Milk');
 
     await sync.sync();
@@ -106,7 +99,7 @@ describe('NoteSync', () => {
     expect(statuses.every((status) => status.kind === 'synced')).toBe(true);
   });
 
-  it('sends an edited file, and a new font on its own', async () => {
+  it('sends an edited note, and a new font on its own', async () => {
     const { sync, watchFiles, disk, settings } = setUp('Milk');
     await sync.sync();
     watchFiles.writes.length = 0;
@@ -139,7 +132,7 @@ describe('NoteSync', () => {
     expect(text(watchFiles.files.get(NOTE_PATH))).toBe('Milk and eggs');
   });
 
-  it('reports a file it cannot read, and does nothing without a file', async () => {
+  it('reports a source it cannot read, and does nothing without one', async () => {
     const failing = setUp('Milk');
     failing.disk.fails = true;
     await failing.sync.sync();
@@ -147,7 +140,7 @@ describe('NoteSync', () => {
       { kind: 'failed', message: 'note.txt could not be read; choose it again.', at: 1000 },
     ]);
 
-    const none = setUp('Milk', null);
+    const none = setUp('Milk', false);
     await none.sync.sync();
     expect(none.statuses).toEqual([{ kind: 'idle' }]);
     expect(none.watchFiles.writes).toEqual([]);

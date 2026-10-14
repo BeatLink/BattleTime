@@ -180,8 +180,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   without room for its longer list, saying why. The launcher and the last face stay on. See
   [apps.md](apps.md) and [memory-map.md](memory-map.md#how-much-heap-an-app-needs).
 
-- **Notes.** Pick a text file in the companion app and it is copied to the watch, again whenever it
-  changes; the notes app shows it, read only and scrolled, in the font chosen in the companion app.
+- **Notes.** Type a note in the companion app, pick a text file, or give a URL it fetches every
+  minute, and the note is copied to the watch, again whenever it changes; the notes app shows it, read only and scrolled, in the font chosen in the companion app.
   See [apps.md](apps.md).
 - **Remote.** Choose up to 9 buttons in the companion app, each with an icon and an action; the
   remote app shows them full size, 2 by 2 or 3 by 3, and a tap buzzes and tells the phone to run

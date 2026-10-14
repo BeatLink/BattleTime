@@ -106,10 +106,24 @@ describe('the note command', () => {
     await expect(files.read(NOTE_PATH)).rejects.toThrow();
   });
 
+  it('sends typed text, and the text a URL answers with', async () => {
+    const { session, service } = noteSession();
+    const fetcher = (async () => new Response('From the web')) as unknown as typeof fetch;
+
+    await note(session, ['text', 'Milk and eggs', 'small']);
+    const files = await service;
+    expect(new TextDecoder().decode(await files.read(NOTE_PATH))).toBe('Milk and eggs');
+    expect(new TextDecoder().decode(await files.read(NOTE_FONT_PATH))).toBe('small');
+
+    await note(session, ['url', 'https://example.org/note.txt'], fetcher);
+    expect(new TextDecoder().decode(await files.read(NOTE_PATH))).toBe('From the web');
+  });
+
   it('asks for a file and a known font', async () => {
     const { session } = noteSession();
 
     await expect(note(session, [])).rejects.toThrow('Give the text file');
+    await expect(note(session, ['url'])).rejects.toThrow('Give the URL to show.');
     await expect(note(session, ['list.txt', 'huge'])).rejects.toThrow('The font is one of small, normal, medium, large');
   });
 });

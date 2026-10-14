@@ -34,6 +34,7 @@ import {
 import type { SlotRange } from '@/protocol/gadgetbridge';
 import { readStepHistory } from '@/protocol/steps';
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
+import { fetchNote } from '@/services/note-source';
 import { currentWeather, findPlace } from '@/services/weather';
 
 import type { WatchSession } from '../ble';
@@ -46,7 +47,8 @@ neotime alarms [HH:MM[/days][/off] ...|none]
 neotime steps [days]
 neotime weather <place>
 neotime files [ls [dir]|get <path> [dest]|put <file> <path>|rm <path>|df]
-neotime note <file> [small|normal|medium|large]|remove
+neotime note <file>|text <text>|url <url> [small|normal|medium|large]
+neotime note remove
 neotime apps [list|install <image>|remove <id>|hide <id>|show <id>|setup]
 neotime apps run <image> [--data <name>=<file>]... [--text <name>=<text>]...
 neotime apps stop|forget [id]
@@ -464,21 +466,31 @@ export async function quickApps(session: WatchSession, args: string[]) {
   }
 }
 
-export async function note(session: WatchSession, args: string[]) {
-  const [file, font = 'normal'] = args;
-  if (!file) {
-    throw new Error('Give the text file to show, or remove.');
+export async function note(session: WatchSession, args: string[], fetcher: typeof fetch = fetch) {
+  const [first, ...rest] = args;
+  if (!first) {
+    throw new Error('Give the text file to show, text <words>, url <url>, or remove.');
   }
   const service = await session.files();
-  if (file === 'remove') {
+  if (first === 'remove') {
     await removeNote(service);
     say('Removed the note.');
     return;
   }
+  // `text` and `url` take the note from the next argument; anything else names a file.
+  const [value, font = 'normal'] = first === 'text' || first === 'url' ? rest : [first, ...rest];
+  if (value === undefined) {
+    throw new Error(`Give the ${first === 'text' ? 'text' : 'URL'} to show.`);
+  }
   if (!(NOTE_FONTS as readonly string[]).includes(font)) {
     throw new Error(`The font is one of ${NOTE_FONTS.join(', ')}, not ${font}.`);
   }
-  const bytes = new Uint8Array(readFileSync(file));
+  const [bytes, name] =
+    first === 'text'
+      ? [new TextEncoder().encode(value), 'the text']
+      : first === 'url'
+        ? [await fetchNote(value, fetcher), value]
+        : [new Uint8Array(readFileSync(value)), basename(value)];
   await syncNote(service, bytes, font as NoteFont, session.deviceId, null, false);
-  say(`Sent ${basename(file)} (${bytes.length} bytes) to ${NOTE_PATH}, in the ${font} font.`);
+  say(`Sent ${name} (${bytes.length} bytes) to ${NOTE_PATH}, in the ${font} font.`);
 }

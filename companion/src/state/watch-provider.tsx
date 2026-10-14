@@ -36,6 +36,7 @@ import {
 import { readStatus, ReplyRouter, type RequestChannel } from '@/protocol/requests';
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
 import { noteFileAccess, type NoteFileAccess } from '@/services/note-file';
+import { noteReader } from '@/services/note-source';
 import { phoneBridge, type PhoneEvent } from '@/services/phone';
 import { controlCall } from '@/services/phone/call-control';
 import { CallSummary } from '@/services/phone/call-summary';
@@ -115,9 +116,9 @@ type WatchContextValue = {
   noteFiles: NoteFileAccess;
   // How keeping the watch's note up to date last went.
   noteStatus: NoteStatus;
-  // Checks the chosen file now and sends it if it changed.
+  // Reads the note's source now and sends it if it changed.
   syncNote: () => Promise<void>;
-  // Stops keeping a note on the watch and takes it off.
+  // Clears the chosen source, stops keeping a note on the watch and takes it off.
   forgetNote: () => Promise<void>;
   // How sending the remote layout to the watch last went.
   remoteStatus: RemoteStatus;
@@ -590,25 +591,26 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     return packagesRef.current;
   }, []);
 
-  // Keep the watch's note matching the chosen file: on connecting, after each save the platform
-  // reports, every minute, and whenever the file or its font is changed here.
+  // Keep the watch's note matching its source: on connecting, after each save of a chosen file the
+  // platform reports, every minute, and whenever the source, its contents or the font change here.
   const noteFiles = useMemo(() => noteFileAccess(), []);
   const [noteStatus, setNoteStatus] = useState<NoteStatus>({ kind: 'idle' });
   const noteSyncRef = useRef<NoteSync | null>(null);
-  const noteFile = settings.noteFile;
+  const noteSource = settings.noteSource;
+  const noteFile = noteSource === 'file' ? settings.noteFile : null;
   const watchId = watch?.id ?? null;
-  const notesOn = watchReady && capabilities.files && noteFile !== null && watchId !== null;
+  const hasNote = noteReader(settings, noteFiles) !== null;
+  const notesOn = watchReady && capabilities.files && hasNote && watchId !== null;
   useEffect(() => {
-    if (!notesOn || noteFile === null || watchId === null) {
+    if (!notesOn || watchId === null) {
       noteSyncRef.current = null;
       return;
     }
     const sync = new NoteSync({
-      access: noteFiles,
       files,
       watchId,
       current: () => ({
-        file: settingsRef.current.noteFile,
+        read: noteReader(settingsRef.current, noteFiles),
         font: settingsRef.current.noteFont,
         onWatch: settingsRef.current.noteOnWatch,
       }),
@@ -618,7 +620,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     noteSyncRef.current = sync;
     void sync.sync();
     const timer = setInterval(() => void sync.sync(), NOTE_CHECK_INTERVAL_MS);
-    const stopWatching = noteFiles.watch(noteFile, () => void sync.sync());
+    const stopWatching = noteFile ? noteFiles.watch(noteFile, () => void sync.sync()) : null;
     return () => {
       clearInterval(timer);
       stopWatching?.();
@@ -626,19 +628,22 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     };
     // The file's link is what matters, not the object holding it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notesOn, noteFile?.uri, watchId, noteFiles, files, updateSettings]);
+  }, [notesOn, noteSource, noteFile?.uri, watchId, noteFiles, files, updateSettings]);
 
-  const noteFont = settings.noteFont;
+  const { noteFont, noteText, noteUrl } = settings;
   useEffect(() => {
     void noteSyncRef.current?.sync();
-  }, [noteFont]);
+  }, [noteFont, noteText, noteUrl]);
 
   const syncNote = useCallback(async () => {
     await noteSyncRef.current?.sync();
   }, []);
 
   const forgetNote = useCallback(async () => {
-    await updateSettings({ noteFile: null, noteOnWatch: null });
+    const cleared = { typed: { noteText: '' }, file: { noteFile: null }, url: { noteUrl: '' } }[
+      settingsRef.current.noteSource
+    ];
+    await updateSettings({ ...cleared, noteOnWatch: null });
     setNoteStatus({ kind: 'idle' });
     if (watchReady && capabilities.files) {
       await removeNote(await files());

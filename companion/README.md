@@ -103,6 +103,8 @@ npm run neotime -- time
 npm run neotime -- diag
 npm run neotime -- files ls /settings
 npm run neotime -- note shopping.txt large
+npm run neotime -- note text "Milk, bread, eggs"
+npm run neotime -- note url https://example.org/note.txt
 npm run neotime -- qr https://example.org --label Example
 npm run neotime -- qr wifi Home secret --label "Home Wi-Fi"
 npm run neotime -- remote push
@@ -204,7 +206,7 @@ src/app/                 Expo Router screens
   scan.tsx               Modal that lists nearby watches
   apps.tsx               Install a compiled .ntapp image, hide or remove an app, see its memory
   setup.tsx              Set up a new watch: the shared icons, a face, the launcher and apps
-  notes.tsx              The text file the watch's Notes app shows, and its font there
+  notes.tsx              The note the watch's Notes app shows (typed, a file or a URL), and its font
   qr-code.tsx            A QR code for text, a link or a Wi-Fi network, for the watch's qr-code app
   remote.tsx             The watch's Remote app: its buttons, what each runs here, and recent taps
   launcher.tsx           The launcher's style, view and groups, and which group each app is in
@@ -308,15 +310,19 @@ Commands run one at a time, so answers never mix.
 
 ## Notes
 
-The Notes screen keeps a text file of the user's choice on the watch, for NeoTime's `notes` app to
-show read only. [src/protocol/notes.ts](src/protocol/notes.ts) writes it to `/notes/note.txt` and
+The Notes screen keeps a note on the watch, for NeoTime's `notes` app to show read only. The note
+comes from one of three sources, chosen on the screen and read through
+[src/services/note-source.ts](src/services/note-source.ts): text typed on the screen, saved and sent
+once typing pauses for a moment; a text file of the user's choice; or an http or https URL, fetched
+again on every check. In the desktop app and a browser the URL's server must allow cross-origin reads
+(`Access-Control-Allow-Origin`), as raw GitHub and gist links do; a phone has no such limit. [src/protocol/notes.ts](src/protocol/notes.ts) writes it to `/notes/note.txt` and
 the chosen font's name to `/notes/font` over the file service, each only when it differs from what
 was last sent; the first check on a connection lists `/notes` too, so a note deleted on the watch
 is sent again. [src/state/note-sync.ts](src/state/note-sync.ts) checks when the watch connects,
-every minute, and when the file or font is changed here, one check at a time. Notes are limited to
+every minute, and when the source, its contents or the font change here, one check at a time. Notes are limited to
 64 kB.
 
-[src/services/note-file.ts](src/services/note-file.ts) reaches the file. The desktop app picks it
+[src/services/note-file.ts](src/services/note-file.ts) reaches a chosen file. The desktop app picks it
 in a file dialog and reads it from disk in the main process
 ([node/note-file.js](node/note-file.js)), which also watches its folder, so a save is sent within a
 moment. A phone or a browser keeps the document picker's link and reads it again on each check; a

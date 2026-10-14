@@ -80,6 +80,12 @@ describe('settings', () => {
     await expect(loadSettings()).resolves.toEqual({ ...defaultSettings, autoReconnect: false });
   });
 
+  it('keeps a note file saved before there was a choice of source as the source', async () => {
+    const noteFile = { name: 'list.txt', uri: '/home/me/list.txt' };
+    await AsyncStorage.setItem('neotime.settings.v1', JSON.stringify({ noteFile }));
+    await expect(loadSettings()).resolves.toEqual({ ...defaultSettings, noteFile, noteSource: 'file' });
+  });
+
   it('falls back to the defaults when the blob is unreadable', async () => {
     await AsyncStorage.setItem('neotime.settings.v1', 'garbage');
     await expect(loadSettings()).resolves.toEqual(defaultSettings);

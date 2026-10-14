@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { NoteFont, NoteOnWatch } from '@/protocol/notes';
 import { readRemoteButtons, type RemoteButton, type RemoteOnWatch } from '@/protocol/remote';
 import type { NoteFileRef } from '@/services/note-file';
+import { NOTE_SOURCES, type NoteSource } from '@/services/note-source';
 import type { Place } from '@/services/weather';
 
 // User settings that survive restarts, stored as one JSON blob.
@@ -28,8 +29,11 @@ export type Settings = {
   githubRepo: string;
   githubToken: string;
   firmwareBoard: string;
-  // The text file the watch's notes app shows, the font it is drawn in, and what the watch was last sent.
+  // Where the watch's note comes from, each source's contents, the font it is drawn in, and what the watch was last sent.
+  noteSource: NoteSource;
+  noteText: string;
   noteFile: NoteFileRef | null;
+  noteUrl: string;
   noteFont: NoteFont;
   noteOnWatch: NoteOnWatch | null;
   // The watch's remote buttons, in order, and the layout the watch was last sent.
@@ -54,7 +58,10 @@ export const defaultSettings: Settings = {
   githubRepo: 'BeatLink/NeoTime',
   githubToken: '',
   firmwareBoard: 'pinetime',
+  noteSource: 'typed',
+  noteText: '',
   noteFile: null,
+  noteUrl: '',
   noteFont: 'normal',
   noteOnWatch: null,
   remoteButtons: [],
@@ -69,7 +76,12 @@ export async function loadSettings(): Promise<Settings> {
     if (!raw) {
       return defaultSettings;
     }
-    const stored = { ...defaultSettings, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    const stored = { ...defaultSettings, ...parsed };
+    // Settings saved before there was a choice of source kept only a file.
+    if (!(NOTE_SOURCES as readonly unknown[]).includes(parsed.noteSource)) {
+      stored.noteSource = stored.noteFile ? 'file' : 'typed';
+    }
     // Buttons are checked one by one, so a malformed one never reaches the watch or runs.
     return { ...stored, remoteButtons: readRemoteButtons(stored.remoteButtons) };
   } catch {

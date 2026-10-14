@@ -1,11 +1,11 @@
-// Keeps the watch's note matching the chosen file while a watch is connected.
+// Keeps the watch's note matching its source while a watch is connected.
 //
-// Each check reads the file again and sends it, or its font, only when it changed. The first check
+// Each check reads the source again and sends it, or its font, only when it changed. The first check
 // on a connection also lists the watch's files, so a note removed or replaced there is sent again.
 // Checks never overlap: one asked for while another runs is made once that one ends.
 
 import { fingerprint, syncNote, type NoteFiles, type NoteFont, type NoteOnWatch } from '@/protocol/notes';
-import type { NoteFileAccess, NoteFileRef } from '@/services/note-file';
+import type { NoteReader } from '@/services/note-source';
 
 // ============================================================================
 // What the screen shows
@@ -22,11 +22,10 @@ export type NoteStatus =
 // ============================================================================
 
 export type NoteSyncParts = {
-  access: NoteFileAccess;
   files: () => Promise<NoteFiles>;
   watchId: string;
-  // The chosen file, its font and what the watch was last sent, as the settings hold them now.
-  current: () => { file: NoteFileRef | null; font: NoteFont; onWatch: NoteOnWatch | null };
+  // The reader for the chosen source, the font and what the watch was last sent, as the settings hold them now.
+  current: () => { read: NoteReader | null; font: NoteFont; onWatch: NoteOnWatch | null };
   remember: (onWatch: NoteOnWatch) => void;
   onStatus: (status: NoteStatus) => void;
   now?: () => number;
@@ -41,7 +40,7 @@ export class NoteSync {
 
   constructor(private readonly parts: NoteSyncParts) {}
 
-  // Checks the file and sends what changed; a call made while a check runs is answered by one more check after it.
+  // Checks the source and sends what changed; a call made while a check runs is answered by one more check after it.
   sync(): Promise<void> {
     if (this.running) {
       this.again = true;
@@ -59,16 +58,16 @@ export class NoteSync {
   }
 
   private async checkOnce(): Promise<void> {
-    const { access, files, watchId, current, remember, onStatus } = this.parts;
+    const { files, watchId, current, remember, onStatus } = this.parts;
     const now = this.parts.now ?? Date.now;
-    const { file, font, onWatch: remembered } = current();
+    const { read, font, onWatch: remembered } = current();
     const onWatch = this.sent ?? remembered;
-    if (!file) {
+    if (!read) {
       onStatus({ kind: 'idle' });
       return;
     }
     try {
-      const note = await access.read(file);
+      const note = await read();
       const changed =
         onWatch === null ||
         onWatch.watchId !== watchId ||
