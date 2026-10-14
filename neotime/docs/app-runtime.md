@@ -245,9 +245,9 @@ watch; [compiler.md](compiler.md) describes it in full. It works straight from t
 5. Compile again until the values each variable may hold stop growing, to choose array widths.
 6. Write the image, and run the same checks the watch runs at install.
 
-What the image format cannot hold yet, such as subscriptions, lifecycle handlers and the icon, is
-left out with a warning. Expressions do not record their inputs or redraw period, and an icon or
-image is not converted yet. Editors get type errors from TypeScript itself, through the type
+What the image format cannot hold yet, such as a Chart's second series, is left out with a
+warning; [compiler.md](compiler.md#not-supported-yet) lists it. Expressions do not record their
+inputs or redraw period, because the runtime works both out when the app opens. Editors get type errors from TypeScript itself, through the type
 declarations in the `neotime` package. The compiler does not depend on it.
 
 ## The app image
