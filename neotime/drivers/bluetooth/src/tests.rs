@@ -66,6 +66,7 @@ struct ConnectParameters {
     window_size: u8,
     window_offset: u16,
     interval: u16,
+    latency: u16,
     timeout: u16,
     channel_map: [u8; 5],
 }
@@ -74,6 +75,7 @@ const DEFAULT_CONNECT: ConnectParameters = ConnectParameters {
     window_size: 3,
     window_offset: 2,
     interval: INTERVAL_IN_UNITS,
+    latency: 0,
     timeout: TIMEOUT_IN_UNITS,
     channel_map: ALL_DATA_CHANNELS,
 };
@@ -87,7 +89,7 @@ fn connect_request(parameters: &ConnectParameters) -> Vec<u8> {
     packet.push(parameters.window_size);
     packet.extend_from_slice(&parameters.window_offset.to_le_bytes());
     packet.extend_from_slice(&parameters.interval.to_le_bytes());
-    packet.extend_from_slice(&0u16.to_le_bytes());
+    packet.extend_from_slice(&parameters.latency.to_le_bytes());
     packet.extend_from_slice(&parameters.timeout.to_le_bytes());
     packet.extend_from_slice(&parameters.channel_map);
     let fifty_parts_per_million = 5;
@@ -997,6 +999,128 @@ fn an_update_whose_instant_has_passed_drops_the_connection() {
             reason: disconnect_reason::INSTANT_PASSED
         })
     );
+}
+
+// ============================================================================
+// Peripheral latency
+// ============================================================================
+
+const LATENCY_OF_TWO: ConnectParameters = ConnectParameters {
+    latency: 2,
+    ..DEFAULT_CONNECT
+};
+
+fn channel_of(operation: RadioOperation) -> u8 {
+    match operation {
+        RadioOperation::Receive { channel, .. } => channel.index,
+        other => panic!("expected to be listening, got {other:?}"),
+    }
+}
+
+/// Plays one quiet event the central opens at `anchor`, and gives back the listen that follows it.
+fn quiet_event(
+    link_layer: &mut LinkLayer,
+    sequence_numbers: bool,
+    anchor: u32,
+    transmit_buffer: &mut [u8],
+) -> RadioOperation {
+    central_sends(
+        link_layer,
+        &CentralPacket::empty(sequence_numbers, sequence_numbers),
+        anchor,
+        transmit_buffer,
+    );
+    link_layer.on_transmitted(anchor + 400, transmit_buffer)
+}
+
+#[test]
+fn latency_skips_events_after_a_quiet_one() {
+    let mut transmit_buffer = transmit_buffer();
+    let (mut link_layer, first) = connected_link_layer(&LATENCY_OF_TWO, &mut transmit_buffer);
+    let anchor = anchor_of(first);
+
+    let next = quiet_event(&mut link_layer, false, anchor, &mut transmit_buffer);
+
+    assert_listens_narrowly_around(next, anchor + 3 * INTERVAL_IN_MICROSECONDS);
+    assert_eq!(channel_of(next), 4 * HOP_INCREMENT % DATA_CHANNEL_COUNT);
+}
+
+#[test]
+fn latency_resynchronises_on_the_next_event_heard() {
+    let mut transmit_buffer = transmit_buffer();
+    let (mut link_layer, first) = connected_link_layer(&LATENCY_OF_TWO, &mut transmit_buffer);
+    let anchor = anchor_of(first);
+    quiet_event(&mut link_layer, false, anchor, &mut transmit_buffer);
+    let drifted_anchor = anchor + 3 * INTERVAL_IN_MICROSECONDS + 20;
+
+    let next = quiet_event(&mut link_layer, true, drifted_anchor, &mut transmit_buffer);
+
+    assert_listens_narrowly_around(next, drifted_anchor + 3 * INTERVAL_IN_MICROSECONDS);
+    assert_eq!(channel_of(next), 7 * HOP_INCREMENT % DATA_CHANNEL_COUNT);
+}
+
+#[test]
+fn latency_skips_nothing_while_data_waits_to_be_sent() {
+    let mut transmit_buffer = transmit_buffer();
+    let (mut link_layer, first) = connected_link_layer(&LATENCY_OF_TWO, &mut transmit_buffer);
+    let anchor = anchor_of(first);
+    link_layer
+        .send_to_peer(DataPacket::new(DataKind::Start, b"hello"))
+        .unwrap();
+
+    let next = quiet_event(&mut link_layer, false, anchor, &mut transmit_buffer);
+
+    assert_listens_narrowly_around(next, anchor + INTERVAL_IN_MICROSECONDS);
+}
+
+#[test]
+fn latency_skips_nothing_while_an_update_waits_for_its_instant() {
+    let mut transmit_buffer = transmit_buffer();
+    let (mut link_layer, first) = connected_link_layer(&LATENCY_OF_TWO, &mut transmit_buffer);
+    let anchor = anchor_of(first);
+    let instant: u16 = 2;
+    let mut update = vec![CONNECTION_UPDATE_INDICATION, 1, 0, 0, 40, 0, 0, 0, 200, 0];
+    update.extend_from_slice(&instant.to_le_bytes());
+    let packet = CentralPacket {
+        kind: DataKind::Control,
+        sequence_number: false,
+        next_expected_sequence_number: false,
+        more_data: false,
+        payload: &update,
+    };
+
+    central_sends(&mut link_layer, &packet, anchor, &mut transmit_buffer);
+    let next = link_layer.on_transmitted(anchor + 400, &mut transmit_buffer);
+
+    assert_listens_narrowly_around(next, anchor + INTERVAL_IN_MICROSECONDS);
+}
+
+#[test]
+fn data_from_the_host_brings_back_a_skipped_event() {
+    let mut transmit_buffer = transmit_buffer();
+    let (mut link_layer, first) = connected_link_layer(&LATENCY_OF_TWO, &mut transmit_buffer);
+    let anchor = anchor_of(first);
+    quiet_event(&mut link_layer, false, anchor, &mut transmit_buffer);
+    link_layer
+        .send_to_peer(DataPacket::new(DataKind::Start, b"hello"))
+        .unwrap();
+
+    let resumed = link_layer.resume_skipped_events(anchor + 1_000).unwrap();
+
+    assert_listens_narrowly_around(resumed, anchor + INTERVAL_IN_MICROSECONDS);
+    assert_eq!(channel_of(resumed), 2 * HOP_INCREMENT % DATA_CHANNEL_COUNT);
+}
+
+#[test]
+fn a_skipped_event_too_close_to_reach_stays_skipped() {
+    let mut transmit_buffer = transmit_buffer();
+    let (mut link_layer, first) = connected_link_layer(&LATENCY_OF_TWO, &mut transmit_buffer);
+    let anchor = anchor_of(first);
+    quiet_event(&mut link_layer, false, anchor, &mut transmit_buffer);
+
+    let resumed = link_layer.resume_skipped_events(anchor + 2 * INTERVAL_IN_MICROSECONDS - 1_000);
+
+    assert_eq!(resumed, None);
 }
 
 // ============================================================================

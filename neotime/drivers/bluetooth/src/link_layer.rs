@@ -37,6 +37,8 @@ const GAP_BETWEEN_ADVERTISING_CHANNELS: u32 = 400;
 const MAXIMUM_ADVERTISING_DELAY: u32 = 10_000;
 const MINIMUM_SCHEDULING_LEAD: u32 = 60;
 const TIME_FOR_ANOTHER_EXCHANGE: u32 = 1_000;
+/// How far ahead a skipped event must start for a packet from the host to bring the listen back to it.
+const LEAD_TO_RESUME_A_SKIPPED_EVENT: u32 = 3_000;
 
 fn microseconds_from(start: u32, end: u32) -> i32 {
     end.wrapping_sub(start) as i32
@@ -257,6 +259,8 @@ struct Connection {
     unmapped_channel: u8,
     channel: u8,
     event_counter: u16,
+    /// The first event after the last one closed, which a packet from the host brings the listen back to.
+    earliest_event_to_listen_at: u16,
 
     /// When the central's first packet of the current event should be heard.
     anchor: u32,
@@ -296,6 +300,16 @@ impl Connection {
 
     fn select_next_channel(&mut self) {
         self.unmapped_channel = (self.unmapped_channel + self.hop_increment) % DATA_CHANNEL_COUNT;
+        self.map_unmapped_channel();
+    }
+
+    fn select_previous_channel(&mut self) {
+        self.unmapped_channel =
+            (self.unmapped_channel + DATA_CHANNEL_COUNT - self.hop_increment) % DATA_CHANNEL_COUNT;
+        self.map_unmapped_channel();
+    }
+
+    fn map_unmapped_channel(&mut self) {
         self.channel = if self.channel_map.is_used(self.unmapped_channel) {
             self.unmapped_channel
         } else {
@@ -649,6 +663,7 @@ impl LinkLayer {
             unmapped_channel: 0,
             channel: 0,
             event_counter: 0,
+            earliest_event_to_listen_at: 0,
             anchor: first_window_start,
             window_length: request.window_size as u32 * UNIT_1250_MICROSECONDS,
             last_synchronised_anchor: end_time,
@@ -882,20 +897,78 @@ impl LinkLayer {
             return self.end_connection(disconnect_reason::FAILED_TO_ESTABLISH);
         }
 
+        let mut events_to_skip = self.events_latency_lets_us_skip();
+        let connection = self.connection();
+        connection.earliest_event_to_listen_at = connection.event_counter.wrapping_add(1);
         loop {
             if let Some(changed) = self.advance_to_next_event() {
                 self.push_notice(changed);
             }
             let connection = self.connection();
             let (start_at, give_up_at) = connection.listen_for_anchor();
-            if microseconds_from(now, start_at) >= MINIMUM_SCHEDULING_LEAD as i32 {
+            if events_to_skip == 0 && microseconds_from(now, start_at) >= MINIMUM_SCHEDULING_LEAD as i32 {
                 return RadioOperation::Receive {
                     start_at,
                     give_up_at,
                     channel: connection.channel(),
                 };
             }
+            events_to_skip = events_to_skip.saturating_sub(1);
         }
+    }
+
+    /// How many events peripheral latency lets the watch sleep through after one it heard with nothing to say.
+    fn events_latency_lets_us_skip(&mut self) -> u16 {
+        let nothing_from_the_host = self.outgoing.is_empty();
+        let connection = self.connection();
+        let heard_this_event =
+            connection.established && connection.last_synchronised_anchor == connection.anchor;
+        let nothing_in_flight = connection
+            .in_flight
+            .is_none_or(|in_flight| in_flight.packet.length == 0);
+        let nothing_to_send = nothing_from_the_host
+            && nothing_in_flight
+            && connection.control_replies.is_empty()
+            && connection.terminate_reason.is_none();
+        let no_instant_pending =
+            connection.pending_update.is_none() && connection.pending_channel_map.is_none();
+        if heard_this_event && nothing_to_send && no_instant_pending {
+            connection.latency
+        } else {
+            0
+        }
+    }
+
+    /// Brings the listen back from events skipped under peripheral latency once the host has something to send.
+    pub fn resume_skipped_events(&mut self, now: u32) -> Option<RadioOperation> {
+        let State::Connected(connection) = &mut self.state else {
+            return None;
+        };
+        if connection.step != EventStep::WaitingForFirstPacket {
+            return None;
+        }
+        let mut moved = false;
+        while connection.event_counter != connection.earliest_event_to_listen_at {
+            let previous_anchor = connection
+                .anchor
+                .wrapping_sub(connection.interval_in_microseconds());
+            if microseconds_from(now, previous_anchor) < LEAD_TO_RESUME_A_SKIPPED_EVENT as i32 {
+                break;
+            }
+            connection.anchor = previous_anchor;
+            connection.event_counter = connection.event_counter.wrapping_sub(1);
+            connection.select_previous_channel();
+            moved = true;
+        }
+        if !moved {
+            return None;
+        }
+        let (start_at, give_up_at) = connection.listen_for_anchor();
+        Some(RadioOperation::Receive {
+            start_at,
+            give_up_at,
+            channel: connection.channel(),
+        })
     }
 
     /// Moves on one connection event, applying any update whose instant has come.

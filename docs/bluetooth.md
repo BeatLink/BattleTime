@@ -84,6 +84,11 @@ access in `nrf_radio.rs`, behind the small `Radio` trait, is the substitute.
   answered with "unknown response", which tells the central the feature is missing. Up to four
   replies can wait to be sent; a request that needs one while they are full is left unacknowledged
   for the central to resend, while indications that need no reply are always taken.
+- **Peripheral latency:** after an event in which the central was heard and the watch had nothing
+  to send, it sleeps through as many events as the central's latency allows, with the window
+  widening grown over the whole gap. It never skips while host data, a control reply or a
+  terminate waits, nor while a connection or channel map update waits for its instant. A packet
+  the host queues during the skip brings the listen back to the next event at least 3 ms away.
 - **Losing the link:** the supervision timeout, a central that never shows up after connecting,
   and an update whose instant has already passed. The link layer checks these when the radio
   reports something, and the firmware's watchdog task calls `check_supervision` every half second
@@ -97,7 +102,6 @@ access in `nrf_radio.rs`, behind the small `Radio` trait, is the substitute.
 | Missing | What it costs |
 |---|---|
 | **Encryption and pairing** (`LL_ENC_REQ`) | Only unencrypted connections. Gadgetbridge works without bonding, as it does with InfiniTime, but phones that insist on pairing will fail. A Pairing Request is answered at once with Pairing Failed, "pairing not supported", so a phone that only offers pairing gives up straight away and keeps the plain link. The chip's CCM and ECB peripherals do the AES work. |
-| **Peripheral latency** | It listens at every connection event even when the central allows it to skip some. |
 | **Longer packets** (data length extension), **2 Mbit PHY**, **channel selection #2** | Slower transfers, for example of firmware updates. |
 | **A connection parameter request** from the peripheral | TrouBLE falls back to asking over L2CAP, which works. |
 | **Being the central**, and more than one connection | Not needed on a watch. |

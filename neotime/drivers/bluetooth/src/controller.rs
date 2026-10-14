@@ -289,7 +289,14 @@ impl<RadioDriver: Radio> Transport for BluetoothController<'_, RadioDriver> {
                                 self.state.room_waker.register(context.waker());
                                 Poll::Pending
                             }
-                            Ok(Ok(())) => Poll::Ready(Ok(())),
+                            Ok(Ok(())) => {
+                                let now = self.radio.now();
+                                if let Some(operation) = host_interface.link_layer.resume_skipped_events(now)
+                                {
+                                    self.radio.run(operation);
+                                }
+                                Poll::Ready(Ok(()))
+                            }
                             Err(error) => Poll::Ready(Err(Error::from(error))),
                         }
                     })

@@ -295,7 +295,12 @@ See [bluetooth.md](bluetooth.md) for the details of each.
 
 - [ ] **Encryption and pairing.** Answer `LL_ENC_REQ` and encrypt packets with the chip's CCM and
   ECB peripherals, so phones that insist on pairing can connect.
-- [ ] **Peripheral latency.** Skip the connection events the central allows the watch to skip.
+- [ ] **Peripheral latency on the watch.** The link layer skips the events the central's latency
+  allows, tested only on the computer. On the watch, with a phone that grants latency, check that
+  the link holds, that notifications still arrive promptly, and the current drawn while idle.
+- [ ] **Ask for slower parameters when idle.** Send an L2CAP Connection Parameter Update Request
+  about 5 s after connecting with no file transfer or update running (interval 160-320, latency 2,
+  timeout 600), ask for 12-24 with latency 0 while a BLEFS or DFU transfer runs, and go back after.
 - [ ] **Faster transfers.** Data length extension, the 2 Mbit PHY and channel selection algorithm
   #2, mainly to speed up firmware updates.
 - [ ] **Connection parameter request** from the peripheral. TrouBLE falls back to L2CAP meanwhile.
