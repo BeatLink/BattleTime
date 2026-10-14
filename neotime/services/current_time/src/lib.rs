@@ -6,7 +6,8 @@
 //! second of the local time, then the day of the week, the fraction of the second in 256ths and why
 //! it last changed. Local Time Information (0x2A0F) is two bytes: the time zone and the daylight
 //! saving offset, both in quarter hours. Gadgetbridge's Bangle.js lines carry
-//! `setTime(<UTC seconds>)` and `E.setTimeZone(<hours>)`. Times here are milliseconds since 1970.
+//! `setTime(<UTC seconds>)` and `E.setTimeZone(<hours>)`. The wearer can also set the local time by
+//! hand in the Settings app. Times here are milliseconds since 1970.
 
 #![no_std]
 
@@ -137,6 +138,31 @@ pub fn decode_current_time(bytes: &[u8]) -> Option<i64> {
     let days = days_since_1970(Date { year, month, day });
     let seconds = days * SECONDS_PER_DAY + hour * SECONDS_PER_HOUR + minute * SECONDS_PER_MINUTE + second;
     Some(seconds * MILLISECONDS_PER_SECOND + fractions * MILLISECONDS_PER_SECOND / FRACTIONS_PER_SECOND)
+}
+
+// ============================================================================
+// Setting the clock by hand
+// ============================================================================
+
+const MINUTES_PER_DAY: i64 = 1440;
+
+/// The local time at the start of a minute of a day of a year, both counted from 1 January at 00:00, or `None` unless real.
+pub fn local_time_from_day_and_minute(year: i64, day_of_year: i64, minute_of_day: i64) -> Option<i64> {
+    let days_in_year = if is_leap_year(year) { 366 } else { 365 };
+    if !(EARLIEST_YEAR..=LATEST_YEAR).contains(&year)
+        || !(1..=days_in_year).contains(&day_of_year)
+        || !(0..MINUTES_PER_DAY).contains(&minute_of_day)
+    {
+        return None;
+    }
+    let first_of_january = Date {
+        year,
+        month: 1,
+        day: 1,
+    };
+    let days = days_since_1970(first_of_january) + day_of_year - 1;
+    let seconds = days * SECONDS_PER_DAY + minute_of_day * SECONDS_PER_MINUTE;
+    Some(seconds * MILLISECONDS_PER_SECOND)
 }
 
 // ============================================================================
@@ -295,6 +321,15 @@ impl WallClock {
             return false;
         };
         self.set_zone_keeping_local_time(zone);
+        true
+    }
+
+    /// Sets the local time from a day of a year and a minute of that day, chosen on the watch, keeping the zone.
+    pub fn set_by_hand(&mut self, year: i64, day_of_year: i64, minute_of_day: i64, uptime: i64) -> bool {
+        let Some(local) = local_time_from_day_and_minute(year, day_of_year, minute_of_day) else {
+            return false;
+        };
+        self.set_local(local, uptime);
         true
     }
 

@@ -126,6 +126,7 @@ export const KNOWN_DIFFERENCES: KnownDifference[] = [
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Bluetooth", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Chimes", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Dark", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Date & time", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Do not disturb", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Digital", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Heart rate", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },

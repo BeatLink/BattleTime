@@ -2,7 +2,7 @@
 //!
 //! Twice a second the clock is kept in RAM a reset leaves as it was, so after a soft or watchdog
 //! reset it counts on from where it was; after a power cut, or the first start of a new build, it
-//! starts from when the firmware was built, in UTC, until a phone sets it. The time zone and
+//! starts from when the firmware was built, in UTC, until a phone or the wearer sets it. The time zone and
 //! daylight saving offset are also saved to `/settings/time_zone`, so local time survives a restart
 //! once the clock is set again. `neotime-current-time` holds the logic; docs/companion-protocol.md
 //! says how each way of setting the clock treats UTC and the zone.
@@ -188,6 +188,11 @@ pub fn local_time_information() -> [u8; LOCAL_TIME_INFORMATION_BYTES] {
 /// Takes the zone from a written Local Time Information value, keeping the local time.
 pub fn set_local_time_information(bytes: &[u8]) -> bool {
     change(|clock| clock.write_local_time_information(bytes))
+}
+
+/// Sets the local time the wearer chose in the Settings app, as a day of a year and a minute of it, keeping the zone.
+pub fn set_by_hand(year: Value, day_of_year: Value, minute_of_day: Value) -> bool {
+    change(|clock| clock.set_by_hand(year, day_of_year, minute_of_day, uptime()))
 }
 
 /// Applies a Gadgetbridge `setTime(...)` / `E.setTimeZone(...)` line; false for any other line.

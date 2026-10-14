@@ -612,6 +612,9 @@ impl System for WatchSystem {
                 heart_rate::flash_led(effect.number(0) != 0, effect.number(1), effect.number(2))
             }
             EffectKind::SetBluetooth => settings::set_by_name(Setting::Bluetooth.name(), effect.number(0)),
+            EffectKind::SetClock => {
+                clock::set_by_hand(effect.number(0), effect.number(1), effect.number(2));
+            }
             EffectKind::StepWatchFace => {
                 let steps = i32::try_from(effect.number(0)).unwrap_or(0);
                 if let Some(number) = self.installed.stepped_face_number(steps) {

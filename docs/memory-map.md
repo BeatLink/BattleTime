@@ -348,9 +348,9 @@ every app, 11,832 B; the harness works the launcher's need out at 17,169 B with 
 faces on, so it fits with room to spare. A launcher's need is its own, plus the names and icons of
 the apps it lists; each icon is read from its image on its own, so no whole image is counted.
 
-The largest app in the repository, `settings`, needs 21.8 KB since it gained the wake list and the
-shake calibration screen,
-so every app fits with room to spare, and `harness/tests/quality.rs` fails any app or face whose
+The largest app in the repository, `settings`, needs 24.5 KB since it gained the face chooser and
+the date and time pages, at 128 widgets, the most an app may have, so every app fits with room to
+spare, and `harness/tests/quality.rs` fails any app or face whose
 estimate is over the budget, or whose opening screen builds more nodes than it counts. Before the
 saved-state buffer was sized for each app, closing any app borrowed 18,694 B for it, which took
 the highest byte touched after leaving `settings` to 30,796 B.

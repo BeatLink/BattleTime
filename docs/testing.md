@@ -290,3 +290,8 @@ digital opens, and with an uninstalled face chosen it falls back to analog; it t
 turned on and a 5 second screen timeout, then tilts the emulated accelerometer: the screen must light
 for a raised wrist after timing out, go dark for a lowered arm before the timeout, and go dark for
 two taps on the face; it needs no Bluetooth and takes about a minute.
+
+`../tools/check_set_clock.py FIRMWARE_ELF [PICTURE_FOLDER]` installs the digital face, the launcher
+and Settings, opens Settings from the launcher, scrolls to **Date & time**, moves the year and the
+hour on by one and taps **Set**, then checks that the clock kept across a reset reads that local
+time at 00 seconds; it needs no Bluetooth and takes about two minutes.

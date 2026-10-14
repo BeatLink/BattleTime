@@ -1,4 +1,4 @@
-# Every screen of the settings app, for docs/apps/settings.md: the list and each screen of choices.
+# Every screen of the settings app, for docs/apps/settings.md: the list, each screen of choices, and the date and time pages.
 open app settings
 set settings.screen_timeout_seconds 15
 set settings.always_on_screen false
@@ -113,4 +113,25 @@ tap "Theme"                 # the theme row
 expect screen theme
 expect text "Ocean"
 snapshot theme
+open app settings
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+tap "Date & time"           # setting the clock by hand, starting from the time now
+expect screen clock
+snapshot date
+set settings.uses_24_hour_clock false
+swipe left                  # the time page, here on a 12 hour clock
+expect text "Set"
+snapshot time
+tap "Set"
+expect effect set-clock 2026 5 540
+expect screen main
 expect no failures

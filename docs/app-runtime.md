@@ -569,7 +569,7 @@ Effects, in the order `effect` numbers them, with how many arguments each takes:
 `start_heart_rate`, `stop_heart_rate`, `reset_step_trip`, `set_setting` (2), `set_do_not_disturb` (1),
 `log` (1), `request_music_state`, `set_heart_rate_led` (3), `set_bluetooth` (1),
 `request_navigation_state`, `set_app_enabled` (2), `prefetch_file` (3), `open_folder` (1), then,
-numbered 35, `step_watch_face` (1).
+numbered 33, `set_clock` (3), and, numbered 35, `step_watch_face` (1).
 `send_to_phone`'s two arguments are texts: the channel, and the data as the JSON object the compiler
 builds, which the firmware sends as `{"t":"app","ch":...,"d":...}`.
 `vibrate_sequence` and `http_request` need arrays and more arguments, and come later.

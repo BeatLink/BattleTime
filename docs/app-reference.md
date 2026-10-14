@@ -409,6 +409,7 @@ app cannot keep the sensor on all the time.
 | `set_do_not_disturb(on)` | Turns do not disturb on or off. |
 | `log(text)` | Writes a line to the debug log the companion app can read. |
 | `set_bluetooth(on)` | Turns Bluetooth on or off; the same as `set_setting("bluetooth", ...)`. A restart turns it on again. |
+| `set_clock(year, day_of_year, minute_of_day)` | Sets the watch's clock to a local time in its time zone, with the seconds at 00: `day_of_year` counts from 1 for 1 January and `minute_of_day` from 0 for midnight. A day or minute that does not exist, or a year outside 1970 to 2200, is ignored. Faces, alarms, chimes and the step day follow it as they do a phone's time. The Settings app's **Date & time** pages use it. |
 | `set_app_enabled(id, on)` | Turns an installed app or face on or off. The watch checks the change as the package manager does and does nothing when `packages` gives it a refusal, so show why first. |
 | `step_watch_face(steps)` | Chooses the face `steps` places on from the one shown among the faces turned on, in id order, wrapping round; a negative number goes back. The watch saves it in the `watch_face` setting and shows it. |
 | `prefetch_file(path, offset, length)` | Starts reading `length` bytes of a file from `offset` into RAM in the background, at most 4,096, so the screen keeps drawing while they arrive. The next `file_bytes` of that part takes them from RAM instead of the flash, as the file was when `prefetch_file` ran. One part is held at a time, until a `file_bytes` reads its last byte, the next `prefetch_file` replaces it or the app closes. An app that calls it needs 4 KB more heap. Read the next page ahead as the wearer turns one, as `file_bytes(path, 256, page * 256)` then `prefetch_file(path, (page + 1) * 256, 256)`. |
@@ -602,7 +603,7 @@ has no place for them yet, so for now the compiler only reports them, in its `Ou
 | `phone` | `call_control`, `music_control`, `find_phone`, reading `current_call`, `current_music` and `current_navigation`, and the `call`, `music` and `navigation` events. |
 | `phone_messages` | `send_to_phone`. |
 | `internet` | `http_request`. |
-| `settings` | `set_setting`, `set_do_not_disturb`, `set_bluetooth`, `set_app_enabled` and `step_watch_face`. |
+| `settings` | `set_setting`, `set_do_not_disturb`, `set_bluetooth`, `set_app_enabled`, `set_clock` and `step_watch_face`. |
 | `wake` | `wake_screen`, and vibration during do not disturb. |
 | `background` | Events other than the app's own life connected without `while_open: true`, which come while the app is closed. |
 

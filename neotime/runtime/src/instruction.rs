@@ -642,6 +642,8 @@ pub enum EffectKind {
     PrefetchFile,
     /// Lists a folder of the watch's storage into the `Folder` system values, soon after the handler ends.
     OpenFolder = 32,
+    /// Sets the wall clock to a local time: a year, a day of it from 1 and a minute of that day from 0.
+    SetClock = 33,
     /// Chooses the face that many places on among the faces turned on, wrapping round, or back when negative.
     StepWatchFace = 35,
 }
@@ -683,6 +685,7 @@ impl EffectKind {
             30 => SetAppEnabled,
             31 => PrefetchFile,
             32 => OpenFolder,
+            33 => SetClock,
             35 => StepWatchFace,
             _ => return None,
         })
@@ -708,7 +711,7 @@ impl EffectKind {
             | DismissNotification | MusicControl | CallControl | SetDoNotDisturb | Log | FindPhone
             | SetBluetooth | StepWatchFace | OpenFolder => 1,
             Notify | SendToPhone | SetSetting | SetAppEnabled => 2,
-            SetHeartRateLed | PrefetchFile => 3,
+            SetHeartRateLed | PrefetchFile | SetClock => 3,
         }
     }
 }

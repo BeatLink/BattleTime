@@ -73,6 +73,15 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   after a crash, a watchdog reset or a restart the watch counts on from where it was, losing only
   the moment the bootloader takes. After a power cut, or the first start of a new firmware, it
   starts from when the firmware was built until a phone sets it.
+- **Setting the date and time on the watch,** for when no phone has, from **Date & time** at the
+  end of the Settings list, as InfiniTime's date and time screens do. One page has rollers for the
+  day, month and year, with the day kept within the month and leap years counted; a swipe left
+  shows the hour and minute, with AM and PM on a 12 hour clock. **Set** sets that local time at 00
+  seconds in the watch's time zone, and the clock then behaves as after a phone set it: faces,
+  alarms, chimes and the midnight step reset follow, and the time is kept across a reset.
+
+  ![Setting the date](../neotime/harness/snapshots/screens/app-settings-date.png)
+  ![Setting the time](../neotime/harness/snapshots/screens/app-settings-time.png)
 - **Alarms and timers ring while their app is closed.** An app's timers, alarms, daily times, clock
   changes and heart rate periods go on running after it closes. When one comes due the watch loads
   the app without a screen just long enough to run it. An alarm or timer that rings lights the

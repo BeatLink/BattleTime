@@ -8,20 +8,27 @@
 // Also: what touch wakes the screen, whether alarms ring in do not disturb, Bluetooth until the next
 // restart, and whether the watch takes firmware updates.
 // Also from InfiniTime: choosing the watch face, here by stepping through the faces turned on in Software.
+// Also from InfiniTime: setting the date and the time by hand, on two pages, for when no phone has.
 // The theme is one of the watch's presets; the companion app can also set colours of the user's own.
 // Every change goes to the watch's settings with `set_setting`, so the companion app sees it too.
 
 import {
+  back,
   brightness,
   computed,
+  day_of,
   define_app,
   go,
+  hour_of,
   is_bluetooth_enabled,
   is_do_not_disturb,
+  minute_of,
+  month_of,
   now,
   on,
   range,
   set_bluetooth,
+  set_clock,
   set_do_not_disturb,
   set_setting,
   settings,
@@ -31,9 +38,28 @@ import {
   watch_face_name,
   type Color,
   type Instant,
+  year_of,
 } from "neotime";
 import { icons } from "neotime/icons";
-import { Arc, Button, Column, Grid, Icon, Label, Row, Screen, Scroll, Stepper, Switch } from "neotime/widgets";
+import { days_in_year } from "neotime/lib";
+import {
+  Arc,
+  Button,
+  Column,
+  Grid,
+  Icon,
+  Label,
+  NumberRoller,
+  Page,
+  Pages,
+  Roller,
+  Row,
+  Screen,
+  Scroll,
+  Stepper,
+  Switch,
+  TimeRollers,
+} from "neotime/widgets";
 
 // ============================================================================
 // Choices
@@ -80,6 +106,14 @@ const CALIBRATE_COLORS: Color[] = ["surface", "accent", "danger"];
 const STEP_GOAL_STEP = 500;
 const LOWEST_STEP_GOAL = 1000;
 const HIGHEST_STEP_GOAL = 50000;
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const FEBRUARY = 2;
+const DAYS_IN_LEAP_YEAR = 366;
+const DAYS_OUTSIDE_FEBRUARY = 337;
+
+const EARLIEST_SETTABLE_YEAR = 2000;
+const LATEST_SETTABLE_YEAR = 2099;
 
 // ============================================================================
 // Derived values
@@ -216,6 +250,44 @@ function finish_calibration() {
 }
 
 // ============================================================================
+// Date and time, from InfiniTime's SettingSetDateTime
+// ============================================================================
+
+export const chosen_year = signal(2026);
+export const chosen_month = signal(1);
+export const chosen_day = signal(1);
+export const chosen_minute_of_day = signal(0);
+
+/** How many days the chosen month has: February what the year leaves, the others 31 for odd months until July and even ones from August. */
+export const chosen_month_length = computed(() =>
+  chosen_month.value === FEBRUARY
+    ? days_in_year(chosen_year.value) - DAYS_OUTSIDE_FEBRUARY
+    : 30 + ((chosen_month.value ^ (chosen_month.value >> 3)) & 1),
+);
+
+/** Opens the date and time pages on the date, starting from the local time now. */
+export function open_date_time() {
+  chosen_year.value = Math.min(Math.max(year_of(now.value), EARLIEST_SETTABLE_YEAR), LATEST_SETTABLE_YEAR);
+  chosen_month.value = month_of(now.value);
+  chosen_day.value = day_of(now.value);
+  chosen_minute_of_day.value = hour_of(now.value) * 60 + minute_of(now.value);
+  go("clock");
+}
+
+/** Sets the watch's clock to the chosen date and time at 00 seconds, then goes back to the list. */
+export function save_date_time() {
+  const days_february_falls_short = days_in_year(chosen_year.value) === DAYS_IN_LEAP_YEAR ? 1 : 2;
+  const month = chosen_month.value;
+  // The day roller shows a day past the month's end as its last day, such as 31 April as 30 April.
+  const day = Math.min(chosen_day.value, chosen_month_length.value);
+  // The usual calendar formula for the day of the year, which takes February's shortfall off from March on.
+  const day_of_year =
+    Math.floor((275 * month) / 9) - days_february_falls_short * Math.floor((month + 9) / 12) + day - 30;
+  set_clock(chosen_year.value, day_of_year, chosen_minute_of_day.value);
+  back();
+}
+
+// ============================================================================
 // Screens
 // ============================================================================
 
@@ -267,6 +339,9 @@ function SettingsList() {
         <ChoiceRow title="Theme" value={theme_name.value} onClick={() => go("theme")} />
         <SwitchRow title="Bluetooth" value={is_bluetooth_enabled.value} onChange={toggle_bluetooth} />
         <SwitchRow title="Updates" value={settings.allows_updates.value} onChange={toggle_updates} />
+        <Row padding={8} height={48} background="surface" radius={12} onClick={open_date_time}>
+          <Label grow={1}>Date & time</Label>
+        </Row>
       </Scroll>
     </Screen>
   );
@@ -501,6 +576,52 @@ function Theme() {
   );
 }
 
+/** The date as day, month and year rollers, then the time as hour and minute rollers, each on its own page. */
+function DateTime() {
+  return (
+    <Screen>
+      <Pages grow={1}>
+        <Page padding={8} gap={6}>
+          <Row grow={1} gap={4} align_items="center" justify="center">
+            <NumberRoller
+              font="normal"
+              value={chosen_day.value}
+              minimum={1}
+              maximum={chosen_month_length.value}
+              digits={2}
+              onChange={(event) => (chosen_day.value = event.value)}
+            />
+            <Roller
+              font="normal"
+              options={MONTH_NAMES}
+              value={chosen_month.value - 1}
+              onChange={(event) => (chosen_month.value = event.value + 1)}
+            />
+            <NumberRoller
+              font="normal"
+              value={chosen_year.value}
+              minimum={EARLIEST_SETTABLE_YEAR}
+              maximum={LATEST_SETTABLE_YEAR}
+              onChange={(event) => (chosen_year.value = event.value)}
+            />
+          </Row>
+        </Page>
+        <Page padding={8} gap={6}>
+          <TimeRollers
+            grow={1}
+            value={chosen_minute_of_day.value}
+            twelve_hour={!settings.uses_24_hour_clock.value}
+            onChange={(event) => (chosen_minute_of_day.value = event.value)}
+          />
+          <Button height={48} background="accent" onClick={save_date_time}>
+            Set
+          </Button>
+        </Page>
+      </Pages>
+    </Screen>
+  );
+}
+
 on("time", next_calibration_stage, { at: calibration_stage_ends_at, while_open: true });
 on("time", sample_shake, { at: next_shake_sample_at, while_open: true });
 
@@ -521,6 +642,7 @@ export default define_app({
     shake_threshold: ShakeThreshold,
     watch_face: WatchFace,
     theme: Theme,
+    clock: DateTime,
   },
 });
 

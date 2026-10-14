@@ -65,6 +65,7 @@ pub fn effect_signature(name: &str) -> Option<(EffectKind, &'static [Type])> {
         "request_navigation_state" => (EffectKind::RequestNavigationState, &[]),
         "set_app_enabled" => (EffectKind::SetAppEnabled, &[TEXT, BOOL]),
         "prefetch_file" => (EffectKind::PrefetchFile, &[TEXT, NUMBER, NUMBER]),
+        "set_clock" => (EffectKind::SetClock, &[NUMBER, NUMBER, NUMBER]),
         "step_watch_face" => (EffectKind::StepWatchFace, &[NUMBER]),
         "open_folder" => (EffectKind::OpenFolder, &[TEXT]),
         _ => return None,

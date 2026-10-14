@@ -39,6 +39,13 @@ saved on the watch, so the companion app sees it too.
   colours of your own, which show here as **Own**.
 - **Bluetooth**: off until the next restart.
 - **Updates**: whether the watch takes firmware updates.
+- **Date & time** sets the clock by hand, for when no phone has, as
+  InfiniTime's date and time screens do. It opens on today's date as rollers for the day, month and
+  year; tap a number above or below the middle one to step it. The day stops at the month's last
+  day, counting 29 February in a leap year. **Swipe left** for the time, as rollers for the hour
+  and minute, with an **AM**/**PM** button on a 12 hour clock. **Set** sets the clock to that date
+  and time at 00 seconds, in the watch's time zone, and goes back to the list; the side button
+  leaves without changing it.
 
 ## Screens
 
@@ -93,3 +100,11 @@ The watch face, opened from **Face**; the arrows step to the face before or afte
 ![The six themes](../../neotime/harness/snapshots/screens/app-settings-theme.png)
 
 The preset themes, opened from **Theme**; the chosen one has a thicker border.
+
+![The date page](../../neotime/harness/snapshots/screens/app-settings-date.png)
+
+The date, opened from **Date & time** at the end of the list, starting from today.
+
+![The time page](../../neotime/harness/snapshots/screens/app-settings-time.png)
+
+The time, a swipe left from the date, here on a 12 hour clock.

@@ -535,6 +535,9 @@ Bluetooth Current Time service's two values and back, so the time handling is te
 `LocalTimeInformation` zone; it gives UTC and local time, and sets either, keeping UTC or the local
 time when the zone changes, as [companion-protocol.md](companion-protocol.md#time-and-time-zone)
 describes. `parse_time_line` reads Gadgetbridge's `setTime(...)` and `E.setTimeZone(...)` lines.
+`WallClock::set_by_hand` sets the local time the Settings app chose, given as a year, a day of it
+from 1 and a minute of that day, through `local_time_from_day_and_minute`, which refuses a day or
+minute that does not exist and the same years as `decode_current_time`.
 `encode_current_time` gives the 10 bytes of 0x2A2B: the date, the time, the day of the week from
 Monday as 1, the 256ths of a second and an adjust reason of 0. `decode_current_time` reads a write
 of at least 7 bytes and refuses a year outside 1970 to 2200 or a date or time that does not exist.
@@ -994,7 +997,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
   the shell next waits. The app host's file reads while drawing go the same way.
 - **Clock.** `clock.rs` holds one `WallClock`: UTC counted on from the build time, or from what a
   phone last set through Current Time (0x2A2B), Local Time Information (0x2A0F) or a `setTime`
-  line, which `read_companion_line` hands it before reading JSON. `clock::now()` gives local time,
+  line, which `read_companion_line` hands it before reading JSON, or from an app's `set_clock`
+  effect, which the shell hands `clock::set_by_hand`. `clock::now()` gives local time,
   for drawing, chimes and the midnight step reset; `clock::utc_now()` gives the `now` apps and the
   app host see, with `clock::utc_offset()` as `utc_offset`, and `clock::instant_at` turns a UTC
   time into a timer reading. Setting the clock signals `now`, `utc_offset` and `started_at` as

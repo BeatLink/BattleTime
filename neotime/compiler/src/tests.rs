@@ -1692,6 +1692,26 @@ fn turning_apps_on_and_off_needs_the_settings_permission() {
 }
 
 #[test]
+fn setting_the_clock_is_an_effect_that_needs_the_settings_permission() {
+    use neotime_runtime::instruction::Instruction;
+    let source = app(r#"import { set_clock } from "neotime";
+        function Main() {
+          return (
+            <Screen>
+              <Button onClick={() => set_clock(2026, 5, 540)}>Set</Button>
+            </Screen>
+          );
+        }"#);
+
+    let output = compile_source(&source);
+    let image = compile(&source);
+    let image = AppImage::parse(&image).unwrap();
+
+    assert!(image_runs(&image, Instruction::Effect(EffectKind::SetClock)));
+    assert_eq!(output.permissions, [crate::permissions::Permission::Settings]);
+}
+
+#[test]
 fn a_twenty_millisecond_timer_needs_while_open() {
     let source = |period: u32| {
         format!(

@@ -1013,6 +1013,11 @@ export function set_do_not_disturb(on: boolean) {
   emit({ kind: "set_do_not_disturb", on });
 }
 
+/** Sets the watch's clock to a local time in its zone, with the seconds at 00: a day of the year from 1 and a minute of the day from 0. Needs `settings`. */
+export function set_clock(year: number, day_of_year: number, minute_of_day: number) {
+  emit({ kind: "set_clock", year, day_of_year, minute_of_day });
+}
+
 export function log(text: string) {
   emit({ kind: "log", text });
 }

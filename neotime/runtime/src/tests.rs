@@ -2315,7 +2315,7 @@ fn the_watch_face_and_its_name_are_settings_numbered_108_and_109_and_stepped_by_
     assert!(!SystemValue::WatchFace.is_text());
     assert_eq!(EffectKind::from_byte(35), Some(EffectKind::StepWatchFace));
     assert_eq!(EffectKind::StepWatchFace as u8, 35);
-    assert_eq!(EffectKind::from_byte(33), None);
+    assert_eq!(EffectKind::from_byte(34), None);
     assert_eq!(EffectKind::StepWatchFace.argument_count(), 1);
 }
 
@@ -2461,6 +2461,13 @@ fn the_folder_values_share_one_bit_with_names_and_the_path_as_text() {
     assert!(SystemValue::FolderEntryIsFolder.is_list());
     assert_eq!(EffectKind::from_byte(32), Some(EffectKind::OpenFolder));
     assert_eq!(EffectKind::OpenFolder.argument_count(), 1);
+}
+
+#[test]
+fn setting_the_clock_is_effect_33_with_three_arguments() {
+    assert_eq!(EffectKind::from_byte(33), Some(EffectKind::SetClock));
+    assert_eq!(EffectKind::SetClock as u8, 33);
+    assert_eq!(EffectKind::SetClock.argument_count(), 3);
 }
 
 // ============================================================================

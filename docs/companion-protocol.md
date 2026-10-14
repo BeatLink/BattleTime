@@ -48,6 +48,9 @@ The two ways in treat the zone differently, as their senders expect:
   value is malformed or out of range is skipped. The watch sends no reply. For example
   `\x10setTime(1767603600);E.setTimeZone(1.0);...` sets 10:00 local time at UTC+1.
 
+The wearer can also set the clock by hand in the Settings app. That takes the local time chosen, at
+00 seconds, in the zone the watch already has, as a 0x2A2B write does, and leaves the zone alone.
+
 ## The message channel
 
 Messages travel over the Nordic UART service, as Gadgetbridge's Bangle.js driver sends them:

@@ -386,6 +386,139 @@ fn a_right_swipe_stays_on_the_screen() {
 }
 
 // ============================================================================
+// Setting the date and time
+// ============================================================================
+
+/// How far left of the time rollers' middle the hour column sits.
+const HOUR_COLUMN_LEFT_OF_MIDDLE: i32 = 30;
+
+/// Opens the Settings app's date and time pages from the row at the end of its list.
+fn open_date_and_time() -> TestWatch {
+    let mut watch = TestWatch::open_app("settings").unwrap();
+    while !watch.shows_text("Date & time") {
+        assert_eq!(watch.swipe(Direction::Up), EventResult::Handled);
+    }
+    watch.tap_text("Date & time");
+    assert_eq!(watch.screen_name(), Some("clock"));
+    watch
+}
+
+/// The shown widgets of one kind, top to bottom and left to right.
+fn widgets_of_kind(watch: &TestWatch, kind: WidgetKind) -> Vec<u16> {
+    watch
+        .visible_widgets()
+        .into_iter()
+        .filter(|&widget| watch.widget_kind(widget) == Some(kind))
+        .collect()
+}
+
+/// Taps the row below the chosen one in a roller, which moves it on by one.
+fn tap_below_the_chosen_row(watch: &mut TestWatch, widget: u16, x_from_middle: i32) {
+    let area = watch.visible_area(widget).unwrap();
+    watch.tap(
+        area.x + area.width / 2 + x_from_middle,
+        area.y + area.height * 5 / 6,
+    );
+}
+
+#[test]
+fn setting_the_date_and_time_moves_the_clock_and_goes_back_to_the_list() {
+    use neotime_app_testing::START_TIME_IN_MILLISECONDS;
+    let mut watch = open_date_and_time();
+    let day_roller = widgets_of_kind(&watch, WidgetKind::NumberRoller)[0];
+    let month_roller = widgets_of_kind(&watch, WidgetKind::Roller)[0];
+
+    tap_below_the_chosen_row(&mut watch, day_roller, 0);
+    tap_below_the_chosen_row(&mut watch, month_roller, 0);
+    assert_eq!(watch.swipe(Direction::Left), EventResult::Handled);
+    let time_rollers = widgets_of_kind(&watch, WidgetKind::TimeRollers)[0];
+    tap_below_the_chosen_row(&mut watch, time_rollers, -HOUR_COLUMN_LEFT_OF_MIDDLE);
+    watch.tap_text("Set");
+
+    let set_clock = watch.effects_of(EffectKind::SetClock);
+    let six_february = 31 + 6;
+    let ten_o_clock = 10 * 60;
+    assert_eq!(set_clock.len(), 1);
+    assert_eq!(
+        (
+            set_clock[0].number(0),
+            set_clock[0].number(1),
+            set_clock[0].number(2)
+        ),
+        (2026, six_february, ten_o_clock)
+    );
+    assert_eq!(watch.screen_name(), Some("main"));
+    let a_month_a_day_and_an_hour_on = (32 * 24 + 1) * 60 * 60 * 1000;
+    assert_eq!(
+        watch.now(),
+        START_TIME_IN_MILLISECONDS + a_month_a_day_and_an_hour_on
+    );
+    assert!(watch.failures().is_empty(), "{:?}", watch.failures());
+}
+
+#[test]
+fn a_day_past_the_end_of_the_chosen_month_sets_its_last_day() {
+    let mut watch = open_date_and_time();
+    let day_roller = widgets_of_kind(&watch, WidgetKind::NumberRoller)[0];
+    let month_roller = widgets_of_kind(&watch, WidgetKind::Roller)[0];
+
+    for _ in 5..31 {
+        tap_below_the_chosen_row(&mut watch, day_roller, 0);
+    }
+    tap_below_the_chosen_row(&mut watch, month_roller, 0);
+    assert_eq!(watch.swipe(Direction::Left), EventResult::Handled);
+    watch.tap_text("Set");
+
+    let set_clock = watch.effects_of(EffectKind::SetClock);
+    let twenty_eighth_of_february = 31 + 28;
+    assert_eq!(set_clock[0].number(1), twenty_eighth_of_february);
+}
+
+#[test]
+fn a_leap_year_gives_february_29_days() {
+    let mut watch = open_date_and_time();
+    let [day_roller, year_roller] = widgets_of_kind(&watch, WidgetKind::NumberRoller)[..] else {
+        panic!("the date page has a day and a year roller");
+    };
+    let month_roller = widgets_of_kind(&watch, WidgetKind::Roller)[0];
+
+    for _ in 5..31 {
+        tap_below_the_chosen_row(&mut watch, day_roller, 0);
+    }
+    tap_below_the_chosen_row(&mut watch, year_roller, 0);
+    tap_below_the_chosen_row(&mut watch, year_roller, 0);
+    tap_below_the_chosen_row(&mut watch, month_roller, 0);
+    watch.swipe(Direction::Left);
+    watch.tap_text("Set");
+
+    let set_clock = watch.effects_of(EffectKind::SetClock);
+    let twenty_ninth_of_february_2028 = 31 + 29;
+    assert_eq!(set_clock[0].number(0), 2028);
+    assert_eq!(set_clock[0].number(1), twenty_ninth_of_february_2028);
+}
+
+#[test]
+fn the_date_and_time_pages_start_from_the_local_time() {
+    use neotime_app_testing::{compile_package, FakeSystem, PackageKind, START_TIME_IN_MILLISECONDS};
+    let two_hours_ahead = 2 * 60 * 60 * 1000;
+    let mut system = FakeSystem::new();
+    system.set(SystemValue::UtcOffset, two_hours_ahead);
+    let image = compile_package(PackageKind::App, "settings").unwrap();
+    let mut watch = TestWatch::open_image_on(image, system).unwrap();
+    while !watch.shows_text("Date & time") {
+        watch.swipe(Direction::Up);
+    }
+    watch.tap_text("Date & time");
+
+    watch.swipe(Direction::Left);
+    watch.tap_text("Set");
+
+    let set_clock = watch.effects_of(EffectKind::SetClock);
+    assert_eq!(set_clock[0].number(2), 11 * 60);
+    assert_eq!(watch.now(), START_TIME_IN_MILLISECONDS);
+}
+
+// ============================================================================
 // Template
 // ============================================================================
 

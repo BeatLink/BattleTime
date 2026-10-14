@@ -483,6 +483,9 @@ impl System for SimulatedSystem {
             EffectKind::RequestNavigationState | EffectKind::RequestMusicState => {
                 println!("  the watch would ask the phone; the simulator's values stay as they are")
             }
+            EffectKind::SetClock => {
+                println!("  the watch would set its clock; the simulator keeps the computer's")
+            }
             EffectKind::SetSetting => {
                 let name = effect.text(0).unwrap_or("").to_string();
                 self.change_setting(&name, effect.number(1));

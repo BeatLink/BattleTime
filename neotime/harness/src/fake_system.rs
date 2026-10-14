@@ -229,6 +229,8 @@ pub struct FakeSystem {
     pub packages: Vec<FakePackage>,
     /// Set when an app turned a package on or off, so the watch tells the app once the call returns.
     pub packages_changed: bool,
+    /// Set when an app set the clock, so the watch tells the app once the call returns.
+    pub clock_changed: bool,
     /// The notifications the watch keeps, which `notify` and the phone add to.
     pub notifications: NotificationList,
     /// The open app's name, which a notification it makes shows as its source.
@@ -283,6 +285,7 @@ impl FakeSystem {
             launcher_groups: Vec::new(),
             packages: starting_packages(),
             packages_changed: false,
+            clock_changed: false,
             notifications: NotificationList::new(),
             app_name: String::new(),
             notifications_changed: false,
@@ -385,6 +388,20 @@ impl FakeSystem {
     /// Sets a text value, such as the playing track.
     pub fn set_text(&mut self, value: SystemValue, text: &str) {
         self.texts[value as usize] = text.to_string();
+    }
+
+    /// Moves the clock to a local time chosen in the Settings app, keeping the zone, as the firmware's clock does.
+    fn set_clock_by_hand(&mut self, year: Value, day_of_year: Value, minute_of_day: Value) {
+        let Some(local) =
+            neotime_current_time::local_time_from_day_and_minute(year, day_of_year, minute_of_day)
+        else {
+            return;
+        };
+        let utc = local - self.values[SystemValue::UtcOffset as usize];
+        let moved_by = utc - self.now_in_milliseconds;
+        self.now_in_milliseconds = utc;
+        self.values[SystemValue::StartedAt as usize] += moved_by;
+        self.clock_changed = true;
     }
 
     pub fn effects(&self) -> &[RecordedEffect] {
@@ -581,6 +598,9 @@ impl System for FakeSystem {
         }
         if effect.kind == EffectKind::OpenFolder {
             self.list_folder(effect.text(0).unwrap_or_default());
+        }
+        if effect.kind == EffectKind::SetClock {
+            self.set_clock_by_hand(effect.number(0), effect.number(1), effect.number(2));
         }
         if let Some(line) = neotime_app_host::phone::line_for_effect(effect.kind, effect.number(0)) {
             self.phone_lines.push(line.to_string());

@@ -253,7 +253,7 @@ impl TestWatch {
         result
     }
 
-    /// Tells the app the notifications changed when its last call changed them, as the shell does.
+    /// Tells the app the notifications, packages or clock changed when its last call changed them, as the shell does.
     fn report_notification_changes(&mut self) {
         if std::mem::take(&mut self.system.notifications_changed) {
             let now = self.now();
@@ -270,6 +270,13 @@ impl TestWatch {
         if std::mem::take(&mut self.system.packages_changed) {
             let now = self.now();
             let changed = SystemValue::PackageCount.bit();
+            self.host
+                .report_system_value_changes(changed, now, &mut self.system);
+        }
+        if std::mem::take(&mut self.system.clock_changed) {
+            let now = self.now();
+            let changed =
+                SystemValue::Now.bit() | SystemValue::UtcOffset.bit() | SystemValue::StartedAt.bit();
             self.host
                 .report_system_value_changes(changed, now, &mut self.system);
         }

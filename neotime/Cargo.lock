@@ -1099,6 +1099,7 @@ dependencies = [
  "neotime-companion",
  "neotime-compiler",
  "neotime-crash-record",
+ "neotime-current-time",
  "neotime-display",
  "neotime-notifications",
  "neotime-packages",

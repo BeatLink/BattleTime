@@ -177,6 +177,67 @@ fn accepts_the_leap_day_of_a_leap_year() {
 }
 
 // ============================================================================
+// Setting the clock by hand
+// ============================================================================
+
+#[test]
+fn a_day_and_minute_give_the_local_time_at_the_start_of_that_minute() {
+    let ninth_hour_in_minutes = 9 * 60;
+
+    assert_eq!(
+        local_time_from_day_and_minute(2026, 5, ninth_hour_in_minutes),
+        Some(MONDAY_5_JANUARY_2026_AT_09_00)
+    );
+    assert_eq!(local_time_from_day_and_minute(1970, 1, 0), Some(0));
+}
+
+#[test]
+fn the_last_day_of_a_leap_year_is_its_366th() {
+    let last_of_2028 = days_since_1970(Date {
+        year: 2028,
+        month: 12,
+        day: 31,
+    });
+
+    assert_eq!(
+        local_time_from_day_and_minute(2028, 366, 0),
+        Some(last_of_2028 * SECONDS_PER_DAY * MILLISECONDS_PER_SECOND)
+    );
+    assert_eq!(local_time_from_day_and_minute(2026, 366, 0), None);
+}
+
+#[test]
+fn a_day_or_minute_that_is_not_real_gives_no_time() {
+    assert_eq!(local_time_from_day_and_minute(2026, 0, 0), None);
+    assert_eq!(local_time_from_day_and_minute(2026, 1, 1440), None);
+    assert_eq!(local_time_from_day_and_minute(2026, 1, -1), None);
+    assert_eq!(local_time_from_day_and_minute(1969, 1, 0), None);
+    assert_eq!(local_time_from_day_and_minute(2201, 1, 0), None);
+}
+
+#[test]
+fn setting_the_clock_by_hand_keeps_the_zone_and_moves_utc() {
+    let mut clock = WallClock::starting_at(0);
+    clock.set_zone_keeping_utc(BERLIN_IN_SUMMER);
+
+    assert!(clock.set_by_hand(2026, 5, 9 * 60, HOUR));
+
+    assert_eq!(clock.zone(), BERLIN_IN_SUMMER);
+    assert_eq!(clock.local(HOUR), MONDAY_5_JANUARY_2026_AT_09_00);
+    assert_eq!(clock.utc(HOUR), MONDAY_5_JANUARY_2026_AT_09_00 - 2 * HOUR);
+}
+
+#[test]
+fn a_hand_setting_that_is_not_real_leaves_the_clock_alone() {
+    let mut clock = WallClock::starting_at(MONDAY_5_JANUARY_2026_AT_09_00);
+    let before = clock;
+
+    assert!(!clock.set_by_hand(2026, 400, 0, 0));
+
+    assert_eq!(clock, before);
+}
+
+// ============================================================================
 // Local Time Information
 // ============================================================================
 
