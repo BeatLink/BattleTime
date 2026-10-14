@@ -46,22 +46,22 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 121.9 KB | 46.0 KB |
-| App host (with `neotime-ui`) | 90.1 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 123.0 KB | 46.0 KB |
+| App host (with `neotime-ui`) | 90.3 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 43.1 KB | 45.3 KB |
 | App runtime | 35.8 KB | 0.0 KB |
 | core, alloc and compiler builtins | 26.3 KB | 14.8 KB |
 | Embassy, allocator and Cortex-M | 21.1 KB | 5.6 KB |
-| Settings, companion and notifications (with serde) | 17.6 KB | 2.4 KB |
+| Settings, companion and notifications (with serde) | 17.7 KB | 2.4 KB |
 | Storage (flash store) | 16.9 KB | 14.0 KB |
 | BLEFS file service | 9.5 KB | 3.1 KB |
 | Packages | 8.6 KB | 1.3 KB |
 | Display, graphics and drivers | 6.6 KB | 3.2 KB |
 | Updates (DFU) | 2.6 KB | 2.5 KB |
-| Other constants and padding | 31.5 KB | 14.9 KB |
-| **Code and data** | **431.4 KB** | **153.1 KB** |
+| Other constants and padding | 31.6 KB | 14.9 KB |
+| **Code and data** | **432.9 KB** | **153.1 KB** |
 | Shared library, after the code | 48.3 KB | none |
-| Free of the 480 KB region, after its header | 0.0 KB | 326.6 KB |
+| Free of the 480 KB region, after its header | -1.4 KB | 326.6 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -284,13 +284,13 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (system 10 KB, UI 20.25 KB; the recovery build has no UI heap) | 30,976 B | 10,240 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 22,386 B | 12,474 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 22,434 B | 12,474 B |
 | Bluetooth controller | 2,545 B | 2,545 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | App host (with `neotime-ui`) | 28 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **56,368 B** | **25,656 B** |
-| Left for the stack | 9,152 B | 39,864 B |
+| **Static RAM** (`.data` and `.bss`) | **56,416 B** | **25,656 B** |
+| Left for the stack | 9,104 B | 39,864 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
