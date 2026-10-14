@@ -278,11 +278,12 @@ impl ImageBuilder {
             (3, self.expressions.len() as u16, Self::table(&self.expressions)),
             (4, self.handlers.len() as u16, Self::table(&self.handlers)),
             (5, self.widgets.len() as u16, Self::table(&self.widgets)),
+            (13, 1, vec![0; image::layout::FACTS_BYTES]),
         ];
 
         let mut image: Vec<u8> = Vec::new();
         image.extend(b"NTAP");
-        image.extend(1u16.to_le_bytes());
+        image.extend(image::FORMAT_VERSION.to_le_bytes());
         image.extend([0, 0]);
         image.extend(1u16.to_le_bytes());
         image.extend((sections.len() as u16).to_le_bytes());
@@ -3018,7 +3019,7 @@ fn state_and_bindings_load_in_place_as_they_do_when_made() {
 }
 
 #[test]
-fn a_library_carries_fonts_and_an_app_keeps_eight_sections() {
+fn a_library_carries_fonts_and_an_app_keeps_nine_sections() {
     use crate::writer::ImageWriter;
 
     let mut library = ImageWriter::new("shared", "Shared library", AppKind::Library, 1);
@@ -3031,8 +3032,45 @@ fn a_library_carries_fonts_and_an_app_keeps_eight_sections() {
 
     let app = ImageWriter::new("app", "App", AppKind::App, 1).build();
     let sections = u16::from_le_bytes([app[10], app[11]]);
-    assert_eq!(sections, 8);
+    assert_eq!(sections, 9);
     assert_eq!(AppImage::parse(&app).unwrap().font_count(), 0);
+}
+
+#[test]
+fn the_writer_stores_the_facts_a_fresh_analysis_gives() {
+    use crate::memory_need::{estimate_memory_need, launcher_share_bytes};
+    use crate::writer::ImageWriter;
+
+    let mut writer = ImageWriter::new("timer", "Timer", AppKind::App, 1);
+    writer.widget(WidgetKind::AppList, 0, &[]);
+    let bytes = writer.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let need = estimate_memory_need(&image);
+
+    assert_eq!(image.facts.need_bytes, need.total_bytes);
+    assert_eq!(image.facts.launcher_share_bytes, launcher_share_bytes(&image));
+    assert!(image.facts.lists_apps && image.facts.reads_app_list);
+}
+
+#[test]
+fn an_image_without_facts_or_of_another_version_is_refused() {
+    let mut bytes = ImageBuilder::new().build();
+    // The facts section's number is the last section entry's first two bytes.
+    let facts_entry = 20 + 5 * 12;
+    bytes[facts_entry..facts_entry + 2].copy_from_slice(&12u16.to_le_bytes());
+    seal(&mut bytes);
+    assert!(matches!(
+        AppImage::parse(&bytes),
+        Err(ImageError::BadFacts) | Err(ImageError::TableOutOfBounds)
+    ));
+
+    let mut old = ImageBuilder::new().build();
+    old[4..6].copy_from_slice(&1u16.to_le_bytes());
+    seal(&mut old);
+    assert!(matches!(
+        AppImage::parse(&old),
+        Err(ImageError::UnsupportedVersion(1))
+    ));
 }
 
 #[test]

@@ -314,8 +314,8 @@ fn a_function_shorter_than_its_header_is_refused() {
     let mut writer = new_writer();
     writer.function(0, 0, 0, Vec::new());
     let mut bytes = writer.build();
-    // The function's table entry is the last 4 bytes before its 3 header bytes; make it 2 long.
-    let entry_length = bytes.len() - 3 - 2;
+    // The function's table entry is the last 4 bytes before its 3 header bytes and the facts; make it 2 long.
+    let entry_length = bytes.len() - crate::image::layout::FACTS_BYTES - 3 - 2;
     bytes[entry_length] = 2;
     let crc = crate::image::crc32(&bytes[16..]);
     bytes[12..16].copy_from_slice(&crc.to_le_bytes());

@@ -265,7 +265,7 @@ reads the sections it needs in place, never copying a whole image into RAM.
 | Bytes | Holds |
 |---|---|
 | 0–3 | Magic `NTAP`. |
-| 4–5 | Format version, now 1. |
+| 4–5 | Format version, now 2; an image of any other version is refused. |
 | 6 | Kind: 0 for an app, 1 for a watch face, 2 for the shared library, which holds only images. |
 | 7 | Flags: bit 0 means the app's image 0 is its icon for the launcher. |
 | 8–9 | The shared library version the app was built against. |
@@ -291,6 +291,14 @@ Each kind of section appears at most once:
 | 10 | Functions | Optional. Up to 256 functions, the same layout as expressions. Each function's bytes start with its argument count, its result count (0 or 1) and how many locals it uses, then its code. |
 | 11 | Launcher | Optional. 2 bytes: the string naming the launcher group the app declares. |
 | 12 | Data | The shared library only. Files the firmware reads, the same layout as resources: number 0 is Bosch's configuration for a BMA421 accelerometer and 1 for a BMA425, in `LibraryData` order. |
+| 13 | Facts | Every image, last. 12 bytes: the heap the app needs while open (4), what it adds to a launcher's list (4), a flags byte (bit 0: it shows the list of apps; bit 1: it reads the app list, so the shell keeps its full list while it is open), then 3 spare bytes. `ImageWriter` works them out from the finished image, and the package manager checks them against its own analysis at install. |
+
+A list of apps never reads an image whole. `neotime_packages::image_reader` reads the header and
+the section table, then each part through its table entry: the facts, the id, name and group
+strings, and for the launcher the icon alone. That is a few reads of a few bytes for each app, so
+listing fifty apps holds no image on the heap. These reads trust the image's structure; install and
+opening the app both check its CRC, and an image that fails install is turned off, so the launcher
+never lists it.
 
 Widgets are stored depth first, so a widget's children follow it, each with everything inside
 it. Each root is one screen, and the first is the screen the app opens on. A widget record is:

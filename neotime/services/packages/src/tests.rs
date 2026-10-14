@@ -282,7 +282,7 @@ fn a_face_installs_too() {
 }
 
 #[test]
-fn a_broken_image_is_refused_and_left_for_another_try() {
+fn a_broken_image_is_refused_turned_off_and_left_for_another_try() {
     let mut files = file_system();
     let mut bytes = image("timer", "Timer", AppKind::App);
     let last = bytes.len() - 1;
@@ -295,7 +295,7 @@ fn a_broken_image_is_refused_and_left_for_another_try() {
         Err(PackageError::BadImage(_))
     ));
     assert!(packages.exists(&app_file("timer", IMAGE_FILE)));
-    assert_eq!(packages.list().unwrap(), vec![]);
+    assert!(!packages.list().unwrap()[0].enabled);
 }
 
 #[test]
@@ -456,5 +456,66 @@ fn every_error_explains_itself() {
     assert_eq!(
         PackageError::from(FileError::Damaged),
         PackageError::Storage(FileError::Damaged)
+    );
+}
+
+// ============================================================================
+// Reading an image's parts without reading it whole
+// ============================================================================
+
+#[test]
+fn a_listing_takes_its_numbers_from_the_stored_facts_and_its_texts_from_the_strings() {
+    let mut files = file_system();
+    let mut writer = ImageWriter::new("dice", "Dice", AppKind::App, 1);
+    writer.set_group("games");
+    let bytes = writer.build();
+    let facts = neotime_runtime::AppImage::parse(&bytes).unwrap().facts;
+    put(&mut files, "dice", &bytes);
+
+    let listed = packages(&mut files).list().unwrap();
+
+    assert_eq!(listed[0].name, "Dice");
+    assert_eq!(listed[0].group, "games");
+    assert_eq!(listed[0].need_bytes, facts.need_bytes);
+    assert_eq!(listed[0].launcher_share_bytes, facts.launcher_share_bytes);
+    assert_eq!(listed[0].image_bytes, bytes.len() as u32);
+}
+
+#[test]
+fn the_icon_is_read_on_its_own() {
+    let mut files = file_system();
+    let mut writer = ImageWriter::new("dice", "Dice", AppKind::App, 1);
+    let pixels: Vec<u16> = (0..64).collect();
+    writer.image_resource(neotime_runtime::resources::ImageFormat::Mask, 8, 8, &pixels);
+    writer.set_has_icon();
+    let bytes = writer.build();
+    let expected = neotime_runtime::AppImage::parse(&bytes)
+        .unwrap()
+        .resource_bytes(0)
+        .unwrap()
+        .to_vec();
+    put(&mut files, "dice", &bytes);
+    put(&mut files, "timer", &image("timer", "Timer", AppKind::App));
+    let mut packages = Packages::new(&mut files);
+
+    assert_eq!(block_on(packages.read_icon("dice")), Some(expected));
+    assert_eq!(block_on(packages.read_icon("timer")), None);
+    assert_eq!(block_on(packages.read_icon("nothing")), None);
+}
+
+#[test]
+fn an_image_whose_stored_facts_differ_from_its_contents_is_refused() {
+    let mut files = file_system();
+    let mut bytes = image("timer", "Timer", AppKind::App);
+    // The facts section is the image's last 12 bytes; its first word is the heap the app needs.
+    let facts_start = bytes.len() - 12;
+    bytes[facts_start] ^= 1;
+    let crc = neotime_runtime::image::crc32(&bytes[16..]);
+    bytes[12..16].copy_from_slice(&crc.to_le_bytes());
+    put(&mut files, "timer", &bytes);
+
+    assert_eq!(
+        packages(&mut files).install("timer", None),
+        Err(PackageError::BadImage(ImageError::BadFacts))
     );
 }

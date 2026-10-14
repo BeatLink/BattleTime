@@ -16,7 +16,7 @@ export function testImage(id: string, name: string, kind: ImageKind = 'app', pad
   const out = new Uint8Array(launcherOffset + (group === undefined ? 0 : 2) + padding);
   const view = new DataView(out.buffer);
   out.set(new TextEncoder().encode('NTAP'), 0);
-  view.setUint16(4, 1, true);
+  view.setUint16(4, 2, true);
   out[6] = KIND_NUMBER[kind];
   view.setUint16(10, sectionCount, true);
   view.setUint16(16, 0, true);

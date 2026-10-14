@@ -31,6 +31,7 @@ const FONTS_SECTION: u16 = 9;
 const FUNCTIONS_SECTION: u16 = 10;
 const LAUNCHER_SECTION: u16 = 11;
 const DATA_SECTION: u16 = 12;
+const FACTS_SECTION: u16 = crate::image::layout::FACTS_SECTION;
 
 const HEADER_BYTES: usize = 20;
 const SECTION_ENTRY_BYTES: usize = 12;
@@ -327,7 +328,7 @@ impl ImageWriter {
                 entry_table(&self.initial_values),
             ),
         ];
-        // Only the shared library has fonts, so app images keep their eight sections.
+        // Only the shared library has fonts, so app images keep their nine sections, the facts last.
         if !self.fonts.is_empty() {
             sections.push((FONTS_SECTION, self.fonts.len() as u16, entry_table(&self.fonts)));
         }
@@ -344,6 +345,12 @@ impl ImageWriter {
         if let Some(group_string) = self.group_string {
             sections.push((LAUNCHER_SECTION, 1, group_string.to_le_bytes().to_vec()));
         }
+        // Filled in below, once the rest of the image is laid out, so the facts count the image's own size.
+        sections.push((
+            FACTS_SECTION,
+            1,
+            alloc::vec![0; crate::image::layout::FACTS_BYTES],
+        ));
 
         let mut image: Vec<u8> = Vec::new();
         image.extend(MAGIC);
@@ -374,6 +381,7 @@ impl ImageWriter {
 
         let crc = crc32(&image[16..]);
         image[12..16].copy_from_slice(&crc.to_le_bytes());
+        fill_in_facts(&mut image);
         image
     }
 
@@ -409,6 +417,26 @@ fn value_type_byte(value_type: ValueType) -> u8 {
 }
 
 /// A table of (offset, length) pairs followed by the data they point into.
+/// Works the facts out from the finished image and writes them into its last section, the facts.
+///
+/// An image the checks refuse keeps zeroed facts, as tests that build broken images expect.
+fn fill_in_facts(image: &mut [u8]) {
+    let Ok(parsed) = crate::image::AppImage::parse(image) else {
+        return;
+    };
+    let need = crate::memory_need::estimate_memory_need(&parsed);
+    let facts = crate::image::Facts {
+        need_bytes: need.total_bytes,
+        launcher_share_bytes: crate::memory_need::launcher_share_bytes(&parsed),
+        lists_apps: need.lists_apps,
+        reads_app_list: need.reads_app_list,
+    };
+    let facts_start = image.len() - crate::image::layout::FACTS_BYTES;
+    image[facts_start..].copy_from_slice(&facts.to_bytes());
+    let crc = crc32(&image[16..]);
+    image[12..16].copy_from_slice(&crc.to_le_bytes());
+}
+
 fn entry_table(entries: &[Vec<u8>]) -> Vec<u8> {
     let mut table: Vec<u8> = Vec::new();
     let mut data: Vec<u8> = Vec::new();

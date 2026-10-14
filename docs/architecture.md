@@ -575,12 +575,13 @@ The folders are the whole record: there is no list of installed apps to fall out
 
 - **`Packages`** works on the mounted file system. `install` checks an image already written to the
   app's folder with the same `AppImage::parse` and `verify` the app host uses, refuses the shared
-  library, and refuses an image whose id is not the folder's name; a bad image is left where it is
-  so the phone can send it again. `remove` deletes the folder with the saved state. `set_enabled`
+  library, an image whose id is not the folder's name, and one whose stored facts differ from a
+  fresh analysis; a bad image is left where it is, turned off, so the phone can send it again. `remove` deletes the folder with the saved state. `set_enabled`
   hides an app from the launcher with a `disabled` marker, without deleting it. `list` returns
-  every app whose image parses and holds its folder's id, in id order, without verifying the code
-  again, with the heap it needs from `estimate_memory_need`, and `enabled` the ones the launcher
-  shows. `read_image` hands the shell an image to load into RAM. An image larger than the heap an
+  every app whose image header holds its folder's id, in id order, with the heap it needs from the
+  image's stored facts, reading only the header, the section table, the facts and three strings
+  through `image_reader`, and `enabled` the ones the launcher shows. `read_icon` reads an app's
+  icon alone, for the launcher. `read_image` hands the shell an image to load into RAM. An image larger than the heap an
   app may have is never read: `list` gives it by its id, turned off, and `read_image` refuses it.
   `install` and `change_enabled` turn an app on or off only once `checks` allows it.
   `read_image_in` reads an image from `/temp/<id>/` as well, for a temporary app, which no listing

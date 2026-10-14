@@ -556,6 +556,11 @@ impl Files {
     }
 
     /// The image of the app `id` in `directory`, `/apps` or `/temp`.
+    /// An installed app's icon alone, read without the rest of its image.
+    pub fn read_app_icon_now(&self, id: &str) -> Option<alloc::vec::Vec<u8>> {
+        self.now(|store| run_on_heap(neotime_packages::Packages::new(store).read_icon(id)))?
+    }
+
     pub fn read_app_image_now(&self, directory: &str, id: &str) -> Option<alloc::vec::Vec<u8>> {
         self.now(|store| {
             run_on_heap(neotime_packages::Packages::new(store).read_image_in(directory, id)).ok()

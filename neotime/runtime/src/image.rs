@@ -13,7 +13,8 @@ use crate::widgets::WidgetProblem;
 // ============================================================================
 
 pub const MAGIC: [u8; 4] = *b"NTAP";
-pub const FORMAT_VERSION: u16 = 1;
+/// Version 2 added the facts section, which every image carries.
+pub const FORMAT_VERSION: u16 = 2;
 /// The files the shared library carries for the firmware, by their number in its data section.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LibraryData {
@@ -26,9 +27,27 @@ pub enum LibraryData {
 /// The longest launcher group id an app may declare, such as `games`.
 pub const MOST_GROUP_ID_BYTES: usize = 16;
 
-const HEADER_BYTES: usize = 20;
-const SECTION_ENTRY_BYTES: usize = 12;
-const TABLE_ENTRY_BYTES: usize = 4;
+/// Where things sit in an image, for readers that take it from flash a few bytes at a time.
+pub mod layout {
+    pub const HEADER_BYTES: usize = 20;
+    pub const KIND_AT: usize = 6;
+    pub const FLAGS_AT: usize = 7;
+    pub const SECTION_COUNT_AT: usize = 10;
+    pub const ID_STRING_AT: usize = 16;
+    pub const NAME_STRING_AT: usize = 18;
+    /// Each section's number (2 bytes), entry count (2), offset from the image's start (4) and length (4).
+    pub const SECTION_ENTRY_BYTES: usize = 12;
+    /// Each table entry's offset after the table (2 bytes) and length (2).
+    pub const TABLE_ENTRY_BYTES: usize = 4;
+    pub const STRINGS_SECTION: u16 = 1;
+    pub const RESOURCES_SECTION: u16 = 7;
+    pub const LAUNCHER_SECTION: u16 = 11;
+    pub const FACTS_SECTION: u16 = 13;
+    /// The facts section's length: two 4-byte numbers, a flags byte and three spare bytes.
+    pub const FACTS_BYTES: usize = 12;
+}
+
+use layout::{HEADER_BYTES, SECTION_ENTRY_BYTES, TABLE_ENTRY_BYTES};
 const STATE_ENTRY_BYTES: usize = 16;
 
 /// The bytes the CRC covers start after the CRC field itself.
@@ -74,6 +93,8 @@ pub enum SectionKind {
     Launcher,
     /// The shared library only: files the firmware reads, such as the accelerometer's configuration.
     Data,
+    /// What the compiler worked out about the image, so a list of apps never reads it whole.
+    Facts,
 }
 
 impl SectionKind {
@@ -92,6 +113,7 @@ impl SectionKind {
             10 => Functions,
             11 => Launcher,
             12 => Data,
+            13 => Facts,
             _ => return None,
         })
     }
@@ -196,6 +218,8 @@ pub enum ImageError {
         widget: u16,
         problem: WidgetProblem,
     },
+    /// Every image carries a facts section of `layout::FACTS_BYTES`.
+    BadFacts,
 }
 
 /// Which piece of code a problem was found in.
@@ -374,6 +398,41 @@ pub struct AppImage<'image> {
     fonts: EntryTable<'image>,
     functions: EntryTable<'image>,
     data: EntryTable<'image>,
+    /// What the compiler worked out about the image; `parse` reads them but does not check them.
+    pub facts: Facts,
+}
+
+/// What the compiler works out about an image, stored in it so a list of apps reads a few bytes per app.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Facts {
+    /// The heap the app needs while open, as `estimate_memory_need` gives it.
+    pub need_bytes: u32,
+    /// What the app adds to a launcher's list, as `launcher_share_bytes` gives it.
+    pub launcher_share_bytes: u32,
+    pub lists_apps: bool,
+    pub reads_app_list: bool,
+}
+
+impl Facts {
+    pub fn to_bytes(self) -> [u8; layout::FACTS_BYTES] {
+        let mut bytes = [0; layout::FACTS_BYTES];
+        bytes[0..4].copy_from_slice(&self.need_bytes.to_le_bytes());
+        bytes[4..8].copy_from_slice(&self.launcher_share_bytes.to_le_bytes());
+        bytes[8] = self.lists_apps as u8 | (self.reads_app_list as u8) << 1;
+        bytes
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Option<Facts> {
+        if bytes.len() != layout::FACTS_BYTES {
+            return None;
+        }
+        Some(Facts {
+            need_bytes: read_u32(bytes, 0)?,
+            launcher_share_bytes: read_u32(bytes, 4)?,
+            lists_apps: bytes[8] & 1 != 0,
+            reads_app_list: bytes[8] & 2 != 0,
+        })
+    }
 }
 
 impl<'image> AppImage<'image> {
@@ -427,6 +486,7 @@ impl<'image> AppImage<'image> {
             fonts: EntryTable::default(),
             functions: EntryTable::default(),
             data: EntryTable::default(),
+            facts: Facts::default(),
         };
 
         let mut seen_sections = 0u32;
@@ -472,7 +532,13 @@ impl<'image> AppImage<'image> {
                 SectionKind::Launcher => {
                     image.group_string = Some(read_u16(section_bytes, 0).ok_or(ImageError::TableOutOfBounds)?)
                 }
+                SectionKind::Facts => {
+                    image.facts = Facts::from_bytes(section_bytes).ok_or(ImageError::BadFacts)?
+                }
             }
+        }
+        if seen_sections & (1 << layout::FACTS_SECTION) == 0 {
+            return Err(ImageError::BadFacts);
         }
 
         for index in 0..image.strings.count {

@@ -24,6 +24,7 @@ use neotime_runtime::{verify_with, AppImage, AppKind, CheckedFunctions, ImageErr
 
 pub mod checks;
 pub mod commands;
+pub mod image_reader;
 pub mod launcher;
 pub mod library;
 
@@ -177,6 +178,17 @@ pub fn temporary_file(id: &str, file: &str) -> AppPath {
 fn check_image(bytes: &[u8]) -> Result<AppImage<'_>, PackageError> {
     let image = AppImage::parse(bytes).map_err(PackageError::BadImage)?;
     verify_with(&image, &mut checked_functions_on_the_heap()).map_err(PackageError::BadImage)?;
+    // A listing trusts the stored facts, so they are checked against a fresh analysis once, here.
+    let need = estimate_memory_need(&image);
+    let facts = neotime_runtime::image::Facts {
+        need_bytes: need.total_bytes,
+        launcher_share_bytes: launcher_share_bytes(&image),
+        lists_apps: need.lists_apps,
+        reads_app_list: need.reads_app_list,
+    };
+    if image.facts != facts {
+        return Err(PackageError::BadImage(ImageError::BadFacts));
+    }
     Ok(image)
 }
 
@@ -273,36 +285,39 @@ impl<'files, Files: FileAccess> Packages<'files, Files> {
         Some(bytes)
     }
 
+    /// An app as a listing gives it, read from its image's header, strings and facts without reading the image whole.
     async fn describe(&mut self, id: &str) -> Option<InstalledApp> {
         let length = self.image_length(id).await?;
         if length > APP_HEAP_BUDGET_BYTES {
             return Some(too_large_to_read(id, length));
         }
-        let bytes = self.read_whole(&app_file(id, IMAGE_FILE)).await?;
-        // Parsing checks the image's CRC; verifying its code here would cost each listing over a kilobyte of stack per call.
-        let image = AppImage::parse(&bytes).ok()?;
-        if image.kind == AppKind::Library || image.string(image.id_string) != Some(id) {
+        let path = app_file(id, IMAGE_FILE);
+        let outline = image_reader::outline(self.files, &path).await?;
+        if outline.kind == AppKind::Library
+            || image_reader::id(self.files, &path, &outline).await.as_deref() != Some(id)
+        {
             return None;
         }
-        let need = estimate_memory_need(&image);
+        let facts = image_reader::facts(self.files, &path, &outline).await?;
         Some(InstalledApp {
             id: String::from(id),
-            name: String::from(image.string(image.name_string).unwrap_or(id)),
-            kind: image.kind,
-            group: String::from(
-                image
-                    .group_string
-                    .and_then(|index| image.string(index))
-                    .unwrap_or(""),
-            ),
-            has_icon: image.has_icon,
+            name: image_reader::name(self.files, &path, &outline).await?,
+            kind: outline.kind,
+            group: image_reader::group(self.files, &path, &outline).await?,
+            has_icon: outline.has_icon,
             enabled: !self.exists(&app_file(id, DISABLED_FILE)).await,
-            image_bytes: bytes.len() as u32,
-            need_bytes: need.total_bytes,
-            lists_apps: need.lists_apps,
-            reads_app_list: need.reads_app_list,
-            launcher_share_bytes: launcher_share_bytes(&image),
+            image_bytes: length,
+            need_bytes: facts.need_bytes,
+            lists_apps: facts.lists_apps,
+            reads_app_list: facts.reads_app_list,
+            launcher_share_bytes: facts.launcher_share_bytes,
         })
+    }
+
+    /// An installed app's icon, read on its own, or none when it has none.
+    pub async fn read_icon(&mut self, id: &str) -> Option<Vec<u8>> {
+        check_id(id).ok()?;
+        image_reader::icon(self.files, &app_file(id, IMAGE_FILE)).await
     }
 
     /// The app's image, to load into RAM for the app host.
@@ -346,7 +361,12 @@ impl<'files, Files: FileAccess> Packages<'files, Files> {
             }
             other => other?,
         };
-        check_app_image(id, &bytes)?;
+        // A listing reads only an image's header, strings and facts, so a refused image is turned off to keep it out of the launcher.
+        if let Err(refusal) = check_app_image(id, &bytes) {
+            drop(bytes);
+            self.set_enabled(id, false).await?;
+            return Err(refusal);
+        }
         let needed = AppImage::parse(&bytes)
             .map_err(PackageError::BadImage)?
             .shared_library_version;

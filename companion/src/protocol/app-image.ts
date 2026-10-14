@@ -9,7 +9,7 @@ export type ImageHeader = { kind: ImageKind; id: string; name: string; group: st
 export class AppImageError extends Error {}
 
 const MAGIC = 'NTAP';
-const FORMAT_VERSION = 1;
+const FORMAT_VERSION = 2;
 const HEADER_BYTES = 20;
 const SECTION_ENTRY_BYTES = 12;
 const TABLE_ENTRY_BYTES = 4;
