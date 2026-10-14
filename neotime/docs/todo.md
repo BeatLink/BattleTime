@@ -610,6 +610,11 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 
 ### Developer tools and docs
 
+- [ ] **A flaky app-host test.** `an_app_list_in_columns_lays_its_apps_out_as_square_cells` failed
+  once at `app-host/src/fonts.rs:90` and passed on every rerun. The installed fonts are global, and
+  `bytes()` reads their start and length separately while parallel tests install fonts, so a read
+  can pair one font's start with another's length. Read both in one step, or give each test its own
+  fonts.
 - [ ] **Measure the stack with any app open.** `tools/measure_stack.py --open-first-app` opens
   the launcher's first row, so with only the heart app installed it measures that: 7,080 B, 1,608 B
   spare, under the 2 KB the rest keep. The alarm's 10.5 KB peak and the system app's still cannot
