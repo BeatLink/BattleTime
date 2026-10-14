@@ -453,10 +453,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 - [ ] **Set the date and time on the watch,** with rollers for the date and the time (with AM/PM on
   a 12 hour clock), for when no phone has set the clock.
-- [ ] **The NeoTime Companion app should write the time zone.** It writes only Current Time
-  (0x2A2B), which sets local time, so the watch's UTC is off by the zone until 0x2A0F is written
-  too. The fix is in the NeoTime Companion repository.
-
 ### Settings
 
 - [ ] **The rest of InfiniTime's settings screens:** Watch face, Date and time, Shake calibration,
