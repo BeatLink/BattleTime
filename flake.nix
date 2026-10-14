@@ -52,8 +52,9 @@
             ./neotime/ui
             # The compiler draws the shared library icons from these fonts and pictures.
             ./neotime/third_party
-            # The compiler inlines the shared components, and its tests compile every app and face.
+            # The compiler inlines the shared components and functions, and its tests compile every app and face.
             ./neotime/sdk/neotime/src/components.tsx
+            ./neotime/sdk/neotime/src/lib.ts
             (lib.fileset.fileFilter (file: file.hasExt "tsx") ./neotime/apps)
             (lib.fileset.fileFilter (file: file.hasExt "tsx") ./neotime/faces)
             # The harness's quality checks look for every app and face in these listings.
