@@ -589,14 +589,20 @@ impl<const SECTORS: usize> Ring<SECTORS> {
         Ok(Some(length))
     }
 
-    pub(crate) async fn record_sequence<Flash: NorFlash>(
+    /// Reads a record's header and the start of its data in one read, filling `bytes` with both.
+    pub(crate) async fn read_record_start<Flash: NorFlash>(
         &self,
         flash: &mut Flash,
         entry: Newest,
-    ) -> Result<u32, StoreError<Flash::Error>> {
-        let mut header = [0u8; RECORD_HEADER_BYTES];
-        read(flash, self.start_address + entry.offset() as u32, &mut header).await?;
-        Ok(word(&header, 4))
+        bytes: &mut [u8],
+    ) -> Result<(), StoreError<Flash::Error>> {
+        let length = bytes.len().min(RECORD_HEADER_BYTES + entry.length());
+        read(
+            flash,
+            self.start_address + entry.offset() as u32,
+            &mut bytes[..length],
+        )
+        .await
     }
 
     /// Puts a log entry back together from its records, oldest sector first, and gives its whole length.

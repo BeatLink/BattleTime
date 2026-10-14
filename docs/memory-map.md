@@ -172,7 +172,7 @@ below it too, so the marker survives from one firmware start to the next. Its th
 bootloader's note to the firmware (`BOOT_NOTE_ADDRESS`), which says whether the recovery firmware
 was just installed, and its fourth is the bootloader updater's (`UPDATER_NOTE_ADDRESS`), which says
 the rollback after it was meant. The firmware measures 53.4 KB of static RAM:
-30.25 KB of heap (10 KB for the system and the 20.25 KB UI heap), the flash store's tables (2.4 KB), and
+30.25 KB of heap (10 KB for the system and the 20.25 KB UI heap), the flash store's tables (2.65 KB, the last file header read included), and
 the Bluetooth host with its eight 128-byte packets, controller, the display's two 1,920 B strip buffers and task state.
 TrouBLE's host keeps one connection, no L2CAP channels of its own (every service speaks over GATT), and a send
 queue of four packets, set by `TROUBLE_HOST_L2CAP_TX_QUEUE_SIZE` in `firmware/.cargo/config.toml`; its receive queue

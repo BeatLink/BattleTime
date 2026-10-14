@@ -41,7 +41,10 @@ the new copy is written before the old is removed; files and records share one s
 so while both exist the newer is read.
 
 Paths are found through a table in RAM of 16 bits of each path's hash and the file's first sector;
-the header's full path settles any clash. `for_each_file` lists every path under a prefix, and
+the header's full path settles any clash. The store keeps the last header it read, parsed, so
+reading a file again, or asking its length, reads only its data; any file retired, deleted or
+replaced, and every mount, drops it. A small file's record header and path come in one read.
+`for_each_file` lists every path under a prefix, and
 `for_each_file_with_length` gives each one's length too.
 
 `read_file` reads a file whole or from an offset and checks the contents' checksum when it reads
@@ -109,12 +112,12 @@ Built for the watch with 128 files, 128 record keys and rings of up to 192 secto
 
 | | Bytes |
 |---|---:|
-| RAM, fixed when built | about 2,430 |
+| RAM, fixed when built, no heap | about 2,650 |
 | Code and constants | about 26,200 |
 | Stack, at most, while cleaning a ring | about 1,000 |
 
 The RAM is mostly the key table (1 KB), the file table (512 B), the rings' sector order (384 B),
-the log batches and a map of the 512 file sectors (64 B), the most the file area may have. An
+the last file header read (about 220 B), the log batches and a map of the 512 file sectors (64 B), the most the file area may have. An
 upload's state, its path and sector list, is boxed on the heap from `begin_file` to its finish or
 abandonment, and a heap without room answers `OutOfMemory`. littlefs takes 23.7 KB of code for comparison. The
 firmware's measured share is in [memory-map.md](memory-map.md).

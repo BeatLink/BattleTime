@@ -338,14 +338,14 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
         let Some(entry) = find_newest(&self.record_keys, key) else {
             return Ok(None);
         };
-        let mut stored = [0u8; 1 + LONGEST_PATH_BYTES];
-        let length = entry.length().min(stored.len());
+        let mut header_and_path = [0u8; ring::RECORD_HEADER_BYTES + 1 + LONGEST_PATH_BYTES];
         self.records
-            .read_newest(&mut self.flash, &self.record_keys, key, 0, &mut stored[..length])
+            .read_record_start(&mut self.flash, entry, &mut header_and_path)
             .await?;
+        let (header, stored) = header_and_path.split_at(ring::RECORD_HEADER_BYTES);
         let path_length = stored[0] as usize;
         if path_length != path.len()
-            || length < 1 + path_length
+            || entry.length() < 1 + path_length
             || &stored[1..1 + path_length] != path.as_bytes()
         {
             return Ok(None);
@@ -353,7 +353,7 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
         Ok(Some(SmallFile {
             key,
             prefix: 1 + path_length,
-            sequence: self.records.record_sequence(&mut self.flash, entry).await?,
+            sequence: flash::word(header, 4),
         }))
     }
 

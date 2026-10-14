@@ -22,6 +22,7 @@ pub(crate) struct TestFlash {
     noise: u64,
     pub(crate) reads_fail: bool,
     pub(crate) erases_per_sector: Vec<u32>,
+    pub(crate) reads: u64,
 }
 
 impl TestFlash {
@@ -38,6 +39,7 @@ impl TestFlash {
             power_lost: false,
             noise: 0x9e37_79b9_7f4a_7c15,
             reads_fail: false,
+            reads: 0,
         }
     }
 
@@ -76,6 +78,7 @@ impl ReadNorFlash for TestFlash {
         if self.reads_fail {
             return Err(NorFlashErrorKind::Other);
         }
+        self.reads += 1;
         let start = offset as usize;
         bytes.copy_from_slice(&self.bytes[start..start + bytes.len()]);
         Ok(())
@@ -397,6 +400,60 @@ fn a_small_file_is_a_record_and_a_large_one_takes_sectors() {
     );
     assert_eq!(block_on(store.file_length("/remote/buttons")).unwrap(), Some(11));
     assert_eq!(read_file(&mut store, "/missing"), None);
+}
+
+/// How many flash reads `action` makes.
+fn reads_during(store: &mut TestStore, action: impl FnOnce(&mut TestStore)) -> u64 {
+    let before = store.flash().reads;
+    action(store);
+    store.flash().reads - before
+}
+
+#[test]
+fn reading_a_large_file_again_reads_only_its_data() {
+    let mut store = blank_store();
+    block_on(store.write_file("/notes/note.txt", &filler(9000, 1))).unwrap();
+    let mut store = remount(store);
+    read_file(&mut store, "/notes/note.txt");
+
+    let length_reads = reads_during(&mut store, |store| {
+        assert_eq!(
+            block_on(store.file_length("/notes/note.txt")).unwrap(),
+            Some(9000)
+        );
+    });
+    let read_again_reads = reads_during(&mut store, |store| {
+        assert_eq!(read_file(store, "/notes/note.txt").unwrap(), filler(9000, 1));
+    });
+
+    assert_eq!(length_reads, 0);
+    assert_eq!(read_again_reads, 3);
+}
+
+#[test]
+fn a_small_file_is_found_in_one_read() {
+    let mut store = blank_store();
+    block_on(store.write_file("/remote/buttons", b"11 bytes ok")).unwrap();
+
+    let reads = reads_during(&mut store, |store| {
+        assert_eq!(block_on(store.file_length("/remote/buttons")).unwrap(), Some(11));
+    });
+
+    assert_eq!(reads, 1);
+}
+
+#[test]
+fn a_rewritten_or_deleted_file_is_not_read_from_the_remembered_header() {
+    let mut store = blank_store();
+    block_on(store.write_file("/notes/note.txt", &filler(9000, 1))).unwrap();
+    read_file(&mut store, "/notes/note.txt");
+
+    block_on(store.write_file("/notes/note.txt", &filler(5000, 2))).unwrap();
+    let rewritten = read_file(&mut store, "/notes/note.txt");
+    block_on(store.delete_file("/notes/note.txt")).unwrap();
+
+    assert_eq!(rewritten.unwrap(), filler(5000, 2));
+    assert_eq!(block_on(store.file_length("/notes/note.txt")).unwrap(), None);
 }
 
 #[test]

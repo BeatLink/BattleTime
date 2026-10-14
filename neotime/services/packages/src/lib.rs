@@ -281,6 +281,11 @@ impl<'files, Files: FileAccess> Packages<'files, Files> {
 
     async fn read_whole(&mut self, path: &str) -> Option<Vec<u8>> {
         let length = self.files.file_length(path).await.ok()??;
+        self.read_whole_of_length(path, length).await
+    }
+
+    /// Reads a file whose length the caller already has, so the store looks it up only once more.
+    async fn read_whole_of_length(&mut self, path: &str, length: usize) -> Option<Vec<u8>> {
         let mut bytes = alloc::vec![0; length];
         self.files.read_file(path, 0, &mut bytes).await.ok()??;
         Some(bytes)
@@ -345,11 +350,15 @@ impl<'files, Files: FileAccess> Packages<'files, Files> {
         check_id(id)?;
         let path = file_in(directory, id, IMAGE_FILE);
         let length = self.files.file_length(&path).await.ok().flatten();
-        let length = length.ok_or(PackageError::NotInstalled)? as u32;
-        if length > APP_HEAP_BUDGET_BYTES {
-            return Err(PackageError::Refused(Refusal::TooLarge { need_bytes: length }));
+        let length = length.ok_or(PackageError::NotInstalled)?;
+        if length as u32 > APP_HEAP_BUDGET_BYTES {
+            return Err(PackageError::Refused(Refusal::TooLarge {
+                need_bytes: length as u32,
+            }));
         }
-        self.read_whole(&path).await.ok_or(PackageError::NotInstalled)
+        self.read_whole_of_length(&path, length)
+            .await
+            .ok_or(PackageError::NotInstalled)
     }
 
     /// The image's length, from the store, without reading it.

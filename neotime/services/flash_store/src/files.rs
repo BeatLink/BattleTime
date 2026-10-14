@@ -25,6 +25,7 @@ const RETIRED_AT: usize = HEADER_CHECKSUM_AT + 4;
 /// The file area may be at most this many sectors, one bit each in RAM, as the watch's layout has.
 pub(crate) const MOST_FILE_SECTORS: usize = 512;
 
+#[derive(Clone)]
 pub(crate) struct FileHeader {
     pub(crate) sequence: u32,
     pub(crate) length: usize,
@@ -111,6 +112,8 @@ pub(crate) struct FileArea<const MOST_FILES: usize> {
     pub(crate) next_sequence: u32,
     /// Where the search for free sectors starts, so writes spread over the area.
     cursor: usize,
+    /// The header `find` read last, so reading one file again needs no flash; retiring any file drops it.
+    cached_header: Option<FileHeader>,
 }
 
 impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
@@ -123,6 +126,7 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
             files: Vec::new(),
             next_sequence: 1,
             cursor: 0,
+            cached_header: None,
         }
     }
 
@@ -138,6 +142,7 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
         self.files.clear();
         self.next_sequence = 1;
         self.cursor = 0;
+        self.cached_header = None;
         let sector_count = self.sector_count;
         for index in 0..sector_count {
             let header = match self.read_header(flash, index).await? {
@@ -214,7 +219,7 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
 
     /// Finds a file by path: entries whose hash matches have their header read to compare the whole path.
     pub(crate) async fn find<Flash: NorFlash>(
-        &self,
+        &mut self,
         flash: &mut Flash,
         path: &str,
     ) -> Result<Option<(usize, FileHeader)>, StoreError<Flash::Error>> {
@@ -224,8 +229,14 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
             if entry.path_hash != hash {
                 continue;
             }
+            if let Some(cached) = &self.cached_header {
+                if cached.sectors[0] == entry.first_sector && cached.path == path {
+                    return Ok(Some((position, cached.clone())));
+                }
+            }
             if let HeaderAt::Valid(header) = self.read_header(flash, entry.first_sector as usize).await? {
                 if header.path == path {
+                    self.cached_header = Some(header.clone());
                     return Ok(Some((position, header)));
                 }
             }
@@ -364,6 +375,7 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
         header: &FileHeader,
     ) -> Result<(), StoreError<Flash::Error>> {
         let entry = self.files.remove(position);
+        self.cached_header = None;
         write(
             flash,
             self.sector_address(entry.first_sector as usize) + RETIRED_AT as u32,
