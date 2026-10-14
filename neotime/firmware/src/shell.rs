@@ -1940,6 +1940,8 @@ pub async fn run_shell(
         shell.system.find_bootloader_record_if_wanted();
         shell.match_accelerometer_to_app();
 
+        // A closed app must load its whole saved state, so a store write under way, such as the phone's, ends first.
+        shell.files.wait_until_free().await;
         // A closed app that ran may have opened itself or changed the screen, so the loop draws again first.
         if shell.run_due_closed_apps() {
             if shell.follow_requests() {

@@ -4,8 +4,10 @@
 //! shell fills it when the apps are read, by loading each app whose image has such a subscription,
 //! and again whenever an app closes. When one comes due the shell loads it without a screen, runs
 //! what is due and saves its state. When the heap lacks room beside the open app, the open app is
-//! closed first and opened again afterwards. A handler that calls `wake_screen` opens its app over
-//! what is open, on the screen its `go` named, and lights the screen, as InfiniTime opens its alarm.
+//! closed first and opened again afterwards. A run waits until no other task is in the store, so it
+//! loads the state as last written, a write from the phone included. A handler that calls
+//! `wake_screen` opens its app over what is open, on the screen its `go` named, and lights the
+//! screen, as InfiniTime opens its alarm.
 
 extern crate alloc;
 
