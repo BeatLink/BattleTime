@@ -286,8 +286,8 @@ each item says what it costs and what it would save.
   any screen, with Dismiss and Snooze sending events back to the app, the vibration, the side
   button stopping it, and the stop after a time limit. The alarm, timer and pomodoro each build
   their own ringing screen and logic today, and they differ: the alarm snoozes for ten minutes and
-  stops after a minute, the timer stops on any tap, and pomodoro buzzes for its chosen seconds and
-  then starts its next entry, so the alert needs a snooze length and an "ended by itself" event.
+  stops after a minute, the timer stops on any tap, and pomodoro buzzes for ten seconds and
+  then starts its next interval, so the alert needs a snooze length and an "ended by itself" event.
   A design change in the firmware shell; it removes each app's ringing screen and its timers.
 - [ ] **Library components.** Widget trees with props kept in the library and named by number,
   for layouts that need no native logic: `ActionRow` and `PlayPauseButton` (7 apps),
@@ -317,8 +317,8 @@ each item says what it costs and what it would save.
   drawn as one node saves RAM where a library component does not:
   - `AppGrid`, the installed apps as a grid of icons, beside the `AppList` the launcher uses; it
     has no user until a grid launcher is wanted.
-  - A digit-entry mode for `ButtonMatrix`. The calculator's entry (millionths, a point and a sign)
-    and pomodoro's queue of minutes differ enough that only the keypad itself is shared.
+  - A digit-entry mode for `ButtonMatrix`. Only the calculator types digits, with millionths, a
+    point and a sign, so it pays once a second app needs a keypad.
   - The other faces' status rows and their step, heart and weather rows: analog, lite-analog,
     lite-digital, lite-rings, infineat, pinetime-style, pride-flag, lite-weather and terminal. Their
     icons sit apart, in colours of their own, and analog swaps the battery for a plug while
@@ -345,9 +345,6 @@ each item says what it costs and what it would save.
 
 Found by the harness's snapshots and quality checks; see [testing.md](testing.md).
 
-- [ ] **Pomodoro's queue can outgrow its header.** A hand-typed queue of six three-digit lengths is
-  23 characters, wider than the header in any font. Labels that clip to their own bounds, or rows
-  that shrink their children, would keep it on one line.
 - [ ] **Terminal face overflow.** Its last line falls off the bottom of the screen and
   "[STAT] Connected" is cut in half.
 - [ ] **Check the free heap before reading an image beside an open app.** A packages `install`, the

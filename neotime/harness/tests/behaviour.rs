@@ -752,20 +752,31 @@ fn the_calculator_lights_only_the_operation_chosen() {
 }
 
 #[test]
-fn the_pomodoro_lights_go_only_while_it_can_start() {
+fn the_pomodoro_takes_a_long_break_after_every_fourth_work_session() {
     let mut watch = TestWatch::open_app("pomodoro").unwrap();
-    let plain = key_fill(&mut watch, 0, 1, 5, 3);
+    let buzz = Duration::from_secs(10);
+    watch.tap_text("Start");
 
-    assert_ne!(
-        key_fill(&mut watch, 2, 2, 3, 3),
-        plain,
-        "Go is lit with a queue typed"
-    );
-    assert_eq!(key_fill(&mut watch, 0, 0, 5, 3), plain, "the 1 key is unlit");
-    tap_key(&mut watch, 2, 1, 3, 3);
-    assert_eq!(
-        key_fill(&mut watch, 2, 2, 3, 3),
-        plain,
-        "Go is unlit while the next entry is awaited"
-    );
+    for work_session in 1..=4 {
+        assert!(watch.shows_text("Work"), "{:?}", watch.visible_texts());
+        assert!(
+            watch.shows_text(&format!("{work_session} of 4")),
+            "{:?}",
+            watch.visible_texts()
+        );
+        watch.advance(Duration::from_secs(25 * 60));
+        watch.advance(buzz);
+        if work_session < 4 {
+            assert!(watch.shows_text("Short break"), "{:?}", watch.visible_texts());
+            watch.advance(Duration::from_secs(5 * 60));
+            watch.advance(buzz);
+        }
+    }
+
+    assert!(watch.shows_text("Long break"), "{:?}", watch.visible_texts());
+    assert!(watch.shows_text("15:00"), "{:?}", watch.visible_texts());
+    watch.advance(Duration::from_secs(15 * 60));
+    watch.advance(buzz);
+    assert!(watch.shows_text("1 of 4"), "{:?}", watch.visible_texts());
+    assert!(watch.failures().is_empty(), "{:?}", watch.failures());
 }

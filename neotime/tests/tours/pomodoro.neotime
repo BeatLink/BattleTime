@@ -1,27 +1,37 @@
-# Every screen of the pomodoro timer, for docs/apps/pomodoro.md: a typed queue, a preset, running and buzzing.
+# Every screen of the pomodoro app, for docs/apps/pomodoro.md: the three lengths, then the countdown through a round.
 open app pomodoro
-tap 45 203                  # Del: drop the 5
-tap 45 203                  # Del: drop the comma
-tap 45 203                  # Del: 25 becomes 2
-tap 45 203                  # Del: and the queue is empty
-tap 165 87                  # 4
-tap 210 87                  # 5
-tap 120 203                 # Then
-tap 30 87                   # 1
-tap 210 87                  # 5
-swipe up                    # one more second of buzzing
-expect text "45,15"
-expect text "V11"
-snapshot typed
-swipe left                  # the last preset
-expect text "25,5,25,5,25,15"
-snapshot preset
-tap 195 203                 # Go
-wait 1min
-expect text "24:00"
-snapshot running
-wait 24min
 expect text "Pomodoro"
+expect text "25 / 5 / 15 min"
+swipe right                 # to the long break page
+expect text "Long break"
+expect text "After 4 work sessions"
+snapshot long-break
+swipe right                 # to the short break page
+expect text "Short break"
+snapshot short-break
+swipe right                 # to the work page
+expect text "Work"
+snapshot work
+swipe left
+swipe left
+swipe left                  # back to the countdown
+tap "Start"
+expect text "Work"
+expect text "1 of 4"
+expect text "25:00"
+snapshot running
+wait 25min
+expect text "Short break next"
+expect effect vibrate-pattern alarm
 snapshot ringing
+wait 10s
+expect text "Short break"
+expect text "05:00"
+expect text "1 of 4"
+snapshot short-break-running
+wait 5min
+wait 10s
+expect text "2 of 4"
 tap "Stop"
+expect text "Pomodoro"
 expect no failures

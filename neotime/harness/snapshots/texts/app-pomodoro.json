@@ -4,8 +4,10 @@
       "name": "main",
       "reached_by": null,
       "texts": [
-        "25,5",
-        "V10"
+        "25 / 5 / 15 min",
+        "25:00",
+        "Pomodoro",
+        "Start"
       ]
     }
   ]

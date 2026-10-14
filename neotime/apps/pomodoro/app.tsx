@@ -1,17 +1,16 @@
-// Pomodoro timer, ported from wasp-os's pomodoro app.
-// Type a queue of lengths in minutes, such as 25 then 5, and it runs them in turn, buzzing between
-// each, until stopped or after 99 rounds. Swipe left or right for a preset queue, and up or down to
-// change how many seconds each buzz lasts.
+// Pomodoro timer, after wasp-os's pomodoro app.
+// Work and short breaks take turns, with a long break in place of every Nth short one. Three pages set
+// the work, short break and long break lengths, and the last page runs the countdown, buzzing between
+// each interval and going on until stopped.
 
 import {
   computed,
   define_app,
   format_duration,
-  format_number,
   now,
   on,
   persisted,
-  range,
+  signal,
   stop_vibrating,
   vibrate,
   vibrate_pattern,
@@ -19,72 +18,55 @@ import {
   MINUTE,
   SECOND,
   type Instant,
-  type SwipeEvent,
+  type PageChangeEvent,
   type TimeEvent,
 } from "neotime";
-import { Card } from "neotime/components";
-import { icons } from "neotime/icons";
-import { Button, ButtonMatrix, Icon, Label, Row, Screen } from "neotime/widgets";
+import { Card, Header } from "neotime/components";
+import { icons, type LibraryIcon } from "neotime/icons";
+import { Button, Icon, Label, Page, Pages, Row, Screen, Stepper } from "neotime/widgets";
 
 // ============================================================================
 // State
 // ============================================================================
 
-const QUEUE_LENGTH_LIMIT = 6;
+const SHORTEST_MINUTES = 1;
+const LONGEST_MINUTES = 99;
+const FEWEST_WORKS_PER_LONG_BREAK = 2;
+const MOST_WORKS_PER_LONG_BREAK = 8;
 
-/** The largest length one entry may have, in minutes. */
-const LONGEST_ENTRY_MINUTES = 999;
+/** How long the buzz between intervals lasts before the next one starts. */
+const BUZZ_LENGTH = 10 * SECOND;
 
-const ROUND_LIMIT = 99;
+/** The kinds of interval, in the order the wearer sets their lengths. */
+const WORK = 0;
+const SHORT_BREAK = 1;
+const LONG_BREAK = 2;
 
-/** Times from this long up have three digits of minutes, too wide for the seven-segment font. */
-const LONGEST_SEVEN_SEGMENT_TIME = 100 * MINUTE;
-const LONGEST_BUZZ_SECONDS = 15;
+const INTERVAL_NAMES = ["Work", "Short break", "Long break"];
 
-/** The places of a queue's entries. */
-const QUEUE_PLACES = range(QUEUE_LENGTH_LIMIT);
+/** The countdown is the last page, and the app opens on it. */
+const COUNTDOWN_PAGE = 3;
 
-/** Preset queues one after another, each padded with zeros to six entries, and how many entries each has. */
-const PRESETS = [
-  25, 5, 0, 0, 0, 0,
-  50, 10, 0, 0, 0, 0,
-  25, 5, 25, 5, 25, 15,
-];
-const PRESET_LENGTHS = [2, 2, 6];
-const PRESET_COUNT = 3;
+export const work_minutes = persisted("work_minutes", 25);
+export const short_break_minutes = persisted("short_break_minutes", 5);
+export const long_break_minutes = persisted("long_break_minutes", 15);
 
-const KEYPAD_ROWS = [
-  ["1", "2", "3", "4", "5"],
-  ["6", "7", "8", "9", "0"],
-  ["Del", "Then", "Go"],
-];
-const KEY_DELETE = 10;
-const KEY_THEN = 11;
-const KEY_GO = 12;
+/** How many work intervals come before each long break. */
+export const works_per_long_break = persisted("works_per_long_break", 4);
 
-/** The queue's lengths in minutes; places past `queue_length` hold 0. */
-const queue_minutes = persisted<number[]>("queue_minutes", [25, 5, 0, 0, 0, 0]);
-const queue_length = persisted("queue_length", 2);
+/** Which kind of interval runs now, or ran last. */
+export const interval = persisted("interval", WORK);
 
-/** Whether "Then" was the last key, so the next digit starts a new entry. */
-const awaits_next_entry = persisted("awaits_next_entry", false);
+/** How many work intervals have finished since the last long break. */
+export const works_done = persisted("works_done", 0);
 
-const preset_place = persisted("preset_place", 0);
-
-/** How many seconds each buzz lasts. */
-const buzz_seconds = persisted("buzz_seconds", 10);
-
-/** When the running entry ends, or null while none runs. */
+/** When the running interval ends, or null while none runs. */
 export const ends_at = persisted<Instant | null>("ends_at", null);
 
-/** When the last entry ended and the buzz began, or null while not buzzing. */
+/** When the last interval ended and the buzz began, or null while not buzzing. */
 export const rang_at = persisted<Instant | null>("rang_at", null);
 
-/** Which entry of the queue runs now. */
-export const running_place = persisted("running_place", 0);
-
-/** How many times the whole queue has run. */
-export const rounds_done = persisted("rounds_done", 0);
+const page = signal(COUNTDOWN_PAGE);
 
 // ============================================================================
 // Derived values
@@ -96,103 +78,64 @@ const is_ringing = computed(() => rang_at.value !== null);
 
 const is_stopped = computed(() => !is_running.value && !is_ringing.value);
 
-const can_start = computed(() => queue_length.value > 0 && !awaits_next_entry.value);
-
-/** One entry of the queue as text, with a comma before all but the first, or nothing past the queue's end. */
-function queue_entry_text(place: number): string {
-  return place < queue_length.value ? `${place > 0 ? "," : ""}${format_number(queue_minutes.value[place])}` : "";
-}
-
-export const queue_text = computed(
-  () =>
-    `${queue_entry_text(0)}${queue_entry_text(1)}${queue_entry_text(2)}${queue_entry_text(3)}${queue_entry_text(4)}${queue_entry_text(5)}${awaits_next_entry.value ? "," : ""}`,
-);
+/** The interval that follows the running one: a long break after every Nth work, else a short one. */
+const next_interval = computed(() => {
+  if (interval.value !== WORK) return WORK;
+  return works_done.value + 1 >= works_per_long_break.value ? LONG_BREAK : SHORT_BREAK;
+});
 
 const remaining = computed(() =>
   ends_at.value !== null ? Math.floor((Math.max(0, ends_at.value - now.value) + SECOND - 1) / SECOND) * SECOND : 0,
 );
 
-const progress_text = computed(() => `Timer #${running_place.value + 1}/${queue_length.value}  (${rounds_done.value})`);
+/** Which work interval of the round this is, or the one a break follows, such as "2 of 4". */
+const round_place = computed(() => {
+  if (interval.value === WORK) return works_done.value + 1;
+  if (interval.value === SHORT_BREAK) return works_done.value;
+  return works_per_long_break.value;
+});
 
-/** When the buzz ends and the next entry starts. */
-const next_entry_at = computed(() => (rang_at.value !== null ? rang_at.value + buzz_seconds.value * SECOND : null));
+const round_text = computed(() => `${round_place.value} of ${works_per_long_break.value}`);
+
+const plan_text = computed(
+  () => `${work_minutes.value} / ${short_break_minutes.value} / ${long_break_minutes.value} min`,
+);
+
+const long_break_text = computed(() => `After ${works_per_long_break.value} work sessions`);
+
+/** When the buzz ends and the next interval starts. */
+const next_interval_at = computed(() => (rang_at.value !== null ? rang_at.value + BUZZ_LENGTH : null));
+
+function minutes_of(kind: number): number {
+  if (kind === WORK) return work_minutes.value;
+  if (kind === SHORT_BREAK) return short_break_minutes.value;
+  return long_break_minutes.value;
+}
 
 // ============================================================================
 // Handlers
 // ============================================================================
 
-function type_digit(digit: number) {
-  const last = queue_length.value - 1;
-  if (awaits_next_entry.value || queue_length.value === 0) {
-    if (digit === 0 || queue_length.value >= QUEUE_LENGTH_LIMIT) return;
-    queue_minutes.value[queue_length.value] = digit;
-    queue_length.value = queue_length.value + 1;
-    awaits_next_entry.value = false;
-  } else if (queue_minutes.value[last] * 10 + digit <= LONGEST_ENTRY_MINUTES) {
-    queue_minutes.value[last] = queue_minutes.value[last] * 10 + digit;
-  }
+/** Every opening starts on the countdown. */
+function show_countdown() {
+  page.value = COUNTDOWN_PAGE;
 }
 
-function delete_key() {
-  const last = queue_length.value - 1;
-  if (awaits_next_entry.value) {
-    awaits_next_entry.value = false;
-  } else if (queue_length.value > 0) {
-    const shortened = Math.floor(queue_minutes.value[last] / 10);
-    queue_minutes.value[last] = shortened;
-    if (shortened === 0) {
-      queue_length.value = last;
-      awaits_next_entry.value = last > 0;
-    }
-  }
-}
-
-function then_key() {
-  if (queue_length.value > 0 && queue_length.value < QUEUE_LENGTH_LIMIT) {
-    awaits_next_entry.value = true;
-  }
-}
-
-export function press_key(event: { value: number }) {
-  if (event.value === KEY_DELETE) delete_key();
-  else if (event.value === KEY_THEN) then_key();
-  else if (event.value === KEY_GO) start();
-  else type_digit((event.value + 1) % 10);
-}
-
-function load_preset(place: number) {
-  preset_place.value = place;
-  for (const entry of QUEUE_PLACES) {
-    queue_minutes.value[entry] = PRESETS[place * QUEUE_LENGTH_LIMIT + entry];
-  }
-  queue_length.value = PRESET_LENGTHS[place];
-  awaits_next_entry.value = false;
-}
-
-function swipe(event: SwipeEvent) {
-  if (!is_stopped.value) return;
-  if (event.direction === "up") {
-    buzz_seconds.value = buzz_seconds.value >= LONGEST_BUZZ_SECONDS ? 1 : buzz_seconds.value + 1;
-  } else if (event.direction === "down") {
-    buzz_seconds.value = buzz_seconds.value <= 1 ? LONGEST_BUZZ_SECONDS : buzz_seconds.value - 1;
-  } else {
-    const step = event.direction === "right" ? 1 : PRESET_COUNT - 1;
-    load_preset((preset_place.value + step) % PRESET_COUNT);
-  }
+function turn_page(event: PageChangeEvent) {
+  page.value = event.page;
 }
 
 export function start() {
-  if (!can_start.value) return;
-  running_place.value = 0;
-  rounds_done.value = 0;
-  ends_at.value = now.value + queue_minutes.value[0] * MINUTE;
+  interval.value = WORK;
+  works_done.value = 0;
+  ends_at.value = now.value + work_minutes.value * MINUTE;
 }
 
 export function stop() {
   ends_at.value = null;
   rang_at.value = null;
-  running_place.value = 0;
-  rounds_done.value = 0;
+  interval.value = WORK;
+  works_done.value = 0;
   stop_vibrating();
 }
 
@@ -210,19 +153,115 @@ function ring(event: TimeEvent) {
   vibrate_pattern("alarm");
 }
 
-function start_next_entry(event: TimeEvent) {
+function start_next_interval(event: TimeEvent) {
   stop_vibrating();
   rang_at.value = null;
-  const wraps = running_place.value + 1 >= queue_length.value;
-  const next_place = wraps ? 0 : running_place.value + 1;
-  const rounds = wraps ? rounds_done.value + 1 : rounds_done.value;
-  if (rounds >= ROUND_LIMIT) {
-    stop();
-    return;
-  }
-  running_place.value = next_place;
-  rounds_done.value = rounds;
-  ends_at.value = event.time + queue_minutes.value[next_place] * MINUTE;
+  const next = next_interval.value;
+  if (interval.value === WORK) works_done.value = next === LONG_BREAK ? 0 : works_done.value + 1;
+  interval.value = next;
+  ends_at.value = event.time + minutes_of(next) * MINUTE;
+}
+
+// ============================================================================
+// Pages
+// ============================================================================
+
+function LengthPage(props: {
+  title: string;
+  icon: LibraryIcon;
+  minutes: number;
+  onChange: (event: { value: number }) => void;
+}) {
+  return (
+    <Page padding={8} gap={10}>
+      <Header title={props.title} icon={props.icon} />
+      <Stepper
+        height={52}
+        gap={6}
+        font="large"
+        value={props.minutes}
+        minimum={SHORTEST_MINUTES}
+        maximum={LONGEST_MINUTES}
+        onChange={props.onChange}
+      />
+      <Label font="small" color="muted">Minutes</Label>
+    </Page>
+  );
+}
+
+function LongBreakPage() {
+  return (
+    <Page padding={8} gap={6}>
+      <Header title="Long break" icon={icons.moon} />
+      <Stepper
+        height={44}
+        gap={6}
+        font="large"
+        value={long_break_minutes.value}
+        minimum={SHORTEST_MINUTES}
+        maximum={LONGEST_MINUTES}
+        onChange={(event) => (long_break_minutes.value = event.value)}
+      />
+      <Label font="small" color="muted">{long_break_text.value}</Label>
+      <Stepper
+        height={44}
+        gap={6}
+        value={works_per_long_break.value}
+        minimum={FEWEST_WORKS_PER_LONG_BREAK}
+        maximum={MOST_WORKS_PER_LONG_BREAK}
+        onChange={(event) => (works_per_long_break.value = event.value)}
+      />
+    </Page>
+  );
+}
+
+function CountdownPage() {
+  return (
+    <Page padding={8} gap={6}>
+      <Row justify="space_between" height={36} padding={4}>
+        <Label color="accent">{is_stopped.value ? "Pomodoro" : INTERVAL_NAMES[interval.value]}</Label>
+        <Label font="small" color="muted">{is_stopped.value ? "" : round_text.value}</Label>
+      </Row>
+
+      {is_stopped.value && (
+        <Card grow={1} align_items="center" justify="center" gap={6} padding={0}>
+          <Label font="seven_segment">{format_duration(work_minutes.value * MINUTE, "mm:ss")}</Label>
+          <Label font="small" color="muted">{plan_text.value}</Label>
+        </Card>
+      )}
+
+      {is_running.value && (
+        <Card grow={1} align_items="center" justify="center" padding={0}>
+          <Label font="seven_segment">{format_duration(remaining.value, "mm:ss")}</Label>
+        </Card>
+      )}
+
+      {is_ringing.value && (
+        <Card grow={1} align_items="center" justify="center" gap={6} padding={0}>
+          <Icon icon={icons.timer} size={48} color="warning" />
+          <Label>{`${INTERVAL_NAMES[next_interval.value]} next`}</Label>
+        </Card>
+      )}
+
+      <Row gap={6} height={52}>
+        {is_stopped.value && (
+          <Button grow={1} height="100%" background="accent" onClick={start}>
+            Start
+          </Button>
+        )}
+        {!is_stopped.value && (
+          <Button grow={2} height="100%" background="danger" onClick={stop}>
+            Stop
+          </Button>
+        )}
+        {is_running.value && (
+          <Button grow={1} height="100%" onClick={add_minute}>
+            +1
+          </Button>
+        )}
+      </Row>
+    </Page>
+  );
 }
 
 // ============================================================================
@@ -231,58 +270,30 @@ function start_next_entry(event: TimeEvent) {
 
 function Pomodoro() {
   return (
-    <Screen padding={8} gap={6} onSwipe={swipe}>
-      <Row justify="space_between" height={44} padding={8} background="surface" radius={12}>
-        <Label color="muted">{is_stopped.value ? `V${buzz_seconds.value}` : progress_text.value}</Label>
-        {is_stopped.value && (
-          <Label font="small" long_mode="clip">
-            {queue_text.value}
-          </Label>
-        )}
-      </Row>
-
-      {is_stopped.value && (
-        <ButtonMatrix
-          grow={1}
-          rows={KEYPAD_ROWS}
-          highlighted={can_start.value ? ["Go"] : []}
-          onClick={press_key}
+    <Screen>
+      <Pages grow={1} value={page.value} onPageChange={turn_page}>
+        <LengthPage
+          title="Work"
+          icon={icons.timer}
+          minutes={work_minutes.value}
+          onChange={(event) => (work_minutes.value = event.value)}
         />
-      )}
-
-      {is_running.value && (
-        <Card grow={1} align_items="center" justify="center" padding={0}>
-          <Label font={remaining.value < LONGEST_SEVEN_SEGMENT_TIME ? "seven_segment" : "large"}>
-            {format_duration(remaining.value, "mm:ss")}
-          </Label>
-        </Card>
-      )}
-
-      {is_ringing.value && (
-        <Card grow={1} align_items="center" justify="center" gap={6} padding={0}>
-          <Icon icon={icons.timer} size={48} color="warning" />
-          <Label>Pomodoro</Label>
-        </Card>
-      )}
-
-      {!is_stopped.value && (
-        <Row gap={6} height={52}>
-          <Button grow={2} height="100%" background="danger" onClick={stop}>
-            Stop
-          </Button>
-          {is_running.value && (
-            <Button grow={1} height="100%" onClick={add_minute}>
-              +1
-            </Button>
-          )}
-        </Row>
-      )}
+        <LengthPage
+          title="Short break"
+          icon={icons.sun}
+          minutes={short_break_minutes.value}
+          onChange={(event) => (short_break_minutes.value = event.value)}
+        />
+        <LongBreakPage />
+        <CountdownPage />
+      </Pages>
     </Screen>
   );
 }
 
+on("open", show_countdown);
 on("time", ring, { at: ends_at });
-on("time", start_next_entry, { at: next_entry_at });
+on("time", start_next_interval, { at: next_interval_at });
 
 export default define_app({
   id: "pomodoro",

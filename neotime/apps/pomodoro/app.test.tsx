@@ -2,16 +2,30 @@ import { act, cleanup, render, screen } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { reset_persisted, MINUTE, SECOND } from "neotime";
 import { advance_clock, freeze_clock, install_apps, open, OpenScreen, start_scheduler, swipe } from "neotime/preview";
-import app, { ends_at, press_key, queue_text, rang_at, rounds_done, running_place, start, stop } from "./app.tsx";
+import app, {
+  ends_at,
+  interval,
+  long_break_minutes,
+  rang_at,
+  short_break_minutes,
+  start,
+  stop,
+  work_minutes,
+  works_done,
+  works_per_long_break,
+} from "./app.tsx";
 
 let stop_scheduler = () => {};
 
-const KEY_PLACES: Record<string, number> = {
-  "1": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5, "7": 6, "8": 7, "9": 8, "0": 9, del: 10, then: 11, go: 12,
-};
+const WORK = 0;
+const SHORT_BREAK = 1;
+const LONG_BREAK = 2;
+const BUZZ = 10 * SECOND;
 
-function press(...keys: string[]) {
-  for (const key of keys) press_key({ value: KEY_PLACES[key] });
+/** Runs the interval on now to its end and through the buzz after it. */
+function finish_interval(minutes: number) {
+  advance_clock(minutes * MINUTE);
+  advance_clock(BUZZ);
 }
 
 describe("pomodoro", () => {
@@ -29,29 +43,64 @@ describe("pomodoro", () => {
     open(null);
   });
 
-  it("types a queue with Then and deletes back through it", () => {
-    press("del", "del", "del", "del");
-    expect(queue_text.value).toBe("");
-    press("2", "5", "then", "5");
-    expect(queue_text.value).toBe("25,5");
-    press("del");
-    expect(queue_text.value).toBe("25,");
-    press("del", "del");
-    expect(queue_text.value).toBe("2");
+  it("takes work and short breaks in turn, with a long break after every Nth work", () => {
+    work_minutes.value = 3;
+    short_break_minutes.value = 1;
+    long_break_minutes.value = 2;
+    works_per_long_break.value = 2;
+    start();
+    expect(interval.value).toBe(WORK);
+    finish_interval(3);
+    expect(interval.value).toBe(SHORT_BREAK);
+    expect(works_done.value).toBe(1);
+    finish_interval(1);
+    expect(interval.value).toBe(WORK);
+    finish_interval(3);
+    expect(interval.value).toBe(LONG_BREAK);
+    expect(works_done.value).toBe(0);
+    finish_interval(2);
+    expect(interval.value).toBe(WORK);
+    finish_interval(3);
+    expect(interval.value).toBe(SHORT_BREAK);
   });
 
-  it("runs each entry in turn and counts rounds", () => {
-    press("del", "del", "del", "del", "2", "then", "1");
+  it("buzzes between intervals and starts the next after ten seconds", () => {
+    work_minutes.value = 1;
     start();
+    advance_clock(MINUTE);
+    expect(rang_at.value).not.toBeNull();
+    expect(ends_at.value).toBeNull();
+    advance_clock(BUZZ - SECOND);
+    expect(rang_at.value).not.toBeNull();
+    advance_clock(SECOND);
+    expect(rang_at.value).toBeNull();
+    expect(ends_at.value).not.toBeNull();
+  });
+
+  it("uses a changed length from the next interval that needs it", () => {
+    work_minutes.value = 2;
+    start();
+    work_minutes.value = 10;
     advance_clock(2 * MINUTE);
     expect(rang_at.value).not.toBeNull();
-    advance_clock(10 * SECOND);
-    expect(rang_at.value).toBeNull();
-    expect(running_place.value).toBe(1);
+    advance_clock(BUZZ);
+    finish_interval(short_break_minutes.value);
+    expect(interval.value).toBe(WORK);
+    advance_clock(9 * MINUTE);
     expect(ends_at.value).not.toBeNull();
-    advance_clock(MINUTE + 10 * SECOND);
-    expect(running_place.value).toBe(0);
-    expect(rounds_done.value).toBe(1);
+    expect(rang_at.value).toBeNull();
+  });
+
+  it("opens on the countdown again after leaving it on another page", () => {
+    render(<OpenScreen />);
+    act(() => swipe("right"));
+    expect(screen.queryByText("Start")).toBeNull();
+    cleanup();
+    open(null);
+    open(app);
+    render(<OpenScreen />);
+    expect(screen.getByText("Start")).toBeTruthy();
+    cleanup();
   });
 });
 
@@ -76,93 +125,80 @@ describe("pomodoro screen", () => {
     open(null);
   });
 
-  it("changes the buzz length on up and down swipes, wrapping between 1 and 15 seconds", () => {
-    expect(screen.getByText("V10")).toBeTruthy();
-    act(() => swipe("up"));
-    expect(screen.getByText("V11")).toBeTruthy();
-    for (let step = 0; step < 4; step++) act(() => swipe("up"));
-    expect(screen.getByText("V15")).toBeTruthy();
-    act(() => swipe("up"));
-    expect(screen.getByText("V1")).toBeTruthy();
-    act(() => swipe("down"));
-    expect(screen.getByText("V15")).toBeTruthy();
-    act(() => swipe("down"));
-    expect(screen.getByText("V14")).toBeTruthy();
-  });
-
-  it("steps through the preset queues on left and right swipes", () => {
-    act(() => swipe("right"));
-    expect(screen.getByText("50,10")).toBeTruthy();
-    act(() => swipe("right"));
-    expect(screen.getByText("25,5,25,5,25,15")).toBeTruthy();
-    act(() => swipe("right"));
-    expect(screen.getByText("25,5")).toBeTruthy();
-    act(() => swipe("left"));
-    expect(screen.getByText("25,5,25,5,25,15")).toBeTruthy();
-  });
-
-  it("counts down from Go, adds a minute on +1 and ignores swipes while running", () => {
-    tap("Go");
+  it("opens on the countdown, with the lengths below the work time", () => {
+    expect(screen.getByText("Start")).toBeTruthy();
     expect(screen.getByText("25:00")).toBeTruthy();
-    expect(screen.getByText("Timer #1/2  (0)", { normalizer: (text) => text })).toBeTruthy();
+    expect(screen.getByText("25 / 5 / 15 min")).toBeTruthy();
+  });
+
+  it("reaches the long break, short break and work pages by swiping right", () => {
+    act(() => swipe("right"));
+    expect(screen.getByText("After 4 work sessions")).toBeTruthy();
+    act(() => swipe("right"));
+    expect(screen.getByText("Short break")).toBeTruthy();
+    act(() => swipe("right"));
+    expect(screen.getByText("Work")).toBeTruthy();
+  });
+
+  it("counts down from Start, adds a minute on +1, and names the interval and the round", () => {
+    tap("Start");
+    expect(screen.getByText("25:00")).toBeTruthy();
+    expect(screen.getByText("Work")).toBeTruthy();
+    expect(screen.getByText("1 of 4")).toBeTruthy();
     tap("+1");
     expect(screen.getByText("26:00")).toBeTruthy();
-    act(() => swipe("right"));
     act(() => advance_clock(MINUTE));
     expect(screen.getByText("25:00")).toBeTruthy();
-    expect(queue_text.value).toBe("25,5");
   });
 
-  it("shows the buzz between entries and goes back to the keypad on Stop", () => {
-    press("del", "del", "del", "del", "1");
-    tap("Go");
-    act(() => advance_clock(MINUTE));
-    expect(screen.getByText("Pomodoro")).toBeTruthy();
+  it("names the next interval while buzzing, and counts the break after the work it follows", () => {
+    tap("Start");
+    act(() => advance_clock(25 * MINUTE));
+    expect(screen.getByText("Short break next")).toBeTruthy();
     expect(screen.queryByText("+1")).toBeNull();
+    act(() => advance_clock(BUZZ));
+    expect(screen.getByText("Short break")).toBeTruthy();
+    expect(screen.getByText("1 of 4")).toBeTruthy();
+    expect(screen.getByText("05:00")).toBeTruthy();
+  });
+
+  it("sets each length with its page's - and + buttons", () => {
+    act(() => swipe("right"));
+    const [long_minus, works_minus] = screen.getAllByText("-");
+    const [long_plus, works_plus] = screen.getAllByText("+");
+    act(() => long_plus.click());
+    expect(long_break_minutes.value).toBe(16);
+    act(() => works_minus.click());
+    expect(works_per_long_break.value).toBe(3);
+    expect(screen.getByText("After 3 work sessions")).toBeTruthy();
+    act(() => long_minus.click());
+    act(() => works_plus.click());
+    expect(long_break_minutes.value).toBe(15);
+    expect(works_per_long_break.value).toBe(4);
+    act(() => swipe("right"));
+    act(() => screen.getByText("-").click());
+    expect(short_break_minutes.value).toBe(4);
+    act(() => swipe("right"));
+    act(() => screen.getByText("+").click());
+    expect(work_minutes.value).toBe(26);
+  });
+
+  it("counts the long break as the end of the round", () => {
+    works_per_long_break.value = 2;
+    tap("Start");
+    act(() => advance_clock(25 * MINUTE + BUZZ));
+    act(() => advance_clock(5 * MINUTE + BUZZ));
+    act(() => advance_clock(25 * MINUTE + BUZZ));
+    expect(screen.getByText("Long break")).toBeTruthy();
+    expect(screen.getByText("2 of 2")).toBeTruthy();
+    expect(screen.getByText("15:00")).toBeTruthy();
+  });
+
+  it("goes back to Start on Stop", () => {
+    tap("Start");
     tap("Stop");
-    expect(screen.getByText("Go")).toBeTruthy();
-    expect(rang_at.value).toBeNull();
-  });
-
-  it("keeps entries between 1 and 999 minutes and the queue to six", () => {
-    press("del", "del", "del", "del", "0");
-    expect(queue_text.value).toBe("");
-    press("then");
-    expect(queue_text.value).toBe("");
-    press("9", "9", "9", "9");
-    expect(queue_text.value).toBe("999");
-    press("then", "0");
-    expect(queue_text.value).toBe("999,");
-    press("1", "then", "2", "then", "3", "then", "4", "then", "5", "then");
-    expect(queue_text.value).toBe("999,1,2,3,4,5");
-    press("6");
-    expect(queue_text.value).toBe("999,1,2,3,4,56");
-    press("del", "del");
-    expect(queue_text.value).toBe("999,1,2,3,4,");
-    press("del");
-    expect(queue_text.value).toBe("999,1,2,3,4");
-  });
-
-  it("will not start on an empty queue or one waiting for its next entry", () => {
-    press("then", "go");
+    expect(screen.getByText("Start")).toBeTruthy();
     expect(ends_at.value).toBeNull();
-    press("del", "del", "del", "del", "del", "go");
-    expect(queue_text.value).toBe("");
-    expect(ends_at.value).toBeNull();
-  });
-
-  it("stops by itself after 99 rounds", () => {
-    press("del", "del", "del", "del", "1");
-    for (let step = 0; step < 9; step++) act(() => swipe("down"));
-    expect(screen.getByText("V1")).toBeTruthy();
-    start();
-    cleanup();
-    advance_clock(98 * (MINUTE + SECOND) + MINUTE);
-    expect(rounds_done.value).toBe(98);
-    expect(rang_at.value).not.toBeNull();
-    advance_clock(SECOND);
-    expect(ends_at.value).toBeNull();
-    expect(rang_at.value).toBeNull();
-    expect(rounds_done.value).toBe(0);
+    expect(interval.value).toBe(WORK);
   });
 });

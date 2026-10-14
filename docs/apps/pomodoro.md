@@ -1,39 +1,50 @@
 # Pomodoro
 
-A pomodoro timer, ported from wasp-os's pomodoro app. You type a queue of lengths in minutes, such
-as 25 then 5, and it runs them in turn, buzzing between each, until stopped or after 99 rounds.
+A pomodoro timer, after wasp-os's pomodoro app. Work and short breaks take turns, with a long break
+in place of every few short ones, until you stop it.
 
 ## Using it
 
-- The top line shows **V** and the buzz length in seconds on the left, and the queue on the right.
-- Type a length with the **digit** keys, up to 999 minutes. Tap **Then** to start the next length;
-  a queue holds up to six.
-- Tap **Del** to remove the last digit, or the last comma after Then.
-- Tap **Go** to start the queue. Go is lit when the queue can start.
-- Swipe **left** or **right** to load a preset queue: 25,5, then 50,10, then 25,5,25,5,25,15.
-- Swipe **up** or **down** to make each buzz a second longer or shorter, from 1 to 15 seconds.
-- While it runs, the top line shows which length runs and how many rounds are done. Tap **+1** to
-  add a minute to the current length, or **Stop** to end the queue.
-- When a length ends the watch wakes and buzzes, then the next length starts on its own.
+- The app opens on the **countdown**, the last of four pages. Swipe right to reach the pages that
+  set the lengths, and left to come back.
+- **Work**, **Short break** and **Long break** each have a page with **-** and **+** buttons that
+  set the length in minutes, from 1 to 99. The long break page also sets how many work sessions
+  come before each long break, from 2 to 8.
+- Tap **Start** on the countdown. It runs a work session, then a short break, and so on; after the
+  set number of work sessions the break is a long one, and the round starts again.
+- The top of the countdown names the interval running and which work session of the round it is,
+  or follows, such as **1 of 4**.
+- When an interval ends the watch wakes and buzzes for ten seconds, names the interval that comes
+  next, and then starts it.
+- Tap **+1** to add a minute to the running interval, or **Stop** to end the round.
+- A new length takes effect from the next interval that uses it.
 
 ## Screens
 
-![The pomodoro keypad with the default queue](../../neotime/harness/snapshots/screens/app-pomodoro.png)
+![The pomodoro countdown before starting](../../neotime/harness/snapshots/screens/app-pomodoro.png)
 
-The keypad with the default queue, 25 then 5, and a ten second buzz.
+The countdown page on opening, with the work length and the three lengths below it.
 
-![The pomodoro keypad with a typed queue](../../neotime/harness/snapshots/screens/app-pomodoro-typed.png)
+![Setting the work length](../../neotime/harness/snapshots/screens/app-pomodoro-work.png)
 
-A typed queue of 45 then 15, with the buzz swiped up to eleven seconds.
+The work length page, the first page.
 
-![The pomodoro keypad with the longest preset](../../neotime/harness/snapshots/screens/app-pomodoro-preset.png)
+![Setting the short break length](../../neotime/harness/snapshots/screens/app-pomodoro-short-break.png)
 
-The six-length preset, after a swipe left.
+The short break length page.
 
-![The pomodoro running](../../neotime/harness/snapshots/screens/app-pomodoro-running.png)
+![Setting the long break](../../neotime/harness/snapshots/screens/app-pomodoro-long-break.png)
 
-Running the first length in seven-segment digits, with Stop and +1.
+The long break page: its length, and how many work sessions come before it.
 
-![The pomodoro buzzing](../../neotime/harness/snapshots/screens/app-pomodoro-ringing.png)
+![A work session counting down](../../neotime/harness/snapshots/screens/app-pomodoro-running.png)
 
-Buzzing between two lengths.
+The first work session of four, counting down.
+
+![The buzz between intervals](../../neotime/harness/snapshots/screens/app-pomodoro-ringing.png)
+
+A work session has ended: the watch buzzes and names the short break that comes next.
+
+![A short break counting down](../../neotime/harness/snapshots/screens/app-pomodoro-short-break-running.png)
+
+The short break after the first work session.
