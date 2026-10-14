@@ -46,7 +46,7 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 105.6 KB | 42.6 KB |
+| Firmware (start-up, shell, tasks) | 106.1 KB | 43.1 KB |
 | App host (with `neotime-ui`) | 84.2 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 42.7 KB | 45.4 KB |
 | App runtime | 35.1 KB | 0.0 KB |
@@ -58,10 +58,10 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Packages | 6.0 KB | 1.3 KB |
 | Display, graphics and drivers | 5.2 KB | 3.2 KB |
 | Updates (DFU) | 2.1 KB | 2.2 KB |
-| Other constants and padding | 28.6 KB | 13.9 KB |
-| **Code and data** | **394.4 KB** | **147.5 KB** |
+| Other constants and padding | 28.7 KB | 14.0 KB |
+| **Code and data** | **395.0 KB** | **148.3 KB** |
 | Shared library, after the code | 43.0 KB | none |
-| Free of the 480 KB region, after its header | 42.4 KB | 332.2 KB |
+| Free of the 480 KB region, after its header | 41.7 KB | 331.5 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -216,13 +216,13 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (system 10 KB, UI 20.25 KB; the recovery build has no UI heap) | 30,976 B | 10,240 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 20,741 B | 12,001 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 20,891 B | 12,151 B |
 | Bluetooth controller | 2,545 B | 2,545 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | App host (with `neotime-ui`) | 8 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **54,692 B** | **25,176 B** |
-| Left for the stack | 10,828 B | 40,344 B |
+| **Static RAM** (`.data` and `.bss`) | **54,844 B** | **25,328 B** |
+| Left for the stack | 10,676 B | 40,192 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
