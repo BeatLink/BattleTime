@@ -790,6 +790,7 @@ watch face, the launcher and the apps through `neotime-app-host`:
   storage, and the UI heap gave up 768 B for it, so static RAM ends 376 B lower than before. `tools/check_heart_rate.py` runs it in the
   emulator: with the Heart app open, the emulated pulse of 84 reads 83, and after a change to 120
   the next reading is 120; with the interval on always and no app open, a pulse of 66 reads 66.
+  A third watch checks the Heart Rate service over the Bluetooth bridge.
 - **Phone connection.** `phone.rs` holds whether a phone is connected, which the Bluetooth task
   sets when a connection is accepted and clears when it ends. Each change wakes the shell, which
   redraws what reads `is_phone_connected` and sends the app's `phone` subscriptions `connects` or
@@ -893,6 +894,13 @@ watch face, the launcher and the apps through `neotime-app-host`:
   flash when it closes or the screen turns off, only when one changed, and put back when it opens.
 - **Battery service.** The standard Battery service (0x180F) answers a read of 0x2A19 with the
   charge `battery.rs` last measured, and notifies a subscribed phone whenever that changes.
+- **Heart Rate service.** The standard Heart Rate service (0x180D) answers a read of 0x2A37 with
+  `neotime_companion::heart_rate_measurement` of the latest reading, a zero flags byte and the
+  beats per minute in one byte, as InfiniTime does. `heart_rate.rs` raises `READING_TAKEN` at each
+  reading, and the Bluetooth task notifies it beside the battery's change. A subscription never
+  starts the sensor, as on InfiniTime, since Gadgetbridge subscribes on every connection and the LED
+  would then be lit for as long as the phone is near. The service comes last in the table, so the
+  handles of the others stay where they were. It costs about 1.1 KB of flash and 48 B of RAM.
 - **Packages characteristic.** Lines written to 6e540003 in the NeoTime service go, once their write
   is answered, to the storage task, which runs them through `storage::Files::run_packages_command`;
   the Bluetooth task notifies each reply in 20-byte pieces,

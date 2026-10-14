@@ -36,6 +36,8 @@ EXCHANGE_MTU_REQUEST = 0x02
 EXCHANGE_MTU_RESPONSE = 0x03
 READ_BY_TYPE_REQUEST = 0x08
 READ_BY_TYPE_RESPONSE = 0x09
+READ_REQUEST = 0x0A
+READ_RESPONSE = 0x0B
 WRITE_REQUEST = 0x12
 WRITE_RESPONSE = 0x13
 NOTIFICATION = 0x1B
@@ -147,6 +149,8 @@ class Watch:
         self.port = port
         self.handle = handle
         self.notified = b""
+        # Every notification so far, as (value handle, value), for checks of characteristics other than the packages one.
+        self.notifications = []
         self.exchanged_mtu = False
 
     @staticmethod
@@ -179,6 +183,7 @@ class Watch:
                 pdu = payload[4:]
                 if pdu[0] == NOTIFICATION:
                     self.notified += pdu[3:]
+                    self.notifications.append((int.from_bytes(pdu[1:3], "little"), pdu[3:]))
                 elif pdu[0] in opcodes:
                     return pdu
         return None
@@ -220,10 +225,18 @@ class Watch:
                 start = int.from_bytes(entry[0:2], "little") + 1
         raise RuntimeError(f"the watch has no characteristic {uuid[::-1].hex()}")
 
+    def read(self, value_handle):
+        """The characteristic's value, as one Read Request gives it."""
+        return self.request(bytes([READ_REQUEST]) + value_handle.to_bytes(2, "little"), READ_RESPONSE)[1:]
+
+    def subscribe(self, value_handle, is_on=True):
+        """Turns the characteristic's notifications on or off through the descriptor that follows its value."""
+        configuration = b"\x01\x00" if is_on else b"\x00\x00"
+        self.request(bytes([WRITE_REQUEST]) + (value_handle + 1).to_bytes(2, "little") + configuration, WRITE_RESPONSE)
+
     def open_packages(self):
         value_handle = self.characteristic_handle(PACKAGES_UUID)
-        # Its client configuration descriptor follows the value.
-        self.request(bytes([WRITE_REQUEST]) + (value_handle + 1).to_bytes(2, "little") + b"\x01\x00", WRITE_RESPONSE)
+        self.subscribe(value_handle)
         return value_handle
 
     def write_line(self, value_handle, line, seconds=60):

@@ -582,6 +582,7 @@ struct Server {
     file_transfer: FileTransferService,
     device_information: DeviceInformationService,
     alert_notification: AlertNotificationService,
+    heart_rate: HeartRateService,
 }
 
 /// The standard Alert Notification service: any Bluetooth tool writes a New Alert to show a notification.
@@ -634,6 +635,14 @@ struct DeviceInformationService {
 struct BatteryService {
     #[characteristic(uuid = "2a19", read, notify)]
     level: u8,
+}
+
+/// The standard Heart Rate service: the latest reading, read or notified as each one is taken.
+#[gatt_service(uuid = "180d")]
+struct HeartRateService {
+    /// A flags byte and the beats per minute, as `neotime_companion::heart_rate_measurement` builds it.
+    #[characteristic(uuid = "2a37", read, notify)]
+    measurement: [u8; 2],
 }
 
 /// The Nordic UART service, which carries the companion app's JSON lines; see docs/companion-protocol.md.
@@ -958,9 +967,12 @@ async fn serve_connection(
         // Pinned where they are made, so the connection's large future is never copied across the stack.
         let next_event = core::pin::pin!(connection.next());
         let next_reply = core::pin::pin!(select(settings::REPLIES.receive(), packages::REPLIES.receive()));
-        let battery_change = core::pin::pin!(battery::PERCENT_CHANGED.wait());
+        let reading_change = core::pin::pin!(select(
+            battery::PERCENT_CHANGED.wait(),
+            heart_rate::READING_TAKEN.wait()
+        ));
         let bluetooth_switched = core::pin::pin!(settings::BLUETOOTH_SWITCHED.wait());
-        let event = match select4(next_event, next_reply, battery_change, bluetooth_switched).await {
+        let event = match select4(next_event, next_reply, reading_change, bluetooth_switched).await {
             Either4::First(event) => event,
             Either4::Second(Either::First(reply)) => {
                 for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
@@ -972,11 +984,19 @@ async fn serve_connection(
                 send_packages_reply(connection, server, &reply).await;
                 continue;
             }
-            Either4::Third(()) => {
+            Either4::Third(Either::First(())) => {
                 let _ = server
                     .battery
                     .level
                     .notify(connection, &battery::percent(), true)
+                    .await;
+                continue;
+            }
+            Either4::Third(Either::Second(())) => {
+                let _ = server
+                    .heart_rate
+                    .measurement
+                    .notify(connection, &heart_rate::measurement(), true)
                     .await;
                 continue;
             }
@@ -1061,6 +1081,9 @@ async fn serve_connection(
                         }
                         if read.handle() == server.battery.level.handle {
                             let _ = server.set(&server.battery.level, &battery::percent());
+                        }
+                        if read.handle() == server.heart_rate.measurement.handle {
+                            let _ = server.set(&server.heart_rate.measurement, &heart_rate::measurement());
                         }
                         if read.handle() == server.time.current_time.handle {
                             let _ = server.set(&server.time.current_time, &clock::current_time());

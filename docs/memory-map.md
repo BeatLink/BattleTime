@@ -50,7 +50,7 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | App host (with `neotime-ui`) | 84.3 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 42.7 KB | 45.4 KB |
 | App runtime | 35.3 KB | 0.0 KB |
-| core, alloc and compiler builtins | 25.3 KB | 14.7 KB |
+| core, alloc and compiler builtins | 25.4 KB | 14.8 KB |
 | Embassy, allocator and Cortex-M | 20.0 KB | 5.4 KB |
 | Storage (flash store) | 17.0 KB | 13.9 KB |
 | Settings, companion and notifications (with serde) | 13.9 KB | 2.3 KB |
@@ -139,10 +139,13 @@ the rollback after it was meant. The firmware measures 53.4 KB of static RAM:
 the Bluetooth host with its eight 128-byte packets, controller, the display's two 1,920 B strip buffers and task state. The
 Bluetooth task's state is 3.2 KB, TrouBLE's runner (1.6 KB) much of it; replies to the companion
 app and half-received lines wait on the heap, and the update state, status page and confirmation
-are held once in a static. The GATT server (`SERVER`) is 496 B, mostly TrouBLE's CCCD table for
-each client. Its attribute table, 47 attributes of 32 B, is a constant in flash (1,504 B), built
-when the firmware is compiled by the patched macros in `third_party/`; only the 366 B of values
+are held once in a static. The GATT server (`SERVER`) is 656 B, mostly TrouBLE's CCCD table for
+each client. Its attribute table, 61 attributes of 32 B, is a constant in flash (1,952 B), built
+when the firmware is compiled by the patched macros in `third_party/`; only the 388 B of values
 that are written or set at run time are in RAM, in one static byte array (`__SERVER_STORED_VALUES`).
+The Heart Rate service, the last one added, took 1,076 B of flash in the full build (about 0.8 KB in
+the recovery build, which serves it too), 128 B of it its four attributes
+and most of the rest notifying it, and 48 B of static RAM: 28 B in the CCCD table, 4 B of value and the reading's signal.
 Built at start-up, as upstream TrouBLE does, the table took 2,536 B with its values' stores
 (2,771 B in all) and 4.4 KB of code to build it. That leaves 10.6 KB (10,828 B) for the
 stack, of which the lowest bytes, up to 360 B, are the stack guard: 256 B from the first 256-byte
@@ -216,13 +219,13 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (system 10 KB, UI 20.25 KB; the recovery build has no UI heap) | 30,976 B | 10,240 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 20,923 B | 12,151 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 20,967 B | 12,203 B |
 | Bluetooth controller | 2,545 B | 2,545 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | App host (with `neotime-ui`) | 8 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **54,876 B** | **25,328 B** |
-| Left for the stack | 10,644 B | 40,192 B |
+| **Static RAM** (`.data` and `.bss`) | **54,924 B** | **25,380 B** |
+| Left for the stack | 10,596 B | 40,140 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:

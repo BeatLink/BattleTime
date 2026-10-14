@@ -1,10 +1,16 @@
 """Checks the heart rate sensor end to end in the PineTime emulator: the firmware reads the pulse the emulated HRS3300 gives.
 
-It runs two watches. On the first, with a face, the launcher and the heart app installed, it
+It runs three watches. On the first, with a face, the launcher and the heart app installed, it
 opens the heart app from the launcher, sets the emulated pulse, and reads the firmware's
 diagnostics counters for the sensor's state and its latest reading; it then changes the pulse and
 checks the reading follows. The second has the heart rate interval setting on always and no app
 open, so the reading must come from background measuring alone.
+
+A third watch runs with the emulator's Bluetooth bridge and checks the Heart Rate service (0x180D)
+through `tools/packages_over_hci.py`, without BlueZ: a phone subscribed to the measurement while
+nothing measures hears nothing and starts nothing, as on InfiniTime; once the companion app turns
+the interval setting to always, each reading is notified as the flags byte and the pulse, a read
+gives the latest one, and turning notifications off stops them.
 
     python3 -I tools/check_heart_rate.py FIRMWARE_ELF [SCREENSHOT]
 
@@ -18,7 +24,14 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
+
+# The other tools sit beside this script; importing them should leave no bytecode in the repository.
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import check_call  # noqa: E402
+import packages_over_hci  # noqa: E402
 
 REPOSITORY = Path(__file__).resolve().parent.parent
 # The watch's crates, apps and build output.
@@ -45,6 +58,20 @@ NEXT_READING_SECONDS = 10
 LARGEST_ERROR = 2
 # `/settings/system` with one record: the format byte, then setting 12 (the heart rate interval) at 1, always.
 ALWAYS_MEASURING_SETTINGS = bytes([1, 12]) + struct.pack("<i", 1)
+
+HEART_RATE_MEASUREMENT_UUID = packages_over_hci.uuid_bytes("2a37")
+BLUETOOTH_PULSE = 78
+BLUETOOTH_SECOND_PULSE = 110
+# The companion app's line that turns the heart rate interval setting to always.
+MEASURE_ALWAYS_LINE = '{"t":"settings","heart_rate_interval":1}'
+# Long enough for a reading, had subscribing started the sensor.
+SUBSCRIBED_IDLE_SECONDS = FIRST_READING_SECONDS + 3
+# How long a wanted notification may take, in emulated seconds.
+NOTIFICATION_SECONDS = 25
+# How long the watch must stay quiet once notifications are turned off.
+UNSUBSCRIBED_SECONDS = 10
+# The flags byte InfiniTime sends: the rate is one byte, with no other fields.
+MEASUREMENT_FLAGS = 0
 
 
 def run(command, folder=NEOTIME):
@@ -141,6 +168,100 @@ def check(name, pulse, reading):
     return passed
 
 
+# ============================================================================
+# The Heart Rate service over the Bluetooth bridge
+# ============================================================================
+
+def wait_emulated(engine, watch, seconds):
+    """Lets this many emulated seconds pass, taking in the watch's notifications meanwhile."""
+    end = engine.emulated_seconds() + seconds
+    while engine.emulated_seconds() < end:
+        watch.wait(set(), 0.2)
+
+
+def measurements(watch, value_handle):
+    return [value for handle, value in watch.notifications if handle == value_handle]
+
+
+def wait_for_measurement(engine, watch, value_handle, pulse):
+    """The first measurement notified near this pulse, or None once the time runs out."""
+    end = engine.emulated_seconds() + NOTIFICATION_SECONDS
+    while engine.emulated_seconds() < end:
+        for value in measurements(watch, value_handle):
+            if len(value) == 2 and abs(value[1] - pulse) <= LARGEST_ERROR:
+                return value
+        watch.wait(set(), packages_over_hci.NUDGE_AFTER_SECONDS)
+        # The bridge's controller sometimes holds a packet until more HCI traffic comes.
+        watch.port.write(packages_over_hci.command(packages_over_hci.READ_BD_ADDRESS))
+    return None
+
+
+def check_measurement(name, pulse, value):
+    passed = value is not None and value[0] == MEASUREMENT_FLAGS and abs(value[1] - pulse) <= LARGEST_ERROR
+    print(f"{'ok  ' if passed else 'FAIL'}  {name}, pulse {pulse}: {value.hex(' ') if value else 'nothing'}")
+    return passed
+
+
+def check_service(emulator, firmware, library, flash, counters, counters_size, folder):
+    """Runs a watch with the Bluetooth bridge and checks the Heart Rate service as a phone sees it."""
+    lines = [f"include @{emulator}/scripts/pinetime.resc"]
+    lines += [f"sysbus WriteDoubleWord {address:#x} {value:#x}" for address, value in FIRST_START_UICR]
+    lines += [
+        f"sysbus LoadELF @{firmware}",
+        *library_lines(library, folder),
+        f"externalFlashMemory LoadBinary @{flash} 0",
+        f"cpu VectorTableOffset {FIRMWARE_VECTOR_TABLE:#x}",
+        f"cpu SP `sysbus ReadDoubleWord {FIRMWARE_VECTOR_TABLE:#x}`",
+        f"cpu PC `sysbus ReadDoubleWord {FIRMWARE_VECTOR_TABLE + 4:#x}`",
+        f"sysbus.twi1.heartRateSensor SetHeartRate {BLUETOOTH_PULSE}",
+        "start",
+    ]
+    script = folder / "service.resc"
+    script.write_text("\n".join(lines) + "\n")
+    link = folder / "hci"
+    results = []
+
+    engine = check_call.Engine(emulator, script, link)
+    try:
+        if not link.exists():
+            sys.exit("the engine never opened its Bluetooth bridge")
+        port = packages_over_hci.HciPort(str(link))
+        port.start_controller()
+        watch = packages_over_hci.Watch.connect(port)
+        measurement = watch.characteristic_handle(HEART_RATE_MEASUREMENT_UUID)
+        receive = watch.characteristic_handle(packages_over_hci.NORDIC_UART_RECEIVE_UUID)
+
+        watch.subscribe(measurement)
+        wait_emulated(engine, watch, SUBSCRIBED_IDLE_SECONDS)
+        state = struct.unpack_from(f"<{counters_size // 4}I", engine.read_bytes(counters, counters_size))[-2]
+        quiet = not measurements(watch, measurement) and state != STARTED
+        results.append(check_call.check("subscribing alone measures nothing", quiet,
+                                        f"sensor state {state}, {len(measurements(watch, measurement))} notifications"))
+
+        watch.write_line(receive, MEASURE_ALWAYS_LINE)
+        value = wait_for_measurement(engine, watch, measurement, BLUETOOTH_PULSE)
+        results.append(check_measurement("notified once measuring", BLUETOOTH_PULSE, value))
+
+        engine.command(f"sysbus.twi1.heartRateSensor SetHeartRate {BLUETOOTH_SECOND_PULSE}")
+        value = wait_for_measurement(engine, watch, measurement, BLUETOOTH_SECOND_PULSE)
+        results.append(check_measurement("notified as the pulse changes", BLUETOOTH_SECOND_PULSE, value))
+
+        results.append(check_measurement("read gives the latest", BLUETOOTH_SECOND_PULSE, watch.read(measurement)))
+
+        watch.subscribe(measurement, is_on=False)
+        watch.notifications.clear()
+        wait_emulated(engine, watch, UNSUBSCRIBED_SECONDS)
+        count = len(measurements(watch, measurement))
+        results.append(check_call.check("unsubscribed hears nothing", count == 0, f"{count} notifications"))
+    finally:
+        engine.stop()
+    return results
+
+
+# ============================================================================
+# All three watches
+# ============================================================================
+
 def main():
     firmware = Path(sys.argv[1]).resolve()
     screenshot = Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else None
@@ -181,12 +302,17 @@ def main():
             run_watch(emulator, firmware, library, flash, background_steps, folder), counters_size, 1
         )
 
+        flash = write_flash(folder / "service.bin", pairs)
+        service_results = check_service(emulator, firmware, library, flash, counters, counters_size, folder)
+
     results = [
         check("heart app", FIRST_PULSE, app_readings[0]),
         check("heart app", SECOND_PULSE, app_readings[1]),
         check("background, no app open", BACKGROUND_PULSE, background_reading[0]),
+        *service_results,
     ]
     sys.exit(0 if all(results) else 1)
 
 
-main()
+if __name__ == "__main__":
+    main()

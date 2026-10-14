@@ -196,6 +196,22 @@ The controller's own address is the chip's factory address with its top two bits
 it a valid static random address. TrouBLE usually sets its own with `set_random_address`. The
 controller reports no public address.
 
+## The services on top
+
+The firmware's GATT server is declared in `firmware/src/main.rs`, and its attribute table is a
+constant in flash. It serves Legacy DFU, Current Time, the NeoTime service, the Nordic UART,
+Battery, file transfer, Device Information, Alert Notification and Heart Rate, in that order, so a
+new service goes at the end and the others keep their handles. What each one carries is in
+[companion-protocol.md](companion-protocol.md#standard-services).
+
+The Heart Rate service (0x180D) is InfiniTime's: one characteristic, Heart Rate Measurement
+(0x2A37), read and notify, holding a flags byte of 0 and the latest beats per minute as one byte.
+The Bluetooth task waits on `heart_rate::READING_TAKEN` beside the battery's `PERCENT_CHANGED` and
+notifies each new reading while the phone is subscribed. A subscription does not turn the sensor
+on, as on InfiniTime: phones such as Gadgetbridge subscribe whenever they connect, so the LED would
+otherwise stay lit all day. The pulse reaches the phone when the Heart app measures or the heart
+rate interval setting measures in the background.
+
 ## Tests
 
 `cargo test -p neotime-bluetooth` runs 137 tests on the computer:

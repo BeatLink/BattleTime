@@ -147,6 +147,10 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   time and time zone back.
 - **The battery level on the phone,** through the standard Bluetooth Battery service, updated as it
   changes.
+- **The heart rate on the phone,** through the standard Bluetooth Heart Rate service, which
+  Gadgetbridge and other fitness apps read. Each new reading is sent to a subscribed phone. As on
+  InfiniTime, the phone does not start the sensor: readings come while the Heart app measures or
+  the background interval setting is on. Tried in the emulator, not yet on the watch.
 - **Whether a phone is connected.** Faces show the Bluetooth icon while a phone is connected, and
   phone apps such as the phone finder say when none is. Apps hear the phone connect and go away.
 - **Themes.** Six presets (dark, light, ocean, forest, sunset and contrast), picked in the Settings

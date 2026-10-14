@@ -271,3 +271,8 @@ emulated seconds, so allow many minutes.
 `../tools/check_call.py FIRMWARE_ELF [SCREENSHOT]` writes a phone's incoming call line to the Nordic
 UART through the bridge and checks that the call app opens, the motor keeps ringing, and the end
 line stops it and goes back to the face; it takes under two minutes.
+
+`../tools/check_heart_rate.py FIRMWARE_ELF` ends with a watch on the bridge that subscribes to the
+Heart Rate Measurement (0x2A37): nothing is notified and the sensor stays off until a settings line
+turns the background interval to always, then each reading arrives as `00` and the pulse, a read
+gives the latest, and turning notifications off stops them.

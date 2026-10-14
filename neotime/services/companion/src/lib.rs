@@ -22,6 +22,9 @@ mod alert_tests;
 mod device_information;
 #[cfg(test)]
 mod device_information_tests;
+mod heart_rate_measurement;
+#[cfg(test)]
+mod heart_rate_measurement_tests;
 mod phone;
 mod slots;
 #[cfg(test)]
@@ -33,6 +36,7 @@ pub use alert::{parse_new_alert, MOST_NEW_ALERT_BYTES};
 pub use device_information::{
     serial_number, HARDWARE_REVISION, MANUFACTURER_NAME, MODEL_NUMBER, SOFTWARE_REVISION,
 };
+pub use heart_rate_measurement::heart_rate_measurement;
 pub use slots::{slots_refusal, slots_report, SlotRange, SlotsReport, SlotsRequest};
 
 pub use phone::{

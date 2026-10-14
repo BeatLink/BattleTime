@@ -6,7 +6,8 @@
 //! the app closes. With no app asking, the heart rate interval setting measures always, never or
 //! now and then, as `neotime_heart_rate::schedule` decides. Each reading wakes the shell as a system
 //! value change, which passes it to the open app, and the latest one, its time and the sensor's
-//! status stay for apps and faces to read. The sample window lives on the heap only while
+//! status stay for apps and faces to read, and each reading is notified to a phone subscribed to the
+//! Heart Rate service. The sample window lives on the heap only while
 //! measuring, so the sensor costs little RAM the rest of the time.
 
 extern crate alloc;
@@ -122,6 +123,14 @@ static STATUS: AtomicU8 = AtomicU8::new(Status::Stopped as u8);
 static MEASURED_AT: Mutex<CriticalSectionRawMutex, Cell<Value>> =
     Mutex::new(Cell::new(neotime_runtime::NONE));
 
+/// Raised at each new reading, so the Heart Rate service can notify a subscribed phone.
+pub static READING_TAKEN: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
+/// The Heart Rate Measurement a phone reads or is notified of, with the latest reading.
+pub fn measurement() -> [u8; 2] {
+    neotime_companion::heart_rate_measurement(BEATS_PER_MINUTE.load(Ordering::Relaxed))
+}
+
 /// The heart rate values apps read, or `None` for any other value.
 pub fn read(value: SystemValue) -> Option<Value> {
     let status = STATUS.load(Ordering::Relaxed);
@@ -157,6 +166,7 @@ fn keep_reading(reading: Reading) {
     CONFIDENCE_PERCENT.store(reading.confidence_percent, Ordering::Relaxed);
     MEASURED_AT.lock(|measured_at| measured_at.set(clock::utc_now()));
     system_values::changed(&[SystemValue::HeartRate]);
+    READING_TAKEN.signal(());
 }
 
 // ============================================================================
