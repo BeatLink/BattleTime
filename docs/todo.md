@@ -136,6 +136,13 @@ document for its part instead.
   - opening Settings from a scrolled launcher, where the outgoing launcher is shown out of place
     while it slides away, looks acceptable, or whether that unturning should move elsewhere;
   - the stack keeps 2 KB spare with the alarm open while its list scrolls.
+- [ ] **Battery line and charge floor on the PineTime.** The bootloader's battery line and the
+  updater's 3.7 V floor before a bootloader write (75f9bcde) have run only in the emulator. Send
+  `dist/bootloader-updater.zip` with `neotime flash`, then on the watch check that:
+  - off the charger the updater says "Plug in the charger" and its line reads "unplugged";
+  - on the charger the line reads "charging" with a charge close to the system app's, and the
+    updater writes the bootloader once the battery reads at least 3.7 V;
+  - the new bootloader's blue "Keep holding for the menu" page shows the same line.
 
 - [ ] **Alert Notification from BlueZ.** The New Alert write (`0x1811`/`0x2A46`) is tested only on
   the computer; nothing has written one over Bluetooth yet. First through the emulator's Bluetooth
