@@ -1,0 +1,12 @@
+{
+  "id": "timer",
+  "name": "Timer",
+  "version": "1.0.0",
+  "description": "A countdown timer of up to 99 minutes, merged from wasp-os's timer and InfiniTime's Timer. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "timer",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

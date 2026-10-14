@@ -1,0 +1,12 @@
+{
+  "id": "launcher",
+  "name": "Apps",
+  "version": "1.0.0",
+  "description": "The launcher: every installed app with its icon and name, grouped the way the companion app set up. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "launcher",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

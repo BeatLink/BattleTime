@@ -1,0 +1,12 @@
+{
+  "id": "qr-code",
+  "name": "QR code",
+  "version": "1.0.0",
+  "description": "Keeps up to eight QR codes that the NeoTime companion app made, such as links, contacts or Wi-Fi networks, so another phone can scan them from the watch. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "qr-code",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

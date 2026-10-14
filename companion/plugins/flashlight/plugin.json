@@ -1,0 +1,12 @@
+{
+  "id": "flashlight",
+  "name": "Flashlight",
+  "version": "1.0.0",
+  "description": "A flashlight, merged from InfiniTime's FlashLight and wasp-os's flashlight. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "flashlight",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

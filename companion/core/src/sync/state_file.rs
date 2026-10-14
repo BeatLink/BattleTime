@@ -174,6 +174,22 @@ fn entry_json(entry: &StateEntry) -> Value {
     }
 }
 
+// What each value that is not a plain number or switch holds, by its key: `time`, `duration`, `color` or `text`.
+pub fn kinds_json(entries: &[StateEntry]) -> Value {
+    let mut out = Map::new();
+    for entry in entries {
+        let kind = match entry.kind {
+            ValueKind::Int | ValueKind::Bool => continue,
+            ValueKind::Instant => "time",
+            ValueKind::Duration => "duration",
+            ValueKind::Color => "color",
+            ValueKind::Text => "text",
+        };
+        out.insert(entry.key.clone(), json!(kind));
+    }
+    Value::Object(out)
+}
+
 // Takes new values from JSON shaped as `to_json` gives it; keys it leaves out keep their values.
 //
 // The types, lengths and widths stay as the app saved them, so the watch still loads the result.
@@ -284,6 +300,22 @@ pub(crate) mod tests {
                 "alarms": { "hour": [7, 9], "enabled": [true, false] },
                 "next_ring_at": 1_760_000_000_000_i64,
             })
+        );
+    }
+
+    #[test]
+    fn times_and_durations_are_named_by_key() {
+        let mut state = alarm_state();
+        state.push(StateEntry {
+            key: "laps".into(),
+            kind: ValueKind::Duration,
+            length: 2,
+            width: 4,
+            values: vec![1000, 2000],
+        });
+        assert_eq!(
+            kinds_json(&state),
+            json!({ "next_ring_at": "time", "laps": "duration" })
         );
     }
 

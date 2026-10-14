@@ -1,0 +1,12 @@
+{
+  "id": "paddle",
+  "name": "Paddle",
+  "version": "1.0.0",
+  "description": "A one-player ball game, ported from InfiniTime's Paddle. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "paddle",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

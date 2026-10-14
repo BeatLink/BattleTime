@@ -1,0 +1,17 @@
+{
+  "id": "steps",
+  "name": "Steps",
+  "version": "1.0.0",
+  "description": "A step counter, merged from InfiniTime's Steps and wasp-os's step_counter and steplogger. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "steps",
+  "views": [
+    "steps"
+  ],
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": [
+      "steps"
+    ]
+  }
+}

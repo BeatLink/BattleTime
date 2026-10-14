@@ -1,0 +1,12 @@
+{
+  "id": "morse",
+  "name": "Morse",
+  "version": "1.0.0",
+  "description": "A Morse code notepad, from wasp-os's morse. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "morse",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

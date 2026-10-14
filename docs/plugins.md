@@ -77,6 +77,33 @@ CI builds every plugin in `companion/plugins/` into the store's files, and each 
 A plugin published elsewhere reaches the store as a `.ntplugin` file on a GitHub release, or as a
 file added by hand; [app-store.md](app-store.md) describes both.
 
+## Plugins for the watch's own apps
+
+Every user-facing app in `neotime/apps` has a plugin in `companion/plugins/<id>`. Such a folder holds
+only a `plugin.json` that names the app with `"app"`. The build script then:
+
+- compiles `neotime/apps/<id>/app.tsx` as the plugin's watch app;
+- takes the shared logic and settings page from `companion/plugins/shared` unless the folder has its
+  own `phone/main.ts` or `phone/ui/`.
+
+The shared page shows the app's synced state and changes it on the watch. Times show as dates, and
+durations are edited in seconds. Two more keys in `plugin.json` shape the page; the build script
+takes both out of the manifest:
+
+- `views` adds sections: `settings` shows and changes the watch's settings, and `steps` lists the
+  last two weeks of steps. Each needs the matching `permissions.data`.
+- `fields` labels values by key, or `record.field`. `{ "kind": "hidden" }` leaves a value out,
+  `{ "kind": "minutes" }` shows minutes of the day as `hh:mm`, and a record's `countedBy` names the
+  value that counts its entries in use.
+
+```json
+{
+  "id": "alarm", "name": "Alarm", "version": "1.0.0", "app": "alarm",
+  "fields": { "alarms": { "label": "Alarm", "countedBy": "alarm_count" }, "next_ring_place": { "kind": "hidden" } },
+  "permissions": { "messages": [], "hosts": [], "data": [] }
+}
+```
+
 ## The logic
 
 `phone/main.js` runs in QuickJS inside the companion's Rust core, on a thread of its own, so it
@@ -110,7 +137,7 @@ in its settings ([sync.md](sync.md) has the details). A plugin reads that copy b
 
 | Source | Holds |
 |---|---|
-| `apps/<id>` | `{ hidden, state }`: whether the app is hidden, and its saved state, `null` if none |
+| `apps/<id>` | `{ hidden, state, kinds }`: whether the app is hidden, its saved state (`null` if none), and which keys hold a `time`, `duration`, `color` or `text` |
 | `settings` | every watch setting, by the keys of the `settings` message |
 | `steps/<year>/<MM>-<DD>` | `{ slots }`: that day's steps in six-minute slots |
 | `steps/trip` | `{ count }`: the trip counter |

@@ -64,10 +64,10 @@ async fn sync_apps(files: &FileClient, store: &SyncStore, report: &mut PassRepor
             }
         };
         let hidden = inside.iter().any(|entry| entry.name == "disabled");
-        let state = if inside.iter().any(|entry| entry.name == "state") {
+        let (state, kinds) = if inside.iter().any(|entry| entry.name == "state") {
             match files.read(&format!("{folder}/state")).await {
                 Ok(bytes) => match state_file::decode(&bytes) {
-                    Ok(entries) => state_file::to_json(&entries),
+                    Ok(entries) => (state_file::to_json(&entries), state_file::kinds_json(&entries)),
                     Err(error) => {
                         report.errors.push(format!("{folder}/state: {error}"));
                         continue;
@@ -79,12 +79,12 @@ async fn sync_apps(files: &FileClient, store: &SyncStore, report: &mut PassRepor
                 }
             }
         } else {
-            Value::Null
+            (Value::Null, json!({}))
         };
         report.put(
             store,
             &format!("apps/{}", app.name),
-            json!({ "hidden": hidden, "state": state }),
+            json!({ "hidden": hidden, "state": state, "kinds": kinds }),
         );
     }
 }
@@ -213,6 +213,7 @@ pub async fn write_app_state(
         .get(&format!("apps/{id}"))
         .unwrap_or(json!({ "hidden": false }));
     kept["state"] = state.clone();
+    kept["kinds"] = state_file::kinds_json(&changed);
     store.put(&format!("apps/{id}"), &kept)?;
     Ok(state)
 }
@@ -255,7 +256,11 @@ mod tests {
         );
         assert_eq!(
             store.get("apps/hello").unwrap(),
-            json!({ "hidden": true, "state": null })
+            json!({ "hidden": true, "state": null, "kinds": {} })
+        );
+        assert_eq!(
+            store.get("apps/alarm").unwrap()["kinds"],
+            json!({ "next_ring_at": "time" })
         );
         assert_eq!(
             store.get("files/settings/quick_apps").unwrap(),

@@ -1,0 +1,12 @@
+{
+  "id": "motion",
+  "name": "Motion",
+  "version": "1.0.0",
+  "description": "An accelerometer check, ported from InfiniTime's Motion. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "motion",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

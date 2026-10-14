@@ -1,0 +1,17 @@
+{
+  "id": "pomodoro",
+  "name": "Pomodoro",
+  "version": "1.0.0",
+  "description": "A pomodoro timer, after wasp-os's pomodoro app. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "pomodoro",
+  "fields": {
+    "interval": {
+      "kind": "hidden"
+    }
+  },
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "game-of-life",
+  "name": "Life",
+  "version": "1.0.0",
+  "description": "Conway's Game of Life, ported from wasp-os's game_of_life. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "game-of-life",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

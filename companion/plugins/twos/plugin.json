@@ -1,0 +1,12 @@
+{
+  "id": "twos",
+  "name": "2048",
+  "version": "1.0.0",
+  "description": "The sliding number game 2048, merged from InfiniTime's Twos and wasp-os's play2048. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "twos",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

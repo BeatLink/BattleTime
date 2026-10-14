@@ -1,0 +1,28 @@
+<!doctype html>
+<!-- The settings page every app's plugin shares. It runs in a sandboxed frame and talks to the plugin only by messages. -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root { color-scheme: light dark; --muted: #666; --line: #ddd; --wrong: #c33; }
+      @media (prefers-color-scheme: dark) { :root { --muted: #aaa; --line: #444; --wrong: #f77; } }
+      body { font-family: system-ui, sans-serif; margin: 16px; }
+      h2 { font-size: 1.05rem; margin: 20px 0 8px; }
+      .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+      .label { flex: 1 1 140px; }
+      .cell { display: inline-flex; flex-direction: column; gap: 2px; }
+      .cell small, .note { color: var(--muted); }
+      input:not([type]) { width: 8em; font-size: 1rem; }
+      input[readonly] { border: none; background: none; }
+      .wrong { outline: 2px solid var(--wrong); }
+      #problem { color: var(--wrong); }
+    </style>
+  </head>
+  <body>
+    <button id="sync">Sync now</button>
+    <p id="problem"></p>
+    <div id="content"><p class="note">Waiting for the plugin…</p></div>
+    <script src="page.js"></script>
+  </body>
+</html>

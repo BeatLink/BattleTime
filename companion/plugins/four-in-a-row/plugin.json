@@ -1,0 +1,12 @@
+{
+  "id": "four-in-a-row",
+  "name": "4 in a row",
+  "version": "1.0.0",
+  "description": "Four in a Row against the watch, ported from wasp-os's four_in_a_row. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "four-in-a-row",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

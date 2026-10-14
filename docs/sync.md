@@ -17,7 +17,7 @@ Each pass reads the following. Each item is kept as one JSON file, named by its 
 | Source | From the watch | Kept as |
 |---|---|---|
 | `settings` | the reply to a `settings` message ([companion-protocol.md](companion-protocol.md#settings-served)) | every setting by its key, the theme with its colours |
-| `apps/<id>` | `/apps/<id>/state` and `/apps/<id>/disabled` | `{ "hidden": bool, "state": {...} }`, the state decoded as below, `null` for an app that keeps none |
+| `apps/<id>` | `/apps/<id>/state` and `/apps/<id>/disabled` | `{ "hidden": bool, "state": {...}, "kinds": {...} }`: the state decoded as below, `null` for an app that keeps none, and which keys hold a `time`, `duration`, `color` or `text` |
 | `files/settings/<name>` | every file in `/settings` | `quick_apps` as `{ "apps": [ids] }`, the rest as `{ "bytes": [...] }` |
 | `steps/<year>/<MM>-<DD>` | that day's file | `{ "size": n, "slots": [...] }`, steps in each six-minute slot from midnight |
 | `steps/trip` | `/steps/trip` | `{ "size": 4, "count": n }` |

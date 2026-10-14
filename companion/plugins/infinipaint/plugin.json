@@ -1,0 +1,12 @@
+{
+  "id": "infinipaint",
+  "name": "Paint",
+  "version": "1.0.0",
+  "description": "Finger painting on a 20 by 20 grid, ported from InfiniTime's InfiniPaint. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "infinipaint",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

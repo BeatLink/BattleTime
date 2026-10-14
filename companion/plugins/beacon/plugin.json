@@ -1,0 +1,12 @@
+{
+  "id": "beacon",
+  "name": "Beacon",
+  "version": "1.0.0",
+  "description": "A beacon that flashes the green LED of the heart rate sensor, ported from wasp-os's beacon app. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "beacon",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

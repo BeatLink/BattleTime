@@ -1,0 +1,12 @@
+{
+  "id": "phone-finder",
+  "name": "Finder",
+  "version": "1.0.0",
+  "description": "Makes the connected phone ring so you can find it, ported from wasp-os's phone_finder. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "phone-finder",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

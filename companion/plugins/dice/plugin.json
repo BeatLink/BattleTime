@@ -1,0 +1,12 @@
+{
+  "id": "dice",
+  "name": "Dice",
+  "version": "1.0.0",
+  "description": "Dice that roll one to nine dice of two to ninety-nine sides, ported from InfiniTime's Dice. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "dice",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "haiku",
+  "name": "Haiku",
+  "version": "1.0.0",
+  "description": "A haiku viewer, from wasp-os's haiku. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "haiku",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

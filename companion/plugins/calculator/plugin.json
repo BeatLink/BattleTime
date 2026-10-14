@@ -1,0 +1,12 @@
+{
+  "id": "calculator",
+  "name": "Calculator",
+  "version": "1.0.0",
+  "description": "A calculator, merged from wasp-os's calculator and InfiniTime's Calculator. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "calculator",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}

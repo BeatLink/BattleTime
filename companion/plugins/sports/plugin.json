@@ -1,0 +1,17 @@
+{
+  "id": "sports",
+  "name": "Sports",
+  "version": "1.0.0",
+  "description": "A stopwatch that also counts the steps taken while it runs, ported from wasp-os's sports app. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "sports",
+  "views": [
+    "steps"
+  ],
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": [
+      "steps"
+    ]
+  }
+}

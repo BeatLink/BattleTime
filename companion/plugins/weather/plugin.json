@@ -1,0 +1,12 @@
+{
+  "id": "weather",
+  "name": "Weather",
+  "version": "1.0.0",
+  "description": "The current weather and the coming days' forecast from the phone, merged from InfiniTime's Weather and wasp-os's weather app. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "weather",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}
