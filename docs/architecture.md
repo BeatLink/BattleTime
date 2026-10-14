@@ -231,7 +231,8 @@ plus 6 B for each variable's place.
 `Color`; `renderer` holds the `Renderer` trait widgets draw through, the `FontMetrics` trait fonts
 implement, and `ClipRenderer`, which drops every pixel outside a rectangle; `raster` works out how
 much of each pixel a disc, a line or part of a ring covers, a row at a time and only inside the
-clip; and `shapes` builds rounded boxes and borders with soft corners from plain fills. The
+clip, visiting in each row only the columns between the shape's edges (and, for a ring, outside its
+hole) with a pixel to spare; and `shapes` builds rounded boxes and borders with soft corners from plain fills. The
 rasterizers and shapes follow [rlvgl](https://github.com/softoboros/rlvgl)'s (MIT licensed).
 
 - **Strips instead of a screen buffer.** A full 240x240 picture takes 115 KB, more than the watch's

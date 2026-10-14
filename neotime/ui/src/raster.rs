@@ -197,7 +197,10 @@ pub fn rasterize_disc(centre: PointF, radius: f32, clip: Rect, sink: &mut dyn Co
     for y in area.y..area.bottom() {
         let down = y as f32 + 0.5 - centre.y;
         let down_squared = down * down;
-        for x in area.x..area.right() {
+        let Some(reached) = chord_columns(centre.x, outer_squared, down_squared, area) else {
+            continue;
+        };
+        for x in reached.first..reached.end {
             let across = x as f32 + 0.5 - centre.x;
             let distance_squared = across * across + down_squared;
             let amount = if distance_squared >= outer_squared {
@@ -215,6 +218,40 @@ pub fn rasterize_disc(centre: PointF, radius: f32, clip: Rect, sink: &mut dyn Co
         }
         run.flush(y);
     }
+}
+
+/// A row's columns from `first` up to `end`, end not included.
+struct Columns {
+    first: i32,
+    end: i32,
+}
+
+/// The columns of `area` a circle reaches in a row `down_squared` from its centre, with a pixel to spare.
+///
+/// `radius_squared` is where the circle's coverage falls to nothing; a row it misses gives nothing.
+fn chord_columns(centre_x: f32, radius_squared: f32, down_squared: f32, area: Rect) -> Option<Columns> {
+    let reach_squared = radius_squared - down_squared;
+    if reach_squared <= 0.0 {
+        return None;
+    }
+    let half_chord = square_root(reach_squared);
+    let first = (floor(centre_x - half_chord) as i32 - 1).max(area.x);
+    let end = (ceil(centre_x + half_chord) as i32 + 1).min(area.right());
+    (first < end).then_some(Columns { first, end })
+}
+
+/// The columns a ring's hole leaves empty in a row `down_squared` from its centre, a pixel in from each edge.
+///
+/// `radius_squared` is where the inner edge's coverage reaches nothing; the columns may lie outside the clip.
+fn hole_columns(centre_x: f32, radius_squared: f32, down_squared: f32) -> Option<Columns> {
+    let reach_squared = radius_squared - down_squared;
+    if reach_squared <= 0.0 {
+        return None;
+    }
+    let half_chord = square_root(reach_squared);
+    let first = ceil(centre_x - half_chord) as i32 + 1;
+    let end = floor(centre_x + half_chord) as i32 - 1;
+    (first < end).then_some(Columns { first, end })
 }
 
 /// How much of a pixel at `distance_squared` from the centre lies inside a ring's two edges.
@@ -306,7 +343,25 @@ pub fn rasterize_arc(
     for y in area.y..area.bottom() {
         let down = y as f32 + 0.5 - centre.y;
         let down_squared = down * down;
-        for x in area.x..area.right() {
+        let Some(reached) = chord_columns(centre.x, outer.outside_squared, down_squared, area) else {
+            continue;
+        };
+        let hole = inner
+            .as_ref()
+            .and_then(|inner| hole_columns(centre.x, inner.inside_squared, down_squared));
+        let (left_of_hole, right_of_hole) = match &hole {
+            Some(hole) => (
+                reached.first..reached.end.min(hole.first),
+                reached.first.max(hole.end)..reached.end,
+            ),
+            None => (reached.first..reached.end, 0..0),
+        };
+        let first_past_hole = right_of_hole.start;
+        for x in left_of_hole.chain(right_of_hole) {
+            // The pixels skipped in the hole are empty, so the run before them ends.
+            if hole.is_some() && x == first_past_hole {
+                run.flush(y);
+            }
             let across = x as f32 + 0.5 - centre.x;
             let radial = ring_coverage(across * across + down_squared, &outer, inner.as_ref());
             let angular = if is_full_circle {

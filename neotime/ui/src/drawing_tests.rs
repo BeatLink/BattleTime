@@ -323,6 +323,32 @@ fn a_ring_has_a_hole_and_an_arc_backwards_covers_the_other_side() {
     assert_eq!(most.coverage_at(26, 13), 0);
 }
 
+#[test]
+fn a_ring_hands_over_each_row_as_a_run_either_side_of_its_hole() {
+    let mut ring = Rows::default();
+
+    rasterize_arc(
+        PointF::new(20.0, 20.0),
+        18.0,
+        14.0,
+        1.0,
+        0.0,
+        1.0,
+        0.0,
+        6.3,
+        ANYWHERE,
+        &mut ring,
+    );
+
+    let middle_row: Vec<_> = ring.rows.iter().filter(|(_, y, _)| *y == 20).collect();
+    assert_eq!(middle_row.len(), 2);
+    assert!(middle_row[0].0 < 20 - 14 && middle_row[1].0 > 20 + 12);
+    assert!(ring
+        .rows
+        .iter()
+        .all(|(_, _, coverage)| coverage.iter().all(|&amount| amount > 0)));
+}
+
 // ============================================================================
 // The renderer's default calls
 // ============================================================================
