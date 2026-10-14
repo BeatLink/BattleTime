@@ -8,6 +8,9 @@ and today's steps) in every build.
 The Rust core does the syncing, so it runs in the Tauri app, on the desktop and on Android alike. The
 code is in `companion/core/src/sync/`, and the Tauri app's part is `companion/tauri/src/sync.rs`.
 
+A phone and a desktop companion will keep this copy in step with each other too; see
+[linked-companions.md](linked-companions.md).
+
 ## What is synced
 
 Each pass reads the following. Each item is kept as one JSON file, named by its source, under

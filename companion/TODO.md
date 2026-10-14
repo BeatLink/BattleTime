@@ -158,6 +158,18 @@ and lets plugins read them and change their own app's state.
   write. Closing that needs the write to name what it read, or the watch to apply the change itself.
 - **Untried with a watch.** The sync has run only against the core's fake watch.
 
+## Linked companions
+
+[Linked companions](../docs/linked-companions.md) lets the phone hand the watch to the desktop at
+home and keeps the two companions' settings in step. Nothing is built yet.
+
+- **Finding and pairing:** mDNS, the QR code and the TLS link, with a screen for linked devices.
+- **Sync areas:** the area table, record versions and the swap on linking, starting with remote
+  buttons and the watch's copy.
+- **Handoff:** the phone lets go and the desktop takes the watch, with the 15-second fallback.
+- **Relaying:** the phone bridge's second source, and taps and replies sent back to the phone.
+- **The other areas:** plugins, notes and the rest.
+
 ## Not started
 
 - **Firmware from GitHub Actions builds.** NeoTime has no CI yet; the finder already reads
