@@ -310,3 +310,14 @@ fn a_slider_draws_its_track_and_a_knob_at_the_value() {
     assert_eq!(round.at(25, 10), Some(ACCENT));
     assert_eq!(no_range.at(1, 10), Some(ACCENT));
 }
+
+#[test]
+fn the_sine_table_matches_the_sine_of_every_whole_degree_on_any_turn() {
+    for degrees in -720..=720 {
+        let exact = (degrees as f64).to_radians().sin();
+        let (cosine, sine) = angle_vector(degrees);
+        assert!((sine as f64 - exact).abs() < 1e-7, "sine of {degrees}");
+        let exact_cosine = (degrees as f64).to_radians().cos();
+        assert!((cosine as f64 - exact_cosine).abs() < 1e-7, "cosine of {degrees}");
+    }
+}

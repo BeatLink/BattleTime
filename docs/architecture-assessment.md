@@ -95,7 +95,7 @@ The build has 362.6 KB of code and constants by symbol, and the full firmware is
 | rlvgl | 23.9 KB | Our own shape drawing; see [The UI](#the-ui) |
 | Other constants and padding | 23.3 KB | Not yet looked at |
 | Bosch accelerometer configuration | 12 KB | Build in one chip (6 KB back) or load it from external flash (12 KB) |
-| Floating-point trigonometry for arcs (`libm`) | a few KB | A fixed-point sine table |
+| Floating-point trigonometry for arcs (`libm`) | 6.3 KB | Done: a table of the sine of each whole degree |
 
 `opt-level = "z"` for crates whose code runs rarely is worth a try. After these, the
 firmware/library slot change in [todo.md](todo.md) becomes possible.

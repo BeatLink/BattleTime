@@ -2,7 +2,6 @@
 //!
 //! Each is a function of what it shows, so nothing is built or kept between draws.
 
-use libm::{cosf, sinf};
 use neotime_ui::{
     geometry::{Color, PointF, Rect},
     renderer::Renderer,
@@ -68,9 +67,35 @@ fn sweep_in_degrees(start: i32, end: i32) -> i32 {
     }
 }
 
+/// The sine of every whole degree from 0 to 90, so arcs need no trigonometry library on the watch.
+#[rustfmt::skip]
+const SINE_OF_DEGREE: [f32; 91] = [
+    0.0, 0.017452406, 0.034899496, 0.052335955, 0.06975647, 0.087155744, 0.104528464, 0.12186934,
+    0.1391731, 0.15643446, 0.17364818, 0.190809, 0.20791169, 0.22495106, 0.2419219, 0.25881904,
+    0.27563736, 0.2923717, 0.309017, 0.32556817, 0.34202015, 0.35836795, 0.37460658, 0.39073113,
+    0.40673664, 0.42261827, 0.43837115, 0.4539905, 0.46947157, 0.4848096, 0.5, 0.5150381,
+    0.52991927, 0.54463905, 0.5591929, 0.57357645, 0.58778524, 0.60181504, 0.6156615, 0.6293204,
+    0.64278764, 0.656059, 0.6691306, 0.6819984, 0.6946584, 0.70710677, 0.7193398, 0.7313537,
+    0.7431448, 0.7547096, 0.76604444, 0.777146, 0.7880108, 0.7986355, 0.809017, 0.81915206,
+    0.82903755, 0.83867055, 0.8480481, 0.8571673, 0.8660254, 0.8746197, 0.88294756, 0.8910065,
+    0.89879405, 0.9063078, 0.9135454, 0.92050487, 0.92718387, 0.9335804, 0.9396926, 0.94551855,
+    0.95105654, 0.9563047, 0.9612617, 0.9659258, 0.9702957, 0.97437006, 0.9781476, 0.98162717,
+    0.9848077, 0.98768836, 0.99026805, 0.99254614, 0.9945219, 0.9961947, 0.9975641, 0.9986295,
+    0.99939084, 0.9998477, 1.0,
+];
+
+/// The sine of a whole number of degrees, from the quarter turn in `SINE_OF_DEGREE`.
+fn sine_of(degrees: i32) -> f32 {
+    match turn_of(degrees) as usize {
+        turn @ 0..=90 => SINE_OF_DEGREE[turn],
+        turn @ 91..=180 => SINE_OF_DEGREE[180 - turn],
+        turn @ 181..=270 => -SINE_OF_DEGREE[turn - 180],
+        turn => -SINE_OF_DEGREE[360 - turn],
+    }
+}
+
 fn angle_vector(degrees: i32) -> (f32, f32) {
-    let radians = turn_of(degrees) as f32 * core::f32::consts::PI / 180.0;
-    (cosf(radians), sinf(radians))
+    (sine_of(degrees + 90), sine_of(degrees))
 }
 
 /// Draws the track, then the part the value fills from the start.
