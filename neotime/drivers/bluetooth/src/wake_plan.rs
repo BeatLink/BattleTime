@@ -10,8 +10,8 @@ use crate::link_layer::RadioOperation;
 // Timing limits
 // ============================================================================
 
-/// Ticks of the 32768 Hz counter allowed for the crystal to start before the timer does, about 1.5 ms.
-pub const CRYSTAL_START_TICKS: u64 = 50;
+/// Ticks of the 32768 Hz counter allowed for the crystal to start before the timer does, about 1 ms.
+pub const CRYSTAL_START_TICKS: u64 = 32;
 
 /// The counter cannot fire a compare set to its current tick or the one after.
 pub const MINIMUM_COUNTER_LEAD_TICKS: u64 = 2;

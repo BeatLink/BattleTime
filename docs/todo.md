@@ -156,7 +156,8 @@ document for its part instead.
   - which nRF52832 revision the watch has (FICR at `0x10000134`), since the radio errata
     workaround depends on it.
   - the controller's sleep between events holds a connection at both a 7.5 ms and a 4 s interval,
-    so the 1.5 ms allowed for the 64 MHz crystal to start is enough on this watch's crystal;
+    so the 1 ms allowed for the 64 MHz crystal to start is enough on this watch's crystal; time
+    `EVENTS_HFCLKSTARTED` against the crystal start task to confirm it, as it typically takes 0.4 ms;
   - the current drawn while advertising and while connected, against the old build that kept the
     crystal and TIMER0 running.
 

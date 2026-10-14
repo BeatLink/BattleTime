@@ -146,7 +146,7 @@ runs, and from RTC0 while it sleeps. Two more PPI channels wake it without the C
 
 | PPI channel | Connects | Used for |
 |---|---|---|
-| 3 | RTC0 compare 0 → crystal start | starting the crystal 50 ticks (about 1.5 ms) before it is needed |
+| 3 | RTC0 compare 0 → crystal start | starting the crystal 32 ticks (about 1 ms) before it is needed |
 | 4 | RTC0 compare 1 → TIMER0 start | starting TIMER0 on an RTC0 tick, about 50 µs before the operation |
 
 TIMER0 always starts on an RTC0 tick, so the clock knows exactly where it counts from, and the link

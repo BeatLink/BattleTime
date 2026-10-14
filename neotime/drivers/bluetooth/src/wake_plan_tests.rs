@@ -98,6 +98,14 @@ fn turning_the_radio_off_sleeps_with_no_wake() {
 }
 
 #[test]
+fn the_crystal_gets_about_a_millisecond_to_start() {
+    let crystal_start_in_microseconds = microseconds_at_tick(CRYSTAL_START_TICKS);
+
+    assert!((900..1_100).contains(&crystal_start_in_microseconds));
+    assert!(microseconds_at_tick(CRYSTAL_START_TICKS + MINIMUM_COUNTER_LEAD_TICKS) < SLEEP_THRESHOLD);
+}
+
+#[test]
 fn the_timer_wakes_just_before_a_distant_operation() {
     let now_tick = 32_768;
     let now = microseconds_at_tick(now_tick) + 12;
