@@ -36,7 +36,7 @@ describe('CallSummary', () => {
     }
   });
 
-  it('gives each summary its own id above the phone notifications and apart from the watch apps'', () => {
+  it('gives each summary its own id above the phone notifications and apart from the watch apps', () => {
     const summary = new CallSummary();
     const ids = [1, 2].map(() => {
       summary.noteCall({ type: 'call', state: 'incoming', name: 'Sam' });
