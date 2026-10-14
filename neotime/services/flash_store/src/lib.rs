@@ -9,10 +9,12 @@
 //!   key's newest copy; when the ring wraps, newest copies are carried forward.
 //! - **Logs** are appended over time, batched in RAM, and drop their oldest sector when their ring wraps.
 //!
-//! Everything survives a power cut at any point. The store needs no heap: its tables are fixed in size by the
-//! type's parameters. See docs/flash-store.md.
+//! Everything survives a power cut at any point. Its tables are fixed in size by the type's parameters; only a
+//! file written a part at a time holds a little heap while it is written. See docs/flash-store.md.
 
 #![no_std]
+
+extern crate alloc;
 
 mod access;
 mod checksum;
@@ -29,6 +31,7 @@ mod power_cut_tests;
 #[cfg(test)]
 mod tests;
 
+use alloc::boxed::Box;
 use embedded_storage_async::nor_flash::NorFlash;
 use heapless::Vec;
 
@@ -94,6 +97,8 @@ pub enum StoreError<FlashError> {
     LayoutDoesNotFit,
     /// A whole file read back does not match its checksum.
     Corrupted,
+    /// The heap had no room for an upload's list of sectors.
+    OutOfMemory,
 }
 
 /// A run of bytes that lie one after another in the flash.
@@ -166,7 +171,8 @@ pub struct FlashStore<
     record_keys: Vec<Newest, MOST_RECORD_KEYS>,
     no_keys: Vec<Newest, 0>,
     log_batches: Vec<LogBatch, LOG_STREAMS>,
-    upload: Option<Upload>,
+    /// A file being written a part at a time, on the heap only while it is written.
+    upload: Option<Box<Upload>>,
 }
 
 impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, const RING_SECTORS: usize>
@@ -405,8 +411,17 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
         if path.len() > LONGEST_PATH_BYTES {
             return Err(StoreError::PathTooLong);
         }
-        self.upload = Some(self.files.begin(&mut self.flash, path).await?);
-        Ok(())
+        let upload = self.files.begin(&mut self.flash, path).await?;
+        match try_box(upload) {
+            Ok(upload) => {
+                self.upload = Some(upload);
+                Ok(())
+            }
+            Err(upload) => {
+                self.files.abandon(&upload);
+                Err(StoreError::OutOfMemory)
+            }
+        }
     }
 
     pub async fn write_file_part(&mut self, data: &[u8]) -> Result<(), StoreError<Flash::Error>> {
@@ -420,7 +435,7 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
     pub async fn finish_file(&mut self) -> Result<(), StoreError<Flash::Error>> {
         let upload = self.upload.take().ok_or(StoreError::NoUpload)?;
         let path = upload_path(&upload);
-        self.files.finish(&mut self.flash, upload).await?;
+        self.files.finish(&mut self.flash, &upload).await?;
         self.share_sequence();
         if self.find_small_file(&path).await?.is_some() {
             self.records
@@ -447,7 +462,7 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
     /// Drops an unfinished upload; the file stays as it was.
     pub fn abandon_file(&mut self) {
         if let Some(upload) = self.upload.take() {
-            self.files.abandon(upload);
+            self.files.abandon(&upload);
         }
     }
 
@@ -684,6 +699,18 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
         }
         Ok(Some(start + batch.length))
     }
+}
+
+/// Moves a value onto the heap when it has room, and gives the value back when it has not.
+fn try_box<Value>(value: Value) -> Result<Box<Value>, Value> {
+    let mut slot = alloc::vec::Vec::new();
+    if slot.try_reserve_exact(1).is_err() {
+        return Err(value);
+    }
+    slot.push(value);
+    let one: Box<[Value]> = slot.into_boxed_slice();
+    // SAFETY: a slice of exactly one value has that value's layout, so the allocation can be owned as a box of it.
+    Ok(unsafe { Box::from_raw(Box::into_raw(one).cast::<Value>()) })
 }
 
 fn upload_path(upload: &Upload) -> heapless::String<LONGEST_PATH_BYTES> {

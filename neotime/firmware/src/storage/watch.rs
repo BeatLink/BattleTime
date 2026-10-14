@@ -464,7 +464,7 @@ const STORE_LAYOUT: Layout = Layout {
     log_sectors: 192,
 };
 
-/// 128 files, 128 record keys and rings of up to 192 sectors: 2.7 KB of static RAM.
+/// 128 files, 128 record keys and rings of up to 192 sectors: 2.4 KB of static RAM.
 type WatchStore = FlashStore<StoreFlash, 128, 128, 192>;
 
 /// How often a running erase or page program is checked while other tasks run.
@@ -889,7 +889,7 @@ async fn load_days(store: &mut WatchStore) {
 }
 
 /// Builds the files' state straight into its static, outside any async function, so start-up's task never holds
-/// a 2.7 KB copy of it.
+/// a 2.4 KB copy of it.
 #[inline(never)]
 fn make_files(
     external_flash: &'static SharedExternalFlash,

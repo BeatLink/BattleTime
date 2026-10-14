@@ -25,7 +25,8 @@ impl<FlashError> From<StoreError<FlashError>> for FileError {
             | StoreError::KeyTableFull
             | StoreError::FileTableFull
             | StoreError::FileAreaFull
-            | StoreError::OverOwnerLimit => FileError::Full,
+            | StoreError::OverOwnerLimit
+            | StoreError::OutOfMemory => FileError::Full,
             StoreError::TooLarge => FileError::TooLarge,
             StoreError::PathTooLong => FileError::PathTooLong,
             StoreError::UploadInProgress | StoreError::NoUpload => FileError::Busy,

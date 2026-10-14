@@ -2,7 +2,7 @@
 name = "neotime-flash-store"
 version = "0.1.0"
 edition = "2021"
-description = "NeoTime's store in the external flash: files, records and logs, safe through power cuts, with no heap"
+description = "NeoTime's store in the external flash: files, records and logs, safe through power cuts, with fixed tables"
 license.workspace = true
 publish = false
 

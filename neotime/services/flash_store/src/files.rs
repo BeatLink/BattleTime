@@ -22,8 +22,8 @@ const SECTORS_AT: usize = 20;
 const PATH_AT: usize = SECTORS_AT + 2 * MOST_SECTORS_PER_FILE;
 const HEADER_CHECKSUM_AT: usize = PATH_AT + LONGEST_PATH_BYTES;
 const RETIRED_AT: usize = HEADER_CHECKSUM_AT + 4;
-/// The file area may be at most this many sectors, one bit each in RAM.
-pub(crate) const MOST_FILE_SECTORS: usize = 1024;
+/// The file area may be at most this many sectors, one bit each in RAM, as the watch's layout has.
+pub(crate) const MOST_FILE_SECTORS: usize = 512;
 
 pub(crate) struct FileHeader {
     pub(crate) sequence: u32,
@@ -312,7 +312,7 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
     pub(crate) async fn finish<Flash: NorFlash>(
         &mut self,
         flash: &mut Flash,
-        upload: Upload,
+        upload: &Upload,
     ) -> Result<(), StoreError<Flash::Error>> {
         let older = self.find(flash, &upload.path).await?;
         let sequence = self.next_sequence;
@@ -351,9 +351,9 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
     }
 
     /// Gives an unfinished upload's sectors back; the flash keeps no trace of it, since it has no header.
-    pub(crate) fn abandon(&mut self, upload: Upload) {
-        for sector in upload.sectors {
-            self.set_used(sector as usize, false);
+    pub(crate) fn abandon(&mut self, upload: &Upload) {
+        for sector in &upload.sectors {
+            self.set_used(*sector as usize, false);
         }
     }
 

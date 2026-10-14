@@ -742,6 +742,27 @@ fn a_file_of_another_format_version_is_refused() {
 }
 
 #[test]
+fn a_file_area_larger_than_its_sector_map_is_refused() {
+    let fits = Layout {
+        file_sectors: 512,
+        ..LAYOUT
+    };
+    let too_large = Layout {
+        file_sectors: 513,
+        ..LAYOUT
+    };
+
+    let fitting = block_on(TestStore::mount(TestFlash::blank(fits.total_sectors()), fits));
+    let refused = block_on(TestStore::mount(
+        TestFlash::blank(too_large.total_sectors()),
+        too_large,
+    ));
+
+    assert!(fitting.is_ok());
+    assert!(matches!(refused, Err(StoreError::LayoutDoesNotFit)));
+}
+
+#[test]
 fn a_layout_larger_than_the_tables_is_refused() {
     let layout = Layout {
         record_sectors: 17,
@@ -786,7 +807,7 @@ fn the_ram_it_keeps_is_known_when_built() {
 
     let ram = WatchStore::RAM_BYTES;
 
-    assert!(ram < 3 * 1024, "{ram} B");
+    assert!(ram <= 2_560, "{ram} B");
 }
 
 // ============================================================================

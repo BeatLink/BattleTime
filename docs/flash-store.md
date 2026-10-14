@@ -7,7 +7,8 @@ and how it compares with littlefs, ekv and sequential-storage, is in
 
 The store knows how data is written, not what it is, so a new kind of data needs no new format and
 no new firmware. It survives a power cut at any point, spreads its wear, is `async` over
-`embedded-storage-async`, and needs no heap.
+`embedded-storage-async`, and keeps fixed tables; only a file written a part at a time holds about
+200 B of heap while it is written.
 
 ## The three containers
 
@@ -108,12 +109,14 @@ Built for the watch with 128 files, 128 record keys and rings of up to 192 secto
 
 | | Bytes |
 |---|---:|
-| RAM, fixed when built, no heap | 2,700 |
+| RAM, fixed when built | about 2,430 |
 | Code and constants | about 26,200 |
 | Stack, at most, while cleaning a ring | about 1,000 |
 
 The RAM is mostly the key table (1 KB), the file table (512 B), the rings' sector order (384 B),
-the log batches and the state of an upload. littlefs takes 23.7 KB of code for comparison. The
+the log batches and a map of the 512 file sectors (64 B), the most the file area may have. An
+upload's state, its path and sector list, is boxed on the heap from `begin_file` to its finish or
+abandonment, and a heap without room answers `OutOfMemory`. littlefs takes 23.7 KB of code for comparison. The
 firmware's measured share is in [memory-map.md](memory-map.md).
 
 An `async` call's future holds every buffer of every call beneath it, and an Embassy task keeps

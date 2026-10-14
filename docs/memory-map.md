@@ -172,7 +172,7 @@ below it too, so the marker survives from one firmware start to the next. Its th
 bootloader's note to the firmware (`BOOT_NOTE_ADDRESS`), which says whether the recovery firmware
 was just installed, and its fourth is the bootloader updater's (`UPDATER_NOTE_ADDRESS`), which says
 the rollback after it was meant. The firmware measures 53.4 KB of static RAM:
-30.25 KB of heap (10 KB for the system and the 20.25 KB UI heap), the flash store's tables (2.7 KB), and
+30.25 KB of heap (10 KB for the system and the 20.25 KB UI heap), the flash store's tables (2.4 KB), and
 the Bluetooth host with its eight 128-byte packets, controller, the display's two 1,920 B strip buffers and task state. The
 Bluetooth task's state is 3.2 KB, TrouBLE's runner (1.6 KB) much of it; replies to the companion
 app and half-received lines wait on the heap, and the update state, status page and confirmation
@@ -305,7 +305,7 @@ The table below is the budget:
 | Reserve | 3 KB | Left free, so a budget that runs over does not crash the watch. | Planned |
 | System state | 4 KB | Settings, notifications, alarms and the step count. The latest 5 notifications are kept on the heap, about 200 B each, beside about 200 B of the shell task's state. | Planned |
 | Display buffer | 2 KB | The buffer `neotime-display` fills before each SPI transfer. | Planned |
-| Flash store | 2.7 KB | The store's tables, in a static rather than the heap: 1 KB of record keys, 512 B of files, the rings' sector order, the log batches and an upload's state. Its calls borrow up to about 1 KB of stack. | Measured with `size_of` for the watch |
+| Flash store | 2.4 KB | The store's tables, in a static rather than the heap: 1 KB of record keys, 512 B of files, the rings' sector order, the log batches and a 64 B map of the file sectors; an upload's state, about 200 B, is on the heap only while a file is written a part at a time. Its calls borrow up to about 1 KB of stack. | Measured with `size_of` for the watch |
 
 The 64 KB is all the chip has, so a part that needs more must take it from another row of this
 table.
