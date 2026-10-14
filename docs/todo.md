@@ -14,6 +14,72 @@ document for its part instead.
   never skips one, even a long slow swipe, which the panel repeats as it goes, the
   page bar marks the page on show, a sideways drag leaves the system page's list still, swipes past
   the first and last page step round the quick apps, and a charger event opens the battery page.
+  With one press and one swipe per finger (71dc8077), swiping slowly and long through the System
+  app turns exactly one page each time, System to Licence and back, and a tap and a vertical
+  scroll on the Tasks page still work.
+
+- [ ] **Launcher freeze fix on the PineTime.** On e266858f the watch froze on the face when the
+  launcher opened, with the button still working, and the watchdog reset it with no crash. The
+  display and flash-read waits could sleep in WFE after the bus had already been freed, and
+  cad2538f makes the bus interrupt send SEV every time. With every app installed, open and close
+  the launcher about ten times and open a few apps; expect no freeze and no "Last restart:
+  watchdog" in `neotime debug`.
+
+- [ ] **DMA flash reads and prefetch on the PineTime.** Reading the external flash by DMA, with
+  `file_bytes` offsets and `prefetch_file` (9d4987d7), has run only in the emulator, which models no
+  nRF52832 DMA anomalies. Install a throwaway `pager` app whose tap reads 256 bytes of
+  `/apps/pager/data` at `page * 1900` and prefetches the next page, labelled
+  `${page} ${bytes[0]} ${bytes[128]} ${bytes[255]}`, and a 12,000-byte data file where byte i is
+  `(i * 7) % 251`. Read the diagnostics, tap three times and read them again. Expect exactly
+  "1 0 143 28", "2 248 140 25" and "3 245 137 22" (page 3 crosses a 4 KB sector), PrefetchedReads
+  up by 16, FlashReadBytes up, and the face, launcher and an ordinary app still drawing normally.
+  A wrong byte means a DMA read corrupted data. Remove the app and its file afterwards.
+
+- [ ] **Resuming a firmware update on the PineTime.** The watch keeping what reached flash and the
+  companion reconnecting up to four times to send the rest (9c9cb262) has run only in the emulator.
+  An ordinary `neotime flash` finishes and confirms. Then flash the same zip again and, at 20-30%,
+  run `bluetoothctl disconnect FC:9B:D8:FD:4A:F8`. Expect "Update paused" and "Kept N KB" on the
+  watch, "Lost the watch; reconnecting to carry on (try 1 of 4)..." from the CLI, its progress bar
+  starting again near the kept amount rather than 0%, and the update validating, installing and
+  confirming, with the new build on the System app's firmware page. Once, the watch was seen
+  pausing at "Kept 3 KB" each time with the transfer starting from scratch, so check for that.
+
+- [ ] **Text drawing time on the PineTime.** The geometric font's square roots in one instruction
+  (5b035fed), text advances without flash reads (4af364ab) and the flash instruction cache
+  (d1e86190) have not been timed on the watch. Leave it untouched on the digital face and read the
+  diagnostics characteristic `6e540002-0000-4000-8000-4e656f54696d` raw: words 22 and 23 (little
+  endian) are DrawMicroseconds and DisplaySendMicroseconds. Send `neotime notify --sender Messages
+  "Dinner plans" "Running ten minutes late. Save me a seat by the window, and order the usual if
+  they ask first."`, wait 12 s and read again, three times, then once more after 40 s of quiet.
+  Earlier draw times were 419 ms with bitmap fonts and 379-749 ms with the geometric font; expect
+  less, ideally near 419 ms.
+
+- [ ] **Terminal face on the PineTime.** With every label in the small font (51e32c64), all ten
+  lines fit on the screen: "[1]+ Notify" when a notification is unread, "user@watch:~ $ now", the
+  [TIME] [DATE] [BATT] [STEP] [L_HR] [WTHR] [STAT] lines and the final "user@watch:~ $" prompt
+  fully visible at the bottom. Note whether the smaller text is still readable.
+
+- [ ] **The state message on the PineTime.** The firmware serving the companion's
+  `{"t":"state","app":"<id>"}` message (b06d9b39) has run only in tests. Set one alarm at 07:00
+  and leave the Alarm app open. Rewrite `/apps/alarm/state` with the hour changed to 08, as the
+  companion core's `sync::pass::write_app_state` does, and send `GB({"app":"alarm","t":"state"})`.
+  Expect the open app to redraw in place at 08:00 with no reset, 08:00 again after reopening it,
+  and the alarm ringing at 08:00. Repeat with the app closed; it rings at the new time.
+
+- [ ] **The companion app store with the PineTime.** The store (51d5de81, b0909f02) has not
+  installed anything on a real watch; no firmware change is needed. From `companion/`:
+  - `neotime store list` lists 54 apps and faces, alarm to word-clock, leaving out the
+    companion-only prompt app;
+  - `neotime apps install dice` installs the bundled dice app by id, printing "Installed Dice as
+    dice.", and dice shows in `neotime apps list`;
+  - `neotime store fetch BeatLink/NeoTime 1 <folder>` prints "Fetched 93 from v0.1.0 into
+    <folder>." (56 apps and faces, 37 plugins);
+  - installing an app from that folder that is not on the watch, such as `haiku.ntapp`, prints
+    "Installed Haiku as haiku." and it appears in the launcher;
+  - `neotime apps remove` takes it, and dice if it was not there before, out of `apps list` and the
+    launcher;
+  - in the Tauri desktop app, Watch tab, Store, Look on GitHub, v0.1.0, adding and installing Buzz
+    back puts the plugin under Plugins and a Buzz back app on the watch, and Uninstall removes both.
 
 - [ ] **Pomodoro on the PineTime.** The pomodoro rebuilt around three intervals (4d27f48a) has run
   only in the harness and the browser preview. Check on the watch that it opens on the countdown,
@@ -24,7 +90,8 @@ document for its part instead.
   only in the harness and the browser preview. Check on the watch that it opens at `/` with each
   folder's size and no stall or watchdog reset, that tapping `apps` and then an app's folder lists
   its files with byte sizes, and that each side button press goes up one folder, wiping the
-  opposite way, until one more press at `/` leaves the app.
+  opposite way, until one more press at `/` leaves the app. Afterwards Settings > System > memory
+  shows nothing unusual.
 
 - [ ] **Touch panel on the PineTime.** The firmware runs `neotime-touch` on the watch, but these
   checks have not been made:
@@ -145,7 +212,10 @@ document for its part instead.
   - a chosen file reaches `/notes/note.txt`, and an edit to it is sent again within a minute;
   - a font chosen in the companion app shows the next time the app opens;
   - a long note scrolls smoothly to its last line, with no line drawn twice or out of place;
-  - the stack keeps its margin with the app open, which in the emulator matches the launcher's.
+  - the stack keeps its margin with the app open, which in the emulator matches the launcher's;
+  - with no note (`neotime note remove`), the app shows "No note yet. Write or choose one in the
+    NeoTime companion app." over four lines, as in
+    `neotime/harness/snapshots/screens/app-notes-empty.png` (e266858f).
 - [ ] **The remote app on the PineTime.** It has run only in the test harness. With the companion
   app's remote screen, check that:
   - buttons chosen in the companion app reach `/remote/buttons` and show the next time the app
@@ -158,6 +228,16 @@ document for its part instead.
     opens, and a tapped code is read and drawn without a long pause;
   - another phone scans a short link, a Wi-Fi code and a code over 74 modules;
   - drawing the largest code stays quick enough for the watchdog.
+  - with up to eight codes (87dff11f, which needs the qr-code app installed from the same commit):
+    `neotime qr https://example.com --label Example` and `neotime qr wifi Home secret` print
+    "Added ... as number 1" and "2", and `neotime qr list` prints "1. Example" and "2. Home";
+  - the app lists "Example" and "Home" with the screen bright, and a tapped row draws its code
+    black on white with its caption under it, without a long pause or watchdog reset;
+  - after `neotime qr move 2 up`, `neotime qr rename 1 "Guest Wi-Fi"` and `neotime qr remove 2`,
+    reopening shows only "Guest Wi-Fi";
+  - after `neotime qr remove all`, it shows "No QR codes yet. Make them in the NeoTime companion
+    app."
+  When these pass, also remove the QR item under "Untried with a watch" in companion/TODO.md.
 - [ ] **Transitions and scrolling on the PineTime.** Slides, wipes and hardware-scrolled lists have
   run only in the emulator and against a model of the panel; none of it is on the watch yet. Flash
   the bootloader first, then a firmware built from master at e78fc7a or later. On the watch, check
