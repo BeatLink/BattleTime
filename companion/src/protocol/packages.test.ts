@@ -10,7 +10,6 @@ import {
   appDetail,
   appImagePath,
   installImage,
-  LIBRARY_UPLOAD_PATH,
   memoryText,
   PackagesClient,
   PackagesError,
@@ -81,15 +80,14 @@ describe('the packages client', () => {
     client.close();
   });
 
-  it('sends the shared library to its upload path and installs it into internal flash', async () => {
+  it('never sends the shared library, which ships inside the firmware', async () => {
     const target = watch();
     const client = await PackagesClient.open(target);
     const library = testImage('shared', 'Shared library', 'library');
 
-    await installImage(writerFor(target), client, library);
+    await expect(installImage(writerFor(target), client, library)).rejects.toThrow('ships inside the firmware');
 
-    expect(target.fileService.files.get(LIBRARY_UPLOAD_PATH)).toEqual(library);
-    expect(target.packagesService.library).toEqual(library);
+    expect(target.fileService.files.has('/resources/shared.ntlib')).toBe(false);
   });
 
   it('passes on what the watch refuses', async () => {
@@ -101,10 +99,7 @@ describe('the packages client', () => {
     target.fileService.files.set('/apps/broken/app.ntapp', new Uint8Array(8));
     await expect(client.install('broken')).rejects.toThrow('app checks');
     target.fileService.files.set('/apps/shared/app.ntapp', testImage('shared', 'Shared', 'library'));
-    await expect(client.install('shared')).rejects.toThrow('install_library');
-    await expect(client.installLibrary()).rejects.toThrow('no such app');
-    target.fileService.files.set(LIBRARY_UPLOAD_PATH, testImage('timer', 'Timer'));
-    await expect(client.installLibrary()).rejects.toThrow('not the shared library');
+    await expect(client.install('shared')).rejects.toThrow('ships inside the firmware');
   });
 
   it('gives each app\'s memory and the most an app may have', async () => {

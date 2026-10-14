@@ -75,13 +75,10 @@ export function memoryText(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} kB`;
 }
 
-// Where a new shared library goes before install_library.
-export const LIBRARY_UPLOAD_PATH = '/resources/shared.ntlib';
-
 // The commands this client sends, so it can ignore lines meant for anyone else on the characteristic.
-const COMMANDS = new Set(['apps', 'install', 'remove', 'enable', 'install_library', 'launcher']);
+const COMMANDS = new Set(['apps', 'install', 'remove', 'enable', 'launcher']);
 
-// How long a command may take; copying the library into internal flash is the slowest.
+// How long a command may take; checking a large app's code is the slowest.
 const REPLY_TIMEOUT_MS = 20000;
 
 // One write's payload at the smallest MTU.
@@ -157,10 +154,6 @@ export class PackagesClient {
     await this.command({ c: 'launcher' });
   }
 
-  async installLibrary(): Promise<void> {
-    await this.command({ c: 'install_library' });
-  }
-
   private async command(message: { c: string } & Record<string, unknown>): Promise<Reply> {
     const bytes = new TextEncoder().encode(`${JSON.stringify(message)}\n`);
     for (let offset = 0; offset < bytes.length; offset += WRITE_BYTES) {
@@ -211,7 +204,7 @@ function memoryOf(reply: Reply): MemoryAnswer {
 // Installing a picked or bundled image
 // ============================================================================
 
-// Sends an app, face or shared library image and installs it, returning what it was.
+// Sends an app or face image and installs it, returning what it was. The shared library ships inside the firmware.
 export async function installImage(
   files: FileWriter,
   packages: PackagesClient,
@@ -220,9 +213,7 @@ export async function installImage(
 ): Promise<ImageHeader> {
   const header = readImageHeader(image);
   if (header.kind === 'library') {
-    await files.write(LIBRARY_UPLOAD_PATH, image, onProgress);
-    await packages.installLibrary();
-    return header;
+    throw new PackagesError('The shared library ships inside the firmware; update the firmware instead.');
   }
   const path = appImagePath(header.id);
   await files.mkdir?.(`/apps/${header.id}`).catch(() => {});

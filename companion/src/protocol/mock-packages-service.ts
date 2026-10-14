@@ -2,7 +2,7 @@
 // It answers as services/packages in the NeoTime tree does.
 
 import { readImageHeader } from './app-image';
-import { LIBRARY_UPLOAD_PATH, REFUSALS } from './packages';
+import { REFUSALS } from './packages';
 
 const ID = /^[A-Za-z0-9_-]{1,32}$/;
 
@@ -13,9 +13,6 @@ export const MOCK_ROOM = 33792;
 const MOCK_WORKING_BYTES = 8000;
 
 export class MockPackagesService {
-  // The library last copied into internal flash, for tests to check.
-  library: Uint8Array | null = null;
-
   // How many times the launcher was told to read its groups again, for tests to check.
   launcherReloads = 0;
 
@@ -41,11 +38,7 @@ export class MockPackagesService {
       return this.reply({ c, ok: 1 });
     }
     if (c === 'install_library') {
-      const image = this.files.get(LIBRARY_UPLOAD_PATH);
-      if (!image) return this.reply({ c, err: 'no such app' });
-      if (this.kindOf(image) !== 'library') return this.reply({ c, err: 'that image is not the shared library' });
-      this.library = image;
-      return this.reply({ c, ok: 1 });
+      return this.reply({ c, err: 'the shared library ships inside the firmware' });
     }
     if (!id || !ID.test(id)) {
       return this.reply({ c, err: 'an app id is letters, digits, - and _' });
@@ -62,7 +55,7 @@ export class MockPackagesService {
         } catch {
           return this.reply({ c, err: 'the image fails the app checks' });
         }
-        if (header.kind === 'library') return this.reply({ c, err: 'the shared library is installed with install_library' });
+        if (header.kind === 'library') return this.reply({ c, err: 'the shared library ships inside the firmware' });
         if (header.id !== id) return this.reply({ c, err: "the image's id is not the folder's name" });
         if (this.needOf(image) > MOCK_ROOM) {
           this.files.set(`/apps/${id}/disabled`, new Uint8Array(0));

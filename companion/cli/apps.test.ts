@@ -88,6 +88,5 @@ describe('the apps command', () => {
     log.mockRestore();
     const installed = await (await session.packages()).apps();
     expect(installed.some((app) => app.kind === 'face')).toBe(true);
-    expect(session.packagesService.library).not.toBeNull();
   }, 20000);
 });

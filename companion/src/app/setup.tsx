@@ -13,7 +13,7 @@ import { useTask } from '@/state/use-task';
 
 const KIND_LABEL = { library: 'Shared icons', face: 'Watch face', app: 'App' } as const;
 
-// Guides a new watch from its help screen to a working one: the shared library, a face, the launcher and the apps.
+// Guides a new watch from its help screen to a working one: a face, the launcher and the apps.
 export default function SetupScreen() {
   const router = useRouter();
   const { files, packages, watchReady } = useWatch();

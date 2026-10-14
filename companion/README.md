@@ -176,7 +176,7 @@ src/app/                 Expo Router screens
   (tabs)/console.tsx     Raw UART traffic and a line to send as it is
   (tabs)/settings.tsx    App settings: weather place, hosts watch apps may fetch, GitHub builds
   scan.tsx               Modal that lists nearby watches
-  apps.tsx               Install a compiled .ntapp or .ntlib image, hide or remove an app, see its memory
+  apps.tsx               Install a compiled .ntapp image, hide or remove an app, see its memory
   setup.tsx              Set up a new watch: the shared icons, a face, the launcher and apps
   notes.tsx              The text file the watch's Notes app shows, and its font there
   remote.tsx             The watch's Remote app: its buttons, what each runs here, and recent taps
@@ -215,7 +215,7 @@ The app reads which services the watch serves right after connecting, in
 | NeoTime diagnostics | `6e540001-…` / `6e540002-…` | eight 32-bit counters and the last restart with its crash; a written `01` says a debug report holds the crash |
 | Device Information | `0x180A` / `0x2A26` | the firmware version, for debug reports |
 | File transfer (BLEFS) | `0xFEBB` / `adaf0200-…` | files, backups, apps |
-| NeoTime packages | `6e540001-…` / `6e540003-…` | installing, hiding and removing apps, the memory each needs and the watch's refusals; the shared library |
+| NeoTime packages | `6e540001-…` / `6e540003-…` | installing, hiding and removing apps, the memory each needs and the watch's refusals |
 | Nordic UART | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` | the Gadgetbridge messages |
 
 The NeoTime UUIDs share the base `6e54xxxx-0000-4000-8000-4e656f54696d`. The full description,
@@ -368,15 +368,15 @@ terminal.
 
 NeoTime ships with no apps, faces or icons: a new watch shows only a help screen. When a watch with
 the packages characteristic has no face, the Watch tab offers **Set up the watch**, which installs
-the shared library, a face, the launcher and the apps chosen, in that order. The images come from
+a face, the launcher and the apps chosen, in that order. The images come from
 [src/bundles/watch-apps.ts](src/bundles/watch-apps.ts), generated from a folder of images compiled
 with NeoTime's `neotime-compiler`: one `.ntapp` per app (the face as `face.ntapp`) and the library
 from `neotime-compiler library -o shared.ntlib`. The images must match the firmware's runtime, so
 rebuild the bundle when the widget or instruction numbering changes.
 
-The shared library also carries the accelerometer's configuration, which the firmware uploads to
-the chip. A watch whose library predates that reports accelerometer state 4 in its diagnostics,
-and the Watch tab then offers **Install the shared library**, which sends only the bundled library.
+The shared library, with its icons, fonts and the accelerometer's configuration, ships inside the
+firmware image, so a firmware update brings it and the companion never sends it. The bundle keeps
+a copy only so the screens can draw the library's icons.
 
 ```bash
 npm run import-watch-apps path/to/images
@@ -384,8 +384,8 @@ npm run import-watch-apps path/to/images
 
 [src/protocol/packages.ts](src/protocol/packages.ts) installs one image: an app or face is written
 to `/apps/<id>/app.ntapp` and then installed with `{"c":"install","id":...}` on the packages
-characteristic, which checks it on the watch; the shared library goes to `/resources/shared.ntlib`
-and `{"c":"install_library"}` copies it into internal flash. The id and kind come from the image's
+characteristic, which checks it on the watch; a shared library image is refused, since it comes with
+the firmware. The id and kind come from the image's
 own header ([src/protocol/app-image.ts](src/protocol/app-image.ts)). The Apps screen and
 `neotime apps` also list, hide, show and remove apps.
 

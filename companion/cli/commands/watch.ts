@@ -54,9 +54,9 @@ neotime slots [fit|recovery <start> <size>|update <start>]
   weekend alarm turned off, and a bare time rings once. files uses NeoTime's
   file service; paths are absolute, such as /settings. note sends a text file
   for the watch's Notes app to show, in the font given, or removes it. apps installs a .ntapp
-  or .ntlib image, list shows each app with the memory it needs, hide and show
+  image, list shows each app with the memory it needs, hide and show
   turn one off and on unless the watch refuses, saying why, and setup installs the
-  face, launcher, apps and shared library this tool bundles onto a new watch. quick-apps
+  face, launcher and apps this tool bundles onto a new watch; the shared library comes with the firmware. quick-apps
   lists the apps a swipe left or right on the face steps through, set replaces them with
   the ids given in order, and reset goes back to the watch's default. listen stays
   connected and prints what the watch sends, answering its apps' http
@@ -269,13 +269,13 @@ export async function apps(session: WatchSession, args: string[]) {
       return;
     }
     case 'install': {
-      if (!first) throw new Error('Give the compiled .ntapp or .ntlib image.');
+      if (!first) throw new Error('Give the compiled .ntapp image.');
       const bar = new ProgressBar();
       const header = await installImage(await session.files(), packages, new Uint8Array(readFileSync(first)), (p) =>
         bar.update(p.sent, p.total, p.file),
       );
       bar.done();
-      say(`Installed ${header.name}${header.kind === 'library' ? ' as the shared library' : ` as ${header.id}`}.`);
+      say(`Installed ${header.name} as ${header.id}.`);
       return;
     }
     case 'remove':
