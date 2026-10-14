@@ -61,7 +61,7 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Other constants and padding | 30.4 KB | 15.1 KB |
 | **Code and data** | **425.1 KB** | **152.9 KB** |
 | Shared library, after the code | 45.7 KB | none |
-| Free of the 480 KB region, after its header | 8.9 KB | 326.8 KB |
+| Free of the 480 KB region, after its header | 8.9 KB | 326.9 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
