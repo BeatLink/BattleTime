@@ -30,8 +30,8 @@ ${LOWERED_SECONDS}                  2
 # AIRCR with its key and SYSRESETREQ: a soft reset, as the firmware's own restart does.
 ${AIRCR}                            0xE000ED0C
 ${SYSTEM_RESET_REQUEST}             0x05FA0004
-# Erased flash near the end of the firmware slot, for the few instructions that write AIRCR.
-${RESET_CODE_ADDRESS}               0x68FC0
+# Erased flash just past the firmware image, worked out from its size, for the few instructions that write AIRCR.
+${RESET_CODE_ADDRESS}               ${{ (${FIRMWARE_START} + __import__('os').path.getsize($FIRMWARE_BIN) + 0xFF) // 0x100 * 0x100 }}
 # ldr r0, [pc, #4]; ldr r1, [pc, #8]; str r1, [r0]; b . ; then the two words those loads read.
 ${RESET_CODE}                       0x49024801
 ${RESET_CODE_STORE_AND_LOOP}        0xE7FE6001
