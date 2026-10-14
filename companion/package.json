@@ -18,7 +18,8 @@
     "build:cli": "esbuild cli/neotime.ts --bundle --platform=node --target=node20 --format=cjs --external:node-ble --alias:@=./src --outfile=build/neotime.cjs",
     "neotime": "npm run build:cli --silent && node build/neotime.cjs",
     "import-watch-apps": "node scripts/import-watch-apps.mjs",
-    "import-icon-names": "node scripts/import-icon-names.mjs"
+    "import-icon-names": "node scripts/import-icon-names.mjs",
+    "build-plugin": "node scripts/build-plugin.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -84,10 +85,10 @@
     ],
     "coverageThreshold": {
       "global": {
-        "lines": 77,
-        "statements": 77,
-        "branches": 75,
-        "functions": 75
+        "lines": 78,
+        "statements": 78,
+        "branches": 77,
+        "functions": 77
       }
     }
   },

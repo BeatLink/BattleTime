@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- Buzz back's settings page. It runs in a sandboxed frame and talks to the plugin only by messages. -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 16px; color: #111; }
+      label { display: block; margin-bottom: 8px; }
+      input { width: 4em; font-size: 1rem; }
+      p { color: #555; }
+    </style>
+  </head>
+  <body>
+    <label>Buzzes for each press <input id="buzzes" type="number" min="1" max="5" /></label>
+    <p id="presses">Waiting for the plugin…</p>
+    <script>
+      const buzzes = document.getElementById("buzzes");
+      const presses = document.getElementById("presses");
+      const send = (message) => parent.postMessage({ neotime: message }, "*");
+
+      window.addEventListener("message", (event) => {
+        const message = event.data && event.data.neotime;
+        if (!message) return;
+        buzzes.value = message.buzzes;
+        presses.textContent = `The watch's button has been pressed ${message.presses} times.`;
+      });
+      buzzes.addEventListener("change", () => send({ buzzes: Number(buzzes.value) }));
+      send({});
+    </script>
+  </body>
+</html>

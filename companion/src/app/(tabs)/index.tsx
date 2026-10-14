@@ -273,6 +273,7 @@ export default function WatchScreen() {
           {canInstall ? (
             <>
               <Row label="Apps" detail="Install, hide or remove apps and faces" onPress={() => router.push('/apps')} />
+              <Row label="Plugins" detail="Watch apps with a part that runs here" onPress={() => router.push('/plugins')} />
               <Row
                 label="Quick apps"
                 detail="The apps a swipe left or right on the watch face steps through"

@@ -4,7 +4,7 @@ const expoConfig = require('eslint-config-expo/flat');
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ['dist/*', 'build/*', 'node_modules/*', '.expo/*', 'android/*', 'ios/*', '.claude/*'],
+    ignores: ['dist/*', 'build/*', 'node_modules/*', '.expo/*', 'android/*', 'ios/*', '.claude/*', 'plugins/*/watch/*'],
   },
   {
     // The desktop shell, the command line tool and the build scripts run in

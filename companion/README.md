@@ -210,8 +210,9 @@ src/app/                 Expo Router screens
   alarms.tsx             The watch's alarms and the days they repeat on
   watch-settings.tsx     Brightness, face, timeout, units, step goal and theme on the watch
 electron/                Desktop app: main process, preload bridge and file server
-core/                    Rust core shared by every build: Bluetooth on btleplug
-tauri/                   Tauri desktop app: the window's bridge, D-Bus, note files, remote commands
+core/                    Rust core shared by every build: Bluetooth on btleplug, and the plugin host
+tauri/                   Tauri desktop app: the window's bridge, D-Bus, note files, remote commands, plugins
+plugins/                 Example plugins; npm run build-plugin -- plugins/<name> builds one
 src/ble/                 Transport layer: react-native-ble-plx, Electron, and a mock for browsers
 src/dfu/                 Firmware updates: Nordic legacy DFU and the package reader
 cli/                     The command line tool, which runs the same code as the screens

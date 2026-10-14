@@ -1,7 +1,7 @@
 // The only bridge between the window and the desktop app, as `window.neotime`.
 //
-// It offers the API src/ble/electron-transport.ts, src/services/phone/desktop.ts, note-file.ts and
-// remote-platform.ts read, and turns each call into a Tauri command answered by src/main.rs.
+// It offers the API src/ble/electron-transport.ts, src/services/phone/desktop.ts, note-file.ts,
+// remote-platform.ts and plugins.ts read, and turns each call into a Tauri command answered by src/main.rs.
 
 (() => {
   // Tauri's own scripts may run after this one, so its globals are looked up at call time.
@@ -72,10 +72,23 @@
     runCommand: (command) => call('remote_run_command', { command }),
   };
 
+  // Plugins installed in the desktop app, read by src/services/plugins.ts.
+  const plugins = {
+    list: () => call('plugins_list'),
+    installPick: () => call('plugins_install_pick'),
+    remove: (id) => call('plugins_remove', { id }),
+    setEnabled: (id, enabled) => call('plugins_set_enabled', { id, enabled }),
+    watchApps: (id) => call('plugins_watch_apps', { id }),
+    uiMessage: (id, message) => call('plugins_ui_message', { id, message }),
+    onUi: (listener) => subscribe('plugins:ui', listener, (each, payload) => each(payload)),
+    onLog: (listener) => subscribe('plugins:log', listener, (each, payload) => each(payload)),
+  };
+
   window.neotime = {
     desktop,
     notes,
     remote,
+    plugins,
     startScan: () => call('ble_start_scan'),
     stopScan: () => call('ble_stop_scan'),
     connect: (id) => call('ble_connect', { id }),

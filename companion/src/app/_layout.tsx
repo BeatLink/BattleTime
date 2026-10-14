@@ -46,6 +46,7 @@ export default function RootLayout() {
           <Stack.Screen name="quick-apps" options={{ headerShown: true, title: 'Quick apps' }} />
           <Stack.Screen name="backup" options={{ headerShown: true, title: 'Backup' }} />
           <Stack.Screen name="apps" options={{ headerShown: true, title: 'Apps' }} />
+          <Stack.Screen name="plugins" options={{ headerShown: true, title: 'Plugins' }} />
           <Stack.Screen name="launcher" options={{ headerShown: true, title: 'Launcher' }} />
           <Stack.Screen name="setup" options={{ headerShown: true, title: 'Set up the watch' }} />
         </Stack>

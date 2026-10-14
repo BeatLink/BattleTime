@@ -179,6 +179,10 @@ relative to `companion/`.
   `window.neotime` the Electron preload does, so a bridge change goes into both until Electron is
   removed. Verify Rust with `cargo test --workspace` and `cargo clippy --workspace --all-targets`
   in `nix develop .#companion`; the Tauri crate needs a `dist/` to build, from `expo export`.
+- Plugins are the phone-side halves of watch apps, installed at run time and run in QuickJS in
+  `core/src/plugins`; [docs/plugins.md](docs/plugins.md) is the author's guide and must match what
+  the host offers. A plugin may send only the watch messages and fetch only the hosts its manifest
+  lists, so a new host function needs a matching permission check and test.
 - `cli/` is the command line tool. It imports the same `src/` modules the screens do, so a feature
   gets a command rather than a second implementation. `npm run neotime -- <command>` rebuilds it
   with esbuild and runs it.

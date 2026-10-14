@@ -1,15 +1,19 @@
 // The NeoTime Companion desktop app.
 //
 // It runs the same interface as the phone app, from the web export, and answers the window's
-// `window.neotime` bridge (bridge.js) with Bluetooth, D-Bus, note files and remote commands here.
+// `window.neotime` bridge (bridge.js) with Bluetooth, D-Bus, note files, remote commands and plugins here.
 
 mod desktop;
 mod notes;
+mod plugins;
 mod remote;
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use neotime_companion_core::ble::{BleError, WatchBle};
+use neotime_companion_core::plugins::host::{Fetcher, PluginHost};
+use neotime_companion_core::plugins::http;
+use neotime_companion_core::plugins::store::PluginStore;
 use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder};
@@ -25,6 +29,7 @@ struct Companion {
     ble: WatchBle,
     desktop: DesktopIntegration,
     notes: NoteFileWatches,
+    plugins: Arc<PluginHost>,
 }
 
 type Answer<T> = Result<T, String>;
@@ -215,14 +220,30 @@ async fn remote_run_command(command: String) -> Answer<remote::CommandResult> {
 // Starting up
 // ============================================================================
 
-fn companion_for(app: &AppHandle) -> Companion {
+fn companion_for(app: &AppHandle) -> Result<Companion, Box<dyn std::error::Error>> {
     let ble_app = app.clone();
     let desktop_app = app.clone();
     let notes_app = app.clone();
-    Companion {
-        ble: WatchBle::new(Arc::new(move |name, payload| {
-            let _ = ble_app.emit("ble:event", json!({ "name": name, "payload": payload }));
-        })),
+
+    // The plugins write to the watch through the Bluetooth layer, which hands them the watch's text in turn.
+    let ble_cell = Arc::new(OnceLock::new());
+    let output = plugins::DesktopOutput {
+        app: app.clone(),
+        ble: ble_cell.clone(),
+    };
+    let fetcher: Fetcher = Arc::new(http::fetch);
+    let store = PluginStore::new(app.path().app_data_dir()?.join("plugins"));
+    let plugin_host = Arc::new(PluginHost::new(store, Arc::new(output), fetcher));
+    let followed = plugin_host.clone();
+    let ble = WatchBle::new(Arc::new(move |name, payload| {
+        plugins::follow_watch(&followed, name, &payload);
+        let _ = ble_app.emit("ble:event", json!({ "name": name, "payload": payload }));
+    }));
+    let _ = ble_cell.set(ble.clone());
+
+    Ok(Companion {
+        ble,
+        plugins: plugin_host,
         desktop: DesktopIntegration::new(Arc::new(move |payload| {
             let _ = desktop_app.emit("desktop:event", payload);
         })),
@@ -232,16 +253,22 @@ fn companion_for(app: &AppHandle) -> Companion {
             }),
             notes::SETTLE,
         ),
-    }
+    })
 }
 
 fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .register_uri_scheme_protocol("plugin", |context, request| {
+            let companion = context.app_handle().state::<Companion>();
+            plugins::serve_ui_file(&companion.plugins, request.uri())
+        })
         .setup(|app| {
-            let companion = companion_for(app.handle());
+            let companion = companion_for(app.handle())?;
             let desktop = companion.desktop.clone();
+            let plugin_host = companion.plugins.clone();
             app.manage(companion);
+            std::thread::spawn(move || plugin_host.start_all());
             tauri::async_runtime::spawn(async move { desktop.start().await });
 
             // In development NEOTIME_DEV_URL points at the Expo dev server, so the interface reloads.
@@ -280,6 +307,13 @@ fn main() {
             notes_watch,
             notes_unwatch,
             remote_run_command,
+            plugins::plugins_list,
+            plugins::plugins_install_pick,
+            plugins::plugins_install,
+            plugins::plugins_remove,
+            plugins::plugins_set_enabled,
+            plugins::plugins_watch_apps,
+            plugins::plugins_ui_message,
         ])
         .build(tauri::generate_context!())
         .expect("the desktop app could not start");
@@ -288,6 +322,7 @@ fn main() {
         if let RunEvent::Exit = event {
             let companion = app.state::<Companion>();
             companion.notes.stop_all();
+            companion.plugins.stop_all();
             tauri::async_runtime::block_on(companion.ble.destroy());
         }
     });

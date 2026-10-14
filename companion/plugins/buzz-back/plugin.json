@@ -1,0 +1,7 @@
+{
+  "id": "buzz-back",
+  "name": "Buzz back",
+  "version": "1.0.0",
+  "description": "A button on the watch that the companion answers by buzzing it back. The example plugin.",
+  "permissions": { "messages": ["vibrate"], "hosts": [] }
+}
