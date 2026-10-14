@@ -1,12 +1,13 @@
 // The NeoTime Companion desktop app.
 //
 // It runs the same interface as the phone app, from the web export, and answers the window's
-// `window.neotime` bridge (bridge.js) with Bluetooth, D-Bus, note files, remote commands and plugins here.
+// `window.neotime` bridge (bridge.js) with Bluetooth, D-Bus, note files, remote commands, plugins and sync here.
 
 mod desktop;
 mod notes;
 mod plugins;
 mod remote;
+mod sync;
 
 use std::sync::{Arc, OnceLock};
 
@@ -14,6 +15,9 @@ use neotime_companion_core::ble::{BleError, WatchBle};
 use neotime_companion_core::plugins::host::{Fetcher, PluginHost};
 use neotime_companion_core::plugins::http;
 use neotime_companion_core::plugins::store::PluginStore;
+use neotime_companion_core::sync::files::FileClient;
+use neotime_companion_core::sync::store::SyncStore;
+use neotime_companion_core::sync::Syncer;
 use neotime_companion_core::web_request;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -31,6 +35,8 @@ struct Companion {
     desktop: DesktopIntegration,
     notes: NoteFileWatches,
     plugins: Arc<PluginHost>,
+    syncer: Arc<Syncer>,
+    lease: Arc<sync::WindowLease>,
 }
 
 type Answer<T> = Result<T, String>;
@@ -243,16 +249,39 @@ fn companion_for(app: &AppHandle) -> Result<Companion, Box<dyn std::error::Error
     let fetcher: Fetcher = Arc::new(http::fetch);
     let store = PluginStore::new(app.path().app_data_dir()?.join("plugins"));
     let plugin_host = Arc::new(PluginHost::new(store, Arc::new(output), fetcher));
-    let followed = plugin_host.clone();
+
+    // The syncer reads the watch's files through the same link, and the plugins read what it keeps.
+    let files = Arc::new(FileClient::new(Arc::new(sync::BleFiles {
+        ble: ble_cell.clone(),
+    })));
+    let syncer = Arc::new(Syncer::new(
+        files,
+        SyncStore::new(app.path().app_data_dir()?.join("sync")),
+        Arc::new(sync::DesktopSync {
+            app: app.clone(),
+            ble: ble_cell.clone(),
+            plugins: plugin_host.clone(),
+        }),
+    ));
+    let syncer_cell = Arc::new(OnceLock::new());
+    let _ = syncer_cell.set(syncer.clone());
+    plugin_host.set_watch_data(Arc::new(sync::PluginData { syncer: syncer_cell }));
+    let lease = Arc::new(sync::WindowLease::default());
+
+    let (followed, synced, leased) = (plugin_host.clone(), syncer.clone(), lease.clone());
     let ble = WatchBle::new(Arc::new(move |name, payload| {
         plugins::follow_watch(&followed, name, &payload);
-        let _ = ble_app.emit("ble:event", json!({ "name": name, "payload": payload }));
+        if sync::follow_watch(&synced, &leased, name, &payload) {
+            let _ = ble_app.emit("ble:event", json!({ "name": name, "payload": payload }));
+        }
     }));
     let _ = ble_cell.set(ble.clone());
 
     Ok(Companion {
         ble,
         plugins: plugin_host,
+        syncer,
+        lease,
         desktop: DesktopIntegration::new(Arc::new(move |payload| {
             let _ = desktop_app.emit("desktop:event", payload);
         })),
@@ -276,7 +305,9 @@ fn main() {
             let companion = companion_for(app.handle())?;
             let desktop = companion.desktop.clone();
             let plugin_host = companion.plugins.clone();
+            let syncer = companion.syncer.clone();
             app.manage(companion);
+            tauri::async_runtime::spawn(syncer.run());
             std::thread::spawn(move || plugin_host.start_all());
             tauri::async_runtime::spawn(async move { desktop.start().await });
 
@@ -324,6 +355,15 @@ fn main() {
             plugins::plugins_set_enabled,
             plugins::plugins_watch_apps,
             plugins::plugins_ui_message,
+            sync::sync_settings,
+            sync::sync_set_settings,
+            sync::sync_now,
+            sync::sync_read,
+            sync::sync_list,
+            sync::sync_write_app_state,
+            sync::sync_write_settings,
+            sync::files_begin,
+            sync::files_end,
         ])
         .build(tauri::generate_context!())
         .expect("the desktop app could not start");

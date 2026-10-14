@@ -16,7 +16,7 @@ export type PluginManifest = {
   watch: string[];
   main?: string | null;
   ui?: string | null;
-  permissions: { messages: string[]; hosts: string[] };
+  permissions: { messages: string[]; hosts: string[]; data?: string[] };
 };
 
 export type PluginStatus = { manifest: PluginManifest; enabled: boolean; running: boolean };
@@ -107,9 +107,17 @@ export function describePermissions(manifest: PluginManifest): string[] {
     find: 'Ring the watch',
     vibrate: 'Buzz the watch',
   };
+  const data: Record<string, string> = {
+    settings: "Read and change the watch's settings",
+    steps: "Read the watch's step history",
+    logs: "Read the watch's logs",
+    files: "Read the watch's settings files",
+    apps: "Read every app's saved state",
+  };
   return [
     ...manifest.permissions.messages.map((message) => words[message] ?? `Send ${message} messages to the watch`),
     ...manifest.permissions.hosts.map((host) => `Fetch from ${host}`),
+    ...(manifest.permissions.data ?? []).map((kind) => data[kind] ?? `Read the watch's ${kind}`),
   ];
 }
 

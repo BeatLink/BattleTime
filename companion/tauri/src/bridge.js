@@ -89,12 +89,25 @@
     onLog: (listener) => subscribe('plugins:log', listener, (each, payload) => each(payload)),
   };
 
+  // The core's copy of the watch's settings and records, read by src/services/sync.ts.
+  const sync = {
+    settings: () => call('sync_settings'),
+    setSettings: (settings) => call('sync_set_settings', { settings }),
+    now: () => call('sync_now'),
+    read: (source) => call('sync_read', { source }),
+    list: (prefix) => call('sync_list', { prefix }),
+    writeAppState: (id, changes) => call('sync_write_app_state', { id, changes }),
+    writeSettings: (changes) => call('sync_write_settings', { changes }),
+    onReport: (listener) => subscribe('sync:report', listener, (each, payload) => each(payload)),
+  };
+
   window.neotime = {
     desktop,
     notes,
     remote,
     web,
     plugins,
+    sync,
     startScan: () => call('ble_start_scan'),
     stopScan: () => call('ble_stop_scan'),
     connect: (id) => call('ble_connect', { id }),
@@ -107,6 +120,9 @@
     gattSubscribe: (service, characteristic) => call('ble_gatt_subscribe', { service, characteristic }),
     gattUnsubscribe: (service, characteristic) => call('ble_gatt_unsubscribe', { service, characteristic }),
     reconnect: (id) => call('ble_reconnect', { id }),
+    // The file service is shared with the core's sync, so the window takes a turn for each operation.
+    filesBegin: () => call('files_begin'),
+    filesEnd: (lease) => call('files_end', { lease }),
     on: (name, listener) => {
       followBle();
       bleListeners[name]?.add(listener);

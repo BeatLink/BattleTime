@@ -49,6 +49,7 @@ import {
   type RemoteLogEntry,
 } from '@/services/remote-actions';
 import { remotePlatform } from '@/services/remote-platform';
+import { shareSyncInterval, syncBridge, syncIntervalMs } from '@/services/sync';
 import { currentWeather, weatherPlace } from '@/services/weather';
 import { watchClockChanges } from '@/state/clock-changes';
 import { NoteSync, type NoteStatus } from '@/state/note-sync';
@@ -136,9 +137,6 @@ type WatchContextValue = {
 };
 
 export type NowPlaying = Extract<PhoneEvent, { type: 'media' }>;
-
-// How often the battery and step count are read while a watch is connected.
-const STATUS_INTERVAL_MS = 5 * 60 * 1000;
 
 // Longest notification text sent, since the watch keeps notifications in a few kilobytes of heap.
 const NOTIFY_TITLE_LIMIT = 60;
@@ -501,20 +499,30 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     setLastSynced(Date.now());
   }, [router, capabilities.uart, readBattery]);
 
-  // Read the battery and step count once the clock is set, then every few minutes.
+  // Read the battery and step count once the clock is set, then on the sync interval.
   const statusOn = uartReady || (watchReady && capabilities.battery);
+  const statusEvery = syncIntervalMs(settings.syncIntervalSeconds);
   useEffect(() => {
     if (!statusOn) {
       return;
     }
     const read = () => refreshStatus().catch(() => {});
     const first = setTimeout(read, 1500);
-    const timer = setInterval(read, STATUS_INTERVAL_MS);
+    const timer = setInterval(read, statusEvery);
     return () => {
       clearTimeout(first);
       clearInterval(timer);
     };
-  }, [statusOn, refreshStatus]);
+  }, [statusOn, statusEvery, refreshStatus]);
+
+  // The desktop app's core reads the rest of the watch on the same interval.
+  const syncIntervalSeconds = settings.syncIntervalSeconds;
+  useEffect(() => {
+    const bridge = syncBridge();
+    if (settingsLoaded && bridge) {
+      shareSyncInterval(bridge, syncIntervalMs(syncIntervalSeconds) / 1000).catch(() => {});
+    }
+  }, [settingsLoaded, syncIntervalSeconds]);
 
   // Keep the app running in the background while a watch is connected, so the link survives.
   const watchName = watch?.name ?? 'watch';

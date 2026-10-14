@@ -18,6 +18,8 @@ export interface DfuLink {
   ): Promise<() => void>;
   // Drop the link and connect to another peer, for the jump into the bootloader.
   reconnect(deviceId: string): Promise<void>;
+  // Runs work while no one else uses the file service, where something else shares it.
+  exclusive?<T>(work: () => Promise<T>): Promise<T>;
 }
 
 export class DfuError extends Error {}
@@ -45,6 +47,11 @@ export class NotifyQueue {
       return;
     }
     this.pending.push(value);
+  }
+
+  // Forget answers nobody waited for, such as those left by a command that gave up.
+  drain() {
+    this.pending.length = 0;
   }
 
   // Fail whoever is waiting, and whoever waits next, after a lost link.

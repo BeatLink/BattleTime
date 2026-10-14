@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
-import { ErrorNote, SavedTextRow, TextRow } from '@/components/fields';
+import { ChoiceRow, ErrorNote, SavedTextRow, TextRow } from '@/components/fields';
 import { Row, ToggleRow } from '@/components/row';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
@@ -11,6 +11,7 @@ import { useWatch } from '@/hooks/use-watch';
 import { MAX_RESPONSE, parseHostList } from '@/services/http-proxy';
 import { phoneBridge } from '@/services/phone';
 import { deviceWord } from '@/services/phone/words';
+import { SYNC_INTERVAL_CHOICES, syncBridge } from '@/services/sync';
 import { findPlace } from '@/services/weather';
 import { useTask } from '@/state/use-task';
 
@@ -51,6 +52,27 @@ function SettingsForm() {
           detail={settings.lastWatchName ?? 'No watch remembered'}
           onPress={settings.lastWatchId ? () => updateSettings({ lastWatchId: null, lastWatchName: null }) : undefined}
         />
+      </Card>
+
+      <Card title="Sync">
+        <ChoiceRow<number>
+          label="Sync every"
+          detail={
+            syncBridge()
+              ? 'How often every setting and record on the watch is read again while it is connected'
+              : 'How often the battery and step count are read again while the watch is connected'
+          }
+          options={SYNC_INTERVAL_CHOICES}
+          value={settings.syncIntervalSeconds}
+          onChange={(value) => updateSettings({ syncIntervalSeconds: value })}
+        />
+        {syncBridge() ? (
+          <Button
+            title="Sync now"
+            busy={task.busy !== null}
+            onPress={() => void task.run('Asking for a sync', async () => syncBridge()?.now())}
+          />
+        ) : null}
       </Card>
 
       <Card title="Weather">

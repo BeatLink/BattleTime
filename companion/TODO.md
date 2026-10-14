@@ -136,6 +136,23 @@ Android 13 and later.
 - **Moving features into plugins.** Weather, notes, remote, alarms, steps, music and notification
   forwarding are still built into the app.
 
+## Sync
+
+[Sync](../docs/sync.md) mirrors the watch's settings, app state, steps and logs in the Rust core,
+and lets plugins read them and change their own app's state.
+
+- **The watch's half of `state`.** The firmware ignores `{"t":"state","app":...}` for now. An open
+  app should load its state file again. A closed app needs nothing, but a background run must not
+  save over the companion's write.
+- **Logs for heart rate, battery and sports sessions** under `/logs` on external flash, so there is
+  history to sync. Sync already reads anything under `/logs`; each log needs a decoder in
+  `core/src/sync/pass.rs`.
+- **A plugin for every user-facing app.** Each app gets a plugin carrying it, with a settings page
+  that shows and edits its synced state.
+- **Synced data in the window.** The steps and alarms screens still read the unserved `steps` and
+  `alarm` messages; they should read `sync_read` instead.
+- **Untried with a watch.** The sync has run only against the core's fake watch.
+
 ## Not started
 
 - **Firmware from GitHub Actions builds.** NeoTime has no CI yet; the finder already reads

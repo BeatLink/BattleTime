@@ -191,6 +191,28 @@ describe('file service on the mock watch', () => {
     expect(await service.read('/apps/clock/state')).toEqual(Uint8Array.from([1, 2, 3]));
   });
 
+  it('takes a turn on a shared service and drops answers left from before', async () => {
+    const watch = new ScriptedWatch(() => [answer(COMMAND.deleteStatus, STATUS.ok)]);
+    const turns: string[] = [];
+    const shared = Object.assign(watch, {
+      exclusive: async <T,>(work: () => Promise<T>) => {
+        turns.push('begin');
+        try {
+          return await work();
+        } finally {
+          turns.push('end');
+        }
+      },
+    });
+    const service = await FileService.open(shared);
+    // An answer meant for someone else arrives first and must not be taken as this command's.
+    (watch as unknown as { listener: (value: Uint8Array) => void }).listener(
+      answer(COMMAND.readData, STATUS.ok),
+    );
+    await service.remove('/old');
+    expect(turns).toEqual(['begin', 'end']);
+  });
+
   it('stops listening when closed', async () => {
     const watch = new ScriptedWatch(() => []);
     const service = await FileService.open(watch);

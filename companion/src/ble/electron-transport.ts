@@ -27,6 +27,9 @@ export type DesktopBridge = {
   gattSubscribe(service: string, characteristic: string): Promise<BridgeResult>;
   gattUnsubscribe(service: string, characteristic: string): Promise<BridgeResult>;
   reconnect(id: string): Promise<BridgeResult>;
+  // Only the desktop app, whose core shares the file service with its sync, has these.
+  filesBegin?(): Promise<BridgeResult>;
+  filesEnd?(lease: unknown): Promise<BridgeResult>;
   on(
     name: 'device' | 'line' | 'state' | 'error' | 'notify' | 'mode',
     listener: (payload: never) => void,
@@ -172,6 +175,19 @@ class ElectronDfuLink implements DfuLink {
       off();
       void this.bridge.gattUnsubscribe(service, characteristic);
     };
+  }
+
+  async exclusive<T>(work: () => Promise<T>): Promise<T> {
+    if (!this.bridge.filesBegin || !this.bridge.filesEnd) {
+      return work();
+    }
+    const begun = await this.bridge.filesBegin();
+    check(begun);
+    try {
+      return await work();
+    } finally {
+      await this.bridge.filesEnd(begun.value);
+    }
   }
 
   async reconnect(deviceId: string): Promise<void> {

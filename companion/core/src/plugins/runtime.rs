@@ -1,7 +1,7 @@
 // One plugin's logic, running in QuickJS on a thread of its own.
 //
-// The script sees `neotime` (events, messages to the watch and the settings page, settings), timers,
-// `fetch` and `console`. Each call out of the script goes through a few host functions that check it
+// The script sees `neotime` (events, messages to the watch and the settings page, settings, synced
+// watch data), timers, `fetch` and `console`. Each call out of the script goes through a few host functions that check it
 // against the manifest; everything else is the JavaScript in PRELUDE.
 
 use std::cell::{Cell, RefCell};
@@ -32,7 +32,7 @@ const STACK_LIMIT_BYTES: usize = 512 * 1024;
 // How long one event may run before the script is stopped, which stops an endless loop.
 const EVENT_TIME_LIMIT: Duration = Duration::from_secs(2);
 
-// The most requests one plugin may have waiting at once.
+// The most requests and data writes one plugin may have waiting at once.
 const MOST_FETCHES_AT_ONCE: usize = 8;
 
 // ============================================================================
@@ -60,6 +60,15 @@ pub struct FetchResponse {
     pub body: String,
 }
 
+// A change a plugin asks to make on the watch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DataWrite {
+    // New values for the plugin's own app's saved state.
+    AppState(Value),
+    // A `settings` message's keys.
+    Settings(Value),
+}
+
 // What a plugin's script reaches outside itself. The host decides how each is carried out.
 pub trait PluginServices: Send + Sync + 'static {
     // A message for the watch, already checked against the manifest.
@@ -69,6 +78,12 @@ pub trait PluginServices: Send + Sync + 'static {
     fn save_settings(&self, plugin: &str, settings: &Map<String, Value>);
     // Runs on a thread of its own, so it may block.
     fn fetch(&self, request: &FetchRequest) -> Result<FetchResponse, String>;
+    // A synced source, already checked against the manifest.
+    fn read_data(&self, source: &str) -> Option<Value>;
+    fn list_data(&self, prefix: &str) -> Vec<String>;
+    // Runs on a thread of its own, so it may block; the answer is the source as it now is.
+    fn write_data(&self, plugin: &str, write: &DataWrite) -> Result<Value, String>;
+    fn sync_now(&self);
 }
 
 // What happens to a plugin, in the order it happens.
@@ -84,6 +99,12 @@ pub enum Event {
         id: u64,
         result: Result<FetchResponse, String>,
     },
+    // A sync changed these sources, already narrowed to those the plugin may read.
+    Synced(Vec<String>),
+    WriteDone {
+        id: u64,
+        result: Result<Value, String>,
+    },
     Stop,
 }
 
@@ -95,11 +116,20 @@ const PRELUDE: &str = r#"
 (() => {
   const host = globalThis.__host;
   delete globalThis.__host;
-  const handlers = { message: [], connect: [], disconnect: [], ui: [] };
+  const handlers = { message: [], connect: [], disconnect: [], ui: [], sync: [] };
   const timers = new Map();
   const fetches = new Map();
   let nextTimer = 1;
   let nextFetch = 1;
+  const writes = new Map();
+  let nextWrite = 1;
+  const write = (kind, changes) =>
+    new Promise((resolve, reject) => {
+      const id = nextWrite++;
+      const refusal = host.write(id, kind, JSON.stringify(changes === undefined ? {} : changes));
+      if (refusal) reject(new Error(refusal));
+      else writes.set(id, { resolve, reject });
+    });
   const describe = (error) => (error && error.stack ? `${error}\n${error.stack}` : String(error));
   const report = (error) => host.log(`error: ${describe(error)}`);
   const run = (handler, argument) => {
@@ -150,6 +180,17 @@ const PRELUDE: &str = r#"
       if (refusal) throw new Error(refusal);
     },
     ui: Object.freeze({ send: (message) => host.ui(JSON.stringify(message)) }),
+    data: Object.freeze({
+      get(source) {
+        const answer = JSON.parse(host.data(String(source)));
+        if (answer.error) throw new Error(answer.error);
+        return answer.value === null ? undefined : answer.value;
+      },
+      list: (prefix) => JSON.parse(host.list(String(prefix || ""))),
+      write: (changes) => write("app", changes),
+      writeSettings: (changes) => write("settings", changes),
+      syncNow: () => host.syncNow(),
+    }),
     settings: Object.freeze({
       get(key) {
         const value = host.get(String(key));
@@ -185,6 +226,14 @@ const PRELUDE: &str = r#"
         text: () => Promise.resolve(body),
         json: () => Promise.resolve().then(() => JSON.parse(body)),
       }));
+      return;
+    }
+    if (kind === "written") {
+      const waiting = writes.get(data.id);
+      if (!waiting) return;
+      writes.delete(data.id);
+      if (data.error) waiting.reject(new Error(data.error));
+      else waiting.resolve(data.value);
       return;
     }
     for (const handler of handlers[kind] || []) run(handler, data);
@@ -227,6 +276,17 @@ pub fn refuse_fetch(manifest: &Manifest, url: &str) -> Option<String> {
             "This plugin may not fetch from {host}; add it to permissions.hosts."
         ))
     }
+}
+
+// Why the script may not read this synced source, or None when it may.
+pub fn refuse_data(manifest: &Manifest, source: &str) -> Option<String> {
+    if manifest.may_read(source) {
+        return None;
+    }
+    let kind = source.split('/').next().unwrap_or(source);
+    Some(format!(
+        "This plugin may not read \"{source}\"; add \"{kind}\" to permissions.data."
+    ))
 }
 
 // ============================================================================
@@ -307,6 +367,7 @@ struct Requests {
     timers: Vec<(u64, u64)>,
     cancelled: Vec<u64>,
     fetches: Vec<(u64, FetchRequest)>,
+    writes: Vec<(u64, DataWrite)>,
     settings_changed: bool,
 }
 
@@ -449,14 +510,18 @@ impl Script {
             })?,
         )?;
 
-        let (requests, waiting) = (self.requests.clone(), self.fetches_waiting.clone());
+        let (requests, waiting, checked) = (
+            self.requests.clone(),
+            self.fetches_waiting.clone(),
+            manifest.clone(),
+        );
         host.set(
             "fetch",
             Function::new(ctx.clone(), move |id: f64, text: String| -> String {
                 let Ok(request) = serde_json::from_str::<FetchRequest>(&text) else {
                     return "The request is not valid.".into();
                 };
-                if let Some(refusal) = refuse_fetch(&manifest, &request.url) {
+                if let Some(refusal) = refuse_fetch(&checked, &request.url) {
                     return refusal;
                 }
                 if waiting.get() >= MOST_FETCHES_AT_ONCE {
@@ -466,6 +531,71 @@ impl Script {
                 requests.borrow_mut().fetches.push((id as u64, request));
                 String::new()
             })?,
+        )?;
+
+        let (services, checked) = (self.services.clone(), manifest.clone());
+        host.set(
+            "data",
+            Function::new(ctx.clone(), move |source: String| -> String {
+                match refuse_data(&checked, &source) {
+                    Some(refusal) => json!({ "error": refusal }),
+                    None => json!({ "value": services.read_data(&source) }),
+                }
+                .to_string()
+            })?,
+        )?;
+
+        let (services, checked) = (self.services.clone(), manifest.clone());
+        host.set(
+            "list",
+            Function::new(ctx.clone(), move |prefix: String| -> String {
+                let sources: Vec<String> = services
+                    .list_data(&prefix)
+                    .into_iter()
+                    .filter(|source| checked.may_read(source))
+                    .collect();
+                json!(sources).to_string()
+            })?,
+        )?;
+
+        let (requests, waiting, checked) = (
+            self.requests.clone(),
+            self.fetches_waiting.clone(),
+            manifest.clone(),
+        );
+        host.set(
+            "write",
+            Function::new(
+                ctx.clone(),
+                move |id: f64, kind: String, text: String| -> String {
+                    let Ok(changes) = serde_json::from_str::<Value>(&text) else {
+                        return "The changes are not JSON.".into();
+                    };
+                    if !changes.is_object() {
+                        return "The changes must be an object.".into();
+                    }
+                    let write = if kind == "settings" {
+                        if let Some(refusal) = refuse_data(&checked, "settings") {
+                            return refusal;
+                        }
+                        DataWrite::Settings(changes)
+                    } else {
+                        DataWrite::AppState(changes)
+                    };
+                    if waiting.get() >= MOST_FETCHES_AT_ONCE {
+                        return format!("A plugin may have at most {MOST_FETCHES_AT_ONCE} requests waiting.");
+                    }
+                    waiting.set(waiting.get() + 1);
+                    requests.borrow_mut().writes.push((id as u64, write));
+                    String::new()
+                },
+            )?,
+        )?;
+
+        let services = self.services.clone();
+        host.set(
+            "syncNow",
+            Function::new(ctx.clone(), move || services.sync_now())?,
         )?;
 
         ctx.globals().set("__host", host)
@@ -499,6 +629,16 @@ impl Script {
                         Err(error) => json!({ "id": id, "error": error }),
                     };
                     self.dispatch("fetch", &data);
+                }
+                Some(Event::Synced(changed)) => self.dispatch("sync", &json!(changed)),
+                Some(Event::WriteDone { id, result }) => {
+                    self.fetches_waiting
+                        .set(self.fetches_waiting.get().saturating_sub(1));
+                    let data = match result {
+                        Ok(value) => json!({ "id": id, "value": value }),
+                        Err(error) => json!({ "id": id, "error": error }),
+                    };
+                    self.dispatch("written", &data);
                 }
                 None => {}
             }
@@ -570,6 +710,13 @@ impl Script {
                 let _ = sender.send(Event::FetchDone { id, result });
             });
         }
+        for (id, write) in requests.writes {
+            let (services, sender, plugin) = (self.services.clone(), self.sender.clone(), self.id.clone());
+            std::thread::spawn(move || {
+                let result = services.write_data(&plugin, &write);
+                let _ = sender.send(Event::WriteDone { id, result });
+            });
+        }
         for id in requests.cancelled {
             self.cancelled.borrow_mut().insert(id);
         }
@@ -619,6 +766,9 @@ pub(crate) mod tests {
         pub log: Mutex<Vec<String>>,
         pub settings: Mutex<Vec<Map<String, Value>>>,
         pub fetched: Mutex<Vec<FetchRequest>>,
+        pub data: Mutex<std::collections::BTreeMap<String, Value>>,
+        pub writes: Mutex<Vec<DataWrite>>,
+        pub syncs: Mutex<usize>,
     }
 
     impl PluginServices for Recorder {
@@ -644,13 +794,39 @@ pub(crate) mod tests {
                 body: r#"{"temp":290}"#.into(),
             })
         }
+        fn read_data(&self, source: &str) -> Option<Value> {
+            self.data.lock().unwrap().get(source).cloned()
+        }
+        fn list_data(&self, prefix: &str) -> Vec<String> {
+            self.data
+                .lock()
+                .unwrap()
+                .keys()
+                .filter(|source| source.starts_with(prefix))
+                .cloned()
+                .collect()
+        }
+        fn write_data(&self, _plugin: &str, write: &DataWrite) -> Result<Value, String> {
+            self.writes.lock().unwrap().push(write.clone());
+            match write {
+                DataWrite::AppState(changes) if changes.get("bad").is_some() => Err("refused".into()),
+                DataWrite::AppState(changes) | DataWrite::Settings(changes) => Ok(changes.clone()),
+            }
+        }
+        fn sync_now(&self) {
+            *self.syncs.lock().unwrap() += 1;
+        }
     }
 
     pub fn manifest(messages: &[&str], hosts: &[&str]) -> Manifest {
+        manifest_with_data(messages, hosts, &[])
+    }
+
+    pub fn manifest_with_data(messages: &[&str], hosts: &[&str], data: &[&str]) -> Manifest {
         Manifest::parse(
             &json!({
                 "id": "demo", "name": "Demo", "version": "1",
-                "permissions": { "messages": messages, "hosts": hosts }
+                "permissions": { "messages": messages, "hosts": hosts, "data": data }
             })
             .to_string(),
         )
@@ -723,6 +899,91 @@ pub(crate) mod tests {
             recorder.settings.lock().unwrap().as_slice(),
             [json!({"city": "Kingston"}).as_object().unwrap().clone()]
         );
+    }
+
+    fn start_with_data(source: &str, data: &[&str]) -> (RunningPlugin, Arc<Recorder>) {
+        let recorder = Arc::new(Recorder::default());
+        recorder.data.lock().unwrap().extend([
+            ("apps/demo".to_string(), json!({ "state": { "level": 2 } })),
+            ("apps/alarm".to_string(), json!({ "state": {} })),
+            ("steps/2026/10-14".to_string(), json!({ "slots": [3] })),
+            ("settings".to_string(), json!({ "brightness": 2 })),
+        ]);
+        let plugin = RunningPlugin::start(
+            manifest_with_data(&[], &[], data),
+            source.into(),
+            Map::new(),
+            recorder.clone(),
+        )
+        .unwrap();
+        (plugin, recorder)
+    }
+
+    #[test]
+    fn synced_data_reads_only_as_far_as_the_manifest_allows() {
+        let (plugin, recorder) = start_with_data(
+            "neotime.on('connect', () => {
+               const refused = (source) => { try { neotime.data.get(source); return false; } catch (e) { return e.message; } };
+               neotime.ui.send({
+                 own: neotime.data.get('apps/demo').state.level,
+                 steps: neotime.data.get('steps/2026/10-14').slots,
+                 missing: neotime.data.get('steps/2026/10-13') === undefined,
+                 listed: neotime.data.list(''),
+                 alarm: refused('apps/alarm'),
+                 settings: refused('settings'),
+               });
+             });",
+            &["steps"],
+        );
+        plugin.send(Event::Connected);
+        wait_for(|| recorder.ui.lock().unwrap().len() == 1);
+        let answer = recorder.ui.lock().unwrap()[0].clone();
+        assert_eq!(answer["own"], 2);
+        assert_eq!(answer["steps"], json!([3]));
+        assert_eq!(answer["missing"], true);
+        assert_eq!(answer["listed"], json!(["apps/demo", "steps/2026/10-14"]));
+        assert!(answer["alarm"]
+            .as_str()
+            .unwrap()
+            .contains("add \"apps\" to permissions.data"));
+        assert!(answer["settings"].as_str().unwrap().contains("\"settings\""));
+    }
+
+    #[test]
+    fn writes_settle_their_promises_and_settings_need_the_permission() {
+        let (plugin, recorder) = start_with_data(
+            "neotime.on('connect', async () => {
+               const own = await neotime.data.write({ level: 3 });
+               const refused = await neotime.data.write({ bad: 1 }).catch((e) => e.message);
+               const settings = await neotime.data.writeSettings({ brightness: 3 }).catch((e) => e.message);
+               neotime.data.syncNow();
+               neotime.ui.send({ own, refused, settings });
+             });",
+            &[],
+        );
+        plugin.send(Event::Connected);
+        wait_for(|| recorder.ui.lock().unwrap().len() == 1);
+        let answer = recorder.ui.lock().unwrap()[0].clone();
+        assert_eq!(answer["own"], json!({ "level": 3 }));
+        assert_eq!(answer["refused"], "refused");
+        assert!(answer["settings"]
+            .as_str()
+            .unwrap()
+            .contains("may not read \"settings\""));
+        assert_eq!(recorder.writes.lock().unwrap().len(), 2);
+        assert_eq!(*recorder.syncs.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn a_sync_reaches_the_plugin_with_what_changed() {
+        let (plugin, recorder) = start_with_data(
+            "neotime.on('sync', (changed) => neotime.ui.send(changed));",
+            &["settings"],
+        );
+        plugin.send(Event::Synced(vec!["settings".into()]));
+        wait_for(|| recorder.ui.lock().unwrap().len() == 1);
+        assert_eq!(recorder.ui.lock().unwrap()[0], json!(["settings"]));
+        plugin.send(Event::Stop);
     }
 
     #[test]

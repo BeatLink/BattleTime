@@ -6,12 +6,12 @@
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use serde_json::{Map, Value};
 
 use super::package::Package;
-use super::runtime::{Event, FetchRequest, FetchResponse, PluginServices, RunningPlugin};
+use super::runtime::{DataWrite, Event, FetchRequest, FetchResponse, PluginServices, RunningPlugin};
 use super::store::{InstalledPlugin, PluginStore};
 use crate::gadgetbridge::{decode_watch_line, encode_for_watch, LineBuffer};
 
@@ -29,10 +29,20 @@ pub trait HostOutput: Send + Sync + 'static {
 // Fetching is a seam of its own so tests need no network.
 pub type Fetcher = Arc<dyn Fn(&FetchRequest) -> Result<FetchResponse, String> + Send + Sync>;
 
+// The synced watch data, which the shell keeps (see `crate::sync`).
+pub trait WatchData: Send + Sync + 'static {
+    fn read(&self, source: &str) -> Option<Value>;
+    fn list(&self, prefix: &str) -> Vec<String>;
+    // May block until the watch has answered.
+    fn write(&self, plugin: &str, write: &DataWrite) -> Result<Value, String>;
+    fn sync_now(&self);
+}
+
 struct Services {
     store: Arc<PluginStore>,
     output: Arc<dyn HostOutput>,
     fetcher: Fetcher,
+    data: OnceLock<Arc<dyn WatchData>>,
 }
 
 impl PluginServices for Services {
@@ -53,6 +63,23 @@ impl PluginServices for Services {
     }
     fn fetch(&self, request: &FetchRequest) -> Result<FetchResponse, String> {
         (self.fetcher)(request)
+    }
+    fn read_data(&self, source: &str) -> Option<Value> {
+        self.data.get()?.read(source)
+    }
+    fn list_data(&self, prefix: &str) -> Vec<String> {
+        self.data.get().map_or_else(Vec::new, |data| data.list(prefix))
+    }
+    fn write_data(&self, plugin: &str, write: &DataWrite) -> Result<Value, String> {
+        match self.data.get() {
+            Some(data) => data.write(plugin, write),
+            None => Err("This companion keeps no watch data.".into()),
+        }
+    }
+    fn sync_now(&self) {
+        if let Some(data) = self.data.get() {
+            data.sync_now();
+        }
     }
 }
 
@@ -85,11 +112,34 @@ impl PluginHost {
                 store: store.clone(),
                 output,
                 fetcher,
+                data: OnceLock::new(),
             }),
             store,
             running: Mutex::new(BTreeMap::new()),
             lines: Mutex::new(LineBuffer::default()),
             connected: AtomicBool::new(false),
+        }
+    }
+
+    // Joins the plugins to the synced watch data; until then they read nothing.
+    pub fn set_watch_data(&self, data: Arc<dyn WatchData>) {
+        let _ = self.services.data.set(data);
+    }
+
+    // A sync changed these sources; each plugin hears about those it may read.
+    pub fn on_synced(&self, changed: &[String]) {
+        for (id, plugin) in self.running.lock().unwrap().iter() {
+            let Ok(installed) = self.store.installed(id) else {
+                continue;
+            };
+            let readable: Vec<String> = changed
+                .iter()
+                .filter(|source| installed.manifest.may_read(source))
+                .cloned()
+                .collect();
+            if !readable.is_empty() {
+                plugin.send(Event::Synced(readable));
+            }
         }
     }
 
@@ -356,6 +406,40 @@ mod tests {
         assert!(!host.list()[0].running);
         host.set_enabled("echo", true).unwrap();
         assert!(host.list()[0].running);
+    }
+
+    struct Kept;
+
+    impl WatchData for Kept {
+        fn read(&self, source: &str) -> Option<Value> {
+            Some(json!(source))
+        }
+        fn list(&self, _prefix: &str) -> Vec<String> {
+            vec!["apps/echo".into()]
+        }
+        fn write(&self, plugin: &str, _write: &DataWrite) -> Result<Value, String> {
+            Ok(json!(plugin))
+        }
+        fn sync_now(&self) {}
+    }
+
+    #[test]
+    fn plugins_hear_only_the_synced_sources_they_may_read() {
+        let (host, shell, _folder) = host();
+        let main = "neotime.on('sync', (changed) => neotime.ui.send({ changed, own: neotime.data.get(changed[0]) }));";
+        host.install(&package("echo", main)).unwrap();
+        host.on_synced(&["settings".into(), "apps/echo".into()]);
+        wait_for(|| shell.ui.lock().unwrap().len() == 1);
+        // No data is joined yet, so the plugin reads nothing.
+        assert_eq!(shell.ui.lock().unwrap()[0].1, json!({ "changed": ["apps/echo"] }));
+        host.set_watch_data(Arc::new(Kept));
+        host.on_synced(&["apps/other".into()]);
+        host.on_synced(&["apps/echo".into()]);
+        wait_for(|| shell.ui.lock().unwrap().len() == 2);
+        assert_eq!(
+            shell.ui.lock().unwrap()[1].1,
+            json!({ "changed": ["apps/echo"], "own": "apps/echo" })
+        );
     }
 
     #[test]

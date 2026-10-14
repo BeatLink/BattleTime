@@ -21,6 +21,10 @@ pub const PLUGIN_MESSAGE_TYPES: [&str; 7] = [
     "vibrate",
 ];
 
+// The synced watch data a plugin may ask for besides its own app's state, which it always has.
+// `settings` also lets it change the watch's settings; the rest are read only.
+pub const PLUGIN_DATA_KINDS: [&str; 5] = ["settings", "steps", "logs", "files", "apps"];
+
 // ============================================================================
 // The manifest
 // ============================================================================
@@ -56,6 +60,9 @@ pub struct Permissions {
     // The internet hosts the plugin may fetch from, over https only.
     #[serde(default)]
     pub hosts: Vec<String>,
+    // The synced watch data the plugin may read, from PLUGIN_DATA_KINDS.
+    #[serde(default)]
+    pub data: Vec<String>,
 }
 
 impl Manifest {
@@ -91,6 +98,11 @@ impl Manifest {
                 ));
             }
         }
+        for kind in &self.permissions.data {
+            if !PLUGIN_DATA_KINDS.contains(&kind.as_str()) {
+                return Err(format!("Plugins may not ask for \"{kind}\" data."));
+            }
+        }
         for host in &self.permissions.hosts {
             if !is_host_name(host) {
                 return Err(format!("\"{host}\" is not a host name."));
@@ -110,6 +122,19 @@ impl Manifest {
             .messages
             .iter()
             .any(|allowed| allowed == message_type)
+    }
+
+    // A source is `settings`, `apps/<id>`, `steps/...` and so on, as the sync store names them.
+    pub fn may_read(&self, source: &str) -> bool {
+        if source == format!("apps/{}", self.id) {
+            return true;
+        }
+        let kind = source.split('/').next().unwrap_or("");
+        let whole = kind == source;
+        self.permissions
+            .data
+            .iter()
+            .any(|allowed| allowed == kind && (kind == "settings") == whole)
     }
 
     pub fn may_fetch(&self, host: &str) -> bool {
@@ -177,6 +202,31 @@ mod tests {
         assert!(!manifest.may_send("vibrate"));
         assert!(manifest.may_fetch("API.open-meteo.com"));
         assert!(!manifest.may_fetch("example.com"));
+    }
+
+    #[test]
+    fn a_plugin_reads_its_own_app_and_only_the_data_it_names() {
+        let manifest = Manifest::parse(
+            r#"{"id":"steps","name":"Steps","version":"1","permissions":{"data":["steps","settings"]}}"#,
+        )
+        .unwrap();
+        for source in ["apps/steps", "steps/2026/10-14", "steps/trip", "settings"] {
+            assert!(manifest.may_read(source), "{source}");
+        }
+        for source in [
+            "apps/alarm",
+            "logs/heart/2026/10-14",
+            "steps",
+            "settings/x",
+            "files/settings/launcher",
+        ] {
+            assert!(!manifest.may_read(source), "{source}");
+        }
+        assert!(Manifest::parse(
+            r#"{"id":"x","name":"X","version":"1","permissions":{"data":["everything"]}}"#
+        )
+        .unwrap_err()
+        .contains("\"everything\" data"));
     }
 
     #[test]

@@ -356,7 +356,14 @@ export class FileService {
   // ==========================================================================
 
   private serially<T>(work: () => Promise<T>): Promise<T> {
-    const result = this.queue.then(work, work);
+    const turn = () => {
+      const fresh = () => {
+        this.answers.drain();
+        return work();
+      };
+      return this.link.exclusive ? this.link.exclusive(fresh) : fresh();
+    };
+    const result = this.queue.then(turn, turn);
     this.queue = result.catch(() => undefined);
     return result;
   }

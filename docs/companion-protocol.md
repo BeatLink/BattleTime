@@ -196,6 +196,7 @@ Phone to watch:
 | `alarm` | `d`: a list of `{h, m, on, rep}` | Set the alarms; with no `d`, report them. |
 | `steps` | `y`, `m`, `d` | The watch replies with that day's steps in 240 six-minute slots, `null` where unknown. |
 | `http` | `id`, `resp` or `err` | The answer to a watch's `http` request. |
+| `state` | `app`: an app id | The companion has just rewritten `/apps/<app>/state` ([sync.md](sync.md)): an open app should load it again rather than save over it. |
 
 Watch to phone: `http` with `id`, `url`, `method`, `body`; `info` with `msg`.
 

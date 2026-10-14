@@ -39,7 +39,7 @@ The manifest:
   "watch": ["watch/buzz-back.ntapp"],
   "main": "phone/main.js",
   "ui": "phone/ui/index.html",
-  "permissions": { "messages": ["vibrate"], "hosts": [] }
+  "permissions": { "messages": ["vibrate"], "hosts": [], "data": [] }
 }
 ```
 
@@ -49,6 +49,13 @@ The manifest:
   `musicinfo`, `musicstate`, `weather`, `find` and `vibrate`. Settings, slots and the rest change
   the watch itself, so only the core sends those.
 - `permissions.hosts` lists the hosts the plugin may fetch from, over https only.
+- `permissions.data` lists the [synced watch data](#synced-watch-data) the plugin may read, beyond
+  its own app's state, which it always has:
+  - `settings`: the watch's settings, which the plugin may also change;
+  - `steps`: the step log;
+  - `logs`: the other logs;
+  - `files`: the files in `/settings`;
+  - `apps`: every app's state.
 
 The companion shows these permissions in words on the plugin's page, and refuses anything else.
 
@@ -79,6 +86,10 @@ build script bundle it. It sees:
 | `neotime.send({ t: "vibrate", n: 2 })` | Sends the watch a message from `permissions.messages`, as [companion-protocol.md](companion-protocol.md) describes it; throws on any other. |
 | `neotime.ui.send(message)` | Sends the settings page a message, when it is open. |
 | `neotime.settings.get(key)`, `neotime.settings.set(key, value)` | The plugin's own settings, kept as JSON and saved after each event. |
+| `neotime.data.get(source)`, `neotime.data.list(prefix)` | Synced watch data, as described below. |
+| `neotime.data.write(changes)`, `neotime.data.writeSettings(changes)` | Changes the plugin's own app's state, or the watch's settings, on the watch; each gives a promise of the result. |
+| `neotime.data.syncNow()` | Asks for a sync now instead of at the next interval. |
+| `neotime.on("sync", (changed) => ...)` | A sync changed these sources; only those the plugin may read are listed. |
 | `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval` | Timers; an interval is at least a second. |
 | `fetch(url, { method, headers, body })` | A request to a host in `permissions.hosts`, over https. Redirects come back unfollowed, and a reply is cut at 1 MB. |
 | `console.log`, `console.warn`, `console.error` | Lines in the plugin's log, shown on its page. |
@@ -86,6 +97,44 @@ build script bundle it. It sees:
 An error in a handler is logged and the plugin keeps running. Each event may run for 2 seconds and
 the script may use 32 MB; past either, the script is stopped for that event. A script that fails to
 load leaves the plugin installed but stopped.
+
+## Synced watch data
+
+The companion keeps a copy of every setting and record on the watch, read again on the interval set
+in its settings ([sync.md](sync.md) has the details). A plugin reads that copy by source name:
+
+| Source | Holds |
+|---|---|
+| `apps/<id>` | `{ hidden, state }`: whether the app is hidden, and its saved state, `null` if none |
+| `settings` | every watch setting, by the keys of the `settings` message |
+| `steps/<year>/<MM>-<DD>` | `{ slots }`: that day's steps in six-minute slots |
+| `steps/trip` | `{ count }`: the trip counter |
+| `files/settings/<name>` | a file from `/settings` |
+| `logs/...` | the logs' raw bytes |
+
+`neotime.data.get` returns `undefined` for a source not synced yet. It throws for one the manifest
+does not allow. `neotime.data.list("steps")` lists the sources under a prefix that the plugin may
+read.
+
+An app's state reads as JSON:
+
+- switches are `true` and `false`;
+- times are milliseconds since 1970, in the watch's local time;
+- a record's fields come together as one object of lists, for example
+  `state.alarms.hour[0]`.
+
+`neotime.data.write({ alarms: { hour: [6, 9] } })` changes only the values it names. Each value
+keeps its type and size, and the promise rejects a value that would not fit. The watch takes up the
+change even while the app is open.
+
+```js
+neotime.on("sync", (changed) => {
+  if (changed.includes("apps/alarm")) {
+    const { state } = neotime.data.get("apps/alarm");
+    neotime.ui.send({ alarms: state.alarm_count });
+  }
+});
+```
 
 ## The settings page
 

@@ -5,6 +5,7 @@ import { readRemoteButtons, type RemoteButton, type RemoteOnWatch } from '@/prot
 import type { NoteFileRef } from '@/services/note-file';
 import { NOTE_SOURCES, type NoteSource } from '@/services/note-source';
 import { readWebAccess, type WebAccess } from '@/services/web-request';
+import { DEFAULT_SYNC_INTERVAL_SECONDS } from '@/services/sync';
 import type { Place } from '@/services/weather';
 
 // User settings that survive restarts, stored as one JSON blob.
@@ -42,6 +43,8 @@ export type Settings = {
   // The watch's remote buttons, in order, and the layout the watch was last sent.
   remoteButtons: RemoteButton[];
   remoteOnWatch: RemoteOnWatch | null;
+  // How often everything on the watch is read again while it is connected.
+  syncIntervalSeconds: number;
 };
 
 export const defaultSettings: Settings = {
@@ -70,6 +73,7 @@ export const defaultSettings: Settings = {
   noteOnWatch: null,
   remoteButtons: [],
   remoteOnWatch: null,
+  syncIntervalSeconds: DEFAULT_SYNC_INTERVAL_SECONDS,
 };
 
 const STORAGE_KEY = 'neotime.settings.v1';

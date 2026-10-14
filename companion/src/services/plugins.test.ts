@@ -89,6 +89,8 @@ describe('plugins', () => {
       'Send custom messages to the watch',
       'Fetch from api.open-meteo.com',
     ]);
+    const reading = { ...manifest, permissions: { messages: [], hosts: [], data: ['steps', 'other'] } };
+    expect(describePermissions(reading)).toEqual(["Read the watch's step history", "Read the watch's other"]);
   });
 
   it('says why a plugin is or is not running', () => {
