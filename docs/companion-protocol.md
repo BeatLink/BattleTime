@@ -252,11 +252,26 @@ returns as spaces and other bytes as `?`, and draws only the characters its font
 
 ### QR code
 
-The `qr-code` app shows the QR code in `/qr/code`, with the caption in `/qr/label` under it. The
-companion app makes the code and writes both files whole with the file transfer above.
+The `qr-code` app lists the codes in `/qr/list` and shows the one tapped from `/qr/<slot>`, reading
+only that file. The companion app makes each code and writes the files whole with the file transfer
+above: adding a code writes its file and then the list, and renaming, moving or removing one
+rewrites only the list (removing deletes the code's file afterwards), so the list never names a
+missing file.
 
-`/qr/code` is a 1-bit bitmap of the code's modules with no quiet zone; the watch paints the white
-margin itself.
+`/qr/list` holds up to eight codes in the order the watch lists them:
+
+| Bytes | Holds |
+|---|---|
+| 0 | format version, 1 |
+| 1 | how many codes, 0 to 8 |
+| 2.. | 26 bytes for each code: its slot (0 to 7), its caption's length (1 to 24), then the caption padded with zeros to 24 bytes |
+
+A caption is printable ASCII only (`0x20` to `0x7e`); the companion drops accents and writes `?`
+for anything else. A list in another version shows no codes. Deleting `/qr/list` brings back the
+app's hint.
+
+`/qr/<slot>`, such as `/qr/3`, is a 1-bit bitmap of the code's modules with no quiet zone; the
+watch paints the white margin itself.
 
 | Bytes | Holds |
 |---|---|
@@ -266,10 +281,6 @@ margin itself.
 
 The watch refuses a code over 120 by 120 modules. Above 74 modules a module is under 3 pixels on
 the 240 pixel screen and may not scan, so the companion warns but still sends it.
-
-`/qr/label` is optional: printable ASCII only (`0x20` to `0x7e`), at most 24 bytes, with no newline.
-The companion drops accents and writes `?` for anything else, and deletes the file when there is
-no caption. Deleting `/qr/code` brings back the app's hint.
 
 ### Launcher
 

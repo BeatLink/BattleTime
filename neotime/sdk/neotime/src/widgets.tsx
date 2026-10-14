@@ -858,6 +858,11 @@ export interface BitmapFileProps extends CommonProps {
    * 120, then each row packed eight pixels to a byte with the leftmost in the high bit. Set bits draw in `color`.
    */
   path: string;
+  /**
+   * A number written after `path`, so `path="/qr/"` with `value={2}` shows `/qr/2`; the file is read again when it
+   * changes, and a negative number shows nothing.
+   */
+  value?: number;
 }
 
 /** The pixels a BitmapFile's file sets, as rows of booleans, or none when it is missing, too large or cut short. */
@@ -877,8 +882,9 @@ export function bitmap_rows(file: string): boolean[][] {
  * largest whole square that fits and centred. The preview reads the file from `preview_files`, one byte per character.
  */
 export function BitmapFile(props: BitmapFileProps) {
-  const { path, ...common } = props;
-  const rows = bitmap_rows(preview_files.value[path] ?? "");
+  const { path, value, ...common } = props;
+  const file = value === undefined ? path : value >= 0 ? `${path}${Math.trunc(value)}` : "";
+  const rows = bitmap_rows(preview_files.value[file] ?? "");
   const width = rows[0]?.length ?? 0;
   const color = css_color(common.color) ?? theme.text;
   return (

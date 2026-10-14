@@ -2328,6 +2328,65 @@ fn a_missing_or_malformed_bitmap_file_draws_only_the_background() {
     }
 }
 
+/// A BitmapFile showing `/qr/` with a number after it, which a left swipe changes from 0 to 1.
+fn numbered_bitmap_file_image() -> Vec<u8> {
+    use Instruction::*;
+
+    let mut writer = ImageWriter::new("qr-code", "QR code", AppKind::App, 1);
+    writer.variable("slot", ValueType::Int, false, 0);
+    let main = writer.string("main");
+    let path = writer.string("/qr/");
+    let slot = writer.expression(code(|code| {
+        code.emit(ReadState(0));
+    }));
+    let next_slot = writer.handler(code(|code| {
+        code.emit(PushSmall(1)).emit(WriteState(0));
+    }));
+    let constant = PropertySource::Constant;
+    writer.widget(
+        WidgetKind::BitmapFile,
+        0,
+        &[
+            (Property::ScreenName, constant(main as i32)),
+            (Property::Path, constant(path as i32)),
+            (Property::Value, PropertySource::Expression(slot)),
+            (
+                Property::Color,
+                constant(ColorValue::Fixed(0x0000).to_value() as i32),
+            ),
+            (
+                Property::Background,
+                constant(ColorValue::Fixed(0xffff).to_value() as i32),
+            ),
+            (Property::OnSwipe, PropertySource::Handler(next_slot)),
+        ],
+    );
+    writer.build()
+}
+
+#[test]
+fn a_numbered_bitmap_file_reads_the_file_for_its_number_and_again_when_it_changes() {
+    let image = numbered_bitmap_file_image();
+    // One pixel each: the first file's is set, the second's is clear.
+    let mut system = FakeSystem {
+        files: alloc::vec![
+            (String::from("/qr/0"), alloc::vec![1, 1, 0b1000_0000]),
+            (String::from("/qr/1"), alloc::vec![1, 1, 0b0000_0000]),
+        ],
+        ..Default::default()
+    };
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+    host.draw(&mut screen).unwrap();
+    assert_eq!(screen.pixel(120, 120), rgb565(0x0000));
+
+    host.touch(Touch::Swipe(SwipeDirection::Left), START_TIME, &mut system);
+    host.draw(&mut screen).unwrap();
+
+    assert_eq!(screen.pixel(120, 120), rgb565(0xffff));
+    assert!(system.failures.is_empty());
+}
+
 #[test]
 fn a_bitmap_file_draws_one_rectangle_per_run_and_only_rows_inside_the_part_being_painted() {
     use neotime_ui::geometry::{Color, Rect};
@@ -2354,7 +2413,11 @@ fn a_bitmap_file_draws_one_rectangle_per_run_and_only_rows_inside_the_part_being
     for _ in 0..10 {
         bitmap.extend([0b1110_0110, 0b0000_0000]);
     }
-    let bitmap_files = [(0, bitmap)];
+    let bitmap_files = [crate::bitmap_file::ShownBitmap {
+        widget_index: 0,
+        number: None,
+        bitmap,
+    }];
     let strip = Rect {
         x: 0,
         y: 50,

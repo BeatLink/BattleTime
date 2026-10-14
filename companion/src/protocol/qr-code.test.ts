@@ -13,10 +13,17 @@ import {
   qrDensityWarning,
   QrCodeError,
   qrModules,
-  QR_CODE_PATH,
-  QR_LABEL_PATH,
+  addQrCode,
+  MOST_QR_CODES,
+  moveQrCode,
+  packQrList,
+  parseQrList,
+  qrCodePath,
+  QR_LIST_PATH,
+  readQrList,
+  removeAllQrCodes,
   removeQrCode,
-  sendQrCode,
+  renameQrCode,
   wifiText,
   type QrFiles,
 } from './qr-code';
@@ -28,6 +35,13 @@ import {
 class FakeFiles implements QrFiles {
   readonly files = new Map<string, Uint8Array>();
   failRemove = false;
+  async read(path: string): Promise<Uint8Array> {
+    const contents = this.files.get(path);
+    if (!contents) {
+      throw new FileMissingError(`${path} does not exist.`);
+    }
+    return contents;
+  }
 
   async write(path: string, contents: Uint8Array): Promise<void> {
     this.files.set(path, contents);
@@ -42,9 +56,6 @@ class FakeFiles implements QrFiles {
     }
   }
 }
-
-const decode = (bytes: Uint8Array | undefined) => new TextDecoder().decode(bytes);
-
 // ============================================================================
 // Encoding
 // ============================================================================
@@ -163,49 +174,119 @@ describe('wifiText', () => {
     expect(() => wifiText({ ssid: '', password: '', security: 'nopass', hidden: false })).toThrow(QrCodeError);
   });
 });
+// ============================================================================
+// The list
+// ============================================================================
+
+describe('packQrList', () => {
+  it('writes each slot, caption length and caption padded to 24 bytes', () => {
+    const file = packQrList([
+      { slot: 3, label: 'Café' },
+      { slot: 0, label: 'Home' },
+    ]);
+
+    expect(file.length).toBe(2 + 2 * 26);
+    expect([...file.subarray(0, 8)]).toEqual([1, 2, 3, 4, 0x43, 0x61, 0x66, 0x65]);
+    expect(file[2 + 26]).toBe(0);
+    expect(parseQrList(file)).toEqual([
+      { slot: 3, label: 'Cafe' },
+      { slot: 0, label: 'Home' },
+    ]);
+  });
+
+  it('refuses more codes than the watch keeps', () => {
+    const entries = Array.from({ length: MOST_QR_CODES + 1 }, (_, slot) => ({ slot, label: 'A' }));
+    expect(() => packQrList(entries)).toThrow(QrCodeError);
+  });
+
+  it('reads nothing from a file in another format or cut short', () => {
+    expect(parseQrList(new Uint8Array([2, 1]))).toEqual([]);
+    expect(parseQrList(new Uint8Array([1, 1, 0, 3]))).toEqual([]);
+  });
+});
 
 // ============================================================================
-// Sending
+// Changing the codes on the watch
 // ============================================================================
 
-describe('sendQrCode', () => {
-  it('writes the code and its cleaned caption', async () => {
+describe('the codes on the watch', () => {
+  it('adds codes in the first free slots, at the end of the list', async () => {
     const files = new FakeFiles();
-    const bitmap = qrBitmap('HELLO');
+    const first = qrBitmap('ONE');
+    const second = qrBitmap('TWO');
 
-    await sendQrCode(files, bitmap, 'Café');
+    await addQrCode(files, first, 'One');
+    const entries = await addQrCode(files, second, 'Two');
 
-    expect(files.files.get(QR_CODE_PATH)).toEqual(bitmap);
-    expect(decode(files.files.get(QR_LABEL_PATH))).toBe('Cafe');
+    expect(entries).toEqual([
+      { slot: 0, label: 'One' },
+      { slot: 1, label: 'Two' },
+    ]);
+    expect(files.files.get(qrCodePath(0))).toEqual(first);
+    expect(files.files.get(qrCodePath(1))).toEqual(second);
+    expect(await readQrList(files)).toEqual(entries);
   });
 
-  it('deletes the caption when there is none, also when none was there', async () => {
+  it('reuses a removed slot and refuses a ninth code', async () => {
     const files = new FakeFiles();
-    await sendQrCode(files, qrBitmap('HELLO'), 'Old');
+    for (let count = 0; count < MOST_QR_CODES; count++) {
+      await addQrCode(files, qrBitmap('HELLO'), `Code ${count}`);
+    }
+    await expect(addQrCode(files, qrBitmap('HELLO'), 'More')).rejects.toThrow(QrCodeError);
 
-    await sendQrCode(files, qrBitmap('HELLO'), '  ');
-    await sendQrCode(files, qrBitmap('HELLO'), '');
+    await removeQrCode(files, 2);
+    const entries = await addQrCode(files, qrBitmap('HELLO'), 'Again');
 
-    expect(files.files.has(QR_LABEL_PATH)).toBe(false);
-    expect(files.files.has(QR_CODE_PATH)).toBe(true);
+    expect(entries.at(-1)).toEqual({ slot: 2, label: 'Again' });
+    expect(entries).toHaveLength(MOST_QR_CODES);
   });
 
-  it('passes on other failures', async () => {
+  it('refuses a code with no caption to list it by', async () => {
     const files = new FakeFiles();
-    files.failRemove = true;
-
-    await expect(sendQrCode(files, qrBitmap('HELLO'), '')).rejects.toThrow('could not do that');
-    await expect(removeQrCode(files)).rejects.toThrow('could not do that');
-  });
-
-  it('removes both files, whichever are there', async () => {
-    const files = new FakeFiles();
-    await sendQrCode(files, qrBitmap('HELLO'), '');
-
-    await removeQrCode(files);
-    await removeQrCode(files);
+    await expect(addQrCode(files, qrBitmap('HELLO'), '  ')).rejects.toThrow(QrCodeError);
 
     expect(files.files.size).toBe(0);
+  });
+
+  it('renames and moves codes by rewriting only the list', async () => {
+    const files = new FakeFiles();
+    await addQrCode(files, qrBitmap('ONE'), 'One');
+    await addQrCode(files, qrBitmap('TWO'), 'Two');
+    const first = files.files.get(qrCodePath(0));
+
+    await renameQrCode(files, 0, 'First');
+    const entries = await moveQrCode(files, 1, -1);
+
+    expect(entries).toEqual([
+      { slot: 1, label: 'Two' },
+      { slot: 0, label: 'First' },
+    ]);
+    expect(await moveQrCode(files, 1, -1)).toEqual(entries);
+    expect(files.files.get(qrCodePath(0))).toBe(first);
+  });
+
+  it('removes a code and its file, and every code at once', async () => {
+    const files = new FakeFiles();
+    await addQrCode(files, qrBitmap('ONE'), 'One');
+    await addQrCode(files, qrBitmap('TWO'), 'Two');
+
+    expect(await removeQrCode(files, 0)).toEqual([{ slot: 1, label: 'Two' }]);
+    expect(files.files.has(qrCodePath(0))).toBe(false);
+
+    await removeAllQrCodes(files);
+    await removeAllQrCodes(files);
+
+    expect(files.files.size).toBe(0);
+    expect(await readQrList(files)).toEqual([]);
+  });
+
+  it('passes on failures other than a missing file', async () => {
+    const files = new FakeFiles();
+    files.failRemove = true;
+    await addQrCode(files, qrBitmap('ONE'), 'One');
+
+    await expect(removeQrCode(files, 0)).rejects.toThrow('could not do that');
+    await expect(removeAllQrCodes(files)).rejects.toThrow('could not do that');
   });
 
   it('works over the file service, making the folder as it writes', async () => {
@@ -213,12 +294,12 @@ describe('sendQrCode', () => {
     const service = await FileService.open(watch);
     const bitmap = qrBitmap(wifiText({ ssid: 'Home', password: 'secret', security: 'WPA', hidden: false }));
 
-    await sendQrCode(service, bitmap, 'Home Wi-Fi');
+    await addQrCode(service, bitmap, 'Home Wi-Fi');
 
-    expect(await service.read(QR_CODE_PATH)).toEqual(bitmap);
-    expect(decode(await service.read(QR_LABEL_PATH))).toBe('Home Wi-Fi');
+    expect(await service.read(qrCodePath(0))).toEqual(bitmap);
+    expect(await readQrList(service)).toEqual([{ slot: 0, label: 'Home Wi-Fi' }]);
 
-    await removeQrCode(service);
-    await expect(service.read(QR_CODE_PATH)).rejects.toBeInstanceOf(FileMissingError);
+    await removeAllQrCodes(service);
+    await expect(service.read(QR_LIST_PATH)).rejects.toBeInstanceOf(FileMissingError);
   });
 });

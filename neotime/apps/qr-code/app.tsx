@@ -1,64 +1,118 @@
-// QR code: shows the code the companion app made, black on white and at full brightness so a scanner reads it.
-// The phone writes the code's modules to /qr/code as a one-bit picture (see BitmapFile) and an optional
-// caption to /qr/label, in plain ASCII.
+// QR code: a list of codes the companion app made; tap one to show it black on white and at full brightness so a
+// scanner reads it. The phone writes the list to /qr/list and each code to /qr/<slot> as a one-bit picture (see
+// BitmapFile), and only the chosen code is read from storage.
 
-import { computed, define_app, file_bytes, keep_screen_on, nth_index_of, on, set_brightness, signal, text_from_codes } from "neotime";
+import {
+  computed,
+  define_app,
+  file_bytes,
+  go,
+  keep_screen_on,
+  on,
+  range,
+  set_brightness,
+  signal,
+  slice_text,
+  text_from_codes,
+} from "neotime";
+import { Header } from "neotime/components";
 import { icons } from "neotime/icons";
-import { BitmapFile, Column, Label, Screen } from "neotime/widgets";
+import { BitmapFile, Button, Column, Label, List, Screen } from "neotime/widgets";
 
 // ============================================================================
-// The files
+// The list file
 // ============================================================================
 
-const CODE_PATH = "/qr/code";
-const LABEL_PATH = "/qr/label";
+const LIST_PATH = "/qr/list";
+const LIST_FORMAT_VERSION = 1;
+/** The most codes the phone keeps on the watch. */
+const MOST_CODES = 8;
+/** The version and the count come before the entries. */
+const HEADER_BYTES = 2;
 /** The longest caption the phone writes. */
-const MOST_LABEL_BYTES = 24;
-/** The largest code the watch draws, in modules on a side. */
-const MOST_MODULES = 120;
+const MOST_CAPTION_BYTES = 24;
+/** Each entry is its code's slot, its caption's length, then the caption padded to full length. */
+const ENTRY_BYTES = 2 + MOST_CAPTION_BYTES;
+const LIST_BYTES = HEADER_BYTES + MOST_CODES * ENTRY_BYTES;
 
-/** The code's width in modules, the file's first byte, or 0 when there is no code. */
-const code_header = signal([0]);
+const EMPTY_LIST = range(LIST_BYTES).map(() => 0);
 
-/** The caption's character codes, with zeros past its end. */
-const label_codes = signal([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+/** The list file as the phone wrote it, with zeros past its end or when it is missing. */
+const list_file = signal(EMPTY_LIST);
 
-const has_code = computed(() => code_header.value[0] > 0 && code_header.value[0] <= MOST_MODULES);
+/** How many codes to list; none for a missing file or one in another format. */
+const code_count = computed(() =>
+  list_file.value[0] === LIST_FORMAT_VERSION ? Math.min(list_file.value[1], MOST_CODES) : 0,
+);
 
-const label_length = computed(() => {
-  const end = nth_index_of(label_codes.value, 0, 0);
-  return end < 0 ? MOST_LABEL_BYTES : end;
-});
+/** The whole list file as text, so each caption can be cut from it. */
+const list_text = computed(() => text_from_codes(list_file.value, LIST_BYTES));
 
-function read_files() {
-  code_header.value = file_bytes(CODE_PATH, 1);
-  label_codes.value = file_bytes(LABEL_PATH, MOST_LABEL_BYTES);
+/** The slot of the code at a place in the list, which names its file. */
+function slot_at(place: number): number {
+  return list_file.value[HEADER_BYTES + place * ENTRY_BYTES];
+}
+
+/** The caption of the code at a place in the list. */
+function caption_at(place: number): string {
+  const start = HEADER_BYTES + place * ENTRY_BYTES + 2;
+  const length = Math.min(list_file.value[start - 1], MOST_CAPTION_BYTES);
+  return slice_text(list_text.value, start, start + length);
+}
+
+/** The place in the list of the code on show. */
+const shown_place = signal(0);
+
+function read_list() {
+  list_file.value = file_bytes(LIST_PATH, LIST_BYTES);
+}
+
+function show_code(place: number) {
+  shown_place.value = place;
+  go("code");
 }
 
 /** Scanners read a bright, steady screen best. */
-function show_brightly() {
-  read_files();
+function open_brightly() {
+  read_list();
   set_brightness(3);
   keep_screen_on(true);
 }
 
 // ============================================================================
-// Screen
+// Screens
 // ============================================================================
 
-function QrCode() {
+const ROW_HEIGHT = 48;
+const SPACING = 6;
+
+function CodeRow(props: { place: number }) {
   return (
-    <Screen background={has_code.value ? "#ffffff" : "background"} padding={10} gap={4}>
-      {has_code.value && <BitmapFile path="/qr/code" color="#000000" grow={1} />}
-      {has_code.value && label_length.value > 0 && (
-        <Label color="#000000" text_align="center" long_mode="clip">
-          {text_from_codes(label_codes.value, label_length.value)}
-        </Label>
+    <>
+      {props.place < code_count.value && (
+        <Button height={ROW_HEIGHT} padding={12} background="surface" onClick={() => show_code(props.place)}>
+          <Label long_mode="clip">{caption_at(props.place)}</Label>
+        </Button>
       )}
-      {!has_code.value && (
+    </>
+  );
+}
+
+function CodeList() {
+  return (
+    <Screen padding={SPACING} gap={2}>
+      <Header title="QR codes" icon={icons.qr_code} />
+      {code_count.value > 0 && (
+        <List grow={1} gap={SPACING}>
+          {range(MOST_CODES).map((place) => (
+            <CodeRow place={place} />
+          ))}
+        </List>
+      )}
+      {code_count.value === 0 && (
         <Column grow={1} justify="center">
           <Label color="muted" text_align="center">
-            No QR code yet. Make one in the NeoTime companion app.
+            No QR codes yet. Make them in the NeoTime companion app.
           </Label>
         </Column>
       )}
@@ -66,12 +120,24 @@ function QrCode() {
   );
 }
 
-on("open", show_brightly);
+function Code() {
+  return (
+    <Screen background="#ffffff" padding={10} gap={4}>
+      <BitmapFile path="/qr/" value={slot_at(shown_place.value)} color="#000000" grow={1} />
+      <Label color="#000000" text_align="center" long_mode="clip">
+        {caption_at(shown_place.value)}
+      </Label>
+    </Screen>
+  );
+}
+
+on("open", open_brightly);
+on("screen_on", read_list);
 
 export default define_app({
   id: "qr-code",
   name: "QR code",
   group: "phone",
   icon: icons.qr_code,
-  screens: { main: QrCode },
+  screens: { main: CodeList, code: Code },
 });

@@ -108,6 +108,8 @@ npm run neotime -- note text "Milk, bread, eggs"
 npm run neotime -- note url https://example.org/note.txt
 npm run neotime -- qr https://example.org --label Example
 npm run neotime -- qr wifi Home secret --label "Home Wi-Fi"
+npm run neotime -- qr list
+npm run neotime -- qr move 2 up
 npm run neotime -- remote push
 npm run neotime -- launcher style folders
 npm run neotime -- apps setup
@@ -208,7 +210,7 @@ src/app/                 Expo Router screens
   apps.tsx               Install a compiled .ntapp image, hide or remove an app, see its memory
   setup.tsx              Set up a new watch: the shared icons, a face, the launcher and apps
   notes.tsx              The note the watch's Notes app shows (typed, a file or a URL), and its font
-  qr-code.tsx            A QR code for text, a link or a Wi-Fi network, for the watch's qr-code app
+  qr-code.tsx            QR codes for text, links or Wi-Fi networks, and the list the watch's qr-code app keeps
   remote.tsx             The watch's Remote app: its buttons, what each runs here, and recent taps
   launcher.tsx           The launcher's style, view and groups, and which group each app is in
   quick-apps.tsx         The apps a swipe left or right on the watch face steps through
@@ -333,14 +335,21 @@ after a restart, in which case the screen asks for the file again.
 ## QR code
 
 The QR code screen makes a code from text, a link or a Wi-Fi network (name, password, security
-and whether it is hidden), shows it on the phone, and sends it to the watch's `qr-code` app with an
-optional caption. [src/protocol/qr-code.ts](src/protocol/qr-code.ts) encodes it with the
+and whether it is hidden), shows it on the phone, and adds it to the end of the watch's `qr-code`
+app's list, which holds up to eight. Each code has a caption, cut to 24 plain ASCII characters,
+that names it in the list; without one the text (less a link's scheme) or the network's name is
+used. Under the form the screen lists the codes on the watch, read when it connects, each with
+Rename, Up, Down and Remove, and a button that removes them all.
+
+[src/protocol/qr-code.ts](src/protocol/qr-code.ts) encodes a code with the
 [qrcode](https://github.com/soldair/node-qrcode) package's encoder at error correction M unless
-another level is chosen, packs it one bit a module into `/qr/code`, and writes the caption,
-cut to 24 plain ASCII characters, to `/qr/label` (the layout is in
-[companion-protocol.md](../docs/companion-protocol.md)). A code over 120 modules is refused, and
-one over 74 is sent with a warning that it may not scan. `neotime qr <text>|wifi <ssid>
-[password]|remove` does the same from a terminal.
+another level is chosen and packs it one bit a module into `/qr/<slot>`, in the first free slot
+from 0 to 7. `/qr/list` holds the order and the captions, so renaming, moving or removing a code
+rewrites only the list (the layout is in [companion-protocol.md](../docs/companion-protocol.md)). A
+code over 120 modules is refused, and one over 74 is sent with a warning that it may not scan.
+`neotime qr <text>|wifi <ssid> [password]` adds a code from a terminal, and
+`neotime qr list|rename <n> <label>|move <n> up|down|remove <n>|remove all` manages the list by
+the numbers `list` shows.
 
 ## Remote
 

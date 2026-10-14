@@ -1,7 +1,8 @@
-// The code the watch's qr-code app shows: a bitmap at /qr/code and an optional caption at /qr/label.
+// The codes the watch's qr-code app lists: each a bitmap at /qr/<slot>, and their order and captions in /qr/list.
 //
-// docs/companion-protocol.md in the NeoTime repository describes both files. They travel over the
-// file service and are written whole each time the wearer sends a new code.
+// docs/companion-protocol.md in the NeoTime repository describes the files. They travel over the file
+// service; adding a code writes its bitmap and the list, and renaming, moving or removing one rewrites
+// only the list.
 
 import { create } from 'qrcode/lib/core/qrcode';
 
@@ -12,8 +13,16 @@ import { FileMissingError, type FileService } from '@/protocol/file-service';
 // ============================================================================
 
 export const QR_DIRECTORY = '/qr';
-export const QR_CODE_PATH = `${QR_DIRECTORY}/code`;
-export const QR_LABEL_PATH = `${QR_DIRECTORY}/label`;
+export const QR_LIST_PATH = `${QR_DIRECTORY}/list`;
+export const QR_LIST_VERSION = 1;
+
+// The most codes the watch keeps, each in its own slot from 0.
+export const MOST_QR_CODES = 8;
+
+// The file holding the code in a slot.
+export function qrCodePath(slot: number): string {
+  return `${QR_DIRECTORY}/${slot}`;
+}
 
 // The watch refuses a code wider than this many modules.
 export const LARGEST_QR_MODULES = 120;
@@ -127,6 +136,10 @@ export function cleanQrLabel(label: string): string {
     .slice(0, LARGEST_QR_LABEL_BYTES)
     .trimEnd();
 }
+// A caption for a code given none: the text itself without a link's scheme, cut to fit.
+export function suggestedQrLabel(text: string): string {
+  return cleanQrLabel(text.replace(/^[a-z][a-z0-9+.-]*:\/\//i, ''));
+}
 
 // ============================================================================
 // Wi-Fi codes
@@ -150,23 +163,62 @@ export function wifiText(network: WifiNetwork): string {
   const password = network.security === 'nopass' ? '' : escapeWifiField(network.password);
   return `WIFI:T:${network.security};S:${escapeWifiField(network.ssid)};P:${password};H:${network.hidden};;`;
 }
-
 // ============================================================================
-// Sending
+// The list
 // ============================================================================
 
-export type QrFiles = Pick<FileService, 'write' | 'remove'>;
+// One code on the watch: the slot its file is in, and the caption the watch lists it by.
+export type QrEntry = { slot: number; label: string };
 
-// Writes the code and its caption to the watch, deleting the caption file when there is none.
-export async function sendQrCode(files: QrFiles, bitmap: Uint8Array, label: string): Promise<void> {
-  await files.write(QR_CODE_PATH, bitmap);
-  const caption = cleanQrLabel(label);
-  if (caption !== '') {
-    await files.write(QR_LABEL_PATH, new TextEncoder().encode(caption));
-    return;
+// Each entry is its slot, its caption's length, then the caption padded with zeros to full length.
+const QR_ENTRY_BYTES = 2 + LARGEST_QR_LABEL_BYTES;
+
+// The /qr/list file for the entries, in the order the watch lists them.
+export function packQrList(entries: QrEntry[]): Uint8Array {
+  if (entries.length > MOST_QR_CODES) {
+    throw new QrCodeError(`The watch keeps up to ${MOST_QR_CODES} codes.`);
   }
+  const file = new Uint8Array(2 + entries.length * QR_ENTRY_BYTES);
+  file[0] = QR_LIST_VERSION;
+  file[1] = entries.length;
+  entries.forEach((entry, place) => {
+    const caption = new TextEncoder().encode(cleanQrLabel(entry.label));
+    const start = 2 + place * QR_ENTRY_BYTES;
+    file[start] = entry.slot;
+    file[start + 1] = caption.length;
+    file.set(caption, start + 2);
+  });
+  return file;
+}
+
+// The entries of a /qr/list file, or none for a file in another format.
+export function parseQrList(file: Uint8Array): QrEntry[] {
+  if (file[0] !== QR_LIST_VERSION) {
+    return [];
+  }
+  const count = Math.min(file[1] ?? 0, MOST_QR_CODES);
+  const entries: QrEntry[] = [];
+  for (let place = 0; place < count; place++) {
+    const start = 2 + place * QR_ENTRY_BYTES;
+    if (start + QR_ENTRY_BYTES > file.length) {
+      break;
+    }
+    const length = Math.min(file[start + 1], LARGEST_QR_LABEL_BYTES);
+    const label = new TextDecoder().decode(file.subarray(start + 2, start + 2 + length));
+    entries.push({ slot: file[start], label });
+  }
+  return entries;
+}
+
+// ============================================================================
+// Changing the codes on the watch
+// ============================================================================
+
+export type QrFiles = Pick<FileService, 'read' | 'write' | 'remove'>;
+
+async function removeIfThere(files: QrFiles, path: string): Promise<void> {
   try {
-    await files.remove(QR_LABEL_PATH);
+    await files.remove(path);
   } catch (error) {
     if (!(error instanceof FileMissingError)) {
       throw error;
@@ -174,15 +226,85 @@ export async function sendQrCode(files: QrFiles, bitmap: Uint8Array, label: stri
   }
 }
 
-// Takes the code and its caption off the watch, so its app shows its hint again.
-export async function removeQrCode(files: QrFiles): Promise<void> {
-  for (const path of [QR_CODE_PATH, QR_LABEL_PATH]) {
-    try {
-      await files.remove(path);
-    } catch (error) {
-      if (!(error instanceof FileMissingError)) {
-        throw error;
-      }
+// The codes on the watch in the order it lists them, or none when it has no list.
+export async function readQrList(files: QrFiles): Promise<QrEntry[]> {
+  try {
+    return parseQrList(await files.read(QR_LIST_PATH));
+  } catch (error) {
+    if (error instanceof FileMissingError) {
+      return [];
     }
+    throw error;
+  }
+}
+
+async function writeQrList(files: QrFiles, entries: QrEntry[]): Promise<QrEntry[]> {
+  await files.write(QR_LIST_PATH, packQrList(entries));
+  return entries;
+}
+
+// A caption the watch can list, refusing one with nothing left to show.
+function listedLabel(label: string): string {
+  const caption = cleanQrLabel(label);
+  if (caption === '') {
+    throw new QrCodeError('Give the code a caption, so the watch can list it.');
+  }
+  return caption;
+}
+
+// Adds a code at the end of the watch's list, in the first free slot; gives the new list.
+export async function addQrCode(files: QrFiles, bitmap: Uint8Array, label: string): Promise<QrEntry[]> {
+  const caption = listedLabel(label);
+  const entries = await readQrList(files);
+  const used = new Set(entries.map((entry) => entry.slot));
+  const slot = [...Array(MOST_QR_CODES).keys()].find((candidate) => !used.has(candidate));
+  if (slot === undefined) {
+    throw new QrCodeError(`The watch already has ${MOST_QR_CODES} codes; remove one first.`);
+  }
+  // The code goes first, so the list never names a slot whose file is not there yet.
+  await files.write(qrCodePath(slot), bitmap);
+  return writeQrList(files, [...entries, { slot, label: caption }]);
+}
+
+// Gives the code in a slot a new caption; gives the new list.
+export async function renameQrCode(files: QrFiles, slot: number, label: string): Promise<QrEntry[]> {
+  const caption = listedLabel(label);
+  const entries = await readQrList(files);
+  return writeQrList(
+    files,
+    entries.map((entry) => (entry.slot === slot ? { slot, label: caption } : entry)),
+  );
+}
+
+// Moves the code in a slot up (-1) or down (+1) the watch's list; gives the new list.
+export async function moveQrCode(files: QrFiles, slot: number, step: -1 | 1): Promise<QrEntry[]> {
+  const entries = await readQrList(files);
+  const place = entries.findIndex((entry) => entry.slot === slot);
+  const other = place + step;
+  if (place < 0 || other < 0 || other >= entries.length) {
+    return entries;
+  }
+  const moved = [...entries];
+  [moved[place], moved[other]] = [moved[other], moved[place]];
+  return writeQrList(files, moved);
+}
+
+// Takes the code in a slot off the watch; gives the new list.
+export async function removeQrCode(files: QrFiles, slot: number): Promise<QrEntry[]> {
+  const entries = await readQrList(files);
+  // The list goes first, so it never names a slot whose file is gone.
+  const left = await writeQrList(
+    files,
+    entries.filter((entry) => entry.slot !== slot),
+  );
+  await removeIfThere(files, qrCodePath(slot));
+  return left;
+}
+
+// Takes every code off the watch, so its app shows its hint again.
+export async function removeAllQrCodes(files: QrFiles): Promise<void> {
+  await removeIfThere(files, QR_LIST_PATH);
+  for (let slot = 0; slot < MOST_QR_CODES; slot++) {
+    await removeIfThere(files, qrCodePath(slot));
   }
 }

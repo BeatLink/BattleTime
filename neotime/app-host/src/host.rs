@@ -31,7 +31,7 @@ use crate::nodes::{row_slots, slots_in_view_along, Extra, Node, PropertyValue};
 #[path = "painting.rs"]
 mod painting;
 
-use crate::bitmap_file::read_bitmap;
+use crate::bitmap_file::{numbered_path, read_bitmap, ShownBitmap};
 use crate::subscriptions::{
     derive_inputs_in, load_subscriptions, PushedEvent, SubscriptionMemory, FAILURES_BEFORE_TURNING_OFF,
 };
@@ -206,8 +206,8 @@ pub struct AppHost<'image> {
     scroll_drag: Option<ScrollDrag>,
     /// Where each TextFile on the screen finds its lines in its file.
     text_files: Vec<(NodeKey, LineIndex)>,
-    /// Each BitmapFile's picture on the screen, by widget number, read once when the screen opens.
-    bitmap_files: Vec<(u16, Vec<u8>)>,
+    /// Each BitmapFile's picture on the screen, read when the screen opens or its number changes.
+    bitmap_files: Vec<ShownBitmap>,
 }
 
 impl<'image> AppHost<'image> {
@@ -1336,7 +1336,7 @@ impl<'image> AppHost<'image> {
         }
     }
 
-    /// Reads the picture of each BitmapFile shown that has none yet, and marks it to be drawn.
+    /// Reads the picture of each BitmapFile shown that has none yet, or whose number changed, and marks it to be drawn.
     #[inline(never)]
     fn fill_bitmap_files(&mut self, system: &dyn SystemValues) {
         for node_index in 0..self.nodes.len() {
@@ -1345,21 +1345,37 @@ impl<'image> AppHost<'image> {
                 continue;
             }
             let widget_index = node.widget_index;
-            if self.bitmap_files.iter().any(|(held, _)| *held == widget_index) {
+            let Some(widget) = self.tree.widget(widget_index) else {
                 continue;
+            };
+            let number = widget
+                .property(Property::Value)
+                .is_some()
+                .then_some(node.settings.value);
+            let held = self
+                .bitmap_files
+                .iter()
+                .position(|shown| shown.widget_index == widget_index);
+            if let Some(held) = held {
+                if self.bitmap_files[held].number == number {
+                    continue;
+                }
+                // The old picture goes before the new one is read, so the two are never held together.
+                self.bitmap_files.swap_remove(held);
             }
-            let path = match self
-                .tree
-                .widget(widget_index)
-                .and_then(|widget| widget.property(Property::Path))
-            {
+            let path = match widget.property(Property::Path) {
                 Some(PropertySource::Constant(string)) => self.image.string(string as u16),
                 _ => None,
             };
+            let path = path.and_then(|path| numbered_path(path, number));
             let bitmap = path.map_or_else(Vec::new, |path| {
-                read_bitmap(&mut |offset: u32, out: &mut [u8]| system.read_file(path, offset, out))
+                read_bitmap(&mut |offset: u32, out: &mut [u8]| system.read_file(&path, offset, out))
             });
-            self.bitmap_files.push((widget_index, bitmap));
+            self.bitmap_files.push(ShownBitmap {
+                widget_index,
+                number,
+                bitmap,
+            });
             self.dirty_nodes |= 1 << node_index;
         }
     }

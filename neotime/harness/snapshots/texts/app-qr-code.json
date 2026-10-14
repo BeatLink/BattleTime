@@ -4,6 +4,15 @@
       "name": "main",
       "reached_by": null,
       "texts": [
+        "Guest Wi-Fi",
+        "QR codes",
+        "example.com"
+      ]
+    },
+    {
+      "name": "code",
+      "reached_by": "tap \"example.com\"",
+      "texts": [
         "example.com"
       ]
     }

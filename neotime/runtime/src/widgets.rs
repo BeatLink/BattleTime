@@ -298,7 +298,7 @@ pub enum Property {
     ShowHours,
     /// How many digits a NumberRoller pads its numbers to.
     Digits,
-    /// The file a TextFile or BitmapFile shows.
+    /// The file a TextFile or BitmapFile shows; a BitmapFile with a `Value` reads the path with that number after it.
     Path,
     /// A file holding the name of the font a TextFile uses, such as `small`, set from the phone.
     FontPath,
@@ -530,6 +530,7 @@ impl Property {
                     | Kind::WeekdayPicker
                     | Kind::Stepper
                     | Kind::NumberRoller
+                    | Kind::BitmapFile
             ),
             Minimum | Maximum | Step => {
                 matches!(

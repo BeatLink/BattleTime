@@ -27,8 +27,8 @@ pub const STARTING_NOTE: &str =
 /// The question the phone ran the prompt app with, at the path the companion app writes it to; short enough not to wrap.
 pub const STARTING_QUESTION_PATH: &str = "/temp/prompt/text";
 pub const STARTING_QUESTION: &str = "Leave now?";
-/// The QR code the phone sent, which the QR code app shows: `https://example.com/neotime`, 29 modules square.
-pub const STARTING_QR_CODE_PATH: &str = "/qr/code";
+/// A QR code the phone sent, in the first of the QR code app's slots: `https://example.com/neotime`, 29 modules square.
+pub const STARTING_QR_CODE_PATH: &str = "/qr/0";
 pub const STARTING_QR_CODE: [u8; 118] = [
     0x1d, 0x1d, 0xfe, 0x07, 0x23, 0xf8, 0x82, 0xa1, 0x4a, 0x08, 0xba, 0xca, 0x8a, 0xe8, 0xba, 0xe3, 0x4a,
     0xe8, 0xba, 0x57, 0x1a, 0xe8, 0x82, 0x16, 0x82, 0x08, 0xfe, 0xaa, 0xab, 0xf8, 0x00, 0x94, 0x38, 0x00,
@@ -38,9 +38,30 @@ pub const STARTING_QR_CODE: [u8; 118] = [
     0xb8, 0x00, 0xbc, 0xe8, 0xc0, 0xfe, 0x37, 0xda, 0xe0, 0x82, 0x5c, 0x78, 0x98, 0xba, 0x35, 0xdf, 0xd0,
     0xba, 0x40, 0xb9, 0x70, 0xba, 0x30, 0x27, 0xf0, 0x82, 0x45, 0x05, 0xe8, 0xfe, 0xcc, 0xb7, 0xa0,
 ];
-/// The caption the phone sent with the code.
-pub const STARTING_QR_LABEL_PATH: &str = "/qr/label";
-pub const STARTING_QR_LABEL: &str = "example.com";
+/// The QR code app's list: two codes, the one above captioned `example.com` and a second in slot 3 with no file.
+pub const STARTING_QR_LIST_PATH: &str = "/qr/list";
+pub const STARTING_QR_LIST: [u8; 2 + 2 * 26] = qr_list([(0, "example.com"), (3, "Guest Wi-Fi")]);
+
+/// A QR code list file holding these slots and captions, in the format `apps/qr-code` reads.
+const fn qr_list<const COUNT: usize, const LENGTH: usize>(entries: [(u8, &str); COUNT]) -> [u8; LENGTH] {
+    let mut file = [0u8; LENGTH];
+    file[0] = 1;
+    file[1] = COUNT as u8;
+    let mut place = 0;
+    while place < COUNT {
+        let (slot, caption) = entries[place];
+        let start = 2 + place * 26;
+        file[start] = slot;
+        file[start + 1] = caption.len() as u8;
+        let mut index = 0;
+        while index < caption.len() {
+            file[start + 2 + index] = caption.as_bytes()[index];
+            index += 1;
+        }
+        place += 1;
+    }
+    file
+}
 
 /// The random generator's first state; any number but zero works.
 const RANDOM_SEED: u32 = 0x2545_f491;
@@ -266,10 +287,7 @@ impl FakeSystem {
                     STARTING_QUESTION.as_bytes().to_vec(),
                 ),
                 (STARTING_QR_CODE_PATH.to_string(), STARTING_QR_CODE.to_vec()),
-                (
-                    STARTING_QR_LABEL_PATH.to_string(),
-                    STARTING_QR_LABEL.as_bytes().to_vec(),
-                ),
+                (STARTING_QR_LIST_PATH.to_string(), STARTING_QR_LIST.to_vec()),
             ],
             phone_lines: Vec::new(),
             random_state: Cell::new(RANDOM_SEED),

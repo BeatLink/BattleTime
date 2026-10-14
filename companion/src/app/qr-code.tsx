@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Switch, View } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -11,16 +11,23 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
 import {
+  addQrCode,
   cleanQrLabel,
   DEFAULT_QR_LEVEL,
   LARGEST_QR_LABEL_BYTES,
+  MOST_QR_CODES,
+  moveQrCode,
   qrBitmap,
   qrDensityWarning,
   QR_LEVELS,
+  readQrList,
+  removeAllQrCodes,
   removeQrCode,
-  sendQrCode,
+  renameQrCode,
+  suggestedQrLabel,
   WIFI_SECURITIES,
   wifiText,
+  type QrEntry,
   type QrLevel,
   type WifiSecurity,
 } from '@/protocol/qr-code';
@@ -49,8 +56,8 @@ type Encoded = { bitmap: Uint8Array; warning: string | null } | { problem: strin
 // ============================================================================
 // The screen
 // ============================================================================
-
-// Makes a QR code from text or a Wi-Fi network, previews it, and sends it to the watch's qr-code app.
+// Makes a QR code from text or a Wi-Fi network, previews it and adds it to the watch's qr-code app, and keeps the
+// list of codes on the watch: renaming, reordering and removing them.
 export default function QrCodeScreen() {
   const theme = useTheme();
   const { files, watchReady, capabilities } = useWatch();
@@ -66,6 +73,10 @@ export default function QrCodeScreen() {
   const [label, setLabel] = useState('');
   const [level, setLevel] = useState<QrLevel>(DEFAULT_QR_LEVEL);
   const [sent, setSent] = useState<string | null>(null);
+  // The codes on the watch, or null until they are read.
+  const [entries, setEntries] = useState<QrEntry[] | null>(null);
+  // The slot of the code being renamed, with the caption typed so far.
+  const [renaming, setRenaming] = useState<{ slot: number; label: string } | null>(null);
 
   const encoded = useMemo<Encoded>(() => {
     try {
@@ -81,27 +92,52 @@ export default function QrCodeScreen() {
   }, [kind, text, ssid, password, security, hidden, level]);
 
   const caption = cleanQrLabel(label);
+  const suggestion = suggestedQrLabel(kind === 'wifi' ? ssid : text);
+  const isFull = entries !== null && entries.length >= MOST_QR_CODES;
+
+  // Runs a change to the watch's list under a label and shows the list it leaves.
+  const change = (busyLabel: string, action: () => Promise<QrEntry[]>) =>
+    task.run(busyLabel, async () => setEntries(await action()));
+
+  useEffect(() => {
+    if (!connected) {
+      return;
+    }
+    void task.run('Reading the codes', async () => setEntries(await readQrList(await files())));
+    // Read once per connection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected]);
 
   const send = () =>
-    task.run('Sending the code', async () => {
-      if ('bitmap' in encoded) {
-        await sendQrCode(await files(), encoded.bitmap, label);
-        setSent(caption ? `Sent, captioned "${caption}".` : 'Sent.');
+    change('Sending the code', async () => {
+      if (!('bitmap' in encoded)) {
+        return entries ?? [];
       }
+      const added = await addQrCode(await files(), encoded.bitmap, caption || suggestion);
+      setSent(`Added as number ${added.length}, "${added[added.length - 1].label}".`);
+      return added;
     });
 
-  const remove = () =>
-    task.run('Removing the code', async () => {
-      await removeQrCode(await files());
-      setSent('Removed from the watch.');
+  const rename = () =>
+    renaming &&
+    change('Renaming the code', async () => {
+      const renamed = await renameQrCode(await files(), renaming.slot, renaming.label);
+      setRenaming(null);
+      return renamed;
+    });
+
+  const removeAll = () =>
+    change('Removing every code', async () => {
+      await removeAllQrCodes(await files());
+      return [];
     });
 
   return (
     <Screen title="QR code">
       <Card title="Code">
         <ThemedText type="small" themeColor="textSecondary">
-          The watch&apos;s QR code app shows one code, for a link, some text or a Wi-Fi network a phone&apos;s
-          camera can join.
+          The watch&apos;s QR code app lists up to {MOST_QR_CODES} codes, each for a link, some text or a Wi-Fi network
+          a phone&apos;s camera can join.
         </ThemedText>
         <ChoiceRow<QrKind> label="What it holds" options={KIND_CHOICES} value={kind} onChange={setKind} />
         {kind === 'text' ? (
@@ -133,7 +169,8 @@ export default function QrCodeScreen() {
         )}
         <TextRow
           label="Caption"
-          detail={`Shown under the code on the watch: up to ${LARGEST_QR_LABEL_BYTES} plain characters, accents dropped.`}
+          detail={`Names the code in the watch's list and shows under it: up to ${LARGEST_QR_LABEL_BYTES} plain characters, accents dropped.`}
+          placeholder={suggestion}
           value={label}
           onChangeText={setLabel}
         />
@@ -170,31 +207,91 @@ export default function QrCodeScreen() {
           </ThemedText>
         )}
       </Card>
-
-      <Card title="Watch">
+      <Card title="On the watch">
         {connected ? (
           <>
             <Button
-              title="Send to the watch"
-              disabled={task.busy !== null || !('bitmap' in encoded)}
+              title="Add to the watch"
+              disabled={task.busy !== null || !('bitmap' in encoded) || isFull}
               busy={task.busy === 'Sending the code'}
               onPress={() => void send()}
             />
-            <Button
-              title="Remove it from the watch"
-              variant="secondary"
-              disabled={task.busy !== null}
-              onPress={() => void remove()}
-            />
+            {isFull ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                The watch holds {MOST_QR_CODES} codes; remove one to add another.
+              </ThemedText>
+            ) : null}
             {sent ? (
               <ThemedText type="small" themeColor="textSecondary">
                 {sent}
               </ThemedText>
             ) : null}
+            {entries?.length === 0 ? <ThemedText>No codes on the watch yet.</ThemedText> : null}
+            {entries?.map((entry, place) => (
+              <View key={entry.slot} style={[styles.entry, { borderColor: theme.backgroundSelected }]}>
+                {renaming?.slot === entry.slot ? (
+                  <>
+                    <TextRow
+                      label={`Caption for number ${place + 1}`}
+                      value={renaming.label}
+                      onChangeText={(typed) => setRenaming({ slot: entry.slot, label: typed })}
+                    />
+                    <View style={styles.actions}>
+                      <Button title="Save" disabled={task.busy !== null} onPress={() => void rename()} />
+                      <Button title="Cancel" variant="secondary" onPress={() => setRenaming(null)} />
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <ThemedText>{`${place + 1}. ${entry.label}`}</ThemedText>
+                    <View style={styles.actions}>
+                      <Button
+                        title="Rename"
+                        variant="secondary"
+                        disabled={task.busy !== null}
+                        onPress={() => setRenaming({ slot: entry.slot, label: entry.label })}
+                      />
+                      <Button
+                        title="Up"
+                        variant="secondary"
+                        disabled={task.busy !== null || place === 0}
+                        onPress={() =>
+                          void change('Moving the code', async () => moveQrCode(await files(), entry.slot, -1))
+                        }
+                      />
+                      <Button
+                        title="Down"
+                        variant="secondary"
+                        disabled={task.busy !== null || place === entries.length - 1}
+                        onPress={() =>
+                          void change('Moving the code', async () => moveQrCode(await files(), entry.slot, 1))
+                        }
+                      />
+                      <Button
+                        title="Remove"
+                        variant="danger"
+                        disabled={task.busy !== null}
+                        onPress={() =>
+                          void change('Removing the code', async () => removeQrCode(await files(), entry.slot))
+                        }
+                      />
+                    </View>
+                  </>
+                )}
+              </View>
+            ))}
+            {entries && entries.length > 0 ? (
+              <Button
+                title="Remove every code"
+                variant="secondary"
+                disabled={task.busy !== null}
+                onPress={() => void removeAll()}
+              />
+            ) : null}
           </>
         ) : (
           <ThemedText type="small" themeColor="textSecondary">
-            Connect a watch that serves files to send the code.
+            Connect a watch that serves files to add codes and see the ones it holds.
           </ThemedText>
         )}
       </Card>
@@ -205,6 +302,8 @@ export default function QrCodeScreen() {
 }
 
 const styles = StyleSheet.create({
+  entry: { gap: Spacing.two, paddingVertical: Spacing.two, borderTopWidth: StyleSheet.hairlineWidth },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',

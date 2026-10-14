@@ -70,9 +70,9 @@ mock watch only.
 
 ## QR code
 
-- **Untried with a watch.** `/qr/code` and `/qr/label` have run only against the mock watch.
+- **Untried with a watch.** `/qr/list` and `/qr/<slot>` have run only against the mock watch.
   With the `qr-code` app installed, check that a sent code scans from the watch, also one near
-  74 modules, and that the caption and `neotime qr` work over BlueZ.
+  74 modules, and that adding, renaming, moving and removing codes and `neotime qr` work over BlueZ.
 
 ## Remote
 

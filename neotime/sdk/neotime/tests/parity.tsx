@@ -169,7 +169,7 @@ function starting_step_history(): StepHistory {
   };
 }
 
-/** The QR code harness/src/fake_system.rs starts with, its STARTING_QR_CODE, one byte per character as the preview reads it. */
+/** The QR code in slot 0 harness/src/fake_system.rs starts with, its STARTING_QR_CODE, one byte per character as the preview reads it. */
 export const STARTING_QR_CODE = String.fromCharCode(
   0x1d, 0x1d, 0xfe, 0x07, 0x23, 0xf8, 0x82, 0xa1, 0x4a, 0x08, 0xba, 0xca, 0x8a, 0xe8, 0xba, 0xe3, 0x4a, 0xe8, 0xba,
   0x57, 0x1a, 0xe8, 0x82, 0x16, 0x82, 0x08, 0xfe, 0xaa, 0xab, 0xf8, 0x00, 0x94, 0x38, 0x00, 0x82, 0xab, 0x56, 0x70,
@@ -179,6 +179,15 @@ export const STARTING_QR_CODE = String.fromCharCode(
   0x5c, 0x78, 0x98, 0xba, 0x35, 0xdf, 0xd0, 0xba, 0x40, 0xb9, 0x70, 0xba, 0x30, 0x27, 0xf0, 0x82, 0x45, 0x05, 0xe8,
   0xfe, 0xcc, 0xb7, 0xa0,
 );
+
+/** The QR code list harness/src/fake_system.rs starts with, its STARTING_QR_LIST: `example.com` in slot 0, `Guest Wi-Fi` in 3. */
+const STARTING_QR_ENTRIES: [number, string][] = [
+  [0, "example.com"],
+  [3, "Guest Wi-Fi"],
+];
+export const STARTING_QR_LIST =
+  String.fromCharCode(1, STARTING_QR_ENTRIES.length) +
+  STARTING_QR_ENTRIES.map(([slot, caption]) => String.fromCharCode(slot, caption.length) + caption.padEnd(24, "\0")).join("");
 
 /** The note harness/src/fake_system.rs starts with, its STARTING_NOTE. */
 export const STARTING_NOTE =
@@ -275,8 +284,8 @@ export function set_fake_system_values() {
   preview_files.value = {
     "/notes/note.txt": STARTING_NOTE,
     "/temp/prompt/text": STARTING_QUESTION,
-    "/qr/code": STARTING_QR_CODE,
-    "/qr/label": "example.com",
+    "/qr/0": STARTING_QR_CODE,
+    "/qr/list": STARTING_QR_LIST,
   };
   clear_notifications();
   step_history.value = starting_step_history();

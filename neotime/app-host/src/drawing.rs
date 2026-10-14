@@ -16,6 +16,7 @@ use neotime_ui::{
     shapes::{draw_widget_bg, fill_rounded_rect, Style},
 };
 
+use crate::bitmap_file::ShownBitmap;
 use crate::fonts::{self, line_height, text_width, FontName};
 use crate::layout::{has_page_bar, visible_length, TICK_BOX_GAP, TICK_BOX_SIZE};
 use crate::nodes::{
@@ -43,8 +44,8 @@ pub struct DrawContext<'context, 'image> {
     pub now: Value,
     /// The part of the screen being painted, so a widget with much to draw can skip the rest.
     pub clip: Rect,
-    /// Each BitmapFile's picture by its widget number, empty when its file is missing or not a picture.
-    pub bitmap_files: &'context [(u16, Vec<u8>)],
+    /// Each BitmapFile's picture, empty when its file is missing or not a picture.
+    pub bitmap_files: &'context [ShownBitmap],
 }
 
 impl<'image> DrawContext<'_, 'image> {
@@ -1239,10 +1240,10 @@ pub fn cell_at(node: &Node, x: i32, y: i32) -> Option<i32> {
 
 /// A BitmapFile's picture, each pixel the largest whole square that fits, centred, with runs of set pixels drawn as one rectangle.
 fn draw_bitmap_file(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
-    let Some((_, bitmap)) = context
+    let Some(ShownBitmap { bitmap, .. }) = context
         .bitmap_files
         .iter()
-        .find(|(widget_index, _)| *widget_index == node.widget_index)
+        .find(|shown| shown.widget_index == node.widget_index)
     else {
         return;
     };

@@ -2,8 +2,9 @@
 //!
 //! The file holds the picture's width and height in pixels, one byte each, then each row from the top,
 //! packed eight pixels to a byte with the leftmost in the high bit; a set bit is drawn in the widget's colour.
+//! A BitmapFile given a number reads the path with that number after it, so an app can pick one of several files.
 
-use alloc::{vec, vec::Vec};
+use alloc::{string::String, vec, vec::Vec};
 
 use neotime_runtime::widgets::BITMAP_FILE_MOST_SIDE;
 
@@ -12,6 +13,30 @@ use crate::text_file::ReadPart;
 // ============================================================================
 // Reading
 // ============================================================================
+
+/// One BitmapFile's picture as read, and the number it was read for.
+pub struct ShownBitmap {
+    pub widget_index: u16,
+    pub number: Option<i32>,
+    pub bitmap: Vec<u8>,
+}
+
+/// The path with the number written after it, the path alone without one, or nothing for a negative number.
+pub fn numbered_path(path: &str, number: Option<i32>) -> Option<String> {
+    let mut whole = String::from(path);
+    let Some(number) = number else {
+        return Some(whole);
+    };
+    let mut left = u32::try_from(number).ok()?;
+    let digits_start = whole.len();
+    loop {
+        whole.insert(digits_start, char::from(b'0' + (left % 10) as u8));
+        left /= 10;
+        if left == 0 {
+            return Some(whole);
+        }
+    }
+}
 
 /// The whole picture, header included, or nothing when the file is missing, too large or cut short.
 pub fn read_bitmap(read: &mut ReadPart) -> Vec<u8> {
@@ -49,6 +74,14 @@ mod tests {
             out[..count].copy_from_slice(&rest[..count]);
             Some(count)
         }
+    }
+
+    #[test]
+    fn a_number_follows_the_path() {
+        assert_eq!(numbered_path("/qr/", Some(0)).as_deref(), Some("/qr/0"));
+        assert_eq!(numbered_path("/qr/", Some(407)).as_deref(), Some("/qr/407"));
+        assert_eq!(numbered_path("/qr/code", None).as_deref(), Some("/qr/code"));
+        assert_eq!(numbered_path("/qr/", Some(-1)), None);
     }
 
     #[test]

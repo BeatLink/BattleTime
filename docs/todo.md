@@ -135,7 +135,8 @@ document for its part instead.
   - the stack keeps its margin while a tap's line is sent.
 - [ ] **The QR code app on the PineTime.** It (9e8f7b13) has run only in the test harness and the
   companion's mock watch. With the companion app's QR code screen or `neotime qr`, check that:
-  - `/qr/code` and `/qr/label` arrive and show the next time the app opens;
+  - `/qr/list` and the codes in `/qr/<slot>` arrive, the list shows them the next time the app
+    opens, and a tapped code is read and drawn without a long pause;
   - another phone scans a short link, a Wi-Fi code and a code over 74 modules;
   - drawing the largest code stays quick enough for the watchdog.
 - [ ] **Transitions and scrolling on the PineTime.** Slides, wipes and hardware-scrolled lists have

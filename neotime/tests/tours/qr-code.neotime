@@ -1,8 +1,12 @@
-# Every screen of the QR code app, for docs/apps/qr-code.md: a code with its caption, then with no code.
+# Every screen of the QR code app, for docs/apps/qr-code.md: the list, a code with its caption, then with no codes.
 open app qr-code
 expect text "example.com"
-write "/qr/code" ""   # the phone clears the code
+expect text "Guest Wi-Fi"
+tap "example.com"
+expect screen code
+snapshot code
+write "/qr/list" ""   # the phone takes every code off
 reopen
-expect text "No QR code yet"
+expect text "No QR codes yet"
 snapshot empty
 expect no failures

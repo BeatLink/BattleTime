@@ -1720,6 +1720,19 @@ fn a_bitmap_file_keeps_its_path_as_a_string() {
 }
 
 #[test]
+fn a_bitmap_file_takes_a_number_worked_out_from_state() {
+    let image = compile(&app(r##"import { BitmapFile } from "neotime/widgets";
+        const slot = signal(0);
+        function Main() { return <Screen><BitmapFile path="/qr/" value={slot.value} grow={1} /></Screen>; }"##));
+    let image = AppImage::parse(&image).unwrap();
+
+    assert!(matches!(
+        property_of(&image, WidgetKind::BitmapFile, Property::Value, 0),
+        PropertySource::Expression(_)
+    ));
+}
+
+#[test]
 fn a_bitmap_file_path_must_be_written_out() {
     let error = first_error(&app(r##"import { BitmapFile } from "neotime/widgets";
         const name = signal(0);
