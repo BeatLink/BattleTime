@@ -12,8 +12,9 @@ use neotime_runtime::{
     subscriptions::{Subscription, SubscriptionKind},
     verify_with,
     widgets::{Property, PropertyValue as ValueKind, MOST_WIDGETS},
-    AppImage, AppKind, AppState, Bindings, CheckedFunctions, EffectKind, Failure, ImageError, Inputs,
-    Interpreter, PropertySource, SystemValue, SystemValues, Theme, Value, WidgetKind, WidgetTree, NONE,
+    AppImage, AppKind, AppState, Bindings, CheckedFunctions, EffectKind, Failure, HandlerOutcome, ImageError,
+    Inputs, Interpreter, PropertySource, SystemValue, SystemValues, Theme, Value, WidgetKind, WidgetTree,
+    NONE,
 };
 use neotime_ui::geometry::Rect;
 
@@ -1060,6 +1061,20 @@ impl<'image> AppHost<'image> {
             }
         };
 
+        self.follow_outcome(&outcome, now, system, may_navigate);
+        EventResult::Handled
+    }
+
+    /// Carries out a handler's effects and follows its changes.
+    // Out of line, so this work's locals are not in `run_handler`'s frame while the interpreter runs below it.
+    #[inline(never)]
+    fn follow_outcome(
+        &mut self,
+        outcome: &HandlerOutcome,
+        now: Value,
+        system: &mut impl System,
+        may_navigate: bool,
+    ) {
         self.last_handler_did_nothing = outcome.effects().is_empty() && outcome.changed_variables() == 0;
         let may_navigate = may_navigate && self.is_open;
         let mut navigated_root = self.screen_root;
@@ -1092,7 +1107,6 @@ impl<'image> AppHost<'image> {
         if let Some(navigation) = last_navigation {
             self.show_navigated_screen(navigated_root, navigation, now, system);
         }
-        EventResult::Handled
     }
 
     /// Follows a change of state or system values: derives, saving, and redrawing what shows them.

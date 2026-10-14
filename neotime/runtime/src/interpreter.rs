@@ -753,67 +753,16 @@ impl Interpreter {
                 self.write_text(|writer| pattern::write_time(writer, &time, pattern, uses_24_hour_clock))?;
             }
             Join => self.join(call.image)?,
-            ToUpper => {
-                let value = self.pop()?;
-                let (source, length) = self.copy_of_text(call.image, value)?;
-                let text = core::str::from_utf8(&source[..length]).map_err(|_| Failure::BadText)?;
-                self.write_text(|writer| {
-                    for character in text.chars().flat_map(char::to_uppercase) {
-                        let mut encoded = [0u8; 4];
-                        writer.write_bytes(character.encode_utf8(&mut encoded).as_bytes())?;
-                    }
-                    Ok(())
-                })?;
-            }
-            TextLength => {
-                let value = self.pop()?;
-                let (source, length) = self.copy_of_text(call.image, value)?;
-                let text = core::str::from_utf8(&source[..length]).map_err(|_| Failure::BadText)?;
-                self.push(text.chars().count() as Value)?;
-            }
-            SliceText => {
-                let end = self.pop()?;
-                let start = self.pop()?;
-                let value = self.pop()?;
-                let (source, length) = self.copy_of_text(call.image, value)?;
-                let text = core::str::from_utf8(&source[..length]).map_err(|_| Failure::BadText)?;
-                let count = text.chars().count() as Value;
-                let first = javascript_index(start, count);
-                let last = javascript_index(end, count).max(first);
-                self.write_text(|writer| {
-                    for character in text.chars().skip(first as usize).take((last - first) as usize) {
-                        let mut encoded = [0u8; 4];
-                        writer.write_bytes(character.encode_utf8(&mut encoded).as_bytes())?;
-                    }
-                    Ok(())
-                })?;
-            }
+            ToUpper => self.to_upper(call.image)?,
+            TextLength => self.text_length(call.image)?,
+            SliceText => self.slice_text(call.image)?,
             FormatFixed => {
                 let trim = self.pop()? != 0;
                 let places = self.pop()?.clamp(0, MOST_FIXED_PLACES as Value) as u8;
                 let value = self.pop()?;
                 self.write_text(|writer| writer.write_fixed(value, places, trim))?;
             }
-            PadStart => {
-                let code = self.pop()?;
-                let width = self.pop()?;
-                let value = self.pop()?;
-                let padding = u32::try_from(code)
-                    .ok()
-                    .and_then(char::from_u32)
-                    .ok_or(Failure::BadText)?;
-                let (source, length) = self.copy_of_text(call.image, value)?;
-                let text = core::str::from_utf8(&source[..length]).map_err(|_| Failure::BadText)?;
-                let missing = (width - text.chars().count() as Value).clamp(0, TEXT_BUFFER_BYTES as Value);
-                self.write_text(|writer| {
-                    let mut encoded = [0u8; 4];
-                    let padding_bytes = padding.encode_utf8(&mut encoded).as_bytes();
-                    for _ in 0..missing {
-                        writer.write_bytes(padding_bytes)?;
-                    }
-                    writer.write_bytes(text.as_bytes())
-                })?;
-            }
+            PadStart => self.pad_start(call.image)?,
             TextFromCodes(array) => {
                 let count = self.pop()?;
                 let length = Self::array_placement(call.state, array)?.length as Value;
@@ -1044,6 +993,72 @@ impl Interpreter {
         Ok(DateTime::from_local_milliseconds(
             instant.checked_add(utc_offset).ok_or(Failure::Overflow)?,
         ))
+    }
+
+    // The text instructions below copy a text onto the stack, so each is kept out of line: inlined
+    // into `execute`, their copies would stay in `run`'s frame for every handler.
+
+    #[inline(never)]
+    fn to_upper(&mut self, image: &AppImage) -> Result<(), Failure> {
+        let value = self.pop()?;
+        let (source, length) = self.copy_of_text(image, value)?;
+        let text = core::str::from_utf8(&source[..length]).map_err(|_| Failure::BadText)?;
+        self.write_text(|writer| {
+            for character in text.chars().flat_map(char::to_uppercase) {
+                let mut encoded = [0u8; 4];
+                writer.write_bytes(character.encode_utf8(&mut encoded).as_bytes())?;
+            }
+            Ok(())
+        })
+    }
+
+    #[inline(never)]
+    fn text_length(&mut self, image: &AppImage) -> Result<(), Failure> {
+        let value = self.pop()?;
+        let (source, length) = self.copy_of_text(image, value)?;
+        let text = core::str::from_utf8(&source[..length]).map_err(|_| Failure::BadText)?;
+        self.push(text.chars().count() as Value)
+    }
+
+    #[inline(never)]
+    fn slice_text(&mut self, image: &AppImage) -> Result<(), Failure> {
+        let end = self.pop()?;
+        let start = self.pop()?;
+        let value = self.pop()?;
+        let (source, length) = self.copy_of_text(image, value)?;
+        let text = core::str::from_utf8(&source[..length]).map_err(|_| Failure::BadText)?;
+        let count = text.chars().count() as Value;
+        let first = javascript_index(start, count);
+        let last = javascript_index(end, count).max(first);
+        self.write_text(|writer| {
+            for character in text.chars().skip(first as usize).take((last - first) as usize) {
+                let mut encoded = [0u8; 4];
+                writer.write_bytes(character.encode_utf8(&mut encoded).as_bytes())?;
+            }
+            Ok(())
+        })
+    }
+
+    #[inline(never)]
+    fn pad_start(&mut self, image: &AppImage) -> Result<(), Failure> {
+        let code = self.pop()?;
+        let width = self.pop()?;
+        let value = self.pop()?;
+        let padding = u32::try_from(code)
+            .ok()
+            .and_then(char::from_u32)
+            .ok_or(Failure::BadText)?;
+        let (source, length) = self.copy_of_text(image, value)?;
+        let text = core::str::from_utf8(&source[..length]).map_err(|_| Failure::BadText)?;
+        let missing = (width - text.chars().count() as Value).clamp(0, TEXT_BUFFER_BYTES as Value);
+        self.write_text(|writer| {
+            let mut encoded = [0u8; 4];
+            let padding_bytes = padding.encode_utf8(&mut encoded).as_bytes();
+            for _ in 0..missing {
+                writer.write_bytes(padding_bytes)?;
+            }
+            writer.write_bytes(text.as_bytes())
+        })
     }
 
     /// A copy of a text value's bytes, so new text can be written while reading it.

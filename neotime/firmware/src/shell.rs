@@ -509,10 +509,7 @@ impl Shell {
         }
         let now = clock::utc_now();
         self.finger_left_on_old_screen = true;
-        if let Some(mut host) = self.host.take() {
-            host.close(now, &mut self.system);
-            self.save_state_of(&mut host);
-        }
+        self.close_open_app(now);
         self.save_settings();
         vibration::request(Some(Vibration::Stop));
         heart_rate::stop();
@@ -582,6 +579,16 @@ impl Shell {
                 image.release();
             }
             self.open_failed(showing);
+        }
+    }
+
+    /// Closes the open app and saves its state.
+    // Out of line, since taking the host moves it onto the stack, and `open` keeps its frame while the next app's handlers run.
+    #[inline(never)]
+    fn close_open_app(&mut self, now: Value) {
+        if let Some(mut host) = self.host.take() {
+            host.close(now, &mut self.system);
+            self.save_state_of(&mut host);
         }
     }
 
@@ -674,6 +681,7 @@ impl Shell {
     }
 
     /// Leaves the crash page for the face once the companion app has saved the crash.
+    #[inline(never)]
     fn leave_crash_page_once_dealt_with(&mut self) {
         if self
             .firmware_page
@@ -700,6 +708,7 @@ impl Shell {
     }
 
     /// Writes the app's persistent state when any of it changed since the last save.
+    #[inline(never)]
     fn save_state_of(&self, host: &mut AppHost<'static>) {
         let Some(id) = host.image().string(host.image().id_string) else {
             return;
@@ -716,6 +725,7 @@ impl Shell {
     }
 
     /// Applies a change from the companion app, then tells it the settings as they now are.
+    #[inline(never)]
     fn change_settings(&mut self, change: &SettingsChange) {
         self.set_theme(change.applied_to(self.theme));
         settings::set_values(&change.values);
@@ -775,6 +785,7 @@ impl Shell {
     }
 
     /// Buzzes when an hour or half hour, as the chimes setting asks, has passed since the last check.
+    #[inline(never)]
     fn chime_if_due(&mut self, now: Value) {
         let checked_at = core::mem::replace(&mut self.chimes_checked_at, now);
         let Some(period) = chime_period_in_milliseconds() else {
@@ -955,6 +966,7 @@ impl Shell {
         }
     }
 
+    #[inline(never)]
     fn system_values_changed(&mut self, changed: u32) {
         self.settings_changed();
         if changed & SystemValue::HeartRate.bit() != 0 {
@@ -971,6 +983,7 @@ impl Shell {
     }
 
     /// Keeps and buzzes for a phone notification, takes the phone's other updates, and passes readings and notifications to the open app.
+    #[inline(never)]
     fn app_event(&mut self, event: AppEvent) {
         let now = clock::utc_now();
         match event {
@@ -1065,6 +1078,7 @@ impl Shell {
     }
 
     /// Reads the accelerometer only as often as the open app needs while the screen is on.
+    #[inline(never)]
     fn match_accelerometer_to_app(&self) {
         let period = match &self.host {
             Some(host) if self.lit => app_motion::reading_period_in_milliseconds(host),

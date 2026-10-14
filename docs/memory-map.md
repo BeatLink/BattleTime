@@ -147,7 +147,10 @@ store call's state, up to 1.8 KB, is on the heap while it runs, both for the she
 the storage task, so neither the stack nor the task's static space holds it. Opening an app: the app
 host loads the image and runs its handlers, and the interpreter formats numbers with 64-bit
 division, all under the shell's task. Opening the launcher, the face and the alarm's editor all
-peak there. Start-up reaches 3,816 B: the Bluetooth server is built straight into its static
+peak there. Opening Remote with nine buttons, whose handler reads `/remote/buttons` from the flash
+store under the interpreter, peaks at 6,620 B, 2,324 B above the guard. That fits because the
+text instructions that copy a text, closing the old app, and the shell loop's other branches run
+out of line, so their locals are not in the frames that stay on the stack while a handler runs. Start-up reaches 3,816 B: the Bluetooth server is built straight into its static
 (`third_party/trouble-host-macros`), where building it by value took a 6.9 KB frame, and the radio
 and Bluetooth tasks start out of line from `main`. Drawing holds no buffer on the stack: the
 display's two strip buffers, 3,840 B together, are static, and drawing's own frames stay under the

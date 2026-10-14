@@ -108,6 +108,8 @@ fn with_page<Answer>(
 // ============================================================================
 
 /// The not-enough-memory page when the app's need, less its image already read onto the heap, is more than the heap has free.
+// Kept out of `Shell::open`, so the estimate's work arrays leave its frame before the app's handlers run.
+#[inline(never)]
 pub fn refusal_for(image_bytes: &[u8], refused_face: bool) -> Option<FirmwarePage> {
     let image = AppImage::parse(image_bytes).ok()?;
     let need = estimate_memory_need(&image);

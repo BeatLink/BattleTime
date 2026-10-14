@@ -190,6 +190,8 @@ pub struct LauncherIcons {
 }
 
 impl LauncherIcons {
+    // Kept out of `Shell::open`, whose frame stays on the stack while the app's handlers run.
+    #[inline(never)]
     pub fn read(files: &storage::Files, installed: &InstalledApps) -> LauncherIcons {
         let mut icons: Vec<Lent<[u8]>> = Vec::new();
         for entry in (0..installed.listed_count()).filter_map(|place| installed.listed(place)) {
