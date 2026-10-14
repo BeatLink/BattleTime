@@ -120,9 +120,13 @@ Android 13 and later.
 
 ## Moving to Tauri
 
-- **Connecting and updating from the Tauri app.** The Rust Bluetooth layer has scanned, connected
-  and read GATT on the watch (the probe example), and the Tauri window scans through it; connecting,
-  the UART lines and a firmware update from the window are untried.
+- **Message lines and a firmware update from the Tauri window.** The window has scanned, connected
+  and installed a plugin's watch app on the real watch; it has not yet sent or received the
+  Gadgetbridge lines, nor run a firmware update. The user chose to remove Electron without waiting
+  for the update check.
+- **Buzz back's answer felt on the wrist.** In the `plugin_host` test the plugin answered four presses
+  with a two-buzz message and the write went out without error, but whether the watch buzzed twice
+  each time was not confirmed.
 - **Removing Electron.** `.#companion-tauri` packages the Tauri app, and its window has scanned,
   connected and installed a plugin's watch app on the real watch. Once a firmware update from its
   window has worked too, it replaces `.#companion`, and Electron, `node/` and their npm dependencies go.
