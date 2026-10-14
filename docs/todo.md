@@ -8,6 +8,12 @@ document for its part instead.
 
 ## Hardware tests
 
+- [ ] **Paging on the PineTime.** `Pages` (2f9524a) and the system and steps apps built on it
+  (5957275) have run only in the harness and the emulator; the watch still runs 3a5abe9. Flash a
+  build with them and check on the watch that a swipe left or right wipes to the next page, the
+  page bar marks the page on show, a sideways drag leaves the system page's list still, swipes past
+  the first and last page step round the quick apps, and a charger event opens the battery page.
+
 - [ ] **Touch panel on the PineTime.** The firmware runs `neotime-touch` on the watch, but these
   checks have not been made:
   - `start` succeeds and `read_chip_info` gives a sensible chip ID (0xb4 or a near value);
@@ -166,6 +172,15 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Check why wasp-os's update mode gives way to the reloader** about 4 seconds after the
   button escape in the emulator, with no reset between. Its advertising never times out, so this may
   be the emulator's SoftDevice; if a watch does the same, the escape leaves the reloader running.
+- [ ] **Updates over Bluetooth drop part way.** Since 5fc998d, `dfu.py --legacy` to the running
+  firmware often stops with "No notification received" (at 80 %, 51 %, 10 % and 50 % on
+  2026-10-13, and again for 3a5abe9). A broken upload is never swapped in, and a retry or an
+  upload to the recovery firmware gets through. Find where the firmware stops answering.
+- [ ] **The recovery firmware no longer fits the reloader.** `recovery.bin` overflows the reloader
+  by about 11.4 KB, so `tools/build_images.sh` stops at the reloader and the two migration suites
+  fail. Shrink the recovery build or give the reloader the room.
+- [ ] **"The Slot Table Moves The Recovery Slot" fails on master.** Find whether the suite or the
+  slot table code is wrong.
 - [ ] **Run the DFU service against more clients:** wasp-os's `dfu.py` works on the watch; the
   companion app and Gadgetbridge are next.
 - [ ] **An update over Bluetooth in the emulator.** The update suites write images straight into
@@ -340,6 +355,9 @@ each item says what it costs and what it would save.
   trimmed GATT table take RAM from the 12 KB budget, at some cost to file transfer speed. The
   Bluetooth task's state is 4.8 KB, most of it TrouBLE's GATT table (39 attributes of 44 B, 2.1
   KB) and its runner (1.6 KB); shrinking those means patching `third_party/trouble-host`.
+- [ ] **Room in the firmware slot.** After 5957275 the firmware is 392,848 B of code and 2,148 B
+  of data, leaving about 2 KB of the 388 KB slot. Find room, such as by moving code to the shared
+  library, before the next firmware feature.
 - [ ] **Find large static RAM.** List `.bss` and `.data` by size with `nm --size-sort` and check
   for oversized embassy task state or tables that should be `const`.
 
