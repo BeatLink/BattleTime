@@ -90,6 +90,8 @@ mod motion;
 mod packages;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod phone;
+#[cfg(with_shell)]
+mod phone_services;
 mod status;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod system_values;
@@ -606,12 +608,12 @@ struct AlertNotificationService {
 #[cfg(with_shell)]
 static NEXT_NEW_ALERT: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
-/// Shows a New Alert written to the Alert Notification service as a notification, or as a call when it is one.
+/// Shows a New Alert, written to the watch or notified by the phone, as a notification, or as a call when it is one.
 #[cfg(with_shell)]
-fn read_new_alert(write: &[u8]) {
+fn read_new_alert(alert: &[u8], parse: fn(&[u8], i64) -> Option<neotime_companion::Message<'static>>) {
     let count = NEXT_NEW_ALERT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let id = (1 << 32) + i64::from(count);
-    match neotime_companion::parse_new_alert(write, id) {
+    match parse(alert, id) {
         Some(neotime_companion::Message::Notification(notification)) => {
             app_events::notification_arrived(notification)
         }
@@ -819,7 +821,7 @@ async fn run_bluetooth(
             };
             screen.write_line(line::BLUETOOTH, "Connected");
             phone::set_connected(true);
-            serve_connection(
+            let serving = serve_connection(
                 &connection,
                 server,
                 dfu,
@@ -827,8 +829,11 @@ async fn run_bluetooth(
                 confirmation,
                 &mut confirmed,
                 files,
-            )
-            .await;
+            );
+            // The phone's own services are used beside serving the watch's, and end with the connection.
+            #[cfg(with_shell)]
+            let serving = select(serving, phone_services::use_phone_services(connection.raw()));
+            serving.await;
             phone::set_connected(false);
             screen.write_line(line::BLUETOOTH, "Advertising");
         }
@@ -950,6 +955,22 @@ async fn send_packages_reply(
     }
 }
 
+/// Confirms the firmware the first time a phone exchanges data with it, and says so on the status page.
+async fn confirm_once(screen: &mut Screen, confirmation: &mut storage::Confirmation, confirmed: &mut bool) {
+    if !*confirmed {
+        let kept = confirmation.confirm().await;
+        if screen.mode == status::Mode::OnTrial {
+            if kept {
+                screen.set_mode(status::Mode::Confirmed);
+                screen.write_line(line::ACTION, "Update kept");
+            } else {
+                screen.write_line(line::ACTION, "Could not keep it");
+            }
+        }
+        *confirmed = true;
+    }
+}
+
 /// The first data a phone exchanges proves the radio works end to end, so that is when the firmware confirms itself.
 // Only the shell's builds move slots, the one use of `files` here.
 #[cfg_attr(not(with_shell), allow(unused_variables))]
@@ -981,7 +1002,10 @@ async fn serve_connection(
             battery::PERCENT_CHANGED.wait(),
             heart_rate::READING_TAKEN.wait()
         ));
-        let bluetooth_switched = core::pin::pin!(settings::BLUETOOTH_SWITCHED.wait());
+        let bluetooth_switched = core::pin::pin!(select(
+            settings::BLUETOOTH_SWITCHED.wait(),
+            clock::SET_FROM_PHONE_SERVICE.wait()
+        ));
         let event = match select4(next_event, next_reply, reading_change, bluetooth_switched).await {
             Either4::First(event) => event,
             Either4::Second(Either::First(reply)) => {
@@ -1011,10 +1035,14 @@ async fn serve_connection(
                 continue;
             }
             // The link stays until the controller reports it gone, which ends this connection as usual.
-            Either4::Fourth(()) => {
+            Either4::Fourth(Either::First(())) => {
                 if !settings::is_bluetooth_on() {
                     connection.raw().disconnect();
                 }
+                continue;
+            }
+            Either4::Fourth(Either::Second(())) => {
+                confirm_once(screen, confirmation, confirmed).await;
                 continue;
             }
         };
@@ -1058,7 +1086,10 @@ async fn serve_connection(
                         #[cfg(with_shell)]
                         if write.handle() == server.alert_notification.new_alert.handle {
                             write.with_data(|_, bytes| {
-                                read_new_alert(&bytes[..bytes.len().min(MOST_NEW_ALERT_BYTES)])
+                                read_new_alert(
+                                    &bytes[..bytes.len().min(MOST_NEW_ALERT_BYTES)],
+                                    neotime_companion::parse_new_alert,
+                                )
                             });
                         }
                         if write.handle() == server.time.current_time.handle {
@@ -1139,18 +1170,7 @@ async fn serve_connection(
                         storage::reset(screen).await;
                     }
                 }
-                if !*confirmed {
-                    let kept = confirmation.confirm().await;
-                    if screen.mode == status::Mode::OnTrial {
-                        if kept {
-                            screen.set_mode(status::Mode::Confirmed);
-                            screen.write_line(line::ACTION, "Update kept");
-                        } else {
-                            screen.write_line(line::ACTION, "Could not keep it");
-                        }
-                    }
-                    *confirmed = true;
-                }
+                confirm_once(screen, confirmation, confirmed).await;
                 send_file_answers(connection, server, file_answers).await;
 
                 dfu.set_allows_updates(settings::current().is_on(Setting::AllowsUpdates));

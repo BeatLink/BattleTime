@@ -25,6 +25,20 @@ whether the watch serves it yet.
 | Alert Notification | `0x1811` | `0x2A46` New Alert, write | Shows a notification, read as InfiniTime reads it: a category byte, two more header bytes, then a title, a zero byte and the body, or only a body when there is no zero byte; at most 125 bytes. The category names the notification's app (`Email`, `Call`, `SMS`, `Messages` and the rest of the standard's list; `Alert` for any other). A write in category 3, an incoming call, opens the call screen and rings as a `call` `incoming` line does, naming the caller from the title, or from the body when there is no title; it is not kept as a notification. A write with no text is ignored. Each other one is kept as a new notification, as in [Notifications](#notifications-served). | Yes |
 | File transfer | `0xFEBB` | as in [File transfer](#file-transfer) | Reading, writing, listing, moving and deleting files. | Yes |
 
+### The phone's services the watch uses
+
+The watch also reads two of the phone's own services, as a GATT client, as InfiniTime does. Three
+seconds after a phone connects it looks for them once; a phone that serves neither is left alone,
+and one that does needs no app for them. [bluetooth.md](bluetooth.md#the-phones-own-services) says
+how the watch asks and how long it waits.
+
+| Service | UUID | Characteristic | What the watch does |
+|---|---|---|---|
+| Current Time | `0x1805` | `0x2A2B`, read | Reads it and sets the clock from it as from a write to its own 0x2A2B; see [Time and time zone](#time-and-time-zone). |
+| | | `0x2A0F`, read | Reads it, when the phone has it and its Current Time was a real date and time, and takes the zone as from a write to its own 0x2A0F. |
+| Alert Notification | `0x1811` | `0x2A46` New Alert, notify | Turns its notifications on. Each one is read as the standard lays it out: a category byte, a count byte, then the text, which is a title, a zero byte and the body, or only a body. It is then shown as a New Alert written to the watch is, a call in category 3 included. |
+| | | `0x2A44` control point, write | Writes `02 FF`, turning on new alerts in every category, when the phone has it. |
+
 ## Time and time zone
 
 The watch counts UTC and keeps a time zone and daylight saving offset beside it. Local time is UTC
@@ -33,13 +47,17 @@ see UTC as `now` and the sum as `utc_offset`; faces, alarms, chimes and the midn
 local time. The zone is saved in `/settings/time_zone` as the two bytes of 0x2A0F; the time itself
 starts again from the build time after a restart, so a phone should set it on every connection.
 
-The two ways in treat the zone differently, as their senders expect:
+The ways in treat the zone differently, as their senders expect:
 
 - **Current Time Service.** 0x2A2B carries local time, as the standard says, so the watch keeps
   UTC as that time minus its zone. A 0x2A0F write keeps the local time and moves UTC instead. A
   phone may write the two in either order, as InfiniTime allows, and the watch ends at the same
   time. A client that writes only 0x2A2B leaves the zone as it was, so its local time is right but
   UTC is off by that zone.
+- **The phone's own Current Time Service.** When the phone serves 0x1805, the watch reads its
+  0x2A2B and then its 0x2A0F a few seconds after connecting and takes them just as the two writes
+  above, so a phone with both sets local time and UTC, and one with only 0x2A2B sets local time in
+  the zone the watch already has.
 - **Gadgetbridge's Bangle.js line.** A message channel line starting `setTime(` or
   `E.setTimeZone(`, optionally after the `0x10` byte Gadgetbridge puts first, is read for those
   two calls, each at the start or after a `;`, and the rest of the line is ignored.

@@ -115,3 +115,44 @@ fn an_incoming_call_without_a_title_names_the_caller_from_the_body() {
     };
     assert_eq!(call.caller, "+15550100");
 }
+
+#[test]
+fn a_phone_alert_has_its_text_right_after_the_count() {
+    let Some(Message::Notification(notification)) = parse_phone_new_alert(b"\x05\x01Sam: on my way", 9)
+    else {
+        panic!("not a notification");
+    };
+    assert_eq!(notification.id, 9);
+    assert_eq!(notification.source, "SMS");
+    assert_eq!(notification.title, "");
+    assert_eq!(notification.body, "Sam: on my way");
+}
+
+#[test]
+fn a_phone_alert_splits_a_title_at_a_zero_byte() {
+    let Some(Message::Notification(notification)) = parse_phone_new_alert(b"\x01\x02Sam\0Lunch?", 1) else {
+        panic!("not a notification");
+    };
+    assert_eq!(notification.source, "Email");
+    assert_eq!(notification.title, "Sam");
+    assert_eq!(notification.body, "Lunch?");
+}
+
+#[test]
+fn a_phone_alert_without_text_shows_nothing() {
+    assert_eq!(parse_phone_new_alert(&[], 1), None);
+    assert_eq!(parse_phone_new_alert(&[5], 1), None);
+    assert_eq!(parse_phone_new_alert(&[5, 1], 1), None);
+    assert_eq!(parse_phone_new_alert(&[5, 1, 0], 1), None);
+}
+
+#[test]
+fn a_phone_alert_for_an_incoming_call_opens_the_call_screen() {
+    assert_eq!(
+        parse_phone_new_alert(b"\x03\x01Sam", 1),
+        Some(Message::Call(PhoneCall {
+            kind: CallKind::Incoming,
+            caller: "Sam".try_into().unwrap(),
+        }))
+    );
+}

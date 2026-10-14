@@ -54,6 +54,7 @@ COMPONENTS = [
     ("neotime_bluetooth", "Bluetooth (controller and TrouBLE)"),
     ("trouble_host", "Bluetooth (controller and TrouBLE)"),
     ("bt_hci", "Bluetooth (controller and TrouBLE)"),
+    ("neotime_phone_client", "Bluetooth (controller and TrouBLE)"),
     ("RADIO", "Bluetooth (controller and TrouBLE)"),
     ("neotime_blefs", "BLEFS file service"),
     ("neotime_packages", "Packages"),

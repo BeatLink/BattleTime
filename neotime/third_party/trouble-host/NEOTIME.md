@@ -1,7 +1,7 @@
 # NeoTime's copy of trouble-host
 
 This is [trouble-host](https://github.com/embassy-rs/trouble) 0.8.0 from crates.io (Apache-2.0 OR
-MIT), with three changes, each marked "NeoTime patch".
+MIT), with four changes, each marked "NeoTime patch".
 
 The attribute server builds a Read By Type or Read By Group Type response by reading each matching
 attribute straight into the space left in the response and comparing the length it got with the
@@ -44,6 +44,12 @@ is `GapConfig::build`; `gap::add_gap_attributes` adds the GAP and GATT services 
 crate's tests build their tables with `AttributeTableBuilder` through `attribute::test_table`.
 `types::uuid::ConstUuid` turns the UUID expressions the macros accept into a `Uuid` in a constant,
 and `__export` also exports `static_cell` for the macros.
+
+`Connection::send_att` sends one ATT PDU the caller built, and `Connection::receive_att_from_server`
+copies out the peer's next ATT response, notification or indication, from the queue upstream's
+`GattClient` reads. They let the firmware's small client for the phone's own services
+(`services/phone_client`) carry its requests without `GattClient`, which cost about 12.6 KB of
+flash in the watch's firmware against about 3 KB for the small client.
 
 The test and example targets are left out of this copy, since their sources are not included.
 The workspace and the firmware swap this copy in with `[patch.crates-io]`. Drop it once upstream

@@ -14,7 +14,10 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use embassy_sync::blocking_mutex::{raw::CriticalSectionRawMutex, Mutex};
+use embassy_sync::{
+    blocking_mutex::{raw::CriticalSectionRawMutex, Mutex},
+    signal::Signal,
+};
 use embassy_time::Instant;
 use neotime_current_time::{
     parse_time_line, LocalTimeInformation, WallClock, CURRENT_TIME_BYTES, KEPT_CLOCK_WORDS,
@@ -33,6 +36,9 @@ const BUILD_TIME: Value = parse_or_zero(env!("NEOTIME_BUILD_TIME_MS"));
 
 static CLOCK: Mutex<CriticalSectionRawMutex, Cell<WallClock>> =
     Mutex::new(Cell::new(WallClock::starting_at(BUILD_TIME)));
+
+/// Signalled when the phone's own Current Time service set the clock, so the Bluetooth task confirms the firmware.
+pub static SET_FROM_PHONE_SERVICE: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 /// Whether the zone changed since it was last saved or loaded.
 static ZONE_UNSAVED: AtomicBool = AtomicBool::new(false);

@@ -279,6 +279,13 @@ document for its part instead.
     answered without an error, since the watch reads it without storing it;
   - ITD's `itctl notify` and Amazfish show their notifications the same way.
   - a write of `03 01 00` then `Sam` opens the call screen for Sam and rings until Reject or the button.
+- [ ] **The phone's own services on the PineTime.** The client for the phone's Current Time and
+  Alert Notification services has run only against `tools/check_phone_services.py` playing the
+  phone through the emulator's bridge, and against the pretend phone in `neotime-phone-client`'s
+  tests. On the watch, with an Android phone serving both through nRF Connect's GATT server, check
+  that a few seconds after connecting the clock takes the phone's time and zone, the firmware is
+  confirmed after an update, a New Alert notified by the phone shows as a notification, and that
+  Gadgetbridge, the companion app and a phone serving neither service work as before.
 
 ## Bluetooth controller
 
@@ -572,6 +579,9 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **Pairing with a passkey.** Secure Connections with a 6-digit passkey shown on screen, as
   InfiniTime does. Needs encryption in the controller first.
 - [ ] **Bonding** saved to the file system and restored at start.
+- [ ] **The Current Time from an iPhone.** iOS is expected to serve its Current Time service only
+  over an encrypted link, so the watch's read of it is refused until pairing works; then an iPhone
+  should set the clock with no app, as it does for InfiniTime. Check what an iPhone answers first.
 - [ ] **Privacy:** resolvable private addresses.
 - [ ] **Light the screen when a phone connects or leaves.** The shell redraws `is_phone_connected`
   and sends the `phone` event, but a dark screen stays dark; turn it on briefly, outside do not
@@ -767,8 +777,7 @@ InfiniTime has these and NeoTime has nothing for them yet:
 | Area | What InfiniTime has |
 |---|---|
 | Board and system loop | sleep and wake of the whole system, wake locks, a system monitor |
-| Clock | the Current Time client |
-| Notifications | the Alert Notification client, Immediate Alert |
+| Notifications | Immediate Alert |
 | Other BLE services | Music, Navigation, Simple Weather |
 | System screens | the pass key, firmware validation |
 

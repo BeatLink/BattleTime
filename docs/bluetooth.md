@@ -212,6 +212,39 @@ on, as on InfiniTime: phones such as Gadgetbridge subscribe whenever they connec
 otherwise stay lit all day. The pulse reaches the phone when the Heart app measures or the heart
 rate interval setting measures in the background.
 
+## The phone's own services
+
+The watch is also a GATT client of the phone, as InfiniTime is, while it stays the peripheral: ATT
+lets either side of a connection ask the other. Three seconds after a phone connects,
+`firmware/src/phone_services.rs` looks once for two of the phone's services, one request at a time:
+
+1. **Current Time (0x1805).** It reads 0x2A2B and, when the phone has it, 0x2A0F, and sets the clock
+   the way a phone's writes to the watch's own Current Time service do, so the step day, alarms and
+   the clock kept across a reset follow, and the firmware confirms itself, as when a phone writes the time.
+2. **Alert Notification (0x1811).** It writes New Alert's (0x2A46) CCCD to turn its notifications
+   on, then writes `02 FF` to the control point (0x2A44), when there is one, to ask for new alerts
+   in every category. Each New Alert the phone then notifies is read as the standard lays it out, a
+   category byte, a count byte and the text, and shown as a notification, or rings as a call,
+   through the same path as a New Alert written to the watch.
+
+What it asks and how it reads the answers is `neotime-phone-client`, a state machine with no I/O,
+tested on the computer against a pretend phone. A phone that has neither service answers two
+requests with errors and is left alone. Each answer may take 5 seconds; one that misses that ends
+the asking for the connection, since a late answer would be taken for the next request's. The
+client keeps reading what the phone sends for the rest of the connection, so a late answer or a
+notification never holds one of the host's eight packets, and it ends with the connection.
+
+It runs beside the connection's own loop in the Bluetooth task, on the heap: 368 B while a phone is
+connected, and only when the heap has that plus 2 KB free. It is polled out of line, so its 268 B
+frame is on the stack only while it runs. TrouBLE's own `GattClient` would have cost about 12.6 KB
+of flash, so the client sends and receives raw ATT through two calls added to the vendored TrouBLE
+([NEOTIME.md](../neotime/third_party/trouble-host/NEOTIME.md)), for about 3 KB in all. The recovery
+firmware leaves it out.
+
+It asks only for 16-bit UUIDs and never raises the ATT MTU, so each answer is at most 23 bytes.
+An iPhone is expected to refuse the read, since iOS serves its Current Time only over an encrypted
+link, which the controller cannot make yet; see [todo.md](todo.md).
+
 ## Tests
 
 `cargo test -p neotime-bluetooth` runs 137 tests on the computer:
@@ -239,6 +272,13 @@ rate interval setting measures in the background.
     `src/gatt_transcript.txt`, which TrouBLE gave when it built its table in RAM at start-up;
   - only the values that change take RAM, constants and declarations refuse writes, and a server
     is built only once, since its values are a static.
+
+`cargo test -p neotime-phone-client` plays the client against pretend phones: with both
+services, with neither, without Local Time Information or the control point, a New Alert without
+its own CCCD, declarations over several pages with 128-bit UUIDs between them, answers cut at the
+end of the watch's buffer, a refused CCCD write, and a phone that stops answering after each
+request. `tools/check_phone_services.py` plays a phone through the emulator's Bluetooth bridge;
+see [testing.md](testing.md#bluetooth-without-bluez).
 
 `tests/emulator/bluetooth_sleep.robot` checks in the PineTime emulator that the crystal is off
 for most of the time while the firmware advertises. None of this shows that the timing works on real hardware. The first test on the watch is in

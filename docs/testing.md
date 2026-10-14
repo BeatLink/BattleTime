@@ -283,6 +283,12 @@ Heart Rate Measurement (0x2A37): nothing is notified and the sensor stays off un
 turns the background interval to always, then each reading arrives as `00` and the pulse, a read
 gives the latest, and turning notifications off stops them.
 
+`../tools/check_phone_services.py FIRMWARE_ELF [SCREENSHOT]` plays a phone that serves the Current
+Time and Alert Notification services, answering the watch's own ATT requests through the bridge
+from a small attribute table. It checks that the watch asks by itself after connecting, turns New
+Alert on and writes the control point, keeps the phone's time and zone as UTC, buzzes for an SMS
+alert the phone notifies and opens the call app for a call alert; it takes about a minute.
+
 `../tools/check_watch_face.py FIRMWARE_ELF` installs the analog and digital faces and starts the
 firmware three times: with no face chosen analog opens, with digital chosen in the saved settings
 digital opens, and with an uninstalled face chosen it falls back to analog; it takes about a minute.

@@ -50,6 +50,7 @@ neotime-dfu = { path = "../services/dfu", features = ["trouble"] }
 neotime-notifications = { path = "../services/notifications" }
 neotime-flash-store = { path = "../services/flash_store" }
 neotime-packages = { path = "../services/packages" }
+neotime-phone-client = { path = "../services/phone_client" }
 neotime-display = { path = "../drivers/display" }
 neotime-heart-rate = { path = "../drivers/heart_rate" }
 neotime-external-flash = { path = "../drivers/external_flash", features = ["cortex-m"] }

@@ -32,7 +32,7 @@ mod slots_tests;
 #[cfg(test)]
 mod tests;
 
-pub use alert::{parse_new_alert, MOST_NEW_ALERT_BYTES};
+pub use alert::{parse_new_alert, parse_phone_new_alert, MOST_NEW_ALERT_BYTES};
 pub use device_information::{
     serial_number, HARDWARE_REVISION, MANUFACTURER_NAME, MODEL_NUMBER, SOFTWARE_REVISION,
 };

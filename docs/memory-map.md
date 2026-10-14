@@ -183,6 +183,13 @@ that are written or set at run time are in RAM, in one static byte array (`__SER
 The Heart Rate service, the last one added, took 1,076 B of flash in the full build (about 0.8 KB in
 the recovery build, which serves it too), 128 B of it its four attributes
 and most of the rest notifying it, and 48 B of static RAM: 28 B in the CCCD table, 4 B of value and the reading's signal.
+The client for the phone's own Current Time and Alert Notification services
+(`firmware/src/phone_services.rs` and `services/phone_client`) took 3,008 B of flash in the full
+build, measured with `cargo size` against master fcdff6dc (433,212 B to 436,220 B of text), and
+56 B of static RAM, most of it in the Bluetooth task's state; the recovery build leaves it out.
+While a phone is connected it keeps 368 B on the heap, and its 268 B frame is out of line, so the
+launcher's stack peak on blank flash stayed at about 6.0 KB with 2,964 B spare. TrouBLE's own
+`GattClient` took 12.6 KB of flash for the same work.
 Built at start-up, as upstream TrouBLE does, the table took 2,536 B with its values' stores
 (2,771 B in all) and 4.4 KB of code to build it. That leaves 10.6 KB (10,828 B) for the
 stack, of which the lowest bytes, up to 360 B, are the stack guard: 256 B from the first 256-byte

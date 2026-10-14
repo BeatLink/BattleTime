@@ -33,7 +33,7 @@ flowchart TB
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: renderer, shapes, strips, started"]
     system["System<br/>settings started; planned: power, events, notifications"]
-    services["Services<br/>services/flash_store, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/steps,<br/>services/slot_log, services/liveness, services/foreground,<br/>services/task_table"]
+    services["Services<br/>services/flash_store, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/phone_client,<br/>services/steps, services/slot_log,<br/>services/liveness, services/foreground,<br/>services/task_table"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/heart_rate,<br/>drivers/bluetooth, drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
@@ -168,6 +168,7 @@ NeoTime/
 │   ├── foreground/   neotime-foreground: whether the wearer watches the screen move, for background work to wait on
 │   ├── liveness/     neotime-liveness: whether the shell and the radio still make progress, for the watchdog
 │   ├── packages/     neotime-packages: the apps installed in /apps and the shared library's install
+│   ├── phone_client/ neotime-phone-client: the GATT client for the phone's own Current Time and Alert Notification services
 │   ├── settings/     neotime-settings: the watch-wide settings, their limits and their file
 │   ├── slot_log/     neotime-slot-log: day files of six-minute slots, for the step, heart rate and battery logs
 │   ├── steps/        neotime-steps: the step history by hour, the trip count and the daily step log
@@ -176,7 +177,7 @@ NeoTime/
 ├── simulator/        neotime-simulator: the drivers in a desktop window
 ├── site/             the GitHub Pages site: its MkDocs config, front page and colours
 ├── third_party/
-│   ├── trouble-host/   TrouBLE with its GATT table in flash and discovery that never cuts a 128-bit UUID short
+│   ├── trouble-host/   TrouBLE with its GATT table in flash, discovery that never cuts a 128-bit UUID short, and raw ATT for a small client
 │   └── trouble-host-macros/  TrouBLE's GATT macros, building the attribute table in a constant
 ├── tools/            scripts: drawing the memory maps, packaging images, building every image
 └── ui/               neotime-ui: renderer, shapes and strips that draw on the screen
@@ -553,6 +554,20 @@ of at least 7 bytes and refuses a year outside 1970 to 2200 or a date or time th
 `LocalTimeInformation` holds 0x2A0F's time zone and daylight saving offset in quarter hours and
 refuses values the field does not allow, while taking its "unknown" values, which count as 0 in
 `offset_in_milliseconds`.
+
+## The phone's services (`services/phone_client`)
+
+`neotime-phone-client` is the watch's GATT client for the phone's own Current Time and Alert
+Notification services, which InfiniTime's ServiceDiscovery, CurrentTimeClient and
+AlertNotificationClient use. `PhoneClient` is a state machine with no I/O: `next` takes the answer
+to the last request and gives any value it read and the next request, so the firmware only carries
+bytes and every step is tested on a computer against a pretend phone. It finds each service with
+Find By Type Value, reads 0x2A2B and 0x2A0F with Read By Type, reads the Alert Notification
+service's declarations a page at a time for New Alert and the control point, finds New Alert's CCCD
+with Find Information, then writes the CCCD and the control point. An answer cut short at the end
+of the firmware's buffer is asked for again from the last whole entry, and any other answer than
+the one expected ends that step. `firmware/src/phone_services.rs` drives it; see
+[bluetooth.md](bluetooth.md#the-phones-own-services).
 
 ## Settings (`services/settings`)
 

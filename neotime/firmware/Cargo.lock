@@ -1256,6 +1256,7 @@ dependencies = [
  "neotime-liveness",
  "neotime-notifications",
  "neotime-packages",
+ "neotime-phone-client",
  "neotime-runtime",
  "neotime-settings",
  "neotime-slot-log",
@@ -1317,6 +1318,10 @@ dependencies = [
  "serde",
  "serde-json-core",
 ]
+
+[[package]]
+name = "neotime-phone-client"
+version = "0.1.0"
 
 [[package]]
 name = "neotime-runtime"

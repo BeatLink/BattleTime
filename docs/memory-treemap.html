@@ -262,7 +262,7 @@ function ramTree() {
         { name: "System heap", size: systemHeap, kind: "data", holds: "The shell's list of installed apps, kept notifications (up to about 1 KB), a small file gathered while it uploads (up to 1 KB), the launcher's groups, and lines to and from the companion app." },
       ] },
       { name: "Firmware", size: owners["Firmware (start-up, shell, tasks)"] || 0, kind: "firmware", holds: "Embassy's task storage, the Bluetooth host's resources and its eight 128-byte packets, the flash store's tables and the display's strip buffers. The split below uses the docs' rounded figures.", children: [
-        { name: "Bluetooth task", size: KB(3.2), kind: "boot", holds: "About 3.2 KB, TrouBLE's runner (1.6 KB) much of it. Replies and half-received companion lines wait on the heap." },
+        { name: "Bluetooth task", size: KB(3.2), kind: "boot", holds: "About 3.2 KB, TrouBLE's runner (1.6 KB) much of it. Replies and half-received companion lines wait on the heap, and so does the client for the phone's own services, 368 B while a phone is connected." },
         { name: "GATT server", size: 1044, kind: "boot", holds: "SERVER, 656 B, mostly TrouBLE's CCCD table for each client, and the 388 B of GATT values written or set at run time. The attribute table itself, 61 attributes, is a 1,952 B constant in flash." },
         { name: "Display strip buffers", size: 3840, kind: "firmware", holds: "The two 1,920 B strip buffers neotime-display fills for each SPI transfer." },
         { name: "Flash store tables", size: KB(2.7), kind: "data", holds: "About 2.7 KB: 1 KB of record keys, 512 B of files, the rings' sector order, the log batches and an upload's state." },

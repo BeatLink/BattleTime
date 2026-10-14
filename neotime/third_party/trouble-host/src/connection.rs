@@ -614,6 +614,32 @@ impl<'stack, P: PacketPool> Connection<'stack, P> {
         self.manager.next_gatt_client(self.index).await
     }
 
+    /// NeoTime patch: sends one ATT PDU, such as a request a small GATT client built itself, to the peer.
+    #[cfg(feature = "gatt")]
+    pub async fn send_att(&self, att: &[u8]) -> Result<(), Error> {
+        let mut packet = P::allocate().ok_or(Error::OutOfMemory)?;
+        let mut writer = crate::cursor::WriteCursor::new(packet.as_mut());
+        writer.write_hci(&crate::types::l2cap::L2capHeader {
+            channel: crate::types::l2cap::L2CAP_CID_ATT,
+            length: att.len() as u16,
+        })?;
+        writer.append(att)?;
+        let length = writer.len();
+        self.send(Pdu::new(packet, length)).await;
+        Ok(())
+    }
+
+    /// NeoTime patch: waits for the peer's next ATT response, notification or indication and copies
+    /// as much of it as fits into `destination`, giving the length copied, or `None` once disconnected.
+    #[cfg(feature = "gatt")]
+    pub async fn receive_att_from_server(&self, destination: &mut [u8]) -> Option<usize> {
+        let pdu = self.next_gatt_client().await?;
+        let bytes = pdu.as_ref();
+        let length = bytes.len().min(destination.len());
+        destination[..length].copy_from_slice(&bytes[..length]);
+        Some(length)
+    }
+
     #[cfg(feature = "gatt")]
     pub(crate) async fn acquire_indication_slot(&self) -> Result<(), Error> {
         self.manager.acquire_indication_slot(self.index).await

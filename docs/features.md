@@ -136,6 +136,10 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   service shows as a notification, as on InfiniTime, so BlueZ's `bluetoothctl`, ITD or Amazfish can
   send one without the companion app. One in the incoming call category opens the call screen and
   rings, as InfiniTime's does.
+- **Notifications from the phone's own Alert Notification service.** A few seconds after a phone
+  connects, the watch looks for the phone's Alert Notification service, as InfiniTime does, and
+  when it serves one subscribes to its New Alerts in every category, so they show as notifications,
+  or ring as calls, without any app on the phone.
 - **A notification pops up a preview.** One that arrives lights the screen, if it is dark, on a
   preview of it over whatever was open, with a bar that runs out over 7 seconds before the watch
   goes back there, as InfiniTime's preview does. A tap keeps it and reads it in full. Do not disturb
@@ -189,7 +193,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   goes back to what was open when the screen sleeps or on the button. Apps hear the same changes
   through their `battery` subscriptions while they are open.
 - **The time and time zone from the phone,** set through the Bluetooth Current Time service or
-  Gadgetbridge's `setTime` line. The watch keeps UTC with the time zone and summer time offsets,
+  Gadgetbridge's `setTime` line. A phone that serves the Current Time service itself sets the
+  clock with no app: a few seconds after it connects the watch reads the phone's time, and its time
+  zone when it has one, as InfiniTime does. The watch keeps UTC with the time zone and summer time offsets,
   shows local time, and remembers the zone across restarts. Alarms, chimes and the midnight step
   reset follow local time, and apps can show UTC and other zones. A phone can read the watch's
   time and time zone back.
