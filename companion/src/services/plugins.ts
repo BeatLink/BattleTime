@@ -38,6 +38,8 @@ export type PluginBridge = {
   uiMessage(id: string, message: unknown): Promise<BridgeResult<void>>;
   onUi(listener: (event: PluginUiMessage) => void): () => void;
   onLog(listener: (event: PluginLogLine) => void): () => void;
+  // Where the settings pages are served; Android's webview reaches the app's scheme as http://plugin.localhost/.
+  pageBase?: string;
 };
 
 export function pluginBridge(): PluginBridge | null {
@@ -134,9 +136,9 @@ export function pluginStateText(status: PluginStatus): string {
 // The settings page
 // ============================================================================
 
-// The address the desktop app serves a plugin's settings page from.
-export function pluginPageUrl(id: string): string {
-  return `plugin://${encodeURIComponent(id)}/`;
+// The address the app serves a plugin's settings page from: plugin://<id>/ unless the bridge names another base.
+export function pluginPageUrl(id: string, pageBase = 'plugin://'): string {
+  return `${pageBase}${encodeURIComponent(id)}/`;
 }
 
 // The page and the window wrap each message as { neotime: message }, so other messages are ignored.

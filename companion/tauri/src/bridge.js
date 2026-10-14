@@ -1,9 +1,13 @@
-// The only bridge between the window and the desktop app, as `window.neotime`.
+// The only bridge between the window and the app, as `window.neotime`.
 //
 // It offers the API src/ble/electron-transport.ts, src/services/phone/desktop.ts, note-file.ts,
-// remote-platform.ts, web-request.ts and plugins.ts read, and turns each call into a Tauri command answered by src/main.rs.
+// remote-platform.ts, web-request.ts and plugins.ts read, and turns each call into a Tauri command answered by src/lib.rs.
+// On Android it offers the phone (src/services/phone/tauri-android.ts) in place of the desktop and remote commands.
 
 (() => {
+  // src/lib.rs sets this before the script runs.
+  const onAndroid = window.__NEOTIME_ANDROID__ === true;
+
   // Tauri's own scripts may run after this one, so its globals are looked up at call time.
   const invoke = (command, args) => window.__TAURI_INTERNALS__.invoke(command, args);
 
@@ -72,12 +76,46 @@
     runCommand: (command) => call('remote_run_command', { command }),
   };
 
+  // The phone bridge plugin's Kotlin, which answers its commands directly.
+  const phoneCall = (command, args) => call(`plugin:phone-bridge|${command}`, args);
+  const phoneListeners = new Set();
+  let phoneFollowed = false;
+  const phone = {
+    hasNotificationAccess: () => phoneCall('has_notification_access'),
+    openNotificationAccessSettings: () => phoneCall('open_notification_access_settings'),
+    requestCallPermissions: () => phoneCall('request_call_permissions'),
+    isDoNotDisturb: () => phoneCall('is_do_not_disturb'),
+    answerCall: () => phoneCall('answer_call'),
+    rejectCall: () => phoneCall('reject_call'),
+    silenceCall: () => phoneCall('silence_call'),
+    mediaCommand: (command) => phoneCall('media_command', { command }),
+    startKeepAlive: (watchName) => phoneCall('start_keep_alive', { watchName }),
+    stopKeepAlive: () => phoneCall('stop_keep_alive'),
+    locate: () => phoneCall('locate'),
+    openUri: (uri) => phoneCall('open_uri', { uri }),
+    startActivity: (packageName, className, action, extras) =>
+      phoneCall('start_activity', { packageName, className, action, extras }),
+    sendBroadcast: (action, packageName, extras) => phoneCall('send_broadcast', { action, packageName, extras }),
+    onEvent: (listener) => {
+      phoneListeners.add(listener);
+      if (!phoneFollowed) {
+        phoneFollowed = true;
+        void window.__TAURI__.core.addPluginListener('phone-bridge', 'phone', (payload) => {
+          for (const each of phoneListeners) {
+            each(payload);
+          }
+        });
+      }
+      return () => phoneListeners.delete(listener);
+    },
+  };
+
   // Web requests for the notes URL and remote buttons, made by src/services/web-request.ts.
   const web = {
     request: (request) => call('web_request', { request }),
   };
 
-  // Plugins installed in the desktop app, read by src/services/plugins.ts.
+  // Plugins installed in the app, read by src/services/plugins.ts.
   const plugins = {
     list: () => call('plugins_list'),
     installPick: () => call('plugins_install_pick'),
@@ -89,6 +127,8 @@
     uiMessage: (id, message) => call('plugins_ui_message', { id, message }),
     onUi: (listener) => subscribe('plugins:ui', listener, (each, payload) => each(payload)),
     onLog: (listener) => subscribe('plugins:log', listener, (each, payload) => each(payload)),
+    // Android's webview reaches the app's plugin:// scheme at this address.
+    pageBase: onAndroid ? 'http://plugin.localhost/' : 'plugin://',
   };
 
   // The core's copy of the watch's settings and records, read by src/services/sync.ts.
@@ -104,9 +144,8 @@
   };
 
   window.neotime = {
-    desktop,
+    ...(onAndroid ? { phone } : { desktop, remote }),
     notes,
-    remote,
     web,
     plugins,
     sync,

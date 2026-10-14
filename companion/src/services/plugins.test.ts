@@ -101,6 +101,7 @@ describe('plugins', () => {
 
   it('wraps messages between the window and the settings page', () => {
     expect(pluginPageUrl('weather-demo')).toBe('plugin://weather-demo/');
+    expect(pluginPageUrl('weather demo', 'http://plugin.localhost/')).toBe('http://plugin.localhost/weather%20demo/');
     expect(messageFromPage({ neotime: { city: 'Kingston' } })).toEqual({ message: { city: 'Kingston' } });
     expect(messageFromPage({ other: 1 })).toBeNull();
     expect(messageFromPage('text')).toBeNull();

@@ -59,4 +59,4 @@ coverage/
 result
 result-*
 /target
-/tauri/gen
+/tauri/gen/schemas

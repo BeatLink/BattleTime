@@ -131,9 +131,16 @@ Android 13 and later.
   Gadgetbridge lines are in `core/src/protocol`, and BLEFS in `core/src/sync/files.rs`. Installing a
   plugin's watch apps runs on them; every other screen still runs the TypeScript ones. DFU is still to
   come, and the formats the firmware defines move into shared crates after.
-- **Tauri on Android**, with the phone bridge as a Tauri plugin; try btleplug on a phone first.
-- **Plugins on the phone.** [Plugins](../docs/plugins.md) run only in the desktop app, whose Rust
-  core hosts them; the phone gets them with Tauri on Android.
+- **The Tauri app on Android is untried on a phone.** Its debug APK builds, with btleplug, the
+  phone bridge plugin, sync and plugins in it, but it has never been installed. On a phone, check
+  that Bluetooth starts (logcat says "Bluetooth could not start" if not), that the nearby devices
+  prompt appears and a scan, a connection and a firmware update work; that notifications, calls,
+  media, Do Not Disturb, the location and the remote buttons' intents reach the window; that sync
+  and an installed plugin run; and that a note picked as a `content://` link is still readable
+  after a restart.
+- **A release build of the Tauri Android app** needs a signing key and the other three targets.
+- **Plugins on the Expo phone app.** [Plugins](../docs/plugins.md) run in the Rust core, so only the
+  Tauri apps have them; the Expo app gets none until the Tauri one replaces it.
 - **Plugins on a real watch from the desktop app.** Buzz back has answered presses on a real watch
   through `cargo run -p neotime-companion-core --example plugin_host -- run <folder> <address>`, but
   not yet with the desktop app's own window connected.

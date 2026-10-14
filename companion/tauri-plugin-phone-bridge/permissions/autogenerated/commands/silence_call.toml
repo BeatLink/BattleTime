@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-silence-call"
+description = "Enables the silence_call command without any pre-configured scope."
+commands.allow = ["silence_call"]
+
+[[permission]]
+identifier = "deny-silence-call"
+description = "Denies the silence_call command without any pre-configured scope."
+commands.deny = ["silence_call"]

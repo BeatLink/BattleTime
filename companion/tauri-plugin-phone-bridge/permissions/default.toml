@@ -1,0 +1,22 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Lets the companion's window use every part of the phone bridge."
+permissions = [
+  "allow-has-notification-access",
+  "allow-open-notification-access-settings",
+  "allow-request-call-permissions",
+  "allow-is-do-not-disturb",
+  "allow-answer-call",
+  "allow-reject-call",
+  "allow-silence-call",
+  "allow-media-command",
+  "allow-start-keep-alive",
+  "allow-stop-keep-alive",
+  "allow-locate",
+  "allow-open-uri",
+  "allow-start-activity",
+  "allow-send-broadcast",
+  "allow-register-listener",
+  "allow-remove-listener",
+]

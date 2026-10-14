@@ -60,11 +60,13 @@ The Android SDK, NDK and JDK live in a shell of their own, since they come to a 
 nix develop .#companion-android
 npm run android                       # build, install and start on a phone over adb
 npx expo prebuild -p android && (cd android && ./gradlew assembleRelease)   # an APK, no phone needed
+npm run tauri-android                 # the Tauri app's debug APK, for 64-bit ARM phones
 ```
 
 The shell pins the versions React Native 0.86 builds against (SDK 36, build tools 36.0.0, NDK
 27.1.12297006, CMake 3.22.1) and points Gradle at the SDK's own `aapt2`, because the one Gradle
-downloads does not run on NixOS.
+downloads does not run on NixOS. It also carries a Rust with the Android targets, and the libclang
+that generates QuickJS's bindings for them.
 
 ### Installing
 
@@ -168,6 +170,35 @@ The window is the same web export. [tauri/src/bridge.js](tauri/src/bridge.js) gi
 
 Set `NEOTIME_DEV_URL` to the Expo dev server's address to load the interface from it instead.
 
+### The Tauri app on Android
+
+The same Tauri app builds for Android, beside the Expo phone app, as
+`com.neotime.companion.tauri` so both can be installed at once. `npm run tauri-android` in
+`nix develop .#companion-android` exports the web build and writes
+`tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`; Gradle and its
+dependencies download on the first build, so it needs the network then. Add `--target armv7`,
+`i686` or `x86_64` to the command for other phones and emulators. The Android project Tauri
+generated is kept in `tauri/gen/android`, with the companion's icon.
+
+The window, the core's Bluetooth, sync and plugins are the desktop app's; what differs:
+
+- **Bluetooth** is btleplug's Android backend. Its Java runs in the app, and the phone bridge
+  plugin starts it as the app opens. The first scan or connection asks for nearby devices
+  (location before Android 12) and, on Android 13 and later, notifications for the keep-alive.
+- **The phone's part** comes from [tauri-plugin-phone-bridge](tauri-plugin-phone-bridge), a Tauri
+  plugin whose Kotlin answers the window directly. It compiles the Expo module's notification
+  listener, call monitor, media tracker and keep-alive service from `modules/phone-bridge` (its
+  `build.rs` copies them in, leaving out the Expo glue), and adds the phone's location for the
+  weather and the remote buttons' intents. `bridge.js` gives the window `window.neotime.phone` in
+  place of the desktop's `desktop` and `remote`, and `src/services/phone/tauri-android.ts` turns it
+  into the `phoneBridge`.
+- **Files** chosen for a note or a plugin come from Android's picker as `content://` links, read
+  through Tauri's fs plugin; a note is read again on each check rather than watched.
+- **Plugin pages** are served at `http://plugin.localhost/<id>/`, since Android's webview reaches
+  the app's own schemes that way.
+- **Not on Android**: D-Bus, note file watching and shell commands for remote buttons, which are
+  compiled out.
+
 ### The computer in place of a phone
 
 On a phone the app forwards what the phone knows; in the desktop app the computer plays that part,
@@ -224,7 +255,9 @@ src/app/                 Expo Router screens
   watch-settings.tsx     Brightness, face, timeout, units, step goal and theme on the watch
 electron/                Desktop app: main process, preload bridge and file server
 core/                    Rust core shared by every build: Bluetooth on btleplug, and the plugin host
-tauri/                   Tauri desktop app: the window's bridge, D-Bus, note files, remote commands, plugins
+tauri/                   Tauri app: the window's bridge, D-Bus, note files, remote commands, plugins;
+                         gen/android holds its Android project
+tauri-plugin-phone-bridge/  The Tauri app's phone bridge on Android, on the Expo module's Kotlin
 plugins/                 Example plugins; npm run build-plugin -- plugins/<name> builds one
 src/ble/                 Transport layer: react-native-ble-plx, Electron, and a mock for browsers
 src/dfu/                 Firmware updates: Nordic legacy DFU and the package reader
@@ -235,7 +268,7 @@ src/protocol/            NeoTime's GATT services, the file service, the Gadgetbr
                          backups and the requests the watch answers
 src/services/            Weather, the watch apps' http proxy and GitHub firmware builds
 src/services/phone/      Notifications, calls, media and Do Not Disturb from the phone or computer
-modules/phone-bridge/    The Android native module behind it
+modules/phone-bridge/    The Android native module behind it, whose services the Tauri plugin shares
 src/state/               Watch provider (connection, capabilities, traffic, settings)
 src/components/          Themed building blocks
 ```

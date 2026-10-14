@@ -158,6 +158,13 @@
           includeSystemImages = false;
         }).androidsdk;
         companionAndroidSdkRoot = "${companionAndroidSdk}/libexec/android-sdk";
+        companionAndroidNdkRoot = "${companionAndroidSdkRoot}/ndk/${companionAndroid.ndk}";
+
+        # The Tauri Android app's Rust, which needs the phone targets nixpkgs' rustc lacks.
+        companionAndroidRust = pkgs.rust-bin.stable.latest.default.override {
+          extensions = [ "clippy" "rustfmt" ];
+          targets = [ "aarch64-linux-android" "armv7-linux-androideabi" "i686-linux-android" "x86_64-linux-android" ];
+        };
 
         # The desktop app runs the Electron from nixpkgs rather than the prebuilt binary npm
         # downloads, which does not run on NixOS.
@@ -329,6 +336,8 @@
           rustc
           clippy
           rustfmt
+        ] ++ companionTauriTools;
+        companionTauriTools = with pkgs; [
           cargo-tauri
           pkg-config
           webkitgtk_4_1
@@ -475,11 +484,18 @@
 
         # The Android SDK is several gigabytes, so it has a shell of its own.
         devShells.companion-android = pkgs.mkShell (companionEnvironment // {
-          packages = companionPackages ++ [ companionAndroidSdk pkgs.jdk17 ];
+          packages = [ companionAndroidRust ]
+            ++ lib.subtractLists [ pkgs.cargo pkgs.rustc pkgs.clippy pkgs.rustfmt ] companionPackages
+            ++ [ companionAndroidSdk pkgs.jdk17 ];
 
           ANDROID_HOME = companionAndroidSdkRoot;
           ANDROID_SDK_ROOT = companionAndroidSdkRoot;
-          ANDROID_NDK_ROOT = "${companionAndroidSdkRoot}/ndk/${companionAndroid.ndk}";
+          ANDROID_NDK_ROOT = companionAndroidNdkRoot;
+          # The Tauri CLI finds the NDK here.
+          NDK_HOME = companionAndroidNdkRoot;
+          # QuickJS's bindings are generated for Android, against the NDK's headers.
+          LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+          BINDGEN_EXTRA_CLANG_ARGS = "--sysroot=${companionAndroidNdkRoot}/toolchains/llvm/prebuilt/linux-x86_64/sysroot";
           JAVA_HOME = pkgs.jdk17.home;
           # Gradle's own aapt2 is built for other Linux systems and does not run on NixOS.
           GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${companionAndroidSdkRoot}/build-tools/${companionAndroid.buildTools}/aapt2";
@@ -489,6 +505,7 @@
             echo "  npm run android      build, install and start the app on a phone over adb"
             echo "  npx expo prebuild -p android && (cd android && ./gradlew assembleRelease)"
             echo "                       build an APK without a phone"
+            echo "  npm run tauri-android   build the Tauri app's debug APK"
           '';
         });
       });

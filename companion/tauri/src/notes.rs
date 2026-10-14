@@ -1,4 +1,4 @@
-// The text file shown on the watch's notes app: read from disk and watched for saves.
+// The text file shown on the watch's notes app, watched for saves; picked_file.rs reads it.
 //
 // Editors often save by writing a new file and renaming it over the old one, which ends a watch on
 // the file itself, so the folder is watched and its events are filtered by name.
@@ -12,10 +12,6 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
 // Saves arrive as several events; they are answered once things are quiet for this long.
 pub const SETTLE: Duration = Duration::from_millis(300);
-
-pub fn read_note_file(path: &str) -> Result<Vec<u8>, String> {
-    std::fs::read(path).map_err(|error| format!("Could not read {path}: {error}"))
-}
 
 // ============================================================================
 // Watching files
@@ -122,13 +118,6 @@ mod tests {
         (watches, calls)
     }
 
-    #[test]
-    fn reading_a_missing_file_names_it() {
-        assert!(read_note_file("/nonexistent/note.txt")
-            .unwrap_err()
-            .contains("/nonexistent/note.txt"));
-    }
-
     #[tokio::test]
     async fn a_save_by_rename_reports_one_change() {
         let folder = tempfile::tempdir().unwrap();
@@ -143,7 +132,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         assert_eq!(*calls.lock().unwrap(), vec![id]);
-        assert_eq!(read_note_file(note.to_str().unwrap()).unwrap(), b"two");
+        assert_eq!(std::fs::read(&note).unwrap(), b"two");
     }
 
     #[tokio::test]

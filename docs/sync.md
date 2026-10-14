@@ -5,9 +5,8 @@ reads everything again on one interval, five minutes unless changed. The interva
 Settings, then Sync, in the companion. The same interval paces the companion's status reads (battery
 and today's steps) in every build.
 
-The Rust core does the syncing, so it runs in the desktop app now and on the phone once the phone
-moves to Tauri. The code is in `companion/core/src/sync/`, and the desktop app's part is
-`companion/tauri/src/sync.rs`.
+The Rust core does the syncing, so it runs in the Tauri app, on the desktop and on Android alike. The
+code is in `companion/core/src/sync/`, and the Tauri app's part is `companion/tauri/src/sync.rs`.
 
 ## What is synced
 

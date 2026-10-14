@@ -1,10 +1,19 @@
 [package]
 name = "neotime-companion"
-description = "The NeoTime Companion desktop app"
+description = "The NeoTime Companion app, on the desktop and on Android"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+
+# Android loads the app as a shared library, and the desktop binary calls the same `run`.
+[lib]
+name = "neotime_companion_lib"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "neotime-companion"
+path = "src/main.rs"
 
 [features]
 # Serves the embedded interface rather than a development server; release builds turn it on.
@@ -16,14 +25,20 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 neotime-companion-core = { path = "../core" }
 futures = "0.3"
-notify = "8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-phone-bridge = { path = "../tauri-plugin-phone-bridge" }
 tokio = { version = "1", features = ["macros", "process", "rt-multi-thread", "sync", "time"] }
+
+# D-Bus and note file watching belong to the desktop.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+notify = "8"
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 
 [dev-dependencies]
+tauri = { version = "2", features = ["test"] }
 tempfile = "3"
 zip = { version = "9", default-features = false, features = ["deflate"] }

@@ -4,8 +4,8 @@ A plugin is the phone-side half of one watch app. It carries that app, installs 
 keeps the app's settings, and answers the app while the watch is connected. The companion's core
 does only what every watch needs, and plugins add the rest at run time.
 
-Plugins run in the desktop app today. The phone app gets them when it moves onto the same Rust core
-(see the companion's `TODO.md`).
+Plugins run wherever the companion's Rust core does: the Tauri desktop app and the Tauri app on
+Android. The Expo phone app and the Electron app have no plugins.
 
 ## What stays in the core
 
@@ -70,7 +70,7 @@ npm run build-plugin -- plugins/buzz-back
 [scripts/build-plugin.mjs](../companion/scripts/build-plugin.mjs) reads the folder's `plugin.json`
 (the manifest without file names), compiles `watch/app.tsx` with the watch's compiler, bundles
 `phone/main.ts` with esbuild, copies `phone/ui/`, and writes `build/plugins/<id>.ntplugin`. In the
-desktop app, Watch, then Plugins, then Install a plugin installs it and its watch app.
+Tauri app, Watch, then Plugins, then Install a plugin installs it and its watch app.
 
 CI builds every plugin in `companion/plugins/` into the store's files, and each release and the
 `apps-latest` pre-release carry them, so the companion's Store screen can download and install them.
@@ -198,9 +198,9 @@ window.addEventListener("message", (event) => {
 |---|---|
 | `companion/core/src/plugins/` | Manifest, package reader, store on disk, QuickJS runtime, HTTP, and the host that joins them to the watch |
 | `companion/core/src/gadgetbridge.rs` | The watch's message lines, shared with the host |
-| `companion/tauri/src/plugins.rs` | The desktop app's commands, its link from the host to the watch and window, and the `plugin://` pages |
+| `companion/tauri/src/plugins.rs` | The Tauri app's commands, its link from the host to the watch and window, and the `plugin://` pages (`http://plugin.localhost/<id>/` on Android) |
 | `companion/src/app/plugins.tsx`, `src/services/plugins.ts` | The Plugins screen |
 | `companion/core/examples/plugin_host.rs` | Installs a plugin into a folder and runs it against a real watch from the terminal |
 
-Installed plugins live in the desktop app's data folder, under `plugins/<id>/`, beside their
+Installed plugins live in the app's data folder, under `plugins/<id>/`, beside their
 on/off state and settings.

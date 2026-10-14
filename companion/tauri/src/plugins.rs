@@ -1,8 +1,10 @@
-// Plugins in the desktop app: the host's link to the watch and the window, its commands, and the
+// Plugins in the app: the host's link to the watch and the window, its commands, and the
 // plugin:// pages that show each plugin's settings.
 
 use std::sync::{Arc, OnceLock};
 
+use crate::picked_file::{self, FileKind};
+use crate::Companion;
 use neotime_companion_core::ble::WatchBle;
 use neotime_companion_core::plugins::host::{HostOutput, PluginHost, PluginStatus};
 use neotime_companion_core::protocol::app_image::ImageHeader;
@@ -12,9 +14,6 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::http::{Response, StatusCode};
 use tauri::{AppHandle, Emitter, State};
-use tauri_plugin_dialog::DialogExt;
-
-use crate::Companion;
 
 type Answer<T> = Result<T, String>;
 
@@ -90,19 +89,14 @@ pub async fn plugins_install_pick(
     app: AppHandle,
     companion: State<'_, Companion>,
 ) -> Answer<Option<PluginStatus>> {
-    let (chosen_sender, chosen) = tokio::sync::oneshot::channel();
-    app.dialog()
-        .file()
-        .set_title("Choose a plugin to install")
-        .add_filter("NeoTime plugin", &["ntplugin"])
-        .pick_file(move |path| {
-            let _ = chosen_sender.send(path);
-        });
-    let Some(path) = chosen.await.ok().flatten().and_then(|path| path.into_path().ok()) else {
+    let plugin_files = FileKind {
+        name: "NeoTime plugin",
+        extensions: &["ntplugin"],
+    };
+    let Some(file) = picked_file::pick_file(&app, "Choose a plugin to install", &[plugin_files]).await else {
         return Ok(None);
     };
-    let bytes =
-        std::fs::read(&path).map_err(|error| format!("Could not read {}: {error}", path.display()))?;
+    let bytes = picked_file::read_file(&app, &file.to_string())?;
     companion.plugins.install(&bytes).map(Some)
 }
 
@@ -163,18 +157,31 @@ pub fn plugins_ui_message(companion: State<'_, Companion>, id: String, message: 
 // Settings pages
 // ============================================================================
 
-// Answers plugin://<id>/<path> with that file of the plugin's settings page.
-pub fn serve_ui_file(host: &PluginHost, uri: &tauri::http::Uri) -> Response<Vec<u8>> {
-    let id = uri.host().unwrap_or_default();
+// Android serves the plugin:// scheme at this host, with the plugin's id as the first folder.
+const ANDROID_PAGE_HOST: &str = "plugin.localhost";
+
+// Splits a page address into the plugin's id and the file asked for.
+fn page_file(uri: &tauri::http::Uri) -> (&str, &str) {
+    let host = uri.host().unwrap_or_default();
     let path = uri.path().trim_start_matches('/');
-    let path = if path.is_empty() { "index.html" } else { path };
+    let (id, path) = if host == ANDROID_PAGE_HOST {
+        path.split_once('/').unwrap_or((path, ""))
+    } else {
+        (host, path)
+    };
+    (id, if path.is_empty() { "index.html" } else { path })
+}
+
+// Answers plugin://<id>/<path>, or http://plugin.localhost/<id>/<path> on Android, with that file of the plugin's settings page.
+pub fn serve_ui_file(host: &PluginHost, uri: &tauri::http::Uri) -> Response<Vec<u8>> {
+    let (id, path) = page_file(uri);
     match host.ui_file(id, path) {
         Ok(contents) => Response::builder()
             .header("Content-Type", content_type(path))
             // The page runs in a sandboxed frame and reaches nothing but its own files.
             .header(
                 "Content-Security-Policy",
-                "default-src plugin: 'unsafe-inline'; img-src plugin: data:",
+                "default-src plugin: http://plugin.localhost 'unsafe-inline'; img-src plugin: http://plugin.localhost data:",
             )
             .body(contents)
             .unwrap_or_default(),
@@ -256,6 +263,19 @@ mod tests {
         assert_eq!(missing.status(), StatusCode::NOT_FOUND);
         assert_eq!(
             serve_ui_file(&host, &"plugin://nobody/".parse().unwrap()).status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[test]
+    fn android_page_addresses_carry_the_id_in_the_path() {
+        let (host, _folder) = host_with_page();
+        let page = serve_ui_file(&host, &"http://plugin.localhost/demo/".parse().unwrap());
+        assert_eq!(page.status(), StatusCode::OK);
+        let script = serve_ui_file(&host, &"http://plugin.localhost/demo/app.js".parse().unwrap());
+        assert_eq!(script.status(), StatusCode::OK);
+        assert_eq!(
+            serve_ui_file(&host, &"http://plugin.localhost/".parse().unwrap()).status(),
             StatusCode::NOT_FOUND
         );
     }

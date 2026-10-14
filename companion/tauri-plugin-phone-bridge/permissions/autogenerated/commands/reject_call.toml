@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-reject-call"
+description = "Enables the reject_call command without any pre-configured scope."
+commands.allow = ["reject_call"]
+
+[[permission]]
+identifier = "deny-reject-call"
+description = "Denies the reject_call command without any pre-configured scope."
+commands.deny = ["reject_call"]

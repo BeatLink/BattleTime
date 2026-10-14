@@ -1,0 +1,24 @@
+[package]
+name = "tauri-plugin-phone-bridge"
+description = "The phone's notifications, calls, media, Do Not Disturb, location and intents for the NeoTime Companion Android app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+links = "tauri-plugin-phone-bridge"
+
+[build-dependencies]
+serde_json = "1"
+tauri-plugin = { version = "2", features = ["build"] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+btleplug = "0.13"
+jni = "0.22"
+
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }

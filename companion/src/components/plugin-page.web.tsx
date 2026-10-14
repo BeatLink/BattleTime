@@ -1,6 +1,6 @@
 import { createElement, useEffect, useState } from 'react';
 
-import { messageFromPage, messageToPage, type PluginBridge } from '@/services/plugins';
+import { messageFromPage, messageToPage, pluginPageUrl, type PluginBridge } from '@/services/plugins';
 
 // A plugin's settings page in a sandboxed frame, passing its messages to and from the plugin.
 export function PluginPage({ id, bridge }: { id: string; bridge: PluginBridge }) {
@@ -31,7 +31,7 @@ export function PluginPage({ id, bridge }: { id: string; bridge: PluginBridge })
   // Scripts only: the page has no origin of its own, so it reaches nothing but its plugin.
   return createElement('iframe', {
     ref: setFrame,
-    src: `plugin://${encodeURIComponent(id)}/`,
+    src: pluginPageUrl(id, bridge.pageBase),
     sandbox: 'allow-scripts',
     title: `${id} settings`,
     style: { width: '100%', height: 420, border: 'none', borderRadius: 12, background: 'white' },
