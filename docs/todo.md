@@ -481,7 +481,9 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 - [ ] **Run closed apps on the watch.** The shell runs only the open app and never calls
   `open_in_background`, so an alarm or timer rings only while its app is open. Run each installed app's background subscriptions, set
-  `next_alarm` from the earliest alarm so faces show the bell, and carry out `wake_screen`.
+  `next_alarm` from the earliest alarm so faces show the bell, and carry out `wake_screen`. A closed
+  run must drop `prefetch_file` in `ClosedRun::hold_back`, since the shell's one read-ahead slot
+  belongs to the open app.
 - [ ] **Deliver the remaining sensor and phone events to apps.** The shell pushes steps,
   acceleration, shakes, heart rate and phone notifications. Push the other `motion` kinds (wrist raise, tap,
   double tap, still, moving), battery changes, calls, music, navigation and weather
