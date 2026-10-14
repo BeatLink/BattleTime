@@ -500,7 +500,16 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 - [ ] **Double line buffers with DMA,** so one is filled while the other is sent. InfiniTime uses
   two of 240 x 4 pixels. This also fixes the text edges listed above.
-- [ ] **More fonts and pictures** loaded from the external flash, beyond the shared library's.
+- [ ] **More fonts and pictures** loaded from the external flash, beyond the shared library's. A
+  font of lines and arcs is about 2 KB, so another can be a file in `/resources/` read into the
+  open app's heap. Check one as app images are checked, keeping the limit of 8 shapes a glyph so a
+  bad font cannot slow drawing enough to trip the watchdog.
+- [ ] **Accented letters for notifications.** The text font holds ASCII and seven signs, so é, ü
+  and the like draw nothing. Let a glyph in `app-host/fonts/geometric.txt` be a letter and an
+  accent placed over it, and add the Latin-1 letters.
+- [ ] **The browser preview's text font.** `sdk/neotime/src/widgets.tsx` draws text in JetBrains
+  Mono, which the watch no longer uses. Draw the font from lines and arcs on the preview's canvas,
+  so its letters match the watch.
 - [ ] **Drag to change an Arc.** The app host gives `Arc` no `onChange`, so the metronome's tempo
   ring cannot be dragged; only tap tempo works.
 - [ ] **A canvas widget for free drawing.** Paint fills cells of a 20 by 20 grid; InfiniTime
@@ -508,7 +517,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **A Tabs widget** that swipes between pages under a row of tabs. It is laid out as a plain
   column now; `Pages` does the swiping without tabs.
 - [ ] **Cyrillic text.** InfiniTime's 20 px font has Cyrillic letters for notifications and music
-  titles. Add them to the text fonts in `tools/generate_fonts.py`.
+  titles. Add them to `app-host/fonts/geometric.txt`.
 - [ ] **More library icons:** brightness levels, sleep, notifications on and off, list,
   home, eye, ban, phone off, volume mute, tachometer, paintbrush, paddle, map, shield, and the
   moon and night rain weather icons. Quick settings and the ports need them.
@@ -533,7 +542,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **A 40 pixel seven-segment font,** so the Casio face's day-of-year and date lines match
   InfiniTime.
 - [ ] **Bebas Neue and Teko for Infineat,** which draws its time and date in them; NeoTime
-  substitutes Open Sans and JetBrains Mono.
+  substitutes its own font of lines and arcs.
 - [ ] **The rest of the music values.** InfiniTime's music service also carries the album, the track
   number and total, playback speed, repeat and shuffle, and moves the position on at the playback
   speed while a track plays. The runtime has no value for any of them.
@@ -606,10 +615,10 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 ### Developer tools and docs
 
 - [ ] **A flaky app-host test.** `an_app_list_in_columns_lays_its_apps_out_as_square_cells` failed
-  once at `app-host/src/fonts.rs:90` and passed on every rerun. The installed fonts are global, and
-  `bytes()` reads their start and length separately while parallel tests install fonts, so a read
-  can pair one font's start with another's length. Read both in one step, or give each test its own
-  fonts.
+  once in `app-host/src/fonts.rs` and passed on every rerun. The installed font is global, and
+  `GeometricFont::bytes` reads its start and length separately while parallel tests install it,
+  so a read can pair one install's start with an empty library's length. Read both in one step, or
+  give each test its own font.
 - [ ] **Measure the stack with any app open.** `tools/measure_stack.py --open-first-app` opens
   the launcher's first row, so with only the heart app installed it measures that: 7,080 B, 1,608 B
   spare, under the 2 KB the rest keep. The alarm's 10.5 KB peak and the system app's still cannot

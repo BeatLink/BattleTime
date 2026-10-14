@@ -829,22 +829,36 @@ the numbers mean. These are the meanings the host uses now:
 
 Event fields `x`, `y`, `start_x` and `start_y` are screen pixels.
 
-The fonts are anti-aliased bitmaps with 4-bit coverage, made by `tools/generate_fonts.py` from the
-fonts in `third_party/fonts/` and kept in `app-host/fonts/`:
+Every text size is one font drawn from lines, arcs and dots. Its source is
+`app-host/fonts/geometric.txt`, one glyph a line, and `tools/generate_fonts.py` turns it into
+`app-host/fonts/geometric.ntfont`: 102 glyphs (printable ASCII and `°±×÷←✓✕`) in 2,289 B. A glyph
+has at most 8 shapes, in units where capitals are 100 tall, the x-height 76 and descenders reach
+-26. Each size scales it and keeps the advance and line of the bitmap font it replaced, so layouts
+did not move:
 
-| Font | Made from | Characters | Bytes |
-|---|---|---|---|
-| `small`, `normal`, `medium` | JetBrains Mono Bold at 16, 20 and 30 pixels | ASCII | 5,389, 6,254, 9,538 |
-| `large` | JetBrains Mono ExtraBold at 42 | ASCII | 13,526 |
-| `huge` | JetBrains Mono Light at 76 | Digits and clock characters | 5,344 |
-| `giant` | Open Sans Light at 120 | Digits and `:` | 6,018 |
-| `condensed` | JetBrains Mono Bold at 48, squeezed to 70% width | Digits and clock characters | 1,850 |
+| Font | Capital height | Advance | Line | Stroke |
+|---|---|---|---|---|
+| `small` | 12 | 10 | 22 | 2 |
+| `normal` | 14 | 12 | 27 | 2.5 |
+| `medium` | 22 | 18 | 40 | 4 |
+| `large` | 31 | 25 | 56 | 6 |
+| `huge` | 57 | 46 | 62 | 6 |
+| `giant` | 87 | 68 for digits, its colon and stops narrower | 92 | 6 |
+| `condensed` | 35 | 20, the glyphs squeezed to fit | 39 | 4 |
+
+All but `giant` are monospaced. Before drawing a glyph, the host puts its straight strokes, the
+left, right, top and bottom of each arc, and the font's capital, x-height, baseline and descender
+lines on whole pixels, and stretches the rest of the glyph between them; a line a pixel or more
+from another stays apart. Each pixel then takes its ink from the nearest shape, over a ramp one
+pixel wide, so joins have no seams. A row of a glyph visits only the columns each shape can reach,
+and only the rows the strip being drawn shows. Arcs need no trigonometry: their ends come from a
+table of sines, and a point is tested against them with cross products.
 
 `seven_segment` and `dot_matrix` are drawn from segments and dots, so they take no font data. The
-seven fonts, 48,462 B in all, live in the shared library's font section (section 9, which only a
-library has), in the order above. The app host's font slots start empty, and the embedder calls
-`fonts::install_from_library` once with the library inside the firmware; until then text takes no room. The
-`built-in-fonts` feature starts them filled from `app-host/fonts/`, for the simulator and tests.
+font lives in the shared library's font section (section 9, which only a library has). The app
+host's font starts empty, and the embedder calls `fonts::install_from_library` once with the
+library inside the firmware; until then text takes no room. The `built-in-fonts` feature starts it
+filled from `app-host/fonts/`, for the simulator and tests.
 
 ### Widgets in the host
 

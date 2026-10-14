@@ -976,8 +976,8 @@ Not done yet: the notification count, navigation and the weather forecast's days
 as 0 or empty, and music and weather are lost on a restart; with a tap waking the screen, the
 touch panel stays awake while the screen is off.
 
-With the shared library after its code it takes all but about 8 KB of the 480 KB firmware region
-(the fonts and the accelerometers' configuration files are in the library) and 53 KB of static RAM, 30.25 KB of it heap: 10 KB for the system and 20.25 KB for
+With the shared library after its code it takes all but about 43 KB of the 480 KB firmware region
+(the text font and the accelerometers' configuration files are in the library) and 53 KB of static RAM, 30.25 KB of it heap: 10 KB for the system and 20.25 KB for
 the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
 the button and the backlight timeout all work.
 
@@ -1131,9 +1131,12 @@ the handler ignores, changing no state and carrying out no effect, is left to th
   (`text_file`): it wraps the whole file once when its screen opens, keeping where every eighth
   line starts, and holds only the lines near the view, so a long note costs about the same RAM as a
   short one. A font file the phone writes can choose its font.
-- **Images and fonts.** Images come from the app or the shared library (`set_library`). The fonts
-  are anti-aliased bitmaps made by `tools/generate_fonts.py` and kept in the shared library;
-  `fonts::install_from_library` takes them from there, so the firmware carries none of its own.
+- **Images and fonts.** Images come from the app or the shared library (`set_library`). Every text
+  size is one font drawn from lines, arcs and dots, made by `tools/generate_fonts.py` from
+  `app-host/fonts/geometric.txt` and kept in the shared library; `fonts::install_from_library`
+  takes it from there, so the firmware carries none of its own. Each size puts the glyph's straight
+  strokes and arc edges on whole pixels, then takes each pixel's ink from its nearest shape; see
+  [app-runtime.md](app-runtime.md#property-values).
 - **Theme.** `set_theme` redraws every colour from the values already held, without running app
   code.
 - **Failures.** A failing handler or expression is reported through `System::app_failed`, and the

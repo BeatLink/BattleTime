@@ -85,7 +85,7 @@ const SINE_OF_DEGREE: [f32; 91] = [
 ];
 
 /// The sine of a whole number of degrees, from the quarter turn in `SINE_OF_DEGREE`.
-fn sine_of(degrees: i32) -> f32 {
+pub(crate) fn sine_of(degrees: i32) -> f32 {
     match turn_of(degrees) as usize {
         turn @ 0..=90 => SINE_OF_DEGREE[turn],
         turn @ 91..=180 => SINE_OF_DEGREE[180 - turn],

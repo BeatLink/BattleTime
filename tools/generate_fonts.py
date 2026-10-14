@@ -1,163 +1,181 @@
-"""Turns the free fonts in third_party/fonts into the compact bitmap fonts the app host draws with.
+"""Turns the font drawn from lines, arcs and dots in app-host/fonts/geometric.txt into the file the app host reads.
 
-Run it from the repository root after changing a font below:
+Run it from anywhere after changing a glyph:
 
-    nix-shell -p 'python3.withPackages (p: [ p.pillow p.fonttools ])' --run 'python3 tools/generate_fonts.py'
+    python3 tools/generate_fonts.py
 
-Each font becomes app-host/fonts/<name>.ntfont, which app-host/src/fonts.rs reads in place:
+It writes app-host/fonts/geometric.ntfont, which app-host/src/fonts.rs reads in place:
 
-    header, 16 bytes: magic "NTFN", version (1), bits per pixel (4), glyph count (2),
-                      line height (2), ascent (2), descent (2), reserved (2)
-    one 10-byte entry per glyph, sorted by character: character (2), data offset (3),
-                      advance (1), left bearing (1, signed), top bearing above the baseline
-                      (1, signed), width (1), height (1)
-    glyph data: 4-bit coverage, rows top to bottom, two pixels a byte with the first in the high
-                half; a 0 or a 15 is followed by a half byte holding how many more of it follow,
-                so the empty and solid parts of large digits cost almost nothing.
+    header, 16 bytes: magic "NTGF", version (1), reserved (1), glyph count (2), capital height (1),
+                      x-height (1), standard width (1), descender (1, signed), then the lowest,
+                      highest, leftmost and rightmost any shape's centre line reaches (1 each, signed)
+    one 6-byte entry per glyph, sorted by character: character (2), width (1), shape count (1),
+                      offset of its first shape from the end of the table (2)
+    shapes, each a kind byte and then signed coordinates in font units:
+        0 line: x1, y1, x2, y2
+        1 arc:  centre x, centre y, radius across (unsigned), radius down (unsigned),
+                start and end angle, anticlockwise, in 256ths of a turn; equal angles draw it whole
+        2 dot:  x, y
 
-The seven-segment and dot-matrix fonts have no data: app-host/src/fonts.rs draws them as shapes.
+Every size the app host draws (small to giant) is this one font, scaled.
 """
 
 import sys
 from pathlib import Path
 
-from fontTools.ttLib import TTFont
-from PIL import Image, ImageDraw, ImageFont
-
 ROOT = Path(__file__).resolve().parent.parent / "neotime"
-SOURCES = ROOT / "third_party" / "fonts"
-OUTPUT = ROOT / "app-host" / "fonts"
+SOURCE = ROOT / "app-host" / "fonts" / "geometric.txt"
+OUTPUT = ROOT / "app-host" / "fonts" / "geometric.ntfont"
 
-# Characters the ports show beyond plain ASCII: degrees, the calculator's signs and keys, and the weather's ticks and crosses.
-EXTRA_TEXT = "°×÷±←✓✕"
-TEXT = "".join(chr(code) for code in range(0x20, 0x7F)) + EXTRA_TEXT
-CLOCK = " 0123456789:-.+%°AMP"
-DIGITS = " 0123456789:"
+CAPITAL_HEIGHT = 100
+X_HEIGHT = 76
+STANDARD_WIDTH = 82
+DESCENDER = -26
 
-# Name, source file, size in pixels, characters, how much to squeeze it across.
-FONTS = [
-    ("small", "JetBrainsMono-Bold.ttf", 16, TEXT, 1.0),
-    ("normal", "JetBrainsMono-Bold.ttf", 20, TEXT, 1.0),
-    ("medium", "JetBrainsMono-Bold.ttf", 30, TEXT, 1.0),
-    ("large", "JetBrainsMono-ExtraBold.ttf", 42, TEXT, 1.0),
-    ("huge", "JetBrainsMono-Light.ttf", 76, CLOCK, 1.0),
-    ("giant", "OpenSans-Light.ttf", 120, DIGITS, 1.0),
-    ("condensed", "JetBrainsMono-Bold.ttf", 48, DIGITS + "-", 0.7),
-]
+# The app host keeps a glyph's placed shapes on the stack while it draws, so a glyph may have only this many.
+MOST_SHAPES = 8
 
-# Fonts with only digits get a line just tall enough for them, plus this much room above and below.
-DISPLAY_FONT_MARGIN = 2
+LINE, ARC, DOT = 0, 1, 2
+SHAPE_FIELDS = {"L": (LINE, 4), "A": (ARC, 6), "D": (DOT, 2)}
 
 
 # ============================================================================
-# Rendering glyphs
+# Reading the source
 # ============================================================================
 
 
-def render_glyph(font, character, squeeze):
-    """Returns (coverage image or None, left bearing, top bearing, advance) for one character."""
-    advance = round(font.getlength(character) * squeeze)
-    left, top, right, bottom = font.getbbox(character, anchor="ls")
-    if right <= left or bottom <= top:
-        return None, 0, 0, advance
-
-    picture = Image.new("L", (right - left, bottom - top), 0)
-    ImageDraw.Draw(picture).text((-left, -top), character, font=font, fill=255, anchor="ls")
-    if squeeze != 1.0:
-        squeezed_width = max(1, round(picture.width * squeeze))
-        picture = picture.resize((squeezed_width, picture.height), Image.LANCZOS)
-        left = round(left * squeeze)
-
-    inked = picture.getbbox()
-    if inked is None:
-        return None, 0, 0, advance
-    picture = picture.crop(inked)
-    return picture, left + inked[0], -(top + inked[1]), advance
+def character_of(token):
+    if token.startswith("U+") and len(token) > 2:
+        return chr(int(token[2:], 16))
+    if len(token) != 1:
+        raise ValueError(f"{token!r} is neither one character nor U+XXXX")
+    return token
 
 
-def to_four_bits(coverage):
-    return (coverage * 15 + 127) // 255
+def parse_shape(text, glyphs, where):
+    """One shape, or every shape of an earlier glyph for @c."""
+    if text.startswith("@"):
+        named = character_of(text[1:])
+        if named not in glyphs:
+            raise ValueError(f"{where}: @{text[1:]} names a glyph not drawn yet")
+        return list(glyphs[named][1])
+    kind, *numbers = text.split()
+    if kind not in SHAPE_FIELDS:
+        raise ValueError(f"{where}: unknown shape {kind!r}")
+    tag, count = SHAPE_FIELDS[kind]
+    if len(numbers) != count:
+        raise ValueError(f"{where}: {kind} takes {count} numbers, not {len(numbers)}")
+    return [(tag, [int(number) for number in numbers])]
 
 
-def encode(picture):
-    """The glyph's coverage as half bytes, with runs of 0 and 15 shortened."""
-    values = [to_four_bits(value) for value in picture.tobytes()]
-    halves = []
-    index = 0
-    while index < len(values):
-        value = values[index]
-        if value in (0, 15):
-            run = 1
-            while run < 16 and index + run < len(values) and values[index + run] == value:
-                run += 1
-            halves += [value, run - 1]
-            index += run
-        else:
-            halves.append(value)
-            index += 1
-    if len(halves) % 2:
-        halves.append(0)
-    return bytes((halves[position] << 4) | halves[position + 1] for position in range(0, len(halves), 2))
-
-
-# ============================================================================
-# Writing a font
-# ============================================================================
-
-
-def build_font(source, size, characters, squeeze):
-    path = SOURCES / source
-    font = ImageFont.truetype(str(path), size)
-    character_map = TTFont(str(path)).getBestCmap()
-    ascent, descent = font.getmetrics()
-
-    entries = []
-    data = bytearray()
-    tallest_above = 0
-    deepest_below = 0
-    for character in sorted(set(characters)):
-        if ord(character) not in character_map:
-            print(f"  {source} has no {character!r}, left out")
+def read_glyphs(path):
+    """Every glyph in the source, as character -> (width, shapes)."""
+    glyphs = {}
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        line = line.strip()
+        if not line or line.startswith("//"):
             continue
-        picture, left, top, advance = render_glyph(font, character, squeeze)
-        width = height = 0
-        offset = len(data)
-        if picture is not None:
-            width, height = picture.size
-            data += encode(picture)
-            tallest_above = max(tallest_above, top)
-            deepest_below = max(deepest_below, height - top)
-        entries.append((ord(character), offset, advance, left, top, width, height))
+        where = f"{path.name}:{number}"
+        key, _, rest = line.partition(" ")
+        character = character_of(key)
+        rest = rest.strip()
+        width = STANDARD_WIDTH
+        first, _, after = rest.partition(" ")
+        if first.isdigit():
+            width, rest = int(first), after.strip()
+        shapes = []
+        for part in filter(None, (piece.strip() for piece in rest.split(";"))):
+            shapes += parse_shape(part, glyphs, where)
+        if character in glyphs:
+            raise ValueError(f"{where}: {character!r} is drawn twice")
+        if len(shapes) > MOST_SHAPES:
+            raise ValueError(f"{where}: {character!r} has {len(shapes)} shapes, more than {MOST_SHAPES}")
+        glyphs[character] = (width, shapes)
+    return glyphs
 
-    if characters is not TEXT:
-        ascent = tallest_above + DISPLAY_FONT_MARGIN
-        descent = deepest_below + DISPLAY_FONT_MARGIN
 
-    header = bytearray(b"NTFN")
-    header += bytes([1, 4])
-    header += len(entries).to_bytes(2, "little")
-    header += (ascent + descent).to_bytes(2, "little")
-    header += ascent.to_bytes(2, "little", signed=True)
-    header += descent.to_bytes(2, "little", signed=True)
-    header += bytes(2)
+# ============================================================================
+# Writing the font
+# ============================================================================
 
+
+def angle_steps(degrees):
+    return round(degrees % 360 * 256 / 360) % 256
+
+
+def signed_byte(value, what):
+    if not -128 <= value <= 127:
+        raise ValueError(f"{what} {value} does not fit a byte")
+    return value & 0xFF
+
+
+def unsigned_byte(value, what):
+    if not 0 <= value <= 255:
+        raise ValueError(f"{what} {value} does not fit a byte")
+    return value
+
+
+def encode_shape(tag, numbers, character):
+    what = f"{character!r}:"
+    if tag == ARC:
+        centre_x, centre_y, across, down, start, end = numbers
+        start_steps, end_steps = angle_steps(start), angle_steps(end)
+        if start_steps == end_steps and start % 360 != end % 360:
+            raise ValueError(f"{what} an arc from {start} to {end} is too short to keep")
+        return bytes([
+            tag,
+            signed_byte(centre_x, what),
+            signed_byte(centre_y, what),
+            unsigned_byte(across, what),
+            unsigned_byte(down, what),
+            start_steps,
+            end_steps,
+        ])
+    return bytes([tag] + [signed_byte(number, what) for number in numbers])
+
+
+def reach(shapes):
+    """Every x and every y a glyph's centre lines reach, a whole arc's box counted for an arc."""
+    xs, ys = [], []
+    for tag, numbers in shapes:
+        if tag == LINE:
+            xs += [numbers[0], numbers[2]]
+            ys += [numbers[1], numbers[3]]
+        elif tag == ARC:
+            xs += [numbers[0] - numbers[2], numbers[0] + numbers[2]]
+            ys += [numbers[1] - numbers[3], numbers[1] + numbers[3]]
+        else:
+            xs.append(numbers[0])
+            ys.append(numbers[1])
+    return xs, ys
+
+
+def build_font(glyphs):
     table = bytearray()
-    for code, offset, advance, left, top, width, height in entries:
-        table += code.to_bytes(2, "little")
-        table += offset.to_bytes(3, "little")
-        table += bytes([advance & 0xFF, left & 0xFF, top & 0xFF, width, height])
+    data = bytearray()
+    for character in sorted(glyphs):
+        width, shapes = glyphs[character]
+        table += ord(character).to_bytes(2, "little")
+        table += bytes([unsigned_byte(width, f"{character!r} width"), len(shapes)])
+        table += len(data).to_bytes(2, "little")
+        for tag, numbers in shapes:
+            data += encode_shape(tag, numbers, character)
+
+    header = bytearray(b"NTGF")
+    header += bytes([1, 0])
+    header += len(glyphs).to_bytes(2, "little")
+    xs = [x for _, shapes in glyphs.values() for x in reach(shapes)[0]]
+    ys = [y for _, shapes in glyphs.values() for y in reach(shapes)[1]]
+    header += bytes([CAPITAL_HEIGHT, X_HEIGHT, STANDARD_WIDTH, DESCENDER & 0xFF])
+    header += bytes(signed_byte(value, "reach") for value in (min(ys), max(ys), min(xs), max(xs)))
     return bytes(header + table + data)
 
 
 def main():
-    OUTPUT.mkdir(parents=True, exist_ok=True)
-    total = 0
-    for name, source, size, characters, squeeze in FONTS:
-        font_bytes = build_font(source, size, characters, squeeze)
-        (OUTPUT / f"{name}.ntfont").write_bytes(font_bytes)
-        total += len(font_bytes)
-        print(f"{name}: {len(font_bytes)} bytes")
-    print(f"all fonts: {total} bytes")
+    glyphs = read_glyphs(SOURCE)
+    font = build_font(glyphs)
+    OUTPUT.write_bytes(font)
+    print(f"{OUTPUT.name}: {len(glyphs)} glyphs, {len(font)} bytes")
     return 0
 
 

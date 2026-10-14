@@ -28,9 +28,10 @@ python3 tools/draw_memory_maps.py
 | Firmware | `0x08000` | 480 KB | The running firmware, to the end of flash: a 256-byte [image header](bootloader.md#the-image-header), then its code, linked to start at `0x08100`, then the shared library. No app, face, icon or font is built into the code apart from the notifications and quick settings screens (about 2.2 KB, compiled from `shell/`); [What fills the firmware](#what-fills-the-firmware) shows what is. The code and the library share the region, so either can grow into the other's room. |
 
 The shared library sits right after the code, on a word boundary, where the image header says. It
-holds what apps share: images, the app host's text fonts (47,919 B), Bosch's configuration file for
-each accelerometer (6,144 B each, which the firmware uploads to the chip; the library with all of it
-is 89,218 B), components, common functions and the preset themes. It arrives with each firmware
+holds what apps share: images, the app host's text font (2,289 B, one font of lines and arcs that
+every text size scales), Bosch's configuration file for each accelerometer (6,144 B each, which the
+firmware uploads to the chip; the library with all of it is 43,753 B), components, common functions
+and the preset themes. It arrives with each firmware
 update and is never written on the watch. No apps are kept in internal flash; they live in `/apps`
 on the external flash. See [app-runtime.md](app-runtime.md#the-shared-library).
 
@@ -45,29 +46,29 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 106.5 KB | 48.0 KB |
-| App host (with `neotime-ui`) | 77.7 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 106.4 KB | 48.4 KB |
+| App host (with `neotime-ui`) | 83.1 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 43.6 KB | 43.6 KB |
 | App runtime | 35.0 KB | 0.1 KB |
-| core, alloc and compiler builtins | 24.8 KB | 13.2 KB |
+| core, alloc and compiler builtins | 24.9 KB | 13.1 KB |
 | Embassy, allocator and Cortex-M | 19.8 KB | 16.7 KB |
 | Storage (flash store) | 17.0 KB | 16.8 KB |
 | Settings, companion and notifications (with serde) | 12.1 KB | 10.2 KB |
-| BLEFS file service | 9.1 KB | 9.2 KB |
-| Packages | 6.0 KB | 2.0 KB |
+| BLEFS file service | 9.0 KB | 9.1 KB |
+| Packages | 6.1 KB | 2.0 KB |
 | Display, graphics and drivers | 5.1 KB | 3.1 KB |
 | Updates (DFU) | 2.1 KB | 2.1 KB |
-| Other constants and padding | 29.7 KB | 13.5 KB |
-| **Code and data** | **388.4 KB** | **178.6 KB** |
-| Shared library, after the code | 87.8 KB | none |
-| Free of the 480 KB region, after its header | 3.5 KB | 301.2 KB |
+| Other constants and padding | 29.7 KB | 13.6 KB |
+| **Code and data** | **394.1 KB** | **178.9 KB** |
+| Shared library, after the code | 42.7 KB | none |
+| Free of the 480 KB region, after its header | 43.0 KB | 300.9 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
 host and the runtime go with it.
 
 The watch face, the launcher and the apps live in `/apps` on the external flash, and the icons,
-the app host's text fonts and the accelerometers' configuration files in the shared library after
+the app host's text font and the accelerometers' configuration files in the shared library after
 the firmware's code; none is inside the code. See
 [app-runtime.md](app-runtime.md#property-values).
 
@@ -210,10 +211,10 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Bluetooth controller | 2,545 B | 2,545 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | BLEFS file service | 122 B | 122 B |
-| App host (with `neotime-ui`) | 56 B | 0 B |
+| App host (with `neotime-ui`) | 8 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **56,300 B** | **27,140 B** |
-| Left for the stack | 9,220 B | 38,380 B |
+| **Static RAM** (`.data` and `.bss`) | **56,252 B** | **27,140 B** |
+| Left for the stack | 9,268 B | 38,380 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:

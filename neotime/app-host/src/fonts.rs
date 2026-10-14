@@ -1,48 +1,79 @@
 //! The fonts an app picks with its `font` property, drawn with soft edges.
 //!
-//! The text fonts are bitmaps made from JetBrains Mono and Open Sans by `tools/generate_fonts.py`,
-//! with 4-bit coverage and runs of empty and solid pixels shortened, read in place from flash. The
-//! seven-segment and dot-matrix display fonts carry no bitmaps: their glyphs are worked out from
-//! segments and dots as they are drawn. docs/app-runtime.md lists the sizes.
+//! Every text size is one font drawn from lines, arcs and dots, made from `fonts/geometric.txt` by
+//! `tools/generate_fonts.py` and read in place from flash. Each size scales it and moves its straight
+//! strokes and the edges of its arcs onto whole pixels, so stems stay sharp and bowls stay even. The
+//! seven-segment and dot-matrix display fonts are worked out from segments and dots as they are
+//! drawn. docs/app-runtime.md lists the sizes.
 
 use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
 use neotime_runtime::AppImage;
 use neotime_ui::{
     geometry::{Color, Rect},
+    raster::{floor, square_root},
     renderer::{FontLineMetrics, FontMetrics, GlyphInfo, Renderer},
 };
 
+use crate::widgets::sine_of;
+
 // ============================================================================
-// Bitmap fonts
+// The font file
 // ============================================================================
 
 const SUBPIXELS_PER_PIXEL: i32 = 16;
+const FONT_MAGIC: &[u8; 4] = b"NTGF";
+const FONT_VERSION: u8 = 1;
 const FONT_HEADER_BYTES: usize = 16;
-const GLYPH_ENTRY_BYTES: usize = 10;
-const FONT_MAGIC: &[u8; 4] = b"NTFN";
-const EMPTY_RUN: u8 = 0;
-const SOLID_RUN: u8 = 15;
-const COVERAGE_PER_STEP: u8 = 17;
+const GLYPH_ENTRY_BYTES: usize = 6;
+const LINE: u8 = 0;
+const ARC: u8 = 1;
+const DOT: u8 = 2;
 
-/// The widest glyph row drawn in one go; wider glyphs are drawn in pieces.
+/// The most shapes a glyph may have, as `tools/generate_fonts.py` checks; a glyph with more draws only these.
+const MOST_SHAPES: usize = 8;
+/// The most lines one axis puts on whole pixels: two for each shape, and the font's four height lines.
+const MOST_CONTROLS: usize = 2 * MOST_SHAPES + 4;
+/// The widest piece of a glyph row worked out in one go; wider glyphs are drawn in pieces.
 const WIDEST_GLYPH_ROW: usize = 128;
+/// How much wider than the line a dot is, so it holds its own beside the strokes.
+const DOT_GROWTH: f32 = 1.5;
 
-/// A font made by `tools/generate_fonts.py`, read in place from the shared library once installed.
-pub struct BitmapFont {
+/// The font made by `tools/generate_fonts.py`, read in place from the shared library once installed.
+pub struct GeometricFont {
     start: AtomicPtr<u8>,
     length: AtomicUsize,
 }
 
-/// Where one glyph's coverage starts, and its size and place.
+/// Where one glyph's shapes start, how many there are, and how wide it is in font units.
 #[derive(Clone, Copy)]
 struct GlyphEntry {
-    offset: usize,
-    advance: u8,
-    left: i8,
-    top: i8,
     width: u8,
-    height: u8,
+    shape_count: u8,
+    offset: usize,
+}
+
+/// One shape as the font file keeps it, in font units with y growing upwards.
+#[derive(Clone, Copy)]
+enum Shape {
+    Line {
+        x1: i8,
+        y1: i8,
+        x2: i8,
+        y2: i8,
+    },
+    Arc {
+        x: i8,
+        y: i8,
+        across: u8,
+        down: u8,
+        start: u8,
+        end: u8,
+    },
+    Dot {
+        x: i8,
+        y: i8,
+    },
 }
 
 fn read_u16(bytes: &[u8], at: usize) -> u16 {
@@ -52,19 +83,19 @@ fn read_u16(bytes: &[u8], at: usize) -> u16 {
     }
 }
 
-impl BitmapFont {
+impl GeometricFont {
     /// A font with no glyphs yet; `install_from_library` fills it.
     pub const fn empty() -> Self {
-        BitmapFont {
+        GeometricFont {
             start: AtomicPtr::new(core::ptr::null_mut()),
             length: AtomicUsize::new(0),
         }
     }
 
-    /// A font that starts with its glyphs, for builds that carry the font files.
+    /// A font that starts with its glyphs, for builds that carry the font file.
     #[cfg(any(test, feature = "built-in-fonts"))]
     const fn preinstalled(bytes: &'static [u8]) -> Self {
-        BitmapFont {
+        GeometricFont {
             start: AtomicPtr::new(bytes.as_ptr() as *mut u8),
             length: AtomicUsize::new(bytes.len()),
         }
@@ -86,54 +117,96 @@ impl BitmapFont {
         unsafe { core::slice::from_raw_parts(start, length) }
     }
 
-    fn is_valid(&self) -> bool {
-        self.bytes().len() >= FONT_HEADER_BYTES && &self.bytes()[..4] == FONT_MAGIC
+    /// The installed file, checked once for a run of lookups.
+    fn data(&self) -> Option<FontData> {
+        let bytes = self.bytes();
+        let is_font =
+            bytes.len() >= FONT_HEADER_BYTES && &bytes[..4] == FONT_MAGIC && bytes[4] == FONT_VERSION;
+        is_font.then(|| FontData {
+            bytes,
+            glyph_count: read_u16(bytes, 6) as usize,
+        })
     }
 
+    #[cfg(test)]
     fn glyph_count(&self) -> usize {
-        if !self.is_valid() {
-            return 0;
-        }
-        read_u16(self.bytes(), 6) as usize
+        self.data().map_or(0, |data| data.glyph_count)
     }
 
-    fn data_start(&self) -> usize {
-        FONT_HEADER_BYTES + self.glyph_count() * GLYPH_ENTRY_BYTES
+    #[cfg(test)]
+    fn heights(&self) -> Option<FontHeights> {
+        Some(self.data()?.heights())
+    }
+
+    #[cfg(test)]
+    fn entry_at(&self, index: usize) -> Option<(u16, GlyphEntry)> {
+        self.data()?.entry_at(index)
+    }
+
+    fn glyph(&self, character: char) -> Option<GlyphEntry> {
+        self.data()?.glyph(character)
+    }
+
+    #[cfg(test)]
+    fn shapes(&self, glyph: GlyphEntry) -> ShapeReader<'static> {
+        match self.data() {
+            Some(data) => data.shapes(glyph),
+            None => ShapeReader { data: &[], left: 0 },
+        }
+    }
+}
+
+/// The font file once checked: its bytes and how many glyphs it lists.
+#[derive(Clone, Copy)]
+struct FontData {
+    bytes: &'static [u8],
+    glyph_count: usize,
+}
+
+impl FontData {
+    /// The font's height lines, standard width and how far its shapes reach, in font units.
+    fn heights(&self) -> FontHeights {
+        let signed = |at: usize| self.bytes[at] as i8 as f32;
+        FontHeights {
+            capital: self.bytes[8] as f32,
+            x_height: self.bytes[9] as f32,
+            standard_width: self.bytes[10] as f32,
+            descender: signed(11),
+            lowest: signed(12),
+            highest: signed(13),
+            leftmost: signed(14),
+            rightmost: signed(15),
+        }
     }
 
     fn entry_at(&self, index: usize) -> Option<(u16, GlyphEntry)> {
+        if index >= self.glyph_count {
+            return None;
+        }
         let start = FONT_HEADER_BYTES + index * GLYPH_ENTRY_BYTES;
-        let entry = self.bytes().get(start..start + GLYPH_ENTRY_BYTES)?;
-        let character = u16::from_le_bytes([entry[0], entry[1]]);
-        let offset = entry[2] as usize | (entry[3] as usize) << 8 | (entry[4] as usize) << 16;
+        let entry = self.bytes.get(start..start + GLYPH_ENTRY_BYTES)?;
         Some((
-            character,
+            u16::from_le_bytes([entry[0], entry[1]]),
             GlyphEntry {
-                offset,
-                advance: entry[5],
-                left: entry[6] as i8,
-                top: entry[7] as i8,
-                width: entry[8],
-                height: entry[9],
+                width: entry[2],
+                shape_count: entry[3],
+                offset: u16::from_le_bytes([entry[4], entry[5]]) as usize,
             },
         ))
     }
 
     fn glyph(&self, character: char) -> Option<GlyphEntry> {
         let wanted = u16::try_from(character as u32).ok()?;
-        // Fonts hold printable ASCII without gaps from their first glyph, so most characters are found at once.
+        // The font holds printable ASCII without gaps from its first glyph, so most characters are found at once.
         let (first, _) = self.entry_at(0)?;
-        let guess = wanted
-            .checked_sub(first)
-            .map(usize::from)
-            .filter(|&index| index < self.glyph_count());
+        let guess = wanted.checked_sub(first).map(usize::from);
         if let Some((found, entry)) = guess.and_then(|index| self.entry_at(index)) {
             if found == wanted {
                 return Some(entry);
             }
         }
         let mut low = 0;
-        let mut high = self.glyph_count();
+        let mut high = self.glyph_count;
         while low < high {
             let middle = (low + high) / 2;
             let (found, entry) = self.entry_at(middle)?;
@@ -146,139 +219,440 @@ impl BitmapFont {
         None
     }
 
-    /// The glyph's coverage, pixel by pixel from its top-left corner, as 0 to 255.
-    fn coverage(&self, glyph: GlyphEntry) -> CoverageReader<'_> {
-        let start = self.data_start() + glyph.offset;
-        CoverageReader {
-            data: self.bytes().get(start..).unwrap_or(&[]),
-            next_half: 0,
-            repeat_value: 0,
-            repeats_left: 0,
+    /// A glyph's shapes, at most `MOST_SHAPES`, stopping early at any that the file cuts short.
+    fn shapes(&self, glyph: GlyphEntry) -> ShapeReader<'static> {
+        let start = FONT_HEADER_BYTES + self.glyph_count * GLYPH_ENTRY_BYTES + glyph.offset;
+        ShapeReader {
+            data: self.bytes.get(start..).unwrap_or(&[]),
+            left: (glyph.shape_count as usize).min(MOST_SHAPES),
+        }
+    }
+}
+
+/// The font's height lines and standard width, in font units.
+#[derive(Clone, Copy)]
+struct FontHeights {
+    capital: f32,
+    x_height: f32,
+    standard_width: f32,
+    descender: f32,
+    /// The lowest, highest, leftmost and rightmost any glyph's centre lines reach.
+    lowest: f32,
+    highest: f32,
+    leftmost: f32,
+    rightmost: f32,
+}
+
+/// Reads one glyph's shapes in turn.
+struct ShapeReader<'font> {
+    data: &'font [u8],
+    left: usize,
+}
+
+impl Iterator for ShapeReader<'_> {
+    type Item = Shape;
+
+    fn next(&mut self) -> Option<Shape> {
+        if self.left == 0 {
+            return None;
+        }
+        let size = match *self.data.first()? {
+            LINE => 5,
+            ARC => 7,
+            DOT => 3,
+            _ => return None,
+        };
+        let fields = self.data.get(..size)?;
+        let signed = |at: usize| fields[at] as i8;
+        let shape = match fields[0] {
+            LINE => Shape::Line {
+                x1: signed(1),
+                y1: signed(2),
+                x2: signed(3),
+                y2: signed(4),
+            },
+            ARC => Shape::Arc {
+                x: signed(1),
+                y: signed(2),
+                across: fields[3],
+                down: fields[4],
+                start: fields[5],
+                end: fields[6],
+            },
+            _ => Shape::Dot {
+                x: signed(1),
+                y: signed(2),
+            },
+        };
+        self.data = &self.data[size..];
+        self.left -= 1;
+        Some(shape)
+    }
+}
+
+static FONT: GeometricFont = font_slot();
+
+// The watch carries no font: it comes from the shared library. Tests and the simulator carry it.
+#[cfg(not(any(test, feature = "built-in-fonts")))]
+const fn font_slot() -> GeometricFont {
+    GeometricFont::empty()
+}
+
+#[cfg(any(test, feature = "built-in-fonts"))]
+const fn font_slot() -> GeometricFont {
+    GeometricFont::preinstalled(include_bytes!("../fonts/geometric.ntfont"))
+}
+
+// ============================================================================
+// Sizes
+// ============================================================================
+
+/// One size of the font: how large it is drawn, how thick its lines are, and the line it sits in.
+pub struct StyledFont {
+    /// From the baseline to the top of a capital's ink, in pixels.
+    capital_height: f32,
+    /// How far the pen moves past a glyph of the font's standard width, in pixels.
+    standard_advance: u8,
+    /// Whether every glyph takes the standard advance, as the text sizes do.
+    monospaced: bool,
+    /// How thick each line is, in pixels.
+    stroke: f32,
+    line_height: u16,
+    ascent: i16,
+    descent: i16,
+}
+
+// Each size keeps the advance and line of the bitmap font it replaced, so layouts stay where they were.
+static SMALL: StyledFont = StyledFont::text(12.0, 10, 2.0, 22, 17, 5);
+static NORMAL: StyledFont = StyledFont::text(14.0, 12, 2.5, 27, 21, 6);
+static MEDIUM: StyledFont = StyledFont::text(22.0, 18, 4.0, 40, 31, 9);
+static LARGE: StyledFont = StyledFont::text(31.0, 25, 6.0, 56, 43, 13);
+static HUGE: StyledFont = StyledFont::text(57.0, 46, 6.0, 62, 59, 3);
+static CONDENSED: StyledFont = StyledFont::text(35.0, 20, 4.0, 39, 37, 2);
+static GIANT: StyledFont = StyledFont {
+    capital_height: 87.0,
+    standard_advance: 68,
+    monospaced: false,
+    stroke: 6.0,
+    line_height: 92,
+    ascent: 89,
+    descent: 3,
+};
+
+/// How a size maps font units to pixels.
+#[derive(Clone, Copy)]
+struct Scale {
+    across: f32,
+    down: f32,
+    heights: FontHeights,
+}
+
+impl StyledFont {
+    const fn text(
+        capital_height: f32,
+        standard_advance: u8,
+        stroke: f32,
+        line_height: u16,
+        ascent: i16,
+        descent: i16,
+    ) -> Self {
+        StyledFont {
+            capital_height,
+            standard_advance,
+            monospaced: true,
+            stroke,
+            line_height,
+            ascent,
+            descent,
         }
     }
 
-    /// Draws one glyph with its pen at `origin` on the baseline, decoding it once.
+    fn scale(&self) -> Option<Scale> {
+        self.scale_in(&FONT.data()?)
+    }
+
+    fn scale_in(&self, data: &FontData) -> Option<Scale> {
+        let heights = data.heights();
+        if heights.capital <= 0.0 || heights.standard_width <= 0.0 {
+            return None;
+        }
+        Some(Scale {
+            across: self.standard_advance as f32 / heights.standard_width,
+            down: (self.capital_height - self.stroke) / heights.capital,
+            heights,
+        })
+    }
+
+    /// How far the pen moves past a character, without working out its box.
+    fn advance_of(&self, character: char) -> Option<i32> {
+        let data = FONT.data()?;
+        let glyph = data.glyph(character)?;
+        match self.monospaced {
+            true => Some(self.standard_advance as i32),
+            false => Some(self.advance(glyph, &self.scale_in(&data)?)),
+        }
+    }
+
+    fn advance(&self, glyph: GlyphEntry, scale: &Scale) -> i32 {
+        match self.monospaced {
+            true => self.standard_advance as i32,
+            false => round(glyph.width as f32 * scale.across) as i32,
+        }
+    }
+
+    /// Where a glyph's x = 0 falls past the pen: monospaced glyphs sit in the middle of their advance.
+    fn shift(&self, glyph: GlyphEntry, scale: &Scale) -> f32 {
+        match self.monospaced {
+            true => (self.standard_advance as f32 - glyph.width as f32 * scale.across) / 2.0,
+            false => 0.0,
+        }
+    }
+
+    /// The glyph's shapes in pixels, with its pen at `origin` on the baseline; returns how many there are.
+    fn place(
+        &self,
+        data: &FontData,
+        glyph: GlyphEntry,
+        origin: (i32, i32),
+        placed: &mut [Placed; MOST_SHAPES],
+    ) -> usize {
+        let Some(scale) = self.scale_in(data) else {
+            return 0;
+        };
+        let half = self.stroke / 2.0;
+        // Each line's near edge lands on a pixel's edge, so a whole-pixel line covers whole pixels.
+        let offset = half - floor(half);
+        let mut across = AxisFit::new(origin.0 as f32 + self.shift(glyph, &scale), scale.across);
+        let mut down = AxisFit::new(origin.1 as f32 - half, -scale.down);
+        let heights = scale.heights;
+        for line in [heights.descender, 0.0, heights.x_height, heights.capital] {
+            down.add(line);
+        }
+        for shape in data.shapes(glyph) {
+            match shape {
+                Shape::Line { x1, y1, x2, y2 } => {
+                    if x1 == x2 {
+                        across.add(x1 as f32);
+                    }
+                    if y1 == y2 {
+                        down.add(y1 as f32);
+                    }
+                }
+                Shape::Arc {
+                    x,
+                    y,
+                    across: wide,
+                    down: tall,
+                    ..
+                } => {
+                    across.add(x as f32 - wide as f32);
+                    across.add(x as f32 + wide as f32);
+                    down.add(y as f32 - tall as f32);
+                    down.add(y as f32 + tall as f32);
+                }
+                Shape::Dot { .. } => {}
+            }
+        }
+        across.fit(offset);
+        down.fit(offset);
+        let mut count = 0;
+        for (slot, shape) in placed.iter_mut().zip(data.shapes(glyph)) {
+            *slot = match shape {
+                Shape::Line { x1, y1, x2, y2 } => Placed::line(
+                    across.place(x1 as f32),
+                    down.place(y1 as f32),
+                    across.place(x2 as f32),
+                    down.place(y2 as f32),
+                ),
+                Shape::Arc {
+                    x,
+                    y,
+                    across: wide,
+                    down: tall,
+                    start,
+                    end,
+                } => {
+                    let left = across.place(x as f32 - wide as f32);
+                    let right = across.place(x as f32 + wide as f32);
+                    let top = down.place(y as f32 + tall as f32);
+                    let bottom = down.place(y as f32 - tall as f32);
+                    Placed::Arc {
+                        x: (left + right) / 2.0,
+                        y: (top + bottom) / 2.0,
+                        across: (right - left) / 2.0,
+                        down: (bottom - top) / 2.0,
+                        start: direction_of(start),
+                        end: direction_of(end),
+                        sweep: Sweep::of(start, end),
+                    }
+                }
+                Shape::Dot { x, y } => Placed::Dot {
+                    x: across.place(x as f32),
+                    y: down.place(y as f32),
+                },
+            };
+            count += 1;
+        }
+        count
+    }
+
+    /// The pixels a glyph's ink can reach with its pen at `origin`, with room for its soft edges.
+    fn ink_box(&self, shapes: &[Placed]) -> Option<Rect> {
+        let reach = self.stroke / 2.0 * DOT_GROWTH + 1.0;
+        let mut bounds: Option<(f32, f32, f32, f32)> = None;
+        for shape in shapes {
+            let (left, top, right, bottom) = shape.bounds();
+            bounds = Some(match bounds {
+                None => (left, top, right, bottom),
+                Some((l, t, r, b)) => (l.min(left), t.min(top), r.max(right), b.max(bottom)),
+            });
+        }
+        let (left, top, right, bottom) = bounds?;
+        let x = floor(left - reach) as i32;
+        let y = floor(top - reach) as i32;
+        Some(Rect {
+            x,
+            y,
+            width: floor(right + reach) as i32 + 1 - x,
+            height: floor(bottom + reach) as i32 + 1 - y,
+        })
+    }
+
+    /// The pixels any glyph's ink can reach with its pen at the origin, from how far the font's shapes reach.
+    ///
+    /// Layout asks for this for every character it measures, so it reads none of the glyph's shapes.
+    /// Placing moves points by about half a pixel, so two pixels more all round hold the placed glyph too.
+    fn rough_box(&self, glyph: GlyphEntry, scale: &Scale) -> Option<Rect> {
+        if glyph.shape_count == 0 {
+            return None;
+        }
+        let half = self.stroke / 2.0;
+        let shift = self.shift(glyph, scale);
+        let heights = scale.heights;
+        let reach = half * DOT_GROWTH + 2.0;
+        let x = floor(shift + heights.leftmost * scale.across - reach) as i32;
+        let y = floor(-half - heights.highest * scale.down - reach) as i32;
+        let right = floor(shift + heights.rightmost * scale.across + reach) as i32 + 1;
+        let bottom = floor(-half - heights.lowest * scale.down + reach) as i32 + 1;
+        Some(Rect {
+            x,
+            y,
+            width: right - x,
+            height: bottom - y,
+        })
+    }
+
+    /// Draws one glyph with its pen at `origin` on the baseline, only the rows the renderer shows.
     fn draw_character(&self, renderer: &mut dyn Renderer, character: char, origin: (i32, i32), color: Color) {
-        let Some(glyph) = self.glyph(character) else {
+        let Some(data) = FONT.data() else {
             return;
         };
-        let width = glyph.width as usize;
-        if width == 0 {
+        let Some(scale) = self.scale_in(&data) else {
             return;
+        };
+        // Text is asked to draw in every strip near it, so a strip no glyph can reach costs nothing more.
+        if let Some(visible) = renderer.visible_area() {
+            let baseline = origin.1 as f32 - self.stroke / 2.0;
+            let reach = self.stroke / 2.0 * DOT_GROWTH + 2.0;
+            let top = baseline - scale.heights.highest * scale.down - reach;
+            let bottom = baseline - scale.heights.lowest * scale.down + reach;
+            if bottom < visible.y as f32 || top > visible.bottom() as f32 {
+                return;
+            }
         }
-        let left = origin.0 + glyph.left as i32;
-        let top = origin.1 - glyph.top as i32;
-        let (first_row, end_row) = rows_to_draw(renderer, top, glyph.height as i32);
-        if first_row >= end_row {
+        let Some(glyph) = data.glyph(character) else {
             return;
-        }
+        };
+        let mut placed = [Placed::NOTHING; MOST_SHAPES];
+        let count = self.place(&data, glyph, origin, &mut placed);
+        let shapes = &placed[..count];
+        let Some(area) = self.ink_box(shapes) else {
+            return;
+        };
+        let (first_row, end_row) = rows_to_draw(renderer, area.y, area.height);
         let mut row = [0u8; WIDEST_GLYPH_ROW];
-        let mut pixels = self.coverage(glyph);
-        pixels.skip_pixels(first_row as usize * width);
         for row_index in first_row..end_row {
+            let y = area.y + row_index;
             let mut column = 0;
-            while column < width {
-                let piece = (width - column).min(WIDEST_GLYPH_ROW);
-                for slot in row[..piece].iter_mut() {
-                    *slot = pixels.next().unwrap_or(0);
-                }
-                renderer.blend_row(left + column as i32, top + row_index, color, &row[..piece]);
-                column += piece;
+            while column < area.width {
+                let piece = ((area.width - column) as usize).min(WIDEST_GLYPH_ROW);
+                let coverage = &mut row[..piece];
+                coverage.fill(0);
+                cover_row(
+                    shapes,
+                    self.stroke / 2.0,
+                    y as f32 + 0.5,
+                    area.x + column,
+                    coverage,
+                );
+                renderer.blend_row(area.x + column, y, color, coverage);
+                column += piece as i32;
             }
         }
     }
 }
 
-/// Reads a glyph's packed coverage: four bits a pixel, with runs of empty or solid pixels shortened.
-struct CoverageReader<'font> {
-    data: &'font [u8],
-    /// Which four bits come next, counted in halves of bytes.
-    next_half: usize,
-    repeat_value: u8,
-    repeats_left: u8,
-}
-
-impl CoverageReader<'_> {
-    fn half(&mut self) -> u8 {
-        let byte = self.data.get(self.next_half / 2).copied().unwrap_or(0);
-        self.next_half += 1;
-        match self.next_half % 2 {
-            1 => byte >> 4,
-            _ => byte & 0x0F,
-        }
-    }
-
-    /// Moves past `count` pixels, a whole run at a time where it can.
-    fn skip_pixels(&mut self, mut count: usize) {
-        while count > 0 {
-            if self.repeats_left > 0 {
-                let skipped = (self.repeats_left as usize).min(count);
-                self.repeats_left -= skipped as u8;
-                count -= skipped;
-                continue;
-            }
-            let value = self.half();
-            if value == EMPTY_RUN || value == SOLID_RUN {
-                self.repeat_value = value;
-                self.repeats_left = self.half();
-            }
-            count -= 1;
-        }
-    }
-}
-
-impl Iterator for CoverageReader<'_> {
-    type Item = u8;
-
-    fn next(&mut self) -> Option<u8> {
-        if self.repeats_left > 0 {
-            self.repeats_left -= 1;
-            return Some(self.repeat_value * COVERAGE_PER_STEP);
-        }
-        let value = self.half();
-        if value == EMPTY_RUN || value == SOLID_RUN {
-            self.repeat_value = value;
-            self.repeats_left = self.half();
-        }
-        Some(value * COVERAGE_PER_STEP)
-    }
-}
-
-impl FontMetrics for BitmapFont {
+impl FontMetrics for StyledFont {
     fn glyph_metrics(&self, character: char) -> Option<GlyphInfo> {
-        let glyph = self.glyph(character)?;
+        let glyph = FONT.glyph(character)?;
+        let scale = self.scale()?;
+        let advance_fp16 = (self.advance(glyph, &scale) * SUBPIXELS_PER_PIXEL) as u16;
+        let Some(area) = self.rough_box(glyph, &scale) else {
+            return Some(GlyphInfo {
+                advance_fp16,
+                bearing_x: 0,
+                bearing_y: 0,
+                width: 0,
+                height: 0,
+            });
+        };
         Some(GlyphInfo {
-            advance_fp16: glyph.advance as u16 * SUBPIXELS_PER_PIXEL as u16,
-            bearing_x: glyph.left as i16,
-            bearing_y: glyph.top as i16,
-            width: glyph.width as u16,
-            height: glyph.height as u16,
+            advance_fp16,
+            bearing_x: area.x as i16,
+            bearing_y: -area.y as i16,
+            width: area.width as u16,
+            height: area.height as u16,
         })
+    }
+
+    fn advance_fp16(&self, character: char) -> Option<u16> {
+        Some((self.advance_of(character)? * SUBPIXELS_PER_PIXEL) as u16)
     }
 
     fn line_metrics(&self) -> FontLineMetrics {
         FontLineMetrics {
-            line_height: read_u16(self.bytes(), 8),
-            ascent: read_u16(self.bytes(), 10) as i16,
-            descent: read_u16(self.bytes(), 12) as i16,
+            line_height: self.line_height,
+            ascent: self.ascent,
+            descent: self.descent,
         }
     }
 
     fn glyph_coverage_row(&self, character: char, row: u16, x_offset: u16, coverage: &mut [u8]) -> bool {
-        let Some(glyph) = self.glyph(character) else {
+        let Some(info) = self.glyph_metrics(character) else {
             return false;
         };
-        let skipped = row as usize * glyph.width as usize + x_offset as usize;
-        let mut pixels = self.coverage(glyph);
-        pixels.skip_pixels(skipped);
-        let row_left = (glyph.width as usize).saturating_sub(x_offset as usize);
-        for (index, slot) in coverage.iter_mut().enumerate() {
-            *slot = if index < row_left {
-                pixels.next().unwrap_or(0)
-            } else {
-                0
-            };
-        }
+        let Some(data) = FONT.data() else {
+            return false;
+        };
+        let Some(glyph) = data.glyph(character) else {
+            return false;
+        };
+        // The glyph's box starts at its top-left corner, so its pen sits at its bearings.
+        let mut placed = [Placed::NOTHING; MOST_SHAPES];
+        let count = self.place(
+            &data,
+            glyph,
+            (-(info.bearing_x as i32), info.bearing_y as i32),
+            &mut placed,
+        );
+        coverage.fill(0);
+        cover_row(
+            &placed[..count],
+            self.stroke / 2.0,
+            row as f32 + 0.5,
+            x_offset as i32,
+            coverage,
+        );
         true
     }
 }
@@ -291,6 +665,363 @@ pub fn rows_to_draw(renderer: &dyn Renderer, top: i32, height: i32) -> (i32, i32
             (visible.bottom() - top).clamp(0, height),
         ),
         None => (0, height),
+    }
+}
+
+// ============================================================================
+// Putting strokes on whole pixels
+// ============================================================================
+
+/// Moves chosen lines of a glyph onto whole pixels along one axis, and stretches what lies between them.
+struct AxisFit {
+    /// Where each chosen line falls unmoved, in pixels, in order.
+    unmoved: [f32; MOST_CONTROLS],
+    /// Where each one is moved to.
+    moved: [f32; MOST_CONTROLS],
+    count: usize,
+    origin: f32,
+    scale: f32,
+}
+
+impl AxisFit {
+    fn new(origin: f32, scale: f32) -> Self {
+        AxisFit {
+            unmoved: [0.0; MOST_CONTROLS],
+            moved: [0.0; MOST_CONTROLS],
+            count: 0,
+            origin,
+            scale,
+        }
+    }
+
+    fn unmoved_at(&self, units: f32) -> f32 {
+        self.origin + units * self.scale
+    }
+
+    /// Chooses a line in font units to put on the pixel grid.
+    fn add(&mut self, units: f32) {
+        if self.count < MOST_CONTROLS {
+            self.unmoved[self.count] = self.unmoved_at(units);
+            self.count += 1;
+        }
+    }
+
+    /// Sorts the chosen lines and moves each to the nearest place `offset` past a pixel's edge.
+    fn fit(&mut self, offset: f32) {
+        let lines = &mut self.unmoved[..self.count];
+        lines.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal));
+        let mut kept = 0;
+        for index in 0..self.count {
+            let line = self.unmoved[index];
+            if kept > 0 && line == self.unmoved[kept - 1] {
+                continue;
+            }
+            let mut moved = round(line - offset) + offset;
+            if kept > 0 {
+                // Lines a pixel or more apart stay apart, so snapping never merges two strokes.
+                let apart = line - self.unmoved[kept - 1] >= 1.0;
+                let lowest = self.moved[kept - 1] + if apart { 1.0 } else { 0.0 };
+                moved = moved.max(lowest);
+            }
+            self.unmoved[kept] = line;
+            self.moved[kept] = moved;
+            kept += 1;
+        }
+        self.count = kept;
+    }
+
+    /// Where a point in font units lands, moved as the chosen lines around it were.
+    fn place(&self, units: f32) -> f32 {
+        let at = self.unmoved_at(units);
+        if self.count == 0 {
+            return at;
+        }
+        let last = self.count - 1;
+        if at <= self.unmoved[0] {
+            return at + self.moved[0] - self.unmoved[0];
+        }
+        if at >= self.unmoved[last] {
+            return at + self.moved[last] - self.unmoved[last];
+        }
+        let mut index = 0;
+        while self.unmoved[index + 1] < at {
+            index += 1;
+        }
+        let (from, to) = (self.unmoved[index], self.unmoved[index + 1]);
+        let along = (at - from) / (to - from);
+        self.moved[index] + along * (self.moved[index + 1] - self.moved[index])
+    }
+}
+
+fn round(value: f32) -> f32 {
+    floor(value + 0.5)
+}
+
+// ============================================================================
+// Coverage from the nearest shape
+// ============================================================================
+
+/// How much of a turn an arc covers, which decides how a point is tested against its ends.
+#[derive(Clone, Copy)]
+enum Sweep {
+    Whole,
+    UpToHalf,
+    MoreThanHalf,
+}
+
+impl Sweep {
+    fn of(start: u8, end: u8) -> Sweep {
+        match end.wrapping_sub(start) {
+            0 => Sweep::Whole,
+            1..=128 => Sweep::UpToHalf,
+            _ => Sweep::MoreThanHalf,
+        }
+    }
+}
+
+/// The cosine and sine of an angle given in 256ths of a turn, to the nearest degree.
+fn direction_of(steps: u8) -> (f32, f32) {
+    let degrees = (steps as i32 * 360 + 128) / 256;
+    (sine_of(degrees + 90), sine_of(degrees))
+}
+
+/// A shape placed in pixels, with y growing downwards.
+#[derive(Clone, Copy)]
+enum Placed {
+    Line {
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        inverse_length_squared: f32,
+    },
+    Arc {
+        x: f32,
+        y: f32,
+        across: f32,
+        down: f32,
+        start: (f32, f32),
+        end: (f32, f32),
+        sweep: Sweep,
+    },
+    Dot {
+        x: f32,
+        y: f32,
+    },
+}
+
+impl Placed {
+    /// A line from one point to another, with what working out a pixel's distance from it needs.
+    fn line(x1: f32, y1: f32, x2: f32, y2: f32) -> Placed {
+        let length_squared = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
+        let inverse_length_squared = match length_squared > 0.0 {
+            true => 1.0 / length_squared,
+            false => 0.0,
+        };
+        Placed::Line {
+            x1,
+            y1,
+            x2,
+            y2,
+            inverse_length_squared,
+        }
+    }
+
+    const NOTHING: Placed = Placed::Dot { x: 0.0, y: 0.0 };
+
+    /// The shape's centre-line box: left, top, right, bottom.
+    fn bounds(&self) -> (f32, f32, f32, f32) {
+        match *self {
+            Placed::Line { x1, y1, x2, y2, .. } => (x1.min(x2), y1.min(y2), x1.max(x2), y1.max(y2)),
+            Placed::Arc {
+                x, y, across, down, ..
+            } => (x - across, y - down, x + across, y + down),
+            Placed::Dot { x, y } => (x, y, x, y),
+        }
+    }
+
+    /// How far from the centre line its ink reaches.
+    fn radius(&self, half: f32) -> f32 {
+        match self {
+            Placed::Dot { .. } => half * DOT_GROWTH,
+            _ => half,
+        }
+    }
+
+    /// The square of a pixel centre's distance from a line or dot, which needs no root; nothing for an arc.
+    fn distance_squared(&self, px: f32, py: f32) -> Option<f32> {
+        match *self {
+            Placed::Line {
+                x1,
+                y1,
+                x2,
+                y2,
+                inverse_length_squared,
+            } => {
+                let (dx, dy) = (x2 - x1, y2 - y1);
+                let along = (((px - x1) * dx + (py - y1) * dy) * inverse_length_squared).clamp(0.0, 1.0);
+                let (ex, ey) = (px - x1 - along * dx, py - y1 - along * dy);
+                Some(ex * ex + ey * ey)
+            }
+            Placed::Dot { x, y } => Some((px - x) * (px - x) + (py - y) * (py - y)),
+            Placed::Arc { .. } => None,
+        }
+    }
+
+    /// How far a pixel centre is from the shape's centre line.
+    fn distance(&self, px: f32, py: f32) -> f32 {
+        match *self {
+            Placed::Line {
+                x1,
+                y1,
+                x2,
+                y2,
+                inverse_length_squared,
+            } => {
+                let (dx, dy) = (x2 - x1, y2 - y1);
+                let along = (((px - x1) * dx + (py - y1) * dy) * inverse_length_squared).clamp(0.0, 1.0);
+                length(px - x1 - along * dx, py - y1 - along * dy)
+            }
+            Placed::Dot { x, y } => length(px - x, py - y),
+            Placed::Arc {
+                x,
+                y,
+                across,
+                down,
+                start,
+                end,
+                sweep,
+            } => {
+                if across <= 0.0 || down <= 0.0 {
+                    return length(px - x, py - y);
+                }
+                let (dx, dy) = (px - x, y - py);
+                // Which side of each end the point lies on, without trigonometry or division:
+                // the sides in the circle the arc is squeezed from, scaled by both radii.
+                let past_start = || start.0 * dy * across - start.1 * dx * down >= 0.0;
+                let before_end = || dx * down * end.1 - dy * across * end.0 >= 0.0;
+                let inside = match sweep {
+                    Sweep::Whole => true,
+                    Sweep::UpToHalf => past_start() && before_end(),
+                    Sweep::MoreThanHalf => past_start() || before_end(),
+                };
+                if !inside {
+                    let to_start = length(px - (x + across * start.0), py - (y - down * start.1));
+                    let to_end = length(px - (x + across * end.0), py - (y - down * end.1));
+                    return to_start.min(to_end);
+                }
+                if (across - down).abs() < 0.01 {
+                    return (length(dx, dy) - across).abs();
+                }
+                let (qx, qy) = (dx / across, dy / down);
+                // An ellipse has no exact distance in closed form; its value over its slope is close near the curve.
+                let reach = length(qx, qy);
+                if reach < 1e-4 {
+                    return across.min(down);
+                }
+                let slope = length(qx / across, qy / down) / reach;
+                (reach - 1.0).abs() / slope
+            }
+        }
+    }
+
+    /// The columns on the row through `y` where the shape's ink can reach, as up to two ranges.
+    fn columns(&self, y: f32, reach: f32) -> [Option<(f32, f32)>; 2] {
+        match *self {
+            Placed::Line { x1, y1, x2, y2, .. } => {
+                if y + reach < y1.min(y2) || y - reach > y1.max(y2) {
+                    return [None, None];
+                }
+                let rise = y2 - y1;
+                let (low, high) = match rise.abs() < 1e-4 {
+                    true => (0.0, 1.0),
+                    false => {
+                        let a = ((y - reach - y1) / rise).clamp(0.0, 1.0);
+                        let b = ((y + reach - y1) / rise).clamp(0.0, 1.0);
+                        (a.min(b), a.max(b))
+                    }
+                };
+                let (xa, xb) = (x1 + low * (x2 - x1), x1 + high * (x2 - x1));
+                [Some((xa.min(xb) - reach, xa.max(xb) + reach)), None]
+            }
+            Placed::Dot { x, y: centre } => match (y - centre).abs() <= reach {
+                true => [Some((x - reach, x + reach)), None],
+                false => [None, None],
+            },
+            Placed::Arc {
+                x,
+                y: centre,
+                across,
+                down,
+                ..
+            } => {
+                let rise = y - centre;
+                if rise.abs() > down + reach {
+                    return [None, None];
+                }
+                if (across - down).abs() >= 0.01 {
+                    return [Some((x - across - reach, x + across + reach)), None];
+                }
+                // A circle's ring meets the row in a chord with its middle cut out.
+                let outer = (across + reach) * (across + reach) - rise * rise;
+                if outer <= 0.0 {
+                    return [None, None];
+                }
+                let outer = square_root(outer);
+                let inner = (across - reach).max(0.0);
+                let inner = inner * inner - rise * rise;
+                match inner > 0.0 {
+                    true => {
+                        let inner = square_root(inner);
+                        [Some((x - outer, x - inner)), Some((x + inner, x + outer))]
+                    }
+                    false => [Some((x - outer, x + outer)), None],
+                }
+            }
+        }
+    }
+}
+
+fn length(x: f32, y: f32) -> f32 {
+    square_root(x * x + y * y)
+}
+
+/// Ink from the distance into a shape plus half a pixel, over a ramp one pixel wide.
+fn ink_of(depth_plus_half: f32) -> u8 {
+    if depth_plus_half <= 0.0 {
+        0
+    } else if depth_plus_half >= 1.0 {
+        255
+    } else {
+        (depth_plus_half * 255.0 + 0.5) as u8
+    }
+}
+
+/// Works out one row of a glyph from `left`, each pixel taking its ink from the nearest shape.
+///
+/// Only the columns each shape can reach are visited, so a row costs about as much as its strokes.
+fn cover_row(shapes: &[Placed], half: f32, y: f32, left: i32, coverage: &mut [u8]) {
+    let end = left + coverage.len() as i32;
+    for shape in shapes {
+        let radius = shape.radius(half);
+        // Past half a pixel beyond the edge the ramp gives no ink, and inside half a pixel all of it.
+        let (outer, inner) = (radius + 0.5, (radius - 0.5).max(0.0));
+        let (outer_squared, inner_squared) = (outer * outer, inner * inner);
+        for (from, to) in shape.columns(y, outer).into_iter().flatten() {
+            let first = (floor(from) as i32).max(left);
+            let last = (floor(to) as i32 + 1).min(end);
+            for column in first..last {
+                let px = column as f32 + 0.5;
+                let ink = match shape.distance_squared(px, y) {
+                    Some(squared) if squared >= outer_squared => 0,
+                    Some(squared) if squared <= inner_squared => 255,
+                    Some(squared) => ink_of(radius - square_root(squared) + 0.5),
+                    None => ink_of(radius - shape.distance(px, y) + 0.5),
+                };
+                let slot = &mut coverage[(column - left) as usize];
+                *slot = (*slot).max(ink);
+            }
+        }
     }
 }
 
@@ -556,58 +1287,22 @@ impl FontMetrics for DotMatrixFont {
 // Font numbers
 // ============================================================================
 
-// The watch carries no font: they come from the shared library. Tests and the simulator carry them.
-#[cfg(not(any(test, feature = "built-in-fonts")))]
-mod font_slots {
-    use super::BitmapFont;
-
-    pub static SMALL: BitmapFont = BitmapFont::empty();
-    pub static NORMAL: BitmapFont = BitmapFont::empty();
-    pub static MEDIUM: BitmapFont = BitmapFont::empty();
-    pub static LARGE: BitmapFont = BitmapFont::empty();
-    pub static HUGE: BitmapFont = BitmapFont::empty();
-    pub static GIANT: BitmapFont = BitmapFont::empty();
-    pub static CONDENSED: BitmapFont = BitmapFont::empty();
-}
-
-#[cfg(any(test, feature = "built-in-fonts"))]
-mod font_slots {
-    use super::BitmapFont;
-
-    pub static SMALL: BitmapFont = BitmapFont::preinstalled(include_bytes!("../fonts/small.ntfont"));
-    pub static NORMAL: BitmapFont = BitmapFont::preinstalled(include_bytes!("../fonts/normal.ntfont"));
-    pub static MEDIUM: BitmapFont = BitmapFont::preinstalled(include_bytes!("../fonts/medium.ntfont"));
-    pub static LARGE: BitmapFont = BitmapFont::preinstalled(include_bytes!("../fonts/large.ntfont"));
-    pub static HUGE: BitmapFont = BitmapFont::preinstalled(include_bytes!("../fonts/huge.ntfont"));
-    pub static GIANT: BitmapFont = BitmapFont::preinstalled(include_bytes!("../fonts/giant.ntfont"));
-    pub static CONDENSED: BitmapFont = BitmapFont::preinstalled(include_bytes!("../fonts/condensed.ntfont"));
-}
-
-use font_slots::{CONDENSED, GIANT, HUGE, LARGE, MEDIUM, NORMAL, SMALL};
-
-/// The bitmap fonts in the order the shared library keeps them.
-static LIBRARY_ORDER: [&BitmapFont; 7] = [&SMALL, &NORMAL, &MEDIUM, &LARGE, &HUGE, &GIANT, &CONDENSED];
-
-/// Takes the text fonts from the shared library, which must stay where it is, such as in internal flash.
+/// Takes the text font from the shared library, which must stay where it is, such as in internal flash.
 ///
 /// Until then text takes no room and draws nothing; returns how many fonts the library had.
 pub fn install_from_library(library: &AppImage<'static>) -> usize {
-    let mut installed = 0;
-    for (index, font) in LIBRARY_ORDER.iter().enumerate() {
-        // A font the library lacks is emptied, so it never points into an older library.
-        let bytes = library.font(index as u16).unwrap_or(&[]);
-        font.install(bytes);
-        installed += usize::from(!bytes.is_empty());
-    }
-    installed
+    // A library without the font empties it, so it never points into an older library.
+    let bytes = library.font(0).unwrap_or(&[]);
+    FONT.install(bytes);
+    usize::from(!bytes.is_empty())
 }
 
 static SEVEN_SEGMENT: SevenSegmentFont = SevenSegmentFont;
 static DOT_MATRIX: DotMatrixFont = DotMatrixFont;
 
-/// How many bytes of flash the bitmap fonts take, for the memory map.
-pub fn bitmap_font_bytes() -> usize {
-    LIBRARY_ORDER.iter().map(|font| font.bytes().len()).sum()
+/// How many bytes of flash the text font takes, for the memory map.
+pub fn text_font_bytes() -> usize {
+    FONT.bytes().len()
 }
 
 /// The `font` property's values, in the order docs/app-reference.md lists the fonts.
@@ -641,7 +1336,8 @@ impl FontName {
         }
     }
 
-    fn bitmap(self) -> Option<&'static BitmapFont> {
+    /// The size of the text font this name draws, or nothing for the display fonts drawn as shapes.
+    fn styled(self) -> Option<&'static StyledFont> {
         use FontName::*;
         match self {
             Small => Some(&SMALL),
@@ -660,7 +1356,7 @@ impl FontName {
         match self {
             FontName::SevenSegment => &SEVEN_SEGMENT,
             FontName::DotMatrix => &DOT_MATRIX,
-            other => other.bitmap().unwrap_or(&NORMAL),
+            other => other.styled().unwrap_or(&NORMAL),
         }
     }
 
@@ -672,19 +1368,23 @@ impl FontName {
         origin: (i32, i32),
         color: Color,
     ) -> i32 {
-        let advance = character_advance(self.metrics(), character);
-        match self.bitmap() {
-            Some(font) => font.draw_character(renderer, character, origin, color),
-            None => renderer.draw_glyph(self.metrics(), character, origin, color),
+        match self.styled() {
+            Some(font) => {
+                font.draw_character(renderer, character, origin, color);
+                font.advance_of(character).unwrap_or(0)
+            }
+            None => {
+                renderer.draw_glyph(self.metrics(), character, origin, color);
+                character_advance(self.metrics(), character)
+            }
         }
-        advance
     }
 }
 
 /// How far the pen moves past one character, in whole pixels.
 pub fn character_advance(font: &dyn FontMetrics, character: char) -> i32 {
-    font.glyph_metrics(character).map_or(0, |glyph| {
-        (glyph.advance_fp16 as i32 + SUBPIXELS_PER_PIXEL / 2) / SUBPIXELS_PER_PIXEL
+    font.advance_fp16(character).map_or(0, |advance| {
+        (advance as i32 + SUBPIXELS_PER_PIXEL / 2) / SUBPIXELS_PER_PIXEL
     })
 }
 
@@ -710,3 +1410,7 @@ pub fn glyph_box(font: &dyn FontMetrics, character: char, origin: (i32, i32)) ->
         height: glyph.height as i32,
     })
 }
+
+#[cfg(test)]
+#[path = "fonts_tests.rs"]
+mod fonts_tests;

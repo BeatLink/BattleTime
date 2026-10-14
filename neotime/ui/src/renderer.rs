@@ -35,6 +35,13 @@ pub trait FontMetrics {
 
     fn line_metrics(&self) -> FontLineMetrics;
 
+    /// How far the pen moves past a character, in sixteenths of a pixel; nothing if the font lacks it.
+    ///
+    /// Layout measures text with this, so a font that can answer without its glyph's box should.
+    fn advance_fp16(&self, character: char) -> Option<u16> {
+        self.glyph_metrics(character).map(|glyph| glyph.advance_fp16)
+    }
+
     /// Fills `coverage` with one row of a glyph from `x_offset`; false if the font has no coverage.
     fn glyph_coverage_row(&self, _character: char, _row: u16, _x_offset: u16, _coverage: &mut [u8]) -> bool {
         false

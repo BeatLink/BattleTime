@@ -337,7 +337,7 @@ pub fn rasterize_arc(
 // ============================================================================
 
 #[inline]
-fn square_root(value: f32) -> f32 {
+pub fn square_root(value: f32) -> f32 {
     if value <= 0.0 {
         return 0.0;
     }
@@ -347,7 +347,7 @@ fn square_root(value: f32) -> f32 {
 }
 
 #[inline]
-fn floor(value: f32) -> f32 {
+pub fn floor(value: f32) -> f32 {
     let whole = value as i32 as f32;
     if value < whole {
         whole - 1.0

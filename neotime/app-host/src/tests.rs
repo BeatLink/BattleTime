@@ -1523,17 +1523,15 @@ fn fonts_come_from_the_shared_library() {
     let library: &'static [u8] =
         std::boxed::Box::leak(neotime_compiler_library_stand_in().into_boxed_slice());
     let image = neotime_runtime::AppImage::parse(library).unwrap();
-    assert_eq!(crate::fonts::install_from_library(&image), 7);
-    assert!(crate::fonts::bitmap_font_bytes() > 0);
+    assert_eq!(crate::fonts::install_from_library(&image), 1);
+    assert!(crate::fonts::text_font_bytes() > 0);
 }
 
-/// A library image holding just the seven fonts, as the compiler's builder writes them.
+/// A library image holding just the text font, as the compiler's builder writes it.
 fn neotime_compiler_library_stand_in() -> Vec<u8> {
     let mut writer = ImageWriter::new("shared", "Shared library", AppKind::Library, 1);
-    for name in ["small", "normal", "medium", "large", "huge", "giant", "condensed"] {
-        let path = std::format!("{}/fonts/{name}.ntfont", env!("CARGO_MANIFEST_DIR"));
-        writer.font(&std::fs::read(path).unwrap());
-    }
+    let path = std::format!("{}/fonts/geometric.ntfont", env!("CARGO_MANIFEST_DIR"));
+    writer.font(&std::fs::read(path).unwrap());
     writer.build()
 }
 

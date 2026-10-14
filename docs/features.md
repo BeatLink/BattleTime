@@ -153,7 +153,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   can use it. See [companion-protocol.md](companion-protocol.md#file-transfer).
 - **Apps remember where they were.** An app's saved state is written to the watch's storage when
   it closes or the screen turns off, and put back when it opens.
-- **Text in clear, smooth fonts** made from JetBrains Mono and Open Sans.
+- **Text in one clear, smooth font at every size,** drawn from lines and arcs with its stems
+  and curves on whole pixels, in 2.3 KB where seven bitmap fonts took 48 KB.
 
 ## Apps and watch faces
 
