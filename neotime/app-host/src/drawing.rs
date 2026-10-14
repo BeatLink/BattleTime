@@ -2058,12 +2058,13 @@ pub fn draw_resource(
     let scaled_y = |row: i32| row * place.height / height;
     // Screen rows the renderer can show, relative to the image's top; the runs are read in order, so rows below end it.
     let (first_shown, end_shown) = fonts::rows_to_draw(renderer, place.y, place.height);
+    let (first_shown_column, end_shown_column) = fonts::columns_to_draw(renderer, place.x, place.width);
     let mask_coverage_of = |value: u16| match (image.format, recolors) {
         (ImageFormat::Mask, _) => Some(value as u8),
         (ImageFormat::Color, true) => Some(brightness(value)),
         (ImageFormat::Color, false) => None,
     };
-    if first_shown >= end_shown {
+    if first_shown >= end_shown || first_shown_column >= end_shown_column {
         return;
     }
     // The first source row that reaches a shown row; the runs before it are skipped by length alone.
@@ -2092,8 +2093,12 @@ pub fn draw_resource(
             }
             let span = left.min(width - column);
             let (y_from, y_to) = (row_top.max(first_shown), row_bottom.min(end_shown));
+            // Only the part of the run inside the shown columns is drawn.
             let (x_from, x_to) = match y_to > y_from {
-                true => (scaled_x(column), scaled_x(column + span)),
+                true => (
+                    scaled_x(column).max(first_shown_column),
+                    scaled_x(column + span).min(end_shown_column),
+                ),
                 false => (0, 0),
             };
             if x_to > x_from {

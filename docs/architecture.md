@@ -243,8 +243,9 @@ rasterizers and shapes follow [rlvgl](https://github.com/softoboros/rlvgl)'s (MI
   straight into the strip's pixels, clipped to the widget and faded by its opacity. A partly
   transparent colour, such as the soft edge of a letter, is mixed with the pixel really underneath,
   so text on a coloured button has clean edges. Every call works on whole runs of a row, and
-  `visible_area` tells widgets which rows the strip holds, so glyphs, images, circles, lines and
-  arcs skip the rest.
+  `visible_area` tells widgets which rows and columns the strip holds, so glyphs, images, circles,
+  lines and arcs skip the rest; a sideways wipe paints 16-column strips, and a glyph or image works
+  out only the columns inside one.
 - **Drawing on a screen.** `ScreenRenderer` wraps any `embedded-graphics` `DrawTarget` for `Rgb565`,
   such as the display driver's `Display`. It cannot read a screen back, so it mixes a partly
   transparent colour with a set background colour (`with_background_color`, black by default).

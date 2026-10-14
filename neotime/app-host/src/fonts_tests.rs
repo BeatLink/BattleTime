@@ -294,6 +294,42 @@ fn only_the_rows_the_renderer_shows_are_worked_out() {
 }
 
 #[test]
+fn only_the_columns_the_renderer_shows_are_worked_out() {
+    let whole = drawn(FontName::Giant, '8');
+    let mut recorder = RowRecorder {
+        visible: Some(Rect {
+            x: 30,
+            y: 0,
+            width: 16,
+            height: 240,
+        }),
+        ..Default::default()
+    };
+    FontName::Giant.draw_character(&mut recorder, '8', (20, 100), white());
+    assert!(!recorder.rows.is_empty());
+    for (left, y, coverage) in &recorder.rows {
+        assert!(
+            *left >= 30 && left + coverage.len() as i32 <= 46,
+            "{left} to {}",
+            left + coverage.len() as i32
+        );
+        for (index, &ink) in coverage.iter().enumerate() {
+            assert_eq!(ink, whole.ink_at(left + index as i32, *y));
+        }
+    }
+
+    recorder.visible = Some(Rect {
+        x: 200,
+        y: 0,
+        width: 40,
+        height: 240,
+    });
+    recorder.rows.clear();
+    FontName::Giant.draw_character(&mut recorder, '8', (20, 100), white());
+    assert!(recorder.rows.is_empty());
+}
+
+#[test]
 fn a_glyph_drawn_in_pieces_matches_one_drawn_whole() {
     let whole = drawn(FontName::Giant, 'W');
     // The giant W is wider than one piece would be if pieces were small; check every pixel against the metrics box.

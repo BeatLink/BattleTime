@@ -103,14 +103,23 @@ pub fn draw_line(
     color: Color,
 ) {
     // A line height above and below the baseline holds every glyph, so a line outside that is skipped.
-    let reach = line_height(font.metrics());
-    if let Some(visible) = renderer.visible_area() {
+    let metrics = font.metrics();
+    let reach = line_height(metrics);
+    let visible = renderer.visible_area();
+    if let Some(visible) = visible {
         if baseline + reach < visible.y || baseline - 2 * reach > visible.bottom() {
             return;
         }
     }
     let mut pen = x;
     for character in line.chars() {
-        pen += font.draw_character(renderer, character, (pen, baseline), color);
+        let advance = character_advance(metrics, character);
+        // A glyph's ink stays within a line height of its advance, so one further outside is skipped.
+        let is_outside =
+            visible.is_some_and(|visible| pen + advance + reach < visible.x || pen - reach > visible.right());
+        if !is_outside {
+            font.draw_character(renderer, character, (pen, baseline), color);
+        }
+        pen += advance;
     }
 }

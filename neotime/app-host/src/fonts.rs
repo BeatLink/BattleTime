@@ -640,12 +640,16 @@ impl StyledFont {
             return;
         };
         let (first_row, end_row) = rows_to_draw(renderer, area.y, area.height);
+        let (first_column, end_column) = columns_to_draw(renderer, area.x, area.width);
+        if first_column >= end_column {
+            return;
+        }
         let mut row = [0u8; WIDEST_GLYPH_ROW];
         for row_index in first_row..end_row {
             let y = area.y + row_index;
-            let mut column = 0;
-            while column < area.width {
-                let piece = ((area.width - column) as usize).min(WIDEST_GLYPH_ROW);
+            let mut column = first_column;
+            while column < end_column {
+                let piece = ((end_column - column) as usize).min(WIDEST_GLYPH_ROW);
                 let coverage = &mut row[..piece];
                 coverage.fill(0);
                 cover_row(
@@ -735,6 +739,17 @@ pub fn rows_to_draw(renderer: &dyn Renderer, top: i32, height: i32) -> (i32, i32
             (visible.bottom() - top).clamp(0, height),
         ),
         None => (0, height),
+    }
+}
+
+/// Which of `width` columns from `left` the renderer can show, counted from `left`, end not included.
+pub fn columns_to_draw(renderer: &dyn Renderer, left: i32, width: i32) -> (i32, i32) {
+    match renderer.visible_area() {
+        Some(visible) => (
+            (visible.x - left).clamp(0, width),
+            (visible.right() - left).clamp(0, width),
+        ),
+        None => (0, width),
     }
 }
 
