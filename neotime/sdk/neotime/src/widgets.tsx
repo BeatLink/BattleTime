@@ -17,6 +17,7 @@ import type {
 } from "./index.ts";
 import { icon_symbol, icons, is_icon, type LibraryIcon } from "./icons.ts";
 import { installed_apps, launcher_groups, preview_files, type InstalledApp } from "./index.ts";
+import { LIGHT_FONT_WOFF, TEXT_FONT_WOFF } from "./preview_font.ts";
 
 // ============================================================================
 // Theme
@@ -61,9 +62,27 @@ const FONT_SIZES_IN_PIXELS: Record<Font, number> = {
   condensed: 48,
 };
 
-const FONT_FAMILY = "'JetBrains Mono', 'DejaVu Sans Mono', monospace";
+// The watch's own font of lines and arcs, made into web fonts by tools/generate_preview_font.py.
+const FONT_FAMILY = "'NeoTime', 'JetBrains Mono', monospace";
+const LIGHT_FONT_FAMILY = "'NeoTime Light', 'NeoTime', monospace";
+export const PREVIEW_FONT_STYLE_ID = "neotime-preview-fonts";
+
+/** Registers the watch's font with the page once, so the preview's text has the watch's letters. */
+export function install_preview_fonts() {
+  if (typeof document === "undefined" || document.getElementById(PREVIEW_FONT_STYLE_ID)) return;
+  const face = (family: string, woff: string) =>
+    `@font-face { font-family: '${family}'; src: url(data:font/woff;base64,${woff}) format('woff'); }`;
+  const style = document.createElement("style");
+  style.id = PREVIEW_FONT_STYLE_ID;
+  style.textContent = [face("NeoTime", TEXT_FONT_WOFF), face("NeoTime Light", LIGHT_FONT_WOFF)].join("\n");
+  document.head.appendChild(style);
+}
+
+install_preview_fonts();
 
 const DISPLAY_FONT_FAMILIES: Partial<Record<Font, string>> = {
+  huge: LIGHT_FONT_FAMILY,
+  giant: LIGHT_FONT_FAMILY,
   dot_matrix: "'DotGothic16', 'JetBrains Mono', monospace",
   condensed: "'Bebas Neue', 'Oswald', 'Arial Narrow', sans-serif",
 };
