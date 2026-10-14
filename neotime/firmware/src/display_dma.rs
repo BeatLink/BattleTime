@@ -188,6 +188,8 @@ impl Handler<interrupt::typelevel::TIMER1> for StripSentHandler {
             BUS_READING_FLASH => finish_flash_piece(),
             _ => {}
         }
+        // A caller that saw the bus busy and then slept in WFE must wake, even if this ran between its check and its sleep.
+        cortex_m::asm::sev();
     }
 }
 
