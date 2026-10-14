@@ -167,7 +167,8 @@ fn free_heap_bytes() -> usize {
 }
 
 static SPI_BUS: StaticCell<SpiBus> = StaticCell::new();
-static HOST_RESOURCES: StaticCell<HostResources<DefaultPacketPool, 1, 2>> = StaticCell::new();
+/// One connection and no L2CAP channels of our own, since every service speaks over GATT.
+static HOST_RESOURCES: StaticCell<HostResources<DefaultPacketPool, 1, 0>> = StaticCell::new();
 
 // ============================================================================
 // Start

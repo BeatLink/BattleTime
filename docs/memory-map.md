@@ -173,7 +173,10 @@ bootloader's note to the firmware (`BOOT_NOTE_ADDRESS`), which says whether the 
 was just installed, and its fourth is the bootloader updater's (`UPDATER_NOTE_ADDRESS`), which says
 the rollback after it was meant. The firmware measures 53.4 KB of static RAM:
 30.25 KB of heap (10 KB for the system and the 20.25 KB UI heap), the flash store's tables (2.4 KB), and
-the Bluetooth host with its eight 128-byte packets, controller, the display's two 1,920 B strip buffers and task state. The
+the Bluetooth host with its eight 128-byte packets, controller, the display's two 1,920 B strip buffers and task state.
+TrouBLE's host keeps one connection, no L2CAP channels of its own (every service speaks over GATT), and a send
+queue of four packets, set by `TROUBLE_HOST_L2CAP_TX_QUEUE_SIZE` in `firmware/.cargo/config.toml`; its receive queue
+stays at eight, since a full one drops the phone's writes. The
 Bluetooth task's state is 3.2 KB, TrouBLE's runner (1.6 KB) much of it; replies to the companion
 app and half-received lines wait on the heap, and the update state, status page and confirmation
 are held once in a static. The GATT server (`SERVER`) is 656 B, mostly TrouBLE's CCCD table for
