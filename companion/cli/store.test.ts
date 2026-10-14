@@ -60,7 +60,7 @@ describe('the store command', () => {
     await store(['releases', 'a/b'], { fetcher });
     await store(['fetch', 'a/b', '1', folder], { fetcher });
     stop();
-    expect(said).toContain(' 1  2026-10-01  Version 1 (release)');
+    expect(said).toContain(' 1  2026-10-01  Version 1');
     expect(existsSync(join(folder, 'dice.ntapp'))).toBe(true);
     expect(existsSync(join(folder, 'buzz-back.ntplugin'))).toBe(true);
     expect(said.at(-1)).toBe(`Fetched 2 from Version 1 into ${folder}.`);

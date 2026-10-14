@@ -49,8 +49,9 @@ export async function store(args: string[], options: StoreOptions = {}): Promise
       const releases = await listStoreReleases(repo, options);
       if (releases.length === 0) say(`No release in ${repo} carries apps or plugins.`);
       releases.forEach((release, index) => {
-        const where = release.source === 'actions' ? 'Actions build' : 'release';
-        say(`${String(index + 1).padStart(2)}  ${release.date.slice(0, 10)}  ${release.title} (${where})`);
+        // A release's title already says when it is a pre-release; only a build needs naming.
+        const where = release.source === 'actions' ? ' (Actions build)' : '';
+        say(`${String(index + 1).padStart(2)}  ${release.date.slice(0, 10)}  ${release.title}${where}`);
       });
       return;
     }
