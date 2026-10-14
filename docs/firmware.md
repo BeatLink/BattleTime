@@ -177,8 +177,8 @@ or swipe from each touch's `GestureFinder` (see [drivers.md](drivers.md#touch-pa
 - **Wake gestures.** `neotime_app_host::wake::gestures_to_watch` says what the accelerometer
   watches for from the settings and the screen: a raised or shaken wrist while it is dark, a
   lowered arm while it is lit and not held on, nothing in sleep mode. The shell hands that to the
-  motion task on every pass of its loop, which then reads ten times a second while anything is
-  watched and sends what it finds through `app_events.rs`; the shell wakes the screen or turns it
+  motion task on every pass of its loop, which then reads ten times a second while lowering is
+  watched and five times a second for raising and shaking alone, and sends what it finds through `app_events.rs`; the shell wakes the screen or turns it
   off as for any other request. `wake::DoubleTapFinder` turns two taps the face does not take,
   within 500 ms and 40 pixels, or a double tap from the panel, into putting the watch to sleep,
   since the panel reports no double taps while the screen is lit. Sleep mode, kept inside do not

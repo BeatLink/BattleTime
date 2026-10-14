@@ -30,6 +30,11 @@ document for its part instead.
   lying on a table the sensor stops flashing after the first try and starts again once it is
   picked up.
 
+- [ ] **Raise and shake at 5 Hz on the PineTime.** With the screen dark the motion task now reads
+  the accelerometer five times a second instead of ten, as only raise and shake are watched then.
+  Check that raising the wrist and a shake at the usual **Shake strength** still wake the screen
+  about as reliably as before, and recalibrate the strength if shakes are missed.
+
 - [ ] **Paging on the PineTime.** `Pages` (2f9524a) and the system and steps apps built on it
   (5957275) have run only in the harness and the emulator; the watch still runs 3a5abe9. Flash a
   build with them and check on the watch that a swipe left or right wipes to the next page and

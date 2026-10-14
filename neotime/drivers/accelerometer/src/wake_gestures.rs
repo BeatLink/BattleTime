@@ -1,4 +1,4 @@
-//! Raise to wake, lower to sleep and shake to wake, found in readings taken ten times a second.
+//! Raise to wake, lower to sleep and shake to wake, found in readings taken five or ten times a second.
 //!
 //! Ported from InfiniTime's `MotionController`: `ShouldRaiseWake`, `ShouldLowerSleep` and
 //! `CurrentShakeSpeed`. Each reading is first turned into InfiniTime's units and axes, 1024 to a g

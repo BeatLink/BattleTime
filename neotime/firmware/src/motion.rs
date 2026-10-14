@@ -57,8 +57,11 @@ static WATCHING: AtomicU32 = AtomicU32::new(0);
 static SHAKE_SPEED_WANTED: AtomicBool = AtomicBool::new(false);
 static SHAKE_SPEED: AtomicI32 = AtomicI32::new(0);
 
-/// Wake gestures are looked for in readings taken ten times a second, as InfiniTime takes them.
-const WAKE_GESTURE_PERIOD_IN_MILLISECONDS: u32 = 100;
+/// Lowering to sleep is looked for in readings taken ten times a second, as InfiniTime takes them.
+const LOWER_PERIOD_IN_MILLISECONDS: u32 = 100;
+
+/// Raising and shaking, watched only while the screen is dark, are looked for five times a second.
+const DARK_GESTURE_PERIOD_IN_MILLISECONDS: u32 = 200;
 
 /// Whether the touch task wants to know when the wrist has been still a while.
 static STILLNESS_WANTED: AtomicBool = AtomicBool::new(false);
@@ -351,9 +354,11 @@ pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus) {
         }
 
         let app_period = READING_PERIOD_IN_MILLISECONDS.load(Ordering::Relaxed);
-        let gesture_period = match unpack_watching(WATCHING.load(Ordering::Relaxed)).anything() {
-            true => WAKE_GESTURE_PERIOD_IN_MILLISECONDS,
-            false => 0,
+        let watching = unpack_watching(WATCHING.load(Ordering::Relaxed));
+        let gesture_period = match (watching.lower, watching.anything()) {
+            (true, _) => LOWER_PERIOD_IN_MILLISECONDS,
+            (false, true) => DARK_GESTURE_PERIOD_IN_MILLISECONDS,
+            (false, false) => 0,
         };
         let is_stillness_wanted = STILLNESS_WANTED.load(Ordering::Relaxed);
         let stillness_period = match is_stillness_wanted {
