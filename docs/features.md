@@ -74,7 +74,7 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   and the theme. They are kept through a restart, except Bluetooth, and apps follow them at once.
 - **Waking the screen by touch.** A tap, a double tap, or only the button, chosen in settings. With
   only the button, the touch panel sleeps while the screen is off. Not tried on the watch yet.
-- **Bluetooth off,** from settings or an app, until it is turned on again or the watch restarts, so
+- **Bluetooth off,** from settings or quick settings, until it is turned on again or the watch restarts, so
   a watch can never be left out of reach. Not tried on the watch yet.
 - **Updates off,** so no phone can install firmware until they are turned on again in settings.
 - **Chimes.** A buzz every hour, or every half hour, chosen in settings; a double buzz on the hour.
@@ -168,9 +168,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   remote app shows them full size, 2 by 2 or 3 by 3, and a tap buzzes and tells the phone to run
   that button's action. See [apps.md](apps.md) and
   [companion-protocol.md](companion-protocol.md#remote).
-- **32 apps** ported from InfiniTime and wasp-os, merged where both firmwares had the same app:
+- **31 apps** ported from InfiniTime and wasp-os, merged where both firmwares had the same app:
   stopwatch, timer, alarm, pomodoro, calculator, dice, flashlight, phone finder, system, heart rate, steps,
-  sports, music, weather, navigation, metronome, motion, level, beacon, Bluetooth off, 2048, paddle,
+  sports, music, weather, navigation, metronome, motion, level, beacon, 2048, paddle,
   puzzle 15, snake, four in a row, Game of Life, paint, haiku, Morse, settings, hello and a template. Each is
   described in [apps.md](apps.md).
 - **18 watch faces** ported from InfiniTime, wasp-os and PinetimeLite, described in
