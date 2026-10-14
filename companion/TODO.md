@@ -123,9 +123,11 @@ Android 13 and later.
 - **Connecting and updating from the Tauri app.** The Rust Bluetooth layer has scanned, connected
   and read GATT on the watch (the probe example), and the Tauri window scans through it; connecting,
   the UART lines and a firmware update from the window are untried.
-- **Removing Electron.** `.#companion-tauri` packages the Tauri app; once connecting and a firmware
-  update from its window have worked on a watch, it replaces `.#companion`, and Electron, `node/`
-  and their npm dependencies go.
+- **Removing Electron.** `.#companion-tauri` packages the Tauri app, and its window has scanned,
+  connected and installed a plugin's watch app on the real watch. Once a firmware update from its
+  window has worked too, it replaces `.#companion`, and Electron, `node/` and their npm dependencies go.
+- **The watch drops an idle link.** Both the Tauri window and the `plugin_host` example lost the
+  connection within about half a minute of connecting with nothing to send, and neither reconnects.
 - **The command line tool in Rust**, on the core crate, once the protocols move there.
 - **Protocols in the core crate**: the NeoTime service, packages, image header, launcher file and
   Gadgetbridge lines are in `core/src/protocol`, and BLEFS in `core/src/sync/files.rs`. Installing a
@@ -141,9 +143,6 @@ Android 13 and later.
 - **A release build of the Tauri Android app** needs a signing key and the other three targets.
 - **Plugins on the Expo phone app.** [Plugins](../docs/plugins.md) run in the Rust core, so only the
   Tauri apps have them; the Expo app gets none until the Tauri one replaces it.
-- **Plugins on a real watch from the desktop app.** Buzz back has answered presses on a real watch
-  through `cargo run -p neotime-companion-core --example plugin_host -- run <folder> <address>`, but
-  not yet with the desktop app's own window connected.
 - **Moving features into plugins.** Weather, notes, remote, alarms, steps, music and notification
   forwarding are still built into the app.
 
