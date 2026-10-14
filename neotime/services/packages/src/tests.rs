@@ -254,7 +254,7 @@ fn turning_an_app_on_and_off_gives_its_need() {
     assert!(installed.need_bytes > 0);
     assert!(!installed.lists_apps);
 
-    let listed = neotime_runtime::memory_need::listed_app_bytes("timer", "Timer");
+    let listed = neotime_runtime::memory_need::indexed_app_bytes("timer");
     assert_eq!(
         packages.change_enabled("timer", false),
         Ok(installed.need_bytes + listed)

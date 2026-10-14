@@ -22,6 +22,7 @@ fn app(id: &str) -> InstalledApp {
         image_bytes: 1_000,
         need_bytes: 8_000,
         lists_apps: false,
+        reads_app_list: false,
         launcher_share_bytes: 100,
     }
 }

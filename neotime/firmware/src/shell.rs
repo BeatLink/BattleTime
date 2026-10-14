@@ -553,14 +553,11 @@ impl Shell {
         }
 
         self.showing = showing;
-        if showing == Showing::Launcher {
-            self.launcher_icons = Some(LauncherIcons::read(self.files, &self.system.installed));
-        }
         let installed = &self.system.installed;
         let (id, built_in) = match showing {
             Showing::Face => (installed.face.clone(), None),
             Showing::Launcher => (installed.has_launcher.then(|| apps::LAUNCHER_ID.into()), None),
-            Showing::App(place) => (installed.listed(place).map(|entry| entry.id.clone()), None),
+            Showing::App(place) => (installed.listed_id(place).map(alloc::string::String::from), None),
             Showing::Notifications => (Some("notifications".into()), Some(NOTIFICATIONS_IMAGE)),
             Showing::QuickSettings => (Some("quick-settings".into()), Some(QUICK_SETTINGS_IMAGE)),
         };
@@ -580,6 +577,10 @@ impl Shell {
             (None, Some(bytes)) => bytes,
             (None, None) => return,
         };
+        apps::keep_list_for(&mut self.system.installed, self.files, bytes);
+        if showing == Showing::Launcher {
+            self.launcher_icons = Some(LauncherIcons::read(self.files, &self.system.installed));
+        }
         if let Some(page) = crate::crash_screen::refusal_for(bytes, showing == Showing::Face) {
             if let Some(image) = image {
                 image.release();
@@ -935,9 +936,7 @@ impl Shell {
             .unwrap_or(quick_apps::DEFAULT_RING);
         let installed = &self.system.installed;
         let current = match self.showing {
-            Showing::App(place) if self.in_quick_ring => {
-                installed.listed(place).map(|entry| entry.id.as_str())
-            }
+            Showing::App(place) if self.in_quick_ring => installed.listed_id(place),
             _ => None,
         };
         let place = match quick_apps::step(ring, current, step, |id| installed.place_of(id).is_some()) {

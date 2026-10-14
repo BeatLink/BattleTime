@@ -4,7 +4,7 @@
 //! The rules work on the list `Packages::list` gives, so the package manager, the shell and the
 //! test harness all check the same way. docs/memory-map.md explains the numbers.
 
-use neotime_runtime::memory_need::{listed_app_bytes, APP_HEAP_BUDGET_BYTES};
+use neotime_runtime::memory_need::{indexed_app_bytes, listed_app_bytes, APP_HEAP_BUDGET_BYTES};
 use neotime_runtime::AppKind;
 
 use crate::{InstalledApp, LAUNCHER_ID};
@@ -66,19 +66,23 @@ impl Refusal {
 // The heap an app needs among the others
 // ============================================================================
 
-/// What an app needs while open beside the list of installed apps the shell keeps, and for a
-/// launcher the names and icons of every app turned on, plus the largest image it reads them from.
+/// What an app needs while open beside the shell's index of app ids; an app that reads the app list
+/// also has the shell's full list beside it, and a launcher the names and icons of every app turned
+/// on, plus the largest image it reads them from.
 pub fn room_needed(app: &InstalledApp, apps: &[InstalledApp]) -> u32 {
     room_needed_with(app, apps, None)
 }
 
 /// Like `room_needed`, with the app `turned_on` counted as on whatever its marker says.
 fn room_needed_with(app: &InstalledApp, apps: &[InstalledApp], turned_on: Option<&str>) -> u32 {
-    let shell_list: u32 = apps
-        .iter()
-        .map(|other| listed_app_bytes(&other.id, &other.name))
-        .sum();
-    let mut need = app.need_bytes + shell_list;
+    let shell_index: u32 = apps.iter().map(|other| indexed_app_bytes(&other.id)).sum();
+    let mut need = app.need_bytes + shell_index;
+    if app.reads_app_list {
+        need += apps
+            .iter()
+            .map(|other| listed_app_bytes(&other.id, &other.name))
+            .sum::<u32>();
+    }
     if app.lists_apps {
         let listed = apps.iter().filter(|other| is_listed(other, turned_on));
         let shares: u32 = listed.clone().map(|other| other.launcher_share_bytes).sum();

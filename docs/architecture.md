@@ -574,7 +574,8 @@ The folders are the whole record: there is no list of installed apps to fall out
   app may have is never read: `list` gives it by its id, turned off, and `read_image` refuses it.
   `install` and `change_enabled` turn an app on or off only once `checks` allows it.
 - **`checks`** decides whether an app may be turned on or off, from the list alone. Turning one on
-  is refused when its need, with the shell's list of every installed app, is over
+  is refused when its need, with the shell's index of app ids (and its full list of apps for an app
+  that reads it), is over
   `APP_HEAP_BUDGET_BYTES`, or when it would push a launcher (an app with an `AppList` or reading
   `installed_apps`) over, since a launcher holds each listed app's name and icon and reads their
   images one at a time. Turning one off is refused for the launcher and the last face on. Other

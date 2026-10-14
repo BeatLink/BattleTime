@@ -71,6 +71,8 @@ pub struct InstalledApp {
     pub need_bytes: u32,
     /// Whether it shows the launcher's list of apps, which grows with every app turned on.
     pub lists_apps: bool,
+    /// Whether it reads the installed apps or packages, so the shell keeps its full list while it is open.
+    pub reads_app_list: bool,
     /// What it adds to the launcher while the launcher is open.
     pub launcher_share_bytes: u32,
 }
@@ -190,6 +192,7 @@ fn too_large_to_read(id: &str, length: u32) -> InstalledApp {
         image_bytes: length,
         need_bytes: length,
         lists_apps: false,
+        reads_app_list: false,
         launcher_share_bytes: 0,
     }
 }
@@ -220,7 +223,7 @@ impl<'files, Files: FileAccess> Packages<'files, Files> {
                 }
             })
             .await?;
-        let mut apps = Vec::new();
+        let mut apps = Vec::with_capacity(ids.len());
         for id in ids {
             if let Some(app) = self.describe(&id).await {
                 apps.push(app);
@@ -276,6 +279,7 @@ impl<'files, Files: FileAccess> Packages<'files, Files> {
             image_bytes: bytes.len() as u32,
             need_bytes: need.total_bytes,
             lists_apps: need.lists_apps,
+            reads_app_list: need.reads_app_list,
             launcher_share_bytes: launcher_share_bytes(&image),
         })
     }

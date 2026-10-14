@@ -179,6 +179,42 @@ fn an_app_list_or_reading_the_installed_apps_marks_a_launcher() {
 }
 
 #[test]
+fn reading_packages_or_launcher_groups_reads_the_app_list_without_marking_a_launcher() {
+    for value in [
+        SystemValue::PackageCount,
+        SystemValue::PackageName,
+        SystemValue::LauncherGroupCount,
+    ] {
+        let mut reading = writer();
+        let mut code = CodeWriter::new();
+        code.emit(Instruction::ReadSystem(value));
+        reading.expression(code.finish().unwrap());
+        reading.widget(WidgetKind::Column, 0, &[]);
+        let bytes = reading.build();
+        let image = AppImage::parse(&bytes).unwrap();
+
+        let need = estimate_memory_need(&image);
+
+        assert!(need.reads_app_list, "{value:?}");
+        assert!(reads_app_list(&image), "{value:?}");
+        assert!(!need.lists_apps, "{value:?}");
+    }
+}
+
+#[test]
+fn an_app_list_on_any_screen_reads_the_app_list_and_other_apps_do_not() {
+    let mut with_widget = writer();
+    with_widget.widget(WidgetKind::Column, 0, &[]);
+    with_widget.widget(WidgetKind::AppList, 0, &[]);
+    assert!(need_of(&with_widget).reads_app_list);
+
+    let mut plain = writer();
+    plain.widget(WidgetKind::Column, 0, &[]);
+    assert!(!need_of(&plain).reads_app_list);
+    assert_eq!(indexed_app_bytes("timer"), 6);
+}
+
+#[test]
 fn code_in_handlers_and_functions_is_read_too() {
     let mut code = CodeWriter::new();
     code.emit(Instruction::ReadSystem(SystemValue::InstalledAppCount))

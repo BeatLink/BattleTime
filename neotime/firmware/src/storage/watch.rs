@@ -622,33 +622,30 @@ impl Files {
     }
 
     /// Runs one line from the packages characteristic, returning the reply line and what changed.
-    async fn run_packages_command(&self, line: &[u8]) -> (alloc::string::String, Change) {
+    /// Runs a packages command, its reply going to the Bluetooth task as it is written.
+    async fn run_packages_command(&self, line: &[u8]) -> Change {
         let mut store = self.store.lock().await;
         let Some(store) = store.as_mut() else {
-            return refuse_command(line, "the flash store is not mounted");
+            let (reply, change) = refuse_command(line, "the flash store is not mounted");
+            packages::REPLIES.send(reply).await;
+            return change;
         };
         self.run_packages_command_on(store, line).await
     }
 
     #[cfg(with_shell)]
-    async fn run_packages_command_on(
-        &self,
-        store: &mut WatchStore,
-        line: &[u8],
-    ) -> (alloc::string::String, Change) {
+    async fn run_packages_command_on(&self, store: &mut WatchStore, line: &[u8]) -> Change {
         let library_version =
             crate::apps::shared_library().and_then(neotime_packages::library::library_version);
-        neotime_packages::commands::handle_command(line, store, library_version).await
+        neotime_packages::commands::handle_command(line, store, library_version, &mut ToBluetooth).await
     }
 
     /// The recovery firmware has no apps, so it leaves the package manager out.
     #[cfg(not(with_shell))]
-    async fn run_packages_command_on(
-        &self,
-        _store: &mut WatchStore,
-        line: &[u8],
-    ) -> (alloc::string::String, Change) {
-        refuse_command(line, "the recovery firmware does not install apps")
+    async fn run_packages_command_on(&self, _store: &mut WatchStore, line: &[u8]) -> Change {
+        let (reply, change) = refuse_command(line, "the recovery firmware does not install apps");
+        packages::REPLIES.send(reply).await;
+        change
     }
 }
 
@@ -703,6 +700,17 @@ fn mount_store(
 // The storage task
 // ============================================================================
 
+/// Hands each piece of a packages reply to the Bluetooth task, which notifies it to the phone.
+#[cfg(with_shell)]
+struct ToBluetooth;
+
+#[cfg(with_shell)]
+impl neotime_packages::commands::ReplySink for ToBluetooth {
+    async fn send(&mut self, piece: alloc::string::String) {
+        packages::REPLIES.send(piece).await;
+    }
+}
+
 /// Runs every store call other tasks ask for, and the packages characteristic's commands, one at a time.
 ///
 /// A packages command starts near the top of the stack here, where the verifier inside it has room. Each call's
@@ -715,8 +723,7 @@ pub async fn run_storage(files: &'static Files) {
             Either::First(request) => alloc::boxed::Box::pin(files.carry_out(&mut transfer, request)).await,
             Either::Second(line) => {
                 foreground::wait_for_a_pause().await;
-                let (reply, change) = alloc::boxed::Box::pin(files.run_packages_command(&line)).await;
-                packages::REPLIES.send(reply).await;
+                let change = alloc::boxed::Box::pin(files.run_packages_command(&line)).await;
                 if change != Change::None {
                     packages::CHANGED.signal(change);
                 }

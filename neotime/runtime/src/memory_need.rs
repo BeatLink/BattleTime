@@ -41,7 +41,7 @@ pub const SYSTEM_BYTES: u32 = 4_096;
 /// The most an open app may need, leaving the system its share.
 pub const APP_HEAP_BUDGET_BYTES: u32 = HEAP_BYTES - SYSTEM_BYTES;
 
-/// What one installed app costs the shell's list of apps, beside its id and name.
+/// What one installed app costs the shell's full list of apps, beside its id and name.
 pub const LISTED_APP_BYTES: u32 = 48;
 
 /// The screen's height, which bounds the rows of a list that are built at once.
@@ -69,6 +69,8 @@ pub struct MemoryNeed {
     pub total_bytes: u32,
     /// Whether it shows the launcher's list of apps, which costs more for each app turned on.
     pub lists_apps: bool,
+    /// Whether it reads the installed apps, packages or launcher groups, so the shell keeps its full list while it is open.
+    pub reads_app_list: bool,
 }
 
 /// Works out an app's heap need from its image.
@@ -99,7 +101,49 @@ pub fn estimate_memory_need(image: &AppImage) -> MemoryNeed {
         text_bytes,
         total_bytes: image_bytes + working_bytes + widget_bytes + text_bytes,
         lists_apps: largest.has_app_list || reads & bit_of(SystemValue::InstalledAppCount) != 0,
+        reads_app_list: reads_app_list_from(image, reads),
     }
+}
+
+/// The system values only the shell's full list of apps answers.
+const APP_LIST_VALUES: [SystemValue; 18] = [
+    SystemValue::InstalledAppCount,
+    SystemValue::InstalledAppName,
+    SystemValue::InstalledAppId,
+    SystemValue::InstalledAppIcon,
+    SystemValue::PackageCount,
+    SystemValue::PackageName,
+    SystemValue::PackageId,
+    SystemValue::PackageEnabled,
+    SystemValue::PackageIsFace,
+    SystemValue::PackageMemory,
+    SystemValue::PackageRefusal,
+    SystemValue::LauncherStyle,
+    SystemValue::LauncherView,
+    SystemValue::LauncherGroupCount,
+    SystemValue::LauncherGroupName,
+    SystemValue::LauncherGroupIcon,
+    SystemValue::LauncherGroupFirst,
+    SystemValue::LauncherGroupSize,
+];
+
+/// Whether the app reads the installed apps, packages or launcher groups, or shows an `AppList`.
+///
+/// The shell reads its full list of apps only while such an app is open.
+pub fn reads_app_list(image: &AppImage) -> bool {
+    reads_app_list_from(image, system_values_read(image))
+}
+
+fn reads_app_list_from(image: &AppImage, reads: u128) -> bool {
+    let list_values = APP_LIST_VALUES
+        .iter()
+        .fold(0, |mask, &value| mask | bit_of(value));
+    let tree = WidgetTree::new(*image);
+    reads & list_values != 0
+        || (0..tree.widget_count()).any(|index| {
+            tree.widget(index)
+                .is_some_and(|widget| widget.kind == WidgetKind::AppList)
+        })
 }
 
 /// What an app adds to the launcher's list while the launcher is open: its icon and its name.
@@ -114,9 +158,14 @@ pub fn launcher_share_bytes(image: &AppImage) -> u32 {
     icon + 8 + name + 1
 }
 
-/// What an app costs the shell's list of installed apps, which every open app shares the heap with.
+/// What an app costs the shell's full list of installed apps, kept only while an app that reads it is open.
 pub fn listed_app_bytes(id: &str, name: &str) -> u32 {
     LISTED_APP_BYTES + rounded(id.len() as u32) + rounded(name.len() as u32)
+}
+
+/// What an app costs the shell's index of app ids, which every open app shares the heap with.
+pub fn indexed_app_bytes(id: &str) -> u32 {
+    id.len() as u32 + 1
 }
 
 /// The most bytes the app's saved state can take: a header, then each persistent variable with its key.

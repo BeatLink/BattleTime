@@ -250,8 +250,8 @@ it opens one. The parts, in bytes:
 | Text | each fixed text's length, 16 for text worked out at run time, 2,560 for a TextFile | |
 
 An app's need must fit `APP_HEAP_BUDGET_BYTES`, 27,648 B: the 31,744 B heap less 4 KB for the
-system while an app is open. At rest the system holds the shell's list of apps; the rest of its
-share is for kept notifications (up to about 1 KB), a small file gathered while it uploads (up to
+system while an app is open. At rest the system holds the shell's index of app ids, about 12 B an
+app; the rest of its share is for kept notifications (up to about 1 KB), a small file gathered while it uploads (up to
 1 KB), and lines to and from the companion app.
 
 Measured in the PineTime emulator on 2026-10-12 with `tools/measure_heap.py`, which installs the
@@ -277,9 +277,15 @@ python3 -I tools/measure_heap.py firmware/target/thumbv7em-none-eabihf/release/n
 Those were measured with littlefs, whose buffers took about 1 KB of the heap, and in use counts
 them. Measured again with the flash store on 2026-10-13, with a typical install: the `digital`
 face 11,864 B in use, the launcher 8,156 B and the alarm 12,136 B; with the alarm's editor open the highest byte touched
-was 13,188 B of the 31,744 B heap. The shell keeps a list of every installed app, turned off
-or not, for the Software app: 62 B an app measured with 38 installed, against the
-`LISTED_APP_BYTES` (48 B) plus id and name every app's need counts for each. With every app in
+was 13,188 B of the 31,744 B heap. The shell keeps a full list of every installed app, turned
+off or not, only while an app that reads it is open, such as the launcher or the Software app
+(`reads_app_list`): 62 B an app measured with 38 installed, against the `LISTED_APP_BYTES` (48 B)
+plus id and name such an app's need counts for each. It reads the list once the old app has
+closed, and drops it when the next app does not read it, keeping only the face, the launcher, its
+look and the listed apps' ids, which every app's need counts as `indexed_app_bytes`. With all 52
+apps and faces installed and the `analog` face on, measured in the emulator on 2026-10-14, the face
+holds 10,376 B, the launcher 14,780 B and the alarm 11,784 B, against 14,192 B, 14,304 B and
+15,600 B when every app kept the full list. With every app in
 the repository and the `digital` face installed, the face held 14,356 B and the launcher, listing
 every app, 11,832 B; the harness works the launcher's need out at 17,169 B with all 55 apps and
 faces on, so it fits with room to spare. A launcher's need is its own, plus the names and icons of

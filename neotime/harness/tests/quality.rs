@@ -246,6 +246,7 @@ fn with_every_app_and_face_turned_on_each_still_fits_and_the_launcher_opens() {
                 image_bytes: bytes.len() as u32,
                 need_bytes: need.total_bytes,
                 lists_apps: need.lists_apps,
+                reads_app_list: need.reads_app_list,
                 launcher_share_bytes: launcher_share_bytes(&image),
             }
         })

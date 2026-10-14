@@ -27,17 +27,51 @@ pub enum Change {
     Apps,
 }
 
-/// Runs one command line and returns the reply line, newline included, and what changed.
+/// Where a command's reply line goes, a piece at a time; the line ends with its newline.
+#[allow(async_fn_in_trait)]
+pub trait ReplySink {
+    async fn send(&mut self, piece: String);
+}
+
+/// Runs one command line, sends its reply line, newline included, to `reply`, and says what changed.
 ///
 /// `library_version` is the version of the library inside the running firmware, or None when it carries none.
 pub async fn handle_command<Files: FileAccess>(
     line: &[u8],
     files: &mut Files,
     library_version: Option<u16>,
-) -> (String, Change) {
-    let Ok((command, _)) = serde_json_core::from_slice::<Command>(line) else {
-        return (error_reply("?", "could not read that command"), Change::None);
+    reply: &mut impl ReplySink,
+) -> Change {
+    let (answer, change) = answer_command(line, files, library_version, reply).await;
+    if let Some(answer) = answer {
+        reply.send(answer).await;
+    }
+    change
+}
+
+/// The reply line, or none when it was already sent in pieces, and what changed.
+async fn answer_command<Files: FileAccess>(
+    line: &[u8],
+    files: &mut Files,
+    library_version: Option<u16>,
+    reply: &mut impl ReplySink,
+) -> (Option<String>, Change) {
+    let (answer, change) = match serde_json_core::from_slice::<Command>(line) {
+        Err(_) => (error_reply("?", "could not read that command"), Change::None),
+        Ok((command, _)) if command.c == "apps" => {
+            send_apps_reply(&mut Packages::new(files), reply).await;
+            return (None, Change::None);
+        }
+        Ok((command, _)) => run_command(command, files, library_version).await,
     };
+    (Some(answer), change)
+}
+
+async fn run_command<Files: FileAccess>(
+    command: Command<'_>,
+    files: &mut Files,
+    library_version: Option<u16>,
+) -> (String, Change) {
     let name = command.c;
     if name == "install_library" {
         return (
@@ -47,7 +81,6 @@ pub async fn handle_command<Files: FileAccess>(
     }
     let mut packages = Packages::new(files);
     let outcome = match (name, command.id) {
-        ("apps", _) => return (apps_reply(&mut packages).await, Change::None),
         ("install", Some(id)) => {
             return match packages.install(id, library_version).await {
                 Ok(app) => {
@@ -133,17 +166,20 @@ fn error_reply(name: &str, message: &str) -> String {
 
 /// `{"c":"apps","room":budget,"a":[[id,name,kind,enabled,bytes,need,group],...]}`, kind being "app" or "face",
 /// need the heap the app needs while open among the others and group the launcher group it declares.
-async fn apps_reply<Files: FileAccess>(packages: &mut Packages<'_, Files>) -> String {
+/// Sends the list a piece per app, so the reply never needs one block of heap that grows with the apps installed.
+async fn send_apps_reply<Files: FileAccess>(packages: &mut Packages<'_, Files>, reply: &mut impl ReplySink) {
     let apps = match packages.list().await {
         Ok(apps) => apps,
-        Err(error) => return error_reply("apps", error.describe()),
+        Err(error) => return reply.send(error_reply("apps", error.describe())).await,
     };
-    let mut reply = String::new();
-    let _ = write!(reply, "{{\"c\":\"apps\",\"room\":{APP_HEAP_BUDGET_BYTES},\"a\":[");
+    let mut start = String::new();
+    let _ = write!(start, "{{\"c\":\"apps\",\"room\":{APP_HEAP_BUDGET_BYTES},\"a\":[");
+    reply.send(start).await;
     for (index, app) in apps.iter().enumerate() {
         let kind = if app.kind == AppKind::Face { "face" } else { "app" };
+        let mut piece = String::new();
         let _ = write!(
-            reply,
+            piece,
             "{}[\"{}\",\"{}\",\"{}\",{},{},{},\"{}\"]",
             if index == 0 { "" } else { "," },
             escaped(&app.id),
@@ -154,9 +190,9 @@ async fn apps_reply<Files: FileAccess>(packages: &mut Packages<'_, Files>) -> St
             crate::checks::room_needed(app, &apps),
             escaped(&app.group)
         );
+        reply.send(piece).await;
     }
-    reply.push_str("]}\n");
-    reply
+    reply.send(String::from("]}\n")).await;
 }
 
 /// JSON string contents, ASCII only, as the protocol asks.
@@ -217,8 +253,30 @@ mod tests {
         );
     }
 
+    /// Keeps every piece sent, to check how a reply was split as well as what it says.
+    #[derive(Default)]
+    struct Pieces(std::vec::Vec<String>);
+
+    impl ReplySink for Pieces {
+        async fn send(&mut self, piece: String) {
+            self.0.push(piece);
+        }
+    }
+
+    fn run_with(line: &str, files: &mut TestStore, library_version: Option<u16>) -> (String, Change, Pieces) {
+        let mut pieces = Pieces::default();
+        let change = block_on(handle_command(
+            line.as_bytes(),
+            files,
+            library_version,
+            &mut pieces,
+        ));
+        (pieces.0.concat(), change, pieces)
+    }
+
     fn run(line: &str, files: &mut TestStore) -> (String, Change) {
-        block_on(handle_command(line.as_bytes(), files, None))
+        let (reply, change, _) = run_with(line, files, None);
+        (reply, change)
     }
 
     #[test]
@@ -273,7 +331,7 @@ mod tests {
         let mut files = file_system();
         put_app(&mut files, "timer", "Timer", AppKind::App);
         let need = block_on(crate::Packages::new(&mut files).list()).unwrap()[0].need_bytes;
-        let need = need + neotime_runtime::memory_need::listed_app_bytes("timer", "Timer");
+        let need = need + neotime_runtime::memory_need::indexed_app_bytes("timer");
         assert_eq!(
             run(r#"{"c":"install","id":"timer"}"#, &mut files),
             (
@@ -356,13 +414,35 @@ mod tests {
             &ImageWriter::new("timer", "Timer", AppKind::App, 3).build(),
         );
 
-        let (reply, _) = block_on(handle_command(
-            br#"{"c":"install","id":"timer"}"#,
-            &mut files,
-            Some(2),
-        ));
+        let (reply, _, _) = run_with(r#"{"c":"install","id":"timer"}"#, &mut files, Some(2));
 
         assert!(reply.contains("newer shared library"));
+    }
+
+    #[test]
+    fn the_app_list_goes_out_a_piece_per_app() {
+        let mut files = file_system();
+        put_app(&mut files, "timer", "Timer", AppKind::App);
+        put_app(&mut files, "dice", "Dice", AppKind::App);
+        put_app(&mut files, "analog", "Analog", AppKind::Face);
+
+        let (reply, _, pieces) = run_with(r#"{"c":"apps"}"#, &mut files, None);
+
+        assert_eq!(pieces.0.len(), 5, "{:?}", pieces.0);
+        assert!(pieces.0[1].starts_with(r#"["analog","#), "{:?}", pieces.0);
+        assert!(pieces.0[2].starts_with(r#",["dice","#), "{:?}", pieces.0);
+        assert_eq!(pieces.0[4], "]}\n");
+        assert_eq!(reply.matches('\n').count(), 1);
+    }
+
+    #[test]
+    fn every_other_reply_is_one_piece() {
+        let mut files = file_system();
+
+        let (_, _, pieces) = run_with(r#"{"c":"remove","id":"nothing"}"#, &mut files, None);
+
+        assert_eq!(pieces.0.len(), 1);
+        assert!(pieces.0[0].ends_with('\n'));
     }
 
     #[test]

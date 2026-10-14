@@ -305,7 +305,7 @@ recovery firmware has no apps, so it refuses every command with an error.
 
 | Command | Answer |
 |---|---|
-| `{"c":"apps"}` | `{"c":"apps","room":budget,"a":[[id,name,kind,enabled,bytes,need,group],...]}`, `kind` being `app` or `face`, `enabled` 0 or 1, `need` the heap in bytes the app needs while open and `group` the launcher group its image declares, empty when none, in id order; `room` is the most an app may need. Each image's CRC and id are checked, but its code only at install. An image larger than `room` is never read: it is listed by its id, as an app, turned off, with `need` its length |
+| `{"c":"apps"}` | `{"c":"apps","room":budget,"a":[[id,name,kind,enabled,bytes,need,group],...]}`, `kind` being `app` or `face`, `enabled` 0 or 1, `need` the heap in bytes the app needs while open and `group` the launcher group its image declares, empty when none, in id order; `room` is the most an app may need. Each image's CRC and id are checked, but its code only at install. An image larger than `room` is never read: it is listed by its id, as an app, turned off, with `need` its length. The watch sends the line a piece per app, so a long list never needs one large block of its heap |
 | `{"c":"install","id":id}` | `{"c":"install","ok":1,"need":need,"room":budget}` once `/apps/<id>/app.ntapp` passes the app checks, holds that id, is not the shared library, was built against no newer shared library than the one inside the running firmware, and fits the heap, as `enable` checks; the app then appears in `installed_apps`. An app that needs a newer library or does not fit stays installed but turned off, and the answer is a refusal |
 | `{"c":"remove","id":id}` | `{"c":"remove","ok":1}`; deletes `/apps/<id>` with its saved state |
 | `{"c":"enable","id":id,"on":bool}` | `{"c":"enable","ok":1,"need":need,"room":budget}`; a disabled app stays installed but leaves the launcher. `on` is true when left out |
@@ -319,7 +319,7 @@ when memory is the reason. The numbers are the same as the `refusal` apps read i
 
 | `why` | `err` | Meaning |
 |---|---|---|
-| 1 | `it needs more memory than an app can have` | Its need, with the shell's list of apps, is over `room` |
+| 1 | `it needs more memory than an app can have` | Its need, with the shell's index of app ids (and its full list for an app that reads it), is over `room` |
 | 2 | `the launcher would run out of memory` | The launcher's need, which grows with each app it lists, would go over `room`; `need` is the launcher's |
 | 3 | `the launcher stays on` | The launcher is how every other app is reached |
 | 4 | `the last watch face stays on` | Another face must be on first |

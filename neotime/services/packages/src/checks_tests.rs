@@ -2,7 +2,7 @@ extern crate std;
 
 use alloc::{string::String, vec, vec::Vec};
 
-use neotime_runtime::memory_need::{listed_app_bytes, APP_HEAP_BUDGET_BYTES};
+use neotime_runtime::memory_need::{indexed_app_bytes, listed_app_bytes, APP_HEAP_BUDGET_BYTES};
 use neotime_runtime::AppKind;
 
 use super::*;
@@ -23,6 +23,7 @@ fn app(id: &str, kind: AppKind, enabled: bool, need_bytes: u32) -> InstalledApp 
         image_bytes: 1_000,
         need_bytes,
         lists_apps: id == LAUNCHER_ID,
+        reads_app_list: id == LAUNCHER_ID,
         launcher_share_bytes: 100,
     }
 }
@@ -37,8 +38,14 @@ fn watch(extra: Vec<InstalledApp>) -> Vec<InstalledApp> {
     apps
 }
 
+/// The shell's full list of apps, kept only while an app that reads it is open.
 fn shell_list(apps: &[InstalledApp]) -> u32 {
     apps.iter().map(|app| listed_app_bytes(&app.id, &app.name)).sum()
+}
+
+/// The shell's index of app ids, which every open app has beside it.
+fn shell_index(apps: &[InstalledApp]) -> u32 {
+    apps.iter().map(|app| indexed_app_bytes(&app.id)).sum()
 }
 
 // ============================================================================
@@ -46,14 +53,26 @@ fn shell_list(apps: &[InstalledApp]) -> u32 {
 // ============================================================================
 
 #[test]
-fn every_app_pays_for_the_shell_list_and_the_launcher_for_each_listed_app() {
+fn every_app_pays_for_the_shell_index_and_the_launcher_for_the_full_list_and_each_listed_app() {
     let apps = watch(vec![app("dice", AppKind::App, false, 9_000)]);
 
-    assert_eq!(room_needed(&apps[2], &apps), 13_000 + shell_list(&apps));
+    assert_eq!(room_needed(&apps[2], &apps), 13_000 + shell_index(&apps));
     // The timer is listed, the face, the launcher itself and the turned-off dice are not.
     assert_eq!(
         room_needed(&apps[1], &apps),
-        8_000 + shell_list(&apps) + 100 + 1_000
+        8_000 + shell_index(&apps) + shell_list(&apps) + 100 + 1_000
+    );
+}
+
+#[test]
+fn an_app_that_reads_the_app_list_pays_for_the_full_list_but_not_the_launcher_share() {
+    let mut software = app("software", AppKind::App, true, 10_000);
+    software.reads_app_list = true;
+    let apps = watch(vec![software]);
+
+    assert_eq!(
+        room_needed(&apps[3], &apps),
+        10_000 + shell_index(&apps) + shell_list(&apps)
     );
 }
 
@@ -65,7 +84,7 @@ fn every_app_pays_for_the_shell_list_and_the_launcher_for_each_listed_app() {
 fn an_app_that_fits_is_turned_on_and_its_need_given() {
     let apps = watch(vec![app("dice", AppKind::App, false, 9_000)]);
 
-    assert_eq!(check_change(&apps, "dice", true), Ok(9_000 + shell_list(&apps)));
+    assert_eq!(check_change(&apps, "dice", true), Ok(9_000 + shell_index(&apps)));
 }
 
 #[test]
@@ -77,7 +96,7 @@ fn an_app_needing_more_than_the_budget_is_refused() {
     assert_eq!(
         refusal,
         Refusal::TooLarge {
-            need_bytes: APP_HEAP_BUDGET_BYTES + shell_list(&apps)
+            need_bytes: APP_HEAP_BUDGET_BYTES + shell_index(&apps)
         }
     );
     assert_eq!(refusal.code(), 1);
@@ -120,7 +139,7 @@ fn turning_an_app_off_is_allowed() {
     let apps = watch(vec![]);
     assert_eq!(
         check_change(&apps, "timer", false),
-        Ok(13_000 + shell_list(&apps))
+        Ok(13_000 + shell_index(&apps))
     );
 }
 
@@ -139,7 +158,7 @@ fn the_launcher_and_the_last_face_stay_on() {
     let with_second_face = watch(vec![app("analog", AppKind::Face, true, 11_000)]);
     assert_eq!(
         check_change(&with_second_face, "digital", false),
-        Ok(12_000 + shell_list(&with_second_face))
+        Ok(12_000 + shell_index(&with_second_face))
     );
 }
 
@@ -148,7 +167,7 @@ fn an_app_already_off_can_be_turned_off_again() {
     let apps = watch(vec![app("analog", AppKind::Face, false, 11_000)]);
     assert_eq!(
         check_change(&apps, "analog", false),
-        Ok(11_000 + shell_list(&apps))
+        Ok(11_000 + shell_index(&apps))
     );
 }
 
