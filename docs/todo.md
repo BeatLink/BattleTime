@@ -657,8 +657,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   distance as the phone writes it.
 - [ ] **Night icons in the weather app.** It shows the sun at night where InfiniTime shows the
   moon. One shared night-aware lookup would also replace the copies in the faces.
-- [ ] **A 40 pixel seven-segment font,** so the Casio face's day-of-year and date lines match
-  InfiniTime.
 - [ ] **Bebas Neue and Teko for Infineat,** which draws its time and date in them; NeoTime
   substitutes its own font of lines and arcs.
 - [ ] **The rest of the music values.** InfiniTime's music service also carries the album, the track

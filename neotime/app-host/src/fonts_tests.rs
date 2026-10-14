@@ -596,54 +596,7 @@ fn coverage_ramps_over_one_pixel() {
     assert_eq!(ink_of(1.2), 255);
 }
 
-// ============================================================================
-// Seven segments
-// ============================================================================
-
-/// Whether a point is inside a bar along x from `start` to `end`, centred on `middle`, with pointed ends.
-fn is_in_bar(along: f32, across: f32, start: f32, end: f32, middle: f32) -> bool {
-    let half = SEGMENT_THICKNESS / 2.0;
-    let distance = (across - middle).abs();
-    distance <= half && along >= start + distance && along <= end - distance
-}
-
-fn is_in_segment(segment: u8, x: f32, y: f32) -> bool {
-    let half = SEGMENT_THICKNESS / 2.0;
-    let left = half;
-    let right = SEGMENT_DIGIT_WIDTH - half;
-    let top = half;
-    let middle = SEGMENT_DIGIT_HEIGHT / 2.0;
-    let bottom = SEGMENT_DIGIT_HEIGHT - half;
-    let across = |at: f32| is_in_bar(x, y, left + SEGMENT_GAP, right - SEGMENT_GAP, at);
-    let upper = |at: f32| is_in_bar(y, x, top + SEGMENT_GAP, middle - SEGMENT_GAP, at);
-    let lower = |at: f32| is_in_bar(y, x, middle + SEGMENT_GAP, bottom - SEGMENT_GAP, at);
-    match segment {
-        0 => across(top),
-        1 => upper(right),
-        2 => lower(right),
-        3 => across(bottom),
-        4 => lower(left),
-        5 => upper(left),
-        _ => across(middle),
-    }
-}
-
 #[test]
-fn seven_segment_rows_match_testing_every_sample() {
-    for character in "0123456789-".chars() {
-        let Some(SegmentGlyph::Segments(lit)) = SevenSegmentFont::glyph(character) else {
-            panic!("{character} is not a digit");
-        };
-        for row in 0..SEGMENT_DIGIT_HEIGHT as u16 {
-            for (x_offset, width) in [(0, SEGMENT_DIGIT_WIDTH as usize), (5, 11), (30, 4)] {
-                let mut fast = std::vec![0u8; width];
-                let mut sampled = std::vec![0u8; width];
-                assert!(SEVEN_SEGMENT.glyph_coverage_row(character, row, x_offset, &mut fast));
-                sample_row(row, x_offset, &mut sampled, |x, y| {
-                    (0..7).any(|segment| lit & (1 << segment) != 0 && is_in_segment(segment, x, y))
-                });
-                assert_eq!(fast, sampled, "{character} row {row} from {x_offset}");
-            }
-        }
-    }
+fn the_unused_font_number_draws_as_huge() {
+    assert_eq!(FontName::from_value(6), FontName::Huge);
 }

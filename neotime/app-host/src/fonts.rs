@@ -3,8 +3,7 @@
 //! Every text size is one font drawn from lines, arcs and dots, made from `fonts/geometric.txt` by
 //! `tools/generate_fonts.py` and read in place from flash. Each size scales it and moves its straight
 //! strokes and the edges of its arcs onto whole pixels, so stems stay sharp and bowls stay even. The
-//! seven-segment and dot-matrix display fonts are worked out from segments and dots as they are
-//! drawn. docs/app-runtime.md lists the sizes.
+//! dot-matrix display font is worked out from its dots as it is drawn. docs/app-runtime.md lists the sizes.
 
 use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU8, AtomicUsize, Ordering};
 
@@ -1174,167 +1173,6 @@ fn sample_row(row: u16, x_offset: u16, coverage: &mut [u8], is_inside: impl Fn(f
 }
 
 // ============================================================================
-// Seven segments
-// ============================================================================
-
-/// Digits built from seven bars with pointed ends, as on a calculator.
-pub struct SevenSegmentFont;
-
-const SEGMENT_DIGIT_WIDTH: f32 = 34.0;
-const SEGMENT_DIGIT_HEIGHT: f32 = 60.0;
-const SEGMENT_THICKNESS: f32 = 8.0;
-const SEGMENT_GAP: f32 = 1.0;
-const SEGMENT_DIGIT_ADVANCE: u16 = 42;
-const SEGMENT_SIGN_ADVANCE: u16 = 18;
-const SEGMENT_SIDE_BEARING: i16 = 4;
-const SEGMENT_ROOM_BELOW: i16 = 4;
-
-/// The lit segments of each digit, bit 0 for the top bar and then clockwise, with bit 6 the middle.
-const DIGIT_SEGMENTS: [u8; 10] = [
-    0b011_1111, 0b000_0110, 0b101_1011, 0b100_1111, 0b110_0110, 0b110_1101, 0b111_1101, 0b000_0111,
-    0b111_1111, 0b110_1111,
-];
-const MIDDLE_SEGMENT: u8 = 0b100_0000;
-
-/// The x range a segment covers on the line at `y`, for bars with pointed ends.
-fn segment_span_at(segment: u8, y: f32) -> Option<(f32, f32)> {
-    let half = SEGMENT_THICKNESS / 2.0;
-    let left = half;
-    let right = SEGMENT_DIGIT_WIDTH - half;
-    let top = half;
-    let middle = SEGMENT_DIGIT_HEIGHT / 2.0;
-    let bottom = SEGMENT_DIGIT_HEIGHT - half;
-    let across = |at: f32| {
-        let distance = (y - at).abs();
-        (distance <= half).then_some((left + SEGMENT_GAP + distance, right - SEGMENT_GAP - distance))
-    };
-    let upright = |at: f32, start: f32, end: f32| {
-        let reach = half.min(y - start).min(end - y);
-        (reach >= 0.0).then_some((at - reach, at + reach))
-    };
-    match segment {
-        0 => across(top),
-        1 => upright(right, top + SEGMENT_GAP, middle - SEGMENT_GAP),
-        2 => upright(right, middle + SEGMENT_GAP, bottom - SEGMENT_GAP),
-        3 => across(bottom),
-        4 => upright(left, middle + SEGMENT_GAP, bottom - SEGMENT_GAP),
-        5 => upright(left, top + SEGMENT_GAP, middle - SEGMENT_GAP),
-        _ => across(middle),
-    }
-}
-
-/// Fills a row of a seven-segment digit's coverage, giving what `sample_row` would without testing every sample.
-///
-/// Every sample point and bar edge is a multiple of an eighth of a pixel, so the sums below are exact.
-fn segment_coverage_row(lit: u8, row: u16, x_offset: u16, coverage: &mut [u8]) {
-    let per_side = SAMPLES_PER_SIDE as f32;
-    // Each slot counts its samples inside first, then becomes that share of full ink.
-    coverage.fill(0);
-    let first_sample = i32::from(x_offset) * SAMPLES_PER_SIDE;
-    let end_sample = first_sample + coverage.len() as i32 * SAMPLES_PER_SIDE;
-    for down in 0..SAMPLES_PER_SIDE {
-        let y = row as f32 + (down as f32 + 0.5) / per_side;
-        for segment in (0..7).filter(|segment| lit & (1 << segment) != 0) {
-            let Some((start, end)) = segment_span_at(segment, y) else {
-                continue;
-            };
-            // Sample k sits at (k + 0.5) / per_side, so these are the first and last samples inside.
-            let first = (-floor(0.5 - start * per_side) as i32).max(first_sample);
-            let last = (floor(end * per_side - 0.5) as i32).min(end_sample - 1);
-            for sample in first..=last {
-                coverage[((sample - first_sample) / SAMPLES_PER_SIDE) as usize] += 1;
-            }
-        }
-    }
-    let samples = (SAMPLES_PER_SIDE * SAMPLES_PER_SIDE) as f32;
-    for slot in coverage.iter_mut() {
-        *slot = (*slot as f32 * FULL_COVERAGE as f32 / samples) as u8;
-    }
-}
-
-/// A seven-segment glyph: which segments are lit, or a sign drawn as dots.
-#[derive(Clone, Copy)]
-enum SegmentGlyph {
-    Segments(u8),
-    Colon,
-    Point,
-    Space,
-}
-
-impl SevenSegmentFont {
-    fn glyph(character: char) -> Option<SegmentGlyph> {
-        Some(match character {
-            '0'..='9' => SegmentGlyph::Segments(DIGIT_SEGMENTS[character as usize - '0' as usize]),
-            '-' => SegmentGlyph::Segments(MIDDLE_SEGMENT),
-            ':' => SegmentGlyph::Colon,
-            '.' => SegmentGlyph::Point,
-            ' ' => SegmentGlyph::Space,
-            _ => return None,
-        })
-    }
-}
-
-impl FontMetrics for SevenSegmentFont {
-    fn glyph_metrics(&self, character: char) -> Option<GlyphInfo> {
-        let (advance, width, height) = match Self::glyph(character)? {
-            SegmentGlyph::Segments(_) => (
-                SEGMENT_DIGIT_ADVANCE,
-                SEGMENT_DIGIT_WIDTH as u16,
-                SEGMENT_DIGIT_HEIGHT as u16,
-            ),
-            SegmentGlyph::Colon | SegmentGlyph::Point => (
-                SEGMENT_SIGN_ADVANCE,
-                SEGMENT_THICKNESS as u16,
-                SEGMENT_DIGIT_HEIGHT as u16,
-            ),
-            SegmentGlyph::Space => (SEGMENT_DIGIT_ADVANCE, 0, 0),
-        };
-        let side_bearing = match Self::glyph(character)? {
-            SegmentGlyph::Segments(_) => SEGMENT_SIDE_BEARING,
-            _ => (SEGMENT_SIGN_ADVANCE as i16 - SEGMENT_THICKNESS as i16) / 2,
-        };
-        Some(GlyphInfo {
-            advance_fp16: advance * SUBPIXELS_PER_PIXEL as u16,
-            bearing_x: side_bearing,
-            bearing_y: SEGMENT_DIGIT_HEIGHT as i16,
-            width,
-            height,
-        })
-    }
-
-    fn line_metrics(&self) -> FontLineMetrics {
-        let ascent = SEGMENT_DIGIT_HEIGHT as i16 + SEGMENT_ROOM_BELOW;
-        FontLineMetrics {
-            line_height: (ascent + SEGMENT_ROOM_BELOW) as u16,
-            ascent,
-            descent: SEGMENT_ROOM_BELOW,
-        }
-    }
-
-    fn glyph_coverage_row(&self, character: char, row: u16, x_offset: u16, coverage: &mut [u8]) -> bool {
-        let Some(glyph) = Self::glyph(character) else {
-            return false;
-        };
-        if let SegmentGlyph::Segments(lit) = glyph {
-            segment_coverage_row(lit, row, x_offset, coverage);
-            return true;
-        }
-        let half = SEGMENT_THICKNESS / 2.0;
-        let is_in_dot =
-            |x: f32, y: f32, centre_y: f32| (x - half).abs() <= half && (y - centre_y).abs() <= half;
-        sample_row(row, x_offset, coverage, |x, y| match glyph {
-            SegmentGlyph::Segments(_) => false,
-            SegmentGlyph::Colon => {
-                is_in_dot(x, y, SEGMENT_DIGIT_HEIGHT * 0.3) || is_in_dot(x, y, SEGMENT_DIGIT_HEIGHT * 0.7)
-            }
-            SegmentGlyph::Point => is_in_dot(x, y, SEGMENT_DIGIT_HEIGHT - half),
-            SegmentGlyph::Space => false,
-        });
-        true
-    }
-}
-
-// ============================================================================
 // Dot matrix
 // ============================================================================
 
@@ -1450,7 +1288,6 @@ pub fn install_from_library(library: &AppImage<'static>) -> usize {
     usize::from(!bytes.is_empty())
 }
 
-static SEVEN_SEGMENT: SevenSegmentFont = SevenSegmentFont;
 static DOT_MATRIX: DotMatrixFont = DotMatrixFont;
 
 /// How many bytes of flash the text font takes, for the memory map.
@@ -1467,7 +1304,6 @@ pub enum FontName {
     Large,
     Huge,
     Giant,
-    SevenSegment,
     DotMatrix,
     Condensed,
 }
@@ -1482,14 +1318,15 @@ impl FontName {
             3 => Large,
             4 => Huge,
             5 => Giant,
-            6 => SevenSegment,
+            // Apps built before 6 was retired drew big digits with it, and huge is the same height.
+            6 => Huge,
             7 => DotMatrix,
             8 => Condensed,
             _ => Normal,
         }
     }
 
-    /// The size of the text font this name draws, or nothing for the display fonts drawn as shapes.
+    /// The size of the text font this name draws, or nothing for the dot-matrix font drawn as shapes.
     fn styled(self) -> Option<&'static StyledFont> {
         use FontName::*;
         match self {
@@ -1500,14 +1337,13 @@ impl FontName {
             Huge => Some(&HUGE),
             Giant => Some(&GIANT),
             Condensed => Some(&CONDENSED),
-            SevenSegment | DotMatrix => None,
+            DotMatrix => None,
         }
     }
 
     /// The font drawn for this name.
     pub fn metrics(self) -> &'static dyn FontMetrics {
         match self {
-            FontName::SevenSegment => &SEVEN_SEGMENT,
             FontName::DotMatrix => &DOT_MATRIX,
             other => other.styled().unwrap_or(&NORMAL),
         }

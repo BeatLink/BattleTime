@@ -47,7 +47,6 @@ export type Font =
   | "large"
   | "huge"
   | "giant"
-  | "seven_segment"
   | "dot_matrix"
   | "condensed";
 
@@ -58,7 +57,6 @@ const FONT_SIZES_IN_PIXELS: Record<Font, number> = {
   large: 42,
   huge: 76,
   giant: 120,
-  seven_segment: 76,
   dot_matrix: 40,
   condensed: 48,
 };
@@ -66,7 +64,6 @@ const FONT_SIZES_IN_PIXELS: Record<Font, number> = {
 const FONT_FAMILY = "'JetBrains Mono', 'DejaVu Sans Mono', monospace";
 
 const DISPLAY_FONT_FAMILIES: Partial<Record<Font, string>> = {
-  seven_segment: "'DSEG7 Classic', 'JetBrains Mono', monospace",
   dot_matrix: "'DotGothic16', 'JetBrains Mono', monospace",
   condensed: "'Bebas Neue', 'Oswald', 'Arial Narrow', sans-serif",
 };

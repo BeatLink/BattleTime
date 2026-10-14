@@ -861,7 +861,7 @@ the numbers mean. These are the meanings the host uses now:
 | `grow` | A weight, 0 or more. |
 | `padding`, `margin`, `border_width`, `radius` | Pixels. |
 | `background`, `color`, `border_color` | RGB565, or a theme reference; see [Theming](#theming). |
-| `font` | 0 `small`, 1 `normal`, 2 `medium`, 3 `large`, 4 `huge`, 5 `giant`, 6 `seven_segment`, 7 `dot_matrix`, 8 `condensed`, in the order of the [app reference](app-reference.md#common-props). Any other number is `normal`. |
+| `font` | 0 `small`, 1 `normal`, 2 `medium`, 3 `large`, 4 `huge`, 5 `giant`, 7 `dot_matrix`, 8 `condensed`, in the order of the [app reference](app-reference.md#common-props). 6 is unused and draws as `huge`, for apps built when it was a font; any other number is `normal`. |
 | `align` | 0 `start`, 1 `center`, 2 `end`. Any other number means not set. |
 | `visible` | 0 or 1. |
 | `value`, `minimum`, `maximum` | Whole numbers. `minimum` is 0 and `maximum` 100 unless set. |
@@ -896,7 +896,7 @@ pixel wide, so joins have no seams. A row of a glyph visits only the columns eac
 and only the rows the strip being drawn shows. Arcs need no trigonometry: their ends come from a
 table of sines, and a point is tested against them with cross products.
 
-`seven_segment` and `dot_matrix` are drawn from segments and dots, so they take no font data. The
+`dot_matrix` is drawn from dots, so it takes no font data. The
 font lives in the shared library's font section (section 9, which only a library has). The app
 host's font starts empty, and the embedder calls `fonts::install_from_library` once with the
 library inside the firmware; until then text takes no room. The `built-in-fonts` feature starts it

@@ -38,7 +38,7 @@ press as a second screen.
 ## Limits and what is left
 
 The faces use the API in [app-reference.md](app-reference.md) as `sdk/neotime` provides it: the
-`giant`, `seven_segment` and `dot_matrix` fonts, `BatteryIcon` (in one colour where the original
+`giant` and `dot_matrix` fonts, `BatteryIcon` (in one colour where the original
 keeps one), `Scale` with angles, skipped ticks and a needle, `AnalogClock` hand lengths, `opacity`,
 the `pine_logo`, `current_weather` with sunrise and sunset for night icons, and the heart rate,
 Bluetooth and alarm system values. They fit the runtime's limits, and only faces that
@@ -51,5 +51,5 @@ The PinetimeLite faces have workarounds of their own. `lite-digital` and `lite-w
 and `lite-photo` uses plain colours for PinetimeLite's three Pixabay photos; the user's own photo,
 sent from the phone, would be better than shipping those.
 
-Still open: each display font comes in one size (`seven_segment` about 76 pixels, `dot_matrix`
-about 40 and `condensed` about 48), so Casio's 7-segment date line stays on a standard font.
+Still open: each display font comes in one size (`dot_matrix` about 40 pixels and `condensed`
+about 48), and Casio draws its time and date in the standard font.

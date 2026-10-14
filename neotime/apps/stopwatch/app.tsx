@@ -107,7 +107,7 @@ function Stopwatch() {
     <Screen padding={8} gap={6}
     >
       <Column align_items="center">
-        <Label font={shows_hours.value ? "large" : "seven_segment"} color={is_dimmed.value ? "muted" : "text"}>
+        <Label font={shows_hours.value ? "large" : "condensed"} color={is_dimmed.value ? "muted" : "text"}>
           {format_duration(elapsed.value, shows_hours.value ? "h:mm:ss" : "mm:ss")}
         </Label>
         <Label color={is_dimmed.value ? "muted" : "text"}>{format_number(Math.floor(elapsed.value / 10) % 100, 2)}</Label>

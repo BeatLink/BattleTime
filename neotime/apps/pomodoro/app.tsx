@@ -225,14 +225,14 @@ function CountdownPage() {
 
       {is_stopped.value && (
         <Card grow={1} align_items="center" justify="center" gap={6} padding={0}>
-          <Label font="seven_segment">{format_duration(work_minutes.value * MINUTE, "mm:ss")}</Label>
+          <Label font="condensed">{format_duration(work_minutes.value * MINUTE, "mm:ss")}</Label>
           <Label font="small" color="muted">{plan_text.value}</Label>
         </Card>
       )}
 
       {is_running.value && (
         <Card grow={1} align_items="center" justify="center" padding={0}>
-          <Label font="seven_segment">{format_duration(remaining.value, "mm:ss")}</Label>
+          <Label font="condensed">{format_duration(remaining.value, "mm:ss")}</Label>
         </Card>
       )}
 

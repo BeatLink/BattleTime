@@ -245,7 +245,7 @@ them the same way.
 
 | Property or argument | Numbers |
 |---|---|
-| `font` | 0 small, 1 normal, 2 medium, 3 large, 4 huge, 5 giant, 6 seven_segment, 7 dot_matrix, 8 condensed |
+| `font` | 0 small, 1 normal, 2 medium, 3 large, 4 huge, 5 giant, 7 dot_matrix (6 is unused), 8 condensed |
 | `align` | 0 start, 1 center, 2 end |
 | `long_mode` | 0 wrap, 1 scroll, 2 clip |
 | `x`, `y`, `width`, `height` | pixels; a negative number is a percentage of the parent, so `"100%"` is -100 |

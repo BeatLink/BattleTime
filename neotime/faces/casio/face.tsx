@@ -101,7 +101,7 @@ function CasioFace() {
           {hour_of(now.value) >= 12 ? "P" : "A"}
         </Label>
       )}
-      <Label x={0} y={118} width={240} text_align="center" font="seven_segment" color={TEXT_COLOR}>
+      <Label x={0} y={118} width={240} text_align="center" font="huge" color={TEXT_COLOR}>
         {time_text.value}
       </Label>
       <Line points={[{ x: 4, y: 209 }, { x: 234, y: 209 }, { x: 239, y: 214 }]} color={TEXT_COLOR} />

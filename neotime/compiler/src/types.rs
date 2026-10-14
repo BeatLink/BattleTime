@@ -286,7 +286,8 @@ impl ChoiceSet {
                 "large",
                 "huge",
                 "giant",
-                "seven_segment",
+                // Number 6 is unused, so apps built with the later fonts keep their numbers.
+                "",
                 "dot_matrix",
                 "condensed",
             ],
