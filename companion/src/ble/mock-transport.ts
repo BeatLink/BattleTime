@@ -49,6 +49,8 @@ export class MockTransport implements WatchTransport {
         : new MockLegacyDfuTarget(id, 'neotime', true);
     if (this.mode === 'bootloader') {
       this.dfu.enterBootloader();
+    } else {
+      this.dfu.fileService.addSampleRecords(new Date());
     }
     this.setState('connected');
     this.listener.onMode?.(this.mode);

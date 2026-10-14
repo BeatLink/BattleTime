@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -9,8 +9,9 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
-import { readWatchSettings } from '@/protocol/requests';
 import { readStepHistory, type StepDay } from '@/protocol/steps';
+import { syncBridge } from '@/services/sync';
+import { changesSteps, watchRecords } from '@/services/watch-records';
 import { useTask } from '@/state/use-task';
 
 const DAYS = 7;
@@ -78,30 +79,44 @@ function BarChart({ bars, goal, selected, onSelect }: {
 
 export default function StepsScreen() {
   const theme = useTheme();
-  const { requests, watchReady } = useWatch();
+  const { requests, watchReady, capabilities, files, send } = useWatch();
   const task = useTask();
+  const bridge = useMemo(() => syncBridge(), []);
+  const records = useMemo(() => watchRecords(bridge, { files, send, requests }), [bridge, files, send, requests]);
+  // The sync's copy is there while the watch is away; without it the watch must serve its files.
+  const available = records.synced || (watchReady && capabilities.files);
   const [history, setHistory] = useState<StepDay[]>([]);
   const [goal, setGoal] = useState<number | undefined>(undefined);
   const [day, setDay] = useState(0);
   const [hour, setHour] = useState<number | null>(null);
 
+  const run = task.run;
   const load = useCallback(
     () =>
-      task.run('Reading the step log', async () => {
-        const settings = await readWatchSettings(requests);
-        setGoal(settings.step_goal || undefined);
-        setHistory(await readStepHistory(requests, DAYS));
+      run('Reading the step log', async () => {
+        setGoal((await records.readStepGoal()) ?? undefined);
+        setHistory(await readStepHistory(records.readStepDay, DAYS));
       }),
-    [requests, task],
+    [records, run],
   );
 
   useEffect(() => {
-    if (watchReady) {
+    if (available) {
       void load();
     }
     // Read once per connection, not on every render of the task.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchReady]);
+  }, [available]);
+
+  // A sync that brings new steps reads them again.
+  useEffect(
+    () => bridge?.onReport((report) => {
+      if (changesSteps(report.changed)) {
+        void load();
+      }
+    }),
+    [bridge, load],
+  );
 
   const today = history[0];
   // Oldest on the left, as a week reads.
@@ -110,10 +125,10 @@ export default function StepsScreen() {
 
   return (
     <Screen title="Steps">
-      {!watchReady ? (
+      {!available ? (
         <Card>
           <ThemedText type="small" themeColor="textSecondary">
-            Connect to the watch to read its step log.
+            Connect to a watch that serves files to read its step log.
           </ThemedText>
         </Card>
       ) : null}
@@ -153,7 +168,7 @@ export default function StepsScreen() {
 
       {shown ? (
         <Card title={`${dayName(shown.date, day)} by hour`}>
-          {shown.hours.length === 0 ? (
+          {shown.slots === null ? (
             <ThemedText type="small" themeColor="textSecondary">
               The watch has no step log for this day.
             </ThemedText>
@@ -182,7 +197,7 @@ export default function StepsScreen() {
         title="Read again"
         variant="secondary"
         busy={task.busy !== null}
-        disabled={!watchReady}
+        disabled={!available}
         onPress={() => void load()}
       />
     </Screen>

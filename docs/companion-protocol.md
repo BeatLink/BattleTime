@@ -220,6 +220,10 @@ Phone to watch:
 
 Watch to phone: `http` with `id`, `url`, `method`, `body`; `info` with `msg`.
 
+The companion does not use `alarm` or `steps`: it reads the step logs and the alarm app's state
+with the file transfer below, or from its [sync](sync.md), and changes alarms through
+[app state](#app-state-served).
+
 ## File transfer
 
 Files move through Adafruit's BLE file transfer protocol, the one InfiniTime's `FSService` serves,

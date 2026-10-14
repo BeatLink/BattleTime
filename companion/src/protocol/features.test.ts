@@ -10,15 +10,12 @@ import { readCapabilities } from './neotime';
 import {
   fittedRecoverySlot,
   moveSlots,
-  readAlarms,
   readSlots,
   readStatus,
   readWatchSettings,
   ReplyRouter,
-  writeAlarms,
   writeWatchSettings,
 } from './requests';
-import { hourlySteps, readStepHistory } from './steps';
 import { changedColors, normaliseHex } from './theme';
 
 // NeoTime's file service on a mock watch, as the provider opens it.
@@ -43,9 +40,10 @@ describe('reply router', () => {
     const sent: PhoneToWatchMessage[] = [];
     const router = new ReplyRouter(async (message) => void sent.push(message), 1000);
     const settings = router.request({ t: 'settings' }, 'settings');
-    const alarms = router.request({ t: 'alarm' }, 'alarm');
-    expect(router.push({ t: 'alarm', d: [] })).toBe(true);
-    await expect(alarms).resolves.toEqual({ t: 'alarm', d: [] });
+    const status = router.request({ t: 'status' }, 'status');
+    const reply = { t: 'status', bat: 50, mv: 3800, charging: false, steps: null } as const;
+    expect(router.push(reply)).toBe(true);
+    await expect(status).resolves.toEqual(reply);
     expect(router.push({ t: 'error', msg: 'Traceback\n  File "x"\nValueError: bad' })).toBe(true);
     await expect(settings).rejects.toThrow('ValueError: bad');
     expect(router.push({ t: 'findPhone', n: true })).toBe(false);
@@ -57,7 +55,7 @@ describe('reply router', () => {
   });
 });
 
-describe('settings and alarms', () => {
+describe('settings', () => {
   it('reads and changes watch settings', async () => {
     const channel = requestChannel();
     const before = await readWatchSettings(channel);
@@ -75,35 +73,6 @@ describe('settings and alarms', () => {
     expect(custom.theme_colors.accent).toBe('#ff8000');
     await expect(writeWatchSettings(channel, { brightness: 2, theme: 'neon' })).rejects.toThrow('unknown theme');
     expect((await readWatchSettings(channel)).brightness).toBe(custom.brightness);
-  });
-
-  it('replaces the alarm list and fills in defaults', async () => {
-    const channel = requestChannel();
-    expect(await readAlarms(channel)).toHaveLength(1);
-    const written = await writeAlarms(channel, [{ h: 6, m: 5 }, { h: 25, m: 70, on: false, rep: 0xff }]);
-    expect(written).toEqual([
-      { h: 6, m: 5, on: true, rep: 0 },
-      { h: 23, m: 59, on: false, rep: 0x7f },
-    ]);
-    await expect(writeAlarms(channel, new Array(13).fill({ h: 1, m: 1 }))).rejects.toThrow('at most 12');
-  });
-});
-
-describe('steps', () => {
-  it('folds 6 minute slots into hours', () => {
-    const slots = new Array(240).fill(1);
-    const hours = hourlySteps(slots);
-    expect(hours).toHaveLength(24);
-    expect(hours.every((count) => count === 10)).toBe(true);
-  });
-
-  it('reads a week, leaving days without a log empty', async () => {
-    const history = await readStepHistory(requestChannel(), 7, new Date(2026, 9, 10));
-    expect(history).toHaveLength(7);
-    expect(history[0].date.getDate()).toBe(10);
-    // The mock has no log on days divisible by five.
-    expect(history[0].hours).toEqual([]);
-    expect(history[1].total).toBeGreaterThan(0);
   });
 });
 

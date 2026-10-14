@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -9,22 +9,10 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
-import type { Alarm } from '@/protocol/gadgetbridge';
-import { MAX_ALARMS, readAlarms, writeAlarms } from '@/protocol/requests';
+import { DAY_NAMES, MAX_ALARMS, NEW_ALARM, repeatLabel, type WatchAlarm } from '@/protocol/alarms';
+import { syncBridge } from '@/services/sync';
+import { changesAlarms, readAlarms, watchRecords, writeAlarms } from '@/services/watch-records';
 import { useTask } from '@/state/use-task';
-
-type EditableAlarm = Required<Alarm>;
-
-// Days as the watch's mask numbers them, Monday first.
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-export function repeatLabel(rep: number): string {
-  if (rep === 0) return 'Once';
-  if (rep === 0x7f) return 'Every day';
-  if (rep === 0x1f) return 'Weekdays';
-  if (rep === 0x60) return 'Weekends';
-  return DAYS.filter((_, bit) => rep & (1 << bit)).join(', ');
-}
 
 function TimeField({ value, max, onChange }: { value: number; max: number; onChange: (value: number) => void }) {
   const theme = useTheme();
@@ -51,8 +39,8 @@ function TimeField({ value, max, onChange }: { value: number; max: number; onCha
 }
 
 function AlarmEditor({ alarm, onChange, onRemove }: {
-  alarm: EditableAlarm;
-  onChange: (alarm: EditableAlarm) => void;
+  alarm: WatchAlarm;
+  onChange: (alarm: WatchAlarm) => void;
   onRemove: () => void;
 }) {
   const theme = useTheme();
@@ -60,27 +48,27 @@ function AlarmEditor({ alarm, onChange, onRemove }: {
     <Card>
       <View style={styles.header}>
         <View style={styles.clock}>
-          <TimeField value={alarm.h} max={23} onChange={(h) => onChange({ ...alarm, h })} />
+          <TimeField value={alarm.hour} max={23} onChange={(hour) => onChange({ ...alarm, hour })} />
           <ThemedText type="subtitle">:</ThemedText>
-          <TimeField value={alarm.m} max={59} onChange={(m) => onChange({ ...alarm, m })} />
+          <TimeField value={alarm.minute} max={59} onChange={(minute) => onChange({ ...alarm, minute })} />
         </View>
         <Switch
-          value={alarm.on}
-          onValueChange={(on) => onChange({ ...alarm, on })}
+          value={alarm.enabled}
+          onValueChange={(enabled) => onChange({ ...alarm, enabled })}
           trackColor={{ true: theme.accent, false: theme.backgroundSelected }}
           thumbColor={theme.text}
           accessibilityLabel="Alarm on"
         />
       </View>
       <View style={styles.days}>
-        {DAYS.map((day, bit) => {
-          const selected = (alarm.rep & (1 << bit)) !== 0;
+        {DAY_NAMES.map((day, bit) => {
+          const selected = (alarm.days & (1 << bit)) !== 0;
           return (
             <Pressable
               key={day}
               accessibilityRole="button"
               accessibilityState={{ selected }}
-              onPress={() => onChange({ ...alarm, rep: alarm.rep ^ (1 << bit) })}>
+              onPress={() => onChange({ ...alarm, days: alarm.days ^ (1 << bit) })}>
               <View style={[styles.day, { backgroundColor: selected ? theme.accent : theme.backgroundSelected }]}>
                 <ThemedText type="small" style={{ color: selected ? theme.onAccent : theme.text }}>
                   {day.slice(0, 2)}
@@ -92,7 +80,7 @@ function AlarmEditor({ alarm, onChange, onRemove }: {
       </View>
       <View style={styles.footer}>
         <ThemedText type="small" themeColor="textSecondary">
-          {repeatLabel(alarm.rep)}
+          {repeatLabel(alarm.days)}
         </ThemedText>
         <Pressable onPress={onRemove} accessibilityRole="button">
           <ThemedText type="smallBold" style={{ color: theme.danger }}>
@@ -105,34 +93,58 @@ function AlarmEditor({ alarm, onChange, onRemove }: {
 }
 
 export default function AlarmsScreen() {
-  const { requests, watchReady } = useWatch();
+  const { requests, watchReady, capabilities, files, send } = useWatch();
   const task = useTask();
-  const [alarms, setAlarms] = useState<EditableAlarm[] | null>(null);
+  const [alarms, setAlarms] = useState<WatchAlarm[] | null>(null);
   const [dirty, setDirty] = useState(false);
+  const bridge = useMemo(() => syncBridge(), []);
+  const records = useMemo(() => watchRecords(bridge, { files, send, requests }), [bridge, files, send, requests]);
+  // The sync's copy is there while the watch is away; without it the watch must serve its files.
+  const available = records.synced || (watchReady && capabilities.files);
+  // A sync never replaces alarms the user is still changing.
+  const editing = useRef(false);
+  useEffect(() => {
+    editing.current = dirty;
+  }, [dirty]);
+
+  const run = task.run;
+  const load = useCallback(
+    () =>
+      run('Reading alarms', async () => {
+        setAlarms(await readAlarms(records));
+        setDirty(false);
+      }),
+    [records, run],
+  );
 
   useEffect(() => {
-    if (!watchReady) {
-      return;
+    if (available) {
+      void load();
     }
-    void task.run('Reading alarms', async () => {
-      setAlarms(await readAlarms(requests));
-      setDirty(false);
-    });
     // Read once per connection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchReady]);
+  }, [available]);
 
-  const edit = (next: EditableAlarm[]) => {
+  useEffect(
+    () => bridge?.onReport((report) => {
+      if (changesAlarms(report.changed) && !editing.current) {
+        void load();
+      }
+    }),
+    [bridge, load],
+  );
+
+  const edit = (next: WatchAlarm[]) => {
     setAlarms(next);
     setDirty(true);
   };
 
   return (
     <Screen title="Alarms">
-      {!watchReady ? (
+      {!available ? (
         <Card>
           <ThemedText type="small" themeColor="textSecondary">
-            Connect to the watch to change its alarms.
+            Connect to a watch that serves files to change its alarms.
           </ThemedText>
         </Card>
       ) : null}
@@ -163,15 +175,15 @@ export default function AlarmsScreen() {
             title="Add an alarm"
             variant="secondary"
             disabled={alarms.length >= MAX_ALARMS}
-            onPress={() => edit([...alarms, { h: 7, m: 0, on: true, rep: 0x1f }])}
+            onPress={() => edit([...alarms, NEW_ALARM])}
           />
           <Button
             title="Save to watch"
-            disabled={!dirty || !watchReady}
+            disabled={!dirty || !available}
             busy={task.busy !== null}
             onPress={() =>
               void task.run('Saving alarms', async () => {
-                setAlarms(await writeAlarms(requests, alarms));
+                setAlarms(await writeAlarms(records, alarms));
                 setDirty(false);
               })
             }

@@ -46,6 +46,10 @@ mock watch only.
 - **Forwarding from the desktop app.** Desktop notifications, MPRIS players and Do Not Disturb are
   read correctly on Cinnamon, but nothing has been forwarded to a real watch from the desktop yet.
   GeoClue's location is untried, since the development machine runs no GeoClue.
+- **Steps and alarms from the watch's files.** The Steps and Alarms screens, `neotime steps` and
+  `neotime alarms` have read `/steps/...` and read and written `/apps/alarm/state` only against the
+  mock watch and the core's byte layout. Check on a watch that a changed alarm rings, that an open
+  Alarm app redraws with it, and that the synced copy in the Tauri app refreshes after a write.
 - **The NeoTime name check in scans.** A running NeoTime is told from a bootloader by its advertised
   name; check what a phone and BlueZ report for it.
 
@@ -149,8 +153,6 @@ and lets plugins read them and change their own app's state.
   `core/src/sync/pass.rs`.
 - **Richer pages for the app plugins.** Every app's plugin uses the shared state page; apps such as
   Alarm, Timer and Steps deserve pages of their own, with a time picker and weekday buttons.
-- **Synced data in the window.** The steps and alarms screens still read the unserved `steps` and
-  `alarm` messages; they should read `sync_read` instead.
 - **Untried with a watch.** The sync has run only against the core's fake watch.
 
 ## Not started

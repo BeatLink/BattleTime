@@ -21,8 +21,9 @@ Built and tested against the mock watch, waiting for the firmware side
 
 - the battery level from the standard Battery service;
 - the Gadgetbridge-style messages over the Nordic UART Service: notifications, calls, music,
-  weather, find, status, steps, alarms, watch settings and web requests for watch apps;
-- the BLEFS file service: browsing files, backups, and installing compiled `.ntapp` apps.
+  weather, find, status, watch settings and web requests for watch apps;
+- the BLEFS file service: browsing files, backups, installing compiled `.ntapp` apps, and the step
+  logs and the alarm app's state behind the Steps and Alarms screens.
 
 Each feature is offered only when the connected watch serves what it needs, so nothing breaks while
 the firmware catches up. On Android the app forwards notifications, calls and now playing, and obeys
@@ -301,7 +302,7 @@ escaped as `\uXXXX`. The watch replies with one JSON object per line, for exampl
 `{"t":"music","n":"play"}`. The full list is in
 [src/protocol/gadgetbridge.ts](src/protocol/gadgetbridge.ts).
 
-Four messages are answered: `settings`, `alarm`, `steps` and `status` each come back with a reply of
+Three messages are answered: `settings`, `status` and `slots` each come back with a reply of
 the same name, which [src/protocol/requests.ts](src/protocol/requests.ts) matches to the request
 waiting for it. A watch app asks for a page with `{"t":"http","url":..,"id":..}` and gets
 `GB({"t":"http","id":..,"resp":..})` back, but only from the hosts listed in Settings.
@@ -317,6 +318,19 @@ got to until it has the whole file. The watch makes missing folders when a file 
 deletes a folder with everything in it. The protocol has no free-space command, so `storage()`
 starts a write to a scratch file, reads how much room the answer offers, and deletes the file.
 Commands run one at a time, so answers never mix.
+
+## Steps and alarms
+
+The Steps and Alarms screens and `neotime steps` and `neotime alarms` read the watch's own records
+through [src/services/watch-records.ts](src/services/watch-records.ts). In the Tauri app they come
+from the core's [sync](../docs/sync.md) copy, refreshed on each sync report, and changes go through
+the core. Elsewhere they are read with the file service: a day's steps from
+`/steps/<year>/<MM>-<DD>` ([src/protocol/steps.ts](src/protocol/steps.ts)), and the alarms from the
+alarm app's saved state, `/apps/alarm/state`. [src/protocol/app-state.ts](src/protocol/app-state.ts)
+reads and writes that `NTST` file as the core's `state_file.rs` does, changing only the values named
+and keeping each one's type and width; [src/protocol/alarms.ts](src/protocol/alarms.ts) turns it into
+alarms and back. After writing it the companion sends `{"t":"state","app":"alarm"}`, so the watch
+takes the new alarms up. The mock watch serves a fortnight of steps and two alarms.
 
 ## Notes
 

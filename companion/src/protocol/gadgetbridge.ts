@@ -14,11 +14,8 @@ export type NotificationMessage = {
 
 export type DismissNotificationMessage = { t: 'notify-'; id: number };
 
-// One alarm as the watch keeps it. `rep` is a day mask, Monday 1 to Sunday 64, and 0 rings once.
-export type Alarm = { h: number; m: number; on?: boolean; rep?: number };
-
-// With `d` the watch replaces its alarms; without it the watch only reports them.
-export type AlarmMessage = { t: 'alarm'; d?: Alarm[] };
+// Says the phone has just rewritten `/apps/<app>/state`, so the watch takes the new state up.
+export type AppStateMessage = { t: 'state'; app: string };
 
 export type FindWatchMessage = { t: 'find'; n: boolean };
 
@@ -74,8 +71,6 @@ export type SettingsMessage = { t: 'settings' } & Partial<Omit<WatchSettingValue
   theme_colors?: Partial<ThemeColors>;
 };
 
-export type StepsRequestMessage = { t: 'steps'; y: number; m: number; d: number };
-
 export type StatusRequestMessage = { t: 'status' };
 
 // A slot as [start, size] in bytes in the watch's external flash.
@@ -128,7 +123,6 @@ export type CallMessage = {
 export type PhoneToWatchMessage =
   | NotificationMessage
   | DismissNotificationMessage
-  | AlarmMessage
   | FindWatchMessage
   | VibrateMessage
   | WeatherMessage
@@ -136,10 +130,10 @@ export type PhoneToWatchMessage =
   | MusicInfoMessage
   | CallMessage
   | SettingsMessage
-  | StepsRequestMessage
   | StatusRequestMessage
   | SlotsMessage
-  | HttpResponseMessage;
+  | HttpResponseMessage
+  | AppStateMessage;
 
 export type MusicControlMessage = {
   t: 'music';
@@ -154,18 +148,6 @@ export type ErrorMessage = { t: 'error'; msg: string };
 
 // Every settings message is answered with all the settings, and the presets the watch offers.
 export type SettingsReply = { t: 'settings'; themes: string[] } & WatchSettingValues;
-
-export type AlarmReply = { t: 'alarm'; d: Alarm[] };
-
-// A day's step counts in 6 minute slots, null when the watch has no log for it.
-export type StepsReply = {
-  t: 'steps';
-  y: number;
-  m: number;
-  d: number;
-  v: number[] | null;
-  now: number;
-};
 
 // The battery level in percent and millivolts, and today's step count, null without a step counter.
 export type StatusReply = {
@@ -207,8 +189,6 @@ export type WatchToPhoneMessage =
   | InfoMessage
   | ErrorMessage
   | SettingsReply
-  | AlarmReply
-  | StepsReply
   | StatusReply
   | SlotsReply
   | CallControlMessage

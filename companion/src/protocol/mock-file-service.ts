@@ -1,7 +1,9 @@
 // A stand-in for NeoTime's BLEFS file service, so files, backups and app installs work with no watch.
 // It answers as services/blefs in the NeoTime tree does, one notification per answer.
 
+import { encodeAppState, type StateEntry } from './app-state';
 import { COMMAND, STATUS } from './file-service';
+import { fileFromSlots, SLOTS_PER_DAY, startOfDay, stepDayPath } from './steps';
 
 // The folders NeoTime makes when it first prepares its file system.
 const FOLDERS = ['/apps', '/settings', '/resources'];
@@ -24,6 +26,20 @@ export class MockFileService {
     this.folders.add('/apps/clock');
     this.files.set('/apps/clock/app.ntapp', new Uint8Array(1200));
     this.files.set('/apps/clock/state', new Uint8Array([1, 2, 3]));
+  }
+
+  // A fortnight of step logs and the alarm app's saved state, so the Steps and Alarms screens have something to show.
+  addSampleRecords(today: Date) {
+    for (let back = 0; back < 14; back++) {
+      const day = startOfDay(today, back);
+      // Some days have no log, as when the watch was off.
+      if (day.getDate() % 5 !== 0) {
+        this.files.set(stepDayPath(day), fileFromSlots(sampleDay(day.getDate(), back === 0 ? today : null)));
+        this.makeParents(stepDayPath(day));
+      }
+    }
+    this.files.set('/apps/alarm/state', encodeAppState(sampleAlarmState()));
+    this.makeParents('/apps/alarm/state');
   }
 
   // One command written to the transfer characteristic.
@@ -236,4 +252,51 @@ function parent(path: string): string {
 
 function name(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1);
+}
+
+// ============================================================================
+// Sample records
+// ============================================================================
+
+// A made-up but plausible day: quiet nights, a walk in the morning and another after work; today stops at the time given.
+function sampleDay(seed: number, until: Date | null): number[] {
+  const last = until ? Math.floor((until.getHours() * 60 + until.getMinutes()) / 6) : SLOTS_PER_DAY;
+  return Array.from({ length: SLOTS_PER_DAY }, (_, slot) => {
+    const hour = slot / 10;
+    const active = (hour > 7.5 && hour < 9) || (hour > 17 && hour < 18.5) ? 90 : hour > 7 && hour < 22 ? 12 : 0;
+    return slot < last ? Math.round(active * (0.6 + ((slot * 37 + seed * 11) % 10) / 12)) : 0;
+  });
+}
+
+// The alarm app's state as it saves it: two alarms in use of its twelve places, and its own keys.
+function sampleAlarmState(): StateEntry[] {
+  // Places not in use hold the app's default alarm, 08:00 once and off.
+  const list = (key: string, kind: StateEntry['kind'], values: number[], unused: number): StateEntry => ({
+    key,
+    kind,
+    length: 12,
+    width: 1,
+    values: [...values, ...new Array(12 - values.length).fill(unused)].map(BigInt),
+  });
+  const one = (key: string, kind: StateEntry['kind'], width: StateEntry['width'], value: bigint): StateEntry => ({
+    key,
+    kind,
+    length: 0,
+    width,
+    values: [value],
+  });
+  const none = -(1n << 63n);
+  return [
+    one('alarm_count', 'int', 1, 2n),
+    list('alarms.hour', 'int', [7, 9], 8),
+    list('alarms.minute', 'int', [0, 30], 0),
+    list('alarms.days', 'int', [0x1f, 0], 0),
+    list('alarms.enabled', 'bool', [1, 0], 0),
+    one('next_ring_at', 'instant', 8, none),
+    one('next_ring_place', 'int', 1, -1n),
+    one('snoozed_until', 'instant', 8, none),
+    one('snoozed_place', 'int', 1, -1n),
+    one('rang_at', 'instant', 8, none),
+    one('ringing_place', 'int', 1, -1n),
+  ];
 }

@@ -1,8 +1,7 @@
-// A small stand-in for NeoTime's message handling, so the settings, alarm and steps
-// screens work against the mock watch. It answers with the same JSON the
-// firmware sends.
+// A small stand-in for NeoTime's message handling, so the settings and slots screens work against the mock watch.
+// It answers with the same JSON the firmware sends.
 
-import { THEME_COLOR_KEYS, type Alarm, type SettingsReply, type ThemeColors, type WatchSettingValues } from '@/protocol/gadgetbridge';
+import { THEME_COLOR_KEYS, type SettingsReply, type ThemeColors, type WatchSettingValues } from '@/protocol/gadgetbridge';
 import { normaliseHex } from '@/protocol/theme';
 
 // Two of the watch's presets, enough to switch between; the rest answer with the dark colours.
@@ -17,15 +16,6 @@ const PRESETS: Record<string, ThemeColors> = {
   },
 };
 const THEMES = ['dark', 'light', 'ocean', 'forest', 'sunset', 'contrast'];
-
-// A made-up but plausible day: quiet nights, a walk in the morning and another after work.
-function sampleDay(seed: number): number[] {
-  return Array.from({ length: 240 }, (_, slot) => {
-    const hour = slot / 10;
-    const active = (hour > 7.5 && hour < 9) || (hour > 17 && hour < 18.5) ? 90 : hour > 7 && hour < 22 ? 12 : 0;
-    return Math.round(active * (0.6 + ((slot * 37 + seed * 11) % 10) / 12));
-  });
-}
 
 // The line the watch's remote app sends when a button is tapped, for simulating taps.
 export function remoteTapLine(button: number): string {
@@ -45,7 +35,6 @@ export class MockGadgetbridge {
     chimes: 0,
     do_not_disturb: false,
   };
-  private alarms: Required<Alarm>[] = [{ h: 7, m: 30, on: true, rep: 31 }];
   private slots: { update: [number, number]; recovery: [number, number] } = {
     update: [0, 392 * 1024],
     recovery: [0x65000, 388 * 1024],
@@ -66,21 +55,11 @@ export class MockGadgetbridge {
     switch (message.t) {
       case 'settings':
         return [this.applySettings(message)];
-      case 'alarm':
-        if (Array.isArray(message.d)) {
-          this.alarms = (message.d as Alarm[]).map((alarm) => ({
-            h: alarm.h,
-            m: alarm.m,
-            on: alarm.on ?? true,
-            rep: alarm.rep ?? 0,
-          }));
-        }
-        return [JSON.stringify({ t: 'alarm', d: this.alarms })];
-      case 'steps': {
-        const day = Number(message.d);
-        const v = day % 5 === 0 ? null : sampleDay(day);
-        return [JSON.stringify({ t: 'steps', y: message.y, m: message.m, d: message.d, v, now: 4321 })];
-      }
+      case 'state':
+        // The watch takes up the app's rewritten state and sends nothing back.
+        return typeof message.app === 'string' && message.app.length > 0 && message.app.length <= 32
+          ? []
+          : [JSON.stringify({ t: 'error', msg: 'state needs an app id' })];
       case 'status':
         return [JSON.stringify({ t: 'status', bat: 76, mv: 3912, charging: false, steps: 4321 })];
       case 'slots':

@@ -1,21 +1,18 @@
-// Gadgetbridge messages that the watch answers: settings, alarms, step history and status.
+// Gadgetbridge messages that the watch answers: settings, status and slots.
 // The watch side is described in docs/companion-protocol.md in the NeoTime tree; keep the two in step.
 
 import type {
-  Alarm,
-  AlarmReply,
   PhoneToWatchMessage,
   SettingsReply,
   SlotRange,
   SlotsReply,
   StatusReply,
-  StepsReply,
   SettingsMessage,
   WatchToPhoneMessage,
 } from './gadgetbridge';
 
 // Message types that come back as the answer to a request.
-export type ReplyType = 'settings' | 'alarm' | 'steps' | 'status' | 'slots';
+export type ReplyType = 'settings' | 'status' | 'slots';
 
 type ReplyOf<T extends ReplyType> = Extract<WatchToPhoneMessage, { t: T }>;
 
@@ -125,40 +122,6 @@ export async function writeWatchSettings(
   patch: Omit<SettingsMessage, 't'>,
 ): Promise<SettingsReply> {
   return channel.request({ t: 'settings', ...patch }, 'settings');
-}
-
-export async function readAlarms(channel: RequestChannel): Promise<Required<Alarm>[]> {
-  const reply: AlarmReply = await channel.request({ t: 'alarm' }, 'alarm');
-  return reply.d.map(normaliseAlarm);
-}
-
-export const MAX_ALARMS = 12;
-
-export async function writeAlarms(channel: RequestChannel, alarms: Alarm[]): Promise<Required<Alarm>[]> {
-  if (alarms.length > MAX_ALARMS) {
-    throw new Error(`The watch holds at most ${MAX_ALARMS} alarms.`);
-  }
-  const reply: AlarmReply = await channel.request(
-    { t: 'alarm', d: alarms.map(normaliseAlarm) },
-    'alarm',
-  );
-  return reply.d.map(normaliseAlarm);
-}
-
-export function normaliseAlarm(alarm: Alarm): Required<Alarm> {
-  return {
-    h: Math.min(23, Math.max(0, Math.floor(alarm.h))),
-    m: Math.min(59, Math.max(0, Math.floor(alarm.m))),
-    on: alarm.on ?? true,
-    rep: (alarm.rep ?? 0) & 0x7f,
-  };
-}
-
-export async function readSteps(channel: RequestChannel, day: Date): Promise<StepsReply> {
-  return channel.request(
-    { t: 'steps', y: day.getFullYear(), m: day.getMonth() + 1, d: day.getDate() },
-    'steps',
-  );
 }
 
 export async function readStatus(channel: RequestChannel): Promise<StatusReply> {

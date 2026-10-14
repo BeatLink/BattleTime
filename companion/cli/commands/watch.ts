@@ -22,17 +22,17 @@ import { encodeForWatch, decodeWatchLine } from '@/protocol/gadgetbridge';
 import {
   fittedRecoverySlot,
   moveSlots,
-  readAlarms,
   readSlots,
   readStatus,
   readWatchSettings,
   SLOT_PAGE_BYTES,
-  writeAlarms,
   writeWatchSettings,
   type SlotsReport,
 } from '@/protocol/requests';
 import type { SlotRange } from '@/protocol/gadgetbridge';
+import { clockText, repeatLabel, type WatchAlarm } from '@/protocol/alarms';
 import { readStepHistory } from '@/protocol/steps';
+import { fileRecords, readAlarms, writeAlarms, type WatchRecords } from '@/services/watch-records';
 import { bundledOffers } from '@/services/app-store';
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
 import { fetchNote } from '@/services/note-source';
@@ -85,10 +85,13 @@ neotime slots [fit|recovery <start> <size>|update <start>]
   and recovery or update moves a slot, in bytes (0x... works). The watch copies
   the recovery image along, then restarts.`;
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-function describeDays(rep: number): string {
-  return rep === 0 ? 'once' : DAYS.filter((_, bit) => rep & (1 << bit)).join(' ');
+// The step logs and the alarm app's state, read and written with the file service as the phone app does.
+function records(session: WatchSession): WatchRecords {
+  return fileRecords({
+    files: () => session.files(),
+    send: (message) => session.send(encodeForWatch(message)),
+    requests: session.requests,
+  });
 }
 
 // Turn a key=value argument into a setting, reading numbers and booleans as such.
@@ -191,31 +194,30 @@ export async function settings(session: WatchSession, args: string[]) {
 }
 
 // HH:MM, then optionally /<day digits> and /off.
-export function parseAlarm(arg: string) {
+export function parseAlarm(arg: string): WatchAlarm {
   const match = /^(\d{1,2}):(\d{2})(?:\/([1-7]+))?(\/off)?$/.exec(arg);
-  if (!match) {
+  if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) {
     throw new Error(`Give alarms as HH:MM[/days][/off], not ${arg}.`);
   }
-  const rep = [...(match[3] ?? '')].reduce((mask, digit) => mask | (1 << (Number(digit) - 1)), 0);
-  return { h: Number(match[1]), m: Number(match[2]), on: !match[4], rep };
+  const days = [...(match[3] ?? '')].reduce((mask, digit) => mask | (1 << (Number(digit) - 1)), 0);
+  return { hour: Number(match[1]), minute: Number(match[2]), days, enabled: !match[4] };
 }
 
 export async function alarms(session: WatchSession, args: string[]) {
   const list =
     args.length === 0
-      ? await readAlarms(session.requests)
-      : await writeAlarms(session.requests, args[0] === 'none' ? [] : args.map(parseAlarm));
+      ? await readAlarms(records(session))
+      : await writeAlarms(records(session), args[0] === 'none' ? [] : args.map(parseAlarm));
   if (list.length === 0) {
     say('No alarms.');
   }
   for (const alarm of list) {
-    const time = `${String(alarm.h).padStart(2, '0')}:${String(alarm.m).padStart(2, '0')}`;
-    say(`${time}  ${alarm.on ? 'on ' : 'off'}  ${describeDays(alarm.rep)}`);
+    say(`${clockText(alarm)}  ${alarm.enabled ? 'on ' : 'off'}  ${repeatLabel(alarm.days)}`);
   }
 }
 
 export async function steps(session: WatchSession, days: number) {
-  const history = await readStepHistory(session.requests, days);
+  const history = await readStepHistory(records(session).readStepDay, days);
   const top = Math.max(1, ...history.map((day) => day.total));
   for (const day of history) {
     const bar = '#'.repeat(Math.round((day.total / top) * 30));
