@@ -19,7 +19,6 @@ use crate::{
 pub const IMAGE_HEADER_SIZE: u32 = 256;
 /// "NTIM" in flash byte order.
 pub const IMAGE_MAGIC: u32 = u32::from_le_bytes(*b"NTIM");
-/// Version 2 added the shared library's place; a version 1 image was built for the 388 KB firmware region.
 pub const IMAGE_HEADER_VERSION: u16 = 2;
 pub const COMMIT_LENGTH: usize = 8;
 

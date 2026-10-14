@@ -59,7 +59,7 @@ External flash, 4 MB, with the slots where `DEFAULT_SLOTS` puts them:
 |---|---|---|---|
 | update slot | `0x000000` | 484 KB | a new firmware waiting to be installed, then the one it replaced, one page up; one page more than `FIRMWARE`, which the swap needs |
 | (free) | `0x079000` | 308 KB | room the slot table can give to either slot |
-| recovery slot | `0x0C6000` | 232 KB | a small firmware that can only receive a new firmware over BLE; clear of every slot the 388 KB layout used |
+| recovery slot | `0x0C6000` | 232 KB | a small firmware that can only receive a new firmware over BLE |
 | `FILE_SYSTEM` | `0x100000` | 3 MB | the flash store: apps, settings and shared resources (see [storage.md](storage.md)) |
 
 Both slots must lie in `SLOT_AREA`, everything below `FILE_SYSTEM`, so an image and the file system
@@ -93,9 +93,8 @@ front of the `.bin` after the build. All numbers are little-endian:
 A library must lie wholly inside the image, after the header, or the header counts as unsound.
 `tools/image_header.py --library dist/shared.ntlib` appends the library after the code on a word
 boundary and fills both fields; the recovery firmware carries none. The firmware finds the library
-by reading its own header at `0x08000` (`neotime_packages::library::firmware_library`). Version 1
-headers, from the layout with a 388 KB firmware region, read as unsound, so the bootloader never
-runs an image built for that layout.
+by reading its own header at `0x08000` (`neotime_packages::library::firmware_library`). A header of
+any other version reads as unsound, so the bootloader never runs it.
 
 The vector table follows at offset 256, which is 256-byte aligned as the Cortex-M4 requires, and
 the bootloader points VTOR there before it jumps. `python3 tools/image_header.py --describe
@@ -118,8 +117,7 @@ start and size, the recovery slot's start and size, a spare word, and a CRC-32 o
 
 - **Reading** takes the newest record whose CRC matches and whose slots pass `Slots::check`: whole
   pages, inside `SLOT_AREA`, the update slot exactly one page more than `FIRMWARE`, the recovery
-  slot between 64 KB and `FIRMWARE`'s size, and no overlap. Records written under the 388 KB layout
-  name a 392 KB update slot, so they all fail and read as the defaults. With no such record, the slots are
+  slot between 64 KB and `FIRMWARE`'s size, and no overlap. With no such record, the slots are
   `DEFAULT_SLOTS`, so an erased table, or pages still holding an old system's code, read as the
   defaults.
 - **Writing** (`write_slots`) appends a record after the last one, so nothing is erased until a
@@ -256,74 +254,7 @@ after the hand-back even though the bootloader was written, as on the first watc
 it leaves clears with the next firmware update.
 
 `tests/emulator/bootloader_update.robot` runs it over a copy of the built bootloader with one byte
-of its title changed. On 2026-10-11 the first-layout updater replaced the reloader's bootloader on the
-watch itself: the rollback showed "Update failed", and the next firmware update was swapped in under
-the new blue screen.
-
-## Moving a watch from the first layout
-
-Until 2026-10-13 the bootloader was 16 KB, the boot state sat at `0x04000` and the firmware ran from
-`0x05000` with no header. A firmware or recovery firmware built for that layout cannot run under
-this one, and that firmware's recovery receiver refuses an image that starts with a header, so the
-move is one image, `dist/bootloader-updater-from-first-layout.zip`
-(`bootloader-updater/ --features from-first-layout`):
-
-1. It is sent as an ordinary firmware update to the first-layout firmware, which the old bootloader
-   swaps in at `0x05000`. It is linked so its vector table is at `0x05000`, as the old bootloader
-   expects, and its code starts at `0x08000`; the pages between, which become the slot table and the
-   boot state, are left zero, which reads as no record and as an ordinary boot.
-2. It checks the bootloader and the recovery firmware it carries, then waits for the charger and
-   enough charge, as above; holding the button quits with nothing written, and the old bootloader rolls back.
-3. It writes the recovery firmware into the default recovery slot and checks its header and CRC. On a failure it stops before the
-   bootloader is touched.
-4. It checks the charger and the charge again, since the recovery write takes a while, then writes
-   the 20 KB bootloader over `0x00000` to `0x05000`, which covers the old boot state, reads
-   it back, and resets.
-5. The new bootloader finds no sound header at `0x08000`, where the updater's code is, and no
-   previous firmware with one, so it installs the recovery firmware and leaves the
-   `RecoveryInstalled` note. The full firmware follows as an ordinary update from the recovery firmware.
-
-A power cut before step 4 leaves the old bootloader and the old firmware; the recovery slot then
-holds an image the old bootloader cannot use, which it reports as "No recovery found". A power cut in
-step 4 is the same window as any bootloader update. `tests/emulator/bootloader_update.robot` runs the
-whole move from `tests/emulator/fixtures/first-layout-bootloader.bin`, the 16 KB bootloader as built
-from `89d3a63`; the one on the watch was built from an earlier commit of the same code and cannot be
-rebuilt bit for bit.
-
-On 2026-10-13 it moved the watch itself. It was sent with `neotime flash` to the full first-layout
-firmware; the watch answered as the recovery firmware, `0.1.0+23a906d`, within 30 seconds of the
-upload ending. The full firmware then went on from the recovery firmware with `neotime flash`, and
-the apps in the file system came through untouched.
-
-## Moving a watch from the 388 KB layout
-
-Until the shared library joined the firmware image, `FIRMWARE` was 388 KB, the library sat in its
-own 92 KB region at `0x69000`, the default recovery slot started at `0x065000`, and images carried a
-version 1 header. That layout's bootloader swaps only 388 KB and its firmware refuses a larger
-upload, so the move is one image, `dist/bootloader-updater-from-388-kb-layout.zip`
-(`bootloader-updater/ --features from-388-kb-layout`), sent with `neotime flash`:
-
-1. It is linked like any firmware, kept within 388 KB, and given a version 1 header
-   (`tools/image_header.py --for-388-kb-layout`), so the old firmware accepts it and the old
-   bootloader swaps it in on trial.
-2. It checks the bootloader and the recovery firmware it carries, then waits for the charger and
-   enough charge, as above; holding the button quits with nothing written, and the old bootloader rolls back.
-3. It writes the recovery firmware into the new default recovery slot at `0x0C6000`, which no slot
-   of the old layout reached, and checks its header and CRC. On a failure it stops before the
-   bootloader is touched.
-4. It checks the charger and the charge again, writes the new bootloader, reads it back, and resets
-   without confirming.
-5. The new bootloader reads the old slot table records as unsound and uses `DEFAULT_SLOTS`. It
-   finds only version 1 headers at `0x08000` and one page up in the update slot, so it installs the
-   recovery firmware and leaves the `RecoveryInstalled` note. The full firmware, with its library,
-   follows as an ordinary update from the recovery firmware.
-
-A power cut before step 4 leaves the old bootloader, the old firmware and the old recovery slot
-untouched. A power cut in step 4 is the same window as any bootloader update. The apps, settings and
-files in the flash store come through untouched; `/resources/shared.ntlib`, which the old companion
-uploaded, is left over and can be deleted. `tests/emulator/bootloader_update.robot` runs the whole
-move, then the full firmware's update, from `tests/emulator/fixtures/388-kb-layout-bootloader.bin`,
-built from `0b6fd33`, with the watch's own slot table record (recovery at `0x065000`, 168 KB).
+of its title changed.
 
 ## What the firmware must do
 

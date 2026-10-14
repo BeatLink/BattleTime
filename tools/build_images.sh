@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds every image NeoTime ships and packs them into dist/: the bootloader, the firmware with the
-# shared library inside, the recovery firmware, the bootloader updaters, and the two reloaders that
+# shared library inside, the recovery firmware, the bootloader updater, and the two reloaders that
 # move a watch over from wasp-os or InfiniTime. Run it inside `nix develop`.
 
 set -euo pipefail
@@ -42,17 +42,6 @@ echo "bootloader updater (a firmware update that installs dist/bootloader.bin on
 add_header bootloader-updater "$dist/bootloader-updater.code.bin" "$dist/bootloader-updater.bin"
 python3 -I ../tools/package_dfu.py "$dist/bootloader-updater.bin" "$dist/bootloader-updater.zip"
 
-echo "bootloader updater from the first layout (16 KB bootloader, firmware at 0x5000; carries the recovery firmware)"
-(cd bootloader-updater && NEOTIME_NEW_BOOTLOADER_BIN="$PWD/../$dist/bootloader.bin" NEOTIME_RECOVERY_BIN="$PWD/../$dist/recovery.bin" \
-  CARGO_TARGET_DIR=target/from-first-layout cargo objcopy -q --release --features from-first-layout -- -O binary "../$dist/bootloader-updater-from-first-layout.bin")
-python3 -I ../tools/package_dfu.py "$dist/bootloader-updater-from-first-layout.bin" "$dist/bootloader-updater-from-first-layout.zip"
-
-echo "bootloader updater from the 388 KB layout (library at 0x69000; carries the recovery firmware)"
-(cd bootloader-updater && NEOTIME_NEW_BOOTLOADER_BIN="$PWD/../$dist/bootloader.bin" NEOTIME_RECOVERY_BIN="$PWD/../$dist/recovery.bin" \
-  CARGO_TARGET_DIR=target/from-388-kb-layout cargo objcopy -q --release --features from-388-kb-layout -- -O binary "../$dist/bootloader-updater-from-388-kb-layout.code.bin")
-# The bootloader it is sent under reads only the header version of its own layout.
-add_header bootloader-updater "$dist/bootloader-updater-from-388-kb-layout.code.bin" "$dist/bootloader-updater-from-388-kb-layout.bin" --for-388-kb-layout
-python3 -I ../tools/package_dfu.py "$dist/bootloader-updater-from-388-kb-layout.bin" "$dist/bootloader-updater-from-388-kb-layout.zip"
 
 # The full firmware does not fit beside the bootloader in wasp-os's app slot, so the reloader installs
 # the recovery firmware in both places, and the full firmware follows as an ordinary update.

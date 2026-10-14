@@ -3,10 +3,7 @@
 //! It is sent as an ordinary firmware update, so the bootloader swaps it in on trial. It checks the
 //! bootloader it carries, waits for the charger and enough charge, writes the bootloader pages and reads them back. It
 //! never confirms itself, so its reset makes the new bootloader roll back to the firmware before it,
-//! and a note in RAM tells that firmware the rollback was meant. Built `from-first-layout` or
-//! `from-388-kb-layout`, it first writes the recovery firmware it carries into the recovery slot, since
-//! the firmware before it cannot run under the new layout; the new bootloader installs that recovery
-//! firmware on its first start. See docs/bootloader.md.
+//! and a note in RAM tells that firmware the rollback was meant. See docs/bootloader.md.
 
 #![no_std]
 #![no_main]
@@ -39,11 +36,6 @@ use panic_halt as _;
 
 mod new_bootloader {
     include!(concat!(env!("OUT_DIR"), "/new_bootloader.rs"));
-}
-
-#[cfg(moves_layout)]
-mod recovery {
-    include!(concat!(env!("OUT_DIR"), "/recovery.rs"));
 }
 
 // ============================================================================
@@ -125,28 +117,7 @@ fn main() -> ! {
 
     wait_until_the_battery_is_safe(&battery, &mut status, &button, &mut watchdog, &mut delay);
 
-    #[cfg(moves_layout)]
-    {
-        status.show("Writing", "Writing recovery", "Do not unplug");
-        let Ok(flash_spi) = RefCellDevice::new_no_delay(&spi_bus, flash_chip_select);
-        let recovery_staged = neotime_external_flash::ExternalFlash::new(
-            flash_spi,
-            neotime_external_flash::BusyWait {
-                cpu_frequency_in_hertz: CPU_FREQUENCY_IN_HERTZ,
-            },
-        )
-        .is_ok_and(|mut external_flash| stage_recovery(&mut external_flash, &mut watchdog));
-        if !recovery_staged {
-            status.show("Unchanged", "Recovery write failed", "Hold button to quit");
-            wait_for_the_button_hold(&button, &mut watchdog, &mut delay);
-        }
-    }
-    #[cfg(not(moves_layout))]
     drop(flash_chip_select);
-
-    // The recovery write takes a while, in which the charger may have come out.
-    #[cfg(moves_layout)]
-    wait_until_the_battery_is_safe(&battery, &mut status, &button, &mut watchdog, &mut delay);
 
     // From the first erase until the read-back matches, a reset would leave nothing that starts, so
     // the watchdog is fed whatever the button does and the updater never gives up.
@@ -308,47 +279,6 @@ fn write_and_check(internal_flash: &mut Nvmc<'_>, watchdog: &mut WatchdogHandle)
 
     watchdog.pet();
     installed_bootloader_matches(internal_flash)
-}
-
-// ============================================================================
-// Writing the recovery firmware, when moving from an older layout
-// ============================================================================
-
-/// Writes the carried recovery firmware into the default recovery slot and checks it reads back whole.
-#[cfg(moves_layout)]
-fn stage_recovery<Flash: NorFlash>(external_flash: &mut Flash, watchdog: &mut WatchdogHandle) -> bool {
-    use neotime_boot::{image_header::installable_image, DEFAULT_SLOTS};
-
-    let slot = DEFAULT_SLOTS.recovery;
-    let image = &recovery::PADDED[..recovery::LENGTH_IN_BYTES];
-    let erase_end =
-        slot.start + (image.len() as u32).div_ceil(Flash::ERASE_SIZE as u32) * Flash::ERASE_SIZE as u32;
-    for sector_start in (slot.start..erase_end).step_by(Flash::ERASE_SIZE) {
-        watchdog.pet();
-        if external_flash
-            .erase(sector_start, sector_start + Flash::ERASE_SIZE as u32)
-            .is_err()
-        {
-            return false;
-        }
-    }
-
-    // The SPI peripheral reads only from RAM, so each chunk is copied there first.
-    for (index, chunk) in image.chunks(COPY_CHUNK_SIZE).enumerate() {
-        watchdog.pet();
-        let mut in_ram = [0xFF; COPY_CHUNK_SIZE];
-        in_ram[..chunk.len()].copy_from_slice(chunk);
-        let offset = slot.start + (index * COPY_CHUNK_SIZE) as u32;
-        if external_flash.write(offset, &in_ram[..chunk.len()]).is_err() {
-            return false;
-        }
-    }
-
-    watchdog.pet();
-    matches!(
-        installable_image(external_flash, slot.start, slot.size),
-        Ok(Some(_))
-    )
 }
 
 // ============================================================================

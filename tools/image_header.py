@@ -7,7 +7,6 @@ commit, where the shared library sits, and a CRC-32 of the header itself. The bo
 run or install an image whose header is missing, damaged or linked for another address.
 
 `--library` appends a shared library after the code, on a word boundary, and records its place.
-`--for-388-kb-layout` writes the version 1 header that a bootloader of that layout reads.
 `--library-beside-elf` is for emulator runs that load the firmware's ELF: it writes a header that
 places the library at the end of the firmware region, and prints the address to load the library at.
 """
@@ -25,9 +24,6 @@ MAGIC = b"NTIM"
 HEADER_VERSION = 2
 FIRMWARE_VECTOR_TABLE = 0x8100
 FIRMWARE_SLOT_BYTES = 480 * 1024
-# What a bootloader of the 388 KB layout accepts: a version 1 header, which has no library fields.
-OLD_LAYOUT_HEADER_VERSION = 1
-OLD_LAYOUT_SLOT_BYTES = 388 * 1024
 LIBRARY_ALIGNMENT = 4
 COMMIT_LENGTH = 8
 IMAGE_TYPES = {"firmware": 1, "recovery": 2, "bootloader-updater": 3}
@@ -46,13 +42,12 @@ def header(
     load_address: int,
     library_offset: int = 0,
     library_size: int = 0,
-    header_version: int = HEADER_VERSION,
 ) -> bytes:
     """The header for `code`, which already holds the library, if any, at `library_offset` minus the header."""
     major, minor, patch = (int(part) for part in version.split("."))
     fields = FIELDS.pack(
         MAGIC,
-        header_version,
+        HEADER_VERSION,
         HEADER_SIZE,
         IMAGE_TYPES[image_type],
         major,
@@ -93,8 +88,6 @@ def describe(image: bytes) -> str:
     problems = []
     if magic != MAGIC or header_size != HEADER_SIZE:
         problems.append("not a NeoTime image header")
-    elif header_version == OLD_LAYOUT_HEADER_VERSION:
-        library_offset = library_size = 0
     elif header_version != HEADER_VERSION:
         problems.append(f"unknown header version {header_version}")
     if zlib.crc32(body) != header_crc:
@@ -106,9 +99,8 @@ def describe(image: bytes) -> str:
         problems.append("library lies outside the image")
     type_name = next((name for name, number in IMAGE_TYPES.items() if number == type_number), f"unknown {type_number}")
     library = f", library of {library_size} bytes at +{library_offset:#x}" if library_size else ""
-    layout = " (388 KB layout)" if header_version == OLD_LAYOUT_HEADER_VERSION else ""
     return (
-        f"{type_name} {major}.{minor}.{patch}+{commit.rstrip(b'\0').decode('ascii', 'replace')}{layout}, "
+        f"{type_name} {major}.{minor}.{patch}+{commit.rstrip(b'\0').decode('ascii', 'replace')}, "
         f"{size} bytes linked at {load_address:#x}{library}, built {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(build_time))} UTC: "
         + ("; ".join(problems) if problems else "sound")
     )
@@ -159,8 +151,6 @@ def self_test() -> None:
     assert (code, offset) == (b"\x01\x02\x03\xffLIB", HEADER_SIZE + 4)
     outside = header("firmware", "1.2.3", "", 0, code, FIRMWARE_VECTOR_TABLE, offset, 4)
     assert describe(outside + code).endswith("library lies outside the image")
-    old = header("bootloader-updater", "1.2.3", "", 0, code, FIRMWARE_VECTOR_TABLE, header_version=1)
-    assert "(388 KB layout)" in describe(old + code) and describe(old + code).endswith("sound")
     beside, address = library_beside_elf(1001)
     assert address % LIBRARY_ALIGNMENT == 0 and address + 1001 <= FIRMWARE_VECTOR_TABLE - HEADER_SIZE + FIRMWARE_SLOT_BYTES
     assert struct.unpack("<II", beside[36:44]) == (address - FIRMWARE_VECTOR_TABLE + HEADER_SIZE, 1001)
@@ -177,11 +167,6 @@ def main() -> None:
     parser.add_argument("--build-time", type=int, help="seconds since 1970; defaults to SOURCE_DATE_EPOCH or now")
     parser.add_argument("--load-address", type=lambda text: int(text, 0), default=FIRMWARE_VECTOR_TABLE)
     parser.add_argument("--library", type=Path, help="a compiled shared library to append after the code")
-    parser.add_argument(
-        "--for-388-kb-layout",
-        action="store_true",
-        help="write the version 1 header a bootloader of the 388 KB layout reads; no library",
-    )
     parser.add_argument("--describe", type=Path, help="print the header of an image and stop")
     parser.add_argument(
         "--library-beside-elf",
@@ -209,15 +194,12 @@ def main() -> None:
         parser.error("image and output are required")
 
     code = arguments.image.read_bytes()
-    if arguments.for_388_kb_layout and arguments.library:
-        parser.error("an image for the 388 KB layout cannot carry a library")
-    slot_bytes = OLD_LAYOUT_SLOT_BYTES if arguments.for_388_kb_layout else FIRMWARE_SLOT_BYTES
     library_offset = library_size = 0
     if arguments.library:
         library = arguments.library.read_bytes()
         code, library_offset = with_library(code, library)
         library_size = len(library)
-    check_linked_for_firmware(code, arguments.load_address, slot_bytes)
+    check_linked_for_firmware(code, arguments.load_address, FIRMWARE_SLOT_BYTES)
     build_time = arguments.build_time
     if build_time is None:
         build_time = int(os.environ.get("SOURCE_DATE_EPOCH", time.time()))
@@ -230,7 +212,6 @@ def main() -> None:
         arguments.load_address,
         library_offset,
         library_size,
-        OLD_LAYOUT_HEADER_VERSION if arguments.for_388_kb_layout else HEADER_VERSION,
     )
     arguments.output.write_bytes(image_header + code)
 

@@ -117,19 +117,6 @@ fn the_bootloader_block_fills_the_first_32_kb() {
 }
 
 #[test]
-fn the_default_recovery_slot_is_clear_of_the_388_kb_layouts_slots() {
-    let old_update_end = 388 * 1024 + PAGE_SIZE;
-    let old_recovery = Region {
-        start: 0x6_5000,
-        size: 388 * 1024,
-    };
-
-    assert!(DEFAULT_SLOTS.recovery.start >= old_update_end);
-    assert!(DEFAULT_SLOTS.recovery.start >= old_recovery.end());
-    assert_eq!(DEFAULT_SLOTS.recovery.end(), SLOT_AREA.end());
-}
-
-#[test]
 fn the_replaced_firmware_fits_in_the_update_slot_one_page_up() {
     let previous = DEFAULT_SLOTS.previous_firmware();
 
@@ -357,7 +344,7 @@ mod image_headers {
     }
 
     #[test]
-    fn a_header_of_the_388_kb_layout_is_refused() {
+    fn a_header_of_another_version_is_refused() {
         let mut header = header_of(&firmware_image(10));
         header[4..6].copy_from_slice(&1u16.to_le_bytes());
         let crc = crate::migration::crc32(crate::migration::CRC32_INITIAL, &header[..252]);
@@ -367,7 +354,7 @@ mod image_headers {
     }
 
     #[test]
-    fn an_image_linked_for_the_first_layout_does_not_run_as_firmware() {
+    fn an_image_linked_elsewhere_does_not_run_as_firmware() {
         let mut header = ImageHeader::decode(&header_of(&firmware_image(10))).unwrap();
         header.load_address = 0x5000;
 
@@ -606,9 +593,9 @@ fn a_damaged_recovery_image_leaves_the_update_slot_alone() {
 }
 
 #[test]
-fn a_first_layout_recovery_image_is_not_installed() {
+fn a_recovery_image_without_a_header_is_not_installed() {
     let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
-    // What the first layout's recovery slot held: a bare vector table for 0x5000, with no header.
+    // A bare vector table, with no header in front.
     flash.put(
         DEFAULT_SLOTS.recovery.start,
         &[0x00, 0x00, 0x01, 0x20, 0x01, 0x51, 0x00, 0x00],

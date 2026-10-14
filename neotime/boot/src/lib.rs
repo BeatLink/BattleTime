@@ -82,7 +82,6 @@ pub const DEFAULT_SLOTS: Slots = Slots {
         start: 0x0000_0000,
         size: FIRMWARE.size + PAGE_SIZE,
     },
-    // Clear of every slot the 388 KB layout used, so the move to this layout can write it first.
     recovery: Region {
         start: 0x000C_6000,
         size: SLOT_AREA.end() - 0x000C_6000,

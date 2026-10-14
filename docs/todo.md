@@ -213,9 +213,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Install recovery from a resized slot on the watch.** After `neotime slots fit` shrank the
   watch's recovery slot to 168 KB, the firmware read the record back, but the bootloader menu's
   Install recovery from that slot has only run in the emulator; it needs a button hold.
-- [ ] **Drop `tests/emulator/fixtures/first-watch-bootloader.bin`.** No suite loads it since the
-  20 KB layout; `first-layout-bootloader.bin` replaced it. Delete it, or keep it as the record of what
-  the reloader first put on the watch.
 - [ ] **Clippy fails on master.** CI's `Lints and types` and the four `Watch lints` jobs are red at
   04005694: `to_upper(&mut self, …)` in `neotime/runtime/src/interpreter.rs:1002` breaks the `to_*`
   naming rule, and eight operations with no effect sit in `neotime/firmware/src/main.rs` (lines 651,
@@ -581,10 +578,6 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **Shrink the BLEFS service.** It grew from 1.9 KB to 8.9 KB of flash when it moved onto the
   async store, and the full firmware and its library have about 8 KB of the 480 KB region left. Look at the copy, move and
   listing code and at how many async state machines its `answer` builds.
-- [ ] **Move the watch to the merged firmware region.** Send
-  `dist/bootloader-updater-from-388-kb-layout.zip` with `neotime flash`, on the charger; the watch
-  comes back as the recovery firmware, and `neotime flash dist/firmware.zip` then puts the full
-  firmware with its library on. Proven in the emulator only ([bootloader.md](bootloader.md#moving-a-watch-from-the-388-kb-layout)).
 - [ ] **Try the flash store on the watch.** It runs in the emulator, apps and icons included, but
   has not met the real chip. Measure the mount time (about a second estimated), the deepest stack
   with apps open and saving, and read the diagnostics' store counters after a day of use.
