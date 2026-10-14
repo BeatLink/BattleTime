@@ -12,7 +12,8 @@ skip and volume commands.
   the track plays. The bar below fills as the track goes on.
 - Tap the middle button, **play** or **pause**, to start or stop the phone's player. The button
   changes at once, without waiting for the phone.
-- Tap the **previous** or **next** button, or swipe right or left, to skip a track.
+- Tap the **previous** or **next** button to skip a track. Swipes left and right step round the
+  quick-app ring when the app was opened from it.
 - Swipe up to swap the outer buttons for **volume down** and **volume up**. Swipe down to bring the
   skip buttons back; a second swipe down leaves the app.
 - Tracks over 99 minutes show hours and minutes, and anything over 99 hours shows as Inf.

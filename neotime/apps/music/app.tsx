@@ -1,7 +1,6 @@
 // Music remote for the phone's player, merged from InfiniTime's Music and wasp-os's music_player.
-// It has wasp-os's artist over a wrapped track title and InfiniTime's running position, swipe left
-// and right to skip, and a second row of volume buttons that a swipe up brings in. It asks the phone
-// for its player's state when it opens.
+// It has wasp-os's artist over a wrapped track title and InfiniTime's running position, and a second
+// row of volume buttons that a swipe up brings in. It asks the phone for its player's state when it opens.
 
 import {
   back,
@@ -98,13 +97,13 @@ function Music() {
     <Screen
       padding={8}
       gap={6}
-      // This takes every swipe, so right skips back a track and down leaves once the volume row is hidden.
+      // Left and right are left to the shell, so they step round the quick-app ring.
       onSwipe={(event) => {
-        if (event.direction === "left") send("next");
-        else if (event.direction === "right") send("previous");
-        else if (event.direction === "up") shows_volume.value = true;
-        else if (shows_volume.value) shows_volume.value = false;
-        else back();
+        if (event.direction === "up") shows_volume.value = true;
+        else if (event.direction === "down") {
+          if (shows_volume.value) shows_volume.value = false;
+          else back();
+        }
       }}
     >
       <Row justify="space_between">

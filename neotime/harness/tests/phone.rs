@@ -1,6 +1,6 @@
 //! Companion lines from the phone, read as the watch reads them and passed to apps and faces.
 
-use neotime_app_testing::{EffectKind, SystemValue, TestWatch, Value};
+use neotime_app_testing::{Direction, EffectKind, EventResult, SystemValue, TestWatch, Value};
 use neotime_runtime::SystemValues;
 
 /// Counts the calls of each kind, as the `call` subscription reports them.
@@ -140,4 +140,14 @@ fn a_line_the_watch_cannot_read_or_does_not_pass_on_is_refused() {
 
     assert!(unreadable.contains("cannot read"), "{unreadable}");
     assert!(not_for_apps.contains("is not a call"), "{not_for_apps}");
+}
+
+#[test]
+fn music_leaves_left_and_right_swipes_to_the_shell_so_the_quick_app_ring_steps_on() {
+    let mut watch = TestWatch::open_app("music").unwrap();
+
+    assert_eq!(watch.swipe(Direction::Left), EventResult::NotHandled);
+    assert_eq!(watch.swipe(Direction::Right), EventResult::NotHandled);
+    assert_eq!(watch.swipe(Direction::Up), EventResult::Handled);
+    assert!(watch.failures().is_empty());
 }

@@ -72,12 +72,12 @@ describe("music", () => {
     expect(screen.getByText("Inf/Inf")).toBeTruthy();
   });
 
-  it("skips tracks with the side buttons and left and right swipes", () => {
+  it("skips tracks with the side buttons and leaves left and right swipes alone", () => {
     act(() => screen.getAllByRole("button")[0].click());
     act(() => screen.getAllByRole("button")[2].click());
     act(() => swipe("left"));
     act(() => swipe("right"));
-    expect(commands()).toEqual(["previous", "next", "next", "previous"]);
+    expect(commands()).toEqual(["previous", "next"]);
   });
 
   it("turns the side buttons into volume buttons after a swipe up, until a swipe down", () => {
