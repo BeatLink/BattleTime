@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it } from '@jest/globals';
 import {
   appendLog,
   describePermissions,
-  installPluginWatchApps,
   messageFromPage,
   messageToPage,
   pluginBridge,
@@ -36,6 +35,7 @@ function fakeBridge(overrides: Partial<PluginBridge> = {}): PluginBridge {
     remove: async () => ({ ok: true }),
     setEnabled: async () => ({ ok: true }),
     watchApps: async () => ({ ok: true, value: [{ name: 'a.ntapp', data: [1, 2] }, { name: 'b.ntapp', data: [3] }] }),
+    installOnWatch: async () => ({ ok: true, value: [{ id: 'weather-demo', name: 'Weather demo' }] }),
     uiMessage: async () => ({ ok: true }),
     onUi: () => () => {},
     onLog: () => () => {},
@@ -76,13 +76,10 @@ describe('plugins', () => {
     await expect(plugins.uiMessage('x', {})).rejects.toThrow('could not reach its plugins');
   });
 
-  it('installs each watch app a plugin carries, in order', async () => {
-    const installed: number[][] = [];
-    const count = await installPluginWatchApps(new Plugins(fakeBridge()), 'weather-demo', async (image) => {
-      installed.push(Array.from(image));
-    });
-    expect(count).toBe(2);
-    expect(installed).toEqual([[1, 2], [3]]);
+  it('reads the watch app images and installs them through the core', async () => {
+    const plugins = new Plugins(fakeBridge());
+    expect((await plugins.watchAppImages('weather-demo')).map((image) => Array.from(image))).toEqual([[1, 2], [3]]);
+    expect(await plugins.installOnWatch('weather-demo')).toEqual([{ id: 'weather-demo', name: 'Weather demo' }]);
   });
 
   it('puts permissions in words', () => {

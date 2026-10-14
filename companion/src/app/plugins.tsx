@@ -8,11 +8,9 @@ import { Row } from '@/components/row';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { useWatch } from '@/hooks/use-watch';
-import { installImage } from '@/protocol/packages';
 import {
   appendLog,
   describePermissions,
-  installPluginWatchApps,
   pluginBridge,
   Plugins,
   pluginStateText,
@@ -25,7 +23,7 @@ import { useTask } from '@/state/use-task';
 export default function PluginsScreen() {
   const bridge = useMemo(() => pluginBridge(), []);
   const plugins = useMemo(() => (bridge ? new Plugins(bridge) : null), [bridge]);
-  const { files, packages, watchReady } = useWatch();
+  const { watchReady } = useWatch();
   const task = useTask();
   const [list, setList] = useState<PluginStatus[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -60,11 +58,10 @@ export default function PluginsScreen() {
     );
   }
 
-  const installWatchApps = (id: string) =>
-    installPluginWatchApps(plugins, id, async (image) => {
-      const header = await installImage(await files(), await packages(), image);
-      setProgress(`Installed ${header.name} on the watch.`);
-    });
+  const installWatchApps = async (id: string) => {
+    const installed = await plugins.installOnWatch(id);
+    setProgress(`Installed ${installed.map((app) => app.name).join(', ')} on the watch.`);
+  };
 
   const install = () =>
     task.run('Installing a plugin', async () => {

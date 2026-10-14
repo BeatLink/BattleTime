@@ -34,6 +34,7 @@ export type PluginBridge = {
   remove(id: string): Promise<BridgeResult<void>>;
   setEnabled(id: string, enabled: boolean): Promise<BridgeResult<void>>;
   watchApps(id: string): Promise<BridgeResult<{ name: string; data: number[] }[]>>;
+  installOnWatch(id: string): Promise<BridgeResult<{ id: string; name: string }[]>>;
   uiMessage(id: string, message: unknown): Promise<BridgeResult<void>>;
   onUi(listener: (event: PluginUiMessage) => void): () => void;
   onLog(listener: (event: PluginLogLine) => void): () => void;
@@ -84,22 +85,14 @@ export class Plugins {
     return valueOf(await this.bridge.watchApps(id)).map((app) => Uint8Array.from(app.data));
   }
 
+  // Installs every watch app the plugin carries and places it in the launcher, all in the desktop app's core.
+  async installOnWatch(id: string): Promise<{ id: string; name: string }[]> {
+    return valueOf(await this.bridge.installOnWatch(id));
+  }
+
   async uiMessage(id: string, message: unknown): Promise<void> {
     valueOf(await this.bridge.uiMessage(id, message));
   }
-}
-
-// Installs every watch app a plugin carries, one after another, and says how many went on.
-export async function installPluginWatchApps(
-  plugins: Plugins,
-  id: string,
-  install: (image: Uint8Array) => Promise<unknown>,
-): Promise<number> {
-  const images = await plugins.watchAppImages(id);
-  for (const image of images) {
-    await install(image);
-  }
-  return images.length;
 }
 
 // What a plugin may do, in words, for the user to read before relying on it.

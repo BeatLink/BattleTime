@@ -354,6 +354,7 @@ fn main() {
             plugins::plugins_remove,
             plugins::plugins_set_enabled,
             plugins::plugins_watch_apps,
+            plugins::plugins_install_on_watch,
             plugins::plugins_ui_message,
             sync::sync_settings,
             sync::sync_set_settings,

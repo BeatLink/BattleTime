@@ -85,6 +85,7 @@
     remove: (id) => call('plugins_remove', { id }),
     setEnabled: (id, enabled) => call('plugins_set_enabled', { id, enabled }),
     watchApps: (id) => call('plugins_watch_apps', { id }),
+    installOnWatch: (id) => call('plugins_install_on_watch', { id }),
     uiMessage: (id, message) => call('plugins_ui_message', { id, message }),
     onUi: (listener) => subscribe('plugins:ui', listener, (each, payload) => each(payload)),
     onLog: (listener) => subscribe('plugins:log', listener, (each, payload) => each(payload)),
