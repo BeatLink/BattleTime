@@ -1,4 +1,4 @@
-// Builds the plugin's permissions and, for Android, gathers the Java and Kotlin its library compiles.
+// Builds the plugin's permissions and, for Android, gathers btleplug's Java for its library to compile.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -23,9 +23,6 @@ const COMMANDS: &[&str] = &[
     "remove_listener",
 ];
 
-// The Expo module's glue, which the Tauri plugin replaces with its own.
-const EXPO_ONLY_FILES: &[&str] = &["PhoneBridgeModule.kt", "WebRequest.kt"];
-
 fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android") {
         gather_android_sources();
@@ -39,23 +36,14 @@ fn main() {
 // Android sources
 // ============================================================================
 
-// Copies the Expo module's services and btleplug's Java into android/.generated, which Gradle compiles.
+// Copies btleplug's Java into android/.generated, which Gradle compiles beside the plugin's own Kotlin.
 fn gather_android_sources() {
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let generated = manifest_dir.join("android").join(".generated");
     let _ = std::fs::remove_dir_all(&generated);
 
-    let expo_module = manifest_dir.join("../modules/phone-bridge/android/src/main");
-    println!("cargo:rerun-if-changed={}", expo_module.display());
-    copy_tree(
-        &expo_module.join("java"),
-        &generated.join("java"),
-        EXPO_ONLY_FILES,
-    );
-    copy_tree(&expo_module.join("res"), &generated.join("res"), &[]);
-
     let btleplug_java = btleplug_dir().join("src/droidplug/java/src/main/java");
-    copy_tree(&btleplug_java, &generated.join("java"), &[]);
+    copy_tree(&btleplug_java, &generated.join("java"));
 }
 
 // Finds btleplug's sources through cargo metadata, since its Java is not published anywhere else.
@@ -86,17 +74,14 @@ fn btleplug_dir() -> PathBuf {
     Path::new(manifest_path).parent().unwrap().to_path_buf()
 }
 
-fn copy_tree(source: &Path, target: &Path, skipped_names: &[&str]) {
+fn copy_tree(source: &Path, target: &Path) {
     for entry in std::fs::read_dir(source).unwrap_or_else(|error| panic!("{}: {error}", source.display())) {
         let entry = entry.unwrap();
         let name = entry.file_name();
-        if skipped_names.iter().any(|skipped| name == *skipped) {
-            continue;
-        }
         let from = entry.path();
         let to = target.join(&name);
         if from.is_dir() {
-            copy_tree(&from, &to, skipped_names);
+            copy_tree(&from, &to);
         } else {
             std::fs::create_dir_all(target).unwrap();
             std::fs::copy(&from, &to).unwrap();

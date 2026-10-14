@@ -60,7 +60,7 @@ class SendBroadcastArgs {
   var extras: Map<String, String> = emptyMap()
 }
 
-// The phone bridge for the Tauri app: the same services the Expo module reads, behind Tauri commands.
+// The phone bridge for the Tauri app: the notification, call and media services beside it, behind Tauri commands.
 @TauriPlugin(
   permissions = [
     Permission(strings = [Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT], alias = "bluetooth"),

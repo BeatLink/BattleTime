@@ -15,9 +15,8 @@ android {
         consumerProguardFiles("consumer-rules.pro")
     }
 
-    // The Expo module's services and btleplug's Java, which build.rs copies here.
+    // btleplug's Java, which build.rs copies here.
     sourceSets["main"].java.srcDir(".generated/java")
-    sourceSets["main"].res.srcDir(".generated/res")
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
