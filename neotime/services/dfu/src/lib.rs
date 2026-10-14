@@ -12,6 +12,8 @@
 
 #![no_std]
 
+extern crate alloc;
+
 use heapless::Vec;
 use neotime_updates::{ImageKind, UpdateError, UpdateTargets};
 
@@ -61,6 +63,25 @@ const LARGEST_PACKET: usize = 20;
 /// Writes to the flash go in whole program pages, not 20 bytes at a time.
 const WRITE_BUFFER_SIZE: usize = 256;
 const CRC_READ_CHUNK: usize = 256;
+
+/// Bytes on the heap with a fixed room reserved, which is only ever filled up to that room.
+type HeapBytes = alloc::vec::Vec<u8>;
+
+/// Reserves `capacity` bytes on the heap, or None when the heap has no room.
+fn reserve_bytes(capacity: usize) -> Option<HeapBytes> {
+    let mut bytes = HeapBytes::new();
+    bytes.try_reserve_exact(capacity).ok()?;
+    Some(bytes)
+}
+
+/// Appends `data` if it fits the room reserved, so the bytes never grow and never allocate again.
+fn append_within(bytes: &mut HeapBytes, capacity: usize, data: &[u8]) -> Result<(), ()> {
+    if bytes.len() + data.len() > capacity {
+        return Err(());
+    }
+    bytes.extend_from_slice(data);
+    Ok(())
+}
 /// How many chunks the check reads before it lets the other tasks run, 4 KB.
 const CRC_CHUNKS_BETWEEN_YIELDS: u32 = 16;
 
@@ -219,7 +240,7 @@ enum State {
 struct PausedUpload {
     kind: ImageKind,
     image_size_in_bytes: u32,
-    init_packet: Vec<u8, LARGEST_INIT_PACKET>,
+    init_packet: HeapBytes,
     /// The bytes written to flash; what was still in the write buffer is lost and sent again.
     bytes_stored: u32,
 }
@@ -232,9 +253,10 @@ pub struct LegacyDfu<Targets: UpdateTargets> {
     bytes_received: u32,
     packets_received: u32,
     receipt_interval: u16,
-    init_packet: Vec<u8, LARGEST_INIT_PACKET>,
+    /// Held on the heap only while an update runs, like the write buffer.
+    init_packet: Option<HeapBytes>,
     expected_crc: u16,
-    write_buffer: Vec<u8, WRITE_BUFFER_SIZE>,
+    write_buffer: Option<HeapBytes>,
     allows_updates: bool,
     paused: Option<PausedUpload>,
     /// Where the image carries on, once the phone asked and the paused upload is this one.
@@ -251,9 +273,9 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
             bytes_received: 0,
             packets_received: 0,
             receipt_interval: 0,
-            init_packet: Vec::new(),
+            init_packet: None,
             expected_crc: 0,
-            write_buffer: Vec::new(),
+            write_buffer: None,
             allows_updates: true,
             paused: None,
             resume_from: None,
@@ -295,8 +317,9 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
                 self.paused = Some(PausedUpload {
                     kind: self.kind,
                     image_size_in_bytes: self.image_size_in_bytes,
-                    init_packet: self.init_packet.clone(),
-                    bytes_stored: self.bytes_received - self.write_buffer.len() as u32,
+                    init_packet: self.init_packet.take().unwrap_or_default(),
+                    bytes_stored: self.bytes_received
+                        - self.write_buffer.as_ref().map_or(0, HeapBytes::len) as u32,
                 });
             }
             // A paused upload whose image was being announced again is still untouched in flash.
@@ -316,9 +339,18 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
         self.state = State::Idle;
         self.bytes_received = 0;
         self.packets_received = 0;
-        self.init_packet.clear();
-        self.write_buffer.clear();
+        self.init_packet = None;
+        self.write_buffer = None;
         self.resume_from = None;
+    }
+
+    /// The heap the update holds now: its init packet and write buffer, none while idle.
+    pub fn buffer_bytes(&self) -> usize {
+        [&self.init_packet, &self.write_buffer]
+            .into_iter()
+            .flatten()
+            .map(HeapBytes::capacity)
+            .sum()
     }
 
     pub fn release(self) -> Targets {
@@ -405,6 +437,14 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
             Some(&image_type::RECOVERY) => ImageKind::Recovery,
             _ => return Outcome::response(command::START_DFU, result::NOT_SUPPORTED),
         };
+        let (Some(init_packet), Some(write_buffer)) = (
+            reserve_bytes(LARGEST_INIT_PACKET),
+            reserve_bytes(WRITE_BUFFER_SIZE),
+        ) else {
+            return Outcome::response(command::START_DFU, result::OPERATION_FAILED);
+        };
+        self.init_packet = Some(init_packet);
+        self.write_buffer = Some(write_buffer);
 
         self.state = State::WaitingForSizes;
         Outcome::none()
@@ -413,16 +453,19 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
     async fn initialize(&mut self, parameters: &[u8]) -> Outcome {
         match (self.state, parameters.first()) {
             (State::WaitingForInitPacket, Some(0)) | (State::ReceivingInitPacket, Some(0)) => {
-                self.init_packet.clear();
+                let Some(init_packet) = self.init_packet.as_mut() else {
+                    return Outcome::response(command::INITIALIZE_DFU, result::OPERATION_FAILED);
+                };
+                init_packet.clear();
                 self.state = State::ReceivingInitPacket;
                 Outcome::none()
             }
             (State::ReceivingInitPacket, Some(&INIT_PACKET_END)) => {
-                let Some(crc_bytes) = self
-                    .init_packet
+                let init_packet = self.init_packet.as_deref().unwrap_or_default();
+                let Some(crc_bytes) = init_packet
                     .len()
                     .checked_sub(2)
-                    .map(|start| &self.init_packet[start..])
+                    .map(|start| &init_packet[start..])
                 else {
                     return Outcome::response(command::INITIALIZE_DFU, result::OPERATION_FAILED);
                 };
@@ -431,7 +474,7 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
                 if self
                     .paused
                     .as_ref()
-                    .is_some_and(|paused| paused.init_packet != self.init_packet)
+                    .is_some_and(|paused| paused.init_packet.as_slice() != init_packet)
                     && self.start_afresh().await.is_err()
                 {
                     return Outcome::response(command::INITIALIZE_DFU, result::OPERATION_FAILED);
@@ -525,6 +568,7 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
 
         let finished = self.targets.finish(self.kind).await;
         self.state = State::Idle;
+        self.init_packet = None;
         match finished {
             Ok(()) => Outcome {
                 notifications: Vec::new(),
@@ -543,7 +587,11 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
         match self.state {
             State::WaitingForSizes => self.take_sizes(data).await,
             State::ReceivingInitPacket => {
-                if self.init_packet.extend_from_slice(data).is_err() {
+                let fits = self
+                    .init_packet
+                    .as_mut()
+                    .is_some_and(|init_packet| append_within(init_packet, LARGEST_INIT_PACKET, data).is_ok());
+                if !fits {
                     self.abort();
                     return Outcome::response(command::INITIALIZE_DFU, result::DATA_SIZE_EXCEEDS_LIMIT);
                 }
@@ -608,11 +656,17 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
             return Outcome::response(command::RECEIVE_FIRMWARE_IMAGE, result::DATA_SIZE_EXCEEDS_LIMIT);
         }
 
-        if self.write_buffer.extend_from_slice(data).is_err() {
+        let Some(write_buffer) = self.write_buffer.as_mut() else {
+            return self.fail_image();
+        };
+        if append_within(write_buffer, WRITE_BUFFER_SIZE, data).is_err() {
             if self.flush().await.is_err() {
                 return self.fail_image();
             }
-            self.write_buffer.extend_from_slice(data).unwrap();
+            let Some(write_buffer) = self.write_buffer.as_mut() else {
+                return self.fail_image();
+            };
+            write_buffer.extend_from_slice(data);
         }
         self.bytes_received += data.len() as u32;
         self.packets_received += 1;
@@ -629,6 +683,7 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
             if self.flush().await.is_err() {
                 return self.fail_image();
             }
+            self.write_buffer = None;
             self.state = State::ImageReceived;
             outcome.push(&[
                 command::RESPONSE,
@@ -640,11 +695,11 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
     }
 
     async fn flush(&mut self) -> Result<(), UpdateError> {
-        if self.write_buffer.is_empty() {
+        let Some(write_buffer) = self.write_buffer.as_mut().filter(|buffer| !buffer.is_empty()) else {
             return Ok(());
-        }
-        let result = self.targets.receive(self.kind, &self.write_buffer).await;
-        self.write_buffer.clear();
+        };
+        let result = self.targets.receive(self.kind, write_buffer).await;
+        write_buffer.clear();
         result
     }
 

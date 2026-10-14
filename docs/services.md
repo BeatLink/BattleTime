@@ -278,7 +278,9 @@ uploads an image and the bootloader that installs it. It knows nothing of the up
 and NeoTime's tools update NeoTime without changes. `LegacyDfu` is the state machine, with no
 Bluetooth in it: control point commands and packet writes go in, notifications and a reset request
 come out, and the bytes go to `neotime-updates`. `activity` reports the step it is on and
-`Outcome::failure` why a step was refused, for the status page.
+`Outcome::failure` why a step was refused, for the status page. Its 256-byte write buffer and
+64-byte init packet are on the heap only while an update runs; a heap without room for them
+answers `START_DFU` with `OPERATION_FAILED`.
 
 An upload cut off by a lost link is kept. The same image sent again (the same type, size and init
 packet) carries on from where it stopped for a phone that asks with `REPORT_RECEIVED_IMAGE_SIZE`

@@ -212,6 +212,26 @@ fn a_full_update_stores_the_image_and_asks_for_a_reset() {
 }
 
 #[test]
+fn the_buffers_are_held_only_while_an_update_runs() {
+    let firmware = image(5000);
+    let mut phone = Phone::new();
+    assert_eq!(phone.dfu.buffer_bytes(), 0);
+
+    phone.command(&[command::START_DFU, image_type::APPLICATION]);
+    let while_starting = phone.dfu.buffer_bytes();
+    phone.dfu.abort();
+    let after_abort = phone.dfu.buffer_bytes();
+    phone.upload(image_type::APPLICATION, &firmware, 0);
+    let once_received = phone.dfu.buffer_bytes();
+    phone.command(&[command::ACTIVATE_IMAGE_AND_RESET]);
+
+    assert!(while_starting >= 256 + 64);
+    assert_eq!(after_abort, 0);
+    assert!(once_received < 256);
+    assert_eq!(phone.dfu.buffer_bytes(), 0);
+}
+
+#[test]
 fn checking_a_large_image_lets_the_other_tasks_run_every_4_kb() {
     let firmware = image(8192);
     let mut phone = Phone::new();
