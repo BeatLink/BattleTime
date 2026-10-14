@@ -12,7 +12,7 @@ use embedded_graphics::{
 
 use neotime_display::{color_of_panel_pixel, panel_pixel};
 
-use crate::geometry::{scale, Color, Rect, OPAQUE};
+use crate::geometry::{divide_by_255, scale, Color, Rect, OPAQUE};
 use crate::renderer::Renderer;
 use crate::strip::Strip;
 
@@ -164,7 +164,7 @@ fn mix(color: Color, alpha: u8, under: Rgb565) -> Rgb565 {
     let front_share = u16::from(alpha);
     let back_share = u16::from(OPAQUE - alpha);
     let channel = |front: u8, back: u8| {
-        ((u16::from(front) * front_share + u16::from(back) * back_share) / u16::from(OPAQUE)) as u8
+        divide_by_255(u16::from(front) * front_share + u16::from(back) * back_share) as u8
     };
     let red = under.r();
     let green = under.g();

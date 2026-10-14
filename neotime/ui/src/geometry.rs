@@ -96,7 +96,14 @@ impl Color {
     }
 }
 
-/// `value` scaled by `share` out of 255, rounding down.
+/// `value` scaled by `share` out of 255, rounded to the nearest step.
 pub fn scale(value: u8, share: u8) -> u8 {
-    (u16::from(value) * u16::from(share) / u16::from(OPAQUE)) as u8
+    divide_by_255(u16::from(value) * u16::from(share)) as u8
+}
+
+/// A product of two 8-bit values divided by 255 and rounded, by shifts instead of a division.
+#[inline]
+pub fn divide_by_255(product: u16) -> u16 {
+    let rounded = u32::from(product) + 128;
+    ((rounded + (rounded >> 8)) >> 8) as u16
 }

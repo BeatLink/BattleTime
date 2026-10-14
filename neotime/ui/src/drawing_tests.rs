@@ -4,7 +4,7 @@ extern crate std;
 
 use std::{vec, vec::Vec};
 
-use crate::geometry::{Color, PointF, Rect};
+use crate::geometry::{divide_by_255, scale, Color, PointF, Rect};
 use crate::raster::{rasterize_arc, rasterize_disc, rasterize_line, CoverageSink};
 use crate::renderer::{ClipRenderer, FontLineMetrics, FontMetrics, GlyphInfo, Renderer};
 use crate::shapes::{draw_border_straight, draw_rounded_border, draw_widget_bg, fill_rounded_rect, Style};
@@ -84,6 +84,20 @@ fn rectangles_join_and_overlap() {
 fn a_colour_fades_by_a_share() {
     assert_eq!(Color(1, 2, 3, 255).with_alpha(128), Color(1, 2, 3, 128));
     assert_eq!(Color(1, 2, 3, 128).with_alpha(0), Color(1, 2, 3, 0));
+}
+
+#[test]
+fn every_product_of_two_shares_divides_by_255_to_the_nearest_step() {
+    for value in 0..=255u16 {
+        for share in 0..=255u16 {
+            let product = value * share;
+            let nearest = (u32::from(product) * 2 + 255) / 510;
+            assert_eq!(u32::from(divide_by_255(product)), nearest, "{value} x {share}");
+        }
+    }
+    assert_eq!(scale(255, 255), 255);
+    assert_eq!(scale(200, 255), 200);
+    assert_eq!(scale(1, 128), 1);
 }
 
 // ============================================================================

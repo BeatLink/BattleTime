@@ -243,7 +243,8 @@ rasterizers and shapes follow [rlvgl](https://github.com/softoboros/rlvgl)'s (MI
 - **Drawing into a strip.** The app host draws each widget through a `StripRenderer`, which writes
   straight into the strip's pixels, clipped to the widget and faded by its opacity. A partly
   transparent colour, such as the soft edge of a letter, is mixed with the pixel really underneath,
-  so text on a coloured button has clean edges. Every call works on whole runs of a row, and
+  so text on a coloured button has clean edges; shares out of 255 are divided by shifts and rounded
+  to the nearest step. Every call works on whole runs of a row, and
   `visible_area` tells widgets which rows and columns the strip holds, so glyphs, images, circles,
   lines and arcs skip the rest; a sideways wipe paints 16-column strips, and a glyph or image works
   out only the columns inside one.
