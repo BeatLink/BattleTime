@@ -144,7 +144,8 @@ impl ServiceBuilder {
                 handle: u16,
             }
 
-            #[allow(unused)]
+            // CCCD_COUNT adds 0 for each characteristic without notify or indicate.
+            #[allow(unused, clippy::identity_op)]
             impl #struct_name {
                 #visibility const ATTRIBUTE_COUNT: usize = {
                     let mut count = 1usize;
@@ -412,7 +413,7 @@ impl ServiceBuilder {
                                     &#default_value,
                                     #uuid,
                                     #permissions,
-                                    #default_value.len() as usize,
+                                    #default_value.len(),
                                     Some({
                                         fn initial_value(buffer: &mut [u8]) -> usize {
                                             trouble_host::attribute::write_initial_value(buffer, &#default_value)

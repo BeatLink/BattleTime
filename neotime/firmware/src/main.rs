@@ -11,8 +11,6 @@
 
 #![no_std]
 #![no_main]
-// The gatt_service expansion trips this lint on every characteristic field.
-#![allow(clippy::identity_op)]
 
 extern crate alloc;
 
