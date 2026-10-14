@@ -314,14 +314,16 @@ impl Connection {
         widening.min(limit)
     }
 
+    /// The listen for the central's first packet, which stays open across a transmit window still unheard.
     fn listen_for_anchor(&self) -> (u32, u32) {
         let widening = self.window_widening();
-        let start_at = self.anchor.wrapping_sub(
-            widening + PREAMBLE_AND_ACCESS_ADDRESS + RECEIVE_CHAIN_DELAY + RAMP_UP + SAFETY_MARGIN,
-        );
-        let give_up_at = self
-            .anchor
-            .wrapping_add(self.window_length + widening + SAFETY_MARGIN);
+        let lead = widening + PREAMBLE_AND_ACCESS_ADDRESS + RECEIVE_CHAIN_DELAY + RAMP_UP + SAFETY_MARGIN;
+        let start_at = self.anchor.wrapping_sub(lead);
+        let room_before_next_event = self
+            .interval_in_microseconds()
+            .saturating_sub(lead + MINIMUM_SCHEDULING_LEAD);
+        let listen_after_anchor = (self.window_length + widening + SAFETY_MARGIN).min(room_before_next_event);
+        let give_up_at = self.anchor.wrapping_add(listen_after_anchor);
         (start_at, give_up_at)
     }
 }
@@ -903,7 +905,6 @@ impl LinkLayer {
             .anchor
             .wrapping_add(connection.interval_in_microseconds());
         connection.event_counter = connection.event_counter.wrapping_add(1);
-        connection.window_length = 0;
         connection.consecutive_crc_errors = 0;
 
         if let Some((instant, bits)) = connection.pending_channel_map {

@@ -124,7 +124,9 @@ critical section elsewhere in the firmware must stay well under that budget.
 
 Every connection event, it listens a little before the expected time and a little after. That
 margin, the *window widening*, grows with the time since the last packet heard, at the central's
-clock accuracy plus the watch's own 50 ppm.
+clock accuracy plus the watch's own 50 ppm. After a connect request or a connection update the
+central may start anywhere in a *transmit window*, and the listen covers that whole window at every
+event until the central is heard, capped so it ends before the next event's listen would start.
 
 The first nRF52832 silicon revision has radio errata 102, 106 and 107. The controller applies
 Nordic's documented workaround on that revision only. Which revision the PineTime has is not yet

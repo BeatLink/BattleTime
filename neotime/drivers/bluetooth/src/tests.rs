@@ -621,6 +621,112 @@ fn the_next_event_is_one_interval_after_the_anchor() {
     assert_eq!(channel.index, 2 * HOP_INCREMENT);
 }
 
+fn listen_window_of(operation: RadioOperation) -> (u32, u32) {
+    match operation {
+        RadioOperation::Receive {
+            start_at, give_up_at, ..
+        } => (start_at, give_up_at),
+        other => panic!("expected to be listening, got {other:?}"),
+    }
+}
+
+/// Checks that the listen around `expected_anchor` is the narrow one of a connection back in step.
+fn assert_listens_narrowly_around(operation: RadioOperation, expected_anchor: u32) {
+    let (start_at, give_up_at) = listen_window_of(operation);
+
+    assert!(
+        start_at < expected_anchor && expected_anchor - start_at < 200,
+        "starts at {start_at}"
+    );
+    assert!(
+        give_up_at > expected_anchor && give_up_at - expected_anchor < 60,
+        "gives up at {give_up_at}"
+    );
+}
+
+#[test]
+fn the_transmit_window_stays_open_until_the_central_is_heard() {
+    let mut transmit_buffer = transmit_buffer();
+    let (mut link_layer, first) = connected_link_layer(&DEFAULT_CONNECT, &mut transmit_buffer);
+    let window_start = CONNECT_REQUEST_END + 1250 + 40 + 2 * 1250;
+    let window_end = window_start + 3 * 1250;
+    let (_, first_give_up) = listen_window_of(first);
+
+    let second = link_layer.on_nothing_received(first_give_up, &mut transmit_buffer);
+    let (_, second_give_up) = listen_window_of(second);
+    let late_anchor = window_end + INTERVAL_IN_MICROSECONDS - 300;
+    central_sends(
+        &mut link_layer,
+        &CentralPacket::empty(false, false),
+        late_anchor,
+        &mut transmit_buffer,
+    );
+    let third = link_layer.on_transmitted(late_anchor + 400, &mut transmit_buffer);
+
+    assert!(
+        second_give_up > window_end + INTERVAL_IN_MICROSECONDS,
+        "gives up at {second_give_up}"
+    );
+    assert!(link_layer.is_connected());
+    assert_listens_narrowly_around(third, late_anchor + INTERVAL_IN_MICROSECONDS);
+}
+
+#[test]
+fn a_connection_update_window_stays_open_until_the_central_is_heard() {
+    let mut transmit_buffer = transmit_buffer();
+    let (mut link_layer, first) = connected_link_layer(&DEFAULT_CONNECT, &mut transmit_buffer);
+    let anchor = anchor_of(first);
+    let new_interval: u16 = 40;
+    let window_size: u8 = 2;
+    let window_offset: u16 = 1;
+    let instant: u16 = 3;
+    let mut update = vec![CONNECTION_UPDATE_INDICATION, window_size];
+    update.extend_from_slice(&window_offset.to_le_bytes());
+    update.extend_from_slice(&new_interval.to_le_bytes());
+    update.extend_from_slice(&0u16.to_le_bytes());
+    update.extend_from_slice(&200u16.to_le_bytes());
+    update.extend_from_slice(&instant.to_le_bytes());
+    let packet = CentralPacket {
+        kind: DataKind::Control,
+        sequence_number: false,
+        next_expected_sequence_number: false,
+        more_data: false,
+        payload: &update,
+    };
+    central_sends(&mut link_layer, &packet, anchor, &mut transmit_buffer);
+    let mut operation = link_layer.on_transmitted(anchor + 400, &mut transmit_buffer);
+    for _ in 1..instant {
+        let (_, give_up_at) = listen_window_of(operation);
+        operation = link_layer.on_nothing_received(give_up_at, &mut transmit_buffer);
+    }
+    let window_start = anchor + instant as u32 * INTERVAL_IN_MICROSECONDS + window_offset as u32 * 1250;
+    let window_end = window_start + window_size as u32 * 1250;
+    let new_interval_in_microseconds = new_interval as u32 * 1250;
+
+    let (_, give_up_at) = listen_window_of(operation);
+    let after_instant = link_layer.on_nothing_received(give_up_at, &mut transmit_buffer);
+    let (_, after_instant_give_up) = listen_window_of(after_instant);
+    let late_anchor = window_end + new_interval_in_microseconds - 300;
+    central_sends(
+        &mut link_layer,
+        &CentralPacket::empty(true, true),
+        late_anchor,
+        &mut transmit_buffer,
+    );
+    let next = link_layer.on_transmitted(late_anchor + 400, &mut transmit_buffer);
+
+    assert!(
+        give_up_at > window_end,
+        "the instant's listen gives up at {give_up_at}"
+    );
+    assert!(
+        after_instant_give_up > window_end + new_interval_in_microseconds,
+        "gives up at {after_instant_give_up}"
+    );
+    assert!(link_layer.is_connected());
+    assert_listens_narrowly_around(next, late_anchor + new_interval_in_microseconds);
+}
+
 // ============================================================================
 // Control procedures
 // ============================================================================
