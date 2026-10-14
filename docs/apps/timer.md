@@ -20,11 +20,11 @@ Choosing a length, here ten minutes.
 
 ![The timer running](../../neotime/harness/snapshots/screens/app-timer-running.png)
 
-Running, with the time left and the pause button.
+Running, with the time left inside a ring that empties as it counts down, and the pause button.
 
 ![The timer paused](../../neotime/harness/snapshots/screens/app-timer-paused.png)
 
-Paused: the time greys out, with stop and play buttons.
+Paused: the time and the ring grey out, with stop and play buttons.
 
 ![The timer ringing](../../neotime/harness/snapshots/screens/app-timer-ringing.png)
 

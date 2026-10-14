@@ -817,7 +817,7 @@ the numbers mean. These are the meanings the host uses now:
 | `align` | 0 `start`, 1 `center`, 2 `end`. Any other number means not set. |
 | `visible` | 0 or 1. |
 | `value`, `minimum`, `maximum` | Whole numbers. `minimum` is 0 and `maximum` 100 unless set. |
-| `start_angle`, `end_angle` | Degrees clockwise from twelve o'clock, as everywhere in the app API. Used only when both are set; an arc otherwise runs from 225 to 135, leaving a gap at the bottom. The host turns them into its arc drawing's angles, which start at three o'clock. |
+| `start_angle`, `end_angle` | Degrees clockwise from twelve o'clock, as everywhere in the app API. Used only when both are set, and equal angles make a whole ring; an arc otherwise runs from 225 to 135, leaving a gap at the bottom. The host turns them into its arc drawing's angles, which start at three o'clock. |
 | `long_mode` | 0 `wrap`, 1 `scroll`, 2 `clip`. Labels wrap at spaces by default. |
 | `image`, `icon` | An image number: below 32768 the app's own, 32768 to 65535 the shared library's, 65536 and up an installed app's icon. |
 

@@ -38,7 +38,7 @@ pub struct ArcLook {
     pub minimum: i32,
     pub maximum: i32,
     pub value: i32,
-    /// Where the track starts and ends, in degrees clockwise from three o'clock before `rotation`.
+    /// Where the track starts and ends, in degrees clockwise from three o'clock before `rotation`; equal means a whole ring.
     pub start_angle: i32,
     pub end_angle: i32,
     pub rotation: i32,
@@ -76,7 +76,11 @@ fn angle_vector(degrees: i32) -> (f32, f32) {
 /// Draws the track, then the part the value fills from the start.
 pub fn draw_arc(renderer: &mut dyn Renderer, bounds: Rect, look: &ArcLook) {
     let track_start = stored_angle(look.start_angle);
-    let track_end = stored_angle(look.end_angle);
+    // A start and end that meet make a whole ring, as in the browser preview.
+    let track_end = match stored_angle(look.end_angle) {
+        end if end == track_start => track_start + 360,
+        end => end,
+    };
     let rotation = turn_of(look.rotation);
     let value = clamp_to_range(look.value, look.minimum, look.maximum);
 

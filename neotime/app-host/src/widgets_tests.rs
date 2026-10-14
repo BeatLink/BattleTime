@@ -137,6 +137,22 @@ fn an_arc_with_a_gap_fills_across_the_wrap_and_reversed_ranges_count_down() {
 }
 
 #[test]
+fn an_arc_whose_start_and_end_meet_runs_the_whole_way_round() {
+    let mut canvas = Canvas::new();
+    let meeting = ArcLook {
+        start_angle: 0,
+        end_angle: 0,
+        ..arc_look(25)
+    };
+
+    draw_arc(&mut canvas, rect(0, 0, SIDE, SIDE), &meeting);
+
+    assert_eq!(canvas.at(36, 4), Some(ACCENT));
+    assert_eq!(canvas.at(55, 36), Some(TRACK));
+    assert_eq!(canvas.at(4, 24), Some(TRACK));
+}
+
+#[test]
 fn an_arc_with_no_room_or_no_thickness_draws_nothing() {
     let mut canvas = Canvas::new();
 
