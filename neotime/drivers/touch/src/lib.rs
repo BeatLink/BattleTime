@@ -143,6 +143,9 @@ impl TouchReport {
 /// The farthest a finger moves between two reports; a report farther off is noise, unless the next one agrees with it.
 pub const LARGEST_JUMP_IN_PIXELS: i32 = 60;
 
+/// The panel can send one more report at the place a finger lifted from, this soon after the lift.
+pub const LIFT_ECHO_MILLISECONDS: u64 = 30;
+
 /// What a report means for the finger on the panel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FingerStep {
@@ -161,18 +164,27 @@ pub struct Finger {
     last_position: Point,
     /// A far-off position held back, taken as real only if the next report lands near it.
     doubtful_position: Option<Point>,
+    /// Where and when the last reported lift was, so the panel's late report of it is not taken as a new finger.
+    last_lift: Option<(Point, u64)>,
 }
 
 impl Finger {
-    pub fn step(&mut self, report: &TouchReport) -> FingerStep {
+    /// Takes a report and when it came, and says what it means for the finger.
+    pub fn step(&mut self, report: &TouchReport, now_in_milliseconds: u64) -> FingerStep {
         let position = Point::from(report.position);
         match report.finger_event {
+            FingerEvent::PressedDown | FingerEvent::StillTouching
+                if !self.is_down && self.echoes_last_lift(position, now_in_milliseconds) =>
+            {
+                FingerStep::Nothing
+            }
             // A move whose landing was lost lands the finger where it is.
             FingerEvent::PressedDown | FingerEvent::StillTouching if !self.is_down => {
                 *self = Finger {
                     is_down: true,
                     last_position: position,
                     doubtful_position: None,
+                    last_lift: None,
                 };
                 FingerStep::Lands
             }
@@ -182,6 +194,7 @@ impl Finger {
             },
             FingerEvent::LiftedUp if self.is_down => {
                 self.is_down = false;
+                self.last_lift = Some((position, now_in_milliseconds));
                 FingerStep::Lifts
             }
             // A lift `lift` already ended, or the same lift reported twice.
@@ -202,6 +215,15 @@ impl Finger {
         let was_down = self.is_down;
         self.is_down = false;
         was_down.then_some(self.last_position)
+    }
+
+    /// Whether a report comes so soon after the last lift, and so near it, that it is the panel repeating the lift.
+    fn echoes_last_lift(&self, position: Point, now_in_milliseconds: u64) -> bool {
+        self.last_lift.is_some_and(|(lifted_at, lift_time)| {
+            let gap = position - lifted_at;
+            now_in_milliseconds.saturating_sub(lift_time) <= LIFT_ECHO_MILLISECONDS
+                && gap.x.abs().max(gap.y.abs()) <= DRAG_THRESHOLD_IN_PIXELS
+        })
     }
 
     /// Whether a position is near the last one, or near a far-off one the report before gave too.
@@ -228,7 +250,7 @@ impl Finger {
 pub const DRAG_THRESHOLD_IN_PIXELS: i32 = 10;
 
 /// How far a finger moves along one direction before the touch is a swipe, while it is still down.
-pub const SWIPE_DISTANCE_IN_PIXELS: i32 = 40;
+pub const SWIPE_DISTANCE_IN_PIXELS: i32 = 30;
 
 /// How far a flick moves before its lift can count as a swipe.
 pub const FLICK_DISTANCE_IN_PIXELS: i32 = 20;

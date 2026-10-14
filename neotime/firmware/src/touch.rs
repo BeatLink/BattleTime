@@ -58,7 +58,7 @@ const START_ATTEMPTS: usize = 5;
 const RETRY_DELAY: Duration = Duration::from_millis(100);
 
 /// The panel reports again and again while a finger stays down, so this long without a report means its lift was lost.
-const LOST_LIFT_TIMEOUT: Duration = Duration::from_millis(300);
+const LOST_LIFT_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// Follows one finger from press to lift, so each touch gives at most one gesture.
 #[derive(Default)]
@@ -72,7 +72,7 @@ struct Finger {
 
 impl Finger {
     fn touches_for(&mut self, report: &TouchReport, now_in_milliseconds: u64, send: impl FnMut(Touch)) {
-        let step = self.panel_finger.step(report);
+        let step = self.panel_finger.step(report, now_in_milliseconds);
         let (x, y) = (report.position.column as i32, report.position.row as i32);
         self.take_step(step, x, y, now_in_milliseconds, send);
     }

@@ -140,15 +140,13 @@ document for its part instead.
 - [ ] **Touch panel on the PineTime.** The firmware runs `neotime-touch` on the watch, but these
   checks have not been made:
   - `start` succeeds and `read_chip_info` gives a sensible chip ID (0xb4 or a near value);
-  - taps, long presses and swipes in all four directions, found by `GestureFinder` from the
-    finger's path, come through quickly and as the right gesture, short flicks included, and a
-    scroll in a list never turns into a swipe and keeps following the finger past 40 px;
+  - with the 30 px swipe distance, short upward swipes count and a scroll in a list never turns
+    into a swipe; taps, long presses and longer swipes were already right on the watch (touch test,
+    2026-10-14);
+  - no tap follows a long press any more, now the panel's late report of a lift is ignored;
   - a flicked list glides on and stops naturally, a slow drag lifted gently does not glide, and a
     tap on a gliding list stops it without opening the row;
-  - a quick tap is never lost to the 30 ms shortest tap, and a tap that wakes the screen opens nothing;
-  - reports keep coming while a finger is held still, or the 300 ms lost-lift timeout cuts long
-    presses short; measure the gap between reports and set the timeout to two or three of them;
-  - a drag streams reports while the finger stays down, and the finger lifting is reported;
+  - a tap that wakes the screen opens nothing;
   - the corners and edges report positions near 0 and 239, or edge swipes need a margin;
   - positions match the display, with column 0 and row 0 at the top left;
   - `sleep` stops the interrupts, and `sleep_until_double_tap` wakes on a double tap only;

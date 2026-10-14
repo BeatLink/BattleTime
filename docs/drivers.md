@@ -61,7 +61,10 @@ interrupt is P0.28 and its reset P0.10, on the I2C bus at SDA P0.06 and SCL P0.0
 - **One finger, with noise and lost reports allowed for.** `Finger` turns reports into landing,
   moving and lifting. A position more than 60 px from the last is ignored unless the next report
   lands near it too, a move while no finger is down lands one, and a second lift is nothing.
-  `lift` ends a touch whose lift report never came, at the last position.
+  The panel can send one more report where a finger lifted, about 10 ms after the lift, so a
+  report within 30 ms and 10 px of the last lift is not a new finger; on the watch it followed most
+  long presses and came out as a tap. `lift` ends a touch whose lift report never came, at the
+  last position.
 - **Gestures come from the finger's path.** The panel's own gestures arrive late and only for long
   straight strokes, so `GestureFinder` works out each touch's one gesture from where and when the
   finger lands, moves and lifts:
@@ -69,7 +72,7 @@ interrupt is P0.28 and its reset P0.10, on the I2C bus at SDA P0.06 and SCL P0.0
     | Gesture | When |
     |---|---|
     | Drag | The finger has moved 10 px. |
-    | Swipe | A drag has gone 40 px along one direction; it is reported at once. |
+    | Swipe | A drag has gone 30 px along one direction; it is reported at once. |
     | Flick | A stroke of 20 px whose finger still moves at 400 px/s that way as it lifts; it is a swipe at the lift. |
     | Long press | The finger has stayed still for 500 ms. |
     | Tap | The finger lifted sooner, after touching for at least 30 ms; a shorter touch is a bounce or a brushing sleeve. |

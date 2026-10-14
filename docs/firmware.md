@@ -141,8 +141,8 @@ or swipe from each touch's `GestureFinder` (see [drivers.md](drivers.md#touch-pa
   right.
 - A drag's start is where the finger crossed the 10 px threshold, so dragged content does not jump
   by it.
-- The panel reports again and again while a finger is down, so 300 ms without a report ends the
-  touch as if it had lifted.
+- The panel reports again and again while a finger is down, about every 10 ms even when it is
+  still, so 100 ms without a report ends the touch as if it had lifted.
 - Touches wait in a queue of 5 in which drags never take the last three places, so a lift's fling,
   the lift and its gesture always fit; while the queue is that full, only the newest drag is held
   back. The shell merges the drags waiting in the queue into the latest one, so a list follows the
