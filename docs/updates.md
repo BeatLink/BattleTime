@@ -253,6 +253,14 @@ bootloader, which would feed the watchdog again, and the watch would loop with n
 update mode. Halting lets the watchdog reset the watch, which the old bootloader takes as a request
 for its update mode.
 
+Under InfiniTime a reset while the reloader stages NeoTime cannot brick the watch either.
+InfiniTime's bootloader 1.0.0 is MCUBoot 1.5.0, which checks the secondary slot (external flash
+0x40000 to 0xB4000) before a revert as well as before an upgrade, and erases an invalid image
+instead of swapping it in. The reloader runs as an unconfirmed test image, so a reset part way
+through staging just starts the reloader again. The button-hold rollback and the factory restore
+both end in that same check. This comes from reading MCUBoot 1.5.0's source; the emulator's
+`migration.robot` starts from bootloader 5.0.4 instead.
+
 When the reloader stops on purpose, for a damaged download, a missing flash chip or a write that
 fails three times, it says so on the screen and keeps feeding the watchdog only while the button is
 up, as it does while it waits for the charger. Holding the button for a few seconds then lets the

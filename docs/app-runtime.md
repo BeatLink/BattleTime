@@ -49,6 +49,12 @@ The closest existing designs evaluate the screen's bindings in the renderer, not
 - [Pebble's Alloy](https://moddable.com/blog/pebble/) runs standard JavaScript on Moddable's XS
   engine, with Piu as its declarative UI, on watches with far more RAM.
 
+Apps stay Preact-flavoured TSX. Solid, Svelte, Nim, Python, plain Rust, a custom language and
+Jsonnet were compared. Solid would have removed only about 1% of the compiler and SDK, at the cost of
+rewriting the browser preview and its tests, and the parity tests already catch the preview and the
+watch drifting apart. Ranged number types would have saved 1.3 KB across every app. Neither was
+worth it.
+
 ## How it fits together
 
 ```mermaid

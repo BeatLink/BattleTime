@@ -2,12 +2,14 @@
 
 This repository holds both halves of NeoTime, licensed GPL-3.0-or-later:
 
-- [neotime/](neotime/) is the watch: firmware, bootloader, apps, faces, simulator, tools and docs.
-  Read [neotime/CLAUDE.md](neotime/CLAUDE.md) before working there, and run its commands from inside it.
-- [companion/](companion/) is the phone and desktop companion app. Read
-  [companion/CLAUDE.md](companion/CLAUDE.md) before working there, and run its commands from inside it.
+- [neotime/](neotime/) is the watch: firmware, bootloader, apps, faces and simulator. Run cargo and
+  npm for it from inside `neotime/`.
+- [companion/](companion/) is the phone and desktop companion app. Run its commands from inside
+  `companion/`.
 - [docs/](docs/) holds the documentation for both, and [tools/](tools/) the scripts that build,
   measure and package; the tools find `neotime/` themselves, so they run from anywhere.
+
+Paths below are relative to the repository root.
 
 The phone-to-watch protocol is [docs/companion-protocol.md](docs/companion-protocol.md).
 A change to it updates the firmware, the doc and the companion together, in one commit where it can.
@@ -26,8 +28,186 @@ workflow under `.github/workflows`, run only when its files or the flake change.
   another session owns.
 - Work lands by pushing to GitHub's `master`, so the local `master` is often behind. Run
   `git fetch origin`, rebase onto `origin/master`, rerun the tests, then push without force.
+  When `master` has moved folders, rebase with `git -c merge.directoryRenames=true -c merge.renameLimit=20000`.
 - Never name a commit to anyone until it is on `origin/master`.
 - Never revert or reformat another session's files. Run `cargo fmt -p <crate>`, not a bare
   `cargo fmt` over a whole workspace.
 - `Cargo.lock` is the usual merge conflict; regenerate it rather than hand-merging.
 - Before using the real watch, tell the other sessions, so only one connects at a time.
+
+# The watch: neotime/
+
+NeoTime is a Rust firmware for the PineTime that merges the best of InfiniTime and wasp-os. It is its
+own product, licensed GPL-3.0-or-later, so code ported from InfiniTime or PinetimeLite is fine.
+Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.md); code style is in
+[docs/coding-guidelines.md](docs/coding-guidelines.md).
+
+## Every change
+
+- Tests go in the same commit as the change, and coverage never drops. `tools/check_coverage.sh`
+  inside `nix develop` runs both gates (Rust floor in the script, TypeScript floors in
+  `neotime/vite.config.ts`). When coverage rises, raise the floor in the same change.
+- App behaviour is tested in `neotime/harness/` ([docs/testing.md](docs/testing.md)), not vitest. A
+  change to what an app shows rewrites its snapshots with `NEOTIME_UPDATE_SNAPSHOTS=1` in the same commit.
+- Every app has a tour in `neotime/tests/tours/<id>.neotime` that snapshots each of its screens, and
+  a page in `docs/apps/<id>.md` with how to use it and those pictures. A new app, or a new or changed
+  screen, updates both in the same commit.
+- Docs ship with the code, never as a follow-up. A new crate gets its place in
+  `docs/architecture.md`; a change to RAM or flash use updates `docs/memory-map.md` and the
+  hand-written part of `docs/memory-treemap.html`.
+- Open work lives in `docs/todo.md`. When an item is done, remove it in the same change and record
+  it in `docs/features.md` if the wearer sees it, or in `docs/architecture.md` or the part's own doc
+  if not. Before removing an item, check in the code that it is really done; keep any open part as a
+  narrower item.
+- Anything to look at (screenshots, galleries, write-ups) goes in `docs/` and lands with the change.
+  Reference existing images such as `neotime/harness/snapshots/screens/*.png` so they stay current.
+  The PineTime screen is square, 240x240; never draw it round.
+- New drivers go in `neotime/drivers/<name>` and get a simulated part in `neotime/simulator/` plus a
+  line in `docs/simulator.md`.
+
+## Design rules
+
+- Going back retraces navigation exactly: it revisits every screen passed on the way forward, in
+  reverse order and moving the opposite way (face, notifications, quick settings goes back through
+  quick settings, notifications, face). The shell records this in `neotime_app_host::way_back`; a new
+  way to move forward must record its step, and a new way back must take it.
+- A click of the side button always means back, and apps never hear it. Swipes inside an app are
+  the app's own; never bring back swipe-right-to-go-back or a swipe that opens Settings.
+- An app's pages run left and right in steps, with a wipe and a page bar, never dots. Scrolling up
+  and down is only for lists inside a page.
+- Prefer a toggle in Settings or quick settings over a new app that only switches one thing.
+- The firmware carries only the engine, plus the notifications and quick settings screens from
+  `neotime/shell/`, which it compiles in. No other built-in apps, faces, launcher, icons or fonts,
+  and no fallback copies of them. Apps live in `/apps` on external flash; the shared library ships
+  inside the firmware image, after the code, where the image header says.
+- Anything that changes often (notifications, settings, app state) goes on external flash, never
+  internal flash.
+- Apps are Preact and Signals compiled on the computer to bytecode ([docs/app-runtime.md](docs/app-runtime.md)).
+  About 12 KB of RAM per app rules out any JavaScript engine or Wasm on the watch.
+- New settings touch `neotime/services/settings`, `neotime/app-host/src/settings.rs`, `neotime/services/companion`, the
+  runtime's system values, the compiler and the sdk. The theme stays in `/settings/theme`.
+- Pure Rust only; no closed-source blobs and no C where a bug could brick the watch.
+- Flash layout changes go in `neotime/boot/src/lib.rs` and `docs/bootloader.md` together.
+
+## Memory budget
+
+- Keep at least 2 KB of stack spare, measured with `tools/measure_stack.py`. Large state goes in a
+  `Box` or lives on the stack only while it is used; a big stack frame overflows the watch's stack,
+  which shows as a blank screen and then a rollback.
+- The full firmware and its shared library nearly fill their 480 KB region, so a new firmware feature
+  or library addition must find room first.
+- CI measures `docs/memory-map.md` with `tools/measure_memory.py`.
+
+## The watch cannot be recovered by wire
+
+There is no SWD probe, so a watch that cannot reach the bootloader is lost. Recovery rests on the
+bootloader at 0x0 (rollback of an unconfirmed firmware, a long button hold for the recovery
+firmware) and on DFU in the firmware.
+
+- Never write the bootloader pages from firmware, and keep the recovery slot valid.
+- Feed the watchdog only from the main loop and only while the side button is up.
+- Prove bootloader, reloader and update changes in the emulator suites under `neotime/tests/emulator`
+  before any watch, and only flash with the user's go-ahead.
+- After a DFU update something must confirm the firmware (writing the time, or any GATT read), or
+  the next reset rolls it back.
+
+## Watch traps
+
+- **Reading address 0 is undefined behaviour.** The bootloader sits at the null pointer. Reading it
+  through a Rust pointer or a HAL slice lets LLVM silently delete code after it (a 305 KB firmware
+  once built at 44 KB). Use asm loads, as `status::BootloaderPages` does, and compare `cargo size`
+  with master after touching such code.
+- **Dropping an embassy `Output` floats its pin.** Keep every display pin's `Output` alive while the
+  screen is in use, or the reset pin drops and the panel goes blank.
+- **Big futures and statics land on the stack.** An async fn's future in a static task pool or under
+  `block_on` costs its full size, so box it or keep large locals from living across awaits. An async
+  fn awaited inside a task merges into the task's frame; poll a big one through an `#[inline(never)]`
+  wrapper. `*self = Big::new()` and `StaticCell::init(array)` both build the value on the stack
+  first; use `ConstStaticCell` for big statics.
+- **A blocking wait in WFE must SEV afterwards**, or the executor sleeps with a task ready.
+- **A slow draw resets the watch.** Anything that blocks the shell for a few seconds stops the
+  watchdog being fed, so it shows as "Reset: watchdog", not a slow frame. A widget that draws many
+  lines must skip those outside `DrawContext::clip`, because every strip redraws it.
+- **New bytecode instructions need the analysis taught.** One that writes an array must call
+  `note_write` with what it can store, or the compiler picks too narrow an element width.
+  `derive_inputs_in` in `neotime/app-host/src/subscriptions.rs` and the bindings must learn every
+  instruction that reads or writes state. A library function's declared return type must be
+  passed as `expected`, or a `Color` comes back as text.
+- **A test compile error can pass unseen.** Grep test output for `^error` as well as `FAILED` and `panicked`.
+- **The emulator runs delay loops at the chip's speed**, about 50 million instructions a second, so
+  MCUBoot's start-up takes about 20 emulated seconds.
+- **`filesystem_use` writes an all-black theme** unless given `--no-theme`, so the launcher and apps
+  render black in the emulator. Running the emulator is in [docs/testing.md](docs/testing.md#the-emulator).
+- **`tools/measure_stack.py` starts with erased external flash**, so it measures only the help
+  screen unless given `--flash` and `--library`. It measures whatever ELF sits at the release path,
+  and `tools/build_images.sh` leaves a recovery or rehearsal build there, so run `cargo build
+  --release` in `neotime/firmware/` first; about 36 KB of stack means it measured the recovery build.
+  `--packages` runs the old Renode emulator, which needs `ulimit -v` and a stdin that blocks
+  (`sleep 1000 | …`): on `/dev/null` it queues reads until it runs out of memory.
+- **littlefs-rust is patched.** `neotime/third_party/littlefs-rust` raises a loop limit that panics
+  on blocks written by C littlefs, and the workspace builds `littlefs-rust-core` without overflow checks.
+- **Bootloader builds are not byte-reproducible across checkout paths**; the code is the same.
+- **`cargo build -p <dev-dependency>` panics in cargo**; check such a dependency from a throwaway crate.
+- **Never `pkill -f` a pattern that also appears in your own command line**; it kills the shell.
+- **A `=======` regex for conflict markers must be anchored** to the start of the line, or it
+  matches the `// ====` section banners.
+- **The InfiniTime checkout beside this repo is a local reference copy.** Never push it.
+
+# The companion: companion/
+
+Expo (React Native) companion app for watches running the NeoTime firmware. Read
+[companion/README.md](companion/README.md) for the layout and the protocol. Paths in this part are
+relative to `companion/`.
+
+- Screens live in `src/app` (Expo Router). Bluetooth stays behind `src/ble/transport.ts`; screens
+  use the `useWatch` hook and never import a Bluetooth library directly. There are three
+  transports: react-native-ble-plx on a phone, Electron over BlueZ on the desktop, and a mock in
+  browsers and Expo Go.
+- `electron/` and `cli/` run in Node, not in the bundle, and Metro never sees them. Both talk to
+  BlueZ through `node/ble.js`, so a change to Bluetooth on a computer belongs there. Every step
+  there has a timeout and a failed connect drops the link, because a half-open BlueZ connection
+  makes every later attempt wait for services that never resolve.
+- The phone's part (notifications, media, Do Not Disturb, location) sits behind `phoneBridge` in
+  `src/services/phone`. In the desktop app the computer plays it through `node/desktop.js` over
+  D-Bus; check `phoneBridge.kind`, `supportsCalls` and `supportsLocation`, never the platform.
+- The desktop app is moving to Tauri. `core/` is the Rust core with no Tauri in it (Bluetooth on
+  btleplug); `tauri/` is the shell, whose `src/bridge.js` gives the window the same
+  `window.neotime` the Electron preload does, so a bridge change goes into both until Electron is
+  removed. Verify Rust with `cargo test --workspace` and `cargo clippy --workspace --all-targets`
+  in `nix develop .#companion`; the Tauri crate needs a `dist/` to build, from `expo export`.
+- `cli/` is the command line tool. It imports the same `src/` modules the screens do, so a feature
+  gets a command rather than a second implementation. `npm run neotime -- <command>` rebuilds it
+  with esbuild and runs it.
+- Raw GATT goes through the `DfuLink` each transport supplies with `dfuLink()`. The DFU controller,
+  `src/protocol/neotime.ts` (time, battery, diagnostics, capabilities) and
+  `src/protocol/file-service.ts` all use it and never touch a Bluetooth library.
+  `src/dfu/mock-legacy-target.ts` is the mock watch behind it, NeoTime or wasp-os.
+- A feature is offered only when the watch serves what it needs. `useWatch` gives `watchReady`
+  (connected and running firmware) and `capabilities` (`dfu`, `time`, `battery`, `diagnostics`,
+  `files`, `uart`); use those, not `connection`, to decide whether a feature is shown.
+- `src/protocol/neotime.ts`, `file-service.ts`, `gadgetbridge.ts` and `requests.ts` mirror
+  [docs/companion-protocol.md](docs/companion-protocol.md); change it there first, then here.
+- `src/bundles/watch-apps.ts` is generated by `npm run import-watch-apps <dir>` from images built
+  with `neotime-compiler` from `../neotime/compiler` (see README); do not edit it by hand. Rebuild it
+  whenever the watch's widget or instruction numbering changes.
+- After a firmware update the app must exchange GATT data with the watch (it writes the time), or
+  NeoTime rolls the update back at its next reset.
+- Use `nix develop .#companion` for the toolchain, and `nix develop .#companion-android` for the
+  Android SDK. A change to `package-lock.json` needs a new `npmDepsHash` in the repository's
+  `flake.nix` (`nix run nixpkgs#prefetch-npm-deps -- package-lock.json`).
+- Open work is in [companion/TODO.md](companion/TODO.md); remove an item there in the same change
+  that finishes it.
+- Every change ships with tests in the same commit. `npm run coverage` runs them with coverage and
+  fails below the floors in `package.json` (`jest.coverageThreshold`); CI runs it whenever
+  `companion/` changes. When coverage rises, raise the floors in the same change.
+- Verify with `npm run coverage`, `npm run typecheck` and `npm run lint`. BLE needs a dev build; web and
+  Expo Go use the mock transport.
+
+## Companion traps
+
+- **Electron must come from the flake.** `npm run desktop` finds it through `scripts/electron.mjs`.
+  Never run the raw `libexec/electron/electron` binary, which dies with an illegal instruction, and
+  never add the npm `electron` package back, because npm puts its launcher first on `PATH`.
+- **A BlueZ link can wedge.** `bluetoothctl info` says `Connected: yes` with no RSSI, and
+  `disconnect` and `remove` both hang. Only switching the adapter off and on clears it, which drops
+  every Bluetooth link on the computer, so ask the user first.

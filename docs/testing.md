@@ -212,3 +212,57 @@ npm test   # the preview must agree with the new texts, or list why it does not
 
 Look at the changed PNGs before committing them. A new app or face needs its snapshots written
 this way before the preview's parity test passes.
+
+## The emulator
+
+The harness tests apps; the firmware itself runs in PineTimeEmulator, a Rust emulator of the whole
+watch. Its suites are in `neotime/tests/emulator`, described in
+[updates.md](updates.md#proving-it-on-the-emulator).
+
+### Running suites
+
+- A script runs as fast as the computer allows, not at the watch's speed, and a sleeping chip skips
+  straight to its next event. Only the interactive window keeps to the clock.
+- One engine takes about one core and 14 MB, so several suites can run at once. Give each its own
+  results folder (`pinetime-test -r <folder>`), because Robot writes `output.xml`, `log.html` and
+  `report.html` into the current one.
+- A scratch script must use only engine commands: an unknown one, even `echo`, leaves the engine
+  waiting forever. Run it with a timeout and stdin closed, and check its CPU use if it seems slow.
+
+### Apps installed
+
+`tools/measure_stack.py` starts with erased external flash, so only the help screen shows. For a
+real install, build a flash image and pass it with the library:
+
+```sh
+cargo run -p neotime-packages --example filesystem_use -- --image flash.bin --no-theme stopwatch=stopwatch.ntapp
+python3 -I ../tools/measure_stack.py FIRMWARE_ELF --launcher --flash flash.bin --library shared.ntlib
+```
+
+Without `--no-theme` the image carries an all-black theme, so the launcher and apps draw black.
+Without the library no text or icons are drawn, so timings and stack use come out far too low.
+
+### Timing and profiling
+
+- The diagnostics counters `DrawMicroseconds` and `DisplaySendMicroseconds`
+  (`firmware/src/diagnostics.rs`) split a screen change into drawing and sending to the display.
+  Read them before and after a drawing change.
+- To profile, sample `sysbus.cpu PC` from the monitor every half millisecond, symbolise the
+  addresses with `llvm-addr2line -i` and count the outermost frame, or inlined helpers swamp the result.
+- To find the deepest stack path, log writes near the peak address with
+  `sysbus AddWatchpointLog <address> 4 Write @file`, or symbolise the stale words left on the
+  stack after a run.
+- For frame sizes, scan `llvm-objdump` prologues for both `sub sp, #N` and `subw sp, #N`.
+- A screen change that resets the watch with "Reset: watchdog" is usually a draw too slow for the
+  liveness check. Time `draw_step_at` per step on the computer in a throwaway harness test,
+  built with `--release`, before suspecting the shell. To walk real gestures, script the emulator as
+  `tools/measure_heap.py` does.
+
+### Bluetooth without BlueZ
+
+`pinetime-engine --bluetooth <link>` gives the emulated watch a controller on a host link.
+`../tools/packages_over_hci.py` and PineTimeEmulator's `tools/hci_scan.py --connect` talk to it
+directly, without BlueZ or root. Drive the engine from a script that runs `emulation RunFor
+"00:00:00.1"` every 100 ms of real time, because a plain script races ahead and quits. The bridge's
+ACL buffers are 27 bytes, so a client splits and rebuilds L2CAP packets itself. A file write takes
+emulated seconds, so allow many minutes.
