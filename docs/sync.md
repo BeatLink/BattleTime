@@ -40,7 +40,7 @@ An app's saved state names each of its values, so the core decodes it without th
 The format is decoded into JSON as follows:
 
 - a switch becomes `true` or `false`;
-- times are milliseconds since 1970 in the watch's local time;
+- times are milliseconds since 1970 in UTC, and a time not set is `null`;
 - durations are milliseconds;
 - text is the string's number in the app's image;
 - a record's fields, saved as `name.field`, come back together as one object.

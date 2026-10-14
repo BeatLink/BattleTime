@@ -107,8 +107,8 @@ takes both out of the manifest:
 
 ```json
 {
-  "id": "alarm", "name": "Alarm", "version": "1.0.0", "app": "alarm",
-  "fields": { "alarms": { "label": "Alarm", "countedBy": "alarm_count" }, "next_ring_place": { "kind": "hidden" } },
+  "id": "stopwatch", "name": "Stopwatch", "version": "1.0.0", "app": "stopwatch",
+  "fields": { "laps": { "label": "Laps" }, "lap_count": { "label": "Laps taken" } },
   "permissions": { "messages": [], "hosts": [], "data": [] }
 }
 ```
@@ -162,7 +162,7 @@ read.
 An app's state reads as JSON:
 
 - switches are `true` and `false`;
-- times are milliseconds since 1970, in the watch's local time;
+- times are milliseconds since 1970 in UTC, and a time not set is `null`;
 - a record's fields come together as one object of lists, for example
   `state.alarms.hour[0]`.
 

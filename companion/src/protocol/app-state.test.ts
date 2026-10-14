@@ -59,7 +59,7 @@ describe('app state files', () => {
     expect(appStateJson(SAMPLE)).toEqual({
       alarm_count: 2,
       alarms: { hour: [7, 9, 8], minute: [0, 30, 0], days: [31, 0, 0], enabled: [true, false, false] },
-      next_ring_at: Number(NONE),
+      next_ring_at: null,
       snoozed_place: -1,
       chosen: 600000,
     });
@@ -72,13 +72,14 @@ describe('app state files', () => {
     });
     expect(Array.from(encodeAppState(changed))).toEqual(RUST_CHANGED);
     // A null time read back as JSON and written again is unchanged.
-    const again = applyAppStateChanges(SAMPLE, { next_ring_at: Number(NONE) });
+    const again = applyAppStateChanges(SAMPLE, { next_ring_at: null });
     expect(Array.from(encodeAppState(again))).toEqual(RUST_BYTES);
   });
 
   it('refuses a change that would not load', () => {
     expect(() => applyAppStateChanges(SAMPLE, { alarm_count: 300 })).toThrow('cannot hold');
     expect(() => applyAppStateChanges(SAMPLE, { alarm_count: 'two' })).toThrow('whole numbers');
+    expect(() => applyAppStateChanges(SAMPLE, { alarm_count: null })).toThrow('cannot hold');
     expect(() => applyAppStateChanges(SAMPLE, { alarms: { hour: [6] } })).toThrow('list of 3');
     expect(() => applyAppStateChanges(SAMPLE, { alarms: { hour: 6 } })).toThrow('list of 3');
     expect(() => encodeAppState([{ ...SAMPLE[0], values: [128n] }])).toThrow('cannot hold');

@@ -44,8 +44,9 @@ describe('reading state', () => {
 
   it('formats times, durations and minutes of the day', () => {
     const cell = (kind: 'time' | 'duration' | 'minutes' | 'number', value: unknown) => ({ key: 'k', label: 'k', kind, value });
-    expect(display(cell('time', Date.UTC(2026, 9, 14, 7, 5)))).toBe('2026-10-14 07:05');
+    expect(display(cell('time', new Date(2026, 9, 14, 7, 5).getTime()))).toBe('2026-10-14 07:05');
     expect(display(cell('time', 0))).toBe('never');
+    expect(display(cell('time', null))).toBe('never');
     expect(display(cell('duration', 90_000))).toBe('90 s');
     expect(display(cell('minutes', 7 * 60 + 5))).toBe('07:05');
     expect(display(cell('number', true))).toBe('true');

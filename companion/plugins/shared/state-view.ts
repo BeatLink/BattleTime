@@ -107,16 +107,25 @@ function recordRows(
   return out;
 }
 
+function localDateTime(instant: number): string {
+  const date = new Date(instant);
+  const two = (part: number) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())} ${two(date.getHours())}:${two(date.getMinutes())}`;
+}
+
 // A value as the page shows it.
 export function display(cell: Cell): string {
   const value = cell.value;
+  if (value === null) {
+    return cell.kind === 'time' ? 'never' : '';
+  }
   if (typeof value !== 'number') {
     return String(value);
   }
   switch (cell.kind) {
     case 'time':
-      // Times are local milliseconds since 1970, so they are shown as UTC to keep the watch's wall clock.
-      return value <= 0 ? 'never' : new Date(value).toISOString().slice(0, 16).replace('T', ' ');
+      // Times are UTC milliseconds since 1970, shown in this computer's zone, which the companion gives the watch.
+      return value <= 0 ? 'never' : localDateTime(value);
     case 'duration':
       return `${Math.round(value / 1000)} s`;
     case 'minutes':

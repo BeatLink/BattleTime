@@ -61,6 +61,9 @@ pub struct StateEntry {
     pub values: Vec<i64>,
 }
 
+// The runtime's "no value", such as a time not set, which JSON carries as null.
+pub const NO_VALUE: i64 = i64::MIN;
+
 // ============================================================================
 // Reading and writing the bytes
 // ============================================================================
@@ -165,6 +168,7 @@ pub fn to_json(entries: &[StateEntry]) -> Value {
 fn entry_json(entry: &StateEntry) -> Value {
     let one = |value: i64| match entry.kind {
         ValueKind::Bool => json!(value != 0),
+        _ if value == NO_VALUE => Value::Null,
         _ => json!(value),
     };
     if entry.length == 0 {
@@ -227,6 +231,7 @@ pub fn apply_json(entries: &[StateEntry], changes: &Value) -> Result<Vec<StateEn
 fn number(value: &Value, key: &str) -> Result<i64, String> {
     match value {
         Value::Bool(on) => Ok(*on as i64),
+        Value::Null => Ok(NO_VALUE),
         _ => value
             .as_i64()
             .ok_or_else(|| format!("{key} takes whole numbers, not {value}")),
@@ -317,6 +322,16 @@ pub(crate) mod tests {
             kinds_json(&state),
             json!({ "next_ring_at": "time", "laps": "duration" })
         );
+    }
+
+    #[test]
+    fn a_time_not_set_reads_and_writes_as_null() {
+        let mut state = alarm_state();
+        state[3].values = vec![NO_VALUE];
+        assert_eq!(to_json(&state)["next_ring_at"], Value::Null);
+        let cleared = apply_json(&alarm_state(), &json!({ "next_ring_at": null })).unwrap();
+        assert_eq!(cleared[3].values, vec![NO_VALUE]);
+        assert!(apply_json(&alarm_state(), &json!({ "alarm_count": null })).is_err());
     }
 
     #[test]

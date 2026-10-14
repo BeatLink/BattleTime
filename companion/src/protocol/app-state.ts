@@ -29,6 +29,9 @@ export type StateEntry = { key: string; kind: ValueKind; length: number; width: 
 
 export class AppStateError extends Error {}
 
+// The runtime's "no value", such as a time not set, which JSON carries as null as the core's copy does.
+export const NO_VALUE = -(2n ** 63n);
+
 // What an app's state looks like as JSON: numbers, switches, lists, and records as objects of lists.
 export type AppStateJson = Record<string, unknown>;
 
@@ -124,7 +127,7 @@ function fits(value: bigint, width: number): boolean {
 export function appStateJson(entries: StateEntry[]): AppStateJson {
   const out: AppStateJson = {};
   for (const entry of entries) {
-    const one = (value: bigint) => (entry.kind === 'bool' ? value !== 0n : Number(value));
+    const one = (value: bigint) => (entry.kind === 'bool' ? value !== 0n : value === NO_VALUE ? null : Number(value));
     const value = entry.length === 0 ? (entry.values.length ? one(entry.values[0]) : null) : entry.values.map(one);
     const dot = entry.key.indexOf('.');
     if (dot < 0) {
@@ -173,6 +176,9 @@ export function applyAppStateChanges(entries: StateEntry[], changes: AppStateJso
 function wholeNumber(value: unknown, key: string): bigint {
   if (typeof value === 'boolean') {
     return value ? 1n : 0n;
+  }
+  if (value === null) {
+    return NO_VALUE;
   }
   if (typeof value === 'number' && Number.isInteger(value)) {
     return BigInt(value);

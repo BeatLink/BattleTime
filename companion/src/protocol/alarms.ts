@@ -77,8 +77,73 @@ export function alarmsFromState(state: Record<string, unknown> | null | undefine
   );
 }
 
+// ============================================================================
+// When the next alarm rings
+// ============================================================================
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+// The first instant after `after` at a local time of day on one of the mask's days, as the watch's `next_time_of_day` finds it.
+// The companion sets the watch's time zone, so this computer's zone is the watch's.
+export function nextTimeOfDay(after: number, hour: number, minute: number, days: number): number {
+  const startOfDay = (instant: number) => new Date(instant).setHours(0, 0, 0, 0);
+  const offset = (hour * 60 + minute) * MINUTE;
+  let day = startOfDay(after);
+  for (let tries = 0; tries < 8; tries++) {
+    const candidate = day + offset;
+    if (candidate > after && (days & (1 << ((new Date(candidate).getDay() + 6) % 7))) !== 0) {
+      return candidate;
+    }
+    day = startOfDay(day + DAY + 2 * HOUR);
+  }
+  return day + offset;
+}
+
+const sameAlarm = (a: WatchAlarm, b: WatchAlarm) =>
+  a.hour === b.hour && a.minute === b.minute && a.days === b.days && a.enabled === b.enabled;
+
+// The app's own keys after its alarms change, as its `schedule` and delete set them: a snooze follows its alarm or is dropped, and the next ring is found again.
+function scheduleChanges(state: Record<string, unknown>, before: WatchAlarm[], after: WatchAlarm[], now: number) {
+  const changes: Record<string, unknown> = {};
+  let snoozedUntil = typeof state.snoozed_until === 'number' ? state.snoozed_until : null;
+  let snoozedPlace = Number(state.snoozed_place ?? -1);
+  if (snoozedUntil !== null) {
+    const snoozed = before[snoozedPlace];
+    const kept = snoozed ? after.findIndex((alarm, place) => place === snoozedPlace && sameAlarm(alarm, snoozed)) : -1;
+    const moved = kept >= 0 || !snoozed ? kept : after.findIndex((alarm) => sameAlarm(alarm, snoozed));
+    if (moved < 0 || !after[moved].enabled) {
+      snoozedUntil = null;
+      changes.snoozed_until = null;
+    } else if (moved !== snoozedPlace) {
+      snoozedPlace = moved;
+      changes.snoozed_place = moved;
+    }
+  }
+  let soonest = snoozedUntil;
+  let soonestPlace = snoozedUntil !== null ? snoozedPlace : -1;
+  after.forEach((alarm, place) => {
+    if (!alarm.enabled) return;
+    const candidate = nextTimeOfDay(now, alarm.hour, alarm.minute, alarm.days === 0 ? EVERY_DAY : alarm.days);
+    if (soonest === null || candidate < soonest) {
+      soonest = candidate;
+      soonestPlace = place;
+    }
+  });
+  changes.next_ring_at = soonest;
+  changes.next_ring_place = soonestPlace;
+  // Keys the app's saved state lacks are left out, so an older app still takes the write.
+  return Object.fromEntries(Object.entries(changes).filter(([key]) => key in state));
+}
+
 // The changes that give the state these alarms; places past the last alarm keep what they held, as the app leaves them.
-export function alarmStateChanges(state: Record<string, unknown> | null | undefined, alarms: WatchAlarm[]) {
+// The app's next ring and any snooze are worked out again from `now`, since the app does that only when it is used.
+export function alarmStateChanges(
+  state: Record<string, unknown> | null | undefined,
+  alarms: WatchAlarm[],
+  now: number = Date.now(),
+) {
   const record = alarmRecord(state);
   const places = record.hour.length;
   if (alarms.length > Math.min(places, MAX_ALARMS)) {
@@ -88,6 +153,7 @@ export function alarmStateChanges(state: Record<string, unknown> | null | undefi
   const pick = <Value>(field: keyof WatchAlarm, kept: Value[]) =>
     kept.map((old, place) => (place < fresh.length ? (fresh[place][field] as Value) : old));
   return {
+    ...scheduleChanges(state ?? {}, alarmsFromState(state), fresh, now),
     alarm_count: fresh.length,
     alarms: {
       hour: pick('hour', record.hour),

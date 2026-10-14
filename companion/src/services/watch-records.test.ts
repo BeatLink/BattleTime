@@ -68,7 +68,7 @@ describe('records from the watch files', () => {
     expect(await records.readStepGoal()).toBe(10000);
   });
 
-  it('reads and writes the alarms, keeping the rest of the state, and tells the watch', async () => {
+  it('reads and writes the alarms, finds the next ring again, and tells the watch', async () => {
     const { watch, records, sent } = await mockWatch();
     expect(await readAlarms(records)).toEqual([
       { hour: 7, minute: 0, days: 0x1f, enabled: true },
@@ -79,7 +79,10 @@ describe('records from the watch files', () => {
     const state = appStateJson(decodeAppState(watch.fileService.files.get('/apps/alarm/state')!));
     expect(state.alarm_count).toBe(1);
     expect((state.alarms as { hour: number[] }).hour.slice(0, 3)).toEqual([6, 9, 8]);
-    expect(state.next_ring_place).toBe(-1);
+    // The app's next ring is found again for the one alarm left, which rings on a weekend morning.
+    expect(state.next_ring_place).toBe(0);
+    expect(new Date(state.next_ring_at as number).getHours()).toBe(6);
+    expect([0, 6]).toContain(new Date(state.next_ring_at as number).getDay());
     expect(sent).toContainEqual({ t: 'state', app: 'alarm' });
     // The mock watch takes the news without answering, as the watch does.
     expect(new MockGadgetbridge().handle(encodeForWatch({ t: 'state', app: 'alarm' }))).toEqual([]);
