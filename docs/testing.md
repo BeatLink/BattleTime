@@ -45,7 +45,7 @@ tests and given to every app.
 | `deliver(PushedEvent::Steps { .. })` | An event from the phone or a sensor, with the system values it carries. |
 | `receive_from_phone(line)` | A companion line from the phone, read by `neotime-companion` as the watch reads it. |
 | `set_system_value`, `set_system_text`, `screen_off`, `screen_on`, `install_apps(&["timer"])` | Change the battery, the firmware version or another value, the screen, or the launcher's list. |
-| `write_file(path, bytes)`, `reopen()` | Write a file as the phone does, and leave the app and open it again, so it reads the file afresh. |
+| `write_file(path, bytes)`, `reopen()`, `start_on_screen(name)` | Write a file as the phone does, and leave the app and open it again, so it reads the file afresh, or start it on another screen as the shell does. |
 
 | Inspect | Gives |
 |---|---|
@@ -97,6 +97,7 @@ expect no failures
 | `navigation` | Tells the app the phone's navigation changed; the turn comes from the system values. |
 | `write "/path" "text"` | Writes a whole text file, as the phone does. |
 | `reopen` | Leaves the app and opens it again with its state kept, so it reads its files afresh. |
+| `start on <screen>` | Starts the open app on that screen with nothing to go back to, as the shell opens the battery page or a notification's preview. |
 | `screen off`, `screen on` | Turns the screen off or on. |
 | `expect text "…"`, `expect no text "…"` | Whether some shown widget's text contains this. |
 | `expect screen <name>` | The open screen, by its name in `screens`. |

@@ -1,4 +1,4 @@
-# Every screen of the notifications shade, for docs/apps/notifications.md: empty, a list, and one read in full.
+# Every screen of the notifications shade, for docs/apps/notifications.md: empty, a list, one read in full, and the preview.
 open app notifications
 expect text "No notifications"
 notify "Sam" "On my way, see you at the station in ten minutes"
@@ -13,4 +13,24 @@ snapshot message
 tap "Dismiss"
 expect screen main
 expect no text "Alex"
+start on preview            # as the shell opens it when a notification arrives
+expect text "Calendar"
+expect text "Team meeting"
+snapshot preview
+wait 6s
+expect no effect back
+notify "Jo" "Lunch at noon?"  # a newer one starts the preview again
+expect text "Jo"
+wait 6s
+expect no effect back
+wait 2s
+expect effect back          # the preview goes back by itself after 7 seconds
+start on preview
+tap "Jo"                    # a tap reads it in full and keeps it
+expect text "Dismiss"
+snapshot preview-open
+wait 10s
+expect no effect back
+tap "Dismiss"
+expect effect back
 expect no failures

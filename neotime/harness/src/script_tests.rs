@@ -603,6 +603,25 @@ fn heart_navigation_write_and_reopen_reach_the_app() {
 }
 
 #[test]
+fn start_on_opens_a_screen_and_fails_on_one_the_app_lacks() {
+    let script = parse_script(
+        "open app notifications\nnotify \"Sam\" \"Hello\"\nstart on preview\nexpect screen preview\n",
+    )
+    .unwrap();
+    assert_eq!(
+        script.steps[2].command,
+        ScriptCommand::StartOn("preview".to_string())
+    );
+    assert_eq!(run_script(&script, &std::env::temp_dir(), |_| {}).failure, None);
+
+    let missing = parse_script("open app notifications\nstart on nowhere\n").unwrap();
+    assert!(run_script(&missing, &std::env::temp_dir(), |_| {})
+        .failure
+        .is_some());
+    assert!(parse_script("open app notifications\nstart preview\n").is_err());
+}
+
+#[test]
 fn a_snapshot_that_differs_from_its_picture_fails() {
     if crate::snapshots::is_updating_snapshots() {
         return;

@@ -121,6 +121,8 @@ pub enum ScriptCommand {
     },
     /// Leaves the app and opens it again with its state kept, so it reads its files afresh.
     Reopen,
+    /// Starts the open app on one of its screens with nothing to go back to, as the shell opens a notification's preview.
+    StartOn(String),
     ScreenOn,
     ScreenOff,
     ExpectText(String),
@@ -273,7 +275,7 @@ fn split_words(line: &str) -> Result<SplitLine, String> {
 // ============================================================================
 
 const COMMAND_NAMES: &str = "open, install, tap, long-press, double-tap, drag, swipe, button, long-button, \
-                             wait, set, notify, phone, shake, acceleration, heart, navigation, write, reopen, screen, expect, screenshot, snapshot";
+                             wait, set, notify, phone, shake, acceleration, heart, navigation, write, reopen, start, screen, expect, screenshot, snapshot";
 
 /// A script's heart rate readings are as sure as the sensor ever reports.
 const FULL_HEART_RATE_CONFIDENCE: Value = 100;
@@ -357,6 +359,10 @@ fn parse_command(words: &[Word]) -> Result<ScriptCommand, String> {
         },
         "navigation" => expect_no_arguments(name, arguments, ScriptCommand::Navigation),
         "reopen" => expect_no_arguments(name, arguments, ScriptCommand::Reopen),
+        "start" => match arguments {
+            [on, screen] if on.bare() == Some("on") => Ok(ScriptCommand::StartOn(screen.text().to_string())),
+            _ => Err("write `start on <screen>`".to_string()),
+        },
         "write" => match arguments {
             [Word::Quoted(path), Word::Quoted(text)] => Ok(ScriptCommand::WriteFile {
                 path: path.clone(),
@@ -840,6 +846,11 @@ impl ScriptRunner<'_> {
             }
             ScriptCommand::Reopen => {
                 watch.reopen();
+            }
+            ScriptCommand::StartOn(screen) => {
+                if !watch.start_on_screen(screen) {
+                    return Err(mismatch(format!("a screen named {screen}"), "no such screen"));
+                }
             }
             ScriptCommand::ScreenOn => {
                 watch.screen_on();

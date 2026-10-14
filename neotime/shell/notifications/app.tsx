@@ -2,6 +2,8 @@
 // The watch keeps the latest few from the phone and from apps; this lists them newest first, each
 // with its title and the start of its text. A tap reads one in full and Dismiss removes it.
 // Opening the app, or the screen turning on while it is open, marks them all read.
+// When a notification arrives the shell opens the preview, which shows the newest one and goes back
+// by itself after 7 seconds unless the wearer taps it to read it in full.
 
 import {
   back,
@@ -11,12 +13,13 @@ import {
   go,
   mark_notifications_read,
   notifications,
+  now,
   on,
   range,
   signal,
 } from "neotime";
 import { icons } from "neotime/icons";
-import { Button, Column, Icon, Label, List, Row, Screen, Scroll } from "neotime/widgets";
+import { Bar, Button, Column, Icon, Label, List, Row, Screen, Scroll } from "neotime/widgets";
 
 // ============================================================================
 // Layout
@@ -30,12 +33,27 @@ const ROW_HEIGHT = 60;
 /** Space around the list and between its rows. */
 const SPACING = 8;
 
+/** How long the preview stays before it goes back by itself. */
+const PREVIEW_MILLISECONDS = 7000;
+
+/** How often the preview's bar shrinks. */
+const PREVIEW_STEP_MILLISECONDS = 250;
+
 // ============================================================================
 // State
 // ============================================================================
 
 /** The place in the list of the notification being read. */
 const reading = signal(0);
+
+/** When the preview goes back by itself, or 0 once it stays. */
+const preview_closes_at = signal(0);
+
+/** How long the preview has left, which the bar across its top shows. */
+const preview_left = signal(0);
+
+/** Whether the wearer tapped the preview to read the notification in full. */
+const is_preview_open = signal(false);
 
 // ============================================================================
 // Handlers
@@ -44,6 +62,38 @@ const reading = signal(0);
 function read(place: number) {
   reading.value = place;
   go("message");
+}
+
+/** Shows the newest notification for the preview's full time. */
+function start_preview() {
+  reading.value = 0;
+  is_preview_open.value = false;
+  preview_closes_at.value = now.value + PREVIEW_MILLISECONDS;
+  preview_left.value = PREVIEW_MILLISECONDS;
+}
+
+function stop_preview() {
+  preview_closes_at.value = 0;
+}
+
+/** Shrinks the preview's bar, and goes back once its time is up. */
+function count_down_preview() {
+  if (preview_closes_at.value === 0) return;
+  preview_left.value = Math.max(0, preview_closes_at.value - now.value);
+  if (preview_left.value === 0) {
+    stop_preview();
+    back();
+  }
+}
+
+/** Starts the preview again for a newer notification while it is still counting down. */
+function preview_newer() {
+  if (preview_closes_at.value !== 0) start_preview();
+}
+
+function open_preview() {
+  stop_preview();
+  is_preview_open.value = true;
 }
 
 function dismiss() {
@@ -94,6 +144,14 @@ function NotificationList() {
 function Message() {
   return (
     <Scroll padding={SPACING}>
+      <MessageText />
+    </Scroll>
+  );
+}
+
+function MessageText() {
+  return (
+    <>
       {reading.value < notifications.value.length && (
         <Column gap={6}>
           <Row gap={8}>
@@ -107,16 +165,48 @@ function Message() {
           </Button>
         </Column>
       )}
-    </Scroll>
+    </>
+  );
+}
+
+/** The newest notification as it arrives: a tap reads it in full, and it goes back by itself once the bar runs out. */
+function Preview() {
+  return (
+    <Screen onShow={start_preview} onHide={stop_preview}>
+      {!is_preview_open.value && (
+        <>
+          <Bar height={4} value={preview_left.value} maximum={PREVIEW_MILLISECONDS} animate={PREVIEW_STEP_MILLISECONDS} />
+          <Button grow={1} background="background" onClick={open_preview}>
+            <Column grow={1} padding={SPACING} gap={6} justify="start">
+              <Row gap={6} align_items="center">
+                <Icon icon={icons.notification} size={20} color="accent" />
+                <Label font="small" color="muted" grow={1} long_mode="clip">
+                  {notifications.value.length > 0 ? notifications.value[0].app : ""}
+                </Label>
+              </Row>
+              <Label font="medium" long_mode="clip">{notifications.value.length > 0 ? notifications.value[0].title : ""}</Label>
+              <Label>{notifications.value.length > 0 ? notifications.value[0].body : ""}</Label>
+            </Column>
+          </Button>
+        </>
+      )}
+      {is_preview_open.value && (
+        <Scroll grow={1} padding={SPACING}>
+          <MessageText />
+        </Scroll>
+      )}
+    </Screen>
   );
 }
 
 on("open", mark_notifications_read);
 on("screen_on", mark_notifications_read);
+on("tick", count_down_preview, { every: { milliseconds: PREVIEW_STEP_MILLISECONDS }, while_open: true });
+on("notification", preview_newer, { while_open: true });
 
 export default define_app({
   id: "notifications",
   name: "Notifications",
   icon: icons.notification,
-  screens: { main: NotificationList, message: Message },
+  screens: { main: NotificationList, message: Message, preview: Preview },
 });

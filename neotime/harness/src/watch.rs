@@ -680,6 +680,14 @@ impl TestWatch {
         self.host.bring_to_front(now, &mut self.system);
     }
 
+    /// Starts the open app on a screen with nothing to go back to, as the shell does; false when it has no such screen.
+    pub fn start_on_screen(&mut self, name: &str) -> bool {
+        let now = self.now();
+        let started = self.host.start_on_screen(name, now, &mut self.system);
+        self.report_notification_changes();
+        started
+    }
+
     /// Draws what changed since the last frame, as the watch would, and gives the whole screen.
     pub fn frame(&mut self) -> &Framebuffer {
         let Ok(()) = self.host.draw(&mut self.framebuffer);

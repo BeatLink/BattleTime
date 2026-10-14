@@ -408,8 +408,8 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **Check `wake` before an alarm rings through do not disturb.** Keep app permissions in the
   image so the watch can check `wake` instead of trusting any app that plays the `alarm` pattern.
 - [ ] **Try the buzzes on the watch:** a phone notification buzzes twice and stays silent in do
-  not disturb, and the alarm pattern still rings there. Check too that a notification on a dark
-  screen turns it on into the notifications, that a `notify-` from Gadgetbridge removes it, and
+  not disturb, and the alarm pattern still rings there. Check too that a notification lights a dark
+  screen on its preview, which goes back by itself after 7 seconds, that a `notify-` from Gadgetbridge removes it, and
   that the heap holds with five kept beside the alarm app.
 
 ### Side button

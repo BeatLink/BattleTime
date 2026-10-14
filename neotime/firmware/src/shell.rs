@@ -9,8 +9,9 @@
 //! them on without acting on it. Each app's persistent state is saved to
 //! `/apps/<id>/state` when it closes or the screen turns off, and changed settings at the same times.
 //! The watch buzzes on the local hour or half hour when the chimes setting asks, and for each notification
-//! from the phone, which also goes to the open app and into the kept list. A notification that
-//! finds the screen dark turns it on and opens the notifications. Do not
+//! from the phone, which also goes to the open app and into the kept list. A notification opens the
+//! notifications on their preview of it, lighting a dark screen, and the preview goes back by
+//! itself after 7 seconds. Do not
 //! disturb silences all of it, keeps the screen dark, and silences every app vibration but the
 //! alarm pattern. The accelerometer is read only while the screen is on and the open app
 //! subscribes to acceleration or shakes, and the heart rate sensor while an app asks for it until
@@ -180,6 +181,9 @@ struct Visit {
 
 /// The notifications screen, compiled from `shell/notifications` when the firmware is built.
 static NOTIFICATIONS_IMAGE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/notifications.ntapp"));
+
+/// The notifications' screen that previews a notification as it arrives, then goes back by itself.
+const NOTIFICATION_PREVIEW_SCREEN: &str = "preview";
 
 /// The quick settings screen, compiled from `shell/quick-settings` when the firmware is built.
 static QUICK_SETTINGS_IMAGE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/quick-settings.ntapp"));
@@ -1025,7 +1029,7 @@ impl Shell {
                 self.system.notifications_changed = true;
                 // A ringing find or call goes on, so the notification neither buzzes over it nor opens an app.
                 if !self.is_finding() && !self.system.is_ringing_for_call() {
-                    self.wake_for_notification();
+                    self.show_notification_preview();
                     vibration::request(haptics::notification_vibration(is_do_not_disturb()));
                 }
             }
@@ -1047,17 +1051,30 @@ impl Shell {
         }
     }
 
-    /// Asks for a dark screen to turn on outside do not disturb, showing the notifications.
+    /// Opens the notifications on their preview of the newest one, outside do not disturb, and turns a dark screen on.
     ///
+    /// The preview goes back by itself after a few seconds, so it opens over what is open and goes back there.
     /// The screen turns on through `follow_requests`, as for the battery screen, so it wakes once and counts as input.
-    fn wake_for_notification(&mut self) {
-        if self.lit || is_do_not_disturb() {
+    fn show_notification_preview(&mut self) {
+        // The crash and memory pages stay up until the wearer answers them.
+        if is_do_not_disturb() || self.firmware_page.is_some() {
             return;
         }
-        if self.showing != Showing::Notifications && self.firmware_page.is_none() {
-            self.go_forward(Showing::Notifications, Transition::None, false);
+        // The notifications already show the new one, so they are left as they are.
+        if self.showing != Showing::Notifications {
+            let transition = if self.lit {
+                Transition::Down
+            } else {
+                Transition::None
+            };
+            self.go_forward(Showing::Notifications, transition, false);
+            if let (Showing::Notifications, Some(host)) = (self.showing, &mut self.host) {
+                host.start_on_screen(NOTIFICATION_PREVIEW_SCREEN, clock::utc_now(), &mut self.system);
+            }
         }
-        self.system.screen_request = Some(true);
+        if !self.lit {
+            self.system.screen_request = Some(true);
+        }
     }
 
     /// Buzzes and rings as the phone asks, keeps its music and weather, and tells the open app.

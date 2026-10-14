@@ -2,14 +2,18 @@ import { act, cleanup, render, screen } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { define_app, notifications, notify, unread_notifications } from "neotime";
 import {
+  advance_clock,
   clear_notifications,
   deliver,
+  freeze_clock,
   install_apps,
   open,
+  open_app,
   OpenScreen,
   run_app_handler,
   screen_stack,
   start_scheduler,
+  unfreeze_clock,
 } from "neotime/preview";
 import { icons } from "neotime/icons";
 import { Screen } from "neotime/widgets";
@@ -91,5 +95,54 @@ describe("notifications", () => {
       "Number 3",
       "Number 2",
     ]);
+  });
+
+  describe("preview", () => {
+    function open_preview() {
+      freeze_clock(1_000_000);
+      open(notifications_app);
+      screen_stack.value = ["preview"];
+      render(<OpenScreen />);
+    }
+
+    afterEach(unfreeze_clock);
+
+    it("shows the newest and goes back by itself after 7 seconds", () => {
+      from_phone(1, "Sam", "On my way");
+      from_phone(2, "Alex", "Running late");
+      open_preview();
+      expect(screen.getByText("Alex")).toBeTruthy();
+      expect(screen.getByText("Running late")).toBeTruthy();
+
+      act(() => advance_clock(6500));
+      expect(open_app.value).toBe(notifications_app);
+      act(() => advance_clock(1000));
+      expect(open_app.value).toBe(null);
+    });
+
+    it("starts again for a newer notification", () => {
+      from_phone(1, "Sam");
+      open_preview();
+      act(() => advance_clock(5000));
+      from_phone(2, "Alex");
+      act(() => advance_clock(5000));
+      expect(open_app.value).toBe(notifications_app);
+      expect(screen.getByText("Alex")).toBeTruthy();
+      act(() => advance_clock(2500));
+      expect(open_app.value).toBe(null);
+    });
+
+    it("stays once tapped, reading it in full", () => {
+      from_phone(1, "Sam", "On my way");
+      open_preview();
+      act(() => screen.getByText("Sam").click());
+      expect(screen.getByText("Dismiss")).toBeTruthy();
+
+      act(() => advance_clock(20_000));
+      expect(open_app.value).toBe(notifications_app);
+      act(() => screen.getByText("Dismiss").click());
+      expect(open_app.value).toBe(null);
+      expect(notifications.value).toEqual([]);
+    });
   });
 });

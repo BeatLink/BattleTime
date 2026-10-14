@@ -89,10 +89,11 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Notifications from any Bluetooth tool.** A New Alert written to the standard Alert Notification
   service shows as a notification, as on InfiniTime, so BlueZ's `bluetoothctl`, ITD or Amazfish can
   send one without the companion app.
-- **A notification wakes the screen.** One that arrives while the screen is dark turns it on and
-  opens the notifications, so it can be read at once. Do not disturb
+- **A notification pops up a preview.** One that arrives lights the screen, if it is dark, on a
+  preview of it over whatever was open, with a bar that runs out over 7 seconds before the watch
+  goes back there, as InfiniTime's preview does. A tap keeps it and reads it in full. Do not disturb
   keeps the screen dark and the watch still, and the notification is still kept. While the phone
-  rings the watch to find it, a notification is kept without a buzz or a wake.
+  rings the watch to find it, or a call rings, a notification is kept without a buzz or a preview.
 - **Music, weather and calls from the phone.** Gadgetbridge's `musicinfo`, `musicstate` and
   `weather` messages fill the music app, the weather app and the faces that show the weather; the
   music app's buttons control the phone's player. An incoming call opens the [call app](apps/call.md)
