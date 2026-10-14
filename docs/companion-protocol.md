@@ -425,7 +425,7 @@ CRC, before sending it again. To forget an app, the phone sends `stop`, then del
 the file transfer's delete. A restart opens nothing from `/temp`. A watch face's image runs like an
 app's; the companion sends only apps.
 
-The companion's `neotime apps run <image> [--data <name>=<file>] [--text <name>=<text>]`,
+The companion's `neotime apps run <image> [--data <name>=<file>] [--text <name>=<text>] [--listen]`,
 `neotime apps stop` and `neotime apps forget [id]` do these steps, and `neotime ask "<question>"`
 runs the `prompt` app with the question as `text` and prints the answer: the app sends
 `{"t":"app","ch":"prompt","d":{"answer":1}}` for Yes and `0` for No, then goes back.

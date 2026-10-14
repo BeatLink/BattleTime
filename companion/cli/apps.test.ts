@@ -109,6 +109,31 @@ describe('the apps command', () => {
     expect(session.fileService.files.has('/temp/prompt/app.ntapp')).toBe(false);
   });
 
+  it('prints what a temporary app sends while it listens, then closes the app', async () => {
+    const session = new FakeSession();
+    let onLine: (line: string) => void = () => {};
+    const listening = Object.assign(session, { listen: (handler: (line: string) => void) => (onLine = handler) });
+    const said: string[] = [];
+    const log = jest.spyOn(process.stdout, 'write').mockImplementation((text) => {
+      said.push(String(text).trimEnd());
+      return true;
+    });
+    const stop = jest.spyOn(PackagesClient.prototype, 'stop');
+    const image = imageFile(testImage('touchtest', 'Touch test'));
+
+    await apps(listening as unknown as WatchSession, ['run', image, '--listen'], async () => {
+      onLine('{"t":"app","ch":"touchtest","d":{"e":3,"x":120,"y":60,"t":5}}\n');
+      onLine('{"t":"notify","id":1}\n');
+    });
+    log.mockRestore();
+
+    expect(said).toContain('{"t":"app","ch":"touchtest","d":{"e":3,"x":120,"y":60,"t":5}}');
+    expect(said.some((line) => line.includes('notify'))).toBe(false);
+    expect(said).toContain('Closed Touch test.');
+    expect(stop).toHaveBeenCalled();
+    stop.mockRestore();
+  });
+
   it('says when the watch refuses to run a temporary app', async () => {
     const session = new FakeSession();
     const log = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
@@ -122,11 +147,17 @@ describe('the apps command', () => {
 
   it('reads the image and the data files apps run is given', () => {
     const read = (path: string) => new TextEncoder().encode(`contents of ${path}`);
+    expect(parseRunArguments(['a.ntapp', '--listen'], read)).toEqual({ image: 'a.ntapp', data: {}, listen: true });
     expect(parseRunArguments(['a.ntapp', '--text', 'text=Is it=1?', '--data', 'list=items.txt'], read)).toEqual({
       image: 'a.ntapp',
       data: { text: 'Is it=1?', list: new TextEncoder().encode('contents of items.txt') },
+      listen: false,
     });
-    expect(parseRunArguments(['--text', 'empty=', 'a.ntapp'], read)).toEqual({ image: 'a.ntapp', data: { empty: '' } });
+    expect(parseRunArguments(['--text', 'empty=', 'a.ntapp'], read)).toEqual({
+      image: 'a.ntapp',
+      data: { empty: '' },
+      listen: false,
+    });
     expect(() => parseRunArguments([], read)).toThrow('Give the compiled .ntapp image to run.');
     expect(() => parseRunArguments(['a.ntapp', 'b.ntapp'], read)).toThrow('not also b.ntapp');
     expect(() => parseRunArguments(['a.ntapp', '--text', 'nothing'], read)).toThrow('--text takes <name>=<text>.');

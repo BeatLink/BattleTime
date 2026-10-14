@@ -54,7 +54,7 @@ neotime note <file>|text <text>|url <url> [small|normal|medium|large]
              [--header 'Name: value']... [--user name:password] [--pin <sha256>|--insecure]
 neotime note remove
 neotime apps [list|install <image|id>|remove <id>|hide <id>|show <id>|setup]
-neotime apps run <image> [--data <name>=<file>]... [--text <name>=<text>]...
+neotime apps run <image> [--data <name>=<file>]... [--text <name>=<text>]... [--listen]
 neotime apps stop|forget [id]
 neotime quick-apps [list|set <id> ...|reset]
 neotime backup <file>
@@ -74,7 +74,8 @@ neotime slots [fit|recovery <start> <size>|update <start>]
   face, launcher and apps this tool bundles onto a new watch; the shared library comes with the firmware. apps run
   opens an image as a temporary app, on top of the screen and never installed, with each --data file or
   --text string (4 kB at most each) written beside it under /temp/<id>/ for the app to read; the image
-  stays there as a cache. apps stop closes it, and apps forget closes it and deletes one temporary
+  stays there as a cache. With --listen it stays connected, printing each message the app sends,
+  until Ctrl+C closes the app. apps stop closes it, and apps forget closes it and deletes one temporary
   app's files, or all of them. quick-apps
   lists the apps a swipe left or right on the face steps through, set replaces them with
   the ids given in order, and reset goes back to the watch's default. listen stays
@@ -276,15 +277,21 @@ export async function files(session: WatchSession, args: string[]) {
   }
 }
 
-// The image and the data files `apps run` was given: --data name=file reads a file, --text name=text takes the text.
+// The image and the data files `apps run` was given: --data name=file reads a file, --text name=text takes the text,
+// and --listen keeps the link open to print what the app sends.
 export function parseRunArguments(
   args: string[],
   readFile: (path: string) => Uint8Array = (path) => new Uint8Array(readFileSync(path)),
-): { image: string; data: Record<string, string | Uint8Array> } {
+): { image: string; data: Record<string, string | Uint8Array>; listen: boolean } {
   let image: string | null = null;
+  let listen = false;
   const data: Record<string, string | Uint8Array> = {};
   for (let at = 0; at < args.length; at++) {
     const arg = args[at];
+    if (arg === '--listen') {
+      listen = true;
+      continue;
+    }
     if (arg !== '--data' && arg !== '--text') {
       if (image !== null) throw new Error(`Give one image to run, not also ${arg}.`);
       image = arg;
@@ -298,7 +305,7 @@ export function parseRunArguments(
     data[name] = arg === '--data' ? readFile(value) : value;
   }
   if (image === null) throw new Error('Give the compiled .ntapp image to run.');
-  return { image, data };
+  return { image, data, listen };
 }
 
 // The memory a reply reports, as a clause for the end of a sentence.
@@ -315,7 +322,12 @@ export function imageToInstall(fileOrId: string): Uint8Array {
   return bundled.data;
 }
 
-export async function apps(session: WatchSession, args: string[]) {
+// Resolves when the user presses Ctrl+C.
+function interrupted(): Promise<void> {
+  return new Promise((resolve) => process.once('SIGINT', () => resolve()));
+}
+
+export async function apps(session: WatchSession, args: string[], untilStopped: () => Promise<void> = interrupted) {
   const [action = 'list', first] = args;
   const packages = await session.packages();
   switch (action) {
@@ -359,7 +371,13 @@ export async function apps(session: WatchSession, args: string[]) {
       }
       return;
     case 'run': {
-      const { image, data } = parseRunArguments(args.slice(1));
+      const { image, data, listen } = parseRunArguments(args.slice(1));
+      // Listening starts before the app opens, so even its first message is printed.
+      if (listen) {
+        session.listen((line) => {
+          if (decodeWatchLine(line)?.t === 'app') say(line.trim());
+        });
+      }
       const bar = new ProgressBar();
       let run;
       try {
@@ -376,6 +394,12 @@ export async function apps(session: WatchSession, args: string[]) {
       }
       say(run.uploaded ? `Sent ${run.header.name}'s image to the watch.` : `The watch already had ${run.header.name}'s image.`);
       say(`Opened ${run.header.name} as temporary app ${run.header.id}${needText(run)}.`);
+      if (listen) {
+        say("Printing the app's messages. Press Ctrl+C to close it.");
+        await untilStopped();
+        await packages.stop();
+        say(`Closed ${run.header.name}.`);
+      }
       return;
     }
     case 'stop':
