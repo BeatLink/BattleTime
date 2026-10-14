@@ -187,6 +187,10 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   can use it. See [companion-protocol.md](companion-protocol.md#file-transfer).
 - **Apps remember where they were.** An app's saved state is written to the watch's storage when
   it closes or the screen turns off, and put back when it opens.
+- **Everything synced to the companion app.** While connected, the companion reads every setting,
+  every app's saved state and the step log again every five minutes, or as often as its Sync
+  setting says. Plugins can change an app's state from the phone, and an open app redraws with the
+  change at once. See [sync.md](sync.md).
 - **Text in one clear, smooth font at every size,** drawn from lines and arcs with its stems
   and curves on whole pixels, in 2.3 KB where seven bitmap fonts took 48 KB.
 

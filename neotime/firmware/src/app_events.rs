@@ -4,14 +4,15 @@
 //! reading, whether a shake happened, the newest wake gesture, and the newest notification from the phone, which waits on
 //! the heap rather than in static RAM. The phone's calls, music, weather, find and vibrate
 //! messages wait together in one `PhoneUpdates`, again only the latest of each. Dismissals from
-//! the phone queue up a few deep instead, so two close together both arrive.
+//! the phone queue up a few deep instead, so two close together both arrive, as do the apps whose
+//! saved state the phone rewrote.
 
 extern crate alloc;
 
 use alloc::boxed::Box;
 use core::cell::RefCell;
 
-use embassy_futures::select::{select, select4, Either, Either4};
+use embassy_futures::select::{select, select3, select4, Either, Either3, Either4};
 use embassy_sync::{
     blocking_mutex::{raw::CriticalSectionRawMutex, Mutex},
     channel::Channel,
@@ -28,6 +29,10 @@ static PHONE_UPDATES: Mutex<CriticalSectionRawMutex, RefCell<PhoneUpdates>> =
     Mutex::new(RefCell::new(PhoneUpdates::new()));
 static PHONE_UPDATED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 static DISMISSALS: Channel<CriticalSectionRawMutex, i64, 4> = Channel::new();
+static STATES_WRITTEN: Channel<CriticalSectionRawMutex, StateWritten, 2> = Channel::new();
+
+/// The id of an app whose saved state the phone rewrote.
+pub type StateWritten = heapless::String<{ neotime_companion::MOST_APP_ID_BYTES }>;
 
 pub enum AppEvent {
     Acceleration(Acceleration),
@@ -38,6 +43,8 @@ pub enum AppEvent {
     Phone(PhoneUpdates),
     /// The phone dismissed the notification with this id.
     NotificationDismissed(i64),
+    /// The phone rewrote this app's saved state.
+    StateWritten(StateWritten),
 }
 
 pub fn acceleration_read(reading: Acceleration) {
@@ -73,6 +80,13 @@ pub fn notification_dismissed(id: i64) {
     }
 }
 
+/// Passes on an app whose state the phone rewrote; one that finds the queue full is dropped.
+pub fn state_written(app: &str) {
+    if let (true, Ok(app)) = (cfg!(with_shell), StateWritten::try_from(app)) {
+        let _ = STATES_WRITTEN.try_send(app);
+    }
+}
+
 /// Waits for the next event: a notification, then the phone's updates, a dismissal, a shake, a wake gesture and a reading.
 pub async fn next() -> AppEvent {
     let phone_updated = async {
@@ -81,15 +95,16 @@ pub async fn next() -> AppEvent {
     };
     match select4(
         NOTIFICATIONS.wait(),
-        select(phone_updated, DISMISSALS.receive()),
+        select3(phone_updated, DISMISSALS.receive(), STATES_WRITTEN.receive()),
         select(SHAKES.wait(), WAKE_GESTURES.wait()),
         ACCELERATION.wait(),
     )
     .await
     {
         Either4::First(notification) => AppEvent::Notification(notification),
-        Either4::Second(Either::First(updates)) => AppEvent::Phone(updates),
-        Either4::Second(Either::Second(id)) => AppEvent::NotificationDismissed(id),
+        Either4::Second(Either3::First(updates)) => AppEvent::Phone(updates),
+        Either4::Second(Either3::Second(id)) => AppEvent::NotificationDismissed(id),
+        Either4::Second(Either3::Third(app)) => AppEvent::StateWritten(app),
         Either4::Third(Either::First(())) => AppEvent::Shake,
         Either4::Third(Either::Second(gesture)) => AppEvent::WakeGesture(gesture),
         Either4::Fourth(reading) => AppEvent::Acceleration(reading),

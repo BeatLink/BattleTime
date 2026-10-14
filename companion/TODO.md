@@ -141,9 +141,9 @@ Android 13 and later.
 [Sync](../docs/sync.md) mirrors the watch's settings, app state, steps and logs in the Rust core,
 and lets plugins read them and change their own app's state.
 
-- **The watch's half of `state`.** The firmware ignores `{"t":"state","app":...}` for now. An open
-  app should load its state file again. A closed app needs nothing, but a background run must not
-  save over the companion's write.
+- **Writes racing a closed app's run.** A closed app that comes due while the companion writes its
+  state could save over the write. The shell runs it between Bluetooth requests, so the window is
+  small but not closed.
 - **Logs for heart rate, battery and sports sessions** under `/logs` on external flash, so there is
   history to sync. Sync already reads anything under `/logs`; each log needs a decoder in
   `core/src/sync/pass.rs`.

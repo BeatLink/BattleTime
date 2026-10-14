@@ -73,6 +73,30 @@ impl Shell {
         }
     }
 
+    /// The phone rewrote an app's saved state: the open app opens again on it, unsaved, and a closed one's next run is noted again.
+    #[inline(never)]
+    pub(super) fn state_written(&mut self, id: &str) {
+        if self.host.is_some() && self.system.open_app_id.as_str() == id && self.showing != Showing::Temporary
+        {
+            // Dropping the host skips its save, so the state that opens is the phone's.
+            self.host = None;
+            self.open(self.showing, Transition::None);
+            return;
+        }
+        if self.system.installed.place_of(id).is_none() || !self.files.runs_while_closed_now(id) {
+            return;
+        }
+        let now = clock::utc_now();
+        let mut slot = None;
+        if let Some(image) = self.load_closed_app(id, now, &mut slot) {
+            if let Some(host) = &slot {
+                self.system.closed_apps.record(id, host, now);
+            }
+            drop(slot);
+            image.release();
+        }
+    }
+
     /// When the next closed app comes due, as the shell's clock counts.
     pub(super) fn next_closed_app_due(&self) -> Instant {
         self.system

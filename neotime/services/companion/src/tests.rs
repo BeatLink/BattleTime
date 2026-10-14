@@ -92,6 +92,21 @@ fn unknown_keys_and_messages_are_passed_over() {
     );
 }
 
+#[test]
+fn a_state_message_names_the_app_whose_state_the_phone_rewrote() {
+    assert_eq!(
+        parse_line(br#"GB({"app":"alarm","t":"state"})"#),
+        Ok(Message::StateWritten { app: "alarm" })
+    );
+    assert_eq!(parse_line(br#"{"t":"state"}"#), Err(MessageError::NotJson));
+    assert_eq!(
+        parse_line(br#"{"t":"state","app":""}"#),
+        Err(MessageError::NotJson)
+    );
+    let long = format!(r#"{{"t":"state","app":"{}"}}"#, "a".repeat(MOST_APP_ID_BYTES + 1));
+    assert_eq!(parse_line(long.as_bytes()), Err(MessageError::NotJson));
+}
+
 // ============================================================================
 // Notifications
 // ============================================================================

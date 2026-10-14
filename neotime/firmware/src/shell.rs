@@ -1264,6 +1264,7 @@ impl Shell {
             AppEvent::NotificationDismissed(id) => {
                 self.system.notifications_changed |= self.system.notifications.dismiss(id);
             }
+            AppEvent::StateWritten(app) => self.state_written(&app),
             AppEvent::Acceleration(reading) => self.deliver(PushedEvent::Acceleration {
                 x: reading.x_in_milli_g as Value,
                 y: reading.y_in_milli_g as Value,

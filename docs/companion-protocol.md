@@ -187,6 +187,20 @@ The companion's command line shows them with `neotime slots`, shrinks the recove
 image with `neotime slots fit`, and moves one with `neotime slots recovery <start> <size>` or
 `neotime slots update <start>`.
 
+### App state (served)
+
+`{"t":"state","app":"<id>"}` says the phone has just rewritten `/apps/<id>/state` with the file
+transfer below, as [sync.md](sync.md) describes:
+
+- If that app is open, the watch opens it again on the new state without saving the old one. The
+  wearer sees it redrawn in place.
+- If the app is closed but runs while closed, such as an alarm, the watch notes again when it next
+  comes due.
+- Any other app reads the new state the next time it opens.
+
+The watch sends no reply. A message with no `app`, or an id longer than 32 characters, is answered
+with an `error` reply.
+
 ### Other messages (not served yet)
 
 Phone to watch:
@@ -196,7 +210,6 @@ Phone to watch:
 | `alarm` | `d`: a list of `{h, m, on, rep}` | Set the alarms; with no `d`, report them. |
 | `steps` | `y`, `m`, `d` | The watch replies with that day's steps in 240 six-minute slots, `null` where unknown. |
 | `http` | `id`, `resp` or `err` | The answer to a watch's `http` request. |
-| `state` | `app`: an app id | The companion has just rewritten `/apps/<app>/state` ([sync.md](sync.md)): an open app should load it again rather than save over it. |
 
 Watch to phone: `http` with `id`, `url`, `method`, `body`; `info` with `msg`.
 

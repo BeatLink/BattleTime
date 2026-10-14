@@ -850,6 +850,7 @@ fn read_companion_line(line: &[u8]) {
         Ok(neotime_companion::Message::Slots(request)) => {
             let _ = SLOTS_REQUESTS.try_send(request);
         }
+        Ok(neotime_companion::Message::StateWritten { app }) => app_events::state_written(app),
         Ok(neotime_companion::Message::Unknown { .. }) => {}
         Ok(phone_message) => app_events::phone_message_arrived(phone_message),
         Err(_) => {

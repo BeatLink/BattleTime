@@ -59,8 +59,9 @@ Changes go back the same two ways:
 - **Settings** are sent as a `settings` message. The watch's reply is kept as the new `settings`.
 - **App state** is changed in place. The core first reads the file again, then takes the new values,
   keeping each value's type, length and width so the app still loads it, and writes the file back. It
-  then sends `{"t":"state","app":"<id>"}` so an open app takes the new state up rather than saving
-  over it. A value that would not fit its width, or a list of the wrong length, is refused, and
+  then sends `{"t":"state","app":"<id>"}` ([companion-protocol.md](companion-protocol.md#app-state-served)).
+  An open app then opens again on the new state rather than saving over it, and a closed alarm or
+  timer notes its new time. A value that would not fit its width, or a list of the wrong length, is refused, and
   nothing is written.
 
 ## Sharing the file service

@@ -126,6 +126,8 @@ pub enum Message<'line> {
     NotificationDismissed { id: i64 },
     /// `slots`: where the update and recovery slots are, or a request to move them.
     Slots(SlotsRequest),
+    /// `state`: the phone rewrote this app's saved state, so an open app loads it again.
+    StateWritten { app: &'line str },
     /// A message this watch does not act on yet, by its `t`.
     Unknown { kind: &'line str },
 }
@@ -163,6 +165,9 @@ impl SettingsChange {
         theme
     }
 }
+
+/// The longest app id, as `neotime-packages` allows.
+pub const MOST_APP_ID_BYTES: usize = 32;
 
 /// The longest app name, title and body a notification keeps; longer text is cut short.
 pub const NOTIFICATION_SOURCE_BYTES: usize = 24;
@@ -252,6 +257,8 @@ const IMPERIAL: &str = "Imperial";
 #[derive(Deserialize)]
 struct Envelope<'line> {
     t: &'line str,
+    #[serde(default, borrow)]
+    app: Option<&'line str>,
     #[serde(default, borrow)]
     theme: Option<&'line str>,
     #[serde(default, borrow)]
@@ -429,6 +436,14 @@ pub fn parse_line(line: &[u8]) -> Result<Message<'_>, MessageError> {
         "vibrate" => return phone::parse_vibrate(json),
         "status" => return Ok(Message::StatusRequest),
         "slots" => return slots::parse_slots(json),
+        "state" => {
+            return match envelope.app {
+                Some(app) if !app.is_empty() && app.len() <= MOST_APP_ID_BYTES => {
+                    Ok(Message::StateWritten { app })
+                }
+                _ => Err(MessageError::NotJson),
+            }
+        }
         "notify-" => {
             return Ok(Message::NotificationDismissed {
                 id: envelope.id.unwrap_or(0),
