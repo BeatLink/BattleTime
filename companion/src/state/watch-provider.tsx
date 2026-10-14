@@ -38,6 +38,7 @@ import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
 import { noteFileAccess, type NoteFileAccess } from '@/services/note-file';
 import { phoneBridge, type PhoneEvent } from '@/services/phone';
 import { controlCall } from '@/services/phone/call-control';
+import { CallSummary } from '@/services/phone/call-summary';
 import {
   buttonName,
   handleRemoteTap,
@@ -161,6 +162,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   const filesRef = useRef<Promise<FileService> | null>(null);
   const packagesRef = useRef<Promise<PackagesClient> | null>(null);
   const nextId = useRef(1);
+  const callSummaryRef = useRef(new CallSummary());
 
   const [connection, setConnection] = useState<ConnectionState>('disconnected');
   const [watchMode, setWatchMode] = useState<WatchMode>('application');
@@ -231,6 +233,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
         break;
       case 'call':
         if ('n' in message) {
+          callSummaryRef.current.noteWatchAnswer(message.n);
           void controlCall(phoneBridge, message.n).catch(() => {});
         }
         break;
@@ -383,6 +386,8 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       if (event.type === 'media') {
         setNowPlaying(event);
       }
+      // Calls are followed even while the watch is away, so a summary never names the wrong outcome.
+      const callSummary = event.type === 'call' ? callSummaryRef.current.noteCall(event) : null;
       const current = settingsRef.current;
       if (!readyRef.current) {
         return;
@@ -408,6 +413,9 @@ export function WatchProvider({ children }: { children: ReactNode }) {
         case 'call':
           if (current.forwardCalls && !(event.state === 'incoming' && (await quiet()))) {
             await send({ t: 'call', cmd: event.state, name: event.name, number: event.number });
+          }
+          if (callSummary && current.forwardNotifications && !(await quiet())) {
+            await send(callSummary);
           }
           break;
         case 'media':

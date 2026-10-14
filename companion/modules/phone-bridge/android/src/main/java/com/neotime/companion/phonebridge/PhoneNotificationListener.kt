@@ -55,7 +55,7 @@ class PhoneNotificationListener : NotificationListenerService() {
     PhoneEventBus.emit(mapOf("type" to "notificationRemoved", "id" to idFor(sbn.key)))
   }
 
-  // Leaves out ongoing and summary notifications, media and call notifications (sent as their own events), and this app's own.
+  // Leaves out ongoing and summary notifications, media, calls and missed calls (sent as their own events), and this app's own.
   private fun shouldForward(sbn: StatusBarNotification): Boolean {
     val notification = sbn.notification ?: return false
     if (sbn.packageName == packageName || sbn.isOngoing) {
@@ -65,7 +65,7 @@ class PhoneNotificationListener : NotificationListenerService() {
       return false
     }
     val category = notification.category
-    if (category == Notification.CATEGORY_TRANSPORT || category == Notification.CATEGORY_CALL) {
+    if (category == Notification.CATEGORY_TRANSPORT || category == Notification.CATEGORY_CALL || category == MISSED_CALL_CATEGORY) {
       return false
     }
     return notification.extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) != true
@@ -94,6 +94,9 @@ class PhoneNotificationListener : NotificationListenerService() {
       ?.takeIf { it.isNotEmpty() }
 
   companion object {
+    // Notification.CATEGORY_MISSED_CALL, spelled out because the constant needs Android 11.
+    private const val MISSED_CALL_CATEGORY = "missed_call"
+
     // The same key always gives the same id, including across restarts, so a removal matches its post.
     fun idFor(key: String): Int = key.hashCode() and 0x7fffffff
   }

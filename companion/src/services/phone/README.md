@@ -20,8 +20,8 @@ media, and lets the watch act on them. In the desktop app the computer stands in
 
 - **Notifications.** A `NotificationListenerService` sends `notification` and
   `notificationRemoved` events once the user turns on notification access
-  (`openNotificationAccessSettings`). It skips ongoing, group summary, media and call
-  notifications, and the app's own. The id is a hash of the notification's key, so a removal
+  (`openNotificationAccessSettings`). It skips ongoing, group summary, media, call and
+  missed call notifications, and the app's own. The id is a hash of the notification's key, so a removal
   carries the same id as its post. An app that updates a notification posts it again with the same
   id.
 - **Media.** The same service follows the active media session, preferring one that is playing,
@@ -33,6 +33,10 @@ media, and lets the watch act on them. In the desktop app the computer stands in
   permission and the name needs contacts. `answerCall` needs Android 8 and `rejectCall` Android 9. `silenceCall`, the watch's Mute, sets
   the ringer to silent until the call ends and then puts it back; Android allows that because the
   app is a notification listener.
+- **Call summaries.** `CallSummary` in `call-summary.ts` follows each incoming call and, when it
+  ends, gives a `Phone` notification for the watch: **Missed call**, **Ignored call** (rejected or
+  muted on the watch) or **Accepted call**, titled with the caller. These take negative ids, below
+  the phone's own. A call rejected on the phone itself reads as missed, since Android reports it the same way.
 - **Do Not Disturb.** `isDoNotDisturb` is true when the interruption filter is anything but "all".
   Nothing is filtered natively; the app decides what to forward.
 - **Keep-alive.** `startKeepAlive` runs a foreground service of type `connectedDevice` with an

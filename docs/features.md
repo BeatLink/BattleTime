@@ -100,7 +100,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   music app's buttons control the phone's player. An incoming call opens the [call app](apps/call.md)
   and rings until it is answered, rejected, muted or left, unless do not disturb is on; Accept,
   Reject and Mute go back to the phone. Without the call app it buzzes once and lights the screen.
-  Every call also reaches apps that listen for calls.
+  Every call also reaches apps that listen for calls. When an incoming call ends, the companion app
+  leaves a notification saying whether it was missed, ignored on the watch or accepted, in place of
+  the phone's own missed call notification.
 - **Find the watch from the phone.** Gadgetbridge's find-device rings the watch for up to a
   minute, even in do not disturb, until the phone stops it or the wearer touches the watch or
   presses the button. The phone can also buzz the watch one to five times, and ask for its battery
