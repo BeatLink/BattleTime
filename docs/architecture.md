@@ -649,6 +649,11 @@ shows a status page, mounts the flash store, advertises as "NeoTime" with the DF
 services, and confirms itself to the bootloader once Bluetooth runs. It is outside the workspace,
 like the bootloader, because it only builds for the watch. See [updates.md](updates.md).
 
+The first thing it does after `embassy_nrf::init` is turn on the flash's instruction cache
+(`NVMC.ICACHECNF`), which the chip starts with off. Without it every instruction word fetched from
+flash waits 2 cycles; with it a fetch from the 2 KB cache waits none. On the emulator, which models
+both, opening Settings draws in 222 ms instead of 297 ms.
+
 Two seconds after start-up the **shell** (`firmware/src/shell.rs`) takes the screen and runs the
 watch face, the launcher and the apps through `neotime-app-host`:
 

@@ -35,6 +35,7 @@ use embassy_nrf::{
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
 use embassy_time::{Delay, Duration, Timer};
 use embedded_alloc::LlffHeap;
+use nrf_pac as pac;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_blefs::service::FileTransferService;
 use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
@@ -179,6 +180,8 @@ async fn main(spawner: Spawner) {
     // Leave the debug port's settings alone, so start-up never writes the protection word.
     config.debug = embassy_nrf::config::Debug::NotConfigured;
     let chip = embassy_nrf::init(config);
+    // The chip starts with its flash cache off, so every instruction fetched from flash waits.
+    pac::NVMC.icachecnf().write(|w| w.set_cacheen(true));
 
     start_heap();
     mark_alive();
