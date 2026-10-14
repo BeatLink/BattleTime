@@ -221,6 +221,10 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   The colour gives the mode: black when confirmed, amber on trial, red after a rollback, purple for
   the recovery firmware, and blue while the bootloader works. The bootloader line names the
   installed bootloader by a CRC-32, such as `OK 1a2b3c4`.
+- **The battery while the bootloader works.** The bootloader, the bootloader updater and the
+  reloader show a battery line, such as "Battery 87% charging" or "Battery 40% unplugged". The
+  updater and the reloader write the bootloader only on the charger with at least 3.7 V in the
+  battery, and say "Battery low, charging" while they wait. It has run only in the emulator.
 - **The version on screen and over Bluetooth.** The status page's first line and the Device
   Information service give the firmware's version and the commit it was built from, such as
   `NeoTime 0.1.0+1b19aed`, with a `*` when the build had uncommitted changes.

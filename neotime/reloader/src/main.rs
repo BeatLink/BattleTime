@@ -32,6 +32,7 @@ use embedded_graphics::{
 };
 use embedded_storage::nor_flash::{ErrorType, NorFlash, ReadNorFlash};
 use mipidsi::interface::SpiInterface;
+use neotime_battery::{battery_line, can_write_bootloader, Measurement, BATTERY_LINE_LENGTH};
 use neotime_boot::{
     migration::{crc32, plan, PayloadSizes, Step, CRC32_INITIAL},
     BOOT_STATE, DEFAULT_SLOTS, PAGE_SIZE,
@@ -143,8 +144,11 @@ fn main() -> ! {
     let _backlight_on = Output::new(chip.P0_14, Level::Low, OutputDrive::Standard);
     screen.title("NeoTime installer");
 
-    let power_present = Input::new(chip.P0_19, Pull::Up);
-    wait_for_the_charger(&power_present, &button, &mut screen, &mut delay);
+    let battery = Battery {
+        power_present: Input::new(chip.P0_19, Pull::Up),
+        charging: Input::new(chip.P0_12, Pull::Up),
+    };
+    wait_until_the_battery_is_safe(&battery, &button, &mut screen, &mut delay);
 
     screen.status("Checking");
     if !payloads_are_intact() {
@@ -188,6 +192,8 @@ fn main() -> ! {
                 stage_firmware(&external_flash, &internal_flash, &mut screen)
             }
             Step::WriteBootloader { region } => {
+                // Staging takes minutes, in which the charger may have come out.
+                wait_until_the_battery_is_safe(&battery, &button, &mut screen, &mut delay);
                 screen.status("Installing, do not unplug");
                 let mut pages = BlockingPartition::new(&internal_flash, region.start, region.size);
                 copy_with_retries(&mut pages, &BOOTLOADER, &mut screen)
@@ -249,20 +255,51 @@ fn halt(button: &Input<'_>) -> ! {
     }
 }
 
-fn wait_for_the_charger(
-    power_present: &Input<'_>,
+/// The charger's two pins; the voltage comes from the SAADC.
+struct Battery<'d> {
+    power_present: Input<'d>,
+    charging: Input<'d>,
+}
+
+impl Battery<'_> {
+    /// One reading of the battery and the charger, or none when the converter never answered.
+    fn measure(&self) -> Option<Measurement> {
+        Some(Measurement {
+            millivolts: neotime_battery_reading::read_millivolts(&mut neotime_battery_reading::Saadc)?,
+            is_power_present: self.power_present.is_low(),
+            is_charge_pin_active: self.charging.is_low(),
+        })
+    }
+}
+
+/// Polls between battery readings while waiting for the charger: one a second.
+const POLLS_PER_BATTERY_READING: u32 = 10;
+
+/// Waits, showing the battery each second, until the watch is on the charger with enough charge to write the bootloader.
+fn wait_until_the_battery_is_safe(
+    battery: &Battery<'_>,
     button: &Input<'_>,
     screen: &mut Screen,
     delay: &mut Delay,
 ) {
-    let mut asked = false;
-    while power_present.is_high() {
-        if !asked {
-            screen.status("Plug in the charger");
-            asked = true;
+    let mut shown_reason = None;
+    loop {
+        let measurement = battery.measure();
+        screen.battery(measurement);
+        let reason = match measurement {
+            Some(measurement) if can_write_bootloader(measurement) => return,
+            Some(measurement) if !measurement.is_power_present => "Plug in the charger",
+            Some(_) => "Battery low, charging",
+            None => "Battery unreadable",
+        };
+        if shown_reason != Some(reason) {
+            screen.status(reason);
+            shown_reason = Some(reason);
         }
-        feed_watchdog_while_button_is_up(button);
-        delay.delay_ms(100);
+        for _ in 0..POLLS_PER_BATTERY_READING {
+            feed_watchdog_while_button_is_up(button);
+            delay.delay_ms(100);
+        }
     }
 }
 
@@ -467,6 +504,7 @@ impl Screen {
     const STATUS_BASELINE: i32 = 120;
     const STATUS_HEIGHT: u32 = 24;
     const BAR: Rectangle = Rectangle::new(Point::new(20, 160), Size::new(200, 16));
+    const BATTERY_BASELINE: i32 = 215;
 
     fn start(
         spi_bus: &'static SpiBus,
@@ -508,6 +546,23 @@ impl Screen {
         let style = MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE);
         let _ = Text::new(text, Point::new(12, Self::STATUS_BASELINE), style).draw(&mut self.display);
         self.progress(0, 1);
+    }
+
+    /// Shows the battery's charge and the charger, such as "Battery 87% charging", below the bar.
+    fn battery(&mut self, measurement: Option<Measurement>) {
+        let mut buffer = [0; BATTERY_LINE_LENGTH];
+        let text = measurement.map_or("Battery unreadable", |measurement| {
+            battery_line(measurement, &mut buffer)
+        });
+        let clear = Rectangle::new(
+            Point::new(0, Self::BATTERY_BASELINE - 20),
+            Size::new(240, Self::STATUS_HEIGHT),
+        );
+        let _ = clear
+            .into_styled(PrimitiveStyle::with_fill(Rgb565::BLACK))
+            .draw(&mut self.display);
+        let style = MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE);
+        let _ = Text::new(text, Point::new(12, Self::BATTERY_BASELINE), style).draw(&mut self.display);
     }
 
     fn progress(&mut self, done: usize, total: usize) {

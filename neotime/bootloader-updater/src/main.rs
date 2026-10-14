@@ -1,7 +1,7 @@
 //! Replaces the bootloader on a watch already running NeoTime.
 //!
 //! It is sent as an ordinary firmware update, so the bootloader swaps it in on trial. It checks the
-//! bootloader it carries, waits for the charger, writes the bootloader pages and reads them back. It
+//! bootloader it carries, waits for the charger and enough charge, writes the bootloader pages and reads them back. It
 //! never confirms itself, so its reset makes the new bootloader roll back to the firmware before it,
 //! and a note in RAM tells that firmware the rollback was meant. Built `from-first-layout` or
 //! `from-388-kb-layout`, it first writes the recovery firmware it carries into the recovery slot, since
@@ -26,6 +26,7 @@ use embassy_nrf::{
 use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565};
 use embedded_hal_bus::spi::RefCellDevice;
 use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
+use neotime_battery::{battery_line, can_write_bootloader, Measurement, BATTERY_LINE_LENGTH};
 use neotime_boot::{
     is_bootloader_vector_table,
     migration::{crc32, CRC32_INITIAL},
@@ -51,6 +52,8 @@ mod recovery {
 
 const CPU_FREQUENCY_IN_HERTZ: u32 = 64_000_000;
 const POLL_INTERVAL_IN_MILLISECONDS: u32 = 100;
+/// Polls between battery readings while waiting for the charger: one a second.
+const POLLS_PER_BATTERY_READING: u32 = 10;
 const COPY_CHUNK_SIZE: usize = 1024;
 const WRITE_ATTEMPTS_BEFORE_WARNING: u32 = 3;
 
@@ -76,6 +79,11 @@ fn main() -> ! {
     let _button_power = Output::new(chip.P0_15, Level::High, OutputDrive::Standard);
     let button = Input::new(chip.P0_13, Pull::Down);
     let power_present = Input::new(chip.P0_19, Pull::Up);
+    let charging = Input::new(chip.P0_12, Pull::Up);
+    let battery = Battery {
+        power_present,
+        charging,
+    };
     let flash_chip_select = Output::new(chip.P0_05, Level::High, OutputDrive::Standard);
 
     let mut spi_config = spim::Config::default();
@@ -115,15 +123,7 @@ fn main() -> ! {
         hand_back(UpdaterNote::BootloaderAlreadyCurrent, &mut watchdog, &mut delay);
     }
 
-    let mut asked_for_the_charger = false;
-    while power_present.is_high() {
-        if !asked_for_the_charger {
-            status.show("Unchanged", "Plug in the charger", "Hold button to quit");
-            asked_for_the_charger = true;
-        }
-        feed_watchdog_while_button_is_up(&button, &mut watchdog);
-        delay.delay_ms(POLL_INTERVAL_IN_MILLISECONDS);
-    }
+    wait_until_the_battery_is_safe(&battery, &mut status, &button, &mut watchdog, &mut delay);
 
     #[cfg(moves_layout)]
     {
@@ -143,6 +143,10 @@ fn main() -> ! {
     }
     #[cfg(not(moves_layout))]
     drop(flash_chip_select);
+
+    // The recovery write takes a while, in which the charger may have come out.
+    #[cfg(moves_layout)]
+    wait_until_the_battery_is_safe(&battery, &mut status, &button, &mut watchdog, &mut delay);
 
     // From the first erase until the read-back matches, a reset would leave nothing that starts, so
     // the watchdog is fed whatever the button does and the updater never gives up.
@@ -198,6 +202,56 @@ fn hand_back(note: UpdaterNote, watchdog: &mut WatchdogHandle, delay: &mut Delay
     watchdog.pet();
     delay.delay_ms(1000);
     cortex_m::peripheral::SCB::sys_reset()
+}
+
+// ============================================================================
+// The battery
+// ============================================================================
+
+/// The charger's two pins; the voltage comes from the SAADC.
+struct Battery<'d> {
+    power_present: Input<'d>,
+    charging: Input<'d>,
+}
+
+impl Battery<'_> {
+    /// One reading of the battery and the charger, or none when the converter never answered.
+    fn measure(&self) -> Option<Measurement> {
+        Some(Measurement {
+            millivolts: neotime_battery_reading::read_millivolts(&mut neotime_battery_reading::Saadc)?,
+            is_power_present: self.power_present.is_low(),
+            is_charge_pin_active: self.charging.is_low(),
+        })
+    }
+}
+
+/// Waits, showing the battery each second, until the watch is on the charger with enough charge to write the bootloader.
+fn wait_until_the_battery_is_safe(
+    battery: &Battery<'_>,
+    status: &mut Status<'_, '_>,
+    button: &Input<'_>,
+    watchdog: &mut WatchdogHandle,
+    delay: &mut Delay,
+) {
+    let mut shown_reason = None;
+    loop {
+        let measurement = battery.measure();
+        status.show_battery(measurement);
+        let reason = match measurement {
+            Some(measurement) if can_write_bootloader(measurement) => return,
+            Some(measurement) if !measurement.is_power_present => "Plug in the charger",
+            Some(_) => "Battery low, charging",
+            None => "Battery unreadable",
+        };
+        if shown_reason != Some(reason) {
+            status.show("Unchanged", reason, "Hold button to quit");
+            shown_reason = Some(reason);
+        }
+        for _ in 0..POLLS_PER_BATTERY_READING {
+            feed_watchdog_while_button_is_up(button, watchdog);
+            delay.delay_ms(POLL_INTERVAL_IN_MILLISECONDS);
+        }
+    }
 }
 
 // ============================================================================
@@ -317,6 +371,17 @@ impl Status<'_, '_> {
             screen.write_line(page::FIRMWARE, "Updater");
             screen.write_line(page::FILES, "Not mounted");
             screen.write_line(page::BLUETOOTH, "Off");
+        }
+    }
+
+    /// Shows the battery's charge and the charger, such as "Battery 87% charging".
+    fn show_battery(&mut self, measurement: Option<Measurement>) {
+        if let Some(screen) = &mut self.screen {
+            let mut buffer = [0; BATTERY_LINE_LENGTH];
+            let line = measurement.map_or("Battery unreadable", |measurement| {
+                battery_line(measurement, &mut buffer)
+            });
+            screen.write_line(page::BATTERY, line);
         }
     }
 

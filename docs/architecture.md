@@ -143,6 +143,7 @@ NeoTime/
 │   └── images/       pictures for the docs
 ├── drivers/
 │   ├── accelerometer/  neotime-accelerometer: the BMA421 or BMA425 and its step counter
+│   ├── battery_reading/  neotime-battery-reading: one blocking battery reading for the bootloader, its updater and the reloader
 │   ├── bluetooth/    neotime-bluetooth: the Bluetooth LE controller for the chip's radio
 │   ├── button/       neotime-button: the side button
 │   ├── display/      neotime-display: the ST7789 screen
@@ -405,6 +406,15 @@ byte-level format.
 
 It never allocates and never panics on bad input. Its working memory is 2,168 B for the
 interpreter, 2,056 B for the bindings of up to 128 expressions and 2,440 B for the state.
+### Battery reading (`drivers/battery_reading`)
+
+The bootloader, its updater and the reloader run with no executor and no interrupts, so they read
+the battery through this crate rather than embassy's SAADC driver. It sets up P0.31 as the
+firmware does, calibrates, averages four samples and gives the voltage, or none when the converter
+never answers. `neotime-battery` turns that reading into the status page's battery line and decides
+whether there is enough charge to write the bootloader. Its tests run it against a stand-in for
+the SAADC's registers.
+
 ### External flash (`drivers/external_flash`)
 
 `neotime-external-flash` drives the 4 MB SPI NOR flash as an `embedded-storage` `NorFlash`, the

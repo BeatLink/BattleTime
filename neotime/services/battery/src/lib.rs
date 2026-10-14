@@ -296,5 +296,54 @@ impl Battery {
     }
 }
 
+// ============================================================================
+// Single readings, for the programs that run before the firmware
+// ============================================================================
+
+/// The lowest voltage, read on the charger, at which the bootloader's pages may be erased.
+pub const MINIMUM_MILLIVOLTS_TO_WRITE_BOOTLOADER: i32 = 3700;
+
+/// Whether the battery can carry the half second in which the watch has no bootloader: on the charger and not near empty.
+pub fn can_write_bootloader(measurement: Measurement) -> bool {
+    measurement.is_power_present && measurement.millivolts >= MINIMUM_MILLIVOLTS_TO_WRITE_BOOTLOADER
+}
+
+/// The longest battery line, "Battery 100% unplugged", which just fits a status page line.
+pub const BATTERY_LINE_LENGTH: usize = 22;
+
+/// The status page line for one reading, such as "Battery 87% charging".
+pub fn battery_line(measurement: Measurement, buffer: &mut [u8; BATTERY_LINE_LENGTH]) -> &str {
+    let mut percent = percent_at(measurement.millivolts);
+    let state = match (measurement.is_power_present, measurement.is_charge_pin_active) {
+        (true, true) => {
+            percent = percent.min(HIGHEST_PERCENT_WHILE_CHARGING);
+            "charging"
+        }
+        (true, false) => "charged",
+        (false, _) => "unplugged",
+    };
+
+    let digits = [
+        b'0' + percent / 100,
+        b'0' + percent / 10 % 10,
+        b'0' + percent % 10,
+    ];
+    let first_digit = match percent {
+        100.. => 0,
+        10.. => 1,
+        _ => 2,
+    };
+    let pieces: [&[u8]; 4] = [b"Battery ", &digits[first_digit..], b"% ", state.as_bytes()];
+    let mut length = 0;
+    for &byte in pieces.iter().flat_map(|piece| piece.iter()) {
+        if let Some(slot) = buffer.get_mut(length) {
+            *slot = byte;
+            length += 1;
+        }
+    }
+    // Every byte written above is ASCII.
+    unsafe { core::str::from_utf8_unchecked(&buffer[..length]) }
+}
+
 #[cfg(test)]
 mod tests;

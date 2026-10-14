@@ -303,3 +303,43 @@ fn the_charger_wakes_the_screen_and_the_warning_keeps_quiet_in_do_not_disturb() 
     assert!(BatteryEvent::Low.wakes_screen(false));
     assert!(!BatteryEvent::Low.wakes_screen(true));
 }
+
+// ============================================================================
+// Single readings, for the programs that run before the firmware
+// ============================================================================
+
+fn assert_line(measurement: Measurement, expected: &str) {
+    let mut buffer = [0; BATTERY_LINE_LENGTH];
+    assert_eq!(battery_line(measurement, &mut buffer), expected);
+}
+
+#[test]
+fn the_battery_line_names_the_charge_and_the_charger() {
+    assert_line(on_battery(3776), "Battery 48% unplugged");
+    assert_line(charging(3776), "Battery 48% charging");
+    assert_line(charged(4180), "Battery 100% charged");
+}
+
+#[test]
+fn the_battery_line_fits_one_digit_and_never_shows_full_while_charging() {
+    assert_line(on_battery(3400), "Battery 0% unplugged");
+    assert_line(charging(4300), "Battery 99% charging");
+}
+
+#[test]
+fn the_longest_battery_line_fills_its_buffer() {
+    assert_line(on_battery(4300), "Battery 100% unplugged");
+    assert_eq!("Battery 100% unplugged".len(), BATTERY_LINE_LENGTH);
+}
+
+#[test]
+fn the_bootloader_is_written_only_on_the_charger_and_above_the_floor() {
+    assert!(can_write_bootloader(charging(
+        MINIMUM_MILLIVOLTS_TO_WRITE_BOOTLOADER
+    )));
+    assert!(can_write_bootloader(charged(4180)));
+    assert!(!can_write_bootloader(charging(
+        MINIMUM_MILLIVOLTS_TO_WRITE_BOOTLOADER - 1
+    )));
+    assert!(!can_write_bootloader(on_battery(4180)));
+}

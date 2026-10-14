@@ -135,6 +135,13 @@ fn every_line_fits_on_the_screen() {
 }
 
 #[test]
+fn the_longest_battery_line_fits_whole() {
+    let longest = "Battery 100% unplugged";
+    assert_eq!(longest.len(), neotime_battery::BATTERY_LINE_LENGTH);
+    assert_eq!(fitted(BATTERY, longest), longest);
+}
+
+#[test]
 fn text_that_is_not_ascii_is_cut_at_a_character() {
     let value = "é€ ünïcödé line that runs on";
     assert_eq!(

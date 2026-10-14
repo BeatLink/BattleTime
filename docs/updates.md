@@ -172,12 +172,15 @@ image, the reloader's build keeps one copy for both slots, since two copies over
 
 The order comes from `neotime_boot::migration`, and its tests hold it to these rules:
 
-1. **Wait for the charger.** It does nothing until power is present on P0.19, and shows why.
+1. **Wait for the charger and enough charge.** It does nothing until power is present on P0.19 and
+   the battery reads at least 3.7 V, and shows why. A line under the progress bar shows the battery
+   from a reading each second, such as "Battery 87% charging".
 2. **Check its cargo.** Each image carries a CRC-32 from the build; a damaged download stops here.
 3. **Stage the recovery firmware** in the default recovery slot and **the firmware** in the
    default update slot, both in the external flash. The old system still starts during this; it has
    only lost its own files in the external flash.
-4. **Write the bootloader** over the first pages of internal flash. From the first erase until the
+4. **Write the bootloader** over the first pages of internal flash, after checking the charger and
+   the charge again, since staging takes minutes. From the first erase until the
    last word is in place, nothing on the watch starts. The bootloader is about 13 KB, four pages:
    about half a second. Each copy is read back and compared, and retried up to three times.
 5. **Mark the swap** in `BOOT_STATE`, so the bootloader's first start installs the staged
@@ -224,11 +227,15 @@ an SWD probe, cannot be brought back; with one, `probe-rs` can write the bootloa
 For that to happen, all of these must go wrong at once:
 
 1. **The power must fail inside the half second.** Neither program starts writing until the charger
-   is present on P0.19, and the whole update before it takes minutes, so the window is a tiny part
-   of the time the watch spends on the charger.
+   is present on P0.19, checked again just before the write, and the whole update before it takes
+   minutes, so the window is a tiny part of the time the watch spends on the charger.
 2. **The battery must fail too.** The PineTime runs from its internal battery; the charger only
    charges it. Lifting the watch off the charger does not cut the power, so the battery itself must
-   be disconnected or collapse in that half second, while it is being charged.
+   be disconnected or collapse in that half second, while it is being charged. Neither program
+   writes until the battery reads at least 3.7 V on the charger
+   (`neotime_battery::MINIMUM_MILLIVOLTS_TO_WRITE_BOOTLOADER`), a few percent above empty once the
+   charger's lift is allowed for, so a nearly flat battery charges for a while first. A converter
+   that never answers counts as too low.
 3. **Nothing else may stop it first.** Both programs feed the watchdog through every erase and
    write, take the new bootloader from flash they never erase, and read every page back. The
    updater writes again on a mismatch for as long as it takes and never resets with a broken

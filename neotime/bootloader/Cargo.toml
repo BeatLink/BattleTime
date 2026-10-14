@@ -23,6 +23,8 @@ embedded-hal-bus = "0.3"
 embedded-storage = "0.3"
 panic-reset = "0.1"
 
+neotime-battery = { path = "../services/battery" }
+neotime-battery-reading = { path = "../drivers/battery_reading" }
 neotime-boot = { path = "../boot" }
 neotime-button = { path = "../drivers/button" }
 neotime-external-flash = { path = "../drivers/external_flash", features = ["cortex-m"] }

@@ -22,7 +22,7 @@ python3 tools/draw_memory_maps.py
 
 | Region | Start | Size | Holds |
 |---|---|---|---|
-| Bootloader | `0x00000` | 20 KB | The `embassy-boot` bootloader with its status screen and button menu, 17,892 bytes of it used. There is no SoftDevice and no MBR. |
+| Bootloader | `0x00000` | 20 KB | The `embassy-boot` bootloader with its status screen and button menu, 18,576 bytes of it used. There is no SoftDevice and no MBR. |
 | Slot table | `0x05000` | 8 KB | Two pages recording where the update and recovery slots sit in the external flash; see [bootloader.md](bootloader.md#the-slot-table). |
 | Boot state | `0x07000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
 | Firmware | `0x08000` | 480 KB | The running firmware, to the end of flash: a 256-byte [image header](bootloader.md#the-image-header), then its code, linked to start at `0x08100`, then the shared library. No app, face, icon or font is built into the code apart from the notifications and quick settings screens (about 2.2 KB, compiled from `shell/`); [What fills the firmware](#what-fills-the-firmware) shows what is. The code and the library share the region, so either can grow into the other's room. |

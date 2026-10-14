@@ -309,7 +309,7 @@ const ROOT = { name: "PineTime", children: [
     children: [
       { name: "Boot area", start: 0x00000, size: KB(32), kind: "boot", holds: "The bootloader and the two records it keeps, at the start of flash. There is no SoftDevice and no MBR.", children: [
         { name: "Bootloader", start: 0x00000, size: KB(20), kind: "boot", holds: "The embassy-boot bootloader with its status screen and button menu. It never starts a firmware without a sound image header.", children: [
-          { name: "Code", size: 17892, kind: "boot", holds: "17,892 B of bootloader code and data." },
+          { name: "Code", size: 18576, kind: "boot", holds: "18,576 B of bootloader code and data." },
           { name: "Unused", rest: true, kind: "spare", holds: "The rest of the bootloader's 20 KB." },
         ] },
         { name: "Slot table", start: 0x05000, size: KB(8), kind: "boot", holds: "Two pages logging where the update and recovery slots sit in the external flash: 32-byte records with a sequence number and a CRC. The firmware moves the slots by appending a record; with no sound record the default slots apply." },

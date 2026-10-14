@@ -103,6 +103,21 @@ The Reloader Waits For The Charger
     Run For                   ${RELOADER_SECONDS}
     Flash Should Hold File    0x0    ${BOOTLOADER_BIN}
 
+The Reloader Waits On The Charger Until The Battery Has Enough Charge
+    [Documentation]           40 % puts 3.48 V on the battery, below the 3.7 V the bootloader write needs; 80 % puts 3.96 V.
+    Create A PineTime
+    Copy File                 ${MCUBOOT_RELEASE}    ${MCUBOOT_BIN}
+    Execute Command           sysbus LoadBinary @${MCUBOOT_BIN} 0x0
+    Execute Command           sysbus LoadBinary @${INFINITIME_RELOADER} ${MCUBOOT_SLOT}
+    Execute Command           ${BATTERY} Percent 40
+    Execute Command           ${BATTERY} ConnectCharger
+
+    Run For                   ${RELOADER_SECONDS}
+    Flash Should Hold File    0x0    ${MCUBOOT_BIN}
+    Execute Command           ${BATTERY} Percent 80
+    Run For                   ${RELOADER_SECONDS}
+    Flash Should Hold File    0x0    ${BOOTLOADER_BIN}
+
 Holding The Button Leaves The Reloader For The Old Update Mode
     [Documentation]           Waiting for the charger, the reloader stops feeding the watchdog while the button is held, so the watchdog resets into wasp-os's bootloader, and nothing is changed.
     Start A Watch Running wasp-os With The Reloader As Its App, Unplugged

@@ -103,6 +103,22 @@ Waits For The Charger, And Holding The Button Quits Without Writing
     # A quit is a real rollback: no note, so the firmware keeps saying the update did not happen.
     Boot State Should Be      ${STATE_REVERTED}
 
+Waits On The Charger Until The Battery Has Enough Charge
+    [Documentation]           40 % puts 3.48 V on the battery, below the 3.7 V the bootloader write needs; 80 % puts 3.96 V.
+    ${older}=                 An Older Bootloader
+    Start A NeoTime Watch With The Updater Staged    ${older}
+    Execute Command           ${BATTERY} Percent 40
+    Execute Command           ${BATTERY} ConnectCharger
+
+    Run For                   ${20}
+    Flash Should Hold File    0x0    ${older}
+    Firmware Should Not Have Run
+
+    Execute Command           ${BATTERY} Percent 80
+    Run For                   ${HAND_BACK_SECONDS}
+    Flash Should Hold File    0x0    ${BOOTLOADER_BIN}
+    The Firmware Should Be Back And Confirmed
+
 Moves A First Layout Watch Onto The Current Layout
     [Documentation]           The 16 KB bootloader swaps the updater in at 0x5000; it writes the recovery firmware and the new bootloader,
     ...                       and the new bootloader, finding no sound header at 0x8000, installs the recovery firmware.

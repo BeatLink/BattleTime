@@ -1126,6 +1126,13 @@ name = "neotime-battery"
 version = "0.1.0"
 
 [[package]]
+name = "neotime-battery-reading"
+version = "0.1.0"
+dependencies = [
+ "neotime-battery",
+]
+
+[[package]]
 name = "neotime-blefs"
 version = "0.1.0"
 dependencies = [
@@ -1327,6 +1334,7 @@ version = "0.1.0"
 dependencies = [
  "embedded-graphics",
  "embedded-hal 1.0.0",
+ "neotime-battery",
 ]
 
 [[package]]

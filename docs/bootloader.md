@@ -8,8 +8,8 @@ a new firmware that fails to start is rolled back by itself. Every firmware imag
 damaged or linked for another address. Where the update and recovery slots sit in the external
 flash is read from the [slot table](#the-slot-table), which the firmware can change.
 
-It is about 17.3 KB, in a 20 KB region, which leaves about 2.7 KB; its status screen takes
-about 6 KB of that.
+It is about 18.1 KB, in a 20 KB region, which leaves about 1.9 KB; its status screen takes
+about 6 KB of that, and the battery line on it about 0.7 KB.
 
 The work of an update is split three ways:
 
@@ -27,6 +27,8 @@ The work of an update is split three ways:
 | `neotime-boot` | `boot/` | the watch and in tests | the flash layout, the image header, the slot table, the watchdog timeout, the recovery copy |
 | `neotime-external-flash` | `drivers/external_flash/` | the watch and in tests | the external flash driver |
 | `neotime-status-screen` | `drivers/status_screen/` | the watch, and in the simulator's tests | the small ST7789 driver for the blue status screen |
+| `neotime-battery-reading` | `drivers/battery_reading/` | the watch and in tests | one blocking reading of the battery's voltage, straight from the SAADC's registers |
+| `neotime-battery` | `services/battery/` | the watch and in tests | the charge curve, the battery line's words and the lowest voltage for a bootloader write, shared with the firmware |
 | `neotime-bootloader-updater` | `bootloader-updater/` | the watch only | the image that replaces this bootloader on a watch already on NeoTime |
 
 `neotime-boot` is shared with the firmware, which must use the same layout and watchdog timeout.
@@ -164,7 +166,10 @@ Every flash read, write and erase feeds the watchdog, so a long swap does not tr
 On an ordinary start the screen stays dark and the firmware starts at once. Whenever the bootloader
 has work to do, it turns the screen blue (`status_colour::BOOTLOADER`) and shows the same page as
 the firmware ([updates.md](updates.md#the-status-page)), titled "NeoTime bootloader", with
-Bootloader `Working`, Filesystem `Not mounted` and Bluetooth `Off`. The screen code is its own
+Bootloader `Working`, Filesystem `Not mounted` and Bluetooth `Off`. Below the progress line it shows
+the battery from one fresh reading each time the page changes, such as "Battery 87% charging",
+"Battery 100% charged" or "Battery 40% unplugged", with the charge read along the firmware's curve;
+the menu's last option covers it while the menu is open. The screen code is its own
 small ST7789 driver in `drivers/status_screen`, since the firmware's display driver does not
 fit. It draws the 10x20 font straight from its bitmap rather than through embedded-graphics' text
 code, which would not fit either. The simulator's tests run it against the simulator's ST7789
@@ -204,8 +209,10 @@ trial. It then:
    The updater is itself an image with a header, of type bootloader updater.
    A damaged one is never written; holding the button quits.
 2. Compares it with the installed bootloader. If they match, nothing is written.
-3. Waits for the charger, since a power cut during the write leaves nothing that starts. Holding
-   the button meanwhile quits.
+3. Waits for the charger and enough charge, since a power cut during the write leaves nothing that
+   starts: power on P0.19 and at least 3.7 V on the battery (`MINIMUM_MILLIVOLTS_TO_WRITE_BOOTLOADER`),
+   read once a second and shown as the battery line. Below that it says "Battery low, charging" and
+   waits while the charger fills it. Holding the button meanwhile quits.
 4. Erases and writes the bootloader's pages from RAM, then reads them back. On a mismatch it tries
    again, feeding the watchdog whatever the button does, and never resets with a broken bootloader.
 5. Leaves a note at `UPDATER_NOTE_ADDRESS`, the alive marker's fourth word, and resets.
@@ -238,11 +245,12 @@ move is one image, `dist/bootloader-updater-from-first-layout.zip`
    swaps in at `0x05000`. It is linked so its vector table is at `0x05000`, as the old bootloader
    expects, and its code starts at `0x08000`; the pages between, which become the slot table and the
    boot state, are left zero, which reads as no record and as an ordinary boot.
-2. It checks the bootloader and the recovery firmware it carries, then waits for the charger;
-   holding the button quits with nothing written, and the old bootloader rolls back.
+2. It checks the bootloader and the recovery firmware it carries, then waits for the charger and
+   enough charge, as above; holding the button quits with nothing written, and the old bootloader rolls back.
 3. It writes the recovery firmware into the default recovery slot and checks its header and CRC. On a failure it stops before the
    bootloader is touched.
-4. It writes the 20 KB bootloader over `0x00000` to `0x05000`, which covers the old boot state, reads
+4. It checks the charger and the charge again, since the recovery write takes a while, then writes
+   the 20 KB bootloader over `0x00000` to `0x05000`, which covers the old boot state, reads
    it back, and resets.
 5. The new bootloader finds no sound header at `0x08000`, where the updater's code is, and no
    previous firmware with one, so it installs the recovery firmware and leaves the
@@ -271,12 +279,13 @@ upload, so the move is one image, `dist/bootloader-updater-from-388-kb-layout.zi
 1. It is linked like any firmware, kept within 388 KB, and given a version 1 header
    (`tools/image_header.py --for-388-kb-layout`), so the old firmware accepts it and the old
    bootloader swaps it in on trial.
-2. It checks the bootloader and the recovery firmware it carries, then waits for the charger;
-   holding the button quits with nothing written, and the old bootloader rolls back.
+2. It checks the bootloader and the recovery firmware it carries, then waits for the charger and
+   enough charge, as above; holding the button quits with nothing written, and the old bootloader rolls back.
 3. It writes the recovery firmware into the new default recovery slot at `0x0C6000`, which no slot
    of the old layout reached, and checks its header and CRC. On a failure it stops before the
    bootloader is touched.
-4. It writes the new bootloader, reads it back, and resets without confirming.
+4. It checks the charger and the charge again, writes the new bootloader, reads it back, and resets
+   without confirming.
 5. The new bootloader reads the old slot table records as unsound and uses `DEFAULT_SLOTS`. It
    finds only version 1 headers at `0x08000` and one page up in the update slot, so it installs the
    recovery firmware and leaves the `RecoveryInstalled` note. The full firmware, with its library,

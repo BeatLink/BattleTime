@@ -28,6 +28,8 @@ mipidsi = "0.10"
 panic-halt = "1.0"
 static_cell = "2.1"
 
+neotime-battery = { path = "../services/battery" }
+neotime-battery-reading = { path = "../drivers/battery_reading" }
 neotime-boot = { path = "../boot" }
 neotime-display = { path = "../drivers/display" }
 neotime-external-flash = { path = "../drivers/external_flash", features = ["cortex-m"] }

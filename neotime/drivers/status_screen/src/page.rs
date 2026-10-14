@@ -19,6 +19,8 @@ pub const ACTION: usize = 5;
 pub const PROGRESS: usize = 6;
 /// Which special build is running, such as a rehearsal.
 pub const BUILD: usize = 7;
+/// The battery's charge and the charger, on the pages of the bootloader and its updater, which have no special build.
+pub const BATTERY: usize = BUILD;
 /// Where the last run stopped, when a rehearsal kept a record.
 pub const LAST_RUN: usize = 8;
 pub const LINE_COUNT: usize = 9;

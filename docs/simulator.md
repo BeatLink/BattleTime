@@ -145,3 +145,6 @@ That builds the InfiniTime version InfiniSim pins, not the `InfiniTime/` checkou
 - Nothing runs on the nRF52832: timing, RAM use and flash use on the watch are not simulated.
 - There is no Bluetooth, touch controller, accelerometer or battery yet. Each
   arrives as a simulated part when its driver lands.
+- `neotime-battery-reading` has no simulated part: only the bootloader, its updater and the
+  reloader use it, and none of them runs in the simulator. PineTimeEmulator's battery and SAADC
+  stand in for it in the emulator suites.

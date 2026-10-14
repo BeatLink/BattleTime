@@ -3,7 +3,7 @@
 //! Holding the button for five seconds at power-on opens a menu: start the firmware, roll back to
 //! the previous one, or install the recovery firmware from external flash. A firmware that does not mark itself booted before its first reset is rolled back,
 //! and one without a sound image header is replaced by the previous or the recovery firmware. The
-//! screen stays dark on an ordinary start and turns blue with a few words while the bootloader works.
+//! screen stays dark on an ordinary start and turns blue with a few words and the battery while the bootloader works.
 
 #![no_std]
 #![no_main]
@@ -20,7 +20,8 @@ use embassy_nrf::{
     gpio::{Input, Level, Output, OutputDrive, Pull},
     nvmc::Nvmc,
     peripherals::{
-        self, P0_02, P0_03, P0_04, P0_05, P0_13, P0_14, P0_15, P0_16, P0_18, P0_25, P0_26, TWISPI0,
+        self, P0_02, P0_03, P0_04, P0_05, P0_12, P0_13, P0_14, P0_15, P0_16, P0_18, P0_19, P0_25, P0_26,
+        TWISPI0,
     },
     spim::{self, Spim},
     wdt::{self, HaltConfig, SleepConfig, Watchdog, WatchdogHandle},
@@ -30,6 +31,7 @@ use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
 use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565};
 use embedded_hal_bus::spi::RefCellDevice;
 use embedded_storage::nor_flash::{ErrorType, NorFlash, ReadNorFlash};
+use neotime_battery::{battery_line, Measurement, BATTERY_LINE_LENGTH};
 use neotime_boot::{
     copy_image_into_update_slot, copy_previous_into_update_slot, firmware_is_runnable,
     image_header::installable_image, slot_table::read_slots, status_colour, BootNote, ImageCopy, Slots,
@@ -62,6 +64,8 @@ struct Pins<'a> {
     display_data_or_command: Peri<'a, P0_18>,
     display_reset: Peri<'a, P0_26>,
     backlight: Peri<'a, P0_14>,
+    charging: Peri<'a, P0_12>,
+    power_present: Peri<'a, P0_19>,
 }
 
 bind_interrupts!(struct Interrupts {
@@ -91,6 +95,8 @@ fn main() -> ! {
         display_data_or_command: chip.P0_18,
         display_reset: chip.P0_26,
         backlight: chip.P0_14,
+        charging: chip.P0_12,
+        power_present: chip.P0_19,
     };
 
     let note = prepare_firmware(pins, chip.TWISPI0, chip.NVMC, &watchdog, &mut delay);
@@ -143,6 +149,8 @@ fn prepare_firmware<'d>(
         reset: Some(pins.display_reset),
         backlight: Some(pins.backlight),
         screen: None,
+        charging: Input::new(pins.charging, Pull::Up),
+        power_present: Input::new(pins.power_present, Pull::Up),
     };
 
     let button_pin = Input::new(pins.button_input, Pull::Down);
@@ -340,6 +348,9 @@ struct StatusPage<'bus, 'd> {
     backlight: Option<Peri<'d, P0_14>>,
     /// The screen, then the backlight and reset pins, kept driven: a dropped pin floats, and a floating reset blanks the panel.
     screen: Option<(StatusScreen<'bus, 'd>, Output<'d>, Output<'d>)>,
+    /// The charger's pins, for the battery line.
+    charging: Input<'d>,
+    power_present: Input<'d>,
 }
 
 impl<'bus, 'd> StatusPage<'bus, 'd> {
@@ -379,7 +390,17 @@ impl<'bus, 'd> StatusPage<'bus, 'd> {
             screen.write_line(page::FIRMWARE, firmware);
             screen.write_line(page::ACTION, action);
             screen.write_line(page::PROGRESS, progress);
-            screen.write_line(page::BUILD, "");
+            let mut buffer = [0; BATTERY_LINE_LENGTH];
+            let millivolts = neotime_battery_reading::read_millivolts(&mut neotime_battery_reading::Saadc);
+            let battery = millivolts.map_or("", |millivolts| {
+                let measurement = Measurement {
+                    millivolts,
+                    is_power_present: self.power_present.is_low(),
+                    is_charge_pin_active: self.charging.is_low(),
+                };
+                battery_line(measurement, &mut buffer)
+            });
+            screen.write_line(page::BATTERY, battery);
             screen.write_line(page::LAST_RUN, "");
         }
     }
