@@ -900,6 +900,11 @@ pixel wide, so joins have no seams. A row of a glyph visits only the columns eac
 and only the rows the strip being drawn shows. Arcs need no trigonometry: their ends come from a
 table of sines, and a point is tested against them with cross products.
 
+The browser preview draws text in the same letters: `tools/generate_preview_font.py` turns each
+glyph's strokes into filled outlines with round ends and writes them, in the text weight and a light
+one for `huge` and `giant`, as WOFF web fonts into `sdk/neotime/src/preview_font.ts`, which the
+preview registers with the page. Run it after `tools/generate_fonts.py` whenever a glyph changes.
+
 `dot_matrix` is drawn from dots, so it takes no font data. The
 font lives in the shared library's font section (section 9, which only a library has). The app
 host's font starts empty, and the embedder calls `fonts::install_from_library` once with the

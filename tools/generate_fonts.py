@@ -1,6 +1,6 @@
 """Turns the font drawn from lines, arcs and dots in app-host/fonts/geometric.txt into the file the app host reads.
 
-Run it from anywhere after changing a glyph:
+Run it from anywhere after changing a glyph, then tools/generate_preview_font.py for the browser preview:
 
     python3 tools/generate_fonts.py
 
