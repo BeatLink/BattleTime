@@ -54,6 +54,24 @@ function withTimeout(promise, what, ms = STEP_TIMEOUT_MS) {
   ]);
 }
 
+// Calls `onDropped` once when BlueZ says the device is no longer connected.
+// node-ble reports a disconnect only to a connect() it made itself, so a link BlueZ
+// already held would drop unseen; this reads the Connected property's changes instead.
+function watchForDisconnect(device, onDropped) {
+  let dropped = false;
+  const drop = () => {
+    if (dropped) return;
+    dropped = true;
+    onDropped();
+  };
+  if (device.helper && typeof device.helper.on === 'function') {
+    device.helper.on('PropertiesChanged', (changed) => {
+      if (changed && 'Connected' in changed && !changed.Connected.value) drop();
+    });
+  }
+  device.on('disconnect', drop);
+}
+
 class WatchBle {
   constructor(emit) {
     this.emit = emit;
@@ -260,7 +278,7 @@ class WatchBle {
     }
     this.emit('mode', mode);
 
-    device.on('disconnect', () => {
+    watchForDisconnect(device, () => {
       this.forget();
       this.emit('state', 'disconnected');
     });
@@ -383,4 +401,4 @@ class WatchBle {
   }
 }
 
-module.exports = { WatchBle };
+module.exports = { WatchBle, watchForDisconnect };

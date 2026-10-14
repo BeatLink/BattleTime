@@ -37,3 +37,9 @@ export declare class WatchBle {
   gattUnsubscribe(service: string, characteristic: string): Promise<void>;
   destroy(): Promise<void>;
 }
+
+/** Calls `onDropped` once when BlueZ says the device is no longer connected, however the link was made. */
+export declare function watchForDisconnect(
+  device: { on(event: 'disconnect', listener: () => void): unknown; helper?: { on(event: string, listener: (changed: unknown) => void): unknown } },
+  onDropped: () => void,
+): void;
