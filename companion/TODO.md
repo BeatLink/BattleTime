@@ -113,9 +113,9 @@ Android 13 and later.
 - **Tauri on Android**, with the phone bridge as a Tauri plugin; try btleplug on a phone first.
 - **Plugins on the phone.** [Plugins](../docs/plugins.md) run only in the desktop app, whose Rust
   core hosts them; the phone gets them with Tauri on Android.
-- **Plugins on a real watch.** Buzz back has run in the desktop app and its settings page, but no
-  plugin has yet answered a press on a watch; `cargo run -p neotime-companion-core --example
-  plugin_host -- run <folder> <address>` tries one without the window.
+- **Plugins on a real watch from the desktop app.** Buzz back has answered presses on a real watch
+  through `cargo run -p neotime-companion-core --example plugin_host -- run <folder> <address>`, but
+  not yet with the desktop app's own window connected.
 - **Moving features into plugins.** Weather, notes, remote, alarms, steps, music and notification
   forwarding are still built into the app.
 

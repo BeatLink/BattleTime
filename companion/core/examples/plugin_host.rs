@@ -13,13 +13,15 @@ use serde_json::Value;
 
 struct Terminal {
     ble: Arc<OnceLock<WatchBle>>,
+    // Plugins write from their own threads, which have no Tokio runtime of their own.
+    runtime: tokio::runtime::Handle,
 }
 
 impl HostOutput for Terminal {
     fn write_to_watch(&self, line: String) {
         println!("to the watch: {}", line.trim_end());
         if let Some(ble) = self.ble.get().cloned() {
-            tokio::spawn(async move {
+            self.runtime.spawn(async move {
                 if let Err(error) = ble.write(&line).await {
                     println!("write failed: {error}");
                 }
@@ -41,6 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let fetcher: Fetcher = Arc::new(http::fetch);
     let terminal = Arc::new(Terminal {
         ble: ble_cell.clone(),
+        runtime: tokio::runtime::Handle::current(),
     });
     match arguments
         .iter()
