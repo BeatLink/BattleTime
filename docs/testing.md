@@ -89,7 +89,7 @@ expect no failures
 | `button` | Clicks the side button, which goes back a screen. |
 | `wait 250ms`, `3s`, `10min`, `2h` | Moves the clock on, waking the app at each time it asked for. |
 | `set <system value> <number>` | Sets a value by the name apps read, such as `battery_percent` or `settings.step_goal`; `true` and `false` are 1 and 0. As on the watch, `steps_today` also sends the `steps` event and `is_phone_connected` the `phone` event. |
-| `notify "title" "body"` | Delivers a notification from the phone. |
+| `notify "title" "body"` | Delivers a notification from the phone; `notify "app" "title" "body"` names its app, which picks its icon. |
 | `phone "line"` | Reads a companion line as the watch does, such as `phone "GB({\"t\":\"weather\",\"temp\":291,\"loc\":\"Test City\"})"`, and passes its call, music or weather to the app; the music and weather then replace the fake system's. A line the watch cannot read fails the step. |
 | `shake` | Delivers a shake from the accelerometer. |
 | `acceleration X Y Z` | Delivers an accelerometer reading in thousandths of g, which `acceleration` subscriptions get at their next period. |

@@ -8,8 +8,10 @@ newest first.
 
 - **Swipe down** on the watch face to pull it down. Swipe down again for
   [quick settings](quick-settings.md).
-- Each row shows the title and the start of the text. **Tap** one to read it in full, with the app
-  it came from and the time.
+- Each row shows an icon for the kind of notification, then the title and the start of the text.
+  Calls, missed calls, texts, chats, news, voicemail, calendar events and alerts each have their
+  own icon; any other app's notifications show an envelope.
+- **Tap** one to read it in full, with the app it came from and the time.
 - Tap **Dismiss** to remove it, or press the side button to go back to the list.
 - Opening it, or turning the screen on while it is open, marks every notification read.
 - The watch keeps the five newest.
@@ -25,9 +27,9 @@ newest first.
 
 With no notifications.
 
-![Three notifications](../../neotime/harness/snapshots/screens/shell-notifications-list.png)
+![Four notifications](../../neotime/harness/snapshots/screens/shell-notifications-list.png)
 
-Three notifications from the phone, newest first.
+Four notifications from the phone, newest first: a chat, a missed call, a calendar event and a text, each with its icon.
 
 ![A notification read in full](../../neotime/harness/snapshots/screens/shell-notifications-message.png)
 

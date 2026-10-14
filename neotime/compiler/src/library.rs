@@ -113,6 +113,12 @@ pub fn icon_source(name: &str) -> Option<IconSource> {
         "remote" => MaterialIcons(0xe8c7),
         "note" => MaterialIcons(0xf1fc),
         "qr_code" => FontAwesome(0xf029),
+        "phone_missed" => FontAwesome(0xf3dd),
+        "sms" => FontAwesome(0xf4ad),
+        "chat" => FontAwesome(0xf086),
+        "news" => FontAwesome(0xf1ea),
+        "voicemail" => MaterialIcons(0xe0d9),
+        "calendar" => FontAwesome(0xf073),
         _ => return None,
     })
 }

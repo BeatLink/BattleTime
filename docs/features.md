@@ -83,8 +83,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   Do not disturb silences everything but alarms and timers, and those too if the wearer chooses.
 - **Notifications from the phone.** Gadgetbridge's `notify` message, sent through the companion
   app's UART service, buzzes twice and goes to the open app. The watch keeps the latest 5, from the
-  phone and from apps, and the notifications list them newest first: a tap reads one in full
-  and Dismiss removes it. A notification dismissed on the phone goes from the watch too. Faces show
+  phone and from apps, and the notifications list them newest first, each with an icon for its
+  kind (a call, a missed call, a text, a chat, news, voicemail, a calendar event or an alert, and
+  an envelope for anything else): a tap reads one in full and Dismiss removes it. A notification dismissed on the phone goes from the watch too. Faces show
   when some are unread.
 - **Notifications from any Bluetooth tool.** A New Alert written to the standard Alert Notification
   service shows as a notification, as on InfiniTime, so BlueZ's `bluetoothctl`, ITD or Amazfish can

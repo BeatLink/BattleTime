@@ -546,7 +546,8 @@ then the About facts `firmware_build_date`, `bootloader_version`, `bootloader_bu
 `bootloader_crc`, `bluetooth_address`, `flash_id`, `touch_chip_id`, `touch_firmware_version`,
 `accelerometer_chip_id`, `free_heap_bytes`, `least_free_heap_bytes`, `allocation_failures` and
 `stack_overflows`, and the tasks' count followed by their lists of `name`, `runs` and
-`busy_milliseconds`, which all share the system info bit.
+`busy_milliseconds`, which all share the system info bit, then the kept notifications' list of
+`icon`, a shared library icon the watch picks from each one's app, which shares their bit.
 `read system element` reads a list's elements through `SystemValues::read_element`, or
 `read_element_text` for the names, ids and notification texts, the packages' too. The location, artist, track,
 instruction, firmware version, reset reason, build dates, bootloader version and task names are text: the system hands them

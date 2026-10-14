@@ -2371,6 +2371,17 @@ fn the_about_values_share_the_system_info_bit_with_the_addresses_and_task_names_
 }
 
 #[test]
+fn each_notifications_icon_is_a_number_list_beside_its_other_fields() {
+    assert_eq!(SystemValue::from_byte(101), Some(SystemValue::NotificationIcon));
+    assert_eq!(
+        SystemValue::NotificationIcon.bit(),
+        SystemValue::NotificationId.bit()
+    );
+    assert!(SystemValue::NotificationIcon.is_list());
+    assert!(!SystemValue::NotificationIcon.is_text());
+}
+
+#[test]
 fn the_package_values_change_with_the_installed_apps_and_list_names_and_ids_as_text() {
     assert_eq!(SystemValue::from_byte(66), Some(SystemValue::PackageCount));
     assert_eq!(SystemValue::from_byte(73), Some(SystemValue::AppMemoryBudget));

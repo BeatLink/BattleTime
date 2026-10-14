@@ -1,9 +1,11 @@
 # Every screen of the notifications shade, for docs/apps/notifications.md: empty, a list, one read in full, and the preview.
 open app notifications
 expect text "No notifications"
-notify "Sam" "On my way, see you at the station in ten minutes"
-notify "Calendar" "Team meeting at 10:00 in room 4"
-notify "Alex" "Running late, start without me"
+# Each shows the icon for its app: a text, the calendar, a missed call and a chat.
+notify "SMS" "Sam" "On my way, see you at the station in ten minutes"
+notify "Calendar" "Calendar" "Team meeting at 10:00 in room 4"
+notify "Phone" "Jamie" "Missed call"
+notify "Messages" "Alex" "Running late, start without me"
 expect text "Alex"
 snapshot list
 tap "Alex"                  # the newest notification
@@ -14,8 +16,8 @@ tap "Dismiss"
 expect screen main
 expect no text "Alex"
 start on preview            # as the shell opens it when a notification arrives
-expect text "Calendar"
-expect text "Team meeting"
+expect text "Jamie"
+expect text "Missed call"
 snapshot preview
 wait 6s
 expect no effect back

@@ -170,6 +170,8 @@ pub enum SystemValue {
     /// List: how many times each task has run, and the milliseconds it has spent running.
     TaskRuns,
     TaskBusyMilliseconds,
+    /// List: each kept notification's icon, a shared library icon picked from its app's name.
+    NotificationIcon,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -185,7 +187,7 @@ const SYSTEM_INFO_BIT: u32 = 23;
 const CALL_BIT: u32 = 24;
 
 impl SystemValue {
-    pub const COUNT: usize = 101;
+    pub const COUNT: usize = 102;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -291,6 +293,7 @@ impl SystemValue {
             98 => TaskName,
             99 => TaskRuns,
             100 => TaskBusyMilliseconds,
+            101 => NotificationIcon,
             _ => return None,
         })
     }
@@ -324,7 +327,7 @@ impl SystemValue {
             ScreenTimeoutSeconds | AlwaysOnScreen | Chimes | ThemePreset | AllowsUpdates | WakeOnTouch
             | AlarmsInDoNotDisturb | HeartRateInterval => SETTINGS_BIT,
             NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
-            | NotificationTime => UnreadNotifications as u32,
+            | NotificationTime | NotificationIcon => UnreadNotifications as u32,
             StepTrip | StepDayCount | StepDayTotal | StepHourCount | StepHourSteps => StepsToday as u32,
             FirmwareVersion | StartedAt | FreeStorageKilobytes | ResetReason | AppMemoryBudget
             | FirmwareBuildDate | BootloaderVersion | BootloaderBuildDate | BootloaderCrc
@@ -353,6 +356,7 @@ impl SystemValue {
                 | NotificationTitle
                 | NotificationBody
                 | NotificationTime
+                | NotificationIcon
                 | StepDayTotal
                 | StepHourSteps
                 | PackageName

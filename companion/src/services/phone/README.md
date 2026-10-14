@@ -35,8 +35,8 @@ media, and lets the watch act on them. In the desktop app the computer stands in
   app is a notification listener.
 - **Call summaries.** `CallSummary` in `call-summary.ts` follows each incoming call and, when it
   ends, gives a `Phone` notification for the watch: **Missed call**, **Ignored call** (rejected or
-  muted on the watch) or **Accepted call**, titled with the caller. These take negative ids, below
-  the phone's own. A call rejected on the phone itself reads as missed, since Android reports it the same way.
+  muted on the watch) or **Accepted call**, titled with the caller. These take ids from 2^31 up,
+  above the phone's own and apart from the watch apps' negative ones. A call rejected on the phone itself reads as missed, since Android reports it the same way.
 - **Do Not Disturb.** `isDoNotDisturb` is true when the interruption filter is anything but "all".
   Nothing is filtered natively; the app decides what to forward.
 - **Keep-alive.** `startKeepAlive` runs a foreground service of type `connectedDevice` with an

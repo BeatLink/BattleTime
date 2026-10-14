@@ -14,6 +14,7 @@ use alloc::boxed::Box;
 
 use neotime_app_host::AppEffect;
 use neotime_companion::PhoneNotification;
+use neotime_runtime::resources::{library_icon, ImageReference};
 use neotime_runtime::{EffectKind, SystemValue, Value, NONE};
 
 /// The most notifications kept; InfiniTime keeps as many.
@@ -169,7 +170,7 @@ impl NotificationList {
         }
     }
 
-    /// A kept notification's id or arrival time, or none past the end of the list.
+    /// A kept notification's id, arrival time or icon, or none past the end of the list.
     pub fn read_element(&self, value: SystemValue, place: Value) -> Value {
         let Some(kept) = self.kept_at(place) else {
             return NONE;
@@ -177,6 +178,9 @@ impl NotificationList {
         match value {
             SystemValue::NotificationId => kept.notification.id,
             SystemValue::NotificationTime => kept.received_at,
+            SystemValue::NotificationIcon => {
+                ImageReference::SharedLibrary(kind_icon(&kept.notification)).to_value() as Value
+            }
             _ => NONE,
         }
     }
@@ -192,6 +196,28 @@ impl NotificationList {
             SystemValue::NotificationBody => &kept.notification.body,
             _ => "",
         }
+    }
+}
+
+// ============================================================================
+// Icons
+// ============================================================================
+
+/// The library icon for a notification's kind, read from its app's name; an envelope for any app not named here.
+///
+/// The names are the Alert Notification categories', the companion's call summaries' and a calendar's.
+fn kind_icon(notification: &PhoneNotification) -> u16 {
+    match notification.source.as_str() {
+        "Missed call" => library_icon::PHONE_MISSED,
+        "Phone" if notification.body == "Missed call" => library_icon::PHONE_MISSED,
+        "Call" | "Phone" => library_icon::PHONE,
+        "SMS" => library_icon::SMS,
+        "Messages" => library_icon::CHAT,
+        "News" => library_icon::NEWS,
+        "Voicemail" => library_icon::VOICEMAIL,
+        "Schedule" | "Calendar" => library_icon::CALENDAR,
+        "Alert" => library_icon::BELL,
+        _ => library_icon::NOTIFICATION,
     }
 }
 

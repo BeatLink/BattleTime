@@ -72,6 +72,12 @@ const ICON_SYMBOLS = {
   remote: "🎛",
   note: "📝",
   qr_code: "▦",
+  phone_missed: "📵",
+  sms: "💬",
+  chat: "🗨",
+  news: "📰",
+  voicemail: "📼",
+  calendar: "📅",
 } as const;
 
 export type IconName = keyof typeof ICON_SYMBOLS;
@@ -98,6 +104,19 @@ const LIBRARY_ORDER: readonly IconName[] = (Object.keys(ICON_SYMBOLS) as IconNam
 /** The shared library icon at this place in the library, or `none` outside it, such as for an icon the phone chose by number. */
 export function library_icon(index: number): LibraryIcon {
   return icons[LIBRARY_ORDER[index] ?? "none"];
+}
+
+/** The icon the watch gives a notification from its app's name, as `kind_icon` in services/notifications does; an envelope for any app not named there. */
+export function notification_icon(app: string, body: string): LibraryIcon {
+  if (app === "Missed call" || (app === "Phone" && body === "Missed call")) return icons.phone_missed;
+  if (app === "Call" || app === "Phone") return icons.phone;
+  if (app === "SMS") return icons.sms;
+  if (app === "Messages") return icons.chat;
+  if (app === "News") return icons.news;
+  if (app === "Voicemail") return icons.voicemail;
+  if (app === "Schedule" || app === "Calendar") return icons.calendar;
+  if (app === "Alert") return icons.bell;
+  return icons.notification;
 }
 
 export function icon_symbol(icon: LibraryIcon): string {

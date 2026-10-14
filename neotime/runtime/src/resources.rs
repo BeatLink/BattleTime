@@ -148,9 +148,17 @@ pub fn library_image_reference_bytes(library_image: u16) -> [u8; 4] {
 /// The shared library's icons that native widgets draw, by their number in the library, which never changes.
 pub mod library_icon {
     pub const ALARM: u16 = 0;
+    pub const BELL: u16 = 3;
     pub const BLUETOOTH: u16 = 5;
     pub const CHARGING: u16 = 7;
     pub const NOTIFICATION: u16 = 29;
+    pub const PHONE: u16 = 31;
+    pub const PHONE_MISSED: u16 = 66;
+    pub const SMS: u16 = 67;
+    pub const CHAT: u16 = 68;
+    pub const NEWS: u16 = 69;
+    pub const VOICEMAIL: u16 = 70;
+    pub const CALENDAR: u16 = 71;
 }
 
 /// Which image an `Image` or `Icon` property names.

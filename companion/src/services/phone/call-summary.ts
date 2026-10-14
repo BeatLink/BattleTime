@@ -13,8 +13,8 @@ const OUTCOME_TEXT: Record<CallOutcome, string> = {
   accepted: 'Accepted call',
 };
 
-// Phone notifications take ids from 0 up, so these count down from -1 and never meet them.
-const FIRST_SUMMARY_ID = -1;
+// Phone notifications take ids below 2^31 and the watch's own apps take negative ones, so these count up from 2^31.
+const FIRST_SUMMARY_ID = 2 ** 31;
 
 export class CallSummary {
   private ringing: { caller: string; outcome: CallOutcome } | null = null;
@@ -40,7 +40,7 @@ export class CallSummary {
         if (!call) {
           return null;
         }
-        return { t: 'notify', id: this.nextId--, src: 'Phone', title: call.caller, body: OUTCOME_TEXT[call.outcome] };
+        return { t: 'notify', id: this.nextId++, src: 'Phone', title: call.caller, body: OUTCOME_TEXT[call.outcome] };
       }
     }
   }

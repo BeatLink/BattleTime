@@ -110,6 +110,8 @@ export interface KeptNotification {
   body: string;
   /** When it arrived. */
   time: Instant;
+  /** The icon for its kind, which the watch picks from `app`; see `notification_icon`. */
+  icon: LibraryIcon;
 }
 
 /** The notifications the watch keeps, newest first, at most 5; reading them needs the `notifications` permission. */

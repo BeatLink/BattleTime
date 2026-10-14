@@ -68,6 +68,12 @@ export const LIBRARY_ICON_NAMES = [
   'remote',
   'note',
   'qr_code',
+  'phone_missed',
+  'sms',
+  'chat',
+  'news',
+  'voicemail',
+  'calendar',
 ] as const;
 
 export type LibraryIconName = (typeof LIBRARY_ICON_NAMES)[number];

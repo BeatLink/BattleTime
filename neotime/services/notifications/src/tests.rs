@@ -3,6 +3,7 @@ extern crate std;
 use alloc::boxed::Box;
 
 use neotime_companion::{PhoneNotification, NOTIFICATION_TITLE_BYTES};
+use neotime_runtime::resources::{library_icon, ImageReference};
 use neotime_runtime::{SystemValue, Value, NONE};
 
 use crate::{NotificationList, MOST_KEPT};
@@ -162,4 +163,51 @@ fn reading_past_the_end_or_another_value_gives_nothing() {
     assert_eq!(list.read_element(SystemValue::NotificationTitle, 0), NONE);
     assert_eq!(list.read_element_text(SystemValue::NotificationTitle, 1), "");
     assert_eq!(list.read_element_text(SystemValue::NotificationId, 0), "");
+}
+
+// ============================================================================
+// Icons
+// ============================================================================
+
+fn icon_for(app: &str, body: &str) -> Value {
+    let mut notification = PhoneNotification::default();
+    let _ = notification.source.push_str(app);
+    let _ = notification.body.push_str(body);
+    let mut list = NotificationList::new();
+    list.add(Box::new(notification), 0);
+    list.read_element(SystemValue::NotificationIcon, 0)
+}
+
+fn library(icon: u16) -> Value {
+    ImageReference::SharedLibrary(icon).to_value() as Value
+}
+
+#[test]
+fn each_kind_of_notification_has_its_own_icon() {
+    let kinds = [
+        ("Missed call", "", library_icon::PHONE_MISSED),
+        ("Phone", "Missed call", library_icon::PHONE_MISSED),
+        ("Phone", "Accepted call", library_icon::PHONE),
+        ("Call", "", library_icon::PHONE),
+        ("SMS", "", library_icon::SMS),
+        ("Messages", "", library_icon::CHAT),
+        ("News", "", library_icon::NEWS),
+        ("Voicemail", "", library_icon::VOICEMAIL),
+        ("Schedule", "", library_icon::CALENDAR),
+        ("Calendar", "", library_icon::CALENDAR),
+        ("Alert", "", library_icon::BELL),
+        ("Email", "", library_icon::NOTIFICATION),
+        ("Signal", "", library_icon::NOTIFICATION),
+    ];
+    for (app, body, icon) in kinds {
+        assert_eq!(icon_for(app, body), library(icon), "{app} {body}");
+    }
+}
+
+#[test]
+fn there_is_no_icon_past_the_end_of_the_list() {
+    assert_eq!(
+        NotificationList::new().read_element(SystemValue::NotificationIcon, 0),
+        NONE
+    );
 }

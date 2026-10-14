@@ -8,7 +8,7 @@ describe('CallSummary', () => {
     expect(summary.noteCall({ type: 'call', state: 'incoming', name: 'Sam', number: '555' })).toBeNull();
     expect(summary.noteCall({ type: 'call', state: 'end', name: 'Sam', number: '555' })).toEqual({
       t: 'notify',
-      id: -1,
+      id: 2 ** 31,
       src: 'Phone',
       title: 'Sam',
       body: 'Missed call',
@@ -36,13 +36,13 @@ describe('CallSummary', () => {
     }
   });
 
-  it('gives each summary its own id below the phone notifications', () => {
+  it('gives each summary its own id above the phone notifications and apart from the watch apps'', () => {
     const summary = new CallSummary();
     const ids = [1, 2].map(() => {
       summary.noteCall({ type: 'call', state: 'incoming', name: 'Sam' });
       return summary.noteCall({ type: 'call', state: 'end' })?.id;
     });
-    expect(ids).toEqual([-1, -2]);
+    expect(ids).toEqual([2 ** 31, 2 ** 31 + 1]);
   });
 
   it('leaves out outgoing calls and stray ends and answers', () => {

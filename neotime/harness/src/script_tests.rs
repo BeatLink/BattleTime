@@ -153,6 +153,7 @@ screenshot out/frame.png
                 number: 15,
             },
             ScriptCommand::Notify {
+                app: String::new(),
                 title: "Hello".to_string(),
                 body: "From the phone".to_string(),
             },
@@ -179,6 +180,21 @@ screenshot out/frame.png
             ScriptCommand::Screenshot(PathBuf::from("out/frame.png")),
         ]
     );
+}
+
+#[test]
+fn a_notification_may_name_its_app() {
+    assert_eq!(
+        parse_one(r#"notify "SMS" "Sam" "On my way""#),
+        ScriptCommand::Notify {
+            app: "SMS".to_string(),
+            title: "Sam".to_string(),
+            body: "On my way".to_string(),
+        }
+    );
+    assert!(parse_error(r#"notify "only a title""#)
+        .to_string()
+        .contains("notify"));
 }
 
 #[test]

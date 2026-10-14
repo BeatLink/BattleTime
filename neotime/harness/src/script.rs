@@ -100,6 +100,8 @@ pub enum ScriptCommand {
         number: Value,
     },
     Notify {
+        /// The app it came from, which picks its icon; empty when the script names none.
+        app: String,
         title: String,
         body: String,
     },
@@ -339,10 +341,16 @@ fn parse_command(words: &[Word]) -> Result<ScriptCommand, String> {
         "set" => parse_set(arguments),
         "notify" => match arguments {
             [Word::Quoted(title), Word::Quoted(body)] => Ok(ScriptCommand::Notify {
+                app: String::new(),
                 title: title.clone(),
                 body: body.clone(),
             }),
-            _ => Err("write `notify \"title\" \"body\"`".to_string()),
+            [Word::Quoted(app), Word::Quoted(title), Word::Quoted(body)] => Ok(ScriptCommand::Notify {
+                app: app.clone(),
+                title: title.clone(),
+                body: body.clone(),
+            }),
+            _ => Err("write `notify \"title\" \"body\"`, or `notify \"app\" \"title\" \"body\"`".to_string()),
         },
         "phone" => match arguments {
             [Word::Quoted(line)] => Ok(ScriptCommand::Phone(line.clone())),
@@ -809,13 +817,13 @@ impl ScriptRunner<'_> {
             }
             ScriptCommand::Wait(duration) => watch.advance(*duration),
             ScriptCommand::SetSystemValue { value, number } => watch.set_system_value(*value, *number),
-            ScriptCommand::Notify { title, body } => {
+            ScriptCommand::Notify { app, title, body } => {
                 let id = self.next_notification_id;
                 self.next_notification_id += 1;
                 let time = watch.now();
                 watch.deliver(PushedEvent::Notification {
                     id,
-                    app: "",
+                    app,
                     title,
                     body,
                     time,

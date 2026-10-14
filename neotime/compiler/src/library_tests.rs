@@ -358,6 +358,14 @@ fn the_icons_native_widgets_draw_have_the_numbers_the_runtime_expects() {
     assert_eq!(number_of("bluetooth"), library_icon::BLUETOOTH);
     assert_eq!(number_of("charging"), library_icon::CHARGING);
     assert_eq!(number_of("notification"), library_icon::NOTIFICATION);
+    assert_eq!(number_of("bell"), library_icon::BELL);
+    assert_eq!(number_of("phone"), library_icon::PHONE);
+    assert_eq!(number_of("phone_missed"), library_icon::PHONE_MISSED);
+    assert_eq!(number_of("sms"), library_icon::SMS);
+    assert_eq!(number_of("chat"), library_icon::CHAT);
+    assert_eq!(number_of("news"), library_icon::NEWS);
+    assert_eq!(number_of("voicemail"), library_icon::VOICEMAIL);
+    assert_eq!(number_of("calendar"), library_icon::CALENDAR);
 }
 
 // ============================================================================

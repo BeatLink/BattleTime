@@ -4,6 +4,7 @@
 // Opening the app, or the screen turning on while it is open, marks them all read.
 // When a notification arrives the shell opens the preview, which shows the newest one and goes back
 // by itself after 7 seconds unless the wearer taps it to read it in full.
+// Each notification shows an icon for its kind: a call, a missed call, a text, an email and so on.
 
 import {
   back,
@@ -96,6 +97,11 @@ function open_preview() {
   is_preview_open.value = true;
 }
 
+/** The icon for the notification at this place, which the watch picks from its app; an envelope past the end. */
+function kind_icon(place: number) {
+  return place < notifications.value.length ? notifications.value[place].icon : icons.notification;
+}
+
 function dismiss() {
   dismiss_notification(notifications.value[reading.value].id);
   back();
@@ -110,10 +116,13 @@ function NotificationRow(props: { place: number }) {
     <>
       {props.place < notifications.value.length && (
         <Button height={ROW_HEIGHT} onClick={() => read(props.place)}>
-          <Column padding={6} gap={2}>
-            <Label long_mode="scroll">{notifications.value[props.place].title}</Label>
-            <Label font="small" color="muted" long_mode="clip">{notifications.value[props.place].body}</Label>
-          </Column>
+          <Row padding={6} gap={8} align_items="center">
+            <Icon icon={kind_icon(props.place)} size={20} color="accent" />
+            <Column grow={1} gap={2}>
+              <Label long_mode="scroll">{notifications.value[props.place].title}</Label>
+              <Label font="small" color="muted" long_mode="clip">{notifications.value[props.place].body}</Label>
+            </Column>
+          </Row>
         </Button>
       )}
     </>
@@ -154,7 +163,8 @@ function MessageText() {
     <>
       {reading.value < notifications.value.length && (
         <Column gap={6}>
-          <Row gap={8}>
+          <Row gap={6} align_items="center">
+            <Icon icon={kind_icon(reading.value)} size={20} color="accent" />
             <Label font="small" color="muted" grow={1} long_mode="clip">{notifications.value[reading.value].app}</Label>
             <Label font="small" color="muted">{format_time(notifications.value[reading.value].time, "clock")}</Label>
           </Row>
@@ -179,7 +189,7 @@ function Preview() {
           <Button grow={1} background="background" onClick={open_preview}>
             <Column grow={1} padding={SPACING} gap={6} justify="start">
               <Row gap={6} align_items="center">
-                <Icon icon={icons.notification} size={20} color="accent" />
+                <Icon icon={kind_icon(0)} size={20} color="accent" />
                 <Label font="small" color="muted" grow={1} long_mode="clip">
                   {notifications.value.length > 0 ? notifications.value[0].app : ""}
                 </Label>
