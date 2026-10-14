@@ -780,3 +780,58 @@ fn the_pomodoro_takes_a_long_break_after_every_fourth_work_session() {
     assert!(watch.shows_text("1 of 4"), "{:?}", watch.visible_texts());
     assert!(watch.failures().is_empty(), "{:?}", watch.failures());
 }
+
+// ============================================================================
+// Prompt
+// ============================================================================
+
+mod prompt {
+    use super::*;
+    use neotime_app_testing::{compile_package, EffectKind, FakeSystem, PackageKind};
+
+    /// The prompt opened, as the phone runs it, with `question` in its data file.
+    fn open_with_question(question: &str) -> TestWatch {
+        let mut system = FakeSystem::new();
+        system.write_file("/temp/prompt/text", question.as_bytes());
+        let image = compile_package(PackageKind::App, "prompt").unwrap();
+        TestWatch::open_image_on(image, system).unwrap()
+    }
+
+    #[test]
+    fn the_prompt_shows_the_phones_question_and_sends_yes_then_leaves() {
+        let mut watch = open_with_question("Leave now?");
+        assert!(watch.shows_text("Leave now?"), "{:?}", watch.visible_texts());
+
+        watch.tap_text("Yes");
+
+        assert_eq!(
+            watch.phone_lines(),
+            ["{\"t\":\"app\",\"ch\":\"prompt\",\"d\":{\"answer\":1}}\n"]
+        );
+        assert_eq!(watch.effects_of(EffectKind::Back).len(), 1);
+        assert!(watch.failures().is_empty(), "{:?}", watch.failures());
+    }
+
+    #[test]
+    fn the_prompt_sends_no_when_no_is_tapped() {
+        let mut watch = open_with_question("Leave now?");
+
+        watch.tap_text("No");
+
+        assert_eq!(
+            watch.phone_lines(),
+            ["{\"t\":\"app\",\"ch\":\"prompt\",\"d\":{\"answer\":0}}\n"]
+        );
+    }
+
+    #[test]
+    fn the_prompt_says_so_when_the_phone_sent_no_question() {
+        let watch = open_with_question("");
+
+        assert!(
+            watch.shows_text("No question from"),
+            "{:?}",
+            watch.visible_texts()
+        );
+    }
+}

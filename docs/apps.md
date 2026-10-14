@@ -22,7 +22,7 @@ can move it, and an app whose group the watch does not have goes to Other:
 | `games` | dice, four-in-a-row, game-of-life, infinipaint, paddle, puzzle15, snake, twos |
 | `tools` | beacon, calculator, flashlight, haiku, hello, level, metronome, morse, template |
 | `time` | alarm, pomodoro, sports, stopwatch, timer |
-| `phone` | call, music, navigation, notes, phone-finder, remote, weather |
+| `phone` | call, music, navigation, notes, phone-finder, prompt, remote, weather |
 | `health` | heart, steps |
 | [`system`](apps/system.md) | launcher, motion, settings, software, system |
 
@@ -88,6 +88,7 @@ there, never listed in the launcher, and cannot be removed. The shell opens them
 | [`sports`](apps/sports.md) | wasp-os sports | A stopwatch with the steps taken since it started. | <img src="../neotime/harness/snapshots/screens/app-sports.png" width="120" alt="sports"> |
 | [`call`](apps/call.md) | InfiniTime and Bangle.js call screens | Opens by itself when a call comes in and the watch rings until the call is answered, rejected, muted or left. Says who is calling, with Accept, Reject and Mute; once answered, End call; when the call ends it goes back to what was open. The answers go to the phone as Gadgetbridge's `call` lines. | <img src="../neotime/harness/snapshots/screens/app-call-ringing.png" width="120" alt="call ringing"> <img src="../neotime/harness/snapshots/screens/app-call-answered.png" width="120" alt="call answered"> |
 | [`music`](apps/music.md) | InfiniTime Music, wasp-os music_player | Track, progress, play and skip by swipe, and a volume row. | <img src="../neotime/harness/snapshots/screens/app-music.png" width="120" alt="music"> |
+| [`prompt`](apps/prompt.md) | new | A temporary app the companion app runs without installing it: the question in `/temp/prompt/text` with No and Yes; a tap tells the phone the answer and goes back. | <img src="../neotime/harness/snapshots/screens/app-prompt.png" width="120" alt="prompt"> |
 | [`remote`](apps/remote.md) | new | Up to 9 buttons the companion app sets up, each with a library icon; a tap buzzes and tells the phone which button it was, and the phone runs that button's action. It reads `/remote/buttons` when it opens and when the screen turns on. | <img src="../neotime/harness/snapshots/screens/app-remote.png" width="120" alt="remote"> <img src="../neotime/harness/snapshots/screens/app-remote-1.png" width="120" alt="remote with one button"> <img src="../neotime/harness/snapshots/screens/app-remote-4.png" width="120" alt="remote with four buttons"> <img src="../neotime/harness/snapshots/screens/app-remote-9.png" width="120" alt="remote with nine buttons"> |
 | [`weather`](apps/weather.md) | InfiniTime Weather, wasp-os weather | Conditions, low and high, and a 5 day forecast, all read from `current_weather`. | <img src="../neotime/harness/snapshots/screens/app-weather.png" width="120" alt="weather"> |
 | [`navigation`](apps/navigation.md) | InfiniTime Navigation | The next turn, its distance in the wearer's units and the trip's progress. | <img src="../neotime/harness/snapshots/screens/app-navigation.png" width="120" alt="navigation"> |

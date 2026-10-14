@@ -64,6 +64,11 @@ impl<Screen: Copy + PartialEq> WayBack<Screen> {
         self.steps.clear();
     }
 
+    /// Forgets every step back to a screen that is gone, such as a temporary app the phone closed.
+    pub fn forget(&mut self, is_gone: impl Fn(&Screen) -> bool) {
+        self.steps.retain(|step| !is_gone(&step.screen));
+    }
+
     pub fn is_empty(&self) -> bool {
         self.steps.is_empty()
     }

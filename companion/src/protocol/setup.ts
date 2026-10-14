@@ -7,6 +7,7 @@ import { BUNDLED_IMAGES, type BundledImage } from '@/bundles/watch-apps';
 import { readImageHeader, type ImageHeader } from './app-image';
 import { DEFAULT_LAUNCHER, writeLauncher } from './launcher';
 import { installImage, type FileWriter, type PackagesClient, type WatchApp } from './packages';
+import { TEMPORARY_ONLY_IDS } from './prompt';
 
 export type SetupItem = { file: string; header: ImageHeader; image: Uint8Array; required: boolean };
 
@@ -30,7 +31,7 @@ export function setupItems(bundle: BundledImage[] = BUNDLED_IMAGES): SetupItem[]
       const required = header.kind !== 'app' || header.id === LAUNCHER_ID;
       return { file, header, image, required };
     })
-    .filter((item) => item.header.kind !== 'library')
+    .filter((item) => item.header.kind !== 'library' && !TEMPORARY_ONLY_IDS.has(item.header.id))
     .sort((a, b) => rank(a) - rank(b) || a.header.name.localeCompare(b.header.name));
 }
 

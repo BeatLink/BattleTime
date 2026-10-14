@@ -8,7 +8,14 @@ import type { SettingsMessage } from '@/protocol/gadgetbridge';
 import { createBackup, parseBackup, restoreBackup } from '@/protocol/backup';
 import { setWatchTime } from '@/protocol/neotime';
 import { NOTE_FONTS, NOTE_PATH, removeNote, syncNote, type NoteFont } from '@/protocol/notes';
-import { installImage, memoryText, PackagesError } from '@/protocol/packages';
+import {
+  forgetTemporaryApp,
+  installImage,
+  memoryText,
+  PackagesError,
+  runTemporaryApp,
+  type MemoryAnswer,
+} from '@/protocol/packages';
 import { readQuickApps, resetQuickApps, writeQuickApps } from '@/protocol/quick-apps';
 import { runSetup, setupItems } from '@/protocol/setup';
 import { encodeForWatch, decodeWatchLine } from '@/protocol/gadgetbridge';
@@ -41,6 +48,8 @@ neotime weather <place>
 neotime files [ls [dir]|get <path> [dest]|put <file> <path>|rm <path>|df]
 neotime note <file> [small|normal|medium|large]|remove
 neotime apps [list|install <image>|remove <id>|hide <id>|show <id>|setup]
+neotime apps run <image> [--data <name>=<file>]... [--text <name>=<text>]...
+neotime apps stop|forget [id]
 neotime quick-apps [list|set <id> ...|reset]
 neotime backup <file>
 neotime restore <file>
@@ -56,7 +65,11 @@ neotime slots [fit|recovery <start> <size>|update <start>]
   for the watch's Notes app to show, in the font given, or removes it. apps installs a .ntapp
   image, list shows each app with the memory it needs, hide and show
   turn one off and on unless the watch refuses, saying why, and setup installs the
-  face, launcher and apps this tool bundles onto a new watch; the shared library comes with the firmware. quick-apps
+  face, launcher and apps this tool bundles onto a new watch; the shared library comes with the firmware. apps run
+  opens an image as a temporary app, on top of the screen and never installed, with each --data file or
+  --text string (4 kB at most each) written beside it under /temp/<id>/ for the app to read; the image
+  stays there as a cache. apps stop closes it, and apps forget closes it and deletes one temporary
+  app's files, or all of them. quick-apps
   lists the apps a swipe left or right on the face steps through, set replaces them with
   the ids given in order, and reset goes back to the watch's default. listen stays
   connected and prints what the watch sends, answering its apps' http
@@ -255,6 +268,37 @@ export async function files(session: WatchSession, args: string[]) {
   }
 }
 
+// The image and the data files `apps run` was given: --data name=file reads a file, --text name=text takes the text.
+export function parseRunArguments(
+  args: string[],
+  readFile: (path: string) => Uint8Array = (path) => new Uint8Array(readFileSync(path)),
+): { image: string; data: Record<string, string | Uint8Array> } {
+  let image: string | null = null;
+  const data: Record<string, string | Uint8Array> = {};
+  for (let at = 0; at < args.length; at++) {
+    const arg = args[at];
+    if (arg !== '--data' && arg !== '--text') {
+      if (image !== null) throw new Error(`Give one image to run, not also ${arg}.`);
+      image = arg;
+      continue;
+    }
+    const pair = args[++at] ?? '';
+    const equals = pair.indexOf('=');
+    if (equals < 1) throw new Error(`${arg} takes <name>=<${arg === '--data' ? 'file' : 'text'}>.`);
+    const name = pair.slice(0, equals);
+    const value = pair.slice(equals + 1);
+    data[name] = arg === '--data' ? readFile(value) : value;
+  }
+  if (image === null) throw new Error('Give the compiled .ntapp image to run.');
+  return { image, data };
+}
+
+// The memory a reply reports, as a clause for the end of a sentence.
+function needText(answer: MemoryAnswer): string {
+  if (answer.need === null) return '';
+  return answer.room === null ? `; it needs ${memoryText(answer.need)}` : `; it needs ${memoryText(answer.need)} of ${memoryText(answer.room)}`;
+}
+
 export async function apps(session: WatchSession, args: string[]) {
   const [action = 'list', first] = args;
   const packages = await session.packages();
@@ -297,6 +341,34 @@ export async function apps(session: WatchSession, args: string[]) {
         }
         throw error;
       }
+      return;
+    case 'run': {
+      const { image, data } = parseRunArguments(args.slice(1));
+      const bar = new ProgressBar();
+      let run;
+      try {
+        run = await runTemporaryApp(await session.files(), packages, new Uint8Array(readFileSync(image)), data, (p) =>
+          bar.update(p.sent, p.total, p.file),
+        );
+      } catch (error) {
+        if (error instanceof PackagesError && error.why !== null) {
+          throw new Error(`The watch refused to run ${basename(image)}: ${error.message}.`);
+        }
+        throw error;
+      } finally {
+        bar.done();
+      }
+      say(run.uploaded ? `Sent ${run.header.name}'s image to the watch.` : `The watch already had ${run.header.name}'s image.`);
+      say(`Opened ${run.header.name} as temporary app ${run.header.id}${needText(run)}.`);
+      return;
+    }
+    case 'stop':
+      await packages.stop();
+      say('Closed the temporary app, if one was open.');
+      return;
+    case 'forget':
+      await forgetTemporaryApp(await session.files(), packages, first);
+      say(first ? `Deleted temporary app ${first}.` : 'Deleted every temporary app.');
       return;
     case 'setup': {
       const items = setupItems();

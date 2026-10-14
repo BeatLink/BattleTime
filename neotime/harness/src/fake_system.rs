@@ -24,6 +24,10 @@ pub const STARTING_NOTE_PATH: &str = "/notes/note.txt";
 pub const STARTING_NOTE: &str =
     "Packing list\n\n- Charger\n- Passport\n- Rain jacket\n- Two books\n\nCall the hotel\nbefore Friday.\n";
 
+/// The question the phone ran the prompt app with, at the path the companion app writes it to; short enough not to wrap.
+pub const STARTING_QUESTION_PATH: &str = "/temp/prompt/text";
+pub const STARTING_QUESTION: &str = "Leave now?";
+
 /// The random generator's first state; any number but zero works.
 const RANDOM_SEED: u32 = 0x2545_f491;
 
@@ -211,7 +215,13 @@ impl FakeSystem {
             app_name: String::new(),
             notifications_changed: false,
             step_hours: starting_step_hours(),
-            files: vec![(STARTING_NOTE_PATH.to_string(), STARTING_NOTE.as_bytes().to_vec())],
+            files: vec![
+                (STARTING_NOTE_PATH.to_string(), STARTING_NOTE.as_bytes().to_vec()),
+                (
+                    STARTING_QUESTION_PATH.to_string(),
+                    STARTING_QUESTION.as_bytes().to_vec(),
+                ),
+            ],
             phone_lines: Vec::new(),
             random_state: Cell::new(RANDOM_SEED),
             effects: Vec::new(),

@@ -1,0 +1,8 @@
+# Every screen of the prompt app, for docs/apps/prompt.md: the phone's question, then none.
+open app prompt
+expect text "Leave now?"
+write "/temp/prompt/text" ""   # the phone sent no question
+reopen
+expect text "No question from"
+snapshot empty
+expect no failures

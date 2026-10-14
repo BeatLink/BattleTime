@@ -15,6 +15,8 @@ const MOCK_WORKING_BYTES = 8000;
 export class MockPackagesService {
   // How many times the launcher was told to read its groups again, for tests to check.
   launcherReloads = 0;
+  // The temporary app open on top of the watch's screen, if any.
+  openTemporaryApp: string | null = null;
 
   constructor(
     // The mock watch's files, shared with its file transfer service.
@@ -24,7 +26,7 @@ export class MockPackagesService {
 
   // The commands this service answers.
   static handles(command: string): boolean {
-    return ['apps', 'install', 'remove', 'enable', 'install_library', 'launcher'].includes(command);
+    return ['apps', 'install', 'remove', 'enable', 'install_library', 'launcher', 'run', 'stop'].includes(command);
   }
 
   handle(message: { c: string; id?: string; on?: boolean }) {
@@ -40,8 +42,15 @@ export class MockPackagesService {
     if (c === 'install_library') {
       return this.reply({ c, err: 'the shared library ships inside the firmware' });
     }
+    if (c === 'stop') {
+      this.openTemporaryApp = null;
+      return this.reply({ c, ok: 1 });
+    }
     if (!id || !ID.test(id)) {
       return this.reply({ c, err: 'an app id is letters, digits, - and _' });
+    }
+    if (c === 'run') {
+      return this.run(id);
     }
     const image = this.files.get(`/apps/${id}/app.ntapp`);
     if (!image) {
@@ -79,6 +88,26 @@ export class MockPackagesService {
         else this.files.delete(`/apps/${id}/disabled`);
         return this.reply({ c, ok: 1, need: this.needOf(image), room: MOCK_ROOM });
       }
+    }
+  }
+
+  // Opens the temporary app in /temp/<id>, answering once it is open as the watch's shell does.
+  private run(id: string) {
+    const c = 'run';
+    const image = this.files.get(`/temp/${id}/app.ntapp`);
+    if (!image || !this.opens(image, id)) return this.reply({ c, err: 'the image is missing or would not open' });
+    if (this.needOf(image) > MOCK_ROOM) return this.refuse(c, 1, this.needOf(image));
+    this.openTemporaryApp = id;
+    return this.reply({ c, ok: 1, need: this.needOf(image), room: MOCK_ROOM });
+  }
+
+  // Whether the image would open as the app in that folder: a valid image of an app or face with the folder's id.
+  private opens(image: Uint8Array, id: string): boolean {
+    try {
+      const header = readImageHeader(image);
+      return header.kind !== 'library' && header.id === id;
+    } catch {
+      return false;
     }
   }
 

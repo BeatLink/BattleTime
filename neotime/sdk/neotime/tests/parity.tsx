@@ -159,6 +159,9 @@ function starting_step_history(): StepHistory {
 export const STARTING_NOTE =
   "Packing list\n\n- Charger\n- Passport\n- Rain jacket\n- Two books\n\nCall the hotel\nbefore Friday.\n";
 
+/** The question harness/src/fake_system.rs starts the prompt app with, its STARTING_QUESTION. */
+export const STARTING_QUESTION = "Leave now?";
+
 /** Sets every system value to what harness/src/fake_system.rs starts with. */
 export function set_fake_system_values() {
   const now = START_TIME_IN_MILLISECONDS;
@@ -225,7 +228,7 @@ export function set_fake_system_values() {
     { id: "timer", name: "Timer", is_face: false, enabled: true, memory: 13_600, refusal: 0 },
   ];
   app_memory_budget.value = 27_648;
-  preview_files.value = { "/notes/note.txt": STARTING_NOTE };
+  preview_files.value = { "/notes/note.txt": STARTING_NOTE, "/temp/prompt/text": STARTING_QUESTION };
   clear_notifications();
   step_history.value = starting_step_history();
 }

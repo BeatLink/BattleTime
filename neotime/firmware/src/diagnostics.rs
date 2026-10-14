@@ -13,7 +13,7 @@ use neotime_crash_record::LAST_RESTART_WORDS;
 pub enum Counter {
     /// Times round the shell's loop.
     ShellLoops,
-    /// Which input woke the shell last: 1 touch, 2 button, 3 timer, 4 system values, 5 settings, 6 apps changed, 7 app event.
+    /// Which input woke the shell last: 1 touch, 2 button, 3 timer, 4 system values, 5 settings, 6 apps changed, 7 app event, 8 status page, 9 temporary app.
     ShellLastWake,
     /// Whether the screen is lit: 1 lit, 0 off.
     ScreenLit,

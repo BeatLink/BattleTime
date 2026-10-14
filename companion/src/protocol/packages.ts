@@ -1,10 +1,11 @@
-// The packages characteristic: installs, lists, hides and removes apps, and installs the shared library.
+// The packages characteristic: installs, lists, hides and removes apps, and runs temporary apps.
 // A file is sent first through the file transfer service; these commands then check it and act on it.
 // The watch side is services/packages in the NeoTime tree, described in docs/companion-protocol.md.
 
 import { NotifyQueue, type DfuLink } from '@/dfu/link';
 
 import { readImageHeader, type ImageHeader } from './app-image';
+import { FileMissingError } from './file-service';
 import { placeNewApps } from './launcher';
 import { NEOTIME_PACKAGES, NEOTIME_SERVICE } from './neotime';
 
@@ -37,6 +38,9 @@ export type FileWriter = {
   write(path: string, data: Uint8Array, onProgress?: (progress: Progress) => void): Promise<void>;
   mkdir?(path: string): Promise<void>;
   read?(path: string): Promise<Uint8Array>;
+  readStart?(path: string, length: number): Promise<{ bytes: Uint8Array; total: number }>;
+  list?(dir: string): Promise<{ name: string; path: string }[]>;
+  remove?(path: string): Promise<void>;
 };
 
 // Why the watch refused, as docs/companion-protocol.md numbers it.
@@ -76,7 +80,7 @@ export function memoryText(bytes: number): string {
 }
 
 // The commands this client sends, so it can ignore lines meant for anyone else on the characteristic.
-const COMMANDS = new Set(['apps', 'install', 'remove', 'enable', 'launcher']);
+const COMMANDS = new Set(['apps', 'install', 'remove', 'enable', 'launcher', 'run', 'stop']);
 
 // How long a command may take; checking a large app's code is the slowest.
 const REPLY_TIMEOUT_MS = 20000;
@@ -154,6 +158,17 @@ export class PackagesClient {
     await this.command({ c: 'launcher' });
   }
 
+  // Opens the temporary app in /temp/<id> on top of whatever the watch shows, or reopens it fresh.
+  async run(id: string): Promise<MemoryAnswer> {
+    appImagePath(id);
+    return memoryOf(await this.command({ c: 'run', id }));
+  }
+
+  // Closes the temporary app if one is open; its files stay.
+  async stop(): Promise<void> {
+    await this.command({ c: 'stop' });
+  }
+
   private async command(message: { c: string } & Record<string, unknown>): Promise<Reply> {
     const bytes = new TextEncoder().encode(`${JSON.stringify(message)}\n`);
     for (let offset = 0; offset < bytes.length; offset += WRITE_BYTES) {
@@ -223,4 +238,108 @@ export async function installImage(
     await placeNewApps({ read: files.read.bind(files), write: files.write.bind(files) }, packages);
   }
   return header;
+}
+
+// ============================================================================
+// Temporary apps
+// ============================================================================
+
+// Temporary apps live here, one folder each, and never show in the launcher or the apps listing.
+export const TEMPORARY_DIRECTORY = '/temp';
+
+// The image's name inside a temporary app's folder; every other file there is the app's data.
+export const TEMPORARY_IMAGE_FILE = 'app.ntapp';
+
+// The most one data file may hold; they are rewritten on every run, so they are meant to be small.
+export const TEMPORARY_DATA_LIMIT = 4096;
+
+// The image header holds the CRC of the whole image, so its bytes and the length tell two images apart.
+const IMAGE_HEADER_BYTES = 20;
+
+// What running a temporary app did: whether the image was sent or already on the watch, and its memory.
+export type TemporaryRun = { header: ImageHeader; uploaded: boolean } & MemoryAnswer;
+
+// A file in a temporary app's folder, such as /temp/prompt/text.
+export function temporaryAppPath(id: string, file: string): string {
+  appImagePath(id);
+  if (!/^[A-Za-z0-9._-]{1,32}$/.test(file) || file === '.' || file === '..') {
+    throw new PackagesError(`${file}: a temporary app's file name is 1 to 32 letters, digits, "-", "_" and ".".`);
+  }
+  return `${TEMPORARY_DIRECTORY}/${id}/${file}`;
+}
+
+// A data file's path; the name may not be the image's own.
+function dataFilePath(id: string, name: string): string {
+  if (name === TEMPORARY_IMAGE_FILE) {
+    throw new PackagesError(`${name} is the app's image, so it cannot be a data file.`);
+  }
+  return temporaryAppPath(id, name);
+}
+
+// Whether the watch already holds this exact image at the path, read from its header alone.
+async function sameImageOnWatch(files: FileWriter, path: string, image: Uint8Array): Promise<boolean> {
+  if (!files.readStart) return false;
+  try {
+    const { bytes, total } = await files.readStart(path, IMAGE_HEADER_BYTES);
+    return total === image.length && bytes.length === IMAGE_HEADER_BYTES && bytes.every((byte, at) => byte === image[at]);
+  } catch {
+    return false;
+  }
+}
+
+// Sends a temporary app's image unless the watch has it cached, writes its data files and opens it.
+export async function runTemporaryApp(
+  files: FileWriter,
+  packages: PackagesClient,
+  image: Uint8Array,
+  data: Record<string, string | Uint8Array> = {},
+  onProgress?: (progress: Progress) => void,
+): Promise<TemporaryRun> {
+  const header = readImageHeader(image);
+  if (header.kind !== 'app') {
+    throw new PackagesError(`Only an app can run as a temporary app, and ${header.id} is a ${header.kind === 'face' ? 'watch face' : 'shared library'}.`);
+  }
+  const imagePath = temporaryAppPath(header.id, TEMPORARY_IMAGE_FILE);
+  const dataFiles = Object.entries(data).map(([name, contents]) => {
+    const bytes = typeof contents === 'string' ? new TextEncoder().encode(contents) : contents;
+    if (bytes.length > TEMPORARY_DATA_LIMIT) {
+      throw new PackagesError(`${name} holds ${bytes.length} bytes; a temporary app's data file holds at most ${TEMPORARY_DATA_LIMIT}.`);
+    }
+    return { path: dataFilePath(header.id, name), bytes };
+  });
+  await files.mkdir?.(`${TEMPORARY_DIRECTORY}/${header.id}`).catch(() => {});
+  const uploaded = !(await sameImageOnWatch(files, imagePath, image));
+  if (uploaded) {
+    await files.write(imagePath, image, onProgress);
+  }
+  for (const file of dataFiles) {
+    await files.write(file.path, file.bytes, onProgress);
+  }
+  await removeStaleFiles(files, header.id, new Set([imagePath, ...dataFiles.map((file) => file.path)]));
+  return { header, uploaded, ...(await packages.run(header.id)) };
+}
+
+// Deletes what an earlier run left in the app's folder, so the app never reads old data.
+async function removeStaleFiles(files: FileWriter, id: string, keep: Set<string>) {
+  if (!files.list || !files.remove) return;
+  for (const entry of await files.list(`${TEMPORARY_DIRECTORY}/${id}`)) {
+    if (!keep.has(entry.path)) await files.remove(entry.path);
+  }
+}
+
+// Closes the open temporary app, then deletes one temporary app's folder, or all of /temp with no id.
+export async function forgetTemporaryApp(
+  files: Pick<Required<FileWriter>, 'remove'>,
+  packages: PackagesClient,
+  id?: string,
+): Promise<void> {
+  if (id !== undefined) appImagePath(id);
+  const folder = id === undefined ? TEMPORARY_DIRECTORY : `${TEMPORARY_DIRECTORY}/${id}`;
+  await packages.stop();
+  try {
+    await files.remove(folder);
+  } catch (error) {
+    // A folder that is not there is already forgotten.
+    if (!(error instanceof FileMissingError)) throw error;
+  }
 }

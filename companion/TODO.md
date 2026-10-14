@@ -20,6 +20,19 @@ mock watch only.
   once `tools/build_watch_apps.sh` compiles them.
 - **Updating a bundled app** that is already installed: compare versions and offer the newer one.
 
+## Temporary apps
+
+- **No screen in the app.** Temporary apps run only from the command line (`neotime apps run`,
+  `neotime ask`); the app has no screen for them yet.
+- **Nothing sends one by itself.** No call, notification or plugin opens a temporary app yet, such
+  as a prompt to answer a call or reply to a message.
+- **The prompt image.** `prompt.ntapp` is not in the bundle until it is regenerated with
+  `npm run import-watch-apps`; until then `neotime ask` exits 3.
+- **Untried with a watch.** Running, the cached image check, stop and forget have run only against
+  the mock watch. Check that a second run of the same image sends only its data, that old data
+  files are deleted, that forgetting deletes the folder, and that a tap reaches `neotime ask` over
+  BlueZ.
+
 ## Untried on a watch
 
 - **Installing apps.** The firmware now serves the packages characteristic, but the Apps and setup

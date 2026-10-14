@@ -34,7 +34,7 @@ use alloc::vec;
 use core::fmt::Write;
 
 use embassy_futures::{
-    select::{select, select4, Either, Either4},
+    select::{select3, select4, Either3, Either4},
     yield_now,
 };
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, signal::Signal};
@@ -57,6 +57,11 @@ use neotime_companion::{PhoneData, PhoneUpdates, SettingsChange, NOTIFICATION_SO
 use neotime_crash_record::screen::Choice;
 use neotime_display::SLEEP_SWITCH_GAP_IN_MILLISECONDS;
 use neotime_notifications::NotificationList;
+use neotime_packages::{
+    commands::{run_reply, Change},
+    AppId, PackageError, Refusal,
+};
+use neotime_runtime::memory_need::estimate_memory_need;
 use neotime_runtime::{
     events::SwipeDirection, resources::ImageReference, AppImage, AppKind, EffectKind, SystemValue,
     SystemValues, Theme, Value,
@@ -170,6 +175,8 @@ enum Showing {
     Notifications,
     /// Quick settings, which the firmware carries itself.
     QuickSettings,
+    /// The app the phone ran from `/temp`, which is never installed and keeps no state.
+    Temporary,
 }
 
 /// A screen as the way back remembers it: what showed, and whether it was reached round the quick-app ring.
@@ -521,6 +528,10 @@ struct Shell {
     finger_left_on_old_screen: bool,
     /// The crash or not-enough-memory page, shown in place of an app.
     firmware_page: Option<ShownPage>,
+    /// The id of the temporary app the phone ran, until it closes it or disconnects.
+    temporary_id: Option<AppId>,
+    /// How opening the temporary app went: the heap it needs, or why it would not open.
+    temporary_outcome: Option<Result<u32, PackageError>>,
 }
 
 impl Shell {
@@ -560,11 +571,16 @@ impl Shell {
             Showing::App(place) => (installed.listed_id(place).map(alloc::string::String::from), None),
             Showing::Notifications => (Some("notifications".into()), Some(NOTIFICATIONS_IMAGE)),
             Showing::QuickSettings => (Some("quick-settings".into()), Some(QUICK_SETTINGS_IMAGE)),
+            Showing::Temporary => (self.temporary_id.as_deref().map(Into::into), None),
         };
         restart::set_open_app(id.as_deref().unwrap_or(""));
+        let directory = match showing {
+            Showing::Temporary => neotime_packages::TEMPORARY_DIRECTORY,
+            _ => neotime_packages::APPS_DIRECTORY,
+        };
         let image = match built_in {
             Some(_) => None,
-            None => match id.and_then(|id| apps::read_image(self.files, &id)) {
+            None => match id.and_then(|id| apps::read_image(self.files, directory, &id)) {
                 Some(image) => Some(image),
                 None => {
                     self.open_failed(showing);
@@ -586,17 +602,33 @@ impl Shell {
                 image.release();
             }
             restart::set_open_app("");
-            self.firmware_page = Some(ShownPage::new(page));
+            // The phone hears why a temporary app did not fit, and the wearer goes back to what it would have covered.
+            match (showing, page) {
+                (Showing::Temporary, FirmwarePage::NotEnoughMemory { needed_bytes, .. }) => {
+                    let refusal = Refusal::TooLarge {
+                        need_bytes: needed_bytes,
+                    };
+                    self.temporary_outcome = Some(Err(PackageError::Refused(refusal)));
+                }
+                (_, page) => self.firmware_page = Some(ShownPage::new(page)),
+            }
             return;
         }
         self.system.free_storage_kilobytes.set(None);
         self.system.free_storage_wanted.set(false);
+        // A temporary app starts afresh each time, from the data files beside it.
         let saved = AppImage::parse(bytes)
             .ok()
+            .filter(|_| showing != Showing::Temporary)
             .and_then(|parsed| parsed.string(parsed.id_string))
             .and_then(|id| self.files.read_now(&state_path(id)))
             .unwrap_or_default();
         if self.start_host(bytes, &saved, now) {
+            if showing == Showing::Temporary {
+                let need =
+                    AppImage::parse(bytes).map_or(0, |parsed| estimate_memory_need(&parsed).total_bytes);
+                self.temporary_outcome = Some(Ok(need));
+            }
             self.image = image;
             if let Some(host) = &mut self.host {
                 host.set_next_transition(transition);
@@ -646,7 +678,9 @@ impl Shell {
 
     /// Falls back to the face when anything else will not open, or to the help screen without one.
     fn open_failed(&mut self, showing: Showing) {
-        if showing == Showing::Face {
+        if showing == Showing::Temporary {
+            self.temporary_outcome = Some(Err(PackageError::WouldNotOpen));
+        } else if showing == Showing::Face {
             self.help_drawn_at = None;
         } else {
             self.open(Showing::Face, Transition::None);
@@ -737,6 +771,10 @@ impl Shell {
     /// Writes the app's persistent state when any of it changed since the last save.
     #[inline(never)]
     fn save_state_of(&self, host: &mut AppHost<'static>) {
+        // A temporary app keeps no state, and has no folder in `/apps` to keep it in.
+        if self.showing == Showing::Temporary {
+            return;
+        }
         let Some(id) = host.image().string(host.image().id_string) else {
             return;
         };
@@ -910,7 +948,7 @@ impl Shell {
             Showing::Notifications => SwipeScreen::Notifications,
             Showing::QuickSettings => SwipeScreen::QuickSettings,
             Showing::App(_) if self.in_quick_ring => SwipeScreen::QuickApp,
-            Showing::App(_) => SwipeScreen::Other,
+            Showing::App(_) | Showing::Temporary => SwipeScreen::Other,
         };
         match swipes::action_for(direction, screen) {
             SwipeAction::Nothing => {}
@@ -983,7 +1021,7 @@ impl Shell {
             Showing::Face => OpenScreen::Face,
             Showing::Launcher => OpenScreen::Launcher,
             Showing::Notifications => OpenScreen::Notifications,
-            Showing::App(_) | Showing::QuickSettings => OpenScreen::App,
+            Showing::App(_) | Showing::QuickSettings | Showing::Temporary => OpenScreen::App,
         };
         ButtonSituation {
             screen_is_lit: self.lit,
@@ -994,6 +1032,9 @@ impl Shell {
     #[inline(never)]
     fn system_values_changed(&mut self, changed: u32) {
         self.settings_changed();
+        if changed & SystemValue::IsPhoneConnected.bit() != 0 && !phone::is_connected() {
+            self.stop_temporary();
+        }
         if changed & SystemValue::HeartRate.bit() != 0 {
             let (beats_per_minute, confidence) = heart_rate::latest_reading();
             self.deliver(PushedEvent::HeartRate {
@@ -1005,6 +1046,55 @@ impl Shell {
             host.report_system_value_changes(changed, clock::utc_now(), &mut self.system);
         }
         self.take_battery_events();
+    }
+
+    /// Runs or stops a temporary app, as the phone asked on the packages characteristic.
+    fn temporary_changed(&mut self, change: Change) {
+        match change {
+            Change::RunTemporary(id) => self.run_temporary(id),
+            Change::StopTemporary => self.stop_temporary(),
+            Change::None | Change::Apps => {}
+        }
+    }
+
+    /// Opens the temporary app over whatever shows, turns the screen on and tells the phone; running it again while it shows starts it afresh.
+    ///
+    /// An app that will not open goes back to what it would have covered, and the phone hears why.
+    fn run_temporary(&mut self, id: AppId) {
+        let was_showing = self.showing == Showing::Temporary && self.firmware_page.is_none();
+        self.temporary_id = Some(id);
+        self.temporary_outcome = None;
+        if was_showing {
+            self.open(Showing::Temporary, Transition::None);
+        } else {
+            self.go_forward(Showing::Temporary, Transition::Up, false);
+        }
+        let outcome = self
+            .temporary_outcome
+            .take()
+            .unwrap_or(Err(PackageError::WouldNotOpen));
+        let opened = outcome.is_ok();
+        let _ = packages::REPLIES.try_send(run_reply(outcome));
+        if opened {
+            self.system.screen_request = Some(true);
+        } else {
+            self.stop_temporary();
+        }
+    }
+
+    /// Closes the temporary app, going back to what it covered.
+    fn stop_temporary(&mut self) {
+        if self.temporary_id.is_none() {
+            return;
+        }
+        self.way_back.forget(|visit| visit.showing == Showing::Temporary);
+        if self.battery_screen_returns_to == Some(Showing::Temporary) {
+            self.battery_screen_returns_to = Some(Showing::Face);
+        }
+        if self.showing == Showing::Temporary {
+            self.go_back(Transition::Down);
+        }
+        self.temporary_id = None;
     }
 
     /// Keeps and buzzes for a phone notification, takes the phone's other updates, and passes readings and notifications to the open app.
@@ -1548,6 +1638,8 @@ pub async fn run_shell(
         waiting_touch: None,
         finger_left_on_old_screen: false,
         firmware_page: None,
+        temporary_id: None,
+        temporary_outcome: None,
     };
     shell.show_first_screen();
     let mut last_input = Instant::now();
@@ -1599,7 +1691,11 @@ pub async fn run_shell(
                         system_values::next_changes(),
                         settings::CHANGES.receive(),
                         packages::CHANGED.wait(),
-                        select(app_events::next(), STATUS_CHANGED.wait()),
+                        select3(
+                            app_events::next(),
+                            STATUS_CHANGED.wait(),
+                            packages::TEMPORARY.wait(),
+                        ),
                     ),
                 )
                 .await
@@ -1643,11 +1739,15 @@ pub async fn run_shell(
                 diagnostics::set(Counter::ShellLastWake, 6);
                 shell.reload_apps();
             }
-            Either4::Fourth(Either4::Fourth(Either::First(event))) => {
+            Either4::Fourth(Either4::Fourth(Either3::First(event))) => {
                 diagnostics::set(Counter::ShellLastWake, 7);
                 shell.app_event(event);
             }
-            Either4::Fourth(Either4::Fourth(Either::Second(()))) => {
+            Either4::Fourth(Either4::Fourth(Either3::Third(change))) => {
+                diagnostics::set(Counter::ShellLastWake, 9);
+                shell.temporary_changed(change);
+            }
+            Either4::Fourth(Either4::Fourth(Either3::Second(()))) => {
                 diagnostics::set(Counter::ShellLastWake, 8);
                 last_input = Instant::now();
                 if status_holds_screen() && !shell.lit {

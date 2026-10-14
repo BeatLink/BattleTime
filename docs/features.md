@@ -171,6 +171,12 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   remote app shows them full size, 2 by 2 or 3 by 3, and a tap buzzes and tells the phone to run
   that button's action. See [apps.md](apps.md) and
   [companion-protocol.md](companion-protocol.md#remote).
+- **Temporary apps from the phone.** The companion app can open an app on the watch without
+  installing it, such as a question to answer Yes or No (`neotime ask`). It opens over whatever
+  shows and turns the screen on, never joins the launcher or keeps state, and closes when the
+  wearer goes back, the phone stops it or the phone disconnects. Its image stays in `/temp` on the
+  external flash, so running it again sends only its data. See
+  [companion-protocol.md](companion-protocol.md#temporary-apps-served).
 - **31 apps** ported from InfiniTime and wasp-os, merged where both firmwares had the same app:
   stopwatch, timer, alarm, pomodoro, calculator, dice, flashlight, phone finder, system, heart rate, steps,
   sports, music, weather, navigation, metronome, motion, level, beacon, 2048, paddle,

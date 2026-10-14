@@ -260,4 +260,33 @@ describe('file service with a misbehaving watch', () => {
     const stalled = await FileService.open(new ScriptedWatch(() => [piece(0, 10, 0)]));
     await expect(stalled.read('/a')).rejects.toThrow('stopped sending');
   });
+
+  it('reads only the start of a file, with the whole file\'s size', async () => {
+    const target = mockWatch();
+    const service = await FileService.open(target);
+    const contents = Uint8Array.from({ length: 300 }, (_, at) => at % 251);
+    target.fileService.files.set('/temp/a/app.ntapp', contents);
+    expect(await service.readStart('/temp/a/app.ntapp', 20)).toEqual({ bytes: contents.subarray(0, 20), total: 300 });
+    // More than one notification holds, so the rest comes in a second piece.
+    expect(await service.readStart('/temp/a/app.ntapp', 200)).toEqual({ bytes: contents.subarray(0, 200), total: 300 });
+    expect(await service.readStart('/apps/clock/state', 20)).toEqual({ bytes: Uint8Array.from([1, 2, 3]), total: 3 });
+    await expect(service.readStart('/nope', 20)).rejects.toBeInstanceOf(FileMissingError);
+    // A whole file read afterwards still works.
+    expect(await service.read('/apps/clock/state')).toEqual(Uint8Array.from([1, 2, 3]));
+  });
+
+  it('refuses start pieces out of place or a start read that stalls', async () => {
+    const piece = (offset: number, total: number, length: number) => {
+      const reply = answer(COMMAND.readData, STATUS.ok, 16 + length);
+      const fields = new DataView(reply.buffer);
+      fields.setUint32(4, offset, true);
+      fields.setUint32(8, total, true);
+      fields.setUint32(12, length, true);
+      return reply;
+    };
+    const misplaced = await FileService.open(new ScriptedWatch(() => [piece(4, 10, 2)]));
+    await expect(misplaced.readStart('/a', 8)).rejects.toThrow('out of place');
+    const stalled = await FileService.open(new ScriptedWatch(() => [piece(0, 10, 0)]));
+    await expect(stalled.readStart('/a', 8)).rejects.toThrow('stopped sending');
+  });
 });

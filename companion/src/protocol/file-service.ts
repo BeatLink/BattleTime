@@ -271,6 +271,34 @@ export class FileService {
     });
   }
 
+  // Up to `length` bytes from the start of a file, with the file's whole size, without reading the rest.
+  readStart(path: string, length: number): Promise<{ bytes: Uint8Array; total: number }> {
+    return this.serially(async () => {
+      const encoded = encoder.encode(checkPath(path));
+      let answer = await this.command(readCommand(encoded, 0, length), COMMAND.readData, path);
+      const total = view(answer).getUint32(8, true);
+      const out = new Uint8Array(Math.min(length, total));
+      let got = 0;
+      for (;;) {
+        const fields = view(answer);
+        const offset = fields.getUint32(4, true);
+        const piece = Math.min(fields.getUint32(12, true), out.length - got);
+        if (offset !== got) {
+          throw new FileServiceError(`${path}: the watch sent a piece out of place.`);
+        }
+        out.set(answer.subarray(READ_DATA_HEADER, READ_DATA_HEADER + piece), offset);
+        got += piece;
+        if (got >= out.length) {
+          return { bytes: out, total };
+        }
+        if (piece === 0) {
+          throw new FileServiceError(`${path}: the watch stopped sending.`);
+        }
+        answer = await this.command(readCommand(encoded, got, out.length - got, true), COMMAND.readData, path);
+      }
+    });
+  }
+
   // The watch makes any missing folders above the file, and replaces a file that is already there.
   write(path: string, contents: Uint8Array, onProgress?: (progress: Progress) => void): Promise<void> {
     return this.serially(async () => {

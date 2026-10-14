@@ -10,7 +10,7 @@ import { PackagesClient } from '@/protocol/packages';
 import { testImage } from '@/test-support/app-images';
 
 import type { WatchSession } from './ble';
-import { apps } from './commands/watch';
+import { apps, parseRunArguments } from './commands/watch';
 
 // What the apps command needs from a session: the file service and the packages client on one watch.
 class FakeSession extends MockLegacyDfuTarget {
@@ -79,6 +79,59 @@ describe('the apps command', () => {
     );
     await expect(run('show', 'nothing')).rejects.toThrow('no such app');
     log.mockRestore();
+  });
+
+  it('runs an image as a temporary app with its data, reusing the cached image, then stops and forgets it', async () => {
+    const session = new FakeSession();
+    const said: string[] = [];
+    const log = jest.spyOn(process.stdout, 'write').mockImplementation((text) => {
+      said.push(String(text).trimEnd());
+      return true;
+    });
+    const run = (...args: string[]) => apps(session as unknown as WatchSession, args);
+    const image = imageFile(testImage('prompt', 'Prompt'));
+    const dataFile = imageFile(Uint8Array.from([9, 8]));
+
+    await run('run', image, '--text', 'text=Lunch?', '--data', `raw=${dataFile}`);
+    await run('run', image, '--text', 'text=Again?');
+    await run('stop');
+    await run('forget', 'prompt');
+    await run('forget');
+    log.mockRestore();
+
+    const output = said.join('\n');
+    expect(output).toContain("Sent Prompt's image to the watch.");
+    expect(output).toContain("The watch already had Prompt's image.");
+    expect(said.some((line) => /^Opened Prompt as temporary app prompt; it needs [0-9.]+ kB of 33\.0 kB\.$/.test(line))).toBe(true);
+    expect(output).toContain('Closed the temporary app, if one was open.');
+    expect(output).toContain('Deleted temporary app prompt.');
+    expect(output).toContain('Deleted every temporary app.');
+    expect(session.fileService.files.has('/temp/prompt/app.ntapp')).toBe(false);
+  });
+
+  it('says when the watch refuses to run a temporary app', async () => {
+    const session = new FakeSession();
+    const log = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const run = (...args: string[]) => apps(session as unknown as WatchSession, args);
+    await expect(run('run', imageFile(testImage('huge', 'Huge', 'app', 30000)))).rejects.toThrow(
+      /^The watch refused to run image\.ntapp: it needs more memory than an app can have/,
+    );
+    await expect(run('run', imageFile(testImage('digital', 'Digital', 'face')))).rejects.toThrow('watch face');
+    log.mockRestore();
+  });
+
+  it('reads the image and the data files apps run is given', () => {
+    const read = (path: string) => new TextEncoder().encode(`contents of ${path}`);
+    expect(parseRunArguments(['a.ntapp', '--text', 'text=Is it=1?', '--data', 'list=items.txt'], read)).toEqual({
+      image: 'a.ntapp',
+      data: { text: 'Is it=1?', list: new TextEncoder().encode('contents of items.txt') },
+    });
+    expect(parseRunArguments(['--text', 'empty=', 'a.ntapp'], read)).toEqual({ image: 'a.ntapp', data: { empty: '' } });
+    expect(() => parseRunArguments([], read)).toThrow('Give the compiled .ntapp image to run.');
+    expect(() => parseRunArguments(['a.ntapp', 'b.ntapp'], read)).toThrow('not also b.ntapp');
+    expect(() => parseRunArguments(['a.ntapp', '--text', 'nothing'], read)).toThrow('--text takes <name>=<text>.');
+    expect(() => parseRunArguments(['a.ntapp', '--data'], read)).toThrow('--data takes <name>=<file>.');
+    expect(() => parseRunArguments(['a.ntapp', '--data', '=x'], read)).toThrow('--data takes');
   });
 
   it('sets up a new watch from the bundled images', async () => {

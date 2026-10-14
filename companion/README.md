@@ -109,6 +109,8 @@ npm run neotime -- apps setup
 npm run neotime -- apps install path/to/timer.ntapp
 npm run neotime -- apps list
 npm run neotime -- apps hide dice
+npm run neotime -- apps run path/to/prompt.ntapp --text text="Lunch now?"
+npm run neotime -- ask "Lunch now?" --timeout 30
 npm run neotime -- quick-apps set steps stopwatch heart
 npm run neotime -- backup watch-backup.json
 npm run neotime -- notify "Build finished" "All tests passed"
@@ -413,6 +415,36 @@ characteristic, which checks it on the watch; a shared library image is refused,
 the firmware. The id and kind come from the image's
 own header ([src/protocol/app-image.ts](src/protocol/app-image.ts)). The Apps screen and
 `neotime apps` also list, hide, show and remove apps.
+
+## Temporary apps
+
+A temporary app is an app image the companion sends and opens at once, on top of whatever the watch
+shows, without installing it. It never appears in the launcher, the Software app or the `apps`
+listing, never saves state, and closes when the wearer goes back, when the companion sends `stop`
+or when the link drops. `runTemporaryApp` in [src/protocol/packages.ts](src/protocol/packages.ts)
+writes the image to `/temp/<id>/app.ntapp` (the id is the image's own) and each data file the app
+reads to `/temp/<id>/<name>` (1 to 32 letters, digits, `-`, `_` and `.`, never `app.ntapp`, and at
+most 4 kB each, since every run rewrites them). It deletes any other file in that folder, so the app
+never reads data from an earlier run, then sends `{"c":"run","id":...}` on the packages
+characteristic. The watch opens the app and only then replies, with the memory it needs, or with an
+error when the image is missing or will not open, or with `why` 1 when the heap is too small. Faces
+and libraries are refused here, before anything is sent. The files stay on the watch as a cache:
+before sending the image the companion reads the first 20 bytes of the cached one, whose header holds
+the CRC of the whole image, and sends it again only when those bytes or the length differ, so running
+the same app again rewrites just its data. `{"c":"stop"}` closes the open temporary app. The watch
+has no command to forget one, so `forgetTemporaryApp` sends `stop` and then deletes `/temp/<id>`
+(or all of `/temp`) with the file transfer's delete.
+
+The bundled `prompt` app ([src/protocol/prompt.ts](src/protocol/prompt.ts)) shows the text in
+`/temp/prompt/text` with Yes and No buttons, sends `{"t":"app","ch":"prompt","d":{"answer":1}}`
+(or `0`) for the tap and closes itself. Setting up a watch never installs it.
+
+| Command | What it does |
+| --- | --- |
+| `neotime apps run <image> [--data <name>=<file>]... [--text <name>=<text>]...` | runs the image as a temporary app with those data files (4 kB at most each), saying whether the image was sent or already there |
+| `neotime apps stop` | closes the open temporary app; its files stay |
+| `neotime apps forget [id]` | closes the temporary app and deletes one temporary app's files, or all of them |
+| `neotime ask "<question>" [--timeout <seconds>]` | asks with the prompt app and prints `yes` (exit 0) or `no` (exit 1); with no tap in time (60 s unless given) it closes the prompt and exits 2, and it exits 3 when it cannot ask, such as when the bundle has no `prompt.ntapp` |
 
 ## License
 

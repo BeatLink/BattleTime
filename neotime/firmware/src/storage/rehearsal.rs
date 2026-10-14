@@ -226,7 +226,7 @@ impl Files {
         false
     }
 
-    pub fn read_app_image_now(&self, _id: &str) -> Option<alloc::vec::Vec<u8>> {
+    pub fn read_app_image_now(&self, _directory: &str, _id: &str) -> Option<alloc::vec::Vec<u8>> {
         None
     }
 }

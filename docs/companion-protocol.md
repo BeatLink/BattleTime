@@ -238,7 +238,8 @@ error (a command cut short, or data with no write in progress).
   write answers, and a written file that ends at its total size.
 
 Each app keeps its folder under `/apps/<id>/`: `app.ntapp` is the compiled image, as
-`neotime-compiler` writes it, and `state` is its saved state.
+`neotime-compiler` writes it, and `state` is its saved state. A temporary app's image and data go
+in `/temp/<id>/`, as [Temporary apps](#temporary-apps-served) describes.
 
 ### Notes
 
@@ -311,6 +312,8 @@ recovery firmware has no apps, so it refuses every command with an error.
 | `{"c":"enable","id":id,"on":bool}` | `{"c":"enable","ok":1,"need":need,"room":budget}`; a disabled app stays installed but leaves the launcher. `on` is true when left out |
 | `{"c":"launcher"}` | `{"c":"launcher","ok":1}`; reads `/settings/launcher` again and regroups the launcher, as [Launcher](#launcher) describes |
 | `{"c":"install_library"}` | Always `{"c":"install_library","err":"the shared library ships inside the firmware"}`: the library arrives with each firmware update |
+| `{"c":"run","id":id}` | `{"c":"run","ok":1,"need":need,"room":budget}` once the shell has opened the temporary app in `/temp/<id>`, as [Temporary apps](#temporary-apps-served) describes |
+| `{"c":"stop"}` | `{"c":"stop","ok":1}`; closes the temporary app if one is open |
 
 Before `install` and `enable` turn an app on, the package manager checks that it fits the heap
 beside everything else, and before `enable` turns one off that the watch keeps a launcher and a
@@ -326,6 +329,43 @@ when memory is the reason. The numbers are the same as the `refusal` apps read i
 | 5 | `it is open on the watch` | Only the watch's own Software app meets this; the packages characteristic never answers it |
 
 [memory-map.md](memory-map.md#how-much-heap-an-app-needs) explains how the need is worked out.
+
+### Temporary apps (served)
+
+A temporary app is opened on the watch without being installed: a question to answer, a call
+screen, a game's score. It never joins the launcher, the Software app or the `apps` answer, and
+never saves state.
+
+1. The phone writes the image to `/temp/<id>/app.ntapp` with the file transfer above, `<id>` being
+   the id inside the image, and any data files the app reads beside it, such as
+   `/temp/prompt/text`. The app reads them by path with `file_bytes` or `TextFile`, as any app reads
+   a file.
+2. `{"c":"run","id":id}` opens it over whatever shows and turns the screen on. The going back is
+   recorded as for any screen, so the side button, or the app going back, returns to what it
+   covered. Running it again while it shows starts it afresh, reading its data files again.
+3. It closes, going back to what it covered, on `{"c":"stop"}` and when the phone disconnects.
+
+The shell, not the storage task, answers `run`, once it has opened the app, so the answer comes
+after the app is on screen. The shell reads and checks the image as it does any app's. When the app
+will not open, the wearer stays on the screen they had, and the answer says why:
+
+| Answer | Why |
+|---|---|
+| `{"c":"run","err":"the image is missing or would not open"}` | No image in the folder, or one that fails the app checks, holds another id, or needs a newer shared library |
+| `{"c":"run","err":"it needs more memory than an app can have","why":1,"need":need,"room":budget}` | Its need, less the image already read, is more than the heap has free beside the shell |
+| `{"c":"run","err":"an app id is letters, digits, - and _"}` | A malformed id |
+
+`stop` always answers `ok`, whether or not a temporary app was open. The files stay in `/temp`
+until the phone deletes them, so a phone can keep an image there and later write only its data
+before each `run`; the companion compares the image's first 20 bytes, which hold its length and
+CRC, before sending it again. To forget an app, the phone sends `stop`, then deletes its folder with
+the file transfer's delete. A restart opens nothing from `/temp`. A watch face's image runs like an
+app's; the companion sends only apps.
+
+The companion's `neotime apps run <image> [--data <name>=<file>] [--text <name>=<text>]`,
+`neotime apps stop` and `neotime apps forget [id]` do these steps, and `neotime ask "<question>"`
+runs the `prompt` app with the question as `text` and prints the answer: the app sends
+`{"t":"app","ch":"prompt","d":{"answer":1}}` for Yes and `0` for No, then goes back.
 
 An id is 1 to 32 letters, digits, `-` and `_`. Each app keeps its folder under `/apps/<id>/`:
 `app.ntapp` is the compiled image, as `neotime-compiler` writes it, and `state` is its saved state.

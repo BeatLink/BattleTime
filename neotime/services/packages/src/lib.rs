@@ -5,6 +5,9 @@
 //! and its id matches the folder. A `disabled` marker in the folder hides it without deleting it.
 //! The folders are the whole record, so there is no list to fall out of step with them.
 //!
+//! A temporary app's folder, `/temp/<id>/`, holds an image the phone runs without installing it,
+//! beside the data files it reads; it is never listed, and its files stay until the phone deletes them.
+//!
 //! Turning an app on, installing it included, first checks that it and every other app turned on
 //! still fit the heap; `checks` holds the rules.
 
@@ -52,6 +55,12 @@ pub const MOST_ID_BYTES: usize = 32;
 /// A path inside `/apps`, long enough for any id and file name.
 pub type AppPath = heapless::String<64>;
 
+/// An app's id, held without the heap.
+pub type AppId = heapless::String<MOST_ID_BYTES>;
+
+/// Temporary apps' folders, `/temp/<id>/`: the phone writes an image and its data there and runs it without installing it.
+pub const TEMPORARY_DIRECTORY: &str = "/temp";
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -93,6 +102,8 @@ pub enum PackageError {
     Refused(Refusal),
     /// The app was built against a newer shared library than the watch has.
     NeedsNewerLibrary,
+    /// The shell could not open the image: it is missing, fails the app checks, or needs a newer shared library.
+    WouldNotOpen,
     /// The store refused.
     Storage(FileError),
 }
@@ -108,6 +119,7 @@ impl PackageError {
             PackageError::IdMismatch => "the image's id is not the folder's name",
             PackageError::Refused(refusal) => refusal.describe(),
             PackageError::NeedsNewerLibrary => "the app needs a newer shared library; update the watch first",
+            PackageError::WouldNotOpen => "the image is missing or would not open",
             PackageError::Storage(FileError::Full) => "no room left on the flash",
             PackageError::Storage(_) => "the flash store refused",
         }
@@ -143,9 +155,18 @@ pub fn app_folder(id: &str) -> AppPath {
 }
 
 pub fn app_file(id: &str, file: &str) -> AppPath {
+    file_in(APPS_DIRECTORY, id, file)
+}
+
+/// A file in the app's folder inside `directory`, which is `APPS_DIRECTORY` or `TEMPORARY_DIRECTORY`.
+pub fn file_in(directory: &str, id: &str, file: &str) -> AppPath {
     let mut path = AppPath::new();
-    let _ = write!(path, "{APPS_DIRECTORY}/{id}/{file}");
+    let _ = write!(path, "{directory}/{id}/{file}");
     path
+}
+
+pub fn temporary_file(id: &str, file: &str) -> AppPath {
+    file_in(TEMPORARY_DIRECTORY, id, file)
 }
 
 // ============================================================================
@@ -286,14 +307,19 @@ impl<'files, Files: FileAccess> Packages<'files, Files> {
 
     /// The app's image, to load into RAM for the app host.
     pub async fn read_image(&mut self, id: &str) -> Result<Vec<u8>, PackageError> {
+        self.read_image_in(APPS_DIRECTORY, id).await
+    }
+
+    /// The image of the app `id` in `directory`, `APPS_DIRECTORY` or `TEMPORARY_DIRECTORY`, to load into RAM for the app host.
+    pub async fn read_image_in(&mut self, directory: &str, id: &str) -> Result<Vec<u8>, PackageError> {
         check_id(id)?;
-        let length = self.image_length(id).await.ok_or(PackageError::NotInstalled)?;
+        let path = file_in(directory, id, IMAGE_FILE);
+        let length = self.files.file_length(&path).await.ok().flatten();
+        let length = length.ok_or(PackageError::NotInstalled)? as u32;
         if length > APP_HEAP_BUDGET_BYTES {
             return Err(PackageError::Refused(Refusal::TooLarge { need_bytes: length }));
         }
-        self.read_whole(&app_file(id, IMAGE_FILE))
-            .await
-            .ok_or(PackageError::NotInstalled)
+        self.read_whole(&path).await.ok_or(PackageError::NotInstalled)
     }
 
     /// The image's length, from the store, without reading it.

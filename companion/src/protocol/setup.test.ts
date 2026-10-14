@@ -1,12 +1,14 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { bytesToBase64 } from '@/ble/encoding';
+import { base64ToBytes, bytesToBase64 } from '@/ble/encoding';
 import { BUNDLED_IMAGES } from '@/bundles/watch-apps';
 import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
 import { testImage } from '@/test-support/app-images';
 
+import { readImageHeader } from './app-image';
 import { PackagesClient, type FileWriter } from './packages';
 import { DEFAULT_LAUNCHER, LAUNCHER_PATH, readLauncherFile } from './launcher';
+import { TEMPORARY_ONLY_IDS } from './prompt';
 import { needsSetup, runSetup, setupItems, type SetupStep } from './setup';
 
 const bundle = [
@@ -15,18 +17,21 @@ const bundle = [
   { file: 'face.ntapp', base64: bytesToBase64(testImage('digital', 'Digital', 'face')) },
   { file: 'shared.ntlib', base64: bytesToBase64(testImage('shared', 'Shared library', 'library')) },
   { file: 'dice.ntapp', base64: bytesToBase64(testImage('dice', 'Dice')) },
+  { file: 'prompt.ntapp', base64: bytesToBase64(testImage('prompt', 'Prompt')) },
 ];
 
 describe('setting up a new watch', () => {
-  it('orders the face and the launcher before the apps, requires those two, and leaves the library out', () => {
+  it('orders the face and the launcher before the apps, requires those two, and leaves the library and temporary apps out', () => {
     const items = setupItems(bundle);
     expect(items.map((item) => item.header.id)).toEqual(['digital', 'launcher', 'dice', 'timer']);
     expect(items.map((item) => item.required)).toEqual([true, true, false, false]);
   });
 
-  it('reads every image this app bundles except the shared library, which ships inside the firmware', () => {
+  it('reads every image this app bundles except the shared library and the temporary apps', () => {
     const items = setupItems(BUNDLED_IMAGES);
-    expect(items.length).toBe(BUNDLED_IMAGES.length - 1);
+    const temporary = BUNDLED_IMAGES.filter(({ base64 }) => TEMPORARY_ONLY_IDS.has(readImageHeader(base64ToBytes(base64)).id));
+    expect(items.length).toBe(BUNDLED_IMAGES.length - 1 - temporary.length);
+    expect(items.some((item) => TEMPORARY_ONLY_IDS.has(item.header.id))).toBe(false);
     expect(items.some((item) => item.header.kind === 'face')).toBe(true);
     expect(items.some((item) => item.header.kind === 'library')).toBe(false);
   });

@@ -573,6 +573,8 @@ The folders are the whole record: there is no list of installed apps to fall out
   shows. `read_image` hands the shell an image to load into RAM. An image larger than the heap an
   app may have is never read: `list` gives it by its id, turned off, and `read_image` refuses it.
   `install` and `change_enabled` turn an app on or off only once `checks` allows it.
+  `read_image_in` reads an image from `/temp/<id>/` as well, for a temporary app, which no listing
+  sees.
 - **`checks`** decides whether an app may be turned on or off, from the list alone. Turning one on
   is refused when its need, with the shell's index of app ids (and its full list of apps for an app
   that reads it), is over
@@ -888,7 +890,9 @@ watch face, the launcher and the apps through `neotime-app-host`:
   The task starts near the top of the stack, while the Bluetooth task's frames under a connection
   take about 2.7 KB, so the verifier inside an install never reaches the end of the stack. A command
   that installs, removes or hides an app, or copies a new shared library into internal flash, raises
-  `packages::CHANGED` for the shell.
+  `packages::CHANGED` for the shell. `run` and `stop` raise `packages::TEMPORARY` instead, and the
+  shell answers `run` itself once it has opened the temporary app as `Showing::Temporary`, which
+  saves no state and closes when the phone disconnects.
   Copying the library erases internal flash pages, each stopping the CPU for about 85 ms.
 - **Storage.** `storage/watch.rs` mounts the flash store at start, in place in its static and by
   polling the chip, so no task holds a copy of it. Its flash adapter, `StoreFlash`, reads at once

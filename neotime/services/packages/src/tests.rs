@@ -446,6 +446,7 @@ fn every_error_explains_itself() {
         PackageError::BadImage(ImageError::TooShort),
         PackageError::IsLibrary,
         PackageError::IdMismatch,
+        PackageError::WouldNotOpen,
         PackageError::Refused(Refusal::LauncherStaysOn),
         PackageError::Storage(FileError::Full),
         PackageError::Storage(FileError::Damaged),

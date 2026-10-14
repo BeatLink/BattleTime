@@ -14,6 +14,10 @@ import {
   PackagesClient,
   PackagesError,
   REFUSALS,
+  forgetTemporaryApp,
+  runTemporaryApp,
+  TEMPORARY_DATA_LIMIT,
+  temporaryAppPath,
   type FileWriter,
 } from './packages';
 
@@ -153,5 +157,189 @@ describe('the packages client', () => {
     const files = await FileService.open(target);
     expect((await files.list('/')).length).toBeGreaterThan(0);
     expect(await client.apps()).toEqual([]);
+  });
+});
+
+// ============================================================================
+// Temporary apps
+// ============================================================================
+
+// A test image whose header carries the given CRC, as a compiled image's does.
+function imageWithCrc(id: string, crc: number, padding = 0): Uint8Array {
+  const image = testImage(id, id, 'app', padding);
+  new DataView(image.buffer).setUint32(12, crc, true);
+  return image;
+}
+
+// The file service over the mock watch, counting the writes to each path.
+async function countingFiles(target: MockLegacyDfuTarget) {
+  const service = await FileService.open(target);
+  const writes: string[] = [];
+  const files: FileWriter = {
+    write: (path, data, onProgress) => {
+      writes.push(path);
+      return service.write(path, data, onProgress);
+    },
+    mkdir: (path) => service.mkdir(path),
+    readStart: (path, length) => service.readStart(path, length),
+    list: (dir) => service.list(dir),
+    remove: (path) => service.remove(path),
+  };
+  return { files, writes, service };
+}
+
+describe('temporary apps', () => {
+  it('names the files in a temporary app\'s folder and refuses names that are not plain', () => {
+    expect(temporaryAppPath('prompt', 'app.ntapp')).toBe('/temp/prompt/app.ntapp');
+    expect(temporaryAppPath('prompt', 'text')).toBe('/temp/prompt/text');
+    expect(temporaryAppPath('prompt', 'a-b_c.txt')).toBe('/temp/prompt/a-b_c.txt');
+    for (const name of ['', '.', '..', 'a/b', 'x'.repeat(33), 'caf\u00e9']) {
+      expect(() => temporaryAppPath('prompt', name)).toThrow(PackagesError);
+    }
+    expect(() => temporaryAppPath('../x', 'text')).toThrow('an app id');
+  });
+
+  it('sends the image and data the first time, opens the app, and keeps it out of the apps listing', async () => {
+    const target = watch();
+    const client = await PackagesClient.open(target);
+    const { files, writes } = await countingFiles(target);
+    const image = imageWithCrc('prompt', 0x12345678);
+    const progress: string[] = [];
+
+    const run = await runTemporaryApp(files, client, image, { text: 'Lunch?', raw: Uint8Array.from([7]) }, (step) =>
+      progress.push(step.file),
+    );
+
+    expect(run).toMatchObject({ header: { id: 'prompt' }, uploaded: true, room: MOCK_ROOM });
+    expect(run.need).toBeGreaterThan(image.length);
+    expect(writes).toEqual(['/temp/prompt/app.ntapp', '/temp/prompt/text', '/temp/prompt/raw']);
+    expect(progress).toContain('/temp/prompt/app.ntapp');
+    expect(target.fileService.files.get('/temp/prompt/app.ntapp')).toEqual(image);
+    expect(new TextDecoder().decode(target.fileService.files.get('/temp/prompt/text'))).toBe('Lunch?');
+    expect(target.fileService.files.get('/temp/prompt/raw')).toEqual(Uint8Array.from([7]));
+    expect(target.packagesService.openTemporaryApp).toBe('prompt');
+    expect(await client.apps()).toEqual([]);
+  });
+
+  it('reuses the image the watch already has and only rewrites the data', async () => {
+    const target = watch();
+    const client = await PackagesClient.open(target);
+    const { files, writes } = await countingFiles(target);
+    const image = imageWithCrc('prompt', 0x12345678);
+    await runTemporaryApp(files, client, image, { text: 'First' });
+    writes.length = 0;
+
+    const again = await runTemporaryApp(files, client, image, { text: 'Second' });
+
+    expect(again.uploaded).toBe(false);
+    expect(writes).toEqual(['/temp/prompt/text']);
+    expect(new TextDecoder().decode(target.fileService.files.get('/temp/prompt/text'))).toBe('Second');
+  });
+
+  it('deletes data an earlier run left behind, so the app never reads it', async () => {
+    const target = watch();
+    const client = await PackagesClient.open(target);
+    const { files } = await countingFiles(target);
+    const image = imageWithCrc('prompt', 1);
+    await runTemporaryApp(files, client, image, { text: 'First', extra: 'old' });
+    target.fileService.folders.add('/temp/prompt/leftover');
+
+    await runTemporaryApp(files, client, image, { text: 'Second' });
+
+    const left = [...target.fileService.files.keys()].filter((path) => path.startsWith('/temp/prompt/')).sort();
+    expect(left).toEqual(['/temp/prompt/app.ntapp', '/temp/prompt/text']);
+    expect(target.fileService.folders.has('/temp/prompt/leftover')).toBe(false);
+    // A writer that cannot list leaves the folder as it is.
+    target.fileService.files.set('/temp/prompt/extra', Uint8Array.from([1]));
+    await runTemporaryApp(writerFor(target), client, image, { text: 'Third' });
+    expect(target.fileService.files.has('/temp/prompt/extra')).toBe(true);
+  });
+
+  it('sends the image again when the cached one differs or cannot be read', async () => {
+    const target = watch();
+    const client = await PackagesClient.open(target);
+    const { files } = await countingFiles(target);
+    await runTemporaryApp(files, client, imageWithCrc('prompt', 1));
+
+    expect((await runTemporaryApp(files, client, imageWithCrc('prompt', 2))).uploaded).toBe(true);
+    expect((await runTemporaryApp(files, client, imageWithCrc('prompt', 2, 10))).uploaded).toBe(true);
+    // A writer that cannot read part of a file always sends the image.
+    expect((await runTemporaryApp(writerFor(target), client, imageWithCrc('prompt', 2, 10))).uploaded).toBe(true);
+    // A cached file shorter than a header is not the image.
+    target.fileService.files.set('/temp/prompt/app.ntapp', Uint8Array.from([1, 2]));
+    expect((await runTemporaryApp(files, client, imageWithCrc('prompt', 2, 10))).uploaded).toBe(true);
+    // A read that fails sends the image too.
+    const failing: FileWriter = { ...files, readStart: () => Promise.reject(new Error('gone')) };
+    expect((await runTemporaryApp(failing, client, imageWithCrc('prompt', 2, 10))).uploaded).toBe(true);
+  });
+
+  it('refuses bad data file names, large data, faces and libraries before sending anything', async () => {
+    const target = watch();
+    const client = await PackagesClient.open(target);
+    const { files, writes } = await countingFiles(target);
+    const image = imageWithCrc('prompt', 1);
+
+    await expect(runTemporaryApp(files, client, image, { 'app.ntapp': 'x' })).rejects.toThrow("is the app's image");
+    await expect(runTemporaryApp(files, client, image, { 'a/b': 'x' })).rejects.toThrow('file name');
+    await expect(runTemporaryApp(files, client, image, { ['x'.repeat(33)]: 'x' })).rejects.toThrow('file name');
+    await expect(
+      runTemporaryApp(files, client, image, { text: 'x'.repeat(TEMPORARY_DATA_LIMIT + 1) }),
+    ).rejects.toThrow('text holds 4097 bytes; a temporary app\'s data file holds at most 4096.');
+    await expect(runTemporaryApp(files, client, testImage('digital', 'Digital', 'face'))).rejects.toThrow('watch face');
+    await expect(runTemporaryApp(files, client, testImage('shared', 'Shared', 'library'))).rejects.toThrow(
+      'shared library',
+    );
+    expect(writes).toEqual([]);
+    // Exactly the limit is fine.
+    await runTemporaryApp(files, client, image, { text: new Uint8Array(TEMPORARY_DATA_LIMIT) });
+  });
+
+  it('passes on what the watch refuses, with the memory when that is the reason', async () => {
+    const target = watch();
+    const client = await PackagesClient.open(target);
+    const { files } = await countingFiles(target);
+
+    const refused = runTemporaryApp(files, client, imageWithCrc('huge', 1, 30000));
+    await expect(refused).rejects.toMatchObject({ why: 1, room: MOCK_ROOM });
+    await expect(refused).rejects.toThrow(REFUSALS[1]);
+    expect(target.packagesService.openTemporaryApp).toBeNull();
+
+    const missing = client.run('nothing');
+    await expect(missing).rejects.toThrow('the image is missing or would not open');
+    await expect(missing).rejects.toMatchObject({ why: null });
+    target.fileService.files.set('/temp/other/app.ntapp', imageWithCrc('prompt', 1));
+    await expect(client.run('other')).rejects.toThrow('would not open');
+    target.fileService.files.set('/temp/broken/app.ntapp', new Uint8Array(4));
+    await expect(client.run('broken')).rejects.toThrow('would not open');
+    await expect(client.run('../x')).rejects.toThrow('an app id');
+  });
+
+  it('stops the open app, keeping its files, and forgets one app or all of them', async () => {
+    const target = watch();
+    const client = await PackagesClient.open(target);
+    const { files, service } = await countingFiles(target);
+    await runTemporaryApp(files, client, imageWithCrc('prompt', 1), { text: 'Hi' });
+
+    await client.stop();
+    await client.stop();
+    expect(target.packagesService.openTemporaryApp).toBeNull();
+    expect(target.fileService.files.has('/temp/prompt/app.ntapp')).toBe(true);
+
+    await runTemporaryApp(files, client, imageWithCrc('other', 1));
+    await forgetTemporaryApp(service, client, 'other');
+    expect(target.packagesService.openTemporaryApp).toBeNull();
+    expect(target.fileService.files.has('/temp/other/app.ntapp')).toBe(false);
+    expect(target.fileService.folders.has('/temp/other')).toBe(false);
+    expect(target.fileService.files.has('/temp/prompt/text')).toBe(true);
+    // Forgetting what is not there is fine.
+    await forgetTemporaryApp(service, client, 'other');
+
+    await forgetTemporaryApp(service, client);
+    expect([...target.fileService.files.keys()].some((path) => path.startsWith('/temp/'))).toBe(false);
+    await forgetTemporaryApp(service, client);
+    await expect(forgetTemporaryApp(service, client, '../x')).rejects.toThrow('an app id');
+    await expect(
+      forgetTemporaryApp({ remove: () => Promise.reject(new Error('the watch could not do that')) }, client, 'a'),
+    ).rejects.toThrow('could not do that');
   });
 });

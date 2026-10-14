@@ -10,7 +10,7 @@ use neotime_flash_store::FileAccess;
 use neotime_runtime::{AppKind, APP_HEAP_BUDGET_BYTES};
 use serde::Deserialize;
 
-use crate::{PackageError, Packages};
+use crate::{check_id, AppId, PackageError, Packages};
 
 #[derive(Deserialize)]
 struct Command<'line> {
@@ -20,11 +20,15 @@ struct Command<'line> {
 }
 
 /// What a command did, beyond its reply, that the shell should hear about.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Change {
     None,
     /// An app was installed, removed, shown or hidden, or the launcher's groups changed.
     Apps,
+    /// The temporary app with this id passed its checks, so the shell opens it.
+    RunTemporary(AppId),
+    /// The shell closes the open temporary app.
+    StopTemporary,
 }
 
 /// Where a command's reply line goes, a piece at a time; the line ends with its newline.
@@ -33,7 +37,7 @@ pub trait ReplySink {
     async fn send(&mut self, piece: String);
 }
 
-/// Runs one command line, sends its reply line, newline included, to `reply`, and says what changed.
+/// Runs one command line, sends its reply line, newline included, to `reply`, and says what changed; the shell sends `run`'s reply.
 ///
 /// `library_version` is the version of the library inside the running firmware, or None when it carries none.
 pub async fn handle_command<Files: FileAccess>(
@@ -43,7 +47,7 @@ pub async fn handle_command<Files: FileAccess>(
     reply: &mut impl ReplySink,
 ) -> Change {
     let (answer, change) = answer_command(line, files, library_version, reply).await;
-    if let Some(answer) = answer {
+    if let Some(answer) = answer.filter(|answer| !answer.is_empty()) {
         reply.send(answer).await;
     }
     change
@@ -99,7 +103,15 @@ async fn run_command<Files: FileAccess>(
                 Err(error) => (error_reply_for(name, error), Change::None),
             };
         }
-        ("install" | "remove" | "enable", None) => {
+        // The shell answers once it has opened the app, or gone back when it would not open.
+        ("run", Some(id)) => {
+            return match check_id(id) {
+                Ok(()) => (String::new(), Change::RunTemporary(app_id(id))),
+                Err(error) => (error_reply_for(name, error), Change::None),
+            };
+        }
+        ("stop", _) => return (ok_reply(name), Change::StopTemporary),
+        ("install" | "remove" | "enable" | "run", None) => {
             return (error_reply(name, "give the app's id"), Change::None)
         }
         _ => return (error_reply(name, "unknown command"), Change::None),
@@ -108,6 +120,19 @@ async fn run_command<Files: FileAccess>(
         Ok(change) => (ok_reply(name), change),
         Err(error) => (error_reply(name, error.describe()), Change::None),
     }
+}
+
+/// The shell's answer to `run`: the heap the open app needs, or why it would not open.
+pub fn run_reply(outcome: Result<u32, PackageError>) -> String {
+    match outcome {
+        Ok(need_bytes) => ok_reply_with_need("run", need_bytes),
+        Err(error) => error_reply_for("run", error),
+    }
+}
+
+/// An id that `check_id` passed, which always fits.
+fn app_id(id: &str) -> AppId {
+    AppId::try_from(id).unwrap_or_default()
 }
 
 /// Answers a command this build cannot run, such as in a rehearsal with no file system.
@@ -443,6 +468,52 @@ mod tests {
 
         assert_eq!(pieces.0.len(), 1);
         assert!(pieces.0[0].ends_with('\n'));
+    }
+
+    #[test]
+    fn run_asks_the_shell_to_open_a_temporary_app_and_leaves_the_reply_to_it() {
+        let mut files = file_system();
+
+        assert_eq!(
+            run(r#"{"c":"run","id":"prompt"}"#, &mut files),
+            (String::new(), Change::RunTemporary(app_id("prompt")))
+        );
+        assert_eq!(
+            run(r#"{"c":"run","id":"bad id"}"#, &mut files),
+            (
+                String::from("{\"c\":\"run\",\"err\":\"an app id is letters, digits, - and _\"}\n"),
+                Change::None
+            )
+        );
+        assert!(run(r#"{"c":"run"}"#, &mut files).0.contains("give the app's id"));
+    }
+
+    #[test]
+    fn the_shells_run_reply_gives_the_need_or_why_it_would_not_open() {
+        assert_eq!(
+            run_reply(Ok(9000)),
+            std::format!("{{\"c\":\"run\",\"ok\":1,\"need\":9000,\"room\":{APP_HEAP_BUDGET_BYTES}}}\n")
+        );
+        assert_eq!(
+            run_reply(Err(PackageError::NotInstalled)),
+            "{\"c\":\"run\",\"err\":\"no such app\"}\n"
+        );
+        assert_eq!(
+            run_reply(Err(PackageError::WouldNotOpen)),
+            "{\"c\":\"run\",\"err\":\"the image is missing or would not open\"}\n"
+        );
+        let too_large = PackageError::Refused(crate::Refusal::TooLarge { need_bytes: 40_000 });
+        assert!(run_reply(Err(too_large)).contains(r#""why":1,"need":40000"#));
+    }
+
+    #[test]
+    fn stop_asks_the_shell_to_close_the_temporary_app() {
+        let mut files = file_system();
+
+        assert_eq!(
+            run(r#"{"c":"stop"}"#, &mut files),
+            (String::from("{\"c\":\"stop\",\"ok\":1}\n"), Change::StopTemporary)
+        );
     }
 
     #[test]

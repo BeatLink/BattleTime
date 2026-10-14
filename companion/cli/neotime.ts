@@ -5,6 +5,7 @@
 // differs, which is node-ble talking to BlueZ.
 
 import { WatchSession, DEFAULT_SCAN_MS } from './ble';
+import { ask, ASK_EXIT, ASK_TIMEOUT_MS, askUsage, requirePromptImage } from './commands/ask';
 import { debug, debugUsage } from './commands/debug';
 import { flash, flashUsage } from './commands/flash';
 import { launcher, launcherUsage } from './commands/launcher';
@@ -54,6 +55,8 @@ ${sendUsage}
 
 ${watchUsage}
 
+${askUsage}
+
 ${remoteUsage}
 
 ${launcherUsage}
@@ -63,7 +66,7 @@ ${debugUsage}
 Options:
   --address <mac>   Which watch to talk to. Otherwise the last one used, or
                     the only one in range. NEOTIME_ADDRESS works too.
-  --timeout <s>     How long to scan for.
+  --timeout <s>     How long to scan for, or for ask, how long to wait for a tap.
   --verbose         Print every line to and from the watch.
 `;
 
@@ -127,6 +130,7 @@ const NEEDS_WATCH = new Set([
   'remote',
   'launcher',
   'apps',
+  'ask',
   'quick-apps',
   'backup',
   'restore',
@@ -164,6 +168,9 @@ async function main(argv: string[]): Promise<number> {
       say(USAGE);
       return 1;
     }
+
+    // Asking needs the bundled prompt app, so say it is missing before connecting.
+    const promptImage = command === 'ask' ? requirePromptImage() : null;
 
     const address = await resolveAddress(session, options.address);
     say(`Connecting to ${address}...`);
@@ -287,6 +294,9 @@ async function main(argv: string[]): Promise<number> {
         await apps(session, rest);
         break;
 
+      case 'ask':
+        return await ask(session, rest.join(' '), options.timeout ?? ASK_TIMEOUT_MS, promptImage!);
+
       case 'launcher':
         await launcher(session, rest);
         break;
@@ -316,7 +326,7 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   } catch (error) {
     warn(`\n${(error as Error).message}`);
-    return 1;
+    return command === 'ask' ? ASK_EXIT.failed : 1;
   } finally {
     await session.close();
   }

@@ -566,8 +566,11 @@ impl Files {
             == Some(true)
     }
 
-    pub fn read_app_image_now(&self, id: &str) -> Option<alloc::vec::Vec<u8>> {
-        self.now(|store| run_on_heap(neotime_packages::Packages::new(store).read_image(id)).ok())?
+    /// The image of the app `id` in `directory`, `/apps` or `/temp`.
+    pub fn read_app_image_now(&self, directory: &str, id: &str) -> Option<alloc::vec::Vec<u8>> {
+        self.now(|store| {
+            run_on_heap(neotime_packages::Packages::new(store).read_image_in(directory, id)).ok()
+        })?
     }
 
     /// Carries out one request from another task; see `storage_requests`.
@@ -724,8 +727,10 @@ pub async fn run_storage(files: &'static Files) {
             Either::Second(line) => {
                 foreground::wait_for_a_pause().await;
                 let change = alloc::boxed::Box::pin(files.run_packages_command(&line)).await;
-                if change != Change::None {
-                    packages::CHANGED.signal(change);
+                match change {
+                    Change::None => {}
+                    Change::Apps => packages::CHANGED.signal(change),
+                    Change::RunTemporary(_) | Change::StopTemporary => packages::TEMPORARY.signal(change),
                 }
             }
         }

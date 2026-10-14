@@ -11,6 +11,9 @@ use neotime_packages::commands::Change;
 /// Raised after a packages command changes the installed apps, so the shell reads its app list again.
 pub static CHANGED: Signal<CriticalSectionRawMutex, Change> = Signal::new();
 
+/// Raised when the phone runs or stops a temporary app, carrying `Change::RunTemporary` or `Change::StopTemporary`.
+pub static TEMPORARY: Signal<CriticalSectionRawMutex, Change> = Signal::new();
+
 /// Command lines from the phone, without their newline, sent by the Bluetooth task.
 pub static COMMANDS: Channel<CriticalSectionRawMutex, Vec<u8>, 2> = Channel::new();
 

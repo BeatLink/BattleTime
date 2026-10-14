@@ -228,9 +228,10 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Profiles.** Sets of apps such as work, gaming or comms, picked from the companion app. A
   profile is a small file in external flash listing app ids, their order, the watch face and which
   subscriptions are on. Switching profiles only reads files, so it writes nothing to flash.
-- [ ] **Temporary apps from the phone.** The companion sends an app image straight into the app's
-  RAM, such as a call screen or a game score display, and it exists only while the phone is
-  connected. Nothing is installed, so nothing is written to flash.
+- [ ] **Temporary apps the companion sends by itself.** The watch runs temporary apps from `/temp`
+  and the companion can send one by hand (`neotime apps run`, `neotime ask`), but nothing sends a
+  call screen, a custom notification page or a game score when a call, a notification or a score
+  arrives on the phone, and the companion app has no screen for choosing them.
 - [ ] **Phone data as inputs.** Values the phone sends, such as the next calendar event, unread
   count, music track or a game score, become inputs like steps, so many apps are only a layout
   bound to phone data. Settles the open question in [app-runtime.md](app-runtime.md) about how

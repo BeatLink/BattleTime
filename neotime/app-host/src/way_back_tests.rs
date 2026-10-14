@@ -99,3 +99,18 @@ fn each_transition_has_its_opposite() {
         assert_eq!(opposite(transition), undone_by);
     }
 }
+
+#[test]
+fn a_screen_that_is_gone_is_skipped_on_the_way_back() {
+    let mut way_back = WayBack::default();
+    way_back.forward(Face, Launcher, Transition::Up);
+    way_back.forward(Launcher, App(1), Transition::Up);
+    way_back.forward(App(1), App(2), Transition::Up);
+
+    way_back.forget(|screen| *screen == App(1));
+
+    assert_eq!(
+        all_the_way_back(&mut way_back),
+        [(Launcher, Transition::Down), (Face, Transition::Down)]
+    );
+}

@@ -245,7 +245,7 @@ impl LauncherIcons {
         let mut icons: Vec<Lent<[u8]>> = Vec::new();
         for entry in (0..installed.listed_count()).filter_map(|place| installed.listed(place)) {
             let image = if entry.has_icon {
-                files.read_app_image_now(&entry.id)
+                files.read_app_image_now(neotime_packages::APPS_DIRECTORY, &entry.id)
             } else {
                 None
             };
@@ -280,9 +280,9 @@ fn icon_of(image_bytes: &[u8]) -> Option<Vec<u8>> {
     Some(icon.to_vec())
 }
 
-/// An app's image, read into the heap for an `AppHost` to borrow.
-pub fn read_image(files: &storage::Files, id: &str) -> Option<Lent<[u8]>> {
-    let bytes = files.read_app_image_now(id)?;
+/// The image of the app `id` in `directory`, `/apps` or `/temp`, read into the heap for an `AppHost` to borrow.
+pub fn read_image(files: &storage::Files, directory: &str, id: &str) -> Option<Lent<[u8]>> {
+    let bytes = files.read_app_image_now(directory, id)?;
     Some(Lent::new(bytes.into_boxed_slice()))
 }
 
