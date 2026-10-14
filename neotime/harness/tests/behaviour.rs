@@ -164,6 +164,22 @@ fn the_launcher_in_a_grid_still_opens_the_app_tapped() {
 }
 
 // ============================================================================
+// Software
+// ============================================================================
+
+#[test]
+fn the_software_memory_note_scrolls_away_with_the_list() {
+    let mut watch = TestWatch::open_app("software").unwrap();
+    assert!(watch.shows_text("Each app may use"));
+
+    watch.swipe(Direction::Up);
+    watch.swipe(Direction::Up);
+
+    assert!(watch.shows_text("Timer"), "{:?}", watch.visible_texts());
+    assert!(!watch.shows_text("Each app may use"));
+}
+
+// ============================================================================
 // Going back
 // ============================================================================
 

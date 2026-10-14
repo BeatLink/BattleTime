@@ -100,8 +100,8 @@ function PackageList() {
   return (
     <Screen padding={SPACING} gap={2}>
       <Header title="Installed" icon={icons.chart} />
-      <Label font="small" color="muted">{`Each app may use ${kilobytes(app_memory_budget.value)}`}</Label>
       <List grow={1} gap={SPACING}>
+        <Label font="small" color="muted">{`Each app may use ${kilobytes(app_memory_budget.value)}`}</Label>
         {range(MOST_PACKAGES).map((place) => (
           <PackageRow place={place} />
         ))}

@@ -247,12 +247,12 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
         }
         Switch => {
             let is_on = settings.value != 0;
-            let on_track = if is_on {
-                accent(settings.background)
-            } else {
-                track(settings.background)
+            // An off track is muted rather than surface, so it still shows on a surface-coloured row.
+            let track_color = match is_on {
+                true => accent(settings.background),
+                false => resolve(settings.background, ThemeColor::Muted, theme),
             };
-            let style = frame_style(settings, on_track, bounds.height / 2, theme);
+            let style = frame_style(settings, track_color, bounds.height / 2, theme);
             let knob_color = resolve(settings.color, ThemeColor::Text, theme);
             draw_switch(renderer, bounds, &style, knob_color, is_on);
         }

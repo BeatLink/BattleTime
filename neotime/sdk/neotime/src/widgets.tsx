@@ -1642,7 +1642,7 @@ export function Switch(props: SwitchProps) {
         width: "56px",
         height: "30px",
         borderRadius: "15px",
-        background: on ? css_color(props.color) ?? theme.accent : theme.surface,
+        background: on ? css_color(props.color) ?? theme.accent : theme.muted,
         position: "relative",
         cursor: "pointer",
         ...css_without_color(props),

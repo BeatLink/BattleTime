@@ -6,8 +6,9 @@ use std::{cell::RefCell, rc::Rc};
 use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565};
 use embedded_hal::{delay::DelayNs, digital::ErrorType, digital::OutputPin};
 use neotime_app_host::{PAINT_STEP_PIXELS, STRIP_PIXELS, TRANSITION_TIME_IN_MILLISECONDS};
-use neotime_app_testing::{Framebuffer, TestWatch, Touch, Transition};
+use neotime_app_testing::{Framebuffer, TestWatch, Touch, Transition, WidgetKind};
 use neotime_display::{Display, PanelInterface};
+use neotime_runtime::ThemeColor;
 use neotime_ui::BufferedScreen;
 
 // ============================================================================
@@ -723,6 +724,44 @@ export default define_app({ id: "tiles", name: "Tiles", screens: { main: Tiles }
         .is_some_and(|cell| cell.x >= 60 && cell.y >= 60));
 }
 
+#[test]
+fn an_off_switch_shows_its_track_on_a_surface_row() {
+    let source = r#"
+import { define_app } from "neotime";
+import { Button, Screen, Switch } from "neotime/widgets";
+
+function Row() {
+  return (
+    <Screen>
+      <Button x={0} y={0} width={240} height={60}>
+        <Switch x={100} y={15} value={false} />
+      </Button>
+    </Screen>
+  );
+}
+
+export default define_app({ id: "row", name: "Row", screens: { main: Row } });
+"#;
+    let mut app = TestWatch::open_source(source).unwrap();
+    let theme = *app.host().theme();
+    let color = |name: ThemeColor| Rgb565::from(RawU16::new(theme.color(name)));
+    let switch_widget = app
+        .visible_widgets()
+        .into_iter()
+        .find(|&widget| app.widget_kind(widget) == Some(WidgetKind::Switch))
+        .unwrap();
+    let switch = app.visible_area(switch_widget).unwrap();
+
+    let frame = app.frame();
+    let right_half_middle = frame.pixel(
+        (switch.x + switch.width * 3 / 4) as usize,
+        (switch.y + switch.height / 2) as usize,
+    );
+
+    assert_ne!(color(ThemeColor::Muted), color(ThemeColor::Surface));
+    assert_eq!(right_half_middle, color(ThemeColor::Muted));
+}
+
 /// An app showing `text` in a TextLines three lines tall, as the morse app keeps its text.
 fn text_lines_showing(text: &str) -> TestWatch {
     let codes: Vec<String> = text
@@ -769,4 +808,19 @@ fn text_lines_start_an_empty_line_after_a_last_new_line() {
 
     // The empty line after the last new line is the third of the three that fit.
     assert_eq!(app.visible_texts(), ["c", "d"]);
+}
+
+#[test]
+fn the_software_list_scrolls_with_the_panel_and_shows_what_drawing_afresh_would() {
+    let mut app = TestWatch::open_app("software").unwrap();
+    let mut watch = Watch::new();
+    watch.draw_everything(&mut app);
+
+    drag_drawing_each_move(&mut app, &mut watch, 220, 80);
+    drag_drawing_each_move(&mut app, &mut watch, 220, 80);
+    drag_drawing_each_move(&mut app, &mut watch, 80, 200);
+
+    // The list starts right under the header, so no fixed line sits above its clipped top row.
+    assert_eq!(watch.scrolling_band(), (44, 234));
+    assert_eq!(watch.pixels_unlike(&app.fresh_frame()), 0);
 }
