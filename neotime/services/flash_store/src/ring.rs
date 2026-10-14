@@ -263,16 +263,20 @@ impl<const SECTORS: usize> Ring<SECTORS> {
         Ok(())
     }
 
+    /// The free sector the next head takes: the first one after the current head.
+    fn next_head_index(&self) -> Option<usize> {
+        let after = self.order.last().map_or(0, |head| *head as usize + 1);
+        (0..self.sector_count)
+            .map(|step| (after + step) % self.sector_count)
+            .find(|index| !self.is_used(*index))
+    }
+
     /// Makes a free sector the one records go to, erasing it first unless it is known to be erased.
     async fn start_new_head<Flash: NorFlash>(
         &mut self,
         flash: &mut Flash,
     ) -> Result<(), StoreError<Flash::Error>> {
-        let after = self.order.last().map_or(0, |head| *head as usize + 1);
-        let index = (0..self.sector_count)
-            .map(|step| (after + step) % self.sector_count)
-            .find(|index| !self.is_used(*index))
-            .ok_or(StoreError::Full)?;
+        let index = self.next_head_index().ok_or(StoreError::Full)?;
         let erase_count = match self.read_sector_header(flash, index).await? {
             SectorHeader::Valid { erase_count, .. } => erase_count + 1,
             _ => 1,
@@ -405,6 +409,31 @@ impl<const SECTORS: usize> Ring<SECTORS> {
             let victim = self.choose_victim(keys);
             self.clean(flash, keys, victim).await?;
             cleaned += 1;
+        }
+        Ok(())
+    }
+
+    /// Does ahead of time the erasing a write would otherwise do when the head fills, so that write only programs.
+    ///
+    /// Records clean a sector early, so starting the next head leaves the reserve whole; logs never drop data early.
+    pub(crate) async fn prepare_room<Flash: NorFlash>(
+        &mut self,
+        flash: &mut Flash,
+        keys: &mut KeyTable,
+    ) -> Result<(), StoreError<Flash::Error>> {
+        let mut cleaned = 0;
+        while self.keeps_newest
+            && self.free_count() <= RESERVED_FREE_SECTORS
+            && self.order.len() > 1
+            && cleaned < self.sector_count
+        {
+            let victim = self.choose_victim(keys);
+            self.clean(flash, keys, victim).await?;
+            cleaned += 1;
+        }
+        if let Some(index) = self.next_head_index().filter(|index| !self.is_erased(*index)) {
+            erase(flash, self.sector_address(index)).await?;
+            self.set_erased(index, true);
         }
         Ok(())
     }

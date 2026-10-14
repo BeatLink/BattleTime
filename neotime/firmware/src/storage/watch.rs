@@ -9,12 +9,16 @@ use embassy_nrf::{
     wdt::HaltConfig,
     Peri,
 };
-use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
+use embassy_sync::blocking_mutex::{
+    raw::{CriticalSectionRawMutex, NoopRawMutex},
+    Mutex,
+};
 use embassy_sync::mutex::Mutex as AsyncMutex;
+use embassy_sync::signal::Signal;
 
 #[cfg(with_shell)]
 use crate::motion;
-use embassy_futures::select::{select, Either};
+use embassy_futures::select::{select3, Either3};
 use embedded_storage::nor_flash::ReadNorFlash;
 use neotime_blefs::FileTransfer;
 use neotime_boot::{
@@ -561,7 +565,9 @@ impl StoreFlash {
             {
                 break;
             }
-            if !self.polls_without_yielding {
+            if self.polls_without_yielding {
+                embassy_time::block_for(interval);
+            } else {
                 embassy_time::Timer::after(interval).await;
             }
         }
@@ -664,6 +670,9 @@ impl Files {
     /// Lets the chip sleep while the screen is off, and puts it down now if the store is idle.
     pub fn let_flash_sleep(&self, may_sleep: bool) {
         self.flash_may_sleep.store(may_sleep, Ordering::Relaxed);
+        if may_sleep {
+            ROOM_WANTED.signal(());
+        }
         self.sleep_flash_if_idle();
     }
 
@@ -864,6 +873,13 @@ impl Files {
         }
     }
 
+    /// Erases ahead what the store's next writes need, so the shell's own writes only program.
+    async fn prepare_room(&self) {
+        if let Some(store) = self.store.lock().await.as_mut() {
+            let _ = store.prepare_room().await;
+        }
+    }
+
     /// Runs one line from the packages characteristic, returning the reply line and what changed.
     /// Runs a packages command, its reply going to the Bluetooth task as it is written.
     async fn run_packages_command(&self, line: &[u8]) -> Change {
@@ -956,6 +972,9 @@ impl neotime_packages::commands::ReplySink for ToBluetooth {
     }
 }
 
+/// Raised when the screen goes dark, so the storage task erases ahead while nothing waits on it.
+static ROOM_WANTED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
 /// Runs every store call other tasks ask for, and the packages characteristic's commands, one at a time.
 ///
 /// A packages command starts near the top of the stack here, where the verifier inside it has room. Each call's
@@ -965,9 +984,18 @@ pub async fn run_storage(files: &'static Files) {
     crate::tasks::name_this_task("storage");
     let mut transfer = FileTransfer::new();
     loop {
-        match select(storage_requests::REQUESTS.receive(), packages::COMMANDS.receive()).await {
-            Either::First(request) => alloc::boxed::Box::pin(files.carry_out(&mut transfer, request)).await,
-            Either::Second(line) => {
+        let next = select3(
+            storage_requests::REQUESTS.receive(),
+            packages::COMMANDS.receive(),
+            ROOM_WANTED.wait(),
+        );
+        match next.await {
+            Either3::First(request) => {
+                alloc::boxed::Box::pin(files.carry_out(&mut transfer, request)).await;
+                alloc::boxed::Box::pin(files.prepare_room()).await;
+            }
+            Either3::Third(()) => alloc::boxed::Box::pin(files.prepare_room()).await,
+            Either3::Second(line) => {
                 foreground::wait_for_a_pause().await;
                 let change = alloc::boxed::Box::pin(files.run_packages_command(&line)).await;
                 match change {

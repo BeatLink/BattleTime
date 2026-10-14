@@ -377,6 +377,25 @@ fn wear_spreads_over_the_whole_records_ring() {
     );
 }
 
+#[test]
+fn a_write_after_preparing_room_erases_nothing() {
+    let mut store = blank_store();
+
+    for round in 0..400 {
+        block_on(store.prepare_room()).unwrap();
+        let erases_before: u32 = store.flash().erases_per_sector.iter().sum();
+        block_on(store.write_record(record_key(SYSTEM, round % 4), &filler(600, round as usize))).unwrap();
+        let erases_after: u32 = store.flash().erases_per_sector.iter().sum();
+
+        assert_eq!(erases_after, erases_before, "write {round} erased");
+    }
+    let mut store = remount(store);
+    assert_eq!(
+        read_record(&mut store, record_key(SYSTEM, 3)).unwrap(),
+        filler(600, 399)
+    );
+}
+
 // ============================================================================
 // Files
 // ============================================================================

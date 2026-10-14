@@ -65,7 +65,9 @@ When the ring needs space it cleans one sector: it copies that sector's newest c
 keeping their sequence numbers, then erases it at once. It picks the sector that gives the most
 space back for its age, so rarely changed records are not copied on every lap but every sector is
 cleaned in time. Two sectors are always kept free, so cleanup can finish even after a power cut
-spoiled one. A deletion writes a tombstone, which is dropped during cleanup once no older copy of
+spoiled one. `prepare_room`, for an idle moment, erases the sector each ring takes next and, for
+records, cleans a sector early when starting that one would use the reserve, so a later write only
+programs pages. A deletion writes a tombstone, which is dropped during cleanup once no older copy of
 its key is left anywhere.
 
 Writes are refused before the ring gets too full to clean well:
