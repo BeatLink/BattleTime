@@ -15,10 +15,8 @@ app would, before reading the stack. Spare bytes are counted down to the top of 
 the lowest `GUARD_BYTES` the memory protection unit forbids.
 
 Run it inside `nix develop`. It finds the emulator in $PINETIME_EMULATOR, or in a PineTimeEmulator
-folder beside this repository, and runs it with that checkout's `pinetime-engine`. The engine has no
-Bluetooth bridge yet, so `--packages` runs the Renode emulator it replaced instead: a PineTimeEmulator
-checkout at 97ebb02, named by $PINETIME_RENODE_EMULATOR. Cap its memory with `ulimit -v 12000000`
-first, since Renode can grow.
+folder beside this repository, and runs it with that checkout's `pinetime-engine`; `--packages` runs
+the engine with `--bluetooth`, its HCI controller on a pseudo-terminal.
 """
 
 import argparse
@@ -76,14 +74,6 @@ def emulator_folder():
         if (folder / "scripts" / "pinetime.resc").is_file():
             return folder
     sys.exit(f"no PineTime emulator at {candidates[-1]}; set PINETIME_EMULATOR")
-
-
-def renode_emulator_folder():
-    """The pinned Renode emulator, which alone has the Bluetooth bridge `--packages` needs."""
-    folder = Path(os.environ.get("PINETIME_RENODE_EMULATOR", ""))
-    if not (folder / "scripts" / "bluetooth-bridge.resc").is_file():
-        sys.exit("--packages needs the Renode emulator: set PINETIME_RENODE_EMULATOR to a PineTimeEmulator checkout at 97ebb02")
-    return folder
 
 
 def stack_end(firmware):
@@ -169,31 +159,29 @@ def run_in_one_go(emulator, lines, end, seconds, swipe_to_launcher, open_first_a
 
 
 class Monitor:
-    """Renode's monitor on a TCP port, one command at a time."""
+    """The engine's monitor on a TCP port, one command at a time, each answered before its prompt."""
+
+    PROMPT = "(pinetime) "
 
     def __init__(self, port):
         self.socket = socket.create_connection(("127.0.0.1", port))
-        self.socket.settimeout(0.3)
-        self.text = ""
+        self.socket.settimeout(60)
+        self.file = self.socket.makefile("r")
+        self.read_to_prompt()
 
-    def run(self, line, seconds=60):
-        """Sends a command and gives back what it printed, up to the prompt that follows it."""
+    def read_to_prompt(self):
+        text = ""
+        while not text.endswith(self.PROMPT):
+            character = self.file.read(1)
+            if not character:
+                raise EOFError("the emulator's monitor closed")
+            text += character
+        return text[: -len(self.PROMPT)].strip()
+
+    def run(self, line):
+        """Sends a command and gives back what it printed."""
         self.socket.sendall(line.encode() + b"\n")
-        end = time.monotonic() + seconds
-        while time.monotonic() < end:
-            try:
-                self.text += self.socket.recv(65536).decode(errors="replace")
-            except socket.timeout:
-                pass
-            clean = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", self.text)
-            echoed = clean.rfind(line)
-            if echoed >= 0:
-                answer = clean[echoed + len(line):]
-                prompt = re.search(r"\(\w+\)\s*$", answer)
-                if prompt:
-                    self.text = ""
-                    return answer[: prompt.start()]
-        raise TimeoutError(f"the monitor never answered {line}")
+        return self.read_to_prompt()
 
 
 def free_port():
@@ -206,12 +194,14 @@ def run_with_bluetooth(emulator, lines, end, seconds, swipe_to_launcher, package
     """Runs the emulator in real time with its Bluetooth bridge, sends the packages lines, and gives back its readings."""
     folder = Path(tempfile.mkdtemp(prefix="measure-stack-"))
     hci = folder / "hci"
-    lines += ["mach clear", f'$hci_pty="{hci}"', f"include @{emulator}/scripts/bluetooth-bridge.resc", "start"]
     script = folder / "start.resc"
-    script.write_text("\n".join(lines) + "\n")
+    script.write_text("\n".join(lines + ["start"]) + "\n")
     port = free_port()
-    renode = subprocess.Popen(
-        ["nix", "develop", str(emulator), "-c", "renode", "--disable-xwt", "--plain", "-P", str(port), str(script)],
+    # The engine reads its standard input, so it gets one that blocks rather than ends.
+    waiting_input = subprocess.Popen(["sleep", "infinity"], stdout=subprocess.PIPE)
+    engine = subprocess.Popen(
+        ["nix", "develop", str(emulator), "-c", "pinetime-engine", "--port", str(port), "--bluetooth", str(hci), str(script)],
+        stdin=waiting_input.stdout,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         cwd=emulator,
@@ -223,6 +213,7 @@ def run_with_bluetooth(emulator, lines, end, seconds, swipe_to_launcher, package
             time.sleep(0.5)
         else:
             sys.exit("the emulator never opened its Bluetooth bridge")
+        time.sleep(1)
         monitor = Monitor(port)
         if swipe_to_launcher:
             time.sleep(SECONDS_BEFORE_SWIPE)
@@ -231,23 +222,18 @@ def run_with_bluetooth(emulator, lines, end, seconds, swipe_to_launcher, package
             print(f"{line} -> {reply}")
         time.sleep(seconds)
         words = []
-        for line in reading_lines(end)[:3]:
+        for line in reading_lines(end):
             found = re.findall(r"0x[0-9A-Fa-f]+", monitor.run(line))
             words.append(int(found[0], 16) if found else 0)
-        # The stack in one read, sampled every READ_STEP bytes as the other way reads it.
-        length = STACK_TOP - TOP_LEFT_ALONE - end
-        command = f"sysbus ReadBytes {end:#x} {length:#x}"
-        text = monitor.run(command)
-        stack = bytes(int(byte, 16) for byte in re.findall(r"0x([0-9A-Fa-f]{2})\b", text))
-        words += [int.from_bytes(stack[offset:offset + 4], "little") for offset in range(0, len(stack) - 3, READ_STEP)]
         monitor.socket.sendall(b"quit\n")
         return words
     finally:
-        renode.terminate()
+        engine.terminate()
         try:
-            renode.wait(30)
+            engine.wait(30)
         except subprocess.TimeoutExpired:
-            renode.kill()
+            engine.kill()
+        waiting_input.kill()
 
 
 def main():
@@ -262,7 +248,7 @@ def main():
     arguments = parser.parse_args()
 
     firmware = Path(arguments.firmware).resolve()
-    emulator = renode_emulator_folder() if arguments.packages else emulator_folder()
+    emulator = emulator_folder()
     end = stack_end(firmware)
     with tempfile.TemporaryDirectory() as folder:
         lines = start_lines(emulator, firmware, end, arguments.flash, arguments.library, folder)

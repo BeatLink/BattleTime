@@ -113,7 +113,7 @@ document for its part instead.
   saves a report naming the crash and the open app and then takes the watch to its face.
 - [ ] **A debug report saved over the emulator's Bluetooth bridge.** The write that dismisses the
   crash is tested only against the companion's mock; `tools/packages_over_hci.py` could write `01` to
-  the diagnostics characteristic under the pinned Renode checkout.
+  the diagnostics characteristic over `pinetime-engine --bluetooth`.
 - [ ] **Allocation failures inside an open app.** The app host allocates with `Vec` and `Box`, whose
   failures abort, so an app that outgrows the heap after it opened still ends in an out-of-memory
   crash and the crash screen rather than closing with a message. Catching it would need fallible
@@ -632,9 +632,8 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **Clippy fails with warnings denied.** `cargo clippy --release -- -D warnings` stops on two
   `needless_borrow`s in `firmware/src/main.rs` (`with_attribute_server(&server)`) and three in
   `neotime-runtime`.
-- [ ] **Emulator gaps in pinetime-engine.** It models no MPU and has no Bluetooth bridge, so the
-  stack-guard test skips there and `tools/measure_stack.py --packages` needs a PineTimeEmulator
-  checkout at 97ebb02 (Renode). Move both to the Rust engine and drop the pinned checkout.
+- [ ] **No MPU in pinetime-engine.** The engine models no memory protection unit, so the
+  stack-guard test skips there.
 - [ ] **A DFU upload tool in `tools/`** that sends a zip over BlueZ, as wasp-os's `dfu.py` does,
   including type `0x08` for the recovery slot, which no client sends yet.
 - [ ] **Flashing a watch over SWD.** One image with the bootloader and the firmware, a way to fill

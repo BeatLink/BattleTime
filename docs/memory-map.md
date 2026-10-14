@@ -188,16 +188,15 @@ With apps installed and packages commands sent over Bluetooth, as the companion 
 
 ```sh
 cargo run -p neotime-packages --example filesystem_use -- --no-theme --image flash.bin launcher=launcher.ntapp ...
-(ulimit -v 12000000; PINETIME_RENODE_EMULATOR=<that checkout> \
-    python3 -I tools/measure_stack.py firmware/target/thumbv7em-none-eabihf/release/neotime-firmware 3 \
-    --flash flash.bin --library shared.ntlib --packages '{"c":"apps"}' '{"c":"install","id":"alarm"}')
+python3 -I tools/measure_stack.py firmware/target/thumbv7em-none-eabihf/release/neotime-firmware 3 \
+    --flash flash.bin --library shared.ntlib --packages '{"c":"apps"}' '{"c":"install","id":"alarm"}'
 ```
 
 `--packages` starts the emulator with its Bluetooth bridge and sends each line through
 `tools/packages_over_hci.py`, which speaks HCI to the bridge directly, needing neither BlueZ nor
-root. The Rust engine has no bridge yet, so this runs the Renode emulator it replaced, from a
-PineTimeEmulator checkout pinned at 97ebb02 that `PINETIME_RENODE_EMULATOR` names, for example
-`git -C ../PineTimeEmulator worktree add --detach .claude/worktrees/renode 97ebb02`. The bridge's controller now and then holds a packet back until more HCI traffic arrives, so
+root. The bridge is `pinetime-engine --bluetooth`, whose controller sits on a pseudo-terminal. The
+library must be built from the same commit as the firmware, or the firmware faults as it starts and
+never advertises. The bridge's controller now and then holds a packet back until more HCI traffic arrives, so
 the client nudges it with a harmless command and sends a line again when the watch could not read it.
 
 Static RAM by owner, from `tools/measure_memory.py`. The firmware's own share is mostly Embassy's
@@ -302,7 +301,7 @@ The refusals were checked the same way, over the emulator's Bluetooth bridge, wi
 `digital` face and a 36,580 B test image uploaded to `/apps/huge` but not installed:
 
 ```sh
-PINETIME_RENODE_EMULATOR=<that checkout> python3 -I tools/measure_stack.py <firmware> 5 --launcher \
+python3 -I tools/measure_stack.py <firmware> 5 --launcher \
     --flash flash.bin --library shared.ntlib --packages '{"c":"install","id":"huge"}' \
     '{"c":"enable","id":"launcher","on":false}' '{"c":"enable","id":"digital","on":false}' \
     '{"c":"enable","id":"timer","on":false}' '{"c":"enable","id":"timer"}' '{"c":"apps"}'
