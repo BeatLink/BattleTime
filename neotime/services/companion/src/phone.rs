@@ -82,6 +82,7 @@ pub(crate) fn parse_phone_message<'line>(
 /// The longest caller name kept; a longer one is cut short.
 pub const CALLER_BYTES: usize = 32;
 
+/// Numbered as apps read `current_call.state`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CallKind {
     Incoming,
@@ -317,6 +318,7 @@ impl PhoneUpdates {
 pub struct PhoneChanges {
     pub music: bool,
     pub weather: bool,
+    pub call: bool,
 }
 
 #[derive(Debug, Default)]
@@ -329,6 +331,8 @@ struct Music {
 /// The latest music and weather the phone sent, kept on the heap once the phone sends any.
 #[derive(Debug, Default)]
 pub struct PhoneData {
+    /// The latest call, kept after it ends so its caller can still be shown.
+    call: Option<Box<PhoneCall>>,
     music: Option<Box<Music>>,
     weather: Option<Box<Weather>>,
     weather_received_at: Value,
@@ -351,6 +355,11 @@ pub const WEATHER_VALUES: [SystemValue; 7] = [
     SystemValue::WeatherSunset,
 ];
 pub const WEATHER_TEXTS: [SystemValue; 1] = [SystemValue::WeatherLocation];
+pub const CALL_VALUES: [SystemValue; 1] = [SystemValue::CallState];
+pub const CALL_TEXTS: [SystemValue; 1] = [SystemValue::CallCaller];
+
+/// `CallState` with no call under way, which is also its number for an ended call.
+const NO_CALL: Value = 2;
 
 fn number_or_none(value: Option<Value>) -> Value {
     value.unwrap_or(NONE)
@@ -360,6 +369,11 @@ impl PhoneData {
     /// Takes the music and weather out of the updates, at wall clock time `now`, and says what changed.
     pub fn apply(&mut self, updates: &mut PhoneUpdates, now: Value) -> PhoneChanges {
         let mut changes = PhoneChanges::default();
+        // The call stays in the updates, since the shell passes it on to the open app as an event.
+        if let Some(call) = &updates.call {
+            self.call = Some(call.clone());
+            changes.call = true;
+        }
         if let Some(info) = updates.music_info.take() {
             self.music.get_or_insert_default().info = *info;
             changes.music = true;
@@ -380,12 +394,13 @@ impl PhoneData {
         changes
     }
 
-    /// A music or weather value, or `None` for any other value; values the phone never sent are empty.
+    /// A call, music or weather value, or `None` for any other value; values the phone never sent are empty.
     pub fn read(&self, value: SystemValue) -> Option<Value> {
         let music = self.music.as_deref();
         let weather = self.weather.as_deref();
         let seconds = |seconds: Value| seconds.saturating_mul(MILLISECONDS_PER_SECOND);
         Some(match value {
+            SystemValue::CallState => self.call.as_deref().map_or(NO_CALL, |call| call.kind as Value),
             SystemValue::MusicIsPlaying => music.is_some_and(|music| music.is_playing) as Value,
             SystemValue::MusicPosition => music.map_or(0, |music| seconds(music.position_in_seconds)),
             SystemValue::MusicLength => music.map_or(0, |music| seconds(music.info.length_in_seconds)),
@@ -402,11 +417,12 @@ impl PhoneData {
         })
     }
 
-    /// The artist, track or place, or `None` for any other value.
+    /// The caller, artist, track or place, or `None` for any other value.
     pub fn read_text(&self, value: SystemValue) -> Option<&str> {
         let music = self.music.as_deref();
         let weather = self.weather.as_deref();
         Some(match value {
+            SystemValue::CallCaller => self.call.as_deref().map_or("", |call| &call.caller),
             SystemValue::MusicArtist => music.map_or("", |music| &music.info.artist),
             SystemValue::MusicTrack => music.map_or("", |music| &music.info.track),
             SystemValue::WeatherLocation => weather.map_or("", |weather| &weather.location),

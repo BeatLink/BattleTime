@@ -4,7 +4,10 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use neotime_app_host::{AppFailure, AppHost, EventResult, PushedEvent, Rect, Touch, SCREEN_AREA};
-use neotime_companion::{PhoneData, PhoneUpdates, MUSIC_TEXTS, MUSIC_VALUES, WEATHER_TEXTS, WEATHER_VALUES};
+use neotime_companion::{
+    PhoneData, PhoneUpdates, CALL_TEXTS, CALL_VALUES, MUSIC_TEXTS, MUSIC_VALUES, WEATHER_TEXTS,
+    WEATHER_VALUES,
+};
 use neotime_runtime::events::SwipeDirection;
 use neotime_runtime::{
     AppImage, EffectKind, Property, PropertySource, SystemValue, Value, WidgetKind, WidgetTree,
@@ -430,6 +433,9 @@ impl TestWatch {
 
         let now = self.now();
         let changes = self.phone.apply(&mut updates, now);
+        if changes.call {
+            self.copy_phone_values(&CALL_VALUES, &CALL_TEXTS);
+        }
         if changes.music {
             self.copy_phone_values(&MUSIC_VALUES, &MUSIC_TEXTS);
         }

@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -40,6 +41,9 @@ object CallMonitor {
   private var lastState = TelephonyManager.CALL_STATE_IDLE
   private var callNumber: String? = null
   private var pendingIncoming: Runnable? = null
+
+  // The ringer mode before the watch muted a ringing call, put back once the call ends.
+  private var ringerModeBeforeSilence: Int? = null
 
   // Safe to call repeatedly; it registers whatever the granted permissions now allow.
   fun start(context: Context) {
@@ -111,6 +115,7 @@ object CallMonitor {
       }
       TelephonyManager.CALL_STATE_IDLE -> {
         flushIncoming()
+        restoreRinger()
         if (lastState != TelephonyManager.CALL_STATE_IDLE) {
           emit("end")
         }
@@ -118,6 +123,33 @@ object CallMonitor {
       }
     }
     lastState = state
+  }
+
+  // Silences a ringing call; Android lets a notification listener change the ringer mode.
+  fun silenceRinger(context: Context) {
+    val audio = context.getSystemService(AudioManager::class.java) ?: return
+    handler.post {
+      if (lastState != TelephonyManager.CALL_STATE_RINGING || ringerModeBeforeSilence != null) {
+        return@post
+      }
+      val before = audio.ringerMode
+      try {
+        audio.ringerMode = AudioManager.RINGER_MODE_SILENT
+        ringerModeBeforeSilence = before
+      } catch (e: SecurityException) {
+        Log.w(TAG, "The ringer cannot be silenced", e)
+      }
+    }
+  }
+
+  private fun restoreRinger() {
+    val before = ringerModeBeforeSilence ?: return
+    ringerModeBeforeSilence = null
+    try {
+      appContext?.getSystemService(AudioManager::class.java)?.ringerMode = before
+    } catch (e: SecurityException) {
+      Log.w(TAG, "The ringer cannot be put back", e)
+    }
   }
 
   // The number for a ringing call, from the system broadcast; it can arrive before or after the state change.

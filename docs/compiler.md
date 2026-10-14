@@ -186,9 +186,9 @@ to locals, because a loop needs an empty stack.
   tables of up to 64 entries are looked up one entry at a time, and an object can be indexed by a
   choice such as a swipe direction.
 - System values with `.value`: `now`, `battery_percent`, `settings.uses_24_hour_clock` and the rest
-  in `SystemValue`. `current_weather`, `current_music` and `current_navigation` are read as
+  in `SystemValue`. `current_weather`, `current_music`, `current_navigation` and `current_call` are read as
   `current_weather.value.temperature` or `current_weather.temperature.value`. Their text fields,
-  `location`, `artist`, `track` and `instruction`, are text made while running.
+  `location`, `artist`, `track`, `instruction` and `caller`, are text made while running.
 - `Array.from({ length: n }, (_, index) => ...)` with `n` known when compiling, like
   `range(n).map(...)`.
 - A bare `/` between constants whose result is whole, such as `(240 - 40) / 2`.

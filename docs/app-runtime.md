@@ -533,7 +533,7 @@ and `reset_reason`, then the settings' `allows_updates`, `wake_on_touch` and
 count followed by their lists of `name`, `id`, `enabled`, `is_face`, `memory` and `refusal`,
 which share the installed apps' bit, and `app_memory_budget`, which shares the system info bit,
 then the launcher's look and groups, and the settings' `heart_rate_interval`, which shares the
-other settings' bit.
+other settings' bit, then the latest call's `caller` and `state`, which share a bit of their own.
 `read system element` reads a list's elements through `SystemValues::read_element`, or
 `read_element_text` for the names, ids and notification texts, the packages' too. The location, artist, track,
 instruction, firmware version and reset reason are text: the system hands them
@@ -651,7 +651,7 @@ compiler and the runtime both follow it:
 | `battery` | `percent` |
 | `phone` | `is_connected` |
 | `notification` | `id`, `app` (text), `title` (text), `body` (text), `time` |
-| `call` | `kind`, `caller` (text) |
+| `call` | `kind`, `caller` (text); the call's values change with it |
 | `settings_change` | `key` (text) |
 | `music`, `weather`, `navigation`, and the app's open, close, screen on and screen off | none; the new values are system values |
 

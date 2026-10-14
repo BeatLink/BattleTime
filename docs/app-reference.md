@@ -42,6 +42,7 @@ time.
 | `launcher_view` | `Text` | How the wearer wants a group's apps drawn: `list` or `grid`. |
 | `packages` | list | Every installed app and face, on or off, in id order: `.name`, `.id` (for `set_app_enabled`), `.is_face`, `.enabled`, `.memory` (the heap it needs while open, in bytes, as the package manager checks it) and `.refusal`, why turning it the other way would be refused: 0 it would not, 1 it needs more memory than an app can have, 2 the launcher would run out of memory, 3 the launcher stays on, 4 the last watch face stays on, 5 it is the open app. `apps/software` lists them. |
 | `app_memory_budget` | `Int` | The most heap an open app may need, in bytes. |
+| `current_call` | object | The phone's latest call: `caller`, its name or else its number, and `state`, `incoming`, `answered` or `ended` (also before any call). Needs the `phone` permission. |
 | `current_music` | object | The phone's player: `artist`, `track`, `is_playing`, `position` and `length`. Needs the `phone` permission. |
 | `firmware_version` | `Text` | The firmware's version and the commit it was built from, such as `0.1.0+1b19aed`, with a `*` when the build had uncommitted changes. At most 22 characters. |
 | `started_at` | `Instant` | When the watch last started, so `now - started_at` is how long it has run. It moves with the clock when the phone sets the time. |
@@ -149,7 +150,7 @@ A handler run in the background may vibrate and notify without the `wake` permis
 | `battery_low`, `charging_starts`, `charging_stops`, `charging_completes` | `percent` | The battery goes low, or charging starts, stops or completes. |
 | `phone_connects`, `phone_disconnects` | `is_connected` | The phone connects or disconnects. |
 | `notification` | `id`, `app`, `title`, `body`, `time` | A notification arrives from the phone. The watch keeps up to 24 bytes of `app`, 32 of `title` and 120 of `body`. |
-| `call` | `kind`, `caller` | A call is `incoming`, `answered` or `ended`. |
+| `call` | `kind`, `caller` | A call is `incoming`, `answered` or `ended`; `current_call` holds it too. |
 | `music` | none | The phone's player changes; read the new state from `current_music`. |
 | `weather` | none | The phone sends a forecast; read it from `current_weather`, coming days included. |
 | `navigation` | none | The phone's navigation app gives the next step; read it from `current_navigation`. |
@@ -578,7 +579,7 @@ has no place for them yet, so for now the compiler only reports them, in its `Ou
 | `heart_rate` | The `heart_rate` event, the heart rate effects and `set_heart_rate_led`. |
 | `motion` | The motion events, such as `shake`, and `acceleration`. |
 | `notifications` | Reading notifications, the `notification` event and the notification effects. |
-| `phone` | `call_control`, `music_control`, `find_phone`, reading `current_music` and `current_navigation`, and the `call`, `music` and `navigation` events. |
+| `phone` | `call_control`, `music_control`, `find_phone`, reading `current_call`, `current_music` and `current_navigation`, and the `call`, `music` and `navigation` events. |
 | `phone_messages` | `send_to_phone`. |
 | `internet` | `http_request`. |
 | `settings` | `set_setting`, `set_do_not_disturb`, `set_bluetooth` and `set_app_enabled`. |

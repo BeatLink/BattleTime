@@ -7,6 +7,7 @@ use neotime_app_testing::{every_package, package_source};
 const NEEDED: &[(&str, &[&str])] = &[
     ("apps/alarm", &["wake", "background"]),
     ("apps/beacon", &["heart_rate"]),
+    ("apps/call", &["phone"]),
     ("apps/dice", &["motion"]),
     ("apps/heart", &["heart_rate"]),
     ("apps/level", &["motion"]),

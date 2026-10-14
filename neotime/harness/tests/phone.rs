@@ -1,6 +1,6 @@
 //! Companion lines from the phone, read as the watch reads them and passed to apps and faces.
 
-use neotime_app_testing::{SystemValue, TestWatch, Value};
+use neotime_app_testing::{EffectKind, SystemValue, TestWatch, Value};
 use neotime_runtime::SystemValues;
 
 /// Counts the calls of each kind, as the `call` subscription reports them.
@@ -56,6 +56,44 @@ fn calls_from_the_phone_reach_the_call_subscription() {
     assert!(watch.shows_text("Answered 1"));
     assert!(watch.shows_text("Ended 1"));
     assert!(watch.failures().is_empty(), "{:?}", watch.failures());
+}
+
+#[test]
+fn the_call_app_sends_its_answers_to_the_phone_and_leaves_when_the_call_ends() {
+    let mut watch = TestWatch::open_app("call").unwrap();
+    watch
+        .receive_from_phone(r#"GB({"t":"call","cmd":"incoming","number":"+15550100"})"#)
+        .unwrap();
+    assert!(watch.shows_text("+15550100"), "{:?}", watch.visible_texts());
+
+    watch.tap_text("Mute");
+    watch.tap_text("Accept");
+    assert_eq!(
+        watch.phone_lines(),
+        [
+            "{\"t\":\"call\",\"n\":\"IGNORE\"}\n",
+            "{\"t\":\"call\",\"n\":\"ACCEPT\"}\n"
+        ]
+    );
+    assert!(watch.effects_of(EffectKind::Back).is_empty());
+
+    watch
+        .receive_from_phone(r#"GB({"t":"call","cmd":"end","number":"+15550100"})"#)
+        .unwrap();
+    assert_eq!(watch.effects_of(EffectKind::Back).len(), 1);
+    assert!(watch.shows_text("No call"));
+    assert!(watch.failures().is_empty(), "{:?}", watch.failures());
+}
+
+#[test]
+fn rejecting_a_call_tells_the_phone_and_leaves() {
+    let mut watch = TestWatch::open_app("call").unwrap();
+    watch
+        .receive_from_phone(r#"GB({"t":"call","cmd":"incoming","name":"Sam"})"#)
+        .unwrap();
+    watch.tap_text("Reject");
+    assert_eq!(watch.phone_lines(), ["{\"t\":\"call\",\"n\":\"REJECT\"}\n"]);
+    assert_eq!(watch.effects_of(EffectKind::Back).len(), 1);
 }
 
 #[test]

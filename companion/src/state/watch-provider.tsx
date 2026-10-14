@@ -37,6 +37,7 @@ import { readStatus, ReplyRouter, type RequestChannel } from '@/protocol/request
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
 import { noteFileAccess, type NoteFileAccess } from '@/services/note-file';
 import { phoneBridge, type PhoneEvent } from '@/services/phone';
+import { controlCall } from '@/services/phone/call-control';
 import {
   buttonName,
   handleRemoteTap,
@@ -230,11 +231,7 @@ export function WatchProvider({ children }: { children: ReactNode }) {
         break;
       case 'call':
         if ('n' in message) {
-          if (message.n === 'ACCEPT') {
-            void phoneBridge.answerCall().catch(() => {});
-          } else if (message.n === 'REJECT') {
-            void phoneBridge.rejectCall().catch(() => {});
-          }
+          void controlCall(phoneBridge, message.n).catch(() => {});
         }
         break;
       case 'http': {

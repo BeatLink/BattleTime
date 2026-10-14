@@ -190,7 +190,8 @@ impl<'text> PushedEvent<'text> {
                 Values::Brightness,
                 Values::IsBluetoothEnabled,
             ]),
-            Motion(_) | Acceleration { .. } | Call { .. } => 0,
+            Call { .. } => bits(&[Values::CallState]),
+            Motion(_) | Acceleration { .. } => 0,
         }
     }
 }

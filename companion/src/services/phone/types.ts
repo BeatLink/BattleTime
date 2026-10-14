@@ -38,6 +38,8 @@ export interface PhoneBridge {
   subscribe(listener: (event: PhoneEvent) => void): () => void;
   answerCall(): Promise<void>;
   rejectCall(): Promise<void>;
+  /** Silences the ringer for the ringing call, which keeps ringing; the ringer comes back once the call ends. */
+  silenceCall(): Promise<void>;
   mediaCommand(command: MediaCommand): Promise<void>;
   /** Starts a foreground service so the Bluetooth link survives the app going to the background. */
   startKeepAlive(watchName: string): Promise<void>;

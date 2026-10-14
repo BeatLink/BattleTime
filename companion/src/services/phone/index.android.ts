@@ -14,6 +14,7 @@ interface NativePhoneBridge {
   isDoNotDisturb(): Promise<boolean>;
   answerCall(): Promise<void>;
   rejectCall(): Promise<void>;
+  silenceCall(): Promise<void>;
   mediaCommand(command: MediaCommand): Promise<void>;
   startKeepAlive(watchName: string): Promise<void>;
   stopKeepAlive(): Promise<void>;
@@ -39,6 +40,7 @@ function nativeBridge(native: NativePhoneBridge): PhoneBridge {
     },
     answerCall: () => native.answerCall(),
     rejectCall: () => native.rejectCall(),
+    silenceCall: () => native.silenceCall(),
     mediaCommand: (command) => native.mediaCommand(command),
     startKeepAlive: (watchName) => native.startKeepAlive(watchName),
     stopKeepAlive: () => native.stopKeepAlive(),

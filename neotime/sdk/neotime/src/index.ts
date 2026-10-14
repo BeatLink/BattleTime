@@ -293,6 +293,16 @@ export interface CurrentMusic {
 /** What the phone's player last reported, kept by the system; needs the `phone` permission. */
 export const current_music = signal<CurrentMusic>({ artist: "", track: "", is_playing: false, position: 0, length: 0 });
 
+export interface CurrentCall {
+  /** The caller's name, or their number when the phone has no name. */
+  caller: string;
+  /** `ended` also when no call has come since the watch started. */
+  state: "incoming" | "answered" | "ended";
+}
+
+/** The phone's latest call, kept by the system; needs the `phone` permission. */
+export const current_call = signal<CurrentCall>({ caller: "", state: "ended" });
+
 export interface CurrentNavigation {
   turn: NavigationTurn;
   instruction: string;

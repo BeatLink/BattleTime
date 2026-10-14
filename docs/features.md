@@ -95,8 +95,10 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   rings the watch to find it, a notification is kept without a buzz or a wake.
 - **Music, weather and calls from the phone.** Gadgetbridge's `musicinfo`, `musicstate` and
   `weather` messages fill the music app, the weather app and the faces that show the weather; the
-  music app's buttons control the phone's player. An incoming call buzzes and lights the screen,
-  unless do not disturb is on, and reaches apps that listen for calls.
+  music app's buttons control the phone's player. An incoming call opens the [call app](apps/call.md)
+  and rings until it is answered, rejected, muted or left, unless do not disturb is on; Accept,
+  Reject and Mute go back to the phone. Without the call app it buzzes once and lights the screen.
+  Every call also reaches apps that listen for calls.
 - **Find the watch from the phone.** Gadgetbridge's find-device rings the watch for up to a
   minute, even in do not disturb, until the phone stops it or the wearer touches the watch or
   presses the button. The phone can also buzz the watch one to five times, and ask for its battery

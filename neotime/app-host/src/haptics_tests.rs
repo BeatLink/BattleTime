@@ -156,13 +156,24 @@ fn the_phones_buzzes_are_silenced_by_do_not_disturb() {
 }
 
 #[test]
-fn only_an_incoming_call_buzzes() {
+fn an_incoming_call_rings_outside_do_not_disturb() {
     use neotime_companion::CallKind;
     assert_eq!(
-        call_vibration(CallKind::Incoming, false),
-        Some(Vibration::Pattern(VibrationPattern::Notification))
+        call_vibration(CallKind::Incoming, false, false),
+        Some(Vibration::CallRing)
     );
-    assert_eq!(call_vibration(CallKind::Incoming, true), None);
-    assert_eq!(call_vibration(CallKind::Answered, false), None);
-    assert_eq!(call_vibration(CallKind::Ended, false), None);
+    assert_eq!(call_vibration(CallKind::Incoming, true, false), None);
+    assert!(!Vibration::CallRing.sounds_in_do_not_disturb());
+}
+
+#[test]
+fn an_answered_or_ended_call_stops_only_its_own_ring() {
+    use neotime_companion::CallKind;
+    assert_eq!(
+        call_vibration(CallKind::Answered, false, true),
+        Some(Vibration::Stop)
+    );
+    assert_eq!(call_vibration(CallKind::Ended, true, true), Some(Vibration::Stop));
+    assert_eq!(call_vibration(CallKind::Answered, false, false), None);
+    assert_eq!(call_vibration(CallKind::Ended, false, false), None);
 }

@@ -94,7 +94,7 @@ pub fn runs_in_background(kind: SubscriptionKind, only_while_open: bool) -> bool
     !only_while_open && !matches!(kind, Open | Close | ScreenOn | ScreenOff | Derive)
 }
 
-/// The permission reading a system value needs: the phone's player and navigation need `phone`, the kept notifications `notifications`.
+/// The permission reading a system value needs: the phone's call, player and navigation need `phone`, the kept notifications `notifications`.
 pub fn system_value_permission(value: SystemValue) -> Option<Permission> {
     use SystemValue::*;
     match value {
@@ -106,7 +106,9 @@ pub fn system_value_permission(value: SystemValue) -> Option<Permission> {
         | NavigationTurn
         | NavigationInstruction
         | NavigationDistance
-        | NavigationProgressPercent => Some(Permission::Phone),
+        | NavigationProgressPercent
+        | CallCaller
+        | CallState => Some(Permission::Phone),
         NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
         | NotificationTime => Some(Permission::Notifications),
         _ => None,

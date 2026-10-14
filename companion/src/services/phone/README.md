@@ -30,7 +30,9 @@ media, and lets the watch act on them. In the desktop app the computer stands in
   there is none; volume goes to the music stream, or to the session on a cast device.
 - **Calls.** After `requestCallPermissions`, call state arrives as `call` events: `incoming`,
   `outgoing`, `start` (an incoming call answered) and `end`. The number needs the call log
-  permission and the name needs contacts. `answerCall` needs Android 8 and `rejectCall` Android 9.
+  permission and the name needs contacts. `answerCall` needs Android 8 and `rejectCall` Android 9. `silenceCall`, the watch's Mute, sets
+  the ringer to silent until the call ends and then puts it back; Android allows that because the
+  app is a notification listener.
 - **Do Not Disturb.** `isDoNotDisturb` is true when the interruption filter is anything but "all".
   Nothing is filtered natively; the app decides what to forward.
 - **Keep-alive.** `startKeepAlive` runs a foreground service of type `connectedDevice` with an

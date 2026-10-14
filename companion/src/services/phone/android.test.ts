@@ -27,6 +27,7 @@ function fakeNative() {
     isDoNotDisturb: jest.fn(async () => true),
     answerCall: jest.fn(async () => {}),
     rejectCall: jest.fn(async () => {}),
+    silenceCall: jest.fn(async () => {}),
     mediaCommand: jest.fn(async (_command: string) => {}),
     startKeepAlive: jest.fn(async (_name: string) => {}),
     stopKeepAlive: jest.fn(async () => {}),
@@ -62,12 +63,14 @@ describe('Android phone bridge', () => {
     await bridge.openNotificationAccessSettings();
     await bridge.answerCall();
     await bridge.rejectCall();
+    await bridge.silenceCall();
     await bridge.mediaCommand('next');
     await bridge.startKeepAlive('PineTime');
     await bridge.stopKeepAlive();
     expect(native.openNotificationAccessSettings).toHaveBeenCalled();
     expect(native.answerCall).toHaveBeenCalled();
     expect(native.rejectCall).toHaveBeenCalled();
+    expect(native.silenceCall).toHaveBeenCalled();
     expect(native.mediaCommand).toHaveBeenCalledWith('next');
     expect(native.startKeepAlive).toHaveBeenCalledWith('PineTime');
     expect(native.stopKeepAlive).toHaveBeenCalled();

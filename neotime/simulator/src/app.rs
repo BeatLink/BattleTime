@@ -242,6 +242,8 @@ impl SystemValues for SimulatedSystem {
             StepHourCount => (STEP_HISTORY_DAYS * HOURS_PER_DAY) as Value,
             StartedAt => self.started_at,
             FreeStorageKilobytes => SIMULATED_FREE_STORAGE_KILOBYTES,
+            // No call has come.
+            CallState => 2,
             _ => 0,
         }
     }

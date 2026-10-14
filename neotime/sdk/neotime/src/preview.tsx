@@ -5,6 +5,7 @@ import { batch, effect, signal } from "@preact/signals";
 import { clock, emit, listen_for_effects, now_milliseconds, start_clock, type Effect } from "./host.ts";
 import {
   current_screen,
+  current_call,
   current_music,
   current_navigation,
   current_weather,
@@ -429,6 +430,10 @@ export function deliver(kind: Subscription["kind"], event: object, filter?: (sub
   if (kind === "notification") {
     const notification = event as Omit<KeptNotification, "time"> & { time?: Instant };
     keep_notification({ ...notification, time: notification.time ?? now_milliseconds.peek() });
+  }
+  if (kind === "call") {
+    const call = event as { kind: "incoming" | "answered" | "ended"; caller: string };
+    current_call.value = { caller: call.caller, state: call.kind };
   }
   if (kind === "music") current_music.value = { ...(event as typeof current_music.value) };
   if (kind === "navigation") current_navigation.value = { ...(event as typeof current_navigation.value) };

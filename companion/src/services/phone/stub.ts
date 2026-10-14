@@ -15,6 +15,7 @@ export const unavailablePhoneBridge: PhoneBridge = {
   subscribe: () => () => {},
   answerCall: unsupported,
   rejectCall: unsupported,
+  silenceCall: unsupported,
   mediaCommand: unsupported,
   startKeepAlive: unsupported,
   stopKeepAlive: async () => {},

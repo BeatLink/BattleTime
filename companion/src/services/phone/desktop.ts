@@ -243,6 +243,7 @@ export function createDesktopPhoneBridge(device: DesktopDeviceBridge): PhoneBrid
     },
     answerCall: noCalls,
     rejectCall: noCalls,
+    silenceCall: noCalls,
     async mediaCommand(command) {
       if (!tracker.currentPlayer) {
         throw new Error('No media player is running.');

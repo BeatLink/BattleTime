@@ -135,6 +135,10 @@ pub enum SystemValue {
     LauncherGroupSize,
     /// 0 off, 1 continuous, then every 30 seconds, minute, 5, 10 or 30 minutes; see `neotime_settings::heart_rate_interval`.
     HeartRateInterval,
+    /// Text: the latest call's caller, by name or else by number.
+    CallCaller,
+    /// The latest call's state: 0 ringing, 1 answered, 2 ended or none.
+    CallState,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -146,9 +150,11 @@ const INSTALLED_APPS_BIT: u32 = 21;
 const SETTINGS_BIT: u32 = 22;
 /// The values a system info screen shows share one bit, as they seldom change.
 const SYSTEM_INFO_BIT: u32 = 23;
+/// The call values share one bit, as the phone sends them together.
+const CALL_BIT: u32 = 24;
 
 impl SystemValue {
-    pub const COUNT: usize = 82;
+    pub const COUNT: usize = 84;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -235,6 +241,8 @@ impl SystemValue {
             79 => LauncherGroupFirst,
             80 => LauncherGroupSize,
             81 => HeartRateInterval,
+            82 => CallCaller,
+            83 => CallState,
             _ => return None,
         })
     }
@@ -273,6 +281,7 @@ impl SystemValue {
             FirmwareVersion | StartedAt | FreeStorageKilobytes | ResetReason | AppMemoryBudget => {
                 SYSTEM_INFO_BIT
             }
+            CallCaller | CallState => CALL_BIT,
             other => other as u32,
         };
         1 << group
@@ -328,6 +337,7 @@ impl SystemValue {
                 | PackageName
                 | PackageId
                 | LauncherGroupName
+                | CallCaller
         )
     }
 }

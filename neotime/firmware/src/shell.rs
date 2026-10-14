@@ -17,7 +17,8 @@
 //! that app closes, or as often as the heart rate interval setting says. Plugging the charger in or out, or the charge going low,
 //! lights the screen on the battery app, which goes back to what was open when the screen sleeps
 //! or the wearer goes back. The phone's music and weather are kept for apps to read, an incoming
-//! call buzzes and lights the screen, and the phone can ring the watch until the wearer touches it.
+//! call opens the call app and rings until the call is answered, rejected, muted or left, and the
+//! phone can ring the watch until the wearer touches it.
 //! While an update runs, the status page holds the screen lit; once the update ends or
 //! fails, the next touch or press puts the shell back.
 
@@ -220,6 +221,8 @@ struct WatchSystem {
     files: &'static storage::Files,
     /// Counted once after an app opens and first reads it, since counting walks the file system.
     free_storage_kilobytes: Cell<Option<Value>>,
+    /// Until when an incoming call rings, unless it is answered, ended or controlled from the watch first.
+    call_ringing_until: Option<Instant>,
     /// Whether an app read the free storage before it was counted, so the loop counts it.
     free_storage_wanted: Cell<bool>,
 }
@@ -377,6 +380,20 @@ impl WatchSystem {
     }
 }
 
+impl WatchSystem {
+    fn is_ringing_for_call(&self) -> bool {
+        self.call_ringing_until
+            .is_some_and(|until| Instant::now() < until)
+    }
+
+    /// Forgets the call ring, and says whether it was still playing.
+    fn stop_call_ring(&mut self) -> bool {
+        let was_ringing = self.is_ringing_for_call();
+        self.call_ringing_until = None;
+        was_ringing
+    }
+}
+
 impl System for WatchSystem {
     fn carry_out(&mut self, effect: &AppEffect) {
         if self
@@ -396,6 +413,10 @@ impl System for WatchSystem {
             return;
         }
         if let Some(line) = app_phone::line_for_effect(effect.kind, effect.number(0)) {
+            // Answering, rejecting or muting the call silences the watch too.
+            if effect.kind == EffectKind::CallControl && self.stop_call_ring() {
+                vibration::request(Some(Vibration::Stop));
+            }
             settings::send_reply(&line);
             return;
         }
@@ -514,6 +535,7 @@ impl Shell {
         vibration::request(Some(Vibration::Stop));
         heart_rate::stop();
         self.finding_until = None;
+        self.system.call_ringing_until = None;
         self.firmware_page = None;
         self.system.keep_screen_on = false;
         self.app_set_brightness = false;
@@ -1001,8 +1023,8 @@ impl Shell {
                 }
                 self.system.notifications.add(notification, now);
                 self.system.notifications_changed = true;
-                // A ringing find goes on, so the notification neither buzzes over it nor opens an app.
-                if !self.is_finding() {
+                // A ringing find or call goes on, so the notification neither buzzes over it nor opens an app.
+                if !self.is_finding() && !self.system.is_ringing_for_call() {
                     self.wake_for_notification();
                     vibration::request(haptics::notification_vibration(is_do_not_disturb()));
                 }
@@ -1046,11 +1068,7 @@ impl Shell {
             vibration::request(haptics::phone_buzzes_vibration(count, is_do_not_disturb));
         }
         if let Some(call) = &updates.call {
-            let buzz = haptics::call_vibration(call.kind, is_do_not_disturb);
-            if buzz.is_some() {
-                vibration::request(buzz);
-                self.system.screen_request = Some(true);
-            }
+            self.take_call(call.kind, is_do_not_disturb);
         }
         if let Some(is_on) = updates.find {
             vibration::request(Some(haptics::find_vibration(is_on)));
@@ -1345,6 +1363,50 @@ impl Shell {
     }
 }
 
+// ============================================================================
+// The call screen
+// ============================================================================
+
+/// The app that opens for an incoming call, offering to answer, reject or mute it.
+const CALL_APP_ID: &str = "call";
+
+impl Shell {
+    /// Opens the call app and rings for an incoming call, or stops the ring once the call is answered or ended.
+    ///
+    /// Without the call app an incoming call only buzzes once and lights the screen, since nothing on it could stop a ring.
+    fn take_call(&mut self, kind: neotime_companion::CallKind, is_do_not_disturb: bool) {
+        let is_ringing = self.system.stop_call_ring();
+        let Some(vibration) = haptics::call_vibration(kind, is_do_not_disturb, is_ringing) else {
+            return;
+        };
+        if vibration == Vibration::CallRing {
+            self.system.screen_request = Some(true);
+            if !self.show_call_screen() {
+                vibration::request(haptics::notification_vibration(is_do_not_disturb));
+                return;
+            }
+            self.system.call_ringing_until = Some(Instant::now() + vibration::CALL_RING_DURATION);
+        }
+        vibration::request(Some(vibration));
+    }
+
+    /// Opens the call app over what is open, so going back returns there; false when it is not installed or a firmware page is up.
+    fn show_call_screen(&mut self) -> bool {
+        // The crash and memory pages stay up until the wearer answers them.
+        if self.firmware_page.is_some() {
+            return false;
+        }
+        let Some(place) = self.system.installed.place_of(CALL_APP_ID) else {
+            return false;
+        };
+        let call_app = Showing::App(place);
+        if self.showing != call_app {
+            self.go_forward(call_app, Transition::Up, false);
+        }
+        self.showing == call_app && self.host.is_some()
+    }
+}
+
 /// Waits out what is left of the panel's gap between going to sleep and waking, which is rarely any time at all.
 fn wait_until_panel_can_switch(switched_at: Instant) {
     let can_switch_at = switched_at + Duration::from_millis(SLEEP_SWITCH_GAP_IN_MILLISECONDS);
@@ -1441,6 +1503,7 @@ pub async fn run_shell(
             files,
             free_storage_kilobytes: Cell::new(None),
             free_storage_wanted: Cell::new(false),
+            call_ringing_until: None,
         },
         theme,
         app_set_brightness: false,

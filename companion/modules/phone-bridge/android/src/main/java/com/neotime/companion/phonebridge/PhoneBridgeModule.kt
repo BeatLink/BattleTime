@@ -97,6 +97,10 @@ class PhoneBridgeModule : Module() {
       rejectCall()
     }
 
+    AsyncFunction("silenceCall") {
+      CallMonitor.silenceRinger(context)
+    }
+
     AsyncFunction("mediaCommand") { command: String ->
       MediaTracker.command(context, command)
     }

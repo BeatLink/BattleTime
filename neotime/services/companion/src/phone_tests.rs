@@ -284,6 +284,32 @@ fn nothing_received_reads_as_empty() {
 }
 
 #[test]
+fn the_latest_call_is_kept_for_apps_and_left_for_the_shell() {
+    let mut data = PhoneData::default();
+    assert_eq!(data.read(SystemValue::CallState), Some(2));
+    assert_eq!(data.read_text(SystemValue::CallCaller), Some(""));
+
+    let mut updates = PhoneUpdates::default();
+    updates.record(parsed(r#"{"t":"call","cmd":"incoming","name":"Sam"}"#));
+    let changes = data.apply(&mut updates, 1_000);
+    assert!(changes.call);
+    assert!(updates.call.is_some());
+    assert_eq!(data.read(SystemValue::CallState), Some(0));
+    assert_eq!(data.read_text(SystemValue::CallCaller), Some("Sam"));
+
+    let mut updates = PhoneUpdates::default();
+    updates.record(parsed(r#"{"t":"call","cmd":"start","name":"Sam"}"#));
+    data.apply(&mut updates, 2_000);
+    assert_eq!(data.read(SystemValue::CallState), Some(1));
+
+    let mut updates = PhoneUpdates::default();
+    updates.record(parsed(r#"{"t":"call","cmd":"end","name":"Sam"}"#));
+    data.apply(&mut updates, 3_000);
+    assert_eq!(data.read(SystemValue::CallState), Some(2));
+    assert_eq!(data.read_text(SystemValue::CallCaller), Some("Sam"));
+}
+
+#[test]
 fn music_info_and_state_combine() {
     let mut data = PhoneData::default();
     let mut updates = PhoneUpdates::default();
@@ -298,7 +324,8 @@ fn music_info_and_state_combine() {
         changes,
         PhoneChanges {
             music: true,
-            weather: false
+            weather: false,
+            call: false,
         }
     );
     assert!(updates.is_empty());
@@ -337,7 +364,8 @@ fn weather_is_kept_with_when_it_came() {
         changes,
         PhoneChanges {
             music: false,
-            weather: true
+            weather: true,
+            call: false,
         }
     );
     assert_eq!(data.read(SystemValue::WeatherTemperature), Some(18));

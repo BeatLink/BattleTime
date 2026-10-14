@@ -55,16 +55,22 @@ impl VibrationPattern {
 /// What the motor is asked to do; a new vibration cuts the one playing short.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Vibration {
-    Buzz { milliseconds: u16 },
+    Buzz {
+        milliseconds: u16,
+    },
     Pattern(VibrationPattern),
-    Buzzes { count: u8 },
+    Buzzes {
+        count: u8,
+    },
+    /// Rings for an incoming call until it is stopped or two minutes pass.
+    CallRing,
     Stop,
 }
 
 impl Vibration {
     pub fn sounds_in_do_not_disturb(self) -> bool {
         match self {
-            Vibration::Buzz { .. } | Vibration::Buzzes { .. } => false,
+            Vibration::Buzz { .. } | Vibration::Buzzes { .. } | Vibration::CallRing => false,
             Vibration::Pattern(pattern) => pattern.sounds_in_do_not_disturb(),
             Vibration::Stop => true,
         }
@@ -146,11 +152,17 @@ pub fn phone_buzzes_vibration(count: u8, is_do_not_disturb: bool) -> Option<Vibr
     Vibration::Buzzes { count }.unless_silenced(is_do_not_disturb)
 }
 
-/// The buzz for an incoming call, nothing for one answered or ended, and `None` in do not disturb.
-pub fn call_vibration(kind: neotime_companion::CallKind, is_do_not_disturb: bool) -> Option<Vibration> {
+/// The ring for an incoming call, or `None` in do not disturb; an answered or ended call stops the ring if it still plays.
+pub fn call_vibration(
+    kind: neotime_companion::CallKind,
+    is_do_not_disturb: bool,
+    is_ringing: bool,
+) -> Option<Vibration> {
     match kind {
-        neotime_companion::CallKind::Incoming => notification_vibration(is_do_not_disturb),
-        neotime_companion::CallKind::Answered | neotime_companion::CallKind::Ended => None,
+        neotime_companion::CallKind::Incoming => Vibration::CallRing.unless_silenced(is_do_not_disturb),
+        neotime_companion::CallKind::Answered | neotime_companion::CallKind::Ended => {
+            is_ringing.then_some(Vibration::Stop)
+        }
     }
 }
 

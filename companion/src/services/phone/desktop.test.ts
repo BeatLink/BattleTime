@@ -243,6 +243,7 @@ describe('createDesktopPhoneBridge', () => {
     await expect(bridge.requestCallPermissions()).resolves.toBe(false);
     await expect(bridge.answerCall()).rejects.toThrow('no calls');
     await expect(bridge.rejectCall()).rejects.toThrow('no calls');
+    await expect(bridge.silenceCall()).rejects.toThrow('no calls');
     await expect(bridge.openNotificationAccessSettings()).rejects.toThrow();
     await expect(bridge.startKeepAlive('NeoTime')).resolves.toBeUndefined();
     await expect(bridge.stopKeepAlive()).resolves.toBeUndefined();

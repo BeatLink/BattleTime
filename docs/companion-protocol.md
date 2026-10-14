@@ -131,7 +131,7 @@ the watch answers with an `error` reply. Text is unescaped and cut at a whole ch
 
 | `t` | Fields the watch reads | What it does |
 |---|---|---|
-| `call` | `cmd`, `name`, `number` | Runs the `call` subscriptions with the caller's `name`, or the `number` without one, up to 32 bytes. `incoming` is an incoming call, which buzzes and turns the screen on unless do not disturb is on; `accept`, `start` and `outgoing` are `answered`; `reject` and `end` are `ended`. Another `cmd` is ignored. |
+| `call` | `cmd`, `name`, `number` | Fills `current_call` and runs the `call` subscriptions with the caller's `name`, or the `number` without one, up to 32 bytes. `incoming` is an incoming call, which opens the `call` app and rings until the call is answered, ended or controlled from the watch, unless do not disturb is on; without that app it buzzes once and turns the screen on. `accept`, `start` and `outgoing` are `answered`; `reject` and `end` are `ended`, and both stop the ring. Another `cmd` is ignored. |
 | `musicinfo` | `artist`, `track`, `dur` (seconds) | Fills `current_music`'s artist (32 bytes), track (64 bytes) and length, and runs the `music` subscriptions. `album` is ignored. |
 | `musicstate` | `state`, `position` (seconds) | `play` is playing and anything else is not; `position`, when given, is how far into the track. Runs the `music` subscriptions. |
 | `weather` | `temp`, `hi`, `lo` (kelvin), `code`, `loc` | Fills `current_weather`: the temperatures in Celsius, the sky from the OpenWeatherMap `code`, the place (32 bytes) and `received_at`, the watch's time when it came. Runs the `weather` subscriptions. The watch has no sunrise, sunset or coming days from it. `hum`, `txt`, `wind` and the rest are ignored. |
@@ -144,7 +144,8 @@ shell takes it, so a burst of messages leaves only the newest of each kind.
 
 Watch to phone, sent as apps ask: `music` with `n` (`play`, `pause`, `next`, `previous`,
 `volumeup`, `volumedown`) for `music_control`; `call` with `n` (`ACCEPT`, `REJECT`, `IGNORE`) for
-`call_control`'s `answer`, `reject` and `mute`; `findPhone` with `n`, `true` or `false`, for
+`call_control`'s `answer`, `reject` and `mute`, which also stop the watch ringing (the phone
+silences its ringer for `IGNORE` and leaves the call ringing); `findPhone` with `n`, `true` or `false`, for
 `find_phone`; and `app` for an app's `send_to_phone(channel, data)`:
 `{"t":"app","ch":"<channel>","d":{"<key>":<number>,...}}`. The channel and keys are 1 to 32 letters,
 digits, `_` or `-`, written out in the app; `d` holds up to 4 whole numbers, in the order the app

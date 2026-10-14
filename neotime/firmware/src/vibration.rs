@@ -16,6 +16,19 @@ const RING_REPEATS: usize = 60;
 /// How long a ring lasts when nothing stops it.
 pub const RING_DURATION: embassy_time::Duration = embassy_time::Duration::from_secs(RING_REPEATS as u64);
 
+/// An incoming call rings this pattern again and again for up to two minutes.
+const CALL_RING: &[Step] = &[
+    Step::buzz(500),
+    Step::pause(250),
+    Step::buzz(500),
+    Step::pause(1250),
+];
+const CALL_RING_REPEATS: usize = 48;
+
+/// How long a call ring lasts when nothing stops it.
+pub const CALL_RING_DURATION: embassy_time::Duration =
+    embassy_time::Duration::from_millis(2500 * CALL_RING_REPEATS as u64);
+
 /// One of the phone's `vibrate` buzzes, with the pause after it.
 const PHONE_BUZZ: &[Step] = &[Step::buzz(150), Step::pause(150)];
 
@@ -62,6 +75,11 @@ pub async fn run_vibrator(motor_pin: Output<'static>) {
                 Vibration::Buzzes { count } => {
                     for _ in 0..count {
                         let _ = vibrator.play(PHONE_BUZZ, &mut Delay).await;
+                    }
+                }
+                Vibration::CallRing => {
+                    for _ in 0..CALL_RING_REPEATS {
+                        let _ = vibrator.play(CALL_RING, &mut Delay).await;
                     }
                 }
                 Vibration::Pattern(pattern) => {

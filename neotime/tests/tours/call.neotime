@@ -1,0 +1,20 @@
+# Every screen of the call app, for docs/apps/call.md: ringing, muted, answered, then the call ending.
+open app call
+expect text "No call"
+phone "GB({\"t\":\"call\",\"cmd\":\"incoming\",\"name\":\"Sam Example\",\"number\":\"+15550100\"})"
+expect text "Incoming call from"
+expect text "Sam Example"
+snapshot ringing
+tap "Mute"                  # silence the phone and the watch
+expect effect call-control mute
+expect text "Muted"
+snapshot muted
+tap "Accept"                # answer it
+expect effect call-control answer
+phone "GB({\"t\":\"call\",\"cmd\":\"start\",\"name\":\"Sam Example\",\"number\":\"+15550100\"})"
+expect text "On call with"
+snapshot answered
+tap "End call"              # hang up, which leaves the app
+expect effect call-control reject
+expect effect back
+expect no failures
