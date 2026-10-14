@@ -198,6 +198,8 @@ pub enum SystemValue {
     FolderEntrySize = 117,
     /// List: whether each entry is a folder.
     FolderEntryIsFolder = 118,
+    /// List: the colour to draw each kept notification's icon in, a theme or fixed colour picked from its app's name.
+    NotificationColor = 119,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -218,7 +220,7 @@ const SHAKE_SPEED_BIT: u32 = 25;
 const FOLDER_BIT: u32 = 26;
 
 impl SystemValue {
-    pub const COUNT: usize = 119;
+    pub const COUNT: usize = 120;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -339,6 +341,7 @@ impl SystemValue {
             116 => FolderEntryName,
             117 => FolderEntrySize,
             118 => FolderEntryIsFolder,
+            119 => NotificationColor,
             _ => return None,
         })
     }
@@ -374,7 +377,7 @@ impl SystemValue {
             | ShakeThreshold | SleepMode | WatchFace | WatchFaceName => SETTINGS_BIT,
             ShakeSpeed => SHAKE_SPEED_BIT,
             NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
-            | NotificationTime | NotificationIcon => UnreadNotifications as u32,
+            | NotificationTime | NotificationIcon | NotificationColor => UnreadNotifications as u32,
             StepTrip | StepDayCount | StepDayTotal | StepHourCount | StepHourSteps => StepsToday as u32,
             FirmwareVersion | StartedAt | FreeStorageKilobytes | ResetReason | AppMemoryBudget
             | FirmwareBuildDate | BootloaderVersion | BootloaderBuildDate | BootloaderCrc
@@ -407,6 +410,7 @@ impl SystemValue {
                 | NotificationBody
                 | NotificationTime
                 | NotificationIcon
+                | NotificationColor
                 | StepDayTotal
                 | StepHourSteps
                 | PackageName

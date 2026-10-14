@@ -4,9 +4,9 @@ use alloc::boxed::Box;
 
 use neotime_companion::{PhoneNotification, NOTIFICATION_TITLE_BYTES};
 use neotime_runtime::resources::{library_icon, ImageReference};
-use neotime_runtime::{SystemValue, Value, NONE};
+use neotime_runtime::{ColorValue, SystemValue, ThemeColor, Value, NONE, PRESET_THEMES};
 
-use crate::{NotificationList, MOST_KEPT};
+use crate::{NotificationList, CALENDAR_PURPLE, MESSAGE_BLUE, MOST_KEPT};
 
 // ============================================================================
 // Helpers
@@ -170,12 +170,20 @@ fn reading_past_the_end_or_another_value_gives_nothing() {
 // ============================================================================
 
 fn icon_for(app: &str, body: &str) -> Value {
+    read_for(SystemValue::NotificationIcon, app, body)
+}
+
+fn color_for(app: &str, body: &str) -> Value {
+    read_for(SystemValue::NotificationColor, app, body)
+}
+
+fn read_for(value: SystemValue, app: &str, body: &str) -> Value {
     let mut notification = PhoneNotification::default();
     let _ = notification.source.push_str(app);
     let _ = notification.body.push_str(body);
     let mut list = NotificationList::new();
     list.add(Box::new(notification), 0);
-    list.read_element(SystemValue::NotificationIcon, 0)
+    list.read_element(value, 0)
 }
 
 fn library(icon: u16) -> Value {
@@ -210,4 +218,80 @@ fn there_is_no_icon_past_the_end_of_the_list() {
         NotificationList::new().read_element(SystemValue::NotificationIcon, 0),
         NONE
     );
+}
+
+// ============================================================================
+// Colours
+// ============================================================================
+
+#[test]
+fn each_kind_of_notification_has_its_own_colour() {
+    let theme = |color| ColorValue::Theme(color);
+    let kinds = [
+        ("Missed call", "", theme(ThemeColor::Danger)),
+        ("Phone", "Missed call", theme(ThemeColor::Danger)),
+        ("Phone", "Accepted call", theme(ThemeColor::Success)),
+        ("Call", "", theme(ThemeColor::Success)),
+        ("SMS", "", MESSAGE_BLUE),
+        ("Messages", "", MESSAGE_BLUE),
+        ("Voicemail", "", MESSAGE_BLUE),
+        ("Email", "", theme(ThemeColor::Warning)),
+        ("Schedule", "", CALENDAR_PURPLE),
+        ("Calendar", "", CALENDAR_PURPLE),
+        ("News", "", theme(ThemeColor::Accent)),
+        ("Alert", "", theme(ThemeColor::Accent)),
+        ("Signal", "", theme(ThemeColor::Accent)),
+    ];
+    for (app, body, color) in kinds {
+        assert_eq!(color_for(app, body), color.to_value(), "{app} {body}");
+    }
+}
+
+#[test]
+fn there_is_no_colour_past_the_end_of_the_list() {
+    assert_eq!(
+        NotificationList::new().read_element(SystemValue::NotificationColor, 0),
+        NONE
+    );
+}
+
+/// A colour's relative luminance, as the Web Content Accessibility Guidelines define it.
+fn luminance(rgb565: u16) -> f64 {
+    let channel = |value: u16, most: u16| {
+        let fraction = value as f64 / most as f64;
+        if fraction <= 0.03928 {
+            fraction / 12.92
+        } else {
+            ((fraction + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let red = channel(rgb565 >> 11, 31);
+    let green = channel((rgb565 >> 5) & 63, 63);
+    let blue = channel(rgb565 & 31, 31);
+    0.2126 * red + 0.7152 * green + 0.0722 * blue
+}
+
+fn contrast(first: u16, second: u16) -> f64 {
+    let (first, second) = (luminance(first), luminance(second));
+    (first.max(second) + 0.05) / (first.min(second) + 0.05)
+}
+
+/// The least contrast the guidelines ask of an icon against what is behind it.
+const LEAST_ICON_CONTRAST: f64 = 3.0;
+
+#[test]
+fn the_fixed_colours_read_on_every_preset_themes_background_and_surface() {
+    for preset in PRESET_THEMES {
+        for behind in [ThemeColor::Background, ThemeColor::Surface] {
+            for color in [MESSAGE_BLUE, CALENDAR_PURPLE] {
+                let drawn = color.resolve(&preset.theme);
+                let measured = contrast(drawn, preset.theme.color(behind));
+                assert!(
+                    measured >= LEAST_ICON_CONTRAST,
+                    "{color:?} on {} {behind:?}: {measured}",
+                    preset.name
+                );
+            }
+        }
+    }
 }

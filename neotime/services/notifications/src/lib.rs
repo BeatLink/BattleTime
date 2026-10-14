@@ -15,7 +15,8 @@ use alloc::boxed::Box;
 use neotime_app_host::AppEffect;
 use neotime_companion::PhoneNotification;
 use neotime_runtime::resources::{library_icon, ImageReference};
-use neotime_runtime::{EffectKind, SystemValue, Value, NONE};
+use neotime_runtime::theme::rgb565;
+use neotime_runtime::{ColorValue, EffectKind, SystemValue, ThemeColor, Value, NONE};
 
 /// The most notifications kept; InfiniTime keeps as many.
 pub const MOST_KEPT: usize = 5;
@@ -170,7 +171,7 @@ impl NotificationList {
         }
     }
 
-    /// A kept notification's id, arrival time or icon, or none past the end of the list.
+    /// A kept notification's id, arrival time, icon or icon colour, or none past the end of the list.
     pub fn read_element(&self, value: SystemValue, place: Value) -> Value {
         let Some(kept) = self.kept_at(place) else {
             return NONE;
@@ -179,8 +180,9 @@ impl NotificationList {
             SystemValue::NotificationId => kept.notification.id,
             SystemValue::NotificationTime => kept.received_at,
             SystemValue::NotificationIcon => {
-                ImageReference::SharedLibrary(kind_icon(&kept.notification)).to_value() as Value
+                ImageReference::SharedLibrary(kind_look(&kept.notification).icon).to_value() as Value
             }
+            SystemValue::NotificationColor => kind_look(&kept.notification).color.to_value(),
             _ => NONE,
         }
     }
@@ -200,24 +202,44 @@ impl NotificationList {
 }
 
 // ============================================================================
-// Icons
+// Icons and colours
 // ============================================================================
 
-/// The library icon for a notification's kind, read from its app's name; an envelope for any app not named here.
+/// Blue for texts, chats and voicemail, mid-bright so it reads on every preset's background and surface.
+pub const MESSAGE_BLUE: ColorValue = ColorValue::Fixed(rgb565(48, 120, 248));
+
+/// Purple for calendar events, as readable as the blue.
+pub const CALENDAR_PURPLE: ColorValue = ColorValue::Fixed(rgb565(168, 80, 248));
+
+const ACCENT: ColorValue = ColorValue::Theme(ThemeColor::Accent);
+
+/// How a kind of notification looks: its library icon and the colour it is drawn in.
+struct KindLook {
+    icon: u16,
+    color: ColorValue,
+}
+
+const fn look(icon: u16, color: ColorValue) -> KindLook {
+    KindLook { icon, color }
+}
+
+/// The icon and colour for a notification's kind, read from its app's name; an envelope in the accent colour for any app not named here.
 ///
 /// The names are the Alert Notification categories', the companion's call summaries' and a calendar's.
-fn kind_icon(notification: &PhoneNotification) -> u16 {
+fn kind_look(notification: &PhoneNotification) -> KindLook {
+    let missed_call = look(library_icon::PHONE_MISSED, ColorValue::Theme(ThemeColor::Danger));
     match notification.source.as_str() {
-        "Missed call" => library_icon::PHONE_MISSED,
-        "Phone" if notification.body == "Missed call" => library_icon::PHONE_MISSED,
-        "Call" | "Phone" => library_icon::PHONE,
-        "SMS" => library_icon::SMS,
-        "Messages" => library_icon::CHAT,
-        "News" => library_icon::NEWS,
-        "Voicemail" => library_icon::VOICEMAIL,
-        "Schedule" | "Calendar" => library_icon::CALENDAR,
-        "Alert" => library_icon::BELL,
-        _ => library_icon::NOTIFICATION,
+        "Missed call" => missed_call,
+        "Phone" if notification.body == "Missed call" => missed_call,
+        "Call" | "Phone" => look(library_icon::PHONE, ColorValue::Theme(ThemeColor::Success)),
+        "SMS" => look(library_icon::SMS, MESSAGE_BLUE),
+        "Messages" => look(library_icon::CHAT, MESSAGE_BLUE),
+        "Voicemail" => look(library_icon::VOICEMAIL, MESSAGE_BLUE),
+        "Email" => look(library_icon::NOTIFICATION, ColorValue::Theme(ThemeColor::Warning)),
+        "Schedule" | "Calendar" => look(library_icon::CALENDAR, CALENDAR_PURPLE),
+        "News" => look(library_icon::NEWS, ACCENT),
+        "Alert" => look(library_icon::BELL, ACCENT),
+        _ => look(library_icon::NOTIFICATION, ACCENT),
     }
 }
 

@@ -857,11 +857,6 @@ only by its Gadgetbridge fork and web app, so they are not worth copying.
   Decide whether NeoTime has a gesture for this, since several faces use the long press for their
   own settings.
 
-### Notifications
-
-- [ ] **An icon and colour for each kind of notification:** email, missed call, message, calendar
-  and the rest, so the kind shows before the text is read.
-
 ### Developer tools
 
 - [ ] **Screenshots over BLE.** PinetimeLite draws the current screen into the external flash and

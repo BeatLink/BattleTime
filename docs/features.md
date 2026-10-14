@@ -128,7 +128,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   app's UART service, buzzes twice and goes to the open app. The watch keeps the latest 5, from the
   phone and from apps, and the notifications list them newest first, each with an icon for its
   kind (a call, a missed call, a text, a chat, news, voicemail, a calendar event or an alert, and
-  an envelope for anything else): a tap reads one in full and Dismiss removes it. A notification dismissed on the phone goes from the watch too. Faces show
+  an envelope for anything else) in a colour of its own: green for a call, red for a missed call,
+  blue for a text, chat or voicemail, yellow for an email, purple for a calendar event and the
+  theme's accent for the rest, each readable in every preset theme: a tap reads one in full and Dismiss removes it. A notification dismissed on the phone goes from the watch too. Faces show
   when some are unread.
 - **Notifications from any Bluetooth tool.** A New Alert written to the standard Alert Notification
   service shows as a notification, as on InfiniTime, so BlueZ's `bluetoothctl`, ITD or Amazfish can

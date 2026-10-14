@@ -111,7 +111,7 @@ pub fn system_value_permission(value: SystemValue) -> Option<Permission> {
         | CallCaller
         | CallState => Some(Permission::Phone),
         NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
-        | NotificationTime | NotificationIcon => Some(Permission::Notifications),
+        | NotificationTime | NotificationIcon | NotificationColor => Some(Permission::Notifications),
         _ => None,
     }
 }

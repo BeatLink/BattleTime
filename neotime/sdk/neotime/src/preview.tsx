@@ -42,7 +42,7 @@ import {
   type WeatherDay,
 } from "./index.ts";
 import { run_handler } from "./widgets.tsx";
-import { notification_icon } from "./icons.ts";
+import { notification_color, notification_icon } from "./icons.ts";
 
 export { clear_storage } from "./host.ts";
 export { swipe } from "./widgets.tsx";
@@ -243,8 +243,12 @@ function show_notifications() {
 }
 
 /** Keeps a notification as the newest and unread, in place of any with its id, as the watch does. */
-export function keep_notification(arrived: Omit<KeptNotification, "icon">) {
-  const notification = { ...arrived, icon: notification_icon(arrived.app, arrived.body) };
+export function keep_notification(arrived: Omit<KeptNotification, "icon" | "color">) {
+  const notification = {
+    ...arrived,
+    icon: notification_icon(arrived.app, arrived.body),
+    color: notification_color(arrived.app, arrived.body),
+  };
   const others = kept_notifications.filter((kept) => kept.notification.id !== notification.id);
   kept_notifications = [{ notification, is_read: false }, ...others].slice(0, MOST_KEPT_NOTIFICATIONS);
   show_notifications();

@@ -1,9 +1,10 @@
 # Every screen of the notifications shade, for docs/apps/notifications.md: empty, a list, one read in full, and the preview.
 open app notifications
 expect text "No notifications"
-# Each shows the icon for its app: a text, the calendar, a missed call and a chat.
+# Each shows the icon and colour for its app: a blue text, a purple calendar event, a yellow email, a red missed call and a blue chat.
 notify "SMS" "Sam" "On my way, see you at the station in ten minutes"
 notify "Calendar" "Calendar" "Team meeting at 10:00 in room 4"
+notify "Email" "Robin" "Invoice for October attached"
 notify "Phone" "Jamie" "Missed call"
 notify "Messages" "Alex" "Running late, start without me"
 expect text "Alex"

@@ -1487,7 +1487,7 @@ function Main() {
     <Screen>
       <Label>{place.value < notifications.value.length ? notifications.value[place.value].title : "None"}</Label>
       <Label>{`${notifications.value[0].id}`}</Label>
-      <Icon icon={notifications.value[0].icon} />
+      <Icon icon={notifications.value[0].icon} color={notifications.value[0].color} />
     </Screen>
   );
 }"#;
@@ -1503,6 +1503,7 @@ fn the_kept_notifications_are_read_one_field_at_a_time() {
     assert!(reads_system_element(&image, SystemValue::NotificationTitle));
     assert!(reads_system_element(&image, SystemValue::NotificationId));
     assert!(reads_system_element(&image, SystemValue::NotificationIcon));
+    assert!(reads_system_element(&image, SystemValue::NotificationColor));
 }
 
 #[test]

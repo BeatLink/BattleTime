@@ -1,6 +1,8 @@
 // Icons in the shared library, which apps refer to by number instead of carrying their own.
 // The preview draws each one as a symbol; the watch draws the library's RGB565 image.
 
+import type { Color } from "./index.ts";
+
 // ============================================================================
 // Icons
 // ============================================================================
@@ -106,7 +108,7 @@ export function library_icon(index: number): LibraryIcon {
   return icons[LIBRARY_ORDER[index] ?? "none"];
 }
 
-/** The icon the watch gives a notification from its app's name, as `kind_icon` in services/notifications does; an envelope for any app not named there. */
+/** The icon the watch gives a notification from its app's name, as `kind_look` in services/notifications does; an envelope for any app not named there. */
 export function notification_icon(app: string, body: string): LibraryIcon {
   if (app === "Missed call" || (app === "Phone" && body === "Missed call")) return icons.phone_missed;
   if (app === "Call" || app === "Phone") return icons.phone;
@@ -117,6 +119,17 @@ export function notification_icon(app: string, body: string): LibraryIcon {
   if (app === "Schedule" || app === "Calendar") return icons.calendar;
   if (app === "Alert") return icons.bell;
   return icons.notification;
+}
+
+/** The colour the watch gives a notification's icon from its app's name, as `kind_look` in services/notifications does; the accent for any app not named there. */
+export function notification_color(app: string, body: string): Color {
+  const icon = notification_icon(app, body);
+  if (icon === icons.phone_missed) return "danger";
+  if (icon === icons.phone) return "success";
+  if (icon === icons.sms || icon === icons.chat || icon === icons.voicemail) return "#3078f8";
+  if (icon === icons.calendar) return "#a850f8";
+  if (app === "Email") return "warning";
+  return "accent";
 }
 
 export function icon_symbol(icon: LibraryIcon): string {

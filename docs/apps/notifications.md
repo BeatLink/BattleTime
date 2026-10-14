@@ -10,7 +10,9 @@ newest first.
   [quick settings](quick-settings.md).
 - Each row shows an icon for the kind of notification, then the title and the start of the text.
   Calls, missed calls, texts, chats, news, voicemail, calendar events and alerts each have their
-  own icon; any other app's notifications show an envelope.
+  own icon; any other app's notifications show an envelope. The icon's colour tells the kind
+  apart too: green for a call, red for a missed call, blue for a text, chat or voicemail, yellow
+  for an email, purple for a calendar event, and the theme's accent for the rest.
 - **Tap** one to read it in full, with the app it came from and the time.
 - Tap **Dismiss** to remove it, or press the side button to go back to the list.
 - Opening it, or turning the screen on while it is open, marks every notification read.
@@ -27,9 +29,9 @@ newest first.
 
 With no notifications.
 
-![Four notifications](../../neotime/harness/snapshots/screens/shell-notifications-list.png)
+![Five notifications](../../neotime/harness/snapshots/screens/shell-notifications-list.png)
 
-Four notifications from the phone, newest first: a chat, a missed call, a calendar event and a text, each with its icon.
+Five notifications from the phone, newest first: a chat, a missed call, an email, a calendar event and a text, each with its icon in its own colour.
 
 ![A notification read in full](../../neotime/harness/snapshots/screens/shell-notifications-message.png)
 

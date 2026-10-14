@@ -2429,6 +2429,17 @@ fn each_notifications_icon_is_a_number_list_beside_its_other_fields() {
 }
 
 #[test]
+fn each_notifications_colour_is_a_number_list_beside_its_other_fields() {
+    assert_eq!(SystemValue::from_byte(119), Some(SystemValue::NotificationColor));
+    assert_eq!(
+        SystemValue::NotificationColor.bit(),
+        SystemValue::NotificationId.bit()
+    );
+    assert!(SystemValue::NotificationColor.is_list());
+    assert!(!SystemValue::NotificationColor.is_text());
+}
+
+#[test]
 fn the_package_values_change_with_the_installed_apps_and_list_names_and_ids_as_text() {
     assert_eq!(SystemValue::from_byte(66), Some(SystemValue::PackageCount));
     assert_eq!(SystemValue::from_byte(73), Some(SystemValue::AppMemoryBudget));
@@ -2461,7 +2472,6 @@ fn the_folder_values_share_one_bit_with_names_and_the_path_as_text() {
         SystemValue::from_byte(118),
         Some(SystemValue::FolderEntryIsFolder)
     );
-    assert_eq!(SystemValue::from_byte(119), None);
     for value in [
         SystemValue::FolderPath,
         SystemValue::FolderEntryCount,

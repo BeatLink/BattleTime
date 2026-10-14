@@ -189,6 +189,7 @@ fn list_field(list: &str, name: &str) -> Option<SystemSignal> {
         ("notifications", "body") => (SystemValue::NotificationBody, Type::TEXT),
         ("notifications", "time") => (SystemValue::NotificationTime, Type::NUMBER),
         ("notifications", "icon") => (SystemValue::NotificationIcon, Type::ICON),
+        ("notifications", "color") => (SystemValue::NotificationColor, Type::COLOR),
         ("packages", "name") => (SystemValue::PackageName, Type::TEXT),
         ("packages", "id") => (SystemValue::PackageId, Type::TEXT),
         ("packages", "enabled") => (SystemValue::PackageEnabled, Type::BOOL),
