@@ -1,7 +1,7 @@
 // The only bridge between the window and the desktop app, as `window.neotime`.
 //
 // It offers the API src/ble/electron-transport.ts, src/services/phone/desktop.ts, note-file.ts,
-// remote-platform.ts and plugins.ts read, and turns each call into a Tauri command answered by src/main.rs.
+// remote-platform.ts, web-request.ts and plugins.ts read, and turns each call into a Tauri command answered by src/main.rs.
 
 (() => {
   // Tauri's own scripts may run after this one, so its globals are looked up at call time.
@@ -72,6 +72,11 @@
     runCommand: (command) => call('remote_run_command', { command }),
   };
 
+  // Web requests for the notes URL and remote buttons, made by src/services/web-request.ts.
+  const web = {
+    request: (request) => call('web_request', { request }),
+  };
+
   // Plugins installed in the desktop app, read by src/services/plugins.ts.
   const plugins = {
     list: () => call('plugins_list'),
@@ -88,6 +93,7 @@
     desktop,
     notes,
     remote,
+    web,
     plugins,
     startScan: () => call('ble_start_scan'),
     stopScan: () => call('ble_stop_scan'),

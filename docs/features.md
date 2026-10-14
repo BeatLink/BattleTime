@@ -201,10 +201,12 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 
 - **Notes.** Type a note in the companion app, pick a text file, or give a URL it fetches every
   minute, and the note is copied to the watch, again whenever it changes; the notes app shows it, read only and scrolled, in the font chosen in the companion app.
+  The URL may need extra headers, a login, or a self-signed certificate trusted by its fingerprint.
   See [apps.md](apps.md).
 - **Remote.** Choose up to 9 buttons in the companion app, each with an icon and an action; the
   remote app shows them full size, 2 by 2 or 3 by 3, and a tap buzzes and tells the phone to run
-  that button's action. See [apps.md](apps.md) and
+  that button's action. A web request button takes the same headers, login and certificate choices
+  as the notes URL. See [apps.md](apps.md) and
   [companion-protocol.md](companion-protocol.md#remote).
 - **Temporary apps from the phone.** The companion app can open an app on the watch without
   installing it, such as a question to answer Yes or No (`neotime ask`). It opens over whatever

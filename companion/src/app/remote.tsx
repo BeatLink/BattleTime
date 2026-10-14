@@ -7,6 +7,7 @@ import { ChoiceRow, ErrorNote, TextRow } from '@/components/fields';
 import { IconPicker, LibraryIcon } from '@/components/library-icon';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
+import { WebAccessFields } from '@/components/web-access-fields';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWatch } from '@/hooks/use-watch';
@@ -69,10 +70,10 @@ function ActionFields({ form, set }: { form: RemoteButtonForm; set: (patch: Part
         <>
           <ChoiceRow label="Method" options={METHOD_CHOICES} value={form.method} onChange={(method) => set({ method })} />
           <TextRow label="Address" placeholder="https://example.com/hook" autoCapitalize="none" value={form.url} onChangeText={(url) => set({ url })} />
-          <TextRow label="Headers" detail="One Name: value per line." multiline autoCapitalize="none" value={form.headers} onChangeText={(headers) => set({ headers })} />
           {form.method !== 'GET' ? (
             <TextRow label="Body" multiline autoCapitalize="none" value={form.body} onChangeText={(body) => set({ body })} />
           ) : null}
+          <WebAccessFields form={form} set={set} />
         </>
       );
     case 'command':

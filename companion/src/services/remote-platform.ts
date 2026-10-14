@@ -3,6 +3,7 @@
 import { androidIntents } from './android-intents';
 import type { AndroidIntents, CommandResult, RemotePlatform } from './remote-actions';
 import type { MediaCommand } from './phone';
+import { fetchRequester, webRequester, type WebRequester } from './web-request';
 
 type BridgeResult<Value> = { ok: boolean; error?: string; value?: Value };
 
@@ -32,14 +33,15 @@ export type RemotePlatformParts = {
   findPhone: () => void;
   desktop?: DesktopRemoteBridge | null;
   android?: AndroidIntents | null;
+  web?: WebRequester;
   fetch?: typeof fetch;
 };
 
-// Puts this device's parts together; the desktop bridge and Android intents are found unless given.
+// Puts this device's parts together; the desktop bridge, Android intents and the native web requests are found unless given.
 export function remotePlatform(parts: RemotePlatformParts): RemotePlatform {
   const desktop = parts.desktop === undefined ? desktopRemoteBridge() : parts.desktop;
   return {
-    fetch: parts.fetch ?? ((input, init) => fetch(input, init)),
+    web: parts.web ?? (parts.fetch ? fetchRequester(parts.fetch) : webRequester()),
     runCommand: desktop ? desktopCommandRunner(desktop) : null,
     android: parts.android === undefined ? androidIntents : parts.android,
     media: parts.media,

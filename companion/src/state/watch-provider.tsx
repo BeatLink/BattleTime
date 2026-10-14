@@ -630,10 +630,10 @@ export function WatchProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notesOn, noteSource, noteFile?.uri, watchId, noteFiles, files, updateSettings]);
 
-  const { noteFont, noteText, noteUrl } = settings;
+  const { noteFont, noteText, noteUrl, noteUrlAccess } = settings;
   useEffect(() => {
     void noteSyncRef.current?.sync();
-  }, [noteFont, noteText, noteUrl]);
+  }, [noteFont, noteText, noteUrl, noteUrlAccess]);
 
   const syncNote = useCallback(async () => {
     await noteSyncRef.current?.sync();

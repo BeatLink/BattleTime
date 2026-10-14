@@ -56,6 +56,8 @@ mock watch only.
   NeoTime and its `notes` app installed, check that:
   - a note typed on the screen is sent a moment after typing stops, and a URL's text is fetched
     and sent, and sent again within a minute of the page changing;
+  - a URL behind a basic-auth login and a self-signed certificate is fetched with the certificate
+    pinned, and refused with a different pin, in the Electron, Tauri and Android apps;
   - choosing a file in the desktop app sends it, and saving it in an editor sends it again within
     a few seconds;
   - on a phone, choosing a file sends it, and an edit is sent within a minute, also after the app
@@ -79,9 +81,11 @@ mock watch only.
 - **Untried with a watch.** The layout file and taps have run only against the mock watch. Check
   that a pushed layout shows the right icons, in order, and that each tap runs its button.
 - **Android intents.** `openUri`, `startActivity` and `sendBroadcast` in `PhoneBridgeModule.kt`
-  have not been compiled or run on a phone. Android 10 and later may refuse to start an activity
+  compile, but have not run on a phone. Android 10 and later may refuse to start an activity
   while the app is in the background, which is where a tap usually finds it; broadcasts are not
   affected.
+- **Web requests with a login or a pinned certificate.** Run against a local server in the Node and
+  Rust tests only; check a button behind basic auth and a self-signed certificate in each app.
 - **Media keys on a phone and the desktop.** The ready-made media actions reuse the forwarding
   bridge, which has not run against a real player from a tap yet.
 - **The command line's buttons file.** `neotime remote` reads its own JSON file; the desktop app

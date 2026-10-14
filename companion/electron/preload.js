@@ -66,10 +66,16 @@ const remote = {
   runCommand: (command) => ipcRenderer.invoke('remote:run-command', command),
 };
 
+// Web requests for the notes URL and remote buttons, made by src/services/web-request.ts.
+const web = {
+  request: (request) => ipcRenderer.invoke('web:request', request),
+};
+
 contextBridge.exposeInMainWorld('neotime', {
   desktop,
   notes,
   remote,
+  web,
   startScan: () => ipcRenderer.invoke('ble:start-scan'),
   stopScan: () => ipcRenderer.invoke('ble:stop-scan'),
   connect: (id) => ipcRenderer.invoke('ble:connect', id),

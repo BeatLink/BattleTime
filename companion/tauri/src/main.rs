@@ -14,6 +14,7 @@ use neotime_companion_core::ble::{BleError, WatchBle};
 use neotime_companion_core::plugins::host::{Fetcher, PluginHost};
 use neotime_companion_core::plugins::http;
 use neotime_companion_core::plugins::store::PluginStore;
+use neotime_companion_core::web_request;
 use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder};
@@ -216,6 +217,14 @@ async fn remote_run_command(command: String) -> Answer<remote::CommandResult> {
     remote::run_shell_command(&command, remote::COMMAND_TIMEOUT).await
 }
 
+// A web request for the notes URL or a remote button, which may trust a self-signed certificate.
+#[tauri::command]
+async fn web_request(request: web_request::WebRequest) -> Answer<web_request::WebReply> {
+    tauri::async_runtime::spawn_blocking(move || web_request::request(&request))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
 // ============================================================================
 // Starting up
 // ============================================================================
@@ -307,6 +316,7 @@ fn main() {
             notes_watch,
             notes_unwatch,
             remote_run_command,
+            web_request,
             plugins::plugins_list,
             plugins::plugins_install_pick,
             plugins::plugins_install,

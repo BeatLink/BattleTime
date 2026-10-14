@@ -106,6 +106,7 @@ npm run neotime -- files ls /settings
 npm run neotime -- note shopping.txt large
 npm run neotime -- note text "Milk, bread, eggs"
 npm run neotime -- note url https://example.org/note.txt
+npm run neotime -- note url https://nas.local/note.txt --user me:secret --pin AB:CD:…
 npm run neotime -- qr https://example.org --label Example
 npm run neotime -- qr wifi Home secret --label "Home Wi-Fi"
 npm run neotime -- qr list
@@ -317,8 +318,8 @@ The Notes screen keeps a note on the watch, for NeoTime's `notes` app to show re
 comes from one of three sources, chosen on the screen and read through
 [src/services/note-source.ts](src/services/note-source.ts): text typed on the screen, saved and sent
 once typing pauses for a moment; a text file of the user's choice; or an http or https URL, fetched
-again on every check. In the desktop app and a browser the URL's server must allow cross-origin reads
-(`Access-Control-Allow-Origin`), as raw GitHub and gist links do; a phone has no such limit. [src/protocol/notes.ts](src/protocol/notes.ts) writes it to `/notes/note.txt` and
+again on every check with the headers, login and certificate choice set beside it (see
+[Web requests](#web-requests)). [src/protocol/notes.ts](src/protocol/notes.ts) writes it to `/notes/note.txt` and
 the chosen font's name to `/notes/font` over the file service, each only when it differs from what
 was last sent; the first check on a connection lists `/notes` too, so a note deleted on the watch
 is sent again. [src/state/note-sync.ts](src/state/note-sync.ts) checks when the watch connects,
@@ -359,7 +360,7 @@ only the companion shows, and an action.
 
 | Action | Where it runs | How |
 | --- | --- | --- |
-| Web request | everywhere | `fetch`, with the method, headers and body given, 15 s timeout |
+| Web request | everywhere | the method, headers, body, login and certificate choice given, 15 s timeout; see [Web requests](#web-requests) |
 | Command | desktop app | the user's shell in the Electron main process ([node/remote-command.js](node/remote-command.js)), 30 s timeout |
 | Android | Android app | a link opened with `ACTION_VIEW`, an activity or a broadcast, through `modules/phone-bridge` |
 | Ready-made | Android and desktop app | play/pause, play, pause, next, previous and volume through `phoneBridge.mediaCommand`; "find this device" everywhere, which shows the same card the watch's find phone does |
@@ -373,6 +374,27 @@ action is always looked up in the companion's own settings
 ([src/services/remote-actions.ts](src/services/remote-actions.ts)), so the watch can never send a
 command, URL or intent. [src/state/remote-sync.ts](src/state/remote-sync.ts) sends the layout when
 a watch connects and on every change, as notes are kept.
+
+## Web requests
+
+The notes URL and remote buttons make their requests through
+[src/services/web-request.ts](src/services/web-request.ts), and set them up with the same fields
+([src/components/web-access-fields.tsx](src/components/web-access-fields.tsx)): extra headers, a
+basic-auth login, and which https certificate to trust. That is the usual check, a self-signed
+certificate pinned by its SHA-256 fingerprint, or any certificate. A pin is checked during the
+TLS handshake, so the headers and login never reach a server that fails it, and the handshake still
+proves the server holds the certificate's key.
+
+A window's or a phone's `fetch` cannot change how certificates are checked, so each app makes the
+request natively: the Electron main process and the command line tool through
+[node/web-request.js](node/web-request.js), the Tauri app through `web_request` in
+[core/src/web_request.rs](core/src/web_request.rs), and the Android app through `WebRequest.kt` in
+`modules/phone-bridge`. Native requests also skip the window's cross-origin rules. Only a browser
+and Expo Go fall back to `fetch`, where a server must allow cross-origin reads
+(`Access-Control-Allow-Origin`) and a choice other than the usual check is refused. Logins are kept
+in the app's settings, unencrypted, as the GitHub token is. The command line takes the same choices
+as `--header 'Name: value'`, `--user name:password`, `--pin <sha256>` and `--insecure`.
+`node/testdata` holds the self-signed certificate and key the tests serve, made for them only.
 
 The icon names are copied from `ICON_NAMES` in NeoTime's `compiler/src/types.rs` into
 [src/bundles/icon-names.ts](src/bundles/icon-names.ts) with `npm run import-icon-names

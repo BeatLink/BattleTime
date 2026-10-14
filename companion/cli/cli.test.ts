@@ -16,6 +16,7 @@ import { flash } from './commands/flash';
 import { recovery } from './commands/recovery';
 import { diag } from './commands/send';
 import { note } from './commands/watch';
+import type { WebRequest } from '@/services/web-request';
 
 // The flash command only needs the DFU link and a way to reset the watch, which is what a session gives it.
 class FakeSession extends MockLegacyDfuTarget {
@@ -108,15 +109,30 @@ describe('the note command', () => {
 
   it('sends typed text, and the text a URL answers with', async () => {
     const { session, service } = noteSession();
-    const fetcher = (async () => new Response('From the web')) as unknown as typeof fetch;
+    const asked: WebRequest[] = [];
+    const requester = async (request: WebRequest) => {
+      asked.push(request);
+      return { status: 200, statusText: 'OK', body: new TextEncoder().encode('From the web') };
+    };
 
     await note(session, ['text', 'Milk and eggs', 'small']);
     const files = await service;
     expect(new TextDecoder().decode(await files.read(NOTE_PATH))).toBe('Milk and eggs');
     expect(new TextDecoder().decode(await files.read(NOTE_FONT_PATH))).toBe('small');
 
-    await note(session, ['url', 'https://example.org/note.txt'], fetcher);
+    await note(
+      session,
+      ['url', 'https://nas.local/note.txt', '--user', 'me:se:cret', '--header', 'X-Key: 1', '--pin', 'AB:'.repeat(31) + 'AB'],
+      requester,
+    );
     expect(new TextDecoder().decode(await files.read(NOTE_PATH))).toBe('From the web');
+    expect(asked[0].access).toEqual({
+      username: 'me',
+      password: 'se:cret',
+      headers: { 'X-Key': '1' },
+      certificate: 'pinned',
+      certificateSha256: 'ab'.repeat(32),
+    });
   });
 
   it('asks for a file and a known font', async () => {

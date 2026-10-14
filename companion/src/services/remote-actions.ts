@@ -12,6 +12,7 @@ import {
 } from '@/protocol/remote';
 import type { WatchToPhoneMessage } from '@/protocol/gadgetbridge';
 import type { MediaCommand } from '@/services/phone';
+import { replyText, type WebRequester } from '@/services/web-request';
 
 // ============================================================================
 // What the platform offers
@@ -33,7 +34,8 @@ export type AndroidIntents = {
 };
 
 export type RemotePlatform = {
-  fetch: typeof fetch;
+  // Makes web requests, natively where the device can, so a button may trust a self-signed certificate.
+  web: WebRequester;
   // Runs a shell command on the computer; null outside the desktop app.
   runCommand: ((command: string) => Promise<CommandResult>) | null;
   // Starts Android intents; null anywhere but the Android app.
@@ -119,24 +121,20 @@ const clip = (text: string) => {
 };
 
 async function runHttp(action: Extract<RemoteAction, { kind: 'http' }>, platform: RemotePlatform): Promise<ActionOutcome> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
   try {
-    const response = await platform.fetch(action.url, {
+    // The action carries its own headers, login and certificate choice.
+    const reply = await platform.web({
       method: action.method,
-      headers: action.headers,
+      url: action.url,
       body: action.method === 'GET' ? undefined : action.body,
-      signal: controller.signal,
+      access: action,
+      timeoutMs: HTTP_TIMEOUT_MS,
     });
-    const text = clip(await response.text().catch(() => ''));
-    return { ok: response.ok, message: `HTTP ${response.status}${text ? `: ${text}` : ''}` };
+    const text = clip(replyText(reply));
+    const ok = reply.status >= 200 && reply.status < 300;
+    return { ok, message: `HTTP ${reply.status}${text ? `: ${text}` : ''}` };
   } catch (error) {
-    return {
-      ok: false,
-      message: controller.signal.aborted ? `No answer within ${HTTP_TIMEOUT_MS / 1000} s.` : errorText(error),
-    };
-  } finally {
-    clearTimeout(timer);
+    return { ok: false, message: errorText(error) };
   }
 }
 

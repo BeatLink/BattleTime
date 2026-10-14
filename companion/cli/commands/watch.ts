@@ -35,10 +35,12 @@ import type { SlotRange } from '@/protocol/gadgetbridge';
 import { readStepHistory } from '@/protocol/steps';
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
 import { fetchNote } from '@/services/note-source';
+import type { WebRequester } from '@/services/web-request';
 import { currentWeather, findPlace } from '@/services/weather';
 
 import type { WatchSession } from '../ble';
 import { ProgressBar, say } from '../output';
+import { takeWebAccess, terminalRequester } from '../web';
 
 export const watchUsage = `neotime status
 neotime time
@@ -48,6 +50,7 @@ neotime steps [days]
 neotime weather <place>
 neotime files [ls [dir]|get <path> [dest]|put <file> <path>|rm <path>|df]
 neotime note <file>|text <text>|url <url> [small|normal|medium|large]
+             [--header 'Name: value']... [--user name:password] [--pin <sha256>|--insecure]
 neotime note remove
 neotime apps [list|install <image>|remove <id>|hide <id>|show <id>|setup]
 neotime apps run <image> [--data <name>=<file>]... [--text <name>=<text>]...
@@ -466,8 +469,9 @@ export async function quickApps(session: WatchSession, args: string[]) {
   }
 }
 
-export async function note(session: WatchSession, args: string[], fetcher: typeof fetch = fetch) {
-  const [first, ...rest] = args;
+export async function note(session: WatchSession, args: string[], requester: WebRequester = terminalRequester()) {
+  const { access, rest: plain } = takeWebAccess(args);
+  const [first, ...rest] = plain;
   if (!first) {
     throw new Error('Give the text file to show, text <words>, url <url>, or remove.');
   }
@@ -489,7 +493,7 @@ export async function note(session: WatchSession, args: string[], fetcher: typeo
     first === 'text'
       ? [new TextEncoder().encode(value), 'the text']
       : first === 'url'
-        ? [await fetchNote(value, fetcher), value]
+        ? [await fetchNote(value, access, requester), value]
         : [new Uint8Array(readFileSync(value)), basename(value)];
   await syncNote(service, bytes, font as NoteFont, session.deviceId, null, false);
   say(`Sent ${name} (${bytes.length} bytes) to ${NOTE_PATH}, in the ${font} font.`);

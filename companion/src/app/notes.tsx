@@ -2,14 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Card } from '@/components/card';
 import { Button } from '@/components/button';
-import { ChoiceRow, ErrorNote, SavedTextRow, TextRow } from '@/components/fields';
+import { ChoiceRow, ErrorNote, TextRow } from '@/components/fields';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
+import { WebAccessFields } from '@/components/web-access-fields';
 import { useWatch } from '@/hooks/use-watch';
 import { LARGEST_NOTE_BYTES, NOTE_FONTS, type NoteFont } from '@/protocol/notes';
 import { describeSource, type NoteSource } from '@/services/note-source';
+import type { WebAccess } from '@/services/web-request';
 import type { NoteStatus } from '@/state/note-sync';
-import { useTask } from '@/state/use-task';
+import { useTask, type Task } from '@/state/use-task';
+import { webAccessForm, webAccessFromForm, type WebAccessForm } from '@/state/web-access-form';
 
 const FONT_CHOICES = NOTE_FONTS.map((font) => ({ value: font, label: font.charAt(0).toUpperCase() + font.slice(1) }));
 
@@ -82,6 +85,45 @@ function NoteEditor({ value, onSave }: { value: string; onSave: (text: string) =
   );
 }
 
+// The URL to fetch the note from, with its headers, login and certificate choice, saved together.
+function NoteUrlEditor({
+  url,
+  access,
+  task,
+  onSave,
+}: {
+  url: string;
+  access: WebAccess;
+  task: Task;
+  onSave: (url: string, access: WebAccess) => Promise<void>;
+}) {
+  const [form, setForm] = useState<WebAccessForm & { url: string }>({ url, ...webAccessForm(access) });
+  const set = (patch: Partial<WebAccessForm & { url: string }>) => setForm((current) => ({ ...current, ...patch }));
+  const save = () =>
+    task.run('Saving the URL', async () => {
+      const trimmed = form.url.trim();
+      if (trimmed !== '' && !/^https?:\/\//i.test(trimmed)) {
+        throw new Error('The URL starts with http:// or https://.');
+      }
+      await onSave(trimmed, webAccessFromForm(form));
+    });
+  return (
+    <>
+      <TextRow
+        label="URL"
+        detail="The app fetches it every minute and sends the text when it changes."
+        placeholder="https://example.com/note.txt"
+        keyboardType="url"
+        autoCapitalize="none"
+        value={form.url}
+        onChangeText={(next) => set({ url: next })}
+      />
+      <WebAccessFields form={form} set={set} />
+      <Button title="Save" disabled={task.busy !== null} onPress={() => void save()} />
+    </>
+  );
+}
+
 export default function NotesScreen() {
   const { settings, updateSettings, watchReady, capabilities, noteFiles, noteStatus, syncNote, forgetNote } =
     useWatch();
@@ -128,15 +170,13 @@ export default function NotesScreen() {
         ) : null}
 
         {source === 'url' ? (
-          <SavedTextRow
-            // A new key resets the box when the URL is cleared elsewhere.
+          <NoteUrlEditor
+            // A new key resets the fields when the URL is cleared elsewhere.
             key={settings.noteUrl === '' ? 'empty' : 'set'}
-            label="URL"
-            detail="The app fetches it every minute and sends the text when it changes."
-            placeholder="https://example.com/note.txt"
-            keyboardType="url"
-            value={settings.noteUrl}
-            onSave={(noteUrl) => void updateSettings({ noteUrl: noteUrl.trim() })}
+            url={settings.noteUrl}
+            access={settings.noteUrlAccess}
+            task={task}
+            onSave={(noteUrl, noteUrlAccess) => updateSettings({ noteUrl, noteUrlAccess })}
           />
         ) : null}
 

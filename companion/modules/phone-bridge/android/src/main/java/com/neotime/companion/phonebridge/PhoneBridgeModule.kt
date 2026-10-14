@@ -23,7 +23,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
 
 private const val EVENT = "onPhoneEvent"
 
-// The JavaScript face of the phone bridge: notification access, calls, media, Do Not Disturb, the keep-alive service and remote button intents.
+// The JavaScript face of the phone bridge: notification access, calls, media, Do Not Disturb, the keep-alive service, remote button intents and web requests.
 class PhoneBridgeModule : Module() {
   private val forward: PhoneEventListener = { event -> sendEvent(EVENT, event) }
 
@@ -132,6 +132,10 @@ class PhoneBridgeModule : Module() {
       action?.let { intent.action = it }
       extras.forEach { (key, value) -> intent.putExtra(key, value) }
       launch(intent)
+    }
+
+    AsyncFunction("httpRequest") { request: Map<String, Any?> ->
+      WebRequest.run(request)
     }
 
     AsyncFunction("sendBroadcast") { action: String, packageName: String?, extras: Map<String, String> ->

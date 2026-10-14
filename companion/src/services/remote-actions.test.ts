@@ -14,13 +14,14 @@ import {
   type CommandResult,
   type RemotePlatform,
 } from './remote-actions';
+import { fetchRequester, type WebRequest } from './web-request';
 
 // ============================================================================
 // A device with every part faked
 // ============================================================================
 
 function fakeResponse(status: number, text: string): Response {
-  return { ok: status >= 200 && status < 300, status, text: async () => text } as Response;
+  return new Response(text, { status });
 }
 
 function platform(overrides: Partial<RemotePlatform> = {}) {
@@ -35,7 +36,7 @@ function platform(overrides: Partial<RemotePlatform> = {}) {
   const findPhone = jest.fn();
   let playing = false;
   const device: RemotePlatform = {
-    fetch: fetch as unknown as typeof globalThis.fetch,
+    web: fetchRequester(fetch as unknown as typeof globalThis.fetch),
     runCommand,
     android,
     media,
@@ -67,6 +68,28 @@ describe('web request actions', () => {
     const outcome = await runRemoteAction({ kind: 'http', method: 'GET', url: 'https://example.com', body: 'x' }, device);
     expect(outcome).toEqual({ ok: false, message: 'HTTP 404' });
     expect(fetch.mock.calls[0][1]?.body).toBeUndefined();
+  });
+
+  it("passes the button's login and certificate choice to the device's requests", async () => {
+    const requests: WebRequest[] = [];
+    const { device } = platform({
+      web: async (request) => {
+        requests.push(request);
+        return { status: 204, statusText: 'No Content', body: new Uint8Array() };
+      },
+    });
+    const action: RemoteAction = {
+      kind: 'http',
+      method: 'GET',
+      url: 'https://nas.local/hook',
+      username: 'me',
+      password: 'secret',
+      certificate: 'pinned',
+      certificateSha256: 'ab'.repeat(32),
+    };
+
+    await expect(runRemoteAction(action, device)).resolves.toEqual({ ok: true, message: 'HTTP 204' });
+    expect(requests[0]).toMatchObject({ url: 'https://nas.local/hook', access: action, timeoutMs: HTTP_TIMEOUT_MS });
   });
 
   it('shortens a long answer for the log', async () => {

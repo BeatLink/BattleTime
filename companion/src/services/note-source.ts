@@ -4,8 +4,10 @@
 
 import { LARGEST_NOTE_BYTES, NoteTooLarge } from '@/protocol/notes';
 import type { NoteFileAccess, NoteFileRef } from '@/services/note-file';
+import { webRequester, type WebAccess, type WebRequester } from '@/services/web-request';
 
-type Fetch = typeof fetch;
+// How long fetching the note may take.
+const FETCH_TIMEOUT_MS = 20000;
 
 // ============================================================================
 // The sources
@@ -20,6 +22,7 @@ export type NoteSourceSettings = {
   noteText: string;
   noteFile: NoteFileRef | null;
   noteUrl: string;
+  noteUrlAccess: WebAccess;
 };
 
 export type NoteReader = () => Promise<Uint8Array>;
@@ -28,7 +31,7 @@ export type NoteReader = () => Promise<Uint8Array>;
 export function noteReader(
   settings: NoteSourceSettings,
   access: NoteFileAccess,
-  fetcher: Fetch = fetch,
+  requester: WebRequester = webRequester(),
 ): NoteReader | null {
   switch (settings.noteSource) {
     case 'typed': {
@@ -41,7 +44,7 @@ export function noteReader(
     }
     case 'url': {
       const url = settings.noteUrl.trim();
-      return url === '' ? null : () => fetchNote(url, fetcher);
+      return url === '' ? null : () => fetchNote(url, settings.noteUrlAccess, requester);
     }
   }
 }
@@ -62,23 +65,33 @@ export function describeSource(settings: NoteSourceSettings): string | null {
 // Fetching from a URL
 // ============================================================================
 
-// Fetches the note's text from an http or https URL, refusing an error reply or one too big for the watch.
-export async function fetchNote(url: string, fetcher: Fetch = fetch): Promise<Uint8Array> {
+// Fetches the note's text from an http or https URL with its headers, login and certificate choice,
+// refusing an error reply or one too big for the watch.
+export async function fetchNote(
+  url: string,
+  access: WebAccess = {},
+  requester: WebRequester = webRequester(),
+): Promise<Uint8Array> {
   if (!/^https?:\/\//i.test(url)) {
     throw new Error(`${url} is not an http or https URL.`);
   }
-  let response: Response;
+  let reply;
   try {
-    response = await fetcher(url, { headers: { Accept: 'text/plain, */*' } });
+    reply = await requester({
+      method: 'GET',
+      url,
+      headers: { Accept: 'text/plain, */*' },
+      access,
+      timeoutMs: FETCH_TIMEOUT_MS,
+    });
   } catch (error) {
     throw new Error(`Could not fetch ${url}: ${error instanceof Error ? error.message : String(error)}`);
   }
-  if (!response.ok) {
-    throw new Error(`${url} answered ${response.status}${response.statusText ? ` ${response.statusText}` : ''}.`);
+  if (reply.status < 200 || reply.status > 299) {
+    throw new Error(`${url} answered ${reply.status}${reply.statusText ? ` ${reply.statusText}` : ''}.`);
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.length > LARGEST_NOTE_BYTES) {
-    throw new NoteTooLarge(bytes.length);
+  if (reply.body.length > LARGEST_NOTE_BYTES) {
+    throw new NoteTooLarge(reply.body.length);
   }
-  return bytes;
+  return reply.body;
 }

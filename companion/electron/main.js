@@ -10,6 +10,7 @@ const { WatchBle } = require('../node/ble');
 const { DesktopIntegration } = require('../node/desktop');
 const { NoteFileWatches, readNoteFile } = require('../node/note-file');
 const { runShellCommand } = require('../node/remote-command');
+const { webRequest } = require('../node/web-request');
 const { serve } = require('./server');
 
 const DIST = join(__dirname, '..', 'dist');
@@ -135,6 +136,11 @@ function wireRemote() {
   });
 }
 
+// Web requests from the user's own notes URL and remote buttons, which may trust a self-signed certificate.
+function wireWeb() {
+  handle('web:request', (request) => webRequest(request));
+}
+
 // The desktop's location service and notification server know the app by its desktop file.
 app.setName('NeoTime Companion');
 if (process.platform === 'linux') {
@@ -146,6 +152,7 @@ app.whenReady().then(async () => {
   wireDesktop();
   wireNotes();
   wireRemote();
+  wireWeb();
   await createWindow();
 
   app.on('activate', () => {

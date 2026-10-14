@@ -52,8 +52,8 @@ describe('the device for remote buttons', () => {
     const device = remotePlatform({ ...parts, desktop: null, android, fetch });
     expect(device.android).toBe(android);
     expect(device.runCommand).toBeNull();
-    await device.fetch('https://example.com');
-    expect(fetch).toHaveBeenCalledWith('https://example.com');
+    await device.web({ method: 'GET', url: 'https://example.com', access: {}, timeoutMs: 1000 });
+    expect(fetch).toHaveBeenCalledWith('https://example.com', expect.objectContaining({ method: 'GET' }));
     expect(remotePlatform(parts).android).toBeNull();
   });
 
@@ -62,8 +62,8 @@ describe('the device for remote buttons', () => {
     const global = jest.fn(async () => new Response('ok')) as unknown as typeof globalThis.fetch;
     globalThis.fetch = global;
     try {
-      await remotePlatform(parts).fetch('https://example.com', { method: 'POST' });
-      expect(global).toHaveBeenCalledWith('https://example.com', { method: 'POST' });
+      await remotePlatform(parts).web({ method: 'POST', url: 'https://example.com', access: {}, timeoutMs: 1000 });
+      expect(global).toHaveBeenCalledWith('https://example.com', expect.objectContaining({ method: 'POST' }));
     } finally {
       globalThis.fetch = original;
     }

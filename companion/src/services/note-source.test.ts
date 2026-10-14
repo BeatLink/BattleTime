@@ -2,6 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import { LARGEST_NOTE_BYTES } from '@/protocol/notes';
 import type { NoteFileAccess } from '@/services/note-file';
+import { fetchRequester, type WebRequest } from '@/services/web-request';
 
 import { describeSource, fetchNote, noteReader, type NoteSourceSettings } from './note-source';
 
@@ -15,15 +16,15 @@ const access: NoteFileAccess = {
   watch: () => null,
 };
 
-const empty: NoteSourceSettings = { noteSource: 'typed', noteText: '', noteFile: null, noteUrl: '' };
+const empty: NoteSourceSettings = { noteSource: 'typed', noteText: '', noteFile: null, noteUrl: '', noteUrlAccess: {} };
 
 // A fetch that answers every URL with the same reply, and remembers what it was asked for.
 function server(body: string, status = 200) {
-  const asked: string[] = [];
-  const fetcher = (async (url: string) => {
-    asked.push(url);
-    return new Response(body, { status, statusText: status === 200 ? 'OK' : 'Not Found' });
-  }) as unknown as typeof fetch;
+  const asked: WebRequest[] = [];
+  const fetcher = (async (request: WebRequest) => {
+    asked.push(request);
+    return { status, statusText: status === 200 ? 'OK' : 'Not Found', body: new TextEncoder().encode(body) };
+  });
   return { fetcher, asked };
 }
 
@@ -41,6 +42,7 @@ describe('noteReader', () => {
       noteText: 'Milk',
       noteFile: { name: 'list.txt', uri: '/home/me/list.txt' },
       noteUrl: ' https://example.org/note.txt ',
+      noteUrlAccess: { username: 'me', password: 'secret', certificate: 'any' },
     };
 
     expect(text(await noteReader(settings, access, fetcher)!())).toBe('Milk');
@@ -48,7 +50,7 @@ describe('noteReader', () => {
       'contents of list.txt',
     );
     expect(text(await noteReader({ ...settings, noteSource: 'url' }, access, fetcher)!())).toBe('From the web');
-    expect(asked).toEqual(['https://example.org/note.txt']);
+    expect(asked).toMatchObject([{ method: 'GET', url: 'https://example.org/note.txt', access: settings.noteUrlAccess }]);
   });
 
   it('gives no reader while the chosen source is empty', () => {
@@ -71,17 +73,24 @@ describe('fetchNote', () => {
     await expect(fetchNote('file:///etc/passwd')).rejects.toThrow('is not an http or https URL');
   });
 
+  it('cannot trust a self-signed certificate through fetch alone', async () => {
+    const fetcher = fetchRequester((async () => new Response('x')) as unknown as typeof fetch);
+    await expect(fetchNote('https://nas.local/n', { certificate: 'any' }, fetcher)).rejects.toThrow(
+      'Trusting a self-signed certificate needs the desktop app or the Android app.',
+    );
+  });
+
   it('reports an error reply, a failed fetch and a note too big for the watch', async () => {
-    await expect(fetchNote('https://example.org/gone', server('', 404).fetcher)).rejects.toThrow(
+    await expect(fetchNote('https://example.org/gone', {}, server('', 404).fetcher)).rejects.toThrow(
       'https://example.org/gone answered 404 Not Found.',
     );
-    const offline = (async () => {
+    const offline = async () => {
       throw new Error('fetch failed');
-    }) as unknown as typeof fetch;
-    await expect(fetchNote('https://example.org/n', offline)).rejects.toThrow(
+    };
+    await expect(fetchNote('https://example.org/n', {}, offline)).rejects.toThrow(
       'Could not fetch https://example.org/n: fetch failed',
     );
     const huge = 'x'.repeat(LARGEST_NOTE_BYTES + 1);
-    await expect(fetchNote('https://example.org/n', server(huge).fetcher)).rejects.toThrow('the watch takes up to 64 kB');
+    await expect(fetchNote('https://example.org/n', {}, server(huge).fetcher)).rejects.toThrow('the watch takes up to 64 kB');
   });
 });

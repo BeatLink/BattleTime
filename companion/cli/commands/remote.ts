@@ -21,6 +21,7 @@ import {
 import { runShellCommand } from '../../node/remote-command';
 import type { WatchSession } from '../ble';
 import { say } from '../output';
+import { terminalRequester } from '../web';
 
 
 export const remoteUsage = `neotime remote [list|push|run <n>|listen] [--buttons <file>]
@@ -54,7 +55,7 @@ export function loadRemoteButtons(path: string): RemoteButton[] {
 // What a terminal can do for a button: web requests and shell commands.
 export function terminalPlatform(runCommand: (command: string) => Promise<CommandResult> = runShellCommand): RemotePlatform {
   return {
-    fetch: (input, init) => fetch(input, init),
+    web: terminalRequester(),
     runCommand,
     android: null,
     media: null,

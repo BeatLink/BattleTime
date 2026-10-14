@@ -8,6 +8,7 @@ import { LIBRARY_ICON_NAMES, type LibraryIconName } from '@/bundles/icon-names';
 import type { FileService } from '@/protocol/file-service';
 import type { WatchToPhoneMessage } from '@/protocol/gadgetbridge';
 import { fingerprint } from '@/protocol/notes';
+import { readWebAccess, type WebAccess } from '@/services/web-request';
 
 // ============================================================================
 // Buttons and their actions
@@ -37,7 +38,8 @@ export type AndroidIntent =
   | { type: 'broadcast'; action: string; packageName?: string; extras?: Record<string, string> };
 
 export type RemoteAction =
-  | { kind: 'http'; method: HttpMethod; url: string; headers?: Record<string, string>; body?: string }
+  // A web request, with the headers, login and certificate choice in its WebAccess part.
+  | ({ kind: 'http'; method: HttpMethod; url: string; body?: string } & WebAccess)
   | { kind: 'command'; command: string }
   | { kind: 'android'; intent: AndroidIntent }
   | { kind: 'builtin'; name: BuiltinAction };
@@ -102,7 +104,7 @@ export function readRemoteAction(value: unknown): RemoteAction | null {
             kind: 'http',
             method: action.method as HttpMethod,
             url: action.url,
-            ...(readExtras(action.headers) ? { headers: readExtras(action.headers) } : {}),
+            ...readWebAccess(action),
             ...(isText(action.body) && action.body ? { body: action.body } : {}),
           }
         : null;

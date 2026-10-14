@@ -11,17 +11,26 @@ import {
   type RemoteButton,
 } from '@/protocol/remote';
 
+import {
+  EMPTY_WEB_ACCESS_FORM,
+  joinPairs,
+  parsePairs,
+  webAccessForm,
+  webAccessFromForm,
+  type WebAccessForm,
+} from './web-access-form';
+
+export { parsePairs };
+
 export type AndroidIntentType = AndroidIntent['type'];
 
 // Every field the editor shows, for every kind of action, so switching kinds keeps what was typed.
-export type RemoteButtonForm = {
+export type RemoteButtonForm = WebAccessForm & {
   icon: string;
   label: string;
   kind: RemoteActionKind;
   method: HttpMethod;
   url: string;
-  // One "Name: value" per line.
-  headers: string;
   body: string;
   command: string;
   intentType: AndroidIntentType;
@@ -35,12 +44,12 @@ export type RemoteButtonForm = {
 };
 
 export const EMPTY_FORM: RemoteButtonForm = {
+  ...EMPTY_WEB_ACCESS_FORM,
   icon: 'play',
   label: '',
   kind: 'builtin',
   method: 'GET',
   url: '',
-  headers: '',
   body: '',
   command: '',
   intentType: 'deeplink',
@@ -52,33 +61,13 @@ export const EMPTY_FORM: RemoteButtonForm = {
   builtin: 'playpause',
 };
 
-const joinPairs = (pairs: Record<string, string> | undefined, separator: string) =>
-  Object.entries(pairs ?? {})
-    .map(([key, value]) => `${key}${separator}${value}`)
-    .join('\n');
-
-// Reads lines of key and value split at the first `separator`, ignoring blank lines.
-export function parsePairs(text: string, separator: string, what: string): Record<string, string> {
-  const pairs: Record<string, string> = {};
-  for (const line of text.split('\n')) {
-    if (line.trim() === '') continue;
-    const at = line.indexOf(separator);
-    const key = at > 0 ? line.slice(0, at).trim() : '';
-    if (!key) {
-      throw new Error(`Write each ${what} as name${separator === ':' ? ': ' : '='}value, not "${line.trim()}".`);
-    }
-    pairs[key] = line.slice(at + 1).trim();
-  }
-  return pairs;
-}
-
 // The editor's fields for an existing button.
 export function formFromButton(button: RemoteButton): RemoteButtonForm {
   const form: RemoteButtonForm = { ...EMPTY_FORM, icon: button.icon, label: button.label, kind: button.action.kind };
   const action = button.action;
   switch (action.kind) {
     case 'http':
-      return { ...form, method: action.method, url: action.url, headers: joinPairs(action.headers, ': '), body: action.body ?? '' };
+      return { ...form, ...webAccessForm(action), method: action.method, url: action.url, body: action.body ?? '' };
     case 'command':
       return { ...form, command: action.command };
     case 'builtin':
@@ -159,7 +148,7 @@ function actionFromForm(form: RemoteButtonForm): RemoteAction {
         kind: 'http',
         method: form.method,
         url,
-        ...withPairs('headers', parsePairs(form.headers, ':', 'header')),
+        ...webAccessFromForm(form),
         ...(form.body && form.method !== 'GET' ? { body: form.body } : {}),
       };
     }
