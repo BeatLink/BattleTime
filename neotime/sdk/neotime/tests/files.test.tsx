@@ -27,10 +27,12 @@ describe("library icons by number", () => {
     expect(library_icon(58)).toEqual(icons.none);
     expect(library_icon(59)).toEqual(icons.weather_night_clear);
     expect(library_icon(62)).toEqual(icons.info);
+    expect(library_icon(63)).toEqual(icons.remote);
+    expect(library_icon(64)).toEqual(icons.note);
   });
 
   it("give none outside the library", () => {
-    expect(library_icon(63)).toEqual(icons.none);
+    expect(library_icon(65)).toEqual(icons.none);
     expect(library_icon(-1)).toEqual(icons.none);
   });
 });
