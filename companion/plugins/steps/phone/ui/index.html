@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- The Steps plugin's page: the last two weeks of steps and today's six-minute slots. It talks to the plugin only by messages. -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root { color-scheme: light dark; --muted: #666; --line: #ddd; --wrong: #c33; --bar: #00807c; --empty: #e6e8eb; }
+      @media (prefers-color-scheme: dark) { :root { --muted: #aaa; --line: #444; --wrong: #f77; --bar: #00aaa5; --empty: #292c31; } }
+      body { font-family: system-ui, sans-serif; margin: 16px; }
+      h2 { font-size: 1.05rem; margin: 20px 0 8px; }
+      .big { font-size: 2.2rem; font-weight: 600; margin: 0; font-variant-numeric: tabular-nums; }
+      .note { color: var(--muted); }
+      svg { width: 100%; display: block; overflow: visible; }
+      svg rect { fill: var(--bar); }
+      svg rect.picked { fill: var(--wrong); }
+      svg .base { stroke: var(--line); }
+      svg text { fill: var(--muted); font-size: 10px; text-anchor: middle; }
+      #readout { min-height: 1.3em; }
+      #problem { color: var(--wrong); }
+    </style>
+  </head>
+  <body>
+    <p id="problem"></p>
+    <p class="note">Today</p>
+    <p class="big" id="today">–</p>
+    <h2>Last two weeks</h2>
+    <p class="note" id="readout">Tap a bar to read it</p>
+    <svg id="fortnight" viewBox="0 0 280 120" role="img" aria-label="Steps on each of the last 14 days"></svg>
+    <h2>Today, every six minutes</h2>
+    <svg id="slots" viewBox="0 0 280 100" role="img" aria-label="Steps in each six-minute slot today"></svg>
+    <p><button id="sync">Sync now</button></p>
+    <script src="page.js"></script>
+  </body>
+</html>

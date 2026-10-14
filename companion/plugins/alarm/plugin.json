@@ -4,24 +4,6 @@
   "version": "1.0.0",
   "description": "Up to twelve alarms, each ringing once or on chosen weekdays, merged from wasp-os's alarm and InfiniTime's Alarm. Its plugin keeps the app's state in sync with the companion and changes it from here.",
   "app": "alarm",
-  "fields": {
-    "alarms": {
-      "label": "Alarm",
-      "countedBy": "alarm_count"
-    },
-    "alarms.days": {
-      "label": "Repeat days (Monday 1, Tuesday 2, Wednesday 4 and so on added up; 0 rings once)"
-    },
-    "next_ring_place": {
-      "kind": "hidden"
-    },
-    "snoozed_place": {
-      "kind": "hidden"
-    },
-    "ringing_place": {
-      "kind": "hidden"
-    }
-  },
   "permissions": {
     "messages": [],
     "hosts": [],

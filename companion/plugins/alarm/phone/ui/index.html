@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- The Alarm plugin's page: the watch's alarms, each with its time, weekdays and switch. It talks to the plugin only by messages. -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root { color-scheme: light dark; --muted: #666; --line: #ddd; --wrong: #c33; --accent: #00807c; --on-accent: #fff; --chip: #e6e8eb; }
+      @media (prefers-color-scheme: dark) { :root { --muted: #aaa; --line: #444; --wrong: #f77; --accent: #00aaa5; --on-accent: #000; --chip: #292c31; } }
+      body { font-family: system-ui, sans-serif; margin: 16px; }
+      .alarm { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+      .alarm input[type="time"] { font-size: 1.6rem; font-weight: 600; background: none; color: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+      .days { display: flex; gap: 6px; }
+      .days button { width: 2.4em; height: 2.4em; border-radius: 50%; border: none; background: var(--chip); color: inherit; font: inherit; cursor: pointer; }
+      .days button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+      .repeat { color: var(--muted); flex: 1 1 100%; font-size: 0.9rem; }
+      .remove { margin-left: auto; color: var(--wrong); background: none; border: none; font: inherit; cursor: pointer; }
+      .switch { display: inline-flex; align-items: center; gap: 4px; }
+      .note { color: var(--muted); }
+      #problem { color: var(--wrong); }
+      .actions { display: flex; gap: 8px; margin-top: 12px; }
+    </style>
+  </head>
+  <body>
+    <p id="problem"></p>
+    <div id="alarms"><p class="note">Waiting for the plugin…</p></div>
+    <div class="actions">
+      <button id="add" disabled>Add an alarm</button>
+      <button id="sync">Sync now</button>
+    </div>
+    <script src="page.js"></script>
+  </body>
+</html>

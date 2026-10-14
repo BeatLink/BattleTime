@@ -151,8 +151,6 @@ and lets plugins read them and change their own app's state.
 - **Logs for heart rate, battery and sports sessions** under `/logs` on external flash, so there is
   history to sync. Sync already reads anything under `/logs`; each log needs a decoder in
   `core/src/sync/pass.rs`.
-- **Richer pages for the app plugins.** Every app's plugin uses the shared state page; apps such as
-  Alarm, Timer and Steps deserve pages of their own, with a time picker and weekday buttons.
 - **Untried with a watch.** The sync has run only against the core's fake watch.
 
 ## Not started

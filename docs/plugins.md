@@ -86,6 +86,13 @@ only a `plugin.json` that names the app with `"app"`. The build script then:
 - takes the shared logic and settings page from `companion/plugins/shared` unless the folder has its
   own `phone/main.ts` or `phone/ui/`.
 
+Alarm, Timer and Steps keep the shared logic but have pages of their own in `phone/ui/`: Alarm lists
+the alarms with a time picker, weekday buttons and a switch each, Timer shows the chosen length and
+whether it runs, and Steps draws the last two weeks and today's six-minute slots. A `page.ts` beside
+`index.html` is bundled into `page.js`; it may import from `../../shared/`, from other files in the
+plugin's `phone/` folder, and from the companion's `src/` modules that import nothing through `@/`
+(`src/protocol/alarms.ts` and `steps.ts`), which keeps the logic in one place and tested with jest.
+
 The shared page shows the app's synced state and changes it on the watch. Times show as dates, and
 durations are edited in seconds. Two more keys in `plugin.json` shape the page; the build script
 takes both out of the manifest:
