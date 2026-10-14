@@ -1,7 +1,9 @@
 //! The installed apps, read from `/apps` on the external flash, and the shared library in internal flash.
 //!
 //! Nothing is built into the firmware: the face, the launcher and every app are installed through
-//! the companion app, and with no face the shell shows its help screen. An app's image is read
+//! the companion app, and with no face the shell shows its help screen. The face is the one the
+//! `watch_face` setting names, or the first face turned on when that one is off or gone; the ids
+//! of the faces turned on stay in RAM, so choosing another needs no list. An app's image is read
 //! into the heap when it opens, and each app's icon is kept alone for the launcher.
 
 extern crate alloc;
@@ -9,14 +11,16 @@ extern crate alloc;
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::ptr::NonNull;
 
+use neotime_packages::faces::{face_number, face_to_show, faces_turned_on, stepped_face, NO_FACE_CHOSEN};
 use neotime_packages::launcher::{self, LauncherLook, ShownGroup, LAUNCHER_FILE};
 pub use neotime_packages::LAUNCHER_ID;
 use neotime_packages::{checks, InstalledApp, Refusal};
 use neotime_runtime::memory_need::reads_app_list;
 use neotime_runtime::resources::ImageReference;
 use neotime_runtime::{AppImage, AppKind};
+use neotime_settings::Setting;
 
-use crate::storage;
+use crate::{settings, storage};
 
 // ============================================================================
 // Bytes the app host borrows
@@ -57,6 +61,10 @@ impl<T: ?Sized> Lent<T> {
 /// app. Otherwise only `face`, `has_launcher`, `look` and the listed apps' ids stay, a few bytes an app.
 pub struct InstalledApps {
     pub face: Option<String>,
+    /// The shown face's name, for apps to read as `watch_face_name`.
+    pub face_name: String,
+    /// The ids of the faces turned on, in id order, each ending in a newline, so a face is picked without the full list.
+    face_ids: String,
     pub has_launcher: bool,
     /// The ids of the apps the launcher lists, in its order, each ending in a newline.
     listed_ids: String,
@@ -77,6 +85,8 @@ pub struct InstalledApps {
 impl InstalledApps {
     pub const NONE: InstalledApps = InstalledApps {
         face: None,
+        face_name: String::new(),
+        face_ids: String::new(),
         has_launcher: false,
         listed_ids: String::new(),
         details: false,
@@ -102,7 +112,7 @@ impl InstalledApps {
         self.details
     }
 
-    /// Frees everything but the face, the launcher, the look and the listed apps' ids.
+    /// Frees everything but the face, the faces turned on, the launcher, the look and the listed apps' ids.
     pub fn forget_details(&mut self) {
         self.packages = Vec::new();
         self.listed = Vec::new();
@@ -111,14 +121,54 @@ impl InstalledApps {
         self.details = false;
     }
 
+    /// The number of the face shown, as the `watch_face` setting holds it, or 0 with no face on.
+    pub fn face_number(&self) -> i32 {
+        self.face.as_deref().map_or(NO_FACE_CHOSEN, face_number)
+    }
+
+    /// The number of the face `steps` places on from the one shown, wrapping round, for the `watch_face` setting.
+    pub fn stepped_face_number(&self, steps: i32) -> Option<i32> {
+        stepped_face(self.face_ids.lines(), self.face.as_deref().unwrap_or(""), steps).map(face_number)
+    }
+
+    /// Picks the face again after the `watch_face` setting changed, and reads the new face's name from its image.
+    pub fn choose_face_again(&mut self, files: &storage::Files) {
+        let face_before = self.face.take();
+        self.pick_face();
+        if self.face != face_before {
+            self.face_name = self
+                .face
+                .as_deref()
+                .and_then(|id| files.read_app_name_now(id))
+                .unwrap_or_default();
+        }
+    }
+
+    /// Picks the face the `watch_face` setting names among the faces turned on, or else the first of them.
+    fn pick_face(&mut self) {
+        let chosen_number = settings::current().get(Setting::WatchFace);
+        self.face = face_to_show(self.face_ids.lines(), chosen_number).map(String::from);
+    }
+
     /// Works out the face, the launcher and the listed apps from which packages are on, grouped as the launcher file says.
     fn sort_out(&mut self, files: &storage::Files) {
-        self.face = None;
+        self.face_ids.clear();
+        for id in faces_turned_on(&self.packages) {
+            self.face_ids.push_str(id);
+            self.face_ids.push('\n');
+        }
+        self.face_ids.shrink_to_fit();
+        self.pick_face();
+        self.face_name = self
+            .packages
+            .iter()
+            .find(|app| Some(&app.id) == self.face.as_ref())
+            .map(|face| face.name.clone())
+            .unwrap_or_default();
         self.has_launcher = false;
         self.listed.clear();
         for (place, app) in self.packages.iter().enumerate().filter(|(_, app)| app.enabled) {
             match app.kind {
-                AppKind::Face if self.face.is_none() => self.face = Some(app.id.clone()),
                 AppKind::App if app.id == LAUNCHER_ID => self.has_launcher = true,
                 AppKind::App => self.listed.push(place as u16),
                 _ => {}

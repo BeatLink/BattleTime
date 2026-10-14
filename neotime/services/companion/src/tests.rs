@@ -269,6 +269,20 @@ fn the_wake_gestures_and_sleep_mode_have_keys_of_their_own() {
 }
 
 #[test]
+fn the_watch_face_is_chosen_by_its_number() {
+    let line = br#"{"t":"settings","watch_face":823453713}"#;
+    let Ok(Message::Settings(change)) = parse_line(line) else {
+        panic!();
+    };
+
+    assert_eq!(change.value(Setting::WatchFace), Some(0x3114_E811));
+    assert_eq!(
+        parse_line(br#"{"t":"settings","watch_face":-5}"#),
+        Err(MessageError::BadSetting)
+    );
+}
+
+#[test]
 fn one_bad_setting_refuses_the_whole_message() {
     let too_short = br#"{"t":"settings","brightness":3,"blank_after":1}"#;
     let unknown_units = br#"{"t":"settings","units":"Furlongs"}"#;
@@ -286,6 +300,7 @@ fn the_report_gives_every_setting_and_reads_back_the_same() {
     settings.set(Setting::UsesMetricUnits, 0).unwrap();
     settings.set(Setting::Chimes, 1).unwrap();
     settings.set(Setting::ScreenTimeoutSeconds, 60).unwrap();
+    settings.set(Setting::WatchFace, i32::MAX).unwrap();
 
     let report = settings_report(&DEFAULT_THEME, &settings);
 
@@ -297,7 +312,8 @@ fn the_report_gives_every_setting_and_reads_back_the_same() {
     assert!(report.contains("\"heart_rate_interval\":0"), "{report}");
     assert!(report.contains("\"raise_to_wake\":false"), "{report}");
     assert!(report.contains("\"shake_threshold\":150"), "{report}");
-    assert!(report.ends_with("\"sleep_mode\":false}\n"), "{report}");
+    assert!(report.contains("\"sleep_mode\":false"), "{report}");
+    assert!(report.ends_with("\"watch_face\":2147483647}\n"), "{report}");
     let Ok(Message::Settings(reread)) = parse_line(report.trim_end().as_bytes()) else {
         panic!("{report}");
     };

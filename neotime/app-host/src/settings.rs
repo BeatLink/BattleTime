@@ -28,6 +28,7 @@ pub fn system_value_of(setting: Setting) -> SystemValue {
         Setting::ShakeToWake => SystemValue::ShakeToWake,
         Setting::ShakeThreshold => SystemValue::ShakeThreshold,
         Setting::SleepMode => SystemValue::SleepMode,
+        Setting::WatchFace => SystemValue::WatchFace,
     }
 }
 

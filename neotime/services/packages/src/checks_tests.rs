@@ -60,7 +60,7 @@ fn every_app_pays_for_the_shell_index_and_the_launcher_for_the_full_list_and_eac
     // The timer is listed, the face, the launcher itself and the turned-off dice are not.
     assert_eq!(
         room_needed(&apps[1], &apps),
-        8_000 + shell_index(&apps) + shell_list(&apps) + 100 + 1_000
+        8_000 + shell_index(&apps) + shell_list(&apps) + 100
     );
 }
 
@@ -106,8 +106,8 @@ fn an_app_needing_more_than_the_budget_is_refused() {
 fn an_app_is_refused_when_the_launcher_would_no_longer_fit() {
     let mut apps = watch(vec![app("dice", AppKind::App, false, 9_000)]);
     let room_left = APP_HEAP_BUDGET_BYTES - room_needed(&apps[1], &apps);
-    // The dice's image becomes the largest the launcher reads icons from, and its share is added too.
-    apps[3].image_bytes = room_left + 1_000 - 100 + 1;
+    // The dice's share of the launcher, its icon and name, is one byte more than the launcher has left.
+    apps[3].launcher_share_bytes = room_left + 1;
 
     let refusal = check_change(&apps, "dice", true).unwrap_err();
 
@@ -120,7 +120,7 @@ fn an_app_is_refused_when_the_launcher_would_no_longer_fit() {
 #[test]
 fn a_face_never_grows_the_launcher() {
     let mut apps = watch(vec![app("analog", AppKind::Face, false, 9_000)]);
-    apps[3].image_bytes = APP_HEAP_BUDGET_BYTES;
+    apps[3].launcher_share_bytes = APP_HEAP_BUDGET_BYTES;
 
     assert!(check_change(&apps, "analog", true).is_ok());
 }

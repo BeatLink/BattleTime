@@ -25,6 +25,7 @@ import {
   step_history,
   steps_today,
   unread_notifications,
+  watch_face_name,
   DAY,
   HOUR,
   MINUTE,
@@ -192,6 +193,13 @@ function carry_out(effect: Effect) {
         .peek()
         .map((app) => (app.id === effect.id && app.refusal === 0 ? { ...app, enabled: effect.on as boolean } : app));
       break;
+    case "step_watch_face": {
+      const faces = packages.peek().filter((app) => app.is_face && app.enabled);
+      const shown = faces.findIndex((face) => face.name === watch_face_name.peek());
+      const next = faces[(((shown + (effect.steps as number)) % faces.length) + faces.length) % faces.length];
+      if (next) watch_face_name.value = next.name;
+      break;
+    }
     case "reset_step_trip":
       step_history.value = { ...step_history.peek(), trip: 0 };
       break;

@@ -182,6 +182,10 @@ pub enum SystemValue {
     SleepMode,
     /// The wrist's shake speed now, as `ShakeThreshold` counts it, kept current only while a screen shows it.
     ShakeSpeed,
+    /// The number of the face the watch shows, as the `watch_face` setting holds it, or 0 with no face on.
+    WatchFace,
+    /// Text: the name of the face the watch shows, or nothing with no face on.
+    WatchFaceName,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -199,7 +203,7 @@ const CALL_BIT: u32 = 24;
 const SHAKE_SPEED_BIT: u32 = 25;
 
 impl SystemValue {
-    pub const COUNT: usize = 108;
+    pub const COUNT: usize = 110;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -312,6 +316,8 @@ impl SystemValue {
             105 => ShakeThreshold,
             106 => SleepMode,
             107 => ShakeSpeed,
+            108 => WatchFace,
+            109 => WatchFaceName,
             _ => return None,
         })
     }
@@ -344,7 +350,7 @@ impl SystemValue {
             | LauncherGroupFirst | LauncherGroupSize => INSTALLED_APPS_BIT,
             ScreenTimeoutSeconds | AlwaysOnScreen | Chimes | ThemePreset | AllowsUpdates | WakeOnTouch
             | AlarmsInDoNotDisturb | HeartRateInterval | RaiseToWake | LowerToSleep | ShakeToWake
-            | ShakeThreshold | SleepMode => SETTINGS_BIT,
+            | ShakeThreshold | SleepMode | WatchFace | WatchFaceName => SETTINGS_BIT,
             ShakeSpeed => SHAKE_SPEED_BIT,
             NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
             | NotificationTime | NotificationIcon => UnreadNotifications as u32,
@@ -419,6 +425,7 @@ impl SystemValue {
                 | BootloaderVersion
                 | BootloaderBuildDate
                 | TaskName
+                | WatchFaceName
         )
     }
 }
@@ -607,6 +614,8 @@ pub enum EffectKind {
     /// Starts reading a path's bytes from an offset into RAM in the background, at most
     /// `PREFETCH_BYTES` of them, so a later `file_bytes` of that part finds them there.
     PrefetchFile,
+    /// Chooses the face that many places on among the faces turned on, wrapping round, or back when negative.
+    StepWatchFace = 35,
 }
 
 impl EffectKind {
@@ -645,6 +654,7 @@ impl EffectKind {
             29 => RequestNavigationState,
             30 => SetAppEnabled,
             31 => PrefetchFile,
+            35 => StepWatchFace,
             _ => return None,
         })
     }
@@ -667,7 +677,7 @@ impl EffectKind {
             | ResetStepTrip => 0,
             Vibrate | VibratePattern | SetBrightness | KeepScreenOn | Go | OpenApp | ShowToast
             | DismissNotification | MusicControl | CallControl | SetDoNotDisturb | Log | FindPhone
-            | SetBluetooth => 1,
+            | SetBluetooth | StepWatchFace => 1,
             Notify | SendToPhone | SetSetting | SetAppEnabled => 2,
             SetHeartRateLed | PrefetchFile => 3,
         }

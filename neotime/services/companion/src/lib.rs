@@ -249,6 +249,7 @@ const KEYS: [(Setting, &str, Shape); Setting::COUNT] = [
     (Setting::ShakeToWake, "shake_to_wake", Shape::TrueOrFalse),
     (Setting::ShakeThreshold, "shake_threshold", Shape::Number),
     (Setting::SleepMode, "sleep_mode", Shape::TrueOrFalse),
+    (Setting::WatchFace, "watch_face", Shape::Number),
 ];
 
 const METRIC: &str = "Metric";
@@ -300,6 +301,8 @@ struct Envelope<'line> {
     #[serde(default)]
     sleep_mode: Option<bool>,
     #[serde(default)]
+    watch_face: Option<i64>,
+    #[serde(default)]
     id: Option<i64>,
     #[serde(default, borrow)]
     src: Option<EscapedStr<'line>>,
@@ -340,6 +343,7 @@ impl Envelope<'_> {
                 Setting::ShakeToWake => self.shake_to_wake.map(i32::from),
                 Setting::ShakeThreshold => number(self.shake_threshold),
                 Setting::SleepMode => self.sleep_mode.map(i32::from),
+                Setting::WatchFace => number(self.watch_face),
             };
         }
         let mut checked = Settings::default();

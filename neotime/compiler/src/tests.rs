@@ -1614,6 +1614,38 @@ fn the_installed_packages_are_read_one_field_at_a_time_and_turned_on_by_id() {
 }
 
 #[test]
+fn the_watch_face_is_read_by_number_and_name_and_stepped_with_the_settings_permission() {
+    use neotime_runtime::instruction::Instruction;
+    let source = app(
+        r#"import { settings, step_watch_face, watch_face_name } from "neotime";
+        function Main() {
+          return (
+            <Screen>
+              <Label>{`${watch_face_name.value} ${settings.watch_face.value}`}</Label>
+              <Button onClick={() => step_watch_face(-1)}>Back</Button>
+            </Screen>
+          );
+        }"#,
+    );
+    let image = compile(&source);
+    let image = AppImage::parse(&image).unwrap();
+
+    assert!(image_runs(
+        &image,
+        Instruction::ReadSystem(SystemValue::WatchFaceName)
+    ));
+    assert!(image_runs(
+        &image,
+        Instruction::ReadSystem(SystemValue::WatchFace)
+    ));
+    assert!(image_runs(&image, Instruction::Effect(EffectKind::StepWatchFace)));
+    assert_eq!(
+        compile_source(&source).permissions,
+        [crate::permissions::Permission::Settings]
+    );
+}
+
+#[test]
 fn the_about_facts_and_the_task_table_are_read_from_the_system() {
     use neotime_runtime::instruction::Instruction;
     let image = compile(&app(

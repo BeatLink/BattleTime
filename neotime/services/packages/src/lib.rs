@@ -24,6 +24,7 @@ use neotime_runtime::{verify_with, AppImage, AppKind, CheckedFunctions, ImageErr
 
 pub mod checks;
 pub mod commands;
+pub mod faces;
 pub mod image_reader;
 pub mod launcher;
 pub mod library;
@@ -318,6 +319,14 @@ impl<'files, Files: FileAccess> Packages<'files, Files> {
     pub async fn read_icon(&mut self, id: &str) -> Option<Vec<u8>> {
         check_id(id).ok()?;
         image_reader::icon(self.files, &app_file(id, IMAGE_FILE)).await
+    }
+
+    /// An installed app's name, read without the rest of its image.
+    pub async fn read_name(&mut self, id: &str) -> Option<String> {
+        check_id(id).ok()?;
+        let path = app_file(id, IMAGE_FILE);
+        let outline = image_reader::outline(self.files, &path).await?;
+        image_reader::name(self.files, &path, &outline).await
     }
 
     /// Whether the app has subscriptions that run while it is closed, read without the rest of its image.

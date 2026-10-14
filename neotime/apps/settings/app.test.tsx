@@ -1,6 +1,15 @@
 import { act, cleanup, render } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { brightness, is_bluetooth_enabled, is_do_not_disturb, set_setting, settings, shake_speed } from "neotime";
+import {
+  brightness,
+  is_bluetooth_enabled,
+  is_do_not_disturb,
+  packages,
+  set_setting,
+  settings,
+  shake_speed,
+  watch_face_name,
+} from "neotime";
 import { install_apps, open, OpenScreen, press_button, screen_stack, start_scheduler } from "neotime/preview";
 import app, {
   calibrate,
@@ -144,6 +153,7 @@ describe("settings", () => {
       ["Chimes", "chimes"],
       ["Heart rate", "heart_rate_interval"],
       ["Wake", "wake"],
+      ["Face", "watch_face"],
       ["Theme", "theme"],
     ];
 
@@ -153,6 +163,25 @@ describe("settings", () => {
       act(() => press_button());
       expect(screen_stack.value.at(-1)).toBe("main");
     }
+  });
+
+  it("steps on and back through the faces turned on, wrapping round", () => {
+    packages.value = [
+      { id: "analog", name: "Analog", is_face: true, enabled: true, memory: 9_000, refusal: 0 },
+      { id: "casio", name: "Casio", is_face: true, enabled: false, memory: 9_000, refusal: 0 },
+      { id: "digital", name: "Digital", is_face: true, enabled: true, memory: 9_000, refusal: 0 },
+    ];
+    watch_face_name.value = "Digital";
+    const { container } = render(<OpenScreen />);
+
+    open_row(container, "Face");
+    const [before, next] = widgets(container, "button");
+    tap(next);
+    expect(watch_face_name.value).toBe("Analog");
+    tap(before);
+
+    expect(watch_face_name.value).toBe("Digital");
+    packages.value = [];
   });
 
   it("takes the last choice tapped on each screen", () => {

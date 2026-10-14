@@ -2305,6 +2305,21 @@ fn the_wake_gesture_values_are_numbered_from_102() {
 }
 
 #[test]
+fn the_watch_face_and_its_name_are_settings_numbered_108_and_109_and_stepped_by_effect_35() {
+    assert_eq!(SystemValue::from_byte(108), Some(SystemValue::WatchFace));
+    assert_eq!(SystemValue::from_byte(109), Some(SystemValue::WatchFaceName));
+    assert_eq!(SystemValue::from_byte(110), None);
+    assert_eq!(SystemValue::WatchFace.bit(), SystemValue::WakeOnTouch.bit());
+    assert_eq!(SystemValue::WatchFaceName.bit(), SystemValue::WakeOnTouch.bit());
+    assert!(SystemValue::WatchFaceName.is_text());
+    assert!(!SystemValue::WatchFace.is_text());
+    assert_eq!(EffectKind::from_byte(35), Some(EffectKind::StepWatchFace));
+    assert_eq!(EffectKind::StepWatchFace as u8, 35);
+    assert_eq!(EffectKind::from_byte(32), None);
+    assert_eq!(EffectKind::StepWatchFace.argument_count(), 1);
+}
+
+#[test]
 fn a_kept_notification_is_a_list_whose_app_title_and_body_are_text() {
     use SystemValue::*;
 

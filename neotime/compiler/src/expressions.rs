@@ -109,6 +109,8 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
         "settings.shake_to_wake" => (SystemValue::ShakeToWake, Type::BOOL),
         "settings.shake_threshold" => (SystemValue::ShakeThreshold, Type::NUMBER),
         "settings.sleep_mode" => (SystemValue::SleepMode, Type::BOOL),
+        "settings.watch_face" => (SystemValue::WatchFace, Type::NUMBER),
+        "watch_face_name" => (SystemValue::WatchFaceName, Type::TEXT),
         "shake_speed" => (SystemValue::ShakeSpeed, Type::NUMBER),
         "current_weather.temperature" => (SystemValue::WeatherTemperature, Type::NUMBER.or_null()),
         "current_weather.condition" => (

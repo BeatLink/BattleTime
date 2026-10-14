@@ -93,6 +93,22 @@ swipe up
 swipe up
 swipe up
 swipe up
+tap "Face"                  # the watch face chooser
+expect screen watch_face
+expect text "Digital"
+snapshot watch-face
+tap 204 140                 # the next face
+expect effect step-watch-face 1
+tap 36 140                  # the face before
+expect effect step-watch-face -1
+button
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
+swipe up
 tap "Theme"                 # the theme row
 expect screen theme
 expect text "Ocean"

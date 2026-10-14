@@ -601,7 +601,8 @@ The folders are the whole record: there is no list of installed apps to fall out
   every app whose image header holds its folder's id, in id order, with the heap it needs from the
   image's stored facts, reading only the header, the section table, the facts and three strings
   through `image_reader`, and `enabled` the ones the launcher shows. `read_icon` reads an app's
-  icon alone, for the launcher. `read_image` hands the shell an image to load into RAM. An image larger than the heap an
+  icon alone, for the launcher, and `read_name` its name alone. `faces` makes a face's
+  `watch_face` number from its id and picks the face to show, or the one a step on or back reaches. `read_image` hands the shell an image to load into RAM. An image larger than the heap an
   app may have is never read: `list` gives it by its id, turned off, and `read_image` refuses it.
   `install` and `change_enabled` turn an app on or off only once `checks` allows it.
   `read_image_in` reads an image from `/temp/<id>/` as well, for a temporary app, which no listing
@@ -1038,10 +1039,14 @@ watch face, the launcher and the apps through `neotime-app-host`:
   written into the table once at start-up.
 - **Apps.** None are built in. `apps.rs` reads every installed app from `/apps` through
   `neotime-packages` and keeps the list, turned-off apps included, for the `packages` system
-  values: the first face turned on is the watch face, the app with id `launcher` is the launcher,
+  values: the watch face is the one the `watch_face` setting names, or else the first face turned
+  on, the app with id `launcher` is the launcher,
   and every other app turned on is listed in `installed_apps`. `set_app_enabled` from an app runs
   the package manager's checks on that list, writes the `disabled` marker and tells the open app;
-  the open app itself cannot be turned off. Their icons are copied out of their images
+  the open app itself cannot be turned off. The ids of the faces turned on and the shown face's name
+  stay when the full list is dropped, so `step_watch_face` and a changed `watch_face` pick a face
+  with no list; `neotime_packages::faces` picks it and reads only the new face's name from its
+  image. Their icons are copied out of their images
   only while the launcher is open, and freed when it closes. The open app's image is read into the heap when it opens and freed once its
   host is gone. The shared library is read in place from the internal-flash region. With no face
   the shell shows `help.rs`: the time and how to install one. `packages::CHANGED` makes the shell read

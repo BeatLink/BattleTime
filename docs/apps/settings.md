@@ -31,6 +31,10 @@ saved on the watch, so the companion app sees it too.
 - **Do not disturb**, and **Alarms in DND**: whether alarms still ring while it is on.
 - **Sleep mode**: do not disturb that also stops every way of waking the screen but the button, and
   the always-on screen. Turning do not disturb off ends it.
+- **Face**: the watch face, shown by name. Its screen steps back and on through the faces turned
+  on in Software with the two arrow buttons, wrapping round, and the face changes at once, as
+  InfiniTime's watch face setting does. If the chosen face is turned off or removed, the first face
+  turned on shows instead.
 - **Theme**: one of six preset themes, each shown in its own colours. The companion app can set
   colours of your own, which show here as **Own**.
 - **Bluetooth**: off until the next restart.
@@ -81,6 +85,10 @@ Chimes, opened from its row.
 ![The heart rate interval choices](../../neotime/harness/snapshots/screens/app-settings-heart-rate.png)
 
 How often to measure the heart rate in the background, opened from **Heart rate**.
+
+![The watch face chooser](../../neotime/harness/snapshots/screens/app-settings-watch-face.png)
+
+The watch face, opened from **Face**; the arrows step to the face before or after it.
 
 ![The six themes](../../neotime/harness/snapshots/screens/app-settings-theme.png)
 

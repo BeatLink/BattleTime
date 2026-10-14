@@ -30,6 +30,15 @@ export const THEME_COLOR_KEYS = ['background', 'surface', 'text', 'muted', 'acce
 export type ThemeColorKey = (typeof THEME_COLOR_KEYS)[number];
 export type ThemeColors = Record<ThemeColorKey, string>;
 
+// The number the watch_face setting holds for a face: the 32-bit FNV-1a hash of its id with the top bit cleared, never 0.
+export function watchFaceNumber(id: string): number {
+  let hash = 0x811c9dc5;
+  for (const byte of new TextEncoder().encode(id)) {
+    hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
+  }
+  return hash & 0x7fffffff || 1;
+}
+
 // The watch settings the phone can change. The theme and brightness are always there; firmware older
 // than the settings store leaves the rest out.
 export type WatchSettingValues = {
@@ -52,6 +61,8 @@ export type WatchSettingValues = {
   shake_threshold?: number;
   // Do not disturb that also stops every wake gesture and the always-on screen; it turns do_not_disturb on.
   sleep_mode?: boolean;
+  // The face to show, by the number watchFaceNumber gives for its id; 0 chooses none.
+  watch_face?: number;
 };
 
 // With no other keys the watch only reports its settings. Colours given are applied after the preset.

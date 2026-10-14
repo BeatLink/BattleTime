@@ -12,6 +12,7 @@ neotime-app-host = { path = "../app-host" }
 neotime-companion = { path = "../services/companion" }
 neotime-compiler = { path = "../compiler" }
 neotime-notifications = { path = "../services/notifications" }
+neotime-packages = { path = "../services/packages" }
 neotime-runtime = { path = "../runtime" }
 png = "0.18"
 
@@ -19,5 +20,4 @@ png = "0.18"
 embedded-hal = "1.0"
 neotime-crash-record = { path = "../services/crash_record" }
 neotime-display = { path = "../drivers/display" }
-neotime-packages = { path = "../services/packages" }
 neotime-ui = { path = "../ui" }

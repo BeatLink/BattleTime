@@ -282,6 +282,10 @@ Heart Rate Measurement (0x2A37): nothing is notified and the sensor stays off un
 turns the background interval to always, then each reading arrives as `00` and the pulse, a read
 gives the latest, and turning notifications off stops them.
 
+`../tools/check_watch_face.py FIRMWARE_ELF` installs the analog and digital faces and starts the
+firmware three times: with no face chosen analog opens, with digital chosen in the saved settings
+digital opens, and with an uninstalled face chosen it falls back to analog; it takes about a minute.
+
 `../tools/check_wake_gestures.py FIRMWARE_ELF` installs a face with raise to wake and lower to sleep
 turned on and a 5 second screen timeout, then tilts the emulated accelerometer: the screen must light
 for a raised wrist after timing out, go dark for a lowered arm before the timeout, and go dark for

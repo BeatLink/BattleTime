@@ -1,6 +1,7 @@
 //! The shell: shows the watch face, the launcher and the open app through the app host.
 //!
-//! The face is shown at start. A swipe up on the face opens the launcher, a tap there opens an app,
+//! The face, the one the watch face setting names, is shown at start and again at once when the
+//! setting changes. A swipe up on the face opens the launcher, a tap there opens an app,
 //! a swipe down pulls the notifications and then quick settings down, and a swipe left or right
 //! steps round the quick apps, as `neotime_app_host::swipes` says. The side button's gestures act as
 //! `neotime_app_host::side_button` says: a click goes back a step, retracing the way the wearer came,
@@ -277,6 +278,10 @@ struct Prefetch {
 
 impl SystemValues for WatchSystem {
     fn read(&self, value: SystemValue) -> Value {
+        // Apps see the face shown, which differs from the setting when the chosen face is off or gone.
+        if value == SystemValue::WatchFace {
+            return self.installed.face_number() as Value;
+        }
         if let Some(setting) = app_settings::read_setting(&settings::current(), value) {
             return setting;
         }
@@ -341,6 +346,7 @@ impl SystemValues for WatchSystem {
             SystemValue::FirmwareBuildDate => crate::FIRMWARE_BUILD_DATE,
             SystemValue::BootloaderVersion => about::bootloader_version(),
             SystemValue::BootloaderBuildDate => about::bootloader_build_date(),
+            SystemValue::WatchFaceName => &self.installed.face_name,
             _ => self.phone.read_text(value).unwrap_or(""),
         }
     }
@@ -578,6 +584,12 @@ impl System for WatchSystem {
                 heart_rate::flash_led(effect.number(0) != 0, effect.number(1), effect.number(2))
             }
             EffectKind::SetBluetooth => settings::set_by_name(Setting::Bluetooth.name(), effect.number(0)),
+            EffectKind::StepWatchFace => {
+                let steps = i32::try_from(effect.number(0)).unwrap_or(0);
+                if let Some(number) = self.installed.stepped_face_number(steps) {
+                    settings::set_by_name(Setting::WatchFace.name(), number as Value);
+                }
+            }
             EffectKind::PrefetchFile => {
                 self.prefetch_file(effect.text(0).unwrap_or(""), effect.number(1), effect.number(2))
             }
@@ -966,6 +978,10 @@ impl Shell {
         if changed & Setting::Brightness.bit() != 0 && !self.app_set_brightness {
             self.set_brightness(settings::current().get(Setting::Brightness) as u8);
         }
+        // The face is picked first, so the open app redraws with the new face's name.
+        if changed & Setting::WatchFace.bit() != 0 {
+            self.face_choice_changed();
+        }
         if let Some(host) = &mut self.host {
             app_settings::tell_app_about_changes(host, changed, clock::utc_now(), &mut self.system);
         }
@@ -977,6 +993,17 @@ impl Shell {
                 touch::listen_for(listening_while_dark());
             }
             self.save_settings();
+        }
+    }
+
+    /// Picks the face again, and shows the new one at once when the face is on the screen.
+    #[inline(never)]
+    fn face_choice_changed(&mut self) {
+        let face_before = self.system.installed.face.clone();
+        self.system.installed.choose_face_again(self.files);
+        let face_showing = self.showing == Showing::Face && self.firmware_page.is_none();
+        if face_showing && self.system.installed.face != face_before {
+            self.open(Showing::Face, Transition::None);
         }
     }
 

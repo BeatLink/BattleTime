@@ -5,6 +5,7 @@ use std::cell::Cell;
 
 use neotime_app_host::{AppEffect, AppFailure, System};
 use neotime_notifications::NotificationList;
+use neotime_packages::faces::face_number;
 use neotime_runtime::resources::ImageReference;
 use neotime_runtime::{EffectKind, SystemValue, SystemValues, Value, NONE};
 
@@ -130,6 +131,10 @@ pub struct FakePackage {
 /// The heap budget an open app has, as the watch gives it.
 pub const STARTING_APP_MEMORY_BUDGET: Value = neotime_runtime::memory_need::APP_HEAP_BUDGET_BYTES as Value;
 
+/// The only face among the starting packages, which the watch shows, so `settings.watch_face` starts at its number.
+pub const STARTING_FACE_ID: &str = "digital";
+pub const STARTING_FACE_NAME: &str = "Digital";
+
 /// A watch with an app too large to turn on, a face, the launcher, the Software app and two apps.
 pub fn starting_packages() -> Vec<FakePackage> {
     let package = |id: &str, name: &str, is_face, enabled, memory, refusal| FakePackage {
@@ -143,7 +148,7 @@ pub fn starting_packages() -> Vec<FakePackage> {
     vec![
         package("atlas", "Atlas", false, false, 41_000, 1),
         package("dice", "Dice", false, false, 11_700, 0),
-        package("digital", "Digital", true, true, 12_700, 4),
+        package(STARTING_FACE_ID, STARTING_FACE_NAME, true, true, 12_700, 4),
         package("launcher", "Apps", false, true, 9_100, 3),
         package("software", "Software", false, true, 12_100, 5),
         package("timer", "Timer", false, true, 13_600, 0),
@@ -328,6 +333,7 @@ impl FakeSystem {
             (AllowsUpdates, 1),
             (WakeOnTouch, 1),
             (AlarmsInDoNotDisturb, 1),
+            (WatchFace, face_number(STARTING_FACE_ID) as Value),
             (HeartRateInterval, 0),
             (ShakeThreshold, 150),
             (CallState, 2),
@@ -355,6 +361,7 @@ impl FakeSystem {
         system.set_text(FirmwareBuildDate, "2026-01-04");
         system.set_text(BootloaderVersion, "0.1.0+0c4e2d1");
         system.set_text(BootloaderBuildDate, "2025-12-20");
+        system.set_text(WatchFaceName, STARTING_FACE_NAME);
         system
     }
 

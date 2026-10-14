@@ -186,6 +186,23 @@ fn a_file_from_before_the_newer_settings_reads_them_as_their_defaults() {
     assert!(!settings.is_on(Setting::ShakeToWake));
     assert_eq!(settings.get(Setting::ShakeThreshold), shake_threshold::DEFAULT);
     assert!(!settings.is_sleep_mode());
+    assert_eq!(settings.get(Setting::WatchFace), watch_face::NONE_CHOSEN);
+}
+
+#[test]
+fn the_watch_face_takes_any_positive_face_number_and_survives_a_restart() {
+    let mut settings = Settings::default();
+
+    assert!(settings.set(Setting::WatchFace, -1).is_err());
+    assert_eq!(
+        settings.set_by_name("watch_face", 0x3114_E811),
+        Ok(Setting::WatchFace)
+    );
+    let mut file = [0; FILE_BYTES];
+    settings.write_file(&mut file);
+
+    assert_eq!(Settings::from_file(&file).get(Setting::WatchFace), 0x3114_E811);
+    assert_eq!(Setting::from_number(18), Some(Setting::WatchFace));
 }
 
 // ============================================================================

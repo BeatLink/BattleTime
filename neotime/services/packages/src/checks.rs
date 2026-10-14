@@ -68,7 +68,7 @@ impl Refusal {
 
 /// What an app needs while open beside the shell's index of app ids; an app that reads the app list
 /// also has the shell's full list beside it, and a launcher the names and icons of every app turned
-/// on, plus the largest image it reads them from.
+/// on, each icon read from its image on its own.
 pub fn room_needed(app: &InstalledApp, apps: &[InstalledApp]) -> u32 {
     room_needed_with(app, apps, None)
 }
@@ -84,10 +84,11 @@ fn room_needed_with(app: &InstalledApp, apps: &[InstalledApp], turned_on: Option
             .sum::<u32>();
     }
     if app.lists_apps {
-        let listed = apps.iter().filter(|other| is_listed(other, turned_on));
-        let shares: u32 = listed.clone().map(|other| other.launcher_share_bytes).sum();
-        let largest_image = listed.map(|other| other.image_bytes).max().unwrap_or(0);
-        need += shares + largest_image;
+        need += apps
+            .iter()
+            .filter(|other| is_listed(other, turned_on))
+            .map(|other| other.launcher_share_bytes)
+            .sum::<u32>();
     }
     need
 }

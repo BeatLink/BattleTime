@@ -661,6 +661,11 @@ impl Files {
         self.now(|store| run_on_heap(neotime_packages::Packages::new(store).read_icon(id)))?
     }
 
+    /// An installed app's name, read without its whole image.
+    pub fn read_app_name_now(&self, id: &str) -> Option<alloc::string::String> {
+        self.now(|store| run_on_heap(neotime_packages::Packages::new(store).read_name(id)))?
+    }
+
     /// Whether an installed app has subscriptions that run while it is closed, read without its whole image.
     pub fn runs_while_closed_now(&self, id: &str) -> bool {
         self.now(|store| run_on_heap(neotime_packages::Packages::new(store).runs_while_closed(id)))

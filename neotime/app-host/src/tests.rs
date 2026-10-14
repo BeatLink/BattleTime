@@ -1529,6 +1529,7 @@ fn sleep_mode_stops_touch_waking_the_screen_and_the_screen_dimming() {
     assert_eq!(settings::wake_on_touch(&settings), wake_on_touch::OFF);
     assert!(!settings::screen_dims_instead_of_sleeping(&settings));
     assert_eq!(settings::read_setting(&settings, SystemValue::SleepMode), Some(1));
+    assert_eq!(settings::read_setting(&settings, SystemValue::WatchFace), Some(0));
     assert_eq!(
         settings::read_setting(&settings, SystemValue::ShakeThreshold),
         Some(150)

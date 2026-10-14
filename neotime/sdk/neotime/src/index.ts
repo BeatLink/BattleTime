@@ -153,6 +153,8 @@ export const settings = {
   shake_threshold: signal(150),
   /** Whether sleep mode is on: do not disturb with every wake gesture and the always-on screen off. */
   sleep_mode: signal(false),
+  /** The `number` of the face the watch shows, as the `watch_face` setting holds it; 0 with no face on. */
+  watch_face: signal(0),
 };
 
 /** How fast the wrist is shaking, 0 to about 4095, kept current only while a screen shows it. */
@@ -169,6 +171,9 @@ export const is_bluetooth_enabled = signal(true);
 
 /** The next alarm any app has set to ring, or null. */
 export const next_alarm = signal<Instant | null>(null);
+
+/** The name of the watch face the watch shows, or nothing with no face on. */
+export const watch_face_name = signal("Digital");
 
 /** The firmware's version and commit, such as `0.1.0+1b19aed`. */
 export const firmware_version = signal("0.1.0+preview");
@@ -891,6 +896,11 @@ export function set_bluetooth(on: boolean) {
 /** Turns an installed app or face on or off; the watch does nothing when its `refusal` says no. Needs `settings`. */
 export function set_app_enabled(id: string, on: boolean) {
   emit({ kind: "set_app_enabled", id, on });
+}
+
+/** Chooses the face `steps` places on from the one shown among the faces turned on, wrapping round; negative goes back. Needs `settings`. */
+export function step_watch_face(steps: number) {
+  emit({ kind: "step_watch_face", steps });
 }
 
 /** Takes one heart rate reading now. */

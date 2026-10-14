@@ -35,6 +35,7 @@ pub enum Setting {
     ShakeToWake = 15,
     ShakeThreshold = 16,
     SleepMode = 17,
+    WatchFace = 18,
 }
 
 /// The lowest and highest value a setting takes, both included, and the value it starts at.
@@ -82,6 +83,12 @@ pub mod wake_on_touch {
     pub const DOUBLE_TAP: i32 = 2;
 }
 
+/// What `Setting::WatchFace` holds: 0 before a face is chosen, else the face's number that `neotime_packages::faces::face_number` makes from its id.
+pub mod watch_face {
+    pub const NONE_CHOSEN: i32 = 0;
+    pub const HIGHEST: i32 = i32::MAX;
+}
+
 /// What `Setting::ShakeThreshold` holds: InfiniTime's shake speed a wrist must pass to wake the screen.
 pub mod shake_threshold {
     pub const LOWEST: i32 = 0;
@@ -90,7 +97,7 @@ pub mod shake_threshold {
 }
 
 impl Setting {
-    pub const COUNT: usize = 18;
+    pub const COUNT: usize = 19;
 
     pub const ALL: [Setting; Setting::COUNT] = [
         Setting::Uses24HourClock,
@@ -111,6 +118,7 @@ impl Setting {
         Setting::ShakeToWake,
         Setting::ShakeThreshold,
         Setting::SleepMode,
+        Setting::WatchFace,
     ];
 
     pub fn from_number(number: u8) -> Option<Setting> {
@@ -142,6 +150,7 @@ impl Setting {
             Setting::ShakeToWake => "shake_to_wake",
             Setting::ShakeThreshold => "shake_threshold",
             Setting::SleepMode => "sleep_mode",
+            Setting::WatchFace => "watch_face",
         }
     }
 
@@ -184,6 +193,11 @@ impl Setting {
                 shake_threshold::DEFAULT,
             ),
             Setting::SleepMode => limits(0, 1, 0),
+            Setting::WatchFace => limits(
+                watch_face::NONE_CHOSEN,
+                watch_face::HIGHEST,
+                watch_face::NONE_CHOSEN,
+            ),
         }
     }
 

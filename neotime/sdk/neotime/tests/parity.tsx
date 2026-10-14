@@ -48,6 +48,7 @@ import {
   touch_firmware_version,
   unread_notifications,
   utc_offset,
+  watch_face_name,
   HOUR,
   MINUTE,
   STEP_HISTORY_DAYS,
@@ -125,6 +126,7 @@ export const KNOWN_DIFFERENCES: KnownDifference[] = [
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Chimes", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Dark", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Do not disturb", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Digital", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Heart rate", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Metric units", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Off", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
@@ -134,6 +136,7 @@ export const KNOWN_DIFFERENCES: KnownDifference[] = [
   { snapshot: "app-settings", screen: "wake", side: "preview_only", text: "Lower to sleep", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Theme", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Updates", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Face", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-software", screen: "main", side: "preview_only", text: "12 KB", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-software", screen: "main", side: "preview_only", text: "14 KB", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-software", screen: "main", side: "preview_only", text: "9 KB", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
@@ -228,6 +231,8 @@ export function set_fake_system_values() {
   settings.shake_to_wake.value = false;
   settings.shake_threshold.value = 150;
   settings.sleep_mode.value = false;
+  settings.watch_face.value = 708936699;
+  watch_face_name.value = "Digital";
   shake_speed.value = 0;
   is_heart_rate_running.value = false;
   heart_rate_status.value = 0;

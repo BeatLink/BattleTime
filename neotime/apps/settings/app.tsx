@@ -7,6 +7,7 @@
 // hard a shake must be by dragging an arc or by recording a shake, and sleep mode.
 // Also: what touch wakes the screen, whether alarms ring in do not disturb, Bluetooth until the next
 // restart, and whether the watch takes firmware updates.
+// Also from InfiniTime: choosing the watch face, here by stepping through the faces turned on in Software.
 // The theme is one of the watch's presets; the companion app can also set colours of the user's own.
 // Every change goes to the watch's settings with `set_setting`, so the companion app sees it too.
 
@@ -26,6 +27,8 @@ import {
   settings,
   shake_speed,
   signal,
+  step_watch_face,
+  watch_face_name,
   type Color,
   type Instant,
 } from "neotime";
@@ -260,6 +263,7 @@ function SettingsList() {
           value={settings.alarms_in_do_not_disturb.value}
           onChange={toggle_alarms_in_do_not_disturb}
         />
+        <ChoiceRow title="Face" value={watch_face_name.value} onClick={() => go("watch_face")} />
         <ChoiceRow title="Theme" value={theme_name.value} onClick={() => go("theme")} />
         <SwitchRow title="Bluetooth" value={is_bluetooth_enabled.value} onChange={toggle_bluetooth} />
         <SwitchRow title="Updates" value={settings.allows_updates.value} onChange={toggle_updates} />
@@ -449,6 +453,26 @@ function ShakeThreshold() {
   );
 }
 
+/** The face the watch shows, with buttons that step back and on through the faces turned on, as InfiniTime's SettingWatchFace chooses one. */
+function WatchFace() {
+  return (
+    <Screen padding={8} gap={6}>
+      <Label color="muted">Watch face</Label>
+      <Row grow={1} gap={6} align_items="center">
+        <Button width={56} height={64} onClick={() => step_watch_face(-1)}>
+          <Icon icon={icons.previous} />
+        </Button>
+        <Label grow={1} text_align="center" long_mode="wrap">
+          {watch_face_name.value}
+        </Label>
+        <Button width={56} height={64} onClick={() => step_watch_face(1)}>
+          <Icon icon={icons.next} />
+        </Button>
+      </Row>
+    </Screen>
+  );
+}
+
 function ThemeChoice(props: { place: number }) {
   const place = props.place;
   return (
@@ -495,6 +519,7 @@ export default define_app({
     wake: Wake,
     wake_touch: WakeTouch,
     shake_threshold: ShakeThreshold,
+    watch_face: WatchFace,
     theme: Theme,
   },
 });

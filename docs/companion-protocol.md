@@ -94,6 +94,7 @@ it changes nothing. Either way the watch answers with the settings as they now a
 | `shake_to_wake` | `true` to wake a dark screen with a shake. |
 | `shake_threshold` | How fast a shake must be to wake the screen, 0 to 4095, as InfiniTime counts it. |
 | `sleep_mode` | `true` for do not disturb that also stops every wake gesture, touch included, and the always-on screen. It turns `do_not_disturb` on, and `do_not_disturb` set `false` ends it. |
+| `watch_face` | The face to show, by its number: the 32-bit FNV-1a hash of its id with the top bit cleared, or `1` should that be `0`. `0`, the default, chooses none. When the chosen face is not installed or is turned off, the watch shows the first face turned on, in id order. |
 
 An unknown preset, a colour not written `#rrggbb`, `units` other than the two names, or any
 value outside its range is refused with an `error` reply, and nothing in that message is applied.
@@ -107,7 +108,8 @@ The reply:
  "clock_24h":true,"units":"Metric","step_goal":10000,"brightness":2,"blank_after":15,
  "always_on":false,"chimes":0,"do_not_disturb":false,"bluetooth":true,"updates":true,
  "wake_on_touch":1,"alarms_in_dnd":true,"heart_rate_interval":0,"raise_to_wake":false,
- "lower_to_sleep":false,"shake_to_wake":false,"shake_threshold":150,"sleep_mode":false}
+ "lower_to_sleep":false,"shake_to_wake":false,"shake_threshold":150,"sleep_mode":false,
+ "watch_face":0}
 ```
 
 `theme` is the preset whose colours match exactly, or `custom`. Colours are stored as RGB565, so a

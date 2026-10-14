@@ -504,6 +504,17 @@ fn the_icon_is_read_on_its_own() {
 }
 
 #[test]
+fn the_name_is_read_on_its_own() {
+    let mut files = file_system();
+    put(&mut files, "analog", &image("analog", "Analog", AppKind::Face));
+    let mut packages = Packages::new(&mut files);
+
+    assert_eq!(block_on(packages.read_name("analog")).as_deref(), Some("Analog"));
+    assert_eq!(block_on(packages.read_name("nothing")), None);
+    assert_eq!(block_on(packages.read_name("../bad")), None);
+}
+
+#[test]
 fn an_app_runs_while_closed_only_with_a_timed_subscription_that_outlives_it() {
     use neotime_runtime::subscriptions::{Subscription, SubscriptionKind, SubscriptionValue};
     let subscription = |kind, only_while_open| Subscription {

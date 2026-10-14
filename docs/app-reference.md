@@ -29,7 +29,7 @@ time.
 | `notifications` | list | The latest 5 notifications the watch keeps, from the phone and from apps, newest first: `notifications.value.length`, and `notifications.value[i].id` (for `dismiss_notification`), `.app`, `.title`, `.body`, `.time`, when it arrived, and `.icon`, an icon for its kind that the watch picks from its app: a phone, a missed call, a text, a chat, news, voicemail, a calendar or a bell for the Alert Notification categories, the companion's call summaries and a calendar, and an envelope for any other app. An app's own have negative ids. Needs the `notifications` permission. `apps/notifications` lists them this way. |
 | `is_do_not_disturb` | `Bool` | Whether do not disturb is on. |
 | `brightness` | `Int` | The backlight level, 1 to 3. |
-| `settings` | object | The user's choices apps should follow: `uses_24_hour_clock`, `uses_metric_units`, `step_goal`, `screen_timeout_seconds` (5 to 300), `always_on_screen`, `chimes` (0 off, 1 every hour, 2 every half hour), `allows_updates`, `wake_on_touch` (0 only the button wakes the screen, 1 a tap, 2 a double tap), `alarms_in_do_not_disturb`, `heart_rate_interval` (0 off, 1 continuous, then every 30 seconds, minute, 5, 10 or 30 minutes, as InfiniTime offers), `raise_to_wake`, `lower_to_sleep`, `shake_to_wake`, `shake_threshold` (0 to 4095, the `shake_speed` a shake must pass to wake the screen), `sleep_mode` (do not disturb that also turns off every wake gesture and the always-on screen; turning it on turns do not disturb on) and `theme`, the preset theme's number in the watch's order (dark, light, ocean, forest, sunset, contrast), or -1 for colours of the user's own. |
+| `settings` | object | The user's choices apps should follow: `uses_24_hour_clock`, `uses_metric_units`, `step_goal`, `screen_timeout_seconds` (5 to 300), `always_on_screen`, `chimes` (0 off, 1 every hour, 2 every half hour), `allows_updates`, `wake_on_touch` (0 only the button wakes the screen, 1 a tap, 2 a double tap), `alarms_in_do_not_disturb`, `heart_rate_interval` (0 off, 1 continuous, then every 30 seconds, minute, 5, 10 or 30 minutes, as InfiniTime offers), `raise_to_wake`, `lower_to_sleep`, `shake_to_wake`, `shake_threshold` (0 to 4095, the `shake_speed` a shake must pass to wake the screen), `sleep_mode` (do not disturb that also turns off every wake gesture and the always-on screen; turning it on turns do not disturb on), `watch_face` (the number of the face the watch shows, made from its id as [companion-protocol.md](companion-protocol.md) says, or 0 with no face on) and `theme`, the preset theme's number in the watch's order (dark, light, ocean, forest, sunset, contrast), or -1 for colours of the user's own. |
 | `shake_speed` | `Int` | How fast the wrist shakes now, as InfiniTime counts it for its shake threshold, about 0 to 4095. Kept current only while the open screen shows it, which has the accelerometer read ten times a second. |
 | `current_screen` | `Text` | The name of the app's screen on display. |
 | `is_heart_rate_running` | `Bool` | Whether the heart rate sensor is measuring for any app. |
@@ -45,6 +45,7 @@ time.
 | `app_memory_budget` | `Int` | The most heap an open app may need, in bytes. |
 | `current_call` | object | The phone's latest call: `caller`, its name or else its number, and `state`, `incoming`, `answered` or `ended` (also before any call). Needs the `phone` permission. |
 | `current_music` | object | The phone's player: `artist`, `track`, `is_playing`, `position` and `length`. Needs the `phone` permission. |
+| `watch_face_name` | `Text` | The name of the face the watch shows, or nothing with no face on. |
 | `firmware_version` | `Text` | The firmware's version and the commit it was built from, such as `0.1.0+1b19aed`, with a `*` when the build had uncommitted changes. At most 22 characters. |
 | `started_at` | `Instant` | When the watch last started, so `now - started_at` is how long it has run. It moves with the clock when the phone sets the time. |
 | `free_storage_kilobytes` | `Int` | The space left in the watch's file system, counted when the app opens. |
@@ -408,6 +409,7 @@ app cannot keep the sensor on all the time.
 | `log(text)` | Writes a line to the debug log the companion app can read. |
 | `set_bluetooth(on)` | Turns Bluetooth on or off; the same as `set_setting("bluetooth", ...)`. A restart turns it on again. |
 | `set_app_enabled(id, on)` | Turns an installed app or face on or off. The watch checks the change as the package manager does and does nothing when `packages` gives it a refusal, so show why first. |
+| `step_watch_face(steps)` | Chooses the face `steps` places on from the one shown among the faces turned on, in id order, wrapping round; a negative number goes back. The watch saves it in the `watch_face` setting and shows it. |
 | `prefetch_file(path, offset, length)` | Starts reading `length` bytes of a file from `offset` into RAM in the background, at most 4,096, so the screen keeps drawing while they arrive. The next `file_bytes` of that part takes them from RAM instead of the flash, as the file was when `prefetch_file` ran. One part is held at a time, until a `file_bytes` reads its last byte, the next `prefetch_file` replaces it or the app closes. An app that calls it needs 4 KB more heap. Read the next page ahead as the wearer turns one, as `file_bytes(path, 256, page * 256)` then `prefetch_file(path, (page + 1) * 256, 256)`. |
 | `set_heart_rate_led(on, brightness, period)` | Drives the heart rate sensor's LED directly, such as for a beacon. `brightness` is the drive level, 0 to 3, and `period` the flash period in milliseconds, 0 for steady. The runtime turns it off when the app closes, even with the `background` permission, to save the battery. |
 
@@ -598,7 +600,7 @@ has no place for them yet, so for now the compiler only reports them, in its `Ou
 | `phone` | `call_control`, `music_control`, `find_phone`, reading `current_call`, `current_music` and `current_navigation`, and the `call`, `music` and `navigation` events. |
 | `phone_messages` | `send_to_phone`. |
 | `internet` | `http_request`. |
-| `settings` | `set_setting`, `set_do_not_disturb`, `set_bluetooth` and `set_app_enabled`. |
+| `settings` | `set_setting`, `set_do_not_disturb`, `set_bluetooth`, `set_app_enabled` and `step_watch_face`. |
 | `wake` | `wake_screen`, and vibration during do not disturb. |
 | `background` | Events other than the app's own life connected without `while_open: true`, which come while the app is closed. |
 

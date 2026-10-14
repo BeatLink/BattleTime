@@ -459,9 +459,8 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### Settings
 
-- [ ] **The rest of InfiniTime's settings screens:** Watch face, Date and time, Shake calibration,
-  Firmware and About. Each needs its feature first, such as choosing among installed
-  faces or setting the clock by hand.
+- [ ] **The rest of InfiniTime's settings screens:** Date and time, Shake calibration, Firmware and
+  About. Each needs its feature first, such as setting the clock by hand.
 
 ### Bluetooth
 

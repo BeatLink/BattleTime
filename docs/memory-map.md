@@ -345,7 +345,7 @@ holds 10,376 B, the launcher 14,780 B and the alarm 11,784 B, against 14,192 B, 
 the repository and the `digital` face installed, the face held 14,356 B and the launcher, listing
 every app, 11,832 B; the harness works the launcher's need out at 17,169 B with all 55 apps and
 faces on, so it fits with room to spare. A launcher's need is its own, plus the names and icons of
-the apps it lists, plus the largest of their images, which it reads one at a time for the icons.
+the apps it lists; each icon is read from its image on its own, so no whole image is counted.
 
 The largest app in the repository, `settings`, needs 21.8 KB since it gained the wake list and the
 shake calibration screen,

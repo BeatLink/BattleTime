@@ -84,8 +84,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Settings, on the watch and from the companion app.** The Settings app and the companion app
   change the same watch-wide settings: brightness, how soon the screen turns off, the always-on
   screen, the 12 or 24 hour clock, metric or imperial units, the daily step goal, chimes, do not
-  disturb, whether alarms ring in do not disturb, what wakes the screen, Bluetooth, firmware updates
-  and the theme. They are kept through a restart, except Bluetooth, and apps follow them at once.
+  disturb, whether alarms ring in do not disturb, what wakes the screen, the watch face, Bluetooth,
+  firmware updates and the theme. They are kept through a restart, except Bluetooth, and apps follow them at once.
 - **Waking the screen by touch.** A tap, a double tap, or only the button, chosen in settings. With
   only the button, the touch panel sleeps while the screen is off. Not tried on the watch yet.
 - **Raise to wake, lower to sleep and shake to wake,** ported from InfiniTime and each turned on in
@@ -98,6 +98,10 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Sleep mode,** the third state of do not disturb, from quick settings or Settings: it silences
   like do not disturb and also stops touch, raise and shake from waking the screen and turns the
   always-on screen off, so only the button wakes the watch.
+- **Choosing the watch face,** as InfiniTime's watch face setting: **Face** in Settings steps back
+  and on through the faces turned on in Software, and the companion app can choose one by its
+  `watch_face` number. The chosen face shows at once and after a restart; if it is turned off or
+  removed, the first face turned on shows instead. Proven in the emulator, not tried on the watch yet.
 - **A double tap on the face puts the watch to sleep,** whichever face shows, unless the face takes
   the taps itself.
 - **Bluetooth off,** from settings or quick settings, until it is turned on again or the watch restarts, so
