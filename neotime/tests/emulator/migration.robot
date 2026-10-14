@@ -22,8 +22,8 @@ ${MCUBOOT_BIN}            ${TEMPDIR}/neotime_mcuboot.bin
 ${INFINITIME_RELOADER}    ${DIST}/reloader-from-infinitime.mcuboot.bin
 ${MCUBOOT_SLOT}           0x8000
 
-# How long the reloader needs, with the flash's real busy times, plus the first NeoTime boot.
-${RELOADER_SECONDS}       40
+# How long the reloader needs, with the flash's real busy times and wait states, plus the first NeoTime boot.
+${RELOADER_SECONDS}       60
 ${FIRST_BOOT_SECONDS}     30
 # The bootloader's 20 KB, the slot table and the boot state page after it.
 ${OLD_START_LENGTH}       0x8000
