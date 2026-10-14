@@ -13,11 +13,14 @@ STACK_TOP = 0x2000FFF0
 BRANCH_TO_SELF_TWICE = 0xE7FEE7FE
 
 
-def write_never_confirming_image(path):
-    """A headered firmware whose reset handler branches to itself: it starts, never confirms, and the watchdog resets."""
+def write_never_confirming_image(path, header_version=image_header.HEADER_VERSION):
+    """A headered firmware whose reset handler branches to itself: it starts, never confirms, and the watchdog resets.
+
+    `header_version` 1 makes it an image of the 388 KB layout, which the current bootloader refuses.
+    """
     load_address = image_header.FIRMWARE_VECTOR_TABLE
     code = struct.pack("<III", STACK_TOP, load_address + 8 + 1, BRANCH_TO_SELF_TWICE)
-    header = image_header.header("firmware", "0.0.0", "", 0, code, load_address)
+    header = image_header.header("firmware", "0.0.0", "", 0, code, load_address, header_version=int(header_version))
     Path(path).write_bytes(header + code)
     return str(path)
 

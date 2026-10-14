@@ -51,18 +51,14 @@ pub const BOOT_STATE: Region = Region {
     start: SLOT_TABLE.end(),
     size: PAGE_SIZE,
 };
-/// The running firmware: its `ImageHeader`, then its code from `FIRMWARE_VECTOR_TABLE` on.
+/// The running firmware, to the end of flash: its `ImageHeader`, its code from `FIRMWARE_VECTOR_TABLE`
+/// on, then the shared library that apps use, where the header says.
 pub const FIRMWARE: Region = Region {
     start: BOOT_STATE.end(),
-    size: SHARED_LIBRARY.start - BOOT_STATE.end(),
+    size: INTERNAL_FLASH_SIZE - BOOT_STATE.end(),
 };
 /// Where the firmware is linked to start; the bootloader jumps here.
 pub const FIRMWARE_VECTOR_TABLE: u32 = FIRMWARE.start + image_header::IMAGE_HEADER_SIZE;
-/// Images, fonts, components and common code that apps share; apps themselves live in /apps on the external flash.
-pub const SHARED_LIBRARY: Region = Region {
-    start: 0x0006_9000,
-    size: INTERNAL_FLASH_SIZE - 0x0006_9000,
-};
 
 // ============================================================================
 // External flash, 4 MB
@@ -86,9 +82,10 @@ pub const DEFAULT_SLOTS: Slots = Slots {
         start: 0x0000_0000,
         size: FIRMWARE.size + PAGE_SIZE,
     },
+    // Clear of every slot the 388 KB layout used, so the move to this layout can write it first.
     recovery: Region {
-        start: 0x0006_5000,
-        size: FIRMWARE.size,
+        start: 0x000C_6000,
+        size: SLOT_AREA.end() - 0x000C_6000,
     },
 };
 
@@ -269,7 +266,6 @@ const _: () = {
         SLOT_TABLE,
         BOOT_STATE,
         FIRMWARE,
-        SHARED_LIBRARY,
         FILE_SYSTEM,
     ];
     let mut index = 0;
@@ -280,7 +276,7 @@ const _: () = {
         index += 1;
     }
 
-    assert!(SHARED_LIBRARY.end() == INTERNAL_FLASH_SIZE);
+    assert!(FIRMWARE.end() == INTERNAL_FLASH_SIZE);
     assert!(FILE_SYSTEM.end() == EXTERNAL_FLASH_SIZE);
     assert!(FIRMWARE_VECTOR_TABLE.is_multiple_of(VECTOR_TABLE_ALIGNMENT));
     assert!(DEFAULT_SLOTS.check().is_ok());

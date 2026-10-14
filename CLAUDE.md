@@ -51,8 +51,8 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
   way to move forward must record its step, and a new way back must take it.
 - The firmware carries only the engine, plus the notifications and quick settings screens from
   `shell/`, which it compiles in. No other built-in apps, faces, launcher, icons or fonts, and no
-  fallback copies of them. Apps live in `/apps` on external flash; the shared library sits in the
-  last 92 KB of internal flash (0x69000).
+  fallback copies of them. Apps live in `/apps` on external flash; the shared library ships inside
+  the firmware image, after the code, where the image header says.
 - Anything that changes often (notifications, settings, app state) goes on external flash, never
   internal flash.
 - Apps are Preact and Signals compiled on the computer to bytecode ([docs/app-runtime.md](docs/app-runtime.md)).
@@ -67,7 +67,8 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
 - Keep at least 2 KB of stack spare, measured with `tools/measure_stack.py`. Large state goes in a
   `Box` or lives on the stack only while it is used; a big stack frame overflows the watch's stack,
   which shows as a blank screen and then a rollback.
-- The full firmware nearly fills its 388 KB slot, so a new firmware feature must find room first.
+- The full firmware and its shared library nearly fill their 480 KB region, so a new firmware feature
+  or library addition must find room first.
 - CI measures `docs/memory-map.md` with `tools/measure_memory.py`.
 
 ## The watch cannot be recovered by wire

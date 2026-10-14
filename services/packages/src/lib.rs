@@ -83,10 +83,8 @@ pub enum PackageError {
     NotInstalled,
     /// The image fails the app host's checks.
     BadImage(ImageError),
-    /// The image is the shared library, which is installed into internal flash instead.
+    /// The image is the shared library, which ships inside the firmware instead.
     IsLibrary,
-    /// The image is not the shared library.
-    NotLibrary,
     /// The id inside the image is not the folder's name.
     IdMismatch,
     /// Turning the app on or off would leave an app without the heap it needs, or the watch without a launcher or face.
@@ -104,8 +102,7 @@ impl PackageError {
             PackageError::BadId => "an app id is letters, digits, - and _",
             PackageError::NotInstalled => "no such app",
             PackageError::BadImage(_) => "the image fails the app checks",
-            PackageError::IsLibrary => "the shared library is installed with install_library",
-            PackageError::NotLibrary => "that image is not the shared library",
+            PackageError::IsLibrary => "the shared library ships inside the firmware",
             PackageError::IdMismatch => "the image's id is not the folder's name",
             PackageError::Refused(refusal) => refusal.describe(),
             PackageError::NeedsNewerLibrary => "the app needs a newer shared library; update the watch first",
@@ -173,14 +170,6 @@ pub fn check_app_image(id: &str, bytes: &[u8]) -> Result<(), PackageError> {
     }
     if image.string(image.id_string) != Some(id) {
         return Err(PackageError::IdMismatch);
-    }
-    Ok(())
-}
-
-/// Checks a shared library image before it is copied into internal flash.
-pub fn check_library_image(bytes: &[u8]) -> Result<(), PackageError> {
-    if check_image(bytes)?.kind != AppKind::Library {
-        return Err(PackageError::NotLibrary);
     }
     Ok(())
 }

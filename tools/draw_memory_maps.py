@@ -17,8 +17,10 @@ MEMORIES = {
     "internal-flash": (
         "Internal flash, 512 KB",
         [
-            ("Firmware", "0x08000", 388, "firmware"),
-            ("Shared library", "0x69000", 92, "data"),
+            # The firmware region holds the code, then the shared library, then what is still free.
+            ("Firmware code", "0x08000", 384, "firmware"),
+            ("Shared library", "after the code", 87, "data"),
+            ("Free in firmware", "", 9, "spare"),
             ("Bootloader", "0x00000", 20, "boot"),
             ("Slot table", "0x05000", 8, "boot"),
             ("Boot state", "0x07000", 4, "boot"),
@@ -28,10 +30,9 @@ MEMORIES = {
         "External SPI flash, 4 MB",
         [
             ("File system", "0x100000", 3072, "data"),
-            ("Update slot", "0x000000", 392, "firmware"),
-            ("Recovery slot", "0x065000", 388, "boot"),
-            ("Free for slots", "0x0C6000", 232, "spare"),
-            ("Free for slots", "0x062000", 12, "spare"),
+            ("Update slot", "0x000000", 484, "firmware"),
+            ("Free for slots", "0x079000", 308, "spare"),
+            ("Recovery slot", "0x0C6000", 232, "boot"),
         ],
     ),
     "ram": (

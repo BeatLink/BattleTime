@@ -300,8 +300,8 @@ the touch panel. PineTimes carry either a BMA421 (chip ID 0x11) or a BMA425 (chi
 The files are not in the firmware: the shared library carries both, as its data 0 and 1
 (`LibraryData`), which saves the firmware 12 KB and keeps one image for every watch. The
 `configuration-files` feature gives them to the compiler, which puts them in the library. The
-firmware's `motion.rs` passes the installed library's files to `start`; before a library is
-installed it waits, with diagnostic state 4, and starts once the shell says one arrived.
+firmware's `motion.rs` passes the files from the library inside the firmware to `start`; a build
+without a library never starts the step counter and reports diagnostic state 4.
 
 The configuration files are Bosch's, under the BSD-3-Clause licence in
 `src/configuration/LICENSE`, taken from the `BMA42X-Sensor-API` that wasp-os uses.
@@ -544,20 +544,17 @@ The folders are the whole record: there is no list of installed apps to fall out
   images one at a time. Turning one off is refused for the launcher and the last face on. Other
   apps are not checked again when one is turned on, since only a launcher's need grows with it.
 - **`commands`** answers the packages characteristic's JSON lines (`apps`, `install`, `remove`,
-  `enable`, `install_library`, `launcher`) and says whether the apps or the library changed, so
-  the shell can read them again.
+  `enable`, `launcher`) and says whether the apps changed, so the shell can read them again. It
+  answers `install_library` with an error, since the library ships inside the firmware.
 - **`launcher`** reads `/settings/launcher`, the bytes in which the companion says how the
   launcher looks and where every app goes, and `arrange` puts the listed apps in group order,
   any the file leaves out in a last group, Other. The shell keeps the file, the order and each
   group's run of it, which apps read as `launcher_groups`, and reads the names in place. It walks
   the bytes and the apps rather than parsing text and sorting, which keeps it near 1 KB of flash.
-- **`library`** copies a checked shared library from `/resources/shared.ntlib` into the internal
-  `SHARED_LIBRARY` region behind an 8-byte header, `NTLB` and the image's length, since the erased
-  tail of the region would spoil the image's CRC. It erases only the pages it needs inside the
-  region and writes the header last. `installed_library` finds the image again.
+- **`library`** finds the shared library inside a firmware image, where its image header says
+  (`firmware_library`), and reads the version it records.
 
-It knows nothing of Bluetooth, so its tests run on a computer against the flash store in RAM and a
-fake internal flash.
+It knows nothing of Bluetooth, so its tests run on a computer against the flash store in RAM.
 
 ## Firmware updates over Bluetooth (`services/dfu`)
 
@@ -637,7 +634,7 @@ watch face, the launcher and the apps through `neotime-app-host`:
   back while the shell is part way through a transition or a sliced redraw, or a finger is down,
   checking every 20 ms, and starts anyway after a second, as `neotime-foreground` decides. The
   DFU image check yields every 4 KB, so the radio's host side keeps running while it reads up to
-  388 KB back.
+  480 KB back.
 - **Transitions.** The launcher and apps slide up over what was open, and the button's way back
   or home slides down. The notifications and quick settings slide down from the top and go back up,
   a step round the quick apps wipes in from the side the finger moved away from, and any screen an
@@ -911,8 +908,8 @@ Not done yet: heart rate, the notification count, navigation and the weather for
 as 0 or empty, and music and weather are lost on a restart; with a tap waking the screen, the
 touch panel stays awake while the screen is off.
 
-It takes 376 KB of the 388 KB firmware slot (the fonts and the accelerometers' configuration files
-are in the shared library) and 53 KB of static RAM, 31 KB of it heap: 10 KB for the system and 21 KB for
+With the shared library after its code it takes all but about 8 KB of the 480 KB firmware region
+(the fonts and the accelerometers' configuration files are in the library) and 53 KB of static RAM, 31 KB of it heap: 10 KB for the system and 21 KB for
 the open app's widgets and working memory. It runs on the watch: the face, the launcher, the apps,
 the button and the backlight timeout all work.
 

@@ -1,22 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420" font-family="Helvetica, Arial, sans-serif">
 <rect width="800" height="420" rx="6" fill="#1f2328"/>
 <text x="12" y="23" font-size="17" font-weight="bold" fill="#ffffff">Internal flash, 512 KB</text>
-<rect x="3.0" y="37.0" width="600.2" height="380.0" rx="4" fill="#2a9d8f"/>
-<text x="303.1" y="212.3" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Firmware</text>
-<text x="303.1" y="232.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">388 KB</text>
-<text x="303.1" y="252.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x08000</text>
-<rect x="609.2" y="37.0" width="187.8" height="280.4" rx="4" fill="#5a9e4b"/>
-<text x="703.1" y="162.5" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Shared library</text>
-<text x="703.1" y="182.5" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">92 KB</text>
-<text x="703.1" y="202.5" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x69000</text>
-<rect x="609.2" y="323.4" width="115.1" height="93.6" rx="4" fill="#3b6fb6"/>
-<text x="666.8" y="355.5" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Bootloader</text>
-<text x="666.8" y="375.5" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">20 KB</text>
-<text x="666.8" y="395.5" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x00000</text>
-<rect x="730.3" y="323.4" width="66.7" height="60.4" rx="4" fill="#3b6fb6"/>
-<text x="763.7" y="345.1" font-size="9.3" font-weight="bold" fill="#ffffff" text-anchor="middle">Slot table</text>
-<text x="763.7" y="356.7" font-size="9.3" font-weight="normal" fill="#ffffff" text-anchor="middle">8 KB</text>
-<text x="763.7" y="368.2" font-size="9.3" font-weight="normal" fill="#ffffff" text-anchor="middle">0x05000</text>
-<rect x="730.3" y="389.8" width="66.7" height="27.2" rx="4" fill="#3b6fb6"/>
-<text x="788" y="23" font-size="13" fill="#c9d1d9" text-anchor="end">Too small to label: Boot state 4 KB 0x07000</text>
+<rect x="3.0" y="37.0" width="594.0" height="380.0" rx="4" fill="#2a9d8f"/>
+<text x="300.0" y="212.3" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Firmware code</text>
+<text x="300.0" y="232.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">384 KB</text>
+<text x="300.0" y="252.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x08000</text>
+<rect x="603.0" y="37.0" width="194.0" height="256.4" rx="4" fill="#5a9e4b"/>
+<text x="700.0" y="150.5" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Shared library</text>
+<text x="700.0" y="170.5" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">87 KB</text>
+<text x="700.0" y="190.5" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">after the code</text>
+<rect x="603.0" y="299.4" width="37.9" height="117.6" rx="4" fill="#8a8f98"/>
+<rect x="646.9" y="299.4" width="91.6" height="117.6" rx="4" fill="#3b6fb6"/>
+<text x="692.7" y="346.5" font-size="12.7" font-weight="bold" fill="#ffffff" text-anchor="middle">Bootloader</text>
+<text x="692.7" y="362.4" font-size="12.7" font-weight="normal" fill="#ffffff" text-anchor="middle">20 KB</text>
+<text x="692.7" y="378.3" font-size="12.7" font-weight="normal" fill="#ffffff" text-anchor="middle">0x00000</text>
+<rect x="744.5" y="299.4" width="52.5" height="76.4" rx="4" fill="#3b6fb6"/>
+<rect x="744.5" y="381.8" width="52.5" height="35.2" rx="4" fill="#3b6fb6"/>
+<text x="788" y="23" font-size="13" fill="#c9d1d9" text-anchor="end">Too small to label: Free in firmware 9 KB, Slot table 8 KB 0x05000, Boot state 4 KB 0x07000</text>
 </svg>

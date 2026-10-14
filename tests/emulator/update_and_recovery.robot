@@ -8,8 +8,8 @@ Test Teardown     Test Teardown
 Resource          neotime.resource
 
 *** Variables ***
-# A swap of the whole 388 KB firmware slot through the external flash takes a few seconds of emulated time.
-${SWAP_SECONDS}           25
+# A swap of the whole 480 KB firmware slot through the external flash takes a few seconds of emulated time.
+${SWAP_SECONDS}           32
 
 *** Test Cases ***
 A Staged Firmware Is Swapped In And Started
@@ -156,7 +156,7 @@ The Slot Table Moves The Recovery Slot
     [Documentation]           A record in the slot table puts the recovery slot at 0x80000, sized to the recovery image.
     Create A PineTime
     Load Bootloader And Firmware
-    ${record}=                Write Slot Table Record    ${OUTPUT DIR}/slots.bin    0x0    ${{ 388 * 1024 + 4096 }}    0x80000    ${{ 172 * 1024 }}
+    ${record}=                Write Slot Table Record    ${OUTPUT DIR}/slots.bin    0x0    ${{ 480 * 1024 + 4096 }}    0x80000    ${{ 192 * 1024 }}
     Execute Command           sysbus LoadBinary @${record} ${SLOT_TABLE}
     Execute Command           sysbus LoadBinary @${RECOVERY_BIN} ${{ ${EXTERNAL_FLASH} + 0x80000 }}
     Clear The Alive Marker
@@ -171,7 +171,7 @@ An Unsound Slot Table Record Is Ignored
     [Documentation]           A recovery slot overlapping the update slot is refused, so the default slot is used.
     Create A PineTime
     Load Bootloader And Firmware
-    ${record}=                Write Slot Table Record    ${OUTPUT DIR}/slots.bin    0x0    ${{ 388 * 1024 + 4096 }}    0x10000    ${{ 172 * 1024 }}
+    ${record}=                Write Slot Table Record    ${OUTPUT DIR}/slots.bin    0x0    ${{ 480 * 1024 + 4096 }}    0x10000    ${{ 172 * 1024 }}
     Execute Command           sysbus LoadBinary @${record} ${SLOT_TABLE}
     Execute Command           sysbus LoadBinary @${RECOVERY_BIN} ${RECOVERY_SLOT}
     Clear The Alive Marker

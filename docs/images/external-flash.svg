@@ -5,18 +5,16 @@
 <text x="300.0" y="212.3" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">File system</text>
 <text x="300.0" y="232.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">3 MB</text>
 <text x="300.0" y="252.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x100000</text>
-<rect x="603.0" y="37.0" width="194.0" height="141.8" rx="4" fill="#2a9d8f"/>
-<text x="700.0" y="93.2" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Update slot</text>
-<text x="700.0" y="113.2" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">392 KB</text>
-<text x="700.0" y="133.2" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x000000</text>
-<rect x="603.0" y="184.8" width="194.0" height="140.3" rx="4" fill="#3b6fb6"/>
-<text x="700.0" y="240.2" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Recovery slot</text>
-<text x="700.0" y="260.2" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">388 KB</text>
-<text x="700.0" y="280.2" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x065000</text>
-<rect x="603.0" y="331.0" width="184.2" height="86.0" rx="4" fill="#8a8f98"/>
-<text x="695.1" y="359.3" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Free for slots</text>
-<text x="695.1" y="379.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">232 KB</text>
-<text x="695.1" y="399.3" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x0C6000</text>
-<rect x="793.2" y="331.0" width="3.8" height="86.0" rx="4" fill="#8a8f98"/>
-<text x="788" y="23" font-size="13" fill="#c9d1d9" text-anchor="end">Too small to label: Free for slots 12 KB 0x062000</text>
+<rect x="603.0" y="37.0" width="194.0" height="176.4" rx="4" fill="#2a9d8f"/>
+<text x="700.0" y="110.6" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Update slot</text>
+<text x="700.0" y="130.6" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">484 KB</text>
+<text x="700.0" y="150.6" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x000000</text>
+<rect x="603.0" y="219.4" width="194.0" height="110.1" rx="4" fill="#8a8f98"/>
+<text x="700.0" y="259.8" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Free for slots</text>
+<text x="700.0" y="279.8" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">308 KB</text>
+<text x="700.0" y="299.8" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x079000</text>
+<rect x="603.0" y="335.5" width="194.0" height="81.5" rx="4" fill="#3b6fb6"/>
+<text x="700.0" y="361.6" font-size="16.0" font-weight="bold" fill="#ffffff" text-anchor="middle">Recovery slot</text>
+<text x="700.0" y="381.6" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">232 KB</text>
+<text x="700.0" y="401.6" font-size="16.0" font-weight="normal" fill="#ffffff" text-anchor="middle">0x0C6000</text>
 </svg>

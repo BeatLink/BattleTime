@@ -304,11 +304,11 @@ recovery firmware has no apps, so it refuses every command with an error.
 | Command | Answer |
 |---|---|
 | `{"c":"apps"}` | `{"c":"apps","room":budget,"a":[[id,name,kind,enabled,bytes,need,group],...]}`, `kind` being `app` or `face`, `enabled` 0 or 1, `need` the heap in bytes the app needs while open and `group` the launcher group its image declares, empty when none, in id order; `room` is the most an app may need. Each image's CRC and id are checked, but its code only at install. An image larger than `room` is never read: it is listed by its id, as an app, turned off, with `need` its length |
-| `{"c":"install","id":id}` | `{"c":"install","ok":1,"need":need,"room":budget}` once `/apps/<id>/app.ntapp` passes the app checks, holds that id, is not the shared library, was built against no newer shared library than the installed one, and fits the heap, as `enable` checks; the app then appears in `installed_apps`. An app that needs a newer library or does not fit stays installed but turned off, and the answer is a refusal |
+| `{"c":"install","id":id}` | `{"c":"install","ok":1,"need":need,"room":budget}` once `/apps/<id>/app.ntapp` passes the app checks, holds that id, is not the shared library, was built against no newer shared library than the one inside the running firmware, and fits the heap, as `enable` checks; the app then appears in `installed_apps`. An app that needs a newer library or does not fit stays installed but turned off, and the answer is a refusal |
 | `{"c":"remove","id":id}` | `{"c":"remove","ok":1}`; deletes `/apps/<id>` with its saved state |
 | `{"c":"enable","id":id,"on":bool}` | `{"c":"enable","ok":1,"need":need,"room":budget}`; a disabled app stays installed but leaves the launcher. `on` is true when left out |
 | `{"c":"launcher"}` | `{"c":"launcher","ok":1}`; reads `/settings/launcher` again and regroups the launcher, as [Launcher](#launcher) describes |
-| `{"c":"install_library"}` | `{"c":"install_library","ok":1}` once `/resources/shared.ntlib`, sent first, checks out as the shared library and is copied into the internal flash's shared-library region |
+| `{"c":"install_library"}` | Always `{"c":"install_library","err":"the shared library ships inside the firmware"}`: the library arrives with each firmware update |
 
 Before `install` and `enable` turn an app on, the package manager checks that it fits the heap
 beside everything else, and before `enable` turns one off that the watch keeps a launcher and a
@@ -327,14 +327,15 @@ when memory is the reason. The numbers are the same as the `refusal` apps read i
 
 An id is 1 to 32 letters, digits, `-` and `_`. Each app keeps its folder under `/apps/<id>/`:
 `app.ntapp` is the compiled image, as `neotime-compiler` writes it, and `state` is its saved state.
-The shared library is a single image that `neotime-compiler library -o shared.ntlib` writes.
+The shared library is a single image that `neotime-compiler library -o shared.ntlib` writes, and
+`tools/build_images.sh` puts inside the firmware image.
 
 ## Where the code lives
 
 - `services/companion`: reads lines and messages and writes replies, with no Bluetooth in it, so
   its tests run on a computer.
-- `services/packages`: installs, lists and removes apps, and copies the shared library into
-  internal flash, with no Bluetooth in it.
+- `services/packages`: installs, lists and removes apps, and finds the shared library inside the
+  firmware image, with no Bluetooth in it.
 - `firmware/src/main.rs`: the GATT services, which hand lines to `services/companion` and send its
   replies.
 - `services/settings`: each setting's limits and default, and the `/settings/system` file.

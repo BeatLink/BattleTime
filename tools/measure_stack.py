@@ -45,8 +45,7 @@ RESET_REASON = 0x40000400
 PATTERN = 0xA5A5A5A5
 FIRMWARE_VECTOR_TABLE = 0x8100
 SECONDS_BEFORE_SWIPE = 4
-# Where the shared library goes, behind `NTLB` and its length; see services/packages/src/library.rs.
-SHARED_LIBRARY_START = 0x69000
+IMAGE_HEADER_SIZE = 256
 # As in firmware/src/stack_guard.rs.
 GUARD_BYTES = 256
 
@@ -102,21 +101,26 @@ def guard_top(end):
 # The emulator script
 # ============================================================================
 
-def library_file(library, folder):
-    """The library behind its `NTLB` header, as the firmware finds it in internal flash."""
-    image = Path(library).read_bytes()
-    path = Path(folder) / "library.bin"
-    path.write_bytes(b"NTLB" + struct.pack("<I", len(image)) + image)
-    return path
+def library_lines(library, folder):
+    """Emulator lines that load the image header and the library behind the ELF, where the firmware finds it."""
+    header = Path(folder) / "header.bin"
+    address = subprocess.run(
+        [sys.executable, "-I", str(REPOSITORY / "tools" / "image_header.py"), "--library-beside-elf", str(library), str(header)],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    return [
+        f"sysbus LoadBinary @{header} {FIRMWARE_VECTOR_TABLE - IMAGE_HEADER_SIZE:#x}",
+        f"sysbus LoadBinary @{Path(library).resolve()} {address}",
+    ]
 
 
-def start_lines(emulator, firmware, end, flash, library):
+def start_lines(emulator, firmware, end, flash, library, folder):
     painted = range(end, STACK_TOP - TOP_LEFT_ALONE, 4)
     lines = [f"include @{emulator}/scripts/pinetime.resc"]
     lines += [f"sysbus WriteDoubleWord {address:#x} {value:#x}" for address, value in FIRST_START_UICR]
     lines.append(f"sysbus LoadELF @{firmware}")
     if library:
-        lines.append(f"sysbus LoadBinary @{library} {SHARED_LIBRARY_START:#x}")
+        lines += library_lines(library, folder)
     if flash:
         lines.append(f"externalFlashMemory LoadBinary @{Path(flash).resolve()} 0")
     lines += [f"sysbus WriteDoubleWord {address:#x} {PATTERN:#x}" for address in painted]
@@ -254,8 +258,7 @@ def main():
     emulator = renode_emulator_folder() if arguments.packages else emulator_folder()
     end = stack_end(firmware)
     with tempfile.TemporaryDirectory() as folder:
-        library = library_file(arguments.library, folder) if arguments.library else None
-        lines = start_lines(emulator, firmware, end, arguments.flash, library)
+        lines = start_lines(emulator, firmware, end, arguments.flash, arguments.library, folder)
         if arguments.packages:
             words = run_with_bluetooth(emulator, lines, end, arguments.seconds, arguments.launcher, arguments.packages)
         else:

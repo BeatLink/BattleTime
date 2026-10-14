@@ -189,7 +189,7 @@ function hex(value, digits) {
 // ===== Measured figures =====
 // tools/measure_memory.py rewrites the line between these markers; sizes are in bytes.
 // measure_memory:treemap
-const MEASURED = {"file_system": {"file_sectors": 512, "file_sectors_in_use": 11, "images": [["digital", 1272], ["launcher", 1013], ["alarm", 3043], ["timer", 1815], ["stopwatch", 1667], ["settings", 3919], ["weather", 1752], ["steps", 2290], ["heart", 1068], ["flashlight", 715], ["music", 1342], ["calculator", 2985]], "log_sectors": 192, "record_bytes_in_use": 1960, "record_sectors": 64, "sector_size": 4096, "settings_bytes": 77}, "firmware": {"full": {"App host (with `neotime-ui`)": 79016, "App runtime": 35308, "BLEFS file service": 9264, "Bluetooth (controller and TrouBLE)": 44684, "Display, graphics and drivers": 5462, "Embassy, allocator and Cortex-M": 19566, "Firmware (start-up, shell, tasks)": 103424, "Other constants and padding": 29104, "Packages": 6202, "Settings, companion and notifications (with serde)": 12650, "Storage (flash store)": 17410, "Updates (DFU)": 2112, "core, alloc and compiler builtins": 30530}, "recovery": {"App runtime": 60, "BLEFS file service": 9368, "Bluetooth (controller and TrouBLE)": 44682, "Display, graphics and drivers": 3222, "Embassy, allocator and Cortex-M": 16882, "Firmware (start-up, shell, tasks)": 48804, "Other constants and padding": 13840, "Packages": 2084, "Settings, companion and notifications (with serde)": 10410, "Storage (flash store)": 17180, "Updates (DFU)": 2180, "core, alloc and compiler builtins": 13496}}, "ram": {"full": {"App host (with `neotime-ui`)": 56, "BLEFS file service": 122, "Bluetooth (controller and TrouBLE)": 2545, "Display, graphics and drivers": 372, "Firmware (start-up, shell, tasks)": 21655, "Heap": 31744, "Other constants and padding": 1}, "recovery_stack": 38492, "recovery_static_ram": 27028, "stack": 8972, "static_ram": 56548}};
+const MEASURED = {"file_system": {"file_sectors": 512, "file_sectors_in_use": 11, "images": [["digital", 1272], ["launcher", 1013], ["alarm", 3043], ["timer", 1815], ["stopwatch", 1667], ["settings", 3919], ["weather", 1752], ["steps", 2290], ["heart", 1068], ["flashlight", 715], ["music", 1342], ["calculator", 2985]], "log_sectors": 192, "record_bytes_in_use": 1960, "record_sectors": 64, "sector_size": 4096, "settings_bytes": 77}, "firmware": {"full": {"App host (with `neotime-ui`)": 79016, "App runtime": 35308, "BLEFS file service": 9264, "Bluetooth (controller and TrouBLE)": 44684, "Display, graphics and drivers": 5238, "Embassy, allocator and Cortex-M": 19860, "Firmware (start-up, shell, tasks)": 102622, "Other constants and padding": 28986, "Packages": 6004, "Settings, companion and notifications (with serde)": 12650, "Storage (flash store)": 17410, "Updates (DFU)": 2112, "core, alloc and compiler builtins": 30634}, "recovery": {"App runtime": 60, "BLEFS file service": 9368, "Bluetooth (controller and TrouBLE)": 44682, "Display, graphics and drivers": 3222, "Embassy, allocator and Cortex-M": 16850, "Firmware (start-up, shell, tasks)": 49290, "Other constants and padding": 13854, "Packages": 2092, "Settings, companion and notifications (with serde)": 10410, "Storage (flash store)": 17180, "Updates (DFU)": 2180, "core, alloc and compiler builtins": 13344}}, "library_bytes": 89218, "ram": {"full": {"App host (with `neotime-ui`)": 56, "BLEFS file service": 122, "Bluetooth (controller and TrouBLE)": 2545, "Display, graphics and drivers": 372, "Firmware (start-up, shell, tasks)": 21651, "Heap": 31744, "Other constants and padding": 1}, "recovery_stack": 38484, "recovery_static_ram": 27036, "stack": 8980, "static_ram": 56540}};
 // /measure_memory:treemap
 
 // ===== The memory tree =====
@@ -219,20 +219,36 @@ const FIRMWARE_GROUPS = [
   { name: "Platform", kind: "firmware", holds: "Libraries everything else stands on.", parts: ["core, alloc and compiler builtins", "Embassy, allocator and Cortex-M", "Storage (flash store)", "Display, graphics and drivers"] },
 ];
 
-function firmwareBuild(name, start, sizes, holds) {
+// A firmware build in its region: the header, the code by component, then the shared library when the build carries one.
+function firmwareBuild(name, start, regionSize, sizes, holds, libraryBytes) {
   const part = component => {
     const [label, kind, text] = FIRMWARE_PARTS[component] || [component, "firmware", "A component the page has no description for yet."];
     return { name: label, size: sizes[component] || 0, kind, holds: text };
   };
   const grouped = new Set(FIRMWARE_GROUPS.flatMap(group => group.parts));
   const groups = FIRMWARE_GROUPS.map(group => ({ name: group.name, kind: group.kind, holds: group.holds, children: group.parts.map(part) }));
-  // A component the page does not group yet, or Other, sits straight in the slot.
+  // A component the page does not group yet, or Other, sits straight in the region.
   const loose = Object.keys(sizes).filter(component => !grouped.has(component)).map(part);
   const used = Object.values(sizes).reduce((sum, size) => sum + size, 0);
-  return { name, start, size: KB(388), kind: "firmware", holds: `${holds} It uses ${sizeText(used)}.`, children: [
-    { name: "Header", start, size: 256, kind: "boot", holds: "The 256-byte image header: type, version, load address, size, CRC-32, build time and commit." },
-    ...groups, ...loose,
-    { name: "Free", rest: true, kind: "spare", holds: "Unused part of the 388 KB slot." },
+  const library = libraryBytes ? [sharedLibrary(libraryBytes)] : [];
+  const total = used + (libraryBytes || 0);
+  return { name, start, size: regionSize, kind: "firmware", holds: `${holds} It uses ${sizeText(total)}.`, children: [
+    { name: "Header", start, size: 256, kind: "boot", holds: "The 256-byte image header: type, version, load address, size, CRC-32, build time, commit, and where the shared library starts and how long it is." },
+    ...groups, ...loose, ...library,
+    { name: "Free", rest: true, kind: "spare", holds: `Unused part of the ${sizeText(regionSize)} region.` },
+  ] };
+}
+
+// The shared library, right after the code on a word boundary, where the image header says.
+function sharedLibrary(libraryBytes) {
+  const fonts = 47919, configuration = 6144;
+  return { name: "Shared library", size: libraryBytes, kind: "data", holds: `What apps share, ${libraryBytes.toLocaleString("en")} B, carried inside the firmware image and updated with it. Apps name its icons rather than copying them. No apps are kept here; they live in /apps on the external flash.`, children: [
+    { name: "Text fonts", size: fonts, kind: "data", holds: "The app host's text fonts." },
+    { name: "Accelerometer configs", kind: "data", holds: "Bosch's configuration file for each accelerometer, which the firmware uploads to the chip.", children: [
+      { name: "BMA421", size: configuration, kind: "data", holds: "The BMA421's configuration file." },
+      { name: "BMA425", size: configuration, kind: "data", holds: "The BMA425's configuration file; this watch has a BMA425." },
+    ] },
+    { name: "Icons, components and themes", rest: true, kind: "data", holds: "Images, shared components, common functions and the preset themes." },
   ] };
 }
 
@@ -289,28 +305,19 @@ function fileSystemTree() {
 const ROOT = { name: "PineTime", children: [
   {
     name: "Internal flash", top: true, size: KB(512), start: 0x00000, digits: 5, status: "Fixed in code",
-    holds: "The nRF52832's own 512 KB of flash. It changes only when the firmware or the shared library is updated; anything that changes often lives on the external flash.",
+    holds: "The nRF52832's own 512 KB of flash. It changes only when the firmware, with the shared library inside it, is updated; anything that changes often lives on the external flash.",
     children: [
       { name: "Boot area", start: 0x00000, size: KB(32), kind: "boot", holds: "The bootloader and the two records it keeps, at the start of flash. There is no SoftDevice and no MBR.", children: [
         { name: "Bootloader", start: 0x00000, size: KB(20), kind: "boot", holds: "The embassy-boot bootloader with its status screen and button menu. It never starts a firmware without a sound image header.", children: [
-          { name: "Code", size: 17752, kind: "boot", holds: "17,752 B of bootloader code and data." },
+          { name: "Code", size: 17892, kind: "boot", holds: "17,892 B of bootloader code and data." },
           { name: "Unused", rest: true, kind: "spare", holds: "The rest of the bootloader's 20 KB." },
         ] },
         { name: "Slot table", start: 0x05000, size: KB(8), kind: "boot", holds: "Two pages logging where the update and recovery slots sit in the external flash: 32-byte records with a sequence number and a CRC. The firmware moves the slots by appending a record; with no sound record the default slots apply." },
         { name: "Boot state", start: 0x07000, size: KB(4), kind: "boot", holds: "The bootloader's record of an update in progress, for swapping and rolling back." },
       ] },
-      firmwareBuild("Firmware slot", 0x08000, MEASURED.firmware.full,
-        "The running firmware, the full build: a 256-byte image header, then its code, linked to start at 0x08100. No app, face, icon or font is built in apart from the notifications and quick settings screens."),
-      { name: "Shared library", start: 0x69000, size: KB(92), kind: "data", holds: "What apps share, to the end of flash. Apps name its icons rather than copying them. No apps are kept here; they live in /apps on the external flash. The installed library is 89,218 B.", children: [
-        { name: "Text fonts", size: 47919, kind: "data", holds: "The app host's text fonts." },
-        { name: "Accelerometer configs", kind: "data", holds: "Bosch's configuration file for each accelerometer, which the firmware uploads to the chip.", children: [
-          { name: "BMA421", size: 6144, kind: "data", holds: "The BMA421's configuration file." },
-          { name: "BMA425", size: 6144, kind: "data", holds: "The BMA425's configuration file; this watch has a BMA425." },
-        ] },
-        { name: "Icons, components and themes", size: 89218 - 47919 - 12288 - 8, kind: "data", holds: "Images, shared components, common functions and the preset themes." },
-        { name: "Header", size: 8, kind: "boot", holds: "NTLB and the library's length, which neotime-packages writes." },
-        { name: "Free", rest: true, kind: "spare", holds: "Room left in the 92 KB region." },
-      ] },
+      firmwareBuild("Firmware", 0x08000, KB(480), MEASURED.firmware.full,
+        "The running firmware, the full build, to the end of flash: a 256-byte image header, its code, linked to start at 0x08100, then the shared library. No app, face, icon or font is built into the code apart from the notifications and quick settings screens.",
+        MEASURED.library_bytes),
     ],
   },
   {
@@ -323,11 +330,10 @@ const ROOT = { name: "PineTime", children: [
     holds: "The XT25F32B, on the same SPI bus as the screen. The slots are where DEFAULT_SLOTS puts them; the slot table can move them anywhere below the file system.",
     children: [
       { name: "Firmware slots", start: 0x000000, size: KB(1024), kind: "firmware", holds: "The first megabyte, for the update and recovery firmware.", children: [
-        { name: "Update slot", start: 0x000000, size: KB(392), kind: "firmware", holds: "A new firmware received over Bluetooth, waiting to be swapped in: 388 KB plus one page. After a swap it holds the replaced firmware one page up, for a rollback." },
-        { name: "Free", start: 0x062000, size: KB(12), kind: "spare", holds: "Room the slot table can give to either slot." },
-        firmwareBuild("Recovery slot", 0x065000, MEASURED.firmware.recovery,
-          "A known-good firmware to fall back to, here the recovery build (--features recovery). It leaves out the shell, so the app host and the runtime go with it."),
-        { name: "Free", start: 0x0C6000, size: KB(232), kind: "spare", holds: "Room the slot table can give to either slot, up to 0x100000; slots never reach into the file system." },
+        { name: "Update slot", start: 0x000000, size: KB(484), kind: "firmware", holds: "A new firmware received over Bluetooth, waiting to be swapped in: 480 KB plus one page. After a swap it holds the replaced firmware one page up, for a rollback." },
+        { name: "Free", start: 0x079000, size: KB(308), kind: "spare", holds: "Room the slot table can give to either slot." },
+        firmwareBuild("Recovery slot", 0x0C6000, KB(232), MEASURED.firmware.recovery,
+          "A known-good firmware to fall back to, here the recovery build (--features recovery), up to 0x100000. It leaves out the shell, so the app host and the runtime go with it, and carries no shared library."),
       ] },
       { name: "File system", start: 0x100000, size: KB(3072), kind: "data", holds: "NeoTime's flash store, safe against power cuts, shown with a typical install: the digital face, the launcher and ten everyday apps. It has no folders; paths such as /apps/<id>/app.ntapp and /steps/<year>/<month>-<day> are names.", children: fileSystemTree() },
     ],

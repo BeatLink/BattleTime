@@ -78,7 +78,6 @@ document for its part instead.
 - [ ] **Installing apps on the PineTime.** On the watch, firmware ae36259 took the shared library,
   the launcher, a face and every app through `neotime apps install` and listed them with `apps`.
   Still check on the watch that:
-  - the shared library survives a restart;
   - the apps appear in the launcher without a restart;
   - hiding, showing and removing one updates the launcher;
   - an image with a bad id or a library that fails its check is refused with an error.
@@ -286,10 +285,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   they call, which run on every redraw, in RAM and read a handler from `/apps` when its event
   comes, as [app-runtime.md](app-runtime.md) plans. Apps stay on the external flash; nothing of an
   app is copied into the internal flash.
-- [ ] **Resize the firmware slot and the shared library.** With no app, face or font built in the
-  firmware is 289 KB, so a split such as 320 KB firmware and 172 KB library becomes possible if the
-  library (74,876 B of 92 KB) fills up. The sizes are in `neotime-boot`, which the bootloader shares,
-  so do it together with the next bootloader update that is needed anyway.
 
 ## Shared library and smaller apps
 
@@ -518,7 +513,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 ### Apps and faces
 
 - [ ] **Try the system app on the watch.** It has run only in the harness and the simulator.
-  Install the new shared library first, which carries its `info` icon, then check the version,
+  Flash a firmware whose library carries its `info` icon first, then check the version,
   the uptime after the phone sets the clock, the reset reason after a button-hold reset, and the
   free storage before and after an install.
 - [ ] **More on the system app's system page:** the free heap, the Bluetooth address and the display's
@@ -549,8 +544,12 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-updates` branches.
 
 - [ ] **Shrink the BLEFS service.** It grew from 1.9 KB to 8.9 KB of flash when it moved onto the
-  async store, and the full firmware has 3 KB of its 388 KB slot left. Look at the copy, move and
+  async store, and the full firmware and its library have about 8 KB of the 480 KB region left. Look at the copy, move and
   listing code and at how many async state machines its `answer` builds.
+- [ ] **Move the watch to the merged firmware region.** Send
+  `dist/bootloader-updater-from-388-kb-layout.zip` with `neotime flash`, on the charger; the watch
+  comes back as the recovery firmware, and `neotime flash dist/firmware.zip` then puts the full
+  firmware with its library on. Proven in the emulator only ([bootloader.md](bootloader.md#moving-a-watch-from-the-388-kb-layout)).
 - [ ] **Try the flash store on the watch.** It runs in the emulator, apps and icons included, but
   has not met the real chip. Measure the mount time (about a second estimated), the deepest stack
   with apps open and saving, and read the diagnostics' store counters after a day of use.

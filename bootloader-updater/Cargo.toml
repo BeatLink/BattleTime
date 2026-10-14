@@ -26,6 +26,8 @@ neotime-status-screen = { path = "../drivers/status_screen" }
 [features]
 # Moves a watch from the first layout (16 KB bootloader, firmware at 0x5000) to the current one.
 from-first-layout = []
+# Moves a watch from the layout with a 388 KB firmware region and the shared library at 0x69000 to the current one.
+from-388-kb-layout = []
 
 [build-dependencies]
 neotime-boot = { path = "../boot" }

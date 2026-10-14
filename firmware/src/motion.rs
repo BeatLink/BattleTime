@@ -37,9 +37,6 @@ static HISTORY: Mutex<ThreadModeRawMutex, RefCell<StepHistory>> =
 
 static TRIP_RESET: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
-/// Raised when a shared library is installed, which may bring the accelerometer's configuration.
-static LIBRARY_INSTALLED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
-
 /// How often acceleration is read, in milliseconds, or 0 while no app wants readings.
 static READING_PERIOD_IN_MILLISECONDS: AtomicU32 = AtomicU32::new(0);
 static READING_PERIOD_CHANGED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
@@ -61,12 +58,7 @@ pub fn reset_trip() {
 }
 
 /// Starts or stops reading acceleration; `None` stops it, so the chip is read only for steps.
-/// Tells the accelerometer a shared library was installed, so one still waiting for its configuration starts.
-pub fn library_installed() {
-    LIBRARY_INSTALLED.signal(());
-}
-
-/// The chips' configuration files from the installed shared library, or none before one is installed.
+/// The chips' configuration files from the shared library inside the firmware, or none in a build without one.
 fn configurations() -> Configurations<'static> {
     let Some(library) = apps::shared_library().and_then(|bytes| AppImage::parse(bytes).ok()) else {
         return Configurations::default();
@@ -156,20 +148,19 @@ pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus) {
     start_history().await;
     touch::STARTED.wait().await;
     let mut accelerometer = Accelerometer::new(i2c_device);
-    loop {
-        match accelerometer
-            .start(Settings::DEFAULT, &mut Delay, configurations())
-            .await
-        {
-            Ok(_) => break,
-            Err(Error::NoConfiguration { .. }) => {
-                diagnostics::set(Counter::AccelerometerState, 4);
-                LIBRARY_INSTALLED.wait().await;
-            }
-            Err(_) => {
-                diagnostics::set(Counter::AccelerometerState, 2);
-                return;
-            }
+    match accelerometer
+        .start(Settings::DEFAULT, &mut Delay, configurations())
+        .await
+    {
+        Ok(_) => {}
+        // The library comes only with a firmware update, so a build without one never counts steps.
+        Err(Error::NoConfiguration { .. }) => {
+            diagnostics::set(Counter::AccelerometerState, 4);
+            return;
+        }
+        Err(_) => {
+            diagnostics::set(Counter::AccelerometerState, 2);
+            return;
         }
     }
     diagnostics::set(Counter::AccelerometerState, 1);

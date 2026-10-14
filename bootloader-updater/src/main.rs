@@ -3,10 +3,10 @@
 //! It is sent as an ordinary firmware update, so the bootloader swaps it in on trial. It checks the
 //! bootloader it carries, waits for the charger, writes the bootloader pages and reads them back. It
 //! never confirms itself, so its reset makes the new bootloader roll back to the firmware before it,
-//! and a note in RAM tells that firmware the rollback was meant. Built `from-first-layout`, it first
-//! writes the recovery firmware it carries into the recovery slot, since the firmware before it cannot
-//! run under the new layout; the new bootloader installs that recovery firmware on its first start.
-//! See docs/bootloader.md.
+//! and a note in RAM tells that firmware the rollback was meant. Built `from-first-layout` or
+//! `from-388-kb-layout`, it first writes the recovery firmware it carries into the recovery slot, since
+//! the firmware before it cannot run under the new layout; the new bootloader installs that recovery
+//! firmware on its first start. See docs/bootloader.md.
 
 #![no_std]
 #![no_main]
@@ -40,7 +40,7 @@ mod new_bootloader {
     include!(concat!(env!("OUT_DIR"), "/new_bootloader.rs"));
 }
 
-#[cfg(feature = "from-first-layout")]
+#[cfg(moves_layout)]
 mod recovery {
     include!(concat!(env!("OUT_DIR"), "/recovery.rs"));
 }
@@ -125,7 +125,7 @@ fn main() -> ! {
         delay.delay_ms(POLL_INTERVAL_IN_MILLISECONDS);
     }
 
-    #[cfg(feature = "from-first-layout")]
+    #[cfg(moves_layout)]
     {
         status.show("Writing", "Writing recovery", "Do not unplug");
         let Ok(flash_spi) = RefCellDevice::new_no_delay(&spi_bus, flash_chip_select);
@@ -141,7 +141,7 @@ fn main() -> ! {
             wait_for_the_button_hold(&button, &mut watchdog, &mut delay);
         }
     }
-    #[cfg(not(feature = "from-first-layout"))]
+    #[cfg(not(moves_layout))]
     drop(flash_chip_select);
 
     // From the first erase until the read-back matches, a reset would leave nothing that starts, so
@@ -257,11 +257,11 @@ fn write_and_check(internal_flash: &mut Nvmc<'_>, watchdog: &mut WatchdogHandle)
 }
 
 // ============================================================================
-// Writing the recovery firmware, when moving from the first layout
+// Writing the recovery firmware, when moving from an older layout
 // ============================================================================
 
 /// Writes the carried recovery firmware into the default recovery slot and checks it reads back whole.
-#[cfg(feature = "from-first-layout")]
+#[cfg(moves_layout)]
 fn stage_recovery<Flash: NorFlash>(external_flash: &mut Flash, watchdog: &mut WatchdogHandle) -> bool {
     use neotime_boot::{image_header::installable_image, DEFAULT_SLOTS};
 

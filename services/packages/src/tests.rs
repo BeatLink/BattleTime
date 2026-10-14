@@ -131,6 +131,47 @@ fn an_app_built_for_a_newer_library_than_the_watch_has_is_refused() {
     );
 }
 
+/// A firmware image as `tools/image_header.py --library` writes it: header, code, then the library.
+fn firmware_image_with(library: &[u8]) -> Vec<u8> {
+    use neotime_boot::image_header::{ImageHeader, ImageType, Version, IMAGE_HEADER_SIZE};
+    let code = vec![0x5A; 100];
+    let body = [code.clone(), library.to_vec()].concat();
+    let header = ImageHeader {
+        image_type: ImageType::Firmware,
+        version: Version {
+            major: 0,
+            minor: 1,
+            patch: 0,
+        },
+        load_address: neotime_boot::FIRMWARE_VECTOR_TABLE,
+        image_size_in_bytes: body.len() as u32,
+        image_crc32: 0,
+        build_time_in_seconds: 0,
+        commit: [0; 8],
+        library_offset: if library.is_empty() { 0 } else { IMAGE_HEADER_SIZE + code.len() as u32 },
+        library_size_in_bytes: library.len() as u32,
+    };
+    [header.encode().to_vec(), body].concat()
+}
+
+#[test]
+fn the_library_is_found_inside_the_firmware_image() {
+    let library = ImageWriter::new("shared", "Shared", AppKind::Library, 2).build();
+    let image = firmware_image_with(&library);
+
+    let found = crate::library::firmware_library(&image);
+
+    assert_eq!(found, Some(&library[..]));
+    assert_eq!(found.and_then(crate::library::library_version), Some(2));
+}
+
+#[test]
+fn a_firmware_without_a_library_or_a_header_has_none() {
+    assert_eq!(crate::library::firmware_library(&firmware_image_with(&[])), None);
+    assert_eq!(crate::library::firmware_library(&[0xFF; 512]), None);
+    assert_eq!(crate::library::firmware_library(&[]), None);
+}
+
 #[test]
 fn an_app_installs_and_is_listed_with_its_name() {
     let mut files = file_system();
@@ -290,22 +331,6 @@ fn installing_without_an_image_says_so() {
     );
 }
 
-#[test]
-fn the_library_check_wants_a_library() {
-    assert_eq!(
-        check_library_image(&image("shared", "Shared", AppKind::Library)),
-        Ok(())
-    );
-    assert_eq!(
-        check_library_image(&image("timer", "Timer", AppKind::App)),
-        Err(PackageError::NotLibrary)
-    );
-    assert!(matches!(
-        check_library_image(&[1, 2, 3]),
-        Err(PackageError::BadImage(_))
-    ));
-}
-
 // ============================================================================
 // Listing, hiding and removing
 // ============================================================================
@@ -416,7 +441,6 @@ fn every_error_explains_itself() {
         PackageError::NotInstalled,
         PackageError::BadImage(ImageError::TooShort),
         PackageError::IsLibrary,
-        PackageError::NotLibrary,
         PackageError::IdMismatch,
         PackageError::Refused(Refusal::LauncherStaysOn),
         PackageError::Storage(FileError::Full),

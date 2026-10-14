@@ -24,7 +24,6 @@ with it. Files of 1 KB or less are kept as records, so most of these cost no sec
 | `/settings/system` | the watch-wide settings as records (see [architecture.md](architecture.md#settings-servicessettings)) |
 | `/settings/theme` | the theme's eight RGB565 colours |
 | `/settings/time_zone` | the zone a phone last set |
-| `/resources/shared.ntlib` | a shared library on its way into internal flash |
 | `/notes/note.txt` and `/notes/font` | the note the companion app sends, and the font to show it in; see [companion-protocol.md](companion-protocol.md#notes) |
 | `/steps/<year>/<month>-<day>` | one day's steps, up to 480 bytes; the last 90 days are kept |
 | `/steps/trip` | the trip count |

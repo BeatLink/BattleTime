@@ -1,4 +1,5 @@
-//! The 256 bytes in front of every firmware image: what it is, where it runs, how long it is and its CRC.
+//! The 256 bytes in front of every firmware image: what it is, where it runs, how long it is, its CRC
+//! and where its shared library sits.
 //!
 //! `tools/image_header.py` writes the header after the build. The bootloader reads it before it starts
 //! or installs an image, and the firmware reads it before it accepts one, so an image built for another
@@ -8,7 +9,7 @@ use embedded_storage::nor_flash::ReadNorFlash;
 
 use crate::{
     migration::{crc32, CRC32_INITIAL},
-    FIRMWARE, FIRMWARE_VECTOR_TABLE,
+    Region, FIRMWARE, FIRMWARE_VECTOR_TABLE,
 };
 
 // ============================================================================
@@ -18,7 +19,8 @@ use crate::{
 pub const IMAGE_HEADER_SIZE: u32 = 256;
 /// "NTIM" in flash byte order.
 pub const IMAGE_MAGIC: u32 = u32::from_le_bytes(*b"NTIM");
-pub const IMAGE_HEADER_VERSION: u16 = 1;
+/// Version 2 added the shared library's place; a version 1 image was built for the 388 KB firmware region.
+pub const IMAGE_HEADER_VERSION: u16 = 2;
 pub const COMMIT_LENGTH: usize = 8;
 
 const MAGIC_OFFSET: usize = 0;
@@ -31,6 +33,8 @@ const IMAGE_SIZE_OFFSET: usize = 16;
 const IMAGE_CRC_OFFSET: usize = 20;
 const BUILD_TIME_OFFSET: usize = 24;
 const COMMIT_OFFSET: usize = 28;
+const LIBRARY_OFFSET_OFFSET: usize = 36;
+const LIBRARY_SIZE_OFFSET: usize = 40;
 const HEADER_CRC_OFFSET: usize = IMAGE_HEADER_SIZE as usize - 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -70,6 +74,9 @@ pub struct ImageHeader {
     pub build_time_in_seconds: u32,
     /// The short commit hash in ASCII, `*` after it for a build with uncommitted changes, zero padded.
     pub commit: [u8; COMMIT_LENGTH],
+    /// Where the shared library starts, counted from the start of the header; 0 when the image carries none.
+    pub library_offset: u32,
+    pub library_size_in_bytes: u32,
 }
 
 // ============================================================================
@@ -95,6 +102,8 @@ impl ImageHeader {
         put_word(&mut bytes, IMAGE_CRC_OFFSET, self.image_crc32);
         put_word(&mut bytes, BUILD_TIME_OFFSET, self.build_time_in_seconds);
         bytes[COMMIT_OFFSET..COMMIT_OFFSET + COMMIT_LENGTH].copy_from_slice(&self.commit);
+        put_word(&mut bytes, LIBRARY_OFFSET_OFFSET, self.library_offset);
+        put_word(&mut bytes, LIBRARY_SIZE_OFFSET, self.library_size_in_bytes);
         let header_crc = crc32(CRC32_INITIAL, &bytes[..HEADER_CRC_OFFSET]);
         put_word(&mut bytes, HEADER_CRC_OFFSET, header_crc);
         bytes
@@ -112,7 +121,7 @@ impl ImageHeader {
 
         let mut commit = [0; COMMIT_LENGTH];
         commit.copy_from_slice(&bytes[COMMIT_OFFSET..COMMIT_OFFSET + COMMIT_LENGTH]);
-        Some(ImageHeader {
+        let header = ImageHeader {
             image_type: ImageType::from_byte(bytes[IMAGE_TYPE_OFFSET])?,
             version: Version {
                 major: bytes[VERSION_OFFSET],
@@ -124,6 +133,29 @@ impl ImageHeader {
             image_crc32: word(bytes, IMAGE_CRC_OFFSET),
             build_time_in_seconds: word(bytes, BUILD_TIME_OFFSET),
             commit,
+            library_offset: word(bytes, LIBRARY_OFFSET_OFFSET),
+            library_size_in_bytes: word(bytes, LIBRARY_SIZE_OFFSET),
+        };
+        header.library_lies_inside().then_some(header)
+    }
+
+    /// No library, or one wholly inside the image after the header.
+    const fn library_lies_inside(&self) -> bool {
+        if self.library_size_in_bytes == 0 {
+            return self.library_offset == 0;
+        }
+        let end = self.library_offset as u64 + self.library_size_in_bytes as u64;
+        self.library_offset >= IMAGE_HEADER_SIZE && end <= self.total_size_in_bytes() as u64
+    }
+
+    /// Where the library sits once the image starts at `image_start`, or none when it carries none.
+    pub const fn library_region(&self, image_start: u32) -> Option<Region> {
+        if self.library_size_in_bytes == 0 {
+            return None;
+        }
+        Some(Region {
+            start: image_start + self.library_offset,
+            size: self.library_size_in_bytes,
         })
     }
 

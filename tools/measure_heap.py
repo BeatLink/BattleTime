@@ -32,8 +32,8 @@ HEAP_SYMBOL = "neotime_firmware::HEAP"
 HEAP_MEMORY_SYMBOL = "neotime_firmware::start_heap::HEAP_MEMORY"
 # The allocator's bytes in use are its second word.
 USED_WORD = 1
-SHARED_LIBRARY_START = 0x69000
 FIRMWARE_VECTOR_TABLE = 0x8100
+IMAGE_HEADER_SIZE = 256
 # The UICR words embassy-nrf writes on the first start, so the emulated chip is not reset.
 FIRST_START_UICR = [(0x10001200, 0x15), (0x10001204, 0x15), (0x1000120C, 0xFFFFFFFE)]
 START_SECONDS = 5
@@ -65,6 +65,19 @@ def emulator_folder():
     return Path(common).parent.parent / "PineTimeEmulator"
 
 
+def library_lines(library, folder):
+    """Emulator lines that load the image header and the library behind the ELF, where the firmware finds it."""
+    header = Path(folder) / "header.bin"
+    address = subprocess.run(
+        [sys.executable, "-I", str(REPOSITORY / "tools" / "image_header.py"), "--library-beside-elf", str(library), str(header)],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    return [
+        f"sysbus LoadBinary @{header} {FIRMWARE_VECTOR_TABLE - IMAGE_HEADER_SIZE:#x}",
+        f"sysbus LoadBinary @{Path(library).resolve()} {address}",
+    ]
+
+
 # ============================================================================
 # Running it
 # ============================================================================
@@ -78,15 +91,11 @@ def main():
     emulator = emulator_folder()
 
     with tempfile.TemporaryDirectory() as folder:
-        # The library goes behind its `NTLB` header, as the firmware finds it in internal flash.
-        library_file = Path(folder) / "library.bin"
-        image = library.read_bytes()
-        library_file.write_bytes(b"NTLB" + struct.pack("<I", len(image)) + image)
         lines = [f"include @{emulator}/scripts/pinetime.resc"]
         lines += [f"sysbus WriteDoubleWord {address:#x} {value:#x}" for address, value in FIRST_START_UICR]
         lines += [
             f"sysbus LoadELF @{firmware}",
-            f"sysbus LoadBinary @{library_file} {SHARED_LIBRARY_START:#x}",
+            *library_lines(library, folder),
             f"externalFlashMemory LoadBinary @{flash} 0",
             f"cpu VectorTableOffset {FIRMWARE_VECTOR_TABLE:#x}",
             f"cpu SP `sysbus ReadDoubleWord {FIRMWARE_VECTOR_TABLE:#x}`",

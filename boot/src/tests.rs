@@ -84,6 +84,8 @@ fn image(image_type: image_header::ImageType, code_size: usize) -> Vec<u8> {
         image_crc32: crate::migration::crc32(crate::migration::CRC32_INITIAL, &code),
         build_time_in_seconds: 1_760_000_000,
         commit: *b"1b19aed*",
+        library_offset: 0,
+        library_size_in_bytes: 0,
     };
     [header.encode().to_vec(), code].concat()
 }
@@ -101,7 +103,7 @@ fn internal_regions_follow_each_other_without_gaps() {
     assert_eq!(SLOT_TABLE.start, BOOTLOADER.end());
     assert_eq!(BOOT_STATE.start, SLOT_TABLE.end());
     assert_eq!(FIRMWARE.start, BOOT_STATE.end());
-    assert_eq!(SHARED_LIBRARY.start, FIRMWARE.end());
+    assert_eq!(FIRMWARE.end(), INTERNAL_FLASH_SIZE);
 }
 
 #[test]
@@ -111,13 +113,20 @@ fn the_bootloader_block_fills_the_first_32_kb() {
     assert_eq!(BOOT_STATE.start, 0x7000);
     assert_eq!(FIRMWARE.start, 0x8000);
     assert_eq!(FIRMWARE_VECTOR_TABLE, 0x8100);
-    assert_eq!(FIRMWARE.size, 388 * 1024);
+    assert_eq!(FIRMWARE.size, 480 * 1024);
 }
 
 #[test]
-fn the_shared_library_stays_where_apps_expect_it() {
-    assert_eq!(SHARED_LIBRARY.start, 0x6_9000);
-    assert_eq!(SHARED_LIBRARY.size, 92 * 1024);
+fn the_default_recovery_slot_is_clear_of_the_388_kb_layouts_slots() {
+    let old_update_end = 388 * 1024 + PAGE_SIZE;
+    let old_recovery = Region {
+        start: 0x6_5000,
+        size: 388 * 1024,
+    };
+
+    assert!(DEFAULT_SLOTS.recovery.start >= old_update_end);
+    assert!(DEFAULT_SLOTS.recovery.start >= old_recovery.end());
+    assert_eq!(DEFAULT_SLOTS.recovery.end(), SLOT_AREA.end());
 }
 
 #[test]
@@ -129,10 +138,10 @@ fn the_replaced_firmware_fits_in_the_update_slot_one_page_up() {
 }
 
 #[test]
-fn the_default_slots_keep_the_recovery_firmware_where_the_first_layout_had_it() {
+fn the_default_slots_put_recovery_after_the_update_slot() {
     assert_eq!(DEFAULT_SLOTS.update.start, 0x00_0000);
     assert_eq!(DEFAULT_SLOTS.update.size, FIRMWARE.size + PAGE_SIZE);
-    assert_eq!(DEFAULT_SLOTS.recovery.start, 0x06_5000);
+    assert_eq!(DEFAULT_SLOTS.recovery.start, 0x0C_6000);
     assert!(DEFAULT_SLOTS.recovery.end() <= FILE_SYSTEM.start);
     assert_eq!(FILE_SYSTEM.start, 0x10_0000);
 }
@@ -158,17 +167,17 @@ mod slot_rules {
 
     #[test]
     fn a_recovery_slot_sized_to_its_image_is_sound() {
-        assert_eq!(with_recovery(0x6_3000, 172 * 1024).check(), Ok(()));
+        assert_eq!(with_recovery(0x7_9000, 172 * 1024).check(), Ok(()));
     }
 
     #[test]
     fn slots_must_be_whole_pages() {
         assert_eq!(
-            with_recovery(0x6_3001, 172 * 1024).check(),
+            with_recovery(0x7_9001, 172 * 1024).check(),
             Err(SlotProblem::NotWholePages)
         );
         assert_eq!(
-            with_recovery(0x6_3000, 172 * 1024 + 1).check(),
+            with_recovery(0x7_9000, 172 * 1024 + 1).check(),
             Err(SlotProblem::NotWholePages)
         );
     }
@@ -204,11 +213,11 @@ mod slot_rules {
     #[test]
     fn the_recovery_slot_holds_at_least_a_small_firmware_and_at_most_a_full_one() {
         assert_eq!(
-            with_recovery(0x6_3000, PAGE_SIZE).check(),
+            with_recovery(0x7_9000, PAGE_SIZE).check(),
             Err(SlotProblem::RecoverySlotTooSmall)
         );
         assert_eq!(
-            with_recovery(0x6_3000, FIRMWARE.size + PAGE_SIZE).check(),
+            with_recovery(0x7_9000, FIRMWARE.size + PAGE_SIZE).check(),
             Err(SlotProblem::RecoverySlotTooLarge)
         );
     }
@@ -263,6 +272,8 @@ mod image_headers {
             image_crc32: crate::migration::crc32(crate::migration::CRC32_INITIAL, b"123456789"),
             build_time_in_seconds: 1_760_000_000,
             commit: *b"abcdef0\0",
+            library_offset: 260,
+            library_size_in_bytes: 5,
         };
 
         let bytes = header.encode();
@@ -294,6 +305,58 @@ mod image_headers {
             .unwrap()
             .encode();
         header[8] = 9;
+        let crc = crate::migration::crc32(crate::migration::CRC32_INITIAL, &header[..252]);
+        header[252..].copy_from_slice(&crc.to_le_bytes());
+
+        assert_eq!(ImageHeader::decode(&header), None);
+    }
+
+    fn with_library(offset: u32, size: u32) -> [u8; IMAGE_HEADER_SIZE as usize] {
+        let mut header = ImageHeader::decode(&header_of(&firmware_image(1000))).unwrap();
+        header.library_offset = offset;
+        header.library_size_in_bytes = size;
+        header.encode()
+    }
+
+    #[test]
+    fn a_library_inside_the_image_reads_back_with_its_place() {
+        let header = ImageHeader::decode(&with_library(IMAGE_HEADER_SIZE + 600, 400)).unwrap();
+
+        assert_eq!(
+            header.library_region(FIRMWARE.start),
+            Some(Region {
+                start: FIRMWARE.start + IMAGE_HEADER_SIZE + 600,
+                size: 400,
+            })
+        );
+    }
+
+    #[test]
+    fn an_image_without_a_library_has_no_library_region() {
+        let header = ImageHeader::decode(&header_of(&firmware_image(1000))).unwrap();
+
+        assert_eq!(header.library_region(FIRMWARE.start), None);
+    }
+
+    #[test]
+    fn a_library_reaching_past_the_image_spoils_the_header() {
+        assert_eq!(ImageHeader::decode(&with_library(IMAGE_HEADER_SIZE + 600, 401)), None);
+    }
+
+    #[test]
+    fn a_library_inside_the_header_spoils_the_header() {
+        assert_eq!(ImageHeader::decode(&with_library(IMAGE_HEADER_SIZE - 4, 4)), None);
+    }
+
+    #[test]
+    fn an_offset_without_a_library_spoils_the_header() {
+        assert_eq!(ImageHeader::decode(&with_library(IMAGE_HEADER_SIZE, 0)), None);
+    }
+
+    #[test]
+    fn a_header_of_the_388_kb_layout_is_refused() {
+        let mut header = header_of(&firmware_image(10));
+        header[4..6].copy_from_slice(&1u16.to_le_bytes());
         let crc = crate::migration::crc32(crate::migration::CRC32_INITIAL, &header[..252]);
         header[252..].copy_from_slice(&crc.to_le_bytes());
 
@@ -355,7 +418,7 @@ mod image_headers {
 }
 
 /// The header CRC `tools/image_header.py --self-test` expects for the same fields.
-const PACKAGING_TOOL_HEADER_CRC: u32 = 0x0479_BFAA;
+const PACKAGING_TOOL_HEADER_CRC: u32 = 0x98DE_B2F0;
 
 // ============================================================================
 // Slot table
@@ -388,16 +451,16 @@ mod slot_table_log {
     fn a_written_change_reads_back() {
         let mut table = table();
 
-        write_slots(&mut table, recovery_at(0x6_3000)).unwrap();
+        write_slots(&mut table, recovery_at(0x7_9000)).unwrap();
 
-        assert_eq!(read_slots(&mut table), Ok(recovery_at(0x6_3000)));
+        assert_eq!(read_slots(&mut table), Ok(recovery_at(0x7_9000)));
     }
 
     #[test]
     fn the_newest_record_wins() {
         let mut table = table();
 
-        write_slots(&mut table, recovery_at(0x6_3000)).unwrap();
+        write_slots(&mut table, recovery_at(0x7_9000)).unwrap();
         write_slots(&mut table, recovery_at(0x8_0000)).unwrap();
 
         assert_eq!(read_slots(&mut table), Ok(recovery_at(0x8_0000)));
@@ -410,12 +473,12 @@ mod slot_table_log {
         let records_per_page = PAGE_SIZE / RECORD_SIZE;
 
         for index in 0..records_per_page + 1 {
-            write_slots(&mut table, recovery_at(0x6_3000 + (index % 2) * 0x1_D000)).unwrap();
+            write_slots(&mut table, recovery_at(0x7_9000 + (index % 2) * 0x1_D000)).unwrap();
         }
 
         assert_eq!(
             read_slots(&mut table),
-            Ok(recovery_at(0x6_3000 + (records_per_page % 2) * 0x1_D000))
+            Ok(recovery_at(0x7_9000 + (records_per_page % 2) * 0x1_D000))
         );
         assert_ne!(table.bytes_at(PAGE_SIZE, 4), &[0xFF; 4]);
     }
@@ -426,13 +489,13 @@ mod slot_table_log {
         let records_per_page = PAGE_SIZE / RECORD_SIZE;
 
         for index in 0..2 * records_per_page + 1 {
-            write_slots(&mut table, recovery_at(0x6_3000 + (index % 3) * 0x1000)).unwrap();
+            write_slots(&mut table, recovery_at(0x7_9000 + (index % 3) * 0x1000)).unwrap();
         }
 
         let last = 2 * records_per_page;
         assert_eq!(
             read_slots(&mut table),
-            Ok(recovery_at(0x6_3000 + (last % 3) * 0x1000))
+            Ok(recovery_at(0x7_9000 + (last % 3) * 0x1000))
         );
         assert_eq!(table.erase_count, 3);
     }
@@ -440,13 +503,13 @@ mod slot_table_log {
     #[test]
     fn a_record_cut_short_by_a_power_cut_leaves_the_one_before() {
         let mut table = table();
-        write_slots(&mut table, recovery_at(0x6_3000)).unwrap();
+        write_slots(&mut table, recovery_at(0x7_9000)).unwrap();
         let mut cut_short = table.bytes_at(0, RECORD_SIZE as usize).to_vec();
         cut_short[28..].fill(0xFF);
         cut_short[8..12].copy_from_slice(&0x8_0000u32.to_le_bytes());
         table.put(RECORD_SIZE, &cut_short);
 
-        assert_eq!(read_slots(&mut table), Ok(recovery_at(0x6_3000)));
+        assert_eq!(read_slots(&mut table), Ok(recovery_at(0x7_9000)));
 
         write_slots(&mut table, recovery_at(0x9_0000)).unwrap();
         assert_eq!(read_slots(&mut table), Ok(recovery_at(0x9_0000)));
@@ -462,8 +525,8 @@ mod slot_table_log {
 
         assert_eq!(read_slots(&mut table), Ok(DEFAULT_SLOTS));
 
-        write_slots(&mut table, recovery_at(0x6_3000)).unwrap();
-        assert_eq!(read_slots(&mut table), Ok(recovery_at(0x6_3000)));
+        write_slots(&mut table, recovery_at(0x7_9000)).unwrap();
+        assert_eq!(read_slots(&mut table), Ok(recovery_at(0x7_9000)));
     }
 
     #[test]
@@ -626,7 +689,7 @@ mod recovery_moves {
         let result = move_recovery(
             &mut flash,
             DEFAULT_SLOTS.recovery,
-            region(0x6_5000, 16 * PAGE_SIZE),
+            region(0xC_6000, 16 * PAGE_SIZE),
         );
 
         assert_eq!(result, Ok(RecoveryMove::KeptInPlace));
@@ -640,11 +703,11 @@ mod recovery_moves {
         let result = move_recovery(
             &mut flash,
             DEFAULT_SLOTS.recovery,
-            region(0xC_6000, 16 * PAGE_SIZE),
+            region(0x7_9000, 16 * PAGE_SIZE),
         );
 
         assert_eq!(result, Ok(RecoveryMove::Copied));
-        assert_eq!(flash.bytes_at(0xC_6000, recovery.len()), &recovery[..]);
+        assert_eq!(flash.bytes_at(0x7_9000, recovery.len()), &recovery[..]);
         assert_eq!(
             flash.bytes_at(DEFAULT_SLOTS.recovery.start, recovery.len()),
             &recovery[..]
@@ -658,7 +721,7 @@ mod recovery_moves {
         let result = move_recovery(
             &mut flash,
             DEFAULT_SLOTS.recovery,
-            region(0xC_6000, 16 * PAGE_SIZE),
+            region(0x7_9000, 16 * PAGE_SIZE),
         );
 
         assert_eq!(result, Ok(RecoveryMove::ImageTooLarge));
@@ -673,7 +736,7 @@ mod recovery_moves {
         let result = move_recovery(
             &mut flash,
             DEFAULT_SLOTS.recovery,
-            region(0x6_6000, 16 * PAGE_SIZE),
+            region(0xC_7000, 16 * PAGE_SIZE),
         );
 
         assert_eq!(result, Ok(RecoveryMove::Overlapping));
@@ -687,7 +750,7 @@ mod recovery_moves {
         let result = move_recovery(
             &mut flash,
             DEFAULT_SLOTS.recovery,
-            region(0x6_6000, 16 * PAGE_SIZE),
+            region(0xC_7000, 16 * PAGE_SIZE),
         );
 
         assert_eq!(result, Ok(RecoveryMove::NoImage));

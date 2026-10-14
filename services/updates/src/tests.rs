@@ -91,6 +91,8 @@ fn image_linked_at(load_address: u32, size_in_bytes: usize) -> Vec<u8> {
         image_crc32: crc32(CRC32_INITIAL, &code),
         build_time_in_seconds: 0,
         commit: [0; 8],
+        library_offset: 0,
+        library_size_in_bytes: 0,
     };
     [header.encode().to_vec(), code].concat()
 }
@@ -576,7 +578,7 @@ impl embedded_storage::nor_flash::NorFlash for SlotTablePage {
 fn smaller_recovery_slot() -> Slots {
     Slots {
         recovery: Region {
-            start: 0x6_3000,
+            start: 0x7_9000,
             size: 172 * 1024,
         },
         ..DEFAULT_SLOTS

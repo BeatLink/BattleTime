@@ -1,6 +1,7 @@
 *** Settings ***
 Documentation     The bootloader updater, sent as a firmware update, replaces the bootloader of a watch already on NeoTime and hands it back to the firmware before it.
 ...               Its first-layout build moves a watch from the 16 KB bootloader, kept in fixtures/ as built from 89d3a63, to the current layout.
+...               Its 388 KB-layout build moves a watch whose shared library sat at 0x69000, with the bootloader kept in fixtures/ as built from 0b6fd33.
 Suite Setup       Setup
 Suite Teardown    Teardown
 Test Setup        Reset Emulation
@@ -11,6 +12,8 @@ Resource          neotime.resource
 ${FIRST_LAYOUT_BOOTLOADER_BIN}    ${CURDIR}/fixtures/first-layout-bootloader.bin
 ${UPDATER_BIN}            ${DIST}/bootloader-updater.bin
 ${MIGRATING_UPDATER_BIN}  ${DIST}/bootloader-updater-from-first-layout.bin
+${OLD_LAYOUT_BOOTLOADER_BIN}    ${CURDIR}/fixtures/388-kb-layout-bootloader.bin
+${OLD_LAYOUT_UPDATER_BIN}    ${DIST}/bootloader-updater-from-388-kb-layout.bin
 # The 16 KB layout kept its boot state at 0x4000 and started the firmware at 0x5000.
 ${FIRST_LAYOUT_BOOT_STATE}    0x4000
 ${BOOT_NOTE}              0x2000FFF8
@@ -50,6 +53,18 @@ Start A First Layout Watch With The Migrating Updater Staged
     Execute Command           sysbus LoadBinary @${FIRST_LAYOUT_BOOTLOADER_BIN} 0x0
     Execute Command           sysbus LoadBinary @${MIGRATING_UPDATER_BIN} ${UPDATE_SLOT}
     Execute Command           sysbus WriteDoubleWord ${FIRST_LAYOUT_BOOT_STATE} ${STATE_SWAP}
+    Clear The Alive Marker
+
+Start A 388 KB Layout Watch With The Migrating Updater Staged
+    [Documentation]           As the watch was: its slot table moved recovery to 0x65000 and shrank it, and a firmware of that layout runs.
+    Create A PineTime
+    Execute Command           sysbus LoadBinary @${OLD_LAYOUT_BOOTLOADER_BIN} 0x0
+    ${record}=                Write Slot Table Record    ${OUTPUT DIR}/old-slots.bin    0x0    ${{ 388 * 1024 + 4096 }}    0x65000    ${{ 168 * 1024 }}
+    Execute Command           sysbus LoadBinary @${record} ${SLOT_TABLE}
+    ${old_firmware}=          Write Never Confirming Image    ${OUTPUT DIR}/old-layout-firmware.bin    1
+    Execute Command           sysbus LoadBinary @${old_firmware} ${FIRMWARE_START}
+    Execute Command           sysbus LoadBinary @${OLD_LAYOUT_UPDATER_BIN} ${UPDATE_SLOT}
+    Execute Command           sysbus WriteDoubleWord ${BOOT_STATE} ${STATE_SWAP}
     Clear The Alive Marker
 
 *** Test Cases ***
@@ -119,5 +134,35 @@ The Migrating Updater Waits For The Charger, And Holding The Button Quits Withou
     Run For                   ${HAND_BACK_SECONDS}
     Flash Should Hold File    0x0    ${FIRST_LAYOUT_BOOTLOADER_BIN}
     # The recovery slot is only written once the charger is in.
+    ${first_word}=            Word At    ${RECOVERY_SLOT}
+    Should Be Equal As Integers    ${first_word}    0xFFFFFFFF
+
+Moves A 388 KB Layout Watch Onto The Current Layout
+    [Documentation]           The old bootloader swaps the updater in; it writes the recovery firmware and the new bootloader. The new bootloader
+    ...                       ignores the old slot table record, finds only images of the old header version at 0x8000 and one page up in the
+    ...                       update slot, and installs the recovery firmware, from which the firmware with its library goes on as an update.
+    Start A 388 KB Layout Watch With The Migrating Updater Staged
+    Execute Command           ${BATTERY} ConnectCharger
+
+    Run For                   ${MIGRATION_SECONDS}
+    Flash Should Hold File    0x0    ${BOOTLOADER_BIN}
+    Flash Should Hold File    ${RECOVERY_SLOT}    ${RECOVERY_BIN}
+    Flash Should Hold File    ${FIRMWARE_START}    ${RECOVERY_BIN}
+    Firmware Should Be Alive
+    Word Should Be            ${BOOT_NOTE}    ${RECOVERY_INSTALLED_NOTE}
+
+    Execute Command           sysbus LoadBinary @${FIRMWARE_BIN} ${UPDATE_SLOT}
+    Execute Command           sysbus WriteDoubleWord ${BOOT_STATE} ${STATE_SWAP}
+    Clear The Alive Marker
+    Execute Command           sysbus WriteDoubleWord 0xE000ED0C 0x05FA0004
+    Run For                   ${HAND_BACK_SECONDS}
+    Flash Should Hold File    ${FIRMWARE_START}    ${FIRMWARE_BIN}
+    Firmware Should Be Alive
+
+The 388 KB Layout Updater Leaves The Old Watch Alone Without The Charger
+    Start A 388 KB Layout Watch With The Migrating Updater Staged
+
+    Run For                   ${20}
+    Flash Should Hold File    0x0    ${OLD_LAYOUT_BOOTLOADER_BIN}
     ${first_word}=            Word At    ${RECOVERY_SLOT}
     Should Be Equal As Integers    ${first_word}    0xFFFFFFFF

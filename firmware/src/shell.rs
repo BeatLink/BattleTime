@@ -621,9 +621,6 @@ impl Shell {
             icons.release();
         }
         self.system.installed = InstalledApps::read(self.files);
-        self.library = apps::shared_library();
-        install_fonts(self.library);
-        crate::motion::library_installed();
         self.show_first_screen();
     }
 
@@ -1358,7 +1355,7 @@ fn app_name_of(bytes: &[u8]) -> heapless::String<NOTIFICATION_SOURCE_BYTES> {
         .unwrap_or_default()
 }
 
-/// Gives the app host its text fonts from the installed shared library, which holds them.
+/// Gives the app host its text fonts from the shared library inside the firmware, which holds them.
 // Kept out of the shell task, so the library's parse never adds to the task's stack frame.
 #[inline(never)]
 fn install_fonts(library: Option<&'static [u8]>) {

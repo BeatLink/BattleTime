@@ -31,7 +31,10 @@ FIRMWARE = REPOSITORY / "firmware"
 MEMORY_MAP = REPOSITORY / "docs" / "memory-map.md"
 TREEMAP = REPOSITORY / "docs" / "memory-treemap.html"
 FIRMWARE_START = 0x8100
-FIRMWARE_SLOT_BYTES = 388 * 1024 - 256
+# The firmware region after its image header; the code and then the shared library share it.
+FIRMWARE_SLOT_BYTES = 480 * 1024 - 256
+# `tools/image_header.py` starts the library on a word boundary after the code.
+LIBRARY_ALIGNMENT = 4
 RAM_START = 0x2000_0000
 # The alive marker keeps the last 16 bytes of RAM.
 RAM_FOR_THE_FIRMWARE = 64 * 1024 - 16
@@ -257,19 +260,29 @@ RAM_LABELS = {
 }
 
 
+def library_bytes():
+    """The size of the shared library the full build carries, as `neotime-compiler library` writes it."""
+    path = REPOSITORY / "target" / "measure-shared.ntlib"
+    path.parent.mkdir(exist_ok=True)
+    run(["cargo", "run", "-q", "--release", "-p", "neotime-compiler", "--", "library", "-o", str(path)], REPOSITORY)
+    return path.stat().st_size
+
+
 def kilobytes(size):
     return f"{size / 1024:.1f} KB"
 
 
-def firmware_table(full, recovery):
+def firmware_table(full, recovery, library_size):
     lines = ["| Component | Full build | Recovery build |", "|---|---:|---:|"]
     names = sorted(set(full["flash"]) | set(recovery["flash"]), key=lambda name: -full["flash"].get(name, 0))
     names.remove(UNATTRIBUTED)
     for name in names + [UNATTRIBUTED]:
         lines.append(f"| {name} | {kilobytes(full['flash'].get(name, 0))} | {kilobytes(recovery['flash'].get(name, 0))} |")
-    lines.append(f"| **Used** | **{kilobytes(full['flash_used'])}** | **{kilobytes(recovery['flash_used'])}** |")
-    free = [FIRMWARE_SLOT_BYTES - build["flash_used"] for build in (full, recovery)]
-    lines.append(f"| Free of the 388 KB slot, after its header | {kilobytes(free[0])} | {kilobytes(free[1])} |")
+    lines.append(f"| **Code and data** | **{kilobytes(full['flash_used'])}** | **{kilobytes(recovery['flash_used'])}** |")
+    padding = -full["flash_used"] % LIBRARY_ALIGNMENT
+    lines.append(f"| Shared library, after the code | {kilobytes(library_size + padding)} | none |")
+    free = [FIRMWARE_SLOT_BYTES - full["flash_used"] - padding - library_size, FIRMWARE_SLOT_BYTES - recovery["flash_used"]]
+    lines.append(f"| Free of the 480 KB region, after its header | {kilobytes(free[0])} | {kilobytes(free[1])} |")
     return lines
 
 
@@ -312,10 +325,11 @@ def file_system_table(values, steps):
     ]
 
 
-def treemap_figures(full, recovery, values, steps):
+def treemap_figures(full, recovery, values, steps, library_size):
     """The measured figures docs/memory-treemap.html draws, in bytes."""
     return {
         "firmware": {"full": full["flash"], "recovery": recovery["flash"]},
+        "library_bytes": library_size,
         "ram": {
             "full": full["ram"],
             "static_ram": full["static_ram"],
@@ -361,13 +375,14 @@ def main():
 
     full = breakdown(None)
     recovery = breakdown("recovery")
+    library_size = library_bytes()
     values, steps = file_system_use()
     document = MEMORY_MAP.read_text()
-    updated = with_section(document, "firmware", firmware_table(full, recovery))
+    updated = with_section(document, "firmware", firmware_table(full, recovery, library_size))
     updated = with_section(updated, "ram", ram_table(full, recovery))
     updated = with_section(updated, "file-system", file_system_table(values, steps))
     treemap = TREEMAP.read_text()
-    updated_treemap = with_treemap(treemap, treemap_figures(full, recovery, values, steps))
+    updated_treemap = with_treemap(treemap, treemap_figures(full, recovery, values, steps, library_size))
     pages = [(MEMORY_MAP, document, updated), (TREEMAP, treemap, updated_treemap)]
     stale = [path for path, before, after in pages if before != after]
     if not stale:

@@ -356,9 +356,11 @@ Handlers are read from the file when they run, which happens only on an event.
 
 ## The shared library
 
-The internal flash keeps no apps. Its last 92 KB, after the firmware, holds the shared library:
-everything common to apps that would otherwise be copied into each one. It can be read in place, so
-using it costs no RAM.
+The internal flash keeps no apps. The firmware image carries the shared library after its code:
+everything common to apps that would otherwise be copied into each one. The image header says where
+it starts, it arrives with each firmware update, and it can be read in place, so using it costs no
+RAM. An app built against a newer library than the running firmware's is refused at install and
+not opened.
 
 | Part | Holds |
 |---|---|
@@ -372,7 +374,7 @@ using it costs no RAM.
 In the source, apps import these from the `neotime` package, for example
 `import { Card } from "neotime/components"` or `icons.heart`. The compiler refers to them by number
 instead of copying them into the image, and records the library version in the image's header. The
-packages service refuses to install an app built against a newer library than the installed one, and
+packages service refuses to install an app built against a newer library than the firmware's, and
 the watch does not open one either (`OpenError::LibraryTooOld`); it shows the face instead, or the
 help screen if the face is the app refused.
 
@@ -402,7 +404,7 @@ internal flash are read in place and cost none. So the work is split into three 
 | Layer | Lives in | RAM while an app is open | Holds |
 |---|---|---|---|
 | Native widgets and builtins | The firmware, in Rust | One node per widget; the code costs none | Composite widgets with logic of their own, such as a time picker, the status icons or the list of installed apps, and work over whole arrays, such as sliding a 2048 board |
-| The shared library | The internal flash after the firmware, read in place | None | Functions, components, images, fonts, strings and themes that two or more apps use |
+| The shared library | Inside the firmware image, after its code, read in place | None | Functions, components, images, fonts, strings and themes that two or more apps use |
 | The app | `/apps` on the external flash, read into RAM when it opens | All of it | Its own state, its layout, and the few lines that connect the shared parts and are unique to it |
 
 Rules for each change:
@@ -826,7 +828,7 @@ fonts in `third_party/fonts/` and kept in `app-host/fonts/`:
 `seven_segment` and `dot_matrix` are drawn from segments and dots, so they take no font data. The
 seven fonts, 48,462 B in all, live in the shared library's font section (section 9, which only a
 library has), in the order above. The app host's font slots start empty, and the embedder calls
-`fonts::install_from_library` once with the installed library; until then text takes no room. The
+`fonts::install_from_library` once with the library inside the firmware; until then text takes no room. The
 `built-in-fonts` feature starts them filled from `app-host/fonts/`, for the simulator and tests.
 
 ### Widgets in the host

@@ -636,8 +636,8 @@ impl Files {
         store: &mut WatchStore,
         line: &[u8],
     ) -> (alloc::string::String, Change) {
-        let mut library = shared_library::InternalFlashLibrary(self.internal_flash);
-        neotime_packages::commands::handle_command(line, store, &mut library).await
+        let library_version = crate::apps::shared_library().and_then(neotime_packages::library::library_version);
+        neotime_packages::commands::handle_command(line, store, library_version).await
     }
 
     /// The recovery firmware has no apps, so it leaves the package manager out.
@@ -720,78 +720,6 @@ pub async fn run_storage(files: &'static Files) {
                     packages::CHANGED.signal(change);
                 }
             }
-        }
-    }
-}
-
-// ============================================================================
-// The shared library in internal flash
-// ============================================================================
-
-#[cfg(with_shell)]
-mod shared_library {
-    use super::SharedInternalFlash;
-    use neotime_boot::SHARED_LIBRARY;
-    use neotime_packages::{
-        check_library_image,
-        commands::LibraryInstaller,
-        library::{install_library_from_file, LibraryError, LIBRARY_HEADER_BYTES},
-    };
-
-    /// Copies a library file into the `SHARED_LIBRARY` region and checks it where it lies, through the
-    /// chip's flash controller. Each page erase stops the CPU for about 85 ms.
-    pub struct InternalFlashLibrary(pub &'static SharedInternalFlash);
-
-    /// The internal flash reached through its shared lock one call at a time, since the copy waits between pieces.
-    struct InternalFlashBorrow(&'static SharedInternalFlash);
-
-    impl embedded_storage::nor_flash::ErrorType for InternalFlashBorrow {
-        type Error = embassy_nrf::nvmc::Error;
-    }
-
-    impl embedded_storage::nor_flash::ReadNorFlash for InternalFlashBorrow {
-        const READ_SIZE: usize = 1;
-
-        fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
-            self.0.lock(|flash| flash.borrow_mut().read(offset, bytes))
-        }
-
-        fn capacity(&self) -> usize {
-            neotime_boot::INTERNAL_FLASH_SIZE as usize
-        }
-    }
-
-    impl embedded_storage::nor_flash::NorFlash for InternalFlashBorrow {
-        const WRITE_SIZE: usize = 4;
-        const ERASE_SIZE: usize = neotime_boot::PAGE_SIZE as usize;
-
-        fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
-            self.0.lock(|flash| flash.borrow_mut().erase(from, to))
-        }
-
-        fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
-            self.0.lock(|flash| flash.borrow_mut().write(offset, bytes))
-        }
-    }
-
-    impl LibraryInstaller for InternalFlashLibrary {
-        async fn install<Files: neotime_flash_store::FileAccess>(
-            &mut self,
-            files: &mut Files,
-            path: &str,
-        ) -> Result<(), LibraryError> {
-            // The internal flash is only ever written here, so it is borrowed for the whole copy.
-            let mut flash = InternalFlashBorrow(self.0);
-            install_library_from_file(&mut flash, files, path, |_, length| {
-                // The internal flash is mapped into the address space, so the image is read where it was written.
-                let start = (SHARED_LIBRARY.start + LIBRARY_HEADER_BYTES) as *const u8;
-                check_library_image(unsafe { core::slice::from_raw_parts(start, length as usize) })
-            })
-            .await
-        }
-
-        fn installed_version(&self) -> Option<u16> {
-            crate::apps::shared_library().and_then(neotime_packages::library::library_version)
         }
     }
 }

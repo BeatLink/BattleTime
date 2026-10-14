@@ -236,12 +236,12 @@ pub fn read_image(files: &storage::Files, id: &str) -> Option<Lent<[u8]>> {
 }
 
 // ============================================================================
-// The shared library in internal flash
+// The shared library inside the firmware image
 // ============================================================================
 
-/// The installed shared library, read where it lies in internal flash, or None before one is installed.
+/// The shared library carried after the running firmware's code, or None in a build without one.
 pub fn shared_library() -> Option<&'static [u8]> {
-    let region = neotime_boot::SHARED_LIBRARY;
-    let bytes = unsafe { core::slice::from_raw_parts(region.start as *const u8, region.size as usize) };
-    neotime_packages::library::installed_library(bytes)
+    let region = neotime_boot::FIRMWARE;
+    let image = unsafe { core::slice::from_raw_parts(region.start as *const u8, region.size as usize) };
+    neotime_packages::library::firmware_library(image)
 }

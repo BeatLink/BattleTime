@@ -117,7 +117,7 @@ Firmware   On trial
 Filesystem OK
 Bluetooth  Connected
 Receiving firmware
-123 / 392 KB  31%
+150 / 470 KB  31%
 ```
 
 | Line | Says |
@@ -149,8 +149,8 @@ described in [bootloader.md](bootloader.md#the-status-screen).
 A recovery firmware installed by the button hold shows as recovery only until its next restart,
 because the note is not kept. A firmware built with `--features recovery` always does, and it is
 the image meant for the recovery slot. That build leaves out the shell, touch, the step counter
-and the apps, keeping the status page, the file system, Bluetooth and DFU, so it is about 144 KB
-against the full firmware's 392 KB. `tools/build_images.sh` writes it to `dist/recovery.bin`.
+and the apps, keeping the status page, the file system, Bluetooth and DFU, and carries no shared
+library, so it is about 179 KB against the full firmware's 472 KB with its library. `tools/build_images.sh` writes it to `dist/recovery.bin`.
 
 A panic halts rather than resets, so the watchdog brings the watch back to the bootloader instead of
 the firmware restarting in a loop. It is 105 KB of flash and 25 KB of static RAM, 16 KB of that heap. Its screen writes and flash
