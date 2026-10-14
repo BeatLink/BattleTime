@@ -1923,6 +1923,7 @@ pub async fn run_shell(
     loop {
         diagnostics::add_one(Counter::ShellLoops);
         diagnostics::set(Counter::ScreenLit, shell.lit as u32);
+        diagnostics::note_flash_cache();
         shell.leave_crash_page_once_dealt_with();
         OutOfLine(shell.draw()).await;
         foreground::set_drawing(shell.is_drawing_under_way());

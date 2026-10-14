@@ -669,7 +669,8 @@ services, and confirms itself to the bootloader once Bluetooth runs. It is outsi
 like the bootloader, because it only builds for the watch. See [updates.md](updates.md).
 
 The first thing it does after `embassy_nrf::init` is turn on the flash's instruction cache
-(`NVMC.ICACHECNF`), which the chip starts with off. Without it every instruction word fetched from
+(`NVMC.ICACHECNF`), which the chip starts with off, with its hit and miss counting on for the
+diagnostics. Without it every instruction word fetched from
 flash waits 2 cycles; with it a fetch from the 2 KB cache waits none. On the emulator, which models
 both, opening Settings draws in 222 ms instead of 297 ms.
 
@@ -917,8 +918,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
   start while the accelerometer reset on the same bus, so the panel now starts first, with retries,
   and the accelerometer waits for it. Fourteen more words follow the counters, set once at start:
   the last restart, described next. Writing `01` to the characteristic says the companion app saved
-  a debug report holding the crash, which dismisses it as Restart on the crash screen does. Six more
-  counters come after the last restart's words. The first two are in microseconds and count
+  a debug report holding the crash, which dismisses it as Restart on the crash screen does. Eleven
+  more counters come after the last restart's words. The first two are in microseconds and count
   round: the time
   the shell spent drawing apps, and the time the CPU spent sending to the display or waiting for a
   send to end, the status page and help screen included. In the emulator, with the shared library
@@ -928,8 +929,10 @@ watch face, the launcher and the apps through `neotime-app-host`:
   and the store calls the shell made while another task held the store, which found nothing.
   Two more follow: the heart rate sensor's state (1 started, 2 failed to start, 3 failed to read)
   and its latest reading in beats per minute. The next two count the bytes the external flash's DMA reads moved
-  and the times a flash read stopped after a piece to give the bus to the display, and the last the
-  app file reads served from a part read ahead with `prefetch_file`.
+  and the times a flash read stopped after a piece to give the bus to the display, the next the
+  app file reads served from a part read ahead with `prefetch_file`, and the last two the flash
+  cache's hits and misses since start (`NVMC.IHIT` and `IMISS`, copied each time round the shell's
+  loop), to check the emulator's model of the cache against the chip.
 - **Reset reasons and crash record.** `restart.rs` reads and clears `RESETREAS` at start, and reads
   the crash record the previous run left in `.uninit` RAM (see
   [memory-map.md](memory-map.md#ram-64-kb-planned)). The full firmware keeps the record until the

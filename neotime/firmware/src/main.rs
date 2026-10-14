@@ -179,7 +179,11 @@ async fn main(spawner: Spawner) {
     config.debug = embassy_nrf::config::Debug::NotConfigured;
     let chip = embassy_nrf::init(config);
     // The chip starts with its flash cache off, so every instruction fetched from flash waits.
-    pac::NVMC.icachecnf().write(|w| w.set_cacheen(true));
+    // Profiling only counts hits and misses, for the diagnostics.
+    pac::NVMC.icachecnf().write(|w| {
+        w.set_cacheen(true);
+        w.set_cacheprofen(true);
+    });
 
     start_heap();
     mark_alive();

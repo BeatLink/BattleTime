@@ -45,6 +45,10 @@ pub enum Counter {
     FlashReadPauses,
     /// App file reads served from a part read ahead with `prefetch_file`, without reading the flash.
     PrefetchedReads,
+    /// Instruction fetches the flash cache answered since start, which stops at the largest `u32`.
+    FlashCacheHits,
+    /// Instruction fetches the flash cache had to read from flash, stopping the same way.
+    FlashCacheMisses,
 }
 
 const COUNTER_COUNT: usize = 8;
@@ -52,7 +56,7 @@ const COUNTER_COUNT: usize = 8;
 /// The byte the companion app writes to the diagnostics characteristic once it saved the crash.
 pub const DEBUG_REPORT_SAVED: u8 = 1;
 const FIRST_LATER_WORD: usize = COUNTER_COUNT + LAST_RESTART_WORDS;
-const LATER_COUNTER_COUNT: usize = 9;
+const LATER_COUNTER_COUNT: usize = 11;
 const WORD_COUNT: usize = FIRST_LATER_WORD + LATER_COUNTER_COUNT;
 pub const SNAPSHOT_BYTES: usize = WORD_COUNT * 4;
 
@@ -88,4 +92,10 @@ pub fn snapshot() -> [u8; SNAPSHOT_BYTES] {
         *chunk = counter.load(Ordering::Relaxed).to_le_bytes();
     }
     bytes
+}
+
+/// Copies the flash cache's hit and miss counts into the counters, so a computer can compare them with the emulator's.
+pub fn note_flash_cache() {
+    set(Counter::FlashCacheHits, nrf_pac::NVMC.ihit().read());
+    set(Counter::FlashCacheMisses, nrf_pac::NVMC.imiss().read());
 }
