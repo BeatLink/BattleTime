@@ -313,7 +313,7 @@ inside `nix develop`; `--check` only reports whether either page is out of date:
 python3 -I tools/measure_memory.py
 ```
 
-CI's Memory map job (`.github/workflows/ci.yml`) runs it on every push and pull request and keeps
+CI's Memory map job (`.github/workflows/neotime.yml`) runs it on every push and pull request and keeps
 both measured pages as an artifact. On master, when the figures change, it commits both pages as
 `docs(memory-map): measure <commit>`, so nobody needs to run it before landing; rebase over that
 commit as over any other. The prose around the tables still needs updating by hand, and so does the

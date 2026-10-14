@@ -5,7 +5,9 @@ set -euo pipefail
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repository_root"
 
-blob_url="https://github.com/BeatLink/NeoTime/blob/master"
+# Links climbing out of docs/ land in neotime/; the README and the licence sit at the top of the repository.
+repository_blob_url="https://github.com/BeatLink/NeoTime/blob/master"
+blob_url="${repository_blob_url}/neotime"
 source_dir="target/site/src"
 
 # ---------------------------------------------------------------------------
@@ -23,8 +25,10 @@ cp harness/snapshots/screens/*.png "$source_dir/screens/"
 cp site/home.md "$source_dir/index.md"
 cp site/neotime.css "$source_dir/stylesheets/neotime.css"
 
-# The README becomes the About page, with its links into docs/ made local.
-sed -e 's#](docs/#](#g' README.md > "$source_dir/introduction.md"
+# The repository's README becomes the About page, with its links into neotime/docs/ made local and the rest sent to GitHub.
+sed -e 's#](neotime/docs/#](#g' \
+    -e "s#](\(neotime/[^)]*\|companion/[^)]*\))#](https://github.com/BeatLink/NeoTime/tree/master/\1)#g" \
+    ../README.md > "$source_dir/introduction.md"
 
 # Screens point into the staged copy; any other link out of docs/ goes to the file on GitHub.
 for page in "$source_dir"/apps/*.md; do
@@ -35,7 +39,7 @@ for page in "$source_dir"/*.md; do
         -e 's#](\.\./harness/snapshots/screens/#](screens/#g' \
         -e 's#src="\.\./harness/snapshots/screens/#src="screens/#g' \
         -e "s#](\.\./\([^)]*\))#](${blob_url}/\1)#g" \
-        -e "s#](\(LICENSE\))#](${blob_url}/\1)#g" \
+        -e "s#](\(LICENSE\))#](${repository_blob_url}/\1)#g" \
         "$page"
 done
 
@@ -69,7 +73,7 @@ python3 -I -m mkdocs build --strict --config-file "$config"
 
 # The front page and the About page are not in docs/, so their edit buttons open the files they come from.
 edit_url="https://github.com/BeatLink/NeoTime/edit/master"
-sed -i "s#${edit_url}/docs/index.md#${edit_url}/site/home.md#" target/site/out/index.html
-sed -i "s#${edit_url}/docs/introduction.md#${edit_url}/README.md#" target/site/out/introduction/index.html
+sed -i "s#${edit_url}/neotime/docs/index.md#${edit_url}/neotime/site/home.md#" target/site/out/index.html
+sed -i "s#${edit_url}/neotime/docs/introduction.md#${edit_url}/README.md#" target/site/out/introduction/index.html
 
 echo "Built the site into target/site/out"

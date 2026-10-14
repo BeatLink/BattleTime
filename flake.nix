@@ -26,35 +26,35 @@
         lib = pkgs.lib;
 
         # The toolchain file adds the watch's ARM target, which nixpkgs rustc lacks.
-        rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
+        rust = pkgs.rust-bin.fromRustupToolchainFile ./neotime/rust-toolchain.toml;
         rustPlatform = pkgs.makeRustPlatform { cargo = rust; rustc = rust; };
 
         # Only the Cargo files and the crates, so editing docs or the flake does not rebuild.
         source = lib.fileset.toSource {
-          root = ./.;
+          root = ./neotime;
           fileset = lib.fileset.unions [
-            ./Cargo.toml
-            ./Cargo.lock
-            ./app-host
-            ./boot
-            ./compiler
-            ./drivers
-            ./harness
-            ./runtime
-            ./services
-            ./simulator
-            ./ui
+            ./neotime/Cargo.toml
+            ./neotime/Cargo.lock
+            ./neotime/app-host
+            ./neotime/boot
+            ./neotime/compiler
+            ./neotime/drivers
+            ./neotime/harness
+            ./neotime/runtime
+            ./neotime/services
+            ./neotime/simulator
+            ./neotime/ui
             # The compiler draws the shared library icons from these fonts and pictures.
-            ./third_party
+            ./neotime/third_party
             # The compiler inlines the shared components, and its tests compile every app and face.
-            ./sdk/neotime/src/components.tsx
-            (lib.fileset.fileFilter (file: file.hasExt "tsx") ./apps)
-            (lib.fileset.fileFilter (file: file.hasExt "tsx") ./faces)
+            ./neotime/sdk/neotime/src/components.tsx
+            (lib.fileset.fileFilter (file: file.hasExt "tsx") ./neotime/apps)
+            (lib.fileset.fileFilter (file: file.hasExt "tsx") ./neotime/faces)
             # The harness's quality checks look for every app and face in these listings.
-            ./docs/apps.md
-            ./docs/faces.md
+            ./neotime/docs/apps.md
+            ./neotime/docs/faces.md
             # The harness plays every example script in this folder.
-            ./tests/scripts
+            ./neotime/tests/scripts
           ];
         };
 
@@ -67,7 +67,7 @@
           pname = "neotime-${name}";
           version = "0.1.0";
           src = source;
-          cargoLock.lockFile = ./Cargo.lock;
+          cargoLock.lockFile = ./neotime/Cargo.lock;
           nativeBuildInputs = simulatorBuildTools;
           buildInputs = simulatorLibraries;
           buildPhase = ''
@@ -83,7 +83,7 @@
           pname = "neotime-simulator";
           version = "0.1.0";
           src = source;
-          cargoLock.lockFile = ./Cargo.lock;
+          cargoLock.lockFile = ./neotime/Cargo.lock;
           cargoBuildFlags = [ "--package" "neotime-simulator" ];
           cargoTestFlags = [ "--package" "neotime-simulator" ];
           nativeBuildInputs = simulatorBuildTools;
