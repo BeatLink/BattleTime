@@ -132,6 +132,11 @@ document for its part instead.
     opens or the screen turns on;
   - each tap's `{"t":"app","ch":"remote",...}` line reaches the phone, which runs that button;
   - the stack keeps its margin while a tap's line is sent.
+- [ ] **The QR code app on the PineTime.** It (9e8f7b13) has run only in the test harness and the
+  companion's mock watch. With the companion app's QR code screen or `neotime qr`, check that:
+  - `/qr/code` and `/qr/label` arrive and show the next time the app opens;
+  - another phone scans a short link, a Wi-Fi code and a code over 74 modules;
+  - drawing the largest code stays quick enough for the watchdog.
 - [ ] **Transitions and scrolling on the PineTime.** Slides, wipes and hardware-scrolled lists have
   run only in the emulator and against a model of the panel; none of it is on the watch yet. Flash
   the bootloader first, then a firmware built from master at e78fc7a or later. On the watch, check
