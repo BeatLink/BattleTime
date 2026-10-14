@@ -248,6 +248,81 @@
           };
         };
 
+        # The companion's interface as a static web export, which the Tauri desktop app embeds.
+        companionWeb = pkgs.buildNpmPackage {
+          pname = "neotime-companion-web";
+          version = (lib.importJSON ./companion/package.json).version;
+          src = lib.cleanSource ./companion;
+
+          nodejs = pkgs.nodejs_22;
+          npmDepsHash = companion.npmDepsHash;
+          makeCacheWritable = true;
+
+          env = {
+            ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
+            EXPO_OFFLINE = "1";
+            EXPO_NO_TELEMETRY = "1";
+            CI = "1";
+          };
+
+          buildPhase = ''
+            runHook preBuild
+            npx expo export --platform web --output-dir dist
+            runHook postBuild
+          '';
+
+          installPhase = ''
+            runHook preInstall
+            cp -r dist $out
+            runHook postInstall
+          '';
+        };
+
+        # The Tauri desktop app, with the web export built in and its Bluetooth, D-Bus and plugins in Rust.
+        companionTauri = pkgs.rustPlatform.buildRustPackage {
+          pname = "neotime-companion-tauri";
+          version = (lib.importJSON ./companion/package.json).version;
+          src = lib.cleanSource ./companion;
+          cargoLock.lockFile = ./companion/Cargo.lock;
+
+          cargoBuildFlags = [ "--package" "neotime-companion" "--features" "custom-protocol" ];
+          # The Rust tests run in CI's companion workflow.
+          doCheck = false;
+
+          nativeBuildInputs = [ pkgs.pkg-config pkgs.wrapGAppsHook3 pkgs.copyDesktopItems ];
+          buildInputs = with pkgs; [ webkitgtk_4_1 gtk3 libsoup_3 glib openssl dbus ];
+
+          # Tauri embeds the interface from dist/ while it compiles.
+          preBuild = ''
+            cp -r ${companionWeb} dist
+            chmod -R u+w dist
+          '';
+
+          postInstall = ''
+            install -Dm644 assets/images/icon.png \
+              $out/share/icons/hicolor/512x512/apps/neotime-companion.png
+          '';
+
+          desktopItems = [
+            (pkgs.makeDesktopItem {
+              name = "neotime-companion";
+              desktopName = "NeoTime Companion";
+              comment = "Companion for watches running NeoTime";
+              exec = "neotime-companion";
+              icon = "neotime-companion";
+              categories = [ "Utility" ];
+            })
+          ];
+
+          meta = {
+            description = "The NeoTime Companion desktop app, built with Tauri";
+            homepage = "https://github.com/BeatLink/NeoTime";
+            license = lib.licenses.gpl3Plus;
+            mainProgram = "neotime-companion";
+            platforms = lib.platforms.linux;
+          };
+        };
+
         # The Tauri desktop app: Rust, the Tauri CLI, and the WebKitGTK window it draws in.
         companionTauriPackages = with pkgs; [
           cargo
@@ -319,6 +394,7 @@
           simulator = simulator;
           infinisim = infinisimPackage;
           companion = companion;
+          companion-tauri = companionTauri;
           companion-android-sdk = companionAndroidSdk;
           appbuilder = appbuilder;
         };
@@ -329,6 +405,7 @@
           infinisim = flake-utils.lib.mkApp { drv = infinisimPackage; };
           companion = flake-utils.lib.mkApp { drv = companion; };
           companion-cli = flake-utils.lib.mkApp { drv = companion; name = "neotime"; };
+          companion-tauri = flake-utils.lib.mkApp { drv = companionTauri; };
         };
 
         checks = {

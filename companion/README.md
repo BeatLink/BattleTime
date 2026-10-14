@@ -71,6 +71,7 @@ The flake also builds the desktop app and the command line tool as one package, 
 
 ```bash
 nix run github:BeatLink/NeoTime#companion                # the desktop app
+nix run github:BeatLink/NeoTime#companion-tauri          # the Tauri desktop app, which is replacing it
 nix run github:BeatLink/NeoTime#companion-cli -- scan    # the command line tool
 nix profile install github:BeatLink/NeoTime#companion    # neotime-companion and neotime on PATH
 ```
