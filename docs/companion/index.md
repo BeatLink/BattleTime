@@ -12,7 +12,7 @@ watch is set up in the first place.
 | Build | Runs on | Good for |
 |---|---|---|
 | The desktop app | Linux | Everything, with the computer standing in for a phone |
-| The Android app | 64-bit ARM phones | Everything, with the phone's own notifications, calls and location |
+| The Android app | Android phones | Everything, with the phone's own notifications, calls and location |
 | The command line tool, `neotime` | Linux | Scripts and quick jobs from a terminal |
 
 The desktop app and the Android app are the same app, built with Tauri on one Rust core, so their
@@ -43,8 +43,9 @@ one it was using is switched off.
 
 ### The Android app
 
-There is no download of the Android app yet; it is built from the repository as a debug APK and
-installed with `adb install`. [companion/README.md](../../companion/README.md) says how to build it.
+Each [NeoTime release](https://github.com/BeatLink/NeoTime/releases) carries a signed APK that
+runs on every Android phone; download it on the phone and open it to install. To build one
+yourself, [companion/README.md](../../companion/README.md) says how.
 The first scan asks for permission to find nearby devices (location, before Android 12), and on
 Android 13 and later for notifications, which the app needs to keep running in the background.
 
