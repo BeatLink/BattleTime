@@ -1,0 +1,53 @@
+/* The simulator pane: the watch screen as large as the pane allows, with its controls and log below. */
+
+main {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* The PineTime's screen is square, so the canvas is too. */
+#screen {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  image-rendering: pixelated;
+  border: 6px solid #111;
+  border-radius: 12px;
+  box-sizing: border-box;
+  touch-action: none;
+  cursor: pointer;
+  background: #000;
+}
+
+#screen.vibrating {
+  border-color: #d33;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+#status {
+  margin: 4px 0;
+  color: var(--vscode-descriptionForeground);
+}
+
+#errors {
+  margin: 4px 0;
+  padding-left: 18px;
+  color: var(--vscode-errorForeground);
+}
+
+#log {
+  max-height: 160px;
+  overflow: auto;
+  margin: 0;
+  padding: 6px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+  background: var(--vscode-textCodeBlock-background);
+  white-space: pre-wrap;
+}

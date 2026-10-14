@@ -1,0 +1,69 @@
+/* The palette pane: a search box over sections of entries, each a button that inserts it. */
+
+body {
+  padding: 8px;
+  background: var(--vscode-sideBar-background);
+}
+
+#target {
+  margin: 0 0 6px;
+  color: var(--vscode-descriptionForeground);
+}
+
+#search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  margin-bottom: 8px;
+  font: inherit;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+}
+
+ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+li {
+  margin: 2px 0 6px;
+}
+
+summary.section {
+  font-weight: bold;
+  margin: 6px 0;
+  cursor: pointer;
+}
+
+button.entry {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-family: var(--vscode-editor-font-family);
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  text-align: left;
+}
+
+button.entry:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+li details {
+  margin: 2px 0 0 4px;
+  color: var(--vscode-descriptionForeground);
+}
+
+dl {
+  margin: 4px 0 4px 12px;
+}
+
+dt {
+  font-family: var(--vscode-editor-font-family);
+  overflow-wrap: anywhere;
+}
+
+dd {
+  margin: 0 0 4px 12px;
+}

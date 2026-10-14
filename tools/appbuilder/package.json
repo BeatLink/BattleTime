@@ -1,7 +1,7 @@
 {
   "name": "neotime-appbuilder",
   "displayName": "NeoTime App Builder",
-  "description": "Builds NeoTime watch apps from a palette of widgets, events and effects, with the simulator running beside the code",
+  "description": "Builds NeoTime watch apps from a palette of widgets, events and effects in the sidebar, with the app running in the simulator beside the code",
   "version": "0.1.0",
   "private": true,
   "license": "GPL-3.0-or-later",
@@ -9,12 +9,33 @@
   "engines": {
     "vscode": "^1.90.0"
   },
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
   "main": "./out/src/extension.js",
   "activationEvents": [
-    "workspaceContains:**/neotime/sdk/neotime/package.json"
+    "workspaceContains:**/neotime/sdk/neotime/package.json",
+    "onView:neotime.palette"
   ],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "neotime",
+          "title": "NeoTime",
+          "icon": "media/watch.svg"
+        }
+      ]
+    },
+    "views": {
+      "neotime": [
+        {
+          "type": "webview",
+          "id": "neotime.palette",
+          "name": "Palette"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "neotime.appBuilder.open",
