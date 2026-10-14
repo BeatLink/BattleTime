@@ -39,6 +39,20 @@ jobs:
           name: coverage
           path: coverage/
 
+  rust:
+    name: Rust tests and clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      # The Tauri crate embeds dist/ when it builds, so an empty page stands in for the web export.
+      - name: Stand in for the web export
+        run: mkdir -p dist && echo '<!doctype html>' > dist/index.html
+      - name: Run the tests
+        run: nix develop --command cargo test --workspace
+      - name: Run clippy
+        run: nix develop --command cargo clippy --workspace --all-targets -- -D warnings
+
   nix:
     name: Nix package
     runs-on: ubuntu-latest

@@ -88,6 +88,18 @@ Android 13 and later.
 - **CLI commands.** `cli/commands/watch.ts`, `scan.ts` and `send.ts` are counted but barely tested;
   drive them against the mock watch as `cli/cli.test.ts` does for `flash`.
 
+## Moving to Tauri
+
+- **Connecting and updating from the Tauri app.** The Rust Bluetooth layer has scanned, connected
+  and read GATT on the watch (the probe example), and the Tauri window scans through it; connecting,
+  the UART lines and a firmware update from the window are untried.
+- **A Nix package for the Tauri app**, then removing Electron, `node/` and their npm dependencies.
+- **The command line tool in Rust**, on the core crate, once the protocols move there.
+- **Protocols in the core crate**: the packages, BLEFS, DFU and Gadgetbridge code, in crates shared
+  with the firmware where it defines the format.
+- **Tauri on Android**, with the phone bridge as a Tauri plugin; try btleplug on a phone first.
+- **Plugins**, as drafted in [docs/plugins.md](docs/plugins.md).
+
 ## Not started
 
 - **Firmware from GitHub Actions builds.** NeoTime has no CI yet; the finder already reads

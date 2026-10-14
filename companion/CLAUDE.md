@@ -14,6 +14,11 @@ Read [README.md](README.md) for the layout and the protocol.
 - The phone's part (notifications, media, Do Not Disturb, location) sits behind `phoneBridge` in
   `src/services/phone`. In the desktop app the computer plays it through `node/desktop.js` over
   D-Bus; check `phoneBridge.kind`, `supportsCalls` and `supportsLocation`, never the platform.
+- The desktop app is moving to Tauri. `core/` is the Rust core with no Tauri in it (Bluetooth on
+  btleplug); `tauri/` is the shell, whose `src/bridge.js` gives the window the same
+  `window.neotime` the Electron preload does, so a bridge change goes into both until Electron is
+  removed. Verify Rust with `cargo test --workspace` and `cargo clippy --workspace --all-targets`
+  in `nix develop`; the Tauri crate needs a `dist/` to build, from `expo export`.
 - `cli/` is the command line tool. It imports the same `src/` modules the screens do, so a feature
   gets a command rather than a second implementation. `npm run neotime -- <command>` rebuilds it
   with esbuild and runs it.

@@ -46,6 +46,7 @@ One codebase builds three targets:
 ```bash
 npm run android      # or npm run ios, a development build with real Bluetooth
 npm run desktop      # the Electron app, with real Bluetooth through BlueZ
+npm run tauri        # the Tauri desktop app, which is replacing Electron (see below)
 npm start            # Expo, including the browser, where the mock watch stands in
 ```
 
@@ -134,6 +135,27 @@ NixOS. `npm run desktop` starts it through [scripts/electron.mjs](scripts/electr
 skips the launcher npm would otherwise put first on `PATH`; that launcher starts Electron's
 unwrapped binary, which dies with SIGILL. Run it inside `nix develop`, or the script says so.
 
+### The Tauri desktop app
+
+The desktop app is moving from Electron to [Tauri](https://tauri.app), so that the desktop, the
+phone and the command line tool can share one Rust core with each other and, later, with the
+firmware's own formats. `npm run tauri` exports the web build and starts it; `cargo test --workspace`
+runs the Rust tests.
+
+The window is the same web export. [tauri/src/bridge.js](tauri/src/bridge.js) gives it the same
+`window.neotime` object the Electron preload did, so no screen changed. Behind it:
+
+- [core/src/ble.rs](core/src/ble.rs) is the Bluetooth layer, on btleplug, with the same timeouts and
+  link handling as `node/ble.js`. It has no Tauri in it, so the tool and the phone can reuse it.
+  `cargo run -p neotime-companion-core --example probe` scans, connects and reads the battery and
+  the time, to check it against a real watch.
+- [tauri/src/desktop.rs](tauri/src/desktop.rs) reads notifications, MPRIS players, Do Not Disturb
+  and GeoClue over D-Bus with zbus, sending the window the same raw events as `node/desktop.js`.
+- [tauri/src/notes.rs](tauri/src/notes.rs) and [tauri/src/remote.rs](tauri/src/remote.rs) are the
+  note file watch and the remote buttons' shell commands.
+
+Set `NEOTIME_DEV_URL` to the Expo dev server's address to load the interface from it instead.
+
 ### The computer in place of a phone
 
 On a phone the app forwards what the phone knows; in the desktop app the computer plays that part,
@@ -188,6 +210,8 @@ src/app/                 Expo Router screens
   alarms.tsx             The watch's alarms and the days they repeat on
   watch-settings.tsx     Brightness, face, timeout, units, step goal and theme on the watch
 electron/                Desktop app: main process, preload bridge and file server
+core/                    Rust core shared by every build: Bluetooth on btleplug
+tauri/                   Tauri desktop app: the window's bridge, D-Bus, note files, remote commands
 src/ble/                 Transport layer: react-native-ble-plx, Electron, and a mock for browsers
 src/dfu/                 Firmware updates: Nordic legacy DFU and the package reader
 cli/                     The command line tool, which runs the same code as the screens

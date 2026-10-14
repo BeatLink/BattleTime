@@ -144,13 +144,28 @@
         # Development shells
         # ====================================================================
 
+        # The Tauri desktop app: Rust, the Tauri CLI, and the WebKitGTK window it draws in.
+        tauri_packages = with pkgs; [
+          cargo
+          rustc
+          clippy
+          rustfmt
+          cargo-tauri
+          pkg-config
+          webkitgtk_4_1
+          gtk3
+          libsoup_3
+          glib
+          openssl
+        ];
+
         common_packages = with pkgs; [
           nodejs_22
           electron
           bluez
           dbus
           git
-        ] ++ browsers;
+        ] ++ browsers ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux tauri_packages;
 
         # Nothing here should download an Electron of its own; the one on
         # PATH is the wrapper that works. Pointing anything at the unwrapped
