@@ -78,6 +78,8 @@ mod foreground;
 mod heart_rate;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod help;
+#[cfg_attr(not(with_shell), allow(dead_code))]
+mod i2c_bus;
 mod restart;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod settings;
@@ -132,9 +134,9 @@ const SIDE_BUTTON_PIN: usize = 13;
 
 use display_dma::SpiBus;
 #[cfg_attr(not(with_shell), allow(dead_code))]
-type I2cBus = embassy_sync::mutex::Mutex<NoopRawMutex, twim::Twim<'static>>;
+type I2cBus = embassy_sync::mutex::Mutex<NoopRawMutex, i2c_bus::SleepingTwim>;
 /// One user of the I2C bus the touch panel, the accelerometer and the heart rate sensor share.
-type I2cDeviceOnBus = I2cDevice<'static, NoopRawMutex, twim::Twim<'static>>;
+type I2cDeviceOnBus = I2cDevice<'static, NoopRawMutex, i2c_bus::SleepingTwim>;
 
 #[global_allocator]
 static HEAP: WatchHeap = WatchHeap {
@@ -266,14 +268,16 @@ async fn main(spawner: Spawner) {
         static I2C_BUS: StaticCell<I2cBus> = StaticCell::new();
         let mut i2c_config = twim::Config::default();
         i2c_config.frequency = twim::Frequency::K400;
-        let i2c_bus: &'static I2cBus = I2C_BUS.init(embassy_sync::mutex::Mutex::new(twim::Twim::new(
-            chip.TWISPI1,
-            Interrupts,
-            chip.P0_06,
-            chip.P0_07,
-            i2c_config,
-            I2C_BUFFER.init([0; 32]),
-        )));
+        let i2c_bus: &'static I2cBus = I2C_BUS.init(embassy_sync::mutex::Mutex::new(
+            i2c_bus::SleepingTwim::new(twim::Twim::new(
+                chip.TWISPI1,
+                Interrupts,
+                chip.P0_06,
+                chip.P0_07,
+                i2c_config,
+                I2C_BUFFER.init([0; 32]),
+            )),
+        ));
         spawner.spawn(
             touch::read_touches(
                 I2cDevice::new(i2c_bus),

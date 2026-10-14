@@ -277,6 +277,10 @@ shell; opening another app stops what is playing.
 - **Sharing the bus.** The touch panel, the accelerometer and the heart rate sensor share the I2C
   bus. The touch panel starts first, with retries, and the accelerometer waits for it, since a
   reset of one while the other starts stops the panel answering.
+  `i2c_bus::SleepingTwim` wraps TWIM1 behind the bus: after every transfer it disables the TWIM
+  and writes its power register 0 then 1, since a TWIM that has used EasyDMA otherwise keeps
+  drawing about 400 µA (nRF52832 anomaly 89), and puts the pins, speed and enable back before the
+  next.
 
 ### Heart rate
 

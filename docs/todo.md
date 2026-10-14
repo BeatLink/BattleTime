@@ -13,6 +13,11 @@ document for its part instead.
   Flash it and check that the watch boots, connects, and that the battery percentage in the
   System app and `neotime battery` reads about the same as before and falls no faster over a day.
 
+- [ ] **TWIM power-down on the PineTime.** `i2c_bus::SleepingTwim` powers TWIM1 down after every
+  transfer for nRF52832 anomaly 89, which the emulator does not model. Check that touch, steps and
+  a heart rate measurement still work, then compare the battery's fall over a night, screen dark,
+  with the build before it; the anomaly costs about 400 µA, roughly a quarter of the idle drain.
+
 - [ ] **Paging on the PineTime.** `Pages` (2f9524a) and the system and steps apps built on it
   (5957275) have run only in the harness and the emulator; the watch still runs 3a5abe9. Flash a
   build with them and check on the watch that a swipe left or right wipes to the next page and

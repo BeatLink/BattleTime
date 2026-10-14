@@ -25,6 +25,7 @@ embassy-time = { version = "0.5", features = ["tick-hz-32_768"] }
 embedded-alloc = "0.7"
 embedded-graphics = "0.8"
 embedded-hal = "1.0"
+embedded-hal-async = "1.0"
 embedded-storage = "0.3"
 embedded-storage-async = "0.4"
 heapless = "0.9"
