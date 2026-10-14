@@ -54,6 +54,15 @@ document for its part instead.
   Earlier draw times were 419 ms with bitmap fonts and 379-749 ms with the geometric font; expect
   less, ideally near 419 ms.
 
+- [ ] **Flash cache hits and misses on the PineTime.** The diagnostics count the instruction cache's
+  hits and misses (8b25f803), to calibrate the emulator's cache model. With every app installed and
+  the face showing, read the raw diagnostics characteristic: words 31 and 32 (little endian,
+  counting from 0) are FlashCacheHits and FlashCacheMisses since start. Read again after 60 s
+  untouched, after swiping up to the launcher and waiting 3 s, and after tapping the first app row
+  and waiting 4 s. The emulator misses 10.4% idle on the face, 4.7% opening the launcher and 5.0%
+  opening Settings; the watch should be within about a point of each, or the emulator's assumed
+  cache line size needs changing.
+
 - [ ] **Terminal face on the PineTime.** With every label in the small font (51e32c64), all ten
   lines fit on the screen: "[1]+ Notify" when a notification is unread, "user@watch:~ $ now", the
   [TIME] [DATE] [BATT] [STEP] [L_HR] [WTHR] [STAT] lines and the final "user@watch:~ $" prompt
