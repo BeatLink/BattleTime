@@ -3,6 +3,7 @@
 //!
 //! The shell is the exception: it calls the store directly, without waiting, once no request is under way.
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, signal::Signal};
@@ -19,7 +20,7 @@ pub const SMALL_WRITE_BYTES: usize = 32;
 pub enum StorageRequest {
     /// A file service command from the phone; its answers come back on `FILE_ANSWERS`.
     FileTransfer {
-        request: heapless::Vec<u8, FILE_REQUEST_BYTES>,
+        request: FileRequest,
         room: usize,
     },
     /// A new connection forgets what the last one left unfinished.
@@ -45,15 +46,30 @@ pub static REQUESTS: Channel<CriticalSectionRawMutex, StorageRequest, 2> = Chann
 pub static FILE_ANSWERS: Channel<CriticalSectionRawMutex, Vec<Vec<u8>>, 1> = Channel::new();
 pub static STEPS_LOADED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
+/// A file service command on its way to the storage task, on the heap so the request channel stays small.
+pub enum FileRequest {
+    Copied(Box<[u8]>),
+    /// The heap had no room for the copy, so only the command byte goes, for the storage task to refuse.
+    Refused(u8),
+}
+
+impl FileRequest {
+    /// Copies up to `FILE_REQUEST_BYTES` of a write, or keeps its command byte when the heap has no room.
+    pub fn copy_of(bytes: &[u8]) -> FileRequest {
+        let bytes = &bytes[..bytes.len().min(FILE_REQUEST_BYTES)];
+        let mut copy = Vec::new();
+        if copy.try_reserve_exact(bytes.len()).is_err() {
+            return FileRequest::Refused(bytes.first().copied().unwrap_or(0));
+        }
+        copy.extend_from_slice(bytes);
+        FileRequest::Copied(copy.into_boxed_slice())
+    }
+}
+
 /// Sends a file service command to the storage task and waits for its answers.
-pub async fn answer_file_transfer(request: &[u8], room: usize) -> Vec<Vec<u8>> {
-    let mut copied = heapless::Vec::new();
-    let _ = copied.extend_from_slice(&request[..request.len().min(FILE_REQUEST_BYTES)]);
+pub async fn answer_file_transfer(request: FileRequest, room: usize) -> Vec<Vec<u8>> {
     REQUESTS
-        .send(StorageRequest::FileTransfer {
-            request: copied,
-            room,
-        })
+        .send(StorageRequest::FileTransfer { request, room })
         .await;
     FILE_ANSWERS.receive().await
 }

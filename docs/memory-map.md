@@ -177,7 +177,9 @@ the Bluetooth host with its eight 128-byte packets, controller, the display's tw
 TrouBLE's host keeps one connection, no L2CAP channels of its own (every service speaks over GATT), and a send
 queue of four packets, set by `TROUBLE_HOST_L2CAP_TX_QUEUE_SIZE` in `firmware/.cargo/config.toml`; its receive queue
 stays at eight, since a full one drops the phone's writes. The
-Bluetooth task's state is 3.2 KB, TrouBLE's runner (1.6 KB) much of it; replies to the companion
+Bluetooth task's state is 3.2 KB, TrouBLE's runner (1.6 KB) much of it; of a write it keeps only the 20 bytes an
+update needs across its awaits, and a file service command goes to the storage task on the heap, so the request
+channel's two places no longer hold a 128-byte packet each; replies to the companion
 app and half-received lines wait on the heap, and the update state, status page and confirmation
 are held once in a static. The GATT server (`SERVER`) is 656 B, mostly TrouBLE's CCCD table for
 each client. Its attribute table, 61 attributes of 32 B, is a constant in flash (1,952 B), built

@@ -47,7 +47,7 @@ use crate::display_dma::{start_flash_read, FlashReadInProgress, MOST_READ_EXTENT
 use crate::{
     foreground, line, packages,
     status::{self, Mode},
-    storage_requests::{self, StorageRequest},
+    storage_requests::{self, FileRequest, StorageRequest},
     Screen, SpiBus,
 };
 
@@ -785,15 +785,30 @@ impl Files {
         let mut store = self.store.lock().await;
         let Some(store) = store.as_mut() else {
             if let StorageRequest::FileTransfer { request, .. } = request {
+                let command = match &request {
+                    FileRequest::Copied(bytes) => &bytes[..],
+                    FileRequest::Refused(command_byte) => core::slice::from_ref(command_byte),
+                };
                 storage_requests::FILE_ANSWERS
-                    .send(FileTransfer::refuse(&request))
+                    .send(FileTransfer::refuse(command))
                     .await;
             }
             storage_requests::STEPS_LOADED.signal(());
             return;
         };
         match request {
-            StorageRequest::FileTransfer { request, room } => {
+            StorageRequest::FileTransfer {
+                request: FileRequest::Refused(command_byte),
+                ..
+            } => {
+                storage_requests::FILE_ANSWERS
+                    .send(FileTransfer::refuse(&[command_byte]))
+                    .await;
+            }
+            StorageRequest::FileTransfer {
+                request: FileRequest::Copied(request),
+                room,
+            } => {
                 foreground::wait_for_a_pause().await;
                 transfer.lock_folders(folders_locked_by_settings());
                 let answers = transfer.answer(Some(store), &request, room).await;

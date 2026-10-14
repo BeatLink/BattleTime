@@ -970,6 +970,10 @@ const NOTIFY_ATTEMPTS: usize = 50;
 const NOTIFICATION_HEADER_BYTES: usize = 3;
 /// Packets a long answer leaves free, so what the phone sends meanwhile still has somewhere to land.
 const PACKETS_KEPT_FOR_INCOMING: usize = 2;
+/// The most of one write the clock, companion and packages characteristics read.
+const MOST_WRITE_BYTES: usize = 64;
+/// The most of one write the update service reads: legacy DFU sends 20-byte packets and shorter commands.
+const DFU_WRITE_BYTES: usize = 20;
 
 /// Sends a BLEFS command's answers, one notification each, waiting while fewer than two packets are free.
 async fn send_file_answers(
@@ -1126,27 +1130,54 @@ async fn serve_connection(
                 return;
             }
             GattConnectionEvent::Gatt { event } => {
-                let mut written = heapless::Vec::<u8, 64>::new();
+                // Only an update's 20 bytes outlive the awaits below, never a whole write.
+                let mut dfu_written = heapless::Vec::<u8, DFU_WRITE_BYTES>::new();
                 let mut file_answers = alloc::vec::Vec::new();
-                let mut file_request = heapless::Vec::<u8, { storage_requests::FILE_REQUEST_BYTES }>::new();
                 let target = match &event {
                     GattEvent::Write(write) => {
-                        write.with_data(|_, bytes| {
-                            let _ = written.extend_from_slice(&bytes[..bytes.len().min(64)]);
+                        let handle = write.handle();
+                        let target = server.dfu.classify(handle);
+                        let file_request = write.with_data(|_, bytes| {
+                            let written = &bytes[..bytes.len().min(MOST_WRITE_BYTES)];
+                            if target.is_some() {
+                                let _ = dfu_written
+                                    .extend_from_slice(&written[..written.len().min(DFU_WRITE_BYTES)]);
+                            }
+                            if handle == server.time.current_time.handle {
+                                clock::set_from_current_time(written);
+                            }
+                            if handle == server.time.local_time_information.handle {
+                                clock::set_local_time_information(written);
+                            }
+                            if handle == server.uart.receive.handle {
+                                companion_lines.push(written, read_companion_line);
+                            }
+                            if handle == server.neotime.counters.handle
+                                && written.first() == Some(&diagnostics::DEBUG_REPORT_SAVED)
+                            {
+                                restart::dismiss_crash();
+                                ping_shell();
+                            }
+                            if handle == server.neotime.packages.handle {
+                                for &byte in written {
+                                    if byte == b'\n' {
+                                        packages_commands.push(core::mem::take(&mut packages_line));
+                                    } else if packages_line.len() < PACKAGES_LINE_BYTES {
+                                        packages_line.push(byte);
+                                    }
+                                }
+                            }
+                            (handle == server.file_transfer.transfer.handle)
+                                .then(|| storage_requests::FileRequest::copy_of(bytes))
                         });
-                        if write.handle() == server.file_transfer.transfer.handle {
+                        if let Some(file_request) = file_request {
                             foreground::wait_for_a_pause().await;
                             let room = connection.raw().att_mtu() as usize - NOTIFICATION_HEADER_BYTES;
-                            write.with_data(|_, bytes| {
-                                let _ = file_request.extend_from_slice(
-                                    &bytes[..bytes.len().min(storage_requests::FILE_REQUEST_BYTES)],
-                                );
-                            });
-                            file_answers = storage_requests::answer_file_transfer(&file_request, room).await;
+                            file_answers = storage_requests::answer_file_transfer(file_request, room).await;
                         }
                         // The recovery firmware has nowhere to show a notification.
                         #[cfg(with_shell)]
-                        if write.handle() == server.alert_notification.new_alert.handle {
+                        if handle == server.alert_notification.new_alert.handle {
                             write.with_data(|_, bytes| {
                                 read_new_alert(
                                     &bytes[..bytes.len().min(MOST_NEW_ALERT_BYTES)],
@@ -1154,31 +1185,7 @@ async fn serve_connection(
                                 )
                             });
                         }
-                        if write.handle() == server.time.current_time.handle {
-                            clock::set_from_current_time(&written);
-                        }
-                        if write.handle() == server.time.local_time_information.handle {
-                            clock::set_local_time_information(&written);
-                        }
-                        if write.handle() == server.uart.receive.handle {
-                            companion_lines.push(&written, read_companion_line);
-                        }
-                        if write.handle() == server.neotime.counters.handle
-                            && written.first() == Some(&diagnostics::DEBUG_REPORT_SAVED)
-                        {
-                            restart::dismiss_crash();
-                            ping_shell();
-                        }
-                        if write.handle() == server.neotime.packages.handle {
-                            for &byte in written.iter() {
-                                if byte == b'\n' {
-                                    packages_commands.push(core::mem::take(&mut packages_line));
-                                } else if packages_line.len() < PACKAGES_LINE_BYTES {
-                                    packages_line.push(byte);
-                                }
-                            }
-                        }
-                        server.dfu.classify(write.handle())
+                        target
                     }
                     GattEvent::Read(read) => {
                         if read.handle() == server.neotime.counters.handle {
@@ -1237,8 +1244,8 @@ async fn serve_connection(
 
                 dfu.set_allows_updates(settings::current().is_on(Setting::AllowsUpdates));
                 let outcome = match target {
-                    Some(DfuWrite::ControlPoint) => dfu.on_control_point(&written).await,
-                    Some(DfuWrite::Packet) => dfu.on_packet(&written).await,
+                    Some(DfuWrite::ControlPoint) => dfu.on_control_point(&dfu_written).await,
+                    Some(DfuWrite::Packet) => dfu.on_packet(&dfu_written).await,
                     None => continue,
                 };
                 for notification in &outcome.notifications {
