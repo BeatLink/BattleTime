@@ -59,8 +59,8 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Updates (DFU) | 2.1 KB | 2.1 KB |
 | Other constants and padding | 29.7 KB | 13.5 KB |
 | **Code and data** | **388.4 KB** | **178.6 KB** |
-| Shared library, after the code | 87.1 KB | none |
-| Free of the 480 KB region, after its header | 4.2 KB | 301.2 KB |
+| Shared library, after the code | 87.8 KB | none |
+| Free of the 480 KB region, after its header | 3.5 KB | 301.2 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -116,7 +116,7 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 | What | Bytes | File sectors |
 |---|---:|---:|
 | `/settings/system` and `/settings/theme`, kept as records | 82 | 0 |
-| 12 app images, 715 B (flashlight) to 4,464 B (settings); those of 1 KB or less are records | 23,793 | 11 |
+| 12 app images, 715 B (flashlight) to 4,392 B (settings); those of 1 KB or less are records | 23,721 | 11 |
 | **In use** | | **11 of 512: 44 KB of 2 MB, and 1,964 B of records in the 256 KB records ring** |
 <!-- /measure_memory:file-system -->
 
