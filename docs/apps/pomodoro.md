@@ -5,8 +5,8 @@ in place of every few short ones, until you stop it.
 
 ## Using it
 
-- The app opens on the **countdown**, the last of four pages. Swipe right to reach the pages that
-  set the lengths, and left to come back.
+- The app always opens on the **countdown**, the last of four pages, with a page bar along the
+  bottom. Swipe right to reach the pages that set the lengths, and left to come back.
 - **Work**, **Short break** and **Long break** each have a page with **-** and **+** buttons that
   set the length in minutes, from 1 to 99. The long break page also sets how many work sessions
   come before each long break, from 2 to 8.
@@ -16,7 +16,8 @@ in place of every few short ones, until you stop it.
   or follows, such as **1 of 4**.
 - When an interval ends the watch wakes and buzzes for ten seconds, names the interval that comes
   next, and then starts it.
-- Tap **+1** to add a minute to the running interval, or **Stop** to end the round.
+- Tap **+1** to add a minute to the running interval; the watch gives a short buzz to confirm.
+  Tap **Stop**, while an interval runs or while the watch buzzes, to end the round.
 - A new length takes effect from the next interval that uses it.
 
 ## Screens
@@ -48,3 +49,8 @@ A work session has ended: the watch buzzes and names the short break that comes 
 ![A short break counting down](../../neotime/harness/snapshots/screens/app-pomodoro-short-break-running.png)
 
 The short break after the first work session.
+
+## With the companion app
+
+The Pomodoro plugin's page shows the three lengths, the long break spacing and the running interval's
+saved times as the last sync read them, and can change the lengths on the watch.

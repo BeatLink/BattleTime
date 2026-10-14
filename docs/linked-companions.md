@@ -1,7 +1,8 @@
 # Linked companions
 
-**Status:** planned. Nothing here is built yet; the stages are in
-[companion/TODO.md](../companion/TODO.md#linked-companions).
+!!! warning "A design, not built yet"
+    This page is a design for work that has not started. None of it is in the companion today;
+    the stages are in [companion/TODO.md](../companion/TODO.md#linked-companions).
 
 The watch keeps one Bluetooth connection. When the wearer has the companion on a phone and on a
 computer, the two companions find each other on the home network and link up. Only one of them

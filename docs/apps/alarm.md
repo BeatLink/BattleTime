@@ -43,3 +43,12 @@ Changing a saved alarm: tap its time, then next. Delete removes it.
 ![An alarm ringing](../../neotime/harness/snapshots/screens/app-alarm-ringing.png)
 
 Ringing, with Snooze and stop.
+
+## With the companion app
+
+- The companion reads the alarms from the watch and can change them: the **Alarms** screen under On
+  the watch, and the Alarm plugin's page, list every alarm with its time, its days and a switch, and
+  can add or remove alarms up to the same limit of twelve.
+- Changes reach the watch straight away, and the watch works out the next ring again. The command
+  line's `alarms` command reads and writes them too.
+- Open the app on the watch once before the companion can read its alarms.

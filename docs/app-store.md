@@ -7,13 +7,14 @@ what CI builds for it, and what a release carries.
 
 ## In the companion
 
-Open it from the Watch tab (**Store**) or from the Apps screen (**Open the store**). Each entry
+Open it from the Watch tab (**Store**) or from the Apps screen (**Open the store**). It opens with no
+watch connected, so it can be browsed and filled first; installing waits for a watch. Each entry
 shows whether it is installed, its size and where it came from.
 
 - **Install** sends an app or face to the watch, which checks it and refuses one that would not fit
-  in memory, as installing from the Apps screen does. A plugin installs in the desktop app together
-  with the watch apps it carries; on a phone, plugins are listed but cannot be installed, because
-  they run only in the desktop app.
+  in memory, as installing from the Apps screen does. A plugin installs together with the watch apps
+  it carries, through the companion's Rust core, so plugins install in the Tauri app on a computer
+  and on Android.
 - **Uninstall** removes the app or face from the watch, with what it saved. For a plugin it removes
   the plugin's watch apps and the plugin.
 - **Remove from the store** takes the entry out of the list. A bundled entry stays out until
@@ -22,7 +23,8 @@ shows whether it is installed, its size and where it came from.
 - **Look on GitHub** lists the releases of a repository, `BeatLink/NeoTime` unless changed, that
   carry `neotime-store.zip` or loose `.ntapp` and `.ntplugin` files; with a GitHub token in Settings
   it lists the `neotime-store` artifacts of Actions runs too. Choosing one downloads it and offers
-  each app and plugin in it, all switched on, to add.
+  each app and plugin in it, all switched on, to add. The files come down through the app's own
+  native requests, since GitHub's download host refuses a web page's.
 
 An added entry replaces a bundled or earlier one with the same id, so adding a newer release
 updates the store; installing it again then updates the watch. The store keeps each added file in
@@ -48,7 +50,7 @@ npm run neotime -- apps install dice                   # install the bundled dic
 ```
 
 `GITHUB_TOKEN` makes `releases` and `fetch` see Actions artifacts too. The command line keeps no
-store of its own; plugins it fetches are installed in the desktop app.
+store of its own; plugins it fetches are installed in the app.
 
 ## Building the store's files
 

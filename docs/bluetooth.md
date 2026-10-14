@@ -6,8 +6,11 @@ Rust. It drives the nRF52832's radio directly and gives the
 involved: no SoftDevice, no SoftDevice Controller and no MPSL.
 
 **Status:** it passes its tests on the computer, including TrouBLE running against it, and it runs
-on the watch, where firmware updates over Bluetooth use it. The checks under "Hardware tests" in
-[todo.md](todo.md) have not been made yet.
+on the watch, where firmware updates, the companion app and its file transfers use it. The timing
+checks under "Hardware tests" in [todo.md](todo.md) have not been made yet.
+
+This page covers the controller first, then what the firmware builds on it: advertising, a
+connection, the GATT services and the phone's own services.
 
 ## Why NeoTime has its own
 
@@ -196,21 +199,86 @@ The controller's own address is the chip's factory address with its top two bits
 it a valid static random address. TrouBLE usually sets its own with `set_random_address`. The
 controller reports no public address.
 
+## Advertising
+
+The firmware advertises as InfiniTime does (`run_bluetooth` in `firmware/src/main.rs`, with the
+bytes and intervals in `neotime_companion::advertising`):
+
+- **How often.** Every 20 to 30 ms (32 to 47 units of 625 µs) for 30 seconds after the watch starts,
+  a phone leaves or Bluetooth is turned back on, then every 1022 to 1032 ms (1636 to 1651 units).
+  The controller uses the shortest of each, plus its random delay of up to 10 ms. When the fast
+  time runs out the firmware stops advertising and starts again slow.
+- **The advertisement,** 28 bytes: the flags (general discoverable, no classic Bluetooth), the Heart
+  Rate service 0x180D as the complete list of 16-bit services, the legacy DFU service
+  `00001530-1212-efde-1523-785feabcd123` as the complete list of 128-bit services, and a transmit
+  power of 0 dBm.
+- **The scan response** holds only the complete name: `NeoTime`, or `InfiniTime` while the
+  `gadgetbridge_name` setting is on, so Gadgetbridge's PineTime/InfiniTime coordinator takes the
+  watch. Every time it starts advertising the firmware lends the GAP service's Device Name (handle
+  3) the same name, so a phone that connects reads it there too. Changing the setting, and reading
+  the saved settings at start, raises `BLUETOOTH_SWITCHED`, so advertising starts again with the new
+  name at once.
+- **The GAP appearance** is 0x00C2, a smartwatch, as InfiniTime sets it.
+- **When the controller refuses** to start advertising, the firmware tries again a second later
+  rather than stopping, so a refused command never leaves the watch silent.
+- **The `bluetooth` setting** off drops the phone and stops advertising until it is turned on again.
+
+`tools/check_advertising.py` checks all of this in the emulator through the Bluetooth bridge's
+controller: about 39 advertisements a second at first and under one a second after 30 s, the
+advertisement's bytes, both names in the scan response and the GAP service, the appearance, fast
+advertising again after a phone leaves, and a saved setting. None of it has run on the watch.
+
+## A connection
+
+One connection at a time, from advertising to the phone leaving:
+
+```mermaid
+sequenceDiagram
+    participant Phone
+    participant Watch as Watch (TrouBLE and the firmware)
+    Watch->>Phone: advertisement every 20 to 30 ms, then about once a second
+    Phone->>Watch: scan request
+    Watch-->>Phone: scan response: NeoTime or InfiniTime
+    Phone->>Watch: connect
+    Phone->>Watch: first GATT read or write
+    Note over Watch: a firmware on trial confirms itself
+    Watch->>Phone: after 3 s: read Current Time, subscribe to New Alert
+    Phone-->>Watch: time, then alerts as they come
+    Watch-->>Phone: battery, heart rate and reply notifications
+    Phone--xWatch: disconnect or supervision timeout
+    Note over Watch: fast advertising again for 30 s
+```
+
+While a phone is connected the Bluetooth task waits on the next GATT event, the replies to the
+message channel and the packages characteristic, the battery's `PERCENT_CHANGED`, the heart rate's
+`READING_TAKEN` and `BLUETOOTH_SWITCHED`. When the phone goes away mid-update, the DFU state keeps
+what reached the flash, so the same image sent again carries on; see
+[updates.md](updates.md#carrying-on-after-a-lost-link).
+
 ## The services on top
 
 The firmware's GATT server is declared in `firmware/src/main.rs`, and its attribute table is a
-constant in flash. It serves Legacy DFU, Current Time, the NeoTime service, the Nordic UART,
-Battery, file transfer, Device Information, Alert Notification and Heart Rate, in that order, so a
-new service goes at the end and the others keep their handles. What each one carries is in
-[companion-protocol.md](companion-protocol.md#standard-services).
+constant in flash. After the GAP service it serves Legacy DFU, Current Time, the NeoTime service,
+the Nordic UART, Battery, file transfer, Device Information, Alert Notification and Heart Rate, in
+that order, so a new service goes at the end and the others keep their handles. The recovery
+firmware serves the same table. What each one carries is in
+[companion-protocol.md](companion-protocol.md#at-a-glance).
 
-The Heart Rate service (0x180D) is InfiniTime's: one characteristic, Heart Rate Measurement
-(0x2A37), read and notify, holding a flags byte of 0 and the latest beats per minute as one byte.
-The Bluetooth task waits on `heart_rate::READING_TAKEN` beside the battery's `PERCENT_CHANGED` and
-notifies each new reading while the phone is subscribed. A subscription does not turn the sensor
-on, as on InfiniTime: phones such as Gadgetbridge subscribe whenever they connect, so the LED would
-otherwise stay lit all day. The pulse reaches the phone when the Heart app measures or the heart
-rate interval setting measures in the background.
+- **Heart Rate (0x180D)** is InfiniTime's: one characteristic, Heart Rate Measurement (0x2A37), read
+  and notify, holding a flags byte of 0 and the latest beats per minute as one byte. The Bluetooth
+  task notifies each new reading while the phone is subscribed. A subscription does not turn the
+  sensor on, as on InfiniTime: phones such as Gadgetbridge subscribe whenever they connect, so the
+  LED would otherwise stay lit all day. The pulse reaches the phone when the Heart app measures or
+  the heart rate interval setting measures in the background. `tools/check_heart_rate.py` checks it
+  in the emulator.
+- **Device Information (0x180A)** serves the same six strings as InfiniTime; the serial number is
+  filled from the chip's factory id once the server is built.
+- **Battery (0x180F)** notifies the charge whenever it changes.
+- **Long answers,** such as a folder listing or the app list, can fill TrouBLE's packets; the task
+  then waits 20 ms and tries again, up to 50 times, rather than dropping a notification.
+
+InfiniTime's Music, Navigation, Simple Weather, Motion and Immediate Alert services are not served;
+navigation, music and weather arrive as Bangle.js lines on the Nordic UART instead.
 
 ## The phone's own services
 
@@ -220,7 +288,8 @@ lets either side of a connection ask the other. Three seconds after a phone conn
 
 1. **Current Time (0x1805).** It reads 0x2A2B and, when the phone has it, 0x2A0F, and sets the clock
    the way a phone's writes to the watch's own Current Time service do, so the step day, alarms and
-   the clock kept across a reset follow, and the firmware confirms itself, as when a phone writes the time.
+   the clock kept across a reset follow. Setting the clock this way confirms a firmware on trial,
+   as a phone's write does.
 2. **Alert Notification (0x1811).** It writes New Alert's (0x2A46) CCCD to turn its notifications
    on, then writes `02 FF` to the control point (0x2A44), when there is one, to ask for new alerts
    in every category. Each New Alert the phone then notifies is read as the standard lays it out, a
@@ -244,33 +313,6 @@ firmware leaves it out.
 It asks only for 16-bit UUIDs and never raises the ATT MTU, so each answer is at most 23 bytes.
 An iPhone is expected to refuse the read, since iOS serves its Current Time only over an encrypted
 link, which the controller cannot make yet; see [todo.md](todo.md).
-
-## Advertising
-
-The firmware advertises as InfiniTime does (`run_bluetooth` in `firmware/src/main.rs`, with the
-bytes and intervals in `neotime_companion::advertising`):
-
-- **How often.** Every 20 to 30 ms (32 to 47 units of 625 µs) for 30 seconds after the watch starts,
-  a phone leaves or Bluetooth is turned back on, then every 1022 to 1032 ms (1636 to 1651 units).
-  The controller uses the shortest of each, plus its random delay of up to 10 ms. When the fast
-  time runs out the firmware stops advertising and starts again slow.
-- **The advertisement,** 28 bytes: the flags (general discoverable, no classic Bluetooth), the Heart
-  Rate service 0x180D as the complete list of 16-bit services, the legacy DFU service
-  `00001530-1212-efde-1523-785feabcd123` as the complete list of 128-bit services, and a transmit
-  power of 0 dBm.
-- **The scan response** holds only the complete name: `NeoTime`, or `InfiniTime` while the
-  `gadgetbridge_name` setting is on. Every time it starts advertising the firmware lends the GAP
-  service's Device Name (handle 3) the same name, so a phone that connects reads it there too.
-  Changing the setting, and reading the saved settings at start, raises `BLUETOOTH_SWITCHED`, so
-  advertising starts again with the new name at once.
-- **The GAP appearance** is 0x00C2, a smartwatch, as InfiniTime sets it.
-- **When the controller refuses** to start advertising, the firmware tries again a second later
-  rather than stopping, so a refused command never leaves the watch silent.
-
-`tools/check_advertising.py` checks all of this in the emulator through the Bluetooth bridge's
-controller: about 39 advertisements a second at first and under one a second after 30 s, the
-advertisement's bytes, both names in the scan response and the GAP service, the appearance, fast
-advertising again after a phone leaves, and a saved setting. None of it has run on the watch.
 
 ## Tests
 
@@ -308,5 +350,5 @@ request. `tools/check_phone_services.py` plays a phone through the emulator's Bl
 see [testing.md](testing.md#bluetooth-without-bluez).
 
 `tests/emulator/bluetooth_sleep.robot` checks in the PineTime emulator that the crystal is off
-for most of the time while the firmware advertises. None of this shows that the timing works on real hardware. The first test on the watch is in
-[todo.md](todo.md).
+for most of the time while the firmware advertises. None of this shows that the timing works on
+real hardware; the first test on the watch is in [todo.md](todo.md).

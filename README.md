@@ -51,16 +51,29 @@ from anywhere in the repository.
 
 ## Documentation
 
-The docs are also on the website, <https://beatlink.github.io/NeoTime/>.
+The docs are also on the website, <https://beatlink.github.io/NeoTime/>, in four parts.
 
-- [Architecture](docs/architecture.md): how the code is laid out and how the parts fit together.
-- [Coding guidelines](docs/coding-guidelines.md): how NeoTime code is written.
-- [Simulator](docs/simulator.md): running the drivers in a desktop window with `nix run`.
-- [Testing apps](docs/testing.md): driving the real apps on a test watch from `cargo test`.
-- [Features](docs/features.md): what the watch can do, added as each feature is finished.
-- [To do](docs/todo.md): work that is known to be needed but not done yet.
-- [Memory map](docs/memory-map.md): how the RAM, internal flash and external flash are divided.
-- [Updates](docs/updates.md): firmware updates over Bluetooth, and moving a watch onto NeoTime.
+**Using the watch** — start at [the guide](docs/guide/index.md).
+
+- [Getting around](docs/guide/getting-around.md), [screen and battery](docs/guide/screen-and-battery.md),
+  [time and alarms](docs/guide/time-and-alarms.md),
+  [notifications and calls](docs/guide/notifications-and-calls.md),
+  [health and fitness](docs/guide/health-and-fitness.md),
+  [phone and Bluetooth](docs/guide/phone-and-bluetooth.md),
+  [apps and faces](docs/guide/apps-and-faces.md) and
+  [updates and recovery](docs/guide/updates-and-recovery.md).
+- [All apps](docs/apps.md), each with its own page, and [watch faces](docs/faces.md).
+
+**The companion app** — start at [the companion guide](docs/companion/index.md): connecting a
+watch, installing apps, phone features, watch data, firmware updates and the command line.
+
+**Writing apps** — start at [writing apps](docs/writing-apps.md), then the
+[app reference](docs/app-reference.md), [testing apps](docs/testing.md),
+[companion plugins](docs/plugins.md) and the [app store](docs/app-store.md).
+
+**How it is built** — start at [the architecture](docs/architecture.md), which leads to the
+drivers, services, firmware, bootloader, Bluetooth, storage and [memory map](docs/memory-map.md)
+pages. Open work is in [to do](docs/todo.md).
 
 ## License
 

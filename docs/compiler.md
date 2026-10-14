@@ -2,6 +2,7 @@
 
 `neotime-compiler` (`compiler/`) turns an app or watch face written as Preact components with
 signals into an app image, the `.ntapp` file the runtime reads. It runs on the computer only.
+[writing-apps.md](writing-apps.md) shows how to use it while writing an app,
 [app-runtime.md](app-runtime.md) describes the design and the image format, and
 [app-reference.md](app-reference.md) lists every name apps use.
 
@@ -11,10 +12,12 @@ signals into an app image, the `.ntapp` file the runtime reads. It runs on the c
 nix develop -c cargo run -p neotime-compiler -- apps/stopwatch/app.tsx -o stopwatch.ntapp
 nix develop -c cargo run -p neotime-compiler -- apps/stopwatch/app.tsx --check
 nix develop -c cargo run -p neotime-compiler -- disassemble stopwatch.ntapp
+nix develop -c cargo run -p neotime-compiler -- library -o shared.ntlib
 ```
 
 - Without `-o`, the image is written next to the source with the `.ntapp` extension.
 - `--check` only reports problems and writes nothing.
+- `library` writes the shared library, described under [Events, images and permissions](#events-images-and-permissions).
 - `disassemble` prints an image's state table, subscriptions and every expression, handler and
   function, one instruction a line with its bytes, decoded by the runtime's own `decode`. State and
   string operands are named, and jumps show where they land (`compiler/src/disassemble.rs`).
@@ -98,7 +101,7 @@ becomes bytecode.
   labels become its `value`, one bit per button: an array literal, a constant or a `? :` choice
   between them, where a label worked out while running is compared with every label.
 - Components from `neotime/components` are inlined from the SDK source, because the image format
-  cannot refer to the shared library yet.
+  cannot refer to library components yet.
 
 ### Handlers
 
@@ -120,9 +123,11 @@ Inside handlers and the functions they call:
   written out and up to 4 whole-number values. The data becomes JSON text built while the handler
   runs, the literal pieces joined with each value's `FormatNumber`, such as `{"button":` and the
   number and `}`; the effect takes the channel's text and that text.
-- `target.value = file_bytes(path, length)`, with the path written out and the length equal to the
-  array's, compiles to the path's `PushText` and one `WorkArray` (`FileBytes`), and lets the array
-  hold 0 to 255.
+- `target.value = file_bytes(path, length, offset?)`, with the path written out and the length
+  equal to the array's, compiles to the path's `PushText` and one `WorkArray`: `FileBytes`, or with
+  an offset, which may be worked out while running, `FileBytesFrom` with the offset pushed after the
+  path. It lets the array hold 0 to 255.
+- `prefetch_file(path, offset, length)` is an ordinary effect with a text and two numbers.
 
 A whole array assigned at once follows JavaScript: the new value is worked out from the old array
 before anything is written.
@@ -252,7 +257,7 @@ them the same way.
 | `grow` | a weight; `padding`, `margin`, `border_width` and `radius` are pixels |
 | `visible`, `show_seconds` | 0 or 1 |
 | `start_angle`, `end_angle`, and every other angle | degrees clockwise from twelve o'clock, passed through unchanged; the host turns them for its arc drawing |
-| `icon`, `src` | a shared library image reference, 32768 plus the icon's position in `ICON_NAMES` in `compiler/src/types.rs`, which is also its image number in the shared library: the first 58 in the order of `sdk/neotime/src/icons.ts` up to `weather` (57), then `none` 58, `weather_night_clear` 59, `weather_night_cloudy` 60, `pine_logo` 61 and `info` 62; new icons go at the end so numbers never change |
+| `icon`, `src` | a shared library image reference, 32768 plus the icon's position in `ICON_NAMES` in `compiler/src/types.rs`, which is also its image number in the shared library: the first 58 in the order of `sdk/neotime/src/icons.ts` up to `weather` (57), then `none` 58, `weather_night_clear` 59, `weather_night_cloudy` 60, `pine_logo` 61, `info` 62, `remote` 63, `note` 64, `qr_code` 65, `phone_missed` 66, `sms` 67, `chat` 68, `news` 69, `voicemail` 70 and `calendar` 71; new icons go at the end so numbers never change |
 | `text`, screen names, `go`, `open_app`, `set_setting`'s key | a string of the image |
 | `opacity` | 0 to 255 |
 | `disabled` | 0 or 1 |
@@ -268,7 +273,7 @@ them the same way.
 | `call_control` | 0 answer, 1 reject, 2 mute |
 | `find_phone()` | 1 when no argument is given |
 | `send_to_phone` | two texts: the channel, and the data as JSON, such as `{"button":2}` |
-| `file_bytes` | `WorkArray` work 6, `FileBytes`, with the array as destination and source and the path's text on the stack |
+| `file_bytes` | `WorkArray` work 6, `FileBytes`, with the array as destination and source and the path's text on the stack; with an offset, work 7, `FileBytesFrom`, with the offset above the path |
 | `request_navigation_state()` | the `RequestNavigationState` effect, with no arguments |
 | `current_weather.condition`, `WeatherCondition` | 0 clear, 1 few_clouds, 2 clouds, 3 heavy_clouds, 4 rain, 5 showers, 6 thunderstorm, 7 snow, 8 mist |
 | `NavigationTurn` | 0 straight, 1 left, 2 right, 3 slight_left, 4 slight_right, 5 sharp_left, 6 sharp_right, 7 u_turn, 8 roundabout, 9 arrive |
@@ -327,3 +332,7 @@ arguments.
 - More than 16 loops, or more than 16 branches waiting to join, in one handler or expression.
 - A screen component that returns different roots, such as an early `return <Screen>`.
 - Fonts by name beyond the built-in set.
+- Props the runtime has no property for, which are left out with a warning, such as `brightness`
+  on `Led`, `visible_rows` on `Roller`, `kind` on `Chart` and `rounded` on `Line`, and `animate`,
+  which is stored but not yet acted on.
+- `current_screen`, which the preview has; keep a screen's name in a signal.

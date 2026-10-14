@@ -61,8 +61,8 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
   `docs/architecture.md`; a change to RAM or flash use updates `docs/memory-map.md` and the
   hand-written part of `docs/memory-treemap.html`.
 - Open work lives in `docs/todo.md`. When an item is done, remove it in the same change and record
-  it in `docs/features.md` if the wearer sees it, or in `docs/architecture.md` or the part's own doc
-  if not. Before removing an item, check in the code that it is really done; keep any open part as a
+  it on the matching page of `docs/guide/` if the wearer sees it, or in the part's own doc if not.
+  Before removing an item, check in the code that it is really done; keep any open part as a
   narrower item.
 - Anything to look at (screenshots, galleries, write-ups) goes in `docs/` and lands with the change.
   Reference existing images such as `neotime/harness/snapshots/screens/*.png` so they stay current.

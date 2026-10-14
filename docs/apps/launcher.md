@@ -1,20 +1,30 @@
 # Apps
 
-The launcher: every installed app with its icon and name, grouped the way the companion app set
-up. It is NeoTime's own, an ordinary app that any other launcher can replace.
+The launcher lists every installed app with its icon and name, grouped the way you set up in the
+companion app, and opens the one you tap. It is NeoTime's own, an ordinary app that any other
+launcher can replace.
 
 ## Using it
 
+- **Swipe up** on the watch face to open the launcher, and **swipe down** in it to close it and go
+  back to the face. The side button also goes back.
 - **Tap** an app to open it.
-- **Swipe down** to close the launcher and go back to the watch face.
-- The companion app chooses the **style**: one plain list, **folders** that each open a group, one
-  list with a **heading** per group, or a **page** per group.
-- In the folders style, tap a folder to open it. In an open folder or in the pages style,
-  **swipe left** and **right** to move to the next or the last group.
-- The companion app also chooses the **view**: a row per app, or a grid of icons three across.
-- Groups, and the apps in each, are in order of their names, unless the companion app sets an
-  order of its own.
-- The list scrolls when the apps do not fit.
+- The list scrolls up and down when the apps do not fit, with a scroll bar at the side.
+- Apps turned off in the Software app are not listed.
+- With no apps installed, it says **No apps**.
+
+### Styles and views
+
+The companion app chooses the **style**:
+
+- **List**: one plain list of every app.
+- **Folders**: a row per group, with its icon, name and how many apps it holds. Tap a folder to open
+  it; in an open folder, **swipe left** and **right** to move to the next or the previous group.
+- **Headings**: one list, with each group's name above its apps.
+- **Pages**: one group at a time; **swipe left** and **right** to move to the next or the previous
+  group.
+
+It also chooses the **view**: a row per app, or a grid of icons three across.
 
 ## Screens
 
@@ -49,3 +59,11 @@ The headings style in the grid view.
 ![One group's page](../../neotime/harness/snapshots/screens/app-launcher-pages.png)
 
 The pages style: one group per page, swiped left and right.
+
+## With the companion app
+
+The companion app sets up the launcher: the style and view, which group each app goes in, and the
+order of groups and apps, which is by name unless you set an order of your own. It places a newly
+installed app in the group the app asks for, until you move it. An app it has not placed, such as
+one installed another way, goes in a group named **Other** at the end. The open launcher shows a
+change at once.

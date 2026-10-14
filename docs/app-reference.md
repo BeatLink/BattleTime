@@ -1,136 +1,217 @@
 # App reference
 
-This page lists what a NeoTime app can read, which events it can answer, which widgets it can show
-and which effects it can ask for. [app-runtime.md](app-runtime.md) explains how apps are written
-and run. Everything here is **planned**; names and fields may change as the runtime is built.
+This page lists what a NeoTime app can declare, read, answer, show and ask for.
+[writing-apps.md](writing-apps.md) shows how an app is written, [compiler.md](compiler.md) the
+language the compiler takes, and [app-runtime.md](app-runtime.md) how the watch runs it.
 
-Every name comes from the `neotime` package. Widgets are imported from `neotime/widgets` and ready-made
-components from `neotime/components`.
+Every name comes from the `neotime` package: values, events, effects and functions from `neotime`,
+widgets from `neotime/widgets`, ready-made components from `neotime/components`, icons from
+`neotime/icons` and shared library functions from `neotime/lib`.
+
+## Declaring an app
+
+`export default define_app({...})` says who the app is:
+
+| Field | Holds |
+|---|---|
+| `id` | The app's id, which names its folder: up to 32 bytes. The watch takes letters, digits, `-` and `_`; repository apps use lower-case words joined by hyphens, such as `four-in-a-row`. |
+| `name` | The name the launcher shows. |
+| `icon` | A shared library icon, such as `icons.timer`, or a PNG beside the source, such as `"./icon.png"`. |
+| `kind` | `"app"`, the default, or `"face"`; a watch face cannot take the button. |
+| `group` | The launcher group the app starts in, such as `"games"`: up to 16 letters, digits, `-` and `_`. [apps.md](apps.md) lists the usual ones. |
+| `screens` | One component per screen, `main` first. `go("name")` moves between them. |
+
+`define_app` takes no list of permissions: the compiler works them out (see
+[Permissions](#permissions)).
+
+| State | Is |
+|---|---|
+| `signal(start)` | A value that lasts while the app is open. |
+| `persisted("key", start)` | A value kept across restarts, under its key. |
+| `useSignal(start)` | A value for that place in a component. |
+| `computed(() => ...)` | A value worked out from others. |
+
+State may hold numbers, booleans, `Instant`, `Duration`, one of the app's own literal strings,
+records of a fixed shape and fixed-length arrays of those; see [Records and arrays](#records-and-arrays).
+
+| Constant | Value |
+|---|---|
+| `SECOND`, `MINUTE`, `HOUR`, `DAY` | Durations in milliseconds. |
+| `EVERY_DAY` | `0b1111111`, a day mask with every day set. |
+| `STEP_HISTORY_DAYS` | 7, the days `step_history` keeps. |
 
 ## System values
 
 System values are read-only signals the runtime keeps current. Reading one in a view or a
 `computed` makes that binding depend on it, so it redraws when the value changes and at no other
-time.
+time. Reading them needs no permission unless the table says so.
+
+### Time, battery and activity
 
 | Value | Type | Holds |
 |---|---|---|
-| `now` | `Instant` | The current time. A binding that reads it redraws as often as its format shows, such as once a minute for `HH:MM`. |
+| `now` | `Instant` | The current time. A binding that reads it redraws as often as its format shows, such as once a minute for `HH:mm`. |
 | `utc_offset` | `Duration` | The local time zone's offset, set by the phone. |
-| `battery_percent` | `Int` | The battery charge, 0 to 100. It only rises on the charger and only falls off it, stays at 99 while charging and reads 100 once the battery is full. |
-| `is_charging` | `Bool` | Whether the watch is on its charger and still charging; false once the battery is full. |
-| `battery_millivolts` | `Int` | The battery's voltage in millivolts, smoothed over the last few minutes' readings. |
+| `battery_percent` | `Int` | The charge, 0 to 100. It only rises on the charger and only falls off it, stays at 99 while charging and reads 100 once full. |
+| `is_charging` | `Bool` | Whether the watch is on its charger and still charging. |
+| `battery_millivolts` | `Int` | The battery's voltage, smoothed over the last few minutes. |
 | `steps_today` | `Int` | Steps since local midnight. |
-| `step_history` | object | The system's step history, kept whether or not any app is open: `trip`, the steps since the wearer last called `reset_step_trip()`; `days`, today and the six days before, each with its `total`, read by how many days back it is (`step_history.value.days[1].total` is yesterday); and `hours`, each with its `steps`, read at `days_back * 24 + hour`. `STEP_HISTORY_DAYS` is 7. |
-| `heart_rate` | `Int` | The last heart rate measured, in beats per minute, or 0 if none. |
+| `step_history` | object | `trip`, the steps since `reset_step_trip()`; `days`, today and the six days before, each with its `total`, read by how many days back it is (`step_history.value.days[1].total` is yesterday); and `hours`, each with its `steps`, read at `days_back * 24 + hour`. |
+| `heart_rate` | `Int` | The last heart rate measured, in beats per minute, or 0. |
 | `heart_rate_measured_at` | `Instant` | When `heart_rate` was measured. |
-| `is_phone_connected` | `Bool` | Whether the phone is connected over Bluetooth. |
-| `unread_notifications` | `Int` | How many of the kept notifications are unread. |
-| `notifications` | list | The latest 5 notifications the watch keeps, from the phone and from apps, newest first: `notifications.value.length`, and `notifications.value[i].id` (for `dismiss_notification`), `.app`, `.title`, `.body`, `.time`, when it arrived, and `.icon`, an icon for its kind that the watch picks from its app: a phone, a missed call, a text, a chat, news, voicemail, a calendar or a bell for the Alert Notification categories, the companion's call summaries and a calendar, and an envelope for any other app; and `.color`, the colour to draw that icon in: `success` for a call, `danger` for a missed call, blue for a text, chat or voicemail, `warning` for an email, purple for a calendar and `accent` for the rest. An app's own have negative ids. Needs the `notifications` permission. `apps/notifications` lists them this way. |
+| `heart_rate_status` | `Int` | The sensor's state: 0 stopped, 1 no skin, 2 settling, 3 measuring. |
+| `is_heart_rate_running` | `Bool` | Whether the sensor is measuring for any app. |
+| `shake_speed` | `Int` | How fast the wrist shakes now, 0 to about 4095, as InfiniTime counts it. Kept current only while the open screen shows it. |
+| `next_alarm` | `Instant \| null` | When the alarm app rings next while closed, or `null`. |
+
+### Phone and notifications
+
+| Value | Type | Holds |
+|---|---|---|
+| `is_phone_connected` | `Bool` | Whether the phone is connected. |
+| `is_bluetooth_enabled` | `Bool` | Whether Bluetooth is on. It is on again after every restart. |
+| `unread_notifications` | `Int` | How many kept notifications are unread. |
+| `notifications` | list | The latest 5 notifications, newest first; needs `notifications`. Each has `id` (for `dismiss_notification`; an app's own are negative), `app`, `title`, `body`, `time`, `icon` and `color`. |
+| `current_call` | object | The latest call: `caller`, its name or number, and `state`, `incoming`, `answered` or `ended`. Needs `phone`. |
+| `current_music` | object | The phone's player: `artist`, `track`, `is_playing`, `position` and `length`. Needs `phone`. |
+| `current_navigation` | object | `turn`, `instruction`, `distance` in metres and `progress_percent`. Needs `phone`. |
+| `current_weather` | object | `temperature`, `condition`, `low`, `high`, `sunrise`, `sunset`, `location` and `received_at`, each `null` until the phone sends it, and `forecast`, up to 5 coming days of `condition`, `low` and `high`. Temperatures are whole degrees Celsius. |
+
+The watch picks each notification's `icon` and `color` from its `app`:
+
+| `app` | Icon | Colour |
+|---|---|---|
+| `Call`, `Phone` | `phone` | `success` |
+| `Missed call`, or `Phone` with the body `Missed call` | `phone_missed` | `danger` |
+| `SMS` | `sms` | blue `#3078f8` |
+| `Messages` | `chat` | blue |
+| `Voicemail` | `voicemail` | blue |
+| `Email` | `notification` | `warning` |
+| `Schedule`, `Calendar` | `calendar` | purple `#a850f8` |
+| `News` | `news` | `accent` |
+| `Alert` | `bell` | `accent` |
+| Any other | `notification` | `accent` |
+
+The watch keeps up to 24 bytes of a notification's `app`, 32 of its `title` and 120 of its `body`.
+The latest music, weather and navigation are kept in RAM, so an app shows them by reading these
+values; the `music`, `weather` and `navigation` events are for reacting when they change.
+
+### Settings
+
+`settings` holds the user's choices, which apps read and change with `set_setting`:
+
+| Setting | Holds |
+|---|---|
+| `uses_24_hour_clock`, `uses_metric_units` | Booleans. |
+| `step_goal` | The day's step goal. |
+| `screen_timeout_seconds` | 5 to 300. |
+| `always_on_screen` | Whether the screen dims instead of turning off. |
+| `chimes` | 0 off, 1 every hour, 2 every half hour. |
+| `theme` | The preset theme's number (dark, light, ocean, forest, sunset, contrast), or -1 for the user's own colours. |
+| `allows_updates` | 0 off, 1 on, 2 on until the next restart. |
+| `wake_on_touch` | 0 only the button wakes the screen, 1 a tap, 2 a double tap. |
+| `alarms_in_do_not_disturb` | Whether alarms and timers still ring in do not disturb. |
+| `heart_rate_interval` | 0 off, 1 continuous, then every 30 seconds, minute, 5, 10 or 30 minutes. |
+| `raise_to_wake`, `lower_to_sleep`, `shake_to_wake` | Wake gestures. |
+| `shake_threshold` | 0 to 4095, the `shake_speed` a shake must pass to wake the screen. |
+| `sleep_mode` | Do not disturb that also turns off every wake gesture and the always-on screen. |
+| `watch_face` | The number of the face shown, made from its id as [companion-protocol.md](companion-protocol.md) says, or 0 with no face on. |
+| `gadgetbridge_name` | Whether the watch advertises as InfiniTime for Gadgetbridge. |
+
+| Value | Type | Holds |
+|---|---|---|
 | `is_do_not_disturb` | `Bool` | Whether do not disturb is on. |
 | `brightness` | `Int` | The backlight level, 1 to 3. |
-| `settings` | object | The user's choices apps should follow: `uses_24_hour_clock`, `uses_metric_units`, `step_goal`, `screen_timeout_seconds` (5 to 300), `always_on_screen`, `chimes` (0 off, 1 every hour, 2 every half hour), `allows_updates` (0 off, 1 on, 2 on only until the next restart), `wake_on_touch` (0 only the button wakes the screen, 1 a tap, 2 a double tap), `alarms_in_do_not_disturb`, `heart_rate_interval` (0 off, 1 continuous, then every 30 seconds, minute, 5, 10 or 30 minutes, as InfiniTime offers), `raise_to_wake`, `lower_to_sleep`, `shake_to_wake`, `shake_threshold` (0 to 4095, the `shake_speed` a shake must pass to wake the screen), `sleep_mode` (do not disturb that also turns off every wake gesture and the always-on screen; turning it on turns do not disturb on), `watch_face` (the number of the face the watch shows, made from its id as [companion-protocol.md](companion-protocol.md) says, or 0 with no face on), `gadgetbridge_name` (whether the watch advertises as InfiniTime for Gadgetbridge, set from the companion app) and `theme`, the preset theme's number in the watch's order (dark, light, ocean, forest, sunset, contrast), or -1 for colours of the user's own. |
-| `shake_speed` | `Int` | How fast the wrist shakes now, as InfiniTime counts it for its shake threshold, about 0 to 4095. Kept current only while the open screen shows it, which has the accelerometer read ten times a second. |
-| `current_screen` | `Text` | The name of the app's screen on display. |
-| `is_heart_rate_running` | `Bool` | Whether the heart rate sensor is measuring for any app. |
-| `heart_rate_status` | `Int` | The sensor's state: 0 stopped, 1 no skin, 2 settling, 3 measuring. |
-| `is_bluetooth_enabled` | `Bool` | Whether Bluetooth is on, whether or not the phone is connected. It is on again after every restart. |
-| `next_alarm` | `Instant \| null` | When the alarm app rings next while it is closed, or `null` if no alarm is set. In app code an empty optional is always `null`. |
-| `current_weather` | object | The last forecast the phone sent: `temperature`, `condition`, `low`, `high`, `sunrise`, `sunset`, `location` and `received_at` (each `null` until the phone sends it), and `forecast`, up to 5 coming days, each with `condition`, `low` and `high`: read `current_weather.value.forecast.length` and `current_weather.value.forecast[day].high`. Reading it needs no permission, so faces need no event of their own. |
-| `installed_apps` | list | Every app a launcher lists, in order, group by group: `installed_apps.value.length`, and `installed_apps.value[i].name`, `.id` (for `open_app`) and `.icon` (for an `Icon`). `apps/launcher` is a launcher written this way. |
-| `launcher_groups` | list | The launcher groups that hold at least one app, in the order the companion set: `.name`, `.icon`, and `.first` and `.count`, the run of `installed_apps` each holds. With no launcher file every app is in one group, `Other`. |
-| `launcher_style` | `Text` | How the wearer wants the groups shown: `folders`, `sections`, `pages` or `list` (one list without groups, until the companion sets one). |
-| `launcher_view` | `Text` | How the wearer wants a group's apps drawn: `list` or `grid`. |
-| `packages` | list | Every installed app and face, on or off, in id order: `.name`, `.id` (for `set_app_enabled`), `.is_face`, `.enabled`, `.memory` (the heap it needs while open, in bytes, as the package manager checks it) and `.refusal`, why turning it the other way would be refused: 0 it would not, 1 it needs more memory than an app can have, 2 the launcher would run out of memory, 3 the launcher stays on, 4 the last watch face stays on, 5 it is the open app. `apps/software` lists them. |
-| `app_memory_budget` | `Int` | The most heap an open app may need, in bytes. |
-| `current_call` | object | The phone's latest call: `caller`, its name or else its number, and `state`, `incoming`, `answered` or `ended` (also before any call). Needs the `phone` permission. |
-| `current_music` | object | The phone's player: `artist`, `track`, `is_playing`, `position` and `length`. Needs the `phone` permission. |
-| `watch_face_name` | `Text` | The name of the face the watch shows, or nothing with no face on. |
-| `firmware_version` | `Text` | The firmware's version and the commit it was built from, such as `0.1.0+1b19aed`, with a `*` when the build had uncommitted changes. At most 22 characters. |
-| `started_at` | `Instant` | When the watch last started, so `now - started_at` is how long it has run. It moves with the clock when the phone sets the time. |
-| `free_storage_kilobytes` | `Int` | The space left in the watch's file system, counted when the app opens. |
-| `reset_reason` | `Text` | Why the watch last restarted: `Fault at 0x…` or `Last run panicked` when the run before crashed, or else the chip's reset reasons, such as `watchdog`, `reset pin` or `power on`. |
-| `firmware_build_date` | `Text` | The UTC day the firmware was built, such as `2026-10-13`. |
-| `firmware_state` | number | Whether the bootloader keeps the running firmware: 0 confirmed, 1 on trial after an update until something confirms it, 2 rolled back to after an update that never confirmed itself. |
-| `bootloader_version` | `Text` | The bootloader's version and commit from its version record, or `""` for a bootloader older than the record. Looked up the first time an app reads it, so it reads `""` until the next redraw. |
-| `bootloader_build_date` | `Text` | The day the bootloader was built, from the same record, or `""`. |
-| `bootloader_crc` | `Int` or `null` | The bootloader's CRC-32, as its status page line shows the first seven hex digits, or `null` when it could not be read. |
-| `bluetooth_address` | `Int` | The address the watch advertises with, as one 48-bit number, highest byte first. |
-| `flash_id` | `Int` | The external flash chip's three-byte JEDEC ID, `0x0B4016` for the PineTime's XT25F32B, or 0 when it never answered. |
-| `touch_chip_id` | `Int` | The touch panel's chip ID, `0xB4` for a CST816S, or 0 when it never answered. |
-| `touch_firmware_version` | `Int` | The touch panel's firmware version. |
-| `accelerometer_chip_id` | `Int` | The accelerometer's chip ID, `0x11` for a BMA421 and `0x13` for a BMA425, or 0 when it never answered. |
-| `free_heap_bytes` | `Int` | The heap's free bytes, read when the app opens. |
-| `least_free_heap_bytes` | `Int` | The fewest free heap bytes since the watch started. |
-| `allocation_failures` | `Int` | How many allocations the heap has refused since the watch started. |
-| `stack_overflows` | `Int` | How many times the stack has run into its guard, counted across restarts until the power goes. |
-| `current_folder` | object | The folder of the watch's storage the app last opened with `open_folder`: `path`, written plainly from the top such as `/apps`, and `entries`, up to 64 of `.name`, `.size` in bytes and `.is_folder`, folders first and then files, each by name. A folder's size is the sum of every file inside it; folders exist only through their files. Empty before the first `open_folder`. An app that calls `open_folder` needs 1,600 B more heap for the listing. |
-| `tasks` | list | The firmware's tasks, in the order they started: `.name`, `.runs`, how many times the executor has polled it, and `.busy_milliseconds`, how long those polls took. Read when the app opens. |
-| `current_navigation` | object | The phone's navigation: `turn`, `instruction` (text), `distance` in metres and `progress_percent`. Needs the `phone` permission. |
+| `watch_face_name` | `Text` | The name of the face shown, or nothing. |
 
-The system keeps the latest weather, music and navigation, including their text, and keeps them
-through a reboot, so an app shows them by reading these values rather than copying event text into
-its own state. The `weather`, `music` and `navigation` events are for reacting when they change.
+### Apps and storage
+
+| Value | Type | Holds |
+|---|---|---|
+| `installed_apps` | list | Every app a launcher lists, group by group: `.name`, `.id` (for `open_app`) and `.icon`. |
+| `launcher_groups` | list | The groups holding at least one app: `.name`, `.icon`, and `.first` and `.count`, the run of `installed_apps` each holds. With no launcher file every app is in one group, `Other`. |
+| `launcher_style` | `Text` | `folders`, `sections`, `pages` or `list`. |
+| `launcher_view` | `Text` | `list` or `grid`. |
+| `packages` | list | Every installed app and face, in id order: `.name`, `.id` (for `set_app_enabled`), `.is_face`, `.enabled`, `.memory`, the heap it needs, and `.refusal`, why turning it the other way would be refused: 0 it would not, 1 it needs more memory than an app can have, 2 the launcher would run out of memory, 3 the launcher stays on, 4 the last watch face stays on, 5 it is the open app. |
+| `app_memory_budget` | `Int` | The most heap an open app may need, in bytes. |
+| `current_folder` | object | The folder `open_folder` last listed: `path`, such as `/apps`, and `entries`, up to 64 of `.name`, `.size` in bytes and `.is_folder`, folders first. A folder's size is the sum of the files inside it. |
+| `free_storage_kilobytes` | `Int` | The space left in the file system, counted when the app opens. |
+
+### The watch itself
+
+| Value | Type | Holds |
+|---|---|---|
+| `firmware_version` | `Text` | Such as `0.1.0+1b19aed`, with a `*` for a build with uncommitted changes. |
+| `firmware_build_date` | `Text` | The UTC day the firmware was built. |
+| `firmware_state` | `Int` | 0 confirmed, 1 on trial after an update, 2 rolled back to. |
+| `started_at` | `Instant` | When the watch last started. |
+| `reset_reason` | `Text` | Why it last restarted: `Fault at 0x…`, `Last run panicked`, or the chip's reasons, such as `watchdog`. |
+| `bootloader_version`, `bootloader_build_date` | `Text` | From the bootloader's version record, or `""`. Looked up the first time an app reads it. |
+| `bootloader_crc` | `Int \| null` | The bootloader's CRC-32, or `null` when unreadable. |
+| `bluetooth_address` | `Int` | The advertised address as one 48-bit number. |
+| `flash_id` | `Int` | The external flash's JEDEC ID, `0x0B4016` for the XT25F32B, or 0. |
+| `touch_chip_id`, `touch_firmware_version` | `Int` | `0xB4` for a CST816S, or 0. |
+| `accelerometer_chip_id` | `Int` | `0x11` for a BMA421, `0x13` for a BMA425, or 0. |
+| `free_heap_bytes`, `least_free_heap_bytes` | `Int` | The heap's free bytes when the app opened, and the fewest since start. |
+| `allocation_failures` | `Int` | Allocations the heap refused since start. |
+| `stack_overflows` | `Int` | Stack overflows into the guard, counted until the power goes. |
+| `tasks` | list | The firmware's tasks: `.name`, `.runs` and `.busy_milliseconds`. |
+
+`current_screen`, the name of the screen on display, exists only in the browser preview; the
+compiler refuses it, so keep a screen's name in a signal.
 
 ## Events
 
-Events are what call an app's handlers. Each handler receives the event's fields as its argument.
-Handlers run one at a time, to the end, and never overlap.
+Events call an app's handlers, which receive the event's fields as their argument. Handlers run one
+at a time, to the end.
 
 ### Touch
 
-Touch events belong to the widget that was touched. A widget with no handler for an event lets it
-pass to the widget behind it, and then to the screen.
+Touch events belong to the widget touched. A widget with no handler for an event lets it pass to
+the widget behind it, and then to the screen.
 
 | Prop | Fields | When |
 |---|---|---|
 | `onClick` | `x`, `y` | A short tap. |
-| `onLongPress` | `x`, `y` | A finger held still for about half a second. |
-| `onDoubleClick` | `x`, `y` | Two taps close together. The touch panel reports this itself. |
-| `onPress`, `onRelease` | `x`, `y` | A finger landing and lifting, for widgets that show a pressed state. |
-| `onDrag` | `x`, `y`, `start_x`, `start_y` | A finger moving while down, for sliders and drawing. At most once per redraw. |
+| `onLongPress` | `x`, `y` | A finger held still for half a second. |
+| `onDoubleClick` | `x`, `y` | Two taps close together, as the touch panel reports them. |
+| `onPress`, `onRelease` | `x`, `y` | A finger landing and lifting. |
+| `onDrag` | `x`, `y`, `start_x`, `start_y` | A finger moving while down. |
 | `onSwipe` | `direction` | A slide `up`, `down`, `left` or `right`, set on a screen. |
 
-Inside an app every swipe is the app's own: the shell takes none, and a right swipe does not go
-back. The shell acts on swipes only on the watch face, the launcher, the notifications and quick
-settings, and an app opened from the quick-app ring, whose left and right swipes step on round the
-ring. A swipe the screen's `onSwipe` ignores, changing nothing and asking for nothing, goes on to
-the shell as if the screen had no handler, so an app that uses only up and down still steps round
-the ring.
+A stroke of 40 pixels is a swipe while the finger is still down, and a quick flick of 20 pixels is
+one as it lifts. A touch on a `CellGrid`, `ButtonMatrix` or `AppList` carries `value`, the cell,
+button or app touched.
+
+Inside an app every swipe is the app's own, and a right swipe does not go back. A swipe the
+screen's `onSwipe` ignores, changing nothing and asking for nothing, goes on to the shell, so an app
+opened from the quick-app ring that uses only up and down still steps round the ring.
 
 ### Side button
 
-Apps never hear the side button. A click goes back one of the app's screens, running the
-screen's `onHide` as it leaves, so a screen that must stop something when the wearer leaves it,
-such as a ringing alarm, does so there; on the app's first screen the shell goes back a step. On
-the watch face a click turns the screen off. A long press or a 2 second hold goes to the face, and
-a double click opens the notifications. Holding it for 5 seconds always resets the watch, whatever
-the app does. A watch face may still have more screens, such as its settings opened with a long
-press on the screen and `go("settings")`.
+Apps never hear the side button. A click goes back one of the app's screens, running the screen's
+`onHide` as it leaves; on the app's first screen the shell goes back a step. On the watch face a
+click turns the screen off. A long press or a 2 second hold goes to the face, and a double click
+opens the notifications. A 5 second hold always resets the watch.
 
-### Widget values
+### Widget values and screens
 
-| Prop | Widgets | Fields |
+| Prop | On | Fields |
 |---|---|---|
-| `onChange` | `Slider`, `Switch`, `Checkbox`, `Radio`, `Roller`, `Spinbox`, `Dropdown`, `TextArea` | `value` |
-| `onPageChange` | `Pages`, `Tabs` | `page` |
-| `onScrollEnd` | `Scroll`, `List`, `AppList`, `TextFile` | `offset` |
+| `onChange` | `Slider`, `Switch`, `Checkbox`, `Roller`, and the rollers, `DayButtons`, `Stepper` and `ConfirmBox` | `value` |
+| `onPageChange` | `Pages` | `page` |
+| `onScrollEnd` | `Scroll`, `List`, `AppList`, `TextFile` | `offset`, once the scroll, or a flung list's glide, ends |
+| `onShow`, `onHide` | a `Screen` | none; the screen comes into view or leaves it |
 
-A widget whose value is bound to a signal, such as `<Slider value={volume} />` without `.value`,
-writes the new value back itself, so `onChange` is only needed for anything else to happen.
+A widget whose value is a signal, such as `<Slider value={volume} />` without `.value`, writes the
+new value back itself, so `onChange` is only needed for anything else to happen.
 
-### Screen life
+### System events
 
-| Prop | Set on | When |
-|---|---|---|
-| `onShow`, `onHide` | a screen | A screen comes into view or leaves it. |
-
-### Events
-
-An app connects a handler to an event with `on(event, handler, options)`, from `neotime`, at the top
-of the file and before `export default define_app`. The compiler turns each `on` into one of the
-image's subscriptions, so an `on` inside a handler is an error. Events other than the app's own life
-call their handler even while the app is closed; see [Background work](app-runtime.md#background-work).
+`on(event, handler, options)`, at the top of the file and before `define_app`, connects a handler
+to an event. Each becomes one of the image's subscriptions, so `on` inside a handler is an error.
+Events other than the app's own life call their handler even while the app is closed, unless given
+`while_open: true`.
 
 ```tsx
 on("open", start);
@@ -141,194 +222,206 @@ on("shake", roll, { while_open: true, at_most_every: SECOND });
 
 | Option | Means |
 |---|---|
-| `while_open: true` | Comes only while the app is open, which needs no `background` permission, such as shaking to roll dice. Written out as `true` or `false`. |
-| `every` | How often `tick`, `heart_rate` and `acceleration` come: milliseconds such as `MINUTE`, or a period such as `{ seconds: 1 }`, known when compiling. |
-| `at` | When `time` comes, an Instant or a signal holding one; or the time of day `daily` comes, `{ hour, minute }` or a signal holding one. |
-| `days` | The weekdays `daily` comes on, a 7-bit mask with Monday first; every day when left out. |
-| `at_most_every` | Skips the handler until this long has passed since it last ran, timed by a hidden variable the compiler adds. The handler must be a function the app defines. |
-
-A `time` that has already passed, for example because the watch was off, comes once at once.
-A handler run in the background may vibrate and notify without the `wake` permission; it needs
-`wake` only to turn the screen on or to vibrate during do not disturb.
+| `while_open` | `true` makes it come only while the app is open, which needs no `background` permission. Written out. |
+| `every` | How often `tick`, `heart_rate` and `acceleration` come: milliseconds such as `MINUTE`, or a period such as `{ seconds: 1 }` (`milliseconds`, `seconds`, `minutes`, `hours`), known when compiling. |
+| `at` | When `time` comes, an `Instant` or a signal holding one; or the time of day `daily` comes, `{ hour, minute }` or a signal holding one. |
+| `days` | The weekdays `daily` comes on, a constant 7-bit mask with Monday in bit 0; every day when left out. |
+| `at_most_every` | Skips the handler until this long has passed since it last ran. The handler must be a function the app defines. |
 
 | Event | Fields | When |
 |---|---|---|
-| `open` | none | The app comes to the front. |
-| `close` | none | The app leaves the front, for another app or the watch face. |
+| `open`, `close` | none | The app comes to the front, or leaves it. |
 | `screen_on`, `screen_off` | none | The display turns on or off while the app is in front. |
-| `tick` | `time` | Repeatedly, `every` so often and at most every 20 milliseconds. Periods shorter than a minute need `while_open: true`, so they never run in the background. |
-| `time` | `time` | Once, `at` an absolute time. The instant may be a signal, so changing it reschedules, and `null` turns it off. |
-| `daily` | `time` | At a local time of day `at`, on the weekdays in `days`. A signal holding `null` turns it off, as an alarm switch does. |
-| `minute`, `hour`, `day` | `time` | The local minute, hour or day changes, such as a reset at midnight. Also comes when the phone sets the clock. |
-| `heart_rate` | `beats_per_minute`, `confidence` | A measurement `every` so often. Several apps asking share one measurement. |
+| `tick` | `time` | Every `every`, lined up with the clock, at most every 20 ms. Under a minute needs `while_open: true`. |
+| `time` | `time` | Once, `at` an absolute time. A signal reschedules it when it changes, and `null` turns it off. A time already passed comes at once. |
+| `daily` | `time` | At a local time of day, on the weekdays in `days`. A signal holding `null` turns it off. |
+| `minute`, `hour`, `day` | `time` | The local minute, hour or day changes, or the phone sets the clock. |
+| `heart_rate` | `beats_per_minute`, `confidence` | A measurement every `every`. Apps asking share one measurement. |
 | `steps` | `steps_today` | The step count changes, at most once a minute. |
 | `step_goal` | `steps_today` | The day's step goal is reached. |
-| `wrist_raise`, `shake`, `wrist_tap`, `wrist_double_tap`, `still`, `moving` | `kind` | The accelerometer sees that motion. Only `shake` is sent so far, found in software while the app is open and the screen is on. |
-| `acceleration` | `x`, `y`, `z` in thousandths of g | Raw readings `every` so often, such as for a spirit level. Only with `while_open: true` and while the screen is on, and at most 10 a second; the accelerometer is read only while an app asks. |
+| `shake` | `kind` | A shake, found while the app is open and the screen is on. |
+| `wrist_raise`, `wrist_tap`, `wrist_double_tap`, `still`, `moving` | `kind` | Accepted, but the watch does not send them yet. |
+| `acceleration` | `x`, `y`, `z` in thousandths of g | Raw readings every `every`, at most 10 a second. Needs `while_open: true`, and comes only while the screen is on. |
 | `battery_low`, `charging_starts`, `charging_stops`, `charging_completes` | `percent` | The battery goes low, or charging starts, stops or completes. |
 | `phone_connects`, `phone_disconnects` | `is_connected` | The phone connects or disconnects. |
-| `notification` | `id`, `app`, `title`, `body`, `time` | A notification arrives from the phone. The watch keeps up to 24 bytes of `app`, 32 of `title` and 120 of `body`. |
-| `call` | `kind`, `caller` | A call is `incoming`, `answered` or `ended`; `current_call` holds it too. |
-| `music` | none | The phone's player changes; read the new state from `current_music`. |
-| `weather` | none | The phone sends a forecast; read it from `current_weather`, coming days included. |
-| `navigation` | none | The phone's navigation app gives the next step; read it from `current_navigation`. |
-| `settings_change` | `key` | The user changes a setting, from the watch or the phone. `key` is its name as `set_setting` takes it, or `do_not_disturb`; one event comes for each setting changed. |
+| `notification` | `id`, `app`, `title`, `body`, `time` | A notification arrives from the phone. |
+| `call` | `kind`, `caller` | A call is `incoming`, `answered` or `ended`. |
+| `music`, `weather`, `navigation` | none | The phone's player, forecast or navigation changes; read the new values from `current_music`, `current_weather` or `current_navigation`. |
+| `settings_change` | `key` | A setting changes, from the watch or the phone. `key` is its name as `set_setting` takes it, or `do_not_disturb`. |
 
-`message`, for messages the companion app sends on the app's own channel, and `http_response`, the
-reply to an `http_request` effect, are not in the image format yet.
-
-When several of the same event are waiting, the runtime delivers only the latest, so a slow handler
-never falls behind.
+When several of the same event are waiting, only the latest is delivered. A closed app hears only
+its timers: `tick`, `time`, `daily`, the clock changes and `heart_rate`. A handler run in the
+background may vibrate and notify; `wake_screen` brings the app to the front on the screen its `go`
+named.
 
 ## Widgets
 
-Widgets follow LVGL's set, and the app host draws each one from its values when a screen opens.
-The second column of each table names the LVGL widget it matches. Each one takes the common props below plus its own.
+The app host draws each widget from its values. The second column of each table names the LVGL
+widget it matches, where there is one. Each widget takes the common props plus its own.
 
 ### Common props
 
 | Prop | Holds |
 |---|---|
-| `x`, `y`, `width`, `height` | Position and size in pixels, or `"100%"`, or left out to let the parent's layout decide. |
+| `x`, `y` | A place in pixels inside the parent's padding, taking the widget out of the flow. |
+| `width`, `height` | Pixels, or `"100%"` and other percentages; left out, the layout decides. `size` (or `diameter`) sets both. |
 | `grow` | The share of spare space this widget takes in a `Row` or `Column`. |
-| `padding`, `margin` | Space inside and outside the widget. |
-| `background`, `color`, `border_color` | Colours, as `"#rrggbb"` or a theme name: `background`, `surface`, `text`, `muted`, `accent`, `success`, `warning` or `danger`. A theme name follows the user's theme, and changes with it without the app doing anything. |
+| `padding`, `margin` | Space inside and outside the widget. Both start at 0. |
+| `background`, `color`, `border_color` | `"#rrggbb"` or a theme name: `background`, `surface`, `text`, `muted`, `accent`, `success`, `warning` or `danger`. A theme name follows the user's theme. |
 | `border_width`, `radius` | The border and corner rounding. |
-| `font` | `small`, `normal`, `medium` (about 30 px), `large`, `huge` or `giant` (about 120 px, digits and `:` only), or a display font: `dot_matrix` (about 40 px, digits and capital letters A to Z) or `condensed` (about 48 px, digits only). Each display font has one size; another size would be a new font name. All are in the shared library. |
-| `align` | `start`, `center` or `end`. |
-| `visible` | Whether the widget is shown. `{condition && <Widget/>}` sets it. |
-| `animate` | A duration in milliseconds. A bound property that changes slides to its new value instead of jumping. |
-| `opacity` | 0 to 255. |
-| `gap` | On a container, the space in pixels between its children. |
-| `justify`, `align_items` | On a container, where its children sit along and across it: `start`, `center`, `end` or `space_between`. |
-| `disabled` | On an input, shows it greyed out and ignores touches. |
+| `font` | One of the [fonts](#fonts). |
+| `align` | `start`, `center` or `end`, across the parent's flow. |
+| `opacity` | 0 to 255, multiplied down through children. |
+| `animate` | Accepted, but the watch does not animate yet; the value jumps. |
+
+Containers (`Screen`, `Column`, `Row`, `Card`, `Page`, `Scroll`, `List`) also take `gap`, the
+pixels between children, `justify` along the flow (`start`, `center`, `end`, `space_between`) and
+`align_items` across it (those, and `stretch`). A `Button` takes `disabled`, which greys it out and
+ignores touches.
+
+Keep 8 pixels between content and the screen's edges, with `padding={8}` on the screen, and 6 to 8
+pixels between controls, with `gap`. Leave the padding out only for content meant to fill the
+screen, such as a game board.
+
+### Fonts
+
+| Font | Capital height | Use |
+|---|---|---|
+| `small` | 12 px | Dense text, such as a list's second line. |
+| `normal` | 14 px | Body text; the default. |
+| `medium` | 22 px | Headings and values. |
+| `large` | 31 px | Big values. |
+| `huge` | 57 px | A clock face's digits. |
+| `giant` | 87 px | The biggest digits; proportional, the rest monospaced. |
+| `condensed` | 35 px | Narrow tall text, such as a stopwatch's time. |
+| `dot_matrix` | 7 dots | Digits, capitals, `-`, `:`, `.` and `/` drawn as dots; lower case shows as capitals. |
+
+Every text font draws printable ASCII, the Latin-1 letters and signs, curly quotes, dashes, the
+ellipsis, bullet and euro sign, and `°±×÷←✓✕`. All live in the shared library.
 
 ### Layout
 
 | Widget | LVGL | Use |
 |---|---|---|
-| `Column`, `Row` | container, flex layout | Children one after another, down or across. |
-| `Grid` | container, grid layout | Children in rows and columns, such as a keypad. |
+| `Screen` | | The outermost widget of a screen: a `Column`, or a `Row` with `direction="row"`. Takes `onSwipe`, `onShow` and `onHide`, and the touch events. |
+| `Column`, `Row` | container, flex | Children one after another, down or across. |
+| `Grid` | container, grid | Children in rows of `columns`, such as a keypad. |
 | `Stack` | container | Children on top of each other, such as text over an image. |
-| `Scroll` | scroll view | Content longer than its space, down or, with `direction="row"`, across. |
-| `List` | list | A scrolling list of rows, from a fixed-length array. A `.map` inside it is one repeated row, so a long list costs an app one row of code, and when the row has a fixed `height` the watch builds only the rows on screen. |
-| `Pages` | tile view | Pages side by side, one on show at a time, swiped left and right with a wipe, and a bar along the bottom marking which is on show. `value` is the page on show; `onPageChange` hears each turn, and an app that turns pages itself binds `value` to a signal it also sets there. A swipe past the first or last page goes to the screen's `onSwipe`. |
-| `Page` | | One page of a `Pages`: a `Column` that fills it, or with `scrolls` a `Scroll` that scrolls down when its content is longer. `scrolls` must be written out. |
-| `Tabs` | tab view | Pages with a row of tabs. |
+| `Scroll` | scroll view | Content longer than its space, scrolled by dragging and flung to glide. |
+| `List` | list | A scrolling list of rows. A `.map` inside it is one repeated row, and with a fixed row `height` the watch builds only the rows on screen. |
+| `Pages` | tile view | Pages side by side, one on show, swiped left and right with a wipe, and a bar along the bottom. `value` is the page on show; `onPageChange` hears each turn, and an app that turns pages itself binds `value` to a signal it also sets there. A swipe past either end goes to the screen's `onSwipe`. |
+| `Page` | | One page of a `Pages`: a `Column` that fills it, or with `scrolls` a `Scroll`. `scrolls` is written out. |
 
-Nothing adds space by itself: `padding` and `gap` start at 0. Keep 8 pixels between content and
-the screen's edges, with `padding={8}` on the screen's outer container, and 6 to 8 pixels between
-buttons and other controls, with `gap`. Leave the padding out only for content meant to fill the
-screen, such as a game board or a full-width picture. A widget placed with `x` and `y` is measured
-from inside its parent's padding.
+`Scroll` and `List` take:
+
+| Prop | Holds |
+|---|---|
+| `direction` | `"column"`, the default, to scroll down, or `"row"` to scroll across; a repeated row across a `List` needs a fixed `width` to be built only while in view. |
+| `scrolling` | `"smooth"`, the default, follows the finger and glides when flung; `"pages"` settles on a whole page when the finger lifts: a drag of 20 pixels or more turns the page. |
+| `scroll_bar` | `false` leaves the bar out. While the content is longer than the widget, the watch draws a 2-pixel bar down its right edge, or along the bottom when it runs across, and keeps 4 pixels for it: a thumb over a dim track, or a segment per page. |
+
+All three are written out in the source.
 
 ### Showing things
 
-| Widget | LVGL | Use |
+| Widget | LVGL | Use and props |
 |---|---|---|
-| `Label` | label | Text. Long text wraps, or scrolls with `long_mode="scroll"`. |
-| `RichText` | span group | Text in several colours or fonts on one line. |
-| `Image` | image | A picture from the app or the shared library. |
-| `Icon` | image | A shared library icon, drawn in the `color` given. |
-| `AnimatedImage` | animated image | A short loop of frames. |
-| `Line` | line | Lines between points, such as clock ticks. |
-| `Arc` | arc | A ring or part of one, such as a progress ring. Its children are stacked in its middle. |
-| `ArcLabel` | arc label | Text along a curve. |
-| `Bar` | bar | A straight progress bar. |
-| `Spinner` | spinner | Shows that something is in progress. |
-| `Led` | led | A dot that is on, off or dimmed. |
-| `Chart` | chart | A line or bar chart from one or more fixed-length arrays, such as heart rate over a day. |
-| `CellGrid` | drawn by the runtime | A board of coloured cells from one array, such as Life, Snake or 2048. One widget however many cells, so a 400-cell board costs no more UI heap than a label. |
-| `BatteryGauge` | drawn by the runtime | A battery's outline filled to `value` percent, with a bolt while `charging`; `BatteryIcon` binds it to the watch's own battery. |
-| `StatusRow` | drawn by the runtime | Status icons chosen by `status_flags` (1 notifications, 2 the phone, 4 an alarm), then a battery in `border_color`; `StatusIcons` binds it to the system. |
-| `Badge` | drawn by the runtime | An `icon` and a text beside it as one widget, the icon in `recolor` when not the text's colour. |
-| `NumberRoller`, `TimeRollers`, `DurationRollers` | drawn by the runtime | Rollers for a whole number from `minimum` to `maximum` padded to `digits`, a time as the minute of the day with `twelve_hour`, or a duration in seconds with `show_hours`; `onChange` sends the new value. The pickers above bind them to signals. |
-| `DayButtons` | drawn by the runtime | Seven day buttons over a `value` of day bits; `onChange` sends the days with the tapped one flipped. |
-| `Stepper` | drawn by the runtime | A minus button, the value or its `text`, and a plus button, stepping `value` by `step` between `minimum` and `maximum`. |
-| `ConfirmBox` | drawn by the runtime | A question and two buttons, its `text` the cancel button's, the confirm button's and the question on lines of their own; `onChange` sends 1 or 0. `ConfirmDialog` binds it to a signal. |
-| `AppList` | drawn by the runtime | The installed apps as a scrolling list of rows or a grid, each its icon and name, read from the system by the widget itself, all of them, one launcher group's, or every group under its heading. One widget however many apps, so a launcher is a few bytes. |
-| `TextFile` | drawn by the runtime | A text file from the watch's storage, wrapped and scrolled, such as a note the companion app sent. Only the lines near the view are read into RAM, so a long file costs no more than a short one. |
-| `TextLines` | drawn by the runtime | The end of a text kept as character codes in an array signal, wrapped to the widget's width at spaces and broken at each new line, showing as many of the last lines as fit. One widget however many lines, for notepads such as morse. |
-| `Scale` | scale | Ticks and labels around a dial or along a ruler, with an optional needle at `value`. |
-| `AnalogClock` | clock | Clock hands bound to a time, normally `now`. |
-| `Table` | table | Rows and columns of text. |
-| `Calendar` | calendar | A month, with chosen days marked. |
+| `Label` | label | Text. `text_align` (`left`, `center`, `right`); `long_mode`: `wrap` (the default, at spaces), `scroll` (one line, sliding back and forth) or `clip`. |
+| `Icon` | image | A shared library `icon`, drawn in `color` at `size`. |
+| `Image` | image | `src`, a PNG beside the source or a library icon; `recolor` draws a one-colour image in that colour; `width` and `height` for one that is not square. |
+| `Line` | line | `points`, a fixed-length array of `{ x, y }` in the parent's pixels, joined in order; `thickness`. |
+| `Arc` | arc | A ring or part of one from `value` between `minimum` and `maximum`; `start_angle`, `end_angle`, `thickness`, `track_color`, `diameter`. Its children are stacked in its middle. It cannot be dragged yet. |
+| `Bar` | bar | A straight progress bar: `value`, `minimum`, `maximum`, `track_color`. |
+| `Led` | led | A dot in `color`, with `diameter`. |
+| `Chart` | chart | `values`, one array drawn in `color`, with `minimum` and `maximum`. `series` takes only its first series on the watch. |
+| `Scale` | scale | Ticks around a dial: `ticks`, `major_every`, `labels` for the major ticks, `major_color`, `skip` for ticks to leave out, `start_angle` and `end_angle` for a part dial, and `value` with `needle_color` for a gauge. |
+| `AnalogClock` | | Hands for `time` (normally `now.value`): `show_seconds`, `hour_color`, `minute_color`, `second_color`, `hour_length`, `minute_length`, `second_length`, and `hand_style` (`line`, `tapered`, `rounded`). |
+| `CellGrid` | | A board of coloured cells from one array, such as Life, Snake or 2048, as one widget however many cells. See below. |
+| `BatteryGauge` | | A battery outline filled to `value` percent, with a bolt while `charging`; `single_color`, `show_bolt`, `show_percent`. |
+| `StatusRow` | | Status icons chosen by `status_flags` (1 notifications, 2 the phone, 4 an alarm), then a battery; `icon_size`, `gap`, and the battery props. |
+| `Badge` | | An `icon` with text beside it as one widget; `icon_size`, `gap`, `recolor` for the icon. |
+| `AppList` | | The installed apps, each its icon and name, as one widget however many. See below. |
+| `TextFile` | | A text file from storage, wrapped and scrolled: `path`, `font_path` (a file naming `small`, `normal`, `medium` or `large`, which wins over `font`), `placeholder` shown in `muted` while the file is missing or empty, and `scrolling` and `scroll_bar`. Only the lines near the view are read into RAM. The file is read when its screen opens; at most 32,767 pixels of lines are shown. |
+| `TextLines` | | The last lines of text kept as character codes: `codes`, an array signal, and `length`, how many are in use. Wraps at spaces and breaks at new lines. |
+| `BitmapFile` | | A one-bit picture from storage, such as a QR code: `path`, and `value`, a number written after the path, so `path="/qr/"` with `value={2}` shows `/qr/2`. The file is a width and a height of at most 120, then each row packed eight pixels to a byte, leftmost in the high bit; set pixels draw in `color`, each as large a square as fits. |
+
+`CellGrid` props: `columns`, `rows`, `cell_size` (the side of one cell; without it the cells grow to
+fill the widget), `cell_gap` (pixels between cells), `cell_shape` (`square`, `rounded`, `round`),
+`cells` (one number per cell, a colour from `palette`), `palette` (a constant array or an array
+signal), `show_numbers` with `number_map` and `number_colors` to draw each non-zero cell's number,
+and `onClick` and `onDrag` receiving `{ value }`, the cell's number.
+
+`AppList` props: `gap` between rows, `color` for icons and names, `first` and `count` for one run of
+`installed_apps`, `sections` for every app under its group's name, `columns` above 1 for square
+cells that many across, `scrolling` and `scroll_bar`, and `onClick` receiving `{ value }`, the app's
+place in `installed_apps`. Rows are 52 pixels tall.
 
 ### Input
 
-| Widget | LVGL | Use |
+| Widget | LVGL | Use and props |
 |---|---|---|
-| `Button` | button | A tappable button with text or an icon. |
-| `ImageButton` | image button | A button drawn as an image. |
-| `ClickArea` | click area | An invisible area that takes touches. Its children are stacked down it, as in a `Column`. |
-| `Switch` | switch | On or off. |
-| `Checkbox` | checkbox | Ticked or not, with a label. |
-| `Radio` | radio | One choice from a group. |
-| `Slider` | slider | A value dragged along a track. |
-| `Roller` | roller | A scrolling wheel of choices, such as hours. |
-| `Spinbox` | spinbox | A number with up and down steps. |
-| `Dropdown` | dropdown | A choice from a list that opens on tap. |
-| `ButtonMatrix` | button matrix | A grid of buttons drawn as one widget, such as a keypad. Cheaper than separate buttons. |
-| `TextArea`, `Keyboard` | text area, keyboard | Typing text. The screen is small, so prefer choices where possible. |
+| `Button` | button | A tappable button with text or an icon; `disabled`. Its `background` is `surface` and its `radius` 12 unless set. |
+| `ClickArea` | | An invisible area that takes touches; its children are stacked down it. |
+| `Switch` | switch | On or off; `value` a boolean or a signal. |
+| `Checkbox` | checkbox | Ticked or not, with its children as the label; `value` a boolean or a signal. |
+| `Slider` | slider | A value dragged along a track: `value`, `minimum`, `maximum`, `step`. |
+| `Roller` | roller | A wheel of `options`; `value` is the chosen option's number. |
+| `ButtonMatrix` | button matrix | A grid of buttons drawn as one widget: `rows`, an array of rows of labels, written out; `onClick` receives `{ value }`, the button counted across the rows; `highlighted` lists labels drawn in the accent colour (the first 32 buttons only). |
+| `NumberRoller` | | Rollers for a number from `minimum` to `maximum`, padded to `digits`. |
+| `TimeRollers` | | Hour and minute rollers for `value`, a minute of the day; `twelve_hour` adds AM and PM. |
+| `DurationRollers` | | Rollers for `value` in seconds; `show_hours`. |
+| `DayButtons` | | Seven day buttons over `value`, a day mask; `columns` a row. |
+| `Stepper` | | Minus and plus buttons around the value or its `text`, stepping by `step` between `minimum` and `maximum`. |
+| `ConfirmBox` | | A question and two buttons: `text` holds the cancel button's text, the confirm button's and the question, each on its own line; `onChange` sends 1 or 0. |
 
-### Components from the shared library
+The rollers, `DayButtons`, `Stepper` and `ConfirmBox` send the new value to `onChange`; the
+components below bind them to signals.
 
-These are built from the widgets above and kept in the [shared library](app-runtime.md#the-shared-library),
-so they will cost an app nothing to include. Until library components exist, the compiler inlines
-them into each app; see [Building apps from shared parts](app-runtime.md#building-apps-from-shared-parts).
-For a list of entries use a `List` with a `Repeat`, and for the status row the native `StatusIcons`.
+### Components
+
+These come from `neotime/components`, built from the widgets above. The compiler inlines each into
+the app.
 
 | Component | Use |
 |---|---|
-| `Card` | A rounded panel, the standard block of an app's layout. |
-| `Header` | A screen's title row, with an optional icon. |
-| `ScrollBar` | For paging by hand; `Pages` draws its own bar. One segment per page down the right edge at x 238, the `page` on show in the muted grey and the rest in the surface grey, as wasp-os draws it; nothing for a single page. Put it straight in a `Screen` without padding, which the watch would add to its place, and pad the content beside it by 4 or more. |
-| `BatteryIcon` | The battery's charge and whether it is charging, drawn the way the system does, with an optional percentage, as one widget. `single_color` draws it all in `color`, and `show_bolt={false}` hides the charging bolt. |
-| `StatusIcons` | The status row as one widget: the notifications icon while any are unread, the phone's while it is connected, the alarm's with `show_alarm` while one is set, then the battery. `icon_size`, `gap`, `color` for the icons, `battery_color`, and `align` to place them across. |
-| `StepsBadge`, `HeartRateBadge`, `TemperatureBadge` | Today's steps, the heart rate while it is measured, or the temperature in the wearer's units, beside an icon, as one widget. `icon_size`, `gap`, `icon_color` and `align`; `TemperatureBadge` takes the weather `icon` the face chooses. |
-| `ConfirmDialog` | A question with two buttons, shown while a signal is true, as one widget. |
-| `NumberPicker`, `TimePicker`, `DurationPicker` | Rollers for a number, a time of day or a duration, writing back to a signal, each one widget. `TimePicker` follows the 12 or 24 hour setting. |
-| `WeekdayPicker` | A button for each day of the week, toggling that day in a signal of day bits, Monday in bit 0, as one widget; `columns` buttons a row. |
+| `Card` | A rounded panel in `surface`, radius 12, padding 10 and gap 4 unless set: the standard block of an app's layout. |
+| `Header` | A screen's `title` row, with an optional `icon` and `color`. |
+| `ScrollBar` | For paging by hand: one segment per page down the right edge for `page` of `pages`. Put it straight in a `Screen` without padding, and pad the content beside it by 4 or more; `Pages` draws its own bar. |
+| `BatteryIcon` | The watch's own battery as one widget: `show_percent`, `color`, `single_color`, `show_bolt`. |
+| `StatusIcons` | The status row bound to the system: notifications while any are unread, the phone while connected, the alarm with `show_alarm`, then the battery. `icon_size`, `gap`, `color`, `battery_color`, `align`. |
+| `StepsBadge`, `HeartRateBadge`, `TemperatureBadge` | Today's steps, the heart rate while measured, or the temperature in the wearer's units, beside an icon. `icon_size`, `gap`, `icon_color`, `align`; `TemperatureBadge` takes the weather `icon`. |
+| `ConfirmDialog` | A `question` with two buttons, shown while the `open` signal is true and closing itself on either: `confirm_text`, `cancel_text`, `onConfirm`, `onCancel`. |
+| `NumberPicker`, `TimePicker`, `DurationPicker` | Rollers writing back to a signal. `TimePicker` follows the 12 or 24 hour setting. |
+| `WeekdayPicker` | Day buttons toggling a signal of day bits, Monday in bit 0; `columns` a row. |
 
-### Props beyond the common ones
+### Icons
 
-Every angle, in every widget and function, is in degrees clockwise from twelve o'clock.
+`icons.<name>` names a shared library icon: `alarm`, `backspace`, `battery`, `bell`, `bell_off`,
+`bluetooth`, `calculator`, `calendar`, `charging`, `chart`, `chat`, `check`, `clear`, `clock`,
+`close`, `clouds`, `dice`, `few_clouds`, `flag`, `flashlight`, `game`, `heart`, `heavy_clouds`,
+`info`, `level`, `metronome`, `minus`, `mist`, `moon`, `music`, `navigation`, `news`, `next`,
+`none` (empty), `note`, `notification`, `pause`, `phone`, `phone_missed`, `pine_logo`, `play`,
+`plus`, `previous`, `qr_code`, `rain`, `remote`, `settings`, `showers`, `sms`, `snow`, `steps`,
+`stop`, `stopwatch`, `sun`, `thunderstorm`, `timer`, the `turn_` arrows (`arrive`, `left`, `right`,
+`roundabout`, `sharp_left`, `sharp_right`, `slight_left`, `slight_right`, `straight`, `u_turn`),
+`voicemail`, `volume_down`, `volume_up`, `weather`, `weather_night_clear` and
+`weather_night_cloudy`.
 
-
-| Widget | Props |
+| Function | Gives |
 |---|---|
-| `Line` | `points`: a fixed-length array of `{ x, y }`. |
-| `Scale` | `ticks`, `major_every`, `labels` for the major ticks, `skip` for tick numbers to leave out (such as under a date window), and `value` and `needle_color` for a gauge. `start_angle` and `end_angle` make a part dial, such as a half gauge. |
-| `CellGrid` | `columns`, `rows`, `cell_size`, the side of one drawn cell, `cell_gap`, the empty pixels between one cell and the next (so cells sit `cell_size + cell_gap` apart and the board is `columns * cell_size + (columns - 1) * cell_gap` wide; with no `cell_size` the cells grow to fill the widget), `cell_shape` (`square`, `rounded` or `round`), `cells` (one number per cell, read as a colour from `palette`), `palette` (a fixed array, or a state array to change colours as the app runs), `show_numbers` to draw each cell's value, or with `number_map` the number it maps to, in every cell where that is not 0 (in `font`, or the small font when it does not fit), `number_colors` for the number's colour by cell value, and `onClick` and `onDrag` receiving `{ value }`, the cell's number. |
-| `AppList` | `gap` between rows, `padding`, `color` for the icons and names, and `onClick` receiving `{ value }`, the tapped app's place in `installed_apps`. Rows are 52 pixels tall. `first` and `count` show only that run of `installed_apps`, such as one of `launcher_groups`; `sections` shows every app with each group's name above its apps instead; `columns` above 1 lays the apps out as square cells that many across, each a large icon with its name below in the small font. `scrolling` and `scroll_bar` work as on a `Scroll`; the bar's room comes off the rows' or cells' width. |
-| `Image` | `width` and `height`, from the common props, for an image that is not square. |
-| `Scroll`, `List` | `direction`, `"column"` (the default) to scroll up and down or `"row"` to lay the children out across and scroll left and right; a repeated row across a `List` needs a fixed `width` to be built only while in view. `scrolling`, `"smooth"` (the default) to follow the finger or `"pages"` to settle on a whole page when the finger lifts: a drag of 20 pixels or more turns to the next page, a shorter one goes back, and the last page ends with the content. `scroll_bar={false}` leaves the bar out. All three are written out in the source. While the content is longer than the widget, the watch draws a 2-pixel bar down its right edge, or along its bottom edge when it runs across, and keeps 4 pixels beside the content for it: a smooth bar is a light thumb, as long as the share in view, over a dim track; a paged bar has a segment per page, as wasp-os draws it, the page on show light. |
-| `TextFile` | `scrolling` and `scroll_bar`, as on a `Scroll`; `path`, the file to show; `font_path`, a file holding the name of a text font (`small`, `normal`, `medium` or `large`), which wins over `font` when it names one; and `placeholder`, shown in the `muted` colour while the file is missing or empty. All three are written out in the source, not worked out. Tabs and carriage returns show as spaces and bytes that are not UTF-8 as `?`. The file is read when its screen opens, so a file the phone changes shows the next time the screen opens. At most 32,767 pixels of lines are shown, such as about 2,000 lines in the small font; the rest is left out. |
-| `TextLines` | `codes`, an array signal of character codes, and `length`, how many of them are in use. A new line at the end starts an empty last line. |
-| `Chart` | `series`: up to 3 arrays, each with its colour. |
-| `Arc` | `value`, `minimum` and `maximum`. Given a signal, the arc can be dragged and writes back to it, with `onChange`. |
-| `Image` | `recolor`: draws a one-colour image, such as a logo, in this colour. |
-| `AnalogClock` | `time` (normally `now`), `show_seconds`, `hour_color`, `minute_color`, `second_color`, `hour_length`, `minute_length`, `second_length`, and `hand_style`: `line`, `tapered` or `rounded`. |
-| `ButtonMatrix` | `rows`: an array of rows of labels, written out. `onClick` receives `{ value }`, the number of the button counted across the rows. `highlighted`: the labels whose buttons are drawn in the accent colour, such as `[symbol.value]` or `ready.value ? ["Go"] : []`; none are lit without it. Each label is fixed text, and only the first 32 buttons can be lit. |
-| `Roller`, `Dropdown` | `options`, and `value` as the number of the chosen option. |
-| `Slider`, `Switch`, `Checkbox`, `Roller`, `Spinbox` | `value` may be a plain value or a signal. Given a signal, the widget writes changes back to it. |
+| `icon_named(name)` | The icon of that name, for one chosen by state, such as `` icon_named(`turn_${turn}`) ``. |
+| `library_icon(index)` | The icon at that place in the library's order (`ICON_NAMES` in `compiler/src/types.rs`), or `none` outside it, for an icon a file chose by number. New icons go at the end. |
 
-### Shared library images and icons
+### Not available yet
 
-Besides the system icons, the shared library holds a `pine_logo` image and icons for `alarm`,
-`info`, `remote`, `note`, `weather_night_clear`, `weather_night_cloudy` and `none`, the empty icon.
+The compiler knows these LVGL names, but the SDK offers no component for them and the watch draws
+each as an empty box: `Tabs`, `RichText`, `AnimatedImage`, `ArcLabel`, `Table`, `Calendar`,
+`ImageButton`, `Radio`, `Spinbox`, `Dropdown`, `TextArea` and `Keyboard`. `Spinner` is in the SDK
+and the preview but draws as an empty box on the watch. These props are left out with a warning:
+`brightness` on `Led`, `visible_rows` on `Roller`, `kind` on `Chart` and `rounded` on `Line`.
 
-`library_icon(index)`, from `neotime/icons`, gives the icon at that place in the library's own
-order, `ICON_NAMES` in `compiler/src/types.rs`, or `none` outside it, for an icon chosen by number
-while the app runs, such as one the phone wrote to a file. The order keeps every icon's number, and
-new icons go at the end.
-
-### Left out
-
-- **Canvas.** It needs a buffer for its pixels, and a full screen is 115 KB, more than the watch's
-  RAM. Draw with `Line`, `Arc` and `Image` instead.
-- **Window and message box.** `Header` and `ConfirmDialog` cover them.
-- **Audio meters and motion effects,** which have no use on a watch.
+Left out for good: a canvas, whose pixel buffer would not fit in RAM (draw with `Line`, `Arc` and
+`Image`); windows and message boxes, which `Header` and `ConfirmDialog` cover.
 
 ## Effects
 
@@ -339,88 +432,64 @@ finishes without failing, in the order they were called.
 
 | Effect | Does |
 |---|---|
-| `vibrate(milliseconds)` | Runs the motor once. Capped at 2 seconds. |
-| `vibrate_pattern(pattern)` | A named pattern: `tap`, `double_tap`, `notification`, `alarm`, `success` or `failure`. `alarm` repeats until `stop_vibrating()`, the app closes, or a minute passes. |
-| `vibrate_sequence([on, off, on, ...])` | A custom pattern in milliseconds, up to 16 steps. |
+| `vibrate(milliseconds)` | Runs the motor once, capped at 2 seconds. |
+| `vibrate_pattern(pattern)` | `tap`, `double_tap`, `notification`, `alarm`, `success` or `failure`. `alarm` repeats until `stop_vibrating()`, the app closes, or a minute passes. |
 | `stop_vibrating()` | Stops any pattern this app started. |
 
-During do not disturb the watch plays only `vibrate_pattern("alarm")` and `stop_vibrating()`, so
-alarms and timers still ring; every other vibration, `notify`'s included, is skipped. With
-`settings.alarms_in_do_not_disturb` off, the alarm pattern is skipped too. The watch does not check
-the `wake` permission for this yet.
+During do not disturb the watch plays only `vibrate_pattern("alarm")`, and only while
+`settings.alarms_in_do_not_disturb` is on; every other vibration, `notify`'s included, is skipped.
 
-### Display
+### Display and navigation
 
 | Effect | Does |
 |---|---|
 | `set_brightness(level)` | Sets the backlight, 1 to 3, until the app closes. |
-| `keep_screen_on(on)` | Stops the screen turning off by itself while this app is in front, such as for a flashlight or a map. |
-| `wake_screen()` | Turns the screen on and brings this app to the front, such as for an alarm or a timer. |
+| `keep_screen_on(on)` | Stops the screen turning off by itself while this app is in front. |
+| `wake_screen()` | Turns the screen on and brings this app to the front. |
 | `screen_off()` | Turns the screen off now. |
-
-### Navigation
-
-| Effect | Does |
-|---|---|
 | `go(screen)` | Shows another of this app's screens. From an `onSwipe` it slides in the way the swipe went; otherwise it wipes in from the right. |
 | `back()` | Returns to the previous screen, or leaves the app from its first one. |
-| `open_app(id)` | Opens another installed app; the id may be text made while running, such as `installed_apps.value[i].id`. |
+| `open_app(id)` | Opens another installed app; the id may be worked out, such as `installed_apps.value[i].id`. |
 | `close()` | Leaves the app for the watch face. |
 | `show_toast(text)` | Shows a short message over the screen for two seconds. |
 
-### Notifications
+### Notifications and phone
 
 | Effect | Does |
 |---|---|
-| `notify(title, body)` | Adds a notification on the watch, with the usual vibration, under the app's name. |
+| `notify(title, body)` | Adds a notification on the watch under the app's name. |
 | `dismiss_notification(id)` | Removes a notification. |
-| `mark_notifications_read()` | Marks every notification read, so `unread_notifications` is 0. |
-
-### Phone
-
-| Effect | Does |
-|---|---|
-| `send_to_phone(channel, data)` | Sends the companion app a message on `channel`, such as `send_to_phone("remote", { button: 2 })`. `data` is an object of up to 4 whole numbers; the channel and the keys are written out, each 1 to 32 letters, digits, `_` or `-`. The phone receives `{"t":"app","ch":"remote","d":{"button":2}}`, as [companion-protocol.md](companion-protocol.md#calls-music-weather-and-the-rest-served) describes. |
-| `http_request(request_id, method, url, body)` | Asks the phone to make a web request. The reply arrives as an `http_response` event. |
+| `mark_notifications_read()` | Marks every notification read. |
+| `send_to_phone(channel, data)` | Sends the companion `{"t":"app","ch":channel,"d":data}`, such as `send_to_phone("remote", { button: 2 })`. `data` is up to 4 whole numbers; the channel and keys are written out, each 1 to 32 letters, digits, `_` or `-`. See [companion-protocol.md](companion-protocol.md#calls-music-weather-and-the-rest-served). |
 | `music_control(command)` | `play`, `pause`, `next`, `previous`, `volume_up` or `volume_down`. |
 | `call_control(command)` | `answer`, `reject` or `mute` the current call. |
 | `find_phone(on)` | Makes the phone ring, or stops it. |
-| `request_music_state()` | Asks the phone to send its player's state now, which arrives through the `music` event. The watch sends `{"t":"request","n":"music"}`, which the companion app answers; Gadgetbridge ignores it. |
-| `request_navigation_state()` | Asks the phone for the current navigation step, which arrives through the `navigation` event. The watch sends `{"t":"request","n":"nav"}`, which the companion app answers; Gadgetbridge ignores it. |
+| `request_music_state()`, `request_navigation_state()` | Asks the companion for the player's state or the navigation step now; the answer arrives as the `music` or `navigation` event. Gadgetbridge ignores them. |
 
 ### Sensors
 
 | Effect | Does |
 |---|---|
-| `measure_heart_rate()` | Takes one reading now. The result arrives through the `heart_rate` event and updates `heart_rate`. |
-| `start_heart_rate()`, `stop_heart_rate()` | Measures continuously while the app is open, such as during a workout. The runtime stops it when the app closes. |
+| `measure_heart_rate()` | Takes one reading now; it updates `heart_rate`. |
+| `start_heart_rate()`, `stop_heart_rate()` | Measures continuously while the app is open; it stops when the app closes. `stop_heart_rate()` ends only this app's own measuring. |
+| `set_heart_rate_led(on, brightness, period)` | Drives the sensor's LED directly, such as for a beacon: `brightness` 0 to 3, `period` the flash period in milliseconds, 0 for steady. Turned off when the app closes. |
+| `reset_step_trip()` | Starts `step_history.trip` from zero. |
 
-The sensor runs while anything needs it: an app that called `start_heart_rate()` and has not
-stopped or closed, a `heart_rate` event when its next reading is due, or a
-`measure_heart_rate()` call. `stop_heart_rate()` ends only that app's own continuous measuring;
-events keep their schedules. An `every` under a minute needs `while_open: true`, so a background
-app cannot keep the sensor on all the time.
-| `reset_step_trip()` | Starts the trip count in `step_history` from zero. Today's count and the history stay. |
-
-### System
+### System and storage
 
 | Effect | Does |
 |---|---|
-| `set_setting(key, value)` | Changes one of the user's settings by name: any key of `settings`, `brightness` (1 to 3, the level the watch returns to), `do_not_disturb` or `bluetooth`. `theme` takes a preset's number. Booleans are 1 or 0, and a value outside its limits is ignored. |
+| `set_setting(key, value)` | Changes a setting by name: any key of `settings`, `brightness` (1 to 3), `do_not_disturb` or `bluetooth`. Booleans are 1 or 0, and a value outside its limits is ignored. |
 | `set_do_not_disturb(on)` | Turns do not disturb on or off. |
-| `log(text)` | Writes a line to the debug log the companion app can read. |
-| `set_bluetooth(on)` | Turns Bluetooth on or off; the same as `set_setting("bluetooth", ...)`. A restart turns it on again. |
-| `set_clock(year, day_of_year, minute_of_day)` | Sets the watch's clock to a local time in its time zone, with the seconds at 00: `day_of_year` counts from 1 for 1 January and `minute_of_day` from 0 for midnight. A day or minute that does not exist, or a year outside 1970 to 2200, is ignored. Faces, alarms, chimes and the step day follow it as they do a phone's time. The Settings app's **Date & time** pages use it. |
-| `confirm_firmware()` | Tells the bootloader to keep a firmware on trial, so a restart no longer rolls it back. Nothing happens to a confirmed firmware. |
-| `roll_back_firmware()` | Restarts a firmware on trial at once without confirming it, so the bootloader brings back the firmware before it. A confirmed firmware is left running, and a closed app's call is dropped. |
-| `set_app_enabled(id, on)` | Turns an installed app or face on or off. The watch checks the change as the package manager does and does nothing when `packages` gives it a refusal, so show why first. |
-| `step_watch_face(steps)` | Chooses the face `steps` places on from the one shown among the faces turned on, in id order, wrapping round; a negative number goes back. The watch saves it in the `watch_face` setting and shows it. |
-| `prefetch_file(path, offset, length)` | Starts reading `length` bytes of a file from `offset` into RAM in the background, at most 4,096, so the screen keeps drawing while they arrive. The next `file_bytes` of that part takes them from RAM instead of the flash, as the file was when `prefetch_file` ran. One part is held at a time, until a `file_bytes` reads its last byte, the next `prefetch_file` replaces it or the app closes. An app that calls it needs 4 KB more heap. Read the next page ahead as the wearer turns one, as `file_bytes(path, 256, page * 256)` then `prefetch_file(path, (page + 1) * 256, 256)`. |
-| `open_folder(path)` | Lists a folder of the watch's storage into `current_folder` soon after the handler ends, which then redraws what shows it. The path may be worked out: `${current_folder.value.path}/${name}` goes into a folder and `${current_folder.value.path}/..` back up; empty and `.` parts are dropped, `..` never climbs above the top, and a path over 64 bytes lists nothing. The listing is dropped when the app closes. |
-| `set_heart_rate_led(on, brightness, period)` | Drives the heart rate sensor's LED directly, such as for a beacon. `brightness` is the drive level, 0 to 3, and `period` the flash period in milliseconds, 0 for steady. The runtime turns it off when the app closes, even with the `background` permission, to save the battery. |
-
-Settings and other values that change often are stored on the external flash, never the internal
-flash; see the [memory map](memory-map.md).
+| `set_bluetooth(on)` | Turns Bluetooth on or off; a restart turns it on again. |
+| `set_clock(year, day_of_year, minute_of_day)` | Sets the clock to a local time at 00 seconds; `day_of_year` counts from 1, `minute_of_day` from 0. A day or minute that does not exist, or a year outside 1970 to 2200, is ignored. |
+| `step_watch_face(steps)` | Shows the face `steps` places on among the faces turned on, wrapping round, and saves it in `watch_face`. |
+| `set_app_enabled(id, on)` | Turns an installed app or face on or off; does nothing when `packages` gives a refusal. |
+| `confirm_firmware()` | Keeps a firmware on trial, so a restart no longer rolls it back. |
+| `roll_back_firmware()` | Restarts a firmware on trial without confirming it, bringing back the one before. |
+| `open_folder(path)` | Lists a folder into `current_folder` soon after the handler ends. The path may be worked out, such as `` `${current_folder.value.path}/..` ``; `..` never climbs above the top, and a path over 64 bytes lists nothing. Needs 1,600 B more heap. |
+| `prefetch_file(path, offset, length)` | Starts reading up to 4,096 bytes of a file into RAM in the background, so the next `file_bytes` of that part takes them without waiting. One part is held at a time. Needs 4 KB more heap. |
+| `log(text)` | Writes a line to the debug log. |
 
 ## Functions
 
@@ -428,18 +497,15 @@ These are plain functions, usable in views, `computed` and handlers unless marke
 
 ### Numbers
 
-Every number is a 64-bit whole number, from about -9.2 × 10¹⁸ to 9.2 × 10¹⁸; there are no
-fractions. For decimals, keep a fixed number of places, such as millionths, in a whole number. The
-compiler accepts `Math.floor`, `Math.trunc`, `Math.round`, `Math.min`, `Math.max` and `Math.abs`.
-A bare `/` is rejected, because JavaScript would give a fraction; write `Math.trunc(a / b)` or
-`Math.floor(a / b)` to say which way it rounds. Overflow and division by zero fail the call.
-
-The bitwise operators `&`, `|`, `^`, `~`, `<<` and `>>` are accepted, such as for day masks. A shift
-by less than 0 or more than 63 places fails the call.
+Every number is a 64-bit whole number; there are no fractions. For decimals, keep a fixed number of
+places in a whole number and show it with `format_fixed`. A bare `/` is refused: write
+`Math.trunc(a / b)`, `Math.floor`, `Math.ceil` or `Math.round` to say how it rounds. `Math.min`,
+`Math.max` and `Math.abs` are accepted, and so are `&`, `|`, `^`, `~`, `<<` and `>>`. Overflow,
+division by zero and a shift outside 0 to 63 fail the call.
 
 | Function | Returns |
 |---|---|
-| `random_int(lowest, highest)` | A random whole number between the two, both included. Handlers only, so a view always shows the same thing for the same state. |
+| `random_int(lowest, highest)` | A random whole number between the two, both included. Handlers only. |
 | `clamp(value, lowest, highest)` | `value` kept between the two. |
 
 ### Text
@@ -449,37 +515,39 @@ Template literals, such as `` `${steps} steps` ``, join text and numbers.
 | Function | Returns |
 |---|---|
 | `format_number(number, minimum_digits?)` | The number as text, padded with zeros. |
-| `format_duration(duration, pattern)` | The duration in a pattern, such as `"mm:ss"` or `"h:mm:ss"`. |
-| `format_time(instant, pattern)` | The local time in a pattern, such as `"dddd D MMMM"`, or one of the named patterns below. |
+| `format_fixed(value, places, trim?)` | `format_fixed(1250, 3)` is `1.250`; with `trim`, trailing zero decimals are left off. |
+| `format_duration(duration, pattern)` | The duration in a pattern, such as `"mm:ss"`. |
+| `format_time(instant, pattern)` | The local time in a pattern, such as `"dddd D MMMM"`, or a named pattern. |
 | `format_temperature(celsius)` | The temperature in the user's units, with its sign. |
-| `to_upper(text)` | The text in capitals, such as `MON` or `OCT` from a pattern's names. |
-| `pad_start(text, width, character?)` | The text with spaces, or the character given, added in front up to `width`. |
-| `format_fixed(value, places, trim?)` | A number kept in units of a `places`-digit fraction as text: `format_fixed(1250, 3)` is `1.250`. With `trim`, trailing zero decimals are left off. |
+| `to_upper(text)` | The text in capitals. |
+| `pad_start(text, width, character?)` | The text padded in front with spaces, or one literal character. |
 | `text_length(text)` | The number of characters. |
-| `slice_text(text, start, end?)` | Part of the text, counted in characters. |
-| `join(texts, separator)` | The texts of a fixed-length array joined together. |
-| `text_from_codes(codes, length)` | Text made from the first `length` character codes of an array, for text built while the app runs. |
+| `slice_text(text, start, end?)` | Part of the text, counted in characters; negative counts from the end. |
+| `join(texts, separator)` | The texts of a fixed-length array joined. |
+| `text_from_codes(codes, length)` | Text from the first `length` character codes of an array signal. |
+
+`.toUpperCase()`, `.slice()`, `.padStart()` and `.length` work on text too.
 
 ### Format patterns
 
-A pattern is always a literal string, so the compiler checks it, and the watch checks it again at
-install. Text inside `[brackets]` is copied as it is, and so is any character that is not a letter.
-Any other letter is an error.
+A pattern is a literal string, or a `? :` choice between literals, so the compiler checks it, and
+the watch checks it again at install. Text inside `[brackets]` is copied as it is, and so is any
+character that is not a letter.
 
 | Time token | Shows |
 |---|---|
 | `YYYY` | The year, such as `2026`. |
 | `MMMM`, `MMM` | The month's name, such as `October` or `Oct`. |
-| `MM`, `M` | The month's number, as `01` to `12` or `1` to `12`. |
-| `DD`, `D` | The day of the month, as `01` to `31` or `1` to `31`. |
+| `MM`, `M` | The month's number, `01` to `12` or `1` to `12`. |
+| `DD`, `D` | The day of the month. |
 | `dddd`, `ddd` | The weekday's name, such as `Sunday` or `Sun`. |
-| `HH`, `H` | The hour on a 24 hour clock, as `00` to `23` or `0` to `23`. |
-| `hh`, `h` | The hour on a 12 hour clock, as `01` to `12` or `1` to `12`. |
+| `HH`, `H` | The hour on a 24 hour clock. |
+| `hh`, `h` | The hour on a 12 hour clock. |
 | `mm`, `m` | The minute. |
 | `ss`, `s` | The second. |
 | `a`, `A` | `am` or `pm`, `AM` or `PM`. |
 
-The named time patterns follow the user's 12 or 24 hour setting: `"clock"` is `HH:mm` or `h:mm`,
+The named patterns follow the 12 or 24 hour setting: `"clock"` is `HH:mm` or `h:mm`,
 `"clock_with_seconds"` adds `:ss`, and `"date"` is `YYYY-MM-DD`.
 
 | Duration token | Shows |
@@ -487,127 +555,116 @@ The named time patterns follow the user's 12 or 24 hour setting: `"clock"` is `H
 | `hh`, `h` | Hours. |
 | `mm`, `m` | Minutes. |
 | `ss`, `s` | Seconds. |
-| `cc` | Hundredths of a second, always two digits. |
+| `cc` | Hundredths of a second, two digits. |
 
 The largest unit in a duration pattern shows the whole amount, so `mm:ss` shows 75 minutes as
-`75:03`, and `h:mm:ss` shows it as `1:15:03`.
-
-A binding redraws as often as the smallest unit its pattern shows: every second with `ss`, ten
-times a second with `cc`, and otherwise once a minute.
+`75:03`. A binding redraws as often as the smallest unit its pattern shows: every second with `ss`,
+ten times a second with `cc`, and otherwise once a minute.
 
 ### Time
 
-All in local time, using `utc_offset`.
+All in local time.
 
 | Function | Returns |
 |---|---|
 | `year_of`, `month_of`, `day_of`, `hour_of`, `minute_of`, `second_of` | That part of an instant. |
 | `weekday_of(instant)` | 0 to 6, Monday first. |
-| `start_of_minute(instant)`, `start_of_hour(instant)`, `start_of_day(instant)` | The start of that local minute, hour or day. A view that shows only these redraws once a minute, not once a second, such as an analog clock without a second hand. |
-| `next_time_of_day(after, time_of_day, days?)` | The first instant after `after` at that local time, on one of `days`. |
+| `start_of_minute`, `start_of_hour`, `start_of_day` | The start of that local minute, hour or day. A view that shows only these redraws once a minute. |
+| `next_time_of_day(after, { hour, minute }, days?)` | The first instant after `after` at that time, on one of `days`. |
 | `day_of_year(instant)` | 1 to 366. |
-| `iso_week_of(instant)` | The ISO 8601 week number, 1 to 53. |
+| `iso_week_of(instant)` | The ISO 8601 week number. |
 
 ### Shared library
 
-From `neotime/lib`; they live in the [shared library](app-runtime.md#the-shared-library).
+From `neotime/lib`. These run in the [shared library](app-runtime.md#the-shared-library), so an app
+carries only a 5-byte call, except `sine`, `cosine` and `point_on_circle`, which work only with
+arguments known when compiling.
 
 | Function | Returns |
 |---|---|
-| `sine(degrees)`, `cosine(degrees)` | In thousandths, from a table. |
-| `point_on_circle(center_x, center_y, radius, degrees)` | `{ x, y }`, with 0 degrees at the top and angles going clockwise, as on a clock face. |
-| `display_hour(instant)` | The hour as the clock shows it: 0 to 23 on a 24 hour clock, else 1 to 12. |
-| `minute_of_day(instant)` | Minutes into the local day, 0 to 1439. |
-| `is_night(instant)` | Whether the instant is between sunset and sunrise, or from 18:00 to 06:00 until the phone sends them. |
-| `steps_since(base)` | Steps taken since today's count was `base`, counting again from today's count after midnight's reset. |
+| `sine(degrees)`, `cosine(degrees)` | In thousandths. |
+| `point_on_circle(center_x, center_y, radius, degrees)` | `{ x, y }`, 0 degrees at the top, clockwise. |
+| `display_hour(instant)` | 0 to 23 on a 24 hour clock, else 1 to 12. |
+| `minute_of_day(instant)` | 0 to 1439. |
+| `is_night(instant)` | Whether it is between sunset and sunrise, or 18:00 to 06:00 until the phone sends them. |
+| `steps_since(base)` | Steps since today's count was `base`, counting on after midnight's reset. |
 | `temperature_in_unit(celsius)` | Whole degrees in the wearer's units. |
 | `digit_of(value, place)` | One decimal digit: `place` 1 for the units, 10 for the tens. |
-| `sunday_week_of(instant)` | The week counted from the year's first Sunday, as strftime's `%U` gives; the days before it are week 0. |
-| `days_in_year(year)` | 366 in a leap year, else 365. |
-| `weather_icon_at(instant)` | The current weather's icon, with the moon in place of the sun at night. |
-| `weather_condition_name(condition)` | InfiniTime's one-word name for a condition: Clear, Cloudy, Rain, Showers, Thunder, Snow or Mist. |
-| `temperature_color(celsius)` | InfiniTime's colour for a temperature, from blue when freezing to deep orange when hot. |
-| `format_time_of_day(hour, minute)` | `07:30` on a 24 hour clock, else `07:30 AM`. |
-| `day_mask_name(days)` | A set of days, Monday in bit 0, as Once, Every day, Weekdays, Weekends, or a letter a day such as `M-W----`. |
-
-The compiler works out `sine`, `cosine` and `point_on_circle`; the others run in the library, so
-an app carries only a 5 byte call.
+| `sunday_week_of(instant)` | The week counted from the year's first Sunday, as strftime's `%U`. |
+| `days_in_year(year)` | 366 or 365. |
+| `weather_icon_at(instant)` | The current weather's icon, with the moon at night. |
+| `weather_condition_name(condition)` | Clear, Cloudy, Rain, Showers, Thunder, Snow or Mist. |
+| `temperature_color(celsius)` | InfiniTime's colour for a temperature, blue when freezing to deep orange when hot. |
+| `format_time_of_day(hour, minute)` | `07:30`, or `07:30 AM` on a 12 hour clock. |
+| `day_mask_name(days)` | Once, Every day, Weekdays, Weekends, or a letter a day such as `M-W----`. |
 
 ### Records and arrays
 
-State may hold objects of a fixed shape, and fixed-length arrays of numbers or of such objects,
-such as a list of alarms `{ hour, minute, days, enabled }`. The compiler stores each field in a
-state slot of its own. A handler may write one element, as in `board.value[cell] = 2`; the write is
-applied with the handler's other writes when it finishes, and later reads in the same handler see it.
-The same holds for single values: after `count.value = 3`, reading `count.value` in that handler gives 3.
+State may hold records of a fixed shape and fixed-length arrays of numbers or records, such as a
+list of alarms `{ hour, minute, days, enabled }`. A handler may write one element, as in
+`board.value[cell] = 2`, or one field, as in `alarms.value[i].enabled = true`; writes apply when the
+handler finishes, and later reads in the same handler see them.
 
-A field of a record in an array can be written the same way, as in `alarms.value[i].enabled = true`.
-The compiler keeps each field of such an array as an array of its own, so this is one element write.
+Text in state can only be one of the app's own literal strings. Keep text made while running as an
+array of character codes and show it with `text_from_codes` or `TextLines`.
 
-A text value held in state can only be one of the app's own literal strings. Text made while the app
-runs, such as typed or joined text, cannot be stored as text. Keep its characters as an array of
-character codes instead, and show it with `text_from_codes(codes, length)`; at 1 byte per code for
-plain ASCII, 96 characters take 96 bytes.
-
-Assigning a whole array, as in `board.value = CELLS.map((cell) => next_state(board.value, cell))`,
-follows JavaScript: the right side reads the old array throughout. The compiler builds the result in
-a hidden array of its own and then copies it in, so that hidden array counts toward the limits
-below. A local holds one value, so an array cannot be kept in a handler's `const` or `let`.
-
-An app's state is at most 2 KB, and one array at most 1 KB. Each array stores its elements in 1, 2,
-4 or 8 bytes, whichever the compiler finds fits, so a 400-cell board of small numbers takes
-400 bytes. One handler may change at most 16 variables and 1 KB of state.
+Assigning a whole array follows JavaScript: the right side reads the old array throughout. A local
+holds one value, so an array cannot be kept in a handler's `const` or `let`. An app's state is at
+most 2 KB and 64 variables, one array at most 1 KB, and each array stores its elements in 1, 2, 4 or
+8 bytes, whichever fits. One handler may change at most 16 variables and 1 KB of state.
 
 | Function | Returns |
 |---|---|
-| `range(count)` | `0` to `count - 1`, where `count` is known when the app is compiled. |
-| `array.includes(value)`, `array.indexOf(value)` | Whether the value is there, and where (or -1). |
+| `range(count)` | `0` to `count - 1`, with `count` known when compiling. |
+| `array.map(...)` | A new array of the same length. |
+| `array.includes(value)`, `array.indexOf(value)` | Whether the value is there, and where, or -1. |
 | `count_where(array, test)` | How many elements pass the test. |
 | `count_of(array, value)` | How many elements equal the value. |
-| `nth_index_of(array, value, n)` | Where the `n`th element equal to the value is, counting from 0, or -1. |
+| `nth_index_of(array, value, n)` | Where the `n`th element equal to the value is, from 0, or -1. |
 | `arrays_equal(first, second)` | Whether two arrays of one length hold the same elements. |
-| `line_through(grid, width, cell, value)` | The longest line of the value through the cell, across, down or diagonally, counting the cell as holding it. Lines stop at the edges. |
-| `slide_grid(grid, width, direction)` | The grid with its tiles slid that way, equal pairs merging once into a tile one level higher, as in 2048. |
-| `slide_points(grid, width, direction)`, `slide_changes(...)`, `can_slide(grid, width)` | What a slide's merges score (two to the power of each new level), whether it changes the grid, and whether any slide would. |
-| `count_inversions(array)` | How many pairs are out of order, the earlier one greater; its parity says whether a sliding puzzle can be solved. At most 64 elements. |
-| `shuffled(array, first, count)` | The array with the `count` elements from `first` on in a random order. Handlers only. |
-| `push_shift(array, value)`, `unshift_pop(array, value)` | The array moved one place along with the value added at the end or the front, dropping the element at the other end: a history of readings or laps. |
-| `life_step(grid, width, live_value)` | The next generation of the Game of Life on a grid that wraps at its edges; each live cell holds `live_value`. At most 16 wide. |
-| `file_bytes(path, length, offset)` | `length` bytes of a file on the watch from `offset`, its first bytes without one, each 0 to 255, with 0 past the file's end or when it is missing, such as a file the companion app wrote. `path` is written out and `length` known when compiling; `offset` may be worked out, so one array can page through a file far larger than RAM. The file is read when the handler runs, so `onOpen` sees what the phone last wrote, unless `prefetch_file` already read that part. The browser preview reads it from `preview_files` as UTF-8. |
-| `array.map(...)` | A new array of the same length. Allowed in views, `computed` and handlers. |
+| `line_through(grid, width, cell, value)` | The longest line of the value through the cell, across, down or diagonally. |
+| `slide_grid(grid, width, direction)` | The grid slid as in 2048, equal pairs merging once. |
+| `slide_points(grid, width, direction)`, `slide_changes(...)`, `can_slide(grid, width)` | What a slide scores, whether it changes the grid, and whether any slide would. |
+| `count_inversions(array)` | How many pairs are out of order, at most 64 elements. |
+| `shuffled(array, first, count)` | The array with `count` elements from `first` in a random order. Handlers only. |
+| `push_shift(array, value)`, `unshift_pop(array, value)` | The array moved one place with the value added at the end or the front, as for a history of laps. |
+| `life_step(grid, width, live_value)` | The Game of Life's next generation on a wrapping grid, at most 16 wide. |
+| `file_bytes(path, length, offset?)` | `length` bytes of a file from `offset`, each 0 to 255, 0 past the end or when the file is missing. `path` is written out and `length` known when compiling; `offset` may be worked out, to page through a file larger than RAM. Read when the handler runs, unless `prefetch_file` already read that part. |
 
-Loops over fixed-length arrays are allowed in `computed` and handlers as well as views.
-
-The interpreter answers the functions from `count_of` down natively, so they cost a few bytes of
-the image where a loop costs dozens, and run far faster; `indexOf` and `includes` on an array signal
-do the same. Their arrays must be signals of numbers, such as `board.value`, or parameters given one.
-`slide_grid`, `life_step`, `push_shift`, `unshift_pop`, `shuffled` and `file_bytes` give a whole array, so they may only be assigned to an array signal of
-the same length in a handler, as in `board.value = life_step(board.value, 16, 1)` or
-`layout.value = file_bytes("/remote/buttons", 11)`. A grid is
-numbered across each row from the top left; a slide's lines are at most 16 long.
+The functions from `count_of` down, and `includes` and `indexOf` on an array signal of numbers, run
+natively in the firmware, so they cost a few bytes where a loop costs dozens. Their arrays must be
+signals of numbers or parameters given one. `slide_grid`, `life_step`, `push_shift`, `unshift_pop`,
+`shuffled` and `file_bytes` give a whole array, so they may only be assigned to an array signal of
+the same length in a handler, as in `board.value = life_step(board.value, 16, 1)`. A grid is
+numbered across each row from the top left.
 
 ### Control flow
 
-An early `return` is allowed in any function, and `break` and `continue` in any loop. A call that loops runs at most 200,000 steps, which
-should be roughly a fifth of a second; a game search should stop well inside that, or split its work across
-several calls.
+`if`, `for ... of` over a fixed-length array, early `return`, `break` and `continue` are allowed.
+A call runs at most 200,000 steps; a game search should stop well inside that, or split its work
+across several calls.
 
 ## Permissions
 
 The compiler works out the permissions an app needs from the effects, events and system values it
-uses, so an app never lists them. The watch asks the user once, when the app is installed. The image
-has no place for them yet, so for now the compiler only reports them, in its `Output::permissions`.
+uses, and reports them; the image does not hold them yet.
 
 | Permission | Covers |
 |---|---|
 | `heart_rate` | The `heart_rate` event, the heart rate effects and `set_heart_rate_led`. |
 | `motion` | The motion events, such as `shake`, and `acceleration`. |
-| `notifications` | Reading notifications, the `notification` event and the notification effects. |
-| `phone` | `call_control`, `music_control`, `find_phone`, reading `current_call`, `current_music` and `current_navigation`, and the `call`, `music` and `navigation` events. |
+| `notifications` | Reading `notifications`, the `notification` event and the notification effects. |
+| `phone` | `call_control`, `music_control`, `find_phone`, `request_music_state`, `request_navigation_state`, reading `current_call`, `current_music` and `current_navigation`, and the `call`, `music` and `navigation` events. |
 | `phone_messages` | `send_to_phone`. |
-| `internet` | `http_request`. |
+| `internet` | Web requests, which the bytecode does not carry yet. |
 | `settings` | `set_setting`, `set_do_not_disturb`, `set_bluetooth`, `set_app_enabled`, `set_clock`, `step_watch_face`, `confirm_firmware` and `roll_back_firmware`. |
-| `wake` | `wake_screen`, and vibration during do not disturb. |
-| `background` | Events other than the app's own life connected without `while_open: true`, which come while the app is closed. |
+| `wake` | `wake_screen`. |
+| `background` | Events other than the app's own life connected without `while_open: true`. |
 
-Reading system values and files, the screen, haptics and navigation need no permission.
+Reading other system values and files, the screen, haptics and navigation need no permission.
+
+## Not in the bytecode yet
+
+`vibrate_sequence` and `http_request` are in the SDK, but the compiler refuses them, because they
+need an array or object argument. The `message` and `http_response` events are not in the image
+format.

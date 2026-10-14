@@ -1,7 +1,7 @@
 # Settings
 
-The watch's settings, merged from InfiniTime's Settings and wasp-os's settings app. Every change is
-saved on the watch, so the companion app sees it too.
+Changes the watch's settings, from the screen and the ways it wakes to the clock, the step goal,
+the watch face and the theme. Merged from InfiniTime's Settings and wasp-os's settings app.
 
 ## Using it
 
@@ -42,13 +42,13 @@ saved on the watch, so the companion app sees it too.
   steps through **On**, **Temporary** and **Off**; Temporary is on only until the watch next
   restarts, as InfiniTime's "till reboot", so it starts again with updates off. Confirming or
   rolling back a new firmware is on the System app's first page.
-- **Date & time** sets the clock by hand, for when no phone has, as
-  InfiniTime's date and time screens do. It opens on today's date as rollers for the day, month and
-  year; tap a number above or below the middle one to step it. The day stops at the month's last
-  day, counting 29 February in a leap year. **Swipe left** for the time, as rollers for the hour
-  and minute, with an **AM**/**PM** button on a 12 hour clock. **Set** sets the clock to that date
-  and time at 00 seconds, in the watch's time zone, and goes back to the list; the side button
-  leaves without changing it.
+- **Date & time** sets the clock by hand, for when no phone has, as InfiniTime's date and time
+  screens do. It opens on today's date as rollers for the day, month and year, with a page bar
+  below; drag a roller up or down, or tap a number above or below the middle one to step it. The
+  day stops at the month's last day, counting 29 February in a leap year. **Swipe left** for the
+  time, as rollers for the hour and minute, with an **AM**/**PM** button on a 12 hour clock.
+  **Set** sets the clock to that date and time at 00 seconds, in the watch's time zone, and goes
+  back to the list; the side button leaves without changing it.
 
 ## Screens
 
@@ -111,3 +111,9 @@ The date, opened from **Date & time** at the end of the list, starting from toda
 ![The time page](../../neotime/harness/snapshots/screens/app-settings-time.png)
 
 The time, a swipe left from the date, here on a 12 hour clock.
+
+## With the companion app
+
+Every change is saved on the watch, so the companion app sees it, and the companion can change the
+same settings from the phone. It can also set theme colours of your own, which the **Theme** row
+shows as **Own**.

@@ -6,7 +6,7 @@ the moment it started, so it keeps running while the app is closed or the watch 
 ## Using it
 
 - Tap **play**, the right button, to start. The screen stays on while the stopwatch runs.
-- Tap the **flag**, the left button, to take a lap. The last four laps show above the buttons:
+- Tap the **flag**, the left button, to take a lap; it is greyed out until the first start. The last four laps show above the buttons:
   the lap number, the lap's own time and the total time when it was taken.
 - Tap **pause** to stop counting. The time blinks while paused; tap play to carry on.
 - While paused, the left button turns red: tap it to **reset** the time and the laps.
@@ -16,7 +16,7 @@ the moment it started, so it keeps running while the app is closed or the watch 
 
 ![The stopwatch, cleared](../../neotime/harness/snapshots/screens/app-stopwatch.png)
 
-Cleared, before the first start.
+Cleared, before the first start, with the lap button greyed out.
 
 ![The stopwatch three seconds after starting](../../neotime/harness/snapshots/screens/app-stopwatch-running.png)
 
@@ -24,8 +24,13 @@ Running: the time with its hundredths below, and the lap and pause buttons.
 
 ![The stopwatch with two laps](../../neotime/harness/snapshots/screens/app-stopwatch-laps.png)
 
-Two laps taken, newest first.
+Two laps taken, newest first: each lap's number, its own time and the total when it was taken.
 
 ![The stopwatch paused](../../neotime/harness/snapshots/screens/app-stopwatch-paused.png)
 
 Paused, with the reset button in red.
+
+## With the companion app
+
+The Stopwatch plugin's page shows the stopwatch's saved values, such as its laps, as the last sync
+read them, and can change them on the watch.

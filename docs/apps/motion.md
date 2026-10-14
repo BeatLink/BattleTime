@@ -1,7 +1,7 @@
 # Motion
 
-An accelerometer check, ported from InfiniTime's Motion. It charts the last ten readings of each
-axis and shows the latest ones, with the step count.
+An accelerometer check that charts the last second of readings on each axis and shows the latest
+ones, with today's step count. Ported from InfiniTime's Motion.
 
 ## Using it
 
@@ -16,8 +16,9 @@ axis and shows the latest ones, with the step count.
 
 ![Motion with no readings yet](../../neotime/harness/snapshots/screens/app-motion.png)
 
-Just opened, before the first reading.
+Just opened, before the first reading: a flat line across the middle, with no numbers yet.
 
 ![Motion charting a second of readings](../../neotime/harness/snapshots/screens/app-motion-readings.png)
 
-A second of readings while the watch tilts, here mostly along X.
+A second of readings while the watch tilts, with the latest at the top and the X line rising and
+falling.

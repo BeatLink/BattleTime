@@ -12,7 +12,8 @@ InfiniTime, with the easy, loadable apps and desktop simulator of wasp-os.
 Apps are written in **Preact and TypeScript**, the way you would build a web page. No Rust or
 embedded knowledge is needed: the compiler turns an app into bytecode the watch runs.
 
-[Read the docs](introduction.md){ .md-button .md-button--primary }
+[Using the watch](guide/index.md){ .md-button .md-button--primary }
+[Writing apps](writing-apps.md){ .md-button }
 [Source on GitHub](https://github.com/BeatLink/NeoTime){ .md-button }
 
 Early work. The firmware, bootloader and updates run on a real PineTime.
@@ -31,7 +32,7 @@ Early work. The firmware, bootloader and updates run on a real PineTime.
     Write an app as Preact components in TypeScript, with Signals for state, and preview it in a
     browser. The compiler turns it into compact bytecode, so web skills are all it takes.
 
-    [How apps are written](app-runtime.md)
+    [How apps are written](writing-apps.md)
 
 -   :material-download-network: **Loadable apps**
 
@@ -57,7 +58,10 @@ Early work. The firmware, bootloader and updates run on a real PineTime.
 
 -   :material-cellphone-link: **Companion apps**
 
-    It works with Gadgetbridge and the other apps InfiniTime supports.
+    It works with Gadgetbridge and the other apps InfiniTime supports, and has a companion of its
+    own for computers and Android.
+
+    [The companion app](companion/index.md)
 
 </div>
 
@@ -93,6 +97,8 @@ arranges. [All apps](apps.md)
 <figure markdown>![](screens/app-twos.png){ .screen loading=lazy }<figcaption>2048</figcaption></figure>
 <figure markdown>![](screens/app-launcher-folders.png){ .screen loading=lazy }<figcaption>Launcher folders</figcaption></figure>
 <figure markdown>![](screens/shell-notifications.png){ .screen loading=lazy }<figcaption>Notifications</figcaption></figure>
+<figure markdown>![](screens/shell-notifications-preview.png){ .screen loading=lazy }<figcaption>New notification</figcaption></figure>
+<figure markdown>![](screens/app-call-ringing.png){ .screen loading=lazy }<figcaption>Incoming call</figcaption></figure>
 <figure markdown>![](screens/shell-quick-settings.png){ .screen loading=lazy }<figcaption>Quick settings</figcaption></figure>
 <figure markdown>![](screens/app-settings.png){ .screen loading=lazy }<figcaption>Settings</figcaption></figure>
 </div>

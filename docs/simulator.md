@@ -37,8 +37,10 @@ nix run . -- --demo --click 120,138 --screenshot out.png    # click Start, save 
 The built-in stopwatch is written with the runtime's image writer (`app-host/src/demo.rs`), so it
 runs before the compiler exists. `--click X,Y` taps the screen before a screenshot and may be
 given more than once. `--files FOLDER` stands a folder in for the watch's storage, so an app reading
-`/remote/buttons` reads `FOLDER/remote/buttons`. `--library path/to/shared.ntlib` gives the app the
-shared library, for the icons apps take from it:
+`/remote/buttons` reads `FOLDER/remote/buttons`, and the Files app lists the folder.
+`--installed path/to/app.ntapp`, given once for each, lists an image as installed, so the launcher
+shows it. `--library path/to/shared.ntlib` gives the app the shared library, for the icons apps take
+from it:
 
 ```sh
 cargo run -q -p neotime-compiler -- faces/digital/face.tsx -o face.ntapp
@@ -97,24 +99,36 @@ and `quit` or the end of the input stops it. Each time the screen changes it wri
 ## How it works
 
 The drivers talk to hardware only through `embedded-hal` traits and `neotime-display`'s
-`PanelInterface`, so the simulator
-hands them simulated parts in place of the chip's:
+`PanelInterface`, so the simulator hands them simulated parts in place of the chip's. Every driver
+in `drivers/` is listed here, with its part or why it has none:
 
-- **The screen** is a model of the ST7789 (`simulator/src/panel.rs`). It keeps the panel's
-  240x320 memory and follows the commands the driver sends, as the datasheet describes them:
-  the address window, memory writes, the scroll area and scroll start, sleep, idle mode and colour
-  inversion. In idle mode it shows each pixel in the nearest of the 8 colours the panel then
-  shows, so low-power screens can be checked here. Each frame, the window shows the 240 rows the panel would show. The PineTime's glass
-  inverts colours, so the model does too, and a driver that forgot to turn inversion on would
-  show wrong colours here as it would on the watch.
-- **The motor** is a pin that runs the motor while low, as P0.16 does. The vibrator driver runs on
-  its own thread, so a pattern waits without freezing the window.
-- **The heart rate sensor** is a model of the HRS3300 (`SimulatedHeartRateChip` in
-  `simulator/src/hardware.rs`) on a wrist with a steady 72 beats a minute, shaped like the
-  emulator's pulse. The heart rate driver and its `Monitor` run on their own thread
-  (`simulator/src/heart_rate.rs`), 24 samples a second while an app has started the sensor, and
-  each reading reaches the app as on the watch, so the Heart app settles and then shows 72. The
-  background interval and the beacon's flashing are not simulated; the effects are printed.
+| Driver | In the simulator |
+|---|---|
+| `neotime-display` (ST7789) | A model of the panel (`simulator/src/panel.rs`), below. |
+| `neotime-vibrator` | A pin that runs the motor while low, as P0.16 does; the window shows a red border while it runs. |
+| `neotime-heart-rate` (HRS3300) | A model of the sensor (`SimulatedHeartRateChip` in `simulator/src/hardware.rs`) on a wrist with a steady 72 beats a minute. |
+| `neotime-touch` (CST816S) | No chip model: the mouse stands in for the finger, and the simulator turns presses, moves and drags into taps, long presses, drags and swipes itself. |
+| `neotime-button` | No pin model: Space presses the side button. |
+| `neotime-accelerometer` (BMA421 or BMA425) | None yet: steps and motion come from the stand-in system's fixed values. |
+| `neotime-external-flash` (XT25F32B) | None: `--files FOLDER` stands in for the flash store above it. |
+| `neotime-bluetooth` | None: there is no radio. Its own tests run the link layer and TrouBLE against a simulated central instead; see [bluetooth.md](bluetooth.md#tests). |
+| `neotime-status-screen` | Not run in the window, but its tests draw the bootloader's status page through the panel model's SPI wires. |
+| `neotime-battery-reading` | None: only the bootloader, its updater and the reloader use it, and none of them runs here. PineTimeEmulator's battery and SAADC stand in for it in the emulator suites. |
+
+- **The screen** keeps the ST7789's 240x320 memory and follows the commands the driver sends, as
+  the datasheet describes them: the address window, memory writes, the scroll area and scroll
+  start, sleep, idle mode and colour inversion. In idle mode it shows each pixel in the nearest of
+  the 8 colours the panel then shows, so low-power screens can be checked here. Each frame, the
+  window shows the 240 rows the panel would show. The PineTime's glass inverts colours, so the model
+  does too, and a driver that forgot to turn inversion on would show wrong colours here as it would
+  on the watch.
+- **The motor's** vibrator driver runs on its own thread, so a pattern waits without freezing the
+  window.
+- **The heart rate sensor's** pulse is shaped like the emulator's. The heart rate driver and its
+  `Monitor` run on their own thread (`simulator/src/heart_rate.rs`), 24 samples a second while an
+  app has started the sensor, and each reading reaches the app as on the watch, so the Heart app
+  settles and then shows 72. The background interval and the beacon's flashing are not simulated;
+  the effects are printed.
 - **Delays** sleep the thread.
 
 An app runs through the display driver over the panel model, so its scrolled lists move with the
@@ -143,8 +157,6 @@ That builds the InfiniTime version InfiniSim pins, not the `InfiniTime/` checkou
 ## Limits
 
 - Nothing runs on the nRF52832: timing, RAM use and flash use on the watch are not simulated.
-- There is no Bluetooth, touch controller, accelerometer or battery yet. Each
-  arrives as a simulated part when its driver lands.
-- `neotime-battery-reading` has no simulated part: only the bootloader, its updater and the
-  reloader use it, and none of them runs in the simulator. PineTimeEmulator's battery and SAADC
-  stand in for it in the emulator suites.
+- There is no Bluetooth, touch controller, accelerometer, battery or external flash model, so
+  their drivers' own code does not run here; the table above says what stands in for each.
+- For the whole firmware on a model of the chip, use the emulator suites in [testing.md](testing.md).

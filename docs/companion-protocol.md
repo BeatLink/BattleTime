@@ -1,8 +1,41 @@
 # Companion protocol
 
 How a phone or computer talks to a NeoTime watch over Bluetooth Low Energy. The NeoTime Companion
-app mirrors this page in its `src/protocol`; this page is the single source for both. Each part says
-whether the watch serves it yet.
+app mirrors this page in its `src/protocol`, and its Rust core in `core/src/protocol`; this page is
+the single source for all of them. Each part says whether the watch serves it yet.
+
+## At a glance
+
+Every build of the firmware, the recovery firmware included, serves the same GATT table, in this
+order. A new service goes at the end, so the others keep their handles.
+
+| Service | UUID | Characteristics | For |
+|---|---|---|---|
+| GAP | `0x1800` | Device Name `0x2A00`, Appearance `0x2A01` | The name (`NeoTime`, or `InfiniTime`) and a smartwatch appearance, 0x00C2 |
+| Legacy DFU | `00001530-1212-efde-1523-785feabcd123` | Control point `…1531` (write, notify), packet `…1532` (write without response), version `…1534` (read) | [Firmware updates](updates.md) |
+| Current Time | `0x1805` | `0x2A2B` (read, write), `0x2A0F` (read, write) | [Time and time zone](#time-and-time-zone) |
+| NeoTime | `6e540001-0000-4000-8000-4e656f54696d` | Diagnostics `6e540002-…` (read, write), packages `6e540003-…` (write, notify) | [The NeoTime service](#the-neotime-service) |
+| Nordic UART | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` | Receive `6e400002-…` (write, with or without response), transmit `6e400003-…` (notify) | [The message channel](#the-message-channel) |
+| Battery | `0x180F` | Battery Level `0x2A19` (read, notify) | [Standard services](#standard-services) |
+| File transfer | `0xFEBB` | Version `adaf0100-4669-6c65-5472-616e73666572` (read), transfer `adaf0200-4669-6c65-5472-616e73666572` (write, notify) | [File transfer](#file-transfer) |
+| Device Information | `0x180A` | `0x2A29`, `0x2A24`, `0x2A25`, `0x2A26`, `0x2A27`, `0x2A28` (read) | [Standard services](#standard-services) |
+| Alert Notification | `0x1811` | New Alert `0x2A46` (write) | [Standard services](#standard-services) |
+| Heart Rate | `0x180D` | Heart Rate Measurement `0x2A37` (read, notify) | [Standard services](#standard-services) |
+
+The watch is also a client of two of the phone's own services, Current Time and Alert
+Notification; see [The phone's services the watch uses](#the-phones-services-the-watch-uses).
+
+InfiniTime's Music, Navigation, Simple Weather, Motion and Immediate Alert services are not served.
+The music, navigation, weather and find features reach the watch through the Bangle.js lines on the
+[message channel](#calls-music-weather-and-the-rest-served) instead.
+
+| Message family | Where |
+|---|---|
+| Settings, notifications, calls, music, weather, navigation, find, vibrate, status, slots, app state | JSON lines on the Nordic UART service, from [The message channel](#the-message-channel) on |
+| Reading, writing, listing, moving and deleting files | the file transfer service, [File transfer](#file-transfer) |
+| Files the companion writes for apps, and records it reads back | [Files the companion writes](#files-the-companion-writes) and [Records the companion reads](#records-the-companion-reads) |
+| Installing, listing, enabling and running apps | JSON lines on the packages characteristic, [Packages](#packages-served) |
+| Counters and the last crash | the diagnostics characteristic, [Diagnostics](#diagnostics-served) |
 
 ## Finding the watch
 
@@ -13,39 +46,41 @@ whether the watch serves it yet.
   [bluetooth.md](bluetooth.md#advertising). Its GAP appearance is 0x00C2, a smartwatch.
 - With the `gadgetbridge_name` setting on, the watch advertises and gives its GAP name as
   `InfiniTime` instead, which Gadgetbridge's PineTime/InfiniTime coordinator matches, so Gadgetbridge
-  offers its InfiniTime support: notifications, calls, music, weather, the time, the heart rate,
-  firmware updates and files through the standard and InfiniTime services this page lists. Another
-  change is adding InfiniTime's Music, Navigation, Simple Weather, Motion and Immediate Alert
-  services, which Gadgetbridge uses once it treats the watch as InfiniTime; until they land,
-  Gadgetbridge's music, navigation, weather and find features reach the watch only through the
-  companion app's Bangle.js lines below.
+  offers its InfiniTime support: notifications, calls, the time, the heart rate, the battery,
+  firmware updates and files through the services above. Its music, navigation, weather and find
+  features need InfiniTime's own services, which the watch does not serve yet.
 - After connecting, a NeoTime watch is recognised by the NeoTime service
-  `6e540001-0000-4000-8000-4e656f54696d`, which every build serves, recovery included.
-- A client should check which of the services below are present and offer only the features they
-  support, since older firmware serves fewer.
+  `6e540001-0000-4000-8000-4e656f54696d`.
+- A client should check which services are present and offer only the features they support, since
+  older firmware serves fewer.
+- The first GATT read or write from a phone confirms a firmware that is on trial after an update, as
+  does the clock being set from the phone's own Current Time service; see
+  [updates.md](updates.md#confirming-or-rolling-back).
 
 ## Standard services
 
 | Service | UUID | Characteristic | Use | Served |
 |---|---|---|---|---|
-| Legacy DFU | `00001530-1212-efde-1523-785feabcd123` | as Nordic's legacy DFU | Firmware updates; see [updates.md](updates.md). | Yes |
 | Current Time | `0x1805` | `0x2A2B`, read and write | Writing the 10-byte Current Time value sets the clock to that local time, read in the zone the watch already has; reading it gives the watch's local time, with the day of the week and 256ths of a second. A write that is not a real date and time is ignored. See [Time and time zone](#time-and-time-zone). | Yes |
 | | | `0x2A0F`, read and write | Local Time Information: the time zone and daylight saving offset, in quarter hours. Writing it changes the zone and keeps the local time; reading it gives the zone the watch is in, or 0 and 0 until one is written. A value outside the field's range is ignored. Saved, so it survives a restart. | Yes |
 | Battery | `0x180F` | `0x2A19`, read and notify | The charge, 0 to 100, notified when it changes. | Yes |
 | Heart Rate | `0x180D` | `0x2A37` Heart Rate Measurement, read and notify | Two bytes, as InfiniTime sends: flags `0` (the rate is one byte, no other fields), then the latest reading in beats per minute, held at 255, or 0 before the first. Notified at each new reading while subscribed. Subscribing does not start the sensor; readings come from an app measuring or the `heart_rate_interval` setting. | Yes |
+| Device Information | `0x180A` | `0x2A29`, `0x2A24`, `0x2A25`, `0x2A26`, `0x2A27`, `0x2A28`, read | The same six strings InfiniTime serves: manufacturer `PINE64`, model `PineTime`, the serial number as the chip's 64-bit factory id in 16 upper-case hex digits, the firmware version as the status page shows it (such as `0.1.0+1b19aed`), hardware revision `1.0.0` and software revision `NeoTime`. | Yes |
 | Alert Notification | `0x1811` | `0x2A46` New Alert, write | Shows a notification, read as InfiniTime reads it: a category byte, two more header bytes, then a title, a zero byte and the body, or only a body when there is no zero byte; at most 125 bytes. The category names the notification's app (`Email`, `Call`, `SMS`, `Messages` and the rest of the standard's list; `Alert` for any other). A write in category 3, an incoming call, opens the call screen and rings as a `call` `incoming` line does, naming the caller from the title, or from the body when there is no title; it is not kept as a notification. A write with no text is ignored. Each other one is kept as a new notification, as in [Notifications](#notifications-served). | Yes |
-| File transfer | `0xFEBB` | as in [File transfer](#file-transfer) | Reading, writing, listing, moving and deleting files. | Yes |
+
+The legacy DFU service is in [updates.md](updates.md#the-protocol-nordic-legacy-dfu), and the file
+transfer service in [File transfer](#file-transfer).
 
 ### The phone's services the watch uses
 
 The watch also reads two of the phone's own services, as a GATT client, as InfiniTime does. Three
 seconds after a phone connects it looks for them once; a phone that serves neither is left alone,
 and one that does needs no app for them. [bluetooth.md](bluetooth.md#the-phones-own-services) says
-how the watch asks and how long it waits.
+how the watch asks and how long it waits. The recovery firmware does not look.
 
 | Service | UUID | Characteristic | What the watch does |
 |---|---|---|---|
-| Current Time | `0x1805` | `0x2A2B`, read | Reads it and sets the clock from it as from a write to its own 0x2A2B; see [Time and time zone](#time-and-time-zone). |
+| Current Time | `0x1805` | `0x2A2B`, read | Reads it and sets the clock from it as from a write to its own 0x2A2B; see [Time and time zone](#time-and-time-zone). Setting the clock this way confirms a firmware on trial. |
 | | | `0x2A0F`, read | Reads it, when the phone has it and its Current Time was a real date and time, and takes the zone as from a write to its own 0x2A0F. |
 | Alert Notification | `0x1811` | `0x2A46` New Alert, notify | Turns its notifications on. Each one is read as the standard lays it out: a category byte, a count byte, then the text, which is a title, a zero byte and the body, or only a body. It is then shown as a New Alert written to the watch is, a call in category 3 included. |
 | | | `0x2A44` control point, write | Writes `02 FF`, turning on new alerts in every category, when the phone has it. |
@@ -55,8 +90,9 @@ how the watch asks and how long it waits.
 The watch counts UTC and keeps a time zone and daylight saving offset beside it. Local time is UTC
 plus both offsets, and an unknown time zone (`-128`) or daylight saving (`255`) counts as 0. Apps
 see UTC as `now` and the sum as `utc_offset`; faces, alarms, chimes and the midnight step reset use
-local time. The zone is saved in `/settings/time_zone` as the two bytes of 0x2A0F; the time itself
-starts again from the build time after a restart, so a phone should set it on every connection.
+local time. The zone is saved in `/settings/time_zone` as the two bytes of 0x2A0F. The clock itself
+carries on across a soft or watchdog reset, but after a power cut, or on the first start of a new
+build, it starts from the firmware's build time, so a phone should set it on every connection.
 
 The ways in treat the zone differently, as their senders expect:
 
@@ -75,7 +111,8 @@ The ways in treat the zone differently, as their senders expect:
   `setTime(<seconds since 1970, UTC>)` sets UTC, and `E.setTimeZone(<hours>)` sets the whole offset,
   rounded to a quarter hour, as the time zone with no daylight saving, keeping UTC. A call whose
   value is malformed or out of range is skipped. The watch sends no reply. For example
-  `\x10setTime(1767603600);E.setTimeZone(1.0);...` sets 10:00 local time at UTC+1.
+  `\x10setTime(1767603600);E.setTimeZone(1.0);...` sets 10:00 local time at UTC+1. The recovery
+  firmware reads these lines too.
 
 The wearer can also set the clock by hand in the Settings app. That takes the local time chosen, at
 00 seconds, in the zone the watch already has, as a 0x2A2B write does, and leaves the zone alone.
@@ -95,9 +132,23 @@ Messages travel over the Nordic UART service, as Gadgetbridge's Bangle.js driver
 - Every message is an object whose `t` names it.
 - Lines are ASCII: write any other character as `\uXXXX`.
 - A line may take several writes, and a reply several notifications of up to 20 bytes each; the
-  reader joins them until the newline. The watch reads lines of at most 640 bytes and drops a longer one; its own lines run to 704, for the full settings reply.
+  reader joins them until the newline. The watch reads lines of at most 640 bytes and drops a
+  longer one; its own lines run to 704, for the full settings reply.
 - The watch ignores keys it does not know, and messages it does not handle yet. It answers a line
   it cannot read with `{"t":"error","msg":"..."}`.
+- The recovery firmware answers only `status`, refuses `slots`, and reads the time lines above; it
+  passes over every other message.
+
+| `t` | From | Section |
+|---|---|---|
+| `settings` | phone, and the watch's reply | [Settings](#settings-served) |
+| `notify`, `notify-` | phone | [Notifications](#notifications-served) |
+| `call`, `musicinfo`, `musicstate`, `weather`, `nav`, `find`, `vibrate`, `status` | phone | [Calls, music, weather and the rest](#calls-music-weather-and-the-rest-served) |
+| `music`, `call`, `findPhone`, `request`, `app` | watch | [Lines the watch sends](#lines-the-watch-sends) |
+| `slots` | phone, and the watch's reply | [Slots](#slots-served) |
+| `state` | phone | [App state](#app-state-served) |
+| `error` | watch | the answer to a line it cannot read |
+| `alarm`, `steps`, `http`, `info` | | [Not served yet](#other-messages-not-served-yet) |
 
 ### Settings (served)
 
@@ -181,7 +232,7 @@ whole character.
 | `musicinfo` | `artist`, `track`, `dur` (seconds) | Fills `current_music`'s artist (32 bytes), track (64 bytes) and length, and runs the `music` subscriptions. `album` is ignored. |
 | `musicstate` | `state`, `position` (seconds) | `play` is playing and anything else is not; `position`, when given, is how far into the track. Runs the `music` subscriptions. |
 | `weather` | `temp`, `hi`, `lo` (kelvin), `code`, `loc` | Fills `current_weather`: the temperatures in Celsius, the sky from the OpenWeatherMap `code`, the place (32 bytes) and `received_at`, the watch's time when it came. Runs the `weather` subscriptions. The watch has no sunrise, sunset or coming days from it. `hum`, `txt`, `wind` and the rest are ignored. |
-| `nav` | `instr`, `distance`, `action` | Fills `current_navigation`, as Gadgetbridge's newer Bangle.js driver sends it, and runs the `navigation` subscriptions. `instr` is the instruction, up to 64 bytes. `distance` is text as the phone shows it, such as `"300 m"`, `"1.2 km"`, `"0,5 mi"`, `"800 ft"` or `"100 yd"`, read to one decimal place in whole metres; with no unit it is metres, and another unit leaves the distance unknown. `action` is the turn: `continue` is `straight`; `left`, `right`, `left_slight`, `right_slight`, `left_sharp` and `right_sharp` the turns of those names; `keep_left` and `keep_right` the slight turns; `uturn_left` and `uturn_right` `u_turn`; the four `roundabout_` actions `roundabout`; `finish` `arrive`; and `offroute` or another leaves the turn unknown. `progress_percent` reads 0, since Gadgetbridge sends none, and `eta` is ignored. A `nav` with none of the three ends the navigation, and `current_navigation` goes back to its values before any came. |
+| `nav` | `instr`, `distance`, `action` | Fills `current_navigation`, as Gadgetbridge's newer Bangle.js driver sends it, and runs the `navigation` subscriptions; see [Navigation](#navigation). A `nav` with none of the three ends the navigation. |
 | `find` | `n` | `true` rings the watch, even in do not disturb, for up to a minute or until the wearer touches the watch or presses the button; `false` stops it. |
 | `vibrate` | `n` | Buzzes `n` times, 1 to 5, unless do not disturb is on. |
 | `status` | | Replies `{"t":"status","bat":87,"mv":3950,"steps":4321,"charging":false}`: the charge in percent, the battery's voltage in millivolts, smoothed as `battery_millivolts` is, today's steps and whether it is charging. |
@@ -189,22 +240,42 @@ whole character.
 The watch keeps the music, weather and navigation until it restarts, and the latest of each message
 until the shell takes it, so a burst of messages leaves only the newest of each kind.
 
-Watch to phone, sent as apps ask: `music` with `n` (`play`, `pause`, `next`, `previous`,
-`volumeup`, `volumedown`) for `music_control`; `call` with `n` (`ACCEPT`, `REJECT`, `IGNORE`) for
-`call_control`'s `answer`, `reject` and `mute`, which also stop the watch ringing (the phone
-silences its ringer for `IGNORE` and leaves the call ringing); `findPhone` with `n`, `true` or `false`, for
-`find_phone`; `request` with `n`, `music` or `nav`, for `request_music_state` and
-`request_navigation_state`; and `app` for an app's `send_to_phone(channel, data)`:
-`{"t":"app","ch":"<channel>","d":{"<key>":<number>,...}}`. The channel and keys are 1 to 32 letters,
-digits, `_` or `-`, written out in the app; `d` holds up to 4 whole numbers, in the order the app
-wrote them, or is `{}`. For example the remote app's third button sends
-`{"t":"app","ch":"remote","d":{"button":2}}`. The phone sends no reply to these, but `request`.
+#### Navigation
+
+- `instr` is the instruction, up to 64 bytes.
+- `distance` is text as the phone shows it, such as `"300 m"`, `"1.2 km"`, `"0,5 mi"`, `"800 ft"`
+  or `"100 yd"`, read to one decimal place in whole metres. With no unit it is metres, and another
+  unit leaves the distance unknown.
+- `action` is the turn: `continue` is `straight`; `left`, `right`, `left_slight`, `right_slight`,
+  `left_sharp` and `right_sharp` the turns of those names; `keep_left` and `keep_right` the slight
+  turns; `uturn_left` and `uturn_right` `u_turn`; the four `roundabout_` actions `roundabout`;
+  `finish` `arrive`; and `offroute` or another leaves the turn unknown.
+- `progress_percent` reads 0, since Gadgetbridge sends none, and `eta` is ignored.
+- A `nav` with none of the three ends the navigation, and `current_navigation` goes back to its
+  values before any came.
+
+#### Lines the watch sends
+
+Watch to phone, sent as apps ask:
+
+| Line | Sent for |
+|---|---|
+| `{"t":"music","n":...}` with `play`, `pause`, `next`, `previous`, `volumeup` or `volumedown` | `music_control` |
+| `{"t":"call","n":...}` with `ACCEPT`, `REJECT` or `IGNORE` | `call_control`'s `answer`, `reject` and `mute`, which also stop the watch ringing; the phone silences its ringer for `IGNORE` and leaves the call ringing |
+| `{"t":"findPhone","n":true}` or `false` | `find_phone` |
+| `{"t":"request","n":"music"}` or `"nav"` | `request_music_state` and `request_navigation_state` |
+| `{"t":"app","ch":"<channel>","d":{"<key>":<number>,...}}` | an app's `send_to_phone(channel, data)` |
+
+In an `app` line the channel and keys are 1 to 32 letters, digits, `_` or `-`, written out in the
+app; `d` holds up to 4 whole numbers, in the order the app wrote them, or is `{}`. For example the
+remote app's third button sends `{"t":"app","ch":"remote","d":{"button":2}}`. The phone sends no
+reply to these, but `request`.
 
 Bangle.js has no message asking the phone again, and Gadgetbridge logs `request` as one it does not
 know and sends nothing; it sends the music and navigation whenever they change. The companion app
-answers `{"t":"request","n":"music"}` with `musicinfo` and `musicstate` for what the phone plays, when
-it forwards music and knows of a track, and `{"t":"request","n":"nav"}` with `{"t":"nav"}`, since it
-follows no navigation, which tells the watch there is none.
+answers `{"t":"request","n":"music"}` with `musicinfo` and `musicstate` for what the phone plays,
+when it forwards music and knows of a track, and `{"t":"request","n":"nav"}` with `{"t":"nav"}`,
+since it follows no navigation, which tells the watch there is none.
 
 ### Slots (served)
 
@@ -215,7 +286,7 @@ reloaders carry it in wasp-os's app slot and it has no room to spare.
 
 | Line | Answer |
 |---|---|
-| `{"t":"slots"}` | `{"t":"slots","update":[0,401408],"recovery":[413696,397312],"area":1048576,"firmware":397312,"image":171428,"restart":false}` |
+| `{"t":"slots"}` | `{"t":"slots","update":[0,495616],"recovery":[811008,237568],"area":1048576,"firmware":491520,"image":156992,"restart":false}` |
 | `{"t":"slots","recovery":[start,size]}`, with `update` as well or instead | The same report naming the new slots, with `"restart":true`; the watch then restarts |
 
 Each slot is `[start, size]` in bytes; one left out stays where it is. `area` is where the file
@@ -272,9 +343,9 @@ Phone to watch:
 
 Watch to phone: `http` with `id`, `url`, `method`, `body`; `info` with `msg`.
 
-The companion does not use `alarm` or `steps`: it reads the step logs and the alarm app's state
+The companion does not need `alarm` or `steps`: it reads the step logs and the alarm app's state
 with the file transfer below, or from its [sync](sync.md), and changes alarms through
-[app state](#app-state-served).
+[app state](#app-state-served); see [Records the companion reads](#records-the-companion-reads).
 
 ## File transfer
 
@@ -290,8 +361,9 @@ so ITD, Gadgetbridge and InfiniTime's resource loader work with NeoTime unchange
 
 Numbers are little-endian, paths are absolute (`/apps/stopwatch/app.ntapp`), and every command fits
 in one write, so the phone must exchange a larger MTU first. The watch's packets allow an MTU of
-up to 124. An answer's second byte is its status: `1` OK, `2` error, `3` no such file, `4` protocol
-error (a command cut short, or data with no write in progress).
+up to 124, so a command is at most 121 bytes. An answer's second byte is its status: `1` OK, `2`
+error, `3` no such file, `4` protocol error (a command cut short, or data with no write in
+progress).
 
 | Command | Layout | Answer |
 |---|---|---|
@@ -314,6 +386,8 @@ error (a command cut short, or data with no write in progress).
 - **Folders** exist only through the files in them, so making a folder always succeeds, and a
   folder listed after it is made but before a file is put in it reports no file. **Deleting** or
   **moving** a folder acts on every file in it; a move copies, then deletes.
+- **Updates off.** While the `updates` setting is off, a write, delete, move or new folder under
+  `/apps` or `/temp` is refused with status `2`.
 - The watch keeps no file times, so every time it reports is 0.
 - **Differences from InfiniTime.** InfiniTime never cuts a file back when it is written again,
   answers a data piece with that piece's own offset, and reports some failures as negative littlefs
@@ -322,24 +396,38 @@ error (a command cut short, or data with no write in progress).
 
 Each app keeps its folder under `/apps/<id>/`: `app.ntapp` is the compiled image, as
 `neotime-compiler` writes it, and `state` is its saved state. A temporary app's image and data go
-in `/temp/<id>/`, as [Temporary apps](#temporary-apps-served) describes.
+in `/temp/<id>/`, as [Temporary apps](#temporary-apps-served) describes. Every path the watch keeps
+is listed in [storage.md](storage.md).
+
+## Files the companion writes
+
+Some apps show what the companion puts in a file of their own. The companion writes each file
+whole with the file transfer above; the watch only reads them.
+
+| File | Read by | Section |
+|---|---|---|
+| `/notes/note.txt`, `/notes/font` | the notes app | [Notes](#notes) |
+| `/qr/list`, `/qr/<slot>` | the `qr-code` app | [QR code](#qr-code) |
+| `/settings/launcher` | the launcher | [Launcher](#launcher) |
+| `/settings/quick_apps` | the watch face's swipes | [Quick apps](#quick-apps) |
+| `/remote/buttons` | the remote app | [Remote](#remote) |
+| `/apps/<id>/state` | the app, after a `state` line | [App state](#app-state-served) |
 
 ### Notes
 
-The notes app shows `/notes/note.txt`, read only. The companion app writes it whole with the
-file transfer above whenever the note, typed there or read from a chosen file or URL, is new or has changed, and writes `/notes/font` with
-the name of the font to show it in: `small`, `normal`, `medium` or `large`, without quotes. Any other
-font file, or none, leaves the app's own font. The text is UTF-8; the watch shows tabs and carriage
-returns as spaces and other bytes as `?`, and draws only the characters its fonts have. Deleting
-`/notes/note.txt` brings back the app's hint to write or choose a note.
+The notes app shows `/notes/note.txt`, read only. The companion app writes it whenever the note,
+typed there or read from a chosen file or URL, is new or has changed, and writes `/notes/font` with
+the name of the font to show it in: `small`, `normal`, `medium` or `large`, without quotes. Any
+other font file, or none, leaves the app's own font. The text is UTF-8; the watch shows tabs and
+carriage returns as spaces and other bytes as `?`, and draws only the characters its fonts have.
+Deleting `/notes/note.txt` brings back the app's hint to write or choose a note.
 
 ### QR code
 
 The `qr-code` app lists the codes in `/qr/list` and shows the one tapped from `/qr/<slot>`, reading
-only that file. The companion app makes each code and writes the files whole with the file transfer
-above: adding a code writes its file and then the list, and renaming, moving or removing one
-rewrites only the list (removing deletes the code's file afterwards), so the list never names a
-missing file.
+only that file. The companion app makes each code: adding a code writes its file and then the list,
+and renaming, moving or removing one rewrites only the list (removing deletes the code's file
+afterwards), so the list never names a missing file.
 
 `/qr/list` holds up to eight codes in the order the watch lists them:
 
@@ -368,10 +456,10 @@ the 240 pixel screen and may not scan, so the companion warns but still sends it
 ### Launcher
 
 The launcher groups the apps as the companion app sets up, in `/settings/launcher`, which the
-companion writes whole with the file transfer above and then follows with `{"c":"launcher"}` on the
-packages characteristic, so the open launcher shows the change at once. The file says where every
-app goes; the companion places each app in the group its image declares (the last field of the
-`apps` answer) until the wearer moves it, and writes the file again after installing an app.
+companion writes and then follows with `{"c":"launcher"}` on the packages characteristic, so the
+open launcher shows the change at once. The file says where every app goes; the companion places
+each app in the group its image declares (the last field of the `apps` answer) until the wearer
+moves it, and writes the file again after installing an app.
 
 | Bytes | Holds |
 |---|---|
@@ -383,15 +471,22 @@ app goes; the companion places each app in the group its image declares (the las
 | then | The companion's sort: 0 by name, 1 the wearer's order. The watch ignores it; the companion writes the groups and apps already in that order, and reads a file without it as by name. |
 
 Apps the file does not name, such as one installed another way, go in a group of their own at the
-end, named Other, in order of their names. Ids of apps that are not installed are skipped, and a group with no installed
-app is not shown. A group cut short ends the groups there. With no file, or one of another
-version, the launcher shows one plain list, in order of the apps' names.
+end, named Other, in order of their names. Ids of apps that are not installed are skipped, and a
+group with no installed app is not shown. A group cut short ends the groups there. With no file, or
+one of another version, the launcher shows one plain list, in order of the apps' names.
+
+### Quick apps
+
+Swiping left or right on the watch face steps round a ring of quick apps, read from
+`/settings/quick_apps` at each step. The file is UTF-8 text with one app id a line, in ring order;
+the watch ignores blank lines, spaces and carriage returns, and skips ids that are not installed.
+Without the file the ring is `steps`, `stopwatch`, `heart`, `weather` and `music`.
 
 ### Remote
 
 The remote app shows the buttons the companion app chose, and the companion app runs each one's
-action when the watch says it was tapped. The companion app writes `/remote/buttons` whole with
-the file transfer above whenever the buttons change:
+action when the watch says it was tapped. The companion app writes `/remote/buttons` whenever the
+buttons change:
 
 | Byte | Holds |
 |---|---|
@@ -404,21 +499,74 @@ version or no buttons show a hint to choose buttons in the companion app; a coun
 and an icon beyond the library shows none. A tap sends `{"t":"app","ch":"remote","d":{"button":i}}`,
 `i` being the button's place in the file counting from 0.
 
+## Records the companion reads
+
+The watch keeps its history in files, which the companion reads with the file transfer above, or
+copies on each [sync](sync.md) pass. Each log has a file for each day from local midnight, holding
+one value for each six-minute slot, 240 slots a day. A slot is written when it ends, so a file stops
+after the day's last written slot. The watch keeps 90 days of each and deletes older days when a new
+day starts.
+
+| Path | Holds |
+|---|---|
+| `/steps/<year>/<month>-<day>` | The steps in each slot, a little-endian `u16` each, in wasp-os's step logger format; a slot past the file's end had none. |
+| `/steps/trip` | The trip count, a little-endian `u32`. |
+| `/logs/heart/<year>/<month>-<day>` | The average beats per minute measured in each slot, one byte each, 0 for none. |
+| `/logs/battery/<year>/<month>-<day>` | The charge in percent at each slot's end, one byte each, with the top bit set while charging, or `0xff` for a slot the watch was off. |
+| `/apps/<id>/state` | An app's saved values, such as the alarm app's alarms or the sports app's last five sessions, in the format [sync.md](sync.md#app-state) decodes. |
+| `/apps/<id>/disabled` | Present while the app is turned off. |
+
+Month and day have two digits, as in `/steps/2026/01-05`. The companion changes an app's state by
+writing its whole `state` file and then sending a [`state` line](#app-state-served).
+
 ## The NeoTime service
 
 Service `6e540001-0000-4000-8000-4e656f54696d`, with its characteristics on the same base:
 
 | Characteristic | UUID | Use | Served |
 |---|---|---|---|
-| Diagnostics | `6e540002-…` | Read: eight little-endian `u32` counters, then fourteen words on the last restart: the `RESETREAS` bits, the kind of crash (0 none, 1 panic, 2 HardFault, 3 out of memory), eight detail words and four words holding the open app's id, zero-padded, then more counters: microseconds spent drawing apps, microseconds spent sending to the display, sectors the flash store erased, store calls the shell made while another task held the store, the heart rate sensor's state and reading, bytes the external flash's DMA reads moved, times a flash read paused for the display, and app file reads served from a part read ahead; see [architecture.md](architecture.md). Write `01` once a debug report holding the crash is saved: the watch forgets the crash and leaves its crash screen for the face. | Yes |
-| Packages | `6e540003-…` | Write and notify: one JSON command per line, as in [Packages](#packages-served). | Yes |
+| Diagnostics | `6e540002-0000-4000-8000-4e656f54696d` | Read: counters and the last restart, as in [Diagnostics](#diagnostics-served). Write `01` once a debug report holding the crash is saved. | Yes |
+| Packages | `6e540003-0000-4000-8000-4e656f54696d` | Write and notify: one JSON command per line, as in [Packages](#packages-served). | Yes |
+
+### Diagnostics (served)
+
+A read gives 33 little-endian `u32` words:
+
+| Words | Hold |
+|---|---|
+| 0 | Times round the shell's loop |
+| 1 | What woke the shell last: 1 touch, 2 button, 3 timer, 4 system values, 5 settings, 6 apps changed, 7 app event, 8 status page, 9 temporary app |
+| 2 | Whether the screen is lit, 1 or 0 |
+| 3 | The touch panel: 1 started, 2 failed to start |
+| 4 to 6 | Reports read from the touch panel, touches sent to the shell, button gestures sent to the shell |
+| 7 | The accelerometer: 1 started, 2 failed to start, 3 failed to read, 4 waiting for a shared library with its configuration |
+| 8 | The last restart's `RESETREAS` bits |
+| 9 | The kind of crash that ended the run before: 0 none, 1 panic, 2 HardFault, 3 out of memory |
+| 10 to 17 | The crash's detail words, such as return addresses or the fault registers |
+| 18 to 21 | The id of the app that was open, zero-padded |
+| 22 | Microseconds spent drawing apps |
+| 23 | Microseconds spent sending to the display |
+| 24 | Sectors the flash store erased |
+| 25 | Store calls the shell made while another task held the store |
+| 26, 27 | The heart rate sensor's state (1 started, 2 failed to start, 3 failed to read) and its latest reading |
+| 28 | Bytes the external flash's DMA reads moved |
+| 29 | Times a flash read paused to give the bus to the display |
+| 30 | App file reads served from a part read ahead with `prefetch_file` |
+| 31, 32 | Instruction fetches the internal flash's cache answered, and those it missed |
+
+The microsecond and byte counters count round past the largest `u32`; the cache counters stop
+there. New counters go at the end, so the words before them keep their places.
+
+Writing `01` once a debug report holding the crash is saved makes the watch forget the crash and
+leave its crash screen for the face.
 
 ### Packages (served)
 
 An app or face is sent as a file first, to `/apps/<id>/app.ntapp`, then installed with a command on
-the packages characteristic. Each command is a JSON line written to it, and each answer a JSON line
-notified on it, in pieces of up to 20 bytes; a failure answers with the command and `"err":"..."`. The
-recovery firmware has no apps, so it refuses every command with an error.
+the packages characteristic. Each command is a JSON line written to it, of at most 256 bytes, and
+each answer a JSON line notified on it, in pieces of up to 20 bytes; a failure answers with the
+command and `"err":"..."`. The recovery firmware has no apps, so it refuses every command with an
+error.
 
 | Command | Answer |
 |---|---|
@@ -445,11 +593,27 @@ when memory is the reason. The numbers are the same as the `refusal` apps read i
 
 [memory-map.md](memory-map.md#how-much-heap-an-app-needs) explains how the need is worked out.
 
+An id is 1 to 32 letters, digits, `-` and `_`. The shared library is a single image that
+`neotime-compiler library -o shared.ntlib` writes, and `tools/build_images.sh` puts inside the
+firmware image, so it arrives with each firmware update rather than as a package.
+
 ### Temporary apps (served)
 
 A temporary app is opened on the watch without being installed: a question to answer, a call
 screen, a game's score. It never joins the launcher, the Software app or the `apps` answer, and
 never saves state.
+
+```mermaid
+sequenceDiagram
+    participant Phone
+    participant Watch
+    Phone->>Watch: file transfer: write /temp/<id>/app.ntapp and any data files
+    Phone->>Watch: packages: {"c":"run","id":"<id>"}
+    Watch-->>Phone: {"c":"run","ok":1,"need":...,"room":...} once it shows
+    Watch-->>Phone: UART: {"t":"app","ch":...,"d":{...}} as the app sends
+    Phone->>Watch: packages: {"c":"stop"}, or the link drops
+    Watch-->>Phone: {"c":"stop","ok":1}
+```
 
 1. The phone writes the image to `/temp/<id>/app.ntapp` with the file transfer above, `<id>` being
    the id inside the image, and any data files the app reads beside it, such as
@@ -482,19 +646,19 @@ The companion's `neotime apps run <image> [--data <name>=<file>] [--text <name>=
 runs the `prompt` app with the question as `text` and prints the answer: the app sends
 `{"t":"app","ch":"prompt","d":{"answer":1}}` for Yes and `0` for No, then goes back.
 
-An id is 1 to 32 letters, digits, `-` and `_`. Each app keeps its folder under `/apps/<id>/`:
-`app.ntapp` is the compiled image, as `neotime-compiler` writes it, and `state` is its saved state.
-The shared library is a single image that `neotime-compiler library -o shared.ntlib` writes, and
-`tools/build_images.sh` puts inside the firmware image.
-
 ## Where the code lives
 
-- `services/companion`: reads lines and messages and writes replies, with no Bluetooth in it, so
-  its tests run on a computer.
+- `services/companion`: reads lines and messages and writes replies, the advertising data, New
+  Alerts, the Heart Rate Measurement and the Device Information strings, with no Bluetooth in it,
+  so its tests run on a computer.
+- `services/blefs` and `services/dfu`: the file transfer and legacy DFU services, each a state
+  machine with its GATT service behind a `trouble` feature.
+- `services/phone_client`: the watch's requests to the phone's own services, with no I/O in it.
 - `services/packages`: installs, lists and removes apps, and finds the shared library inside the
   firmware image, with no Bluetooth in it.
-- `firmware/src/main.rs`: the GATT services, which hand lines to `services/companion` and send its
-  replies.
+- `services/slot_log` and `services/steps`: the day files of the heart rate, battery and step logs.
 - `services/settings`: each setting's limits and default, and the `/settings/system` file.
+- `firmware/src/main.rs`: the GATT server, which hands lines to `services/companion` and sends its
+  replies; `firmware/src/phone_services.rs` runs the phone client beside it.
 - `firmware/src/settings.rs` and `firmware/src/shell.rs`: apply settings and keep them on the
   external flash.

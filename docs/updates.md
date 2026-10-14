@@ -1,7 +1,7 @@
 # Firmware updates
 
 How a new firmware gets onto the watch, and how a watch gets onto NeoTime in the first place.
-Three pieces share the work:
+Four pieces share the work:
 
 | Piece | Where | Does |
 |---|---|---|
@@ -100,31 +100,68 @@ would an InfiniTime release.
 
 ## The firmware's part
 
-The first firmware (`firmware/`) does the little an update needs and not much more:
+Besides serving the DFU service on every connection, the firmware (`firmware/`) does what keeps an
+update safe:
 
 - takes over the bootloader's watchdog with the same settings and feeds it only while the side
   button is up, so holding the button for about five seconds always gets back to the bootloader;
-- advertises as "NeoTime" with the DFU service, and confirms itself to the bootloader once a phone
-  has exchanged data with it, so a firmware whose radio does not really work rolls back by itself;
-  advertising alone proves nothing, since the host is told it started whether or not anything
-  went out on air;
-- confirms itself at start instead when a rollback could not help: when the replaced firmware,
-  which embassy-boot keeps one page into the update slot (`Slots::previous_firmware`), has no sound header
-  at all, as after a migration, or when the running image is the recovery image, which must stay;
-- lets the wearer confirm or roll back a firmware still on trial from the System app's first page,
-  as InfiniTime's firmware validation screen does. Roll back restarts without confirming, so the
-  bootloader's ordinary revert puts the firmware before back. The first Bluetooth exchange still
-  confirms by itself: waiting for the wearer instead would roll back every update whose wearer
-  restarted before thinking of the screen, and a phone that can talk to the new firmware is the
-  proof that matters most, since a firmware that cannot take the next update is the one that
-  strands a watch. So the buttons mostly matter for an update sent from a phone that went away
-  at once, or one the wearer wants gone before any phone reconnects;
-- serves the DFU service on every connection, shows progress on the screen, and resets when the
-  protocol asks;
+- advertises the legacy DFU service as InfiniTime does ([bluetooth.md](bluetooth.md#advertising)),
+  so any DFU client finds it;
+- shows progress on the status page, and resets when the protocol asks;
+- refuses an update, and changes to `/apps` and `/temp` over the file service, while the `updates`
+  setting is off, or after a restart when it was on only until then;
 - mounts the file system, so that an update which breaks storage is noticed on the screen;
-- writes an alive marker into the last words of RAM, which an emulator checks.
+- writes an alive marker into the last words of RAM, which an emulator checks;
+- confirms a new firmware, or lets the wearer roll it back, as below.
 
-### The status page
+## Confirming or rolling back
+
+A firmware the bootloader has just swapped in runs on trial. Until it is confirmed, every reset
+swaps the firmware before it back, and no new update is accepted.
+
+```mermaid
+sequenceDiagram
+    participant Phone
+    participant Firmware as Running firmware
+    participant Bootloader
+    Phone->>Firmware: legacy DFU: START, INIT, image, VALIDATE
+    Firmware->>Firmware: write the update slot, check CRC-16, header and CRC-32
+    Phone->>Firmware: ACTIVATE_IMAGE_AND_RESET
+    Firmware->>Bootloader: mark a swap, reset
+    Bootloader->>Bootloader: swap the new firmware in, page by page
+    Bootloader->>Firmware: start the new firmware, on trial (amber page)
+    alt a phone exchanges GATT data, or the wearer taps Confirm
+        Firmware->>Firmware: confirm_running_firmware: "Update kept"
+    else reset first, or the wearer taps Roll back
+        Firmware->>Bootloader: reset without confirming
+        Bootloader->>Bootloader: revert: swap the previous firmware back
+        Bootloader->>Firmware: start the previous firmware (red "Rolled back" page)
+    end
+```
+
+- **A phone confirms it.** The first GATT read or write from a phone, or the clock being set from
+  the phone's own Current Time service, confirms the firmware, so a firmware whose radio does not
+  really work rolls back by itself. Advertising alone proves nothing, since the host is told it
+  started whether or not anything went out on air. The companion writes the time on every
+  connection, which is enough.
+- **The wearer can decide.** The System app's first page says whether the bootloader keeps the
+  running firmware, and while it is on trial offers Confirm and Roll back, as InfiniTime's firmware
+  validation screen does. Roll back restarts without confirming, so the bootloader's ordinary revert
+  puts the firmware before back. The first Bluetooth exchange still confirms by itself: waiting for
+  the wearer instead would roll back every update whose wearer restarted before thinking of the
+  screen, and a phone that can talk to the new firmware is the proof that matters most, since a
+  firmware that cannot take the next update is the one that strands a watch. So the buttons mostly
+  matter for an update sent from a phone that went away at once, or one the wearer wants gone before
+  any phone reconnects.
+- **Some firmware confirms itself at start,** when a rollback could not help: when the replaced
+  firmware, which embassy-boot keeps one page into the update slot (`Slots::previous_firmware`), has
+  no sound header at all, as after a migration, or when the running image is the recovery image,
+  which must stay.
+- **A rollback stays visible.** After a revert the boot state says so until the next update, and
+  the status page shows the red Rolled back mode. The bootloader's menu can also roll back or
+  install the recovery firmware by hand; see [bootloader.md](bootloader.md#the-menu-rollback-and-recovery).
+
+## The status page
 
 At start, and again while an update arrives, the firmware shows a status page. The firmware, the
 recovery firmware, the bootloader and the bootloader updater all lay it out through
@@ -166,19 +203,22 @@ away the page stays up but lets go (`shell::release_status`): the next touch or 
 screen timeout, puts the shell back. A successful update restarts into the bootloader's blue page,
 described in [bootloader.md](bootloader.md#the-status-screen).
 
+## The recovery firmware
+
 A recovery firmware installed by the button hold shows as recovery only until its next restart,
 because the note is not kept. A firmware built with `--profile recovery --features recovery` always does, and it is
 the image meant for the recovery slot. That build leaves out the shell, touch, the step counter,
 the apps and the phone's messages, keeping the status page, the file system, Bluetooth and DFU,
-answering only `status` and `slots` from the companion, and carries no shared library. Its profile
-builds for size (`opt-level = "z"`), so it is about 149 KB against the full firmware's 472 KB with
-its library. `tools/build_images.sh` writes it to `dist/recovery.bin`.
+answering only `status` and the time lines from the companion and refusing `slots`, and carries no
+shared library. It serves the same GATT table as the full firmware. Its profile builds for size
+(`opt-level = "z"`), so it is about 153 KB against the full firmware's 480 KB with its library
+([memory-map.md](memory-map.md)). `tools/build_images.sh` writes it to `dist/recovery.bin`.
 
-A panic halts rather than resets, so the watchdog brings the watch back to the bootloader instead of
-the firmware restarting in a loop. It is 105 KB of flash and 25 KB of static RAM, 16 KB of that heap. Its screen writes and flash
-writes are blocking, so the Bluetooth host waits while a flash sector erases; the link layer runs in
-an interrupt and keeps the connection up meanwhile. The async flash driver is there for when the
-display can share an async bus.
+## When the firmware crashes
+
+A panic or a fault is recorded in RAM a reset keeps, then halts rather than resets, so the watchdog
+brings the watch back to the bootloader instead of the firmware restarting in a loop. The next
+start shows the crash, and the companion reads it from the diagnostics.
 
 ## The reloader: getting onto NeoTime
 
@@ -203,7 +243,7 @@ The order comes from `neotime_boot::migration`, and its tests hold it to these r
    only lost its own files in the external flash.
 4. **Write the bootloader** over the first pages of internal flash, after checking the charger and
    the charge again, since staging takes minutes. From the first erase until the
-   last word is in place, nothing on the watch starts. The bootloader is about 13 KB, four pages:
+   last word is in place, nothing on the watch starts. The bootloader is about 18 KB, five pages:
    about half a second. Each copy is read back and compared, and retried up to three times.
 5. **Mark the swap** in `BOOT_STATE`, so the bootloader's first start installs the staged
    firmware. Even if this step is lost, the bootloader is whole and the button hold installs the
@@ -242,7 +282,7 @@ make the window zero: the old and the new bootloader want the same first page.
 
 The reloader and the bootloader updater (see [bootloader.md](bootloader.md#updating-the-bootloader))
 share one risk: from the first erase of the bootloader's pages until the last word is written and
-read back, nothing on the watch can start. Erasing four 4 KB pages and writing about 13 KB takes
+read back, nothing on the watch can start. Erasing five 4 KB pages and writing about 18 KB takes
 about half a second. A watch that loses power inside that half second has no bootloader and, without
 an SWD probe, cannot be brought back; with one, `probe-rs` can write the bootloader again.
 
@@ -276,10 +316,9 @@ NeoTime's own controller, and a controller that does not work on real hardware l
 that starts but can never take another update. The emulator cannot rule that out, because it
 does not model the radio's timing. Before the reloader first went to a watch, two builds that ran
 as wasp-os apps proved NeoTime's controller, TrouBLE, the DFU service and the external flash on the
-real chip while wasp-os stayed installed. They found that waiting for the 32 kHz clock to stop
-hangs while the watchdog runs, and that TrouBLE cut a 128-bit UUID short in discovery, which
-`third_party/trouble-host` fixes (see its `NEOTIME.md`). Those builds are gone now that no watch
-runs wasp-os; they are in the history up to 9a54d693.
+real chip while wasp-os stayed installed. Two lessons from them stay in the code: waiting for the
+32 kHz clock to stop hangs while the watchdog runs, and TrouBLE cut a 128-bit UUID short in
+discovery, which `third_party/trouble-host` fixes (see its `NEOTIME.md`).
 
 A panic in the reloader halts it rather than resetting: a reset would restart it under the old
 bootloader, which would feed the watchdog again, and the watch would loop with no way into the old
@@ -300,23 +339,17 @@ up, as it does while it waits for the charger. Holding the button for a few seco
 watchdog reset the watch: into the old update mode before the bootloader write, or into NeoTime's
 bootloader after it, where holding on installs the recovery firmware.
 
-### On the watch
+### Checked on the watch
 
-On 2026-10-11 the reloader went to a PineTime running wasp-os on S112, through wasp-os's own
-update mode (238 KB in 4 minutes 7 seconds), and the watch came up running NeoTime seconds later,
-with its file system found and the firmware confirmed. A firmware update sent to NeoTime itself then
-took 1 minute 51 seconds to upload. The bootloader swapped it in, it started, and it confirmed
-itself after its first Bluetooth exchange.
-
-Recovery works on the watch as well. Holding the button reset the watch into the bootloader, which
-buzzed after five more seconds. It swapped in the recovery firmware, which started, and that
-firmware confirmed itself after its first Bluetooth exchange.
-
-Rollback works on the watch too. On 2026-10-12 a firmware was sent over a confirmed one and never
-connected to, so it stayed on trial. Holding the button reset the watch, and letting go as soon as
-the bootloader showed "Keep holding for recovery firmware" made it swap the confirmed firmware
-back, which started on the red "Update failed" page. Holding on past that text installs the
-recovery firmware instead.
+- **The reloader from wasp-os.** Sent through wasp-os's own update mode (238 KB in about 4
+  minutes), it left the watch running NeoTime seconds later, with its file system found and the
+  firmware confirmed.
+- **An update over Bluetooth.** A firmware sent to NeoTime itself uploads in under 2 minutes; the
+  bootloader swaps it in, and it confirms itself after its first Bluetooth exchange.
+- **Recovery.** Holding the button resets the watch into the bootloader, and holding on installs the
+  recovery firmware, which starts and confirms itself after its first Bluetooth exchange.
+- **Rollback.** A firmware sent over a confirmed one and never connected to stays on trial; a reset
+  into the bootloader swaps the confirmed firmware back, which starts on the red page.
 
 ## Proving it on the emulator
 
@@ -332,7 +365,7 @@ pinetime-test --variable EMULATOR:<emulator checkout> tests/emulator/<suite>.rob
 CI's `Emulator suites` job runs them on every push. The old systems' bootloaders they start from, wasp-os's
 on Nordic's S112 and InfiniTime's MCUBoot 5.0.4, are kept in `tests/emulator/fixtures`. The emulator has already caught two faults that would have stranded a watch: the reloader sent 256-byte pages from
 its own flash, which embassy's SPI driver cannot do (it panics above 255 bytes), and the firmware
-read the replaced image from the wrong page after a swap. The plan:
+read the replaced image from the wrong page after a swap. What the suites check:
 
 1. **Boot chain.** Flash the bootloader at 0 and the firmware at `FIRMWARE.start`. Run. The
    firmware's alive marker (`FIRMWARE_ALIVE_MARKER`) must hold `FIRMWARE_ALIVE_MAGIC`, and

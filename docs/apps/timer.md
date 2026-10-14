@@ -9,8 +9,9 @@ when it ends, so it keeps running while the app is closed or the watch sleeps.
 - While it runs, tap **pause** to hold the time. While paused, tap **play** to carry on, or the red
   **stop** button to go back to the rollers.
 - When the time runs out the watch wakes and buzzes, and shows how long ago it ended. Tap
-  **Dismiss**, or anywhere on the screen, to silence it. The buzzing stops on its own after a minute.
-- The rollers keep the last length chosen.
+  **Dismiss**, or anywhere on the screen, to silence it. The buzzing stops on its own after a minute,
+  and leaving the app with the side button dismisses it too.
+- The rollers keep the last length chosen. The play button is greyed out at zero.
 
 ## Screens
 
@@ -28,4 +29,10 @@ Paused: the time and the ring grey out, with stop and play buttons.
 
 ![The timer ringing](../../neotime/harness/snapshots/screens/app-timer-ringing.png)
 
-Time's up, with the time since the end and Dismiss.
+Time's up, 35 seconds after the end, with Dismiss.
+
+## With the companion app
+
+The Timer plugin's page shows the chosen length and whether the timer is running, paused or ringing,
+with the time left counting down between syncs. **Set on the watch** changes the length the rollers
+start from, in minutes and seconds up to 99:59.

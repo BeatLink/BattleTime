@@ -13,9 +13,13 @@ no new firmware. It survives a power cut at any point, spreads its wear, is `asy
 
 | Container | For | Examples |
 |---|---|---|
-| Files | Data named by path, written whole, read whole or from an offset | app images, the note, `/remote/buttons`, fonts, resources |
-| Records | Small values, up to 2,112 bytes, rewritten often | each app's group of saved values, the settings |
-| Logs | Data appended over time, with the oldest dropped | steps, heart rate, activity |
+| Files | Data named by path, written whole, read whole or from an offset | app images, the note, `/remote/buttons`, the step, heart rate and battery days |
+| Records | Small values, up to 2,112 bytes, rewritten often | every file of 1 KB or less, such as the settings, an app's saved state or a day's steps |
+| Logs | Data appended over time, with the oldest dropped | nothing yet; kept for recordings too long to rewrite whole |
+
+The firmware reaches all of it through paths: the files API keeps a small file as a record by
+itself, and the step, heart rate and battery logs are day files ([storage.md](storage.md#logs)), so
+nothing in the firmware calls the record or log APIs directly.
 
 ### Files
 
@@ -36,7 +40,14 @@ the new copy is written before the old is removed; files and records share one s
 so while both exist the newer is read.
 
 Paths are found through a table in RAM of 16 bits of each path's hash and the file's first sector;
-the header's full path settles any clash. `for_each_file` lists every path under a prefix.
+the header's full path settles any clash. `for_each_file` lists every path under a prefix, and
+`for_each_file_with_length` gives each one's length too.
+
+`read_file` reads a file whole or from an offset and checks the contents' checksum when it reads
+the whole file. `file_extents` instead says where a part of a file lies in the flash, as up to a
+given number of runs of addresses, so a caller can read it itself, such as by DMA while the screen
+draws; it gives none for a file kept as a record or one that needs more runs, and bytes read this
+way skip the checksum.
 
 ### Records
 
@@ -64,7 +75,7 @@ Writes are refused before the ring gets too full to clean well:
 
 ### Logs
 
-A log entry, such as one day's steps, is a key in the log ring. `append_log` adds bytes to it,
+A log entry is a key in the log ring. `append_log` adds bytes to it,
 batched in RAM: up to 4 streams of 64 bytes each, written out when a batch fills, when a fifth
 stream starts, or on `flush_logs`. A power cut loses at most what has not been flushed. When the
 log ring needs space it drops and erases its oldest sector, so the oldest entries lose their start
@@ -93,7 +104,7 @@ the watch.
 ## Size
 
 Built for the watch with 128 files, 128 record keys and rings of up to 192 sectors
-(`FlashStore<Flash, 128, 128, 192>`), measured by `tools/storage-benchmark/size-probe`, which is in the history up to 9a54d693:
+(`FlashStore<Flash, 128, 128, 192>`):
 
 | | Bytes |
 |---|---:|
@@ -102,9 +113,8 @@ Built for the watch with 128 files, 128 record keys and rings of up to 192 secto
 | Stack, at most, while cleaning a ring | about 1,000 |
 
 The RAM is mostly the key table (1 KB), the file table (512 B), the rings' sector order (384 B),
-the log batches and the state of an upload. littlefs takes 23.7 KB of code for comparison. With the
-store in the firmware, the heap is 6 KB smaller than it was with littlefs, which more than pays for
-the store's tables and its task; see [memory-map.md](memory-map.md).
+the log batches and the state of an upload. littlefs takes 23.7 KB of code for comparison. The
+firmware's measured share is in [memory-map.md](memory-map.md).
 
 An `async` call's future holds every buffer of every call beneath it, and an Embassy task keeps
 its future in RAM for good. So the firmware awaits the store in one task only, and builds and
@@ -121,5 +131,4 @@ files that move between small and large, deletes and log appends, in which both 
 the power at every single write and erase of the run in turn, leaving that one half done, mounts
 again and checks that every record, file, listing and the log is as before the interrupted
 operation or as it left it (an older log entry may only have lost its start). Each cut is repeated
-with a second cut during the recovery. `tools/storage_benchmark.sh`, in the history up to
-9a54d693, ran a larger version of the same test, over 16,000 runs, and the speed comparison.
+with a second cut during the recovery.

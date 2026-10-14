@@ -2,8 +2,8 @@
 
 Work that is known to be needed but not done yet.
 
-When an item is done, remove it here. If it is something the user sees, add it to
-[features.md](features.md); if not, describe it in [architecture.md](architecture.md) or the
+When an item is done, remove it here. If it is something the user sees, add it to the matching
+page of the [guide](guide/index.md); if not, describe it in [architecture.md](architecture.md) or the
 document for its part instead.
 
 ## Hardware tests
@@ -314,8 +314,8 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Check why wasp-os's update mode gives way to the reloader** about 4 seconds after the
   button escape in the emulator, with no reset between. Its advertising never times out, so this may
   be the emulator's SoftDevice; if a watch does the same, the escape leaves the reloader running.
-- [ ] **Run the DFU service against more clients:** wasp-os's `dfu.py` works on the watch; the
-  companion app and Gadgetbridge are next.
+- [ ] **Run the DFU service against Gadgetbridge:** wasp-os's `dfu.py` and the companion app
+  already update the watch.
 - [ ] **An update over Bluetooth in the emulator.** The update suites write images straight into
   flash, so no emulator test sends a firmware through the DFU service. Send one over the
   PineTimeEmulator Bluetooth bridge from a raw-HCI client, which also proves the controller's sleep
@@ -337,9 +337,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Install recovery from a resized slot on the watch.** After `neotime slots fit` shrank the
   watch's recovery slot to 168 KB, the firmware read the record back, but the bootloader menu's
   Install recovery from that slot has only run in the emulator; it needs a button hold.
-- [ ] **Clippy fails on master.** CI's `Lints and types` and the four `Watch lints` jobs are red at
-  04005694: eight operations with no effect sit in `neotime/firmware/src/main.rs` (lines 651, 683,
-  690, 692, 706, 714, 721 and 723).
 - [ ] **Run the stack overflow test in the emulator.** `crash_record`'s "A Stack Overflow Faults At
   The Guard And Is Reported" skips, since PineTimeEmulator has no memory protection unit yet; it
   runs once the emulator models one.
@@ -362,8 +359,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   [memory-map.md](memory-map.md) and the size in `tools/draw_memory_maps.py`, and rerun the script.
 - [ ] **App screens in the simulator.** The simulator still shows hand-drawn demo pages. Draw
   real app screens there through `ScreenRenderer`.
-- [ ] **Touch input.** Turn `neotime-touch` gestures into the app host's touch events.
-
 ## App runtime
 
 - [ ] **Profiles.** Sets of apps such as work, gaming or comms, picked from the companion app. A
@@ -377,10 +372,9 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   that `neotime ask` opens the prompt over the face and over another app with the screen dark and
   lit, that Yes and No reach the computer and go back, that a second `neotime ask` reuses the cached
   image, and that turning Bluetooth off on the computer closes the prompt.
-- [ ] **Phone data as inputs.** Values the phone sends, such as the next calendar event, unread
-  count, music track or a game score, become inputs like steps, so many apps are only a layout
-  bound to phone data. Settles the open question in [app-runtime.md](app-runtime.md) about how
-  phone data reaches the runtime.
+- [ ] **More phone data as inputs.** Weather, music, navigation and calls already reach apps as
+  system values; others, such as the next calendar event, unread count or a game score, could
+  join them, so many apps are only a layout bound to phone data.
 - [ ] **Accelerometer configuration out of the firmware.** Bosch's configuration takes 6 KB of
   internal flash for each chip, 12 KB with both. Store it on external flash and send it to the
   sensor in small chunks at boot, turning step counting off if the file is missing. Other options:
@@ -404,8 +398,7 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   - Navigation progress: Gadgetbridge's `nav` carries none, so `progress_percent` reads 0.
   - Gadgetbridge prefixes each line with the `0x10` byte, which only the `setTime` line reader
     skips; check that `GB(...)` lines arriving with it are read, and skip it in `parse_line` if not.
-  - Keep the music and weather through a restart, as [app-reference.md](app-reference.md) promises;
-    they are kept in RAM only.
+  - Keep the music and weather through a restart; they are kept in RAM only.
   - Nothing has run on the watch yet: try each message from Gadgetbridge and the companion app.
 - [ ] **Harness gaps in the app host.** The test harness works around three: `widget_bounds` has
   no clip rectangle, so it cannot tell a widget scrolled out of a List or Scroll; there is no
@@ -414,7 +407,7 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Read handlers from the file when they run.** The shell reads an app's whole image into the
   UI heap when it opens, so every byte of it costs RAM. Keep only the expressions and the functions
   they call, which run on every redraw, in RAM and read a handler from `/apps` when its event
-  comes, as [app-runtime.md](app-runtime.md) plans. Apps stay on the external flash; nothing of an
+  comes. Apps stay on the external flash; nothing of an
   app is copied into the internal flash.
 
 ## Shared library and smaller apps
@@ -489,8 +482,6 @@ each item says what it costs and what it would save.
 
 Found by the harness's snapshots and quality checks; see [testing.md](testing.md).
 
-- [ ] **Terminal face overflow.** Its last line falls off the bottom of the screen and
-  "[STAT] Connected" is cut in half.
 - [ ] **Check the free heap before reading an image beside an open app.** A packages `install`, the
   launcher reading icons and opening an app all read a whole image while another app may hold the
   heap. The package manager now refuses images larger than an app's budget, but one inside it can
@@ -557,23 +548,14 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 ### Side button
 
 - [ ] **Try the gestures on the watch:** a click, a double click, a long press and a 2 second
-  hold each do what docs/features.md says, and a 5 second hold still resets into the bootloader.
+  hold each do what docs/guide/getting-around.md says, and a 5 second hold still resets into the bootloader.
 - [ ] **Try the face's swipes on the watch:** down to the notifications and again to quick
   settings, up to put them away, down in the launcher, and left and right round the quick apps.
   They are tested on the host and in the harness only.
-- [ ] **Edit the quick apps from the companion app:** a list of installed apps to pick and order,
-  written to `/settings/quick_apps` one id a line. The watch reads it on every step round the ring.
 
 ### Accelerometer
 
 - [ ] **Motion service over BLE,** sending steps and raw x, y and z to the phone.
-
-### Clock
-
-### Settings
-
-- [ ] **The rest of InfiniTime's settings screens:** Shake calibration and About. Each needs its
-  feature first.
 
 ### Bluetooth
 
@@ -591,7 +573,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   InfiniTime's advertisement and the name in the scan response, has run only in the emulator
   (`tools/check_advertising.py`). Check on the watch that phones find it at both rates and that it
   keeps advertising, given **Bluetooth stopped advertising after an update** above.
-- [ ] **A larger ATT MTU.** The firmware allows 64 bytes where InfiniTime asks for 256. File
+- [ ] **A larger ATT MTU.** The firmware allows 124 bytes where InfiniTime asks for 256. File
   transfer, long track names and notifications need longer writes.
 
 ### App runtime
@@ -619,7 +601,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   heart rate counters if the screen shows nothing.
 - [ ] **Heart rate for apps that are not open.** A closed app's `heart_rate` subscription gets the
   latest reading the interval setting took at each of its periods, but it never starts a
-  measurement itself, and no log of the readings is kept beside the step log.
+  measurement itself.
 - [ ] **Try the beacon on the watch.** The driver's register writes match wasp-os's, but the
   emulator cannot show the LED.
 - [ ] **Run `tools/check_heart_rate.py`, `tools/check_call.py`, `tools/check_wake_gestures.py` and `tools/check_firmware_trial.py` in CI.** The emulator suites have no
@@ -627,8 +609,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### UI toolkit
 
-- [ ] **Double line buffers with DMA,** so one is filled while the other is sent. InfiniTime uses
-  two of 240 x 4 pixels. This also fixes the text edges listed above.
 - [ ] **An app's own font,** for a face or app whose lettering the shared font cannot give, such as
   Infineat's below. Build it the first time one needs it. Let the compiler embed the font in the
   app's image, cut down to the characters the app can show: its fixed text, and the digits and signs
@@ -695,12 +675,11 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   with apps open and saving, and read the diagnostics' store counters after a day of use.
 - [ ] **The step log in the store's log ring.** Each day is a record rewritten whole at every slot,
   and the oldest days are deleted past 90; the log ring appends each slot alone and drops the oldest
-  days by itself. Heart rate and activity logs belong beside it, and raw accelerometer recordings in
-  a ring of their own. Until the clock is set after a restart, steps are logged under the
-  firmware's build date.
+  days by itself. The heart rate and battery day files would move with it, and raw accelerometer
+  recordings belong in a ring of their own.
 - [ ] **A checkpoint of the store's tables,** so mounting need not read every ring record.
 
-- [ ] **Use the file system:** save alarms and the BLE bond there.
+- [ ] **Use the file system:** save the BLE bond there.
 - [ ] **Resource packages:** fonts and pictures installed from a zip over BLE, with a list of
   obsolete files that an upgrade deletes, as InfiniTime's `resources.json` has.
 - [ ] **Report failed flash writes.** After each erase and page program, read the flash's security
@@ -729,7 +708,7 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **Give up on a stalled update.** InfiniTime aborts an update when no packet has arrived for
   10 seconds; NeoTime only aborts when the link drops.
 - [ ] **A swap progress bar on the bootloader screen.** It says "Installing firmware" for up to 30
-  seconds with nothing moving. Its 20 KB has about 2.7 KB to spare.
+  seconds with nothing moving. Its 20 KB has about 1.9 KB to spare.
 
 ### Developer tools and docs
 
@@ -758,11 +737,9 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **Firmware logic where tests reach it.** Coverage measures only the workspace. Move logic out
   of `firmware/` into workspace crates, as `boot` and the services already are, so host tests
   cover it.
-- [ ] **Harness gaps.** Open a named screen directly, so screens behind icon-only buttons, such as
-  the alarm's edit and ring screens, get smoke and snapshot coverage; read the key labels of a
+- [ ] **Harness gaps.** Read the key labels of a
   `ButtonMatrix`, so `tap "7"` works on the calculator; match text spread over neighbouring
-  labels, such as a face's "09:00"; set text system values from scripts; give `notify` an
-  app name in scripts; and see every built row of a repeated list, since `widget_text` and
+  labels, such as a face's "09:00"; set text system values from scripts; and see every built row of a repeated list, since `widget_text` and
   `widget_bounds` give only the first row's node, so `tap "Sam"` cannot reach the second row of
   the notifications list.
 - [ ] **Scripts from an installed simulator.** `--script` finds app sources through the build-time
@@ -771,8 +748,8 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **App host API for tests.** `widget_bounds` gives no clip rectangle, there is no iterator
   over the open screen's nodes, and there is no call to redraw the whole screen. The harness works
   around all three.
-- [ ] **A user guide:** what the face shows, the swipes and button presses, moving from InfiniTime
-  or wasp-os, updating with Gadgetbridge or ITD, and the recovery hold, with simulator screenshots.
+- [ ] **Step-by-step moves onto NeoTime** in the [guide](guide/updates-and-recovery.md): from
+  InfiniTime and from wasp-os, and updating with Gadgetbridge or ITD.
 
 ### Not started
 
@@ -783,7 +760,7 @@ InfiniTime has these and NeoTime has nothing for them yet:
 | Board and system loop | sleep and wake of the whole system, wake locks, a system monitor |
 | Notifications | Immediate Alert |
 | Other BLE services | Music, Navigation, Simple Weather |
-| System screens | the pass key, firmware validation |
+| System screens | the pass key |
 
 ## Gaps against the wasp-os fork
 
@@ -798,10 +775,6 @@ full report is
 - [ ] **Measure the bus speed on the watch.** The fork found its SPI bus stuck at 1 Mbps instead of
   8 Mbps, which made every redraw 4.4 times slower.
 
-### Touch panel
-
-- [ ] **Pass touch and swipe events to apps.**
-
 ### Accelerometer
 
 - [ ] **Write the axis remap to the chip,** so its own motion features see the watch the right way
@@ -811,13 +784,12 @@ full report is
 
 - [ ] **The rest of the Gadgetbridge Bangle.js messages** in
   [companion-protocol.md](companion-protocol.md): alarms, steps and HTTP. `settings`, `notify`,
-  `notify-`, calls, music, weather, find, vibrate and status are served.
+  `notify-`, calls, music, weather, `nav`, find, vibrate, status, `slots` and `state` are served.
 - [ ] **A developer console over BLE,** to replace the fork's Python REPL for uploads, time setting
   and resets.
 
 ### UI toolkit
 
-- [ ] **Cards:** rounded-rectangle cards as the layout every app uses.
 - [ ] **Widgets:** status bar, battery meter, clock, notification bar, button,
   toggle, checkbox, slider, spinner, stopwatch and confirmation view.
 - [ ] **App icons:** monochrome Font Awesome icons per app.
@@ -831,26 +803,20 @@ full report is
 
 ### External flash and storage
 
-- [ ] **Install apps as packages over BLE,** as the fork's `pkgmgr` does into `/flash/pkg`.
-- [ ] **File manager and backup** from the companion app.
 - [ ] **Updatable read-only image:** the fork keeps nearly all its code in a ROMFS image in
   internal flash, updated without reflashing the firmware.
 
-### Firmware updates
-
-- [ ] **Firmware from GitHub releases** offered by the companion app.
-
 ### Not started
 
-The fork has these and NeoTime has nothing for them yet. Most also appear in the InfiniTime table.
+The fork has these and NeoTime has nothing for them yet; the faces, apps and companion features
+NeoTime already ported are left out. Most also appear in the InfiniTime table.
 
 | Area | What the fork has |
 |---|---|
-| App runtime | apps loaded when opened, state kept when left |
 | Heart rate | raw data logging |
-| Watch faces | Clock, Week clock, Chrono, Dual clock, Fibonacci, Resistor, Word clock, a Faces app with previews |
-| Apps | Alarm with 4 alarms and snooze, Pomodoro, Phone finder, Sports, Level, Gallery, Haiku, Morse, Snake, Four in a row, Puzzle 15, Game of Life, Beacon, Self test |
-| Companion app | WaspOSCompanion: steps, alarms, settings, files, backup, weather, themes, face previews, firmware |
+| Watch faces | Chrono, a Faces app with previews |
+| Apps | Gallery, Self test |
+| Companion app | WaspOSCompanion: themes, face previews |
 | Developer tools | `wasptool`, `pkgpush.py`, `nus.py` |
 | Other watches | Colmi P8, Senbono K9, DS-D6, 96Boards Nitrogen |
 

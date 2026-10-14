@@ -16,11 +16,7 @@ source_dir="target/site/src"
 
 rm -rf target/site
 mkdir -p "$source_dir/screens" "$source_dir/stylesheets"
-cp ../docs/*.md "$source_dir/"
-cp ../docs/*.html "$source_dir/"
-mkdir -p "$source_dir/apps"
-cp ../docs/apps/*.md "$source_dir/apps/"
-cp -r ../docs/images "$source_dir/images"
+cp -r ../docs/. "$source_dir/"
 cp harness/snapshots/screens/*.png "$source_dir/screens/"
 cp site/home.md "$source_dir/index.md"
 cp site/neotime.css "$source_dir/stylesheets/neotime.css"
@@ -32,8 +28,12 @@ sed -e "s#](docs/)#](https://github.com/BeatLink/NeoTime/tree/master/docs/)#g" \
     ../README.md > "$source_dir/introduction.md"
 
 # Screens point into the staged copy; any other link out of docs/ goes to the file on GitHub.
-for page in "$source_dir"/apps/*.md; do
-    sed -i -e 's#](\.\./\.\./neotime/harness/snapshots/screens/#](../screens/#g' -e 's#](\.\./\([a-z-]*\.md\)#](../\1#g' "$page"
+for page in "$source_dir"/*/*.md; do
+    sed -i \
+        -e 's#](\.\./\.\./neotime/harness/snapshots/screens/#](../screens/#g' \
+        -e 's#src="\.\./\.\./neotime/harness/snapshots/screens/#src="../screens/#g' \
+        -e "s#](\.\./\.\./\([^)]*\))#](${blob_url}/\1)#g" \
+        "$page"
 done
 for page in "$source_dir"/*.md; do
     sed -i \
@@ -45,8 +45,9 @@ for page in "$source_dir"/*.md; do
 done
 
 # Every doc must be in the navigation, so a new page cannot be left out of the site.
-for page in ../docs/*.md; do
-    name="$(basename "$page")"
+for page in ../docs/*.md ../docs/*/*.md; do
+    name="${page#../docs/}"
+    [[ "$name" == apps/* ]] && continue
     if ! grep -q ": $name\$" site/mkdocs.yml; then
         echo "site/mkdocs.yml does not list docs/$name in its nav" >&2
         exit 1

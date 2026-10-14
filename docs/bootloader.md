@@ -15,8 +15,8 @@ The work of an update is split three ways:
 
 - **The bootloader** only acts on the watch: it swaps, rolls back and installs recovery.
 - **The firmware's Bluetooth** only uploads: it writes the new image into the update slot, marks it,
-  and resets. It will speak Nordic's legacy DFU, as InfiniTime does, so Gadgetbridge and the other
-  companion apps can update NeoTime unchanged.
+  and resets. It speaks Nordic's legacy DFU, as InfiniTime does, so Gadgetbridge and the other
+  companion apps update NeoTime unchanged; see [updates.md](updates.md).
 - **A reloader image** moves a watch onto NeoTime once, from InfiniTime or wasp-os (below).
 
 ## Crates
@@ -43,6 +43,8 @@ flash. Updates and the recovery firmware wait in external flash until they are s
 
 Internal flash, 512 KB:
 
+![The internal flash](images/internal-flash.svg)
+
 | Region | Start | Size | Holds |
 |---|---|---|---|
 | `BOOTLOADER` | `0x00000` | 20 KB | this bootloader, the first code to run; there is no Nordic MBR or SoftDevice |
@@ -54,6 +56,8 @@ The first 32 KB, from the bootloader to the boot state, belong to the bootloader
 writes the bootloader's pages, only the slot table and the boot state through their own APIs.
 
 External flash, 4 MB, with the slots where `DEFAULT_SLOTS` puts them:
+
+![The external flash](images/external-flash.svg)
 
 | Region | Start | Size | Holds |
 |---|---|---|---|
@@ -145,7 +149,7 @@ The update slot already acts as a B slot: after each swap it holds the previous 
 rollback restores. The recovery firmware is kept apart from that pair on purpose. It is a small
 build, rarely rebuilt, so a bug that the running and the previous firmware share, such as one in
 DFU or in mounting the store, does not reach it. There is no backup bootloader; the bootloader is
-not expected to change, and SWD remains for a watch that cannot reach it.
+not expected to change, and a watch that cannot reach it needs an SWD probe.
 
 ## What happens at start
 
@@ -172,6 +176,31 @@ not expected to change, and SWD remains for a watch that cannot reach it.
    `FIRMWARE_VECTOR_TABLE` and jump there.
 
 Every flash read, write and erase feeds the watchdog, so a long swap does not trip it.
+
+```mermaid
+flowchart TD
+    start([Reset]) --> held{Button held<br/>10 s in all?}
+    held -- yes --> menu[Menu: Start firmware,<br/>Roll back, Install recovery]
+    menu -- Roll back --> copy_previous[Copy the previous firmware<br/>into the update slot, mark a swap]
+    menu -- Install recovery --> copy_recovery[Copy the recovery image<br/>into the update slot, mark a swap]
+    menu -- Start firmware or 30 s --> flash_ok
+    copy_previous --> flash_ok
+    copy_recovery --> flash_ok
+    held -- no --> flash_ok{External flash<br/>answers?}
+    flash_ok -- no --> jump
+    flash_ok -- yes --> state{BOOT_STATE}
+    state -- Boot --> header
+    state -- Swap --> swap[Swap the update slot in,<br/>on trial] --> header
+    state -- Revert --> revert[Swap the previous<br/>firmware back] --> header
+    header{Sound header<br/>in FIRMWARE?}
+    header -- yes --> jump([Leave the note, jump to the firmware])
+    header -- no --> repair{Previous or recovery<br/>image sound?}
+    repair -- yes --> copy_repair[Copy it in, mark a swap] --> state
+    repair -- no --> wait([No firmware found:<br/>wait for the watchdog])
+```
+
+A firmware on trial that never confirms itself is swapped back out at the next reset, which is the
+Revert branch; see [updates.md](updates.md#confirming-or-rolling-back).
 
 ## The status screen
 
@@ -246,12 +275,9 @@ The updater never confirms itself, so its reset makes the new bootloader roll ba
 that was running before. That firmware reads the note, clears the rollback's mark with
 `neotime_updates::forget_rollback`, and its status page says "Bootloader updated" or "Bootloader up
 to date" instead of "Update failed". Quitting leaves no note, so a quit reads as the failed update
-it is. The write is about four pages, half a second or so, and is the only part with no way back;
+it is. The write is five pages, half a second or so, and is the only part with no way back;
 [updates.md](updates.md#losing-power-during-the-bootloader-write) sets out what would have to go
 wrong for a power cut to land in it.
-Only a firmware from `db985cf` on reads the note. An older one shows the red "Update failed" page
-after the hand-back even though the bootloader was written, as on the first watch; the Revert mark
-it leaves clears with the next firmware update.
 
 `tests/emulator/bootloader_update.robot` runs it over a copy of the built bootloader with one byte
 of its title changed.
@@ -278,7 +304,7 @@ The menu is for a firmware that starts but is broken badly enough that it cannot
 or one that should be swapped for the firmware before it. It needs only the side button.
 
 The system loop feeds the watchdog only while the button is up, and while the shell and the radio
-make progress (see the button driver in [architecture.md](architecture.md)), so the menu opens with
+make progress (see the button driver in [drivers.md](drivers.md)), so the menu opens with
 one long hold:
 
 1. Hold the button. After about 5 seconds the watchdog resets the watch.
@@ -316,12 +342,13 @@ must confirm itself, or the next reset swaps the other one back.
 
 ```sh
 nix develop
-cd bootloader
+cd neotime/bootloader
 cargo build --release
 ```
 
 `bootloader/` is not in the Cargo workspace, because it only builds for the watch.
-`cargo run --release` flashes it over SWD with probe-rs.
+`cargo run --release` flashes it over SWD with probe-rs, for a watch with a probe attached;
+`tools/build_images.sh` builds it, with every other image, into `dist/`.
 
 ## Not done yet
 

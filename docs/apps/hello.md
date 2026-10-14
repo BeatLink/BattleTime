@@ -1,14 +1,16 @@
 # Hello
 
-Hello world, from wasp-os's hello: the smallest app, one card with an icon and a greeting. It is a
-starting point for reading app code; see [app-runtime.md](../app-runtime.md).
+The smallest app: one card with a check mark and the greeting "Hello, world!". From wasp-os's
+hello.
 
 ## Using it
 
-- There is nothing to press. The side button leaves, as in every app.
+- There is nothing to press. Clicking the side button leaves, as in every app.
+- It is a starting point for reading app code; [writing an app](../writing-apps.md) explains how
+  apps are written.
 
 ## Screens
 
 ![The hello app](../../neotime/harness/snapshots/screens/app-hello.png)
 
-Its only screen: a check mark and "Hello, world!".
+Its only screen: a check mark above "Hello, world!" on one card.

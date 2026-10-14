@@ -1,6 +1,7 @@
 # Testing apps
 
-`neotime-app-testing` in `harness/` runs apps and faces on a test watch, in the spirit of
+This page describes how apps are tested; [writing-apps.md](writing-apps.md#testing) shows where
+it fits while writing one. `neotime-app-testing` in `harness/` runs apps and faces on a test watch, in the spirit of
 wasp-os's `make check`. It compiles each one from its source with `neotime-compiler`, opens the
 image on the real `neotime-app-host`, and drives it the way the watch would. Nothing is simulated
 above the host: the bytecode, bindings, layout and drawing are the watch's own.
@@ -9,7 +10,13 @@ above the host: the bytecode, bindings, layout and drawing are the watch's own.
 cargo test -p neotime-app-testing      # inside nix develop; cargo test --workspace runs it too
 ```
 
-Like the simulator, it needs `std`, so it is a workspace member but not a default member.
+Like the simulator, it needs `std`, so it is a workspace member but not a default member. Run only
+the suite or test for what you changed, such as `cargo test -p neotime-app-testing --test tours`.
+
+The browser preview has tests of its own: each app's `app.test.tsx` renders it with the stand-in
+`neotime` package and `neotime/preview` under Vitest, run with `npm test` from `neotime/`, and
+`npm run check` type-checks every app. They check the preview, not the watch; behaviour belongs in
+the harness.
 
 ## Writing a test
 
@@ -154,6 +161,15 @@ cargo run -p neotime-simulator -- --script tests/scripts/timer_rings_and_dismiss
   with the reference pictures in `harness/snapshots/screens/`.
 - `harness/tests/scripts.rs` plays every script in `tests/scripts`.
 - `harness/tests/tours.rs` plays each app's tour, described under [App tours](#app-tours).
+- `harness/tests/permissions.rs` checks the permissions the compiler works out for every package
+  against what each one needs, so a compiler change cannot quietly drop one.
+- `harness/tests/phone.rs` reads companion lines as the watch does and passes their calls, music,
+  weather and navigation to apps and faces.
+- `harness/tests/drawing.rs` draws apps through the display driver onto a model of the ST7789, and
+  checks that moving rows in the panel, for scrolled lists and slides, shows what drawing afresh
+  would.
+- `harness/tests/firmware_pages.rs` draws the pages the firmware shows itself, after a crash and
+  when an app needs more memory than is free, against their reference pictures.
 
 ## Snapshots
 
