@@ -147,6 +147,28 @@ fn an_unknown_shape_ends_the_glyph() {
 }
 
 #[test]
+fn the_font_notes_which_ascii_it_has_and_looks_up_the_rest() {
+    assert!(FONT.has('A') && FONT.has(' ') && FONT.has('~'));
+    assert!(!FONT.has('\u{7F}'));
+    assert!(FONT.has('°') && FONT.has('✓'));
+    assert!(!FONT.has('é'));
+}
+
+#[test]
+fn installing_a_file_that_is_not_the_font_forgets_what_was_checked() {
+    static NOT_A_FONT: [u8; 16] = *b"NTFN\x01\x04\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+    static FONT_FILE: &[u8] = include_bytes!("../fonts/geometric.ntfont");
+    let font = GeometricFont::empty();
+    font.install(FONT_FILE);
+    assert!(font.has('A'));
+    font.install(&NOT_A_FONT);
+    assert!(!font.has('A'));
+    assert!(font.data().is_none());
+    font.install(FONT_FILE);
+    assert!(font.has('A'));
+}
+
+#[test]
 fn glyphs_are_found_past_a_gap_in_the_characters() {
     // The font jumps from '~' to '°', so the quick guess misses and the search finds it.
     let degree = FONT.glyph('°').unwrap();

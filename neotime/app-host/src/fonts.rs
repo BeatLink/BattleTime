@@ -6,7 +6,7 @@
 //! seven-segment and dot-matrix display fonts are worked out from segments and dots as they are
 //! drawn. docs/app-runtime.md lists the sizes.
 
-use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU8, AtomicUsize, Ordering};
 
 use neotime_runtime::AppImage;
 use neotime_ui::{
@@ -40,10 +40,25 @@ const WIDEST_GLYPH_ROW: usize = 128;
 const DOT_GROWTH: f32 = 1.5;
 
 /// The font made by `tools/generate_fonts.py`, read in place from the shared library once installed.
+///
+/// Layout measures text all the time, and the font sits in flash, where each read makes the CPU
+/// wait, so the first lookup checks the file once and notes which printable ASCII characters it
+/// has; later lookups trust that.
 pub struct GeometricFont {
     start: AtomicPtr<u8>,
     length: AtomicUsize,
+    /// `UNCHECKED`, `CHECKED` or `NOT_A_FONT`.
+    state: AtomicU8,
+    glyph_count: AtomicUsize,
+    /// One bit for each character from `FIRST_ASCII` up, set where the font has a glyph for it.
+    ascii: [AtomicU32; ASCII_WORDS],
 }
+
+const UNCHECKED: u8 = 0;
+const CHECKED: u8 = 1;
+const NOT_A_FONT: u8 = 2;
+const FIRST_ASCII: u32 = 0x20;
+const ASCII_WORDS: usize = 3;
 
 /// Where one glyph's shapes start, how many there are, and how wide it is in font units.
 #[derive(Clone, Copy)]
@@ -89,6 +104,9 @@ impl GeometricFont {
         GeometricFont {
             start: AtomicPtr::new(core::ptr::null_mut()),
             length: AtomicUsize::new(0),
+            state: AtomicU8::new(UNCHECKED),
+            glyph_count: AtomicUsize::new(0),
+            ascii: [const { AtomicU32::new(0) }; ASCII_WORDS],
         }
     }
 
@@ -98,10 +116,14 @@ impl GeometricFont {
         GeometricFont {
             start: AtomicPtr::new(bytes.as_ptr() as *mut u8),
             length: AtomicUsize::new(bytes.len()),
+            state: AtomicU8::new(UNCHECKED),
+            glyph_count: AtomicUsize::new(0),
+            ascii: [const { AtomicU32::new(0) }; ASCII_WORDS],
         }
     }
 
     fn install(&self, bytes: &'static [u8]) {
+        self.state.store(UNCHECKED, Ordering::Release);
         self.length.store(0, Ordering::Release);
         self.start.store(bytes.as_ptr() as *mut u8, Ordering::Release);
         self.length.store(bytes.len(), Ordering::Release);
@@ -117,15 +139,64 @@ impl GeometricFont {
         unsafe { core::slice::from_raw_parts(start, length) }
     }
 
-    /// The installed file, checked once for a run of lookups.
+    /// The installed file, checked the first time it is asked for.
     fn data(&self) -> Option<FontData> {
+        match self.state.load(Ordering::Acquire) {
+            CHECKED => Some(FontData {
+                bytes: self.bytes(),
+                glyph_count: self.glyph_count.load(Ordering::Acquire),
+            }),
+            NOT_A_FONT => None,
+            _ => self.check(),
+        }
+    }
+
+    /// Checks the installed file and notes its glyph count and which printable ASCII it has.
+    #[cold]
+    fn check(&self) -> Option<FontData> {
         let bytes = self.bytes();
         let is_font =
             bytes.len() >= FONT_HEADER_BYTES && &bytes[..4] == FONT_MAGIC && bytes[4] == FONT_VERSION;
-        is_font.then(|| FontData {
+        if !is_font {
+            self.state.store(NOT_A_FONT, Ordering::Release);
+            return None;
+        }
+        let data = FontData {
             bytes,
             glyph_count: read_u16(bytes, 6) as usize,
-        })
+        };
+        let mut ascii = [0u32; ASCII_WORDS];
+        for index in 0..data.glyph_count {
+            let Some((character, _)) = data.entry_at(index) else {
+                break;
+            };
+            let bit = (character as u32).wrapping_sub(FIRST_ASCII);
+            if (bit as usize) < ASCII_WORDS * 32 {
+                ascii[bit as usize / 32] |= 1 << (bit % 32);
+            }
+        }
+        for (slot, word) in self.ascii.iter().zip(ascii) {
+            slot.store(word, Ordering::Release);
+        }
+        self.glyph_count.store(data.glyph_count, Ordering::Release);
+        self.state.store(CHECKED, Ordering::Release);
+        Some(data)
+    }
+
+    /// Whether the font has a glyph for `character`; printable ASCII needs no read of the file.
+    fn has(&self, character: char) -> bool {
+        let bit = (character as u32).wrapping_sub(FIRST_ASCII);
+        let is_ascii = (bit as usize) < ASCII_WORDS * 32;
+        if is_ascii && self.state.load(Ordering::Acquire) == CHECKED {
+            return self.ascii[bit as usize / 32].load(Ordering::Acquire) & (1 << (bit % 32)) != 0;
+        }
+        let Some(data) = self.data() else {
+            return false;
+        };
+        match is_ascii {
+            true => self.ascii[bit as usize / 32].load(Ordering::Acquire) & (1 << (bit % 32)) != 0,
+            false => data.glyph(character).is_some(),
+        }
     }
 
     #[cfg(test)]
@@ -385,12 +456,12 @@ impl StyledFont {
 
     /// How far the pen moves past a character, without working out its box.
     fn advance_of(&self, character: char) -> Option<i32> {
+        if self.monospaced {
+            return FONT.has(character).then_some(self.standard_advance as i32);
+        }
         let data = FONT.data()?;
         let glyph = data.glyph(character)?;
-        match self.monospaced {
-            true => Some(self.standard_advance as i32),
-            false => Some(self.advance(glyph, &self.scale_in(&data)?)),
-        }
+        Some(self.advance(glyph, &self.scale_in(&data)?))
     }
 
     fn advance(&self, glyph: GlyphEntry, scale: &Scale) -> i32 {
@@ -679,17 +750,22 @@ struct AxisFit {
     /// Where each one is moved to.
     moved: [f32; MOST_CONTROLS],
     count: usize,
+    /// The whole pixels of the origin, added only at the end, so a glyph snaps the same wherever it is.
+    base: f32,
+    /// The rest of the origin, which the lines are worked out from.
     origin: f32,
     scale: f32,
 }
 
 impl AxisFit {
     fn new(origin: f32, scale: f32) -> Self {
+        let base = floor(origin);
         AxisFit {
             unmoved: [0.0; MOST_CONTROLS],
             moved: [0.0; MOST_CONTROLS],
             count: 0,
-            origin,
+            base,
+            origin: origin - base,
             scale,
         }
     }
@@ -732,6 +808,10 @@ impl AxisFit {
 
     /// Where a point in font units lands, moved as the chosen lines around it were.
     fn place(&self, units: f32) -> f32 {
+        self.base + self.place_from_base(units)
+    }
+
+    fn place_from_base(&self, units: f32) -> f32 {
         let at = self.unmoved_at(units);
         if self.count == 0 {
             return at;
