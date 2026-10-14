@@ -1196,31 +1196,59 @@ const DIGIT_SEGMENTS: [u8; 10] = [
 ];
 const MIDDLE_SEGMENT: u8 = 0b100_0000;
 
-/// Whether a point is inside a bar along x from `start` to `end`, centred on `middle`, with pointed ends.
-fn is_in_bar(along: f32, across: f32, start: f32, end: f32, middle: f32) -> bool {
-    let half = SEGMENT_THICKNESS / 2.0;
-    let distance = (across - middle).abs();
-    distance <= half && along >= start + distance && along <= end - distance
-}
-
-fn is_in_segment(segment: u8, x: f32, y: f32) -> bool {
+/// The x range a segment covers on the line at `y`, for bars with pointed ends.
+fn segment_span_at(segment: u8, y: f32) -> Option<(f32, f32)> {
     let half = SEGMENT_THICKNESS / 2.0;
     let left = half;
     let right = SEGMENT_DIGIT_WIDTH - half;
     let top = half;
     let middle = SEGMENT_DIGIT_HEIGHT / 2.0;
     let bottom = SEGMENT_DIGIT_HEIGHT - half;
-    let across = |at: f32| is_in_bar(x, y, left + SEGMENT_GAP, right - SEGMENT_GAP, at);
-    let upper = |at: f32| is_in_bar(y, x, top + SEGMENT_GAP, middle - SEGMENT_GAP, at);
-    let lower = |at: f32| is_in_bar(y, x, middle + SEGMENT_GAP, bottom - SEGMENT_GAP, at);
+    let across = |at: f32| {
+        let distance = (y - at).abs();
+        (distance <= half).then_some((left + SEGMENT_GAP + distance, right - SEGMENT_GAP - distance))
+    };
+    let upright = |at: f32, start: f32, end: f32| {
+        let reach = half.min(y - start).min(end - y);
+        (reach >= 0.0).then_some((at - reach, at + reach))
+    };
     match segment {
         0 => across(top),
-        1 => upper(right),
-        2 => lower(right),
+        1 => upright(right, top + SEGMENT_GAP, middle - SEGMENT_GAP),
+        2 => upright(right, middle + SEGMENT_GAP, bottom - SEGMENT_GAP),
         3 => across(bottom),
-        4 => lower(left),
-        5 => upper(left),
+        4 => upright(left, middle + SEGMENT_GAP, bottom - SEGMENT_GAP),
+        5 => upright(left, top + SEGMENT_GAP, middle - SEGMENT_GAP),
         _ => across(middle),
+    }
+}
+
+/// Fills a row of a seven-segment digit's coverage, giving what `sample_row` would without testing every sample.
+///
+/// Every sample point and bar edge is a multiple of an eighth of a pixel, so the sums below are exact.
+fn segment_coverage_row(lit: u8, row: u16, x_offset: u16, coverage: &mut [u8]) {
+    let per_side = SAMPLES_PER_SIDE as f32;
+    // Each slot counts its samples inside first, then becomes that share of full ink.
+    coverage.fill(0);
+    let first_sample = i32::from(x_offset) * SAMPLES_PER_SIDE;
+    let end_sample = first_sample + coverage.len() as i32 * SAMPLES_PER_SIDE;
+    for down in 0..SAMPLES_PER_SIDE {
+        let y = row as f32 + (down as f32 + 0.5) / per_side;
+        for segment in (0..7).filter(|segment| lit & (1 << segment) != 0) {
+            let Some((start, end)) = segment_span_at(segment, y) else {
+                continue;
+            };
+            // Sample k sits at (k + 0.5) / per_side, so these are the first and last samples inside.
+            let first = (-floor(0.5 - start * per_side) as i32).max(first_sample);
+            let last = (floor(end * per_side - 0.5) as i32).min(end_sample - 1);
+            for sample in first..=last {
+                coverage[((sample - first_sample) / SAMPLES_PER_SIDE) as usize] += 1;
+            }
+        }
+    }
+    let samples = (SAMPLES_PER_SIDE * SAMPLES_PER_SIDE) as f32;
+    for slot in coverage.iter_mut() {
+        *slot = (*slot as f32 * FULL_COVERAGE as f32 / samples) as u8;
     }
 }
 
@@ -1287,13 +1315,15 @@ impl FontMetrics for SevenSegmentFont {
         let Some(glyph) = Self::glyph(character) else {
             return false;
         };
+        if let SegmentGlyph::Segments(lit) = glyph {
+            segment_coverage_row(lit, row, x_offset, coverage);
+            return true;
+        }
         let half = SEGMENT_THICKNESS / 2.0;
         let is_in_dot =
             |x: f32, y: f32, centre_y: f32| (x - half).abs() <= half && (y - centre_y).abs() <= half;
         sample_row(row, x_offset, coverage, |x, y| match glyph {
-            SegmentGlyph::Segments(lit) => {
-                (0..7).any(|segment| lit & (1 << segment) != 0 && is_in_segment(segment, x, y))
-            }
+            SegmentGlyph::Segments(_) => false,
             SegmentGlyph::Colon => {
                 is_in_dot(x, y, SEGMENT_DIGIT_HEIGHT * 0.3) || is_in_dot(x, y, SEGMENT_DIGIT_HEIGHT * 0.7)
             }
