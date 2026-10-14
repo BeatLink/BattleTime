@@ -34,6 +34,7 @@ export class MockGadgetbridge {
     always_on: false,
     chimes: 0,
     do_not_disturb: false,
+    gadgetbridge_name: false,
   };
   private slots: { update: [number, number]; recovery: [number, number] } = {
     update: [0, 392 * 1024],
@@ -116,7 +117,7 @@ export class MockGadgetbridge {
       }
       next.brightness = level;
     }
-    for (const key of ['blank_after', 'clock_24h', 'units', 'step_goal', 'always_on', 'chimes', 'do_not_disturb'] as const) {
+    for (const key of ['blank_after', 'clock_24h', 'units', 'step_goal', 'always_on', 'chimes', 'do_not_disturb', 'gadgetbridge_name'] as const) {
       if (key in message) {
         (next as Record<string, unknown>)[key] = message[key];
       }

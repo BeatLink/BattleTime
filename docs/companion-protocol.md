@@ -6,8 +6,19 @@ whether the watch serves it yet.
 
 ## Finding the watch
 
-- The watch advertises the complete local name `NeoTime`. The advertisement has no room for a
-  128-bit service UUID.
+- The watch advertises as InfiniTime does: the Heart Rate service `0x180D`, the legacy DFU service
+  and a transmit power of 0 dBm in the advertisement, and the complete local name `NeoTime` in the
+  scan response, so a phone must scan actively to see the name. It advertises every 20 to 30 ms for
+  30 seconds after it starts or a phone leaves, then about once a second; see
+  [bluetooth.md](bluetooth.md#advertising). Its GAP appearance is 0x00C2, a smartwatch.
+- With the `gadgetbridge_name` setting on, the watch advertises and gives its GAP name as
+  `InfiniTime` instead, which Gadgetbridge's PineTime/InfiniTime coordinator matches, so Gadgetbridge
+  offers its InfiniTime support: notifications, calls, music, weather, the time, the heart rate,
+  firmware updates and files through the standard and InfiniTime services this page lists. Another
+  change is adding InfiniTime's Music, Navigation, Simple Weather, Motion and Immediate Alert
+  services, which Gadgetbridge uses once it treats the watch as InfiniTime; until they land,
+  Gadgetbridge's music, navigation, weather and find features reach the watch only through the
+  companion app's Bangle.js lines below.
 - After connecting, a NeoTime watch is recognised by the NeoTime service
   `6e540001-0000-4000-8000-4e656f54696d`, which every build serves, recovery included.
 - A client should check which of the services below are present and offer only the features they
@@ -116,6 +127,7 @@ it changes nothing. Either way the watch answers with the settings as they now a
 | `shake_to_wake` | `true` to wake a dark screen with a shake. |
 | `shake_threshold` | How fast a shake must be to wake the screen, 0 to 4095, as InfiniTime counts it. |
 | `sleep_mode` | `true` for do not disturb that also stops every wake gesture, touch included, and the always-on screen. It turns `do_not_disturb` on, and `do_not_disturb` set `false` ends it. |
+| `gadgetbridge_name` | `true` to advertise and name the watch `InfiniTime`, so Gadgetbridge offers its InfiniTime support; `false`, the default, for `NeoTime`. Advertising starts again at once with the new name. |
 | `watch_face` | The face to show, by its number: the 32-bit FNV-1a hash of its id with the top bit cleared, or `1` should that be `0`. `0`, the default, chooses none. When the chosen face is not installed or is turned off, the watch shows the first face turned on, in id order. |
 
 An unknown preset, a colour not written `#rrggbb`, `units` other than the two names, or any
@@ -132,7 +144,7 @@ The reply:
  "updates_until_restart":false,
  "wake_on_touch":1,"alarms_in_dnd":true,"heart_rate_interval":0,"raise_to_wake":false,
  "lower_to_sleep":false,"shake_to_wake":false,"shake_threshold":150,"sleep_mode":false,
- "watch_face":0}
+ "watch_face":0,"gadgetbridge_name":false}
 ```
 
 `theme` is the preset whose colours match exactly, or `custom`. Colours are stored as RGB565, so a
@@ -156,9 +168,12 @@ watch removes it from the list, and sends no reply.
 
 ### Calls, music, weather and the rest (served)
 
-These follow Gadgetbridge's Bangle.js messages, so its driver works too. Numbers are whole; a
-field of the wrong type, such as a temperature with a fraction, makes the line unreadable, which
-the watch answers with an `error` reply. Text is unescaped and cut at a whole character.
+These follow Gadgetbridge's Bangle.js messages, so its driver works too. Numbers are whole: before
+reading a JSON line the watch rounds every number outside quotes that has a fraction, halves away
+from zero, so `"temp":291.6` reads as 292. Lines that are not JSON, such as `setTime(...)`, keep
+their fractions, and a number with an exponent stays unreadable. A field of the wrong type makes
+the line unreadable, which the watch answers with an `error` reply. Text is unescaped and cut at a
+whole character.
 
 | `t` | Fields the watch reads | What it does |
 |---|---|---|
@@ -166,22 +181,30 @@ the watch answers with an `error` reply. Text is unescaped and cut at a whole ch
 | `musicinfo` | `artist`, `track`, `dur` (seconds) | Fills `current_music`'s artist (32 bytes), track (64 bytes) and length, and runs the `music` subscriptions. `album` is ignored. |
 | `musicstate` | `state`, `position` (seconds) | `play` is playing and anything else is not; `position`, when given, is how far into the track. Runs the `music` subscriptions. |
 | `weather` | `temp`, `hi`, `lo` (kelvin), `code`, `loc` | Fills `current_weather`: the temperatures in Celsius, the sky from the OpenWeatherMap `code`, the place (32 bytes) and `received_at`, the watch's time when it came. Runs the `weather` subscriptions. The watch has no sunrise, sunset or coming days from it. `hum`, `txt`, `wind` and the rest are ignored. |
+| `nav` | `instr`, `distance`, `action` | Fills `current_navigation`, as Gadgetbridge's newer Bangle.js driver sends it, and runs the `navigation` subscriptions. `instr` is the instruction, up to 64 bytes. `distance` is text as the phone shows it, such as `"300 m"`, `"1.2 km"`, `"0,5 mi"`, `"800 ft"` or `"100 yd"`, read to one decimal place in whole metres; with no unit it is metres, and another unit leaves the distance unknown. `action` is the turn: `continue` is `straight`; `left`, `right`, `left_slight`, `right_slight`, `left_sharp` and `right_sharp` the turns of those names; `keep_left` and `keep_right` the slight turns; `uturn_left` and `uturn_right` `u_turn`; the four `roundabout_` actions `roundabout`; `finish` `arrive`; and `offroute` or another leaves the turn unknown. `progress_percent` reads 0, since Gadgetbridge sends none, and `eta` is ignored. A `nav` with none of the three ends the navigation, and `current_navigation` goes back to its values before any came. |
 | `find` | `n` | `true` rings the watch, even in do not disturb, for up to a minute or until the wearer touches the watch or presses the button; `false` stops it. |
 | `vibrate` | `n` | Buzzes `n` times, 1 to 5, unless do not disturb is on. |
 | `status` | | Replies `{"t":"status","bat":87,"mv":3950,"steps":4321,"charging":false}`: the charge in percent, the battery's voltage in millivolts, smoothed as `battery_millivolts` is, today's steps and whether it is charging. |
 
-The watch keeps the music and weather until it restarts, and the latest of each message until the
-shell takes it, so a burst of messages leaves only the newest of each kind.
+The watch keeps the music, weather and navigation until it restarts, and the latest of each message
+until the shell takes it, so a burst of messages leaves only the newest of each kind.
 
 Watch to phone, sent as apps ask: `music` with `n` (`play`, `pause`, `next`, `previous`,
 `volumeup`, `volumedown`) for `music_control`; `call` with `n` (`ACCEPT`, `REJECT`, `IGNORE`) for
 `call_control`'s `answer`, `reject` and `mute`, which also stop the watch ringing (the phone
 silences its ringer for `IGNORE` and leaves the call ringing); `findPhone` with `n`, `true` or `false`, for
-`find_phone`; and `app` for an app's `send_to_phone(channel, data)`:
+`find_phone`; `request` with `n`, `music` or `nav`, for `request_music_state` and
+`request_navigation_state`; and `app` for an app's `send_to_phone(channel, data)`:
 `{"t":"app","ch":"<channel>","d":{"<key>":<number>,...}}`. The channel and keys are 1 to 32 letters,
 digits, `_` or `-`, written out in the app; `d` holds up to 4 whole numbers, in the order the app
 wrote them, or is `{}`. For example the remote app's third button sends
-`{"t":"app","ch":"remote","d":{"button":2}}`. The phone sends no reply.
+`{"t":"app","ch":"remote","d":{"button":2}}`. The phone sends no reply to these, but `request`.
+
+Bangle.js has no message asking the phone again, and Gadgetbridge logs `request` as one it does not
+know and sends nothing; it sends the music and navigation whenever they change. The companion app
+answers `{"t":"request","n":"music"}` with `musicinfo` and `musicstate` for what the phone plays, when
+it forwards music and knows of a track, and `{"t":"request","n":"nav"}` with `{"t":"nav"}`, since it
+follows no navigation, which tells the watch there is none.
 
 ### Slots (served)
 

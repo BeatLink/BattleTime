@@ -19,11 +19,15 @@ fn every_setting_starts_at_its_default() {
 #[test]
 fn numbers_and_names_go_both_ways() {
     for (place, setting) in Setting::ALL.into_iter().enumerate() {
-        assert_eq!(setting.number() as usize, place);
+        assert_eq!(setting.index(), place);
         assert_eq!(Setting::from_number(setting.number()), Some(setting));
         assert_eq!(Setting::from_name(setting.name()), Some(setting));
     }
-    assert_eq!(Setting::from_number(Setting::COUNT as u8), None);
+    assert!(Setting::ALL
+        .windows(2)
+        .all(|pair| pair[0].number() < pair[1].number()));
+    assert_eq!(Setting::from_number(19), None);
+    assert_eq!(Setting::from_number(21), None);
     assert_eq!(Setting::from_name("volume"), None);
 }
 
@@ -236,6 +240,24 @@ fn the_watch_face_takes_any_positive_face_number_and_survives_a_restart() {
 
     assert_eq!(Settings::from_file(&file).get(Setting::WatchFace), 0x3114_E811);
     assert_eq!(Setting::from_number(18), Some(Setting::WatchFace));
+}
+
+#[test]
+fn the_gadgetbridge_name_starts_off_takes_on_or_off_and_survives_a_restart() {
+    let mut settings = Settings::default();
+
+    assert!(!settings.is_on(Setting::GadgetbridgeName));
+    assert!(settings.set(Setting::GadgetbridgeName, 2).is_err());
+    assert_eq!(
+        settings.set_by_name("gadgetbridge_name", 1),
+        Ok(Setting::GadgetbridgeName)
+    );
+    let mut file = [0; FILE_BYTES];
+    settings.write_file(&mut file);
+
+    assert!(Settings::from_file(&file).is_on(Setting::GadgetbridgeName));
+    assert_eq!(Setting::from_number(20), Some(Setting::GadgetbridgeName));
+    assert_eq!(Setting::GadgetbridgeName.bit(), 1 << 20);
 }
 
 // ============================================================================

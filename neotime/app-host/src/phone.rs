@@ -1,5 +1,5 @@
-//! The phone as apps see it: its calls, music and weather delivered as events, and the lines an
-//! app's phone effects send back, such as `music_control` and `send_to_phone`.
+//! The phone as apps see it: its calls, music, weather and navigation delivered as events, and the
+//! lines an app's phone effects send back, such as `music_control` and `send_to_phone`.
 
 use neotime_companion::{PhoneCall, PhoneChanges, ShortLine};
 use neotime_runtime::{EffectKind, Value};
@@ -21,7 +21,7 @@ pub fn call_event(call: &PhoneCall) -> PushedEvent<'_> {
     }
 }
 
-/// Tells the open app of a call and of new music or weather, which the system already reads back.
+/// Tells the open app of a call and of new music, weather or navigation, which the system already reads back.
 pub fn tell_app(
     host: &mut AppHost,
     call: Option<&PhoneCall>,
@@ -38,6 +38,9 @@ pub fn tell_app(
     if changes.weather {
         host.deliver(PushedEvent::Weather, now, system);
     }
+    if changes.navigation {
+        host.deliver(PushedEvent::Navigation, now, system);
+    }
 }
 
 /// The line an effect sends the phone, or `None` for an effect that sends none.
@@ -46,6 +49,8 @@ pub fn line_for_effect(kind: EffectKind, first_argument: Value) -> Option<ShortL
         EffectKind::MusicControl => neotime_companion::music_control_line(first_argument),
         EffectKind::CallControl => neotime_companion::call_control_line(first_argument),
         EffectKind::FindPhone => Some(neotime_companion::find_phone_line(first_argument != 0)),
+        EffectKind::RequestMusicState => Some(neotime_companion::state_request_line(false)),
+        EffectKind::RequestNavigationState => Some(neotime_companion::state_request_line(true)),
         _ => None,
     }
 }

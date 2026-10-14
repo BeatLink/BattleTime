@@ -108,6 +108,7 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
         "settings.raise_to_wake" => (SystemValue::RaiseToWake, Type::BOOL),
         "settings.lower_to_sleep" => (SystemValue::LowerToSleep, Type::BOOL),
         "settings.shake_to_wake" => (SystemValue::ShakeToWake, Type::BOOL),
+        "settings.gadgetbridge_name" => (SystemValue::GadgetbridgeName, Type::BOOL),
         "settings.shake_threshold" => (SystemValue::ShakeThreshold, Type::NUMBER),
         "settings.sleep_mode" => (SystemValue::SleepMode, Type::BOOL),
         "settings.watch_face" => (SystemValue::WatchFace, Type::NUMBER),

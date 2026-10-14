@@ -1,6 +1,6 @@
 extern crate std;
 
-use std::format;
+use std::{format, string::String};
 
 use neotime_runtime::{SystemValue, NONE};
 
@@ -174,6 +174,166 @@ fn vibrate_buzzes_one_to_five_times() {
 }
 
 #[test]
+fn a_temperature_with_a_fraction_is_rounded_as_the_line_arrives() {
+    let line = br#"GB({"t":"weather","temp":291.6,"hi":299.5,"lo":-0.5,"loc":"Port 3.5","code":800})"#;
+    let rounded = with_fractions_rounded(line).unwrap();
+    let Ok(Message::Weather(weather)) = parse_line(&rounded) else {
+        panic!("{}", String::from_utf8_lossy(&rounded));
+    };
+
+    assert_eq!(weather.temperature_in_celsius, Some(19));
+    assert_eq!(weather.high_in_celsius, Some(27));
+    assert_eq!(weather.low_in_celsius, Some(-274));
+    assert_eq!(weather.location, "Port 3.5");
+    assert_eq!(weather.condition, Some(WeatherCondition::Clear));
+}
+
+#[test]
+fn rounding_carries_into_a_new_digit_and_leaves_text_alone() {
+    assert_eq!(
+        with_fractions_rounded(br#"{"a":9.5,"b":"x\"9.9","c":[0.4,-99.99]}"#).unwrap(),
+        br#"{"a":10,"b":"x\"9.9","c":[0,-100]}"#
+    );
+    assert_eq!(with_fractions_rounded(br#"{"t":"weather","temp":291}"#), None);
+}
+
+#[test]
+fn a_line_that_is_not_json_keeps_its_fractions() {
+    assert_eq!(
+        with_fractions_rounded(b"\x10setTime(1767603600);E.setTimeZone(5.5);"),
+        None
+    );
+    assert!(with_fractions_rounded(b"\x10GB({\"t\":\"weather\",\"temp\":2.5})").is_some());
+}
+
+#[test]
+fn the_line_assembler_rounds_each_json_line() {
+    let mut lines = LineAssembler::new();
+    let mut seen = std::vec::Vec::new();
+    lines.push(b"{\"t\":\"weather\",\"temp\":280.7}\nsetTime(1.5)\n", |line| {
+        seen.push(line.to_vec())
+    });
+
+    assert_eq!(
+        seen,
+        [
+            b"{\"t\":\"weather\",\"temp\":281}".to_vec(),
+            b"setTime(1.5)".to_vec()
+        ]
+    );
+}
+
+#[test]
+fn a_temperature_with_an_exponent_is_still_unreadable() {
+    let rounded = with_fractions_rounded(br#"{"t":"weather","temp":2.9e2}"#).unwrap();
+    assert_eq!(parse_line(&rounded), Err(MessageError::NotJson));
+}
+
+// ============================================================================
+// Navigation
+// ============================================================================
+
+#[test]
+fn gadgetbridge_navigation_is_read_with_its_turn_and_distance() {
+    let line = r#"GB({"t":"nav","instr":"Turn left onto Main Street","distance":"300 m","action":"left","eta":"12:34"})"#;
+
+    assert_eq!(
+        parsed(line),
+        Message::Navigation(Navigation {
+            turn: Some(NavigationTurn::Left),
+            instruction: "Turn left onto Main Street".try_into().unwrap(),
+            distance_in_metres: Some(300),
+        })
+    );
+}
+
+#[test]
+fn every_gadgetbridge_action_names_a_turn_but_off_route() {
+    use NavigationTurn::*;
+    for (action, turn) in [
+        ("continue", Some(Straight)),
+        ("left", Some(Left)),
+        ("left_slight", Some(SlightLeft)),
+        ("left_sharp", Some(SharpLeft)),
+        ("right", Some(Right)),
+        ("right_slight", Some(SlightRight)),
+        ("right_sharp", Some(SharpRight)),
+        ("keep_left", Some(SlightLeft)),
+        ("keep_right", Some(SlightRight)),
+        ("uturn_left", Some(UTurn)),
+        ("uturn_right", Some(UTurn)),
+        ("offroute", None),
+        ("roundabout_right", Some(Roundabout)),
+        ("roundabout_left", Some(Roundabout)),
+        ("roundabout_straight", Some(Roundabout)),
+        ("roundabout_uturn", Some(Roundabout)),
+        ("finish", Some(Arrive)),
+    ] {
+        assert_eq!(NavigationTurn::from_action(action), turn, "{action}");
+    }
+}
+
+#[test]
+fn distances_are_read_in_the_units_phones_write() {
+    for (text, metres) in [
+        ("300 m", Some(300)),
+        ("1.2 km", Some(1_200)),
+        ("1,5 km", Some(1_500)),
+        ("0.5 mi", Some(805)),
+        ("800 ft", Some(244)),
+        ("100 yd", Some(91)),
+        ("42", Some(42)),
+        (" 7 M ", Some(7)),
+        ("far", None),
+        ("3 parsecs", None),
+    ] {
+        assert_eq!(metres_from_text(text), metres, "{text}");
+    }
+}
+
+#[test]
+fn navigation_is_kept_for_apps_until_an_empty_step_ends_it() {
+    let off_route = parsed(r#"{"t":"nav","instr":"Off route","action":"offroute"}"#);
+    let Message::Navigation(off_route) = off_route else {
+        panic!();
+    };
+    assert_eq!(off_route.turn, None);
+
+    let mut data = PhoneData::default();
+
+    let mut updates = PhoneUpdates::default();
+    assert!(updates.record(parsed(
+        r#"{"t":"nav","instr":"Keep right","distance":"1.2 km","action":"keep_right"}"#
+    )));
+    let changes = data.apply(&mut updates, 1_000);
+
+    assert!(changes.navigation);
+    assert!(updates.is_empty());
+    assert_eq!(
+        data.read(SystemValue::NavigationTurn),
+        Some(NavigationTurn::SlightRight as i64)
+    );
+    assert_eq!(data.read(SystemValue::NavigationDistance), Some(1_200));
+    assert_eq!(data.read(SystemValue::NavigationProgressPercent), Some(0));
+    assert_eq!(
+        data.read_text(SystemValue::NavigationInstruction),
+        Some("Keep right")
+    );
+
+    updates.record(parsed(r#"{"t":"nav"}"#));
+    assert!(data.apply(&mut updates, 2_000).navigation);
+    assert_eq!(data.read(SystemValue::NavigationTurn), None);
+    assert_eq!(data.read(SystemValue::NavigationDistance), None);
+    assert_eq!(data.read_text(SystemValue::NavigationInstruction), None);
+}
+
+#[test]
+fn a_state_request_names_music_or_navigation() {
+    assert_eq!(state_request_line(false), "{\"t\":\"request\",\"n\":\"music\"}\n");
+    assert_eq!(state_request_line(true), "{\"t\":\"request\",\"n\":\"nav\"}\n");
+}
+
+#[test]
 fn a_field_of_the_wrong_type_is_unreadable() {
     for line in [
         r#"{"t":"find","n":"yes"}"#,
@@ -182,6 +342,7 @@ fn a_field_of_the_wrong_type_is_unreadable() {
         r#"{"t":"musicinfo","dur":"long"}"#,
         r#"{"t":"musicstate","position":"start"}"#,
         r#"{"t":"call","cmd":1}"#,
+        r#"{"t":"nav","distance":300}"#,
     ] {
         assert_eq!(parse_line(line.as_bytes()), Err(MessageError::NotJson), "{line}");
     }
@@ -281,6 +442,7 @@ fn nothing_received_reads_as_empty() {
     assert_eq!(data.read_text(SystemValue::MusicArtist), Some(""));
     assert_eq!(data.read_text(SystemValue::WeatherLocation), Some(""));
     assert_eq!(data.read_text(SystemValue::NavigationInstruction), None);
+    assert_eq!(data.read(SystemValue::NavigationTurn), None);
 }
 
 #[test]
@@ -326,6 +488,7 @@ fn music_info_and_state_combine() {
             music: true,
             weather: false,
             call: false,
+            navigation: false,
         }
     );
     assert!(updates.is_empty());
@@ -366,6 +529,7 @@ fn weather_is_kept_with_when_it_came() {
             music: false,
             weather: true,
             call: false,
+            navigation: false,
         }
     );
     assert_eq!(data.read(SystemValue::WeatherTemperature), Some(18));

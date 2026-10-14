@@ -1,0 +1,10 @@
+# The navigation app shows the step Gadgetbridge's nav message carries, and asks the phone for it when it opens.
+open app navigation
+expect effect request-navigation-state
+phone "GB({\"t\":\"nav\",\"instr\":\"Turn right onto Elm Road\",\"distance\":\"1.2 km\",\"action\":\"right\",\"eta\":\"12:34\"})"
+expect text "Elm Road"
+expect text "1.2 km"
+phone "GB({\"t\":\"nav\",\"instr\":\"Keep left\",\"distance\":\"300 m\",\"action\":\"keep_left\"})"
+expect text "Keep left"
+expect text "300 m"
+expect no failures

@@ -33,6 +33,14 @@ fn phone_effects_send_their_lines() {
         line_for_effect(EffectKind::FindPhone, 1).unwrap(),
         "{\"t\":\"findPhone\",\"n\":true}\n"
     );
+    assert_eq!(
+        line_for_effect(EffectKind::RequestMusicState, 0).unwrap(),
+        "{\"t\":\"request\",\"n\":\"music\"}\n"
+    );
+    assert_eq!(
+        line_for_effect(EffectKind::RequestNavigationState, 0).unwrap(),
+        "{\"t\":\"request\",\"n\":\"nav\"}\n"
+    );
     assert_eq!(line_for_effect(EffectKind::MusicControl, 99), None);
     assert_eq!(line_for_effect(EffectKind::Vibrate, 30), None);
 }

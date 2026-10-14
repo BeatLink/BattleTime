@@ -36,11 +36,28 @@ pub fn send_reply(line: &str) {
     let _ = REPLIES.try_send(Box::from(line));
 }
 
-/// Raised when the Bluetooth setting changes, so the Bluetooth task drops the phone or advertises again.
+/// Raised when the Bluetooth setting or the advertised name changes, so the Bluetooth task drops the phone or advertises again.
 pub static BLUETOOTH_SWITCHED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
+/// The settings that change what the Bluetooth task does, as `Setting::bit`s.
+fn bluetooth_bits() -> u32 {
+    Setting::Bluetooth.bit() | Setting::GadgetbridgeName.bit()
+}
 
 pub fn is_bluetooth_on() -> bool {
     current().is_on(Setting::Bluetooth)
+}
+
+/// The two names the watch advertises, in statics so the GAP service can borrow them.
+static OWN_NAME: &str = crate::DEVICE_NAME;
+static GADGETBRIDGE_NAME: &str = neotime_companion::advertising::GADGETBRIDGE_NAME;
+
+/// The name the watch advertises and gives in its GAP service: "InfiniTime" for Gadgetbridge, or its own.
+pub fn advertised_name() -> &'static &'static str {
+    match current().is_on(Setting::GadgetbridgeName) {
+        true => &GADGETBRIDGE_NAME,
+        false => &OWN_NAME,
+    }
 }
 
 const SETTINGS_PATH: &str = "/settings/system";
@@ -62,7 +79,12 @@ pub fn current() -> Settings {
 /// Reads the saved settings at start-up; a missing or unreadable file leaves the defaults.
 pub fn load(files: &storage::Files) {
     if let Some(bytes) = files.read_now(SETTINGS_PATH) {
-        SETTINGS.lock(|settings| settings.set(Settings::from_file(&bytes)));
+        let loaded = Settings::from_file(&bytes);
+        let before = SETTINGS.lock(|settings| settings.replace(loaded));
+        // Advertising started before the file was read, so a saved name starts it again.
+        if loaded.differences_from(&before) & bluetooth_bits() != 0 {
+            BLUETOOTH_SWITCHED.signal(());
+        }
     }
 }
 
@@ -115,7 +137,7 @@ fn change(apply: impl FnOnce(&mut Settings) -> u32) {
         return;
     }
     UNSAVED_CHANGES.fetch_or(changed, Ordering::Relaxed);
-    if changed & Setting::Bluetooth.bit() != 0 {
+    if changed & bluetooth_bits() != 0 {
         BLUETOOTH_SWITCHED.signal(());
     }
     for setting in Setting::ALL

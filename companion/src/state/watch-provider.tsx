@@ -18,6 +18,8 @@ import {
   type PhoneToWatchMessage,
   type StatusReply,
   type WatchToPhoneMessage,
+  answerStateRequest,
+  musicMessages,
 } from '@/protocol/gadgetbridge';
 import type { DfuLink } from '@/dfu/link';
 import { FileService } from '@/protocol/file-service';
@@ -176,6 +178,11 @@ export function WatchProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<StatusReply | null>(null);
   const [lastSynced, setLastSynced] = useState<number | null>(null);
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
+  // A watch's request arrives in a callback that outlives a render, so it reads what plays from here.
+  const nowPlayingRef = useRef<NowPlaying | null>(null);
+  useEffect(() => {
+    nowPlayingRef.current = nowPlaying;
+  }, [nowPlaying]);
   const [capabilities, setCapabilities] = useState<WatchCapabilities>(NO_CAPABILITIES);
   const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
   // Callbacks that outlive a render read the settings from here.
@@ -228,6 +235,11 @@ export function WatchProvider({ children }: { children: ReactNode }) {
       case 'music':
         if (settingsRef.current.forwardMusic) {
           void phoneBridge.mediaCommand(message.n).catch(() => {});
+        }
+        break;
+      case 'request':
+        for (const reply of answerStateRequest(message, nowPlayingRef.current, settingsRef.current.forwardMusic)) {
+          void sendMessageRef.current(reply);
         }
         break;
       case 'call':
@@ -419,14 +431,9 @@ export function WatchProvider({ children }: { children: ReactNode }) {
           break;
         case 'media':
           if (current.forwardMusic) {
-            await send({
-              t: 'musicinfo',
-              artist: event.artist,
-              album: event.album,
-              track: event.track,
-              dur: event.durationSec,
-            });
-            await send({ t: 'musicstate', state: event.playing ? 'play' : 'pause', position: event.positionSec });
+            for (const message of musicMessages(event)) {
+              await send(message);
+            }
           }
           break;
       }

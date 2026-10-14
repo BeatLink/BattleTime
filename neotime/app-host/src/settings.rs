@@ -29,6 +29,7 @@ pub fn system_value_of(setting: Setting) -> SystemValue {
         Setting::ShakeThreshold => SystemValue::ShakeThreshold,
         Setting::SleepMode => SystemValue::SleepMode,
         Setting::WatchFace => SystemValue::WatchFace,
+        Setting::GadgetbridgeName => SystemValue::GadgetbridgeName,
     }
 }
 

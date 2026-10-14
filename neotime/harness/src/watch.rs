@@ -6,8 +6,8 @@ use std::time::Duration;
 use neotime_app_host::closed_apps::ClosedApps;
 use neotime_app_host::{AppFailure, AppHost, EventResult, PushedEvent, Rect, Touch, SCREEN_AREA};
 use neotime_companion::{
-    PhoneData, PhoneUpdates, CALL_TEXTS, CALL_VALUES, MUSIC_TEXTS, MUSIC_VALUES, WEATHER_TEXTS,
-    WEATHER_VALUES,
+    PhoneData, PhoneUpdates, CALL_TEXTS, CALL_VALUES, MUSIC_TEXTS, MUSIC_VALUES, NAVIGATION_TEXTS,
+    NAVIGATION_VALUES, WEATHER_TEXTS, WEATHER_VALUES,
 };
 use neotime_runtime::events::SwipeDirection;
 use neotime_runtime::{
@@ -486,14 +486,17 @@ impl TestWatch {
 
     /// Reads a companion line as the watch does, keeps its music or weather, and tells the app of it.
     ///
-    /// Only the messages the shell passes to apps are taken: a call, music, weather, find or vibrate.
+    /// Only the messages the shell passes to apps are taken: a call, music, weather, navigation, find or vibrate.
     pub fn receive_from_phone(&mut self, line: &str) -> Result<(), String> {
-        let message = neotime_companion::parse_line(line.as_bytes())
+        // The watch rounds a JSON line's fractions as the line arrives, before reading it.
+        let rounded = neotime_companion::with_fractions_rounded(line.as_bytes());
+        let bytes = rounded.as_deref().unwrap_or(line.as_bytes());
+        let message = neotime_companion::parse_line(bytes)
             .map_err(|error| format!("the watch cannot read {line:?}: {error:?}"))?;
         let mut updates = PhoneUpdates::new();
         if !updates.record(message) {
             return Err(format!(
-                "{line:?} is not a call, music, weather, find or vibrate message"
+                "{line:?} is not a call, music, weather, navigation, find or vibrate message"
             ));
         }
 
@@ -508,6 +511,9 @@ impl TestWatch {
         if changes.weather {
             self.copy_phone_values(&WEATHER_VALUES, &WEATHER_TEXTS);
             self.system.forecast.clear();
+        }
+        if changes.navigation {
+            self.copy_phone_values(&NAVIGATION_VALUES, &NAVIGATION_TEXTS);
         }
         neotime_app_host::phone::tell_app(
             &mut self.host,

@@ -16,6 +16,7 @@ use neotime_settings::{allows_updates, Setting, Settings};
 use serde::Deserialize;
 use serde_json_core::str::{EscapedStr, EscapedStringFragment};
 
+pub mod advertising;
 mod alert;
 #[cfg(test)]
 mod alert_tests;
@@ -40,11 +41,12 @@ pub use heart_rate_measurement::heart_rate_measurement;
 pub use slots::{slots_refusal, slots_report, SlotRange, SlotsReport, SlotsRequest};
 
 pub use phone::{
-    app_message_line, call_control_line, find_phone_line, music_control_line, status_report, CallKind,
-    MusicInfo, MusicState, PhoneCall, PhoneChanges, PhoneData, PhoneUpdates, ShortLine, WatchStatus, Weather,
-    WeatherCondition, CALLER_BYTES, CALL_TEXTS, CALL_VALUES, MOST_PHONE_BUZZES, MUSIC_ARTIST_BYTES,
-    MUSIC_TEXTS, MUSIC_TRACK_BYTES, MUSIC_VALUES, SHORT_LINE_BYTES, WEATHER_LOCATION_BYTES, WEATHER_TEXTS,
-    WEATHER_VALUES,
+    app_message_line, call_control_line, find_phone_line, metres_from_text, music_control_line,
+    state_request_line, status_report, CallKind, MusicInfo, MusicState, Navigation, NavigationTurn,
+    PhoneCall, PhoneChanges, PhoneData, PhoneUpdates, ShortLine, WatchStatus, Weather, WeatherCondition,
+    CALLER_BYTES, CALL_TEXTS, CALL_VALUES, MOST_PHONE_BUZZES, MUSIC_ARTIST_BYTES, MUSIC_TEXTS,
+    MUSIC_TRACK_BYTES, MUSIC_VALUES, NAVIGATION_INSTRUCTION_BYTES, NAVIGATION_TEXTS, NAVIGATION_VALUES,
+    SHORT_LINE_BYTES, WEATHER_LOCATION_BYTES, WEATHER_TEXTS, WEATHER_VALUES,
 };
 
 /// The longest line either side sends; a longer one is dropped whole.
@@ -78,11 +80,16 @@ impl LineAssembler {
     }
 
     /// Takes newly written bytes and hands each line they complete to `on_line`, without its newline.
+    ///
+    /// A JSON line has its numbers' fractions rounded first, as `with_fractions_rounded` describes.
     pub fn push(&mut self, bytes: &[u8], mut on_line: impl FnMut(&[u8])) {
         for &byte in bytes {
             if byte == b'\n' {
                 if !self.overflowed {
-                    on_line(&self.buffer);
+                    match with_fractions_rounded(&self.buffer) {
+                        Some(rounded) => on_line(&rounded),
+                        None => on_line(&self.buffer),
+                    }
                 }
                 self.clear();
             } else if self.buffer.len() < MOST_LINE_BYTES {
@@ -98,6 +105,75 @@ impl LineAssembler {
         self.buffer = alloc::vec::Vec::new();
         self.overflowed = false;
     }
+}
+
+/// A JSON line with each number outside quotes that has a fraction rounded to a whole one, halves away
+/// from zero, since the watch reads whole numbers only; `None` for a line with none, or one not JSON.
+///
+/// A phone may send a temperature such as `291.6`. Lines that are not JSON, such as Gadgetbridge's
+/// `setTime(...);E.setTimeZone(5.5)`, are left alone.
+pub fn with_fractions_rounded(line: &[u8]) -> Option<alloc::vec::Vec<u8>> {
+    let start = line
+        .iter()
+        .position(|&byte| byte != GADGETBRIDGE_LINE_START && !byte.is_ascii_whitespace())?;
+    if !matches!(line[start], b'{' | b'G') || !line.contains(&b'.') {
+        return None;
+    }
+    let mut out = alloc::vec::Vec::with_capacity(line.len() + 1);
+    let mut in_text = false;
+    let mut after_backslash = false;
+    // Where the digits of the number being copied start, and while skipping its fraction, whether it rounds up.
+    let mut digits_start = None;
+    let mut fraction: Option<Option<bool>> = None;
+    for &byte in line {
+        if in_text {
+            out.push(byte);
+            in_text = after_backslash || byte != b'"';
+            after_backslash = !after_backslash && byte == b'\\';
+            continue;
+        }
+        if let Some(rounds_up) = fraction {
+            if byte.is_ascii_digit() {
+                fraction = Some(Some(rounds_up.unwrap_or(byte >= b'5')));
+                continue;
+            }
+            round_up_if(rounds_up == Some(true), &mut out, digits_start);
+            fraction = None;
+            digits_start = None;
+        }
+        match byte {
+            b'0'..=b'9' => {
+                digits_start.get_or_insert(out.len());
+                out.push(byte);
+            }
+            b'.' if digits_start.is_some() => fraction = Some(None),
+            _ => {
+                digits_start = None;
+                in_text = byte == b'"';
+                out.push(byte);
+            }
+        }
+    }
+    round_up_if(fraction == Some(Some(true)), &mut out, digits_start);
+    Some(out)
+}
+
+/// The byte Gadgetbridge puts before each line, an Espruino convention.
+const GADGETBRIDGE_LINE_START: u8 = 0x10;
+
+/// Adds one to the whole number whose digits run from `digits_start` to the end of `out`.
+fn round_up_if(rounds_up: bool, out: &mut alloc::vec::Vec<u8>, digits_start: Option<usize>) {
+    let Some(start) = digits_start.filter(|_| rounds_up) else {
+        return;
+    };
+    for digit in out[start..].iter_mut().rev() {
+        if *digit != b'9' {
+            *digit += 1;
+            return;
+        }
+        *digit = b'0';
+    }
+    out.insert(start, b'1');
 }
 
 // ============================================================================
@@ -119,6 +195,8 @@ pub enum Message<'line> {
     MusicState(MusicState),
     /// `weather`: the phone's forecast.
     Weather(Weather),
+    /// `nav`: the next step of the phone's navigation, or its end.
+    Navigation(Navigation),
     /// `find`: start or stop ringing the watch.
     Find { is_on: bool },
     /// `vibrate`: buzz this many times.
@@ -154,7 +232,7 @@ impl SettingsChange {
     }
 
     pub fn value(&self, setting: Setting) -> Option<i32> {
-        self.values[setting as usize]
+        self.values[setting.index()]
     }
 
     /// The theme after this change.
@@ -258,6 +336,7 @@ const KEYS: [(Setting, &str, Shape); Setting::COUNT] = [
     (Setting::ShakeThreshold, "shake_threshold", Shape::Number),
     (Setting::SleepMode, "sleep_mode", Shape::TrueOrFalse),
     (Setting::WatchFace, "watch_face", Shape::Number),
+    (Setting::GadgetbridgeName, "gadgetbridge_name", Shape::TrueOrFalse),
 ];
 
 const METRIC: &str = "Metric";
@@ -313,6 +392,8 @@ struct Envelope<'line> {
     #[serde(default)]
     watch_face: Option<i64>,
     #[serde(default)]
+    gadgetbridge_name: Option<bool>,
+    #[serde(default)]
     id: Option<i64>,
     #[serde(default, borrow)]
     src: Option<EscapedStr<'line>>,
@@ -334,7 +415,7 @@ impl Envelope<'_> {
         };
         let mut values = [None; Setting::COUNT];
         for setting in Setting::ALL {
-            values[setting as usize] = match setting {
+            values[setting.index()] = match setting {
                 Setting::Uses24HourClock => self.clock_24h.map(i32::from),
                 Setting::UsesMetricUnits => units,
                 Setting::StepGoal => number(self.step_goal),
@@ -357,6 +438,7 @@ impl Envelope<'_> {
                 Setting::ShakeThreshold => number(self.shake_threshold),
                 Setting::SleepMode => self.sleep_mode.map(i32::from),
                 Setting::WatchFace => number(self.watch_face),
+                Setting::GadgetbridgeName => self.gadgetbridge_name.map(i32::from),
             };
         }
         let mut checked = Settings::default();
@@ -446,7 +528,7 @@ pub fn parse_line(line: &[u8]) -> Result<Message<'_>, MessageError> {
                 body: unescaped(envelope.body),
             }))
         }
-        "call" | "musicinfo" | "musicstate" | "weather" => {
+        "call" | "musicinfo" | "musicstate" | "weather" | "nav" => {
             return phone::parse_phone_message(envelope.t, json)
         }
         "find" => return phone::parse_find(json),

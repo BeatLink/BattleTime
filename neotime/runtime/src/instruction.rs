@@ -200,6 +200,8 @@ pub enum SystemValue {
     FolderEntryIsFolder = 118,
     /// List: the colour to draw each kept notification's icon in, a theme or fixed colour picked from its app's name.
     NotificationColor = 119,
+    /// Whether the watch advertises as "InfiniTime", so Gadgetbridge picks its InfiniTime support; numbers 120 and 121 are kept for other changes.
+    GadgetbridgeName = 122,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -220,7 +222,7 @@ const SHAKE_SPEED_BIT: u32 = 25;
 const FOLDER_BIT: u32 = 26;
 
 impl SystemValue {
-    pub const COUNT: usize = 120;
+    pub const COUNT: usize = 123;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -342,6 +344,7 @@ impl SystemValue {
             117 => FolderEntrySize,
             118 => FolderEntryIsFolder,
             119 => NotificationColor,
+            122 => GadgetbridgeName,
             _ => return None,
         })
     }
@@ -374,7 +377,7 @@ impl SystemValue {
             | LauncherGroupFirst | LauncherGroupSize => INSTALLED_APPS_BIT,
             ScreenTimeoutSeconds | AlwaysOnScreen | Chimes | ThemePreset | AllowsUpdates | WakeOnTouch
             | AlarmsInDoNotDisturb | HeartRateInterval | RaiseToWake | LowerToSleep | ShakeToWake
-            | ShakeThreshold | SleepMode | WatchFace | WatchFaceName => SETTINGS_BIT,
+            | ShakeThreshold | SleepMode | WatchFace | WatchFaceName | GadgetbridgeName => SETTINGS_BIT,
             ShakeSpeed => SHAKE_SPEED_BIT,
             NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
             | NotificationTime | NotificationIcon | NotificationColor => UnreadNotifications as u32,

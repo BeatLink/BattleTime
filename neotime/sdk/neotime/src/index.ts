@@ -157,6 +157,8 @@ export const settings = {
   sleep_mode: signal(false),
   /** The `number` of the face the watch shows, as the `watch_face` setting holds it; 0 with no face on. */
   watch_face: signal(0),
+  /** Whether the watch advertises as "InfiniTime", so Gadgetbridge picks its InfiniTime support; set from the companion app. */
+  gadgetbridge_name: signal(false),
 };
 
 /** How fast the wrist is shaking, 0 to about 4095, kept current only while a screen shows it. */

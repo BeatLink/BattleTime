@@ -8,3 +8,9 @@ expect text "23"
 expect text "12°"
 expect text "26°"
 expect no failures
+
+# A temperature with a fraction is rounded rather than refused.
+phone "GB({\"t\":\"weather\",\"temp\":296.6,\"hi\":299,\"lo\":289,\"code\":800,\"loc\":\"Test City\"})"
+expect text "Test City"
+expect text "24"
+expect no failures

@@ -289,6 +289,12 @@ from a small attribute table. It checks that the watch asks by itself after conn
 Alert on and writes the control point, keeps the phone's time and zone as UTC, buzzes for an SMS
 alert the phone notifies and opens the call app for a call alert; it takes about a minute.
 
+`../tools/check_advertising.py FIRMWARE_ELF` scans the watch through the bridge's controller: fast
+advertising for the first 30 seconds then about once a second, InfiniTime's advertisement, the name
+in the scan response and the GAP service, the 0x00C2 appearance, then the `gadgetbridge_name`
+setting written over the Nordic UART, after which the watch advertises fast again as `InfiniTime`,
+and a second start with the setting saved; it takes about three minutes.
+
 `../tools/check_watch_face.py FIRMWARE_ELF` installs the analog and digital faces and starts the
 firmware three times: with no face chosen analog opens, with digital chosen in the saved settings
 digital opens, and with an uninstalled face chosen it falls back to analog; it takes about a minute.

@@ -1,8 +1,8 @@
-//! The phone's calls, music, weather and other Gadgetbridge messages besides settings and notifications.
+//! The phone's calls, music, weather, navigation and other Gadgetbridge messages besides settings and notifications.
 //!
 //! Each message is read into a small struct whose text is unescaped and cut at a whole character.
 //! `PhoneUpdates` keeps the latest of each kind until the shell takes them, and `PhoneData` keeps
-//! the music and weather the apps read as system values. The watch's own lines to the phone, such
+//! the music, weather and navigation the apps read as system values. The watch's own lines to the phone, such
 //! as the `status` reply and music commands, are written here too.
 
 extern crate alloc;
@@ -27,8 +27,8 @@ pub type ShortLine = heapless::String<SHORT_LINE_BYTES>;
 // Reading calls, music and weather
 // ============================================================================
 
-/// The fields of `call`, `musicinfo`, `musicstate` and `weather`, read by one parser to keep the
-/// firmware small; no two of these messages use a key in different ways.
+/// The fields of `call`, `musicinfo`, `musicstate`, `weather` and `nav`, read by one parser to keep
+/// the firmware small; no two of these messages use a key in different ways.
 #[derive(Deserialize)]
 struct PhoneFields<'line> {
     #[serde(default, borrow)]
@@ -57,9 +57,15 @@ struct PhoneFields<'line> {
     code: Option<i64>,
     #[serde(default, borrow)]
     loc: Option<EscapedStr<'line>>,
+    #[serde(default, borrow)]
+    instr: Option<EscapedStr<'line>>,
+    #[serde(default, borrow)]
+    distance: Option<&'line str>,
+    #[serde(default, borrow)]
+    action: Option<&'line str>,
 }
 
-/// Reads a `call`, `musicinfo`, `musicstate` or `weather` message, by its `t`.
+/// Reads a `call`, `musicinfo`, `musicstate`, `weather` or `nav` message, by its `t`.
 #[inline(never)]
 pub(crate) fn parse_phone_message<'line>(
     kind: &'line str,
@@ -70,7 +76,8 @@ pub(crate) fn parse_phone_message<'line>(
         "call" => call_from(fields),
         "musicinfo" => music_info_from(fields),
         "musicstate" => music_state_from(fields),
-        "weather" => weather_from(fields),
+        "weather" => Message::Weather(weather_from(fields)),
+        "nav" => Message::Navigation(navigation_from(fields)),
         _ => Message::Unknown { kind },
     })
 }
@@ -107,7 +114,7 @@ fn call_kind_of(command: &str) -> Option<CallKind> {
     }
 }
 
-fn call_from(fields: PhoneFields<'_>) -> Message<'_> {
+fn call_from(fields: PhoneFields<'_>) -> Message<'static> {
     let Some(kind) = fields.cmd.and_then(call_kind_of) else {
         return Message::Unknown { kind: "call" };
     };
@@ -143,7 +150,7 @@ pub struct MusicState {
     pub position_in_seconds: Option<Value>,
 }
 
-fn music_info_from(fields: PhoneFields<'_>) -> Message<'_> {
+fn music_info_from(fields: PhoneFields<'_>) -> Message<'static> {
     Message::MusicInfo(MusicInfo {
         artist: unescaped(fields.artist),
         track: unescaped(fields.track),
@@ -151,7 +158,7 @@ fn music_info_from(fields: PhoneFields<'_>) -> Message<'_> {
     })
 }
 
-fn music_state_from(fields: PhoneFields<'_>) -> Message<'_> {
+fn music_state_from(fields: PhoneFields<'_>) -> Message<'static> {
     Message::MusicState(MusicState {
         is_playing: fields.state == Some("play"),
         position_in_seconds: fields.position.map(|seconds| seconds.max(0)),
@@ -215,14 +222,143 @@ fn celsius_from_kelvin(kelvin: Option<i64>) -> Option<Value> {
     kelvin.map(|kelvin| kelvin.saturating_sub(KELVIN_AT_ZERO_CELSIUS))
 }
 
-fn weather_from(fields: PhoneFields<'_>) -> Message<'_> {
-    Message::Weather(Weather {
+fn weather_from(fields: PhoneFields<'_>) -> Weather {
+    Weather {
         temperature_in_celsius: celsius_from_kelvin(fields.temp),
         low_in_celsius: celsius_from_kelvin(fields.lo),
         high_in_celsius: celsius_from_kelvin(fields.hi),
         condition: fields.code.and_then(WeatherCondition::from_code),
         location: unescaped(fields.loc),
-    })
+    }
+}
+
+// ============================================================================
+// Navigation
+// ============================================================================
+
+/// The longest instruction kept; a longer one is cut short.
+pub const NAVIGATION_INSTRUCTION_BYTES: usize = 64;
+
+/// The turns apps name, numbered in the order the compiler gives `NavigationTurn`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NavigationTurn {
+    Straight,
+    Left,
+    Right,
+    SlightLeft,
+    SlightRight,
+    SharpLeft,
+    SharpRight,
+    UTurn,
+    Roundabout,
+    Arrive,
+}
+
+/// Gadgetbridge's Bangle.js `action` names and the turns they show as; `offroute` shows none.
+const NAVIGATION_ACTIONS: [(&str, NavigationTurn); 16] = [
+    ("continue", NavigationTurn::Straight),
+    ("left", NavigationTurn::Left),
+    ("right", NavigationTurn::Right),
+    ("left_slight", NavigationTurn::SlightLeft),
+    ("keep_left", NavigationTurn::SlightLeft),
+    ("right_slight", NavigationTurn::SlightRight),
+    ("keep_right", NavigationTurn::SlightRight),
+    ("left_sharp", NavigationTurn::SharpLeft),
+    ("right_sharp", NavigationTurn::SharpRight),
+    ("uturn_left", NavigationTurn::UTurn),
+    ("uturn_right", NavigationTurn::UTurn),
+    ("roundabout_right", NavigationTurn::Roundabout),
+    ("roundabout_left", NavigationTurn::Roundabout),
+    ("roundabout_straight", NavigationTurn::Roundabout),
+    ("roundabout_uturn", NavigationTurn::Roundabout),
+    ("finish", NavigationTurn::Arrive),
+];
+
+impl NavigationTurn {
+    /// The turn for one of the `action` names Gadgetbridge's Bangle.js driver sends.
+    pub fn from_action(action: &str) -> Option<NavigationTurn> {
+        NAVIGATION_ACTIONS
+            .iter()
+            .find(|(name, _)| *name == action)
+            .map(|&(_, turn)| turn)
+    }
+}
+
+/// `nav`: the next step of the phone's navigation; one with nothing in it means navigation ended.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Navigation {
+    pub turn: Option<NavigationTurn>,
+    pub instruction: heapless::String<NAVIGATION_INSTRUCTION_BYTES>,
+    pub distance_in_metres: Option<Value>,
+}
+
+impl Navigation {
+    /// Whether this says navigation ended: no turn, instruction or distance.
+    pub fn has_ended(&self) -> bool {
+        *self == Navigation::default()
+    }
+}
+
+fn navigation_from(fields: PhoneFields<'_>) -> Navigation {
+    Navigation {
+        turn: fields.action.and_then(NavigationTurn::from_action),
+        instruction: unescaped(fields.instr),
+        distance_in_metres: fields.distance.and_then(metres_from_text),
+    }
+}
+
+/// Millimetres in each unit a phone writes a distance in.
+const MILLIMETRES_PER_UNIT: [(&str, Value); 5] = [
+    ("km", 1_000_000),
+    ("mi", 1_609_344),
+    ("ft", 305),
+    ("yd", 914),
+    ("m", 1_000),
+];
+
+/// A distance written as the phone shows it, such as `300 m`, `1.2 km` or `0,5 mi`, in whole metres.
+///
+/// A number with no unit counts as metres; one decimal place is kept, and an unknown unit gives `None`.
+pub fn metres_from_text(text: &str) -> Option<Value> {
+    let mut tenths_of_units: Value = 0;
+    let mut digits = 0;
+    let mut fraction_digits = None;
+    let mut rest = text.trim().as_bytes();
+    while let [byte, after @ ..] = rest {
+        match (byte, fraction_digits) {
+            (b'0'..=b'9', None) => {
+                tenths_of_units = tenths_of_units
+                    .checked_mul(10)?
+                    .checked_add(Value::from(byte - b'0'))?;
+                digits += 1;
+            }
+            (b'0'..=b'9', Some(0)) => {
+                tenths_of_units = tenths_of_units.checked_add(Value::from(byte - b'0'))?;
+                fraction_digits = Some(1);
+            }
+            (b'0'..=b'9', Some(_)) => {}
+            (b'.' | b',', None) => {
+                tenths_of_units = tenths_of_units.checked_mul(10)?;
+                fraction_digits = Some(0);
+            }
+            _ => break,
+        }
+        rest = after;
+    }
+    if fraction_digits.is_none() {
+        tenths_of_units = tenths_of_units.checked_mul(10)?;
+    }
+    let unit = core::str::from_utf8(rest).ok()?.trim();
+    let millimetres = match unit {
+        "" => 1_000,
+        _ => {
+            MILLIMETRES_PER_UNIT
+                .iter()
+                .find(|(name, _)| unit.eq_ignore_ascii_case(name))?
+                .1
+        }
+    };
+    (digits > 0).then(|| (tenths_of_units * millimetres + 5_000) / 10_000)
 }
 
 // ============================================================================
@@ -272,6 +408,7 @@ pub struct PhoneUpdates {
     pub music_info: Option<Box<MusicInfo>>,
     pub music_state: Option<MusicState>,
     pub weather: Option<Box<Weather>>,
+    pub navigation: Option<Box<Navigation>>,
     /// Whether to start or stop ringing the watch so the wearer can find it.
     pub find: Option<bool>,
     pub buzzes: Option<u8>,
@@ -285,18 +422,20 @@ impl PhoneUpdates {
             music_info: None,
             music_state: None,
             weather: None,
+            navigation: None,
             find: None,
             buzzes: None,
         }
     }
 
-    /// Keeps a call, music, weather, find or vibrate message, replacing one of its kind; false for any other.
+    /// Keeps a call, music, weather, navigation, find or vibrate message, replacing one of its kind; false for any other.
     pub fn record(&mut self, message: Message<'_>) -> bool {
         match message {
             Message::Call(call) => self.call = Some(Box::new(call)),
             Message::MusicInfo(info) => self.music_info = Some(Box::new(info)),
             Message::MusicState(state) => self.music_state = Some(state),
             Message::Weather(weather) => self.weather = Some(Box::new(weather)),
+            Message::Navigation(navigation) => self.navigation = Some(Box::new(navigation)),
             Message::Find { is_on } => self.find = Some(is_on),
             Message::Vibrate { times } => self.buzzes = Some(times),
             _ => return false,
@@ -319,6 +458,7 @@ pub struct PhoneChanges {
     pub music: bool,
     pub weather: bool,
     pub call: bool,
+    pub navigation: bool,
 }
 
 #[derive(Debug, Default)]
@@ -328,7 +468,7 @@ struct Music {
     position_in_seconds: Value,
 }
 
-/// The latest music and weather the phone sent, kept on the heap once the phone sends any.
+/// The latest music, weather and navigation the phone sent, kept on the heap once the phone sends any.
 #[derive(Debug, Default)]
 pub struct PhoneData {
     /// The latest call, kept after it ends so its caller can still be shown.
@@ -336,6 +476,8 @@ pub struct PhoneData {
     music: Option<Box<Music>>,
     weather: Option<Box<Weather>>,
     weather_received_at: Value,
+    /// The step navigation is at, or none once it ends.
+    navigation: Option<Box<Navigation>>,
 }
 
 /// The system values `PhoneData` gives, so a test system can copy them.
@@ -356,6 +498,12 @@ pub const WEATHER_VALUES: [SystemValue; 7] = [
 ];
 pub const WEATHER_TEXTS: [SystemValue; 1] = [SystemValue::WeatherLocation];
 pub const CALL_VALUES: [SystemValue; 1] = [SystemValue::CallState];
+pub const NAVIGATION_VALUES: [SystemValue; 3] = [
+    SystemValue::NavigationTurn,
+    SystemValue::NavigationDistance,
+    SystemValue::NavigationProgressPercent,
+];
+pub const NAVIGATION_TEXTS: [SystemValue; 1] = [SystemValue::NavigationInstruction];
 pub const CALL_TEXTS: [SystemValue; 1] = [SystemValue::CallCaller];
 
 /// `CallState` with no call under way, which is also its number for an ended call.
@@ -366,7 +514,7 @@ fn number_or_none(value: Option<Value>) -> Value {
 }
 
 impl PhoneData {
-    /// Takes the music and weather out of the updates, at wall clock time `now`, and says what changed.
+    /// Takes the music, weather and navigation out of the updates, at wall clock time `now`, and says what changed.
     pub fn apply(&mut self, updates: &mut PhoneUpdates, now: Value) -> PhoneChanges {
         let mut changes = PhoneChanges::default();
         // The call stays in the updates, since the shell passes it on to the open app as an event.
@@ -391,13 +539,20 @@ impl PhoneData {
             self.weather_received_at = now;
             changes.weather = true;
         }
+        if let Some(navigation) = updates.navigation.take() {
+            self.navigation = (!navigation.has_ended()).then_some(navigation);
+            changes.navigation = true;
+        }
         changes
     }
 
-    /// A call, music or weather value, or `None` for any other value; values the phone never sent are empty.
+    /// A call, music, weather or navigation value, or `None` for any other value and for navigation before a step comes.
+    ///
+    /// Music and weather the phone never sent read as empty.
     pub fn read(&self, value: SystemValue) -> Option<Value> {
         let music = self.music.as_deref();
         let weather = self.weather.as_deref();
+        let navigation = self.navigation.as_deref();
         let seconds = |seconds: Value| seconds.saturating_mul(MILLISECONDS_PER_SECOND);
         Some(match value {
             SystemValue::CallState => self.call.as_deref().map_or(NO_CALL, |call| call.kind as Value),
@@ -413,11 +568,16 @@ impl PhoneData {
             SystemValue::WeatherReceivedAt => number_or_none(weather.map(|_| self.weather_received_at)),
             SystemValue::WeatherSunrise | SystemValue::WeatherSunset => NONE,
             SystemValue::WeatherForecastLength => 0,
+            // Without navigation the system's own values stand, as before the phone sent any.
+            SystemValue::NavigationTurn => number_or_none(navigation?.turn.map(|turn| turn as Value)),
+            SystemValue::NavigationDistance => number_or_none(navigation?.distance_in_metres),
+            // Gadgetbridge sends no progress, so the bar stays empty.
+            SystemValue::NavigationProgressPercent => navigation.map(|_| 0)?,
             _ => return None,
         })
     }
 
-    /// The caller, artist, track or place, or `None` for any other value.
+    /// The caller, artist, track, place or navigation instruction, or `None` for any other value.
     pub fn read_text(&self, value: SystemValue) -> Option<&str> {
         let music = self.music.as_deref();
         let weather = self.weather.as_deref();
@@ -426,6 +586,7 @@ impl PhoneData {
             SystemValue::MusicArtist => music.map_or("", |music| &music.info.artist),
             SystemValue::MusicTrack => music.map_or("", |music| &music.info.track),
             SystemValue::WeatherLocation => weather.map_or("", |weather| &weather.location),
+            SystemValue::NavigationInstruction => &self.navigation.as_deref()?.instruction,
             _ => return None,
         })
     }
@@ -476,6 +637,20 @@ pub fn music_control_line(command: Value) -> Option<ShortLine> {
 /// The `call` line for a `call_control` command by its number, or `None` for a number out of range.
 pub fn call_control_line(command: Value) -> Option<ShortLine> {
     command_line("call", &CALL_COMMANDS, command)
+}
+
+/// What `request_music_state` and `request_navigation_state` ask the phone for, as the `n` of a `request` line.
+const STATE_REQUESTS: [&str; 2] = ["music", "nav"];
+
+/// The `request` line asking the phone to send its music again, or its navigation step when `navigation` is true.
+pub fn state_request_line(navigation: bool) -> ShortLine {
+    let mut line = ShortLine::new();
+    let _ = writeln!(
+        line,
+        "{{\"t\":\"request\",\"n\":\"{}\"}}",
+        STATE_REQUESTS[navigation as usize]
+    );
+    line
 }
 
 /// The `findPhone` line that starts or stops the phone ringing.

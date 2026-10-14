@@ -66,6 +66,12 @@ describe('settings', () => {
     expect(after.theme_colors.background).toBe('#ffffff');
   });
 
+  it('turns the InfiniTime name for Gadgetbridge on and off', async () => {
+    const channel = requestChannel();
+    expect((await readWatchSettings(channel)).gadgetbridge_name).toBe(false);
+    expect((await writeWatchSettings(channel, { gadgetbridge_name: true })).gadgetbridge_name).toBe(true);
+  });
+
   it('turns a changed colour into a custom theme, and refuses a bad value whole', async () => {
     const channel = requestChannel();
     const custom = await writeWatchSettings(channel, { theme_colors: { accent: '#ff8000' } });

@@ -37,6 +37,8 @@ pub enum Setting {
     ShakeThreshold = 16,
     SleepMode = 17,
     WatchFace = 18,
+    /// Number 19 is kept for a setting another change adds.
+    GadgetbridgeName = 20,
 }
 
 /// The lowest and highest value a setting takes, both included, and the value it starts at.
@@ -105,7 +107,8 @@ pub mod shake_threshold {
 }
 
 impl Setting {
-    pub const COUNT: usize = 19;
+    /// How many settings there are; numbers may skip one, so a setting's place in `ALL` is its `index`.
+    pub const COUNT: usize = 20;
 
     pub const ALL: [Setting; Setting::COUNT] = [
         Setting::Uses24HourClock,
@@ -127,14 +130,25 @@ impl Setting {
         Setting::ShakeThreshold,
         Setting::SleepMode,
         Setting::WatchFace,
+        Setting::GadgetbridgeName,
     ];
 
     pub fn from_number(number: u8) -> Option<Setting> {
-        Setting::ALL.get(number as usize).copied()
+        Setting::ALL
+            .into_iter()
+            .find(|setting| setting.number() == number)
     }
 
-    pub fn number(self) -> u8 {
+    pub const fn number(self) -> u8 {
         self as u8
+    }
+
+    /// The setting's place in `ALL`, and in every array kept in that order.
+    pub const fn index(self) -> usize {
+        match self {
+            Setting::GadgetbridgeName => 19,
+            other => other as usize,
+        }
     }
 
     /// The name apps pass to `set_setting` and read under `settings`.
@@ -159,6 +173,7 @@ impl Setting {
             Setting::ShakeThreshold => "shake_threshold",
             Setting::SleepMode => "sleep_mode",
             Setting::WatchFace => "watch_face",
+            Setting::GadgetbridgeName => "gadgetbridge_name",
         }
     }
 
@@ -210,6 +225,7 @@ impl Setting {
                 watch_face::HIGHEST,
                 watch_face::NONE_CHOSEN,
             ),
+            Setting::GadgetbridgeName => limits(0, 1, 0),
         }
     }
 
@@ -259,7 +275,7 @@ impl Settings {
     };
 
     pub fn get(&self, setting: Setting) -> i32 {
-        self.values[setting as usize]
+        self.values[setting.index()]
     }
 
     pub fn is_on(&self, setting: Setting) -> bool {
@@ -276,7 +292,7 @@ impl Settings {
             });
         }
         let changed = self.get(setting) != value;
-        self.values[setting as usize] = value;
+        self.values[setting.index()] = value;
         self.keep_sleep_mode_inside_do_not_disturb(setting);
         Ok(changed)
     }
@@ -285,10 +301,10 @@ impl Settings {
     fn keep_sleep_mode_inside_do_not_disturb(&mut self, changed: Setting) {
         match changed {
             Setting::SleepMode if self.is_on(Setting::SleepMode) => {
-                self.values[Setting::DoNotDisturb as usize] = 1;
+                self.values[Setting::DoNotDisturb.index()] = 1;
             }
             Setting::DoNotDisturb if !self.is_on(Setting::DoNotDisturb) => {
-                self.values[Setting::SleepMode as usize] = 0;
+                self.values[Setting::SleepMode.index()] = 0;
             }
             _ => {}
         }
@@ -381,10 +397,10 @@ impl Settings {
             .into_iter()
             .filter(|setting| !setting.survives_restart())
         {
-            settings.values[setting as usize] = setting.limits().default;
+            settings.values[setting.index()] = setting.limits().default;
         }
         if settings.get(Setting::AllowsUpdates) == allows_updates::UNTIL_RESTART {
-            settings.values[Setting::AllowsUpdates as usize] = allows_updates::OFF;
+            settings.values[Setting::AllowsUpdates.index()] = allows_updates::OFF;
         }
         settings
     }

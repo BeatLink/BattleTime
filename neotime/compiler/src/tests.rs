@@ -1647,6 +1647,26 @@ fn the_watch_face_is_read_by_number_and_name_and_stepped_with_the_settings_permi
 }
 
 #[test]
+fn the_gadgetbridge_name_setting_is_read_as_a_true_or_false() {
+    use neotime_runtime::instruction::Instruction;
+    let source = app(r#"import { settings } from "neotime";
+        function Main() {
+          return (
+            <Screen>
+              <Label>{settings.gadgetbridge_name.value ? "InfiniTime" : "NeoTime"}</Label>
+            </Screen>
+          );
+        }"#);
+    let image = compile(&source);
+    let image = AppImage::parse(&image).unwrap();
+
+    assert!(image_runs(
+        &image,
+        Instruction::ReadSystem(SystemValue::GadgetbridgeName)
+    ));
+}
+
+#[test]
 fn the_about_facts_and_the_task_table_are_read_from_the_system() {
     use neotime_runtime::instruction::Instruction;
     let image = compile(&app(

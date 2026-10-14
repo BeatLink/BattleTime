@@ -236,6 +236,7 @@ export function set_fake_system_values() {
   settings.shake_threshold.value = 150;
   settings.sleep_mode.value = false;
   settings.watch_face.value = 708936699;
+  settings.gadgetbridge_name.value = false;
   watch_face_name.value = "Digital";
   shake_speed.value = 0;
   is_heart_rate_running.value = false;

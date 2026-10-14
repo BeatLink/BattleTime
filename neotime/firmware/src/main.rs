@@ -31,7 +31,7 @@ use embassy_nrf::{
     wdt::{self, SleepConfig, Watchdog, WatchdogHandle},
 };
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
-use embassy_time::{Delay, Duration, Timer};
+use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_alloc::LlffHeap;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_blefs::service::FileTransferService;
@@ -747,9 +747,37 @@ static SERVER: StaticCell<Server<'static>> = StaticCell::new();
 fn build_server() -> &'static Server<'static> {
     let gap = GapConfig::Peripheral(PeripheralConfig {
         name: DEVICE_NAME,
-        appearance: &appearance::watch::GENERIC_WATCH,
+        appearance: &appearance::watch::SMARTWATCH,
     });
     Server::init_in_place(SERVER.uninit(), gap).unwrap()
+}
+
+/// The GAP service's device name, the first characteristic in the table.
+const DEVICE_NAME_HANDLE: u16 = 3;
+
+/// How long to wait before trying again when the controller refuses to start advertising.
+const ADVERTISING_RETRY_DELAY: Duration = Duration::from_secs(1);
+
+/// Gives the GAP service the name the watch advertises now.
+#[inline(never)]
+fn set_device_name(server: &Server<'static>, name: &'static &'static str) {
+    if let Ok(device_name) = server
+        .table()
+        .find_characteristic_by_value_handle::<&'static str>(DEVICE_NAME_HANDLE)
+    {
+        let _ = device_name.set_ro(server, name);
+    }
+}
+
+/// The advertising intervals InfiniTime asks for, fast or about once a second.
+fn advertising_parameters(
+    interval: neotime_companion::advertising::AdvertisingInterval,
+) -> AdvertisementParameters {
+    AdvertisementParameters {
+        interval_min: Duration::from_micros(interval.shortest_in_microseconds),
+        interval_max: Duration::from_micros(interval.longest_in_microseconds),
+        ..Default::default()
+    }
 }
 
 /// Its own task, so the Bluetooth loop's stack frame is not added to start-up's.
@@ -775,19 +803,11 @@ async fn run_bluetooth(
     let server = build_server();
     set_serial_number(server);
 
-    let mut advertisement_data = [0; 31];
-    let advertisement_length = AdStructure::encode_slice(
-        &[
-            AdStructure::Flags(LE_GENERAL_DISCOVERABLE | BR_EDR_NOT_SUPPORTED),
-            AdStructure::CompleteLocalName(DEVICE_NAME.as_bytes()),
-        ],
-        &mut advertisement_data,
-    )
-    .unwrap();
-
     let serve = async {
         let mut advertising_shown = false;
         let mut confirmed = false;
+        // Advertising is fast for a while from here, as after a phone leaves or Bluetooth comes back on.
+        let mut fast_from = Instant::now();
         loop {
             if !settings::is_bluetooth_on() {
                 screen.write_line(line::BLUETOOTH, "Off");
@@ -795,24 +815,48 @@ async fn run_bluetooth(
                     settings::BLUETOOTH_SWITCHED.wait().await;
                 }
                 advertising_shown = false;
+                fast_from = Instant::now();
             }
-            let advertiser = peripheral
+            let interval = neotime_companion::advertising::advertising_interval(
+                fast_from.as_millis(),
+                Instant::now().as_millis(),
+            );
+            let is_fast = interval == neotime_companion::advertising::FAST_INTERVAL;
+            let name = settings::advertised_name();
+            set_device_name(server, name);
+            let scan_response = neotime_companion::advertising::scan_response(*name);
+            let Ok(advertiser) = peripheral
                 .advertise(
-                    &AdvertisementParameters::default(),
+                    &advertising_parameters(interval),
                     Advertisement::ConnectableScannableUndirected {
-                        adv_data: &advertisement_data[..advertisement_length],
-                        scan_data: &[],
+                        adv_data: &neotime_companion::advertising::ADVERTISEMENT,
+                        scan_data: &scan_response,
                     },
                 )
                 .await
-                .unwrap();
+            else {
+                Timer::after(ADVERTISING_RETRY_DELAY).await;
+                continue;
+            };
             if !advertising_shown {
                 screen.write_line(line::BLUETOOTH, "Advertising");
                 advertising_shown = true;
             }
 
-            let Either::First(Ok(connection)) =
-                select(advertiser.accept(), settings::BLUETOOTH_SWITCHED.wait()).await
+            // Fast advertising stops when its time is up and starts again slow.
+            let fast_ends_at = fast_from
+                + Duration::from_millis(neotime_companion::advertising::FAST_ADVERTISING_MILLISECONDS);
+            let slow_down = async {
+                match is_fast {
+                    true => Timer::at(fast_ends_at).await,
+                    false => core::future::pending().await,
+                }
+            };
+            let Either::First(Ok(connection)) = select(
+                advertiser.accept(),
+                select(settings::BLUETOOTH_SWITCHED.wait(), slow_down),
+            )
+            .await
             else {
                 continue;
             };
@@ -836,6 +880,7 @@ async fn run_bluetooth(
             serving.await;
             phone::set_connected(false);
             screen.write_line(line::BLUETOOTH, "Advertising");
+            fast_from = Instant::now();
         }
     };
 

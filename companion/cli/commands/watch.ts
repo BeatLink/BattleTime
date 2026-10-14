@@ -64,7 +64,7 @@ neotime slots [fit|recovery <start> <size>|update <start>]
 
   status prints the battery and today's steps. time sets the watch clock from this computer's. settings with no arguments prints them;
   brightness=3, theme=ocean, theme_colors='{"accent":"#ff8000"}' and the like
-  change them. alarms with no arguments lists them, otherwise replaces
+  change them; gadgetbridge_name=true makes the watch advertise as InfiniTime for Gadgetbridge. alarms with no arguments lists them, otherwise replaces
   them all: 07:30/12345 rings on weekdays (1 is Monday), 06:00/67/off is a
   weekend alarm turned off, and a bare time rings once. files uses NeoTime's
   file service; paths are absolute, such as /settings. note sends a text file

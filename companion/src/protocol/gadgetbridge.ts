@@ -64,6 +64,8 @@ export type WatchSettingValues = {
   updates?: boolean;
   // True turns updates on only until the watch next restarts; it wins over updates when both are sent.
   updates_until_restart?: boolean;
+  // True makes the watch advertise as "InfiniTime", so Gadgetbridge offers its InfiniTime support.
+  gadgetbridge_name?: boolean;
 };
 
 // With no other keys the watch only reports its settings. Colours given are applied after the preset.
@@ -112,6 +114,17 @@ export type MusicInfoMessage = {
   n?: number;
 };
 
+// The next step of the phone's navigation, as Gadgetbridge's Bangle.js driver sends it; with none of
+// the step's fields it says navigation ended.
+export type NavigationMessage = {
+  t: 'nav';
+  instr?: string;
+  // As the phone shows it, such as "300 m" or "1.2 km".
+  distance?: string;
+  action?: string;
+  eta?: string;
+};
+
 export type CallMessage = {
   t: 'call';
   cmd: 'accept' | 'incoming' | 'outgoing' | 'reject' | 'start' | 'end';
@@ -128,6 +141,7 @@ export type PhoneToWatchMessage =
   | WeatherMessage
   | MusicStateMessage
   | MusicInfoMessage
+  | NavigationMessage
   | CallMessage
   | SettingsMessage
   | StatusRequestMessage
@@ -141,6 +155,9 @@ export type MusicControlMessage = {
 };
 
 export type FindPhoneMessage = { t: 'findPhone'; n: boolean | 'true' | 'false' };
+
+// A watch app asking for the music or the navigation step again, which the phone answers by sending it.
+export type StateRequestMessage = { t: 'request'; n: 'music' | 'nav' };
 
 export type InfoMessage = { t: 'info'; msg: string };
 
@@ -186,6 +203,7 @@ export type AppChannelMessage = { t: 'app'; ch: string; d?: unknown };
 export type WatchToPhoneMessage =
   | MusicControlMessage
   | FindPhoneMessage
+  | StateRequestMessage
   | InfoMessage
   | ErrorMessage
   | SettingsReply
@@ -229,6 +247,37 @@ export function decodeWatchLine(line: string): WatchToPhoneMessage | null {
 // The watch sends findPhone with a string flag, so normalise it to a boolean.
 export function isFindPhoneOn(message: FindPhoneMessage): boolean {
   return message.n === true || message.n === 'true';
+}
+
+// What the phone knows of the music playing, as the media events report it.
+export type PlayingMedia = {
+  playing: boolean;
+  artist?: string;
+  album?: string;
+  track?: string;
+  durationSec?: number;
+  positionSec?: number;
+};
+
+// The music lines the phone sends the watch for what is playing.
+export function musicMessages(media: PlayingMedia): PhoneToWatchMessage[] {
+  return [
+    { t: 'musicinfo', artist: media.artist, album: media.album, track: media.track, dur: media.durationSec },
+    { t: 'musicstate', state: media.playing ? 'play' : 'pause', position: media.positionSec },
+  ];
+}
+
+// The answer to a watch's request: the music when it is forwarded and known, and for navigation an
+// empty step, since this app follows no navigation, which tells the watch there is none.
+export function answerStateRequest(
+  request: StateRequestMessage,
+  media: PlayingMedia | null,
+  forwardMusic: boolean,
+): PhoneToWatchMessage[] {
+  if (request.n === 'nav') {
+    return [{ t: 'nav' }];
+  }
+  return forwardMusic && media ? musicMessages(media) : [];
 }
 
 // Collect raw UART chunks and hand back complete lines as they arrive.

@@ -345,9 +345,11 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   `installed_crc` reads `BOOTLOADER.start` (address 0, the null pointer) through `Nvmc`, which is
   undefined behaviour; the firmware's same read let the compiler delete most of the firmware. Use
   loads like `status::BootloaderPages` in the firmware.
-- [ ] **A Gadgetbridge entry for NeoTime.** Gadgetbridge recognises InfiniTime by its advertised
-  name; NeoTime advertises as "NeoTime" and needs a device coordinator of its own, or to be
-  matched by the PineTime one.
+- [ ] **Gadgetbridge with the InfiniTime name.** The `gadgetbridge_name` setting makes the watch
+  advertise as "InfiniTime" so Gadgetbridge's PineTime/InfiniTime coordinator takes it, but no real
+  Gadgetbridge has paired with it yet. Try it once InfiniTime's Music, Navigation, Simple Weather,
+  Motion and Immediate Alert services land, and check whether Gadgetbridge insists on bonding, which
+  the controller cannot do yet. A coordinator of NeoTime's own in Gadgetbridge would need no setting.
 
 ## UI toolkit
 
@@ -390,21 +392,18 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   as a font or picture from a resource package or a handler from `/apps`, so each costs one SPI
   transaction instead of many small reads.
 - [ ] **The remaining companion messages.** [companion-protocol.md](companion-protocol.md) lists
-  them under "not served yet". `call`, `musicinfo`, `musicstate`, `weather`, `find`, `vibrate`,
-  `status` and the `music`, `call`, `findPhone` and `app` lines are served (`services/companion/src/phone.rs`).
+  them under "not served yet". `call`, `musicinfo`, `musicstate`, `weather`, `nav`, `find`, `vibrate`,
+  `status` and the `music`, `call`, `findPhone`, `request` and `app` lines are served (`services/companion/src/phone.rs`).
   - `alarm` (set or report the alarms), `steps` (a day in 240 six-minute slots, read from the
     step log with `neotime_steps::log`) and `http` (answers to an app's request, and the watch's `http`
     line).
-  - `request_music_state` and `request_navigation_state` send nothing, since Bangle.js has no such
-    message; find what Gadgetbridge answers, or add one for the companion app.
-  - Navigation: Gadgetbridge's newer Bangle.js driver sends `nav`; read it into
-    `current_navigation` and run the `navigation` subscriptions.
   - The weather's coming days, sunrise and sunset: Gadgetbridge's `weather` line carries none, so
     the forecast stays empty until the companion app sends them in keys of its own.
+  - Navigation progress: Gadgetbridge's `nav` carries none, so `progress_percent` reads 0.
+  - Gadgetbridge prefixes each line with the `0x10` byte, which only the `setTime` line reader
+    skips; check that `GB(...)` lines arriving with it are read, and skip it in `parse_line` if not.
   - Keep the music and weather through a restart, as [app-reference.md](app-reference.md) promises;
     they are kept in RAM only.
-  - A temperature with a fraction makes the `weather` line unreadable, since the watch parses
-    whole numbers only to stay clear of float parsing's flash; round it if a phone sends one.
   - Nothing has run on the watch yet: try each message from Gadgetbridge and the companion app.
 - [ ] **Harness gaps in the app host.** The test harness works around three: `widget_bounds` has
   no clip rectangle, so it cannot tell a widget scrolled out of a List or Scroll; there is no
@@ -586,12 +585,10 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **Light the screen when a phone connects or leaves.** The shell redraws `is_phone_connected`
   and sends the `phone` event, but a dark screen stays dark; turn it on briefly, outside do not
   disturb, so the wearer sees the link change.
-- [ ] **Advertise like InfiniTime.** The firmware advertises every 160 ms all the time. InfiniTime
-  advertises fast for 30 seconds after start or a disconnect and then about once a second, puts the
-  heart rate and DFU service UUIDs and the transmit power in the advertisement, and the name in the
-  scan response, which some phone apps filter on.
-- [ ] **Match InfiniTime's GAP appearance,** 0x00C2 (a watch worn on the wrist), where NeoTime
-  says Generic Watch, 0x00C0.
+- [ ] **Advertising on the watch.** Fast advertising for 30 seconds, then about once a second, with
+  InfiniTime's advertisement and the name in the scan response, has run only in the emulator
+  (`tools/check_advertising.py`). Check on the watch that phones find it at both rates and that it
+  keeps advertising, given **Bluetooth stopped advertising after an update** above.
 - [ ] **A larger ATT MTU.** The firmware allows 64 bytes where InfiniTime asks for 256. File
   transfer, long track names and notifications need longer writes.
 

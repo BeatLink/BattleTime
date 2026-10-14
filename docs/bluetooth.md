@@ -245,6 +245,33 @@ It asks only for 16-bit UUIDs and never raises the ATT MTU, so each answer is at
 An iPhone is expected to refuse the read, since iOS serves its Current Time only over an encrypted
 link, which the controller cannot make yet; see [todo.md](todo.md).
 
+## Advertising
+
+The firmware advertises as InfiniTime does (`run_bluetooth` in `firmware/src/main.rs`, with the
+bytes and intervals in `neotime_companion::advertising`):
+
+- **How often.** Every 20 to 30 ms (32 to 47 units of 625 µs) for 30 seconds after the watch starts,
+  a phone leaves or Bluetooth is turned back on, then every 1022 to 1032 ms (1636 to 1651 units).
+  The controller uses the shortest of each, plus its random delay of up to 10 ms. When the fast
+  time runs out the firmware stops advertising and starts again slow.
+- **The advertisement,** 28 bytes: the flags (general discoverable, no classic Bluetooth), the Heart
+  Rate service 0x180D as the complete list of 16-bit services, the legacy DFU service
+  `00001530-1212-efde-1523-785feabcd123` as the complete list of 128-bit services, and a transmit
+  power of 0 dBm.
+- **The scan response** holds only the complete name: `NeoTime`, or `InfiniTime` while the
+  `gadgetbridge_name` setting is on. Every time it starts advertising the firmware lends the GAP
+  service's Device Name (handle 3) the same name, so a phone that connects reads it there too.
+  Changing the setting, and reading the saved settings at start, raises `BLUETOOTH_SWITCHED`, so
+  advertising starts again with the new name at once.
+- **The GAP appearance** is 0x00C2, a smartwatch, as InfiniTime sets it.
+- **When the controller refuses** to start advertising, the firmware tries again a second later
+  rather than stopping, so a refused command never leaves the watch silent.
+
+`tools/check_advertising.py` checks all of this in the emulator through the Bluetooth bridge's
+controller: about 39 advertisements a second at first and under one a second after 30 s, the
+advertisement's bytes, both names in the scan response and the GAP service, the appearance, fast
+advertising again after a phone leaves, and a saved setting. None of it has run on the watch.
+
 ## Tests
 
 `cargo test -p neotime-bluetooth` runs 137 tests on the computer:

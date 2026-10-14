@@ -333,6 +333,16 @@ fn the_watch_face_is_chosen_by_its_number() {
 }
 
 #[test]
+fn the_gadgetbridge_name_is_turned_on_and_off() {
+    let Ok(Message::Settings(change)) = parse_line(br#"{"t":"settings","gadgetbridge_name":true}"#) else {
+        panic!();
+    };
+
+    assert_eq!(change.value(Setting::GadgetbridgeName), Some(1));
+    assert!(parse_line(br#"{"t":"settings","gadgetbridge_name":1}"#).is_err());
+}
+
+#[test]
 fn one_bad_setting_refuses_the_whole_message() {
     let too_short = br#"{"t":"settings","brightness":3,"blank_after":1}"#;
     let unknown_units = br#"{"t":"settings","units":"Furlongs"}"#;
@@ -351,6 +361,7 @@ fn the_report_gives_every_setting_and_reads_back_the_same() {
     settings.set(Setting::Chimes, 1).unwrap();
     settings.set(Setting::ScreenTimeoutSeconds, 60).unwrap();
     settings.set(Setting::WatchFace, i32::MAX).unwrap();
+    settings.set(Setting::GadgetbridgeName, 1).unwrap();
 
     let report = settings_report(&DEFAULT_THEME, &settings);
 
@@ -363,7 +374,8 @@ fn the_report_gives_every_setting_and_reads_back_the_same() {
     assert!(report.contains("\"raise_to_wake\":false"), "{report}");
     assert!(report.contains("\"shake_threshold\":150"), "{report}");
     assert!(report.contains("\"sleep_mode\":false"), "{report}");
-    assert!(report.ends_with("\"watch_face\":2147483647}\n"), "{report}");
+    assert!(report.contains("\"watch_face\":2147483647"), "{report}");
+    assert!(report.ends_with("\"gadgetbridge_name\":true}\n"), "{report}");
     let Ok(Message::Settings(reread)) = parse_line(report.trim_end().as_bytes()) else {
         panic!("{report}");
     };

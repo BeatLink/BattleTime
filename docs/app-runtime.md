@@ -556,7 +556,8 @@ folder's `path`, its entry count and its entries' lists of `name`, `size` and `i
 share bit 26 of their own. 112 is `firmware_state`, whether the bootloader keeps the running
 firmware, which shares the system info bit. 119 is the kept notifications' list of `color`, the
 colour the watch picks for each one's icon from its app, a theme colour or a fixed one, which
-shares their bit. `allows_updates` is a number: 0 off, 1 on, 2 on until
+shares their bit. 122 is the settings' `gadgetbridge_name`, which shares the other settings'
+bit; 120 and 121 are other changes' numbers. `allows_updates` is a number: 0 off, 1 on, 2 on until
 the next restart.
 `read system element` reads a list's elements through `SystemValues::read_element`, or
 `read_element_text` for the names, ids and notification texts, the packages' too. The location, artist, track,

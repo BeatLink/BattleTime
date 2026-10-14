@@ -2305,6 +2305,18 @@ fn the_wake_gesture_values_are_numbered_from_102() {
 }
 
 #[test]
+fn the_gadgetbridge_name_is_a_setting_numbered_122() {
+    assert_eq!(SystemValue::from_byte(122), Some(SystemValue::GadgetbridgeName));
+    assert_eq!(SystemValue::from_byte(121), None);
+    assert_eq!(SystemValue::from_byte(123), None);
+    assert_eq!(
+        SystemValue::GadgetbridgeName.bit(),
+        SystemValue::WakeOnTouch.bit()
+    );
+    assert!(!SystemValue::GadgetbridgeName.is_text());
+}
+
+#[test]
 fn the_watch_face_and_its_name_are_settings_numbered_108_and_109_and_stepped_by_effect_35() {
     assert_eq!(SystemValue::from_byte(108), Some(SystemValue::WatchFace));
     assert_eq!(SystemValue::from_byte(109), Some(SystemValue::WatchFaceName));

@@ -235,6 +235,19 @@ export default function WatchSettingsScreen() {
             </Card>
           ) : null}
 
+          {current.gadgetbridge_name !== undefined ? (
+            <Card title="Bluetooth">
+              <ChoiceRow
+                label="Show as InfiniTime"
+                detail="Advertise the name InfiniTime, so Gadgetbridge offers its InfiniTime support for this watch"
+                options={ON_OFF}
+                value={current.gadgetbridge_name}
+                disabled={busy}
+                onChange={(gadgetbridge_name) => change({ gadgetbridge_name })}
+              />
+            </Card>
+          ) : null}
+
           {colours ? (
             <Card title="Theme">
               <View style={styles.presets}>

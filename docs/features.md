@@ -114,6 +114,15 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   removed, the first face turned on shows instead. Proven in the emulator, not tried on the watch yet.
 - **A double tap on the face puts the watch to sleep,** whichever face shows, unless the face takes
   the taps itself.
+- **Advertising as InfiniTime does.** The watch advertises fast, every 20 to 30 ms, for 30 seconds
+  after it starts, a phone leaves or Bluetooth comes back on, then about once a second to save
+  power. The advertisement names the heart rate and DFU services and the transmit power, the scan
+  response carries the name, and the GAP appearance is a smartwatch (0x00C2), as on InfiniTime.
+  Proven in the emulator (`tools/check_advertising.py`), not tried on the watch yet.
+- **Shows as InfiniTime for Gadgetbridge,** with the `gadgetbridge_name` setting from the companion
+  app's settings screen or `neotime settings gadgetbridge_name=true`. The watch then advertises and
+  names itself "InfiniTime", which Gadgetbridge's PineTime/InfiniTime support recognises; it is kept
+  through a restart. The Settings app has no row for it, since it is full.
 - **Bluetooth off,** from settings or quick settings, until it is turned on again or the watch restarts, so
   a watch can never be left out of reach. Not tried on the watch yet.
 - **Updates off, on, or on until the next restart,** stepped through on Settings' Updates row. Off
@@ -145,9 +154,11 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   goes back there, as InfiniTime's preview does. A tap keeps it and reads it in full. Do not disturb
   keeps the screen dark and the watch still, and the notification is still kept. While the phone
   rings the watch to find it, or a call rings, a notification is kept without a buzz or a preview.
-- **Music, weather and calls from the phone.** Gadgetbridge's `musicinfo`, `musicstate` and
-  `weather` messages fill the music app, the weather app and the faces that show the weather; the
-  music app's buttons control the phone's player. An incoming call opens the [call app](apps/call.md)
+- **Music, weather, navigation and calls from the phone.** Gadgetbridge's `musicinfo`, `musicstate`,
+  `weather` and `nav` messages fill the music app, the weather app, the navigation app and the faces
+  that show the weather; a temperature with a fraction is rounded. The music app's buttons control
+  the phone's player, and the music and navigation apps ask the companion app for what is playing or
+  the next step when they open. An incoming call opens the [call app](apps/call.md)
   and rings until it is answered, rejected, muted or left, unless do not disturb is on; Accept,
   Reject and Mute go back to the phone. Without the call app it buzzes once and lights the screen.
   Every call also reaches apps that listen for calls. When an incoming call ends, the companion app
