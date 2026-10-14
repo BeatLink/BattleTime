@@ -14,6 +14,12 @@ document for its part instead.
   page bar marks the page on show, a sideways drag leaves the system page's list still, swipes past
   the first and last page step round the quick apps, and a charger event opens the battery page.
 
+- [ ] **Pomodoro on the PineTime.** The pomodoro rebuilt around three intervals (4d27f48a) has run
+  only in the harness and the browser preview. Check on the watch that it opens on the countdown,
+  that the three length pages are reached by swiping right and their - and + buttons set the
+  lengths, and that a round runs work and short breaks in turn with a long break after the set
+  number of work sessions, buzzing and waking the screen between each.
+
 - [ ] **Touch panel on the PineTime.** The firmware runs `neotime-touch` on the watch, but these
   checks have not been made:
   - `start` succeeds and `read_chip_info` gives a sensible chip ID (0xb4 or a near value);
