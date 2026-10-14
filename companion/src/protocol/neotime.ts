@@ -11,6 +11,7 @@ import { NUS_RX, NUS_SERVICE } from '@/ble/uuids';
 
 export const CURRENT_TIME_SERVICE = '00001805-0000-1000-8000-00805f9b34fb';
 export const CURRENT_TIME = '00002a2b-0000-1000-8000-00805f9b34fb';
+export const LOCAL_TIME_INFORMATION = '00002a0f-0000-1000-8000-00805f9b34fb';
 
 export const BATTERY_SERVICE = '0000180f-0000-1000-8000-00805f9b34fb';
 export const BATTERY_LEVEL = '00002a19-0000-1000-8000-00805f9b34fb';
@@ -93,7 +94,34 @@ export function encodeCurrentTime(now: Date = new Date()): Uint8Array {
   ]);
 }
 
+// The daylight saving offsets Local Time Information allows, in quarter hours.
+const DAYLIGHT_SAVING_OFFSETS = [0, 2, 4, 8];
+
+// How far this device's zone is ahead of UTC on the given date, in quarter hours.
+function quarterHoursAheadOfUtc(date: Date): number {
+  return Math.round(-date.getTimezoneOffset() / 15);
+}
+
+// The two-byte Local Time Information value: the standard time zone, then the daylight saving offset, both in quarter hours.
+export function encodeLocalTimeInformation(now: Date = new Date()): Uint8Array {
+  const total = quarterHoursAheadOfUtc(now);
+  const year = now.getFullYear();
+  const standard = Math.min(
+    quarterHoursAheadOfUtc(new Date(year, 0, 1)),
+    quarterHoursAheadOfUtc(new Date(year, 6, 1)),
+  );
+  const daylightSaving = total - standard;
+  if (DAYLIGHT_SAVING_OFFSETS.includes(daylightSaving)) {
+    return Uint8Array.from([standard & 0xff, daylightSaving]);
+  }
+  return Uint8Array.from([total & 0xff, 0]);
+}
+
+// Writes the zone first and then the local time, so the watch's UTC is right; firmware without 0x2A0F gets the time alone.
 export async function setWatchTime(link: DfuLink, now: Date = new Date()): Promise<void> {
+  if (await link.hasCharacteristic(CURRENT_TIME_SERVICE, LOCAL_TIME_INFORMATION)) {
+    await link.write(CURRENT_TIME_SERVICE, LOCAL_TIME_INFORMATION, encodeLocalTimeInformation(now), 'request');
+  }
   await link.write(CURRENT_TIME_SERVICE, CURRENT_TIME, encodeCurrentTime(now), 'request');
 }
 

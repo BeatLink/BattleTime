@@ -12,6 +12,7 @@ import {
   CURRENT_TIME,
   CURRENT_TIME_SERVICE,
   FILE_TRANSFER,
+  LOCAL_TIME_INFORMATION,
   NEOTIME_DIAGNOSTICS,
   NEOTIME_PACKAGES,
   NEOTIME_SERVICE,
@@ -49,6 +50,8 @@ export class MockLegacyDfuTarget implements DfuLink {
   readonly imageTypes: number[] = [];
   // Every Current Time value written, which is what keeps a NeoTime update.
   readonly timeWrites: Uint8Array[] = [];
+  // Every Local Time Information value written, the time zone.
+  readonly timeZoneWrites: Uint8Array[] = [];
   // The last restart words after the counters: a watchdog reset after running out of memory in the alarm app.
   lastRestartWords: number[] = [2, 3, 2048, 612, 0x1a2b5, 0x5101, 0, 0, 0, 0, 0x72616c61, 0x6d, 0, 0];
   // Whether the watch still keeps its crash for a debug report, and how often one was saved.
@@ -151,6 +154,10 @@ export class MockLegacyDfuTarget implements DfuLink {
   ): Promise<void> {
     if (characteristic === CURRENT_TIME) {
       this.timeWrites.push(data);
+      return;
+    }
+    if (characteristic === LOCAL_TIME_INFORMATION) {
+      this.timeZoneWrites.push(data);
       return;
     }
     if (characteristic === NEOTIME_PACKAGES) {

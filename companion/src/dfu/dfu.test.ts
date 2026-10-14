@@ -1,11 +1,18 @@
-import { describe, expect, it } from '@jest/globals';
+import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
 import { zipSync } from 'fflate';
 
 import { nextAddress, readU32le, u32le } from './bytes';
-import { encodeCurrentTime, setWatchTime } from '@/protocol/neotime';
+import {
+  CURRENT_TIME,
+  encodeCurrentTime,
+  encodeLocalTimeInformation,
+  LOCAL_TIME_INFORMATION,
+  setWatchTime,
+} from '@/protocol/neotime';
 import { flashFirmware, flashRecovery, type FlashStep } from './flash';
 import { parseNotification } from './legacy';
+import type { DfuLink } from './link';
 import { MockLegacyDfuTarget } from './mock-legacy-target';
 import { FirmwarePackageError, readFirmwarePackage } from './package';
 
@@ -135,6 +142,7 @@ describe('flashing a NeoTime watch', () => {
       onStep: (step) => steps.push(step),
     });
     expect(target.timeWrites).toHaveLength(1);
+    expect(target.timeZoneWrites).toHaveLength(1);
     expect(steps.at(-1)).toEqual({ step: 'finished', confirmed: true });
   });
 
@@ -231,5 +239,71 @@ describe('the Current Time value', () => {
 
   it('gives Sunday weekday 7', () => {
     expect(encodeCurrentTime(new Date(2026, 9, 11, 0, 0, 0))[7]).toBe(7);
+  });
+});
+
+describe('the Local Time Information value', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  // The value on 1 January or 1 July, in a zone this many minutes ahead of UTC from October to March and from April to September.
+  function inZone(january: number, july: number, month: 0 | 6): number[] {
+    jest
+      .spyOn(Date.prototype, 'getTimezoneOffset')
+      .mockImplementation(function (this: Date) {
+        return -(this.getMonth() >= 3 && this.getMonth() <= 8 ? july : january);
+      });
+    return Array.from(encodeLocalTimeInformation(new Date(2026, month, 1)));
+  }
+
+  it('is UTC with no daylight saving in UTC', () => {
+    expect(inZone(0, 0, 6)).toEqual([0, 0]);
+  });
+
+  it('splits a summer offset into the standard zone and an hour of daylight saving', () => {
+    expect(inZone(60, 120, 6)).toEqual([4, 4]);
+    expect(inZone(60, 120, 0)).toEqual([4, 0]);
+  });
+
+  it('carries a zone west of UTC as a negative byte', () => {
+    expect(inZone(-300, -240, 6)).toEqual([0x100 - 20, 4]);
+    expect(inZone(-300, -300, 6)).toEqual([0x100 - 20, 0]);
+  });
+
+  it('keeps quarter-hour zones and half-hour daylight saving', () => {
+    expect(inZone(345, 345, 6)).toEqual([23, 0]);
+    expect(inZone(630, 660, 6)).toEqual([42, 2]);
+  });
+
+  it('counts the southern summer as daylight saving too', () => {
+    expect(inZone(780, 720, 0)).toEqual([48, 4]);
+  });
+
+  it('puts an offset change daylight saving cannot express into the zone', () => {
+    expect(inZone(0, 180, 6)).toEqual([12, 0]);
+  });
+
+  it('is written before the time, and skipped on firmware that does not serve it', async () => {
+    // A watch that records what is written to it, serving Local Time Information only when told to.
+    async function writesTo(servesZone: boolean): Promise<string[]> {
+      const writes: string[] = [];
+      const link = {
+        hasCharacteristic: async (_service: string, characteristic: string) =>
+          characteristic === CURRENT_TIME || servesZone,
+        write: async (_service: string, characteristic: string) => {
+          writes.push(characteristic);
+        },
+      } as unknown as DfuLink;
+      await setWatchTime(link);
+      return writes;
+    }
+    expect(await writesTo(true)).toEqual([LOCAL_TIME_INFORMATION, CURRENT_TIME]);
+    expect(await writesTo(false)).toEqual([CURRENT_TIME]);
+
+    const target = new MockLegacyDfuTarget();
+    await setWatchTime(target, new Date(Date.UTC(2026, 6, 1)));
+    expect(target.timeZoneWrites).toHaveLength(1);
+    expect(target.timeWrites).toHaveLength(1);
   });
 });

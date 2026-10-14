@@ -12,7 +12,7 @@ Early. What works today against NeoTime's firmware:
 - scanning, connecting, and telling a running NeoTime from a watch waiting in a bootloader;
 - firmware updates over Nordic legacy DFU, from a file or a GitHub release, then reconnecting so
   the watch keeps the new firmware instead of rolling it back;
-- setting the clock over the standard Current Time service on every connection;
+- setting the clock and time zone over the standard Current Time service on every connection;
 - reading NeoTime's diagnostic counters, and saving a debug report after a crash (the Debug report
   card on the Watch tab, or `neotime debug [file]`), which lets the watch leave its crash screen.
 
@@ -234,7 +234,7 @@ The app reads which services the watch serves right after connecting, in
 | Service | UUID | Gives |
 | --- | --- | --- |
 | Legacy DFU | `00001530-1212-efde-1523-785feabcd123` | firmware updates |
-| Current Time | `0x1805` / `0x2A2B` | the clock, set on every connection |
+| Current Time | `0x1805` / `0x2A2B`, `0x2A0F` | the clock and time zone, set on every connection |
 | Battery | `0x180F` / `0x2A19` | the battery level |
 | NeoTime diagnostics | `6e540001-…` / `6e540002-…` | eight 32-bit counters and the last restart with its crash; a written `01` says a debug report holds the crash |
 | Device Information | `0x180A` / `0x2A26` | the firmware version, for debug reports |
