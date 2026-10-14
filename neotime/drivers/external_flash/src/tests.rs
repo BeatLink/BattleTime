@@ -233,6 +233,76 @@ fn sleeping_puts_the_chip_in_deep_power_down() {
     assert!(flash.release().spi.asleep);
 }
 
+#[test]
+fn a_read_after_sleeping_wakes_the_chip_first() {
+    let mut flash = started_flash();
+    flash.write(0x2000, &[1, 2, 3]).unwrap();
+    flash.sleep().unwrap();
+    assert!(flash.is_asleep());
+
+    let mut bytes = [0; 3];
+    flash.read(0x2000, &mut bytes).unwrap();
+
+    assert_eq!(bytes, [1, 2, 3]);
+    assert!(!flash.is_asleep());
+    assert!(!flash.release().spi.asleep);
+}
+
+#[test]
+fn writing_erasing_and_reading_the_id_after_sleeping_all_wake_the_chip() {
+    let mut flash = started_flash();
+
+    flash.sleep().unwrap();
+    flash.write(0x10, &[0x42]).unwrap();
+    flash.sleep().unwrap();
+    flash.start_programming_page(0x20, &[0x43]).unwrap();
+    flash.sleep().unwrap();
+    flash.erase(0x1000, 0x2000).unwrap();
+    flash.sleep().unwrap();
+    flash.start_erasing_sector(0x3000).unwrap();
+    flash.sleep().unwrap();
+    let chip_id = flash.read_chip_id().unwrap();
+
+    assert_eq!(chip_id, XT25F32B_CHIP_ID);
+    let chip = flash.release().spi;
+    assert_eq!(&chip.memory[0x10..0x11], &[0x42]);
+    assert_eq!(&chip.memory[0x20..0x21], &[0x43]);
+    assert_eq!(chip.erased_addresses, [0x1000, 0x3000]);
+}
+
+#[test]
+fn sleeping_waits_for_a_background_erase_to_end() {
+    let mut chip = FakeChip::new();
+    chip.busy_polls_after_each_write = 3;
+    let mut flash = ExternalFlash::new(chip, CountingDelay::default()).unwrap();
+    flash.start_erasing_sector(0x1000).unwrap();
+
+    flash.sleep().unwrap();
+
+    assert!(flash.operation_has_finished().unwrap());
+    let chip = flash.release().spi;
+    assert!(chip.asleep);
+    assert_eq!(chip.busy_polls_left, 0);
+}
+
+#[test]
+fn waking_an_awake_chip_or_sleeping_twice_sends_nothing() {
+    let mut flash = started_flash();
+    let waited_after_start = flash.delay.microseconds_waited;
+
+    flash.wake_if_asleep().unwrap();
+    assert_eq!(flash.delay.microseconds_waited, waited_after_start);
+
+    flash.sleep().unwrap();
+    flash.sleep().unwrap();
+    flash.wake_if_asleep().unwrap();
+    flash.wake_if_asleep().unwrap();
+    assert_eq!(
+        flash.delay.microseconds_waited,
+        waited_after_start + WAKE_UP_TIME_IN_MICROSECONDS
+    );
+}
+
 // ============================================================================
 // Reading and writing
 // ============================================================================

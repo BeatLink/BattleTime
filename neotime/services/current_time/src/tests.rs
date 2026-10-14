@@ -368,6 +368,102 @@ fn an_empty_time_line_changes_nothing() {
 }
 
 // ============================================================================
+// The clock kept across a reset
+// ============================================================================
+
+const BUILD_TIME: i64 = MONDAY_5_JANUARY_2026_AT_09_00 - 30 * 86_400_000;
+
+fn kept_clock_in_berlin() -> WallClock {
+    let mut clock = WallClock::starting_at(MONDAY_5_JANUARY_2026_AT_09_00);
+    clock.set_zone_keeping_utc(LocalTimeInformation {
+        time_zone_in_quarter_hours: 4,
+        daylight_saving_in_quarter_hours: 0,
+    });
+    clock
+}
+
+#[test]
+fn a_kept_clock_comes_back_counting_on_from_the_new_uptime() {
+    let kept = kept_clock_in_berlin().kept_words(60_000);
+
+    let restored = WallClock::from_kept_words(kept, 2_000, BUILD_TIME).unwrap();
+
+    assert_eq!(restored.utc(2_000), MONDAY_5_JANUARY_2026_AT_09_00 + 60_000);
+    assert_eq!(restored.utc(5_000), MONDAY_5_JANUARY_2026_AT_09_00 + 63_000);
+    assert_eq!(restored.zone(), kept_clock_in_berlin().zone());
+}
+
+#[test]
+fn a_kept_clock_starts_with_its_marker() {
+    assert_eq!(kept_clock_in_berlin().kept_words(0)[0], KEPT_CLOCK_MARKER);
+    assert_eq!(&KEPT_CLOCK_MARKER.to_le_bytes(), b"TIME");
+}
+
+#[test]
+fn any_changed_word_reads_as_no_kept_clock() {
+    let kept = kept_clock_in_berlin().kept_words(0);
+
+    for place in 0..KEPT_CLOCK_WORDS {
+        for bit in [0, 7, 31] {
+            let mut changed = kept;
+            changed[place] ^= 1 << bit;
+            assert_eq!(
+                WallClock::from_kept_words(changed, 0, BUILD_TIME),
+                None,
+                "word {place} bit {bit}"
+            );
+        }
+    }
+}
+
+#[test]
+fn ram_after_a_power_cut_reads_as_no_kept_clock() {
+    for filler in [0, u32::MAX, 0xDEAD_BEEF] {
+        assert_eq!(
+            WallClock::from_kept_words([filler; KEPT_CLOCK_WORDS], 0, BUILD_TIME),
+            None
+        );
+    }
+}
+
+#[test]
+fn a_kept_time_before_the_build_moves_up_to_the_build_time() {
+    let kept = WallClock::starting_at(BUILD_TIME - 86_400_000).kept_words(0);
+
+    let restored = WallClock::from_kept_words(kept, 1_000, BUILD_TIME).unwrap();
+
+    assert_eq!(restored.utc(1_000), BUILD_TIME);
+}
+
+#[test]
+fn a_kept_time_past_the_latest_settable_year_is_refused() {
+    let year_2200 = days_since_1970(Date {
+        year: 2200,
+        month: 1,
+        day: 1,
+    }) * 86_400_000;
+
+    let too_late = WallClock::starting_at(year_2200).kept_words(0);
+    let just_in_time = WallClock::starting_at(year_2200 - 1).kept_words(0);
+
+    assert_eq!(WallClock::from_kept_words(too_late, 0, BUILD_TIME), None);
+    assert!(WallClock::from_kept_words(just_in_time, 0, BUILD_TIME).is_some());
+}
+
+#[test]
+fn a_kept_zone_the_field_cannot_hold_is_refused() {
+    let mut kept = WallClock::starting_at(MONDAY_5_JANUARY_2026_AT_09_00).kept_words(0);
+    kept[3] = u16::from_le_bytes([0, 3]) as u32;
+    kept[4] = kept_clock_check([kept[0], kept[1], kept[2], kept[3]]);
+
+    assert_eq!(WallClock::from_kept_words(kept, 0, BUILD_TIME), None);
+
+    kept[3] = 0x1_0000;
+    kept[4] = kept_clock_check([kept[0], kept[1], kept[2], kept[3]]);
+    assert_eq!(WallClock::from_kept_words(kept, 0, BUILD_TIME), None);
+}
+
+// ============================================================================
 // Companion time lines
 // ============================================================================
 

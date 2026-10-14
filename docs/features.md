@@ -61,9 +61,16 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   goes to the face, and a double click opens the notifications, or goes from them to the face.
   While the phone rings the watch to find it, the first gesture only stops the ring.
 - **The screen sleeps on its own.** It turns off after the time chosen in settings, 15 seconds at
-  first, unless the open app keeps it on. While it is dark the watch stays idle until the open app
+  first, unless the open app keeps it on. Two seconds before it turns off the light drops to its
+  low level, as on InfiniTime, and a touch or a button press in those seconds brings it back and
+  starts the time again. While it is dark the watch stays idle until the open app
   has something to do, and the clock is up to date the moment the screen comes back. The open app
-  can also turn the screen on, such as when its timer rings, or off.
+  can also turn the screen on, such as when its timer rings, or off. While the screen is off the
+  external flash sleeps in deep power-down between uses, and wakes before each one.
+- **The clock survives a reset.** Twice a second the time is kept in RAM a reset leaves alone, so
+  after a crash, a watchdog reset or a restart the watch counts on from where it was, losing only
+  the moment the bootloader takes. After a power cut, or the first start of a new firmware, it
+  starts from when the firmware was built until a phone sets it.
 - **Brightness.** The backlight has off, low, medium and high levels.
 - **An always-on screen,** turned on in settings. When the screen times out it dims and switches to
   the panel's low-power mode, and the face keeps drawing. It has not been tried on the watch yet.

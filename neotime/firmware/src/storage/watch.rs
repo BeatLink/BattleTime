@@ -35,7 +35,11 @@ use neotime_updates::{
 };
 use static_cell::StaticCell;
 
-use core::{cell::RefCell, future::Future};
+use core::{
+    cell::RefCell,
+    future::Future,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use crate::{
     foreground, line, packages,
@@ -409,6 +413,7 @@ impl embedded_storage_async::nor_flash::ReadNorFlash for StoreFlash {
 
     async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
         self.wait_for_free_bus().await;
+        self.wake_chip()?;
         self.flash.lock(|flash| flash.borrow_mut().read(offset, bytes))
     }
 
@@ -422,6 +427,7 @@ impl embedded_storage_async::nor_flash::NorFlash for StoreFlash {
     const ERASE_SIZE: usize = neotime_flash_store::SECTOR_BYTES as usize;
 
     async fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
+        self.wake_chip()?;
         for sector in (from..to).step_by(Self::ERASE_SIZE) {
             self.wait_for_free_bus().await;
             self.flash
@@ -433,6 +439,7 @@ impl embedded_storage_async::nor_flash::NorFlash for StoreFlash {
     }
 
     async fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+        self.wake_chip()?;
         let page = neotime_external_flash::PROGRAM_PAGE_SIZE;
         let mut done = 0;
         while done < bytes.len() {
@@ -450,6 +457,11 @@ impl embedded_storage_async::nor_flash::NorFlash for StoreFlash {
 }
 
 impl StoreFlash {
+    /// Brings the chip out of deep power-down before the store reaches it, by the driver or any other way.
+    fn wake_chip(&self) -> Result<(), <Self as embedded_storage_async::nor_flash::ErrorType>::Error> {
+        self.flash.lock(|flash| flash.borrow_mut().wake_if_asleep())
+    }
+
     /// Waits for a strip going out to the display, letting other tasks run, unless this call may not yield.
     async fn wait_for_free_bus(&self) {
         if !self.polls_without_yielding {
@@ -494,9 +506,10 @@ pub struct Files {
     /// For copying the shared library into its region of the internal flash.
     #[cfg_attr(not(with_shell), allow(dead_code))]
     internal_flash: &'static SharedInternalFlash,
-    /// For moving the update and recovery slots, outside the store.
-    #[cfg_attr(not(with_shell), allow(dead_code))]
+    /// For moving the update and recovery slots, outside the store, and for putting the chip to sleep.
     external_flash: &'static SharedExternalFlash,
+    /// Set while the screen is off, when the chip goes into deep power-down whenever the store is idle.
+    flash_may_sleep: AtomicBool,
 }
 
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -519,7 +532,28 @@ impl Files {
         store.flash_mut().polls_without_yielding = true;
         let answer = call(store);
         store.flash_mut().polls_without_yielding = false;
+        self.sleep_flash_if_allowed();
         Some(answer)
+    }
+
+    /// Lets the chip sleep while the screen is off, and puts it down now if the store is idle.
+    pub fn let_flash_sleep(&self, may_sleep: bool) {
+        self.flash_may_sleep.store(may_sleep, Ordering::Relaxed);
+        self.sleep_flash_if_idle();
+    }
+
+    /// Puts the chip into deep power-down if the screen is off and no task is in a store call.
+    fn sleep_flash_if_idle(&self) {
+        if let Ok(_store) = self.store.try_lock() {
+            self.sleep_flash_if_allowed();
+        }
+    }
+
+    /// Puts the chip into deep power-down if the screen is off; only called with the store held, so no store call is under way.
+    fn sleep_flash_if_allowed(&self) {
+        if self.flash_may_sleep.load(Ordering::Relaxed) {
+            let _ = self.external_flash.lock(|flash| flash.borrow_mut().sleep());
+        }
     }
 
     pub fn read_now(&self, path: &str) -> Option<alloc::vec::Vec<u8>> {
@@ -678,6 +712,7 @@ fn make_files(
         store: AsyncMutex::new(Some(WatchStore::unmounted(flash, STORE_LAYOUT))),
         internal_flash,
         external_flash,
+        flash_may_sleep: AtomicBool::new(false),
     })
 }
 
@@ -736,5 +771,6 @@ pub async fn run_storage(files: &'static Files) {
                 }
             }
         }
+        files.sleep_flash_if_idle();
     }
 }

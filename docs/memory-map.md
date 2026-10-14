@@ -173,13 +173,20 @@ below the start path of that time. Under a connection the Bluetooth task's own f
 the stack under those frames, and the app host verifies an image and runs its first derives outside
 the 1.7 KB frame that loads it.
 
-The last 68 bytes of the firmware's static RAM, in the `.uninit` section just below the stack, are
-the crash record (`firmware/src/restart.rs`, laid out by `neotime-crash-record`) and the 8-byte
-stack overflow count, kept as the count and its bits flipped. Start-up does not
-zero `.uninit`, so a panic or HardFault written there survives the reset that follows. It sits at
-about `0x2000D564`, wherever the linker puts the end of the other statics, so each build has its own
-address and a record from another build fails its checksum; the overflow count starts again
-from 0 the same way. The bootloader runs between the two
+The last 88 bytes of the firmware's static RAM, in the `.uninit` section just below the stack, are
+the kept clock (`firmware/src/clock.rs`, 20 B), the crash record (`firmware/src/restart.rs`, laid
+out by `neotime-crash-record`) and the 8-byte stack overflow count, kept as the count and its bits
+flipped. Start-up does not zero `.uninit`, so a panic or HardFault written there survives the reset
+that follows. The kept clock is five words, which `neotime-current-time` writes and checks: "TIME",
+UTC in milliseconds as two halves, the time zone and a check over the four. The watchdog task
+writes it twice a second and start-up takes it back, so after a soft or watchdog reset the clock
+counts on from it, and RAM after a power cut fails the check. A restored clock counts as set, the
+same as one a phone set: NeoTime has no separate "set by phone" state, and the step log and alarms
+go by the clock whatever set it, so a reset no longer throws them back to the build date. A kept
+time earlier than the build time is moved up to it. It all sits at about `0x2000D61C`, wherever the
+linker puts the end of the other statics, so each build has its own address and a record from
+another build fails its checksum; the overflow count starts again from 0 the same way, and the
+first start of a new firmware starts the clock from its build time until the phone sets it. The bootloader runs between the two
 starts but keeps clear of it: its statics are 336 B at the bottom of RAM and its stack reaches about
 4.7 KB below the alive marker in an ordinary start, measured in the emulator, against the record's
 10.3 KB. A stack that grew into the record would only happen after the firmware's own stack had

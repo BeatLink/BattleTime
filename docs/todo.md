@@ -411,8 +411,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **Try the always-on screen on the watch.** Turn on Always on in the Settings app and
   check that the dim level is steady, without flicker, that the face keeps time, and how much
   battery a night costs. It has only been built, not run.
-- [ ] **Dim before the screen turns off.** Drop to the low backlight a few seconds before the
-  timeout, so a wearer still reading can touch to keep it on, as InfiniTime does.
 - [ ] **The panel's power settings.** `Display::new` starts the ST7789 with its defaults. InfiniTime also
   sets the lowest panel and gate voltages, a VDV value that makes the first grey above black less
   of a jump, and its own porches and frame rate. Send the same commands after `Display::new`, then
@@ -583,7 +581,6 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   firmware's build date.
 - [ ] **A checkpoint of the store's tables,** so mounting need not read every ring record.
 
-- [ ] **Deep power-down in sleep.** Put the flash chip to sleep when the watch sleeps.
 - [ ] **Use the file system:** save alarms and the BLE bond there.
 - [ ] **Resource packages:** fonts and pictures installed from a zip over BLE, with a list of
   obsolete files that an upgrade deletes, as InfiniTime's `resources.json` has.
@@ -725,7 +722,6 @@ full report is
 
 ### Firmware updates
 
-- [ ] **Keep the clock across a reset** in retained RAM.
 - [ ] **Firmware from GitHub releases** offered by the companion app.
 
 ### Not started

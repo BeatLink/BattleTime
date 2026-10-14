@@ -6,7 +6,9 @@
 //! `neotime_app_host::side_button` says: a click goes back a step, retracing the way the wearer came,
 //! and from the face to sleep. The backlight and display turn off, or dim for an always-on screen, after the settings' timeout
 //! without input, unless the app keeps the screen on, and the next touch or button gesture turns
-//! them on without acting on it. Each app's persistent state is saved to
+//! them on without acting on it. Two seconds before the timeout the light drops to its low level,
+//! and any input in those seconds brings it back and starts the timeout again. While the screen is
+//! off the external flash sleeps in deep power-down between store calls. Each app's persistent state is saved to
 //! `/apps/<id>/state` when it closes or the screen turns off, and changed settings at the same times.
 //! The watch buzzes on the local hour or half hour when the chimes setting asks, and for each notification
 //! from the phone, which also goes to the open app and into the kept list. A notification opens the
@@ -66,7 +68,9 @@ use neotime_runtime::{
     events::SwipeDirection, resources::ImageReference, AppImage, AppKind, EffectKind, SystemValue,
     SystemValues, Theme, Value,
 };
-use neotime_settings::{chimes, Setting};
+use neotime_settings::{
+    chimes, next_screen_timeout_step_in_milliseconds, screen_timeout_stage, ScreenTimeoutStage, Setting,
+};
 use neotime_steps::{StepHistory, DAYS_REMEMBERED, HOURS_PER_DAY};
 
 use crate::drawing_screen::{DrawingScreen, StripBuffers, STRIP_BUFFER_PIXELS};
@@ -116,6 +120,13 @@ fn listening_while_dark() -> touch::Listening {
 
 fn screen_timeout() -> Duration {
     Duration::from_secs(settings::current().get(Setting::ScreenTimeoutSeconds) as u64)
+}
+
+/// When a lit screen next moves on toward its timeout: when its light lowers, then when it goes off.
+fn next_screen_timeout_step(last_input: Instant) -> Instant {
+    let since_input = Instant::now().saturating_duration_since(last_input).as_millis();
+    let step = next_screen_timeout_step_in_milliseconds(since_input, screen_timeout().as_millis());
+    last_input + Duration::from_millis(step)
 }
 
 /// How often the watch chimes, or `None` when the chimes are off.
@@ -536,6 +547,8 @@ struct Shell {
     help_drawn_at: Option<Value>,
     /// Whether the screen went off by dimming, for an always-on screen, rather than by sleeping.
     dimmed: bool,
+    /// Whether the light is lowered for the last moments before the screen timeout.
+    light_lowered: bool,
     /// When the panel last went to sleep or woke, which it cannot do again too soon after.
     panel_switched_at: Instant,
     /// Settings changed since they were last written to the flash.
@@ -1254,6 +1267,7 @@ impl Shell {
             hide_status();
         }
         self.lit = false;
+        self.light_lowered = false;
         // A finger still down as the panel stops reporting would otherwise never be seen to lift.
         foreground::set_finger_down(false);
         touch::listen_for(listening_while_dark());
@@ -1277,10 +1291,12 @@ impl Shell {
             self.host = Some(host);
         }
         self.save_settings();
+        self.files.let_flash_sleep(true);
     }
 
     fn turn_screen_on(&mut self) {
         self.lit = true;
+        self.files.let_flash_sleep(false);
         touch::listen_for(touch::Listening::Everything);
         self.display.lock(|display| {
             let mut display = display.borrow_mut();
@@ -1299,6 +1315,29 @@ impl Shell {
             host.screen_turned_on(now, &mut self.system);
             // The clock was not redrawn while the screen was dark, so this catches it up.
             host.tick(now, &mut self.system);
+        }
+    }
+
+    /// Lowers the light shortly before the screen timeout, brings it back after input, and turns the screen off at the timeout.
+    fn follow_screen_timeout(&mut self, last_input: Instant) {
+        let held_lit = !self.lit || self.system.keep_screen_on || status_holds_screen();
+        let since_input = Instant::now().saturating_duration_since(last_input).as_millis();
+        let stage = if held_lit {
+            ScreenTimeoutStage::Lit
+        } else {
+            screen_timeout_stage(since_input, screen_timeout().as_millis())
+        };
+        match stage {
+            ScreenTimeoutStage::TimedOut => self.turn_screen_off(),
+            ScreenTimeoutStage::LightLowered if !self.light_lowered => {
+                self.backlight.lower();
+                self.light_lowered = true;
+            }
+            ScreenTimeoutStage::Lit if self.light_lowered => {
+                self.backlight.turn_on();
+                self.light_lowered = false;
+            }
+            _ => {}
         }
     }
 
@@ -1659,6 +1698,7 @@ pub async fn run_shell(
         lit: true,
         help_drawn_at: None,
         dimmed: false,
+        light_lowered: false,
         panel_switched_at: Instant::from_ticks(0),
         settings_unsaved: false,
         chimes_checked_at: clock::now(),
@@ -1708,7 +1748,7 @@ pub async fn run_shell(
             None => clock::instant_at(help::next_change(now)),
         };
         if shell.lit && !shell.system.keep_screen_on && !status_holds_screen() {
-            wake_at = wake_at.min(last_input + screen_timeout());
+            wake_at = wake_at.min(next_screen_timeout_step(last_input));
         }
         if let Some(period) = chime_period_in_milliseconds() {
             let next_local_chime = local_now - local_now.rem_euclid(period) + period;
@@ -1754,10 +1794,7 @@ pub async fn run_shell(
             }
             Either4::Third(()) => {
                 diagnostics::set(Counter::ShellLastWake, 3);
-                let timed_out = Instant::now() >= last_input + screen_timeout();
-                if shell.lit && timed_out && !shell.system.keep_screen_on && !status_holds_screen() {
-                    shell.turn_screen_off();
-                }
+                shell.follow_screen_timeout(last_input);
                 if let Some(host) = &mut shell.host {
                     host.tick(clock::utc_now(), &mut shell.system);
                 }
@@ -1793,5 +1830,6 @@ pub async fn run_shell(
         if shell.follow_requests() {
             last_input = Instant::now();
         }
+        shell.follow_screen_timeout(last_input);
     }
 }

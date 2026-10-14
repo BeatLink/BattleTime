@@ -2,8 +2,9 @@
 //!
 //! The chip shares its SPI bus with the screen. Writes are split at the chip's 256-byte program
 //! pages, and the chip is woken from deep power-down on start, since the firmware may have left it
-//! asleep before a reset. `ExternalFlash` blocks and waits with a blocking delay while the chip is
-//! busy; `AsyncExternalFlash` waits with an async delay, so the firmware's other tasks keep running.
+//! asleep before a reset. `ExternalFlash` remembers putting the chip to sleep and wakes it before its
+//! next command, and blocks and waits with a blocking delay while the chip is busy;
+//! `AsyncExternalFlash` waits with an async delay, so the firmware's other tasks keep running.
 
 #![no_std]
 
@@ -162,6 +163,8 @@ pub struct ExternalFlash<FlashSpi, Delay> {
     delay: Delay,
     /// An erase or page program started without waiting may still be running in the chip.
     operation_may_be_running: bool,
+    /// The chip is in deep power-down, where it ignores every command but the one that wakes it.
+    asleep: bool,
 }
 
 pub struct FlashParts<FlashSpi, Delay> {
@@ -176,6 +179,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
             spi,
             delay,
             operation_may_be_running: false,
+            asleep: true,
         };
 
         flash.wake()?;
@@ -186,6 +190,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
     }
 
     pub fn read_chip_id(&mut self) -> Result<ChipId, Error<FlashSpi::Error>> {
+        self.wake_if_asleep()?;
         let mut id_bytes = [0; 3];
         self.spi
             .transaction(&mut [Operation::Write(&[READ_CHIP_ID]), Operation::Read(&mut id_bytes)])
@@ -199,15 +204,34 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
         })
     }
 
+    /// Puts the chip in deep power-down once any running erase or program ends; the next command wakes it.
     pub fn sleep(&mut self) -> Result<(), Error<FlashSpi::Error>> {
+        if self.asleep {
+            return Ok(());
+        }
         self.finish_running_operation()?;
-        self.spi.write(&[DEEP_POWER_DOWN]).map_err(Error::Spi)
+        self.spi.write(&[DEEP_POWER_DOWN]).map_err(Error::Spi)?;
+        self.asleep = true;
+        Ok(())
     }
 
     pub fn wake(&mut self) -> Result<(), Error<FlashSpi::Error>> {
         self.spi.write(&[RELEASE_POWER_DOWN]).map_err(Error::Spi)?;
         self.delay.delay_us(WAKE_UP_TIME_IN_MICROSECONDS);
+        self.asleep = false;
         Ok(())
+    }
+
+    /// Wakes the chip if `sleep` put it down, for anything about to reach it, even past this driver.
+    pub fn wake_if_asleep(&mut self) -> Result<(), Error<FlashSpi::Error>> {
+        if self.asleep {
+            self.wake()?;
+        }
+        Ok(())
+    }
+
+    pub fn is_asleep(&self) -> bool {
+        self.asleep
     }
 
     pub fn release(self) -> FlashParts<FlashSpi, Delay> {
@@ -308,8 +332,9 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
         Ok(true)
     }
 
-    /// Waits for an erase or program started without waiting, since the chip ignores other commands meanwhile.
+    /// Wakes the chip and waits for an erase or program started without waiting, since the chip ignores other commands meanwhile.
     fn finish_running_operation(&mut self) -> Result<(), Error<FlashSpi::Error>> {
+        self.wake_if_asleep()?;
         if self.operation_may_be_running {
             self.wait_until_ready()?;
             self.operation_may_be_running = false;

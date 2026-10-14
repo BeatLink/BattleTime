@@ -266,6 +266,7 @@ function ramTree() {
         { name: "GATT server", size: 1044, kind: "boot", holds: "SERVER, 656 B, mostly TrouBLE's CCCD table for each client, and the 388 B of GATT values written or set at run time. The attribute table itself, 61 attributes, is a 1,952 B constant in flash." },
         { name: "Display strip buffers", size: 3840, kind: "firmware", holds: "The two 1,920 B strip buffers neotime-display fills for each SPI transfer." },
         { name: "Flash store tables", size: KB(2.7), kind: "data", holds: "About 2.7 KB: 1 KB of record keys, 512 B of files, the rings' sector order, the log batches and an upload's state." },
+        { name: "Kept clock", size: 20, kind: "boot", holds: "20 B in .uninit beside the crash record: UTC and the time zone with a marker and a check, written twice a second, so a soft or watchdog reset keeps the time." },
         { name: "Crash record", size: 60, kind: "boot", holds: "60 B in .uninit just below the stack: a panic's return addresses or a HardFault's registers, with a checksum, kept across the reset. Start-up does not zero it, and the bootloader keeps clear of it." },
         { name: "Other tasks and packet pool", rest: true, kind: "firmware", holds: "The other tasks' state and the Bluetooth host's packet pool." },
       ] },

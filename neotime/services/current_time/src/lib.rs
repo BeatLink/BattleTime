@@ -310,6 +310,59 @@ impl WallClock {
 }
 
 // ============================================================================
+// The clock kept across a reset
+// ============================================================================
+
+/// Words in a kept clock: a marker, UTC in two halves, the zone, and a check over the four.
+pub const KEPT_CLOCK_WORDS: usize = 5;
+
+/// "TIME" in ASCII, so a kept clock is easy to find in a dump of RAM.
+pub const KEPT_CLOCK_MARKER: u32 = 0x454D_4954;
+
+impl WallClock {
+    /// The clock as words for RAM a reset keeps: UTC at `uptime` and the zone, with a marker and a check.
+    pub fn kept_words(&self, uptime: i64) -> [u32; KEPT_CLOCK_WORDS] {
+        let utc = self.utc(uptime) as u64;
+        let zone = u16::from_le_bytes(self.zone.encode()) as u32;
+        let [marker, utc_low, utc_high, zone] = [KEPT_CLOCK_MARKER, utc as u32, (utc >> 32) as u32, zone];
+        let check = kept_clock_check([marker, utc_low, utc_high, zone]);
+        [marker, utc_low, utc_high, zone, check]
+    }
+
+    /// The clock kept words hold, counted on from `uptime`, or `None` unless they are a whole kept clock.
+    ///
+    /// A kept time before `earliest_utc`, the firmware's build time, is moved up to it.
+    pub fn from_kept_words(words: [u32; KEPT_CLOCK_WORDS], uptime: i64, earliest_utc: i64) -> Option<Self> {
+        let [marker, utc_low, utc_high, zone, check] = words;
+        if marker != KEPT_CLOCK_MARKER || check != kept_clock_check([marker, utc_low, utc_high, zone]) {
+            return None;
+        }
+        let zone = LocalTimeInformation::decode(&u16::try_from(zone).ok()?.to_le_bytes())?;
+        let utc = ((utc_high as u64) << 32 | utc_low as u64) as i64;
+        let latest_year_starts = Date {
+            year: LATEST_YEAR,
+            month: 1,
+            day: 1,
+        };
+        let latest_utc = days_since_1970(latest_year_starts) * SECONDS_PER_DAY * MILLISECONDS_PER_SECOND;
+        if !(0..latest_utc).contains(&utc) {
+            return None;
+        }
+        let mut clock = WallClock::starting_at(0);
+        clock.set_utc(utc.max(earliest_utc), uptime);
+        clock.zone = zone;
+        Some(clock)
+    }
+}
+
+/// A check over a kept clock's words, so RAM left by a power cut or another build reads as no clock.
+fn kept_clock_check(words: [u32; KEPT_CLOCK_WORDS - 1]) -> u32 {
+    words.iter().fold(0x811C_9DC5, |check, word| {
+        (check ^ word).rotate_left(5).wrapping_mul(0x0100_0193)
+    })
+}
+
+// ============================================================================
 // Companion time lines
 // ============================================================================
 

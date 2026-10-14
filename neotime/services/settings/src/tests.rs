@@ -214,3 +214,51 @@ fn the_heart_rate_interval_gives_seconds_only_for_measuring_now_and_then() {
         Some(1800)
     );
 }
+
+// ============================================================================
+// The screen timeout
+// ============================================================================
+
+#[test]
+fn the_light_lowers_two_seconds_before_the_timeout() {
+    assert_eq!(screen_timeout_stage(0, 15_000), ScreenTimeoutStage::Lit);
+    assert_eq!(screen_timeout_stage(12_999, 15_000), ScreenTimeoutStage::Lit);
+    assert_eq!(
+        screen_timeout_stage(13_000, 15_000),
+        ScreenTimeoutStage::LightLowered
+    );
+    assert_eq!(
+        screen_timeout_stage(14_999, 15_000),
+        ScreenTimeoutStage::LightLowered
+    );
+    assert_eq!(screen_timeout_stage(15_000, 15_000), ScreenTimeoutStage::TimedOut);
+    assert_eq!(screen_timeout_stage(90_000, 15_000), ScreenTimeoutStage::TimedOut);
+}
+
+#[test]
+fn a_short_timeout_lowers_the_light_for_its_second_half_at_most() {
+    assert_eq!(screen_timeout_stage(1_499, 3_000), ScreenTimeoutStage::Lit);
+    assert_eq!(
+        screen_timeout_stage(1_500, 3_000),
+        ScreenTimeoutStage::LightLowered
+    );
+    assert_eq!(next_screen_timeout_step_in_milliseconds(0, 3_000), 1_500);
+}
+
+#[test]
+fn the_next_step_is_the_lowering_then_the_timeout() {
+    assert_eq!(next_screen_timeout_step_in_milliseconds(0, 15_000), 13_000);
+    assert_eq!(next_screen_timeout_step_in_milliseconds(12_999, 15_000), 13_000);
+    assert_eq!(next_screen_timeout_step_in_milliseconds(13_000, 15_000), 15_000);
+    assert_eq!(next_screen_timeout_step_in_milliseconds(20_000, 15_000), 15_000);
+}
+
+#[test]
+fn the_shortest_setting_still_lowers_the_light_two_seconds_early() {
+    let shortest_in_milliseconds = Setting::ScreenTimeoutSeconds.limits().lowest as u64 * 1000;
+
+    assert_eq!(
+        next_screen_timeout_step_in_milliseconds(0, shortest_in_milliseconds),
+        shortest_in_milliseconds - LOWER_LIGHT_BEFORE_TIMEOUT_IN_MILLISECONDS
+    );
+}

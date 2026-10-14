@@ -432,7 +432,14 @@ trait embassy-boot and the flash store are reached through:
   SPI NOR commands are used, so a second-source part works as well as the XT25F32B.
 - **Writes of any length.** The chip programs at most 256 bytes at a time, within one page, so
   `write` splits at page boundaries. `erase` takes whole 4 KB sectors.
-- **Power.** `sleep` puts the chip in deep power-down, and `wake` brings it back.
+- **Power.** `sleep` puts the chip in deep power-down once any running erase or program ends, and
+  `wake` brings it back. The driver remembers putting it down and wakes it before its own next
+  command; `wake_if_asleep` is for anything that reaches the chip past the driver. The firmware's
+  `storage::Files` puts the chip down while the screen is off (`let_flash_sleep`), only while it
+  holds the store, at the end of each store call and after each storage task request, so no store
+  read is under way or can start while the chip is down. `StoreFlash` calls `wake_if_asleep` at
+  the start of every read, erase and write, so a read that goes past the driver, such as by DMA,
+  still finds the chip awake. The update slots reach the chip through the driver, which wakes it.
 - **Blocking and async.** While an erase or a write is in progress, both check the chip every 100
   microseconds and wait in between. `ExternalFlash` blocks, which is what the bootloader, the
   reloader and the firmware's update slots need; it waits on a blocking delay, and the
@@ -844,7 +851,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
   [memory-map.md](memory-map.md#ram-64-kb-planned)). The full firmware keeps the record until the
   wearer picks Restart on the crash screen or the companion app saves a debug report, so a reset in
   between shows the crash again; the recovery firmware, which has no crash screen, clears it at
-  start. The status page's last line shows the crash
+  start. The clock is kept beside it (`clock::keep`, `clock::restore_kept`), so it survives a soft or
+  watchdog reset. The status page's last line shows the crash
   when there was one, or else the reasons in words. The diagnostics characteristic gets
   `neotime_crash_record::last_restart_words`: the `RESETREAS` bits, the kind of crash (0 none, 1
   panic, 2 HardFault, 3 out of memory), eight detail words and four words of the open app's id.
@@ -866,6 +874,9 @@ watch face, the launcher and the apps through `neotime-app-host`:
   (`services/crash_record`) holds the format and the decoding, with host tests;
   `tests/emulator/crash_record.robot` faults the running firmware, poke-calls the panic handler
   after a refused allocation, and checks the next start reports each and shows the crash screen.
+  `tests/emulator/screen_power.robot` checks the kept clock across a soft reset, a watchdog reset
+  and a power cut, the light lowering before the screen timeout, and the external flash sleeping
+  while the screen is off and waking for the step log.
 - **Crash screen.** After a start whose previous run crashed, the shell opens no app and shows the
   crash page instead: what stopped NeoTime in plain words ("out of memory", "out of stack space" for
   a stack guard fault, "a processor fault", "a software error") and which app was open, with two

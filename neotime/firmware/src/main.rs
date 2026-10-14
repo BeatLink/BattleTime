@@ -234,6 +234,7 @@ async fn main(spawner: Spawner) {
     screen.write_line(line::FILES, "Starting");
     screen.write_line(line::BLUETOOTH, "Off");
     let last_restart = restart::take_last_restart();
+    clock::restore_kept();
     show_last_restart(&mut screen, last_restart);
 
     let storage_peripherals = storage::StoragePeripherals {
@@ -418,6 +419,7 @@ async fn feed_watchdog_while_button_is_up(mut watchdog: WatchdogHandle) {
         if verdict.alive && !side_button_is_held() {
             watchdog.pet();
         }
+        clock::keep();
         Timer::after(WATCHDOG_CHECK_INTERVAL).await;
     }
 }

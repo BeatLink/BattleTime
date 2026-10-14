@@ -1,5 +1,6 @@
 //! The backlight: three pins, each turned on by pulling it low, set through `neotime-display`'s
-//! `Backlight`, plus a dim level for an always-on screen that pulses the low pin in hardware.
+//! `Backlight`, plus a dim level for an always-on screen that pulses the low pin in hardware, and a
+//! lowered state that shows the low level just before the screen timeout.
 //!
 //! The dim level runs without the CPU: RTC2 counts at 32768 Hz, one PPI channel turns the low pin
 //! off at the end of its short on time, and another turns it back on and restarts the count, as
@@ -78,6 +79,8 @@ impl OutputPin for BacklightPin {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum State {
     On,
+    /// Lit at the low level for the last moments before the screen timeout, keeping the wearer's level.
+    Lowered,
     Off,
     Dim,
 }
@@ -150,6 +153,14 @@ impl Backlight {
         self.stop_pulse();
         let _ = self.pins.set_level(BacklightLevel::Off);
         self.state = State::Off;
+    }
+
+    /// Drops a lit screen to the low level until `turn_on` brings the wearer's level back.
+    pub fn lower(&mut self) {
+        if self.state == State::On {
+            let _ = self.pins.set_level(BacklightLevel::Low);
+            self.state = State::Lowered;
+        }
     }
 
     /// Lights the screen faintly, for an always-on screen.

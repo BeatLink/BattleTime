@@ -302,5 +302,52 @@ impl Settings {
     }
 }
 
+// ============================================================================
+// The screen timeout
+// ============================================================================
+
+/// How long before the screen timeout the light drops to its low level, as InfiniTime does.
+pub const LOWER_LIGHT_BEFORE_TIMEOUT_IN_MILLISECONDS: u64 = 2_000;
+
+/// Where a lit screen stands in its timeout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScreenTimeoutStage {
+    Lit,
+    LightLowered,
+    TimedOut,
+}
+
+/// How long after the last input the light drops, never more than half the timeout.
+fn light_lowers_after_in_milliseconds(timeout_in_milliseconds: u64) -> u64 {
+    timeout_in_milliseconds - LOWER_LIGHT_BEFORE_TIMEOUT_IN_MILLISECONDS.min(timeout_in_milliseconds / 2)
+}
+
+/// Where a lit screen stands some time after the last input.
+pub fn screen_timeout_stage(
+    since_input_in_milliseconds: u64,
+    timeout_in_milliseconds: u64,
+) -> ScreenTimeoutStage {
+    if since_input_in_milliseconds >= timeout_in_milliseconds {
+        ScreenTimeoutStage::TimedOut
+    } else if since_input_in_milliseconds >= light_lowers_after_in_milliseconds(timeout_in_milliseconds) {
+        ScreenTimeoutStage::LightLowered
+    } else {
+        ScreenTimeoutStage::Lit
+    }
+}
+
+/// How long after the last input the screen next moves on a stage: when its light drops, then when it times out.
+pub fn next_screen_timeout_step_in_milliseconds(
+    since_input_in_milliseconds: u64,
+    timeout_in_milliseconds: u64,
+) -> u64 {
+    let lowers_after = light_lowers_after_in_milliseconds(timeout_in_milliseconds);
+    if since_input_in_milliseconds < lowers_after {
+        lowers_after
+    } else {
+        timeout_in_milliseconds
+    }
+}
+
 #[cfg(test)]
 mod tests;

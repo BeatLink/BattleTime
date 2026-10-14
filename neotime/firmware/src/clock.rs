@@ -1,19 +1,24 @@
 //! The wall clock: UTC counted on by the chip's timer, with the zone it is shown in.
 //!
-//! Until a phone sets it, it starts from when the firmware was built, in UTC. The time zone and
-//! daylight saving offset are saved to `/settings/time_zone`, so local time survives a restart once
-//! the clock is set again. `neotime-current-time` holds the logic; docs/companion-protocol.md says
-//! how each way of setting the clock treats UTC and the zone.
+//! Twice a second the clock is kept in RAM a reset leaves as it was, so after a soft or watchdog
+//! reset it counts on from where it was; after a power cut, or the first start of a new build, it
+//! starts from when the firmware was built, in UTC, until a phone sets it. The time zone and
+//! daylight saving offset are also saved to `/settings/time_zone`, so local time survives a restart
+//! once the clock is set again. `neotime-current-time` holds the logic; docs/companion-protocol.md
+//! says how each way of setting the clock treats UTC and the zone.
 
 use core::{
     cell::Cell,
+    mem::MaybeUninit,
+    ptr::{addr_of, addr_of_mut},
     sync::atomic::{AtomicBool, Ordering},
 };
 
 use embassy_sync::blocking_mutex::{raw::CriticalSectionRawMutex, Mutex};
 use embassy_time::Instant;
 use neotime_current_time::{
-    parse_time_line, LocalTimeInformation, WallClock, CURRENT_TIME_BYTES, LOCAL_TIME_INFORMATION_BYTES,
+    parse_time_line, LocalTimeInformation, WallClock, CURRENT_TIME_BYTES, KEPT_CLOCK_WORDS,
+    LOCAL_TIME_INFORMATION_BYTES,
 };
 use neotime_runtime::{SystemValue, Value};
 
@@ -23,9 +28,11 @@ use crate::{
     system_values,
 };
 
-static CLOCK: Mutex<CriticalSectionRawMutex, Cell<WallClock>> = Mutex::new(Cell::new(
-    WallClock::starting_at(parse_or_zero(env!("NEOTIME_BUILD_TIME_MS"))),
-));
+/// When the firmware was built, in UTC: where the clock starts with nothing kept, and the earliest it takes.
+const BUILD_TIME: Value = parse_or_zero(env!("NEOTIME_BUILD_TIME_MS"));
+
+static CLOCK: Mutex<CriticalSectionRawMutex, Cell<WallClock>> =
+    Mutex::new(Cell::new(WallClock::starting_at(BUILD_TIME)));
 
 /// Whether the zone changed since it was last saved or loaded.
 static ZONE_UNSAVED: AtomicBool = AtomicBool::new(false);
@@ -87,6 +94,42 @@ pub fn utc_offset() -> Value {
 /// The chip's timer reading at a UTC time, for sleeping until then.
 pub fn instant_at(utc: Value) -> Instant {
     Instant::from_millis(CLOCK.lock(Cell::get).uptime_at(utc) as u64)
+}
+
+// ============================================================================
+// Keeping the clock across a reset
+// ============================================================================
+
+/// The clock as last kept, in `.uninit` beside the crash record, which start-up leaves as it was.
+#[link_section = ".uninit.KEPT_CLOCK"]
+static mut KEPT_CLOCK: MaybeUninit<[u32; KEPT_CLOCK_WORDS]> = MaybeUninit::uninit();
+
+/// Writes the clock into RAM a reset keeps; the watchdog task calls it twice a second.
+pub fn keep() {
+    let words = CLOCK.lock(Cell::get).kept_words(uptime());
+    unsafe {
+        addr_of_mut!(KEPT_CLOCK)
+            .cast::<[u32; KEPT_CLOCK_WORDS]>()
+            .write_volatile(words)
+    };
+}
+
+/// Takes the clock the previous run kept, if it left a whole one, and keeps it again at once.
+pub fn restore_kept() {
+    let words = unsafe {
+        addr_of!(KEPT_CLOCK)
+            .cast::<[u32; KEPT_CLOCK_WORDS]>()
+            .read_volatile()
+    };
+    if let Some(kept) = WallClock::from_kept_words(words, uptime(), BUILD_TIME) {
+        change(|clock| {
+            *clock = kept;
+            true
+        });
+        // The saved zone file still loads over it, so a start never writes the zone back unasked.
+        ZONE_UNSAVED.store(false, Ordering::Relaxed);
+    }
+    keep();
 }
 
 // ============================================================================
