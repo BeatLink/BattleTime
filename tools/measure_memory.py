@@ -5,7 +5,8 @@ Run it inside `nix develop` from anywhere in the repository:
 
     python3 -I tools/measure_memory.py
 
-It builds the firmware twice, the full build and `--features recovery`, and sorts every symbol by
+It builds the firmware twice, the full build and the recovery build (`--profile recovery --features
+recovery`), and sorts every symbol by
 the crate that owns it. The firmware is linked with LTO into one object, so a linker map cannot
 say where a byte came from; demangled symbol paths can. Unnamed constants are matched by content
 against the files the firmware embeds (fonts, built-in apps, the accelerometer's configuration).
@@ -115,7 +116,9 @@ def owning_crate(name):
     task = re.search(r"TaskStorage<([a-z_0-9]+)::", name)
     if task:
         return task.group(1)
-    return re.match(r"[<&\s]*(?:dyn\s+)?([A-Za-z_0-9]+)", name).group(1)
+    # `<() as bt_hci::WriteHci>` belongs to the trait's crate, and `<[u8]>::contains` to no crate it names.
+    segment = re.match(r"[<&\s\[()*]*(?:(?:dyn|const|mut)\s+)*(?:as\s+)?([A-Za-z_0-9]+)", name)
+    return segment.group(1) if segment else ""
 
 
 def component_of(crate):
@@ -136,13 +139,15 @@ def run(command, directory):
 
 def build(features):
     """Builds the firmware and returns its symbols, its section sizes and its flash image."""
-    flags = ["--features", features] if features else []
-    run(["cargo", "build", "-q", "--release", *flags], FIRMWARE)
-    symbols = run(["cargo", "nm", "-q", "--release", *flags, "--", "--print-size", "--demangle"], FIRMWARE)
-    sections = run(["cargo", "size", "-q", "--release", *flags, "--", "-A"], FIRMWARE)
+    # The recovery firmware has its own profile, which builds for size.
+    profile = ["--profile", "recovery"] if features == "recovery" else ["--release"]
+    flags = [*profile, "--features", features] if features else profile
+    run(["cargo", "build", "-q", *flags], FIRMWARE)
+    symbols = run(["cargo", "nm", "-q", *flags, "--", "--print-size", "--demangle"], FIRMWARE)
+    sections = run(["cargo", "size", "-q", *flags, "--", "-A"], FIRMWARE)
     image_path = NEOTIME / "target" / f"measure-{features or 'full'}.bin"
     image_path.parent.mkdir(exist_ok=True)
-    run(["cargo", "objcopy", "-q", "--release", *flags, "--", "-O", "binary", str(image_path)], FIRMWARE)
+    run(["cargo", "objcopy", "-q", *flags, "--", "-O", "binary", str(image_path)], FIRMWARE)
     section_sizes = {}
     for line in sections.splitlines():
         fields = line.split()

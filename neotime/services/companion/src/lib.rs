@@ -353,15 +353,34 @@ impl<'line> ThemeColors<'line> {
     }
 }
 
-/// Reads one line: `GB({...})` as Gadgetbridge sends it, or a bare JSON object.
-pub fn parse_line(line: &[u8]) -> Result<Message<'_>, MessageError> {
+/// The JSON object in a line, with Gadgetbridge's `GB(...)` around it taken off.
+#[inline(always)]
+fn json_of(line: &[u8]) -> Result<&str, MessageError> {
     let text = core::str::from_utf8(line)
         .map_err(|_| MessageError::NotText)?
         .trim();
-    let json = text
+    Ok(text
         .strip_prefix("GB(")
         .and_then(|inner| inner.strip_suffix(')'))
-        .unwrap_or(text);
+        .unwrap_or(text))
+}
+
+/// Only the `t` of a line, for the recovery firmware, which answers `status` and `slots` and nothing else.
+#[derive(Deserialize)]
+struct KindOnly<'line> {
+    t: &'line str,
+}
+
+/// Reads only a line's kind, its `t`, without the parsers for each kind that `parse_line` brings in.
+pub fn message_kind(line: &[u8]) -> Result<&str, MessageError> {
+    let (envelope, _) =
+        serde_json_core::from_str::<KindOnly>(json_of(line)?).map_err(|_| MessageError::NotJson)?;
+    Ok(envelope.t)
+}
+
+/// Reads one line: `GB({...})` as Gadgetbridge sends it, or a bare JSON object.
+pub fn parse_line(line: &[u8]) -> Result<Message<'_>, MessageError> {
+    let json = json_of(line)?;
     let (envelope, _) = serde_json_core::from_str::<Envelope>(json).map_err(|_| MessageError::NotJson)?;
     match envelope.t {
         "settings" => {}

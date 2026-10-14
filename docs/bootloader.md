@@ -135,6 +135,20 @@ The companion moves them with the `slots` message ([companion-protocol.md](compa
 which the firmware answers with `storage::answer_slots`: it carries the recovery image to a new
 recovery slot first (`neotime_boot::move_recovery`), then calls `change_slots` and restarts.
 
+### Why the slot area stays at 1 MB
+
+The slot area ends where the file system starts, at `0x100000`, and that boundary is fixed. It
+holds the 484 KB update slot and a recovery slot as large as the firmware, with 60 KB to spare, so
+the recovery slot can take either the small recovery build or a full firmware without the file
+system moving. Squeezing the recovery slot to the small image would give the file system only
+about 300 KB more, while a typical install uses 44 KB of its 2 MB of files.
+
+The update slot already acts as a B slot: after each swap it holds the previous firmware, which a
+rollback restores. The recovery firmware is kept apart from that pair on purpose. It is a small
+build, rarely rebuilt, so a bug that the running and the previous firmware share, such as one in
+DFU or in mounting the store, does not reach it. There is no backup bootloader; the bootloader is
+not expected to change, and SWD remains for a watch that cannot reach it.
+
 ## What happens at start
 
 1. Make sure the NFC pins are plain GPIO, since P0.10 resets the touch panel. If an erased UICR

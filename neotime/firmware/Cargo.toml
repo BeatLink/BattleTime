@@ -85,5 +85,11 @@ debug = true
 lto = true
 opt-level = "s"
 
+# The recovery firmware, built with `--profile recovery --features recovery`: smallest over fastest, since it only
+# takes updates.
+[profile.recovery]
+inherits = "release"
+opt-level = "z"
+
 [profile.dev.package.littlefs-rust-core]
 overflow-checks = false

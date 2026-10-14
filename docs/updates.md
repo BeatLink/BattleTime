@@ -147,10 +147,12 @@ screen timeout, puts the shell back. A successful update restarts into the bootl
 described in [bootloader.md](bootloader.md#the-status-screen).
 
 A recovery firmware installed by the button hold shows as recovery only until its next restart,
-because the note is not kept. A firmware built with `--features recovery` always does, and it is
-the image meant for the recovery slot. That build leaves out the shell, touch, the step counter
-and the apps, keeping the status page, the file system, Bluetooth and DFU, and carries no shared
-library, so it is about 179 KB against the full firmware's 472 KB with its library. `tools/build_images.sh` writes it to `dist/recovery.bin`.
+because the note is not kept. A firmware built with `--profile recovery --features recovery` always does, and it is
+the image meant for the recovery slot. That build leaves out the shell, touch, the step counter,
+the apps and the phone's messages, keeping the status page, the file system, Bluetooth and DFU,
+answering only `status` and `slots` from the companion, and carries no shared library. Its profile
+builds for size (`opt-level = "z"`), so it is about 149 KB against the full firmware's 472 KB with
+its library. `tools/build_images.sh` writes it to `dist/recovery.bin`.
 
 A panic halts rather than resets, so the watchdog brings the watch back to the bootloader instead of
 the firmware restarting in a loop. It is 105 KB of flash and 25 KB of static RAM, 16 KB of that heap. Its screen writes and flash

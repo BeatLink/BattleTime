@@ -81,11 +81,11 @@ jobs:
       fail-fast: false
       matrix:
         build:
-          - { name: firmware, crate: firmware, features: "" }
-          - { name: recovery firmware, crate: firmware, features: "--features recovery" }
-          - { name: wasp-os rehearsal, crate: firmware, features: "--features wasp-os-rehearsal" }
-          - { name: storage rehearsal, crate: firmware, features: "--features wasp-os-storage-rehearsal" }
-          - { name: bootloader, crate: bootloader, features: "" }
+          - { name: firmware, crate: firmware, features: "--release" }
+          - { name: recovery firmware, crate: firmware, features: "--profile recovery --features recovery" }
+          - { name: wasp-os rehearsal, crate: firmware, features: "--release --features wasp-os-rehearsal" }
+          - { name: storage rehearsal, crate: firmware, features: "--release --features wasp-os-storage-rehearsal" }
+          - { name: bootloader, crate: bootloader, features: "--release" }
     defaults:
       run:
         working-directory: neotime/${{ matrix.build.crate }}
@@ -98,7 +98,7 @@ jobs:
       - name: Check the formatting
         run: nix develop ../.. --command cargo fmt --check
       - name: Run clippy
-        run: nix develop ../.. --command cargo clippy --release ${{ matrix.build.features }} -- --deny warnings
+        run: nix develop ../.. --command cargo clippy ${{ matrix.build.features }} -- --deny warnings
 
   memory-map:
     # Measures the firmware and file system into docs/memory-map.md, and on master commits the tables when they change.

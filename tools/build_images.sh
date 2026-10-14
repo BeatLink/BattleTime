@@ -33,7 +33,7 @@ cp firmware/target/thumbv7em-none-eabihf/release/neotime-firmware "$dist/firmwar
 python3 -I ../tools/package_dfu.py "$dist/firmware.bin" "$dist/firmware.zip"
 
 echo "recovery firmware (the status page, Bluetooth and updates, without the shell or the library)"
-(cd firmware && cargo objcopy -q --release --features recovery -- -O binary "../$dist/recovery.code.bin")
+(cd firmware && cargo objcopy -q --profile recovery --features recovery -- -O binary "../$dist/recovery.code.bin")
 add_header recovery "$dist/recovery.code.bin" "$dist/recovery.bin"
 python3 -I ../tools/package_dfu.py "$dist/recovery.bin" "$dist/recovery.zip"
 

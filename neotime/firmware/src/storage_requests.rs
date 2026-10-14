@@ -13,11 +13,8 @@ pub const FILE_REQUEST_BYTES: usize = 128;
 /// The longest small file another task writes, such as the time zone.
 pub const SMALL_WRITE_BYTES: usize = 32;
 
-/// The rehearsals keep no store, so they refuse each request without reading what it carries.
-#[cfg_attr(
-    any(feature = "wasp-os-rehearsal", feature = "wasp-os-storage-rehearsal"),
-    allow(dead_code)
-)]
+/// The rehearsals keep no store and the recovery firmware no step counter, so they leave some of what these carry unread.
+#[cfg_attr(not(with_shell), allow(dead_code))]
 pub enum StorageRequest {
     /// A file service command from the phone; its answers come back on `FILE_ANSWERS`.
     FileTransfer {

@@ -38,7 +38,9 @@ use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_blefs::service::FileTransferService;
 use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
 use neotime_button::Button;
-use neotime_companion::{LineAssembler, MOST_NEW_ALERT_BYTES};
+use neotime_companion::LineAssembler;
+#[cfg(with_shell)]
+use neotime_companion::MOST_NEW_ALERT_BYTES;
 use neotime_crash_record::Crash;
 use neotime_dfu::{
     service::DfuWrite, service::LegacyDfuService, write_progress, Activity, LegacyDfu, Outcome,
@@ -650,9 +652,11 @@ struct AlertNotificationService {
 }
 
 /// The id the next New Alert gets, counted above Gadgetbridge's 32-bit ids so the two never meet.
+#[cfg(with_shell)]
 static NEXT_NEW_ALERT: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
 /// Shows a New Alert written to the Alert Notification service as a notification, or as a call when it is one.
+#[cfg(with_shell)]
 fn read_new_alert(write: &[u8]) {
     let count = NEXT_NEW_ALERT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let id = (1 << 32) + i64::from(count);
@@ -850,6 +854,7 @@ async fn run_bluetooth(
 }
 
 /// Hands a message to the shell, or answers `status` at once; unknown messages are passed over.
+#[cfg(with_shell)]
 fn read_companion_line(line: &[u8]) {
     if clock::read_time_line(line) {
         return;
@@ -865,19 +870,32 @@ fn read_companion_line(line: &[u8]) {
         Ok(neotime_companion::Message::NotificationDismissed { id }) => {
             app_events::notification_dismissed(id);
         }
-        #[cfg(with_shell)]
         Ok(neotime_companion::Message::Slots(request)) => {
             let _ = SLOTS_REQUESTS.try_send(request);
         }
+        Ok(neotime_companion::Message::Unknown { .. }) => {}
+        Ok(phone_message) => app_events::phone_message_arrived(phone_message),
+        Err(_) => {
+            settings::send_reply(&neotime_companion::error_report("could not read that message"));
+        }
+    }
+}
+
+/// Answers `status` and refuses `slots`; with no shell to show them, every other message is passed over.
+#[cfg(not(with_shell))]
+fn read_companion_line(line: &[u8]) {
+    if clock::read_time_line(line) {
+        return;
+    }
+    match neotime_companion::message_kind(line) {
+        Ok("status") => send_status(),
         // The reloaders carry the recovery firmware twice in wasp-os's app slot, so it stays without this.
-        #[cfg(not(with_shell))]
-        Ok(neotime_companion::Message::Slots(_)) => {
+        Ok("slots") => {
             settings::send_reply(&neotime_companion::slots_refusal(
                 "the recovery firmware cannot move the slots",
             ));
         }
-        Ok(neotime_companion::Message::Unknown { .. }) => {}
-        Ok(phone_message) => app_events::phone_message_arrived(phone_message),
+        Ok(_) => {}
         Err(_) => {
             settings::send_reply(&neotime_companion::error_report("could not read that message"));
         }
@@ -1038,6 +1056,8 @@ async fn serve_connection(
                             });
                             file_answers = storage_requests::answer_file_transfer(&file_request, room).await;
                         }
+                        // The recovery firmware has nowhere to show a notification.
+                        #[cfg(with_shell)]
                         if write.handle() == server.alert_notification.new_alert.handle {
                             write.with_data(|_, bytes| {
                                 read_new_alert(&bytes[..bytes.len().min(MOST_NEW_ALERT_BYTES)])

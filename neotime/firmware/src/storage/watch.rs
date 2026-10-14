@@ -12,6 +12,8 @@ use embassy_nrf::{
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
 use embassy_sync::mutex::Mutex as AsyncMutex;
 
+#[cfg(with_shell)]
+use crate::motion;
 use embassy_futures::select::{select, Either};
 use embedded_storage::nor_flash::ReadNorFlash;
 use neotime_blefs::FileTransfer;
@@ -25,6 +27,7 @@ use neotime_packages::{
     commands::{refuse_command, Change},
     InstalledApp,
 };
+#[cfg(with_shell)]
 use neotime_steps::{log, DayChange, DAYS_REMEMBERED};
 use neotime_updates::{
     confirm_running_firmware, forget_rollback, running_firmware_is_on_trial,
@@ -35,7 +38,7 @@ use static_cell::StaticCell;
 use core::{cell::RefCell, future::Future};
 
 use crate::{
-    foreground, line, motion, packages,
+    foreground, line, packages,
     status::{self, Mode},
     storage_requests::{self, StorageRequest},
     Screen, SpiBus,
@@ -603,6 +606,7 @@ impl Files {
                 transfer.abort();
                 FileAccess::abandon_file(store);
             }
+            #[cfg(with_shell)]
             StorageRequest::LoadSteps => {
                 load_days(store).await;
                 if let Some(steps) = log::load_trip(store).await {
@@ -610,6 +614,7 @@ impl Files {
                 }
                 storage_requests::STEPS_LOADED.signal(());
             }
+            #[cfg(with_shell)]
             StorageRequest::StoreSteps(recorded) => {
                 if let Some(finished) = recorded.finished {
                     if log::write_slot(store, finished).await.is_ok() {
@@ -623,12 +628,16 @@ impl Files {
                     load_days(store).await;
                 }
             }
+            #[cfg(with_shell)]
             StorageRequest::SaveTrip(steps) => {
                 let _ = log::save_trip(store, steps).await;
             }
             StorageRequest::WriteSmallFile { path, bytes } => {
                 let _ = FileAccess::write_file(store, path, &bytes).await;
             }
+            // Only the step counter asks for these, and the recovery firmware has none.
+            #[cfg(not(with_shell))]
+            StorageRequest::LoadSteps | StorageRequest::StoreSteps(_) | StorageRequest::SaveTrip(_) => {}
         }
     }
 
@@ -662,6 +671,7 @@ impl Files {
 
 /// Reads each remembered day back from the log into the step history, changing nothing else in it, so steps
 /// recorded meanwhile are kept.
+#[cfg(with_shell)]
 async fn load_days(store: &mut WatchStore) {
     let today = motion::recording_day();
     for days_back in 0..DAYS_REMEMBERED {

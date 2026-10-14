@@ -49,6 +49,17 @@ fn a_finished_line_gives_its_memory_back() {
 // ============================================================================
 
 #[test]
+fn message_kind_reads_only_the_kind() {
+    assert_eq!(message_kind(b"GB({\"t\":\"status\"})"), Ok("status"));
+    assert_eq!(
+        message_kind(br#"{"t":"slots","recovery":[413696,397312],"theme":"ocean"}"#),
+        Ok("slots")
+    );
+    assert_eq!(message_kind(b"not json"), Err(MessageError::NotJson));
+    assert_eq!(message_kind(&[0xff]), Err(MessageError::NotText));
+}
+
+#[test]
 fn settings_with_no_keys_asks_for_a_report() {
     let message = parse_line(b"GB({\"t\":\"settings\"})").unwrap();
     let Message::Settings(change) = message else {
