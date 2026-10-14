@@ -10,6 +10,7 @@ pub mod compiler;
 pub mod constants;
 pub mod derived;
 pub mod diagnostics;
+pub mod disassemble;
 pub mod emitter;
 pub mod expressions;
 pub mod functions;

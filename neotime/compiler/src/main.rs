@@ -9,7 +9,8 @@ use neotime_compiler::compile_file;
 // Command line
 // ============================================================================
 
-const USAGE: &str = "usage: neotime-compiler <source.tsx> [-o <out.ntapp>] [--check]";
+const USAGE: &str =
+    "usage: neotime-compiler <source.tsx> [-o <out.ntapp>] [--check]\n       neotime-compiler disassemble <image.ntapp>\n       neotime-compiler library [-o <shared.ntlib>]";
 
 struct Arguments {
     source: PathBuf,
@@ -43,6 +44,32 @@ fn read_arguments() -> Result<Arguments, String> {
 // Main
 // ============================================================================
 
+/// `neotime-compiler disassemble app.ntapp`: prints an image's state, subscriptions and code.
+fn print_disassembly() -> ExitCode {
+    let arguments: Vec<String> = std::env::args().skip(2).collect();
+    let [path] = arguments.as_slice() else {
+        eprintln!("usage: neotime-compiler disassemble <image.ntapp>");
+        return ExitCode::from(2);
+    };
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            eprintln!("{path}: cannot read the image: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match neotime_compiler::disassemble::disassemble(&bytes) {
+        Ok(text) => {
+            print!("{text}");
+            ExitCode::SUCCESS
+        }
+        Err(problem) => {
+            eprintln!("{path}: {problem}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 /// `neotime-compiler library -o shared.ntlib`: writes the shared library image of every icon.
 fn write_library() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(2).collect();
@@ -69,8 +96,10 @@ fn write_library() -> ExitCode {
 }
 
 fn main() -> ExitCode {
-    if std::env::args().nth(1).as_deref() == Some("library") {
-        return write_library();
+    match std::env::args().nth(1).as_deref() {
+        Some("library") => return write_library(),
+        Some("disassemble") => return print_disassembly(),
+        _ => {}
     }
     let arguments = match read_arguments() {
         Ok(arguments) => arguments,

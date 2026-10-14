@@ -10,10 +10,14 @@ signals into an app image, the `.ntapp` file the runtime reads. It runs on the c
 ```sh
 nix develop -c cargo run -p neotime-compiler -- apps/stopwatch/app.tsx -o stopwatch.ntapp
 nix develop -c cargo run -p neotime-compiler -- apps/stopwatch/app.tsx --check
+nix develop -c cargo run -p neotime-compiler -- disassemble stopwatch.ntapp
 ```
 
 - Without `-o`, the image is written next to the source with the `.ntapp` extension.
 - `--check` only reports problems and writes nothing.
+- `disassemble` prints an image's state table, subscriptions and every expression, handler and
+  function, one instruction a line with its bytes, decoded by the runtime's own `decode`. State and
+  string operands are named, and jumps show where they land (`compiler/src/disassemble.rs`).
 - Errors and warnings print as `file:line:column: message`. An error stops the image; a warning
   says what was left out. The command exits with 1 on an error.
 
