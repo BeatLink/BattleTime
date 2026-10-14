@@ -199,6 +199,20 @@ The window, the core's Bluetooth, sync and plugins are the desktop app's; what d
 - **Not on Android**: D-Bus, note file watching and shell commands for remote buttons, which are
   compiled out.
 
+#### Releases
+
+Each `v*` tag publishes `NeoTime-Companion-<version>.apk` with the watch images and the store
+([release.yml](../.github/workflows/release.yml)). It is one APK for all four phone processors,
+built by `npm run tauri-android:release`, with the version taken from the tag.
+
+It is signed with the release key, which the repository keeps in its secrets:
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_PASSWORD` and
+`ANDROID_KEY_ALIAS`. The workflow writes the key into `tauri/gen/android` as `release.jks` and
+`keystore.properties`, which git ignores, and deletes both after the build. Without
+`keystore.properties`, a release build comes out unsigned.
+
+Every later release must be signed with the same key, or phones refuse it as an update.
+
 ### The computer in place of a phone
 
 On a phone the app forwards what the phone knows; in the desktop app the computer plays that part,

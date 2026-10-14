@@ -140,7 +140,6 @@ Android 13 and later.
   media, Do Not Disturb, the location and the remote buttons' intents reach the window; that sync
   and an installed plugin run; and that a note picked as a `content://` link is still readable
   after a restart.
-- **A release build of the Tauri Android app** needs a signing key and the other three targets.
 - **Plugins on the Expo phone app.** [Plugins](../docs/plugins.md) run in the Rust core, so only the
   Tauri apps have them; the Expo app gets none until the Tauri one replaces it.
 - **Moving features into plugins.** Weather, notes, remote, alarms, steps, music and notification

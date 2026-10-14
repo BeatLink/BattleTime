@@ -16,6 +16,7 @@
     "desktop:dev": "node scripts/electron.mjs",
     "tauri": "expo export --platform web --output-dir dist && cargo run --release -p neotime-companion",
     "tauri-android": "cd tauri && cargo tauri android build --debug --apk --target aarch64",
+    "tauri-android:release": "cd tauri && cargo tauri android build --apk --target aarch64 armv7 i686 x86_64",
     "build:cli": "esbuild cli/neotime.ts --bundle --platform=node --target=node20 --format=cjs --external:node-ble --alias:@=./src --outfile=build/neotime.cjs",
     "neotime": "npm run build:cli --silent && node build/neotime.cjs",
     "import-watch-apps": "node scripts/import-watch-apps.mjs",

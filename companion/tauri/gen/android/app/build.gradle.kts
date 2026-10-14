@@ -1,3 +1,4 @@
+import java.io.FileInputStream
 import java.util.Properties
 
 plugins {
@@ -13,6 +14,9 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// The release key, which CI writes into keystore.properties from its secrets; without the file a release build is unsigned.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+
 android {
     compileSdk = 36
     namespace = "com.neotime.companion.tauri"
@@ -23,6 +27,18 @@ android {
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+    }
+    signingConfigs {
+        create("release") {
+            if (keystorePropertiesFile.exists()) {
+                val keystoreProperties = Properties()
+                FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -37,6 +53,9 @@ android {
             }
         }
         getByName("release") {
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }

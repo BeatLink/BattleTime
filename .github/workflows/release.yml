@@ -1,5 +1,6 @@
-# Publishes a GitHub release for each version tag: the bootloader, firmware and reloader images, and every
-# app, face and plugin with the store's neotime-store.zip, all under one SHA256SUMS.
+# Publishes a GitHub release for each version tag: the bootloader, firmware and reloader images, every
+# app, face and plugin with the store's neotime-store.zip, and the companion's signed Android app, all
+# under one SHA256SUMS.
 name: Release
 
 on:
@@ -50,9 +51,55 @@ jobs:
           name: neotime-store
           path: neotime/dist/store/
 
+  android:
+    name: Companion for Android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: companion -> target
+      - name: Install the companion's dependencies
+        working-directory: companion
+        run: nix develop ..#companion-android --command npm ci
+      # The key comes from the repository's secrets and is deleted again whatever happens.
+      - name: Write the signing key
+        working-directory: companion/tauri/gen/android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > release.jks
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+          } > keystore.properties
+      # The tag names the version, so v1.2.3 installs as 1.2.3.
+      - name: Build the signed app for every phone processor
+        working-directory: companion
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          nix develop ..#companion-android --command npm run tauri-android:release -- --config "{\"version\":\"$version\"}"
+          mkdir -p ../release
+          cp tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk \
+            "../release/NeoTime-Companion-$version.apk"
+      - name: Delete the signing key
+        if: always()
+        working-directory: companion/tauri/gen/android
+        run: rm -f release.jks keystore.properties
+      - uses: actions/upload-artifact@v4
+        with:
+          name: companion-android
+          path: release/
+
   publish:
     name: Publish the release
-    needs: [watch-images, store]
+    needs: [watch-images, store, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -65,6 +112,10 @@ jobs:
         with:
           name: neotime-store
           path: store
+      - uses: actions/download-artifact@v4
+        with:
+          name: companion-android
+          path: release
       # The firmware's images already hold the shared library, and one list of sums covers everything.
       - name: Gather the files
         run: |
