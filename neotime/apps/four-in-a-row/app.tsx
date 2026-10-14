@@ -58,7 +58,7 @@ const DRAWN_PLACES = range(CELL_COUNT).map(
 const SEARCH_ORDER = [3, 2, 4, 1, 5, 0, 6];
 const REVERSED_SEARCH_ORDER = [6, 0, 5, 1, 4, 2, 3];
 
-/** The board is drawn in cells of this size, the top row holding the counter being aimed. */
+/** Each column and row of the board is this many pixels apart, the top row holding the counter being aimed. */
 const CELL_SIZE = 34;
 const BORDER = 1;
 
@@ -330,6 +330,8 @@ function aim(event: ClickEvent) {
 // ============================================================================
 
 const PIECE_SIZE = 30;
+/** The space around a counter inside its cell, so the drawn columns line up with the tapped ones. */
+const PIECE_INSET = (CELL_SIZE - PIECE_SIZE) / 2;
 const BOARD_COLOR: Color = "#000080";
 
 /** Empty places show the board's blue, then the player's red and the watch's yellow. */
@@ -371,8 +373,8 @@ function Game() {
       <Column x={0} y={BORDER + CELL_SIZE} width={240} height={240 - BORDER - CELL_SIZE} background={BOARD_COLOR} />
       {outcome.value === "playing" && !is_thinking.value && (
         <Column
-          x={BORDER + aimed_column.value * CELL_SIZE + 2}
-          y={BORDER + 2}
+          x={BORDER + aimed_column.value * CELL_SIZE + PIECE_INSET}
+          y={BORDER + PIECE_INSET}
           width={PIECE_SIZE}
           height={PIECE_SIZE}
           radius={15}
@@ -385,11 +387,11 @@ function Game() {
         </Label>
       )}
       <CellGrid
-        x={BORDER}
-        y={BORDER + CELL_SIZE}
+        x={BORDER + PIECE_INSET}
+        y={BORDER + CELL_SIZE + PIECE_INSET}
         columns={COLUMN_COUNT}
         rows={ROW_COUNT}
-        cell_size={CELL_SIZE}
+        cell_size={PIECE_SIZE}
         cell_gap={CELL_SIZE - PIECE_SIZE}
         cell_shape="round"
         cells={DRAWN_PLACES.map((place) => board.value[place])}

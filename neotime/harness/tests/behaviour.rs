@@ -623,6 +623,35 @@ fn the_software_app_shows_the_need_against_the_budget_for_an_app_too_large() {
 }
 
 // ============================================================================
+// Four in a Row
+// ============================================================================
+
+/// The middle of the right column's top place, where the aimed counter hangs, and of its bottom place.
+const RIGHT_COLUMN_X: i32 = 222;
+const AIMED_COUNTER_Y: i32 = 18;
+const BOTTOM_PLACE_Y: i32 = 222;
+
+#[test]
+fn four_in_a_row_drops_a_counter_into_the_right_column_on_screen() {
+    let mut watch = TestWatch::open_app("four-in-a-row").unwrap();
+    watch.swipe(Direction::Down);
+    watch.tap(RIGHT_COLUMN_X, 120);
+    let red = watch
+        .fresh_frame()
+        .pixel(RIGHT_COLUMN_X as usize, AIMED_COUNTER_Y as usize);
+
+    watch.swipe(Direction::Down);
+    let frame = watch.fresh_frame();
+
+    assert_eq!(frame.pixel(RIGHT_COLUMN_X as usize, BOTTOM_PLACE_Y as usize), red);
+    assert_ne!(
+        frame.pixel(239, BOTTOM_PLACE_Y as usize),
+        red,
+        "the board ends inside the screen"
+    );
+}
+
+// ============================================================================
 // Swipes a screen ignores
 // ============================================================================
 

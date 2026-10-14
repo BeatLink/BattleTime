@@ -1461,7 +1461,7 @@ export interface CellGridProps extends CommonProps {
   /** One number per cell, read as a colour from `palette`. */
   cells: number[];
   palette: Color[];
-  /** Pixels left empty between cells. */
+  /** Pixels left empty between one cell and the next, so cells sit `cell_size + cell_gap` apart. */
   cell_gap?: number;
   cell_shape?: "square" | "rounded" | "round";
   /** Draws a number in each cell that is not 0: the cell's own value, or what `number_map` gives for it. */
@@ -1476,22 +1476,27 @@ export interface CellGridProps extends CommonProps {
   onDrag?: (event: ChangeEvent<number>) => void;
 }
 
+/** Where a CellGrid's cells sit: each cell is `cell_size` across and the next starts `cell_gap` after it, as on the watch. */
+export function cell_grid_layout(props: Pick<CellGridProps, "columns" | "rows" | "cell_size" | "cell_gap">) {
+  const pitch = props.cell_size + (props.cell_gap ?? 0);
+  return {
+    pitch,
+    width: props.columns * pitch - (pitch - props.cell_size),
+    height: props.rows * pitch - (pitch - props.cell_size),
+  };
+}
+
 /** A board of coloured cells from one array, drawn as a single widget. */
 export function CellGrid(props: CellGridProps) {
-  const gap = props.cell_gap ?? 0;
-  const corner = props.cell_shape === "round" ? props.cell_size / 2 : props.cell_shape === "rounded" ? props.cell_size / 5 : 0;
+  const { pitch, width, height } = cell_grid_layout(props);
+  const corner = props.cell_shape === "round" ? props.cell_size / 2 : props.cell_shape === "rounded" ? props.cell_size / 4 : 0;
   const squares = [];
   for (let cell = 0; cell < props.columns * props.rows; cell++) {
     const color = css_color(props.palette[props.cells[cell] ?? 0]) ?? theme.background;
+    const left = (cell % props.columns) * pitch;
+    const top = Math.floor(cell / props.columns) * pitch;
     squares.push(
-      <rect
-        x={(cell % props.columns) * props.cell_size + gap / 2}
-        y={Math.floor(cell / props.columns) * props.cell_size + gap / 2}
-        width={props.cell_size - gap}
-        height={props.cell_size - gap}
-        rx={corner}
-        fill={color}
-      />,
+      <rect data-widget="cell" x={left} y={top} width={props.cell_size} height={props.cell_size} rx={corner} fill={color} />,
     );
     const value = props.cells[cell] ?? 0;
     const number = props.number_map ? (props.number_map[value] ?? 0) : value;
@@ -1499,8 +1504,8 @@ export function CellGrid(props: CellGridProps) {
       squares.push(
         <text
           data-widget="cell-number"
-          x={(cell % props.columns) * props.cell_size + props.cell_size / 2}
-          y={Math.floor(cell / props.columns) * props.cell_size + props.cell_size / 2}
+          x={left + props.cell_size / 2}
+          y={top + props.cell_size / 2}
           text-anchor="middle"
           dominant-baseline="central"
           fill={css_color(props.number_colors?.[value] ?? props.color) ?? theme.text}
@@ -1512,21 +1517,28 @@ export function CellGrid(props: CellGridProps) {
     }
   }
 
+  /** The cell under the pointer, or -1 when it is off the board; a gap belongs to the cell before it. */
   function cell_at(event: MouseEvent): number {
     const bounds = (event.currentTarget as SVGElement).getBoundingClientRect();
-    const scale = bounds.width / (props.columns * props.cell_size) || 1;
-    const column = Math.floor((event.clientX - bounds.left) / scale / props.cell_size);
-    const row = Math.floor((event.clientY - bounds.top) / scale / props.cell_size);
-    return row * props.columns + column;
+    const scale = bounds.width / width || 1;
+    const column = Math.floor((event.clientX - bounds.left) / scale / pitch);
+    const row = Math.floor((event.clientY - bounds.top) / scale / pitch);
+    const inside = column >= 0 && column < props.columns && row >= 0 && row < props.rows;
+    return inside ? row * props.columns + column : -1;
+  }
+
+  function send(handler: ((event: ChangeEvent<number>) => void) | undefined, event: MouseEvent) {
+    const cell = cell_at(event);
+    if (handler && cell >= 0) run_handler(handler, { value: cell });
   }
 
   return (
     <svg
       data-widget="cell-grid"
-      width={props.columns * props.cell_size}
-      height={props.rows * props.cell_size}
-      onClick={(event) => props.onClick && run_handler(props.onClick, { value: cell_at(event) })}
-      onPointerMove={(event) => props.onDrag && event.buttons && run_handler(props.onDrag, { value: cell_at(event) })}
+      width={width}
+      height={height}
+      onClick={(event) => send(props.onClick, event)}
+      onPointerMove={(event) => event.buttons && send(props.onDrag, event)}
       style={{ touchAction: "none", ...css_without_color(props) }}
     >
       {squares}
