@@ -68,6 +68,9 @@ export type HttpResponseMessage = { t: 'http'; id: string; resp?: string; err?: 
 export type WeatherMessage = {
   t: 'weather';
   temp: number;
+  hi: number;
+  lo: number;
+  code?: number;
   hum: number;
   txt: string;
   wind: number;

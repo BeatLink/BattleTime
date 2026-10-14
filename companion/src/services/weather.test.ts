@@ -1,6 +1,14 @@
 import { describe, expect, it, jest } from '@jest/globals';
 
-import { currentWeather, describeWeatherCode, describeWeatherSource, findPlace, weatherPlace } from './weather';
+import {
+  currentWeather,
+  describeWeatherCode,
+  describeWeatherSource,
+  findPlace,
+  openWeatherMapCode,
+  weatherPlace,
+  wholeKelvin,
+} from './weather';
 
 const kingston = { name: 'Kingston', latitude: 18, longitude: -76.8 };
 
@@ -28,6 +36,31 @@ describe('describeWeatherCode', () => {
   });
 });
 
+describe('openWeatherMapCode', () => {
+  it('gives the OpenWeatherMap code the watch reads for each WMO code', () => {
+    expect(openWeatherMapCode(0)).toBe(800);
+    expect(openWeatherMapCode(3)).toBe(804);
+    expect(openWeatherMapCode(45)).toBe(741);
+    expect(openWeatherMapCode(63)).toBe(501);
+    expect(openWeatherMapCode(81)).toBe(521);
+    expect(openWeatherMapCode(86)).toBe(621);
+    expect(openWeatherMapCode(99)).toBe(202);
+  });
+
+  it('gives nothing for a code the table lacks', () => {
+    expect(openWeatherMapCode(4)).toBeUndefined();
+  });
+});
+
+describe('wholeKelvin', () => {
+  it('gives a whole number the watch turns back into the rounded Celsius', () => {
+    expect(wholeKelvin(0.4)).toBe(273);
+    expect(wholeKelvin(20.6)).toBe(294);
+    expect(wholeKelvin(-5.2)).toBe(268);
+    expect(Number.isInteger(wholeKelvin(31.37))).toBe(true);
+  });
+});
+
 describe('findPlace', () => {
   it('asks for the trimmed, encoded name and takes the first match', async () => {
     const { fetcher, urls } = answer(200, {
@@ -52,19 +85,41 @@ describe('findPlace', () => {
 });
 
 describe('currentWeather', () => {
-  it('asks for the place by its coordinates in km/h', async () => {
+  it("asks for the place by its coordinates in km/h, with today's range", async () => {
     const { fetcher, urls } = answer(200, {
-      current: { temperature_2m: -5, relative_humidity_2m: 90, weather_code: 120, wind_speed_10m: 0.4 },
+      current: { temperature_2m: 27.6, relative_humidity_2m: 90, weather_code: 61, wind_speed_10m: 0.4 },
+      daily: { temperature_2m_max: [31.2], temperature_2m_min: [22.4] },
     });
     expect(await currentWeather(kingston, fetcher)).toEqual({
       t: 'weather',
-      temp: 268.2,
+      temp: 301,
+      hi: 304,
+      lo: 295,
+      code: 500,
       hum: 90,
-      txt: 'Unknown',
+      txt: 'Rain',
       wind: 0,
       loc: 'Kingston',
     });
+    expect(urls[0]).toContain('&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto');
     expect(urls[0]).toContain('&latitude=18&longitude=-76.8&wind_speed_unit=kmh');
+  });
+
+  it('uses the current temperature for a missing range and leaves out an unknown sky', async () => {
+    const { fetcher } = answer(200, {
+      current: { temperature_2m: -5, relative_humidity_2m: 90, weather_code: 120, wind_speed_10m: 0.4 },
+    });
+    const message = await currentWeather(kingston, fetcher);
+    expect(message).toMatchObject({ temp: 268, hi: 268, lo: 268, txt: 'Unknown' });
+    expect(message).not.toHaveProperty('code');
+  });
+
+  it('widens the range to take in the current temperature', async () => {
+    const { fetcher } = answer(200, {
+      current: { temperature_2m: 35, relative_humidity_2m: 40, weather_code: 0, wind_speed_10m: 3 },
+      daily: { temperature_2m_max: [33], temperature_2m_min: [36] },
+    });
+    expect(await currentWeather(kingston, fetcher)).toMatchObject({ temp: 308, hi: 308, lo: 308 });
   });
 
   it('reports a failed forecast with its status', async () => {

@@ -69,9 +69,51 @@ export function describeWeatherSource(chosen: Place | null, fromDevice: boolean,
   return chosen ? chosen.name : null;
 }
 
+// The OpenWeatherMap code for each WMO code, since the watch reads skies as Gadgetbridge sends them.
+const OPEN_WEATHER_MAP_CODES: Record<number, number> = {
+  0: 800,
+  1: 801,
+  2: 802,
+  3: 804,
+  45: 741,
+  48: 741,
+  51: 300,
+  53: 301,
+  55: 302,
+  56: 310,
+  57: 311,
+  61: 500,
+  63: 501,
+  65: 502,
+  66: 511,
+  67: 511,
+  71: 600,
+  73: 601,
+  75: 602,
+  77: 600,
+  80: 520,
+  81: 521,
+  82: 522,
+  85: 620,
+  86: 621,
+  95: 211,
+  96: 201,
+  99: 202,
+};
+
+export function openWeatherMapCode(code: number): number | undefined {
+  return OPEN_WEATHER_MAP_CODES[code];
+}
+
+// The watch takes whole kelvin and subtracts 273, so this gives back the rounded Celsius exactly.
+export function wholeKelvin(celsius: number): number {
+  return Math.round(celsius) + 273;
+}
+
 export async function currentWeather(place: Place, fetcher: Fetch = fetch): Promise<WeatherMessage> {
   const url =
     'https://api.open-meteo.com/v1/forecast?current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m' +
+    '&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto' +
     `&latitude=${place.latitude}&longitude=${place.longitude}&wind_speed_unit=kmh`;
   const response = await fetcher(url);
   if (!response.ok) {
@@ -84,15 +126,22 @@ export async function currentWeather(place: Place, fetcher: Fetch = fetch): Prom
       weather_code: number;
       wind_speed_10m: number;
     };
+    daily?: { temperature_2m_max?: number[]; temperature_2m_min?: number[] };
   };
   const now = body.current;
   if (!now) {
     throw new Error('The weather service sent no current conditions.');
   }
+  // Today's range, widened to take in the current temperature, or just the current one when the day is missing.
+  const high = Math.max(body.daily?.temperature_2m_max?.[0] ?? now.temperature_2m, now.temperature_2m);
+  const low = Math.min(body.daily?.temperature_2m_min?.[0] ?? now.temperature_2m, now.temperature_2m);
+  const code = openWeatherMapCode(now.weather_code);
   return {
     t: 'weather',
-    // The watch takes Kelvin, as Gadgetbridge sends it.
-    temp: Math.round((now.temperature_2m + 273.15) * 10) / 10,
+    temp: wholeKelvin(now.temperature_2m),
+    hi: wholeKelvin(high),
+    lo: wholeKelvin(low),
+    ...(code === undefined ? {} : { code }),
     hum: Math.round(now.relative_humidity_2m),
     txt: describeWeatherCode(now.weather_code),
     wind: Math.round(now.wind_speed_10m),

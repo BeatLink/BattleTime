@@ -64,12 +64,16 @@ describe('weather', () => {
       'https://geocoding-api.open-meteo.com/': { results: [{ name: 'Kingston', latitude: 18, longitude: -76.8 }] },
       'https://api.open-meteo.com/': {
         current: { temperature_2m: 30, relative_humidity_2m: 70.4, weather_code: 2, wind_speed_10m: 12.6 },
+        daily: { temperature_2m_max: [32], temperature_2m_min: [24] },
       },
     });
     const place = await findPlace('Kingston', fetcher);
     expect(await currentWeather(place, fetcher)).toEqual({
       t: 'weather',
-      temp: 303.2,
+      temp: 303,
+      hi: 305,
+      lo: 297,
+      code: 802,
       hum: 70,
       txt: 'Partly cloudy',
       wind: 13,
