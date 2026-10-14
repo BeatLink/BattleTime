@@ -198,7 +198,7 @@ controller reports no public address.
 
 ## Tests
 
-`cargo test -p neotime-bluetooth` runs 129 tests on the computer:
+`cargo test -p neotime-bluetooth` runs 137 tests on the computer:
 
 - **The link layer, against a simulated central:**
   - advertising on each channel in turn;
@@ -217,6 +217,12 @@ controller reports no public address.
   - the central reads a GATT characteristic: the request goes in through the link layer, TrouBLE's
     attribute server answers, and the answer comes back out through the controller's
     acknowledgements.
+  - discovery never cuts a 128-bit UUID short after 16-bit ones;
+  - a server laid out as the watch's answers several hundred ATT requests (discovery from every
+    handle, reads, blobs, writes, CCCDs and a notification) with exactly the bytes in
+    `src/gatt_transcript.txt`, which TrouBLE gave when it built its table in RAM at start-up;
+  - only the values that change take RAM, constants and declarations refuse writes, and a server
+    is built only once, since its values are a static.
 
 `tests/emulator/bluetooth_sleep.robot` checks in the PineTime emulator that the crystal is off
 for most of the time while the firmware advertises. None of this shows that the timing works on real hardware. The first test on the watch is in

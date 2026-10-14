@@ -25,5 +25,4 @@ nrf-pac = { version = "0.4", features = ["nrf52832"] }
 critical-section = { version = "1.1", features = ["std"] }
 embassy-futures = "0.1"
 embassy-time = { version = "0.5", features = ["std", "generic-queue-8"] }
-static_cell = "2.1"
 trouble-host = "0.8"

@@ -7,8 +7,6 @@
 //! In addition, this profile includes common format requirements for
 //! parameters accessible on the user interface level.
 
-use embassy_sync::blocking_mutex::raw::RawMutex;
-
 use crate::prelude::*;
 
 /// Advertising packet is limited to 31 bytes. 9 of these are used by other GAP data, leaving 22 bytes for the Device Name characteristic
@@ -65,7 +63,9 @@ pub struct CentralConfig<'a> {
 impl<'a> GapConfig<'a> {
     /// Create a default peripheral configuration.
     ///
-    /// This configuration will use the `UNKNOWN` appearance.
+    /// This function will create a GAP Service with the following characteristics:
+    /// - `name`: The name of the device.
+    /// - `appearance`: The appearance of the device, set to `UNKNOWN`.
     pub fn default(name: &'a str) -> Self {
         GapConfig::Peripheral(PeripheralConfig {
             name,
@@ -73,82 +73,69 @@ impl<'a> GapConfig<'a> {
         })
     }
 
-    /// Add the GAP config to the attribute table
-    pub fn build<M: RawMutex, const MAX: usize>(
-        self,
-        table: &mut AttributeTable<'a, M, MAX>,
-    ) -> Result<(), &'static str> {
-        match self {
-            GapConfig::Peripheral(config) => config.build(table),
-            GapConfig::Central(config) => config.build(table),
+    /// NeoTime patch: the device name and appearance the GAP service's attributes borrow.
+    ///
+    /// The attributes themselves come from [`add_gap_attributes`], built in a constant.
+    pub fn borrowed_values(self) -> Result<[&'a [u8]; BORROWED_VALUE_SLOTS], &'static str> {
+        let (name, appearance) = match self {
+            GapConfig::Peripheral(config) => (config.name, config.appearance),
+            GapConfig::Central(config) => (config.name, config.appearance),
+        };
+        if name.len() > DEVICE_NAME_MAX_LENGTH {
+            return Err("Device name is too long. Max length is 22 bytes");
         }
+        Ok([name.as_bytes(), appearance.as_gatt()])
     }
 }
 
-impl<'a> PeripheralConfig<'a> {
-    /// Add the peripheral GAP config to the attribute table
-    fn build<M: RawMutex, const MAX: usize>(self, table: &mut AttributeTable<'a, M, MAX>) -> Result<(), &'static str> {
-        // Store the name by reference (lives for `'a`); a one-shot StaticCell
-        // would panic if the server is ever built twice.
-        if self.name.len() > DEVICE_NAME_MAX_LENGTH {
-            return Err("Device name is too long. Max length is 22 bytes");
-        }
+/// The GAP service's slot for the device name.
+const DEVICE_NAME_SLOT: u8 = 0;
 
-        let mut gap_builder = table.add_service(Service::new(service::GAP));
-        gap_builder.add_characteristic_ro(characteristic::DEVICE_NAME, self.name);
-        gap_builder.add_characteristic_ro(characteristic::APPEARANCE, self.appearance);
-        #[cfg(all(feature = "security", feature = "central"))]
-        gap_builder.add_characteristic_ro(characteristic::CENTRAL_ADDRESS_RESOLUTION, &1u8);
-        gap_builder.build();
+/// The GAP service's slot for the appearance.
+const APPEARANCE_SLOT: u8 = 1;
 
-        table.add_service(Service::new(service::GATT));
-
-        Ok(())
-    }
-}
-
-impl<'a> CentralConfig<'a> {
-    /// Add the peripheral GAP config to the attribute table
-    fn build<M: RawMutex, const MAX: usize>(self, table: &mut AttributeTable<'a, M, MAX>) -> Result<(), &'static str> {
-        // Store the name by reference (lives for `'a`); a one-shot StaticCell
-        // would panic if the server is ever built twice.
-        if self.name.len() > DEVICE_NAME_MAX_LENGTH {
-            return Err("Device name is too long. Max length is 22 bytes");
-        }
-
-        let mut gap_builder = table.add_service(Service::new(service::GAP));
-        gap_builder.add_characteristic_ro(characteristic::DEVICE_NAME, self.name);
-        gap_builder.add_characteristic_ro(characteristic::APPEARANCE, self.appearance);
-        #[cfg(all(feature = "security", feature = "central"))]
-        gap_builder.add_characteristic_ro(characteristic::CENTRAL_ADDRESS_RESOLUTION, &1u8);
-        gap_builder.build();
-
-        table.add_service(Service::new(service::GATT));
-
-        Ok(())
-    }
+/// NeoTime patch: adds the GAP and GATT services to a table built in a constant.
+///
+/// The device name and appearance are borrowed when the server is built, from
+/// [`GapConfig::borrowed_values`].
+pub const fn add_gap_attributes<const N: usize>(builder: &mut AttributeTableBuilder<N>) {
+    builder.add_service(Uuid::Uuid16(service::GAP.to_le_bytes()));
+    builder.add_borrowed_characteristic::<str>(
+        Uuid::Uuid16(characteristic::DEVICE_NAME.to_le_bytes()),
+        DEVICE_NAME_SLOT,
+    );
+    builder.add_borrowed_characteristic::<BluetoothUuid16>(
+        Uuid::Uuid16(characteristic::APPEARANCE.to_le_bytes()),
+        APPEARANCE_SLOT,
+    );
+    #[cfg(all(feature = "security", feature = "central"))]
+    builder.add_constant_characteristic::<u8>(
+        Uuid::Uuid16(characteristic::CENTRAL_ADDRESS_RESOLUTION.to_le_bytes()),
+        PermissionLevel::Allowed,
+        || &[1],
+    );
+    builder.add_service(Uuid::Uuid16(service::GATT.to_le_bytes()));
 }
 
 #[cfg(test)]
 mod tests {
     extern crate std;
 
-    use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-
     use super::*;
 
-    // Building the GAP config twice must not panic. With the one-shot StaticCell
-    // the second build panicked ("StaticCell already full").
     #[test]
-    fn gap_config_can_be_built_twice() {
-        for _ in 0..2 {
-            let mut table: AttributeTable<'_, NoopRawMutex, 16> = AttributeTable::new();
-            GapConfig::Peripheral(PeripheralConfig {
-                name: "trouble",
-                appearance: &appearance::UNKNOWN,
-            })
-            .build(&mut table)
-            .unwrap();
-        }
+    fn gap_attributes_fill_the_counted_handles() {
+        let mut builder = AttributeTableBuilder::<GAP_SERVICE_ATTRIBUTE_COUNT>::new();
+        add_gap_attributes(&mut builder);
+        assert_eq!(builder.finish().len(), GAP_SERVICE_ATTRIBUTE_COUNT);
+    }
+
+    #[test]
+    fn a_long_device_name_is_refused() {
+        assert!(GapConfig::default("a name far longer than twenty-two bytes")
+            .borrowed_values()
+            .is_err());
+        let values = GapConfig::default("trouble").borrowed_values().unwrap();
+        assert_eq!(values[0], b"trouble");
     }
 }

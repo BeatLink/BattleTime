@@ -5,7 +5,7 @@
 
 use darling::Error;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{quote, quote_spanned};
+use quote::{format_ident, quote, quote_spanned};
 use syn::meta::ParseNestedMeta;
 use syn::spanned::Spanned;
 use syn::{parse_quote, Expr, Result};
@@ -77,6 +77,10 @@ impl ServerBuilder {
     }
 
     /// Construct the macro blueprint for the server struct.
+    ///
+    /// NeoTime patch: the attribute table is built in a constant and kept in a `static`, so it stays
+    /// in flash; only its stored values and the GAP service's borrowed ones are in RAM. See
+    /// third_party/trouble-host/NEOTIME.md.
     pub fn build(self) -> TokenStream2 {
         let name = &self.properties.ident;
         let visibility = &self.properties.vis;
@@ -90,11 +94,19 @@ impl ServerBuilder {
             .packet_type
             .unwrap_or(syn::Type::Verbatim(quote!(trouble_host::prelude::DefaultPacketPool)));
 
+        let layout_name = format_ident!("__{}Layout", name);
+        let layout = format_ident!("__{}_LAYOUT", name.to_string().to_uppercase());
+        let attributes = format_ident!("__{}_ATTRIBUTES", name.to_string().to_uppercase());
+        let attribute_count = format_ident!("__{}_ATTRIBUTE_COUNT", name.to_string().to_uppercase());
+        let stored_values = format_ident!("__{}_STORED_VALUES", name.to_string().to_uppercase());
+        let stored_bytes = format_ident!("__{}_STORED_BYTES", name.to_string().to_uppercase());
+
         let mut code_service_definition = TokenStream2::new();
-        let mut code_service_init = TokenStream2::new();
+        let mut code_layout_fields = TokenStream2::new();
+        let mut code_layout_build = TokenStream2::new();
+        let mut code_layout_populate = TokenStream2::new();
+        let mut code_service_constants = TokenStream2::new();
         let mut code_server_populate = TokenStream2::new();
-        // NeoTime patch: the same services, built for `init_in_place`.
-        let mut code_service_init_in_place = TokenStream2::new();
         let mut code_server_write = TokenStream2::new();
         let mut code_attribute_summation = TokenStream2::new();
         let mut code_cccd_summation = TokenStream2::new();
@@ -115,24 +127,40 @@ impl ServerBuilder {
                 #vis #service_name: #service_type,
             });
 
-            code_service_init.extend(quote_spanned! {service_span=>
+            code_layout_fields.extend(quote_spanned! {service_span=>
                 #(#cfg_attrs)*
-                let #service_name = #service_type::new(&mut table);
+                #service_name: #service_type,
             });
 
-            code_server_populate.extend(quote_spanned! {service_span=>
+            code_layout_build.extend(quote_spanned! {service_span=>
+                #(#cfg_attrs)*
+                let #service_name = #service_type::build(&mut builder);
+            });
+
+            code_layout_populate.extend(quote_spanned! {service_span=>
                 #(#cfg_attrs)*
                 #service_name,
             });
 
-            code_service_init_in_place.extend(quote_spanned! {service_span=>
+            // Each service gets its own constant, so using one never copies the whole layout out of flash.
+            let service_constant = format_ident!(
+                "__{}_{}",
+                name.to_string().to_uppercase(),
+                service_name.to_string().to_uppercase()
+            );
+            code_service_constants.extend(quote_spanned! {service_span=>
                 #(#cfg_attrs)*
-                let #service_name = #service_type::new(table);
+                const #service_constant: #service_type = #layout.#service_name;
+            });
+
+            code_server_populate.extend(quote_spanned! {service_span=>
+                #(#cfg_attrs)*
+                #service_name: #service_constant,
             });
 
             code_server_write.extend(quote_spanned! {service_span=>
                 #(#cfg_attrs)*
-                core::ptr::addr_of_mut!((*this).#service_name).write(#service_name);
+                core::ptr::addr_of_mut!((*this).#service_name).write(#service_constant);
             });
 
             code_attribute_summation.extend(quote_spanned! {service_span=>
@@ -187,6 +215,39 @@ impl ServerBuilder {
             };
             const _CONNECTIONS_MAX: usize = #connections_max;
 
+            /// The number of attributes the server's table holds.
+            const #attribute_count: usize = #attr_sum;
+
+            /// The server's attribute table and services, worked out when the firmware is compiled.
+            struct #layout_name {
+                attributes: [trouble_host::attribute::Attribute; #attribute_count],
+                stored_bytes: usize,
+                #code_layout_fields
+            }
+
+            const #layout: #layout_name = {
+                let mut builder = trouble_host::attribute::AttributeTableBuilder::<#attribute_count>::new();
+                trouble_host::gap::add_gap_attributes(&mut builder);
+                #code_layout_build
+                #layout_name {
+                    stored_bytes: builder.stored_bytes(),
+                    attributes: builder.finish(),
+                    #code_layout_populate
+                }
+            };
+
+            #code_service_constants
+
+            /// The server's attribute table, in flash.
+            static #attributes: [trouble_host::attribute::Attribute; #attribute_count] = #layout.attributes;
+
+            /// The bytes of RAM the server's stored values need.
+            const #stored_bytes: usize = #layout.stored_bytes;
+
+            /// The RAM the server's stored values are kept in.
+            static #stored_values: trouble_host::__export::static_cell::ConstStaticCell<[u8; #stored_bytes]> =
+                trouble_host::__export::static_cell::ConstStaticCell::new([0; #stored_bytes]);
+
             #visibility struct #name<'values>
             {
                 pub server: trouble_host::prelude::AttributeServer<'values, #mutex_type, #packet_type, _ATTRIBUTE_TABLE_SIZE, _CONNECTIONS_MAX>,
@@ -195,34 +256,23 @@ impl ServerBuilder {
 
             impl<'values> #name<'values>
             {
-                /// Create a new Gatt Server instance.
+                /// The attribute table over the flash attributes, its stored values and the GAP service's borrowed ones.
                 ///
-                /// Requires you to add your own GAP Service.  Use `new_default(name)` or `new_with_config(name, gap_config)` if you want to add a GAP Service.
-                #visibility fn new(mut table: trouble_host::attribute::AttributeTable<'values, #mutex_type, _ATTRIBUTE_TABLE_SIZE>) -> Self {
-
-                    #code_service_init
-
-                    Self {
-                        server: trouble_host::prelude::AttributeServer::new(table),
-                        #code_server_populate
-                    }
+                /// The stored values' RAM is a static, so a server can be built only once.
+                fn __attribute_table(
+                    gap: trouble_host::gap::GapConfig<'values>,
+                ) -> Result<trouble_host::attribute::AttributeTable<'values, #mutex_type, _ATTRIBUTE_TABLE_SIZE>, &'static str> {
+                    let borrowed = gap.borrowed_values()?;
+                    Ok(trouble_host::attribute::AttributeTable::new(&#attributes, #stored_values.take(), borrowed))
                 }
+
                 /// Create a new Gatt Server instance.
                 ///
                 /// This function will add a Generic GAP Service with the given name.
                 /// The maximum length which the name can be is 22 bytes (limited by the size of the advertising packet).
                 /// If a name longer than this is passed, Err() is returned.
                 #visibility fn new_default(name: &'values str) -> Result<Self, &'static str> {
-                    let mut table: trouble_host::attribute::AttributeTable<'_, #mutex_type, _ATTRIBUTE_TABLE_SIZE> = trouble_host::attribute::AttributeTable::new();
-
-                    trouble_host::gap::GapConfig::default(name).build(&mut table)?;
-
-                    #code_service_init
-
-                    Ok(Self {
-                        server: trouble_host::prelude::AttributeServer::new(table),
-                        #code_server_populate
-                    })
+                    Self::new_with_config(trouble_host::gap::GapConfig::default(name))
                 }
 
                 /// Create a new Gatt Server instance.
@@ -231,12 +281,7 @@ impl ServerBuilder {
                 /// The maximum length which the device name can be is 22 bytes (limited by the size of the advertising packet).
                 /// If a name longer than this is passed, Err() is returned.
                 #visibility fn new_with_config(gap: trouble_host::gap::GapConfig<'values>) -> Result<Self, &'static str> {
-                    let mut table: trouble_host::attribute::AttributeTable<'_, #mutex_type, _ATTRIBUTE_TABLE_SIZE> = trouble_host::attribute::AttributeTable::new();
-
-                    gap.build(&mut table)?;
-
-                    #code_service_init
-
+                    let table = Self::__attribute_table(gap)?;
                     Ok(Self {
                         server: trouble_host::prelude::AttributeServer::new(table),
                         #code_server_populate
@@ -244,29 +289,15 @@ impl ServerBuilder {
                 }
 
                 /// NeoTime patch: builds the server with a GAP service straight into `slot`, never copying it.
-                ///
-                /// On an error the slot holds a partly built server, which must not be used.
                 #visibility fn init_in_place<'slot>(
                     slot: &'slot mut core::mem::MaybeUninit<Self>,
                     gap: trouble_host::gap::GapConfig<'values>,
                 ) -> Result<&'slot mut Self, &'static str> {
+                    let table = Self::__attribute_table(gap)?;
                     let this = slot.as_mut_ptr();
-                    let mut services = None;
                     unsafe {
-                        trouble_host::prelude::AttributeServer::init_in_place(
-                            core::ptr::addr_of_mut!((*this).server),
-                            |table| {
-                                gap.build(table)?;
-                                #code_service_init_in_place
-                                services = Some(move |this: *mut Self| {
-                                    #code_server_write
-                                });
-                                Ok::<(), &'static str>(())
-                            },
-                        )?;
-                    }
-                    if let Some(write_services) = services {
-                        write_services(this);
+                        trouble_host::prelude::AttributeServer::init_in_place(core::ptr::addr_of_mut!((*this).server), table);
+                        #code_server_write
                     }
                     Ok(unsafe { slot.assume_init_mut() })
                 }

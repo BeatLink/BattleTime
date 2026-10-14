@@ -1606,4 +1606,437 @@ mod end_to_end {
             assert_eq!(second[11..27], CONTROL_POINT_UUID);
         }
     }
+
+    /// Its own module, since each GATT server's generated names would clash with another's.
+    mod transcript {
+        extern crate std;
+
+        use super::*;
+
+        // ------------------------------------------------------------------------
+        // Every ATT answer from a server laid out as the watch's
+        // ------------------------------------------------------------------------
+
+        const READ_BY_GROUP_TYPE_REQUEST: u8 = 0x10;
+        const READ_BY_TYPE_REQUEST: u8 = 0x08;
+        const FIND_INFORMATION_REQUEST: u8 = 0x04;
+        const FIND_BY_TYPE_VALUE_REQUEST: u8 = 0x06;
+        const READ_REQUEST: u8 = 0x0A;
+        const READ_BLOB_REQUEST: u8 = 0x0C;
+        const WRITE_REQUEST: u8 = 0x12;
+        const WRITE_COMMAND: u8 = 0x52;
+        const PREPARE_WRITE_REQUEST: u8 = 0x16;
+        const PRIMARY_SERVICE: u16 = 0x2800;
+        const CHARACTERISTIC_DECLARATION: u16 = 0x2803;
+        const LAST_HANDLE: u16 = 0xFFFF;
+        /// Empty packets the central sends after each request, enough for every answer and notification.
+        const EXCHANGES_PER_REQUEST: usize = 30;
+        const FIRMWARE_VERSION: &str = "1.2.3-test";
+        const PROTOCOL_VERSION: [u8; 2] = [8, 0];
+        const SERIAL_NUMBER: [u8; 16] = *b"0123456789abcdef";
+        const PACKAGES_UUID: [u8; 16] = [
+            0x6d, 0x69, 0x54, 0x6f, 0x65, 0x4e, 0x00, 0x80, 0x00, 0x40, 0x00, 0x00, 0x03, 0x00, 0x54, 0x6e,
+        ];
+        const UART_SERVICE_UUID: [u8; 16] = [
+            0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9, 0xe0, 0x93, 0xf3, 0xa3, 0xb5, 0x01, 0x00, 0x40, 0x6e,
+        ];
+
+        /// The watch's services, with every kind of characteristic and descriptor the macros make.
+        #[gatt_server]
+        struct TranscriptServer {
+            update: UpdateService,
+            time: TimeService,
+            neotime: NeoTimeService,
+            uart: UartService,
+            battery: BatteryService,
+            information: InformationService,
+            alert: AlertService,
+        }
+
+        #[gatt_service(uuid = "00001530-1212-efde-1523-785feabcd123")]
+        struct UpdateService {
+            #[characteristic(uuid = "00001531-1212-efde-1523-785feabcd123", write, notify)]
+            control_point: [u8; 20],
+            #[characteristic(uuid = "00001532-1212-efde-1523-785feabcd123", write_without_response)]
+            packet: [u8; 20],
+            #[characteristic(uuid = "00001534-1212-efde-1523-785feabcd123", read, value = &PROTOCOL_VERSION)]
+            version: &'static [u8; 2],
+        }
+
+        #[gatt_service(uuid = "1805")]
+        struct TimeService {
+            #[characteristic(uuid = "2a2b", read, write)]
+            current_time: [u8; 10],
+            #[characteristic(uuid = "2a0f", read, write)]
+            local_time_information: [u8; 2],
+        }
+
+        #[gatt_service(uuid = "6e540001-0000-4000-8000-4e656f54696d")]
+        struct NeoTimeService {
+            #[characteristic(uuid = "6e540002-0000-4000-8000-4e656f54696d", read, write, value = [7; 30])]
+            counters: [u8; 30],
+            #[characteristic(
+                uuid = "6e540003-0000-4000-8000-4e656f54696d",
+                write,
+                write_without_response,
+                notify
+            )]
+            packages: [u8; 20],
+            #[characteristic(uuid = "adaf0100-4669-6c65-5472-616e73666572", read, value = [4, 0, 0, 0])]
+            files_version: [u8; 4],
+        }
+
+        #[gatt_service(uuid = "6e400001-b5a3-f393-e0a9-e50e24dcca9e")]
+        struct UartService {
+            #[characteristic(uuid = "6e400002-b5a3-f393-e0a9-e50e24dcca9e", write, write_without_response)]
+            receive: [u8; 20],
+            #[characteristic(uuid = "6e400003-b5a3-f393-e0a9-e50e24dcca9e", notify)]
+            transmit: [u8; 20],
+        }
+
+        #[gatt_service(uuid = service::BATTERY)]
+        struct BatteryService {
+            #[descriptor(uuid = descriptors::CHARACTERISTIC_USER_DESCRIPTION, read, type = &'static str, value = "Charge")]
+            #[descriptor(uuid = "2904", name = "format", read, write, type = [u8; 7], value = [4, 0, 0xAD, 0x27, 1, 0, 0])]
+            #[descriptor(uuid = "2a20", read, value = "Demo")]
+            #[characteristic(uuid = characteristic::BATTERY_LEVEL, read, notify, value = 57)]
+            level: u8,
+        }
+
+        #[gatt_service(uuid = "180a")]
+        struct InformationService {
+            #[characteristic(uuid = "2a25", read)]
+            serial_number: [u8; 16],
+            #[characteristic(uuid = "2a26", read, value = FIRMWARE_VERSION)]
+            firmware_revision: &'static str,
+        }
+
+        #[gatt_service(uuid = "1811")]
+        struct AlertService {
+            #[characteristic(uuid = "2a46", write)]
+            new_alert: u8,
+        }
+
+        fn request(attribute_protocol: &[u8]) -> Vec<u8> {
+            let mut request = Vec::new();
+            request.extend_from_slice(&(attribute_protocol.len() as u16).to_le_bytes());
+            request.extend_from_slice(&ATTRIBUTE_PROTOCOL_CHANNEL.to_le_bytes());
+            request.extend_from_slice(attribute_protocol);
+            request
+        }
+
+        fn with_handle(opcode: u8, handle: u16, rest: &[u8]) -> Vec<u8> {
+            let mut pdu = vec![opcode];
+            pdu.extend_from_slice(&handle.to_le_bytes());
+            pdu.extend_from_slice(rest);
+            request(&pdu)
+        }
+
+        fn from_handle(opcode: u8, start: u16, rest: &[u8]) -> Vec<u8> {
+            let mut range = LAST_HANDLE.to_le_bytes().to_vec();
+            range.extend_from_slice(rest);
+            with_handle(opcode, start, &range)
+        }
+
+        /// Discovery from every handle, then reads, writes, a subscription and a notification, then reads again.
+        fn requests(server: &TranscriptServer<'_>) -> Vec<Vec<u8>> {
+            let last_handle = server.alert.new_alert.handle + 2;
+            let battery_cccd = server.battery.level.cccd_handle.unwrap();
+            let transmit_cccd = server.uart.transmit.cccd_handle.unwrap();
+            let format = server.battery.level_format_descriptor.handle();
+            let mut requests = Vec::new();
+            for start in 1..=last_handle {
+                requests.push(from_handle(
+                    READ_BY_GROUP_TYPE_REQUEST,
+                    start,
+                    &PRIMARY_SERVICE.to_le_bytes(),
+                ));
+                requests.push(from_handle(
+                    READ_BY_TYPE_REQUEST,
+                    start,
+                    &CHARACTERISTIC_DECLARATION.to_le_bytes(),
+                ));
+                requests.push(from_handle(FIND_INFORMATION_REQUEST, start, &[]));
+            }
+            let mut reads = Vec::new();
+            for handle in 0..=last_handle {
+                reads.push(with_handle(READ_REQUEST, handle, &[]));
+                reads.push(with_handle(READ_BLOB_REQUEST, handle, &1u16.to_le_bytes()));
+            }
+            requests.extend(reads.iter().cloned());
+            requests.push(from_handle(READ_BY_TYPE_REQUEST, 1, &PACKAGES_UUID));
+            requests.push(from_handle(
+                READ_BY_TYPE_REQUEST,
+                1,
+                &characteristic::BATTERY_LEVEL.to_le_bytes(),
+            ));
+            let mut battery = PRIMARY_SERVICE.to_le_bytes().to_vec();
+            battery.extend_from_slice(&service::BATTERY.to_le_bytes());
+            requests.push(from_handle(FIND_BY_TYPE_VALUE_REQUEST, 1, &battery));
+            let mut uart = PRIMARY_SERVICE.to_le_bytes().to_vec();
+            uart.extend_from_slice(&UART_SERVICE_UUID);
+            requests.push(from_handle(FIND_BY_TYPE_VALUE_REQUEST, 1, &uart));
+
+            let current_time = server.time.current_time.handle;
+            requests.push(with_handle(
+                WRITE_REQUEST,
+                current_time,
+                &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            ));
+            requests.push(with_handle(WRITE_REQUEST, current_time, &[0xEE; 11]));
+            requests.push(with_handle(
+                WRITE_REQUEST,
+                server.time.local_time_information.handle,
+                &[0x42],
+            ));
+            requests.push(with_handle(
+                WRITE_REQUEST,
+                server.information.firmware_revision.handle,
+                b"x",
+            ));
+            requests.push(with_handle(
+                WRITE_REQUEST,
+                server.information.firmware_revision.handle - 1,
+                b"x",
+            ));
+            requests.push(with_handle(WRITE_REQUEST, server.alert.new_alert.handle, &[3]));
+            requests.push(with_handle(WRITE_REQUEST, server.alert.new_alert.handle, &[3, 4]));
+            requests.push(with_handle(
+                WRITE_COMMAND,
+                server.update.packet.handle,
+                &[0x5A; 20],
+            ));
+            requests.push(with_handle(
+                WRITE_REQUEST,
+                server.neotime.counters.handle,
+                &[9; 20],
+            ));
+            requests.push(with_handle(WRITE_REQUEST, format, &[1, 2, 3, 4, 5, 6, 7]));
+            requests.push(with_handle(WRITE_REQUEST, format + 1, b"New"));
+            requests.push(with_handle(WRITE_REQUEST, format - 1, b"x"));
+            requests.push(with_handle(WRITE_REQUEST, battery_cccd, &[1, 0]));
+            requests.push(with_handle(WRITE_REQUEST, transmit_cccd, &[1, 0]));
+            requests.push(with_handle(WRITE_REQUEST, server.uart.receive.handle, b"hello"));
+            let mut prepare = 0u16.to_le_bytes().to_vec();
+            prepare.extend_from_slice(b"ab");
+            requests.push(with_handle(PREPARE_WRITE_REQUEST, current_time, &prepare));
+            for offset in [0u16, 22, 30, 31] {
+                requests.push(with_handle(
+                    READ_BLOB_REQUEST,
+                    server.neotime.counters.handle,
+                    &offset.to_le_bytes(),
+                ));
+            }
+            requests.extend(reads);
+            requests
+        }
+
+        /// Plays the requests through the controller to the server and returns every packet the watch sent.
+        fn transcript() -> Vec<Vec<u8>> {
+            let radio = FakeRadio::new();
+            let state = ControllerState::new();
+            state.start(HostInterface::new(OWN_ADDRESS, fake_random_bytes));
+            let controller: ExternalController<_, 4> =
+                ExternalController::new(BluetoothController::new(&state, &radio));
+            let mut resources: HostResources<DefaultPacketPool, 1, 2> = HostResources::new();
+            let stack = trouble_host::new(controller, &mut resources)
+                .set_random_address(Address::random(OWN_ADDRESS))
+                .build();
+            let mut runner = stack.runner();
+            let mut peripheral = stack.peripheral();
+            let server = TranscriptServer::new_with_config(GapConfig::Peripheral(PeripheralConfig {
+                name: "NeoTime",
+                appearance: &appearance::watch::GENERIC_WATCH,
+            }))
+            .unwrap();
+            server
+                .set(&server.information.serial_number, &SERIAL_NUMBER)
+                .unwrap();
+            let requests = requests(&server);
+            let receive = server.uart.receive.handle;
+
+            let watch = async {
+                let advertisement = Advertisement::ConnectableScannableUndirected {
+                    adv_data: &[2, 1, 6],
+                    scan_data: &[],
+                };
+                let advertiser = peripheral
+                    .advertise(&AdvertisementParameters::default(), advertisement)
+                    .await
+                    .unwrap();
+                central_connects(&state, &radio);
+                let connection = advertiser
+                    .accept()
+                    .await
+                    .unwrap()
+                    .with_attribute_server(&server)
+                    .unwrap();
+
+                let answer_requests = async {
+                    loop {
+                        if let GattConnectionEvent::Gatt { event } = connection.next().await {
+                            let echo = matches!(&event, GattEvent::Write(write) if write.handle() == receive);
+                            event.accept().unwrap().send().await;
+                            if echo {
+                                server
+                                    .uart
+                                    .transmit
+                                    .notify(&connection, &[0x21; 20], false)
+                                    .await
+                                    .unwrap();
+                            }
+                        }
+                    }
+                };
+
+                let mut central = Central {
+                    state: &state,
+                    radio: &radio,
+                    sequence_number: false,
+                    next_expected_sequence_number: false,
+                    received: Vec::new(),
+                };
+                let play = async {
+                    for request in &requests {
+                        while !central.exchange(DataKind::Start, request) {}
+                        for _ in 0..EXCHANGES_PER_REQUEST {
+                            embassy_futures::yield_now().await;
+                            central.exchange(DataKind::Continuation, &[]);
+                        }
+                    }
+                    central.received.clone()
+                };
+
+                match select(answer_requests, play).await {
+                    Either::Second(received) => received,
+                    Either::First(()) => unreachable!(),
+                }
+            };
+            let outcome = block_on(select(runner.run(), watch));
+            let Either::Second(received) = outcome else {
+                panic!("the host stopped: {outcome:?}")
+            };
+            received
+        }
+
+        fn hex(packets: &[Vec<u8>]) -> std::string::String {
+            use core::fmt::Write;
+            let mut text = std::string::String::new();
+            for packet in packets {
+                for byte in packet {
+                    write!(text, "{byte:02x}").unwrap();
+                }
+                text.push('\n');
+            }
+            text
+        }
+
+        #[test]
+        fn every_request_gets_the_same_bytes_as_from_a_table_built_at_start_up() {
+            let received = transcript();
+
+            let expected = include_str!("gatt_transcript.txt");
+            let actual = hex(&received);
+            if std::env::var_os("NEOTIME_UPDATE_SNAPSHOTS").is_some() {
+                std::fs::write(
+                    concat!(env!("CARGO_MANIFEST_DIR"), "/src/gatt_transcript.txt"),
+                    &actual,
+                )
+                .unwrap();
+            }
+            assert_eq!(actual, expected);
+        }
+    }
+
+    /// Its own module, since each GATT server's generated names would clash with another's.
+    mod split {
+        use super::*;
+
+        // ------------------------------------------------------------------------
+        // The table in flash and the values that change in RAM
+        // ------------------------------------------------------------------------
+
+        const NAME: &str = "NeoTime";
+
+        #[gatt_server]
+        struct SplitServer {
+            values: SplitService,
+        }
+
+        #[gatt_service(uuid = "6e540001-0000-4000-8000-4e656f54696d")]
+        struct SplitService {
+            #[characteristic(uuid = "2a19", read, write, notify, value = 5)]
+            small: u8,
+            #[characteristic(uuid = "6e540002-0000-4000-8000-4e656f54696d", read, write, value = [1, 2, 3])]
+            bytes: [u8; 3],
+            #[characteristic(uuid = "2a29", read, value = NAME)]
+            name: &'static str,
+        }
+
+        #[test]
+        fn only_the_values_that_change_take_ram() {
+            let fixed_byte = 1;
+            let three_bytes_and_their_length = 3 + 2;
+
+            assert_eq!(
+                __SPLITSERVER_STORED_BYTES,
+                fixed_byte + three_bytes_and_their_length
+            );
+            assert_eq!(
+                __SPLITSERVER_ATTRIBUTES.len(),
+                trouble_host::gap::GAP_SERVICE_ATTRIBUTE_COUNT + SplitService::ATTRIBUTE_COUNT
+            );
+            assert_eq!(SplitService::ATTRIBUTE_COUNT, 1 + 3 + 2 + 2);
+            assert_eq!(SplitService::CCCD_COUNT, 1);
+        }
+
+        #[test]
+        fn stored_values_change_while_constants_and_declarations_refuse_to() {
+            let server = SplitServer::new_default("NeoTime").unwrap();
+            let values = &server.values;
+
+            server.set(&values.small, &9).unwrap();
+            server.set(&values.bytes, &[7, 8, 9]).unwrap();
+            let refused_constant = server.set(&values.name, NAME);
+            let refused_length = server.server.table().write(values.small.handle, 0, &[1, 2]);
+            let refused_declaration = server.server.table().write(values.name.handle - 1, 0, &[0]);
+
+            assert_eq!(server.get(&values.small).unwrap(), 9);
+            assert_eq!(server.get(&values.bytes).unwrap(), [7, 8, 9]);
+            assert!(refused_constant.is_err());
+            assert!(refused_length.is_err());
+            assert!(refused_declaration.is_err());
+            assert_eq!(
+                values.name.with_raw_value(&server, |value| value.to_vec()),
+                Some(NAME.as_bytes().to_vec())
+            );
+            assert_eq!(values.small.end_handle, values.small.cccd_handle.unwrap());
+            assert_eq!(values.bytes.end_handle, values.bytes.handle);
+        }
+    }
+
+    /// Its own module, since each GATT server's generated names would clash with another's.
+    mod built_once {
+        use super::*;
+
+        #[gatt_server]
+        struct OnceServer {
+            battery: OnceBatteryService,
+        }
+
+        #[gatt_service(uuid = service::BATTERY)]
+        struct OnceBatteryService {
+            #[characteristic(uuid = characteristic::BATTERY_LEVEL, read, notify)]
+            level: u8,
+        }
+
+        #[test]
+        #[should_panic]
+        fn a_server_can_be_built_only_once_since_its_values_are_a_static() {
+            let first = OnceServer::new_default("NeoTime").unwrap();
+            assert!(first.battery.level.cccd_handle.is_some());
+
+            let _second = OnceServer::new_default("NeoTime");
+        }
+    }
 }

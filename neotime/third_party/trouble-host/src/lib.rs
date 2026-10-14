@@ -1140,4 +1140,5 @@ pub(crate) fn bt_hci_ext_duration<const US: u16>(d: Duration) -> bt_hci::param::
 #[doc(hidden)]
 pub mod __export {
     pub use embassy_sync;
+    pub use static_cell;
 }

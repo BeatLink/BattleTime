@@ -263,12 +263,10 @@ pub fn parse_uuid(meta: &ParseNestedMeta<'_>) -> Result<TokenStream> {
         Ok(quote::quote! { #uuid })
     } else {
         let expr: syn::Expr = parser.parse()?;
-        let span = expr.span(); // span will highlight if the value does not impl Into<Uuid>
+        let span = expr.span(); // span will highlight if the value is not a kind of UUID
         Ok(quote::quote_spanned! { span =>
-            {
-                let uuid: trouble_host::types::uuid::Uuid = #expr.into();
-                uuid
-            }
+            // NeoTime patch: worked out in a constant, since the attribute table is built in one.
+            ::trouble_host::types::uuid::ConstUuid(#expr).uuid()
         })
     }
 }

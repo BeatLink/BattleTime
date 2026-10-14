@@ -4,7 +4,6 @@
 //! The struct definition is used to define the characteristics of the service, and the ServiceBuilder is used to
 //! generate the code required to create the service.
 
-use convert_case::{Case, Casing};
 use darling::Error;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned, ToTokens};
@@ -12,7 +11,7 @@ use syn::parse::Result;
 use syn::spanned::Spanned;
 use syn::{Meta, Token};
 
-use crate::characteristic::{Characteristic, PermissionArgs, PropertiesArgs};
+use crate::characteristic::{Characteristic, PropertiesArgs};
 use crate::uuid::parse_arg_uuid;
 
 #[derive(Debug)]
@@ -69,12 +68,13 @@ impl syn::parse::Parse for ServiceArgs {
 pub(crate) struct ServiceBuilder {
     properties: syn::ItemStruct,
     args: ServiceArgs,
-    attribute_count: usize,
-    cccd_count: usize,
+    code_attribute_count: TokenStream2,
+    code_cccd_count: TokenStream2,
     code_impl: TokenStream2,
     code_build_chars: TokenStream2,
     code_struct_init: TokenStream2,
     code_fields: TokenStream2,
+    code_errors: TokenStream2,
 }
 
 impl ServiceBuilder {
@@ -82,32 +82,48 @@ impl ServiceBuilder {
         Self {
             properties,
             args,
-            attribute_count: 1, // Service counts as an attribute
-            cccd_count: 0,
+            code_attribute_count: TokenStream2::new(),
+            code_cccd_count: TokenStream2::new(),
             code_struct_init: TokenStream2::new(),
             code_impl: TokenStream2::new(),
             code_fields: TokenStream2::new(),
             code_build_chars: TokenStream2::new(),
+            code_errors: TokenStream2::new(),
         }
     }
-    /// Increment the number of access arguments required for this characteristic
+
+    /// Count the attributes a characteristic adds to the table, under its `cfg` if it has one.
     ///
     /// At least two attributes will be added to the attribute table for each characteristic:
     /// - The characteristic declaration
     /// - The characteristic's value declaration
     ///
     /// If the characteristic has either the notify or indicate property,
-    /// a Client Characteristic Configuration Descriptor (CCCD) declaration will also be added.
-    fn increment_attributes(&mut self, properties: &PropertiesArgs) -> usize {
-        if properties.notify || properties.indicate {
-            self.cccd_count += 1;
-            self.attribute_count += 3;
-        } else {
-            self.attribute_count += 2;
-        }
-        self.attribute_count
+    /// a Client Characteristic Configuration Descriptor (CCCD) declaration will also be added,
+    /// and each descriptor adds one more.
+    fn count_attributes(&mut self, characteristic: &Characteristic) {
+        let properties = &characteristic.args.properties;
+        let has_cccd = properties.notify || properties.indicate;
+        let attributes = 2 + usize::from(has_cccd) + characteristic.args.descriptors.len();
+        let cccds = usize::from(has_cccd);
+        let cfg_attr = characteristic.args.cfg.as_ref().into_iter();
+        self.code_attribute_count.extend(quote_spanned! {characteristic.span=>
+            #(#cfg_attr)* {
+                count += #attributes;
+            }
+        });
+        let cfg_attr = characteristic.args.cfg.as_ref().into_iter();
+        self.code_cccd_count.extend(quote_spanned! {characteristic.span=>
+            #(#cfg_attr)* {
+                count += #cccds;
+            }
+        });
     }
+
     /// Construct the macro blueprint for the service struct.
+    ///
+    /// NeoTime patch: the service adds its attributes to a table built in a constant, so the table
+    /// stays in flash; see third_party/trouble-host/NEOTIME.md.
     pub fn build(self) -> TokenStream2 {
         let properties = self.properties;
         let visibility = &properties.vis;
@@ -116,10 +132,13 @@ impl ServiceBuilder {
         let code_impl = self.code_impl;
         let fields = self.code_fields;
         let code_build_chars = self.code_build_chars;
+        let code_attribute_count = self.code_attribute_count;
+        let code_cccd_count = self.code_cccd_count;
+        let code_errors = self.code_errors;
         let uuid = self.args.uuid;
-        let attribute_count = self.attribute_count;
-        let cccd_count = self.cccd_count;
         quote! {
+            #code_errors
+
             #visibility struct #struct_name {
                 #fields
                 handle: u16,
@@ -127,18 +146,26 @@ impl ServiceBuilder {
 
             #[allow(unused)]
             impl #struct_name {
-                #visibility const ATTRIBUTE_COUNT: usize = #attribute_count;
-                #visibility const CCCD_COUNT: usize = #cccd_count;
+                #visibility const ATTRIBUTE_COUNT: usize = {
+                    let mut count = 1usize;
+                    #code_attribute_count
+                    count
+                };
+                #visibility const CCCD_COUNT: usize = {
+                    let mut count = 0usize;
+                    #code_cccd_count
+                    count
+                };
 
-                #visibility fn new<M, const MAX_ATTRIBUTES: usize>(table: &mut trouble_host::attribute::AttributeTable<'_, M, MAX_ATTRIBUTES>) -> Self
-                where
-                    M: trouble_host::__export::embassy_sync::blocking_mutex::raw::RawMutex,
-                {
-                    let mut service = table.add_service(trouble_host::attribute::Service::new(#uuid));
+                /// Adds the service's attributes to a table built in a constant, and returns its handles.
+                #visibility const fn build<const MAX_ATTRIBUTES: usize>(
+                    builder: &mut trouble_host::attribute::AttributeTableBuilder<MAX_ATTRIBUTES>,
+                ) -> Self {
+                    let handle = builder.add_service(#uuid);
                     #code_build_chars
 
                     Self {
-                        handle: service.build(),
+                        handle,
                         #code_struct_init
                     }
                 }
@@ -152,15 +179,15 @@ impl ServiceBuilder {
         }
     }
 
-    /// Construct instructions for adding a characteristic to the service, with static storage.
+    /// Construct instructions for adding a characteristic whose value is kept in RAM.
     fn construct_characteristic_static(&mut self, characteristic: Characteristic) {
         let (code_descriptors, named_descriptors) = self.build_descriptors(&characteristic);
-        let name_screaming = format_ident!("{}_STORE", characteristic.name.as_str().to_case(Case::Constant));
         let char_name = format_ident!("{}", characteristic.name);
         let ty = characteristic.ty;
-        let properties = &characteristic.args.properties;
-        let permissions = &characteristic.args.permissions;
-        let properties = set_properties(properties);
+        let properties = set_properties(&characteristic.args.properties);
+        let read = characteristic.args.permissions.read;
+        let write = characteristic.args.permissions.write;
+        let cccd = characteristic.args.permissions.cccd;
         let uuid = characteristic.args.uuid;
         let default_value = match characteristic.args.default_value {
             Some(val) => quote!(#val),                                       // if set by user
@@ -171,19 +198,21 @@ impl ServiceBuilder {
         self.code_build_chars.extend(quote_spanned! {characteristic.span=>
             #(#cfg_attr)*
             let (#char_name, #(#named_descriptors),*) = {
-                #[allow(clippy::absurd_extreme_comparisons)]
-                let mut builder = if <#ty as trouble_host::types::gatt_traits::AsGatt>::MAX_SIZE <= trouble_host::attribute::MAX_SMALL_DATA_SIZE {
-                    service.add_characteristic_small(#uuid, [#(#properties),*], #default_value)
-                } else {
-                    static #name_screaming: static_cell::StaticCell<[u8; <#ty as trouble_host::types::gatt_traits::AsGatt>::MAX_SIZE]> = static_cell::StaticCell::new();
-                    let store = #name_screaming.init([0; <#ty as trouble_host::types::gatt_traits::AsGatt>::MAX_SIZE]);
-                    service
-                        .add_characteristic(#uuid, [#(#properties),*], #default_value, store)
-                }
-                #permissions;
+                let characteristic = builder.add_characteristic::<#ty>(
+                    #uuid,
+                    trouble_host::attribute::CharacteristicProps::from_bits(0u8 #(| (#properties as u8))*),
+                    trouble_host::attribute::AttPermissions::new(#read, #write),
+                    #cccd,
+                    Some({
+                        fn initial_value(buffer: &mut [u8]) -> usize {
+                            trouble_host::attribute::write_initial_value::<#ty>(buffer, &#default_value)
+                        }
+                        initial_value
+                    }),
+                );
                 #code_descriptors
 
-                (builder.build(), #(#named_descriptors),*)
+                (builder.finish_characteristic(characteristic), #(#named_descriptors),*)
             };
         });
 
@@ -194,29 +223,36 @@ impl ServiceBuilder {
         ));
     }
 
-    /// Construct instructions for adding a read-only characteristic to the service.
-    fn construct_characteristic_ro(&mut self, characteristic: Characteristic) {
+    /// Construct instructions for adding a read-only characteristic whose value stays in flash.
+    fn construct_characteristic_ro(&mut self, characteristic: Characteristic, value_type: syn::Type) {
         let (code_descriptors, named_descriptors) = self.build_descriptors(&characteristic);
         let char_name = format_ident!("{}", characteristic.name);
-        let ty = characteristic.ty;
-        let permissions = &characteristic.args.permissions;
+        let read = characteristic.args.permissions.read;
         let uuid = characteristic.args.uuid;
         let default_value = match characteristic.args.default_value {
-            Some(val) => quote!(#val),                                       // if set by user
-            None => quote_spanned!(characteristic.span => <#ty>::default()), // or default otherwise
+            Some(val) => quote!(#val),                                               // if set by user
+            None => quote_spanned!(characteristic.span => <#value_type>::default()), // or default otherwise
         };
 
+        let cfg_attr = characteristic.args.cfg.as_ref().into_iter();
         self.code_build_chars.extend(quote_spanned! {characteristic.span=>
+            #(#cfg_attr)*
             let (#char_name, #(#named_descriptors),*) = {
-                let mut builder = service.add_characteristic_ro(#uuid, #default_value)
-                    #permissions;
+                let characteristic = builder.add_constant_characteristic::<#value_type>(#uuid, #read, {
+                    fn constant_value() -> &'static [u8] {
+                        <#value_type as trouble_host::types::gatt_traits::AsGatt>::as_gatt(#default_value)
+                    }
+                    constant_value
+                });
                 #code_descriptors
 
-                (builder.build(), #(#named_descriptors),*)
+                (builder.finish_characteristic(characteristic), #(#named_descriptors),*)
             };
         });
 
+        let cfg_attr = characteristic.args.cfg.as_ref().into_iter();
         self.code_struct_init.extend(quote_spanned!(characteristic.span=>
+            #(#cfg_attr)*
             #char_name,
         ));
     }
@@ -228,18 +264,18 @@ impl ServiceBuilder {
         mut fields: Vec<syn::Field>,
         characteristics: Vec<Characteristic>,
     ) -> Self {
-        // Processing specific to non-characteristic fields
-        let mut attrs: Vec<Vec<syn::Attribute>> = Vec::new();
+        // NeoTime patch: a service is built in a constant, so it can hold only characteristics.
         for field in &fields {
-            let ident = field.ident.as_ref().expect("All fields should have names");
-            let ty = &field.ty;
-            let cfg_attr = field.attrs.iter().find(|attr| attr.path().is_ident("cfg")).into_iter();
-            self.code_struct_init.extend(quote_spanned! {field.span() =>
-                #(#cfg_attr)*
-                #ident: #ty::default(),
-            });
-            attrs.push(field.attrs.clone());
+            self.code_errors.extend(
+                syn::Error::new_spanned(
+                    field,
+                    "a gatt_service is built in a constant, so it can hold only characteristics",
+                )
+                .to_compile_error(),
+            );
         }
+        fields.clear();
+        let mut attrs: Vec<Vec<syn::Attribute>> = Vec::new();
         // Process characteristic fields
         for ch in characteristics {
             let char_name = format_ident!("{}", ch.name);
@@ -255,6 +291,7 @@ impl ServiceBuilder {
                     ro = true;
                 }
             }
+            let value_type = ty.clone();
 
             // add fields for each characteristic value handle
             fields.push(syn::Field {
@@ -272,10 +309,10 @@ impl ServiceBuilder {
             }
             attrs.push(ch_attrs);
 
-            self.increment_attributes(&ch.args.properties);
+            self.count_attributes(&ch);
 
             if ro {
-                self.construct_characteristic_ro(ch);
+                self.construct_characteristic_ro(ch, value_type);
             } else {
                 self.construct_characteristic_static(ch);
             }
@@ -297,16 +334,18 @@ impl ServiceBuilder {
     /// Generate token stream for any descriptors tagged against this characteristic.
     fn build_descriptors(&mut self, characteristic: &Characteristic) -> (TokenStream2, Vec<TokenStream2>) {
         let mut named_descriptors = Vec::<TokenStream2>::new();
-        (characteristic
+        (
+            characteristic
                 .args
                 .descriptors
                 .iter()
-                .enumerate()
-                .map(|(index, args)| {
-                    let name_screaming =
-                        format_ident!("DESC_{index}_{}_STORE", characteristic.name.as_str().to_case(Case::Constant));
-                    let identifier = args.name.as_ref().map(|name| format_ident!("{}_{}_descriptor", characteristic.name.as_str(), name.value()));
-                    let permissions = set_permissions(&args.permissions);
+                .map(|args| {
+                    let identifier = args
+                        .name
+                        .as_ref()
+                        .map(|name| format_ident!("{}_{}_descriptor", characteristic.name.as_str(), name.value()));
+                    let read = args.permissions.read;
+                    let write = args.permissions.write;
                     let uuid = &args.uuid;
                     let default_value = match &args.default_value {
                         Some(val) => quote!(#val), // if set by user
@@ -329,7 +368,7 @@ impl ServiceBuilder {
                     if let Some(name) = &identifier {
                         let ty = ty.unwrap(); // The type is required for named descriptors
                         let cfg_attr = characteristic.args.cfg.as_ref().into_iter();
-                        self.code_fields.extend(quote_spanned!{ identifier.span() =>
+                        self.code_fields.extend(quote_spanned! { identifier.span() =>
                             #(#cfg_attr)*
                             #name: trouble_host::attribute::Descriptor<#ty>,
                         });
@@ -342,47 +381,52 @@ impl ServiceBuilder {
                         identifier_assignment = Some(quote! { let #name = });
                     };
 
-                    self.attribute_count += 1; // descriptors should always only be one attribute.
-
                     if ro {
-                        let read = args.permissions.read;
+                        let value_type = ty.unwrap();
                         quote_spanned! {characteristic.span=>
-                            #identifier_assignment builder.add_descriptor_ro(#uuid, #read, #default_value);
+                            #identifier_assignment builder.add_constant_descriptor::<#value_type>(#uuid, #read, {
+                                fn constant_value() -> &'static [u8] {
+                                    <#value_type as trouble_host::types::gatt_traits::AsGatt>::as_gatt(#default_value)
+                                }
+                                constant_value
+                            });
                         }
                     } else {
-                        let capacity = match ty {
-                            Some(ty) => quote!(<#ty as trouble_host::types::gatt_traits::AsGatt>::MAX_SIZE),
-                            None => quote!(#default_value.len() as usize),
-                        };
-                        let capacity_screaming =
-                            format_ident!("DESC_{index}_{}_CAPACITY", characteristic.name.as_str().to_case(Case::Constant));
-
-                        quote_spanned! {characteristic.span=>
-                            #identifier_assignment {
-                                const #capacity_screaming: usize = #capacity;
-                                #[allow(clippy::absurd_extreme_comparisons)]
-                                if #capacity_screaming <= trouble_host::attribute::MAX_SMALL_DATA_SIZE {
-                                    builder.add_descriptor_small(
-                                        #uuid,
-                                        #permissions,
-                                        #default_value,
-                                    )
-                                } else {
-                                    static #name_screaming: static_cell::StaticCell<[u8; #capacity_screaming]> = static_cell::StaticCell::new();
-                                    let store = #name_screaming.init([0; #capacity]);
-                                    builder.add_descriptor(
-                                        #uuid,
-                                        #permissions,
-                                        #default_value,
-                                        store,
-                                    )
-                                }
-                            };
+                        let permissions = quote!(trouble_host::attribute::AttPermissions::new(#read, #write));
+                        match ty {
+                            Some(ty) => quote_spanned! {characteristic.span=>
+                                #identifier_assignment builder.add_descriptor::<#ty>(
+                                    #uuid,
+                                    #permissions,
+                                    <#ty as trouble_host::types::gatt_traits::AsGatt>::MAX_SIZE,
+                                    Some({
+                                        fn initial_value(buffer: &mut [u8]) -> usize {
+                                            trouble_host::attribute::write_initial_value::<#ty>(buffer, &#default_value)
+                                        }
+                                        initial_value
+                                    }),
+                                );
+                            },
+                            None => quote_spanned! {characteristic.span=>
+                                #identifier_assignment builder.add_descriptor_like(
+                                    &#default_value,
+                                    #uuid,
+                                    #permissions,
+                                    #default_value.len() as usize,
+                                    Some({
+                                        fn initial_value(buffer: &mut [u8]) -> usize {
+                                            trouble_host::attribute::write_initial_value(buffer, &#default_value)
+                                        }
+                                        initial_value
+                                    }),
+                                );
+                            },
                         }
                     }
                 })
                 .collect(),
-            named_descriptors)
+            named_descriptors,
+        )
     }
 }
 
@@ -421,18 +465,4 @@ fn set_properties(args: &PropertiesArgs) -> Vec<TokenStream2> {
         &mut properties,
     );
     properties
-}
-
-/// Parse the permissions of a descriptor and return an AttPermissions
-fn set_permissions(args: &PermissionArgs) -> TokenStream2 {
-    let read = args.read;
-    let write = args.write;
-    quote! {
-        #[allow(clippy::needless_update)]
-        trouble_host::attribute::AttPermissions {
-            read: #read,
-            write: #write,
-            ..Default::default()
-        }
-    }
 }

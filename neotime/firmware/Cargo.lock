@@ -1129,7 +1129,6 @@ name = "neotime-blefs"
 version = "0.1.0"
 dependencies = [
  "neotime-flash-store",
- "static_cell",
  "trouble-host",
 ]
 
@@ -1210,7 +1209,6 @@ dependencies = [
  "embassy-futures",
  "heapless 0.9.3",
  "neotime-updates",
- "static_cell",
  "trouble-host",
 ]
 

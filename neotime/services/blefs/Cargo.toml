@@ -7,12 +7,10 @@ license.workspace = true
 publish = false
 
 [features]
-# The GATT service macro needs static_cell in scope.
-trouble = ["dep:trouble-host", "dep:static_cell"]
+trouble = ["dep:trouble-host"]
 
 [dependencies]
 neotime-flash-store = { path = "../flash_store" }
-static_cell = { version = "2.1", optional = true }
 trouble-host = { version = "0.8", default-features = false, features = ["peripheral", "gatt", "derive"], optional = true }
 
 [dev-dependencies]

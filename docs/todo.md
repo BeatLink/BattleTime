@@ -358,10 +358,11 @@ each item says what it costs and what it would save.
   Opening an app is the deepest path: the app host's `load_into` and `run_handler` frames (860 B
   and 876 B) and the interpreter's under them are where to win stack back.
 
-- [ ] **Smaller Bluetooth buffers.** Fewer and smaller packets in the pool, one connection and a
-  trimmed GATT table take RAM from the 12 KB budget, at some cost to file transfer speed. The
-  Bluetooth task's state is 4.8 KB, most of it TrouBLE's GATT table (39 attributes of 44 B, 2.1
-  KB) and its runner (1.6 KB); shrinking those means patching `third_party/trouble-host`.
+- [ ] **Smaller Bluetooth buffers.** Fewer and smaller packets in the pool and one connection take
+  RAM from the 12 KB budget, at some cost to file transfer speed. The GATT table is already in
+  flash; the Bluetooth task's state is 3.2 KB, TrouBLE's runner (1.6 KB) much of it, and the GATT
+  server's 496 B are mostly TrouBLE's CCCD table for each client; shrinking those means patching
+  `third_party/trouble-host`.
 - [ ] **Find large static RAM.** List `.bss` and `.data` by size with `nm --size-sort` and check
   for oversized embassy task state or tables that should be `const`.
 

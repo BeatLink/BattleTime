@@ -753,7 +753,7 @@ impl BluetoothParts {
 static BLUETOOTH_PARTS: StaticCell<BluetoothParts> = StaticCell::new();
 static SERVER: StaticCell<Server<'static>> = StaticCell::new();
 
-/// Builds the attribute table straight into its static, so it never passes through the stack.
+/// Builds the server straight into its static, so it never passes through the stack.
 #[inline(never)]
 fn build_server() -> &'static Server<'static> {
     let gap = GapConfig::Peripheral(PeripheralConfig {

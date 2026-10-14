@@ -1985,7 +1985,7 @@ mod tests {
 
     use super::*;
     use crate::att::{self, Att, AttClient, AttReq};
-    use crate::attribute::Service;
+    use crate::attribute::{test_table, AttributeTableBuilder};
     use crate::attribute_server::AttributeServer;
     use crate::connection::ConnParams;
     use crate::connection_manager::tests::{setup, ADDR_1};
@@ -2051,19 +2051,18 @@ mod tests {
         let char_decl_uuid = Uuid::new_short(0x2803);
 
         // Create attribute table with 9 characteristics (128-bit UUIDs)
-        let mut table: AttributeTable<'_, NoopRawMutex, MAX_ATTRIBUTES> = AttributeTable::new();
-        {
-            let mut svc = table.add_service(Service {
-                uuid: Uuid::new_long([0x32; 16]),
-            });
-            for i in 0..NUM_CHARACTERISTICS {
-                let mut uuid_bytes = [0x32u8; 16];
-                uuid_bytes[0] = i;
-                let _char = svc
-                    .add_characteristic_ro::<[u8; 2], _>(Uuid::new_long(uuid_bytes), &[0, 0])
-                    .build();
-            }
+        let mut builder = AttributeTableBuilder::<MAX_ATTRIBUTES>::new();
+        builder.add_service(Uuid::new_long([0x32; 16]));
+        for i in 0..NUM_CHARACTERISTICS {
+            let mut uuid_bytes = [0x32u8; 16];
+            uuid_bytes[0] = i;
+            builder.add_constant_characteristic::<[u8; 2]>(
+                Uuid::new_long(uuid_bytes),
+                PermissionLevel::Allowed,
+                || &[0, 0],
+            );
         }
+        let table = test_table::<NoopRawMutex, MAX_ATTRIBUTES>(builder);
 
         let server = AttributeServer::<_, DefaultPacketPool, MAX_ATTRIBUTES, CONNECTIONS_MAX>::new(table);
 
@@ -2141,19 +2140,18 @@ mod tests {
 
         const MAX_ATTRIBUTES: usize = 16;
         const CONNECTIONS_MAX: usize = 3;
-        let mut table: AttributeTable<'_, NoopRawMutex, MAX_ATTRIBUTES> = AttributeTable::new();
-        let mut storage = [0u8; 1];
-        let characteristic: Characteristic<u8> = table
-            .add_service(Service {
-                uuid: Uuid::new_long([0x44; 16]),
-            })
-            .add_characteristic(
-                Uuid::new_long([0x45; 16]),
-                [CharacteristicProp::Read, CharacteristicProp::WriteWithoutResponse],
-                0u8,
-                &mut storage[..],
-            )
-            .build();
+        let mut builder = AttributeTableBuilder::<MAX_ATTRIBUTES>::new();
+        builder.add_service(Uuid::new_long([0x44; 16]));
+        let characteristic: Characteristic<u8> = builder.add_characteristic(
+            Uuid::new_long([0x45; 16]),
+            CharacteristicProps::from_bits(
+                CharacteristicProp::Read as u8 | CharacteristicProp::WriteWithoutResponse as u8,
+            ),
+            AttPermissions::new(PermissionLevel::Allowed, PermissionLevel::Allowed),
+            PermissionLevel::NotAllowed,
+            None,
+        );
+        let table = test_table::<NoopRawMutex, MAX_ATTRIBUTES>(builder);
         let server = AttributeServer::<_, DefaultPacketPool, MAX_ATTRIBUTES, CONNECTIONS_MAX>::new(table);
 
         let mgr = setup();
@@ -2204,19 +2202,16 @@ mod tests {
 
         const MAX_ATTRIBUTES: usize = 16;
         const CONNECTIONS_MAX: usize = 3;
-        let mut table: AttributeTable<'_, NoopRawMutex, MAX_ATTRIBUTES> = AttributeTable::new();
-        let mut storage = [0u8; 1];
-        let characteristic: Characteristic<u8> = table
-            .add_service(Service {
-                uuid: Uuid::new_long([0x44; 16]),
-            })
-            .add_characteristic(
-                Uuid::new_long([0x45; 16]),
-                [CharacteristicProp::Read, CharacteristicProp::Write],
-                0u8,
-                &mut storage[..],
-            )
-            .build();
+        let mut builder = AttributeTableBuilder::<MAX_ATTRIBUTES>::new();
+        builder.add_service(Uuid::new_long([0x44; 16]));
+        let characteristic: Characteristic<u8> = builder.add_characteristic(
+            Uuid::new_long([0x45; 16]),
+            CharacteristicProps::from_bits(CharacteristicProp::Read as u8 | CharacteristicProp::Write as u8),
+            AttPermissions::new(PermissionLevel::Allowed, PermissionLevel::Allowed),
+            PermissionLevel::NotAllowed,
+            None,
+        );
+        let table = test_table::<NoopRawMutex, MAX_ATTRIBUTES>(builder);
         let server = AttributeServer::<_, DefaultPacketPool, MAX_ATTRIBUTES, CONNECTIONS_MAX>::new(table);
 
         let mgr = setup();

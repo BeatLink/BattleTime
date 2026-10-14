@@ -177,7 +177,8 @@ NeoTime/
 ├── site/             the GitHub Pages site: its MkDocs config, front page and colours
 ├── third_party/
 │   ├── littlefs-rust/  littlefs-rust with its panicking loop caps turned off
-│   └── trouble-host/   TrouBLE with discovery responses that never cut a 128-bit UUID short
+│   ├── trouble-host/   TrouBLE with its GATT table in flash and discovery that never cuts a 128-bit UUID short
+│   └── trouble-host-macros/  TrouBLE's GATT macros, building the attribute table in a constant
 ├── tools/            scripts: drawing the memory maps, packaging images, building every image
 └── ui/               neotime-ui: renderer, shapes and strips that draw on the screen
 ```
@@ -372,6 +373,13 @@ Nordic's closed SoftDevice Controller and saves about 27 KB of flash and 5 KB of
 
 See [bluetooth.md](bluetooth.md) for the design, the timing, what it takes from the chip and what is
 missing.
+
+The GATT services the firmware serves are declared with TrouBLE's `#[gatt_server]` and
+`#[gatt_service]` macros, patched in `third_party/` so the attribute table is built in a constant
+and kept in flash: the declarations, UUIDs and `&'static` read-only values cost no RAM. Only the
+values that are written or set at run time are in RAM, in one byte array, beside the CCCDs TrouBLE
+keeps for each client; see `third_party/trouble-host/NEOTIME.md` and
+[memory-map.md](memory-map.md#ram-64-kb-planned).
 
 ## App runtime (`runtime`)
 

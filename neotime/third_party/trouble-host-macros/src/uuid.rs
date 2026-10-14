@@ -80,12 +80,10 @@ pub(crate) fn parse_arg_uuid(value: &Expr) -> Result<TokenStream2> {
             }
         }
         other => {
-            let span = other.span(); // span will highlight if the value does not impl Into<Uuid>
+            let span = other.span(); // span will highlight if the value is not a kind of UUID
             Ok(quote::quote_spanned! { span =>
-                {
-                    let uuid: trouble_host::types::uuid::Uuid = #other.into();
-                    uuid
-                }
+                // NeoTime patch: worked out in a constant, since the attribute table is built in one.
+                ::trouble_host::types::uuid::ConstUuid(#other).uuid()
             })
         }
     }

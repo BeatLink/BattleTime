@@ -12,8 +12,8 @@ pub struct LegacyDfuService {
     pub control_point: [u8; 20],
     #[characteristic(uuid = "00001532-1212-efde-1523-785feabcd123", write_without_response)]
     pub packet: [u8; 20],
-    #[characteristic(uuid = "00001534-1212-efde-1523-785feabcd123", read, value = PROTOCOL_VERSION)]
-    pub version: [u8; 2],
+    #[characteristic(uuid = "00001534-1212-efde-1523-785feabcd123", read, value = &PROTOCOL_VERSION)]
+    pub version: &'static [u8; 2],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

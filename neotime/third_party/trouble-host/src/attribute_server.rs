@@ -100,11 +100,11 @@ impl<M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: usize> se
     fn get(&self, connection: &Connection<'_, P>, att_handle: u16, buf: &mut [u8]) -> Result<usize, Error> {
         self.att_table
             .with_attribute(att_handle, |att| {
-                if matches!(att.data, AttributeData::ClientSpecific { .. }) {
+                if att.is_client_specific() {
                     self.client_att_tables
                         .read(&connection.peer_identity(), att_handle, 0, buf)
                 } else {
-                    att.read(0, buf)
+                    self.att_table.read_value(att_handle, att, 0, buf)
                 }
                 .map_err(Into::into)
             })
@@ -113,18 +113,19 @@ impl<M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: usize> se
 
     fn set(&self, connection: &Connection<'_, P>, att_handle: u16, input: &[u8]) -> Result<(), Error> {
         self.att_table
-            .with_attribute_mut(att_handle, |att| {
-                if !att.data.is_variable_len() && att.data.capacity() != input.len() {
+            .with_attribute(att_handle, |att| {
+                let capacity = self.att_table.capacity(att_handle, att);
+                if !AttributeTable::<M, ATT_MAX>::is_variable_len(att) && capacity != input.len() {
                     Err(Error::UnexpectedDataLength {
-                        expected: att.data.capacity(),
+                        expected: capacity,
                         actual: input.len(),
                     })
-                } else if matches!(att.data, AttributeData::ClientSpecific { .. }) {
+                } else if att.is_client_specific() {
                     self.client_att_tables
                         .write(&connection.peer_identity(), att_handle, 0, input)
                         .map_err(Into::into)
                 } else {
-                    att.write(0, input).map_err(Into::into)
+                    self.att_table.write_value(att, 0, input).map_err(Into::into)
                 }
             })
             .unwrap_or(Err(Error::NotFound))
@@ -160,27 +161,18 @@ impl<'values, M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: 
         }
     }
 
-    /// NeoTime patch: builds a server straight into `slot`, filling its table with `build` there.
-    ///
-    /// A server built by value is copied several times on its way to a static, which needs a stack
-    /// frame several times its size; this one is written in place and never moves.
+    /// NeoTime patch: builds a server straight into `slot`, so it is never copied through the stack.
     ///
     /// # Safety
     ///
-    /// `slot` must be valid for writes and properly aligned. On success it holds a server; on an
-    /// error it holds a partly built one that must not be used or dropped.
-    pub unsafe fn init_in_place<E>(
-        slot: *mut Self,
-        build: impl FnOnce(&mut AttributeTable<'values, M, ATT_MAX>) -> Result<(), E>,
-    ) -> Result<(), E> {
+    /// `slot` must be valid for writes and properly aligned; afterwards it holds a server.
+    pub unsafe fn init_in_place(slot: *mut Self, att_table: AttributeTable<'values, M, ATT_MAX>) {
         let table = unsafe { core::ptr::addr_of_mut!((*slot).att_table) };
-        unsafe { table.write(AttributeTable::new()) };
-        build(unsafe { &mut *table })?;
         unsafe {
+            table.write(att_table);
             core::ptr::addr_of_mut!((*slot).client_att_tables).write(ClientAttTables::new(&*table));
             core::ptr::addr_of_mut!((*slot)._p).write(PhantomData);
         }
-        Ok(())
     }
 
     /// Read an attribute value with permission checks for the given connection.
@@ -226,7 +218,7 @@ impl<'values, M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: 
             .unwrap_or(false)
     }
 
-    fn can_read(&self, connection: &Connection<'_, P>, att: &Attribute<'_>) -> Result<(), AttErrorCode> {
+    fn can_read(&self, connection: &Connection<'_, P>, att: &Attribute) -> Result<(), AttErrorCode> {
         match connection.security_level() {
             Ok(level) => att.permissions().can_read(
                 level,
@@ -237,7 +229,7 @@ impl<'values, M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: 
         }
     }
 
-    fn can_write(&self, connection: &Connection<'_, P>, att: &Attribute<'_>) -> Result<(), AttErrorCode> {
+    fn can_write(&self, connection: &Connection<'_, P>, att: &Attribute) -> Result<(), AttErrorCode> {
         match connection.security_level() {
             Ok(level) => att.permissions().can_write(
                 level,
@@ -253,16 +245,16 @@ impl<'values, M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: 
         connection: &Connection<'_, P>,
         handle: u16,
         offset: usize,
-        att: &Attribute<'values>,
+        att: &Attribute,
         data: &mut [u8],
     ) -> Result<usize, AttErrorCode> {
         self.can_read(connection, att)?;
-        if matches!(att.data, AttributeData::ClientSpecific { .. }) {
+        if att.is_client_specific() {
             return self
                 .client_att_tables
                 .read(&connection.peer_identity(), handle, offset, data);
         }
-        att.read(offset, data)
+        self.att_table.read_value(handle, att, offset, data)
     }
 
     /// NeoTime patch: reads a later entry of a Read By Type or Read By Group Type response.
@@ -275,7 +267,7 @@ impl<'values, M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: 
         &self,
         connection: &Connection<'_, P>,
         handle: u16,
-        att: &Attribute<'values>,
+        att: &Attribute,
         first_length: usize,
         body: &mut WriteCursor<'_>,
     ) -> Result<usize, AttErrorCode> {
@@ -293,16 +285,16 @@ impl<'values, M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: 
         connection: &Connection<'_, P>,
         handle: u16,
         offset: usize,
-        att: &mut Attribute<'values>,
+        att: &Attribute,
         data: &[u8],
     ) -> Result<(), AttErrorCode> {
         self.can_write(connection, att)?;
-        if matches!(att.data, AttributeData::ClientSpecific { .. }) {
+        if att.is_client_specific() {
             return self
                 .client_att_tables
                 .write(&connection.peer_identity(), handle, offset, data);
         }
-        att.write(offset, data)
+        self.att_table.write_value(att, offset, data)
     }
 
     fn handle_read_by_type_req(
@@ -325,7 +317,7 @@ impl<'values, M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: 
             let mut ret = Err(AttErrorCode::ATTRIBUTE_NOT_FOUND);
             for (att_handle, att) in it {
                 // trace!("[read_by_type] Check attribute {:?} {}", att.uuid, att.handle);
-                if &att.uuid == attribute_type && att_handle <= end {
+                if &att.uuid() == attribute_type && att_handle <= end {
                     body.write(att_handle)?;
                     handle = att_handle;
 
@@ -411,7 +403,7 @@ impl<'values, M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: 
             let mut ret: Result<usize, AttErrorCode> = Err(AttErrorCode::ATTRIBUTE_NOT_FOUND);
             while let Some((att_handle, att)) = it.next() {
                 // trace!("[read_by_group] Check attribute {:x?} {}", att.uuid, att.handle);
-                if &att.uuid == group_type && att_handle <= end {
+                if &att.uuid() == group_type && att_handle <= end {
                     // debug!("[read_by_group] found! {:x?} handle: {}", att.uuid, att.handle);
                     handle = att_handle;
                     let last_handle_in_group = it.service_group_end();
@@ -510,7 +502,7 @@ impl<'values, M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: 
         handle: u16,
         data: &[u8],
     ) -> Result<usize, codec::Error> {
-        self.att_table.with_attribute_mut(handle, |att| {
+        self.att_table.with_attribute(handle, |att| {
             // Write commands can't respond with an error.
             let _ = self.write_attribute_data(connection, handle, 0, att, data);
         });
@@ -526,7 +518,7 @@ impl<'values, M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: 
     ) -> Result<usize, codec::Error> {
         let err = self
             .att_table
-            .with_attribute_mut(handle, |att| {
+            .with_attribute(handle, |att| {
                 self.write_attribute_data(connection, handle, 0, att, data)
             })
             .unwrap_or(Err(AttErrorCode::ATTRIBUTE_NOT_FOUND));
@@ -559,9 +551,11 @@ impl<'values, M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: 
         w.write(att::ATT_FIND_BY_TYPE_VALUE_RSP)?;
         self.att_table.iterate_from(start, |mut it| {
             while let Some((handle, att)) = it.next() {
-                if handle <= end && att.uuid == attr_type {
-                    let value = att.data.value();
-                    if value == Some(attr_value) {
+                if handle <= end && att.uuid() == attr_type {
+                    let matches = self
+                        .att_table
+                        .with_value(handle, att, |value| value == Some(attr_value));
+                    if matches {
                         if w.available() < 4 {
                             break;
                         }
@@ -604,13 +598,13 @@ impl<'values, M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: 
                     // `get_att_type()` returns the real format code (32-bit reports 0x02 and is
                     // widened to 128-bit by `att_bytes()`), so the header byte, this same-type
                     // batching check, and the body written below all agree.
-                    let format = att.uuid.get_att_type();
+                    let format = att.uuid().get_att_type();
                     if t == 0 {
                         t = format;
                     } else if t != format {
                         break;
                     }
-                    let (uuid, len) = att.uuid.att_bytes();
+                    let (uuid, len) = att.uuid().att_bytes();
                     let uuid = &uuid[..len];
                     if body.available() < 2 + uuid.len() {
                         break;
@@ -701,7 +695,7 @@ impl<'values, M: RawMutex, P: PacketPool, const ATT_MAX: usize, const CONN_MAX: 
                 }
                 let data = &pw.buf[..pw.len as usize];
                 self.att_table
-                    .with_attribute_mut(pw.handle, |att| {
+                    .with_attribute(pw.handle, |att| {
                         self.write_attribute_data(connection, pw.handle, pw.offset as usize, att, data)
                     })
                     .unwrap_or(Err(AttErrorCode::ATTRIBUTE_NOT_FOUND))
@@ -967,38 +961,29 @@ mod tests {
             debug!("Testing with interior handle count of {}", interior_handle_count);
 
             // Create a new table.
-            let mut table: AttributeTable<'_, NoopRawMutex, { MAX_ATTRIBUTES }> = AttributeTable::new();
+            let mut builder = AttributeTableBuilder::<{ MAX_ATTRIBUTES }>::new();
 
             // Add a first service, contents don't really matter, but the issue doesn't manifest without this.
-            {
-                let svc = table.add_service(Service {
-                    uuid: Uuid::new_long([10; 16]),
-                });
-            }
+            builder.add_service(Uuid::new_long([10; 16]));
 
             // Add an interior service that has a varying length.
-            {
-                let mut svc = table.add_service(Service {
-                    uuid: Uuid::new_long([0; 16]),
-                });
+            builder.add_service(Uuid::new_long([0; 16]));
+            for c in 0..interior_handle_count {
+                builder.add_constant_characteristic::<[u8; 2]>(
+                    Uuid::new_long([c; 16]),
+                    PermissionLevel::Allowed,
+                    || &[0, 0],
+                );
+            }
 
-                for c in 0..interior_handle_count {
-                    let _service_instance = svc
-                        .add_characteristic_ro::<[u8; 2], _>(Uuid::new_long([c; 16]), &[0, 0])
-                        .build();
-                }
-            }
             // Now add the service at the end, contents don't really matter.
-            {
-                table.add_service(Service {
-                    uuid: Uuid::new_long([8; 16]),
-                });
-            }
+            builder.add_service(Uuid::new_long([8; 16]));
+            let table = crate::attribute::test_table::<NoopRawMutex, { MAX_ATTRIBUTES }>(builder);
 
             // Print the table for debugging.
             table.iterate(|it| {
                 for (handle, att) in it {
-                    let uuid = &att.uuid;
+                    let uuid = &att.uuid();
                     if *uuid == PRIMARY_SERVICE.into() || *uuid == SECONDARY_SERVICE.into() {
                         trace!("service 0x{:0>4x?}, 0x{:0>2x?}", handle, uuid,);
                     } else {
@@ -1073,17 +1058,15 @@ mod tests {
         ];
         let uuid32 = Uuid::Uuid32([0x11, 0x22, 0x33, 0x44]);
 
-        let mut table: AttributeTable<'_, NoopRawMutex, { MAX_ATTRIBUTES }> = AttributeTable::new();
-        let (h128, h32) = {
-            let mut svc = table.add_service(Service {
-                uuid: Uuid::new_long([0; 16]),
-            });
-            let c128 = svc
-                .add_characteristic_ro::<[u8; 2], _>(Uuid::new_long(uuid128), &[0, 0])
-                .build();
-            let c32 = svc.add_characteristic_ro::<[u8; 2], _>(uuid32, &[0, 0]).build();
-            (c128.handle, c32.handle)
-        };
+        let mut builder = AttributeTableBuilder::<{ MAX_ATTRIBUTES }>::new();
+        builder.add_service(Uuid::new_long([0; 16]));
+        let h128 = builder
+            .add_constant_characteristic::<[u8; 2]>(Uuid::new_long(uuid128), PermissionLevel::Allowed, || &[0, 0])
+            .handle;
+        let h32 = builder
+            .add_constant_characteristic::<[u8; 2]>(uuid32, PermissionLevel::Allowed, || &[0, 0])
+            .handle;
+        let table = crate::attribute::test_table::<NoopRawMutex, { MAX_ATTRIBUTES }>(builder);
 
         let server = AttributeServer::<_, DefaultPacketPool, MAX_ATTRIBUTES, CONNECTIONS_MAX>::new(table);
         let mut buf = [0u8; 64];

@@ -16,6 +16,34 @@ pub enum Uuid {
     Uuid128([u8; 16]),
 }
 
+/// NeoTime patch: turns any kind of UUID the GATT macros accept into a [`Uuid`] inside a constant.
+///
+/// `ConstUuid(value).uuid()` picks the conversion from the value's type, which `Into` cannot do in a constant.
+pub struct ConstUuid<T>(pub T);
+
+macro_rules! const_uuid_from {
+    ($source:ty, $value:ident => $uuid:expr) => {
+        impl ConstUuid<$source> {
+            /// The UUID, worked out in a constant.
+            pub const fn uuid(self) -> Uuid {
+                let $value = self.0;
+                $uuid
+            }
+        }
+    };
+}
+
+const_uuid_from!(Uuid, value => value);
+const_uuid_from!(BluetoothUuid16, value => Uuid::Uuid16(value.to_le_bytes()));
+const_uuid_from!(BluetoothUuid32, value => Uuid::Uuid32(value.to_le_bytes()));
+const_uuid_from!(BluetoothUuid128, value => Uuid::Uuid128(value.to_le_bytes()));
+const_uuid_from!(u16, value => Uuid::Uuid16(value.to_le_bytes()));
+const_uuid_from!(u32, value => Uuid::Uuid32(value.to_le_bytes()));
+const_uuid_from!(u128, value => Uuid::Uuid128(value.to_le_bytes()));
+const_uuid_from!([u8; 2], value => Uuid::Uuid16(value));
+const_uuid_from!([u8; 4], value => Uuid::Uuid32(value));
+const_uuid_from!([u8; 16], value => Uuid::Uuid128(value));
+
 impl From<BluetoothUuid16> for Uuid {
     fn from(data: bt_hci::uuid::BluetoothUuid16) -> Self {
         Uuid::Uuid16(data.into())

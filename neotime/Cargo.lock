@@ -1138,7 +1138,6 @@ version = "0.1.0"
 dependencies = [
  "embassy-futures",
  "neotime-flash-store",
- "static_cell",
  "trouble-host",
 ]
 
@@ -1156,7 +1155,6 @@ dependencies = [
  "embedded-io 0.7.1",
  "heapless 0.9.3",
  "nrf-pac",
- "static_cell",
  "trouble-host",
 ]
 
@@ -1224,7 +1222,6 @@ dependencies = [
  "embassy-futures",
  "heapless 0.9.3",
  "neotime-updates",
- "static_cell",
  "trouble-host",
 ]
 

@@ -77,8 +77,9 @@ What to do, in order:
    the 12 KB or so this frees, give part to the stack (the alarm's margin is 1,920 B, under the
    2 KB rule) and the rest to apps. Measure the heap's peak on the watch first.
 2. **Stop reading whole app images into the heap.** See [Apps](#apps-as-chunks-in-flash).
-3. **Move the GATT table into flash** as a constant. This needs a patch to
-   `third_party/trouble-host`.
+3. **Move the GATT table into flash** as a constant. Done: `third_party/trouble-host` and its
+   macros build the table in a constant, so `SERVER` is 496 B and the values that change take
+   366 B beside it.
 4. **Fewer packets in the pool**, at some cost to file transfer speed.
 
 ## Internal flash (512 KB)
