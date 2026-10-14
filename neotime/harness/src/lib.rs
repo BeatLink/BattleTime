@@ -31,8 +31,8 @@ pub use snapshots::{
     ScreenTexts, SnapshotFolders, UPDATE_SNAPSHOTS_VARIABLE,
 };
 pub use sources::{
-    compile_package, compile_source_text, docs_root, every_package, package_source, repository_root, shared_library,
-    OpenFailure, Package, PackageKind,
+    compile_package, compile_source_text, docs_root, every_package, package_source, repository_root,
+    shared_library, OpenFailure, Package, PackageKind,
 };
 pub use watch::{TestWatch, MOST_WAKEUPS_PER_ADVANCE};
 

@@ -97,11 +97,11 @@ fn every_tour_passes_and_its_page_shows_every_picture() {
 fn every_tour_and_page_belongs_to_an_app() {
     let ids: Vec<String> = toured_packages().into_iter().map(|package| package.id).collect();
     let mut strays = Vec::new();
-    for (folder, extension) in [(repository_root().join("tests/tours"), "neotime"), (docs_root().join("apps"), "md")] {
-        for entry in std::fs::read_dir(folder)
-            .unwrap()
-            .flatten()
-        {
+    for (folder, extension) in [
+        (repository_root().join("tests/tours"), "neotime"),
+        (docs_root().join("apps"), "md"),
+    ] {
+        for entry in std::fs::read_dir(folder).unwrap().flatten() {
             let path = entry.path();
             let stem = path.file_stem().unwrap_or_default().to_string_lossy().to_string();
             if path.extension().is_some_and(|found| found == extension) && !ids.contains(&stem) {

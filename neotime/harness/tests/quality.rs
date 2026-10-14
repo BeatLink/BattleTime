@@ -2,7 +2,7 @@
 //! `test_qa`: who it says it is, that it is documented, and that its image is sound and fits in RAM.
 
 use neotime_app_testing::{
-    compile_package, docs_root, every_package, package_source, repository_root, Package, PackageKind, TestWatch,
+    compile_package, docs_root, every_package, package_source, Package, PackageKind, TestWatch,
 };
 use neotime_runtime::{estimate_memory_need, AppImage, AppKind, APP_HEAP_BUDGET_BYTES};
 
