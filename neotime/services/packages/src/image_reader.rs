@@ -1,5 +1,6 @@
-//! Reads the few parts of an installed image that a list of apps and the launcher's icons need, a
-//! few bytes at a time, so neither ever holds a whole image.
+//! Reads the few parts of an installed image that a list of apps, the launcher's icons and the
+//! shell's search for apps to run while closed need, a few bytes at a time, so none ever holds a
+//! whole image.
 //!
 //! An image is laid out as `neotime_runtime::image::layout` describes: a header, a table of
 //! sections, and inside each section a table of entries, so any string, the facts or the icon is
@@ -10,6 +11,7 @@ use alloc::{string::String, vec, vec::Vec};
 
 use neotime_flash_store::FileAccess;
 use neotime_runtime::image::{layout, Facts, FORMAT_VERSION, MAGIC};
+use neotime_runtime::subscriptions::{Subscription, SUBSCRIPTION_BYTES};
 use neotime_runtime::AppKind;
 
 // ============================================================================
@@ -179,4 +181,18 @@ pub async fn icon<Files: FileAccess>(files: &mut Files, path: &str) -> Option<Ve
         return None;
     }
     entry_bytes(files, path, &outline, layout::RESOURCES_SECTION, 0).await
+}
+
+/// Whether any of the app's subscriptions runs while it is closed: one read of its subscriptions.
+pub async fn runs_while_closed<Files: FileAccess>(files: &mut Files, path: &str) -> Option<bool> {
+    let outline = outline(files, path).await?;
+    let Some(section) = outline.section(layout::SUBSCRIPTIONS_SECTION) else {
+        return Some(false);
+    };
+    let mut bytes = vec![0; section.count as usize * SUBSCRIPTION_BYTES];
+    read_exactly(files, path, section.offset, &mut bytes).await?;
+    let (records, _) = bytes.as_chunks::<SUBSCRIPTION_BYTES>();
+    Some(records.iter().any(|record| {
+        Subscription::parse(record).is_some_and(|subscription| subscription.runs_while_closed())
+    }))
 }

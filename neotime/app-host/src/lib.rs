@@ -11,6 +11,7 @@
 extern crate alloc;
 
 mod bitmap_file;
+pub mod closed_apps;
 mod drawing;
 pub mod fonts;
 pub mod haptics;

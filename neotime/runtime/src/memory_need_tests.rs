@@ -147,6 +147,21 @@ fn subscriptions_and_saved_state_add_to_the_working_memory() {
 }
 
 #[test]
+fn a_closed_run_needs_the_image_and_the_working_memory_but_no_screen() {
+    let mut image = writer();
+    image.handler(vec![]);
+    image.widget(WidgetKind::Column, 1, &[]);
+    image.widget(WidgetKind::Label, 0, &[]);
+    let bytes = image.build();
+    let parsed = AppImage::parse(&bytes).unwrap();
+
+    let need = estimate_memory_need(&parsed);
+
+    assert_eq!(closed_run_bytes(&parsed), need.image_bytes + need.working_bytes);
+    assert!(closed_run_bytes(&parsed) < need.total_bytes);
+}
+
+#[test]
 fn an_app_without_persistent_state_saves_nothing() {
     let mut image = writer();
     image.variable("scratch", ValueType::Int, false, 0);

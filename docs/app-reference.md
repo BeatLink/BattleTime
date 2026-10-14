@@ -34,7 +34,7 @@ time.
 | `is_heart_rate_running` | `Bool` | Whether the heart rate sensor is measuring for any app. |
 | `heart_rate_status` | `Int` | The sensor's state: 0 stopped, 1 no skin, 2 settling, 3 measuring. |
 | `is_bluetooth_enabled` | `Bool` | Whether Bluetooth is on, whether or not the phone is connected. It is on again after every restart. |
-| `next_alarm` | `Instant \| null` | The next alarm any app has set to ring, or `null` if none is set. In app code an empty optional is always `null`. |
+| `next_alarm` | `Instant \| null` | When the alarm app rings next while it is closed, or `null` if no alarm is set. In app code an empty optional is always `null`. |
 | `current_weather` | object | The last forecast the phone sent: `temperature`, `condition`, `low`, `high`, `sunrise`, `sunset`, `location` and `received_at` (each `null` until the phone sends it), and `forecast`, up to 5 coming days, each with `condition`, `low` and `high`: read `current_weather.value.forecast.length` and `current_weather.value.forecast[day].high`. Reading it needs no permission, so faces need no event of their own. |
 | `installed_apps` | list | Every app a launcher lists, in order, group by group: `installed_apps.value.length`, and `installed_apps.value[i].name`, `.id` (for `open_app`) and `.icon` (for an `Icon`). `apps/launcher` is a launcher written this way. |
 | `launcher_groups` | list | The launcher groups that hold at least one app, in the order the companion set: `.name`, `.icon`, and `.first` and `.count`, the run of `installed_apps` each holds. With no launcher file every app is in one group, `Other`. |

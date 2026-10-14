@@ -83,6 +83,10 @@ impl EffectCheck {
 pub enum ScriptCommand {
     OpenApp(String),
     OpenFace(String),
+    /// Leaves the open app, which goes on running closed with its state, and opens this app.
+    SwitchToApp(String),
+    /// Leaves the open app, which goes on running closed with its state, and opens this face.
+    SwitchToFace(String),
     InstallApps(Vec<String>),
     Touch {
         kind: TouchKind,
@@ -276,7 +280,7 @@ fn split_words(line: &str) -> Result<SplitLine, String> {
 // Parsing
 // ============================================================================
 
-const COMMAND_NAMES: &str = "open, install, tap, long-press, double-tap, drag, swipe, button, long-button, \
+const COMMAND_NAMES: &str = "open, switch, install, tap, long-press, double-tap, drag, swipe, button, long-button, \
                              wait, set, notify, phone, shake, acceleration, heart, navigation, write, reopen, start, screen, expect, screenshot, snapshot";
 
 /// A script's heart rate readings are as sure as the sensor ever reports.
@@ -328,6 +332,7 @@ fn parse_command(words: &[Word]) -> Result<ScriptCommand, String> {
     match name {
         "open" => parse_open(arguments),
         "install" => parse_install(arguments),
+        "switch" => parse_switch(arguments),
         "tap" => parse_touch(TouchKind::Tap, name, arguments),
         "long-press" => parse_touch(TouchKind::LongPress, name, arguments),
         "double-tap" => parse_touch(TouchKind::DoubleTap, name, arguments),
@@ -417,6 +422,18 @@ fn parse_open(arguments: &[Word]) -> Result<ScriptCommand, String> {
         [kind, id] if kind.bare() == Some("app") => Ok(ScriptCommand::OpenApp(id.text().to_string())),
         [kind, id] if kind.bare() == Some("face") => Ok(ScriptCommand::OpenFace(id.text().to_string())),
         _ => Err("write `open app <id>` or `open face <id>`".to_string()),
+    }
+}
+
+fn parse_switch(arguments: &[Word]) -> Result<ScriptCommand, String> {
+    match arguments {
+        [to, kind, id] if to.bare() == Some("to") && kind.bare() == Some("app") => {
+            Ok(ScriptCommand::SwitchToApp(id.text().to_string()))
+        }
+        [to, kind, id] if to.bare() == Some("to") && kind.bare() == Some("face") => {
+            Ok(ScriptCommand::SwitchToFace(id.text().to_string()))
+        }
+        _ => Err("write `switch to app <id>` or `switch to face <id>`".to_string()),
     }
 }
 
@@ -792,6 +809,12 @@ impl ScriptRunner<'_> {
         })?;
         match command {
             ScriptCommand::OpenApp(_) | ScriptCommand::OpenFace(_) => {}
+            ScriptCommand::SwitchToApp(id) => watch
+                .switch_to_app(id)
+                .map_err(|failure| mismatch(format!("the app {id} to open"), failure.to_string()))?,
+            ScriptCommand::SwitchToFace(id) => watch
+                .switch_to_face(id)
+                .map_err(|failure| mismatch(format!("the face {id} to open"), failure.to_string()))?,
             ScriptCommand::InstallApps(ids) => {
                 let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
                 watch
@@ -919,7 +942,8 @@ impl ScriptRunner<'_> {
                 ));
             }
             ScriptCommand::Snapshot(name) => {
-                let picture = format!("{}-{name}", self.opened_name);
+                // A switch, or a closed app that woke, may have opened another package since the script opened one.
+                let picture = format!("{}-{name}", watch.package_name());
                 crate::snapshots::check_screen_snapshot(&picture, watch.frame())
                     .map_err(|problem| mismatch(format!("the screen to match {picture}.png"), problem))?;
             }

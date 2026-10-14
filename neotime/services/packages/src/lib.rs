@@ -320,6 +320,12 @@ impl<'files, Files: FileAccess> Packages<'files, Files> {
         image_reader::icon(self.files, &app_file(id, IMAGE_FILE)).await
     }
 
+    /// Whether the app has subscriptions that run while it is closed, read without the rest of its image.
+    pub async fn runs_while_closed(&mut self, id: &str) -> bool {
+        check_id(id).is_ok()
+            && image_reader::runs_while_closed(self.files, &app_file(id, IMAGE_FILE)).await == Some(true)
+    }
+
     /// The app's image, to load into RAM for the app host.
     pub async fn read_image(&mut self, id: &str) -> Result<Vec<u8>, PackageError> {
         self.read_image_in(APPS_DIRECTORY, id).await

@@ -93,11 +93,7 @@ pub fn estimate_memory_need(image: &AppImage) -> MemoryNeed {
     }
 
     let image_bytes = rounded(image.byte_count() as u32);
-    let working_bytes = WORKING_BYTES
-        + SUBSCRIPTION_BYTES * image.subscription_count() as u32
-        + rounded(saved_state_bytes(image) as u32)
-        + PASSING_BYTES
-        + if prefetches(image) { PREFETCH_BYTES } else { 0 };
+    let working_bytes = working_bytes_of(image);
     let widget_bytes = NODE_BYTES * largest.node_count;
     let text_bytes = largest.text_bytes;
     let reads = system_values_read(image);
@@ -110,6 +106,20 @@ pub fn estimate_memory_need(image: &AppImage) -> MemoryNeed {
         lists_apps: largest.has_app_list || reads & bit_of(SystemValue::InstalledAppCount) != 0,
         reads_app_list: reads_app_list_from(image, reads),
     }
+}
+
+/// The host's working memory, its subscriptions, its saved state and what drawing borrows.
+fn working_bytes_of(image: &AppImage) -> u32 {
+    WORKING_BYTES
+        + SUBSCRIPTION_BYTES * image.subscription_count() as u32
+        + rounded(saved_state_bytes(image) as u32)
+        + PASSING_BYTES
+        + if prefetches(image) { PREFETCH_BYTES } else { 0 }
+}
+
+/// The heap a closed app needs while its subscriptions run: its image and the host's working memory, with no screen.
+pub fn closed_run_bytes(image: &AppImage) -> u32 {
+    rounded(image.byte_count() as u32) + working_bytes_of(image)
 }
 
 /// The system values only the shell's full list of apps answers.

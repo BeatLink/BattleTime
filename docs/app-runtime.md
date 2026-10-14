@@ -690,9 +690,26 @@ depends on the clock.
 ### Background work
 
 A subscription runs its handler even when the app is closed. For that the runtime loads only the
-app's state and that one handler, never its widgets. Subscriptions from every app are merged, so
-two apps that both want the heart rate every ten minutes share one measurement. Alarms are `at`
-subscriptions with an absolute time, so a reboot or a clock change cannot lose them.
+app's state and its handlers, never its widgets. Alarms are `at` subscriptions with an absolute
+time, so a reboot or a clock change cannot lose them.
+
+`neotime_app_host::closed_apps` is how an embedder does it. `ClosedApps` keeps, for each closed
+app whose timers, alarms, daily times, clock changes or heart rate periods still have a time to
+come (`Subscription::runs_while_closed`), when it is next due, when it was recorded and the heap
+a run needs (`memory_need::closed_run_bytes`: the image and the working memory, no nodes). Nothing
+else of the app stays in RAM. When an app comes due the embedder loads it with
+`open_in_background`, keeps the latest heart rate reading for it (`remember_heart_rate`), and calls
+`run_while_closed`, which fires what came due since the record (`check_timers_from`). The
+embedder's `System` implements `RunsClosedApps`, and its `carry_out` first offers each effect to
+`ClosedRun::hold_back`. That keeps back what needs a screen: `wake_screen` and `go` become a
+`WakeRequest` naming the screen, and screen, brightness and navigation effects are dropped. The
+embedder then saves the state, records the app again, and opens the app on that screen when it
+woke. `next_alarm` is the closed `alarm` app's next due time.
+
+A passed `at` fires once each time the app is loaded, so a handler that rings should move or clear
+its time, as the alarm, timer and pomodoro do. Closed apps hear no pushed events yet, and two apps
+that want the heart rate share the readings the interval setting takes rather than asking for
+their own.
 
 ### Failures
 
@@ -735,6 +752,7 @@ What happens next is driven by the embedder:
 | `go_back_a_screen(now, system)` | Goes back one of the app's screens, as a click of the side button does; not handled on the first screen. |
 | `tick(now, system)` | Runs the timer-like subscriptions that are due, and works out again the open screen's expressions that `Bindings::due_between_among` says the clock has changed. |
 | `next_wakeup(now)` | The earliest of: when the clock next changes something on the open screen, the next due subscription, and the next step of a scrolling label. None means sleep until an event. |
+| `check_timers_from(time)`, `remember_heart_rate(bpm, confidence)` | For a closed app loaded again: its timers fire for what came due since `time`, and its heart rate subscriptions get this reading at their next period. |
 | `bring_to_front`, `close`, `screen_turned_on`, `screen_turned_off` | Run the `Open`, `Close`, `ScreenOn` and `ScreenOff` subscriptions. A closed app keeps only subscriptions without `only_while_open`. |
 | `deliver(event, now, system)` | Hands a `PushedEvent` to the subscriptions of its kind: steps, motion, heart rate, battery, phone, notifications and calls (with their text), music, weather, navigation and settings changes. Acceleration readings are kept and handed over at each subscription's period. |
 | `save_changed_state(out)` | Writes the persistent state when any of it changed since the last save, else returns `None`. `LARGEST_SAVED_STATE_BYTES` is always big enough. |

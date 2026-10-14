@@ -1,0 +1,14 @@
+# A timer left running rings over the face: it lights the dark screen and opens the timer.
+open app timer
+tap 120 202                 # the start button under the duration picker
+switch to face digital
+screen off
+wait 9min
+expect no text "Time's up"
+wait 1min
+expect text "Time's up"
+expect effect vibrate-pattern alarm
+
+tap "Dismiss"
+expect effect stop-vibrating
+expect no failures

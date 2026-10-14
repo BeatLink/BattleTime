@@ -67,6 +67,35 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 The recovery build (`--features recovery`) leaves out the shell, so the app
 host and the runtime go with it.
 
+Running closed apps (`firmware/src/closed_apps.rs` and `neotime_app_host::closed_apps`) added
+5,008 B of code to the full build, measured with `cargo size` against master on 2026-10-14
+(405,496 B to 410,504 B of text), and 32 B of static RAM. A first version wrapped the shell's
+system in a second `System` type, which built the host's handler path twice and cost 23.8 KB, so
+the shell's own `WatchSystem` takes the closed app's effects through `ClosedRun::hold_back`.
+On the heap the shell keeps about 20 B for each closed app with a time to come (its id, due and
+record times and run size). A run holds the app's image, its state, interpreter and bindings and
+its saved state, plus what drawing borrows, `closed_run_bytes`: about 11.5 KB for the alarm, whose
+image is 3 KB. It happens beside the open app when the free heap has that plus 2 KB, and otherwise
+after closing it. The host is loaded into its slot out of line (`open_in_background_into`), as
+opening an app does: loading it by value put the load's frame under the first derives, and the
+start-up search for closed apps then peaked at 8,784 B of stack, 1,440 B spare.
+
+Measured in the emulator on 2026-10-14 with the typical install (the `digital` face, the launcher
+and `TYPICAL_APPS`): open the timer from the launcher, start its 10 minutes, leave it, and let it
+ring while closed. The stack pattern was painted before start, and `restart`'s least free heap and
+allocation failure count were read at the end:
+
+| Timer rings over | Stack peak | Spare above the guard | Least free heap | Highest heap byte touched | Resets |
+|---|---:|---:|---:|---:|---:|
+| The face, screen dark | 6,352 B | 3,872 B | 8,996 B | 22,900 B | none |
+| The stopwatch (11,424 B in use), run beside it | 6,352 B | 3,872 B | 9,080 B | 22,644 B | none |
+| Settings (19,200 B in use), closed first and opened again | 6,352 B | 3,872 B | 10,976 B | 20,660 B | none |
+
+Each time the timer opened on its ringing screen and lit the screen, with no allocation refused.
+The same install without the timer started peaks at 5,984 B, as master does. With a 1 KB margin
+the run beside Settings went ahead, leaving 1,304 B free at its lowest and touching the heap to
+30,812 B of 30,976 B, so the margin is 2 KB.
+
 The watch face, the launcher and the apps live in `/apps` on the external flash, and the icons,
 the app host's text font and the accelerometers' configuration files in the shared library after
 the firmware's code; none is inside the code. See

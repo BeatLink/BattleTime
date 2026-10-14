@@ -72,6 +72,11 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   after a crash, a watchdog reset or a restart the watch counts on from where it was, losing only
   the moment the bootloader takes. After a power cut, or the first start of a new firmware, it
   starts from when the firmware was built until a phone sets it.
+- **Alarms and timers ring while their app is closed.** An app's timers, alarms, daily times, clock
+  changes and heart rate periods go on running after it closes. When one comes due the watch loads
+  the app without a screen just long enough to run it. An alarm or timer that rings lights the
+  screen and opens its app over what was open, on its ringing screen, as InfiniTime's do. Going
+  back returns to what was open. While an alarm is set, faces show the bell through `next_alarm`.
 - **Brightness.** The backlight has off, low, medium and high levels.
 - **An always-on screen,** turned on in settings. When the screen times out it dims and switches to
   the panel's low-power mode, and the face keeps drawing. It has not been tried on the watch yet.

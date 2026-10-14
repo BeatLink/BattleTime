@@ -286,6 +286,24 @@ impl<'image> AppHost<'image> {
         Ok(host)
     }
 
+    /// Loads a closed app into `slot`, like `open_in_background`, and returns the host there.
+    ///
+    /// As with `open_into`, the host is built in a step of its own, so its first derives never run below that large frame.
+    pub fn open_in_background_into<'slot>(
+        slot: &'slot mut Option<Self>,
+        image_bytes: &'image [u8],
+        theme: Theme,
+        saved_state: &[u8],
+        now: Value,
+        system: &mut impl System,
+    ) -> Result<&'slot mut Self, OpenError> {
+        verify_image(image_bytes)?;
+        Self::load_into(slot, image_bytes, theme, saved_state, now, system)?;
+        let host = slot.as_mut().ok_or(OpenError::NoScreens)?;
+        host.run_derives(Inputs::NOTHING, true, now, system);
+        Ok(host)
+    }
+
     fn load(
         image_bytes: &'image [u8],
         theme: Theme,
@@ -2103,6 +2121,16 @@ impl<'image> AppHost<'image> {
     /// When the next subscription comes due, leaving out redraws, for while the screen is dark.
     pub fn next_subscription_due(&self, now: Value) -> Option<Value> {
         self.next_timer(now)
+    }
+
+    /// Counts the timers as checked up to `time`, so the next tick fires those due since, as for a closed app loaded again.
+    pub fn check_timers_from(&mut self, time: Value) {
+        self.last_timer_check = time;
+    }
+
+    /// Keeps a heart rate reading for the heart rate subscriptions' next period, without running any handler.
+    pub fn remember_heart_rate(&mut self, beats_per_minute: Value, confidence: Value) {
+        self.latest_heart_rate = [beats_per_minute, confidence];
     }
 
     /// Redraws what reads the system values that changed, given as `SystemValue::bit` values or'd together.

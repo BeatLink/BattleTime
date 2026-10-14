@@ -213,6 +213,8 @@ pub struct FakeSystem {
     pub tasks: Vec<FakeTask>,
     /// The steps in each hour of the step history, at `days_back * 24 + hour`.
     pub step_hours: Vec<Value>,
+    /// While a closed app runs, what it asked of the screen.
+    pub closed_run: Option<neotime_app_host::closed_apps::ClosedRun>,
     /// The watch's files by path, such as the note the phone sent.
     pub files: Vec<(String, Vec<u8>)>,
     /// Every line the app's effects sent the phone, newline included, as the firmware sends them.
@@ -255,6 +257,7 @@ impl FakeSystem {
             app_name: String::new(),
             notifications_changed: false,
             step_hours: starting_step_hours(),
+            closed_run: None,
             tasks: starting_tasks(),
             files: vec![
                 (STARTING_NOTE_PATH.to_string(), STARTING_NOTE.as_bytes().to_vec()),
@@ -511,8 +514,17 @@ impl SystemValues for FakeSystem {
 // What the app host hands back
 // ============================================================================
 
+impl neotime_app_host::closed_apps::RunsClosedApps for FakeSystem {
+    fn closed_run(&mut self) -> &mut Option<neotime_app_host::closed_apps::ClosedRun> {
+        &mut self.closed_run
+    }
+}
+
 impl System for FakeSystem {
     fn carry_out(&mut self, effect: &AppEffect) {
+        if self.closed_run.as_mut().is_some_and(|run| run.hold_back(effect)) {
+            return;
+        }
         let now = self.now_in_milliseconds;
         if self.notifications.carry_out(effect, &self.app_name, now) {
             self.notifications_changed = true;

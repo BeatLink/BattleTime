@@ -661,6 +661,12 @@ impl Files {
         self.now(|store| run_on_heap(neotime_packages::Packages::new(store).read_icon(id)))?
     }
 
+    /// Whether an installed app has subscriptions that run while it is closed, read without its whole image.
+    pub fn runs_while_closed_now(&self, id: &str) -> bool {
+        self.now(|store| run_on_heap(neotime_packages::Packages::new(store).runs_while_closed(id)))
+            == Some(true)
+    }
+
     pub fn read_app_image_now(&self, directory: &str, id: &str) -> Option<alloc::vec::Vec<u8>> {
         self.now(|store| {
             run_on_heap(neotime_packages::Packages::new(store).read_image_in(directory, id)).ok()

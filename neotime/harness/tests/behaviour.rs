@@ -5,6 +5,7 @@ use std::time::Duration;
 use neotime_app_testing::{
     Direction, EffectKind, EventResult, FakeTask, SystemValue, TestWatch, WidgetKind, NONE,
 };
+use neotime_runtime::SystemValues;
 
 // ============================================================================
 // Named numbers
@@ -70,6 +71,183 @@ fn the_timer_rings_when_it_finishes_and_a_dismiss_silences_it() {
     assert!(!watch.effects_of(EffectKind::StopVibrating).is_empty());
     assert!(!watch.shows_text("Time's up"));
     assert!(watch.failures().is_empty());
+}
+
+// ============================================================================
+// Closed apps
+// ============================================================================
+
+#[test]
+fn a_timer_left_running_rings_from_the_face_and_opens_itself_on_a_dark_screen() {
+    let mut watch = TestWatch::open_app("timer").unwrap();
+    let start_button = *watch.tappable_widgets().last().unwrap();
+    watch.tap_widget(start_button);
+    watch.switch_to_face("digital").unwrap();
+    watch.screen_off();
+    assert_eq!(watch.closed_app_ids(), vec!["timer"]);
+
+    watch.advance(Duration::from_secs(10 * 60 - 1));
+    assert_eq!(watch.id(), "digital");
+
+    watch.advance(Duration::from_secs(1));
+
+    assert_eq!(watch.id(), "timer");
+    assert!(watch.is_screen_on());
+    assert!(watch.shows_text("Time's up"), "{:?}", watch.visible_texts());
+    let alarms = watch.effects_of(EffectKind::VibratePattern);
+    assert_eq!(alarms.len(), 1);
+    assert_eq!(alarms[0].number(0), ALARM_PATTERN);
+    assert_eq!(watch.closed_app_ids(), Vec::<String>::new());
+    assert!(watch.failures().is_empty());
+}
+
+#[test]
+fn a_timer_installed_with_a_run_saved_rings_once_its_time_comes() {
+    let mut watch = TestWatch::open_app("timer").unwrap();
+    let start_button = *watch.tappable_widgets().last().unwrap();
+    watch.tap_widget(start_button);
+    watch.switch_to_app("stopwatch").unwrap();
+
+    watch.advance(Duration::from_secs(10 * 60));
+
+    assert_eq!(watch.id(), "timer");
+    assert!(watch.shows_text("Time's up"));
+    watch.tap_text("Dismiss");
+    watch.switch_to_app("stopwatch").unwrap();
+    assert!(watch.closed_app_ids().iter().all(|id| id != "timer"));
+}
+
+/// Sets a one-off alarm for 08:00, the alarm app's default, which is tomorrow at the fake system's 09:00.
+fn set_an_alarm_for_eight() -> TestWatch {
+    let mut watch = TestWatch::open_app("alarm").unwrap();
+    let new_alarm = *watch.tappable_widgets().last().unwrap();
+    watch.tap_widget(new_alarm);
+    let next = *watch.tappable_widgets().last().unwrap();
+    watch.tap_widget(next);
+    let save = *watch.tappable_widgets().last().unwrap();
+    watch.tap_widget(save);
+    assert!(watch.shows_text("in 23:00"), "{:?}", watch.visible_texts());
+    watch
+}
+
+fn shown_icons(watch: &TestWatch) -> usize {
+    watch
+        .visible_widgets()
+        .into_iter()
+        .filter(|&widget| watch.widget_kind(widget) == Some(WidgetKind::Icon))
+        .count()
+}
+
+#[test]
+fn a_set_alarm_shows_the_bell_on_the_face_and_rings_with_the_alarm_app_on_its_ringing_screen() {
+    let mut watch = set_an_alarm_for_eight();
+    let tomorrow_at_eight = watch.now() + 23 * 60 * 60 * 1000;
+    watch.switch_to_face("digital").unwrap();
+    assert_eq!(watch.system().read(SystemValue::NextAlarm), tomorrow_at_eight);
+    let icons_with_bell = shown_icons(&watch);
+
+    watch.screen_off();
+    watch.advance(Duration::from_secs(23 * 60 * 60));
+
+    assert_eq!(watch.id(), "alarm");
+    assert_eq!(watch.screen_name(), Some("ring"));
+    assert!(watch.is_screen_on());
+    assert_eq!(
+        watch
+            .effects_of(EffectKind::VibratePattern)
+            .last()
+            .unwrap()
+            .number(0),
+        ALARM_PATTERN
+    );
+
+    watch.tap_text("Snooze");
+    watch.switch_to_face("digital").unwrap();
+    assert_eq!(
+        watch.system().read(SystemValue::NextAlarm),
+        watch.now() + 10 * 60 * 1000
+    );
+    assert_eq!(shown_icons(&watch), icons_with_bell);
+    assert!(watch.failures().is_empty());
+}
+
+#[test]
+fn the_face_shows_no_bell_once_the_alarm_is_switched_off() {
+    let mut watch = set_an_alarm_for_eight();
+    watch.switch_to_face("digital").unwrap();
+    let icons_with_bell = shown_icons(&watch);
+
+    watch.switch_to_app("alarm").unwrap();
+    let switch = watch
+        .tappable_widgets()
+        .into_iter()
+        .find(|&widget| watch.widget_kind(widget) == Some(WidgetKind::Switch))
+        .unwrap();
+    watch.tap_widget(switch);
+    watch.switch_to_face("digital").unwrap();
+
+    assert_eq!(watch.system().read(SystemValue::NextAlarm), NONE);
+    assert_eq!(shown_icons(&watch), icons_with_bell - 1);
+    assert!(watch.closed_app_ids().iter().all(|id| id != "alarm"));
+}
+
+#[test]
+fn installed_apps_with_nothing_set_stay_unloaded() {
+    let mut watch = TestWatch::open_face("digital").unwrap();
+
+    watch
+        .install_apps(&["alarm", "timer", "pomodoro", "stopwatch"])
+        .unwrap();
+
+    assert_eq!(watch.closed_app_ids(), Vec::<String>::new());
+    assert_eq!(watch.system().read(SystemValue::NextAlarm), NONE);
+}
+
+/// Keeps the latest heart rate a measurement in the background gave, once a minute, even while closed.
+const HEART_LOG_APP: &str = r#"
+// Keeps the latest heart rate once a minute.
+import { define_app, on, persisted, type HeartRateEvent, MINUTE } from "neotime";
+import { Label, Screen } from "neotime/widgets";
+
+const latest = persisted("latest", 0);
+
+function keep(event: HeartRateEvent) {
+  latest.value = event.beats_per_minute;
+}
+
+function Log() {
+  return (
+    <Screen>
+      <Label>{`Latest ${latest.value}`}</Label>
+    </Screen>
+  );
+}
+
+on("heart_rate", keep, { every: MINUTE });
+
+export default define_app({
+  id: "heart-log",
+  name: "Heart log",
+  screens: { main: Log },
+});
+"#;
+
+#[test]
+fn a_closed_app_hears_the_heart_rate_measured_in_the_background() {
+    let mut watch = TestWatch::open_source(HEART_LOG_APP).unwrap();
+    assert!(watch.shows_text("Latest 0"));
+    watch.switch_to_face("digital").unwrap();
+    assert_eq!(watch.closed_app_ids(), vec!["heart-log"]);
+    watch.set_system_value(SystemValue::HeartRateStatus, 3);
+    watch.deliver(neotime_app_testing::PushedEvent::HeartRate {
+        beats_per_minute: 72,
+        confidence: 90,
+    });
+
+    watch.advance(Duration::from_secs(60));
+    watch.switch_to_app("heart-log").unwrap();
+
+    assert!(watch.shows_text("Latest 72"), "{:?}", watch.visible_texts());
 }
 
 // ============================================================================

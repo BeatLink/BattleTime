@@ -40,6 +40,7 @@ pub mod layout {
     /// Each table entry's offset after the table (2 bytes) and length (2).
     pub const TABLE_ENTRY_BYTES: usize = 4;
     pub const STRINGS_SECTION: u16 = 1;
+    pub const SUBSCRIPTIONS_SECTION: u16 = 6;
     pub const RESOURCES_SECTION: u16 = 7;
     pub const LAUNCHER_SECTION: u16 = 11;
     pub const FACTS_SECTION: u16 = 13;

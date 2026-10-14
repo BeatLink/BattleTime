@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use neotime_app_host::closed_apps::ClosedApps;
 use neotime_app_host::{AppFailure, AppHost, EventResult, PushedEvent, Rect, Touch, SCREEN_AREA};
 use neotime_companion::{
     PhoneData, PhoneUpdates, CALL_TEXTS, CALL_VALUES, MUSIC_TEXTS, MUSIC_VALUES, WEATHER_TEXTS,
@@ -22,6 +23,9 @@ use crate::framebuffer::Framebuffer;
 use crate::sources::{
     compile_package, compile_source_text, package_source, shared_library, OpenFailure, PackageKind,
 };
+
+#[path = "closed_apps.rs"]
+mod closed_apps;
 
 // ============================================================================
 // Limits
@@ -46,12 +50,24 @@ const SCREEN_MIDDLE: i32 = 120;
 /// An app open on a fake watch, as a test sees and drives it.
 pub struct TestWatch {
     host: AppHost<'static>,
+    /// The open app's image, which its host borrows.
+    open_image: &'static [u8],
     widgets: WidgetTree<'static>,
     system: FakeSystem,
     framebuffer: Framebuffer,
     is_screen_on: bool,
     /// The music and weather the phone sent through `receive_from_phone`.
     phone: PhoneData,
+    /// The closed apps with subscriptions still to run, as the shell keeps them.
+    closed_apps: ClosedApps,
+    /// The image of every app installed or left, by id, so a closed one can run or open again.
+    images: HashMap<String, &'static [u8]>,
+    /// Each closed app's saved state, as the shell keeps it in `/apps/<id>/state`.
+    saved_states: HashMap<String, Vec<u8>>,
+    /// The installed apps' icons, for a launcher opened again.
+    installed_icons: &'static [&'static [u8]],
+    /// The latest heart rate reading and its confidence, which a closed app's heart rate subscription gets.
+    latest_heart_rate: (Value, Value),
 }
 
 impl TestWatch {
@@ -105,11 +121,17 @@ impl TestWatch {
         let widgets = WidgetTree::new(*host.image());
         Ok(TestWatch {
             host,
+            open_image: image,
             widgets,
             system,
             framebuffer: Framebuffer::new(),
             is_screen_on: true,
             phone: PhoneData::default(),
+            closed_apps: ClosedApps::NONE,
+            images: HashMap::new(),
+            saved_states: HashMap::new(),
+            installed_icons: &[],
+            latest_heart_rate: (0, 0),
         })
     }
 
@@ -127,10 +149,11 @@ impl TestWatch {
             });
             let icon = parsed.has_icon.then(|| parsed.resource_bytes(0)).flatten();
             icons.push(icon.unwrap_or_default());
+            self.keep_installed_app(&text(parsed.id_string), image);
         }
         self.system.installed_apps = installed_apps;
-        self.host
-            .set_installed_app_icons(Box::leak(icons.into_boxed_slice()));
+        self.installed_icons = Box::leak(icons.into_boxed_slice());
+        self.host.set_installed_app_icons(self.installed_icons);
         let now = self.now();
         self.host
             .system_values_changed(SystemValue::InstalledAppCount.bit(), now, &mut self.system);
@@ -359,12 +382,12 @@ impl TestWatch {
         self.system.now_in_milliseconds = now;
     }
 
-    /// Moves the clock on, waking the app at each time it asked for on the way, in order.
+    /// Moves the clock on, waking the app and the closed apps at each time they asked for on the way, in order.
     #[track_caller]
     pub fn advance(&mut self, duration: Duration) {
         let target = self.now() + duration.as_millis() as Value;
         let mut wakeups = 0;
-        while let Some(wakeup) = self.host.next_wakeup(self.now()) {
+        while let Some(wakeup) = self.next_wakeup() {
             // A wakeup due now is taken a millisecond later, so the clock always moves forward.
             let next = wakeup.max(self.now() + 1);
             if next > target {
@@ -379,10 +402,19 @@ impl TestWatch {
             self.set_clock(next);
             self.host.tick(next, &mut self.system);
             self.report_notification_changes();
+            self.run_due_closed_apps();
         }
         self.set_clock(target);
         self.host.tick(target, &mut self.system);
         self.report_notification_changes();
+        self.run_due_closed_apps();
+    }
+
+    /// The earliest time the open app or a closed one asked to wake.
+    fn next_wakeup(&self) -> Option<Value> {
+        let now = self.now();
+        let closed = self.closed_apps.next_due(self.id());
+        [self.host.next_wakeup(now), closed].into_iter().flatten().min()
     }
 
     /// Hands the app an event from the phone or a sensor, and updates the system values it carries.
@@ -391,7 +423,11 @@ impl TestWatch {
     pub fn deliver(&mut self, event: PushedEvent) -> EventResult {
         let now = self.now();
         match event {
-            PushedEvent::HeartRate { beats_per_minute, .. } => {
+            PushedEvent::HeartRate {
+                beats_per_minute,
+                confidence,
+            } => {
+                self.latest_heart_rate = (beats_per_minute, confidence);
                 self.system.set(SystemValue::HeartRate, beats_per_minute);
                 self.system.set(SystemValue::HeartRateMeasuredAt, now);
             }

@@ -45,6 +45,7 @@ tests and given to every app.
 | `deliver(PushedEvent::Steps { .. })` | An event from the phone or a sensor, with the system values it carries. |
 | `receive_from_phone(line)` | A companion line from the phone, read by `neotime-companion` as the watch reads it. |
 | `set_system_value`, `set_system_text`, `screen_off`, `screen_on`, `install_apps(&["timer"])` | Change the battery, the firmware version or another value, the screen, or the launcher's list. |
+| `switch_to_app(id)`, `switch_to_face(id)` | Leaves the open app closed with its state, as the shell does, and opens another. Installed and left apps with timers or alarms run when those come due, and one that calls `wake_screen` opens on the screen its `go` named, with the screen lit; `closed_app_ids()` lists those waiting. |
 | `write_file(path, bytes)`, `reopen()`, `start_on_screen(name)` | Write a file as the phone does, and leave the app and open it again, so it reads the file afresh, or start it on another screen as the shell does. |
 
 | Inspect | Gives |
@@ -55,6 +56,9 @@ tests and given to every app.
 | `phone_lines()` | Every line the app's effects sent the phone, as the firmware builds them, such as `send_to_phone`'s `app` line. |
 | `failures()` | Every `AppFailure` of the app's code. |
 | `frame()`, `pixels_left_stale()` | The drawn 240x240 RGB565 screen; how far drawing only the changes strays from drawing afresh. |
+
+A script's `snapshot` names its picture after the package open at that step, which a switch or a
+closed app that woke may have changed.
 
 The fake system starts at 09:00 UTC on Monday 5 January 2026, with plausible readings such as 87%
 battery, and gives the same random numbers on every run.
@@ -81,6 +85,7 @@ expect no failures
 | Command | Does |
 |---|---|
 | `open app <id>`, `open face <id>` | Compiles and opens `apps/<id>` (or `shell/<id>`) or `faces/<id>`; a script starts with one, and may open another later. |
+| `switch to app <id>`, `switch to face <id>` | Leaves the open app as the shell does, closed with its state kept, and opens another; a closed app's timers and alarms go on and can open it again, as on the watch. |
 | `install <id> ...` | Installs these apps, so a launcher lists them. |
 | `tap X Y`, `tap "text"` | Taps a point, or the middle of the shown widget whose text is exactly that. |
 | `long-press ...`, `double-tap ...` | The same, held or tapped twice. |

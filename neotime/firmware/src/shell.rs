@@ -42,6 +42,7 @@ use embassy_futures::{
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, signal::Signal};
 use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
+use neotime_app_host::closed_apps::{ClosedApps, ClosedRun};
 use neotime_app_host::{
     haptics::{self, Vibration},
     motion as app_motion, phone as app_phone,
@@ -86,6 +87,9 @@ use crate::{
     touch::{self, TOUCHES},
     vibration, SharedDisplay,
 };
+
+#[path = "closed_apps.rs"]
+mod closed_apps;
 
 /// The side button's gestures, from the task that watches it.
 pub static BUTTON_GESTURES: Channel<CriticalSectionRawMutex, Gesture, 2> = Channel::new();
@@ -250,6 +254,10 @@ struct WatchSystem {
     free_storage_wanted: Cell<bool>,
     /// The part of a file the open app read ahead with `prefetch_file`, until a `file_bytes` takes it.
     prefetch: RefCell<Option<Prefetch>>,
+    /// The closed apps with subscriptions still to run, and when each comes due.
+    closed_apps: ClosedApps,
+    /// While a closed app runs, what it asked of the screen.
+    closed_run: Option<ClosedRun>,
 }
 
 /// A part of a file read ahead into RAM, as the file was when `prefetch_file` asked for it.
@@ -290,7 +298,7 @@ impl SystemValues for WatchSystem {
             SystemValue::StepHourCount => (DAYS_REMEMBERED * HOURS_PER_DAY) as Value,
             SystemValue::IsPhoneConnected => phone::is_connected() as Value,
             SystemValue::Brightness => self.brightness as Value,
-            SystemValue::NextAlarm => neotime_runtime::NONE,
+            SystemValue::NextAlarm => self.closed_apps.next_alarm(&self.open_app_id),
             SystemValue::InstalledAppCount => self.installed.listed_count() as Value,
             SystemValue::PackageCount => self.installed.packages.len() as Value,
             SystemValue::AppMemoryBudget => neotime_runtime::APP_HEAP_BUDGET_BYTES as Value,
@@ -506,6 +514,9 @@ impl WatchSystem {
 
 impl System for WatchSystem {
     fn carry_out(&mut self, effect: &AppEffect) {
+        if self.closed_run.as_mut().is_some_and(|run| run.hold_back(effect)) {
+            return;
+        }
         if self
             .notifications
             .carry_out(effect, &self.open_app_name, clock::utc_now())
@@ -636,6 +647,8 @@ struct Shell {
     temporary_id: Option<AppId>,
     /// How opening the temporary app went: the heap it needs, or why it would not open.
     temporary_outcome: Option<Result<u32, PackageError>>,
+    /// Set while a closed app that just vibrated is opened, so opening does not stop the vibration.
+    keeps_vibration_on_open: bool,
 }
 
 impl Shell {
@@ -651,7 +664,9 @@ impl Shell {
         self.finger_left_on_old_screen = true;
         self.close_open_app(now);
         self.save_settings();
-        vibration::request(Some(Vibration::Stop));
+        if !self.keeps_vibration_on_open {
+            vibration::request(Some(Vibration::Stop));
+        }
         heart_rate::stop();
         self.finding_until = None;
         self.system.call_ringing_until = None;
@@ -752,6 +767,7 @@ impl Shell {
         if let Some(mut host) = self.host.take() {
             host.close(now, &mut self.system);
             self.save_state_of(&mut host);
+            self.note_closed_app(&host, now);
         }
         *self.system.prefetch.get_mut() = None;
     }
@@ -810,6 +826,7 @@ impl Shell {
 
     /// Shows the crash page while the previous run's crash waits for the wearer, or else the face; nothing is open before.
     fn show_first_screen(&mut self) {
+        self.find_closed_apps();
         if restart::pending_crash().is_some() {
             self.showing = Showing::Face;
             self.firmware_page = Some(ShownPage::new(FirmwarePage::Crash));
@@ -1743,6 +1760,8 @@ pub async fn run_shell(
             free_storage_wanted: Cell::new(false),
             prefetch: RefCell::new(None),
             call_ringing_until: None,
+            closed_apps: ClosedApps::NONE,
+            closed_run: None,
         },
         theme,
         app_set_brightness: false,
@@ -1774,6 +1793,7 @@ pub async fn run_shell(
         firmware_page: None,
         temporary_id: None,
         temporary_outcome: None,
+        keeps_vibration_on_open: false,
     };
     shell.show_first_screen();
     let mut last_input = Instant::now();
@@ -1796,6 +1816,13 @@ pub async fn run_shell(
         shell.system.find_bootloader_record_if_wanted();
         shell.match_accelerometer_to_app();
 
+        // A closed app that ran may have opened itself or changed the screen, so the loop draws again first.
+        if shell.run_due_closed_apps() {
+            if shell.follow_requests() {
+                last_input = Instant::now();
+            }
+            continue;
+        }
         let now = clock::utc_now();
         let local_now = clock::now();
         shell.chime_if_due(local_now);
@@ -1807,6 +1834,7 @@ pub async fn run_shell(
             Some(host) => host.next_wakeup(now).map_or(Instant::MAX, clock::instant_at),
             None => clock::instant_at(help::next_change(now)),
         };
+        wake_at = wake_at.min(shell.next_closed_app_due());
         if shell.lit && !shell.system.keep_screen_on && !status_holds_screen() {
             wake_at = wake_at.min(next_screen_timeout_step(last_input));
         }

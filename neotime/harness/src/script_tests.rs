@@ -619,6 +619,41 @@ fn heart_navigation_write_and_reopen_reach_the_app() {
 }
 
 #[test]
+fn switch_leaves_the_app_running_closed_and_opens_another() {
+    let script = parse_script(
+        "open app timer\ntap 120 202\nswitch to face digital\nexpect text \"Mon 5 Jan 2026\"\n\
+         wait 10min\nexpect text \"Time's up\"\nswitch to app stopwatch\nexpect text \"00:00\"\n",
+    )
+    .unwrap();
+    assert_eq!(
+        script.steps[2].command,
+        ScriptCommand::SwitchToFace("digital".to_string())
+    );
+    assert_eq!(
+        script.steps[6].command,
+        ScriptCommand::SwitchToApp("stopwatch".to_string())
+    );
+
+    let run = run_script(&script, &std::env::temp_dir(), |_| {});
+
+    assert_eq!(run.failure, None);
+}
+
+#[test]
+fn switching_to_a_missing_package_fails_naming_it() {
+    for (line, expected) in [
+        ("switch to app no-such-app", "the app no-such-app to open"),
+        ("switch to face no-such-face", "the face no-such-face to open"),
+    ] {
+        let run = run_on_scripted_app(&format!("{line}\n"));
+
+        assert_eq!(run.failure.unwrap().expected, expected);
+    }
+    let error = parse_error("switch app timer\n");
+    assert!(error.message.contains("switch to app <id>"), "{error}");
+}
+
+#[test]
 fn start_on_opens_a_screen_and_fails_on_one_the_app_lacks() {
     let script = parse_script(
         "open app notifications\nnotify \"Sam\" \"Hello\"\nstart on preview\nexpect screen preview\n",

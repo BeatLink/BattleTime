@@ -752,6 +752,15 @@ watch face, the launcher and the apps through `neotime-app-host`:
   while the screen is dark it wakes only for the app's subscriptions (`next_subscription_due`),
   and catches the clock's redraws up when the screen turns on. An app's `wake_screen()` and
   `screen_off()` turn the screen on and off, and waking it restarts the timeout.
+- **Closed apps.** `closed_apps.rs` keeps `neotime_app_host::closed_apps::ClosedApps`, a few bytes
+  for each listed app with a subscription that runs while closed. It is filled when the apps are
+  read, by loading each app whose image has such a subscription (`Packages::runs_while_closed` reads
+  only its subscriptions), and again as each app closes. The loop sleeps until the next one too.
+  When one comes due the shell loads it with `open_in_background`, `run_while_closed` fires what is
+  due, and its state is saved. If the free heap is short of the app's `closed_run_bytes` plus 2 KB,
+  the open app is closed first and opened again afterwards. A `wake_screen` from the closed app
+  opens it over what is open, on the screen its `go` named, without stopping its vibration, and
+  lights the screen. `next_alarm` reads the closed `alarm` app's next ring.
 - **Always-on screen.** With the always-on setting, the screen dims instead of turning off: the
   panel enters its 8-colour low-power mode, the backlight drops to a tenth of its low level, and
   the face keeps drawing.

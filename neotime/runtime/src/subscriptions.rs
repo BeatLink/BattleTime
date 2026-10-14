@@ -215,6 +215,13 @@ impl Subscription {
         }
     }
 
+    /// Whether the runtime keeps a time for it while the app is closed: a timer, an alarm, a daily
+    /// time, a clock change or a heart rate period, without `only_while_open`.
+    pub fn runs_while_closed(&self) -> bool {
+        use SubscriptionKind::*;
+        !self.only_while_open && matches!(self.kind, Every | At | Daily | ClockChange | HeartRate)
+    }
+
     /// When a timer-like subscription is next due after `after`, or `None` if it waits on events
     /// or is turned off. `utc_offset` places daily times and clock changes in local time.
     ///

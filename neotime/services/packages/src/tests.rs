@@ -504,6 +504,54 @@ fn the_icon_is_read_on_its_own() {
 }
 
 #[test]
+fn an_app_runs_while_closed_only_with_a_timed_subscription_that_outlives_it() {
+    use neotime_runtime::subscriptions::{Subscription, SubscriptionKind, SubscriptionValue};
+    let subscription = |kind, only_while_open| Subscription {
+        kind,
+        only_while_open,
+        handler: 0,
+        detail: 0,
+        days: 0b111_1111,
+        value: SubscriptionValue::Constant(60_000),
+    };
+    let with = |id: &str, subscriptions: &[Subscription]| {
+        let mut writer = ImageWriter::new(id, id, AppKind::App, 1);
+        writer.handler(Vec::new());
+        for each in subscriptions {
+            writer.subscription(*each);
+        }
+        writer.build()
+    };
+    let mut files = file_system();
+    put(
+        &mut files,
+        "timer",
+        &with("timer", &[subscription(SubscriptionKind::At, false)]),
+    );
+    put(
+        &mut files,
+        "dice",
+        &with("dice", &[subscription(SubscriptionKind::Every, true)]),
+    );
+    put(
+        &mut files,
+        "music",
+        &with("music", &[subscription(SubscriptionKind::Open, false)]),
+    );
+    put(&mut files, "hello", &image("hello", "Hello", AppKind::App));
+    write_raw(&mut files, &app_file("broken", IMAGE_FILE), b"not an image");
+    let mut packages = Packages::new(&mut files);
+
+    assert!(block_on(packages.runs_while_closed("timer")));
+    assert!(!block_on(packages.runs_while_closed("dice")));
+    assert!(!block_on(packages.runs_while_closed("music")));
+    assert!(!block_on(packages.runs_while_closed("hello")));
+    assert!(!block_on(packages.runs_while_closed("broken")));
+    assert!(!block_on(packages.runs_while_closed("nothing")));
+    assert!(!block_on(packages.runs_while_closed("../timer")));
+}
+
+#[test]
 fn an_image_whose_stored_facts_differ_from_its_contents_is_refused() {
     let mut files = file_system();
     let mut bytes = image("timer", "Timer", AppKind::App);

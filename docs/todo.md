@@ -479,11 +479,13 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### App runtime
 
-- [ ] **Run closed apps on the watch.** The shell runs only the open app and never calls
-  `open_in_background`, so an alarm or timer rings only while its app is open. Run each installed app's background subscriptions, set
-  `next_alarm` from the earliest alarm so faces show the bell, and carry out `wake_screen`. A closed
-  run must drop `prefetch_file` in `ClosedRun::hold_back`, since the shell's one read-ahead slot
-  belongs to the open app.
+- [ ] **Pushed events for closed apps.** Closed apps run their timers, alarms, daily times, clock
+  changes and heart rate periods, but steps, step goal, motion, battery, phone, notification, call,
+  music, weather, navigation and settings-change subscriptions reach only the open app. Each would
+  load its listening closed apps through `neotime_app_host::closed_apps` as the timers do.
+- [ ] **An emulator suite for closed apps.** A timer ringing while closed was measured by hand in
+  the emulator ([memory-map.md](memory-map.md)); no suite under `tests/emulator` repeats it, so a
+  later change to that path is not checked for its stack and heap.
 - [ ] **Deliver the remaining sensor and phone events to apps.** The shell pushes steps,
   acceleration, shakes, heart rate and phone notifications. Push the other `motion` kinds (wrist raise, tap,
   double tap, still, moving), battery changes, calls, music, navigation and weather
@@ -498,9 +500,9 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   chain's gain, the LED current and the no-skin limit were never tuned on a real wrist. Compare
   readings with InfiniTime's or a chest strap at rest and walking, and read the diagnostics'
   heart rate counters if the screen shows nothing.
-- [ ] **Heart rate for apps that are not open.** The interval setting measures in the background,
-  but only the open app's `heart_rate_reading` subscriptions hear of it, and no log of the
-  readings is kept beside the step log.
+- [ ] **Heart rate for apps that are not open.** A closed app's `heart_rate` subscription gets the
+  latest reading the interval setting took at each of its periods, but it never starts a
+  measurement itself, and no log of the readings is kept beside the step log.
 - [ ] **Try the beacon on the watch.** The driver's register writes match wasp-os's, but the
   emulator cannot show the LED.
 - [ ] **Run `tools/check_heart_rate.py` and `tools/check_call.py` in CI.** The emulator suites have no

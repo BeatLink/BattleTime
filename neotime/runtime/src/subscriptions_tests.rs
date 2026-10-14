@@ -131,6 +131,18 @@ fn a_subscription_on_a_variable_survives_writing_and_reading() {
 }
 
 #[test]
+fn only_timed_subscriptions_that_outlive_the_open_app_run_while_closed() {
+    use SubscriptionKind::*;
+    let timed = [Every, At, Daily, ClockChange, HeartRate];
+    for kind in SubscriptionKind::ALL {
+        let mut each = subscription(kind, SubscriptionValue::Constant(MILLISECONDS_PER_MINUTE));
+        assert_eq!(each.runs_while_closed(), timed.contains(&kind), "{kind:?}");
+        each.only_while_open = true;
+        assert!(!each.runs_while_closed(), "{kind:?} only while open");
+    }
+}
+
+#[test]
 fn bytes_of_the_wrong_length_do_not_parse() {
     let bytes = subscription(SubscriptionKind::Open, SubscriptionValue::Constant(0)).to_bytes();
 
