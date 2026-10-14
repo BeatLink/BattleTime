@@ -508,13 +508,13 @@ phone through the emulator's Bluetooth bridge.
 
 ## Watchdog and liveness
 
-A separate watchdog task reads the side button's pin straight from the port every 500 ms and feeds
+A separate watchdog task reads the side button's pin straight from the port every second and feeds
 the watchdog only while it is up, so a hold of 4 to 5 seconds resets the watch into the bootloader
 whatever the button task does. It also feeds it only while the shell and the radio make progress,
 as [`neotime-liveness`](services.md#liveness-servicesliveness) judges: the shell's loop count must
 move, and a quiet shell is woken with an empty system value change to prove it still runs; the
-radio's interrupt count must move while it advertises or holds a connection. A shell stopped for six
-checks, or a radio with work stopped for twelve, lets the watchdog reset the watch.
+radio's interrupt count must move while it advertises or holds a connection. A shell stopped for three
+checks, or a radio with work stopped for six, lets the watchdog reset the watch.
 `tests/emulator/liveness.robot` stops the radio's interrupt and sees the reset.
 
 ## Crashes

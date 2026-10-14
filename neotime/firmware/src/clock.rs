@@ -1,6 +1,6 @@
 //! The wall clock: UTC counted on by the chip's timer, with the zone it is shown in.
 //!
-//! Twice a second the clock is kept in RAM a reset leaves as it was, so after a soft or watchdog
+//! Once a second the clock is kept in RAM a reset leaves as it was, so after a soft or watchdog
 //! reset it counts on from where it was; after a power cut, or the first start of a new build, it
 //! starts from when the firmware was built, in UTC, until a phone or the wearer sets it. The time zone and
 //! daylight saving offset are also saved to `/settings/time_zone`, so local time survives a restart
@@ -110,7 +110,7 @@ pub fn instant_at(utc: Value) -> Instant {
 #[link_section = ".uninit.KEPT_CLOCK"]
 static mut KEPT_CLOCK: MaybeUninit<[u32; KEPT_CLOCK_WORDS]> = MaybeUninit::uninit();
 
-/// Writes the clock into RAM a reset keeps; the watchdog task calls it twice a second.
+/// Writes the clock into RAM a reset keeps; the watchdog task calls it once a second.
 pub fn keep() {
     let words = CLOCK.lock(Cell::get).kept_words(uptime());
     unsafe {

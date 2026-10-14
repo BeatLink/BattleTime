@@ -30,7 +30,8 @@ reloaders use. On top it adds what the PineTime needs:
   that crosses the end of memory is split in two.
 - **embedded-graphics.** `Display` is a `DrawTarget` for `Rgb565`, so any `embedded-graphics`
   shape, text or image draws on it.
-- **Power.** `sleep` and `wake` turn the panel off and on and keep its memory. The panel needs
+- **Power.** `sleep` and `wake` turn the panel off and on and keep its memory: `sleep` sends
+  DISPLAY_OFF before ENTER_SLEEP, and `wake` sends DISPLAY_ON once EXIT_SLEEP has settled. The panel needs
   6 ms after either before its next command, and 125 ms between the two
   (`SLEEP_SWITCH_GAP_IN_MILLISECONDS`).
 - **Low-power mode.** `enter_low_power_mode` switches the panel to its idle mode, as InfiniTime

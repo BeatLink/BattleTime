@@ -322,10 +322,10 @@ is in [firmware.md](firmware.md#crashes).
 ### Liveness (`services/liveness`)
 
 `neotime-liveness` judges whether the shell and the radio still make progress, so the watchdog is
-fed only while they do. The watchdog task checks twice a second with each part's counter: the
+fed only while they do. The watchdog task checks once a second with each part's counter: the
 shell's loop count, and the radio's interrupt count while it advertises or holds a connection. A
-quiet shell is asked to prove it still runs (`ping_shell`). A shell stopped for six checks, or a
-radio with work stopped for twelve, is judged stopped. Checks are counted rather than timed, so a
+quiet shell is asked to prove it still runs (`ping_shell`). A shell stopped for three checks, or a
+radio with work stopped for six, is judged stopped. Checks are counted rather than timed, so a
 long blocking job that also stops the watchdog task never counts against a part.
 
 ### Foreground (`services/foreground`)

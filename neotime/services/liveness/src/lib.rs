@@ -1,6 +1,6 @@
 //! Whether the firmware's parts are still making progress, so the watchdog is fed only while they are.
 //!
-//! The watchdog task checks twice a second. Each part shows progress through a counter that moves:
+//! The watchdog task checks once a second. Each part shows progress through a counter that moves:
 //! the shell counts its loops, and the radio counts its interrupts. A part whose counter stands
 //! still for too many checks has stopped, and the watchdog is left to reset the watch. Checks are
 //! counted, not time, so a long blocking job that also stops the watchdog task never counts against
@@ -16,12 +16,12 @@ mod tests;
 // ============================================================================
 
 /// Checks without a shell loop before the shell is asked to loop once.
-pub const SHELL_PING_AFTER: u32 = 2;
+pub const SHELL_PING_AFTER: u32 = 1;
 /// Checks without a shell loop, pings included, before the shell counts as stopped.
-pub const SHELL_STOPPED_AFTER: u32 = 6;
+pub const SHELL_STOPPED_AFTER: u32 = 3;
 /// Checks without a radio interrupt, while the radio has work, before it counts as stopped. Longer
-/// than the longest connection interval, four seconds, at two checks a second.
-pub const RADIO_STOPPED_AFTER: u32 = 12;
+/// than the longest connection interval, four seconds, at one check a second.
+pub const RADIO_STOPPED_AFTER: u32 = 6;
 
 // ============================================================================
 // One part

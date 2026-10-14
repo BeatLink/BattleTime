@@ -360,14 +360,17 @@ fn a_length_with_no_large_divisor_still_splits_exactly() {
 }
 
 #[test]
-fn sleeping_and_waking_send_one_command_each_and_wait_only_a_few_milliseconds() {
+fn sleeping_and_waking_switch_the_display_and_its_sleep_and_wait_only_a_few_milliseconds() {
     let mut display = new_display_with_no_commands_recorded();
     let mut delay = FakeDelay::default();
 
     display.sleep(&mut delay).unwrap();
     display.wake(&mut delay).unwrap();
 
-    assert_eq!(command_codes(&mut display), vec![ENTER_SLEEP, EXIT_SLEEP]);
+    assert_eq!(
+        command_codes(&mut display),
+        vec![DISPLAY_OFF, ENTER_SLEEP, EXIT_SLEEP, DISPLAY_ON]
+    );
     assert_eq!(
         delay.waited_in_nanoseconds,
         2 * u64::from(SLEEP_SWITCH_SETTLE_TIME_IN_MICROSECONDS) * 1_000

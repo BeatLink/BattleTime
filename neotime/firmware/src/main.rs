@@ -128,7 +128,7 @@ const UI_HEAP_SIZE: usize = 20 * 1024 + 256;
 const UI_HEAP_SIZE: usize = 0;
 const HEAP_SIZE: usize = storage::HEAP_SIZE + UI_HEAP_SIZE;
 /// How often the watchdog task reads the button, and feeds the watchdog when it is up.
-const WATCHDOG_CHECK_INTERVAL: Duration = Duration::from_millis(500);
+const WATCHDOG_CHECK_INTERVAL: Duration = Duration::from_secs(1);
 /// The side button's pin on port 0, which reads high while the button is held.
 const SIDE_BUTTON_PIN: usize = 13;
 

@@ -39,6 +39,7 @@ const ENTER_SLEEP: u8 = 0x10;
 const EXIT_SLEEP: u8 = 0x11;
 const NORMAL_MODE_ON: u8 = 0x13;
 const INVERSION_ON: u8 = 0x21;
+const DISPLAY_OFF: u8 = 0x28;
 const DISPLAY_ON: u8 = 0x29;
 const SET_COLUMN_ADDRESS: u8 = 0x2A;
 const SET_ROW_ADDRESS: u8 = 0x2B;
@@ -287,6 +288,7 @@ where
 
     /// Turns the panel off to save power, keeping its memory; the caller keeps waking `SLEEP_SWITCH_GAP_IN_MILLISECONDS` away.
     pub fn sleep(&mut self, delay: &mut impl DelayNs) -> Result<(), Interface::Error> {
+        self.send_command(DISPLAY_OFF, &[])?;
         self.send_command(ENTER_SLEEP, &[])?;
         delay.delay_us(SLEEP_SWITCH_SETTLE_TIME_IN_MICROSECONDS);
         Ok(())
@@ -296,7 +298,7 @@ where
     pub fn wake(&mut self, delay: &mut impl DelayNs) -> Result<(), Interface::Error> {
         self.send_command(EXIT_SLEEP, &[])?;
         delay.delay_us(SLEEP_SWITCH_SETTLE_TIME_IN_MICROSECONDS);
-        Ok(())
+        self.send_command(DISPLAY_ON, &[])
     }
 
     /// Shows only 8 colours at a slow refresh, for an always-on screen; memory keeps every colour.
