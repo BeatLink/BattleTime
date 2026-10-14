@@ -198,7 +198,7 @@ const MEASURED = {"file_system": {"file_sectors": 512, "file_sectors_in_use": 12
 // The page's name for each component tools/measure_memory.py reports, and what it holds.
 const FIRMWARE_PARTS = {
   "Firmware (start-up, shell, tasks)": ["Firmware", "firmware", "Start-up, the status page, the shell and every task with their GATT handling, plus the notifications and quick settings screens compiled in from shell/ (about 2.2 KB)."],
-  "Settings, companion and notifications (with serde)": ["Settings", "firmware", "Settings, the companion app's JSON lines (calls, music, weather, find, status, notifications) and the notification list, with serde."],
+  "Settings, companion and notifications (with serde)": ["Settings", "firmware", "Settings, the companion app's JSON lines (calls, music, weather, navigation, find, status, notifications), what the watch advertises, and the notification list, with serde."],
   "Packages": ["Packages", "runtime", "The package manager: installing, listing and removing apps in /apps."],
   "Updates (DFU)": ["Updates", "boot", "Legacy DFU and the update and recovery receivers."],
   "App host (with `neotime-ui`)": ["App host", "runtime", "Lays out and draws an app's widget tree with neotime-ui and NeoTime's own strip renderer."],

@@ -235,6 +235,13 @@ starts but keeps clear of it: its statics are 336 B at the bottom of RAM and its
 4.7 KB below the alive marker in an ordinary start, measured in the emulator, against the record's
 10.3 KB. A stack that grew into the record would only happen after the firmware's own stack had
 already overflowed.
+Advertising like InfiniTime, the `gadgetbridge_name` setting, Gadgetbridge's `nav` message, the
+`request` lines and rounding fractions in companion lines took 2,816 B of flash (2,808 B of text and
+8 B of data) and 48 B of static RAM in the full build, against `cargo size` of master 5eaf23f2, and
+312 B in the recovery build. Advertising itself saved about 450 B, since the advertisement is a
+constant rather than encoded at start; most of the cost is the `nav` reader and serde's
+deserializers, which the larger line parser no longer inlines. A line with a fraction is copied
+once on the heap while it is read.
 The wake gestures (raise, lower and shake to wake, sleep mode and the face's double tap) took 3,808 B
 of flash, 16 B of data and 312 B of static RAM, against `cargo size` of master 97551242: the wake
 gesture detector, about 130 B, lives in the motion task's state and the double tap finder in the
