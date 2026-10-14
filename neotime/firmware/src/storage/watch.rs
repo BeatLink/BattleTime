@@ -641,6 +641,22 @@ impl Files {
         self.now(|store| run_on_heap(FileAccess::write_file(store, path, bytes)).is_ok()) == Some(true)
     }
 
+    /// Lists the folder at `path` into `folder` from every file of the store; false when the store is busy or missing.
+    pub fn list_folder_now(&self, path: &str, folder: &mut neotime_app_host::folder::FolderListing) -> bool {
+        if !folder.begin(path) {
+            return true;
+        }
+        let listed = self.now(|store| {
+            run_on_heap(FileAccess::for_each_file_with_length(
+                store,
+                "/",
+                &mut |file_path, length| folder.add_file(file_path, length),
+            ))
+            .is_ok()
+        });
+        listed == Some(true)
+    }
+
     pub fn free_kilobytes_now(&self) -> Option<u32> {
         self.now(|store| (FileAccess::free_bytes(store) / 1024) as u32)
     }

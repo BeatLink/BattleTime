@@ -3,7 +3,7 @@
 
 use std::cell::Cell;
 
-use neotime_app_host::{AppEffect, AppFailure, System};
+use neotime_app_host::{folder::FolderListing, AppEffect, AppFailure, System};
 use neotime_notifications::NotificationList;
 use neotime_packages::faces::face_number;
 use neotime_runtime::resources::ImageReference;
@@ -182,7 +182,7 @@ impl RecordedEffect {
 fn text_arguments(kind: EffectKind) -> &'static [usize] {
     use EffectKind::*;
     match kind {
-        Go | OpenApp | ShowToast | Log | SetSetting | SetAppEnabled | PrefetchFile => &[0],
+        Go | OpenApp | ShowToast | Log | SetSetting | SetAppEnabled | PrefetchFile | OpenFolder => &[0],
         Notify | SendToPhone => &[0, 1],
         _ => &[],
     }
@@ -245,6 +245,10 @@ pub struct FakeSystem {
     pub files: Vec<(String, Vec<u8>)>,
     /// Every line the app's effects sent the phone, newline included, as the firmware sends them.
     pub phone_lines: Vec<String>,
+    /// The folder the app last opened with `open_folder`, listed from `files`.
+    pub folder: FolderListing,
+    /// Set when the app opened a folder, so the watch tells the app once the call returns.
+    pub folder_changed: bool,
     random_state: Cell<u32>,
     effects: Vec<RecordedEffect>,
     failures: Vec<AppFailure>,
@@ -295,6 +299,8 @@ impl FakeSystem {
                 (STARTING_QR_LIST_PATH.to_string(), STARTING_QR_LIST.to_vec()),
             ],
             phone_lines: Vec::new(),
+            folder: FolderListing::new(),
+            folder_changed: false,
             random_state: Cell::new(RANDOM_SEED),
             effects: Vec::new(),
             failures: Vec::new(),
@@ -406,7 +412,7 @@ impl Default for FakeSystem {
 
 impl SystemValues for FakeSystem {
     fn read(&self, value: SystemValue) -> Value {
-        if let Some(number) = self.notifications.read(value) {
+        if let Some(number) = self.notifications.read(value).or_else(|| self.folder.read(value)) {
             return number;
         }
         match value {
@@ -423,12 +429,18 @@ impl SystemValues for FakeSystem {
     }
 
     fn read_text(&self, value: SystemValue) -> &str {
+        if let Some(text) = self.folder.read_text(value) {
+            return text;
+        }
         &self.texts[value as usize]
     }
 
     fn read_element(&self, value: SystemValue, index: Value) -> Value {
         if value.bit() == SystemValue::UnreadNotifications.bit() {
             return self.notifications.read_element(value, index);
+        }
+        if let Some(number) = self.folder.read_element(value, index) {
+            return number;
         }
         let Ok(place) = usize::try_from(index) else {
             return NONE;
@@ -489,6 +501,9 @@ impl SystemValues for FakeSystem {
     fn read_element_text(&self, value: SystemValue, index: Value) -> &str {
         if value.bit() == SystemValue::UnreadNotifications.bit() {
             return self.notifications.read_element_text(value, index);
+        }
+        if let Some(text) = self.folder.read_element_text(value, index) {
+            return text;
         }
         let place = usize::try_from(index).unwrap_or(usize::MAX);
         if value == SystemValue::LauncherGroupName {
@@ -564,6 +579,9 @@ impl System for FakeSystem {
                 }
             }
         }
+        if effect.kind == EffectKind::OpenFolder {
+            self.list_folder(effect.text(0).unwrap_or_default());
+        }
         if let Some(line) = neotime_app_host::phone::line_for_effect(effect.kind, effect.number(0)) {
             self.phone_lines.push(line.to_string());
         }
@@ -590,5 +608,19 @@ impl System for FakeSystem {
 
     fn app_failed(&mut self, failure: AppFailure) {
         self.failures.push(failure);
+    }
+}
+
+impl FakeSystem {
+    /// Lists a folder of `files` at once, where the watch lists it once the handler returns.
+    fn list_folder(&mut self, path: &str) {
+        let mut folder = std::mem::take(&mut self.folder);
+        if folder.begin(path) {
+            for (file_path, bytes) in &self.files {
+                folder.add_file(file_path, bytes.len());
+            }
+        }
+        self.folder = folder;
+        self.folder_changed = true;
     }
 }

@@ -291,6 +291,34 @@ mod status_screen {
 }
 
 #[test]
+fn a_folder_of_the_storage_folder_is_listed_with_its_sizes() {
+    use neotime_runtime::{SystemValue, SystemValues};
+
+    let folder = std::env::temp_dir().join(format!("neotime-simulator-folders-{}", std::process::id()));
+    std::fs::create_dir_all(folder.join("remote/more")).unwrap();
+    std::fs::write(folder.join("remote/buttons"), [1, 3, 26]).unwrap();
+    std::fs::write(folder.join("remote/more/keys"), [0; 10]).unwrap();
+    std::fs::write(folder.join("note"), [0; 4]).unwrap();
+    let mut system = crate::app::test_system_with_storage(&folder);
+
+    system.list_folder("/remote/more/..");
+
+    assert_eq!(system.read_text(SystemValue::FolderPath), "/remote");
+    assert_eq!(system.read(SystemValue::FolderEntryCount), 2);
+    assert_eq!(system.read_element_text(SystemValue::FolderEntryName, 0), "more");
+    assert_eq!(system.read_element(SystemValue::FolderEntrySize, 0), 10);
+    assert_eq!(system.read_element(SystemValue::FolderEntryIsFolder, 0), 1);
+    assert_eq!(
+        system.read_element_text(SystemValue::FolderEntryName, 1),
+        "buttons"
+    );
+    assert_eq!(system.read_element(SystemValue::FolderEntrySize, 1), 3);
+    system.list_folder("/");
+    assert_eq!(system.read_element(SystemValue::FolderEntrySize, 0), 13);
+    std::fs::remove_dir_all(&folder).unwrap();
+}
+
+#[test]
 fn watch_files_are_read_from_the_storage_folder() {
     use crate::app::read_storage_file;
     use neotime_runtime::SystemValues;

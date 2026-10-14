@@ -551,10 +551,12 @@ then the About facts `firmware_build_date`, `bootloader_version`, `bootloader_bu
 `raise_to_wake`, `lower_to_sleep`, `shake_to_wake`, `shake_threshold` and `sleep_mode`, which share
 the other settings' bit, and `shake_speed`, which has bit 25 to itself since it changes ten times a
 second. 108 and 109 are the settings' `watch_face`, the number of the face shown, and
-`watch_face_name`, its name as text, which share the other settings' bit.
+`watch_face_name`, its name as text, which share the other settings' bit. 114 to 118 are the open
+folder's `path`, its entry count and its entries' lists of `name`, `size` and `is_folder`, which
+share bit 26 of their own.
 `read system element` reads a list's elements through `SystemValues::read_element`, or
 `read_element_text` for the names, ids and notification texts, the packages' too. The location, artist, track,
-instruction, firmware version, reset reason, build dates, bootloader version, task names and watch face name are text: the system hands them
+instruction, firmware version, reset reason, build dates, bootloader version, task names, watch face name, folder path and entry names are text: the system hands them
 over through `SystemValues::read_text`, and `read system` copies them into the call's text buffer.
 Values the phone sends together share one bit of an input mask, so all the weather values redraw
 together, and the four a system info screen shows share another; that keeps the mask in 32 bits.
@@ -566,8 +568,8 @@ Effects, in the order `effect` numbers them, with how many arguments each takes:
 `music_control` (1), `call_control` (1), `find_phone` (1), `measure_heart_rate`,
 `start_heart_rate`, `stop_heart_rate`, `reset_step_trip`, `set_setting` (2), `set_do_not_disturb` (1),
 `log` (1), `request_music_state`, `set_heart_rate_led` (3), `set_bluetooth` (1),
-`request_navigation_state`, `set_app_enabled` (2), `prefetch_file` (3), then, numbered 35,
-`step_watch_face` (1).
+`request_navigation_state`, `set_app_enabled` (2), `prefetch_file` (3), `open_folder` (1), then,
+numbered 35, `step_watch_face` (1).
 `send_to_phone`'s two arguments are texts: the channel, and the data as the JSON object the compiler
 builds, which the firmware sends as `{"t":"app","ch":...,"d":...}`.
 `vibrate_sequence` and `http_request` need arrays and more arguments, and come later.

@@ -66,6 +66,7 @@ pub fn effect_signature(name: &str) -> Option<(EffectKind, &'static [Type])> {
         "set_app_enabled" => (EffectKind::SetAppEnabled, &[TEXT, BOOL]),
         "prefetch_file" => (EffectKind::PrefetchFile, &[TEXT, NUMBER, NUMBER]),
         "step_watch_face" => (EffectKind::StepWatchFace, &[NUMBER]),
+        "open_folder" => (EffectKind::OpenFolder, &[TEXT]),
         _ => return None,
     })
 }

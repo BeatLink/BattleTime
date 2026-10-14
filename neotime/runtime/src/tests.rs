@@ -2266,7 +2266,7 @@ fn shows_and_joins_text_the_system_keeps() {
 
 #[test]
 fn every_system_value_has_a_bit_in_the_mask_and_related_values_share_one() {
-    let values = (0..SystemValue::COUNT as u8).map(|byte| SystemValue::from_byte(byte).unwrap());
+    let values = (0..SystemValue::COUNT as u8).filter_map(SystemValue::from_byte);
 
     for value in values {
         assert!(value.bit().trailing_zeros() < 32);
@@ -2315,7 +2315,7 @@ fn the_watch_face_and_its_name_are_settings_numbered_108_and_109_and_stepped_by_
     assert!(!SystemValue::WatchFace.is_text());
     assert_eq!(EffectKind::from_byte(35), Some(EffectKind::StepWatchFace));
     assert_eq!(EffectKind::StepWatchFace as u8, 35);
-    assert_eq!(EffectKind::from_byte(32), None);
+    assert_eq!(EffectKind::from_byte(33), None);
     assert_eq!(EffectKind::StepWatchFace.argument_count(), 1);
 }
 
@@ -2431,6 +2431,36 @@ fn the_package_values_change_with_the_installed_apps_and_list_names_and_ids_as_t
     assert_eq!(EffectKind::SetAppEnabled.argument_count(), 2);
     assert_eq!(EffectKind::from_byte(31), Some(EffectKind::PrefetchFile));
     assert_eq!(EffectKind::PrefetchFile.argument_count(), 3);
+}
+
+#[test]
+fn the_folder_values_share_one_bit_with_names_and_the_path_as_text() {
+    assert_eq!(SystemValue::from_byte(114), Some(SystemValue::FolderPath));
+    assert_eq!(
+        SystemValue::from_byte(118),
+        Some(SystemValue::FolderEntryIsFolder)
+    );
+    assert_eq!(SystemValue::from_byte(119), None);
+    for value in [
+        SystemValue::FolderPath,
+        SystemValue::FolderEntryCount,
+        SystemValue::FolderEntryName,
+        SystemValue::FolderEntrySize,
+        SystemValue::FolderEntryIsFolder,
+    ] {
+        assert_eq!(SystemValue::from_byte(value as u8), Some(value));
+        assert_eq!(value.bit(), 1 << 26);
+    }
+    assert!(SystemValue::FolderPath.is_text());
+    assert!(!SystemValue::FolderPath.is_list());
+    assert!(!SystemValue::FolderEntryCount.is_list());
+    assert!(SystemValue::FolderEntryName.is_list());
+    assert!(SystemValue::FolderEntryName.is_text());
+    assert!(SystemValue::FolderEntrySize.is_list());
+    assert!(!SystemValue::FolderEntrySize.is_text());
+    assert!(SystemValue::FolderEntryIsFolder.is_list());
+    assert_eq!(EffectKind::from_byte(32), Some(EffectKind::OpenFolder));
+    assert_eq!(EffectKind::OpenFolder.argument_count(), 1);
 }
 
 // ============================================================================

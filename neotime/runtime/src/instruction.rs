@@ -186,6 +186,16 @@ pub enum SystemValue {
     WatchFace,
     /// Text: the name of the face the watch shows, or nothing with no face on.
     WatchFaceName,
+    /// Text: the folder `open_folder` last listed, such as `/apps`, or nothing before the first.
+    FolderPath = 114,
+    /// How many entries that folder holds, folders first and then files, each by name.
+    FolderEntryCount = 115,
+    /// Text list: each entry's name, without the folder's path.
+    FolderEntryName = 116,
+    /// List: each entry's size in bytes, a folder's being the sum of every file inside it.
+    FolderEntrySize = 117,
+    /// List: whether each entry is a folder.
+    FolderEntryIsFolder = 118,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -202,8 +212,11 @@ const CALL_BIT: u32 = 24;
 /// The shake speed changes ten times a second, so it has a bit of its own.
 const SHAKE_SPEED_BIT: u32 = 25;
 
+/// The listed folder's values share one bit, as one listing changes them together.
+const FOLDER_BIT: u32 = 26;
+
 impl SystemValue {
-    pub const COUNT: usize = 110;
+    pub const COUNT: usize = 119;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -318,6 +331,11 @@ impl SystemValue {
             107 => ShakeSpeed,
             108 => WatchFace,
             109 => WatchFaceName,
+            114 => FolderPath,
+            115 => FolderEntryCount,
+            116 => FolderEntryName,
+            117 => FolderEntrySize,
+            118 => FolderEntryIsFolder,
             _ => return None,
         })
     }
@@ -361,6 +379,9 @@ impl SystemValue {
             | FreeHeapBytes | LeastFreeHeapBytes | AllocationFailures | StackOverflows | TaskCount
             | TaskName | TaskRuns | TaskBusyMilliseconds => SYSTEM_INFO_BIT,
             CallCaller | CallState => CALL_BIT,
+            FolderPath | FolderEntryCount | FolderEntryName | FolderEntrySize | FolderEntryIsFolder => {
+                FOLDER_BIT
+            }
             other => other as u32,
         };
         1 << group
@@ -398,6 +419,9 @@ impl SystemValue {
                 | TaskName
                 | TaskRuns
                 | TaskBusyMilliseconds
+                | FolderEntryName
+                | FolderEntrySize
+                | FolderEntryIsFolder
         )
     }
 
@@ -426,6 +450,8 @@ impl SystemValue {
                 | BootloaderBuildDate
                 | TaskName
                 | WatchFaceName
+                | FolderPath
+                | FolderEntryName
         )
     }
 }
@@ -614,6 +640,8 @@ pub enum EffectKind {
     /// Starts reading a path's bytes from an offset into RAM in the background, at most
     /// `PREFETCH_BYTES` of them, so a later `file_bytes` of that part finds them there.
     PrefetchFile,
+    /// Lists a folder of the watch's storage into the `Folder` system values, soon after the handler ends.
+    OpenFolder = 32,
     /// Chooses the face that many places on among the faces turned on, wrapping round, or back when negative.
     StepWatchFace = 35,
 }
@@ -654,6 +682,7 @@ impl EffectKind {
             29 => RequestNavigationState,
             30 => SetAppEnabled,
             31 => PrefetchFile,
+            32 => OpenFolder,
             35 => StepWatchFace,
             _ => return None,
         })
@@ -677,7 +706,7 @@ impl EffectKind {
             | ResetStepTrip => 0,
             Vibrate | VibratePattern | SetBrightness | KeepScreenOn | Go | OpenApp | ShowToast
             | DismissNotification | MusicControl | CallControl | SetDoNotDisturb | Log | FindPhone
-            | SetBluetooth | StepWatchFace => 1,
+            | SetBluetooth | StepWatchFace | OpenFolder => 1,
             Notify | SendToPhone | SetSetting | SetAppEnabled => 2,
             SetHeartRateLed | PrefetchFile => 3,
         }

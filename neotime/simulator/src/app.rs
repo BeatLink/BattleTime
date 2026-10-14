@@ -18,7 +18,8 @@ use std::{
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use embedded_graphics_simulator::{sdl2::Keycode, OutputSettings, SimulatorDisplay, SimulatorEvent, Window};
 use neotime_app_host::{
-    settings, AppEffect, AppFailure, AppHost, EventResult, PushedEvent, System, Touch, STRIP_PIXELS,
+    folder::FolderListing, settings, AppEffect, AppFailure, AppHost, EventResult, PushedEvent, System, Touch,
+    STRIP_PIXELS,
 };
 use neotime_app_testing::{
     starting_step_hours, HOURS_PER_DAY, STARTING_DAY_STEPS, STARTING_TRIP_STEPS, STEP_HISTORY_DAYS,
@@ -103,6 +104,10 @@ pub struct SimulatedSystem {
     started_at: Value,
     /// The folder standing in for the watch's storage, if one was given.
     storage_folder: Option<PathBuf>,
+    /// The folder of the storage the app last opened with `open_folder`.
+    folder: FolderListing,
+    /// Set when the app opened a folder, so it is told once the host call returns.
+    folder_changed: bool,
     /// The simulated heart rate sensor's thread, when the simulator runs in a window.
     heart_rate_link: Option<HeartRateLink>,
     /// The sensor's latest reading and when it came, or none before the first.
@@ -142,6 +147,8 @@ impl SimulatedSystem {
             theme_request: None,
             started_at: wall_clock_in_milliseconds(),
             storage_folder: files.storage_folder.map(Path::to_path_buf),
+            folder: FolderListing::new(),
+            folder_changed: false,
             heart_rate_link,
             latest_heart_rate: None,
             heart_rate_status: Status::Stopped,
@@ -164,6 +171,9 @@ impl SimulatedSystem {
         let changed = core::mem::take(&mut self.changed_settings);
         if changed != 0 {
             settings::tell_app_about_changes(host, changed, now, self);
+        }
+        if core::mem::take(&mut self.folder_changed) {
+            host.report_system_value_changes(SystemValue::FolderPath.bit(), now, self);
         }
         if let Some(theme) = self.theme_request.take() {
             self.theme_preset = settings::preset_number(&theme);
@@ -210,6 +220,9 @@ impl SystemValues for SimulatedSystem {
         let now = wall_clock_in_milliseconds();
         if let Some(setting) = settings::read_setting(&self.settings, value) {
             return setting;
+        }
+        if let Some(number) = self.folder.read(value) {
+            return number;
         }
         if value == ThemePreset {
             return self.theme_preset;
@@ -258,6 +271,9 @@ impl SystemValues for SimulatedSystem {
     }
 
     fn read_element_text(&self, value: SystemValue, index: Value) -> &str {
+        if let Some(text) = self.folder.read_element_text(value, index) {
+            return text;
+        }
         if value == SystemValue::TaskName {
             return if index == 0 { SIMULATED_TASK_NAME } else { "" };
         }
@@ -276,6 +292,9 @@ impl SystemValues for SimulatedSystem {
 
     /// A three-day forecast: each day's condition, low and high; the installed apps' icons; and the test watch's steps.
     fn read_element(&self, value: SystemValue, index: Value) -> Value {
+        if let Some(number) = self.folder.read_element(value, index) {
+            return number;
+        }
         if let Some(steps) = simulated_steps(value, index) {
             return steps;
         }
@@ -303,6 +322,9 @@ impl SystemValues for SimulatedSystem {
 
     fn read_text(&self, value: SystemValue) -> &str {
         use SystemValue::*;
+        if let Some(text) = self.folder.read_text(value) {
+            return text;
+        }
         match value {
             WeatherLocation => "Simulated City",
             MusicArtist => "The Simulators",
@@ -325,6 +347,41 @@ impl SystemValues for SimulatedSystem {
         state ^= state << 5;
         self.random_state.set(state);
         state
+    }
+}
+
+impl SimulatedSystem {
+    /// Lists a folder of the storage folder at once, where the watch lists it once the handler returns.
+    pub(crate) fn list_folder(&mut self, path: &str) {
+        if self.folder.begin(path) {
+            if let Some(storage) = &self.storage_folder {
+                for_each_storage_file(storage, "", &mut |file_path, length| {
+                    self.folder.add_file(file_path, length)
+                });
+            }
+        }
+        self.folder_changed = true;
+    }
+}
+
+/// Gives `visit` every file under a folder of the computer as the watch's path and its length, such as `/remote/buttons`.
+pub fn for_each_storage_file(folder: &Path, watch_path: &str, visit: &mut dyn FnMut(&str, usize)) {
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
+        let inner_path = format!("{watch_path}/{name}");
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if kind.is_dir() {
+            for_each_storage_file(&entry.path(), &inner_path, visit);
+        } else if let Ok(metadata) = entry.metadata() {
+            visit(&inner_path, metadata.len() as usize);
+        }
     }
 }
 
@@ -371,7 +428,7 @@ fn simulated_steps(value: SystemValue, index: Value) -> Option<Value> {
 fn text_arguments(kind: EffectKind) -> &'static [usize] {
     use EffectKind::*;
     match kind {
-        Go | OpenApp | ShowToast | Log | SetSetting | PrefetchFile => &[0],
+        Go | OpenApp | ShowToast | Log | SetSetting | PrefetchFile | OpenFolder => &[0],
         Notify | SendToPhone => &[0, 1],
         _ => &[],
     }
@@ -434,6 +491,7 @@ impl System for SimulatedSystem {
                 self.change_setting(Setting::DoNotDisturb.name(), effect.number(0))
             }
             EffectKind::SetBluetooth => self.change_setting(Setting::Bluetooth.name(), effect.number(0)),
+            EffectKind::OpenFolder => self.list_folder(effect.text(0).unwrap_or("")),
             EffectKind::StartHeartRate | EffectKind::StopHeartRate | EffectKind::MeasureHeartRate => {
                 if let Some(link) = &self.heart_rate_link {
                     match effect.kind {
@@ -461,6 +519,15 @@ pub fn test_system_with_heart_rate(link: HeartRateLink) -> SimulatedSystem {
     }
 }
 
+/// A simulated system with no motor whose storage is a folder of the computer, for tests.
+#[cfg(test)]
+pub fn test_system_with_storage(folder: &Path) -> SimulatedSystem {
+    SimulatedSystem {
+        storage_folder: Some(folder.to_path_buf()),
+        ..test_system()
+    }
+}
+
 /// A simulated system with no motor, for tests.
 #[cfg(test)]
 pub fn test_system() -> SimulatedSystem {
@@ -474,6 +541,8 @@ pub fn test_system() -> SimulatedSystem {
         theme_request: None,
         started_at: 0,
         storage_folder: None,
+        folder: FolderListing::new(),
+        folder_changed: false,
         heart_rate_link: None,
         latest_heart_rate: None,
         heart_rate_status: Status::Stopped,

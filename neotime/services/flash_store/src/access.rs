@@ -59,6 +59,12 @@ pub trait FileAccess {
     async fn delete_file(&mut self, path: &str) -> Result<(), FileError>;
     /// Gives `visit` every file's path that starts with `prefix`, each once.
     async fn for_each_file(&mut self, prefix: &str, visit: &mut dyn FnMut(&str)) -> Result<(), FileError>;
+    /// Gives `visit` every file's path that starts with `prefix` and its length in bytes, each once.
+    async fn for_each_file_with_length(
+        &mut self,
+        prefix: &str,
+        visit: &mut dyn FnMut(&str, usize),
+    ) -> Result<(), FileError>;
     /// The bytes of the file area, and how many are free, counted in whole sectors.
     fn total_bytes(&self) -> usize;
     fn free_bytes(&self) -> usize;
@@ -110,6 +116,14 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
 
     async fn for_each_file(&mut self, prefix: &str, visit: &mut dyn FnMut(&str)) -> Result<(), FileError> {
         Ok(FlashStore::for_each_file(self, prefix, visit).await?)
+    }
+
+    async fn for_each_file_with_length(
+        &mut self,
+        prefix: &str,
+        visit: &mut dyn FnMut(&str, usize),
+    ) -> Result<(), FileError> {
+        Ok(FlashStore::for_each_file_with_length(self, prefix, visit).await?)
     }
 
     fn total_bytes(&self) -> usize {

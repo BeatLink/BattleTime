@@ -1,0 +1,13 @@
+# Every screen of the files app, for docs/apps/files.md: the top folder, then a folder inside it.
+open app files
+expect text "notes"
+expect text "Folder, 172 B"
+tap "qr"
+expect screen inside
+expect text "/qr"
+expect text "118 B"
+snapshot inside
+button
+expect screen main
+expect text "temp"
+expect no failures

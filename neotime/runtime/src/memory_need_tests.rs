@@ -297,3 +297,21 @@ fn an_app_that_reads_ahead_holds_room_for_one_prefetch() {
         need_of(&plain).working_bytes + PREFETCH_BYTES
     );
 }
+
+#[test]
+fn an_app_that_opens_folders_holds_room_for_one_listing() {
+    let mut plain = writer();
+    plain.widget(WidgetKind::Column, 0, &[]);
+    let mut lists_folders = writer();
+    lists_folders.widget(WidgetKind::Column, 0, &[]);
+    let mut code = CodeWriter::new();
+    code.emit(Instruction::PushSmall(0));
+    code.emit(Instruction::Effect(crate::EffectKind::OpenFolder));
+    lists_folders.handler(code.finish().unwrap());
+
+    assert_eq!(
+        need_of(&lists_folders).working_bytes,
+        need_of(&plain).working_bytes + FOLDER_LISTING_BYTES
+    );
+    assert_eq!(FOLDER_LISTING_BYTES, 1_600);
+}

@@ -46,22 +46,22 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 118.8 KB | 45.3 KB |
-| App host (with `neotime-ui`) | 88.1 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 120.1 KB | 45.4 KB |
+| App host (with `neotime-ui`) | 88.9 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 42.7 KB | 45.4 KB |
-| App runtime | 35.6 KB | 0.0 KB |
-| core, alloc and compiler builtins | 25.9 KB | 14.7 KB |
+| App runtime | 35.8 KB | 0.0 KB |
+| core, alloc and compiler builtins | 26.0 KB | 14.7 KB |
 | Embassy, allocator and Cortex-M | 20.1 KB | 5.5 KB |
-| Storage (flash store) | 16.8 KB | 14.0 KB |
+| Storage (flash store) | 16.9 KB | 14.0 KB |
 | Settings, companion and notifications (with serde) | 14.2 KB | 2.3 KB |
-| BLEFS file service | 9.0 KB | 2.7 KB |
+| BLEFS file service | 9.0 KB | 2.8 KB |
 | Packages | 8.6 KB | 1.3 KB |
 | Display, graphics and drivers | 5.6 KB | 3.2 KB |
 | Updates (DFU) | 2.6 KB | 2.5 KB |
-| Other constants and padding | 30.2 KB | 15.2 KB |
-| **Code and data** | **418.3 KB** | **152.0 KB** |
+| Other constants and padding | 30.4 KB | 15.1 KB |
+| **Code and data** | **421.0 KB** | **152.3 KB** |
 | Shared library, after the code | 45.7 KB | none |
-| Free of the 480 KB region, after its header | 15.7 KB | 327.7 KB |
+| Free of the 480 KB region, after its header | 13.1 KB | 327.4 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -262,13 +262,13 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (system 10 KB, UI 20.25 KB; the recovery build has no UI heap) | 30,976 B | 10,240 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 21,813 B | 12,413 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 21,861 B | 12,413 B |
 | Bluetooth controller | 2,545 B | 2,545 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | App host (with `neotime-ui`) | 28 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **55,792 B** | **25,596 B** |
-| Left for the stack | 9,728 B | 39,924 B |
+| **Static RAM** (`.data` and `.bss`) | **55,840 B** | **25,596 B** |
+| Left for the stack | 9,680 B | 39,924 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
@@ -302,6 +302,7 @@ it opens one. The parts, in bytes:
 | Saved state | `saved_state_bytes` | The buffer the shell writes it from when the app closes, and reads it into when it opens |
 | Passing use | 1,536 | Drawing, the image checks at open, and the allocator's gaps |
 | Read ahead | 4,096 when the app calls `prefetch_file` | The one file part it holds until a `file_bytes` takes it |
+| Folder listing | 1,600 when the app calls `open_folder` | The listed folder's path (64), 64 entries of 8 and 1,024 for their names, reserved when a folder is listed |
 | Nodes | 164 per widget of the largest screen | A node and its place in the list; every widget counts as shown, a Repeat counts each row (8 when the count is worked out at run time, only those in view down a list of fixed-height rows), and no screen more than 128 |
 | Text | each fixed text's length, 16 for text worked out at run time, 2,560 for a TextFile | |
 

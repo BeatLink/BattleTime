@@ -232,6 +232,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   shows one black on white at full brightness for another phone to scan, reading only that code
   from storage. See [apps/qr-code.md](apps/qr-code.md) and
   [companion-protocol.md](companion-protocol.md#qr-code).
+- **Files.** The Files app lists what the watch keeps on its external flash, a folder at a time:
+  folders first, then files, each with its size, a folder's being everything inside it. Tap a
+  folder to open it; the side button goes back up. See [apps/files.md](apps/files.md).
 - **31 apps** ported from InfiniTime and wasp-os, merged where both firmwares had the same app:
   stopwatch, timer, alarm, pomodoro, calculator, dice, flashlight, phone finder, system, heart rate, steps,
   sports, music, weather, navigation, metronome, motion, level, beacon, 2048, paddle,

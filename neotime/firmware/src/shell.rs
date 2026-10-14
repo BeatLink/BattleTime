@@ -50,6 +50,7 @@ use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_accelerometer::wake_gestures::WakeGesture;
 use neotime_app_host::closed_apps::{ClosedApps, ClosedRun};
 use neotime_app_host::{
+    folder::FolderListing,
     haptics::{self, Vibration},
     motion as app_motion, phone as app_phone,
     quick_apps::{self, Destination, Step},
@@ -265,6 +266,10 @@ struct WatchSystem {
     closed_apps: ClosedApps,
     /// While a closed app runs, what it asked of the screen.
     closed_run: Option<ClosedRun>,
+    /// The folder the open app last listed with `open_folder`.
+    folder: FolderListing,
+    /// The folder the open app asked for, which the loop lists once the host call returns.
+    folder_wanted: Option<alloc::string::String>,
 }
 
 /// A part of a file read ahead into RAM, as the file was when `prefetch_file` asked for it.
@@ -294,7 +299,7 @@ impl SystemValues for WatchSystem {
         if let Some(number) = self.notifications.read(value) {
             return number;
         }
-        if let Some(number) = heart_rate::read(value) {
+        if let Some(number) = heart_rate::read(value).or_else(|| self.folder.read(value)) {
             return number;
         }
         match value {
@@ -347,7 +352,11 @@ impl SystemValues for WatchSystem {
             SystemValue::BootloaderVersion => about::bootloader_version(),
             SystemValue::BootloaderBuildDate => about::bootloader_build_date(),
             SystemValue::WatchFaceName => &self.installed.face_name,
-            _ => self.phone.read_text(value).unwrap_or(""),
+            _ => self
+                .phone
+                .read_text(value)
+                .or_else(|| self.folder.read_text(value))
+                .unwrap_or(""),
         }
     }
 
@@ -355,6 +364,9 @@ impl SystemValues for WatchSystem {
     fn read_element(&self, value: SystemValue, index: Value) -> Value {
         if is_notification_value(value) {
             return self.notifications.read_element(value, index);
+        }
+        if let Some(number) = self.folder.read_element(value, index) {
+            return number;
         }
         let place = usize::try_from(index).unwrap_or(usize::MAX);
         match value {
@@ -406,6 +418,9 @@ impl SystemValues for WatchSystem {
     fn read_element_text(&self, value: SystemValue, index: Value) -> &str {
         if is_notification_value(value) {
             return self.notifications.read_element_text(value, index);
+        }
+        if let Some(text) = self.folder.read_element_text(value, index) {
+            return text;
         }
         let place = usize::try_from(index).unwrap_or(usize::MAX);
         if value == SystemValue::LauncherGroupName {
@@ -503,6 +518,19 @@ impl WatchSystem {
         system_values::changed(&[SystemValue::FreeStorageKilobytes]);
     }
 
+    /// Lists the folder the open app asked for from the loop rather than inside its handler, as the free storage is counted.
+    // Out of line, so the listing's frame is on the stack only while it runs and never under a redraw.
+    #[inline(never)]
+    fn list_folder_if_wanted(&mut self) {
+        let Some(path) = self.folder_wanted.take() else {
+            return;
+        };
+        if !self.files.list_folder_now(&path, &mut self.folder) {
+            self.folder.clear();
+        }
+        system_values::changed(&[SystemValue::FolderPath]);
+    }
+
     /// Looks for the bootloader's version record from the loop the first time an app reads it, as the free storage is counted.
     fn find_bootloader_record_if_wanted(&self) {
         if about::find_record_if_wanted() {
@@ -590,6 +618,7 @@ impl System for WatchSystem {
                     settings::set_by_name(Setting::WatchFace.name(), number as Value);
                 }
             }
+            EffectKind::OpenFolder => self.folder_wanted = effect.text(0).map(alloc::string::String::from),
             EffectKind::PrefetchFile => {
                 self.prefetch_file(effect.text(0).unwrap_or(""), effect.number(1), effect.number(2))
             }
@@ -791,6 +820,8 @@ impl Shell {
             self.note_closed_app(&host, now);
         }
         *self.system.prefetch.get_mut() = None;
+        self.system.folder.clear();
+        self.system.folder_wanted = None;
     }
 
     /// Opens a host on the image into `self.host`.
@@ -1828,6 +1859,8 @@ pub async fn run_shell(
             free_storage_kilobytes: Cell::new(None),
             free_storage_wanted: Cell::new(false),
             prefetch: RefCell::new(None),
+            folder: FolderListing::new(),
+            folder_wanted: None,
             call_ringing_until: None,
             closed_apps: ClosedApps::NONE,
             closed_run: None,
@@ -1883,6 +1916,7 @@ pub async fn run_shell(
         }
         foreground::set_drawing(false);
         shell.system.count_free_storage_if_wanted();
+        shell.system.list_folder_if_wanted();
         shell.system.find_bootloader_record_if_wanted();
         shell.match_accelerometer_to_app();
 

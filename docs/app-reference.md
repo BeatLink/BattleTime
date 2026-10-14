@@ -63,6 +63,7 @@ time.
 | `least_free_heap_bytes` | `Int` | The fewest free heap bytes since the watch started. |
 | `allocation_failures` | `Int` | How many allocations the heap has refused since the watch started. |
 | `stack_overflows` | `Int` | How many times the stack has run into its guard, counted across restarts until the power goes. |
+| `current_folder` | object | The folder of the watch's storage the app last opened with `open_folder`: `path`, written plainly from the top such as `/apps`, and `entries`, up to 64 of `.name`, `.size` in bytes and `.is_folder`, folders first and then files, each by name. A folder's size is the sum of every file inside it; folders exist only through their files. Empty before the first `open_folder`. An app that calls `open_folder` needs 1,600 B more heap for the listing. |
 | `tasks` | list | The firmware's tasks, in the order they started: `.name`, `.runs`, how many times the executor has polled it, and `.busy_milliseconds`, how long those polls took. Read when the app opens. |
 | `current_navigation` | object | The phone's navigation: `turn`, `instruction` (text), `distance` in metres and `progress_percent`. Needs the `phone` permission. |
 
@@ -411,6 +412,7 @@ app cannot keep the sensor on all the time.
 | `set_app_enabled(id, on)` | Turns an installed app or face on or off. The watch checks the change as the package manager does and does nothing when `packages` gives it a refusal, so show why first. |
 | `step_watch_face(steps)` | Chooses the face `steps` places on from the one shown among the faces turned on, in id order, wrapping round; a negative number goes back. The watch saves it in the `watch_face` setting and shows it. |
 | `prefetch_file(path, offset, length)` | Starts reading `length` bytes of a file from `offset` into RAM in the background, at most 4,096, so the screen keeps drawing while they arrive. The next `file_bytes` of that part takes them from RAM instead of the flash, as the file was when `prefetch_file` ran. One part is held at a time, until a `file_bytes` reads its last byte, the next `prefetch_file` replaces it or the app closes. An app that calls it needs 4 KB more heap. Read the next page ahead as the wearer turns one, as `file_bytes(path, 256, page * 256)` then `prefetch_file(path, (page + 1) * 256, 256)`. |
+| `open_folder(path)` | Lists a folder of the watch's storage into `current_folder` soon after the handler ends, which then redraws what shows it. The path may be worked out: `${current_folder.value.path}/${name}` goes into a folder and `${current_folder.value.path}/..` back up; empty and `.` parts are dropped, `..` never climbs above the top, and a path over 64 bytes lists nothing. The listing is dropped when the app closes. |
 | `set_heart_rate_led(on, brightness, period)` | Drives the heart rate sensor's LED directly, such as for a beacon. `brightness` is the drive level, 0 to 3, and `period` the flash period in milliseconds, 0 for steady. The runtime turns it off when the app closes, even with the `background` permission, to save the battery. |
 
 Settings and other values that change often are stored on the external flash, never the internal

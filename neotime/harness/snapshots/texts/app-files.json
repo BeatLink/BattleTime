@@ -1,0 +1,26 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "/",
+        "Folder, 10 B",
+        "Folder, 172 B",
+        "Folder, 92 B",
+        "notes",
+        "qr",
+        "temp"
+      ]
+    },
+    {
+      "name": "inside",
+      "reached_by": "tap \"notes\"",
+      "texts": [
+        "/notes",
+        "92 B",
+        "note.txt"
+      ]
+    }
+  ]
+}

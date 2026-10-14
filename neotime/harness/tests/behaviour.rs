@@ -1120,3 +1120,73 @@ fn an_app_pages_through_a_file_and_reads_the_next_page_ahead() {
     assert_eq!(prefetches[1].text(0), Some("/apps/pager/data"));
     assert_eq!((prefetches[1].number(1), prefetches[1].number(2)), (8, 4));
 }
+
+// ============================================================================
+// Files
+// ============================================================================
+
+#[test]
+fn the_files_app_lists_the_top_folder_with_each_folders_size() {
+    let watch = TestWatch::open_app("files").unwrap();
+
+    assert!(watch.shows_text("/"), "{:?}", watch.visible_texts());
+    assert!(watch.shows_text("notes"));
+    assert!(watch.shows_text("Folder, 92 B"));
+    assert!(watch.shows_text("qr"));
+    assert!(watch.shows_text("Folder, 172 B"));
+    assert!(watch.shows_text("temp"));
+    assert!(watch.system().failures().is_empty());
+}
+
+#[test]
+fn the_files_app_opens_a_folder_and_the_button_goes_back_up() {
+    let mut watch = TestWatch::open_app("files").unwrap();
+
+    watch.tap_text("qr");
+
+    assert_eq!(watch.screen_name(), Some("inside"));
+    assert!(watch.shows_text("/qr"), "{:?}", watch.visible_texts());
+    assert!(watch.shows_text("0"));
+    assert!(watch.shows_text("118 B"));
+    assert!(watch.shows_text("list"));
+    assert!(watch.shows_text("54 B"));
+    watch.press_button();
+    assert_eq!(watch.screen_name(), Some("main"));
+    assert!(watch.shows_text("notes"), "{:?}", watch.visible_texts());
+    assert_eq!(watch.system().folder.path(), "/");
+    assert!(watch.system().failures().is_empty());
+}
+
+#[test]
+fn the_files_app_goes_down_two_folders_and_back_up_through_both() {
+    let mut watch = TestWatch::open_app("files").unwrap();
+    watch.write_file("/temp/prompt/big", &vec![0; 5000]);
+    watch.reopen();
+
+    watch.tap_text("temp");
+    watch.tap_text("prompt");
+
+    assert_eq!(watch.screen_name(), Some("main"));
+    assert!(watch.shows_text("/temp/prompt"), "{:?}", watch.visible_texts());
+    assert!(watch.shows_text("4.8 KB"));
+    watch.press_button();
+    assert_eq!(watch.screen_name(), Some("inside"));
+    assert!(watch.shows_text("/temp"));
+    assert!(watch.shows_text("Folder, 4.8 KB"));
+    watch.press_button();
+    assert_eq!(watch.screen_name(), Some("main"));
+    assert_eq!(watch.system().folder.path(), "/");
+    assert!(watch.system().failures().is_empty());
+}
+
+#[test]
+fn the_files_app_taps_on_a_file_open_nothing() {
+    let mut watch = TestWatch::open_app("files").unwrap();
+    watch.tap_text("qr");
+
+    watch.tap_text("list");
+
+    assert_eq!(watch.screen_name(), Some("inside"));
+    assert_eq!(watch.system().folder.path(), "/qr");
+    assert_eq!(watch.effects_of(EffectKind::OpenFolder).len(), 2);
+}

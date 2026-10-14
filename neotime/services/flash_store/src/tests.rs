@@ -569,6 +569,36 @@ fn listing_gives_each_path_under_a_prefix_once() {
 }
 
 #[test]
+fn listing_with_lengths_gives_each_files_length_whether_small_or_large() {
+    let mut store = blank_store();
+    for (path, length) in [
+        ("/apps/a", 5000),
+        ("/apps/b", 10),
+        ("/apps/c", 0),
+        ("/notes/n", 30),
+    ] {
+        block_on(store.write_file(path, &filler(length, 0))).unwrap();
+    }
+    block_on(store.write_file("/apps/b", &filler(12, 1))).unwrap();
+
+    let mut found = Vec::new();
+    block_on(store.for_each_file_with_length("/apps/", &mut |path, length| {
+        found.push((String::from(path), length))
+    }))
+    .unwrap();
+    found.sort();
+
+    assert_eq!(
+        found,
+        [
+            (String::from("/apps/a"), 5000),
+            (String::from("/apps/b"), 12),
+            (String::from("/apps/c"), 0),
+        ]
+    );
+}
+
+#[test]
 fn a_small_file_whose_key_another_path_holds_goes_into_sectors() {
     let mut store = blank_store();
     let (first, second) = colliding_paths();

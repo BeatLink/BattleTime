@@ -483,7 +483,8 @@ kind of data needs no new format:
   full, and each app may use 4 KB.
 - **Logs** are appended over time, batched in RAM, and drop their oldest sector when the ring wraps.
 - **`FileAccess`** is the trait the services reach files through, so they need not name the
-  store's sizes; `ram_flash` (a feature) gives their tests a flash in RAM.
+  store's sizes; `ram_flash` (a feature) gives their tests a flash in RAM. Its
+  `for_each_file_with_length` walks every file with its length, which folder listings are built from.
 
 It survives a power cut at any write or erase, which its tests check exhaustively. Built for the
 watch it takes 2,700 B of RAM and about 26 KB of code. The firmware reaches it through its storage
@@ -1228,6 +1229,13 @@ the handler ignores, changing no state and carrying out no effect, is left to th
   those.
 - **Saved state.** `save_changed_state` writes the persistent variables when they change, and
   `open_with_saved_state` puts them back.
+- **Folders.** `folder::FolderListing` is the folder an app opened with `open_folder`, answering the
+  `current_folder` system values. Its embedder hands it every file's path and length: the first part
+  of a path after the folder names an entry, a folder when more follows, whose size is the sum of
+  its files. It keeps up to 64 entries, folders first and then by name, with their names in one
+  1 KB string, and `folder::normalise` writes a path plainly. The firmware lists a folder from its
+  loop once the handler that asked has returned, then reports the change; the harness and the
+  simulator list theirs at once, from their fake files and the storage folder.
 - **Text files.** A `TextFile` reads its file through `SystemValues::read_file` a chunk at a time
   (`text_file`): it wraps the whole file once when its screen opens, keeping where every eighth
   line starts, and holds only the lines near the view, so a long note costs about the same RAM as a

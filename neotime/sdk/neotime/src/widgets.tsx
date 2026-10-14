@@ -1,7 +1,7 @@
 // The widgets an app's screens are built from, one for each rlvgl widget the runtime creates.
 // In a browser each is a Preact component styled like rlvgl's dark theme on a 240x240 screen.
 
-import { batch, type Signal } from "@preact/signals";
+import { batch, untracked, type Signal } from "@preact/signals";
 import { toChildArray, type ComponentChildren, type JSX } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type {
@@ -92,7 +92,8 @@ export function listen_for_handler_failures(listener: HandlerFailureListener): (
 export function run_handler<Event>(handler: ((event: Event) => void) | undefined, event: Event) {
   if (!handler) return;
   try {
-    batch(() => handler(event));
+    // Handlers read signals untracked, so one run as a screen is taken down never subscribes a component going away.
+    batch(() => untracked(() => handler(event)));
   } catch (error) {
     for (const listener of handler_failure_listeners) listener(error);
   }

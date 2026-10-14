@@ -14,7 +14,7 @@ images, which the bootloader reads as raw flash; see [bootloader.md](bootloader.
 ## What the watch keeps
 
 The store has no folders: a path's slashes only name it, and a folder is the files whose paths start
-with it. Files of 1 KB or less are kept as records, so most of these cost no sector of their own.
+with it. The [Files app](apps/files.md) lists them that way, a folder at a time with each file's size. Files of 1 KB or less are kept as records, so most of these cost no sector of their own.
 
 | Path | Holds |
 |---|---|

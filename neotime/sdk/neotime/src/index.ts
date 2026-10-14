@@ -320,6 +320,88 @@ export const app_memory_budget = signal(27_648);
 /** Files a `TextFile`, `BitmapFile` and `file_bytes` read in the browser preview, by path, standing in for the watch's storage. */
 export const preview_files = signal<Record<string, string>>({});
 
+export interface FolderEntry {
+  /** The entry's own name, without the folder's path. */
+  name: string;
+  /** Its size in bytes; a folder's is the sum of every file inside it. */
+  size: number;
+  is_folder: boolean;
+}
+
+export interface Folder {
+  /** The folder's path from the top, such as `/apps`, or empty before the first `open_folder`. */
+  path: string;
+  /** Up to 64 entries, folders first and then files, each by name. */
+  entries: FolderEntry[];
+}
+
+/** The most entries one folder lists, as the watch keeps them. */
+export const MOST_FOLDER_ENTRIES = 64;
+
+/** The longest folder path the watch lists. */
+export const LONGEST_FOLDER_PATH_BYTES = 64;
+
+/** The folder the app last opened with `open_folder`; kept by the system. */
+export const current_folder = signal<Folder>({ path: "", entries: [] });
+
+/**
+ * A folder path written plainly, as the watch writes it: from the top, without empty or `.` parts, with each `..`
+ * taking the part before it away and never climbing above the top; null when it is longer than the watch lists.
+ */
+export function normalise_folder_path(path: string): string | null {
+  const parts: string[] = [];
+  for (const part of path.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  const normal = `/${parts.join("/")}`;
+  return new TextEncoder().encode(normal).length <= LONGEST_FOLDER_PATH_BYTES ? normal : null;
+}
+
+/** A preview file's size: one byte for each character below 256, as raw bytes are kept, and UTF-8 for the rest. */
+function preview_file_size(text: string): number {
+  let size = 0;
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0;
+    size += code < 0x100 ? 1 : new TextEncoder().encode(character).length;
+  }
+  return size;
+}
+
+/** The folder at `path` among the preview's files, listed as the watch lists its storage. */
+export function list_preview_folder(files: Record<string, string>, path: string): Folder {
+  const normal = normalise_folder_path(path);
+  if (normal === null) return { path: "", entries: [] };
+  const prefix = normal === "/" ? "/" : `${normal}/`;
+  const entries: FolderEntry[] = [];
+  for (const [file_path, text] of Object.entries(files)) {
+    if (!file_path.startsWith(prefix)) continue;
+    const inside = file_path.slice(prefix.length);
+    const slash = inside.indexOf("/");
+    const name = slash < 0 ? inside : inside.slice(0, slash);
+    if (name === "") continue;
+    const is_folder = slash >= 0;
+    const size = preview_file_size(text);
+    const found = entries.find((entry) => entry.name === name && entry.is_folder === is_folder);
+    if (found) found.size += size;
+    else entries.push({ name, size, is_folder });
+  }
+  entries.sort((first, second) =>
+    first.is_folder !== second.is_folder ? (first.is_folder ? -1 : 1) : first.name < second.name ? -1 : first.name > second.name ? 1 : 0,
+  );
+  return { path: normal, entries: entries.slice(0, MOST_FOLDER_ENTRIES) };
+}
+
+/**
+ * Lists a folder of the watch's storage into `current_folder`, soon after the handler ends. The path may be worked
+ * out, such as `${current_folder.value.path}/${name}` to go in or `${current_folder.value.path}/..` to go up. The
+ * preview lists `preview_files`.
+ */
+export function open_folder(path: string) {
+  emit({ kind: "open_folder", path });
+}
+
 /** How many days the step history holds: today and the six before it. */
 export const STEP_HISTORY_DAYS = 7;
 

@@ -1812,3 +1812,42 @@ fn a_group_must_be_a_short_plain_id() {
     );
     assert!(first_error(&source).contains("`group` is up to 16 letters"));
 }
+
+#[test]
+fn the_open_folder_is_read_from_the_system_and_opened_with_an_effect() {
+    use neotime_runtime::instruction::Instruction;
+    let image = compile(&app(
+        r#"import { current_folder, open_folder, range } from "neotime";
+        function enter(place: number) {
+          open_folder(`${current_folder.value.path}/${current_folder.value.entries[place].name}`);
+        }
+        function Main() {
+          return (
+            <Screen>
+              <Label>{`${current_folder.value.path} ${current_folder.value.entries.length}`}</Label>
+              {range(4).map((place) => (
+                <Button onClick={() => enter(place)}>
+                  <Label>{`${current_folder.value.entries[place].is_folder ? "Folder" : "File"} ${current_folder.value.entries[place].size}`}</Label>
+                </Button>
+              ))}
+            </Screen>
+          );
+        }"#,
+    ));
+    let image = AppImage::parse(&image).unwrap();
+
+    for value in [SystemValue::FolderPath, SystemValue::FolderEntryCount] {
+        assert!(image_runs(&image, Instruction::ReadSystem(value)), "{value:?}");
+    }
+    for value in [
+        SystemValue::FolderEntryName,
+        SystemValue::FolderEntrySize,
+        SystemValue::FolderEntryIsFolder,
+    ] {
+        assert!(
+            image_runs(&image, Instruction::ReadSystemElement(value)),
+            "{value:?}"
+        );
+    }
+    assert!(image_runs(&image, Instruction::Effect(EffectKind::OpenFolder)));
+}

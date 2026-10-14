@@ -32,6 +32,23 @@ pub const BITMAP_FILE_BYTES: u32 = rounded(crate::widgets::BITMAP_FILE_MOST_BYTE
 /// The most bytes one `prefetch_file` reads ahead; an app that asks for one holds that much until a `file_bytes` takes it.
 pub const PREFETCH_BYTES: u32 = 4096;
 
+/// The most entries one folder listing holds; the rest of a larger folder is left out.
+pub const MOST_FOLDER_ENTRIES: usize = 64;
+
+/// The bytes a folder listing keeps for all its entries' names together.
+pub const FOLDER_NAME_BYTES: usize = 1024;
+
+/// The longest folder path a listing keeps, as long as the flash store's longest path.
+pub const LONGEST_FOLDER_PATH_BYTES: usize = 64;
+
+/// What one listed entry holds beside its name: its size, where its name starts, its name's length and whether it is a folder.
+pub const FOLDER_ENTRY_BYTES: usize = 8;
+
+/// A folder listing, which an app that calls `open_folder` holds while it is open.
+pub const FOLDER_LISTING_BYTES: u32 = rounded(
+    (LONGEST_FOLDER_PATH_BYTES + MOST_FOLDER_ENTRIES * FOLDER_ENTRY_BYTES + FOLDER_NAME_BYTES) as u32,
+);
+
 /// What drawing borrows from the heap for a moment, and the image checks when the app opens.
 pub const PASSING_BYTES: u32 = 1_536;
 
@@ -65,7 +82,7 @@ const ALLOCATION_STEP: u32 = 4;
 pub struct MemoryNeed {
     /// The image itself, which is read into the heap while the app is open.
     pub image_bytes: u32,
-    /// The host's working memory, its subscriptions, its saved state, what drawing borrows and a file part read ahead.
+    /// The host's working memory, its subscriptions, its saved state, what drawing borrows, a file part read ahead and a folder listing.
     pub working_bytes: u32,
     /// The nodes of its largest screen.
     pub widget_bytes: u32,
@@ -114,7 +131,16 @@ fn working_bytes_of(image: &AppImage) -> u32 {
         + SUBSCRIPTION_BYTES * image.subscription_count() as u32
         + rounded(saved_state_bytes(image) as u32)
         + PASSING_BYTES
-        + if prefetches(image) { PREFETCH_BYTES } else { 0 }
+        + if uses_effect(image, EffectKind::PrefetchFile) {
+            PREFETCH_BYTES
+        } else {
+            0
+        }
+        + if uses_effect(image, EffectKind::OpenFolder) {
+            FOLDER_LISTING_BYTES
+        } else {
+            0
+        }
 }
 
 /// The heap a closed app needs while its subscriptions run: its image and the host's working memory, with no screen.
@@ -332,11 +358,11 @@ fn system_values_read(image: &AppImage) -> u128 {
     reads
 }
 
-/// Whether the app reads part of a file ahead with `prefetch_file`.
-fn prefetches(image: &AppImage) -> bool {
+/// Whether any of the app's code asks for this effect, such as `prefetch_file` or `open_folder`.
+fn uses_effect(image: &AppImage, kind: EffectKind) -> bool {
     let mut found = false;
     for_each_instruction(image, |instruction| {
-        found |= instruction == Instruction::Effect(EffectKind::PrefetchFile);
+        found |= instruction == Instruction::Effect(kind);
     });
     found
 }

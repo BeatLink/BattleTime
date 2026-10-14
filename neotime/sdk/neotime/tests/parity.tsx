@@ -14,6 +14,7 @@ import {
   bootloader_version,
   battery_percent,
   brightness,
+  current_folder,
   current_music,
   current_navigation,
   current_weather,
@@ -300,6 +301,7 @@ export function set_fake_system_values() {
     "/qr/0": STARTING_QR_CODE,
     "/qr/list": STARTING_QR_LIST,
   };
+  current_folder.value = { path: "", entries: [] };
   clear_notifications();
   step_history.value = starting_step_history();
 }

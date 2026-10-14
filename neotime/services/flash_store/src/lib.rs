@@ -548,10 +548,22 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
         prefix: &str,
         mut visit: impl FnMut(&str),
     ) -> Result<(), StoreError<Flash::Error>> {
+        self.for_each_file_with_length(prefix, &mut |path, _| visit(path))
+            .await
+    }
+
+    /// Gives `visit` the path and length in bytes of every file that starts with `prefix`, each once.
+    ///
+    /// It takes the visitor by reference, so every caller shares one copy of the walk in the firmware.
+    pub async fn for_each_file_with_length(
+        &mut self,
+        prefix: &str,
+        visit: &mut dyn FnMut(&str, usize),
+    ) -> Result<(), StoreError<Flash::Error>> {
         self.files
             .for_each(&mut self.flash, |header| {
                 if header.path.starts_with(prefix) {
-                    visit(&header.path);
+                    visit(&header.path, header.length);
                 }
             })
             .await?;
@@ -579,7 +591,7 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
             };
             let also_large = self.files.find(&mut self.flash, path).await?.is_some();
             if path.starts_with(prefix) && !also_large {
-                visit(path);
+                visit(path, entry.length().saturating_sub(1 + path_length));
             }
         }
         Ok(())

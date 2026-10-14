@@ -125,6 +125,7 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
         "current_weather.location" => (SystemValue::WeatherLocation, Type::TEXT),
         "current_call.caller" => (SystemValue::CallCaller, Type::TEXT),
         "current_call.state" => (SystemValue::CallState, Type::choice(ChoiceSet::CallKind)),
+        "current_folder.path" => (SystemValue::FolderPath, Type::TEXT),
         "current_music.artist" => (SystemValue::MusicArtist, Type::TEXT),
         "current_music.track" => (SystemValue::MusicTrack, Type::TEXT),
         "current_music.is_playing" => (SystemValue::MusicIsPlaying, Type::BOOL),
@@ -150,6 +151,7 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
 fn list_length(list: &str) -> Option<SystemValue> {
     match list {
         "current_weather.forecast" => Some(SystemValue::WeatherForecastLength),
+        "current_folder.entries" => Some(SystemValue::FolderEntryCount),
         "installed_apps" => Some(SystemValue::InstalledAppCount),
         "launcher_groups" => Some(SystemValue::LauncherGroupCount),
         "notifications" => Some(SystemValue::NotificationCount),
@@ -161,7 +163,7 @@ fn list_length(list: &str) -> Option<SystemValue> {
     }
 }
 
-/// One field of an element of a system list: a day of the forecast, an installed app, a kept notification, or a day or hour of steps.
+/// One field of an element of a system list: a day of the forecast, an entry of the open folder, an installed app, a kept notification, or a day or hour of steps.
 fn list_field(list: &str, name: &str) -> Option<SystemSignal> {
     let (value, value_type) = match (list, name) {
         ("current_weather.forecast", "condition") => (
@@ -170,6 +172,9 @@ fn list_field(list: &str, name: &str) -> Option<SystemSignal> {
         ),
         ("current_weather.forecast", "low") => (SystemValue::WeatherForecastLow, Type::NUMBER.or_null()),
         ("current_weather.forecast", "high") => (SystemValue::WeatherForecastHigh, Type::NUMBER.or_null()),
+        ("current_folder.entries", "name") => (SystemValue::FolderEntryName, Type::TEXT),
+        ("current_folder.entries", "size") => (SystemValue::FolderEntrySize, Type::NUMBER),
+        ("current_folder.entries", "is_folder") => (SystemValue::FolderEntryIsFolder, Type::BOOL),
         ("installed_apps", "name") => (SystemValue::InstalledAppName, Type::TEXT),
         ("installed_apps", "id") => (SystemValue::InstalledAppId, Type::TEXT),
         ("installed_apps", "icon") => (SystemValue::InstalledAppIcon, Type::ICON),
@@ -359,6 +364,9 @@ impl<'a> Compiler<'a> {
             }
             Reference::SystemGroupValue("current_weather") if name == "forecast" => {
                 Some(Reference::SystemList("current_weather.forecast"))
+            }
+            Reference::SystemGroupValue("current_folder") if name == "entries" => {
+                Some(Reference::SystemList("current_folder.entries"))
             }
             Reference::SystemGroupValue("step_history") if name == "days" => {
                 Some(Reference::SystemList("step_history.days"))
@@ -1335,6 +1343,7 @@ fn library_reference<'a>(module: LibraryModule, name: &str) -> Reference<'a> {
                 "current_weather" => Some("current_weather"),
                 "current_music" => Some("current_music"),
                 "current_call" => Some("current_call"),
+                "current_folder" => Some("current_folder"),
                 "current_navigation" => Some("current_navigation"),
                 "installed_apps" => Some("installed_apps"),
                 "launcher_groups" => Some("launcher_groups"),

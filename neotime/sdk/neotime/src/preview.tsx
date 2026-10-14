@@ -9,6 +9,7 @@ import {
   current_music,
   current_navigation,
   current_weather,
+  current_folder,
   heart_rate,
   heart_rate_status,
   is_bluetooth_enabled,
@@ -20,6 +21,8 @@ import {
   packages,
   period_in_milliseconds,
   hour_of,
+  list_preview_folder,
+  preview_files,
   settings,
   start_of_day,
   step_history,
@@ -200,6 +203,9 @@ function carry_out(effect: Effect) {
       if (next) watch_face_name.value = next.name;
       break;
     }
+    case "open_folder":
+      current_folder.value = list_preview_folder(preview_files.peek(), effect.path as string);
+      break;
     case "reset_step_trip":
       step_history.value = { ...step_history.peek(), trip: 0 };
       break;
