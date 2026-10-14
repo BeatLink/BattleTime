@@ -1,13 +1,13 @@
 // Drives a firmware update from the UI: pick a package, send it, and report
 // where the update has got to.
 
-import * as DocumentPicker from 'expo-document-picker';
-import { useCallback, useState } from 'react';
+import { useCallback, useState } from 'preact/hooks';
 
 import { ENTER_DFU_COMMAND, flashFirmware, type FlashStep } from '@/dfu/flash';
 import type { DfuLink } from '@/dfu/link';
 import { readFirmwarePackage, type FirmwarePackage } from '@/dfu/package';
 import { setWatchTime } from '@/protocol/neotime';
+import { pickFile } from '@/services/device-files';
 
 export type FirmwareState = {
   firmware: FirmwarePackage | null;
@@ -58,11 +58,6 @@ function describe(step: FlashStep): string {
   }
 }
 
-async function readPicked(uri: string): Promise<Uint8Array> {
-  const response = await fetch(uri);
-  return new Uint8Array(await response.arrayBuffer());
-}
-
 export function useFirmware(link: () => DfuLink | null, sendRaw: (text: string) => Promise<void>) {
   const [firmware, setFirmware] = useState<FirmwarePackage | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -83,16 +78,12 @@ export function useFirmware(link: () => DfuLink | null, sendRaw: (text: string) 
 
   const choose = useCallback(async () => {
     setError(null);
-    const picked = await DocumentPicker.getDocumentAsync({
-      type: ['application/zip', 'application/octet-stream', '*/*'],
-      copyToCacheDirectory: true,
-    });
-    if (picked.canceled || !picked.assets?.[0]) {
+    const picked = await pickFile('.zip,application/zip,application/octet-stream');
+    if (!picked) {
       return;
     }
-    const asset = picked.assets[0];
     try {
-      load(readFirmwarePackage(await readPicked(asset.uri), asset.name));
+      load(readFirmwarePackage(picked.data, picked.name));
     } catch (caught) {
       setFirmware(null);
       setError((caught as Error).message);

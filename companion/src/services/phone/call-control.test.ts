@@ -25,6 +25,6 @@ describe('controlCall', () => {
   });
 
   it('passes on the bridge refusing', async () => {
-    await expect(controlCall(unavailablePhoneBridge, 'IGNORE')).rejects.toThrow('only available on Android');
+    await expect(controlCall(unavailablePhoneBridge, 'IGNORE')).rejects.toThrow('only available in the app');
   });
 });

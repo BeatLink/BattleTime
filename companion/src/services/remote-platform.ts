@@ -7,7 +7,7 @@ import { fetchRequester, webRequester, type WebRequester } from './web-request';
 
 type BridgeResult<Value> = { ok: boolean; error?: string; value?: Value };
 
-// What electron/preload.js offers for remote buttons.
+// What window.neotime.remote (tauri/src/bridge.js) offers on the desktop.
 export type DesktopRemoteBridge = {
   runCommand(command: string): Promise<BridgeResult<CommandResult>>;
 };
@@ -16,7 +16,7 @@ export function desktopRemoteBridge(): DesktopRemoteBridge | null {
   return (globalThis as { neotime?: { remote?: DesktopRemoteBridge } }).neotime?.remote ?? null;
 }
 
-// Runs a command through the desktop app's main process and hands back how it ended.
+// Runs a command through the desktop app's core and hands back how it ended.
 export function desktopCommandRunner(bridge: DesktopRemoteBridge): (command: string) => Promise<CommandResult> {
   return async (command) => {
     const result = await bridge.runCommand(command);

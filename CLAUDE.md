@@ -161,37 +161,36 @@ firmware) and on DFU in the firmware.
 
 # The companion: companion/
 
-Expo (React Native) companion app for watches running the NeoTime firmware. Read
-[companion/README.md](companion/README.md) for the layout and the protocol. Paths in this part are
-relative to `companion/`.
+The companion app for watches running the NeoTime firmware: one Tauri app for the desktop and
+Android, and a command line tool. Read [companion/README.md](companion/README.md) for the layout and
+the protocol. Paths in this part are relative to `companion/`.
 
-- Screens live in `src/app` (Expo Router). Bluetooth stays behind `src/ble/transport.ts`; screens
-  use the `useWatch` hook and never import a Bluetooth library directly. There are three
-  transports: react-native-ble-plx on a phone, Electron over BlueZ on the desktop, and a mock in
-  browsers and Expo Go.
-- `electron/` and `cli/` run in Node, not in the bundle, and Metro never sees them. Both talk to
-  BlueZ through `node/ble.js`, so a change to Bluetooth on a computer belongs there. Every step
-  there has a timeout and a failed connect drops the link, because a half-open BlueZ connection
-  makes every later attempt wait for services that never resolve.
+- The window is Preact and TypeScript, built by Vite into `dist/`, which Tauri serves. Screens live in
+  `src/screens`, shared pieces in `src/components`, and the routes in `src/app.tsx`. It runs in
+  WebKitGTK and in Android's WebView, so lay it out for a phone's width and use only web APIs.
+- Bluetooth stays behind `src/ble/transport.ts`; screens use the `useWatch` hook and never reach the
+  bridge directly. The window's transport is `src/ble/tauri-transport.ts`, over `window.neotime`
+  from `tauri/src/bridge.js`; in a plain browser (`npm run dev`) the mock watch stands in.
+- `core/` is the Rust core with no Tauri in it (Bluetooth on btleplug, sync, plugins, web requests);
+  `tauri/` is the app, whose `src/bridge.js` is the window's only way to the core. Every step in
+  `core/src/ble.rs` has a timeout and a failed connect drops the link, because a half-open link
+  makes every later attempt wait for services that never resolve. Verify Rust with
+  `cargo test --workspace` and `cargo clippy --workspace --all-targets` in `nix develop .#companion`;
+  the Tauri crate needs a `dist/` to build, from `npx vite build`.
+- The app builds for Android with `npm run tauri-android` (debug) and `npm run tauri-android:release`
+  in `nix develop .#companion-android`, project in `tauri/gen/android`. Its phone bridge is
+  `tauri-plugin-phone-bridge`, whose Kotlin services and commands live in its `android/` folder.
+  Desktop-only Rust sits behind `#[cfg(desktop)]`.
 - The phone's part (notifications, media, Do Not Disturb, location) sits behind `phoneBridge` in
-  `src/services/phone`. In the desktop app the computer plays it through `node/desktop.js` over
+  `src/services/phone`. On the desktop the computer plays it through `tauri/src/desktop.rs` over
   D-Bus; check `phoneBridge.kind`, `supportsCalls` and `supportsLocation`, never the platform.
-- The desktop app is moving to Tauri. `core/` is the Rust core with no Tauri in it (Bluetooth on
-  btleplug); `tauri/` is the shell, whose `src/bridge.js` gives the window the same
-  `window.neotime` the Electron preload does, so a bridge change goes into both until Electron is
-  removed. Verify Rust with `cargo test --workspace` and `cargo clippy --workspace --all-targets`
-  in `nix develop .#companion`; the Tauri crate needs a `dist/` to build, from `expo export`.
-- The Tauri app also builds for Android (`npm run tauri-android` in `nix develop .#companion-android`,
-  project in `tauri/gen/android`). Its phone bridge is `tauri-plugin-phone-bridge`, which compiles
-  the Expo module's Kotlin services from `modules/phone-bridge`, so a change there reaches both
-  phone apps. Desktop-only Rust sits behind `#[cfg(desktop)]`.
 - Plugins are the phone-side halves of watch apps, installed at run time and run in QuickJS in
   `core/src/plugins`; [docs/plugins.md](docs/plugins.md) is the author's guide and must match what
   the host offers. A plugin may send only the watch messages and fetch only the hosts its manifest
   lists, so a new host function needs a matching permission check and test.
 - `cli/` is the command line tool. It imports the same `src/` modules the screens do, so a feature
-  gets a command rather than a second implementation. `npm run neotime -- <command>` rebuilds it
-  with esbuild and runs it.
+  gets a command rather than a second implementation, and talks to BlueZ through `node/ble.js`.
+  `npm run neotime -- <command>` rebuilds it with esbuild and runs it.
 - Raw GATT goes through the `DfuLink` each transport supplies with `dfuLink()`. The DFU controller,
   `src/protocol/neotime.ts` (time, battery, diagnostics, capabilities) and
   `src/protocol/file-service.ts` all use it and never touch a Bluetooth library.
@@ -215,19 +214,20 @@ relative to `companion/`.
 - Open work is in [companion/TODO.md](companion/TODO.md); remove an item there in the same change
   that finishes it.
 - Every change ships with tests in the same commit. Run only the test files for what you changed
-  (`npx jest <path>`); CI runs `npm run coverage`, typecheck and lint whenever `companion/` changes.
-  BLE needs a dev build; web and Expo Go use the mock transport.
+  (`npx jest <path>`); CI runs `npm run coverage`, typecheck, lint and the Vite build whenever
+  `companion/` changes. A test that needs the DOM starts with a `@jest-environment jsdom` docblock.
 
 ## Companion traps
 
-- **Electron must come from the flake.** `npm run desktop` finds it through `scripts/electron.mjs`.
-  Never run the raw `libexec/electron/electron` binary, which dies with an illegal instruction, and
-  never add the npm `electron` package back, because npm puts its launcher first on `PATH`.
 - **A BlueZ link can wedge.** `bluetoothctl info` says `Connected: yes` with no RSSI, and
   `disconnect` and `remove` both hang. Only switching the adapter off and on clears it, which drops
   every Bluetooth link on the computer, so ask the user first.
 - **Install `node_modules` in your own worktree.** Run `npm ci` in `nix develop .#companion` (about
   30 s); never link another worktree's, because its session can remove that worktree mid-task.
+- **Preact is ESM only.** Jest transforms it through Babel (`transformIgnorePatterns` in
+  `package.json`); a new ESM-only dependency needs adding there too.
+- **jsdom lacks some web APIs**, such as `TextEncoder` and `Blob.arrayBuffer`, that WebKitGTK and
+  Android's WebView have; a test fakes them rather than the code avoiding them.
 - **Node's fetch gives up on slow hosts.** Its 10 s connect timeout is too short for Open-Meteo from
   this machine, so a CLI command such as `neotime weather` fails with "fetch failed". Preload
   undici's `setGlobalDispatcher(new Agent({ connect: { timeout: 60000 } }))` through `NODE_OPTIONS=-r`.

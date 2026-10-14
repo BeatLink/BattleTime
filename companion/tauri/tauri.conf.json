@@ -5,7 +5,7 @@
   "identifier": "com.neotime.companion",
   "build": {
     "frontendDist": "../dist",
-    "beforeBuildCommand": "npx expo export --platform web --output-dir dist"
+    "beforeBuildCommand": "npx vite build"
   },
   "app": {
     "withGlobalTauri": true,

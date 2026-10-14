@@ -1,5 +1,4 @@
-import { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useMemo } from 'preact/hooks';
 
 import { darkRuns } from '@/protocol/qr-code';
 
@@ -17,35 +16,19 @@ export function QrPreview({ bitmap, size = 240 }: QrPreviewProps) {
   const moduleSize = Math.max(1, Math.floor(size / modules));
   const side = moduleSize * modules;
   return (
-    <View
-      style={[styles.paper, { width: side, height: side }]}
-      accessibilityRole="image"
-      accessibilityLabel={`QR code, ${bitmap[0]} modules wide`}>
+    <div class="qr-paper" role="img" aria-label={`QR code, ${bitmap[0]} modules wide`} style={{ width: side, height: side }}>
       {runs.map((run) => (
-        <View
+        <div
           key={`${run.row}:${run.column}`}
-          style={[
-            styles.ink,
-            {
-              left: (run.column + QUIET_MODULES) * moduleSize,
-              top: (run.row + QUIET_MODULES) * moduleSize,
-              width: run.length * moduleSize,
-              height: moduleSize,
-            },
-          ]}
+          class="qr-ink"
+          style={{
+            left: (run.column + QUIET_MODULES) * moduleSize,
+            top: (run.row + QUIET_MODULES) * moduleSize,
+            width: run.length * moduleSize,
+            height: moduleSize,
+          }}
         />
       ))}
-    </View>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  paper: {
-    backgroundColor: '#ffffff',
-    alignSelf: 'center',
-  },
-  ink: {
-    position: 'absolute',
-    backgroundColor: '#000000',
-  },
-});

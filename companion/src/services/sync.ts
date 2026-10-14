@@ -1,8 +1,8 @@
-// Sync: the desktop app's Rust core keeps a copy of every setting and record on the watch, read again
+// Sync: the app's Rust core keeps a copy of every setting and record on the watch, read again
 // on one interval that the whole companion shares. docs/sync.md describes it in full.
 //
-// The window reaches it through `window.neotime.sync` (tauri/src/bridge.js). Builds without it still
-// use the interval for their own status reads.
+// The window reaches it through `window.neotime.sync` (tauri/src/bridge.js). In a plain browser there is
+// none, and the interval only paces the window's own status reads.
 
 // ============================================================================
 // The interval
@@ -25,7 +25,7 @@ export function syncIntervalMs(seconds: number): number {
 }
 
 // ============================================================================
-// What the desktop bridge carries
+// What the bridge carries
 // ============================================================================
 
 export type SyncReport = { changed: string[]; errors: string[]; finishedAt: number };
@@ -49,7 +49,7 @@ export function syncBridge(): SyncBridge | null {
 
 function valueOf<Value>(result: BridgeResult<Value>): Value {
   if (!result.ok) {
-    throw new Error(result.error ?? 'The desktop app could not reach its sync.');
+    throw new Error(result.error ?? 'The app could not reach its sync.');
   }
   return result.value as Value;
 }

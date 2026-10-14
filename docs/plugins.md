@@ -4,8 +4,8 @@ A plugin is the phone-side half of one watch app. It carries that app, installs 
 keeps the app's settings, and answers the app while the watch is connected. The companion's core
 does only what every watch needs, and plugins add the rest at run time.
 
-Plugins run wherever the companion's Rust core does: the Tauri desktop app and the Tauri app on
-Android. The Expo phone app and the Electron app have no plugins.
+Plugins run in the companion's Rust core, so they run in the app on the desktop and on Android alike.
+The window opened in a plain browser (`npm run dev`) has no core and so no plugins.
 
 ## What stays in the core
 
@@ -199,7 +199,7 @@ window.addEventListener("message", (event) => {
 | `companion/core/src/plugins/` | Manifest, package reader, store on disk, QuickJS runtime, HTTP, and the host that joins them to the watch |
 | `companion/core/src/gadgetbridge.rs` | The watch's message lines, shared with the host |
 | `companion/tauri/src/plugins.rs` | The Tauri app's commands, its link from the host to the watch and window, and the `plugin://` pages (`http://plugin.localhost/<id>/` on Android) |
-| `companion/src/app/plugins.tsx`, `src/services/plugins.ts` | The Plugins screen |
+| `companion/src/screens/plugins.tsx`, `src/services/plugins.ts` | The Plugins screen |
 | `companion/core/examples/plugin_host.rs` | Installs a plugin into a folder and runs it against a real watch from the terminal |
 
 Installed plugins live in the app's data folder, under `plugins/<id>/`, beside their

@@ -1,5 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
 import type { NoteFont, NoteOnWatch } from '@/protocol/notes';
 import { readRemoteButtons, type RemoteButton, type RemoteOnWatch } from '@/protocol/remote';
 import type { NoteFileRef } from '@/services/note-file';
@@ -7,6 +5,8 @@ import { NOTE_SOURCES, type NoteSource } from '@/services/note-source';
 import { readWebAccess, type WebAccess } from '@/services/web-request';
 import { DEFAULT_SYNC_INTERVAL_SECONDS } from '@/services/sync';
 import type { Place } from '@/services/weather';
+import { appStorage } from '@/state/storage';
+import type { KeyValueStorage } from '@/services/app-store';
 
 // User settings that survive restarts, stored as one JSON blob.
 export type Settings = {
@@ -78,9 +78,9 @@ export const defaultSettings: Settings = {
 
 const STORAGE_KEY = 'neotime.settings.v1';
 
-export async function loadSettings(): Promise<Settings> {
+export async function loadSettings(storage: KeyValueStorage = appStorage): Promise<Settings> {
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const raw = await storage.getItem(STORAGE_KEY);
     if (!raw) {
       return defaultSettings;
     }
@@ -101,6 +101,6 @@ export async function loadSettings(): Promise<Settings> {
   }
 }
 
-export async function saveSettings(settings: Settings): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+export async function saveSettings(settings: Settings, storage: KeyValueStorage = appStorage): Promise<void> {
+  await storage.setItem(STORAGE_KEY, JSON.stringify(settings));
 }

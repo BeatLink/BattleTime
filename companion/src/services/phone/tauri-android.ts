@@ -1,7 +1,7 @@
 // The Tauri app on Android: the phone bridge plugin's Kotlin, reached through `window.neotime.phone` from tauri/src/bridge.js.
 //
-// It reads the same notification listener, calls, media sessions and Do Not Disturb as the Expo
-// module, and sends the same raw events, so events.ts checks them the same way.
+// The plugin reads the notification listener, calls, media sessions and Do Not Disturb, and sends raw
+// events that events.ts checks.
 
 import type { AndroidIntents } from '../remote-actions';
 import { toPhoneEvent } from './events';

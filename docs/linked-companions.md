@@ -14,7 +14,7 @@ sending the desktop its calls, notifications, media and location for the watch. 
 also keep each other's settings in step, so a change made in either shows in both.
 
 All of it lives in the Rust core, in `companion/core/src/link/`, so the Tauri app on the desktop
-and on Android share it. The Expo app gets none of it.
+and on Android share it.
 
 ## Who holds the watch
 

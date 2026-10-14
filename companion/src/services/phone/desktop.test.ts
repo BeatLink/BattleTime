@@ -54,7 +54,7 @@ function track() {
   return { tracker, events };
 }
 
-// A preload bridge the test drives: it records commands and can send raw events.
+// A bridge the test drives: it records commands and can send raw events.
 function fakeDevice(answers: Partial<Record<'access' | 'quiet' | 'media' | 'locate', { ok: boolean; value?: unknown; error?: string }>> = {}) {
   let send: (event: RawDesktopEvent) => void = () => {};
   const device = {
@@ -249,7 +249,7 @@ describe('createDesktopPhoneBridge', () => {
     await expect(bridge.stopKeepAlive()).resolves.toBeUndefined();
   });
 
-  it('passes on what the main process reports, and stops when unsubscribed', () => {
+  it('passes on what the core reports, and stops when unsubscribed', () => {
     const { device, send } = fakeDevice();
     const bridge = createDesktopPhoneBridge(device);
     const listener = jest.fn();
@@ -309,7 +309,7 @@ describe('choosing the bridge', () => {
     delete (globalThis as { neotime?: unknown }).neotime;
   });
 
-  it('finds the preload bridge only in the desktop app', () => {
+  it('finds the bridge only in the desktop app', () => {
     expect(desktopDeviceBridge()).toBeNull();
     const { device } = fakeDevice();
     (globalThis as { neotime?: unknown }).neotime = { desktop: device };

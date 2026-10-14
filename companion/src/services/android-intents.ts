@@ -1,4 +1,4 @@
-// Android intents for remote buttons: the Tauri app's phone plugin here, the Expo app's module in android-intents.android.ts.
+// Android intents for remote buttons, started by the app's phone plugin.
 import { tauriIntents, tauriPhoneDevice } from './phone/tauri-android';
 import type { AndroidIntents } from './remote-actions';
 

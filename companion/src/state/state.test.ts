@@ -1,21 +1,21 @@
+/**
+ * @jest-environment jsdom
+ */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { Backup } from '@/protocol/backup';
 
 import { addBackup, loadBackups, removeBackup } from './backups';
 import { defaultSettings, loadSettings, saveSettings } from './settings';
-
-jest.mock('@react-native-async-storage/async-storage', () =>
-  jest.requireActual('@react-native-async-storage/async-storage/jest/async-storage-mock'),
-);
+import { localKeyValueStorage } from './storage';
 
 function backupAt(created: string): Backup {
   return { format: 'neotime-backup', version: 1, created, files: {} };
 }
 
-beforeEach(async () => {
-  await AsyncStorage.clear();
+beforeEach(() => {
+  localStorage.clear();
+  jest.restoreAllMocks();
 });
 
 describe('backups', () => {
@@ -50,9 +50,11 @@ describe('backups', () => {
   });
 
   it('treats unreadable storage as no backups', async () => {
-    await AsyncStorage.setItem('neotime.backups.v1', '{not json');
+    localStorage.setItem('neotime.backups.v1', '{not json');
     await expect(loadBackups()).resolves.toEqual([]);
-    jest.mocked(AsyncStorage.getItem).mockRejectedValueOnce(new Error('disk gone'));
+    jest.spyOn(Storage.prototype, 'getItem').mockImplementationOnce(() => {
+      throw new Error('disk gone');
+    });
     await expect(loadBackups()).resolves.toEqual([]);
   });
 });
@@ -71,23 +73,40 @@ describe('settings', () => {
   it('reads back remote buttons, leaving out malformed ones', async () => {
     const play = { icon: 'play', label: 'Music', action: { kind: 'builtin', name: 'playpause' } };
     const stored = { remoteButtons: [play, { icon: 'play', action: { kind: 'shell', command: 'x' } }] };
-    await AsyncStorage.setItem('neotime.settings.v1', JSON.stringify(stored));
+    localStorage.setItem('neotime.settings.v1', JSON.stringify(stored));
     await expect(loadSettings()).resolves.toEqual({ ...defaultSettings, remoteButtons: [play] });
   });
 
   it('fills settings added since the blob was saved from the defaults', async () => {
-    await AsyncStorage.setItem('neotime.settings.v1', JSON.stringify({ autoReconnect: false }));
+    localStorage.setItem('neotime.settings.v1', JSON.stringify({ autoReconnect: false }));
     await expect(loadSettings()).resolves.toEqual({ ...defaultSettings, autoReconnect: false });
   });
 
   it('keeps a note file saved before there was a choice of source as the source', async () => {
     const noteFile = { name: 'list.txt', uri: '/home/me/list.txt' };
-    await AsyncStorage.setItem('neotime.settings.v1', JSON.stringify({ noteFile }));
+    localStorage.setItem('neotime.settings.v1', JSON.stringify({ noteFile }));
     await expect(loadSettings()).resolves.toEqual({ ...defaultSettings, noteFile, noteSource: 'file' });
   });
 
   it('falls back to the defaults when the blob is unreadable', async () => {
-    await AsyncStorage.setItem('neotime.settings.v1', 'garbage');
+    localStorage.setItem('neotime.settings.v1', 'garbage');
     await expect(loadSettings()).resolves.toEqual(defaultSettings);
+  });
+});
+
+describe('local storage', () => {
+  it('keeps what is set under its key and forgets what is removed', async () => {
+    const storage = localKeyValueStorage();
+    await storage.setItem('a', '1');
+    await expect(storage.getItem('a')).resolves.toBe('1');
+    expect(localStorage.getItem('a')).toBe('1');
+    await storage.removeItem('a');
+    await expect(storage.getItem('a')).resolves.toBeNull();
+  });
+
+  it('refuses every call where the window has none', async () => {
+    const storage = localKeyValueStorage(null);
+    await expect(storage.getItem('a')).rejects.toThrow('no local storage');
+    await expect(loadSettings(storage)).resolves.toEqual(defaultSettings);
   });
 });

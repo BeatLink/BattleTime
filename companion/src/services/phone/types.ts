@@ -22,7 +22,7 @@ export type BridgeKind = 'phone' | 'computer' | 'none';
 export type DeviceLocation = { latitude: number; longitude: number; name: string };
 
 export interface PhoneBridge {
-  /** False where there is nothing to read: iOS, a browser, and Expo Go, where the native module is missing. */
+  /** False where there is nothing to read: a plain browser, outside the app. */
   readonly available: boolean;
   readonly kind: BridgeKind;
   /** Whether calls can be followed and answered here; a computer has none. */

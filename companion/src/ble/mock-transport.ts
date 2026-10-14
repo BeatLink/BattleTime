@@ -13,7 +13,7 @@ import type {
 const MOCK_WATCH = 'AA:BB:CC:DD:EE:00';
 const MOCK_BOOTLOADER = 'AA:BB:CC:DD:EE:11';
 
-// A fake watch so the UI runs on web and in Expo Go, where the BLE native module is unavailable.
+// A fake watch, so the window runs in a plain browser, where there is no Bluetooth bridge.
 export class MockTransport implements WatchTransport {
   readonly kind = 'mock' as const;
 

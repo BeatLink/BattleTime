@@ -37,7 +37,7 @@ most people keep); the rest waits in the store.
 The code is [companion/src/services/app-store.ts](../companion/src/services/app-store.ts) (entries,
 keeping them, installing) and
 [companion/src/services/github-store.ts](../companion/src/services/github-store.ts) (finding and
-downloading), with the screen in [companion/src/app/store.tsx](../companion/src/app/store.tsx).
+downloading), with the screen in [companion/src/screens/store.tsx](../companion/src/screens/store.tsx).
 
 ## From the command line
 

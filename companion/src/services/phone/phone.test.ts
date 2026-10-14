@@ -17,7 +17,7 @@ describe('phone bridge stub', () => {
   });
 
   it('rejects actions, except stopping a keep-alive that never started', async () => {
-    await expect(phoneBridge.answerCall()).rejects.toThrow('only available on Android');
+    await expect(phoneBridge.answerCall()).rejects.toThrow('only available in the app');
     await expect(phoneBridge.mediaCommand('play')).rejects.toThrow();
     await expect(phoneBridge.startKeepAlive('PineTime')).rejects.toThrow();
     await expect(phoneBridge.stopKeepAlive()).resolves.toBeUndefined();

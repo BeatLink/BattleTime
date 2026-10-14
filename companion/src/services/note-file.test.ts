@@ -1,17 +1,17 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
-import * as DocumentPicker from 'expo-document-picker';
 
-import { desktopNoteAccess, noteFileAccess, pickerNoteAccess, type DesktopNoteBridge } from './note-file';
+import { chooseFiles } from './device-files';
+import { bridgeNoteAccess, noteFileAccess, pickerNoteAccess, type NoteBridge } from './note-file';
 
-jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
+jest.mock('./device-files', () => ({ chooseFiles: jest.fn() }));
 
 const NOTE = { name: 'note.txt', uri: '/home/me/note.txt' };
 
-// A bridge like electron/preload.js's, with the main process's answers given by the test.
+// A bridge like tauri/src/bridge.js's, with the core's answers given by the test.
 function fakeBridge() {
   let listener: ((id: number) => void) | null = null;
   const unwatched: number[] = [];
-  const bridge: DesktopNoteBridge = {
+  const bridge: NoteBridge = {
     pick: async () => ({ ok: true, value: NOTE }),
     read: async (path) =>
       path === NOTE.uri ? { ok: true, value: new TextEncoder().encode('Milk') } : { ok: false, error: 'ENOENT' },
@@ -36,9 +36,9 @@ afterEach(() => {
   delete (globalThis as { neotime?: unknown }).neotime;
 });
 
-describe('the note file in the desktop app', () => {
+describe('the note file in the app', () => {
   it('picks and reads the file through the bridge', async () => {
-    const access = desktopNoteAccess(fakeBridge().bridge);
+    const access = bridgeNoteAccess(fakeBridge().bridge);
 
     expect(await access.pick()).toEqual(NOTE);
     expect(new TextDecoder().decode(await access.read(NOTE))).toBe('Milk');
@@ -48,7 +48,7 @@ describe('the note file in the desktop app', () => {
   it('passes on only its own file changes, until stopped', async () => {
     const fake = fakeBridge();
     const changes: number[] = [];
-    const stop = desktopNoteAccess(fake.bridge).watch(NOTE, () => changes.push(1));
+    const stop = bridgeNoteAccess(fake.bridge).watch(NOTE, () => changes.push(1));
     await settle();
 
     fake.change(3);
@@ -62,7 +62,7 @@ describe('the note file in the desktop app', () => {
 
   it('stops a watch that is only set up after it was stopped', async () => {
     const fake = fakeBridge();
-    const stop = desktopNoteAccess(fake.bridge).watch(NOTE, () => undefined);
+    const stop = bridgeNoteAccess(fake.bridge).watch(NOTE, () => undefined);
 
     stop?.();
     await settle();
@@ -78,34 +78,35 @@ describe('the note file in the desktop app', () => {
   });
 });
 
-describe('the note file on a phone or in a browser', () => {
-  const pick = DocumentPicker.getDocumentAsync as jest.MockedFunction<typeof DocumentPicker.getDocumentAsync>;
+describe('the note file in a plain browser', () => {
+  const choose = jest.mocked(chooseFiles);
 
-  it('keeps the picked document, or nothing when cancelled', async () => {
-    pick.mockResolvedValueOnce({
-      canceled: false,
-      assets: [{ name: 'list.txt', uri: 'content://list', lastModified: 0 }],
-    } as DocumentPicker.DocumentPickerResult);
-    pick.mockResolvedValueOnce({ canceled: true, assets: null } as DocumentPicker.DocumentPickerResult);
+  it('keeps a link to the chosen file, or nothing when cancelled', async () => {
+    const file = { name: 'list.txt' } as File;
+    const createObjectURL = jest.fn(() => 'blob:list');
+    (URL as { createObjectURL?: unknown }).createObjectURL = createObjectURL;
+    choose.mockResolvedValueOnce([file]);
+    choose.mockResolvedValueOnce([]);
 
-    expect(await pickerNoteAccess.pick()).toEqual({ name: 'list.txt', uri: 'content://list' });
+    expect(await pickerNoteAccess.pick()).toEqual({ name: 'list.txt', uri: 'blob:list' });
     expect(await pickerNoteAccess.pick()).toBeNull();
-    expect(pick).toHaveBeenCalledWith({ type: 'text/*', copyToCacheDirectory: false });
+    expect(choose).toHaveBeenCalledWith({ accept: 'text/*' });
+    expect(createObjectURL).toHaveBeenCalledWith(file);
     expect(pickerNoteAccess.watch(NOTE, () => undefined)).toBeNull();
   });
 
-  it('reads the document again, and asks for it again when it cannot', async () => {
+  it('reads the file again, and asks for it again when it cannot', async () => {
     const realFetch = globalThis.fetch;
     globalThis.fetch = (async (uri: string) => {
-      if (uri !== 'content://list') {
+      if (uri !== 'blob:list') {
         throw new Error('no access');
       }
       return { arrayBuffer: async () => new TextEncoder().encode('Eggs').buffer } as Response;
     }) as typeof fetch;
     try {
-      const read = await pickerNoteAccess.read({ name: 'list.txt', uri: 'content://list' });
+      const read = await pickerNoteAccess.read({ name: 'list.txt', uri: 'blob:list' });
       expect(new TextDecoder().decode(read)).toBe('Eggs');
-      await expect(pickerNoteAccess.read({ name: 'old.txt', uri: 'content://old' })).rejects.toThrow(
+      await expect(pickerNoteAccess.read({ name: 'old.txt', uri: 'blob:old' })).rejects.toThrow(
         'old.txt could not be read; choose it again.',
       );
     } finally {

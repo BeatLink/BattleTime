@@ -356,7 +356,7 @@ pub fn run() {
             tauri::async_runtime::spawn(syncer.run());
             std::thread::spawn(move || plugin_host.start_all());
 
-            // In development NEOTIME_DEV_URL points at the Expo dev server, so the interface reloads.
+            // In development NEOTIME_DEV_URL points at the Vite dev server (`npm run dev`), so the interface reloads.
             let url = match std::env::var("NEOTIME_DEV_URL") {
                 Ok(dev_url) => WebviewUrl::External(dev_url.parse()?),
                 Err(_) => WebviewUrl::App("index.html".into()),

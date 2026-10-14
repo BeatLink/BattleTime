@@ -1,32 +1,16 @@
-import { useState } from 'react';
-import { Platform, Share } from 'react-native';
+import { useState } from 'preact/hooks';
+
+import { useWatch } from '@/hooks/use-watch';
+import { crashSummary, saveDebugReport } from '@/protocol/debug-report';
+import { saveFile } from '@/services/device-files';
+import { useTask } from '@/state/use-task';
 
 import { Button } from './button';
 import { Card } from './card';
 import { ThemedText } from './themed-text';
 
-import { useTheme } from '@/hooks/use-theme';
-import { useWatch } from '@/hooks/use-watch';
-import { crashSummary, saveDebugReport } from '@/protocol/debug-report';
-import { useTask } from '@/state/use-task';
-
-// Downloads the report in a browser or the desktop app, and offers it to the share sheet on a phone.
-async function keepReport(fileName: string, json: string): Promise<void> {
-  if (Platform.OS === 'web') {
-    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    return;
-  }
-  await Share.share({ title: fileName, message: json });
-}
-
 // Saves a debug report of the watch's last crash, which also lets the watch leave its crash screen.
 export function DebugReportCard() {
-  const theme = useTheme();
   const { dfuLink, files, packages, capabilities } = useWatch();
   const task = useTask();
   const [summary, setSummary] = useState<string | null>(null);
@@ -43,7 +27,7 @@ export function DebugReportCard() {
           apps: capabilities.packages ? async () => (await packages()).apps() : undefined,
           freeStorageBytes: capabilities.files ? async () => (await (await files()).storage()).free : undefined,
         },
-        keepReport,
+        async (fileName, json) => saveFile(fileName, json, 'application/json'),
       );
       setSummary(crashSummary(report.lastRestart));
     });
@@ -56,11 +40,11 @@ export function DebugReportCard() {
       </ThemedText>
       {summary ? <ThemedText type="small">{summary}</ThemedText> : null}
       {task.error ? (
-        <ThemedText type="small" style={{ color: theme.danger }}>
+        <ThemedText type="small" themeColor="danger">
           {task.error}
         </ThemedText>
       ) : null}
-      <Button title="Save debug report" variant="secondary" busy={task.busy !== null} onPress={() => void save()} />
+      <Button title="Save debug report" variant="secondary" busy={task.busy !== null} onClick={() => void save()} />
     </Card>
   );
 }

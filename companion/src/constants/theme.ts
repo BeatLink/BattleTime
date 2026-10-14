@@ -1,58 +1,21 @@
 // Colours follow the watch's own look: an accent on black with white text.
+//
+// Each colour is a CSS variable from src/styles.css, which switches between light and dark with the system.
 
-import { Platform } from 'react-native';
-
-export const Accent = '#00ACFF';
-
-export const Colors = {
-  light: {
-    text: '#000000',
-    textSecondary: '#60646C',
-    background: '#FFFFFF',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    accent: Accent,
-    onAccent: '#FFFFFF',
-    success: '#1DB954',
-    warning: '#F5A623',
-    danger: '#E5484D',
-  },
-  dark: {
-    text: '#FFFFFF',
-    textSecondary: '#B0B4BA',
-    background: '#000000',
-    backgroundElement: '#161719',
-    backgroundSelected: '#26282C',
-    accent: Accent,
-    onAccent: '#000000',
-    success: '#1DB954',
-    warning: '#F5A623',
-    danger: '#E5484D',
-  },
+export const theme = {
+  text: 'var(--text)',
+  textSecondary: 'var(--text-secondary)',
+  background: 'var(--background)',
+  backgroundElement: 'var(--background-element)',
+  backgroundSelected: 'var(--background-selected)',
+  accent: 'var(--accent)',
+  onAccent: 'var(--on-accent)',
+  success: 'var(--success)',
+  warning: 'var(--warning)',
+  danger: 'var(--danger)',
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
-
-export const Fonts = Platform.select({
-  ios: {
-    sans: 'system-ui',
-    serif: 'ui-serif',
-    rounded: 'ui-rounded',
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: 'Inter, system-ui, sans-serif',
-    serif: 'Georgia, serif',
-    rounded: 'system-ui, sans-serif',
-    mono: 'ui-monospace, Menlo, Consolas, monospace',
-  },
-});
+export type ThemeColor = keyof typeof theme;
 
 export const Spacing = {
   half: 2,
@@ -69,5 +32,3 @@ export const Radius = {
   medium: 12,
   large: 20,
 } as const;
-
-export const MaxContentWidth = 800;

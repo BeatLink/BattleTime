@@ -1,6 +1,6 @@
 // The only bridge between the window and the app, as `window.neotime`.
 //
-// It offers the API src/ble/electron-transport.ts, src/services/phone/desktop.ts, note-file.ts,
+// It offers the API src/ble/tauri-transport.ts, src/services/phone/desktop.ts, note-file.ts,
 // remote-platform.ts, web-request.ts and plugins.ts read, and turns each call into a Tauri command answered by src/lib.rs.
 // On Android it offers the phone (src/services/phone/tauri-android.ts) in place of the desktop and remote commands.
 
@@ -11,7 +11,7 @@
   // Tauri's own scripts may run after this one, so its globals are looked up at call time.
   const invoke = (command, args) => window.__TAURI_INTERNALS__.invoke(command, args);
 
-  // Every call gives { ok, value } or { ok: false, error }, as the Electron preload did.
+  // Every call gives { ok, value } or { ok: false, error }.
   const call = (command, args) =>
     invoke(command, args).then(
       (value) => ({ ok: true, value }),

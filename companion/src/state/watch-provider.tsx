@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, type ComponentChildren } from 'preact';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 
 import { createTransport, detectTransportKind } from '@/ble/create-transport';
 import { remoteTapLine } from '@/ble/mock-gadgetbridge';
@@ -157,7 +158,7 @@ const WEATHER_INTERVAL_MS = 30 * 60 * 1000;
 const WatchContext = createContext<WatchContextValue | null>(null);
 
 // Owns the single transport for the app and exposes connection, traffic and settings to every screen.
-export function WatchProvider({ children }: { children: ReactNode }) {
+export function WatchProvider({ children }: { children: ComponentChildren }) {
   const transportRef = useRef<WatchTransport | null>(null);
   const bufferRef = useRef(new LineBuffer());
   const filesRef = useRef<Promise<FileService> | null>(null);

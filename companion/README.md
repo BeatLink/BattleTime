@@ -1,9 +1,15 @@
 # NeoTime Companion
 
-A React Native (Expo) phone, desktop and command line companion for watches running
-[NeoTime](https://github.com/BeatLink/NeoTime), the Rust firmware for the PineTime. It talks to the
-watch through the services NeoTime serves, and supports no other firmware beyond sending a watch
-the reloader that moves it onto NeoTime.
+The companion app for watches running [NeoTime](https://github.com/BeatLink/NeoTime), the Rust
+firmware for the PineTime: one [Tauri](https://tauri.app) app for the desktop and Android, and a
+command line tool. It talks to the watch through the services NeoTime serves, and supports no other
+firmware beyond sending a watch the reloader that moves it onto NeoTime.
+
+How to install and use it is in the user guide, [docs/companion](../docs/companion/index.md):
+[connecting a watch](../docs/companion/connecting.md), [apps and the store](../docs/companion/apps-and-store.md),
+[phone features](../docs/companion/phone-features.md), [the watch's data](../docs/companion/watch-data.md),
+[firmware updates](../docs/companion/firmware-updates.md), [notes, QR codes, remote and tools](../docs/companion/tools.md)
+and [the command line](../docs/companion/command-line.md). This file is for working on the app.
 
 ## Status
 
@@ -28,196 +34,98 @@ Built and tested against the mock watch, waiting for the firmware side
 Each feature is offered only when the connected watch serves what it needs, so nothing breaks while
 the firmware catches up. On Android the app forwards notifications, calls and now playing, and obeys
 Do Not Disturb; that bridge compiles but has not run on a phone yet, see
-[src/services/phone/README.md](src/services/phone/README.md). The desktop app does the same with the
-computer's own notifications, media players and Do Not Disturb, and can report the weather wherever
-the computer is.
+[src/services/phone/README.md](src/services/phone/README.md). On the desktop the computer does the
+same with its own notifications, media players and Do Not Disturb, and can report the weather
+wherever the computer is. What is unfinished is listed in [TODO.md](TODO.md).
 
 ## Getting started
 
-The app lives in `companion/` of the NeoTime repository. Everything it needs is in the
-repository's flake; run these from `companion/`:
+Everything the app needs is in the repository's flake; run these from `companion/`:
 
 ```bash
 nix develop .#companion
-npm install
+npm ci
+npm run tauri        # build the window with Vite and open the desktop app
+npm run dev          # the window alone in a browser, where the mock watch stands in for Bluetooth
 ```
-
-One codebase builds three targets:
-
-```bash
-npm run android      # or npm run ios, a development build with real Bluetooth
-npm run desktop      # the Electron app, with real Bluetooth through BlueZ
-npm run tauri        # the Tauri desktop app, which is replacing Electron (see below)
-npm start            # Expo, including the browser, where the mock watch stands in
-```
-
-Bluetooth on a phone needs a development build, so Expo Go falls back to the mock watch. A plain
-browser has no Bluetooth either, and the mock is enough to work on screens without hardware.
-
-The Android SDK, NDK and JDK live in a shell of their own, since they come to a few gigabytes:
-
-```bash
-nix develop .#companion-android
-npm run android                       # build, install and start on a phone over adb
-npx expo prebuild -p android && (cd android && ./gradlew assembleRelease)   # an APK, no phone needed
-npm run tauri-android                 # the Tauri app's debug APK, for 64-bit ARM phones
-```
-
-The shell pins the versions React Native 0.86 builds against (SDK 36, build tools 36.0.0, NDK
-27.1.12297006, CMake 3.22.1) and points Gradle at the SDK's own `aapt2`, because the one Gradle
-downloads does not run on NixOS. It also carries a Rust with the Android targets, and the libclang
-that generates QuickJS's bindings for them.
-
-### Installing
-
-The flake also builds the desktop app and the command line tool as one package, with a menu entry:
-
-```bash
-nix run github:BeatLink/NeoTime#companion                # the desktop app
-nix run github:BeatLink/NeoTime#companion-tauri          # the Tauri desktop app, which is replacing it
-nix run github:BeatLink/NeoTime#companion-cli -- scan    # the command line tool
-nix profile install github:BeatLink/NeoTime#companion    # neotime-companion and neotime on PATH
-```
-
-On NixOS it can go in `environment.systemPackages` or `home.packages` as
-`inputs.neotime.packages.${system}.companion`. When `package-lock.json` changes,
-`npmDepsHash` in the repository's `flake.nix` must change with it; `nix run nixpkgs#prefetch-npm-deps --
-package-lock.json` prints the new one, and CI's Nix job fails until it matches.
 
 ```bash
 npm test
 npm run coverage     # the tests again, failing if coverage drops below the floors in package.json
 npm run typecheck
 npm run lint
+cargo test --workspace
+cargo clippy --workspace --all-targets
 ```
 
-CI runs the coverage, type check, lint and command line build on every push and pull request.
+CI runs all of these, the window and command line builds, and the Nix package on every push and
+pull request that touches the companion. When `package-lock.json` changes, `npmDepsHash` in the
+repository's `flake.nix` must change with it; `nix run nixpkgs#prefetch-npm-deps -- package-lock.json`
+prints the new one, and CI's Nix job fails until it matches.
+
+The flake builds `.#companion-tauri` (the desktop app), `.#companion-cli` (the command line tool)
+and `.#companion` (both together); installing them is in the [user guide](../docs/companion/index.md).
+
+## The window
+
+The window is [Preact](https://preactjs.com) and TypeScript, built by [Vite](https://vite.dev) into
+`dist/`, which Tauri serves on the desktop and on Android. It runs in WebKitGTK on Linux and in
+Android's WebView, so it is laid out for a phone's width first and follows the system's light or
+dark theme ([src/styles.css](src/styles.css)).
+
+- [src/app.tsx](src/app.tsx) holds the tabs and the screens opened over them; the route lives in the
+  address's hash ([src/navigation.tsx](src/navigation.tsx)), so the web view's history and Android's
+  back button step back through the screens.
+- [src/state/watch-provider.tsx](src/state/watch-provider.tsx) owns the connection and gives every
+  screen `useWatch()`.
+- Bluetooth stays behind `WatchTransport` ([src/ble/transport.ts](src/ble/transport.ts)).
+  [src/ble/tauri-transport.ts](src/ble/tauri-transport.ts) carries it to the Rust core through
+  `window.neotime`, which [tauri/src/bridge.js](tauri/src/bridge.js) gives the window. Opened in a
+  plain browser there is no bridge, so [src/ble/mock-transport.ts](src/ble/mock-transport.ts), a
+  mock NeoTime watch and a mock wasp-os bootloader, stands in.
+- Settings, backups and the store are kept in the web view's local storage
+  ([src/state/storage.ts](src/state/storage.ts)), and files are chosen and saved with the web view's
+  own file chooser and downloads ([src/services/device-files.ts](src/services/device-files.ts)).
+
+Set `NEOTIME_DEV_URL=http://localhost:5173` while `npm run dev` runs, and `npm run tauri` loads the
+window from Vite's dev server, reloading it on each change.
 
 ## The command line tool
 
-Everything the app does to a watch can be done from a terminal on Linux, over the same BlueZ
-transport the desktop app uses:
-
-```bash
-npm run neotime -- scan
-npm run neotime -- flash path/to/firmware.zip
-npm run neotime -- recovery path/to/recovery.zip
-npm run neotime -- slots fit
-npm run neotime -- time
-npm run neotime -- diag
-npm run neotime -- files ls /settings
-npm run neotime -- note shopping.txt large
-npm run neotime -- note text "Milk, bread, eggs"
-npm run neotime -- note url https://example.org/note.txt
-npm run neotime -- note url https://nas.local/note.txt --user me:secret --pin AB:CD:…
-npm run neotime -- qr https://example.org --label Example
-npm run neotime -- qr wifi Home secret --label "Home Wi-Fi"
-npm run neotime -- qr list
-npm run neotime -- qr move 2 up
-npm run neotime -- remote push
-npm run neotime -- launcher style folders
-npm run neotime -- apps setup
-npm run neotime -- apps install path/to/timer.ntapp
-npm run neotime -- store fetch BeatLink/NeoTime 1 apps
-npm run neotime -- apps list
-npm run neotime -- apps hide dice
-npm run neotime -- apps run path/to/prompt.ntapp --text text="Lunch now?"
-npm run neotime -- ask "Lunch now?" --timeout 30
-npm run neotime -- quick-apps set steps stopwatch heart
-npm run neotime -- backup watch-backup.json
-npm run neotime -- notify "Build finished" "All tests passed"
-npm run neotime -- status
-npm run neotime -- settings brightness=3
-npm run neotime -- weather Kingston
-```
+Everything the app does to a watch can be done from a terminal on Linux; its commands are in
+[the command line guide](../docs/companion/command-line.md). `npm run neotime -- <command>` rebuilds
+it with esbuild and runs it. It imports the same `src/` modules the screens do, and talks to BlueZ
+through node-ble in [node/ble.js](node/ble.js), so each protocol exists only once.
 
 The first scan remembers the watch in `~/.config/neotime-companion/cli.json`, so later commands
-need no address; `--address` and `NEOTIME_ADDRESS` override it. `npm run neotime -- help` lists
-every command. The tool runs the same code the screens run, with node-ble in place of the phone's
-Bluetooth library, so each protocol exists only once.
+need no address; `--address` and `NEOTIME_ADDRESS` override it. The tool connects to a remembered
+address without scanning. BlueZ forgets an unpaired watch soon after it last saw one, so when it
+does not know the address the tool runs discovery until the watch appears, and says so if it never
+does.
 
-## The desktop app
+## The Rust core and the desktop
 
-The desktop build is the same interface, rendered by React Native for Web and wrapped in Electron.
-Only the transport differs. `electron/ble.js` runs in the main process and talks to BlueZ through
-node-ble, and `electron/preload.js` exposes a narrow bridge to the window, so the interface never
-touches Node. `src/ble/electron-transport.ts` implements the same `WatchTransport` interface the
-phone uses, which is why every screen, every protocol and the tests are shared unchanged.
+[core/](core) is the Rust core, with no Tauri in it, so the tool and the phone can reuse it:
 
-Electron comes from the flake rather than npm, because the binary npm downloads does not run on
-NixOS. `npm run desktop` starts it through [scripts/electron.mjs](scripts/electron.mjs), which
-skips the launcher npm would otherwise put first on `PATH`; that launcher starts Electron's
-unwrapped binary, which dies with SIGILL. Run it inside `nix develop .#companion`, or the script says so.
-
-### The Tauri desktop app
-
-The desktop app is moving from Electron to [Tauri](https://tauri.app), so that the desktop, the
-phone and the command line tool can share one Rust core with each other and, later, with the
-firmware's own formats. `npm run tauri` exports the web build and starts it; `cargo test --workspace`
-runs the Rust tests.
-
-The window is the same web export. [tauri/src/bridge.js](tauri/src/bridge.js) gives it the same
-`window.neotime` object the Electron preload did, so no screen changed. Behind it:
-
-- [core/src/ble.rs](core/src/ble.rs) is the Bluetooth layer, on btleplug, with the same timeouts and
-  link handling as `node/ble.js`. It has no Tauri in it, so the tool and the phone can reuse it.
+- [core/src/ble.rs](core/src/ble.rs) is the Bluetooth layer, on btleplug. Every step has a timeout
+  and a failed connect drops the link.
   `cargo run -p neotime-companion-core --example probe` scans, connects and reads the battery and
   the time, to check it against a real watch.
+- `core/src/sync` keeps a copy of the watch ([docs/sync.md](../docs/sync.md)), and
+  `core/src/plugins` runs [plugins](../docs/plugins.md) in QuickJS.
+
+[tauri/](tauri) is the app around it. Desktop-only Rust sits behind `#[cfg(desktop)]`:
+
 - [tauri/src/desktop.rs](tauri/src/desktop.rs) reads notifications, MPRIS players, Do Not Disturb
-  and GeoClue over D-Bus with zbus, sending the window the same raw events as `node/desktop.js`.
+  and GeoClue over D-Bus with zbus.
 - [tauri/src/notes.rs](tauri/src/notes.rs) and [tauri/src/remote.rs](tauri/src/remote.rs) are the
   note file watch and the remote buttons' shell commands.
 
-Set `NEOTIME_DEV_URL` to the Expo dev server's address to load the interface from it instead.
-
-### The Tauri app on Android
-
-The same Tauri app builds for Android, beside the Expo phone app, as
-`com.neotime.companion.tauri` so both can be installed at once. `npm run tauri-android` in
-`nix develop .#companion-android` exports the web build and writes
-`tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`; Gradle and its
-dependencies download on the first build, so it needs the network then. Add `--target armv7`,
-`i686` or `x86_64` to the command for other phones and emulators. The Android project Tauri
-generated is kept in `tauri/gen/android`, with the companion's icon.
-
-The window, the core's Bluetooth, sync and plugins are the desktop app's; what differs:
-
-- **Bluetooth** is btleplug's Android backend. Its Java runs in the app, and the phone bridge
-  plugin starts it as the app opens. The first scan or connection asks for nearby devices
-  (location before Android 12) and, on Android 13 and later, notifications for the keep-alive.
-- **The phone's part** comes from [tauri-plugin-phone-bridge](tauri-plugin-phone-bridge), a Tauri
-  plugin whose Kotlin answers the window directly. It compiles the Expo module's notification
-  listener, call monitor, media tracker and keep-alive service from `modules/phone-bridge` (its
-  `build.rs` copies them in, leaving out the Expo glue), and adds the phone's location for the
-  weather and the remote buttons' intents. `bridge.js` gives the window `window.neotime.phone` in
-  place of the desktop's `desktop` and `remote`, and `src/services/phone/tauri-android.ts` turns it
-  into the `phoneBridge`.
-- **Files** chosen for a note or a plugin come from Android's picker as `content://` links, read
-  through Tauri's fs plugin; a note is read again on each check rather than watched.
-- **Plugin pages** are served at `http://plugin.localhost/<id>/`, since Android's webview reaches
-  the app's own schemes that way.
-- **Not on Android**: D-Bus, note file watching and shell commands for remote buttons, which are
-  compiled out.
-
-#### Releases
-
-Each `v*` tag publishes `NeoTime-Companion-<version>.apk` with the watch images and the store
-([release.yml](../.github/workflows/release.yml)). It is one APK for all four phone processors,
-built by `npm run tauri-android:release`, with the version taken from the tag.
-
-It is signed with the release key, which the repository keeps in its secrets:
-`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_PASSWORD` and
-`ANDROID_KEY_ALIAS`. The workflow writes the key into `tauri/gen/android` as `release.jks` and
-`keystore.properties`, which git ignores, and deletes both after the build. Without
-`keystore.properties`, a release build comes out unsigned.
-
-Every later release must be signed with the same key, or phones refuse it as an update.
-
 ### The computer in place of a phone
 
-On a phone the app forwards what the phone knows; in the desktop app the computer plays that part,
-through [node/desktop.js](node/desktop.js) in the main process and
-[src/services/phone/desktop.ts](src/services/phone/desktop.ts) in the window. Both builds share the
+On a phone the app forwards what the phone knows; on the desktop the computer plays that part,
+through [tauri/src/desktop.rs](tauri/src/desktop.rs) and
+[src/services/phone/desktop.ts](src/services/phone/desktop.ts) in the window. Both share the
 `phoneBridge` interface, so the watch provider and the screens do not know which one they have.
 
 | On a phone | On Linux |
@@ -236,27 +144,73 @@ hand, synced, a new time zone, waking from sleep), and every six hours anyway, b
 Weather from the computer's location needs GeoClue running; on NixOS that is
 `services.geoclue2.enable = true`, and GeoClue knows the app as `neotime-companion`.
 
-### Connecting by address
+## The app on Android
 
-The command line tool connects to a remembered address without scanning. BlueZ forgets an unpaired
-watch soon after it last saw one, so when it does not know the address the tool runs discovery
-until the watch appears, and says so if it never does. The desktop app uses the same Bluetooth
-layer.
+The same app builds for Android as `com.neotime.companion.tauri`. The Android SDK, NDK and JDK live
+in a shell of their own, since they come to a few gigabytes:
 
-This and the rest of what is unfinished are listed in [TODO.md](TODO.md).
+```bash
+nix develop .#companion-android
+npm run tauri-android            # a debug APK for 64-bit ARM phones
+npm run tauri-android:release    # the release APK for all four processors
+```
+
+Both build the window with Vite first (Tauri's `beforeBuildCommand`). The debug build writes
+`tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`; Gradle and its
+dependencies download on the first build, so it needs the network then. The Android project Tauri
+generated is kept in `tauri/gen/android`, with the companion's icon. The shell pins SDK 36, build
+tools 36.0.0, NDK 27.1.12297006 and CMake 3.22.1, and points Gradle at the SDK's own `aapt2`,
+because the one Gradle downloads does not run on NixOS. It also carries a Rust with the Android
+targets, and the libclang that generates QuickJS's bindings for them.
+
+The window, the core's Bluetooth, sync and plugins are the desktop app's; what differs:
+
+- **Bluetooth** is btleplug's Android backend. Its Java runs in the app, and the phone bridge
+  plugin starts it as the app opens. The first scan or connection asks for nearby devices
+  (location before Android 12) and, on Android 13 and later, notifications for the keep-alive.
+- **The phone's part** comes from [tauri-plugin-phone-bridge](tauri-plugin-phone-bridge), a Tauri
+  plugin whose Kotlin answers the window directly: the notification listener, call monitor, media
+  tracker and keep-alive service, the phone's location for the weather and the remote buttons'
+  intents. Its `build.rs` copies in btleplug's Java. `bridge.js` gives the window
+  `window.neotime.phone` in place of the desktop's `desktop` and `remote`, and
+  `src/services/phone/tauri-android.ts` turns it into the `phoneBridge`.
+- **Files** chosen for a note or a plugin come from Android's picker as `content://` links, read
+  through Tauri's fs plugin; a note is read again on each check rather than watched.
+- **Plugin pages** are served at `http://plugin.localhost/<id>/`, since Android's webview reaches
+  the app's own schemes that way.
+- **Not on Android**: D-Bus, note file watching and shell commands for remote buttons, which are
+  compiled out.
+
+### Releases
+
+Each `v*` tag publishes `NeoTime-Companion-<version>.apk` with the watch images and the store
+([release.yml](../.github/workflows/release.yml)). It is one APK for all four phone processors,
+built by `npm run tauri-android:release`, with the version taken from the tag.
+
+It is signed with the release key, which the repository keeps in its secrets:
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_PASSWORD` and
+`ANDROID_KEY_ALIAS`. The workflow writes the key into `tauri/gen/android` as `release.jks` and
+`keystore.properties`, which git ignores, and deletes both after the build. Without
+`keystore.properties`, a release build comes out unsigned.
+
+Every later release must be signed with the same key, or phones refuse it as an update.
 
 ## Layout
 
 ```
-src/app/                 Expo Router screens
-  (tabs)/index.tsx       Watch: connection, status, diagnostics and quick actions
-  (tabs)/firmware.tsx    Send a firmware package to the watch over DFU
-  (tabs)/notifications   Forwarding toggles
-  (tabs)/console.tsx     Raw UART traffic and a line to send as it is
-  (tabs)/settings.tsx    App settings: weather place, hosts watch apps may fetch, GitHub builds
-  scan.tsx               Modal that lists nearby watches
+index.html, src/main.tsx  The window's entry point, which Vite builds into dist/
+src/app.tsx              The tabs and the screens opened over them
+src/screens/             One file per screen
+  watch.tsx              Watch: connection, status, diagnostics and quick actions
+  firmware.tsx           Send a firmware package to the watch over DFU
+  notifications.tsx      Forwarding toggles
+  console.tsx            Raw UART traffic and a line to send as it is
+  settings.tsx           App settings: weather place, hosts watch apps may fetch, GitHub builds
+  scan.tsx               Lists nearby watches
   apps.tsx               Install a compiled .ntapp image, hide or remove an app, see its memory
-  setup.tsx              Set up a new watch: the shared icons, a face, the launcher and apps
+  setup.tsx              Set up a new watch: a face, the launcher and apps
+  store.tsx              Every app, face and plugin to install, and more from files and GitHub
+  plugins.tsx            Installed plugins, their watch apps and their settings pages
   notes.tsx              The note the watch's Notes app shows (typed, a file or a URL), and its font
   qr-code.tsx            QR codes for text, links or Wi-Fi networks, and the list the watch's qr-code app keeps
   remote.tsx             The watch's Remote app: its buttons, what each runs here, and recent taps
@@ -266,25 +220,23 @@ src/app/                 Expo Router screens
   backup.tsx             Copy the watch's settings and app state off and back
   steps.tsx              The last week of steps, by day and by hour
   alarms.tsx             The watch's alarms and the days they repeat on
-  watch-settings.tsx     Brightness, face, timeout, units, step goal and theme on the watch
-electron/                Desktop app: main process, preload bridge and file server
-core/                    Rust core shared by every build: Bluetooth on btleplug, and the plugin host
+  watch-settings.tsx     Brightness, timeout, units, step goal, the Gadgetbridge name and theme on the watch
+src/components/          Shared building blocks: cards, rows, buttons, fields, the plugin page frame
+src/styles.css           The light and dark theme and the components' look
+core/                    Rust core: Bluetooth on btleplug, sync, the plugin host and web requests
 tauri/                   Tauri app: the window's bridge, D-Bus, note files, remote commands, plugins;
                          gen/android holds its Android project
-tauri-plugin-phone-bridge/  The Tauri app's phone bridge on Android, on the Expo module's Kotlin
+tauri-plugin-phone-bridge/  The phone bridge on Android: Kotlin services and commands
 plugins/                 Example plugins; npm run build-plugin -- plugins/<name> builds one
-src/ble/                 Transport layer: react-native-ble-plx, Electron, and a mock for browsers
+src/ble/                 Transport layer: the bridge to the core, and a mock for a plain browser
 src/dfu/                 Firmware updates: Nordic legacy DFU and the package reader
 cli/                     The command line tool, which runs the same code as the screens
-node/                    BlueZ over node-ble, shared by the desktop app and the tool, and the
-                         computer's notifications, media players and location over D-Bus
+node/                    The command line tool's BlueZ over node-ble, web requests and shell commands
 src/protocol/            NeoTime's GATT services, the file service, the Gadgetbridge messages,
                          backups and the requests the watch answers
-src/services/            Weather, the watch apps' http proxy and GitHub firmware builds
+src/services/            Weather, the watch apps' http proxy, GitHub builds, files on this device
 src/services/phone/      Notifications, calls, media and Do Not Disturb from the phone or computer
-modules/phone-bridge/    The Android native module behind it, whose services the Tauri plugin shares
-src/state/               Watch provider (connection, capabilities, traffic, settings)
-src/components/          Themed building blocks
+src/state/               Watch provider (connection, capabilities, traffic, settings), routes, storage
 ```
 
 ## What the watch serves
@@ -394,12 +346,12 @@ is sent again. [src/state/note-sync.ts](src/state/note-sync.ts) checks when the 
 every minute, and when the source, its contents or the font change here, one check at a time. Notes are limited to
 64 kB.
 
-[src/services/note-file.ts](src/services/note-file.ts) reaches a chosen file. The desktop app picks it
-in a file dialog and reads it from disk in the main process
-([node/note-file.js](node/note-file.js)), which also watches its folder, so a save is sent within a
-moment. A phone or a browser keeps the document picker's link and reads it again on each check; a
-browser can read it only until the page reloads, and a phone may withdraw the app's access to it
-after a restart, in which case the screen asks for the file again.
+[src/services/note-file.ts](src/services/note-file.ts) reaches a chosen file through the core
+([tauri/src/notes.rs](tauri/src/notes.rs)). On the desktop it is picked in a file dialog and read
+from disk, and its folder is watched, so a save is sent within a moment. On Android the picker gives
+a `content://` link that is read again on each check, and the phone may withdraw the app's access
+to it after a restart, in which case the screen asks for the file again. The window in a plain
+browser keeps a link to the chosen file only until the page reloads.
 
 ## QR code
 
@@ -429,8 +381,8 @@ only the companion shows, and an action.
 | Action | Where it runs | How |
 | --- | --- | --- |
 | Web request | everywhere | the method, headers, body, login and certificate choice given, 15 s timeout; see [Web requests](#web-requests) |
-| Command | desktop app | the user's shell in the Electron main process ([node/remote-command.js](node/remote-command.js)), 30 s timeout |
-| Android | Android app | a link opened with `ACTION_VIEW`, an activity or a broadcast, through `modules/phone-bridge` |
+| Command | desktop app, command line | the user's shell, from the core ([tauri/src/remote.rs](tauri/src/remote.rs)) or the tool ([node/remote-command.js](node/remote-command.js)), 30 s timeout |
+| Android | Android app | a link opened with `ACTION_VIEW`, an activity or a broadcast, through `tauri-plugin-phone-bridge` |
 | Ready-made | Android and desktop app | play/pause, play, pause, next, previous and volume through `phoneBridge.mediaCommand`; "find this device" everywhere, which shows the same card the watch's find phone does |
 
 An action the device cannot run is marked unavailable in the screen and skipped, with the reason
@@ -454,11 +406,10 @@ TLS handshake, so the headers and login never reach a server that fails it, and 
 proves the server holds the certificate's key.
 
 A window's or a phone's `fetch` cannot change how certificates are checked, so each app makes the
-request natively: the Electron main process and the command line tool through
-[node/web-request.js](node/web-request.js), the Tauri app through `web_request` in
-[core/src/web_request.rs](core/src/web_request.rs), and the Android app through `WebRequest.kt` in
-`modules/phone-bridge`. Native requests also skip the window's cross-origin rules. Only a browser
-and Expo Go fall back to `fetch`, where a server must allow cross-origin reads
+request natively: the app, on the desktop and on Android, through `web_request` in
+[core/src/web_request.rs](core/src/web_request.rs), and the command line tool through
+[node/web-request.js](node/web-request.js). Native requests also skip the window's cross-origin
+rules. Only the window in a plain browser falls back to `fetch`, where a server must allow cross-origin reads
 (`Access-Control-Allow-Origin`) and a choice other than the usual check is refused. Logins are kept
 in the app's settings, unencrypted, as the GitHub token is. The command line takes the same choices
 as `--header 'Name: value'`, `--user name:password`, `--pin <sha256>` and `--insecure`.

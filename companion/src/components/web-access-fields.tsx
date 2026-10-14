@@ -19,23 +19,20 @@ export function WebAccessFields({ form, set }: { form: WebAccessForm; set: (patc
         label="Headers"
         detail="One Name: value per line."
         multiline
-        autoCapitalize="none"
         value={form.headers}
         onChangeText={(headers) => set({ headers })}
       />
       <TextRow
         label="Username"
         detail="For a server that asks for a login (HTTP basic auth)."
-        autoCapitalize="none"
-        textContentType="username"
+        autoComplete="username"
         value={form.username}
         onChangeText={(username) => set({ username })}
       />
       <TextRow
         label="Password"
-        secureTextEntry
-        autoCapitalize="none"
-        textContentType="password"
+        password
+        autoComplete="current-password"
         value={form.password}
         onChangeText={(password) => set({ password })}
       />
@@ -44,7 +41,7 @@ export function WebAccessFields({ form, set }: { form: WebAccessForm; set: (patc
         detail={
           native
             ? 'For a self-signed certificate, trust that one certificate by its SHA-256 fingerprint.'
-            : 'Only the usual check works here; trusting a self-signed certificate needs the desktop or Android app.'
+            : 'Only the usual check works in a browser; trusting a self-signed certificate needs the app.'
         }
         options={TRUST_CHOICES}
         value={form.certificate}
@@ -55,7 +52,6 @@ export function WebAccessFields({ form, set }: { form: WebAccessForm; set: (patc
           label="SHA-256 fingerprint"
           detail="openssl x509 -noout -fingerprint -sha256 -in cert.pem prints it."
           placeholder="AB:CD:…"
-          autoCapitalize="none"
           value={form.certificateSha256}
           onChangeText={(certificateSha256) => set({ certificateSha256 })}
         />

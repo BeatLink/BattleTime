@@ -1,6 +1,6 @@
 // Runs one watch operation at a time for a screen and keeps what it is doing and how it failed.
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'preact/hooks';
 
 export type Task = {
   busy: string | null;

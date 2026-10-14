@@ -1,7 +1,7 @@
 // The watch's records that the Steps and Alarms screens and the command line show: step logs and apps' saved state.
 //
-// With the Rust core's sync (the Tauri app) they come from its copy and changes go through it; without
-// it (the Expo phone app, Electron, the command line) they are read and written with the file service.
+// In the app they come from the Rust core's sync copy and changes go through it; without it (the command
+// line, and the window in a plain browser) they are read and written with the file service.
 
 import { alarmsFromState, alarmStateChanges, type WatchAlarm } from '@/protocol/alarms';
 import { readAppStateFile, writeAppStateFile, type AppStateJson } from '@/protocol/app-state';

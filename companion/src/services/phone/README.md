@@ -6,20 +6,17 @@ media, and lets the watch act on them. In the desktop app the computer stands in
 
 ## Platforms
 
-- **Android** uses the Expo local module in `modules/phone-bridge`. Its manifest declares the
-  services and permissions, and Gradle merges them into the app, so no config plugin is needed.
-  The module is native code, so it needs a development build.
-- **The Tauri app on Android** uses `tauri-android.ts`, fed by `tauri-plugin-phone-bridge`, a Tauri
-  plugin that compiles this module's services with Kotlin commands of its own in place of the Expo
-  glue. It also finds the phone's location for the weather, so `supportsLocation` is true there.
-- **The desktop app** uses `desktop.ts`, fed by `node/desktop.js` in Electron's main process over
-  D-Bus: desktop notifications, MPRIS media players, Do Not Disturb and GeoClue's location. It has
-  no calls and needs no keep-alive. `kind` is `computer`, so the screens say "computer".
-- **iOS, web and Expo Go** get a stub with `available: false`. Queries answer `false`, actions
-  reject, and `subscribe` never calls back. iOS has no public way to read other apps'
-  notifications; that would need ANCS on the watch.
+- **Android** uses `tauri-android.ts`, fed by `tauri-plugin-phone-bridge`, a Tauri plugin whose
+  Kotlin services and commands live in its `android/` folder. Its manifest declares the services
+  and permissions, and Gradle merges them into the app. It also finds the phone's location for the
+  weather, so `supportsLocation` is true there.
+- **The desktop app** uses `desktop.ts`, fed by `tauri/src/desktop.rs` over D-Bus: desktop
+  notifications, MPRIS media players, Do Not Disturb and GeoClue's location. It has no calls and
+  needs no keep-alive. `kind` is `computer`, so the screens say "computer".
+- **A plain browser** (the window under `npm run dev`) gets a stub with `available: false`. Queries
+  answer `false`, actions reject, and `subscribe` never calls back.
 
-## What the Android module does
+## What the Android plugin does
 
 - **Notifications.** A `NotificationListenerService` sends `notification` and
   `notificationRemoved` events once the user turns on notification access
@@ -43,7 +40,7 @@ media, and lets the watch act on them. In the desktop app the computer stands in
 - **Do Not Disturb.** `isDoNotDisturb` is true when the interruption filter is anything but "all".
   Nothing is filtered natively; the app decides what to forward.
 - **Keep-alive.** `startKeepAlive` runs a foreground service of type `connectedDevice` with an
-  ongoing notification, so the Bluetooth link in JavaScript survives the app being backgrounded.
+  ongoing notification, so the Bluetooth link survives the app being backgrounded.
   Call it while the app is in front, because Android refuses to start one from the background.
 
-The Kotlin compiles in both debug APKs but has never run on a phone.
+The Kotlin compiles in the debug APK but has never run on a phone.

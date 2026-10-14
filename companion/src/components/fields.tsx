@@ -1,11 +1,8 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
+import type { TargetedEvent } from 'preact';
+import { useState } from 'preact/hooks';
 
 import { Button } from './button';
 import { ThemedText } from './themed-text';
-
-import { Radius, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
 
 type Option<T> = { value: T; label: string };
 
@@ -20,72 +17,108 @@ type ChoiceRowProps<T> = {
 
 // A label over a row of buttons, one of which is chosen.
 export function ChoiceRow<T>({ label, detail, options, value, onChange, disabled }: ChoiceRowProps<T>) {
-  const theme = useTheme();
   return (
-    <View style={styles.choice}>
+    <div class="field" role="group" aria-label={label}>
       <ThemedText>{label}</ThemedText>
       {detail ? (
         <ThemedText type="small" themeColor="textSecondary">
           {detail}
         </ThemedText>
       ) : null}
-      <View style={styles.options}>
+      <div class="options">
         {options.map((option) => {
           const selected = option.value === value;
           return (
-            <Pressable
+            <button
+              type="button"
               key={option.label}
+              class={selected ? 'option selected' : 'option'}
+              aria-pressed={selected}
               disabled={disabled}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              onPress={() => onChange(option.value)}>
-              <View
-                style={[
-                  styles.option,
-                  { backgroundColor: selected ? theme.accent : theme.backgroundSelected, opacity: disabled ? 0.5 : 1 },
-                ]}>
-                <ThemedText type="small" style={{ color: selected ? theme.onAccent : theme.text }}>
-                  {option.label}
-                </ThemedText>
-              </View>
-            </Pressable>
+              onClick={() => onChange(option.value)}>
+              {option.label}
+            </button>
           );
         })}
-      </View>
-    </View>
+      </div>
+    </div>
   );
 }
 
-type TextRowProps = TextInputProps & { label: string; detail?: string };
+export type TextRowProps = {
+  label: string;
+  detail?: string;
+  value: string;
+  onChangeText?: (text: string) => void;
+  onBlur?: () => void;
+  // Called on Enter in a one-line box.
+  onSubmit?: () => void;
+  placeholder?: string;
+  multiline?: boolean;
+  // How many lines a multiline box shows before it scrolls.
+  rows?: number;
+  password?: boolean;
+  inputMode?: 'text' | 'url' | 'numeric';
+  autoCapitalize?: 'none' | 'sentences' | 'words';
+  autoComplete?: string;
+};
 
 // A label with a text box under it.
-export function TextRow({ label, detail, style, ...rest }: TextRowProps) {
-  const theme = useTheme();
+export function TextRow({
+  label,
+  detail,
+  value,
+  onChangeText,
+  onBlur,
+  onSubmit,
+  placeholder,
+  multiline,
+  rows,
+  password,
+  inputMode,
+  autoCapitalize = 'none',
+  autoComplete = 'off',
+}: TextRowProps) {
+  const shared = {
+    class: 'input',
+    value,
+    placeholder,
+    'aria-label': label,
+    autoCapitalize,
+    autoComplete,
+    spellcheck: autoCapitalize === 'sentences',
+    onInput: (event: TargetedEvent<HTMLInputElement | HTMLTextAreaElement>) => onChangeText?.(event.currentTarget.value),
+    onBlur,
+  };
+  const submitOnEnter = (event: KeyboardEvent) => {
+    if (event.key === 'Enter') onSubmit?.();
+  };
   return (
-    <View style={styles.choice}>
+    <label class="field">
       <ThemedText>{label}</ThemedText>
       {detail ? (
         <ThemedText type="small" themeColor="textSecondary">
           {detail}
         </ThemedText>
       ) : null}
-      <TextInput
-        placeholderTextColor={theme.textSecondary}
-        autoCapitalize="none"
-        autoCorrect={false}
-        style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundSelected }, style]}
-        {...rest}
-      />
-    </View>
+      {multiline ? (
+        <textarea {...shared} rows={rows ?? 3} />
+      ) : (
+        password ? (
+          <input {...shared} type="password" onKeyDown={submitOnEnter} />
+        ) : (
+          <input {...shared} type="text" inputMode={inputMode} onKeyDown={submitOnEnter} />
+        )
+      )}
+    </label>
   );
 }
 
-type SavedTextRowProps = Omit<TextRowProps, 'value' | 'onChangeText' | 'defaultValue'> & {
-  value: string;
+type SavedTextRowProps = Omit<TextRowProps, 'onChangeText' | 'onBlur' | 'onSubmit'> & {
   onSave: (text: string) => void;
 };
 
-// A text row that keeps its edit locally and saves it when the box loses focus or is submitted.
+// A text row that keeps its edit locally and saves it when the box loses focus or Enter is pressed.
 export function SavedTextRow({ value, onSave, ...rest }: SavedTextRowProps) {
   const [text, setText] = useState(value);
   const save = () => {
@@ -93,49 +126,20 @@ export function SavedTextRow({ value, onSave, ...rest }: SavedTextRowProps) {
       onSave(text);
     }
   };
-  return <TextRow {...rest} value={text} onChangeText={setText} onBlur={save} onSubmitEditing={save} />;
+  return <TextRow {...rest} value={text} onChangeText={setText} onBlur={save} onSubmit={save} />;
 }
 
 // An error from the watch or the network, with a way to put it away.
 export function ErrorNote({ error, onDismiss }: { error: string | null; onDismiss?: () => void }) {
-  const theme = useTheme();
   if (!error) {
     return null;
   }
   return (
-    <View style={styles.error}>
-      <ThemedText type="small" style={{ color: theme.danger }}>
+    <div class="stack">
+      <ThemedText type="small" themeColor="danger">
         {error}
       </ThemedText>
-      {onDismiss ? <Button title="Dismiss" variant="secondary" onPress={onDismiss} /> : null}
-    </View>
+      {onDismiss ? <Button title="Dismiss" variant="secondary" onClick={onDismiss} /> : null}
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  choice: {
-    gap: Spacing.two,
-    paddingVertical: Spacing.two,
-  },
-  options: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    flexWrap: 'wrap',
-  },
-  option: {
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Radius.small,
-    minHeight: 36,
-    justifyContent: 'center',
-  },
-  input: {
-    borderRadius: Radius.small,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    minHeight: 44,
-  },
-  error: {
-    gap: Spacing.two,
-  },
-});

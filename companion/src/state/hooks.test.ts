@@ -1,17 +1,20 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import * as DocumentPicker from 'expo-document-picker';
-import { createElement } from 'react';
-import { act, create } from 'react-test-renderer';
+/**
+ * @jest-environment jsdom
+ */
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { createElement, render } from 'preact';
+import { act } from 'preact/test-utils';
 
 import { ENTER_DFU_COMMAND, flashFirmware, type FlashStep } from '@/dfu/flash';
 import type { DfuLink } from '@/dfu/link';
 import { readFirmwarePackage, type FirmwarePackage } from '@/dfu/package';
 import { setWatchTime } from '@/protocol/neotime';
+import { pickFile } from '@/services/device-files';
 
 import { useFirmware } from './use-firmware';
 import { useTask } from './use-task';
 
-jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
+jest.mock('@/services/device-files', () => ({ pickFile: jest.fn() }));
 jest.mock('@/dfu/package', () => ({ readFirmwarePackage: jest.fn() }));
 jest.mock('@/protocol/neotime', () => ({ setWatchTime: jest.fn() }));
 jest.mock('@/dfu/flash', () => ({
@@ -19,7 +22,7 @@ jest.mock('@/dfu/flash', () => ({
   flashFirmware: jest.fn(),
 }));
 
-const pick = jest.mocked(DocumentPicker.getDocumentAsync);
+const pick = jest.mocked(pickFile);
 const parse = jest.mocked(readFirmwarePackage);
 const flashMock = jest.mocked(flashFirmware);
 
@@ -31,7 +34,7 @@ function renderHook<T>(hook: () => T): { current: T } {
     return null;
   }
   act(() => {
-    create(createElement(Probe));
+    render(createElement(Probe, null), document.createElement('div'));
   });
   return result;
 }
@@ -116,17 +119,8 @@ describe('useFirmware', () => {
     });
   }
 
-  let fetchSpy: jest.SpiedFunction<typeof fetch>;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    fetchSpy = jest
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue({ arrayBuffer: async () => new Uint8Array([9, 8]).buffer } as Response);
-  });
-
-  afterEach(() => {
-    fetchSpy.mockRestore();
   });
 
   it('takes a package and its size', () => {
@@ -139,20 +133,18 @@ describe('useFirmware', () => {
   });
 
   it('reads and parses the file the user picks', async () => {
-    pick.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file:///fw.zip', name: 'fw.zip' }] } as never);
+    pick.mockResolvedValueOnce({ name: 'fw.zip', data: new Uint8Array([9, 8]) });
     parse.mockReturnValueOnce(firmware);
     const state = renderFirmware();
     await act(() => state.current.choose());
-    expect(fetchSpy).toHaveBeenCalledWith('file:///fw.zip');
+    expect(pick).toHaveBeenCalledWith(expect.stringContaining('.zip'));
     expect(parse).toHaveBeenCalledWith(new Uint8Array([9, 8]), 'fw.zip');
     expect(state.current.firmware).toBe(firmware);
   });
 
-  it('does nothing when the picker is cancelled or returns no file', async () => {
-    pick.mockResolvedValueOnce({ canceled: true, assets: null } as never);
-    pick.mockResolvedValueOnce({ canceled: false, assets: [] } as never);
+  it('does nothing when the picker is cancelled', async () => {
+    pick.mockResolvedValueOnce(null);
     const state = renderFirmware();
-    await act(() => state.current.choose());
     await act(() => state.current.choose());
     expect(parse).not.toHaveBeenCalled();
     expect(state.current.firmware).toBeNull();
@@ -160,7 +152,7 @@ describe('useFirmware', () => {
   });
 
   it('drops the package and shows why when the picked file is not firmware', async () => {
-    pick.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///x', name: 'x' }] } as never);
+    pick.mockResolvedValue({ name: 'x', data: new Uint8Array([1]) });
     parse.mockReturnValueOnce(firmware);
     parse.mockImplementationOnce(() => {
       throw new Error('No manifest.json in x');

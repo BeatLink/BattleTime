@@ -1,4 +1,4 @@
-// The native side of web requests: the desktop app's bridge here, the PhoneBridge module in web-bridge.android.ts.
+// The native side of web requests: the app's Rust core, through window.neotime.web on the desktop and Android.
 import type { NativeWebBridge } from './web-request';
 
 export function nativeWebBridge(): NativeWebBridge | null {

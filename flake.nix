@@ -139,7 +139,7 @@
         # The companion app
         # ====================================================================
 
-        # The versions React Native 0.86 and Expo SDK 57 build against.
+        # The Android versions the Tauri app's Gradle project builds against.
         companionAndroid = {
           platform = "36";
           buildTools = "36.0.0";
@@ -149,7 +149,7 @@
 
         companionAndroidSdk = (pkgs.androidenv.composeAndroidPackages {
           platformVersions = [ companionAndroid.platform ];
-          # Some Expo modules still ask for build tools 35 as well.
+          # Build tools 35 stay alongside 36 for Gradle plugins that ask for them.
           buildToolsVersions = [ companionAndroid.buildTools "35.0.0" ];
           includeNDK = true;
           ndkVersions = [ companionAndroid.ndk ];
@@ -166,115 +166,56 @@
           targets = [ "aarch64-linux-android" "armv7-linux-androideabi" "i686-linux-android" "x86_64-linux-android" ];
         };
 
-        # The desktop app runs the Electron from nixpkgs rather than the prebuilt binary npm
-        # downloads, which does not run on NixOS.
-        companionElectron = pkgs.electron;
-
-        # The installable desktop app and command line tool.
-        companion = pkgs.buildNpmPackage {
-          pname = "neotime-companion";
+        # The command line tool, bundled with esbuild so it needs nothing from node_modules at run time.
+        companionCli = pkgs.buildNpmPackage {
+          pname = "neotime-companion-cli";
           version = (lib.importJSON ./companion/package.json).version;
           src = lib.cleanSource ./companion;
 
           nodejs = pkgs.nodejs_22;
-          npmDepsHash = "sha256-3dAdDnct/C6GZpm0WVoJyKzu902DjMOP5JstEOwfuxI=";
+          npmDepsHash = "sha256-WewPJft4QoSC/Qg/Jb83UEpwRtVcwupHcVEmiGQQwCI=";
           makeCacheWritable = true;
-
-          nativeBuildInputs = [ pkgs.makeWrapper pkgs.copyDesktopItems ];
-
-          env = {
-            ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
-            # Expo would otherwise try to reach its servers during the build.
-            EXPO_OFFLINE = "1";
-            EXPO_NO_TELEMETRY = "1";
-            CI = "1";
-          };
 
           buildPhase = ''
             runHook preBuild
-
-            npx expo export --platform web --output-dir dist
-
-            # Both bundles carry their Bluetooth and D-Bus code, so nothing
-            # from node_modules is needed at run time.
-            npx esbuild electron/main.js --bundle --platform=node --target=node20 \
-              --format=cjs --external:electron --external:x11 --external:usocket \
-              --outfile=build/electron/main.js
-            cp electron/preload.js build/electron/preload.js
-            # Electron takes the app's name and version from a package.json beside its main script.
-            cat > build/electron/package.json <<EOF
-            {"name": "neotime-companion", "productName": "NeoTime Companion", "version": "$version", "main": "main.js"}
-            EOF
             npx esbuild cli/neotime.ts --bundle --platform=node --target=node20 \
               --format=cjs --alias:@=./src --external:x11 --external:usocket \
               --outfile=build/neotime.cjs
-
             runHook postBuild
           '';
 
           installPhase = ''
             runHook preInstall
-
-            share=$out/share/neotime-companion
-            mkdir -p $share $out/bin
-            cp -r build/electron $share/electron
-            cp -r dist $share/dist
-            cp build/neotime.cjs $share/neotime.cjs
-
-            makeWrapper ${companionElectron}/bin/electron $out/bin/neotime-companion \
-              --unset ELECTRON_RUN_AS_NODE \
-              --add-flags $share/electron/main.js
-
+            install -Dm644 build/neotime.cjs $out/share/neotime-companion/neotime.cjs
             makeWrapper ${pkgs.nodejs_22}/bin/node $out/bin/neotime \
-              --add-flags $share/neotime.cjs
-
-            install -Dm644 assets/images/icon.png \
-              $out/share/icons/hicolor/512x512/apps/neotime-companion.png
-
+              --add-flags $out/share/neotime-companion/neotime.cjs
             runHook postInstall
           '';
 
-          desktopItems = [
-            (pkgs.makeDesktopItem {
-              name = "neotime-companion";
-              desktopName = "NeoTime Companion";
-              comment = "Companion for watches running NeoTime";
-              exec = "neotime-companion";
-              icon = "neotime-companion";
-              categories = [ "Utility" ];
-              startupWMClass = "NeoTime Companion";
-            })
-          ];
+          nativeBuildInputs = [ pkgs.makeWrapper ];
 
           meta = {
-            description = "Desktop app and command line tool for watches running NeoTime";
+            description = "Command line tool for watches running NeoTime";
             homepage = "https://github.com/BeatLink/NeoTime";
             license = lib.licenses.gpl3Plus;
-            mainProgram = "neotime-companion";
+            mainProgram = "neotime";
             platforms = lib.platforms.linux;
           };
         };
 
-        # The companion's interface as a static web export, which the Tauri desktop app embeds.
+        # The companion's window, built by Vite, which the Tauri desktop app embeds.
         companionWeb = pkgs.buildNpmPackage {
           pname = "neotime-companion-web";
           version = (lib.importJSON ./companion/package.json).version;
           src = lib.cleanSource ./companion;
 
           nodejs = pkgs.nodejs_22;
-          npmDepsHash = companion.npmDepsHash;
+          npmDepsHash = companionCli.npmDepsHash;
           makeCacheWritable = true;
-
-          env = {
-            ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
-            EXPO_OFFLINE = "1";
-            EXPO_NO_TELEMETRY = "1";
-            CI = "1";
-          };
 
           buildPhase = ''
             runHook preBuild
-            npx expo export --platform web --output-dir dist
+            npx vite build
             runHook postBuild
           '';
 
@@ -285,7 +226,16 @@
           '';
         };
 
-        # The Tauri desktop app, with the web export built in and its Bluetooth, D-Bus and plugins in Rust.
+        # The desktop app and the command line tool together, as one installable package.
+        companion = pkgs.symlinkJoin {
+          name = "neotime-companion-${(lib.importJSON ./companion/package.json).version}";
+          paths = [ companionTauri companionCli ];
+          meta = companionTauri.meta // {
+            description = "The NeoTime Companion desktop app and command line tool";
+          };
+        };
+
+        # The Tauri desktop app, with the Vite build built in and its Bluetooth, D-Bus and plugins in Rust.
         companionTauri = pkgs.rustPlatform.buildRustPackage {
           pname = "neotime-companion-tauri";
           version = (lib.importJSON ./companion/package.json).version;
@@ -347,26 +297,14 @@
           openssl
         ];
 
-        # Chromium is the browser with Web Bluetooth, for testing the web build against a real watch.
+        # Chromium loads the window under `npm run dev`, where the mock watch stands in for Bluetooth.
         companionPackages = with pkgs; [
           nodejs_22
-          companionElectron
           bluez
           dbus
           git
         ] ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux ([ pkgs.chromium ] ++ companionTauriPackages);
 
-        # Nothing here should download an Electron of its own; the one on PATH is the wrapper that
-        # works, and the unwrapped binary under libexec dies with SIGILL.
-        companionEnvironment = {
-          ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
-        };
-
-        # The VSCode terminal exports ELECTRON_RUN_AS_NODE, which makes Electron start as a bare
-        # Node process and exit at once.
-        companionShellHook = ''
-          unset ELECTRON_RUN_AS_NODE
-        '';
         # The App Builder, a VS Code extension; the editor module names its folder from the passthru values.
         appbuilderVersion = (lib.importJSON ./tools/appbuilder/package.json).version;
         appbuilder = pkgs.buildNpmPackage {
@@ -403,6 +341,7 @@
           simulator = simulator;
           infinisim = infinisimPackage;
           companion = companion;
+          companion-cli = companionCli;
           companion-tauri = companionTauri;
           companion-android-sdk = companionAndroidSdk;
           appbuilder = appbuilder;
@@ -413,7 +352,7 @@
           simulator = flake-utils.lib.mkApp { drv = simulator; };
           infinisim = flake-utils.lib.mkApp { drv = infinisimPackage; };
           companion = flake-utils.lib.mkApp { drv = companion; };
-          companion-cli = flake-utils.lib.mkApp { drv = companion; name = "neotime"; };
+          companion-cli = flake-utils.lib.mkApp { drv = companionCli; };
           companion-tauri = flake-utils.lib.mkApp { drv = companionTauri; };
         };
 
@@ -467,23 +406,23 @@
           '';
         };
 
-        devShells.companion = pkgs.mkShell (companionEnvironment // {
+        devShells.companion = pkgs.mkShell {
           packages = companionPackages;
 
-          shellHook = companionShellHook + ''
+          shellHook = ''
             echo "NeoTime Companion (run these from companion/)"
-            echo "  npm install          install dependencies"
-            echo "  npm start            phone and web, via Expo"
-            echo "  npm run desktop      build the web export and open the Electron desktop app"
-            echo "  npm run tauri        build the web export and open the Tauri desktop app"
-            echo "  npm test             protocol tests"
+            echo "  npm ci               install dependencies"
+            echo "  npm run tauri        build the window with Vite and open the desktop app"
+            echo "  npm run dev          the window alone in a browser, with a mock watch"
+            echo "  npm test             the TypeScript tests"
+            echo "  npm run neotime -- <command>   the command line tool"
             echo "  cargo test --workspace   the Rust core and the Tauri app"
             echo "  nix develop .#companion-android   the shell with the Android SDK"
           '';
-        });
+        };
 
         # The Android SDK is several gigabytes, so it has a shell of its own.
-        devShells.companion-android = pkgs.mkShell (companionEnvironment // {
+        devShells.companion-android = pkgs.mkShell {
           packages = [ companionAndroidRust ]
             ++ lib.subtractLists [ pkgs.cargo pkgs.rustc pkgs.clippy pkgs.rustfmt ] companionPackages
             ++ [ companionAndroidSdk pkgs.jdk17 ];
@@ -500,13 +439,11 @@
           # Gradle's own aapt2 is built for other Linux systems and does not run on NixOS.
           GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${companionAndroidSdkRoot}/build-tools/${companionAndroid.buildTools}/aapt2";
 
-          shellHook = companionShellHook + ''
+          shellHook = ''
             echo "NeoTime Companion, with the Android SDK (run these from companion/)"
-            echo "  npm run android      build, install and start the app on a phone over adb"
-            echo "  npx expo prebuild -p android && (cd android && ./gradlew assembleRelease)"
-            echo "                       build an APK without a phone"
-            echo "  npm run tauri-android   build the Tauri app's debug APK"
+            echo "  npm run tauri-android           build the app's debug APK for arm64"
+            echo "  npm run tauri-android:release   build the release APK for every ABI, signed when keystore.properties exists"
           '';
-        });
+        };
       });
 }

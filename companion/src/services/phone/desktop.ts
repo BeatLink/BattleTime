@@ -1,12 +1,12 @@
 // The desktop app's stand-in for a phone: desktop notifications, media players and Do Not Disturb from the computer.
 //
-// node/desktop.js reads them over D-Bus in the Electron main process and passes raw facts through the preload bridge;
+// tauri/src/desktop.rs reads them over D-Bus and passes raw facts through window.neotime.desktop;
 // this file turns those into the same events the Android bridge sends.
 
 import type { DeviceLocation, MediaCommand, PhoneBridge, PhoneEvent } from './types';
 
 // ============================================================================
-// What the preload bridge carries
+// What the bridge carries
 // ============================================================================
 
 type BridgeResult = { ok: boolean; error?: string; value?: unknown };

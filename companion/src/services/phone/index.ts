@@ -1,5 +1,5 @@
-// The Tauri app on Android reads the phone through its plugin, the desktop app reads the computer through its bridge;
-// iOS and browsers have neither, and the Expo Android app uses index.android.ts.
+// The app on Android reads the phone through its plugin, and on the desktop reads the computer through its bridge;
+// a plain browser has neither.
 import { createDesktopPhoneBridge, desktopDeviceBridge } from './desktop';
 import { unavailablePhoneBridge } from './stub';
 import { createTauriPhoneBridge, tauriPhoneDevice } from './tauri-android';

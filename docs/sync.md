@@ -3,9 +3,9 @@
 The companion keeps a copy of every setting and record on the watch. While the watch is connected it
 reads everything again on one interval, five minutes unless changed. The interval is set under
 Settings, then Sync, in the companion. The same interval paces the companion's status reads (battery
-and today's steps) in every build.
+and today's steps), and the command line tool's.
 
-The Rust core does the syncing, so it runs in the Tauri app, on the desktop and on Android alike. The
+The Rust core does the syncing, so it runs in the app, on the desktop and on Android alike. The
 code is in `companion/core/src/sync/`, and the Tauri app's part is `companion/tauri/src/sync.rs`.
 
 A phone and a desktop companion will keep this copy in step with each other too; see

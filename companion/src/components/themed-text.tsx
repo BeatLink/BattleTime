@@ -1,73 +1,34 @@
-import { Platform, StyleSheet, Text, type TextProps } from 'react-native';
+import type { ComponentChildren, CSSProperties } from 'preact';
 
-import { Accent, Fonts, ThemeColor } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { theme, type ThemeColor } from '@/constants/theme';
 
-export type ThemedTextProps = TextProps & {
-  type?: 'default' | 'title' | 'small' | 'smallBold' | 'subtitle' | 'link' | 'linkPrimary' | 'code';
-  themeColor?: ThemeColor;
+export type TextType = 'default' | 'title' | 'small' | 'smallBold' | 'subtitle' | 'code';
+
+const TYPE_CLASS: Record<TextType, string> = {
+  default: 'text-default',
+  title: 'text-title',
+  small: 'text-small',
+  smallBold: 'text-small-bold',
+  subtitle: 'text-subtitle',
+  code: 'text-code',
 };
 
-export function ThemedText({ style, type = 'default', themeColor, ...rest }: ThemedTextProps) {
-  const theme = useTheme();
+export type ThemedTextProps = {
+  type?: TextType;
+  themeColor?: ThemeColor;
+  // Keeps the text to one line, ending in an ellipsis.
+  oneLine?: boolean;
+  class?: string;
+  style?: CSSProperties;
+  children?: ComponentChildren;
+};
 
+// A paragraph in one of the app's text styles, coloured from the theme.
+export function ThemedText({ type = 'default', themeColor, oneLine, class: extra, style, children }: ThemedTextProps) {
+  const classes = [TYPE_CLASS[type], oneLine ? 'one-line' : null, extra].filter(Boolean).join(' ');
   return (
-    <Text
-      style={[
-        { color: theme[themeColor ?? 'text'] },
-        type === 'default' && styles.default,
-        type === 'title' && styles.title,
-        type === 'small' && styles.small,
-        type === 'smallBold' && styles.smallBold,
-        type === 'subtitle' && styles.subtitle,
-        type === 'link' && styles.link,
-        type === 'linkPrimary' && styles.linkPrimary,
-        type === 'code' && styles.code,
-        style,
-      ]}
-      {...rest}
-    />
+    <p class={classes} style={{ color: theme[themeColor ?? 'text'], ...style }}>
+      {children}
+    </p>
   );
 }
-
-const styles = StyleSheet.create({
-  small: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: 500,
-  },
-  smallBold: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: 700,
-  },
-  default: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: 500,
-  },
-  title: {
-    fontSize: 48,
-    fontWeight: 600,
-    lineHeight: 52,
-  },
-  subtitle: {
-    fontSize: 32,
-    lineHeight: 44,
-    fontWeight: 600,
-  },
-  link: {
-    lineHeight: 30,
-    fontSize: 14,
-  },
-  linkPrimary: {
-    lineHeight: 30,
-    fontSize: 14,
-    color: Accent,
-  },
-  code: {
-    fontFamily: Fonts.mono,
-    fontWeight: Platform.select({ android: 700 }) ?? 500,
-    fontSize: 12,
-  },
-});

@@ -1,4 +1,4 @@
-# Runs the companion's tests with coverage, the type check, the lint, the CLI build, the Rust core and the Nix package whenever companion/ or the flake changes.
+# Runs the companion's tests with coverage, the type check, the lint, the window and CLI builds, the Rust core and the Nix package whenever companion/ or the flake changes.
 name: Companion
 
 on:
@@ -37,6 +37,8 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
+      - name: Build the window
+        run: npm run build
       - name: Build the command line tool
         run: npm run build:cli
       - name: Keep the coverage report
@@ -52,8 +54,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@v31
-      # The Tauri crate embeds dist/ when it builds, so an empty page stands in for the web export.
-      - name: Stand in for the web export
+      # The Tauri crate embeds dist/ when it builds, so an empty page stands in for the Vite build.
+      - name: Stand in for the window
         run: mkdir -p dist && echo '<!doctype html>' > dist/index.html
       - name: Run the tests
         run: nix develop ..#companion --command cargo test --workspace

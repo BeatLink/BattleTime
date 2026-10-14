@@ -1,79 +1,69 @@
-import { Pressable, StyleSheet, Switch, View, type ViewProps } from 'react-native';
+import type { ComponentChildren } from 'preact';
 
 import { ThemedText } from './themed-text';
 
-import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
-
-type RowProps = ViewProps & {
+type RowProps = {
   label: string;
   detail?: string;
-  onPress?: () => void;
-  right?: React.ReactNode;
+  onClick?: () => void;
+  right?: ComponentChildren;
 };
 
-// A label with optional detail text and a control on the right.
-export function Row({ label, detail, onPress, right, style, ...rest }: RowProps) {
+// A label with optional detail text and a control on the right; with onClick the whole row is a button.
+export function Row({ label, detail, onClick, right }: RowProps) {
   const content = (
-    <View style={[styles.row, style]} {...rest}>
-      <View style={styles.text}>
+    <>
+      <span class="row-text">
         <ThemedText>{label}</ThemedText>
         {detail ? (
           <ThemedText type="small" themeColor="textSecondary">
             {detail}
           </ThemedText>
         ) : null}
-      </View>
+      </span>
       {right}
-    </View>
+    </>
   );
-  if (!onPress) {
-    return content;
+  if (!onClick) {
+    return <div class="row">{content}</div>;
   }
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
+    <button type="button" class="row" onClick={onClick}>
       {content}
-    </Pressable>
+    </button>
   );
 }
 
-type ToggleRowProps = Omit<RowProps, 'right' | 'onPress'> & {
+type SwitchProps = {
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+  disabled?: boolean;
+  label: string;
+};
+
+// An on and off switch.
+export function Switch({ value, onValueChange, disabled, label }: SwitchProps) {
+  return (
+    <input
+      type="checkbox"
+      role="switch"
+      class="switch"
+      aria-label={label}
+      checked={value}
+      disabled={disabled}
+      onChange={(event) => onValueChange(event.currentTarget.checked)}
+    />
+  );
+}
+
+type ToggleRowProps = Omit<RowProps, 'right' | 'onClick'> & {
   value: boolean;
   onValueChange: (value: boolean) => void;
   disabled?: boolean;
 };
 
 export function ToggleRow({ value, onValueChange, disabled, ...rest }: ToggleRowProps) {
-  const theme = useTheme();
   return (
-    <Row
-      {...rest}
-      right={
-        <Switch
-          value={value}
-          onValueChange={onValueChange}
-          disabled={disabled}
-          trackColor={{ true: theme.accent, false: theme.backgroundSelected }}
-          thumbColor={theme.text}
-        />
-      }
-    />
+    <Row {...rest} right={<Switch value={value} onValueChange={onValueChange} disabled={disabled} label={rest.label} />} />
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.three,
-    paddingVertical: Spacing.two,
-  },
-  text: {
-    flex: 1,
-    gap: Spacing.half,
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-});

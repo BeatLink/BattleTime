@@ -143,7 +143,7 @@ export function sourceText(source: StoreSource): string {
 // Keeping the store
 // ============================================================================
 
-// What the store keeps its list and files in: AsyncStorage in the app, a plain map in tests.
+// What the store keeps its list and files in: the window's local storage in the app, a plain map in tests.
 export type KeyValueStorage = {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;

@@ -17,8 +17,8 @@ export type WatchMode = 'application' | 'bootloader';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 
-// Which implementation is carrying the bytes, for the interface to report.
-export type TransportKind = 'ble' | 'electron' | 'mock';
+// Which implementation is carrying the bytes: the app's Rust core, or the mock watch in a plain browser.
+export type TransportKind = 'tauri' | 'mock';
 
 export type TransportListener = {
   onState?: (state: ConnectionState) => void;

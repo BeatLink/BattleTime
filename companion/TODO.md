@@ -16,8 +16,8 @@ mock watch only.
 
 ## Packages
 
-- **Choosing a face during setup.** The bundle holds the one face NeoTime builds; offer the others
-  once `tools/build_watch_apps.sh` compiles them.
+- **Choosing a face during setup.** The bundle holds every face, but setup marks only `digital` for
+  a new watch; let the user pick which face to start with.
 - **Updating a bundled app** that is already installed: compare versions and offer the newer one.
 
 ## Temporary apps
@@ -26,8 +26,6 @@ mock watch only.
   `neotime ask`); the app has no screen for them yet.
 - **Nothing sends one by itself.** No call, notification or plugin opens a temporary app yet, such
   as a prompt to answer a call or reply to a message.
-- **The prompt image.** `prompt.ntapp` is not in the bundle until it is regenerated with
-  `npm run import-watch-apps`; until then `neotime ask` exits 3.
 - **Untried with a watch.** Running, the cached image check, stop and forget have run only against
   the mock watch. Check that a second run of the same image sends only its data, that old data
   files are deleted, that forgetting deletes the folder, and that a tap reaches `neotime ask` over
@@ -41,8 +39,8 @@ mock watch only.
   raw HCI client in the emulator, but the two have not met over a real radio.
 - **Firmware updates against NeoTime.** The DFU flow and the reconnect that keeps the update run
   against the mock watch only; NeoTime's own Bluetooth controller has not run on hardware yet.
-- **The phone and desktop builds.** They share the protocol code with the command line tool, but
-  not its Bluetooth layer on a phone, and the desktop app has not been opened against a watch.
+- **The app's window on a watch.** It shares the protocol code with the command line tool, but its
+  Bluetooth runs in the Rust core; see "The app" below for what it has done on the real watch.
 - **Forwarding from the desktop app.** Desktop notifications, MPRIS players and Do Not Disturb are
   read correctly on Cinnamon, but nothing has been forwarded to a real watch from the desktop yet.
   GeoClue's location is untried, since the development machine runs no GeoClue.
@@ -61,7 +59,7 @@ mock watch only.
   - a note typed on the screen is sent a moment after typing stops, and a URL's text is fetched
     and sent, and sent again within a minute of the page changing;
   - a URL behind a basic-auth login and a self-signed certificate is fetched with the certificate
-    pinned, and refused with a different pin, in the Electron, Tauri and Android apps;
+    pinned, and refused with a different pin, on the desktop and on Android;
   - choosing a file in the desktop app sends it, and saving it in an editor sends it again within
     a few seconds;
   - on a phone, choosing a file sends it, and an edit is sent within a minute, also after the app
@@ -70,9 +68,9 @@ mock watch only.
   - a note over 64 kB is refused with its size, and "Stop and remove" brings back the app's hint;
   - `neotime note <file> large`, `neotime note text …`, `neotime note url …` and `neotime note remove`
     work over BlueZ.
-- **Reading the file again on a phone.** The picker's `content://` link is read again with `fetch`,
+- **Reading the file again on a phone.** The picker's `content://` link is read again by the core,
   which may stop working after the app restarts; keeping access would need
-  `takePersistableUriPermission` in the native module.
+  `takePersistableUriPermission` in the phone bridge plugin.
 
 ## QR code
 
@@ -84,7 +82,7 @@ mock watch only.
 
 - **Untried with a watch.** The layout file and taps have run only against the mock watch. Check
   that a pushed layout shows the right icons, in order, and that each tap runs its button.
-- **Android intents.** `openUri`, `startActivity` and `sendBroadcast` in `PhoneBridgeModule.kt`
+- **Android intents.** `openUri`, `startActivity` and `sendBroadcast` in `PhoneBridgePlugin.kt`
   compile, but have not run on a phone. Android 10 and later may refuse to start an activity
   while the app is in the background, which is where a tap usually finds it; broadcasts are not
   affected.
@@ -111,41 +109,38 @@ Android 13 and later.
 
 ## Tests
 
-- **Screen and component tests.** `src/app` and `src/components` are left out of coverage because
-  nothing tests them, which keeps the floor at 66%. Add `@testing-library/react-native`, test the
-  screens against the mock transport, take them out of the `collectCoverageFrom` exclusions and
-  raise the floors in `package.json`.
+- **Screen and component tests.** `src/screens` and `src/components` are left out of coverage
+  because nothing tests them. Render the screens with Preact in jsdom against the mock transport,
+  take them out of the `collectCoverageFrom` exclusions and raise the floors in `package.json`.
 - **CLI commands.** `cli/commands/watch.ts`, `scan.ts` and `send.ts` are counted but barely tested;
   drive them against the mock watch as `cli/cli.test.ts` does for `flash`.
 
-## Moving to Tauri
+## The app
 
-- **Message lines and a firmware update from the Tauri window.** The window has scanned, connected
+- **Message lines and a firmware update from the window.** The window has scanned, connected
   and installed a plugin's watch app on the real watch; it has not yet sent or received the
-  Gadgetbridge lines, nor run a firmware update. The user chose to remove Electron without waiting
-  for the update check.
+  Gadgetbridge lines, nor run a firmware update.
+- **The Preact window on a watch.** The window was rewritten from React Native to Preact and Vite
+  and checked only against the mock watch, in a browser; open every screen against the real watch.
+- **Saving files on Android.** Backups, debug reports and file downloads use the web view's own
+  download, which Android's WebView may ignore; save them through the core or a share sheet there.
 - **Buzz back's answer felt on the wrist.** In the `plugin_host` test the plugin answered four presses
   with a two-buzz message and the write went out without error, but whether the watch buzzed twice
   each time was not confirmed.
-- **Removing Electron.** `.#companion-tauri` packages the Tauri app, and its window has scanned,
-  connected and installed a plugin's watch app on the real watch. Once a firmware update from its
-  window has worked too, it replaces `.#companion`, and Electron, `node/` and their npm dependencies go.
-- **The watch drops an idle link.** Both the Tauri window and the `plugin_host` example lost the
+- **The watch drops an idle link.** Both the window and the `plugin_host` example lost the
   connection within about half a minute of connecting with nothing to send, and neither reconnects.
 - **The command line tool in Rust**, on the core crate, once the protocols move there.
 - **Protocols in the core crate**: the NeoTime service, packages, image header, launcher file and
   Gadgetbridge lines are in `core/src/protocol`, and BLEFS in `core/src/sync/files.rs`. Installing a
   plugin's watch apps runs on them; every other screen still runs the TypeScript ones. DFU is still to
   come, and the formats the firmware defines move into shared crates after.
-- **The Tauri app on Android is untried on a phone.** Its debug APK builds, with btleplug, the
+- **The app on Android is untried on a phone.** Its debug APK builds, with btleplug, the
   phone bridge plugin, sync and plugins in it, but it has never been installed. On a phone, check
   that Bluetooth starts (logcat says "Bluetooth could not start" if not), that the nearby devices
   prompt appears and a scan, a connection and a firmware update work; that notifications, calls,
   media, Do Not Disturb, the location and the remote buttons' intents reach the window; that sync
   and an installed plugin run; and that a note picked as a `content://` link is still readable
   after a restart.
-- **Plugins on the Expo phone app.** [Plugins](../docs/plugins.md) run in the Rust core, so only the
-  Tauri apps have them; the Expo app gets none until the Tauri one replaces it.
 - **Moving features into plugins.** Weather, notes, remote, alarms, steps, music and notification
   forwarding are still built into the app.
 
@@ -167,8 +162,3 @@ home and keeps the two companions' settings in step. Nothing is built yet.
 - **Handoff:** the phone lets go and the desktop takes the watch, with the 15-second fallback.
 - **Relaying:** the phone bridge's second source, and taps and replies sent back to the phone.
 - **The other areas:** plugins, notes and the rest.
-
-## Not started
-
-- **Firmware from GitHub Actions builds.** NeoTime has no CI yet; the finder already reads
-  `firmware.zip` from releases and artifacts once there are some.
