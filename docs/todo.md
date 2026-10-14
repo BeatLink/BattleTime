@@ -216,10 +216,10 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Drop `tests/emulator/fixtures/first-watch-bootloader.bin`.** No suite loads it since the
   20 KB layout; `first-layout-bootloader.bin` replaced it. Delete it, or keep it as the record of what
   the reloader first put on the watch.
-- [ ] **Clippy fails on master.** CI's `Lints and types` and `Watch lints` jobs are red since run
-  38325871913: a reference that is created and dereferenced at once in `runtime/src/verifier.rs`
-  (lines 64, 87 and 92) and `firmware/src/main.rs` (lines 757 and 765), and a needless `mut` in
-  `app-host/src/host.rs:292`.
+- [ ] **Clippy fails on master.** CI's `Lints and types` and the four `Watch lints` jobs are red at
+  04005694: `to_upper(&mut self, …)` in `neotime/runtime/src/interpreter.rs:1002` breaks the `to_*`
+  naming rule, and eight operations with no effect sit in `neotime/firmware/src/main.rs` (lines 651,
+  683, 690, 692, 706, 714, 721 and 723).
 - [ ] **Run the stack overflow test in the emulator.** `crash_record`'s "A Stack Overflow Faults At
   The Guard And Is Reported" skips, since PineTimeEmulator has no memory protection unit yet; it
   runs once the emulator models one.
