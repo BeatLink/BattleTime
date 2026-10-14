@@ -5,6 +5,9 @@ use super::*;
 // ============================================================================
 
 /// Raises each task's event at once and writes the next of its readings on every sample.
+///
+/// Like the nRF52832 (anomaly 86), a sample after an offset calibration never ends unless the
+/// converter was stopped in between.
 struct FakeSaadc {
     registers: [u32; 0x200],
     result: *mut i16,
@@ -14,6 +17,7 @@ struct FakeSaadc {
     silent_task: Option<u32>,
     writes: [(u32, u32); 64],
     write_count: usize,
+    calibrated_since_stop: bool,
 }
 
 impl FakeSaadc {
@@ -26,6 +30,7 @@ impl FakeSaadc {
             silent_task: None,
             writes: [(0, 0); 64],
             write_count: 0,
+            calibrated_since_stop: false,
         }
     }
 
@@ -53,6 +58,12 @@ impl Registers for FakeSaadc {
         self.write_count += 1;
         self.registers[offset as usize / 4] = value;
         if offset < 0x100 && value == 1 && self.silent_task != Some(offset) {
+            match offset {
+                TASKS_CALIBRATE_OFFSET => self.calibrated_since_stop = true,
+                TASKS_STOP => self.calibrated_since_stop = false,
+                TASKS_SAMPLE if self.calibrated_since_stop => return,
+                _ => {}
+            }
             if offset == TASKS_SAMPLE {
                 unsafe { self.result.write(self.readings[self.samples_taken]) };
                 self.samples_taken += 1;
@@ -111,4 +122,20 @@ fn a_failed_calibration_takes_no_samples() {
 
     assert_eq!(read_millivolts(&mut saadc), None);
     assert_eq!(saadc.samples_taken, 0);
+}
+
+#[test]
+fn stops_the_converter_between_calibrating_and_sampling() {
+    let mut saadc = FakeSaadc::new([2200, 2202, 2198, 2200]);
+
+    assert!(read_millivolts(&mut saadc).is_some());
+
+    let mut tasks = saadc
+        .written()
+        .iter()
+        .filter(|(offset, value)| *offset < 0x100 && *value == 1)
+        .map(|(offset, _)| *offset);
+    assert_eq!(tasks.next(), Some(TASKS_CALIBRATE_OFFSET));
+    assert_eq!(tasks.next(), Some(TASKS_STOP));
+    assert_eq!(tasks.next(), Some(TASKS_START));
 }

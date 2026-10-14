@@ -151,6 +151,9 @@ firmware) and on DFU in the firmware.
   as the firmware, or the firmware faults at start and the watch never connects.
 - **littlefs-rust is patched.** `neotime/third_party/littlefs-rust` raises a loop limit that panics
   on blocks written by C littlefs, and the workspace builds `littlefs-rust-core` without overflow checks.
+- **The emulator models no chip anomalies.** The SAADC never ends a sample started straight after an
+  offset calibration (nRF52832 anomaly 86), so the blocking reader stops the converter in between;
+  code that drives a peripheral's registers itself needs a check on the watch, not only the suites.
 - **Bootloader builds are not byte-reproducible across checkout paths**; the code is the same.
 - **`cargo build -p <dev-dependency>` panics in cargo**; check such a dependency from a throwaway crate.
 - **Never `pkill -f` a pattern that also appears in your own command line**; it kills the shell.

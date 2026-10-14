@@ -91,6 +91,8 @@ pub fn read_millivolts(registers: &mut impl Registers) -> Option<i32> {
 
 fn calibrate_and_sample(registers: &mut impl Registers, result: *const i16) -> Option<i32> {
     run_task(registers, TASKS_CALIBRATE_OFFSET, EVENTS_CALIBRATE_DONE)?;
+    // The nRF52832 never ends a sample started straight after a calibration (anomaly 86), so stop first.
+    run_task(registers, TASKS_STOP, EVENTS_STOPPED)?;
     let mut total = 0;
     for _ in 0..SAMPLES {
         run_task(registers, TASKS_START, EVENTS_STARTED)?;
