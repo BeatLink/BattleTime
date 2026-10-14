@@ -18,6 +18,7 @@
         "[STEP]",
         "[TIME]",
         "[WTHR]",
+        "user@watch:~ $",
         "user@watch:~ $ now"
       ]
     }

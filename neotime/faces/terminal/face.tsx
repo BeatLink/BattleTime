@@ -72,8 +72,8 @@ const status_text = computed(() =>
 function TaggedLine(props: { tag: string; value: string; color: Color }) {
   return (
     <Row gap={12}>
-      <Label color="#ffffff">{props.tag}</Label>
-      <Label color={props.color}>{props.value}</Label>
+      <Label font="small" color="#ffffff">{props.tag}</Label>
+      <Label font="small" color={props.color}>{props.value}</Label>
     </Row>
   );
 }
@@ -82,8 +82,8 @@ function TerminalFace() {
   return (
     <Screen>
       <Column x={0} y={7} width={240}>
-        <Label>{unread_notifications.value > 0 ? "[1]+ Notify" : ""}</Label>
-        <Label color={LIGHT_GRAY}>user@watch:~ $ now</Label>
+        <Label font="small">{unread_notifications.value > 0 ? "[1]+ Notify" : ""}</Label>
+        <Label font="small" color={LIGHT_GRAY}>user@watch:~ $ now</Label>
         <TaggedLine tag="[TIME]" value={time_text.value} color={GREEN} />
         <TaggedLine tag="[DATE]" value={format_time(now.value, "date")} color={BLUE} />
         <TaggedLine
@@ -103,7 +103,7 @@ function TerminalFace() {
           value={status_text.value}
           color={is_bluetooth_enabled.value && is_phone_connected.value ? CONNECTED_BLUE : GRAY}
         />
-        <Label color={LIGHT_GRAY}>user@watch:~ $</Label>
+        <Label font="small" color={LIGHT_GRAY}>user@watch:~ $</Label>
       </Column>
     </Screen>
   );

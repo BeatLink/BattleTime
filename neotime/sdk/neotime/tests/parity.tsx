@@ -140,7 +140,6 @@ export const KNOWN_DIFFERENCES: KnownDifference[] = [
   { snapshot: "app-software", screen: "main", side: "preview_only", text: "Apps", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-software", screen: "main", side: "preview_only", text: "Software", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-software", screen: "main", side: "preview_only", text: "Timer", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
-  { snapshot: "face-terminal", screen: "main", side: "preview_only", text: "user@watch:~ $", reason: "The last line falls below the screen on the watch, and the preview test has no layout to tell." },
 ];
 
 // ============================================================================
