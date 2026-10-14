@@ -88,10 +88,11 @@ describe('the packages client', () => {
     const target = watch();
     const client = await PackagesClient.open(target);
     const library = testImage('shared', 'Shared library', 'library');
+    const files_before = target.fileService.files.size;
 
     await expect(installImage(writerFor(target), client, library)).rejects.toThrow('ships inside the firmware');
 
-    expect(target.fileService.files.has('/resources/shared.ntlib')).toBe(false);
+    expect(target.fileService.files.size).toBe(files_before);
   });
 
   it('passes on what the watch refuses', async () => {

@@ -77,12 +77,6 @@ async fn run_command<Files: FileAccess>(
     library_version: Option<u16>,
 ) -> (String, Change) {
     let name = command.c;
-    if name == "install_library" {
-        return (
-            error_reply(name, PackageError::IsLibrary.describe()),
-            Change::None,
-        );
-    }
     let mut packages = Packages::new(files);
     let outcome = match (name, command.id) {
         ("install", Some(id)) => {
@@ -418,16 +412,6 @@ mod tests {
             .contains("give the app's id"));
         assert!(run(r#"{"c":"format"}"#, &mut files).0.contains("unknown command"));
         assert!(run("not json", &mut files).0.contains("could not read"));
-    }
-
-    #[test]
-    fn install_library_says_the_library_ships_inside_the_firmware() {
-        let mut files = file_system();
-
-        let (reply, change) = run(r#"{"c":"install_library"}"#, &mut files);
-
-        assert!(reply.contains("ships inside the firmware"));
-        assert_eq!(change, Change::None);
     }
 
     #[test]

@@ -56,7 +56,6 @@ describe('setting up a new watch', () => {
     await runSetup(files, packages, setupItems(bundle), (step) => steps.push(step));
 
     expect((await packages.apps()).map((app) => app.id)).toEqual(['dice', 'digital', 'launcher', 'timer']);
-    expect(target.fileService.files.has('/resources/shared.ntlib')).toBe(false);
     expect(needsSetup(await packages.apps())).toBe(false);
     expect(steps.at(-1)).toMatchObject({ index: 3, count: 4 });
     expect(readLauncherFile(target.fileService.files.get(LAUNCHER_PATH)!)?.groups).toEqual(DEFAULT_LAUNCHER.groups);

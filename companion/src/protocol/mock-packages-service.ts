@@ -26,7 +26,7 @@ export class MockPackagesService {
 
   // The commands this service answers.
   static handles(command: string): boolean {
-    return ['apps', 'install', 'remove', 'enable', 'install_library', 'launcher', 'run', 'stop'].includes(command);
+    return ['apps', 'install', 'remove', 'enable', 'launcher', 'run', 'stop'].includes(command);
   }
 
   handle(message: { c: string; id?: string; on?: boolean }) {
@@ -38,9 +38,6 @@ export class MockPackagesService {
     if (c === 'launcher') {
       this.launcherReloads += 1;
       return this.reply({ c, ok: 1 });
-    }
-    if (c === 'install_library') {
-      return this.reply({ c, err: 'the shared library ships inside the firmware' });
     }
     if (c === 'stop') {
       this.openTemporaryApp = null;

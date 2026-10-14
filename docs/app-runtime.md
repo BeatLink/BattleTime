@@ -397,8 +397,8 @@ Library functions are bytecode in the library image's functions section, numbere
 `LIBRARY_FUNCTIONS` in `compiler/src/shared_functions.rs`, and compiled from the TypeScript in
 `sdk/neotime/src/lib.ts`, so the browser preview runs the same code. An app calls one with
 `call library`, which costs 5 bytes in place of the function's whole body. Library code takes only
-its arguments and system values; text it gives back is copied into the app's text buffer. Without
-an installed library the call fails and the property it feeds is left as it was.
+its arguments and system values; text it gives back is copied into the app's text buffer. In a
+firmware built without the library the call fails and the property it feeds is left as it was.
 
 The library is checked by the same verifier as an app image. It can be updated together with the
 firmware or on its own, and a new version keeps the numbers of everything the old one had, so
@@ -492,7 +492,7 @@ Each instruction is one opcode byte followed by its operands:
 | `2B` | loop back | distance, 2 bytes | Goes back that many bytes, counted from the end of this instruction, to a loop start. The stack must be empty here too. |
 | `2C` | call | function, 1 byte | Takes the function's arguments into its first locals, runs it, and leaves its result, if it has one. The function sees only the stack above what the caller had, and its own locals. |
 | `2D` | read row | | Pushes the number of the row of a `Repeat` the code runs for, or 0 outside one. |
-| `2E` | call library | function, 2 bytes; arguments, 1 byte; results, 1 byte | Runs a function of the shared library as `call` runs one of the app's. The call fails unless the library is installed and the function takes that many arguments and gives that many results. |
+| `2E` | call library | function, 2 bytes; arguments, 1 byte; results, 1 byte | Runs a function of the shared library as `call` runs one of the app's. The call fails unless the firmware carries the library and the function takes that many arguments and gives that many results. |
 | `30` | time part | part, 1 byte | Takes an instant and pushes its local year, month, day, hour, minute, second or weekday (0 to 6, Monday first). |
 | `31` | start of | unit, 1 byte | Takes an instant and pushes the start of its local minute, hour or day. A binding that uses it redraws once a minute. |
 | `40` | format number | minimum digits, 1 byte | Takes a number and pushes it as text, padded with zeros. |

@@ -311,7 +311,6 @@ recovery firmware has no apps, so it refuses every command with an error.
 | `{"c":"remove","id":id}` | `{"c":"remove","ok":1}`; deletes `/apps/<id>` with its saved state |
 | `{"c":"enable","id":id,"on":bool}` | `{"c":"enable","ok":1,"need":need,"room":budget}`; a disabled app stays installed but leaves the launcher. `on` is true when left out |
 | `{"c":"launcher"}` | `{"c":"launcher","ok":1}`; reads `/settings/launcher` again and regroups the launcher, as [Launcher](#launcher) describes |
-| `{"c":"install_library"}` | Always `{"c":"install_library","err":"the shared library ships inside the firmware"}`: the library arrives with each firmware update |
 | `{"c":"run","id":id}` | `{"c":"run","ok":1,"need":need,"room":budget}` once the shell has opened the temporary app in `/temp/<id>`, as [Temporary apps](#temporary-apps-served) describes |
 | `{"c":"stop"}` | `{"c":"stop","ok":1}`; closes the temporary app if one is open |
 

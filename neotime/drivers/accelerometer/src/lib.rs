@@ -274,7 +274,7 @@ pub enum Error<BusError> {
     UnknownChip {
         chip_id: u8,
     },
-    /// The caller has no configuration file for this chip, such as before a shared library is installed.
+    /// The caller has no configuration file for this chip, such as a firmware built without the shared library.
     NoConfiguration {
         chip_model: ChipModel,
     },

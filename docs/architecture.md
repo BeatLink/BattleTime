@@ -593,8 +593,7 @@ The folders are the whole record: there is no list of installed apps to fall out
   images one at a time. Turning one off is refused for the launcher and the last face on. Other
   apps are not checked again when one is turned on, since only a launcher's need grows with it.
 - **`commands`** answers the packages characteristic's JSON lines (`apps`, `install`, `remove`,
-  `enable`, `launcher`) and says whether the apps changed, so the shell can read them again. It
-  answers `install_library` with an error, since the library ships inside the firmware.
+  `enable`, `launcher`) and says whether the apps changed, so the shell can read them again.
 - **`launcher`** reads `/settings/launcher`, the bytes in which the companion says how the
   launcher looks and where every app goes, and `arrange` puts the listed apps in group order,
   any the file leaves out in a last group, Other. The shell keeps the file, the order and each
