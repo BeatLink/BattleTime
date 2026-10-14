@@ -12,6 +12,8 @@ import * as path from "node:path";
 export const SCREEN_SIZE = 240;
 const OUTPUT_FOLDER = path.join("target", "appbuilder");
 const BUILT_TOOLS = ["neotime-compiler", "neotime-simulator"];
+/** What to say when the checkout's simulator predates `--stream`, which the builder needs. */
+export const OLD_SIMULATOR_MESSAGE = "This checkout's simulator is older than the App Builder; update the checkout to NeoTime master";
 
 // ============================================================================
 // Finding the watch code
@@ -204,11 +206,19 @@ export class AppSession {
         else this.listener.log(read.text);
       }),
     );
-    simulator.stderr?.on("data", split_lines((line) => this.listener.log(line)));
+    let lacks_stream = false;
+    simulator.stderr?.on(
+      "data",
+      split_lines((line) => {
+        if (line.includes("unknown option --stream")) lacks_stream = true;
+        this.listener.log(line);
+      }),
+    );
     simulator.on("close", (code) => {
       if (this.simulator !== simulator) return;
       this.simulator = undefined;
-      this.listener.status(code === 0 ? "Stopped" : `The simulator stopped with code ${code}`);
+      if (lacks_stream) this.listener.status(OLD_SIMULATOR_MESSAGE);
+      else this.listener.status(code === 0 ? "Stopped" : `The simulator stopped with code ${code}`);
     });
   }
 

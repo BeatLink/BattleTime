@@ -13,6 +13,7 @@ import {
   parse_compile_errors,
   read_simulator_line,
   split_lines,
+  OLD_SIMULATOR_MESSAGE,
   type CompileError,
   type Spawn,
 } from "../src/session";
@@ -257,5 +258,18 @@ describe("a session", () => {
     await new AppSession(neotime_folder, "", spawn, listener).run(app);
     await settle();
     expect(heard.statuses.at(-1)).toBe("The simulator stopped with code 3");
+  });
+
+  it("says plainly when the checkout's simulator is too old to stream", async () => {
+    const { spawn } = fake_spawn((process) => {
+      if (!process.command.endsWith("neotime-simulator")) return { code: 0 };
+      (process.child.stderr as PassThrough).write('Error: "unknown option --stream; use --screenshot PATH"\n');
+      return { code: 1 };
+    });
+    const { heard, listener } = recording_listener();
+    await new AppSession(neotime_folder, "", spawn, listener).run(app);
+    await settle();
+    expect(heard.statuses.at(-1)).toBe(OLD_SIMULATOR_MESSAGE);
+    expect(heard.logs.some((line) => line.includes("unknown option --stream"))).toBe(true);
   });
 });

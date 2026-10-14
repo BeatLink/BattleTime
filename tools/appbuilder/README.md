@@ -20,6 +20,10 @@ The first run builds the compiler and simulator with cargo, which takes a while;
 moment. Effects the app asks for, such as `effect: Vibrate(30)`, appear under the screen and in the
 "NeoTime App Builder" output channel.
 
+The compiler and simulator are built from the checkout the app is in, so an app opened in a checkout
+from before the App Builder landed gets a simulator without `--stream`. The panel then says the
+checkout is too old; update it to NeoTime master.
+
 | On the panel | Does |
 |---|---|
 | Click, hold or drag on the screen | A tap, a long press, a drag or a swipe |
