@@ -19,6 +19,9 @@ use serde_json_core::str::{EscapedStr, EscapedStringFragment};
 mod alert;
 #[cfg(test)]
 mod alert_tests;
+mod device_information;
+#[cfg(test)]
+mod device_information_tests;
 mod phone;
 mod slots;
 #[cfg(test)]
@@ -27,6 +30,9 @@ mod slots_tests;
 mod tests;
 
 pub use alert::{parse_new_alert, MOST_NEW_ALERT_BYTES};
+pub use device_information::{
+    serial_number, HARDWARE_REVISION, MANUFACTURER_NAME, MODEL_NUMBER, SOFTWARE_REVISION,
+};
 pub use slots::{slots_refusal, slots_report, SlotRange, SlotsReport, SlotsRequest};
 
 pub use phone::{

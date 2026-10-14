@@ -963,6 +963,11 @@ watch face, the launcher and the apps through `neotime-app-host`:
   it reads the commit from `NEOTIME_GIT_COMMIT`, which takes Nix's `shortRev` or `dirtyShortRev`,
   and says `unknown` without either. The status page's title shows it, and the standard Device
   Information service (0x180A) answers a read of Firmware Revision (0x2A26) with it.
+- **Device Information.** The 0x180A service serves the same six strings InfiniTime does:
+  manufacturer `PINE64`, model `PineTime`, hardware revision `1.0.0` and software revision
+  `NeoTime`, all constants in `neotime_companion`, the firmware revision above, and a serial
+  number. The serial number is the chip's 64-bit factory id (FICR DEVICEID) as 16 hex digits,
+  written into the table once at start-up.
 - **Apps.** None are built in. `apps.rs` reads every installed app from `/apps` through
   `neotime-packages` and keeps the list, turned-off apps included, for the `packages` system
   values: the first face turned on is the watch face, the app with id `launcher` is the launcher,

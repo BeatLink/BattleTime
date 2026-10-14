@@ -669,11 +669,23 @@ fn read_new_alert(write: &[u8]) {
     }
 }
 
-/// The standard Device Information service: the firmware's version, as the status page shows it.
+/// The standard Device Information service, with the same characteristics InfiniTime serves.
 #[gatt_service(uuid = "180a")]
 struct DeviceInformationService {
+    #[characteristic(uuid = "2a29", read, value = neotime_companion::MANUFACTURER_NAME)]
+    manufacturer_name: &'static str,
+    #[characteristic(uuid = "2a24", read, value = neotime_companion::MODEL_NUMBER)]
+    model_number: &'static str,
+    /// Filled from the chip's factory id once the server is built.
+    #[characteristic(uuid = "2a25", read)]
+    serial_number: [u8; 16],
+    /// The firmware's version, as the status page shows it.
     #[characteristic(uuid = "2a26", read, value = FIRMWARE_VERSION)]
     firmware_revision: &'static str,
+    #[characteristic(uuid = "2a27", read, value = neotime_companion::HARDWARE_REVISION)]
+    hardware_revision: &'static str,
+    #[characteristic(uuid = "2a28", read, value = neotime_companion::SOFTWARE_REVISION)]
+    software_revision: &'static str,
 }
 
 /// The standard Battery service: the charge, 0 to 100, read or notified when it changes.
@@ -721,6 +733,22 @@ struct CurrentTimeService {
     current_time: [u8; 10],
     #[characteristic(uuid = "2a0f", read, write)]
     local_time_information: [u8; 2],
+}
+
+/// Fills in the serial number, the one Device Information value not known when the firmware is built.
+#[inline(never)]
+fn set_serial_number(server: &Server<'static>) {
+    let serial_number = neotime_companion::serial_number(device_id());
+    let _ = server.set(&server.device_information.serial_number, &serial_number);
+}
+
+/// The chip's 64-bit factory id, unique to each nRF52.
+fn device_id() -> u64 {
+    const FICR_DEVICE_ID_LOW: *const u32 = 0x1000_0060 as *const u32;
+    const FICR_DEVICE_ID_HIGH: *const u32 = 0x1000_0064 as *const u32;
+    let low = unsafe { FICR_DEVICE_ID_LOW.read_volatile() };
+    let high = unsafe { FICR_DEVICE_ID_HIGH.read_volatile() };
+    (u64::from(high) << 32) | u64::from(low)
 }
 
 /// The chip's factory address with its top two bits set, the same static random address the controller reports.
@@ -784,8 +812,7 @@ async fn run_bluetooth(
     let mut runner = stack.runner();
     let mut peripheral = stack.peripheral();
     let server = build_server();
-    // Phones read the version straight from the attribute table, so nothing else uses this service.
-    let _device_information = &server.device_information;
+    set_serial_number(server);
 
     let mut advertisement_data = [0; 31];
     let advertisement_length = AdStructure::encode_slice(
