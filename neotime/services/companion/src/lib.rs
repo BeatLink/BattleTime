@@ -29,6 +29,9 @@ mod heart_rate_measurement_tests;
 pub mod link_pace;
 #[cfg(test)]
 mod link_pace_tests;
+mod infinitime;
+#[cfg(all(test, feature = "single-values"))]
+mod infinitime_tests;
 mod phone;
 mod slots;
 #[cfg(test)]
@@ -41,15 +44,21 @@ pub use device_information::{
     serial_number, HARDWARE_REVISION, MANUFACTURER_NAME, MODEL_NUMBER, SOFTWARE_REVISION,
 };
 pub use heart_rate_measurement::heart_rate_measurement;
+pub use infinitime::{motion_values, music_event, simple_weather_write, MUSIC_OPEN_EVENT};
+#[cfg(feature = "single-values")]
+pub use infinitime::{music_write, navigation_write};
 pub use slots::{slots_refusal, slots_report, SlotRange, SlotsReport, SlotsRequest};
 
+#[cfg(feature = "single-values")]
+pub use phone::PhoneField;
 pub use phone::{
     app_message_line, call_control_line, find_phone_line, metres_from_text, music_control_line,
-    state_request_line, status_report, CallKind, MusicInfo, MusicState, Navigation, NavigationTurn,
-    PhoneCall, PhoneChanges, PhoneData, PhoneUpdates, ShortLine, WatchStatus, Weather, WeatherCondition,
-    CALLER_BYTES, CALL_TEXTS, CALL_VALUES, MOST_PHONE_BUZZES, MUSIC_ARTIST_BYTES, MUSIC_TEXTS,
-    MUSIC_TRACK_BYTES, MUSIC_VALUES, NAVIGATION_INSTRUCTION_BYTES, NAVIGATION_TEXTS, NAVIGATION_VALUES,
-    SHORT_LINE_BYTES, WEATHER_LOCATION_BYTES, WEATHER_TEXTS, WEATHER_VALUES,
+    state_request_line, status_report, CallKind, Forecast, ForecastDay, MusicInfo, MusicState, Navigation,
+    NavigationTurn, PhoneCall, PhoneChanges, PhoneData, PhoneUpdates, ShortLine, WatchStatus, Weather,
+    WeatherCondition, CALLER_BYTES, CALL_TEXTS, CALL_VALUES, MOST_FORECAST_DAYS, MOST_PHONE_BUZZES,
+    MUSIC_ARTIST_BYTES, MUSIC_TEXTS, MUSIC_TRACK_BYTES, MUSIC_VALUES, NAVIGATION_INSTRUCTION_BYTES,
+    NAVIGATION_TEXTS, NAVIGATION_VALUES, SHORT_LINE_BYTES, WEATHER_LOCATION_BYTES, WEATHER_TEXTS,
+    WEATHER_VALUES,
 };
 
 /// The longest line either side sends; a longer one is dropped whole.
@@ -200,6 +209,11 @@ pub enum Message<'line> {
     Weather(Weather),
     /// `nav`: the next step of the phone's navigation, or its end.
     Navigation(Navigation),
+    /// The coming days, from InfiniTime's Simple Weather service.
+    Forecast(Forecast),
+    #[cfg(feature = "single-values")]
+    /// One music or navigation value, from InfiniTime's services.
+    PhoneField(PhoneField),
     /// `find`: start or stop ringing the watch.
     Find { is_on: bool },
     /// `vibrate`: buzz this many times.

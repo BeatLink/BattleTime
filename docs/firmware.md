@@ -434,6 +434,9 @@ in RAM, in one byte array, beside the CCCDs TrouBLE keeps for each client; see
 | Device Information | 0x180A | The six strings InfiniTime serves. |
 | Alert Notification | 0x1811 | New Alert (0x2A46), written by any Bluetooth tool to show a notification. |
 | Heart Rate | 0x180D | The latest reading (0x2A37), read or notified as each is taken. |
+| Simple Weather | `00050000-78fc-…` | InfiniTime's weather and five-day forecast, written by the phone. |
+| Immediate Alert | 0x1802 | Alert Level (0x2A06), written to ring the watch so the wearer finds it. |
+| Music, Navigation, Motion | InfiniTime's | Only in builds with their cargo features; see [bluetooth.md](bluetooth.md#infinitimes-own-services). |
 
 - **Device Information.** Manufacturer `PINE64`, model `PineTime`, hardware revision `1.0.0` and
   software revision `NeoTime`, all constants in `neotime_companion`, the firmware revision (the
@@ -448,6 +451,11 @@ in RAM, in one byte array, beside the CCCDs TrouBLE keeps for each client; see
   notifies each reply in 20-byte pieces, waiting for a free packet when a long reply, such as the
   app list, fills the eight-packet pool. A command that installs, removes or hides an app raises
   `packages::CHANGED` for the shell; `run` and `stop` raise `packages::TEMPORARY`.
+- **InfiniTime's services.** `infinitime_services.rs` declares them, each under a cfg that
+  `build.rs` sets from its cargo feature in the shell's builds only, and hands each write to
+  `neotime_companion::infinitime`, whose message goes to the shell through `app_events` like a
+  Bangle.js line's. The music app's controls queue an event the Bluetooth task notifies, and the
+  motion task signals new step counts and, while a phone subscribes to raw motion, each reading.
 - **File transfer.** The storage task answers each command, and the Bluetooth task sends each
   answer as a notification, waiting for a free packet when a folder listing fills the send queue.
 

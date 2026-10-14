@@ -81,6 +81,7 @@ mod heart_rate;
 mod help;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod i2c_bus;
+mod infinitime_services;
 mod restart;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod settings;
@@ -602,6 +603,16 @@ struct Server {
     device_information: DeviceInformationService,
     alert_notification: AlertNotificationService,
     heart_rate: HeartRateService,
+    #[cfg(weather_service)]
+    simple_weather: infinitime_services::SimpleWeatherService,
+    #[cfg(music_service)]
+    music: infinitime_services::MusicService,
+    #[cfg(navigation_service)]
+    navigation: infinitime_services::NavigationService,
+    #[cfg(alert_service)]
+    immediate_alert: infinitime_services::ImmediateAlertService,
+    #[cfg(motion_service)]
+    motion: infinitime_services::MotionService,
 }
 
 /// The standard Alert Notification service: any Bluetooth tool writes a New Alert to show a notification.
@@ -1110,9 +1121,10 @@ async fn serve_connection(
         // Pinned where they are made, so the connection's large future is never copied across the stack.
         let next_event = core::pin::pin!(connection.next());
         let next_reply = core::pin::pin!(select(settings::REPLIES.receive(), packages::REPLIES.receive()));
-        let reading_change = core::pin::pin!(select(
+        let reading_change = core::pin::pin!(select3(
             battery::PERCENT_CHANGED.wait(),
-            heart_rate::READING_TAKEN.wait()
+            heart_rate::READING_TAKEN.wait(),
+            infinitime_services::next_notification(),
         ));
         let bluetooth_switched = core::pin::pin!(select3(
             settings::BLUETOOTH_SWITCHED.wait(),
@@ -1137,7 +1149,7 @@ async fn serve_connection(
                 shell::OutOfLine(send_packages_reply(connection, server, &reply)).await;
                 continue;
             }
-            Either4::Third(Either::First(())) => {
+            Either4::Third(Either3::First(())) => {
                 let percent = battery::percent();
                 let _ = notify_bytes(
                     connection,
@@ -1148,7 +1160,7 @@ async fn serve_connection(
                 .await;
                 continue;
             }
-            Either4::Third(Either::Second(())) => {
+            Either4::Third(Either3::Second(())) => {
                 let measurement = heart_rate::measurement();
                 let _ = notify_bytes(
                     connection,
@@ -1157,6 +1169,10 @@ async fn serve_connection(
                     true,
                 )
                 .await;
+                continue;
+            }
+            Either4::Third(Either3::Third(notification)) => {
+                infinitime_services::notify(connection, server, notification).await;
                 continue;
             }
             // The link stays until the controller reports it gone, which ends this connection as usual.
@@ -1175,6 +1191,7 @@ async fn serve_connection(
         };
         match event {
             GattConnectionEvent::Disconnected { .. } => {
+                infinitime_services::note_subscriptions(server, None);
                 let was_updating = dfu.is_updating();
                 // What reached the flash is kept, so the same image sent again carries on from there.
                 dfu.pause();
@@ -1194,12 +1211,14 @@ async fn serve_connection(
                 // Only an update's 20 bytes outlive the awaits below, never a whole write.
                 let mut dfu_written = heapless::Vec::<u8, DFU_WRITE_BYTES>::new();
                 let mut file_answers = alloc::vec::Vec::new();
+                let mut unstored = false;
                 let target = match &event {
                     GattEvent::Write(write) => {
                         let handle = write.handle();
                         let target = server.dfu.classify(handle);
                         let file_request = write.with_data(|_, bytes| {
                             let written = &bytes[..bytes.len().min(MOST_WRITE_BYTES)];
+                            unstored = infinitime_services::take_write(server, handle, bytes);
                             if target.is_some() {
                                 let _ = dfu_written
                                     .extend_from_slice(&written[..written.len().min(DFU_WRITE_BYTES)]);
@@ -1257,6 +1276,7 @@ async fn serve_connection(
                         target
                     }
                     GattEvent::Read(read) => {
+                        infinitime_services::fill_read(server, read.handle());
                         if read.handle() == server.neotime.counters.handle {
                             let _ = server.set(&server.neotime.counters, &diagnostics::snapshot());
                         }
@@ -1281,7 +1301,7 @@ async fn serve_connection(
                 };
                 let reply = match event {
                     GattEvent::Write(write)
-                        if write.handle() == server.alert_notification.new_alert.handle =>
+                        if unstored || write.handle() == server.alert_notification.new_alert.handle =>
                     {
                         write.accept_unprocessed()
                     }
@@ -1290,6 +1310,7 @@ async fn serve_connection(
                 if let Ok(reply) = reply {
                     shell::OutOfLine(reply.send()).await;
                 }
+                infinitime_services::note_subscriptions(server, Some(connection));
                 shell::OutOfLine(clock::save_time_zone_if_changed()).await;
                 for command in packages_commands.drain(..) {
                     shell::OutOfLine(packages::COMMANDS.send(command)).await;

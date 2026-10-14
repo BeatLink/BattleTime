@@ -6,7 +6,7 @@ use std::time::Duration;
 use neotime_app_host::closed_apps::ClosedApps;
 use neotime_app_host::{AppFailure, AppHost, EventResult, PushedEvent, Rect, Touch, SCREEN_AREA};
 use neotime_companion::{
-    PhoneData, PhoneUpdates, CALL_TEXTS, CALL_VALUES, MUSIC_TEXTS, MUSIC_VALUES, NAVIGATION_TEXTS,
+    Message, PhoneData, PhoneUpdates, CALL_TEXTS, CALL_VALUES, MUSIC_TEXTS, MUSIC_VALUES, NAVIGATION_TEXTS,
     NAVIGATION_VALUES, WEATHER_TEXTS, WEATHER_VALUES,
 };
 use neotime_runtime::events::SwipeDirection;
@@ -18,7 +18,9 @@ use neotime_runtime::{
 use neotime_companion::PhoneNotification;
 use neotime_notifications::cut_to_fit;
 
-use crate::fake_system::{FakeLauncherGroup, FakeSystem, FakeTask, InstalledApp, RecordedEffect};
+use crate::fake_system::{
+    FakeLauncherGroup, FakeSystem, FakeTask, ForecastDay, InstalledApp, RecordedEffect,
+};
 use crate::framebuffer::Framebuffer;
 use crate::sources::{
     compile_package, compile_source_text, package_source, shared_library, OpenFailure, PackageKind,
@@ -56,7 +58,7 @@ pub struct TestWatch {
     system: FakeSystem,
     framebuffer: Framebuffer,
     is_screen_on: bool,
-    /// The music and weather the phone sent through `receive_from_phone`.
+    /// The music, navigation and weather the phone sent through `receive_from_phone` or `receive_phone_message`.
     phone: PhoneData,
     /// The closed apps with subscriptions still to run, as the shell keeps them.
     closed_apps: ClosedApps,
@@ -493,11 +495,17 @@ impl TestWatch {
         let bytes = rounded.as_deref().unwrap_or(line.as_bytes());
         let message = neotime_companion::parse_line(bytes)
             .map_err(|error| format!("the watch cannot read {line:?}: {error:?}"))?;
+        self.receive_phone_message(message).map_err(|_| {
+            format!("{line:?} is not a call, music, weather, navigation, find or vibrate message")
+        })
+    }
+
+    /// Takes a message as the shell does, such as one read from a write to InfiniTime's music,
+    /// navigation or weather service, keeps its values, and tells the app of it.
+    pub fn receive_phone_message(&mut self, message: Message<'_>) -> Result<(), String> {
         let mut updates = PhoneUpdates::new();
         if !updates.record(message) {
-            return Err(format!(
-                "{line:?} is not a call, music, weather, navigation, find or vibrate message"
-            ));
+            return Err(String::from("the shell passes this message to no app"));
         }
 
         let now = self.now();
@@ -510,7 +518,7 @@ impl TestWatch {
         }
         if changes.weather {
             self.copy_phone_values(&WEATHER_VALUES, &WEATHER_TEXTS);
-            self.system.forecast.clear();
+            self.copy_forecast();
         }
         if changes.navigation {
             self.copy_phone_values(&NAVIGATION_VALUES, &NAVIGATION_TEXTS);
@@ -523,6 +531,19 @@ impl TestWatch {
             &mut self.system,
         );
         Ok(())
+    }
+
+    /// Sets the fake system's forecast to the days the phone sent, none until it sends a forecast.
+    fn copy_forecast(&mut self) {
+        let day_count = self.phone.read(SystemValue::WeatherForecastLength).unwrap_or(0);
+        let read_day = |value, day| self.phone.read_element(value, day).unwrap_or(NONE);
+        self.system.forecast = (0..day_count)
+            .map(|day| ForecastDay {
+                condition: read_day(SystemValue::WeatherForecastCondition, day),
+                low: read_day(SystemValue::WeatherForecastLow, day),
+                high: read_day(SystemValue::WeatherForecastHigh, day),
+            })
+            .collect();
     }
 
     /// Sets the fake system's values to what the phone sent, as the watch's shell reads them.

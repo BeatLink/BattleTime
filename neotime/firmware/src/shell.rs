@@ -243,7 +243,7 @@ struct WatchSystem {
     installed: InstalledApps,
     /// Whether the open app asked to turn the screen on (`wake_screen`) or off (`screen_off`).
     screen_request: Option<bool>,
-    /// The music and weather the phone last sent.
+    /// The music, navigation and weather the phone last sent.
     phone: PhoneData,
     notifications: NotificationList,
     /// Set when the kept notifications changed, so the open app is told once the host call returns.
@@ -367,7 +367,11 @@ impl SystemValues for WatchSystem {
         if is_notification_value(value) {
             return self.notifications.read_element(value, index);
         }
-        if let Some(number) = self.folder.read_element(value, index) {
+        if let Some(number) = self
+            .folder
+            .read_element(value, index)
+            .or_else(|| self.phone.read_element(value, index))
+        {
             return number;
         }
         let place = usize::try_from(index).unwrap_or(usize::MAX);
@@ -576,6 +580,7 @@ impl System for WatchSystem {
             vibration::request(vibration);
             return;
         }
+        crate::infinitime_services::send_music_event(effect.kind, effect.number(0));
         if let Some(line) = app_phone::line_for_effect(effect.kind, effect.number(0)) {
             // Answering, rejecting or muting the call silences the watch too.
             if effect.kind == EffectKind::CallControl && self.stop_call_ring() {

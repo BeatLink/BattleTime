@@ -25,9 +25,19 @@ order. A new service goes at the end, so the others keep their handles.
 The watch is also a client of two of the phone's own services, Current Time and Alert
 Notification; see [The phone's services the watch uses](#the-phones-services-the-watch-uses).
 
-InfiniTime's Music, Navigation, Simple Weather, Motion and Immediate Alert services are not served.
-The music, navigation, weather and find features reach the watch through the Bangle.js lines on the
-[message channel](#calls-music-weather-and-the-rest-served) instead.
+InfiniTime's Simple Weather and Immediate Alert services are served too. Its Music, Navigation and
+Motion services are written but left out of the shipped firmware for want of flash; each is a cargo
+feature, as [bluetooth.md](bluetooth.md#infinitimes-own-services) describes. Without them, music
+and navigation reach the watch through the Bangle.js lines on the
+[message channel](#calls-music-weather-and-the-rest-served).
+
+| Service | UUID | Characteristics | Served |
+|---|---|---|---|
+| Simple Weather | `00050000-78fc-48fe-8e23-433b3a1942d0` | Data `00050001-…` (write): message type 0 is the current weather, version 0 or 1, as a timestamp, the temperature, low and high in hundredths of a °C, a 32-byte place, an icon (0 clear to 8 mist) and, in version 1, sunrise and sunset in minutes into the local day; type 1 is the forecast, up to 5 days of low, high and icon | Yes |
+| Music | `00000000-78fc-48fe-8e23-433b3a1942d0` | Event `00000001-…` (notify), status `…02`, artist `…03`, track `…04`, position `…06` and length `…07` in big-endian seconds (write) | With `music-service` |
+| Navigation | `00010000-78fc-48fe-8e23-433b3a1942d0` | Icon name `00010001-…`, instruction `…02`, distance as text `…03`, progress percent `…04` (write) | With `navigation-service` |
+| Immediate Alert | `0x1802` | Alert Level `0x2A06` (write, with or without response): 1 or 2 rings to find the watch, 0 stops it | Yes |
+| Motion | `00030000-78fc-48fe-8e23-433b3a1942d0` | Step count `00030001-…` (read, notify, 4 bytes), raw x, y and z `…02` (read, notify, three 16-bit milli-g) | With `motion-service` |
 
 | Message family | Where |
 |---|---|

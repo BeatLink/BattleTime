@@ -6,6 +6,11 @@ description = "The companion app's message channel: JSON lines over the Nordic U
 license.workspace = true
 publish = false
 
+[features]
+default = ["single-values"]
+# Music and navigation values written one at a time, as InfiniTime's services carry them.
+single-values = []
+
 [dependencies]
 heapless = "0.9"
 serde = { version = "1", default-features = false, features = ["derive"] }

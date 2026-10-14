@@ -72,7 +72,7 @@ fn parse_alert(alert: &[u8], header_bytes: usize, id: i64) -> Option<Message<'st
 }
 
 /// The text up to its first byte that is not part of a whole UTF-8 character.
-fn whole_characters(bytes: &[u8]) -> &str {
+pub(crate) fn whole_characters(bytes: &[u8]) -> &str {
     match core::str::from_utf8(bytes) {
         Ok(text) => text,
         Err(error) => core::str::from_utf8(&bytes[..error.valid_up_to()]).unwrap_or(""),
@@ -80,7 +80,7 @@ fn whole_characters(bytes: &[u8]) -> &str {
 }
 
 /// Text cut at the last whole character that fits.
-fn cut_to_fit<const BYTES: usize>(text: &str) -> heapless::String<BYTES> {
+pub(crate) fn cut_to_fit<const BYTES: usize>(text: &str) -> heapless::String<BYTES> {
     let mut end = text.len().min(BYTES);
     while !text.is_char_boundary(end) {
         end -= 1;

@@ -171,6 +171,12 @@ fn vibrate_buzzes_one_to_five_times() {
     assert_eq!(parsed(r#"{"t":"vibrate","n":40}"#), Message::Vibrate { times: 5 });
     assert_eq!(parsed(r#"{"t":"vibrate","n":0}"#), Message::Vibrate { times: 1 });
     assert_eq!(parsed(r#"{"t":"vibrate"}"#), Message::Vibrate { times: 1 });
+    assert_eq!(parsed(r#"{"t":"vibrate","n":-2}"#), Message::Vibrate { times: 1 });
+    assert_eq!(
+        parsed(r#"{ "n" : 2 , "t" : "vibrate" }"#),
+        Message::Vibrate { times: 2 }
+    );
+    assert_eq!(parsed(r#"{"n":true,"t":"find"}"#), Message::Find { is_on: true });
 }
 
 #[test]
@@ -243,6 +249,7 @@ fn gadgetbridge_navigation_is_read_with_its_turn_and_distance() {
             turn: Some(NavigationTurn::Left),
             instruction: "Turn left onto Main Street".try_into().unwrap(),
             distance_in_metres: Some(300),
+            progress_percent: None,
         })
     );
 }
@@ -443,6 +450,7 @@ fn nothing_received_reads_as_empty() {
     assert_eq!(data.read_text(SystemValue::WeatherLocation), Some(""));
     assert_eq!(data.read_text(SystemValue::NavigationInstruction), None);
     assert_eq!(data.read(SystemValue::NavigationTurn), None);
+    assert_eq!(data.read_text(SystemValue::FirmwareVersion), None);
 }
 
 #[test]

@@ -48,22 +48,22 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 136.1 KB | 46.4 KB |
-| App host (with `neotime-ui`) | 93.2 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 136.7 KB | 46.4 KB |
+| App host (with `neotime-ui`) | 93.1 KB | 0.0 KB |
 | App runtime | 36.2 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 33.7 KB | 43.3 KB |
-| core, alloc and compiler builtins | 27.9 KB | 15.6 KB |
-| Storage (flash store) | 18.0 KB | 14.5 KB |
-| Settings, companion and notifications (with serde) | 17.5 KB | 2.4 KB |
+| core, alloc and compiler builtins | 27.6 KB | 15.6 KB |
+| Storage (flash store) | 18.0 KB | 14.4 KB |
+| Settings, companion and notifications (with serde) | 17.7 KB | 2.4 KB |
 | BLEFS file service | 9.5 KB | 3.1 KB |
-| Embassy, allocator and Cortex-M | 8.4 KB | 5.5 KB |
+| Embassy, allocator and Cortex-M | 8.5 KB | 5.5 KB |
 | Packages | 7.8 KB | 1.3 KB |
 | Display, graphics and drivers | 5.4 KB | 3.2 KB |
-| Updates (DFU) | 3.0 KB | 2.8 KB |
-| Other constants and padding | 33.0 KB | 14.3 KB |
-| **Code and data** | **429.9 KB** | **152.4 KB** |
+| Updates (DFU) | 3.1 KB | 2.7 KB |
+| Other constants and padding | 33.1 KB | 14.3 KB |
+| **Code and data** | **430.4 KB** | **152.5 KB** |
 | Shared library, after the code | 48.3 KB | none |
-| Free of the 480 KB region, after its header | 1.6 KB | 327.3 KB |
+| Free of the 480 KB region, after its header | 1.0 KB | 327.3 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -298,13 +298,13 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (system 10 KB, UI 20.25 KB; the recovery build has no UI heap) | 30,976 B | 10,240 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 21,021 B | 11,214 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 21,087 B | 11,214 B |
 | Bluetooth controller | 2,610 B | 2,610 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | App host (with `neotime-ui`) | 364 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **55,412 B** | **24,464 B** |
-| Left for the stack | 10,108 B | 41,056 B |
+| **Static RAM** (`.data` and `.bss`) | **55,476 B** | **24,464 B** |
+| Left for the stack | 10,044 B | 41,056 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:

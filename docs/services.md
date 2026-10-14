@@ -117,7 +117,7 @@ fractions as they arrive so a fractional temperature still reads.
 | `call`, `musicinfo`, `musicstate` | A call starting, answered or ended; the player's track; whether it plays and where. |
 | `weather` | Kelvin turned into Celsius, OpenWeatherMap codes into the sky names apps use. |
 | `nav` | The next step of the phone's navigation, or its end. |
-| `find`, `vibrate` | Ring the watch until stopped; buzz a number of times. |
+| `find`, `vibrate` | Ring the watch until stopped; buzz a number of times. Their one value, `n`, is read by hand, since a JSON parser for one field cost about 850 B each. |
 | `status` | The phone asks for the battery and steps. |
 | `slots` | Where the update and recovery slots are, or a request to move them (`slots.rs`). |
 | `state` | The phone rewrote an app's saved state, so the app takes it up. |
@@ -127,6 +127,13 @@ small struct, so its parse never adds to the others' stack. `PhoneUpdates` keeps
 kind until the shell takes them, the larger ones on the heap, and `PhoneData` keeps the music,
 weather and navigation and answers the system values apps read them through. The crate also writes
 the `status` reply and the `music`, `call`, `findPhone` and `request` lines an app's effects send.
+
+`infinitime.rs` reads writes to InfiniTime's own GATT services in their byte formats into the same
+messages: Simple Weather into `Weather` (with sunrise and sunset) and `Forecast`, and, with the
+`single-values` feature, the music and navigation characteristics into one `PhoneField` each, which
+`PhoneUpdates` keeps in order and `PhoneData` applies to the music or navigation it holds. It also
+gives the music event for an app's control and the motion service's bytes. The firmware turns the
+feature on only with its music or navigation service, so a build without them carries none of it.
 
 It holds the standard services' content too, so the firmware only serves the bytes:
 

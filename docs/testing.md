@@ -305,6 +305,17 @@ from a small attribute table. It checks that the watch asks by itself after conn
 Alert on and writes the control point, keeps the phone's time and zone as UTC, buzzes for an SMS
 alert the phone notifies and opens the call app for a call alert; it takes about a minute.
 
+`../tools/check_infinitime_services.py FIRMWARE_ELF [SCREENSHOT_FOLDER]` checks InfiniTime's own
+services that the build serves, skipping the rest: Simple Weather's current weather and forecast in
+the weather app; the music service's values in the music app, its open event and a tap's pause
+event beside the UART line; the navigation service's turn, instruction, distance and progress in the
+navigation app; the motion service's step count, and raw acceleration only while subscribed; and
+Immediate Alert ringing and stopping. It opens each app as a temporary app with `run`, and splits
+writes longer than 20 bytes into the bridge's 27-byte ACL packets. A build with every service
+(`--features music-service,navigation-service,alert-service,motion-service`) needs room for the
+shared library behind it, so build that one with `CARGO_PROFILE_RELEASE_OPT_LEVEL=z` to check it; it
+takes about three minutes.
+
 `../tools/check_advertising.py FIRMWARE_ELF` scans the watch through the bridge's controller: fast
 advertising for the first 30 seconds then about once a second, InfiniTime's advertisement, the name
 in the scan response and the GAP service, the 0x00C2 appearance, then the `gadgetbridge_name`

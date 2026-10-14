@@ -42,9 +42,26 @@ fn main() {
     }
     println!("cargo:rerun-if-changed=../boot/src/lib.rs");
 
+    // InfiniTime's own services, each turned on by its feature in the shell's builds only.
+    for (feature, name) in INFINITIME_SERVICES {
+        println!("cargo:rustc-check-cfg=cfg({name})");
+        if !recovery && env::var_os(feature).is_some() {
+            println!("cargo:rustc-cfg={name}");
+        }
+    }
+
     compile_shell_screens(&output_directory);
     set_firmware_version(build_time);
 }
+
+/// Each InfiniTime service's feature, as cargo passes it to this script, and the cfg it turns on.
+const INFINITIME_SERVICES: [(&str, &str); 5] = [
+    ("CARGO_FEATURE_WEATHER_SERVICE", "weather_service"),
+    ("CARGO_FEATURE_MUSIC_SERVICE", "music_service"),
+    ("CARGO_FEATURE_NAVIGATION_SERVICE", "navigation_service"),
+    ("CARGO_FEATURE_ALERT_SERVICE", "alert_service"),
+    ("CARGO_FEATURE_MOTION_SERVICE", "motion_service"),
+];
 
 // ============================================================================
 // The shell's own screens

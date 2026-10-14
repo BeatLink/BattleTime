@@ -378,8 +378,8 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   loads like `status::BootloaderPages` in the firmware.
 - [ ] **Gadgetbridge with the InfiniTime name.** The `gadgetbridge_name` setting makes the watch
   advertise as "InfiniTime" so Gadgetbridge's PineTime/InfiniTime coordinator takes it, but no real
-  Gadgetbridge has paired with it yet. Try it once InfiniTime's Music, Navigation, Simple Weather,
-  Motion and Immediate Alert services land, and check whether Gadgetbridge insists on bonding, which
+  Gadgetbridge has paired with it yet. Try it with InfiniTime's Simple Weather and Immediate Alert
+  services, and with a build that has the other three, and check whether Gadgetbridge insists on bonding, which
   the controller cannot do yet. A coordinator of NeoTime's own in Gadgetbridge would need no setting.
 
 ## UI toolkit
@@ -426,8 +426,9 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
     step log with `neotime_steps::log`) and `http` (answers to an app's request, and the watch's `http`
     line).
   - The weather's coming days, sunrise and sunset: Gadgetbridge's `weather` line carries none, so
-    the forecast stays empty until the companion app sends them in keys of its own.
-  - Navigation progress: Gadgetbridge's `nav` carries none, so `progress_percent` reads 0.
+    only InfiniTime's Simple Weather service fills them; the companion app needs keys of its own.
+  - Navigation progress: Gadgetbridge's `nav` carries none, so `progress_percent` reads 0 unless
+    InfiniTime's navigation service, not yet in the shipped firmware, writes it.
   - Gadgetbridge prefixes each line with the `0x10` byte, which only the `setTime` line reader
     skips; check that `GB(...)` lines arriving with it are read, and skip it in `parse_line` if not.
   - Keep the music and weather through a restart; they are kept in RAM only.
@@ -587,7 +588,10 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### Accelerometer
 
-- [ ] **Motion service over BLE,** sending steps and raw x, y and z to the phone.
+- [ ] **Room for InfiniTime's other services.** Music, Navigation and Motion are written, tested on
+  the computer and in the emulator (`tools/check_infinitime_services.py`), but are cargo features
+  left out of the shipped firmware for want of flash; together they need about 4.3 KB more
+  ([bluetooth.md](bluetooth.md#infinitimes-own-services) has each one's cost).
 
 ### Bluetooth
 
@@ -792,8 +796,7 @@ InfiniTime has these and NeoTime has nothing for them yet:
 | Area | What InfiniTime has |
 |---|---|
 | Board and system loop | sleep and wake of the whole system, wake locks, a system monitor |
-| Notifications | Immediate Alert |
-| Other BLE services | Music, Navigation, Simple Weather |
+| Other BLE services | Music and Navigation in the shipped firmware |
 | System screens | the pass key |
 
 ## Gaps against the wasp-os fork

@@ -11,6 +11,14 @@ publish = false
 [features]
 # The image for the recovery slot: its status page always says it is the recovery firmware.
 recovery = []
+# InfiniTime's own GATT services (src/infinitime_services.rs), one feature each since flash is short;
+# docs/bluetooth.md lists what each costs.
+default = ["weather-service", "alert-service"]
+weather-service = []
+music-service = ["neotime-companion/single-values"]
+navigation-service = ["neotime-companion/single-values"]
+alert-service = []
+motion-service = []
 
 [dependencies]
 cortex-m = { version = "0.7", features = ["critical-section-single-core", "inline-asm"] }
@@ -38,7 +46,7 @@ neotime-app-host = { path = "../app-host" }
 neotime-ui = { path = "../ui" }
 neotime-bluetooth = { path = "../drivers/bluetooth" }
 neotime-boot = { path = "../boot" }
-neotime-companion = { path = "../services/companion" }
+neotime-companion = { path = "../services/companion", default-features = false }
 neotime-current-time = { path = "../services/current_time" }
 neotime-crash-record = { path = "../services/crash_record" }
 neotime-liveness = { path = "../services/liveness" }

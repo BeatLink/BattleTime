@@ -2,6 +2,7 @@
 //! with the shakes found in them, taken only while the open app wants them or the shell watches for
 //! a wake gesture: a raised or shaken wrist while the screen is dark, a lowered arm while it is lit.
 //! Each reading also updates the wrist's shake speed, which apps see only while a screen shows it.
+//! A phone subscribed to InfiniTime's motion service gets readings too, and hears each new step count.
 //!
 //! `neotime-steps` keeps the history: today and the six days before by hour, and the trip count.
 //! Each six-minute slot with steps is added to that day's file in `/steps` as it ends, and the
@@ -82,6 +83,19 @@ const STILL_AFTER: Duration = Duration::from_secs(60);
 /// A change on any axis bigger than this between readings counts as movement.
 const MOVEMENT_IN_MILLI_G: i32 = 80;
 
+/// Whether a phone subscribes to the motion service's raw acceleration, which is read ten times a second.
+static PHONE_WANTS_READINGS: AtomicBool = AtomicBool::new(false);
+const PHONE_READING_PERIOD_IN_MILLISECONDS: u32 = LOWER_PERIOD_IN_MILLISECONDS;
+
+#[cfg(motion_service)]
+/// The latest reading for a subscribed phone, which the Bluetooth task notifies.
+pub static READING_FOR_PHONE: Signal<CriticalSectionRawMutex, neotime_accelerometer::Acceleration> =
+    Signal::new();
+
+#[cfg(motion_service)]
+/// Set when today's steps change, so the Bluetooth task notifies a subscribed phone.
+pub static STEPS_CHANGED_FOR_PHONE: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
 const RAISE_BIT: u32 = 1 << 0;
 const LOWER_BIT: u32 = 1 << 1;
 const SHAKE_BIT: u32 = 1 << 2;
@@ -133,6 +147,14 @@ fn configurations() -> Configurations<'static> {
 pub fn read_acceleration_every(period_in_milliseconds: Option<Value>) {
     let period = period_in_milliseconds.map_or(0, |period| period.clamp(1, u32::MAX as Value) as u32);
     if READING_PERIOD_IN_MILLISECONDS.swap(period, Ordering::Relaxed) != period {
+        READING_PERIOD_CHANGED.signal(());
+    }
+}
+
+#[cfg(motion_service)]
+/// Starts or stops reading acceleration for a phone subscribed to the motion service.
+pub fn send_readings_to_phone(wanted: bool) {
+    if PHONE_WANTS_READINGS.swap(wanted, Ordering::Relaxed) != wanted {
         READING_PERIOD_CHANGED.signal(());
     }
 }
@@ -192,6 +214,10 @@ fn take_reading(
         if shakes.feed(reading, time_in_milliseconds) {
             app_events::shake_found();
         }
+    }
+    #[cfg(motion_service)]
+    if PHONE_WANTS_READINGS.load(Ordering::Relaxed) {
+        READING_FOR_PHONE.signal(reading);
     }
     let watching = unpack_watching(WATCHING.load(Ordering::Relaxed));
     if let Some(gesture) = wake_gestures.feed(reading, time_in_milliseconds, watching) {
@@ -276,6 +302,8 @@ async fn record_steps(count: u32) {
     }
     if recorded.changed {
         system_values::changed(&[SystemValue::StepsToday]);
+        #[cfg(motion_service)]
+        STEPS_CHANGED_FOR_PHONE.signal(());
     }
 }
 
@@ -365,7 +393,11 @@ pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus) {
             true => STILLNESS_PERIOD_IN_MILLISECONDS,
             false => 0,
         };
-        let period = [app_period, gesture_period, stillness_period]
+        let phone_period = match PHONE_WANTS_READINGS.load(Ordering::Relaxed) {
+            true => PHONE_READING_PERIOD_IN_MILLISECONDS,
+            false => 0,
+        };
+        let period = [app_period, gesture_period, stillness_period, phone_period]
             .into_iter()
             .filter(|&period| period != 0)
             .min()

@@ -9,5 +9,5 @@ publish = false
 [dependencies]
 heapless = "0.9"
 neotime-app-host = { path = "../../app-host" }
-neotime-companion = { path = "../companion" }
+neotime-companion = { path = "../companion", default-features = false }
 neotime-runtime = { path = "../../runtime" }

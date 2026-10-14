@@ -308,8 +308,47 @@ firmware serves the same table. What each one carries is in
 - **Long answers,** such as a folder listing or the app list, can fill TrouBLE's packets; the task
   then waits 20 ms and tries again, up to 50 times, rather than dropping a notification.
 
-InfiniTime's Music, Navigation, Simple Weather, Motion and Immediate Alert services are not served;
-navigation, music and weather arrive as Bangle.js lines on the Nordic UART instead.
+### InfiniTime's own services
+
+`firmware/src/infinitime_services.rs` serves InfiniTime's own services after Heart Rate, so
+Gadgetbridge's InfiniTime support and other InfiniTime phone apps work. Flash is short, so each is
+a cargo feature of the firmware. Simple Weather and Immediate Alert are in the default build; Music,
+Navigation and Motion build with `--features music-service,navigation-service,motion-service` and
+are left out of the shipped image until room is found. None is in the recovery firmware. Each write
+is read by `neotime_companion::infinitime` into the same phone messages the Bangle.js lines give, so
+the shell keeps them in `PhoneData`, and the music, navigation and weather apps and faces show them.
+
+| Feature | Service | Flash, on top of the default build |
+|---|---|---|
+| `weather-service` (default) | Simple Weather `00050000-78fc-48fe-8e23-433b3a1942d0` | In it: 948 B, less 776 B saved by reading `find` and `vibrate` by hand |
+| `alert-service` (default) | Immediate Alert 0x1802 | In it: 208 B |
+| `music-service` | Music `00000000-78fc-…` | 2,044 B, which brings in the single-values code navigation shares |
+| `navigation-service` | Navigation `00010000-78fc-…` | 1,648 B alone, 1,116 B more with music |
+| `motion-service` | Motion `00030000-78fc-…` | 1,356 B |
+
+Measured with `cargo size` and the 49,461 B shared library on 2026-10-15, on `master` at
+`32593068`: that `master` has 1,575 B free in the 480 KB region, the default build 1,075 B, and all
+five services together are 4,284 B more than the default build, 3,209 B too many.
+
+- **Writes** are taken as they arrive and never stored, as New Alert's are, so one byte of storage
+  takes a write of any length. The music and navigation characteristics are write-only and follow
+  each other in the table, so the handle of a write gives the characteristic by its place.
+- **Simple Weather** reads InfiniTime's current weather, versions 0 and 1 (with sunrise and sunset
+  as minutes into the local day), and its five-day forecast, which fills the weather app's coming
+  days. Temperatures come in hundredths of a degree and are rounded to whole degrees.
+- **Music** takes the playing state, artist, track, position and length; the album, track numbers,
+  playback speed, repeat and shuffle are not served, since the watch keeps none of them, and
+  Gadgetbridge skips a characteristic the watch lacks. The music app's controls notify InfiniTime's
+  event codes (0x00 play, 0x01 pause, 0x03 next, 0x04 previous, 0x05 and 0x06 volume) and opening
+  the app notifies 0xe0, beside the Nordic UART `music` line.
+- **Navigation** reads the icon name into a turn by its words, the distance with the same reader as
+  the Bangle.js `nav` line, and the progress, which only this service carries.
+- **Immediate Alert** level 1 or 2 rings to find the watch as the `find` line does, and 0 stops it.
+- **Motion** notifies today's steps as each new count is read, and while a phone subscribes to the
+  raw values, reads acceleration ten times a second, as for wake gestures, and notifies x, y and z
+  in milli-g as three little-endian 16-bit numbers.
+
+`tools/check_infinitime_services.py` checks whichever services a build serves in the emulator.
 
 ## The phone's own services
 

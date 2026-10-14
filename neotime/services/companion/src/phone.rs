@@ -9,6 +9,8 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use alloc::string::String;
+#[cfg(feature = "single-values")]
+use alloc::vec::Vec;
 use core::fmt::Write;
 
 use neotime_runtime::{SystemValue, Value, NONE};
@@ -216,7 +218,24 @@ pub struct Weather {
     pub high_in_celsius: Option<Value>,
     pub condition: Option<WeatherCondition>,
     pub location: heapless::String<WEATHER_LOCATION_BYTES>,
+    /// Today's sunrise and sunset in milliseconds since 1970, which only InfiniTime's weather service carries.
+    pub sunrise: Option<Value>,
+    pub sunset: Option<Value>,
 }
+
+/// The most coming days a forecast holds.
+pub const MOST_FORECAST_DAYS: usize = 5;
+
+/// One coming day of the forecast, in whole degrees Celsius.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ForecastDay {
+    pub condition: Option<WeatherCondition>,
+    pub low_in_celsius: Value,
+    pub high_in_celsius: Value,
+}
+
+/// The coming days, today first.
+pub type Forecast = heapless::Vec<ForecastDay, MOST_FORECAST_DAYS>;
 
 fn celsius_from_kelvin(kelvin: Option<i64>) -> Option<Value> {
     kelvin.map(|kelvin| kelvin.saturating_sub(KELVIN_AT_ZERO_CELSIUS))
@@ -229,6 +248,8 @@ fn weather_from(fields: PhoneFields<'_>) -> Weather {
         high_in_celsius: celsius_from_kelvin(fields.hi),
         condition: fields.code.and_then(WeatherCondition::from_code),
         location: unescaped(fields.loc),
+        sunrise: None,
+        sunset: None,
     }
 }
 
@@ -290,6 +311,8 @@ pub struct Navigation {
     pub turn: Option<NavigationTurn>,
     pub instruction: heapless::String<NAVIGATION_INSTRUCTION_BYTES>,
     pub distance_in_metres: Option<Value>,
+    /// How much of the route is done, which only InfiniTime's navigation service carries.
+    pub progress_percent: Option<Value>,
 }
 
 impl Navigation {
@@ -304,6 +327,7 @@ fn navigation_from(fields: PhoneFields<'_>) -> Navigation {
         turn: fields.action.and_then(NavigationTurn::from_action),
         instruction: unescaped(fields.instr),
         distance_in_metres: fields.distance.and_then(metres_from_text),
+        progress_percent: None,
     }
 }
 
@@ -368,36 +392,93 @@ pub fn metres_from_text(text: &str) -> Option<Value> {
 /// `vibrate` buzzes at least once and at most this many times.
 pub const MOST_PHONE_BUZZES: u8 = 5;
 
-#[derive(Deserialize)]
-struct FindFields {
-    #[serde(default)]
-    n: Option<bool>,
+/// The key both messages carry their value in, as it appears in the line.
+const N_KEY: &str = "\"n\"";
+
+/// The text of the `n` key's value, in a line `parse_line` has already read as JSON, or `None` without one.
+///
+/// Read by hand, byte by byte, since a JSON parser for one field cost about 850 B of flash each.
+fn value_of_n(json: &str) -> Option<&str> {
+    let bytes = json.as_bytes();
+    let key_end = bytes
+        .windows(N_KEY.len())
+        .position(|window| window == N_KEY.as_bytes())?
+        + N_KEY.len();
+    let is_gap = |byte: &u8| *byte == b' ' || *byte == b':';
+    let start = key_end + bytes[key_end..].iter().position(|byte| !is_gap(byte))?;
+    let length = bytes[start..]
+        .iter()
+        .position(|&byte| matches!(byte, b',' | b'}' | b' '))
+        .unwrap_or(bytes.len() - start);
+    json.get(start..start + length)
 }
 
-#[derive(Deserialize)]
-struct VibrateFields {
-    #[serde(default)]
-    n: Option<i64>,
-}
-
-#[inline(never)]
 pub(crate) fn parse_find(json: &str) -> Result<Message<'_>, MessageError> {
-    let (fields, _) = serde_json_core::from_str::<FindFields>(json).map_err(|_| MessageError::NotJson)?;
-    Ok(Message::Find {
-        is_on: fields.n.unwrap_or(false),
-    })
+    let is_on = match value_of_n(json) {
+        None | Some("false") => false,
+        Some("true") => true,
+        Some(_) => return Err(MessageError::NotJson),
+    };
+    Ok(Message::Find { is_on })
 }
 
-#[inline(never)]
 pub(crate) fn parse_vibrate(json: &str) -> Result<Message<'_>, MessageError> {
-    let (fields, _) = serde_json_core::from_str::<VibrateFields>(json).map_err(|_| MessageError::NotJson)?;
-    let times = fields.n.unwrap_or(1).clamp(1, MOST_PHONE_BUZZES as i64) as u8;
+    let mut times: i64 = 1;
+    if let Some(text) = value_of_n(json) {
+        let digits = text.strip_prefix('-').unwrap_or(text);
+        if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(MessageError::NotJson);
+        }
+        times = digits.bytes().fold(0, |count: i64, digit| {
+            count.saturating_mul(10).saturating_add(i64::from(digit - b'0'))
+        });
+        if digits.len() < text.len() {
+            times = 0;
+        }
+    }
+    let times = times.clamp(1, MOST_PHONE_BUZZES as i64) as u8;
     Ok(Message::Vibrate { times })
+}
+
+// ============================================================================
+// Single values from InfiniTime's music and navigation services
+// ============================================================================
+
+#[cfg(feature = "single-values")]
+/// One music or navigation value, which InfiniTime's services carry each in its own characteristic.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PhoneField {
+    MusicArtist(heapless::String<MUSIC_ARTIST_BYTES>),
+    MusicTrack(heapless::String<MUSIC_TRACK_BYTES>),
+    MusicIsPlaying(bool),
+    MusicPositionInSeconds(Value),
+    MusicLengthInSeconds(Value),
+    NavigationTurn(NavigationTurn),
+    NavigationInstruction(heapless::String<NAVIGATION_INSTRUCTION_BYTES>),
+    NavigationDistanceInMetres(Value),
+    NavigationProgressPercent(Value),
+}
+
+#[cfg(feature = "single-values")]
+impl PhoneField {
+    fn is_navigation(&self) -> bool {
+        matches!(
+            self,
+            PhoneField::NavigationTurn(_)
+                | PhoneField::NavigationInstruction(_)
+                | PhoneField::NavigationDistanceInMetres(_)
+                | PhoneField::NavigationProgressPercent(_)
+        )
+    }
 }
 
 // ============================================================================
 // Waiting for the shell
 // ============================================================================
+
+#[cfg(feature = "single-values")]
+/// The most single music and navigation values that wait for the shell; more are dropped.
+const MOST_WAITING_FIELDS: usize = 16;
 
 /// The phone's messages the shell has not yet taken, only the latest of each kind.
 ///
@@ -409,6 +490,10 @@ pub struct PhoneUpdates {
     pub music_state: Option<MusicState>,
     pub weather: Option<Box<Weather>>,
     pub navigation: Option<Box<Navigation>>,
+    pub forecast: Option<Box<Forecast>>,
+    #[cfg(feature = "single-values")]
+    /// Single music and navigation values in the order they came, the shell taking them all at once.
+    pub fields: Vec<PhoneField>,
     /// Whether to start or stop ringing the watch so the wearer can find it.
     pub find: Option<bool>,
     pub buzzes: Option<u8>,
@@ -423,6 +508,9 @@ impl PhoneUpdates {
             music_state: None,
             weather: None,
             navigation: None,
+            forecast: None,
+            #[cfg(feature = "single-values")]
+            fields: Vec::new(),
             find: None,
             buzzes: None,
         }
@@ -436,6 +524,11 @@ impl PhoneUpdates {
             Message::MusicState(state) => self.music_state = Some(state),
             Message::Weather(weather) => self.weather = Some(Box::new(weather)),
             Message::Navigation(navigation) => self.navigation = Some(Box::new(navigation)),
+            Message::Forecast(forecast) => self.forecast = Some(Box::new(forecast)),
+            #[cfg(feature = "single-values")]
+            Message::PhoneField(field) if self.fields.len() < MOST_WAITING_FIELDS => self.fields.push(field),
+            #[cfg(feature = "single-values")]
+            Message::PhoneField(_) => {}
             Message::Find { is_on } => self.find = Some(is_on),
             Message::Vibrate { times } => self.buzzes = Some(times),
             _ => return false,
@@ -478,6 +571,7 @@ pub struct PhoneData {
     weather_received_at: Value,
     /// The step navigation is at, or none once it ends.
     navigation: Option<Box<Navigation>>,
+    forecast: Option<Box<Forecast>>,
 }
 
 /// The system values `PhoneData` gives, so a test system can copy them.
@@ -543,7 +637,43 @@ impl PhoneData {
             self.navigation = (!navigation.has_ended()).then_some(navigation);
             changes.navigation = true;
         }
+        if let Some(forecast) = updates.forecast.take() {
+            self.forecast = Some(forecast);
+            changes.weather = true;
+        }
+        #[cfg(feature = "single-values")]
+        for field in core::mem::take(&mut updates.fields) {
+            changes.navigation |= field.is_navigation();
+            changes.music |= !field.is_navigation();
+            self.apply_field(field);
+        }
         changes
+    }
+
+    #[cfg(feature = "single-values")]
+    fn apply_field(&mut self, field: PhoneField) {
+        if field.is_navigation() {
+            let navigation = self.navigation.get_or_insert_default();
+            match field {
+                PhoneField::NavigationTurn(turn) => navigation.turn = Some(turn),
+                PhoneField::NavigationInstruction(instruction) => navigation.instruction = instruction,
+                PhoneField::NavigationDistanceInMetres(metres) => {
+                    navigation.distance_in_metres = Some(metres)
+                }
+                PhoneField::NavigationProgressPercent(percent) => navigation.progress_percent = Some(percent),
+                _ => {}
+            }
+            return;
+        }
+        let music = self.music.get_or_insert_default();
+        match field {
+            PhoneField::MusicArtist(artist) => music.info.artist = artist,
+            PhoneField::MusicTrack(track) => music.info.track = track,
+            PhoneField::MusicIsPlaying(is_playing) => music.is_playing = is_playing,
+            PhoneField::MusicPositionInSeconds(seconds) => music.position_in_seconds = seconds,
+            PhoneField::MusicLengthInSeconds(seconds) => music.info.length_in_seconds = seconds,
+            _ => {}
+        }
     }
 
     /// A call, music, weather or navigation value, or `None` for any other value and for navigation before a step comes.
@@ -566,13 +696,31 @@ impl PhoneData {
                 number_or_none(weather.and_then(|w| w.condition).map(|sky| sky as Value))
             }
             SystemValue::WeatherReceivedAt => number_or_none(weather.map(|_| self.weather_received_at)),
-            SystemValue::WeatherSunrise | SystemValue::WeatherSunset => NONE,
-            SystemValue::WeatherForecastLength => 0,
+            SystemValue::WeatherSunrise => number_or_none(weather.and_then(|w| w.sunrise)),
+            SystemValue::WeatherSunset => number_or_none(weather.and_then(|w| w.sunset)),
+            SystemValue::WeatherForecastLength => {
+                self.forecast.as_ref().map_or(0, |days| days.len() as Value)
+            }
             // Without navigation the system's own values stand, as before the phone sent any.
             SystemValue::NavigationTurn => number_or_none(navigation?.turn.map(|turn| turn as Value)),
             SystemValue::NavigationDistance => number_or_none(navigation?.distance_in_metres),
-            // Gadgetbridge sends no progress, so the bar stays empty.
-            SystemValue::NavigationProgressPercent => navigation.map(|_| 0)?,
+            // Only InfiniTime's navigation service sends progress, so the bar stays empty without it.
+            SystemValue::NavigationProgressPercent => navigation?.progress_percent.unwrap_or(0),
+            _ => return None,
+        })
+    }
+
+    /// One coming day's condition, low or high, or `None` for any other value; days past the forecast are empty.
+    pub fn read_element(&self, value: SystemValue, index: Value) -> Option<Value> {
+        let day = usize::try_from(index)
+            .ok()
+            .and_then(|place| self.forecast.as_ref()?.get(place));
+        Some(match value {
+            SystemValue::WeatherForecastCondition => {
+                number_or_none(day.and_then(|day| day.condition).map(|sky| sky as Value))
+            }
+            SystemValue::WeatherForecastLow => number_or_none(day.map(|day| day.low_in_celsius)),
+            SystemValue::WeatherForecastHigh => number_or_none(day.map(|day| day.high_in_celsius)),
             _ => return None,
         })
     }

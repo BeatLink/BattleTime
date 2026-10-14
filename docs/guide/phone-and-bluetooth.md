@@ -27,8 +27,10 @@ Connecting a phone sets the clock and time zone; see
 ## Weather
 
 The phone sends the weather, and the [weather app](../apps/weather.md) shows the place, the sky,
-the temperature now with the day's low and high, and up to five coming days. Faces that show the
-weather use the same report. Weather more than three hours old is dimmed. Temperatures follow the
+the temperature now with the day's low and high, and up to five coming days. Gadgetbridge's
+InfiniTime support sends the coming days, sunrise and sunset through InfiniTime's weather service,
+which the watch serves; its Bangle.js line carries only today. Faces that show the weather use the
+same report. Weather more than three hours old is dimmed. Temperatures follow the
 **Metric units** setting.
 
 ## Music
@@ -50,7 +52,8 @@ it asks the phone for the current step.
 ## Finding the watch or the phone
 
 - **Find the watch:** Gadgetbridge's find device rings the watch for up to a minute, even in do not
-  disturb, until the phone stops it or you touch the watch or press the button.
+  disturb, until the phone stops it or you touch the watch or press the button. Phones that use the
+  standard Immediate Alert service to find a watch ring it the same way.
 - **Find the phone:** the [phone finder](../apps/phone-finder.md) app rings the phone until you tap
   **Stop** or leave the app.
 - The phone can also buzz the watch one to five times, and ask for its battery level, voltage,
