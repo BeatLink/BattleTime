@@ -829,12 +829,23 @@ impl Files {
             StorageRequest::SaveTrip(steps) => {
                 let _ = log::save_trip(store, steps).await;
             }
+            #[cfg(with_shell)]
+            StorageRequest::StoreSlotLogs {
+                ended,
+                beats_per_minute,
+                battery,
+            } => {
+                let _ = neotime_slot_log::store_ended_slot(store, ended, beats_per_minute, battery).await;
+            }
             StorageRequest::WriteSmallFile { path, bytes } => {
                 let _ = FileAccess::write_file(store, path, &bytes).await;
             }
-            // Only the step counter asks for these, and the recovery firmware has none.
+            // Only the step counter and the battery task ask for these, and the recovery firmware runs neither.
             #[cfg(not(with_shell))]
-            StorageRequest::LoadSteps | StorageRequest::StoreSteps(_) | StorageRequest::SaveTrip(_) => {}
+            StorageRequest::LoadSteps
+            | StorageRequest::StoreSteps(_)
+            | StorageRequest::SaveTrip(_)
+            | StorageRequest::StoreSlotLogs { .. } => {}
         }
     }
 

@@ -6,6 +6,7 @@
 use alloc::vec::Vec;
 
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, signal::Signal};
+use neotime_slot_log::EndedSlot;
 use neotime_steps::Recorded;
 
 /// The longest file service command: one write of the 128-byte packets the Bluetooth host uses.
@@ -28,6 +29,12 @@ pub enum StorageRequest {
     /// Writes the slot a reading ended, with the trip count, and reads the days again after the clock jumped.
     StoreSteps(Recorded),
     SaveTrip(u32),
+    /// Writes a six-minute slot that ended to the heart rate and battery logs; see `neotime_slot_log`.
+    StoreSlotLogs {
+        ended: EndedSlot,
+        beats_per_minute: u8,
+        battery: u8,
+    },
     WriteSmallFile {
         path: &'static str,
         bytes: heapless::Vec<u8, SMALL_WRITE_BYTES>,

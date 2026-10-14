@@ -1258,6 +1258,7 @@ dependencies = [
  "neotime-packages",
  "neotime-runtime",
  "neotime-settings",
+ "neotime-slot-log",
  "neotime-status-screen",
  "neotime-steps",
  "neotime-task-table",
@@ -1326,6 +1327,15 @@ name = "neotime-settings"
 version = "0.1.0"
 
 [[package]]
+name = "neotime-slot-log"
+version = "0.1.0"
+dependencies = [
+ "heapless 0.9.3",
+ "neotime-current-time",
+ "neotime-flash-store",
+]
+
+[[package]]
 name = "neotime-status-screen"
 version = "0.1.0"
 dependencies = [
@@ -1338,8 +1348,8 @@ name = "neotime-steps"
 version = "0.1.0"
 dependencies = [
  "heapless 0.9.3",
- "neotime-current-time",
  "neotime-flash-store",
+ "neotime-slot-log",
 ]
 
 [[package]]

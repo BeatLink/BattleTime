@@ -1313,6 +1313,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "neotime-slot-log"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "heapless 0.9.3",
+ "neotime-current-time",
+ "neotime-flash-store",
+]
+
+[[package]]
 name = "neotime-status-screen"
 version = "0.1.0"
 dependencies = [
@@ -1327,8 +1337,8 @@ version = "0.1.0"
 dependencies = [
  "embassy-futures",
  "heapless 0.9.3",
- "neotime-current-time",
  "neotime-flash-store",
+ "neotime-slot-log",
 ]
 
 [[package]]

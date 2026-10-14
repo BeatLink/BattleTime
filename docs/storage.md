@@ -27,6 +27,8 @@ with it. The [Files app](apps/files.md) lists them that way, a folder at a time 
 | `/notes/note.txt` and `/notes/font` | the note the companion app sends, and the font to show it in; see [companion-protocol.md](companion-protocol.md#notes) |
 | `/steps/<year>/<month>-<day>` | one day's steps, up to 480 bytes; the last 90 days are kept |
 | `/steps/trip` | the trip count |
+| `/logs/heart/<year>/<month>-<day>` | one day's average heart rate per six minutes, a byte each; the last 90 days are kept |
+| `/logs/battery/<year>/<month>-<day>` | one day's battery charge at the end of each six minutes, the top bit set while charging; the last 90 days are kept |
 
 ## How the firmware reaches it
 

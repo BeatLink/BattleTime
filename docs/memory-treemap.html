@@ -296,7 +296,7 @@ function fileSystemTree() {
       { name: "App images", size: store.file_sectors_in_use * store.sector_size, kind: "data", holds: `${store.file_sectors_in_use} sectors for ${images.length} app images, ${smallest[1].toLocaleString("en")} B (${smallest[0]}) to ${largest[1].toLocaleString("en")} B (${largest[0]}); ${imageBytes.toLocaleString("en")} B in all. Those of 1 KB or less are records instead.` },
       { name: "Free sectors", rest: true, kind: "spare", holds: "Room for more apps, saved state and resources." },
     ] },
-    { name: "Records ring", size: store.record_sectors * store.sector_size, kind: "runtime", holds: "Files of 1 KB or less, which cost no sector: the settings, the theme, saved app state, a day's steps.", children: [
+    { name: "Records ring", size: store.record_sectors * store.sector_size, kind: "runtime", holds: "Files of 1 KB or less, which cost no sector: the settings, the theme, saved app state, and a day of each log: steps (up to 480 B), heart rate and battery (up to 240 B each), 90 days of each, about 90 KB at most.", children: [
       { name: "In use", size: store.record_bytes_in_use, kind: "runtime", holds: `The settings and theme (${store.settings_bytes} B) and the app images of 1 KB or less.` },
       { name: "Free", rest: true, kind: "spare", holds: "The rest of the ring." },
     ] },
@@ -337,7 +337,7 @@ const ROOT = { name: "PineTime", children: [
         firmwareBuild("Recovery slot", 0x0C6000, KB(232), MEASURED.firmware.recovery,
           "A known-good firmware to fall back to, here the recovery build (--features recovery), up to 0x100000. It leaves out the shell, so the app host and the runtime go with it, and carries no shared library."),
       ] },
-      { name: "File system", start: 0x100000, size: KB(3072), kind: "data", holds: "NeoTime's flash store, safe against power cuts, shown with a typical install: the digital face, the launcher and ten everyday apps. It has no folders; paths such as /apps/<id>/app.ntapp and /steps/<year>/<month>-<day> are names.", children: fileSystemTree() },
+      { name: "File system", start: 0x100000, size: KB(3072), kind: "data", holds: "NeoTime's flash store, safe against power cuts, shown with a typical install: the digital face, the launcher and ten everyday apps. It has no folders; paths such as /apps/<id>/app.ntapp, /steps/<year>/<month>-<day> and /logs/heart/<year>/<month>-<day> are names.", children: fileSystemTree() },
     ],
   },
 ] };

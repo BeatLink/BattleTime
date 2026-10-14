@@ -67,6 +67,12 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 The recovery build (`--features recovery`) leaves out the shell, so the app
 host and the runtime go with it.
 
+The heart rate and battery logs (`neotime-slot-log`, written by the battery task through the
+storage task) added 1,528 B of code to the full build, measured with `cargo size` against master on
+2026-10-14 (433,200 B to 434,728 B of text), and 136 B of static RAM, most of it the battery task's
+future holding the storage request while it waits to send it. The step log takes its paths and its
+forgetting of old days from the same crate.
+
 Running closed apps (`firmware/src/closed_apps.rs` and `neotime_app_host::closed_apps`) added
 5,008 B of code to the full build, measured with `cargo size` against master on 2026-10-14
 (405,496 B to 410,504 B of text), and 32 B of static RAM. A first version wrapped the shell's
@@ -137,6 +143,8 @@ records ring, so it costs no sector. There are no folders, so an app costs nothi
 | `/resources/` | For resource packages; empty for now. |
 | `/steps/<year>/<month>-<day>` | One day's steps in six-minute slots, up to 480 bytes, a record; the last 90 days are kept, at most about 47 KB. |
 | `/steps/trip` | The trip count, 4 bytes. |
+| `/logs/heart/<year>/<month>-<day>` | One day's average heart rate in six-minute slots, a byte each, up to 240 bytes, a record; 90 days kept, at most about 23 KB. |
+| `/logs/battery/<year>/<month>-<day>` | One day's battery charge at the end of each six-minute slot, with the top bit set while charging, up to 240 bytes, a record; 90 days kept, at most about 23 KB. |
 
 A typical install is the digital face, the launcher and ten everyday apps (alarm, timer,
 stopwatch, settings, weather, steps, heart, flashlight, music and calculator), which

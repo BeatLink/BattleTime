@@ -56,6 +56,7 @@ neotime-external-flash = { path = "../drivers/external_flash", features = ["cort
 neotime-runtime = { path = "../runtime" }
 neotime-settings = { path = "../services/settings" }
 neotime-steps = { path = "../services/steps" }
+neotime-slot-log = { path = "../services/slot_log" }
 neotime-status-screen = { path = "../drivers/status_screen" }
 neotime-touch = { path = "../drivers/touch" }
 neotime-vibrator = { path = "../drivers/vibrator" }

@@ -2,12 +2,10 @@
 //!
 //! Each day has a file, `/steps/<year>/<month>-<day>`, holding the steps of each six-minute slot
 //! from midnight as a little-endian `u16`. A slot is added when it ends with steps in it, so a file
-//! stops after the day's last slot with steps, and a slot past its end had none. Nothing is ever
-//! deleted. The trip count is kept apart, in `/steps/trip`, as a little-endian `u32`.
+//! stops after the day's last slot with steps, and a slot past its end had none. Days older than
+//! `DAYS_KEPT` are deleted when a new day starts, by `neotime_slot_log`, which the heart rate and
+//! battery logs share. The trip count is kept apart, in `/steps/trip`, as a little-endian `u32`.
 
-use core::fmt::Write;
-
-use neotime_current_time::{date_from_days_since_1970, days_since_1970, Date};
 use neotime_flash_store::{FileAccess, FileError};
 
 use crate::{
@@ -18,14 +16,13 @@ use crate::{
 pub const STEPS_DIRECTORY: &str = "/steps";
 /// How many days the log keeps; each is a record of up to 480 bytes, so 90 take at most about 47 KB of the
 /// store's records.
-pub const DAYS_KEPT: i64 = 90;
+pub const DAYS_KEPT: i64 = neotime_slot_log::DAYS_KEPT;
 pub const TRIP_PATH: &str = "/steps/trip";
 pub const BYTES_PER_SLOT: usize = 2;
 pub const LARGEST_DAY_FILE_BYTES: usize = SLOTS_PER_DAY * BYTES_PER_SLOT;
 const TRIP_FILE_BYTES: usize = 4;
 
-/// Long enough for `/steps/` and a five-digit year, with the month and day.
-pub type DayPath = heapless::String<24>;
+pub use neotime_slot_log::DayPath;
 
 // ============================================================================
 // Paths
@@ -33,27 +30,12 @@ pub type DayPath = heapless::String<24>;
 
 /// The file holding a day, counted from 1970-01-01, such as `/steps/2026/01-05`.
 pub fn day_path(day: i64) -> DayPath {
-    let date = date_from_days_since_1970(day);
-    let mut path = DayPath::new();
-    let _ = write!(
-        path,
-        "{STEPS_DIRECTORY}/{}/{:02}-{:02}",
-        date.year, date.month, date.day
-    );
-    path
+    neotime_slot_log::day_path(STEPS_DIRECTORY, day)
 }
 
 /// The day a path such as `/steps/2026/01-05` holds, or nothing for any other path.
 pub fn day_of_path(path: &str) -> Option<i64> {
-    let rest = path.strip_prefix(STEPS_DIRECTORY)?.strip_prefix('/')?;
-    let (year, month_day) = rest.split_once('/')?;
-    let (month, day) = month_day.split_once('-')?;
-    let date = Date {
-        year: year.parse().ok()?,
-        month: month.parse().ok()?,
-        day: day.parse().ok()?,
-    };
-    Some(days_since_1970(date))
+    neotime_slot_log::day_of_path(STEPS_DIRECTORY, path)
 }
 
 // ============================================================================
@@ -121,26 +103,7 @@ pub async fn write_slot<Files: FileAccess>(
 
 /// Deletes the days older than the log keeps, counting back from `today`.
 pub async fn forget_old_days<Files: FileAccess>(files: &mut Files, today: i64) -> Result<(), FileError> {
-    let mut old_paths: heapless::Vec<DayPath, 8> = heapless::Vec::new();
-    loop {
-        old_paths.clear();
-        files
-            .for_each_file(STEPS_DIRECTORY, &mut |path| {
-                if day_of_path(path).is_some_and(|day| day <= today - DAYS_KEPT) {
-                    let mut kept = DayPath::new();
-                    if kept.push_str(path).is_ok() {
-                        let _ = old_paths.push(kept);
-                    }
-                }
-            })
-            .await?;
-        if old_paths.is_empty() {
-            return Ok(());
-        }
-        for path in &old_paths {
-            files.delete_file(path).await?;
-        }
-    }
+    neotime_slot_log::forget_old_days(files, STEPS_DIRECTORY, today).await
 }
 
 // ============================================================================

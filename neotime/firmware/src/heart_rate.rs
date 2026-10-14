@@ -7,7 +7,8 @@
 //! now and then, as `neotime_heart_rate::schedule` decides. Each reading wakes the shell as a system
 //! value change, which passes it to the open app, and the latest one, its time and the sensor's
 //! status stay for apps and faces to read, and each reading is notified to a phone subscribed to the
-//! Heart Rate service. The sample window lives on the heap only while
+//! Heart Rate service. The readings of each six-minute slot are averaged for the heart rate log,
+//! which the battery task writes when the slot ends. The sample window lives on the heap only while
 //! measuring, so the sensor costs little RAM the rest of the time.
 
 extern crate alloc;
@@ -32,6 +33,7 @@ use neotime_heart_rate::{
 };
 use neotime_runtime::{SystemValue, Value};
 use neotime_settings::{heart_rate_interval, Setting};
+use neotime_slot_log::Average;
 
 use crate::{
     clock,
@@ -123,6 +125,19 @@ static STATUS: AtomicU8 = AtomicU8::new(Status::Stopped as u8);
 static MEASURED_AT: Mutex<CriticalSectionRawMutex, Cell<Value>> =
     Mutex::new(Cell::new(neotime_runtime::NONE));
 
+/// The readings of the six-minute slot in progress, which the battery task takes for the heart rate log when it ends.
+static SLOT_AVERAGE: Mutex<CriticalSectionRawMutex, Cell<Average>> = Mutex::new(Cell::new(Average::new()));
+
+/// The average beats per minute measured since the last call, or 0 for none.
+pub fn take_slot_average() -> u8 {
+    SLOT_AVERAGE.lock(|average| {
+        let mut taken = average.get();
+        let beats_per_minute = taken.take();
+        average.set(taken);
+        beats_per_minute
+    })
+}
+
 /// Raised at each new reading, so the Heart Rate service can notify a subscribed phone.
 pub static READING_TAKEN: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
@@ -165,6 +180,11 @@ fn keep_reading(reading: Reading) {
     BEATS_PER_MINUTE.store(reading.beats_per_minute, Ordering::Relaxed);
     CONFIDENCE_PERCENT.store(reading.confidence_percent, Ordering::Relaxed);
     MEASURED_AT.lock(|measured_at| measured_at.set(clock::utc_now()));
+    SLOT_AVERAGE.lock(|average| {
+        let mut added = average.get();
+        added.add(reading.beats_per_minute);
+        average.set(added);
+    });
     system_values::changed(&[SystemValue::HeartRate]);
     READING_TAKEN.signal(());
 }

@@ -1,7 +1,8 @@
 //! The battery: its voltage on P0.31, and whether power is present and charging on P0.19 and P0.12.
 //!
 //! `neotime_battery::Battery` turns each reading into the steady charge the watch shows; this task
-//! takes the readings, keeps what apps read, and passes the events on to the shell.
+//! takes the readings, keeps what apps read, passes the events on to the shell, and logs the charge
+//! and the heart rate of each six-minute slot through the storage task.
 
 use core::sync::atomic::{AtomicBool, AtomicU16, AtomicU8, Ordering};
 
@@ -13,8 +14,13 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channe
 use embassy_time::{Duration, Timer};
 use neotime_battery::{millivolts_from_reading, Battery, BatteryEvent, Measurement};
 use neotime_runtime::SystemValue;
+use neotime_slot_log::{battery_byte, SlotClock};
 
-use crate::system_values;
+use crate::{
+    clock, heart_rate,
+    storage_requests::{self, StorageRequest},
+    system_values,
+};
 
 static PERCENT: AtomicU8 = AtomicU8::new(0);
 static IS_CHARGING: AtomicBool = AtomicBool::new(false);
@@ -43,7 +49,8 @@ pub fn millivolts() -> u16 {
     MILLIVOLTS.load(Ordering::Relaxed)
 }
 
-/// Reads the battery at start and then once a minute, or soon after power is plugged in or out.
+/// Reads the battery at start and then once a minute, or soon after power is plugged in or out, and
+/// hands each six-minute slot that ended to the storage task for the heart rate and battery logs.
 #[embassy_executor::task]
 pub async fn watch_battery(
     mut adc: Saadc<'static, 1>,
@@ -53,6 +60,7 @@ pub async fn watch_battery(
     crate::tasks::name_this_task("battery");
     adc.calibrate().await;
     let mut battery = Battery::new();
+    let mut slot_clock = SlotClock::new();
     loop {
         let mut reading = [0; 1];
         adc.sample(&mut reading).await;
@@ -76,6 +84,14 @@ pub async fn watch_battery(
         }
         if percent_changed {
             PERCENT_CHANGED.signal(());
+        }
+        if let Some(ended) = slot_clock.look(clock::now()) {
+            let request = StorageRequest::StoreSlotLogs {
+                ended,
+                beats_per_minute: heart_rate::take_slot_average(),
+                battery: battery_byte(battery.percent(), battery.is_charging()),
+            };
+            storage_requests::REQUESTS.send(request).await;
         }
 
         let woke = embassy_futures::select::select3(

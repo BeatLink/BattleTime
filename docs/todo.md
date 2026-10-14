@@ -138,6 +138,11 @@ document for its part instead.
   - the phone setting the clock after a restart reads the right week back;
   - the slot writes every six minutes do not upset the Bluetooth link.
 
+- [ ] **Heart rate and battery logs on the PineTime.** They have run only in host tests. On the
+  watch, check that a file appears in `/logs/battery/<year>` within seven minutes of a start, that
+  `/logs/heart/<year>` fills while the Heart app or the background interval measures, that the
+  charging bit follows the charger, and that the companion's Heart and System pages show the days.
+
 - [ ] **Bluetooth controller on the PineTime.** The firmware runs `neotime-bluetooth` on the watch and
   takes updates over it, but these checks, with a phone and with `btmon` on the computer, have not
   been made:

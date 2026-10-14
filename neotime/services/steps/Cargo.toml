@@ -9,8 +9,7 @@ publish = false
 [dependencies]
 heapless = "0.9"
 neotime-flash-store = { path = "../flash_store" }
-
-neotime-current-time = { path = "../current_time" }
+neotime-slot-log = { path = "../slot_log" }
 
 [dev-dependencies]
 embassy-futures = "0.1"

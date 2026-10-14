@@ -33,7 +33,7 @@ flowchart TB
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: renderer, shapes, strips, started"]
     system["System<br/>settings started; planned: power, events, notifications"]
-    services["Services<br/>services/flash_store, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/steps,<br/>services/liveness, services/foreground,<br/>services/task_table"]
+    services["Services<br/>services/flash_store, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/steps,<br/>services/slot_log, services/liveness, services/foreground,<br/>services/task_table"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/heart_rate,<br/>drivers/bluetooth, drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
@@ -169,6 +169,7 @@ NeoTime/
 │   ├── liveness/     neotime-liveness: whether the shell and the radio still make progress, for the watchdog
 │   ├── packages/     neotime-packages: the apps installed in /apps and the shared library's install
 │   ├── settings/     neotime-settings: the watch-wide settings, their limits and their file
+│   ├── slot_log/     neotime-slot-log: day files of six-minute slots, for the step, heart rate and battery logs
 │   ├── steps/        neotime-steps: the step history by hour, the trip count and the daily step log
 │   ├── task_table/   neotime-task-table: the firmware's tasks with their runs and busy time, for the system app
 │   └── updates/      neotime-updates: stores an uploaded firmware and hands it to the bootloader
@@ -598,6 +599,24 @@ RAM.
   its count from 0 at every start, so a restart loses only the slot in progress.
 
 Midnight is the clock's local time; the clock holds local time, as the phone writes it.
+
+## Slot logs (`services/slot_log`)
+
+`neotime-slot-log` keeps day files of six-minute slots in the flash store, each under its log's
+folder as `<folder>/<year>/<month>-<day>`, and deletes days older than `DAYS_KEPT` (90) when a new
+day starts. The step log takes its paths and its forgetting from here, and two more logs live
+here whole:
+
+- **Heart rate,** `/logs/heart`: one byte a slot, the rounded average of the beats per minute the
+  sensor measured in it. A slot without a reading is never written, and holds 0 when a later slot
+  pads past it.
+- **Battery,** `/logs/battery`: one byte a slot, the charge in percent at the slot's end, with the
+  top bit set while charging. A slot the watch was off for holds `0xff`.
+
+A full day is 240 bytes, so the store keeps each as a record. The firmware's battery task, which
+reads the battery every minute, holds a `SlotClock`; when it says a slot has ended, the task takes
+the heart rate task's `Average` of that slot and the charge, and hands them to the storage task as
+`StoreSlotLogs`, which calls `store_ended_slot`. Nothing is written while a slot is in progress.
 
 ## Packages (`services/packages`)
 
