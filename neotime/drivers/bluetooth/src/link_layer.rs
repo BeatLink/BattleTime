@@ -188,7 +188,7 @@ struct Advertiser {
 // ============================================================================
 
 const SLEEP_CLOCK_ACCURACY_IN_PPM: [u32; 8] = [500, 250, 150, 100, 75, 50, 30, 20];
-const CONTROL_REPLY_QUEUE_LENGTH: usize = 2;
+const CONTROL_REPLY_QUEUE_LENGTH: usize = 4;
 
 #[derive(Clone, Copy, Debug)]
 struct ChannelMap {
@@ -965,9 +965,6 @@ impl LinkLayer {
             return Acceptance::Accepted;
         };
         let connection = self.connection();
-        if connection.control_replies.is_full() {
-            return Acceptance::NoRoom;
-        }
         let read_u16 = |offset: usize| u16::from_le_bytes([parameters[offset], parameters[offset + 1]]);
 
         match opcode {
@@ -1006,39 +1003,38 @@ impl LinkLayer {
 
             FEATURE_REQUEST => {
                 let no_optional_features = [0; 8];
-                let _ = connection
-                    .control_replies
-                    .push_back(DataPacket::control(FEATURE_RESPONSE, &no_optional_features));
+                return self
+                    .queue_control_reply(DataPacket::control(FEATURE_RESPONSE, &no_optional_features));
             }
 
-            VERSION_INDICATION => {
-                if !connection.version_sent {
-                    connection.version_sent = true;
-                    let _ = connection
-                        .control_replies
-                        .push_back(DataPacket::control(VERSION_INDICATION, &VERSION));
+            VERSION_INDICATION if !connection.version_sent => {
+                let acceptance = self.queue_control_reply(DataPacket::control(VERSION_INDICATION, &VERSION));
+                if matches!(acceptance, Acceptance::Accepted) {
+                    self.connection().version_sent = true;
                 }
+                return acceptance;
             }
 
-            PING_REQUEST => {
-                let _ = connection
-                    .control_replies
-                    .push_back(DataPacket::control(PING_RESPONSE, &[]));
-            }
+            PING_REQUEST => return self.queue_control_reply(DataPacket::control(PING_RESPONSE, &[])),
 
-            UNKNOWN_RESPONSE
+            VERSION_INDICATION
+            | UNKNOWN_RESPONSE
             | REJECT_INDICATION
             | REJECT_EXTENDED_INDICATION
             | FEATURE_RESPONSE
             | PING_RESPONSE => {}
 
-            _ => {
-                let _ = connection
-                    .control_replies
-                    .push_back(DataPacket::control(UNKNOWN_RESPONSE, &[opcode]));
-            }
+            _ => return self.queue_control_reply(DataPacket::control(UNKNOWN_RESPONSE, &[opcode])),
         }
         Acceptance::Accepted
+    }
+
+    /// Queues a control reply, or refuses the request so the central resends it once there is room.
+    fn queue_control_reply(&mut self, reply: DataPacket) -> Acceptance {
+        match self.connection().control_replies.push_back(reply) {
+            Ok(()) => Acceptance::Accepted,
+            Err(_) => Acceptance::NoRoom,
+        }
     }
 }
 

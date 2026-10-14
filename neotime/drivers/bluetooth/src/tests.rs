@@ -790,6 +790,82 @@ fn unsupported_procedures_get_an_unknown_response() {
     assert_eq!(reply, [UNKNOWN_RESPONSE, encryption_request]);
 }
 
+/// Sends each request as a new packet in one event without acknowledging our replies, and says which were accepted.
+fn control_requests_accepted(
+    link_layer: &mut LinkLayer,
+    requests: &[&[u8]],
+    transmit_buffer: &mut [u8],
+) -> Vec<bool> {
+    let mut address_time = 50_000;
+    let mut sequence_number = false;
+    let mut accepted = Vec::new();
+    for request in requests {
+        let packet = CentralPacket {
+            kind: DataKind::Control,
+            sequence_number,
+            next_expected_sequence_number: false,
+            more_data: true,
+            payload: request,
+        };
+        let (_, reply) = central_sends(link_layer, &packet, address_time, transmit_buffer);
+        link_layer.on_transmitted(address_time + 400, transmit_buffer);
+        let was_accepted = reply.next_expected_sequence_number != sequence_number;
+        if was_accepted {
+            sequence_number = !sequence_number;
+        }
+        accepted.push(was_accepted);
+        address_time += 700;
+    }
+    accepted
+}
+
+#[test]
+fn four_control_requests_in_one_event_are_all_accepted() {
+    let mut transmit_buffer = transmit_buffer();
+    let (mut link_layer, _) = connected_link_layer(&DEFAULT_CONNECT, &mut transmit_buffer);
+    let feature_request: &[u8] = &[FEATURE_REQUEST, 0, 0, 0, 0, 0, 0, 0, 0];
+    let version_indication: &[u8] = &[VERSION_INDICATION, 0x0B, 0x59, 0x00, 0x01, 0x00];
+    let ping_request: &[u8] = &[PING_REQUEST];
+    let encryption_request: &[u8] = &[0x03, 0, 0, 0];
+
+    let accepted = control_requests_accepted(
+        &mut link_layer,
+        &[
+            feature_request,
+            version_indication,
+            ping_request,
+            encryption_request,
+        ],
+        &mut transmit_buffer,
+    );
+
+    assert_eq!(accepted, [true; 4]);
+}
+
+#[test]
+fn a_terminate_is_accepted_while_the_reply_queue_is_full() {
+    let mut transmit_buffer = transmit_buffer();
+    let (mut link_layer, _) = connected_link_layer(&DEFAULT_CONNECT, &mut transmit_buffer);
+    let ping_request: &[u8] = &[PING_REQUEST];
+    let terminate: &[u8] = &[TERMINATE_INDICATION, disconnect_reason::REMOTE_USER_TERMINATED];
+
+    let accepted = control_requests_accepted(
+        &mut link_layer,
+        &[
+            ping_request,
+            ping_request,
+            ping_request,
+            ping_request,
+            ping_request,
+            ping_request,
+            terminate,
+        ],
+        &mut transmit_buffer,
+    );
+
+    assert_eq!(accepted, [true, true, true, true, true, false, true]);
+}
+
 #[test]
 fn central_terminating_ends_the_connection_after_our_acknowledgement() {
     let mut transmit_buffer = transmit_buffer();

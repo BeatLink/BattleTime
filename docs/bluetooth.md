@@ -81,7 +81,9 @@ access in `nrf_radio.rs`, behind the small `Radio` trait, is the substitute.
   on, so the central resends it rather than it being lost.
 - **Control procedures:** connection parameter updates and channel map updates at their instants,
   feature exchange, version exchange, ping, and termination from either side. Anything else is
-  answered with "unknown response", which tells the central the feature is missing.
+  answered with "unknown response", which tells the central the feature is missing. Up to four
+  replies can wait to be sent; a request that needs one while they are full is left unacknowledged
+  for the central to resend, while indications that need no reply are always taken.
 - **Losing the link:** the supervision timeout, a central that never shows up after connecting,
   and an update whose instant has already passed. The link layer checks these when the radio
   reports something, and the firmware's watchdog task calls `check_supervision` every half second
