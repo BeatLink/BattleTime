@@ -1,13 +1,13 @@
-# Runs the watch's host tests with coverage, the lints, and the watch builds whenever neotime/ or the flake changes.
+# Runs the watch's host tests with coverage, the lints, and the watch builds whenever neotime/, docs/, tools/ or the flake changes.
 name: NeoTime
 
 on:
   push:
     branches: [master]
     tags: ["v*"]
-    paths: ["neotime/**", "flake.nix", "flake.lock", ".github/workflows/neotime.yml"]
+    paths: ["neotime/**", "docs/**", "tools/**", "flake.nix", "flake.lock", ".github/workflows/neotime.yml"]
   pull_request:
-    paths: ["neotime/**", "flake.nix", "flake.lock", ".github/workflows/neotime.yml"]
+    paths: ["neotime/**", "docs/**", "tools/**", "flake.nix", "flake.lock", ".github/workflows/neotime.yml"]
   workflow_dispatch:
 
 # A newer push to a pull request replaces its older run; every commit on master keeps its own result.
@@ -29,7 +29,7 @@ jobs:
       - name: Install the TypeScript dependencies
         run: nix develop --command npm ci
       - name: Run every test with coverage and check the floors
-        run: nix develop --command tools/check_coverage.sh
+        run: nix develop --command ../tools/check_coverage.sh
       - name: Keep the coverage reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -120,24 +120,24 @@ jobs:
             neotime -> target
             neotime/firmware -> target
       - name: Measure the firmware and file system
-        run: nix develop --command python3 -I tools/measure_memory.py
+        run: nix develop --command python3 -I ../tools/measure_memory.py
       - name: Keep the measured page
         uses: actions/upload-artifact@v4
         with:
           name: memory-map
           path: |
-            neotime/docs/memory-map.md
-            neotime/docs/memory-treemap.html
+            docs/memory-map.md
+            docs/memory-treemap.html
       - name: Commit the tables when they changed
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
-          if git diff --quiet -- docs/memory-map.md docs/memory-treemap.html; then
+          if git diff --quiet -- ../docs/memory-map.md ../docs/memory-treemap.html; then
             echo "The memory map is current."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit --quiet --message "docs(memory-map): measure ${GITHUB_SHA::7}" -- docs/memory-map.md docs/memory-treemap.html
+          git commit --quiet --message "docs(memory-map): measure ${GITHUB_SHA::7}" -- ../docs/memory-map.md ../docs/memory-treemap.html
           # A push in the meantime is retried on top of it; a newer page there means that push's own run measures again.
           for attempt in 1 2 3; do
             if ! git pull --quiet --rebase origin master; then
@@ -171,7 +171,7 @@ jobs:
       - name: Build the workspace for the watch
         run: nix develop --command cargo build --release --target thumbv7em-none-eabihf
       - name: Build the bootloader, firmware and reloaders
-        run: nix develop --command tools/build_images.sh
+        run: nix develop --command ../tools/build_images.sh
       - name: Keep the images
         uses: actions/upload-artifact@v4
         with:

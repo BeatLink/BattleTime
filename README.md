@@ -38,9 +38,11 @@ watch from InfiniTime has run only in the emulator.
 ## This repository
 
 - [neotime/](neotime/) is the watch: the firmware, bootloader, apps, faces, simulator and their
-  tools and docs. Run its commands from inside it.
+  tests. Run its commands from inside it.
 - [companion/](companion/) is the NeoTime Companion, the phone and desktop app that installs apps,
   updates the firmware and forwards notifications. See [its README](companion/README.md).
+- [docs/](docs/) is the documentation for both, also published as the website.
+- [tools/](tools/) builds the watch images, packages firmware updates and measures memory use.
 
 `nix develop` gives the watch's toolchain and `nix develop .#companion` the companion's; both work
 from anywhere in the repository.
@@ -49,14 +51,14 @@ from anywhere in the repository.
 
 The docs are also on the website, <https://beatlink.github.io/NeoTime/>.
 
-- [Architecture](neotime/docs/architecture.md): how the code is laid out and how the parts fit together.
-- [Coding guidelines](neotime/docs/coding-guidelines.md): how NeoTime code is written.
-- [Simulator](neotime/docs/simulator.md): running the drivers in a desktop window with `nix run`.
-- [Testing apps](neotime/docs/testing.md): driving the real apps on a test watch from `cargo test`.
-- [Features](neotime/docs/features.md): what the watch can do, added as each feature is finished.
-- [To do](neotime/docs/todo.md): work that is known to be needed but not done yet.
-- [Memory map](neotime/docs/memory-map.md): how the RAM, internal flash and external flash are divided.
-- [Updates](neotime/docs/updates.md): firmware updates over Bluetooth, and moving a watch onto NeoTime.
+- [Architecture](docs/architecture.md): how the code is laid out and how the parts fit together.
+- [Coding guidelines](docs/coding-guidelines.md): how NeoTime code is written.
+- [Simulator](docs/simulator.md): running the drivers in a desktop window with `nix run`.
+- [Testing apps](docs/testing.md): driving the real apps on a test watch from `cargo test`.
+- [Features](docs/features.md): what the watch can do, added as each feature is finished.
+- [To do](docs/todo.md): work that is known to be needed but not done yet.
+- [Memory map](docs/memory-map.md): how the RAM, internal flash and external flash are divided.
+- [Updates](docs/updates.md): firmware updates over Bluetooth, and moving a watch onto NeoTime.
 
 ## License
 

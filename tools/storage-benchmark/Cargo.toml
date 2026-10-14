@@ -1,0 +1,26 @@
+[package]
+name = "neotime-storage-benchmark"
+version = "0.1.0"
+edition = "2021"
+description = "Compares ekv and sequential-storage as the store for apps split into keys, on a simulated external flash"
+license = "GPL-3.0-or-later"
+publish = false
+
+# Kept out of NeoTime's workspace: a measuring tool, not part of the firmware or its coverage.
+[workspace]
+
+[dependencies]
+neotime-runtime = { path = "../../neotime/runtime" }
+neotime-storage = { path = "../../neotime/services/storage" }
+neotime-flash-store = { path = "../../neotime/services/flash_store" }
+ekv = { version = "1.0.0", features = ["crc"] }
+sequential-storage = { version = "8.0.2", features = ["alloc"] }
+embedded-storage-async = "0.4"
+embedded-storage = "0.3"
+embassy-futures = "0.1"
+# ekv 1.0 takes its mutex from embassy-sync 0.6.
+embassy-sync = "0.6"
+
+# The same patched littlefs-rust the firmware builds; see third_party/littlefs-rust/NEOTIME.md.
+[patch.crates-io]
+littlefs-rust = { path = "../../neotime/third_party/littlefs-rust" }

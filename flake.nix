@@ -34,9 +34,10 @@
         rust = pkgs.rust-bin.fromRustupToolchainFile ./neotime/rust-toolchain.toml;
         rustPlatform = pkgs.makeRustPlatform { cargo = rust; rustc = rust; };
 
-        # Only the Cargo files and the crates, so editing docs or the flake does not rebuild.
+        # Only the Cargo files and the crates, so editing docs or the flake does not rebuild. The
+        # workspace is neotime/, and the docs the harness reads sit beside it.
         source = lib.fileset.toSource {
-          root = ./neotime;
+          root = ./.;
           fileset = lib.fileset.unions [
             ./neotime/Cargo.toml
             ./neotime/Cargo.lock
@@ -56,8 +57,8 @@
             (lib.fileset.fileFilter (file: file.hasExt "tsx") ./neotime/apps)
             (lib.fileset.fileFilter (file: file.hasExt "tsx") ./neotime/faces)
             # The harness's quality checks look for every app and face in these listings.
-            ./neotime/docs/apps.md
-            ./neotime/docs/faces.md
+            ./docs/apps.md
+            ./docs/faces.md
             # The harness plays every example script in this folder.
             ./neotime/tests/scripts
           ];
@@ -73,10 +74,12 @@
           version = "0.1.0";
           src = source;
           cargoLock.lockFile = ./neotime/Cargo.lock;
+          cargoRoot = "neotime";
           nativeBuildInputs = simulatorBuildTools;
           buildInputs = simulatorLibraries;
           buildPhase = ''
             runHook preBuild
+            cd neotime
             ${command}
             runHook postBuild
           '';
@@ -89,6 +92,8 @@
           version = "0.1.0";
           src = source;
           cargoLock.lockFile = ./neotime/Cargo.lock;
+          cargoRoot = "neotime";
+          buildAndTestSubdir = "neotime";
           cargoBuildFlags = [ "--package" "neotime-simulator" ];
           cargoTestFlags = [ "--package" "neotime-simulator" ];
           nativeBuildInputs = simulatorBuildTools;
@@ -330,18 +335,18 @@
             if [ ! -d .githooks ] && [ "$(git config --get core.hooksPath)" = .githooks ]; then
               git config --unset core.hooksPath
             fi
-            echo "NeoTime"
+            echo "NeoTime (run these from neotime/)"
             echo "  cargo test --workspace                                 run every test, simulator included"
             echo "  cargo build --release --target thumbv7em-none-eabihf   build the drivers for the watch"
             echo "  cargo run -p neotime-simulator                         open the simulator"
             echo "  cargo run -p neotime-simulator -- --demo               run the built-in stopwatch app"
             echo "  cargo run -p neotime-simulator -- --script FILE        play a test script, such as tests/scripts/*.neotime"
-            echo "  tools/build_images.sh                                  build the bootloader, firmware and reloaders into dist/"
+            echo "  ../tools/build_images.sh                               build the bootloader, firmware and reloaders into dist/"
             echo "  nix run .#infinisim                                    open InfiniTime's simulator to compare"
-            echo "  tools/check_coverage.sh                                run every test with coverage and check the floors"
+            echo "  ../tools/check_coverage.sh                             run every test with coverage and check the floors"
             echo "  nix flake check                                        run all of the above as checks"
-            echo "  python3 -I tools/measure_memory.py                     measure the firmware and file system into the memory map pages"
-            echo "  tools/build_site.sh                                    build the GitHub Pages site into target/site/out"
+            echo "  python3 -I ../tools/measure_memory.py                  measure the firmware and file system into the memory map pages"
+            echo "  ../tools/build_site.sh                                 build the GitHub Pages site into target/site/out"
           '';
         };
 

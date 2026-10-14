@@ -17,7 +17,7 @@ Early. What works today against NeoTime's firmware:
   card on the Watch tab, or `neotime debug [file]`), which lets the watch leave its crash screen.
 
 Built and tested against the mock watch, waiting for the firmware side
-([companion-protocol.md](../neotime/docs/companion-protocol.md) in the watch's docs):
+([companion-protocol.md](../docs/companion-protocol.md) in the watch's docs):
 
 - the battery level from the standard Battery service;
 - the Gadgetbridge-style messages over the Nordic UART Service: notifications, calls, music,
@@ -243,7 +243,7 @@ The app reads which services the watch serves right after connecting, in
 | Nordic UART | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` | the Gadgetbridge messages |
 
 The NeoTime UUIDs share the base `6e54xxxx-0000-4000-8000-4e656f54696d`. The full description,
-which the firmware and this app both follow, is [companion-protocol.md](../neotime/docs/companion-protocol.md) in the watch's docs.
+which the firmware and this app both follow, is [companion-protocol.md](../docs/companion-protocol.md) in the watch's docs.
 
 | State | Tabs |
 | --- | --- |
@@ -362,7 +362,7 @@ to another place in its own.
 Each app's image declares the group it starts in, such as `games`, and the `apps` reply carries it.
 [src/protocol/launcher.ts](src/protocol/launcher.ts) works out where every installed app goes, each
 in the group it declares until the wearer moves it, and writes that to `/settings/launcher` over the
-file service as a few hundred bytes (the layout is in [companion-protocol.md](../neotime/docs/companion-protocol.md)), then
+file service as a few hundred bytes (the layout is in [companion-protocol.md](../docs/companion-protocol.md)), then
 sends `{"c":"launcher"}` on the packages characteristic so the launcher shows it at once. Installing
 an app writes the file again, so a new app lands in its group. The file lives on the watch, so
 every phone and the command line see the same groups; with no file the screen starts from the

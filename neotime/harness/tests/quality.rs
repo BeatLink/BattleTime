@@ -2,7 +2,7 @@
 //! `test_qa`: who it says it is, that it is documented, and that its image is sound and fits in RAM.
 
 use neotime_app_testing::{
-    compile_package, every_package, package_source, repository_root, Package, PackageKind, TestWatch,
+    compile_package, docs_root, every_package, package_source, repository_root, Package, PackageKind, TestWatch,
 };
 use neotime_runtime::{estimate_memory_need, AppImage, AppKind, APP_HEAP_BUDGET_BYTES};
 
@@ -36,10 +36,10 @@ fn is_lowercase_hyphenated(id: &str) -> bool {
 /// The page that lists a package, and its text.
 fn listing_page(kind: PackageKind) -> (&'static str, String) {
     let page = match kind {
-        PackageKind::App | PackageKind::Shell => "docs/apps.md",
-        PackageKind::Face => "docs/faces.md",
+        PackageKind::App | PackageKind::Shell => "apps.md",
+        PackageKind::Face => "faces.md",
     };
-    let text = std::fs::read_to_string(repository_root().join(page)).unwrap_or_default();
+    let text = std::fs::read_to_string(docs_root().join(page)).unwrap_or_default();
     (page, text)
 }
 

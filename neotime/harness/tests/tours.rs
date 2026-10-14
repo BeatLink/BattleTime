@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use neotime_app_testing::{
-    every_package, load_script, repository_root, run_script, Package, PackageKind, ScriptCommand,
+    docs_root, every_package, load_script, repository_root, run_script, Package, PackageKind, ScriptCommand,
 };
 
 // ============================================================================
@@ -34,10 +34,7 @@ fn tour_path(id: &str) -> PathBuf {
 }
 
 fn page_path(id: &str) -> PathBuf {
-    repository_root()
-        .join("docs")
-        .join("apps")
-        .join(format!("{id}.md"))
+    docs_root().join("apps").join(format!("{id}.md"))
 }
 
 // ============================================================================
@@ -100,8 +97,8 @@ fn every_tour_passes_and_its_page_shows_every_picture() {
 fn every_tour_and_page_belongs_to_an_app() {
     let ids: Vec<String> = toured_packages().into_iter().map(|package| package.id).collect();
     let mut strays = Vec::new();
-    for (folder, extension) in [("tests/tours", "neotime"), ("docs/apps", "md")] {
-        for entry in std::fs::read_dir(repository_root().join(folder))
+    for (folder, extension) in [(repository_root().join("tests/tours"), "neotime"), (docs_root().join("apps"), "md")] {
+        for entry in std::fs::read_dir(folder)
             .unwrap()
             .flatten()
         {

@@ -50,11 +50,17 @@ impl Package {
     }
 }
 
+/// The watch's folder, `neotime/`, which holds the apps, faces, shell and tests.
 pub fn repository_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_default()
+}
+
+/// The docs folder, which sits beside `neotime/` at the top of the repository.
+pub fn docs_root() -> PathBuf {
+    repository_root().join("..").join("docs")
 }
 
 pub fn package_source(kind: PackageKind, id: &str) -> PathBuf {

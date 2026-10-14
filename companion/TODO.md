@@ -4,7 +4,7 @@ What is known to be unfinished in this app. Remove an item in the same change th
 
 ## Waiting for the firmware
 
-The firmware side is described in `../neotime/docs/companion-protocol.md` and is being
+The firmware side is described in `../docs/companion-protocol.md` and is being
 built in this order: the UART channel with the settings message, the Battery service, the remaining
 Gadgetbridge messages. Each of these is built and tested here against the
 mock watch only.
@@ -98,7 +98,7 @@ Android 13 and later.
 - **Protocols in the core crate**: the packages, BLEFS, DFU and Gadgetbridge code, in crates shared
   with the firmware where it defines the format.
 - **Tauri on Android**, with the phone bridge as a Tauri plugin; try btleplug on a phone first.
-- **Plugins**, as drafted in [docs/plugins.md](docs/plugins.md).
+- **Plugins**, as drafted in [docs/plugins.md](../docs/plugins.md).
 
 ## Not started
 

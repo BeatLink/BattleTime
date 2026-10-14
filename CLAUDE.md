@@ -6,8 +6,10 @@ This repository holds both halves of NeoTime, licensed GPL-3.0-or-later:
   Read [neotime/CLAUDE.md](neotime/CLAUDE.md) before working there, and run its commands from inside it.
 - [companion/](companion/) is the phone and desktop companion app. Read
   [companion/CLAUDE.md](companion/CLAUDE.md) before working there, and run its commands from inside it.
+- [docs/](docs/) holds the documentation for both, and [tools/](tools/) the scripts that build,
+  measure and package; the tools find `neotime/` themselves, so they run from anywhere.
 
-The phone-to-watch protocol is [neotime/docs/companion-protocol.md](neotime/docs/companion-protocol.md).
+The phone-to-watch protocol is [docs/companion-protocol.md](docs/companion-protocol.md).
 A change to it updates the firmware, the doc and the companion together, in one commit where it can.
 
 The two halves are separate Cargo workspaces, so the companion's desktop crates never change how the

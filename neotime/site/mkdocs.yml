@@ -4,7 +4,7 @@ site_description: A firmware for the PineTime smartwatch, written in Rust, with 
 site_url: https://beatlink.github.io/NeoTime/
 repo_url: https://github.com/BeatLink/NeoTime
 repo_name: BeatLink/NeoTime
-edit_uri: edit/master/neotime/docs/
+edit_uri: edit/master/docs/
 docs_dir: ../target/site/src
 site_dir: ../target/site/out
 
@@ -64,6 +64,7 @@ nav:
       - The app compiler: compiler.md
       - Testing apps: testing.md
       - Companion protocol: companion-protocol.md
+      - Companion plugins: plugins.md
   - How it is built:
       - Architecture: architecture.md
       - Architecture assessment: architecture-assessment.md

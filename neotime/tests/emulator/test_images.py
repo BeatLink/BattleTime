@@ -4,7 +4,7 @@ import importlib.util
 import struct
 from pathlib import Path
 
-_TOOL = Path(__file__).resolve().parents[2] / "tools" / "image_header.py"
+_TOOL = Path(__file__).resolve().parents[3] / "tools" / "image_header.py"
 _SPEC = importlib.util.spec_from_file_location("image_header", _TOOL)
 image_header = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(image_header)

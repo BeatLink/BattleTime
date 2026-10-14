@@ -1,35 +1,36 @@
 # NeoTime watch code: notes for Claude
 
-Everything here is relative to `neotime/`; run cargo, npm and `tools/` from this folder. The
+Paths here are relative to `neotime/`; run cargo and npm from this folder. The docs and tools sit
+at the top of the repository, in `../docs` and `../tools`. The
 repository-wide rules are in [../CLAUDE.md](../CLAUDE.md).
 
 NeoTime is a Rust firmware for the PineTime that merges the best of InfiniTime and wasp-os. It is its
 own product, licensed GPL-3.0-or-later, so code ported from InfiniTime or PinetimeLite is fine.
-Start with the repository's [README.md](../README.md) and [docs/architecture.md](docs/architecture.md); code style is in
-[docs/coding-guidelines.md](docs/coding-guidelines.md).
+Start with the repository's [README.md](../README.md) and [docs/architecture.md](../docs/architecture.md); code style is in
+[docs/coding-guidelines.md](../docs/coding-guidelines.md).
 
 ## Every change
 
-- Tests go in the same commit as the change, and coverage never drops. `tools/check_coverage.sh`
+- Tests go in the same commit as the change, and coverage never drops. `../tools/check_coverage.sh`
   inside `nix develop` runs both gates (Rust floor in the script, TypeScript floors in
   `vite.config.ts`). When coverage rises, raise the floor in the same change.
-- App behaviour is tested in `harness/` ([docs/testing.md](docs/testing.md)), not vitest. A change to
+- App behaviour is tested in `harness/` ([docs/testing.md](../docs/testing.md)), not vitest. A change to
   what an app shows rewrites its snapshots with `NEOTIME_UPDATE_SNAPSHOTS=1` in the same commit.
 - Every app has a tour in `tests/tours/<id>.neotime` that snapshots each of its screens, and a page
-  in `docs/apps/<id>.md` with how to use it and those pictures. A new app, or a new or changed
+  in `../docs/apps/<id>.md` with how to use it and those pictures. A new app, or a new or changed
   screen, updates both in the same commit.
 - Docs ship with the code, never as a follow-up. A new crate gets its place in
-  `docs/architecture.md`; a change to RAM or flash use updates `docs/memory-map.md` and the hand-written part of
-  `docs/memory-treemap.html`.
-- Open work lives in `docs/todo.md`. When an item is done, remove it in the same change and record
-  it in `docs/features.md` if the wearer sees it, or in `docs/architecture.md` or the part's own doc
+  `../docs/architecture.md`; a change to RAM or flash use updates `../docs/memory-map.md` and the hand-written part of
+  `../docs/memory-treemap.html`.
+- Open work lives in `../docs/todo.md`. When an item is done, remove it in the same change and record
+  it in `../docs/features.md` if the wearer sees it, or in `../docs/architecture.md` or the part's own doc
   if not. Before removing an item, check in the code that it is really done; keep any open part as a
   narrower item.
-- Anything to look at (screenshots, galleries, write-ups) goes in `docs/` and lands with the change.
+- Anything to look at (screenshots, galleries, write-ups) goes in `../docs/` and lands with the change.
   Reference existing images such as `harness/snapshots/screens/*.png` so they stay current. The
   PineTime screen is square, 240x240; never draw it round.
 - New drivers go in `drivers/<name>` and get a simulated part in `simulator/` plus a line in
-  `docs/simulator.md`.
+  `../docs/simulator.md`.
 
 ## Design rules
 
@@ -43,21 +44,21 @@ Start with the repository's [README.md](../README.md) and [docs/architecture.md]
   the firmware image, after the code, where the image header says.
 - Anything that changes often (notifications, settings, app state) goes on external flash, never
   internal flash.
-- Apps are Preact and Signals compiled on the computer to bytecode ([docs/app-runtime.md](docs/app-runtime.md)).
+- Apps are Preact and Signals compiled on the computer to bytecode ([docs/app-runtime.md](../docs/app-runtime.md)).
   About 12 KB of RAM per app rules out any JavaScript engine or Wasm on the watch.
 - New settings touch `services/settings`, `app-host/src/settings.rs`, `services/companion`, the
   runtime's system values, the compiler and the sdk. The theme stays in `/settings/theme`.
 - Pure Rust only; no closed-source blobs and no C where a bug could brick the watch.
-- Flash layout changes go in `boot/src/lib.rs` and `docs/bootloader.md` together.
+- Flash layout changes go in `boot/src/lib.rs` and `../docs/bootloader.md` together.
 
 ## Memory budget
 
-- Keep at least 2 KB of stack spare, measured with `tools/measure_stack.py`. Large state goes in a
+- Keep at least 2 KB of stack spare, measured with `../tools/measure_stack.py`. Large state goes in a
   `Box` or lives on the stack only while it is used; a big stack frame overflows the watch's stack,
   which shows as a blank screen and then a rollback.
 - The full firmware and its shared library nearly fill their 480 KB region, so a new firmware feature
   or library addition must find room first.
-- CI measures `docs/memory-map.md` with `tools/measure_memory.py`.
+- CI measures `../docs/memory-map.md` with `../tools/measure_memory.py`.
 
 ## The watch cannot be recovered by wire
 
@@ -85,7 +86,7 @@ firmware) and on DFU in the firmware.
   about twice as fast; a test tuned there may need a longer wait.
 - **The packages example writes an all-black theme.** `filesystem_use` stores `/settings/theme` as
   zero bytes, so the launcher and apps render black in the emulator; build the image without it.
-- **`tools/measure_stack.py` starts with erased external flash**, so it measures only the help
+- **`../tools/measure_stack.py` starts with erased external flash**, so it measures only the help
   screen, not a real install.
 - **littlefs-rust is patched.** `third_party/littlefs-rust` raises a loop limit that panics on blocks
   written by C littlefs, and the workspace builds `littlefs-rust-core` without overflow checks.
