@@ -1,3 +1,6 @@
 # Nix build links
 result
 result-*
+
+# Python caches the tools leave beside themselves
+__pycache__/
