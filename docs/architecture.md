@@ -323,7 +323,7 @@ describes its calls, the layout rules and what each property value means.
 On the watch, `AppHost` keeps its state, interpreter and bindings on the UI heap, about 1.2 KB
 plus what the image's expressions and variables take. The interpreter is boxed from a constant and
 the rest are slices of the image's size, never built on the stack, so opening an app needs under
-1 KB of stack; each widget of the open screen takes 160 B more plus its text. See
+1 KB of stack; each widget of the open screen takes 128 B more plus its text. See
 [memory-map.md](memory-map.md#how-much-heap-an-app-needs).
 
 ## App compiler (`compiler`)

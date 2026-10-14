@@ -176,8 +176,8 @@ fn roller_places(node: &Node, columns: usize, has_toggle: bool) -> RollerPlaces 
     let gap = i32::from(node.settings.gap);
     let row_height = option_row_height(node);
     let rows = roller_rows(node);
-    let top = node.bounds.y + Align::Center.offset(node.bounds.height, rows * row_height);
-    let mut x = node.bounds.x + Align::Center.offset(node.bounds.width, width);
+    let top = node.bounds().y + Align::Center.offset(node.bounds().height, rows * row_height);
+    let mut x = node.bounds().x + Align::Center.offset(node.bounds().width, width);
     let mut places = RollerPlaces {
         columns: Vec::new(),
         separators: Vec::new(),
@@ -206,10 +206,10 @@ fn roller_places(node: &Node, columns: usize, has_toggle: bool) -> RollerPlaces 
         x += column_width(node);
     }
     if has_toggle {
-        let height = BUTTON_HEIGHT.min(node.bounds.height);
+        let height = BUTTON_HEIGHT.min(node.bounds().height);
         places.toggle = Some(Rect {
             x: x + gap,
-            y: node.bounds.y + Align::Center.offset(node.bounds.height, height),
+            y: node.bounds().y + Align::Center.offset(node.bounds().height, height),
             width: TOGGLE_WIDTH,
             height,
         });
@@ -289,7 +289,7 @@ fn day_buttons(node: &Node) -> impl Iterator<Item = (usize, Rect)> + '_ {
     let columns = day_columns(node);
     let rows = (7 + columns - 1) / columns;
     let gap = i32::from(node.settings.gap);
-    let inner = inset(node.bounds, i32::from(node.settings.padding));
+    let inner = inset(node.bounds(), i32::from(node.settings.padding));
     let width = (inner.width - (columns - 1) * gap) / columns;
     let height = (inner.height - (rows - 1) * gap) / rows;
     (0..7).map(move |day| {
@@ -354,7 +354,7 @@ fn weekdays_tapped(node: &Node, x: i32, y: i32) -> Option<Value> {
 ///
 /// The buttons narrow when the widest value would not fit between them.
 fn stepper_places(node: &Node) -> (Rect, Rect, Rect) {
-    let inner = inset(node.bounds, i32::from(node.settings.padding));
+    let inner = inset(node.bounds(), i32::from(node.settings.padding));
     let gap = i32::from(node.settings.gap);
     let room_beside_value = (inner.width - widest_stepper_text(node) - 2 * gap) / 2;
     let side = inner.height.min(inner.width / 3).min(room_beside_value).max(0);
@@ -448,7 +448,7 @@ fn confirm_texts(node: &Node) -> (&str, &str, &str) {
 
 /// Where a Confirm's question and its two buttons sit.
 fn confirm_places(node: &Node) -> (Rect, Rect, Rect) {
-    let inner = inset(node.bounds, CONFIRM_PADDING);
+    let inner = inset(node.bounds(), CONFIRM_PADDING);
     let (_, _, question) = confirm_texts(node);
     let font = node.settings.font;
     let lines = crate::text::WrappedLines::new(question, font, inner.width.max(1))
@@ -478,7 +478,7 @@ pub fn draw_confirm(node: &Node, context: &DrawContext, renderer: &mut dyn Rende
     let theme = context.theme;
     let text = resolve(node.settings.color, ThemeColor::Text, theme);
     renderer.fill_rect(
-        node.bounds,
+        node.bounds(),
         resolve(node.settings.background, ThemeColor::Background, theme),
     );
     let (cancel_text, confirm_text, question) = confirm_texts(node);

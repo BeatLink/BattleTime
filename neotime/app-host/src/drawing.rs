@@ -131,9 +131,9 @@ fn frame_style(settings: &Settings, background: Color, default_radius: i32, them
     Style {
         bg_color: background,
         border_color: resolve(settings.border_color, ThemeColor::Muted, theme),
-        border_width: to_u8(settings.border_width.map(i32::from).unwrap_or(BORDER_WIDTH)),
+        border_width: to_u8(settings.border_width.get().map(i32::from).unwrap_or(BORDER_WIDTH)),
         alpha: OPAQUE,
-        radius: to_u8(settings.radius.map(i32::from).unwrap_or(default_radius)),
+        radius: to_u8(settings.radius.get().map(i32::from).unwrap_or(default_radius)),
     }
 }
 
@@ -200,7 +200,7 @@ fn round_line(renderer: &mut dyn Renderer, from: PointF, to: PointF, width: f32,
 pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
     let settings = &node.settings;
     let theme = context.theme;
-    let bounds = node.bounds;
+    let bounds = node.bounds();
     let accent = |color: Option<ColorValue>| resolve(color, ThemeColor::Accent, theme);
     let track = |color: Option<ColorValue>| resolve(color, ThemeColor::Surface, theme);
     let plain_frame = |renderer: &mut dyn Renderer| {
@@ -221,8 +221,8 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
         }
         Arc => {
             let (start_angle, end_angle) = match (
-                settings.start_angle.map(i32::from),
-                settings.end_angle.map(i32::from),
+                settings.start_angle.get().map(i32::from),
+                settings.end_angle.get().map(i32::from),
             ) {
                 (Some(start), Some(end)) => (start, end),
                 _ => (ARC_DEFAULT_START_ANGLE, ARC_DEFAULT_END_ANGLE),
@@ -234,7 +234,13 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
                 start_angle,
                 end_angle,
                 rotation: TWELVE_TO_RIGHT_IN_DEGREES,
-                stroke_width: to_u8(settings.border_width.map(i32::from).unwrap_or(ARC_STROKE_WIDTH)),
+                stroke_width: to_u8(
+                    settings
+                        .border_width
+                        .get()
+                        .map(i32::from)
+                        .unwrap_or(ARC_STROKE_WIDTH),
+                ),
                 track_color: track(settings.background),
                 indicator_color: accent(settings.color),
             };
@@ -385,7 +391,7 @@ pub fn label_scrolls(node: &Node) -> bool {
     node.kind == neotime_runtime::WidgetKind::Label
         && node.settings.long_mode == LongMode::Scroll
         && text_width(node.settings.font.metrics(), &node.text)
-            > inset(node.bounds, i32::from(node.settings.padding)).width
+            > inset(node.bounds(), i32::from(node.settings.padding)).width
 }
 
 /// Draws lines of text inside `area`, each placed across by `align` and the block centred down.
@@ -414,7 +420,7 @@ fn draw_text_block(
 
 fn draw_label_text(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
     let settings = &node.settings;
-    let area = inset(node.bounds, i32::from(settings.padding));
+    let area = inset(node.bounds(), i32::from(settings.padding));
     let color = resolve(settings.color, ThemeColor::Text, context.theme);
     let align = settings.align.unwrap_or(Align::Start);
     let font = settings.font;
@@ -441,7 +447,7 @@ fn draw_label_text(node: &Node, context: &DrawContext, renderer: &mut dyn Render
 /// A button's icon, if it has one, then its text, together centred.
 fn draw_button_content(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
     let settings = &node.settings;
-    let area = inset(node.bounds, i32::from(settings.padding));
+    let area = inset(node.bounds(), i32::from(settings.padding));
     let color = resolve(settings.color, ThemeColor::Text, context.theme);
     let icon = match *node.extra {
         Extra::Image {
@@ -501,7 +507,7 @@ fn draw_button_content(node: &Node, context: &DrawContext, renderer: &mut dyn Re
 fn draw_tick_box(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
     let settings = &node.settings;
     let theme = context.theme;
-    let area = inset(node.bounds, i32::from(settings.padding));
+    let area = inset(node.bounds(), i32::from(settings.padding));
     let is_on = settings.value != 0;
     let accent = resolve(settings.background, ThemeColor::Accent, theme);
     let border = resolve(settings.border_color, ThemeColor::Muted, theme);
@@ -736,7 +742,7 @@ fn draw_status(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) 
     };
     let theme = context.theme;
     let pieces = status_pieces(node);
-    let inner = inset(node.bounds, i32::from(node.settings.padding));
+    let inner = inset(node.bounds(), i32::from(node.settings.padding));
     let percent = node.settings.value.clamp(0, 100);
     let is_status = node.kind == neotime_runtime::WidgetKind::StatusIcons;
     let icon_color = resolve(node.settings.color, ThemeColor::Text, theme);
@@ -865,7 +871,7 @@ fn draw_badge(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
         return;
     };
     let theme = context.theme;
-    let inner = inset(node.bounds, i32::from(node.settings.padding));
+    let inner = inset(node.bounds(), i32::from(node.settings.padding));
     let (width, _) = badge_size(node);
     let side = icon_size as i32;
     let text_color = resolve(node.settings.color, ThemeColor::Text, theme);
@@ -957,11 +963,11 @@ fn walk_app_list<'node>(node: &'node Node, bar_room: i32, visit: &mut dyn FnMut(
     let padding = i32::from(node.settings.padding);
     let gap = i32::from(node.settings.gap);
     let columns = i32::from(node.settings.columns).max(1);
-    let inner_width = (node.bounds.width - 2 * padding - bar_room).max(0);
+    let inner_width = (node.bounds().width - 2 * padding - bar_room).max(0);
     let cell_width = ((inner_width - (columns - 1) * gap) / columns).max(0);
     let cell_height = if columns == 1 { APP_ROW_HEIGHT } else { cell_width };
-    let left = node.bounds.x + padding;
-    let mut top = node.bounds.y + padding - i32::from(node.scroll_offset);
+    let left = node.bounds().x + padding;
+    let mut top = node.bounds().y + padding - i32::from(node.scroll_offset);
     let mut column = 0;
     let mut place = first_app(node);
     let mut apps_left = app_count(node);
@@ -1035,7 +1041,7 @@ pub fn app_list_height_without_bar(node: &Node) -> i32 {
 
 fn app_list_height_with_room(node: &Node, bar_room: i32) -> i32 {
     let padding = i32::from(node.settings.padding);
-    let content_top = node.bounds.y + padding - i32::from(node.scroll_offset);
+    let content_top = node.bounds().y + padding - i32::from(node.scroll_offset);
     let mut bottom = None;
     walk_app_list(node, bar_room, &mut |item| {
         bottom = Some(item.area.y + item.area.height);
@@ -1063,10 +1069,10 @@ pub fn app_list_rows(node: &Node) -> Vec<AppListItem<'_>> {
     let mut rows = Vec::new();
     walk_app_list(node, app_list_bar_room(node), &mut |item| {
         let area = item.area;
-        if area.y + area.height > node.bounds.y && area.y < node.bounds.y + node.bounds.height {
+        if area.y + area.height > node.bounds().y && area.y < node.bounds().y + node.bounds().height {
             rows.push(item);
         }
-        area.y < node.bounds.y + node.bounds.height
+        area.y < node.bounds().y + node.bounds().height
     });
     rows
 }
@@ -1213,7 +1219,7 @@ pub fn cell_layout(node: &Node) -> Option<CellLayout> {
     let columns = (node.settings.columns as i32).max(1);
     let rows = (rows as i32).max(1);
     let gap = cell_gap as i32;
-    let area = inset(node.bounds, i32::from(node.settings.padding));
+    let area = inset(node.bounds(), i32::from(node.settings.padding));
     let fitted = ((area.width - (columns - 1) * gap) / columns).min((area.height - (rows - 1) * gap) / rows);
     let cell_size = match cell_size {
         0 => fitted.max(1),
@@ -1252,7 +1258,7 @@ fn draw_bitmap_file(node: &Node, context: &DrawContext, renderer: &mut dyn Rende
     };
     let (width, height) = (i32::from(width), i32::from(height));
     let row_bytes = (width as usize).div_ceil(8);
-    let area = inset(node.bounds, i32::from(node.settings.padding));
+    let area = inset(node.bounds(), i32::from(node.settings.padding));
     let scale = (area.width / width.max(1)).min(area.height / height.max(1));
     if scale < 1 {
         return;
@@ -1370,7 +1376,7 @@ pub fn text_lines_shown(node: &Node, context: &DrawContext) -> Vec<(String, Rect
         })
         .collect();
     let font = node.settings.font;
-    let area = inset(node.bounds, i32::from(node.settings.padding));
+    let area = inset(node.bounds(), i32::from(node.settings.padding));
     let mut lines: Vec<&str> = WrappedLines::new(&text, font, area.width).collect();
     // A new line at the very end starts a line of its own, still empty.
     if text.is_empty() || text.ends_with('\n') {
@@ -1488,7 +1494,7 @@ pub fn text_file_lines_in_view(node: &Node) -> (i32, i32) {
     let height = line_height(node.settings.font.metrics()).max(1);
     let top = i32::from(node.scroll_offset) - i32::from(node.settings.padding);
     let first = (top / height).max(0);
-    let end = (top + node.bounds.height + height - 1) / height + 1;
+    let end = (top + node.bounds().height + height - 1) / height + 1;
     (first, end.max(first))
 }
 
@@ -1496,14 +1502,14 @@ pub fn text_file_lines_in_view(node: &Node) -> (i32, i32) {
 pub fn text_file_rows(node: &Node) -> impl Iterator<Item = (&str, i32)> + '_ {
     let (_, first_line) = text_file_lines(node);
     let height = line_height(node.settings.font.metrics());
-    let top = node.bounds.y + i32::from(node.settings.padding) - i32::from(node.scroll_offset);
+    let top = node.bounds().y + i32::from(node.settings.padding) - i32::from(node.scroll_offset);
     node.text
         .split('\n')
         .enumerate()
         .filter(|_| !node.text.is_empty())
         .map(move |(place, line)| (line, top + (first_line + place as i32) * height))
         .filter(move |(_, line_top)| {
-            *line_top + height > node.bounds.y && *line_top < node.bounds.y + node.bounds.height
+            *line_top + height > node.bounds().y && *line_top < node.bounds().y + node.bounds().height
         })
 }
 
@@ -1522,7 +1528,7 @@ fn draw_text_file(node: &Node, context: &DrawContext, renderer: &mut dyn Rendere
         true => resolve(None, ThemeColor::Muted, context.theme),
         false => resolve(node.settings.color, ThemeColor::Text, context.theme),
     };
-    let left = node.bounds.x + i32::from(node.settings.padding);
+    let left = node.bounds().x + i32::from(node.settings.padding);
     let height = line_height(font.metrics());
     let painted = |top: i32| top + height > context.clip.y && top < context.clip.y + context.clip.height;
     for (line, top) in text_file_rows(node).filter(|(_, top)| painted(*top)) {
@@ -1545,7 +1551,7 @@ const SMALLEST_THUMB: i32 = 12;
 
 /// The strip a widget's scroll bar runs along: its right edge, or its bottom edge when it scrolls across.
 pub fn scroll_bar_track(node: &Node) -> Rect {
-    let bounds = node.bounds;
+    let bounds = node.bounds();
     match node.runs_across() {
         true => Rect {
             y: bounds.y + bounds.height - SCROLL_BAR_WIDTH,
@@ -1650,7 +1656,7 @@ pub fn draw_scroll_bar(node: &Node, content_length: i32, context: &DrawContext, 
 /// Gives each part of a Pages' bar along its bottom: a segment per page with the one on show bright,
 /// or, when the segments would be too short, a bright thumb over a dim track.
 pub fn for_each_page_bar_part(node: &Node, mut part: impl FnMut(Rect, bool)) {
-    let bounds = node.bounds;
+    let bounds = node.bounds();
     let pages = i32::from(node.option_count).max(1);
     let current = node.settings.value.clamp(0, pages - 1);
     let along = |start: i32, end: i32| Rect {
@@ -1716,11 +1722,12 @@ fn draw_polyline(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
     let width = node
         .settings
         .border_width
+        .get()
         .map_or(LINE_WIDTH, |width| width.max(1) as f32);
     let point = |pair: usize| {
         PointF::new(
-            node.bounds.x as f32 + context.element(points, 2 * pair) as f32,
-            node.bounds.y as f32 + context.element(points, 2 * pair + 1) as f32,
+            node.bounds().x as f32 + context.element(points, 2 * pair) as f32,
+            node.bounds().y as f32 + context.element(points, 2 * pair + 1) as f32,
         )
     };
     for pair in 1..length / 2 {
@@ -1736,7 +1743,7 @@ fn draw_chart(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
         return;
     };
     let settings = &node.settings;
-    let area = inset(node.bounds, i32::from(settings.padding).max(1));
+    let area = inset(node.bounds(), i32::from(settings.padding).max(1));
     let color = resolve(settings.color, ThemeColor::Accent, context.theme);
     let span = (settings.maximum as f32 - settings.minimum as f32).max(1.0);
     let height = (area.height - 1) as f32;
@@ -1772,8 +1779,8 @@ fn tick_angle(start: f32, span: f32, tick: u16, ticks: u16) -> f32 {
 }
 
 fn dial_angles(settings: &Settings) -> (f32, f32) {
-    let start = settings.start_angle.map(i32::from).unwrap_or(0) as f32;
-    let end = settings.end_angle.map(i32::from).unwrap_or(360) as f32;
+    let start = settings.start_angle.get().map(i32::from).unwrap_or(0) as f32;
+    let end = settings.end_angle.get().map(i32::from).unwrap_or(360) as f32;
     let mut span = end - start;
     if span <= 0.0 {
         span += 360.0;
@@ -1795,7 +1802,7 @@ fn draw_scale(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
     };
     let settings = &node.settings;
     let theme = context.theme;
-    let area = inset(node.bounds, i32::from(settings.padding));
+    let area = inset(node.bounds(), i32::from(settings.padding));
     let centre = centre_of(area);
     let radius = area.width.min(area.height) as f32 / 2.0;
     let (start, span) = dial_angles(settings);
@@ -1897,7 +1904,7 @@ fn draw_analog_clock(node: &Node, context: &DrawContext, renderer: &mut dyn Rend
         return;
     };
     let theme = context.theme;
-    let area = inset(node.bounds, i32::from(node.settings.padding));
+    let area = inset(node.bounds(), i32::from(node.settings.padding));
     let centre = centre_of(area);
     let radius = area.width.min(area.height) as f32 / 2.0;
     let length_of = |length: Option<u16>, share: i32| {
@@ -2142,7 +2149,7 @@ pub fn matrix_buttons<'context>(
     let length = options.map_or(0, |(_, length)| length);
     let text = move |index: usize| options.map_or("", |(variable, _)| context.text_element(variable, index));
     let row_count = (0..length).filter(|&index| text(index) == ROW_BREAK).count() as i32 + 1;
-    let area = inset(node.bounds, i32::from(node.settings.padding));
+    let area = inset(node.bounds(), i32::from(node.settings.padding));
     let row_height = (area.height - (row_count - 1) * MATRIX_GAP) / row_count.max(1);
 
     let mut index = 0;
@@ -2213,7 +2220,7 @@ pub fn option_row_height_of_font(font: FontName) -> i32 {
 
 /// How many rows a Roller shows: as many as fit, always an odd number so the chosen one is in the middle.
 pub fn roller_rows(node: &Node) -> i32 {
-    let fit = (node.bounds.height / option_row_height(node).max(1)).max(1);
+    let fit = (node.bounds().height / option_row_height(node).max(1)).max(1);
     if fit % 2 == 0 {
         fit - 1
     } else {
@@ -2229,12 +2236,12 @@ fn draw_roller(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) 
     let theme = context.theme;
     let row_height = option_row_height(node);
     let rows = roller_rows(node);
-    let top = node.bounds.y + Align::Center.offset(node.bounds.height, rows * row_height);
+    let top = node.bounds().y + Align::Center.offset(node.bounds().height, rows * row_height);
     let chosen = settings.value;
     let band = Rect {
-        x: node.bounds.x,
+        x: node.bounds().x,
         y: top + rows / 2 * row_height,
-        width: node.bounds.width,
+        width: node.bounds().width,
         height: row_height,
     };
     fill_rounded_rect(
@@ -2256,7 +2263,7 @@ fn draw_roller(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) 
         let place = Rect {
             y: top + row * row_height,
             height: row_height,
-            ..node.bounds
+            ..node.bounds()
         };
         draw_text_block(
             renderer,
@@ -2273,8 +2280,8 @@ fn draw_roller(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) 
 /// The area an open Dropdown's list covers: its box, then one row per option below it.
 pub fn open_list_area(node: &Node) -> Rect {
     Rect {
-        height: node.bounds.height + node.option_count as i32 * option_row_height(node),
-        ..node.bounds
+        height: node.bounds().height + node.option_count as i32 * option_row_height(node),
+        ..node.bounds()
     }
 }
 
@@ -2284,7 +2291,7 @@ fn draw_dropdown(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
     let surface = resolve(settings.background, ThemeColor::Surface, theme);
     let text_color = resolve(settings.color, ThemeColor::Text, theme);
     let style = frame_style(settings, surface, BUTTON_RADIUS / 2, theme);
-    draw_widget_bg(renderer, node.bounds, &style);
+    draw_widget_bg(renderer, node.bounds(), &style);
 
     let options = context.array(settings.array);
     let text_of = |index: i32| match options {
@@ -2293,7 +2300,7 @@ fn draw_dropdown(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
         }
         _ => "",
     };
-    let area = inset(node.bounds, OPTION_ROW_PADDING);
+    let area = inset(node.bounds(), OPTION_ROW_PADDING);
     let arrow_x = (area.x + area.width) as f32 - DROPDOWN_ARROW_SIZE;
     let arrow_y = area.y as f32 + area.height as f32 / 2.0;
     let text_area = Rect {
@@ -2320,9 +2327,9 @@ fn draw_dropdown(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
     };
     let row_height = option_row_height(node);
     let list = Rect {
-        y: node.bounds.y + node.bounds.height,
+        y: node.bounds().y + node.bounds().height,
         height: length as i32 * row_height,
-        ..node.bounds
+        ..node.bounds()
     };
     fill_rounded_rect(renderer, list, surface, (BUTTON_RADIUS / 2) as u8);
     for option in 0..length as i32 {
@@ -2354,7 +2361,7 @@ fn draw_dropdown(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
 
 /// The option under a point in an open Dropdown's list.
 pub fn dropdown_option_at(node: &Node, y: i32) -> Option<i32> {
-    let below = y - (node.bounds.y + node.bounds.height);
+    let below = y - (node.bounds().y + node.bounds().height);
     (below >= 0).then(|| below / option_row_height(node).max(1))
 }
 

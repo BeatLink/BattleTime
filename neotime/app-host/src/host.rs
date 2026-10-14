@@ -702,7 +702,7 @@ impl<'image> AppHost<'image> {
             }
         }
         for node in old.into_iter().flatten() {
-            let Some(area) = node.drawn_bounds else {
+            let Some(area) = node.drawn_bounds() else {
                 continue;
             };
             let moved_with_the_list =
@@ -1070,11 +1070,11 @@ impl<'image> AppHost<'image> {
         let before: Vec<(Rect, bool, Rect)> = self
             .nodes
             .iter()
-            .map(|node| (node.bounds, node.shown, node.clip))
+            .map(|node| (node.bounds(), node.shown, node.clip()))
             .collect();
         self.measure_and_lay_out();
         for (node_index, node) in self.nodes.iter().enumerate() {
-            if before[node_index] != (node.bounds, node.shown, node.clip) {
+            if before[node_index] != (node.bounds(), node.shown, node.clip()) {
                 self.dirty_nodes |= 1 << node_index;
             }
         }
@@ -1289,7 +1289,7 @@ impl<'image> AppHost<'image> {
                 }
             }
             let padding = i32::from(node.settings.padding);
-            let full_width = (node.bounds.width - 2 * padding).max(1);
+            let full_width = (node.bounds().width - 2 * padding).max(1);
             let mut width = text_file_width(full_width, node.shows_scroll_bar);
             let font = node.settings.font;
             let index_fits = place.is_some_and(|place| {
@@ -1306,7 +1306,7 @@ impl<'image> AppHost<'image> {
                     let file_height =
                         |index: &LineIndex| index.line_count * line_height(font.metrics()) + 2 * padding;
                     let shows_scroll_bar =
-                        node.wants_scroll_bar() && file_height(&index) > node.bounds.height;
+                        node.wants_scroll_bar() && file_height(&index) > node.bounds().height;
                     if shows_scroll_bar != node.shows_scroll_bar {
                         node.shows_scroll_bar = shows_scroll_bar;
                         width = text_file_width(full_width, shows_scroll_bar);
@@ -1842,14 +1842,14 @@ impl<'image> AppHost<'image> {
             WidgetKind::Roller => {
                 let rows = roller_rows(node);
                 let row_height = option_row_height(node).max(1);
-                let top = node.bounds.y + (node.bounds.height - rows * row_height) / 2;
+                let top = node.bounds().y + (node.bounds().height - rows * row_height) / 2;
                 let row = (y - top).div_euclid(row_height).clamp(0, rows - 1);
                 let last = self.array_length(settings.array).saturating_sub(1) as i32;
                 (settings.value + row - rows / 2).clamp(0, last) as Value
             }
             _ => {
-                let width = node.bounds.width.max(1) as Value;
-                let along = (x - node.bounds.x).clamp(0, node.bounds.width) as Value;
+                let width = node.bounds().width.max(1) as Value;
+                let along = (x - node.bounds().x).clamp(0, node.bounds().width) as Value;
                 let span = settings.maximum as Value - settings.minimum as Value;
                 settings.minimum as Value + span * along / width
             }
@@ -1893,7 +1893,7 @@ impl<'image> AppHost<'image> {
             return Some(EventResult::Handled);
         };
         let node = &self.nodes[node_index];
-        let inside_across = x >= node.bounds.x && x < node.bounds.x + node.bounds.width;
+        let inside_across = x >= node.bounds().x && x < node.bounds().x + node.bounds().width;
         let option =
             dropdown_option_at(node, y).filter(|&option| inside_across && option < node.option_count as i32);
         let row = node.row;
@@ -2332,7 +2332,7 @@ impl<'image> AppHost<'image> {
     /// Where layout put a widget of the open screen, and whether it is shown.
     pub fn widget_bounds(&self, widget_index: u16) -> Option<(Rect, bool)> {
         let node = self.node(widget_index)?;
-        Some((node.bounds, node.shown))
+        Some((node.bounds(), node.shown))
     }
 
     /// The text a widget of the open screen shows.
@@ -2357,11 +2357,11 @@ impl<'image> AppHost<'image> {
         if !node.shown {
             return None;
         }
-        let mut area = node.bounds.intersect(SCREEN_AREA)?;
+        let mut area = node.bounds().intersect(SCREEN_AREA)?;
         let mut next = node.parent;
         while let Some(parent) = next {
             let parent = &self.nodes[parent as usize];
-            area = area.intersect(parent.bounds)?;
+            area = area.intersect(parent.bounds())?;
             next = parent.parent;
         }
         (area.width > 0 && area.height > 0).then_some(area)
@@ -2386,9 +2386,9 @@ impl<'image> AppHost<'image> {
             Some(node) if node.kind == WidgetKind::TextFile => {
                 let height = line_height(node.settings.font.metrics());
                 let row = |top| Rect {
-                    x: node.bounds.x + i32::from(node.settings.padding),
+                    x: node.bounds().x + i32::from(node.settings.padding),
                     y: top,
-                    width: (node.bounds.width - 2 * i32::from(node.settings.padding)).max(0),
+                    width: (node.bounds().width - 2 * i32::from(node.settings.padding)).max(0),
                     height,
                 };
                 text_file_rows(node).map(|(line, top)| (line, row(top))).collect()

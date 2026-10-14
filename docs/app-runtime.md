@@ -766,7 +766,7 @@ stored by an app changes. A watch face that wants its own look uses fixed colour
 The largest app allowed takes about 6.6 KB of working memory, and a small one about 1.3 KB. `AppHost`
 keeps it on the heap, the interpreter boxed from a constant and the rest in slices of the image's
 size, so opening an app needs under 1 KB of stack. Each widget of the open screen is a node of about
-160 B plus its text, and nodes hold only values, so drawing allocates nothing.
+128 B plus its text, and nodes hold only values, so drawing allocates nothing.
 
 `memory_need::estimate_memory_need` adds up an app's heap need from its image: the image itself,
 the working memory, the nodes of its largest screen, its text, and what a `TextFile`, `BitmapFile`,

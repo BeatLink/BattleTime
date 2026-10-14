@@ -262,10 +262,10 @@ fn position_and_spacing_properties_land_in_the_settings() {
     column.apply(Property::Radius, number(-8));
 
     let settings = column.settings;
-    assert_eq!((settings.x, settings.y), (Some(10), Some(-20)));
+    assert_eq!((settings.x.get(), settings.y.get()), (Some(10), Some(-20)));
     assert_eq!(settings.gap, 0);
-    assert_eq!(settings.border_width, Some(3));
-    assert_eq!(settings.radius, Some(0));
+    assert_eq!(settings.border_width.get(), Some(3));
+    assert_eq!(settings.radius.get(), Some(0));
 }
 
 #[test]
@@ -401,12 +401,12 @@ fn a_hidden_widget_covers_nothing() {
 fn a_shown_widget_covers_its_box_cut_to_its_clip() {
     let mut label = node(WidgetKind::Label);
     label.shown = true;
-    label.bounds = Rect {
+    label.set_bounds(Rect {
         x: 200,
         y: 10,
         width: 100,
         height: 20,
-    };
+    });
 
     let area = label.covered_area();
 
@@ -426,12 +426,12 @@ fn an_open_dropdown_covers_its_list_below_its_box() {
     let mut dropdown = node(WidgetKind::Dropdown);
     dropdown.shown = true;
     dropdown.option_count = 3;
-    dropdown.bounds = Rect {
+    dropdown.set_bounds(Rect {
         x: 0,
         y: 0,
         width: 100,
         height: 40,
-    };
+    });
     let closed = dropdown.covered_area().unwrap();
 
     dropdown.is_open = true;
@@ -496,4 +496,51 @@ fn containers_and_controls_are_mapped_but_pages_are_not() {
     assert!(is_mapped(WidgetKind::Dropdown));
     assert!(!is_mapped(WidgetKind::Pages));
     assert!(!is_mapped(WidgetKind::Tabs));
+}
+
+#[test]
+fn a_node_keeps_its_place_in_two_byte_numbers() {
+    let place = Rect {
+        x: -20,
+        y: 300,
+        width: 240,
+        height: 40_000,
+    };
+
+    let stored = NodeRect::from_rect(place);
+
+    assert_eq!(core::mem::size_of::<NodeRect>(), 8);
+    assert_eq!(core::mem::size_of::<Option<NodeRect>>(), 10);
+    assert_eq!(
+        stored.to_rect(),
+        Rect {
+            height: i16::MAX as i32,
+            ..place
+        }
+    );
+}
+
+#[test]
+fn an_unset_pixel_value_takes_two_bytes_and_reads_as_none() {
+    assert_eq!(core::mem::size_of::<OptionalPixels>(), 2);
+    assert_eq!(OptionalPixels::NONE.get(), None);
+    assert_eq!(OptionalPixels::some(-5).get(), Some(-5));
+    assert_eq!(OptionalPixels::some(i16::MIN).get(), Some(i16::MIN + 1));
+}
+
+#[test]
+fn a_node_remembers_where_it_was_drawn() {
+    let mut label = node(WidgetKind::Label);
+    let area = Rect {
+        x: 10,
+        y: 20,
+        width: 30,
+        height: 40,
+    };
+
+    label.set_drawn_bounds(Some(area));
+
+    assert_eq!(label.drawn_bounds(), Some(area));
+    label.set_drawn_bounds(None);
+    assert_eq!(label.drawn_bounds(), None);
 }

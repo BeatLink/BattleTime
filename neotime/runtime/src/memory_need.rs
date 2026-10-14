@@ -22,7 +22,7 @@ pub const EXPRESSION_BINDING_BYTES: u32 = 16;
 pub const PLACEMENT_BYTES: u32 = 6;
 
 /// One node of the open screen, as `size_of` gives it on the watch, plus its place in the list.
-pub const NODE_BYTES: u32 = 164;
+pub const NODE_BYTES: u32 = 132;
 
 /// Each subscription the host keeps track of.
 pub const SUBSCRIPTION_BYTES: u32 = 40;

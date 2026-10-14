@@ -116,11 +116,32 @@ pub enum PropertyValue<'text> {
     Text(&'text str),
 }
 
+/// A pixel value a widget may leave unset, kept in two bytes with `i16::MIN` meaning unset.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OptionalPixels(i16);
+
+impl OptionalPixels {
+    pub const NONE: OptionalPixels = OptionalPixels(i16::MIN);
+
+    /// A set value; `i16::MIN` itself is stored as the next value up, so it never reads as unset.
+    pub const fn some(pixels: i16) -> OptionalPixels {
+        OptionalPixels(if pixels == i16::MIN { i16::MIN + 1 } else { pixels })
+    }
+
+    pub const fn get(self) -> Option<i16> {
+        if self.0 == i16::MIN {
+            None
+        } else {
+            Some(self.0)
+        }
+    }
+}
+
 /// What the common properties of a widget hold.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Settings {
-    pub x: Option<i16>,
-    pub y: Option<i16>,
+    pub x: OptionalPixels,
+    pub y: OptionalPixels,
     pub width: Option<Length>,
     pub height: Option<Length>,
     pub grow: i16,
@@ -130,8 +151,8 @@ pub struct Settings {
     pub background: Option<ColorValue>,
     pub color: Option<ColorValue>,
     pub border_color: Option<ColorValue>,
-    pub border_width: Option<i16>,
-    pub radius: Option<i16>,
+    pub border_width: OptionalPixels,
+    pub radius: OptionalPixels,
     pub font: FontName,
     pub align: Option<Align>,
     pub justify: Placement,
@@ -143,8 +164,8 @@ pub struct Settings {
     pub value: i32,
     pub minimum: i32,
     pub maximum: i32,
-    pub start_angle: Option<i16>,
-    pub end_angle: Option<i16>,
+    pub start_angle: OptionalPixels,
+    pub end_angle: OptionalPixels,
     /// A Grid's or ButtonMatrix's columns, or a CellGrid's.
     pub columns: u16,
     /// The state array the widget's main array property names: cells, options, points, series or labels.
@@ -159,8 +180,8 @@ pub const OPAQUE: u8 = 255;
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            x: None,
-            y: None,
+            x: OptionalPixels::NONE,
+            y: OptionalPixels::NONE,
             width: None,
             height: None,
             grow: 0,
@@ -170,8 +191,8 @@ impl Default for Settings {
             background: None,
             color: None,
             border_color: None,
-            border_width: None,
-            radius: None,
+            border_width: OptionalPixels::NONE,
+            radius: OptionalPixels::NONE,
             font: FontName::Normal,
             align: None,
             justify: Placement::Start,
@@ -183,8 +204,8 @@ impl Default for Settings {
             value: 0,
             minimum: 0,
             maximum: DEFAULT_MAXIMUM,
-            start_angle: None,
-            end_angle: None,
+            start_angle: OptionalPixels::NONE,
+            end_angle: OptionalPixels::NONE,
             columns: 0,
             array: None,
             scrolling: 0,
@@ -447,6 +468,43 @@ impl core::ops::Deref for ExtraSlot {
 // Nodes
 // ============================================================================
 
+/// A rectangle in two-byte numbers, which is all a node's place on the 240-pixel screen needs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NodeRect {
+    pub x: i16,
+    pub y: i16,
+    pub width: i16,
+    pub height: i16,
+}
+
+impl NodeRect {
+    /// The rectangle with each number held to what two bytes can store.
+    pub fn from_rect(rect: Rect) -> NodeRect {
+        NodeRect {
+            x: to_i16(rect.x),
+            y: to_i16(rect.y),
+            width: to_i16(rect.width),
+            height: to_i16(rect.height),
+        }
+    }
+
+    pub fn to_rect(self) -> Rect {
+        Rect {
+            x: self.x.into(),
+            y: self.y.into(),
+            width: self.width.into(),
+            height: self.height.into(),
+        }
+    }
+}
+
+// The memory estimate counts a node and its place in the host's list, so every watch build checks the two agree.
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(
+    core::mem::size_of::<Node>() + core::mem::size_of::<Box<Node>>()
+        == neotime_runtime::memory_need::NODE_BYTES as usize
+);
+
 pub struct Node {
     /// The widget's number in the image.
     pub widget_index: u16,
@@ -462,9 +520,9 @@ pub struct Node {
     /// The size the widget's content wants, worked out by the host from images and arrays.
     pub content_width: i16,
     pub content_height: i16,
-    pub bounds: Rect,
+    bounds: NodeRect,
     /// The part of the screen the widget may draw on: its parents' boxes where they clip, such as a Scroll.
-    pub clip: Rect,
+    clip: NodeRect,
     /// Whether the widget and every widget around it is visible.
     pub shown: bool,
     /// How far a Scroll or List has been scrolled down, or right when it runs across.
@@ -476,7 +534,7 @@ pub struct Node {
     /// How many options a Dropdown offers, for the height of its open list, or how many pages a Pages holds.
     pub option_count: u8,
     /// Where the widget was last drawn, so moving or hiding it can clear that area.
-    pub drawn_bounds: Option<Rect>,
+    drawn_bounds: Option<NodeRect>,
 }
 
 impl Node {
@@ -498,8 +556,8 @@ impl Node {
             text: String::new(),
             content_width: 0,
             content_height: 0,
-            bounds: screen,
-            clip: screen,
+            bounds: NodeRect::from_rect(screen),
+            clip: NodeRect::from_rect(screen),
             shown: false,
             scroll_offset: 0,
             shows_scroll_bar: false,
@@ -507,6 +565,33 @@ impl Node {
             option_count: 0,
             drawn_bounds: None,
         }
+    }
+
+    /// Where layout put the widget.
+    pub fn bounds(&self) -> Rect {
+        self.bounds.to_rect()
+    }
+
+    pub fn set_bounds(&mut self, bounds: Rect) {
+        self.bounds = NodeRect::from_rect(bounds);
+    }
+
+    /// The part of the screen the widget may draw on.
+    pub fn clip(&self) -> Rect {
+        self.clip.to_rect()
+    }
+
+    pub fn set_clip(&mut self, clip: Rect) {
+        self.clip = NodeRect::from_rect(clip);
+    }
+
+    /// Where the widget was last drawn, if it was.
+    pub fn drawn_bounds(&self) -> Option<Rect> {
+        self.drawn_bounds.map(NodeRect::to_rect)
+    }
+
+    pub fn set_drawn_bounds(&mut self, drawn_bounds: Option<Rect>) {
+        self.drawn_bounds = drawn_bounds.map(NodeRect::from_rect);
     }
 
     /// Whether a Scroll or List lays its children out across and scrolls left and right.
@@ -536,9 +621,9 @@ impl Node {
         }
         let area = match self.is_open {
             true => crate::drawing::open_list_area(self),
-            false => self.bounds,
+            false => self.bounds(),
         };
-        area.intersect(self.clip)
+        area.intersect(self.clip())
     }
 
     /// Stores one property's value and says whether anything visible changed.
@@ -563,8 +648,8 @@ impl Node {
         let settings = &mut self.settings;
 
         match property {
-            Property::X => replace(&mut settings.x, Some(pixels)),
-            Property::Y => replace(&mut settings.y, Some(pixels)),
+            Property::X => replace(&mut settings.x, OptionalPixels::some(pixels)),
+            Property::Y => replace(&mut settings.y, OptionalPixels::some(pixels)),
             Property::Width => replace(&mut settings.width, Some(Length::from_value(small))),
             Property::Height => replace(&mut settings.height, Some(Length::from_value(small))),
             Property::Grow => replace(&mut settings.grow, pixels.max(0)),
@@ -574,8 +659,8 @@ impl Node {
             Property::Background => color.is_some() && replace(&mut settings.background, color),
             Property::Color => color.is_some() && replace(&mut settings.color, color),
             Property::BorderColor => color.is_some() && replace(&mut settings.border_color, color),
-            Property::BorderWidth => replace(&mut settings.border_width, Some(pixels.max(0))),
-            Property::Radius => replace(&mut settings.radius, Some(pixels.max(0))),
+            Property::BorderWidth => replace(&mut settings.border_width, OptionalPixels::some(pixels.max(0))),
+            Property::Radius => replace(&mut settings.radius, OptionalPixels::some(pixels.max(0))),
             Property::Font => replace(&mut settings.font, FontName::from_value(small)),
             Property::Align => replace(&mut settings.align, Align::from_value(small)),
             Property::Justify => replace(
@@ -590,8 +675,8 @@ impl Node {
             Property::Value | Property::RowCount | Property::CodeCount => replace(&mut settings.value, small),
             Property::Minimum => replace(&mut settings.minimum, small),
             Property::Maximum => replace(&mut settings.maximum, small),
-            Property::StartAngle => replace(&mut settings.start_angle, Some(pixels)),
-            Property::EndAngle => replace(&mut settings.end_angle, Some(pixels)),
+            Property::StartAngle => replace(&mut settings.start_angle, OptionalPixels::some(pixels)),
+            Property::EndAngle => replace(&mut settings.end_angle, OptionalPixels::some(pixels)),
             Property::Columns => replace(&mut settings.columns, to_u16(number)),
             Property::Scrolling => replace(&mut settings.scrolling, number.clamp(0, u8::MAX as i64) as u8),
             Property::Cells | Property::Options | Property::Points | Property::Series | Property::Codes => {
@@ -842,13 +927,13 @@ pub fn slots_in_view_along(node: &Node, across: bool, extent: i32, gap: i32, cou
     match across {
         true => {
             let clip = Rect {
-                y: node.clip.x,
-                height: node.clip.width,
-                ..node.clip
+                y: node.clip().x,
+                height: node.clip().width,
+                ..node.clip()
             };
-            slots_in_view(node.bounds.x, clip, extent, gap, count)
+            slots_in_view(node.bounds().x, clip, extent, gap, count)
         }
-        false => slots_in_view(node.bounds.y, node.clip, extent, gap, count),
+        false => slots_in_view(node.bounds().y, node.clip(), extent, gap, count),
     }
 }
 

@@ -230,24 +230,24 @@ fn place_transparent_repeats(nodes: &mut [Box<Node>], index: usize, inner: Rect,
         let mut around: Option<Rect> = None;
         let mut row = repeat + 1;
         while row < end {
-            let bounds = nodes[row].bounds;
+            let bounds = nodes[row].bounds();
             around = Some(around.map_or(bounds, |around| around.union(bounds)));
             row = nodes[row].subtree_end as usize;
         }
         let node = &mut nodes[repeat];
-        node.bounds = around.unwrap_or(Rect {
+        node.set_bounds(around.unwrap_or(Rect {
             x: inner.x,
             y: inner.y,
             width: 0,
             height: 0,
-        });
-        node.clip = clip;
+        }));
+        node.set_clip(clip);
         node.shown = shown && node.settings.visible;
         if !node.shown {
             let mut row = repeat + 1;
             while row < end {
-                let row_clip = nodes[row].clip;
-                let row_bounds = nodes[row].bounds;
+                let row_clip = nodes[row].clip();
+                let row_bounds = nodes[row].bounds();
                 place(nodes, row, row_bounds, false, row_clip);
                 row = nodes[row].subtree_end as usize;
             }
@@ -256,8 +256,8 @@ fn place_transparent_repeats(nodes: &mut [Box<Node>], index: usize, inner: Rect,
 }
 
 fn is_positioned(node: &Node) -> bool {
-    node.settings.x.map(i32::from).is_some()
-        || node.settings.y.map(i32::from).is_some()
+    node.settings.x.get().map(i32::from).is_some()
+        || node.settings.y.get().map(i32::from).is_some()
         || is_overlay(node.kind)
 }
 
@@ -421,8 +421,8 @@ fn place_positioned_box(nodes: &[Box<Node>], index: usize, inner: Rect, fills: b
         None => natural,
     };
     Rect {
-        x: inner.x + settings.x.map(i32::from).unwrap_or(0),
-        y: inner.y + settings.y.map(i32::from).unwrap_or(0),
+        x: inner.x + settings.x.get().map(i32::from).unwrap_or(0),
+        y: inner.y + settings.y.get().map(i32::from).unwrap_or(0),
         width: length(settings.width, inner.width, natural.width),
         height: length(settings.height, inner.height, natural.height),
     }
@@ -430,12 +430,12 @@ fn place_positioned_box(nodes: &[Box<Node>], index: usize, inner: Rect, fills: b
 
 fn place(nodes: &mut [Box<Node>], index: usize, bounds: Rect, parent_shown: bool, clip: Rect) {
     let across = runs_across(nodes, index);
-    nodes[index].bounds = bounds;
+    nodes[index].set_bounds(bounds);
     let shows_scroll_bar = wants_scroll_bar_room(nodes, index);
     let node = &mut nodes[index];
     node.shows_scroll_bar = shows_scroll_bar;
-    node.bounds = bounds;
-    node.clip = clip;
+    node.set_bounds(bounds);
+    node.set_clip(clip);
     node.shown = parent_shown && node.settings.visible;
     let shown = node.shown;
     let mut inner = inset(bounds, i32::from(node.settings.padding));
@@ -722,7 +722,7 @@ pub fn content_length(nodes: &[Box<Node>], index: usize) -> i32 {
             .sum();
         return children + gap + padding;
     }
-    let inner_width = (nodes[index].bounds.width - padding).max(0);
+    let inner_width = (nodes[index].bounds().width - padding).max(0);
     let children: i32 = flowing(nodes, index)
         .map(|child| {
             let margin = 2 * i32::from(nodes[child].settings.margin);
@@ -735,8 +735,8 @@ pub fn content_length(nodes: &[Box<Node>], index: usize) -> i32 {
 /// How much of a scrolling widget's content shows at once, along the way it scrolls.
 pub fn visible_length(node: &Node) -> i32 {
     match node.runs_across() {
-        true => node.bounds.width,
-        false => node.bounds.height,
+        true => node.bounds().width,
+        false => node.bounds().height,
     }
 }
 

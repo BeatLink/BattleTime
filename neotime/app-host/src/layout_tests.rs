@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 
 use super::*;
 use crate::fonts::FontName;
+use crate::nodes::OptionalPixels;
 use crate::text::wrapped_line_count;
 
 // ============================================================================
@@ -68,8 +69,8 @@ fn an_arc_stacks_its_children_in_its_middle() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(112, 104, 16, 16));
-    assert_eq!(nodes[2].bounds, rect(112, 120, 16, 16));
+    assert_eq!(nodes[1].bounds(), rect(112, 104, 16, 16));
+    assert_eq!(nodes[2].bounds(), rect(112, 120, 16, 16));
     assert!(nodes[1].shown && nodes[2].shown);
 }
 
@@ -84,9 +85,9 @@ fn a_click_area_stacks_its_children_and_takes_their_size() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(112, 104, 16, 32));
-    assert_eq!(nodes[2].bounds, rect(112, 104, 16, 16));
-    assert_eq!(nodes[3].bounds, rect(112, 120, 16, 16));
+    assert_eq!(nodes[1].bounds(), rect(112, 104, 16, 32));
+    assert_eq!(nodes[2].bounds(), rect(112, 104, 16, 16));
+    assert_eq!(nodes[3].bounds(), rect(112, 120, 16, 16));
 }
 
 // ============================================================================
@@ -105,9 +106,9 @@ fn a_row_lays_its_children_left_to_right_gap_apart() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(0, 0, 16, 240));
-    assert_eq!(nodes[2].bounds, rect(20, 0, 16, 240));
-    assert_eq!(nodes[3].bounds, rect(40, 0, 52, 240));
+    assert_eq!(nodes[1].bounds(), rect(0, 0, 16, 240));
+    assert_eq!(nodes[2].bounds(), rect(20, 0, 16, 240));
+    assert_eq!(nodes[3].bounds(), rect(40, 0, 52, 240));
 }
 
 #[test]
@@ -124,7 +125,7 @@ fn align_items_places_row_children_across_at_their_natural_height() {
 
         let nodes = laid_out(nodes);
 
-        assert_eq!(nodes[1].bounds, rect(0, expected_y, 16, 16), "{align_items:?}");
+        assert_eq!(nodes[1].bounds(), rect(0, expected_y, 16, 16), "{align_items:?}");
     }
 }
 
@@ -147,7 +148,11 @@ fn justify_places_row_children_along_the_spare_space() {
 
         let nodes = laid_out(nodes);
 
-        assert_eq!([nodes[1].bounds.x, nodes[2].bounds.x], expected_x, "{justify:?}");
+        assert_eq!(
+            [nodes[1].bounds().x, nodes[2].bounds().x],
+            expected_x,
+            "{justify:?}"
+        );
     }
 }
 
@@ -164,8 +169,8 @@ fn spare_row_space_goes_to_growing_children_in_proportion() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!((nodes[1].bounds.x, nodes[1].bounds.width), (0, 16 + 52));
-    assert_eq!((nodes[2].bounds.x, nodes[2].bounds.width), (68, 16 + 156));
+    assert_eq!((nodes[1].bounds().x, nodes[1].bounds().width), (0, 16 + 52));
+    assert_eq!((nodes[2].bounds().x, nodes[2].bounds().width), (68, 16 + 156));
 }
 
 #[test]
@@ -181,8 +186,8 @@ fn a_row_inside_a_column_is_as_wide_as_its_children_and_gaps() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(0, 0, 70, 28));
-    assert_eq!(nodes[3].bounds, rect(18, 0, 52, 28));
+    assert_eq!(nodes[1].bounds(), rect(0, 0, 70, 28));
+    assert_eq!(nodes[3].bounds(), rect(18, 0, 52, 28));
 }
 
 // ============================================================================
@@ -197,7 +202,7 @@ fn a_column_child_fills_the_width_inside_padding_and_margin() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(15, 15, 210, 10));
+    assert_eq!(nodes[1].bounds(), rect(15, 15, 210, 10));
 }
 
 #[test]
@@ -207,7 +212,7 @@ fn a_column_child_with_a_percent_width_is_centred() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(60, 0, 120, 10));
+    assert_eq!(nodes[1].bounds(), rect(60, 0, 120, 10));
 }
 
 #[test]
@@ -227,7 +232,7 @@ fn fixed_widgets_take_their_own_size_when_aligned() {
 
         let nodes = laid_out(nodes);
 
-        assert_eq!(nodes[1].bounds, rect(0, 0, width, height), "{kind:?}");
+        assert_eq!(nodes[1].bounds(), rect(0, 0, width, height), "{kind:?}");
     }
 }
 
@@ -247,12 +252,15 @@ fn a_button_is_as_wide_as_its_icon_and_text_with_side_space() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(0, 0, 20 + 32, normal_line_height().max(44)));
     assert_eq!(
-        nodes[2].bounds.width,
+        nodes[1].bounds(),
+        rect(0, 0, 20 + 32, normal_line_height().max(44))
+    );
+    assert_eq!(
+        nodes[2].bounds().width,
         normal_text_width("OK") + 20 + TICK_BOX_GAP + 32
     );
-    assert_eq!(nodes[2].bounds.height, normal_line_height().max(44));
+    assert_eq!(nodes[2].bounds().height, normal_line_height().max(44));
 }
 
 #[test]
@@ -271,8 +279,8 @@ fn an_icon_in_a_button_keeps_its_own_size_in_the_middle() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(18, 16, 32, 32));
-    assert_eq!(nodes[2].bounds, rect(0, 0, 68, 64));
+    assert_eq!(nodes[1].bounds(), rect(18, 16, 32, 32));
+    assert_eq!(nodes[2].bounds(), rect(0, 0, 68, 64));
 }
 
 #[test]
@@ -284,7 +292,7 @@ fn a_checkbox_is_its_tick_box_then_its_text() {
     let nodes = laid_out(nodes);
 
     assert_eq!(
-        nodes[1].bounds,
+        nodes[1].bounds(),
         rect(
             0,
             0,
@@ -307,8 +315,8 @@ fn a_label_with_a_pixel_width_wraps_inside_it() {
     let nodes = laid_out(nodes);
 
     assert!(lines > 1);
-    assert_eq!(nodes[1].bounds.width, 60);
-    assert_eq!(nodes[1].bounds.height, lines * normal_line_height() + 8);
+    assert_eq!(nodes[1].bounds().width, 60);
+    assert_eq!(nodes[1].bounds().height, lines * normal_line_height() + 8);
 }
 
 // ============================================================================
@@ -329,9 +337,9 @@ fn stacked_children_fill_unless_sized_or_aligned() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, SCREEN);
-    assert_eq!(nodes[2].bounds, rect(188, 212, 52, 28));
-    assert_eq!(nodes[3].bounds, rect(70, 110, 100, 20));
+    assert_eq!(nodes[1].bounds(), SCREEN);
+    assert_eq!(nodes[2].bounds(), rect(188, 212, 52, 28));
+    assert_eq!(nodes[3].bounds(), rect(70, 110, 100, 20));
 }
 
 #[test]
@@ -346,7 +354,7 @@ fn a_stack_inside_a_column_is_as_big_as_its_biggest_child() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(0, 0, 52, 28));
+    assert_eq!(nodes[1].bounds(), rect(0, 0, 52, 28));
 }
 
 // ============================================================================
@@ -366,9 +374,9 @@ fn a_grid_puts_children_in_rows_that_share_the_spare_height() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(0, 0, 115, 115));
-    assert_eq!(nodes[2].bounds, rect(125, 0, 115, 115));
-    assert_eq!(nodes[3].bounds, rect(0, 125, 115, 115));
+    assert_eq!(nodes[1].bounds(), rect(0, 0, 115, 115));
+    assert_eq!(nodes[2].bounds(), rect(125, 0, 115, 115));
+    assert_eq!(nodes[3].bounds(), rect(0, 125, 115, 115));
 }
 
 #[test]
@@ -378,7 +386,7 @@ fn an_aligned_grid_cell_child_keeps_its_natural_size() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(0, 0, 16, 16));
+    assert_eq!(nodes[1].bounds(), rect(0, 0, 16, 16));
 }
 
 #[test]
@@ -396,9 +404,9 @@ fn a_grid_inside_a_column_is_as_big_as_its_cells_and_gaps() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(0, 0, 42, 42));
-    assert_eq!(nodes[3].bounds, rect(26, 0, 16, 16));
-    assert_eq!(nodes[4].bounds, rect(0, 26, 16, 16));
+    assert_eq!(nodes[1].bounds(), rect(0, 0, 42, 42));
+    assert_eq!(nodes[3].bounds(), rect(26, 0, 16, 16));
+    assert_eq!(nodes[4].bounds(), rect(0, 26, 16, 16));
 }
 
 #[test]
@@ -411,15 +419,15 @@ fn a_grid_without_columns_has_one_column() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(0, 0, 240, 120));
-    assert_eq!(nodes[2].bounds, rect(0, 120, 240, 120));
+    assert_eq!(nodes[1].bounds(), rect(0, 0, 240, 120));
+    assert_eq!(nodes[2].bounds(), rect(0, 120, 240, 120));
 }
 
 #[test]
 fn an_empty_grid_still_fills_the_screen() {
     let nodes = laid_out(tree(&[(WidgetKind::Grid, None)]));
 
-    assert_eq!(nodes[0].bounds, SCREEN);
+    assert_eq!(nodes[0].bounds(), SCREEN);
     assert!(nodes[0].shown);
 }
 
@@ -441,11 +449,11 @@ fn scrolling_moves_the_children_up_and_they_are_clipped_to_the_scroll() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(20, 20, 200, 150));
-    assert_eq!(nodes[1].clip, SCREEN);
-    assert_eq!(nodes[2].bounds.y, 20 - 50);
-    assert_eq!(nodes[3].bounds.y, 20 - 50 + 100);
-    assert_eq!(nodes[2].clip, rect(20, 20, 200, 150));
+    assert_eq!(nodes[1].bounds(), rect(20, 20, 200, 150));
+    assert_eq!(nodes[1].clip(), SCREEN);
+    assert_eq!(nodes[2].bounds().y, 20 - 50);
+    assert_eq!(nodes[3].bounds().y, 20 - 50 + 100);
+    assert_eq!(nodes[2].clip(), rect(20, 20, 200, 150));
 }
 
 #[test]
@@ -463,7 +471,7 @@ fn a_growing_scroll_fills_the_space_left_however_tall_its_content() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[2].bounds, rect(0, 40, 240, 200));
+    assert_eq!(nodes[2].bounds(), rect(0, 40, 240, 200));
     assert_eq!(content_length(&nodes, 2), 300);
 }
 
@@ -474,12 +482,12 @@ fn a_scroll_wholly_off_the_screen_lets_its_children_draw_nothing() {
         (WidgetKind::List, Some(0)),
         (WidgetKind::Led, Some(1)),
     ]);
-    nodes[1].settings.y = Some(300);
+    nodes[1].settings.y = OptionalPixels::some(300);
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds.y, 300);
-    assert_eq!((nodes[2].clip.width, nodes[2].clip.height), (0, 0));
+    assert_eq!(nodes[1].bounds().y, 300);
+    assert_eq!((nodes[2].clip().width, nodes[2].clip().height), (0, 0));
 }
 
 #[test]
@@ -513,13 +521,13 @@ fn a_child_with_a_position_sits_at_that_offset_and_takes_no_flow_space() {
         (WidgetKind::Bar, Some(0)),
     ]);
     nodes[0].settings.padding = 10;
-    nodes[1].settings.x = Some(30);
-    nodes[1].settings.y = Some(40);
+    nodes[1].settings.x = OptionalPixels::some(30);
+    nodes[1].settings.y = OptionalPixels::some(40);
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(40, 50, 16, 16));
-    assert_eq!(nodes[2].bounds, rect(10, 10, 220, 10));
+    assert_eq!(nodes[1].bounds(), rect(40, 50, 16, 16));
+    assert_eq!(nodes[2].bounds(), rect(10, 10, 220, 10));
 }
 
 #[test]
@@ -533,8 +541,8 @@ fn a_scale_is_drawn_over_the_whole_of_its_parent() {
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[1].bounds, rect(10, 10, 220, 220));
-    assert_eq!(nodes[2].bounds.y, 10);
+    assert_eq!(nodes[1].bounds(), rect(10, 10, 220, 220));
+    assert_eq!(nodes[2].bounds().y, 10);
 }
 
 #[test]
@@ -550,7 +558,7 @@ fn a_hidden_child_gives_up_its_place_and_is_not_shown() {
 
     assert!(!nodes[1].shown);
     assert!(nodes[2].shown);
-    assert_eq!(nodes[2].bounds.x, 0);
+    assert_eq!(nodes[2].bounds().x, 0);
 }
 
 #[test]
@@ -584,12 +592,12 @@ fn laying_out_no_nodes_does_nothing() {
 #[test]
 fn a_root_with_a_width_and_position_keeps_them_and_fills_the_height() {
     let mut nodes = tree(&[(WidgetKind::Column, None)]);
-    nodes[0].settings.x = Some(20);
+    nodes[0].settings.x = OptionalPixels::some(20);
     nodes[0].settings.width = Some(Length::Pixels(100));
 
     let nodes = laid_out(nodes);
 
-    assert_eq!(nodes[0].bounds, rect(20, 0, 100, 240));
+    assert_eq!(nodes[0].bounds(), rect(20, 0, 100, 240));
 }
 
 #[test]

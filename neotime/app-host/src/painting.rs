@@ -222,7 +222,7 @@ impl<'image> AppHost<'image> {
             self.unpainted_regions = self.dirty_regions();
             for (node_index, node) in self.nodes.iter_mut().enumerate() {
                 if self.dirty_nodes & (1 << node_index) != 0 {
-                    node.drawn_bounds = node.covered_area();
+                    node.set_drawn_bounds(node.covered_area());
                 }
             }
             self.dirty_nodes = 0;
@@ -268,7 +268,7 @@ impl<'image> AppHost<'image> {
             if self.dirty_nodes & (1 << node_index) == 0 {
                 continue;
             }
-            for region in [node.drawn_bounds, node.covered_area()].into_iter().flatten() {
+            for region in [node.drawn_bounds(), node.covered_area()].into_iter().flatten() {
                 add_region(&mut regions, region);
             }
         }
@@ -353,7 +353,7 @@ impl<'image> AppHost<'image> {
                 continue;
             }
             let Some(clip) = scroll_bar_track(node)
-                .intersect(node.clip)
+                .intersect(node.clip())
                 .and_then(|area| area.intersect(region))
             else {
                 continue;
@@ -469,7 +469,7 @@ impl<'image> AppHost<'image> {
         self.prepare_scroll_band(screen, kind).await?;
 
         for node in &mut self.nodes {
-            node.drawn_bounds = node.covered_area();
+            node.set_drawn_bounds(node.covered_area());
         }
         self.dirty_nodes = 0;
         self.cleared_regions.clear();
@@ -521,7 +521,7 @@ impl<'image> AppHost<'image> {
     /// The rows a Scroll or List shows its content in.
     fn scroll_band_of(&self, node_index: usize) -> Option<ScrollBand> {
         let node = &self.nodes[node_index];
-        let area = node.bounds.intersect(node.clip)?.intersect(SCREEN_AREA)?;
+        let area = node.bounds().intersect(node.clip())?.intersect(SCREEN_AREA)?;
         Some(ScrollBand {
             first_row: area.y,
             end_row: area.y + area.height,
@@ -581,17 +581,18 @@ impl<'image> AppHost<'image> {
         for index in inside {
             let is_dirty = self.dirty_nodes & (1 << index) != 0;
             let node = &mut self.nodes[index];
-            node.drawn_bounds = match is_dirty {
+            let drawn_bounds = match is_dirty {
                 false => node.covered_area(),
                 // Its old pixels moved with the panel, so that is where they are cleared from.
                 true => node
-                    .drawn_bounds
+                    .drawn_bounds()
                     .map(|area| Rect {
                         y: area.y - scroll_move.rows,
                         ..area
                     })
-                    .and_then(|area| area.intersect(node.clip)),
+                    .and_then(|area| area.intersect(node.clip())),
             };
+            node.set_drawn_bounds(drawn_bounds);
         }
         Ok(())
     }
@@ -705,7 +706,7 @@ impl<'image> AppHost<'image> {
         self.nodes.iter().enumerate().all(|(index, node)| {
             list.contains(&index)
                 || around[index]
-                || [node.covered_area(), node.drawn_bounds]
+                || [node.covered_area(), node.drawn_bounds()]
                     .into_iter()
                     .flatten()
                     .all(|area| area.intersect(band_area).is_none())
@@ -719,12 +720,12 @@ impl<'image> AppHost<'image> {
         let mut next = Some(node_index);
         while let Some(index) = next {
             let node = &self.nodes[index];
-            let radius = i32::from(node.settings.radius.unwrap_or(0));
-            let border = i32::from(node.settings.border_width.unwrap_or(0));
+            let radius = i32::from(node.settings.radius.get().unwrap_or(0));
+            let border = i32::from(node.settings.border_width.get().unwrap_or(0));
             let edge_rows = radius.max(border);
             if edge_rows > 0 {
-                let top = rows_from(node.bounds.y, edge_rows);
-                let bottom = rows_from(node.bounds.y + node.bounds.height - edge_rows, edge_rows);
+                let top = rows_from(node.bounds().y, edge_rows);
+                let bottom = rows_from(node.bounds().y + node.bounds().height - edge_rows, edge_rows);
                 edges.extend(
                     [top, bottom]
                         .into_iter()
