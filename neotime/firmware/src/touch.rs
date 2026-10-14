@@ -7,7 +7,7 @@ use embassy_time::{Delay, Duration, Timer};
 use neotime_app_host::Touch;
 use neotime_runtime::events::SwipeDirection;
 use neotime_settings::wake_on_touch;
-use neotime_touch::{FingerEvent, Gesture, Settings, TouchPanel, TouchReport};
+use neotime_touch::{Finger as PanelFinger, FingerStep, Gesture, Settings, TouchPanel, TouchReport};
 
 use crate::{
     diagnostics::{self, Counter},
@@ -49,6 +49,7 @@ const DRAG_THRESHOLD_IN_PIXELS: i32 = 10;
 /// Follows one finger from press to lift, so each touch gives at most one gesture.
 #[derive(Default)]
 struct Finger {
+    panel_finger: PanelFinger,
     start: Option<(i32, i32)>,
     dragging: bool,
     gesture_sent: bool,
@@ -58,16 +59,17 @@ impl Finger {
     fn touches_for(&mut self, report: &TouchReport, mut send: impl FnMut(Touch)) {
         let x = report.position.column as i32;
         let y = report.position.row as i32;
-        match report.finger_event {
-            FingerEvent::PressedDown => {
+        match self.panel_finger.step(report) {
+            FingerStep::Lands => {
                 *self = Finger {
+                    panel_finger: self.panel_finger,
                     start: Some((x, y)),
                     ..Finger::default()
                 };
                 foreground::set_finger_down(true);
                 send(Touch::Press { x, y });
             }
-            FingerEvent::StillTouching => {
+            FingerStep::Moves => {
                 let (start_x, start_y) = *self.start.get_or_insert((x, y));
                 let moved = (x - start_x).abs().max((y - start_y).abs());
                 if self.dragging || moved > DRAG_THRESHOLD_IN_PIXELS {
@@ -80,11 +82,11 @@ impl Finger {
                     });
                 }
             }
-            FingerEvent::LiftedUp => {
+            FingerStep::Lifts => {
                 foreground::set_finger_down(false);
                 send(Touch::Release { x, y })
             }
-            FingerEvent::NoEvent => {}
+            FingerStep::Nothing => {}
         }
 
         if self.gesture_sent {

@@ -136,6 +136,50 @@ impl TouchReport {
     }
 }
 
+// ============================================================================
+// One finger from landing to lifting
+// ============================================================================
+
+/// What a report means for the finger on the panel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FingerStep {
+    Lands,
+    Moves,
+    Lifts,
+    Nothing,
+}
+
+/// Whether a finger is on the panel, so a landing reported while one is already down counts as a move.
+///
+/// While a finger slides left or right the panel repeats the slide, and can report the finger landing again with each repeat.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Finger {
+    is_down: bool,
+}
+
+impl Finger {
+    pub fn step(&mut self, report: &TouchReport) -> FingerStep {
+        match report.finger_event {
+            FingerEvent::PressedDown if !self.is_down => {
+                self.is_down = true;
+                FingerStep::Lands
+            }
+            FingerEvent::PressedDown | FingerEvent::StillTouching => {
+                self.is_down = true;
+                FingerStep::Moves
+            }
+            FingerEvent::LiftedUp => {
+                self.is_down = false;
+                FingerStep::Lifts
+            }
+            FingerEvent::NoEvent => {
+                self.is_down &= report.is_touching;
+                FingerStep::Nothing
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ChipInfo {
     pub chip_id: u8,

@@ -10,7 +10,8 @@ document for its part instead.
 
 - [ ] **Paging on the PineTime.** `Pages` (2f9524a) and the system and steps apps built on it
   (5957275) have run only in the harness and the emulator; the watch still runs 3a5abe9. Flash a
-  build with them and check on the watch that a swipe left or right wipes to the next page, the
+  build with them and check on the watch that a swipe left or right wipes to the next page and
+  never skips one, even a long slow swipe, which the panel repeats as it goes, the
   page bar marks the page on show, a sideways drag leaves the system page's list still, swipes past
   the first and last page step round the quick apps, and a charger event opens the battery page.
 

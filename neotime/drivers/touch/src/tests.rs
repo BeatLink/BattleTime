@@ -406,3 +406,68 @@ fn a_bus_error_is_passed_on() {
 
     assert_eq!(result, Err(Error::Bus(FakeBusError)));
 }
+
+// ============================================================================
+// One finger from landing to lifting
+// ============================================================================
+
+/// What the finger makes of a report with this finger event and finger count.
+fn finger_report(finger_event: FingerEvent, finger_count: u8) -> TouchReport {
+    TouchReport {
+        position: TouchPosition {
+            column: 120,
+            row: 120,
+        },
+        gesture: Gesture::SlideLeft,
+        finger_event,
+        is_touching: finger_count > 0,
+    }
+}
+
+#[test]
+fn a_landing_while_the_finger_is_down_is_a_move() {
+    let mut finger = Finger::default();
+
+    assert_eq!(
+        finger.step(&finger_report(FingerEvent::PressedDown, 1)),
+        FingerStep::Lands
+    );
+    assert_eq!(
+        finger.step(&finger_report(FingerEvent::PressedDown, 1)),
+        FingerStep::Moves
+    );
+    assert_eq!(
+        finger.step(&finger_report(FingerEvent::StillTouching, 1)),
+        FingerStep::Moves
+    );
+}
+
+#[test]
+fn a_finger_lands_again_after_a_lift() {
+    let mut finger = Finger::default();
+    finger.step(&finger_report(FingerEvent::PressedDown, 1));
+
+    assert_eq!(
+        finger.step(&finger_report(FingerEvent::LiftedUp, 0)),
+        FingerStep::Lifts
+    );
+    assert_eq!(
+        finger.step(&finger_report(FingerEvent::PressedDown, 1)),
+        FingerStep::Lands
+    );
+}
+
+#[test]
+fn a_report_with_no_finger_ends_a_touch_whose_lift_was_lost() {
+    let mut finger = Finger::default();
+    finger.step(&finger_report(FingerEvent::PressedDown, 1));
+
+    assert_eq!(
+        finger.step(&finger_report(FingerEvent::NoEvent, 0)),
+        FingerStep::Nothing
+    );
+    assert_eq!(
+        finger.step(&finger_report(FingerEvent::PressedDown, 1)),
+        FingerStep::Lands
+    );
+}
