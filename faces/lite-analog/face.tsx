@@ -3,8 +3,8 @@
 // The "rays" dial has grey rays, yellow hands and the step count; a long press switches between them.
 // A double tap hides the second hand, so the hands move once a minute.
 
-import { computed } from "@preact/signals";
 import {
+  computed,
   define_app,
   format_time,
   now,

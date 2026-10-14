@@ -19,11 +19,10 @@ impl SystemValues for System {
 }
 
 /// An app whose screen calls `tap` on a swipe, with `body` before the screen and `label` shown.
-fn source(body: &str, label: &str, permissions: &str) -> String {
+fn source(body: &str, label: &str) -> String {
     format!(
         r#"
-import {{ signal }} from "@preact/signals";
-import {{ define_app, send_to_phone, type SwipeEvent }} from "neotime";
+import {{ define_app, send_to_phone, signal, type SwipeEvent }} from "neotime";
 import {{ icons, library_icon }} from "neotime/icons";
 import {{ Icon, Label, Screen }} from "neotime/widgets";
 
@@ -34,13 +33,13 @@ function Main() {{
   return <Screen onSwipe={{tap}}>{label}</Screen>;
 }}
 
-export default define_app({{ id: "test", name: "Test", screens: {{ main: Main }}, permissions: [{permissions}] }});
+export default define_app({{ id: "test", name: "Test", screens: {{ main: Main }} }});
 "#
     )
 }
 
 fn compiled(body: &str, label: &str) -> Vec<u8> {
-    let source = source(body, label, "\"phone_messages\"");
+    let source = source(body, label);
     let output = compile_source(&source);
     let errors: Vec<String> = output
         .errors()
@@ -50,8 +49,8 @@ fn compiled(body: &str, label: &str) -> Vec<u8> {
     output.image.expect("an image")
 }
 
-fn first_error(body: &str, permissions: &str) -> String {
-    let output = compile_source(&source(body, "<Label>Hi</Label>", permissions));
+fn first_error(body: &str) -> String {
+    let output = compile_source(&source(body, "<Label>Hi</Label>"));
     let message = output.errors().next().expect("an error").message.clone();
     message
 }
@@ -115,10 +114,9 @@ fn send_to_phone_with_no_fields_sends_an_empty_object() {
 #[test]
 fn send_to_phone_checks_its_channel_fields_and_permission() {
     let call = |arguments: &str| {
-        first_error(
-            &format!("function tap(event: SwipeEvent) {{ send_to_phone({arguments}); }}"),
-            "\"phone_messages\"",
-        )
+        first_error(&format!(
+            "function tap(event: SwipeEvent) {{ send_to_phone({arguments}); }}"
+        ))
     };
 
     assert!(call(r#""has space", { a: 1 }"#).contains("channel must be written out"));
@@ -129,19 +127,20 @@ fn send_to_phone_checks_its_channel_fields_and_permission() {
     assert!(call(r#""remote", { ...{ a: 1 } }"#).contains("without `...`"));
     assert!(call(r#""remote", { a: "text" }"#).contains("number"));
     assert!(call(r#""remote""#).contains("takes a channel"));
-    let error = first_error(
+    let output = compile_source(&source(
         r#"function tap(event: SwipeEvent) { send_to_phone("remote", { a: 1 }); }"#,
-        "",
+        "<Label>Hi</Label>",
+    ));
+    assert_eq!(
+        output.permissions,
+        [crate::permissions::Permission::PhoneMessages]
     );
-    assert!(error.contains("phone_messages"), "{error}");
 }
 
 #[test]
 fn send_to_phone_belongs_on_its_own_line_in_a_handler() {
-    let error = first_error(
-        r#"function tap(event: SwipeEvent) { const sent = send_to_phone("remote", { a: 1 }); }"#,
-        "\"phone_messages\"",
-    );
+    let error =
+        first_error(r#"function tap(event: SwipeEvent) { const sent = send_to_phone("remote", { a: 1 }); }"#);
     assert!(error.contains("its own line in a handler"), "{error}");
 }
 

@@ -88,13 +88,11 @@ fn rejected_call_advice(name: &str) -> Option<&'static str> {
         "useState" | "useReducer" | "useRef" => "is not available; use `signal` at the top of the file, or `useSignal`",
         "useMemo" | "useCallback" => "is not available; use `computed`",
         "useEffect" | "useLayoutEffect" | "effect" | "setTimeout" | "setInterval" => {
-            "is not available; use `subscriptions` in define_app, or a binding that reads `now`"
+            "is not available; connect an event with `on` at the top of the file, or bind to `now`"
         }
-        "fetch" => "is not available; data from the phone arrives through a subscription",
+        "fetch" => "is not available; data from the phone arrives through an event",
         "signal" | "persisted" | "computed" => "cannot be called here; declare it at the top of the file",
-        "every" | "at" | "daily" | "clock_change" | "heart_rate_reading" | "steps" | "step_goal" | "motion"
-        | "acceleration" | "battery" | "phone" | "notification" | "call" | "music" | "weather" | "navigation"
-        | "message" | "http_response" | "settings_change" => "is a subscription; list it in define_app's `subscriptions`",
+        "on" => "connects events only at the top of the file, before define_app",
         "vibrate_sequence" | "http_request" => {
             "is not in the bytecode yet, because it needs an array or object argument"
         }

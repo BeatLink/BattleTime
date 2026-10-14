@@ -1,23 +1,22 @@
-//! Tests for define_app's subscriptions and lifecycle handlers, read back from the compiled image.
+//! Tests for the events an app connects to with `on`, read back from the compiled image.
 
 use neotime_runtime::subscriptions::{Subscription, SubscriptionKind, SubscriptionValue};
-use neotime_runtime::{AppImage, NONE};
+use neotime_runtime::{AppImage, AppState, Interpreter, SystemValue, SystemValues, Value, NONE};
 
-use super::{detail_names, handler_position, lifecycle_kind, subscription_kind};
+use super::EVENTS;
 use crate::compile_source;
+use crate::permissions::Permission;
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-/// An app that declares `declarations` and passes `options` to define_app, with every permission granted.
-fn app_with(declarations: &str, options: &str) -> String {
+/// An app that declares `declarations` and then connects the `on` calls in `listeners`.
+fn app_with(declarations: &str, listeners: &str) -> String {
     format!(
         r#"
-import {{ computed, signal }} from "@preact/signals";
 import {{
-  define_app, every, at, daily, clock_change, heart_rate_reading, steps, motion, acceleration, battery,
-  phone, notification, settings_change, navigation, message, vibrate, EVERY_DAY, type Instant, type TimeOfDay,
+  computed, define_app, on, signal, vibrate, EVERY_DAY, MINUTE, SECOND, type Instant, type TimeOfDay,
 }} from "neotime";
 import {{ Label, Screen }} from "neotime/widgets";
 
@@ -26,18 +25,16 @@ function tick() {{ count.value += 1; }}
 {declarations}
 function Main() {{ return <Screen><Label>{{count.value}}</Label></Screen>; }}
 
-export default define_app({{
-  id: "test", name: "Test", screens: {{ main: Main }},
-  permissions: ["background", "motion", "heart_rate", "notifications", "phone"],
-  {options}
-}});
+{listeners}
+
+export default define_app({{ id: "test", name: "Test", screens: {{ main: Main }} }});
 "#
     )
 }
 
-/// An app whose only subscriptions are the list given.
-fn subscribing(declarations: &str, list: &str) -> String {
-    app_with(declarations, &format!("subscriptions: [{list}],"))
+/// An app whose only listener is the one `on(...)` call given.
+fn listening(declarations: &str, call: &str) -> String {
+    app_with(declarations, &format!("{call};"))
 }
 
 /// Compiles an app, failing the test on any error, and returns the subscriptions its image lists.
@@ -68,152 +65,76 @@ fn first_error(source: &str) -> String {
 }
 
 // ============================================================================
-// Names
+// Event names
 // ============================================================================
 
 #[test]
-fn each_lifecycle_option_names_its_subscription() {
-    assert_eq!(lifecycle_kind("onOpen"), Some(SubscriptionKind::Open));
-    assert_eq!(lifecycle_kind("onClose"), Some(SubscriptionKind::Close));
-    assert_eq!(lifecycle_kind("onScreenOn"), Some(SubscriptionKind::ScreenOn));
-    assert_eq!(lifecycle_kind("onScreenOff"), Some(SubscriptionKind::ScreenOff));
-    assert_eq!(lifecycle_kind("onWake"), None);
+fn every_event_name_is_written_once() {
+    for (place, (name, _, _)) in EVENTS.iter().enumerate() {
+        assert!(
+            EVENTS[place + 1..].iter().all(|(other, _, _)| other != name),
+            "`{name}` is listed twice"
+        );
+    }
 }
 
 #[test]
-fn each_subscription_function_names_its_kind() {
-    assert_eq!(
-        subscription_kind("settings_change"),
-        Some(SubscriptionKind::SettingsChange)
-    );
-    assert_eq!(
-        subscription_kind("navigation"),
-        Some(SubscriptionKind::Navigation)
-    );
-    assert_eq!(subscription_kind("weather"), Some(SubscriptionKind::Weather));
-    assert_eq!(subscription_kind("format_time"), None);
-}
-
-#[test]
-fn only_kinds_with_a_detail_list_detail_names() {
-    assert_eq!(
-        detail_names(SubscriptionKind::Battery),
-        &["low", "starts", "stops", "completes"]
-    );
-    assert_eq!(
-        detail_names(SubscriptionKind::Phone),
-        &["connects", "disconnects"]
-    );
-    assert!(detail_names(SubscriptionKind::Steps).is_empty());
-}
-
-#[test]
-fn the_handler_follows_the_period_or_kind_argument() {
-    assert_eq!(handler_position(SubscriptionKind::Every), 1);
-    assert_eq!(handler_position(SubscriptionKind::Battery), 1);
-    assert_eq!(handler_position(SubscriptionKind::Steps), 0);
-    assert_eq!(handler_position(SubscriptionKind::Notification), 0);
-}
-
-// ============================================================================
-// Lifecycle handlers
-// ============================================================================
-
-#[test]
-fn every_lifecycle_handler_is_written_in_order() {
+fn each_detail_event_becomes_its_kind_and_position() {
     let source = app_with(
         "",
-        "onClose: tick, onScreenOn: tick, onScreenOff: () => { count.value = 0; },",
+        r#"on("day", tick); on("charging_completes", tick); on("phone_disconnects", tick); on("moving", tick); on("wrist_tap", tick);"#,
     );
 
-    let kinds: Vec<SubscriptionKind> = subscriptions_of(&source)
+    let details: Vec<(SubscriptionKind, u8)> = subscriptions_of(&source)
         .iter()
-        .map(|subscription| subscription.kind)
+        .map(|subscription| (subscription.kind, subscription.detail))
         .collect();
 
     assert_eq!(
-        kinds,
+        details,
         [
-            SubscriptionKind::Close,
-            SubscriptionKind::ScreenOn,
-            SubscriptionKind::ScreenOff
+            (SubscriptionKind::ClockChange, 2),
+            (SubscriptionKind::Battery, 3),
+            (SubscriptionKind::Phone, 1),
+            (SubscriptionKind::Motion, 5),
+            (SubscriptionKind::Motion, 2),
         ]
     );
 }
 
-// ============================================================================
-// The list
-// ============================================================================
-
 #[test]
-fn subscriptions_written_as_something_other_than_an_array_are_refused() {
-    let source = app_with("", "subscriptions: every({ minutes: 1 }, tick),");
+fn an_unknown_event_lists_the_choices() {
+    let message = first_error(&listening("", r#"on("wake", tick)"#));
 
-    assert!(first_error(&source).starts_with("write `subscriptions` as an array"));
-}
-
-#[test]
-fn a_subscription_that_is_not_a_call_is_refused() {
-    let source = subscribing("", "tick");
-
-    assert!(first_error(&source).starts_with("each subscription is a call, such as"));
-}
-
-#[test]
-fn a_call_to_the_apps_own_function_is_not_a_subscription() {
-    let source = subscribing("function make() { return 1; }", "make()");
-
-    assert!(first_error(&source).starts_with("each subscription is a call to a `neotime` subscription"));
-}
-
-#[test]
-fn the_message_subscription_is_not_in_the_image_format_yet() {
-    let source = subscribing("", r#"message("chat", tick)"#);
-
-    assert!(first_error(&source).starts_with("the `message` subscription is not in the image format yet"));
-}
-
-#[test]
-fn a_neotime_function_that_is_not_a_subscription_is_refused() {
-    let source = subscribing("", "vibrate(100)");
-
-    assert_eq!(first_error(&source), "`vibrate` is not a subscription");
-}
-
-#[test]
-fn spread_arguments_in_a_subscription_are_refused() {
-    let source = subscribing("const extra = [tick];", "steps(...extra)");
-
-    assert_eq!(first_error(&source), "`...` in a subscription is not supported");
-}
-
-#[test]
-fn a_subscription_missing_its_handler_is_refused() {
-    let source = subscribing("", "every({ minutes: 1 })");
-
-    assert_eq!(first_error(&source), "`every` needs more arguments");
-}
-
-#[test]
-fn a_subscription_with_too_many_arguments_is_refused() {
-    let source = subscribing("", "steps(tick, {}, 3)");
-
-    assert_eq!(first_error(&source), "`steps` takes at most 2 arguments");
-}
-
-#[test]
-fn a_handler_that_is_not_a_function_is_refused() {
-    let source = subscribing("const nothing = undefined;", "steps(nothing)");
-
-    assert_eq!(
-        first_error(&source),
-        "give the subscription a handler, such as a function the app defines"
+    assert!(
+        message.starts_with("there is no event `wake`; choose from open, close"),
+        "{message}"
     );
 }
 
 #[test]
-fn a_subscription_without_detail_or_period_writes_only_its_kind_and_handler() {
-    let source = subscribing("", "notification(tick), settings_change(tick)");
+fn an_event_name_that_is_not_text_is_refused() {
+    let message = first_error(&listening("", "on(3, tick)"));
+
+    assert!(
+        message.starts_with("name the event with text written out"),
+        "{message}"
+    );
+}
+
+#[test]
+fn the_message_event_is_not_in_the_image_format_yet() {
+    let message = first_error(&listening("", r#"on("message", tick)"#));
+
+    assert!(
+        message.starts_with("the `message` event is not in the image format yet"),
+        "{message}"
+    );
+}
+
+#[test]
+fn an_event_without_detail_or_period_writes_only_its_kind_and_handler() {
+    let source = app_with("", r#"on("notification", tick); on("settings_change", tick);"#);
 
     let subscriptions = subscriptions_of(&source);
 
@@ -230,22 +151,169 @@ fn a_subscription_without_detail_or_period_writes_only_its_kind_and_handler() {
     ));
 }
 
-#[test]
-fn a_subscription_that_needs_a_permission_reports_the_missing_one() {
-    let source = r#"
-import { define_app, notification } from "neotime";
-import { Screen } from "neotime/widgets";
-function Main() { return <Screen></Screen>; }
-export default define_app({ id: "t", name: "T", screens: { main: Main }, permissions: ["background"],
-  subscriptions: [notification(() => {})] });
-"#;
+// ============================================================================
+// Lifecycle events
+// ============================================================================
 
-    let message = first_error(source);
+#[test]
+fn lifecycle_events_are_written_in_the_order_connected() {
+    let source = app_with(
+        "",
+        r#"on("close", tick); on("screen_on", tick); on("screen_off", () => { count.value = 0; }); on("open", tick);"#,
+    );
+
+    let kinds: Vec<SubscriptionKind> = subscriptions_of(&source)
+        .iter()
+        .map(|subscription| subscription.kind)
+        .collect();
+
+    assert_eq!(
+        kinds,
+        [
+            SubscriptionKind::Close,
+            SubscriptionKind::ScreenOn,
+            SubscriptionKind::ScreenOff,
+            SubscriptionKind::Open
+        ]
+    );
+}
+
+#[test]
+fn a_lifecycle_event_takes_no_while_open() {
+    let message = first_error(&listening("", r#"on("open", tick, { while_open: true })"#));
+
+    assert!(message.contains("only comes while the app is open"), "{message}");
+}
+
+#[test]
+fn a_lifecycle_event_needs_no_permission() {
+    let output = compile_source(&listening("", r#"on("open", tick)"#));
+
+    assert!(output.permissions.is_empty(), "{:?}", output.permissions);
+}
+
+// ============================================================================
+// The call
+// ============================================================================
+
+#[test]
+fn on_inside_a_handler_is_refused() {
+    let source = app_with(
+        "function start() { on(\"steps\", tick); }",
+        r#"on("open", start);"#,
+    );
+
+    let message = first_error(&source);
 
     assert!(
-        message.starts_with("the `notification` subscription needs the `notifications` permission"),
+        message.contains("connects events only at the top of the file"),
         "{message}"
     );
+}
+
+#[test]
+fn a_call_to_the_apps_own_function_at_the_top_is_refused() {
+    let message = first_error(&listening("function make() { return 1; }", "make()"));
+
+    assert!(
+        message.starts_with("only declarations and `on(...)` may sit at the top"),
+        "{message}"
+    );
+}
+
+#[test]
+fn a_statement_that_is_not_a_call_at_the_top_is_refused() {
+    let message = first_error(&listening("", "count.value + 1"));
+
+    assert!(
+        message.starts_with("only declarations and `on(...)` may sit at the top"),
+        "{message}"
+    );
+}
+
+#[test]
+fn on_after_define_app_is_refused() {
+    let source = format!("{}\non(\"steps\", tick);\n", listening("", r#"on("open", tick)"#));
+
+    assert_eq!(
+        first_error(&source),
+        "connect events with `on` before `export default define_app`"
+    );
+}
+
+#[test]
+fn spread_arguments_in_on_are_refused() {
+    let message = first_error(&listening("const extra = [tick];", r#"on("steps", ...extra)"#));
+
+    assert_eq!(message, "`...` in `on` is not supported");
+}
+
+#[test]
+fn on_without_a_handler_is_refused() {
+    let message = first_error(&listening("", r#"on("steps")"#));
+
+    assert!(message.starts_with("write `on(\"event\", handler)`"), "{message}");
+}
+
+#[test]
+fn on_with_too_many_arguments_is_refused() {
+    let message = first_error(&listening("", r#"on("steps", tick, {}, 3)"#));
+
+    assert_eq!(message, "`on` takes an event, a handler and its options");
+}
+
+#[test]
+fn a_handler_that_is_not_a_function_is_refused() {
+    let message = first_error(&listening(
+        "const nothing = undefined;",
+        r#"on("steps", nothing)"#,
+    ));
+
+    assert_eq!(
+        message,
+        "give the subscription a handler, such as a function the app defines"
+    );
+}
+
+#[test]
+fn an_effect_with_no_arguments_may_be_the_handler() {
+    let source = r#"
+import { define_app, on, back } from "neotime";
+import { Screen } from "neotime/widgets";
+function Main() { return <Screen></Screen>; }
+on("shake", back, { while_open: true });
+export default define_app({ id: "t", name: "T", screens: { main: Main } });
+"#;
+
+    assert_eq!(only_subscription(source).kind, SubscriptionKind::Motion);
+}
+
+// ============================================================================
+// define_app's old options
+// ============================================================================
+
+#[test]
+fn define_app_refuses_subscriptions_lifecycle_options_and_permissions() {
+    let cases = [
+        ("subscriptions: [],", "connect events with `on` above define_app"),
+        ("onOpen: tick,", "connect `onOpen` with `on` above define_app"),
+        ("onScreenOff: tick,", "connect `onScreenOff` with `on`"),
+        (r#"permissions: ["motion"],"#, "remove `permissions`"),
+    ];
+    for (option, advice) in cases {
+        let source = format!(
+            r#"
+import {{ define_app, signal }} from "neotime";
+import {{ Screen }} from "neotime/widgets";
+const count = signal(0);
+function tick() {{ count.value += 1; }}
+function Main() {{ return <Screen></Screen>; }}
+export default define_app({{ id: "t", name: "T", screens: {{ main: Main }}, {option} }});
+"#
+        );
+        let message = first_error(&source);
+        assert!(message.starts_with(advice), "{option}: {message}");
+    }
 }
 
 // ============================================================================
@@ -253,41 +321,82 @@ export default define_app({ id: "t", name: "T", screens: { main: Main }, permiss
 // ============================================================================
 
 #[test]
-fn only_while_open_is_written_into_the_subscription() {
-    let source = subscribing("", "steps(tick, { only_while_open: true })");
-
-    assert!(only_subscription(&source).only_while_open);
+fn while_open_is_written_into_the_subscription() {
+    assert!(only_subscription(&listening("", r#"on("steps", tick, { while_open: true })"#)).only_while_open);
 }
 
 #[test]
-fn only_while_open_false_keeps_running_in_the_background() {
-    let source = subscribing("", "steps(tick, { only_while_open: false })");
-
-    assert!(!only_subscription(&source).only_while_open);
-}
-
-#[test]
-fn options_that_are_not_an_object_are_refused() {
-    let source = subscribing("", "steps(tick, true)");
-
-    assert_eq!(
-        first_error(&source),
-        "write the options as `{ only_while_open: true }`"
+fn while_open_false_keeps_coming_in_the_background() {
+    assert!(
+        !only_subscription(&listening("", r#"on("steps", tick, { while_open: false })"#)).only_while_open
     );
 }
 
 #[test]
-fn only_while_open_that_is_not_a_boolean_is_refused() {
-    let source = subscribing("", "steps(tick, { only_while_open: 1 })");
+fn options_that_are_not_an_object_are_refused() {
+    let message = first_error(&listening("", r#"on("steps", tick, true)"#));
 
-    assert_eq!(first_error(&source), "`only_while_open` must be true or false");
+    assert!(
+        message.starts_with("write `on`'s options as an object"),
+        "{message}"
+    );
 }
 
 #[test]
-fn an_unknown_subscription_option_is_refused() {
-    let source = subscribing("", "steps(tick, { repeat: true })");
+fn options_with_a_spread_or_a_computed_name_are_refused() {
+    let spread = first_error(&listening(
+        "const more = {};",
+        r#"on("steps", tick, { ...more })"#,
+    ));
+    let computed_name = first_error(&listening(
+        r#"const field = "while_open";"#,
+        r#"on("steps", tick, { [field]: true })"#,
+    ));
 
-    assert_eq!(first_error(&source), "a subscription has no option `repeat`");
+    assert!(
+        spread.starts_with("write `on`'s options out one by one"),
+        "{spread}"
+    );
+    assert!(
+        computed_name.starts_with("write `on`'s options with plain names"),
+        "{computed_name}"
+    );
+}
+
+#[test]
+fn while_open_that_is_not_written_out_is_refused() {
+    let message = first_error(&listening(
+        "const yes = true;",
+        r#"on("steps", tick, { while_open: yes })"#,
+    ));
+
+    assert_eq!(message, "`while_open` must be written out as true or false");
+}
+
+#[test]
+fn an_unknown_option_is_refused() {
+    let message = first_error(&listening("", r#"on("steps", tick, { repeat: true })"#));
+
+    assert!(message.starts_with("`on` has no option `repeat`"), "{message}");
+}
+
+#[test]
+fn an_option_the_event_does_not_take_is_refused() {
+    let cases = [
+        (r#"on("steps", tick, { every: MINUTE })"#, "takes no `every`"),
+        (
+            r#"on("tick", tick, { every: MINUTE, at: 5000 })"#,
+            "takes no `at`",
+        ),
+        (
+            r#"on("time", tick, { at: 5000, days: EVERY_DAY })"#,
+            "takes no `days`",
+        ),
+    ];
+    for (call, advice) in cases {
+        let message = first_error(&listening("", call));
+        assert!(message.contains(advice), "{call}: {message}");
+    }
 }
 
 // ============================================================================
@@ -295,130 +404,166 @@ fn an_unknown_subscription_option_is_refused() {
 // ============================================================================
 
 #[test]
-fn a_period_adds_up_every_unit_in_milliseconds() {
-    let source = subscribing(
+fn every_takes_milliseconds_or_a_period_that_adds_up_every_unit() {
+    let in_milliseconds = only_subscription(&listening("", r#"on("tick", tick, { every: 2 * MINUTE })"#));
+    let as_period = only_subscription(&listening(
         "",
-        "every({ hours: 1, minutes: 2, seconds: 3, milliseconds: 4 }, tick)",
-    );
+        r#"on("tick", tick, { every: { hours: 1, minutes: 2, seconds: 3, milliseconds: 4 } })"#,
+    ));
 
-    let subscription = only_subscription(&source);
-
-    assert_eq!(subscription.value, SubscriptionValue::Constant(3_723_004));
+    assert_eq!(in_milliseconds.kind, SubscriptionKind::Every);
+    assert_eq!(in_milliseconds.value, SubscriptionValue::Constant(120_000));
+    assert_eq!(as_period.value, SubscriptionValue::Constant(3_723_004));
 }
 
 #[test]
-fn a_heart_rate_period_is_kept_like_every() {
-    let source = subscribing("", "heart_rate_reading({ minutes: 5 }, tick)");
-
-    let subscription = only_subscription(&source);
+fn a_heart_rate_period_is_kept_like_tick() {
+    let subscription = only_subscription(&listening("", r#"on("heart_rate", tick, { every: 5 * MINUTE })"#));
 
     assert_eq!(subscription.kind, SubscriptionKind::HeartRate);
     assert_eq!(subscription.value, SubscriptionValue::Constant(300_000));
 }
 
 #[test]
-fn a_period_not_known_when_compiling_is_refused() {
-    let source = subscribing("", "every(count.value, tick)");
+fn tick_without_every_is_refused() {
+    let message = first_error(&listening("", r#"on("tick", tick)"#));
 
-    assert!(first_error(&source).starts_with("a period must be known when compiling"));
+    assert!(message.starts_with("the `tick` event needs `every`"), "{message}");
+}
+
+#[test]
+fn a_period_not_known_when_compiling_is_refused() {
+    let message = first_error(&listening("", r#"on("tick", tick, { every: count.value })"#));
+
+    assert!(
+        message.starts_with("a length of time must be known when compiling"),
+        "{message}"
+    );
+}
+
+#[test]
+fn a_period_of_nothing_is_refused() {
+    let message = first_error(&listening("", r#"on("tick", tick, { every: 0 })"#));
+
+    assert!(
+        message.starts_with("a length of time must be known when compiling and above zero"),
+        "{message}"
+    );
 }
 
 #[test]
 fn a_period_in_an_unknown_unit_is_refused() {
-    let source = subscribing("", "every({ days: 1 }, tick)");
+    let message = first_error(&listening("", r#"on("tick", tick, { every: { days: 1 } })"#));
 
     assert_eq!(
-        first_error(&source),
+        message,
         "a period has no `days`; use milliseconds, seconds, minutes or hours"
     );
 }
 
 #[test]
 fn a_period_that_is_not_a_number_is_refused() {
-    let source = subscribing("", r#"every({ minutes: "five" }, tick)"#);
+    let message = first_error(&listening(
+        "",
+        r#"on("tick", tick, { every: { minutes: "five" } })"#,
+    ));
 
-    assert_eq!(first_error(&source), "`minutes` must be a whole number");
+    assert_eq!(message, "`minutes` must be a whole number");
 }
 
 #[test]
 fn a_period_that_overflows_is_refused() {
-    let source = subscribing("", "every({ hours: 9000000000000000 }, tick)");
+    let message = first_error(&listening(
+        "",
+        r#"on("tick", tick, { every: { hours: 9000000000000000 } })"#,
+    ));
 
-    assert_eq!(first_error(&source), "this period is too long");
+    assert_eq!(message, "this period is too long");
 }
 
 #[test]
 fn a_period_shorter_than_the_runtime_allows_is_refused() {
-    let source = subscribing("", "every({ milliseconds: 5 }, tick, { only_while_open: true })");
+    let message = first_error(&listening(
+        "",
+        r#"on("tick", tick, { every: 5, while_open: true })"#,
+    ));
 
     assert_eq!(
-        first_error(&source),
-        "`every` runs at most every 20 milliseconds, and this period is 5"
+        message,
+        "`tick` runs at most every 20 milliseconds, and this period is 5"
     );
 }
 
 #[test]
-fn acceleration_must_run_only_while_the_app_is_open() {
-    let source = subscribing("", "acceleration({ milliseconds: 100 }, tick)");
+fn a_period_under_a_minute_must_come_only_while_open() {
+    let message = first_error(&listening("", r#"on("tick", tick, { every: SECOND })"#));
 
-    assert!(first_error(&source).starts_with("`acceleration` runs only while the app is open"));
+    assert!(
+        message.contains("add `while_open: true` to the `tick` event"),
+        "{message}"
+    );
+}
+
+#[test]
+fn acceleration_must_come_only_while_the_app_is_open() {
+    let message = first_error(&listening("", r#"on("acceleration", tick, { every: 100 })"#));
+
+    assert!(
+        message.starts_with("`acceleration` comes only while the app is open"),
+        "{message}"
+    );
 }
 
 #[test]
 fn acceleration_may_use_a_period_under_a_minute_while_open() {
-    let source = subscribing(
+    let subscription = only_subscription(&listening(
         "",
-        "acceleration({ milliseconds: 100 }, tick, { only_while_open: true })",
-    );
-
-    let subscription = only_subscription(&source);
+        r#"on("acceleration", tick, { every: 100, while_open: true })"#,
+    ));
 
     assert_eq!(subscription.kind, SubscriptionKind::Acceleration);
     assert_eq!(subscription.value, SubscriptionValue::Constant(100));
 }
 
 // ============================================================================
-// At
+// Time
 // ============================================================================
 
 #[test]
-fn at_a_constant_instant_keeps_the_instant() {
-    let source = subscribing("", "at(5000, tick)");
+fn time_at_a_constant_instant_keeps_the_instant() {
+    let subscription = only_subscription(&listening("", r#"on("time", tick, { at: 5000 })"#));
 
-    assert_eq!(
-        only_subscription(&source).value,
-        SubscriptionValue::Constant(5000)
-    );
+    assert_eq!(subscription.kind, SubscriptionKind::At);
+    assert_eq!(subscription.value, SubscriptionValue::Constant(5000));
 }
 
 #[test]
-fn at_null_is_switched_off() {
-    let source = subscribing("", "at(null, tick)");
+fn time_at_null_is_switched_off() {
+    let subscription = only_subscription(&listening("", r#"on("time", tick, { at: null })"#));
 
-    assert_eq!(
-        only_subscription(&source).value,
-        SubscriptionValue::Constant(NONE)
-    );
+    assert_eq!(subscription.value, SubscriptionValue::Constant(NONE));
 }
 
 #[test]
-fn at_text_is_refused() {
-    let source = subscribing("", r#"at("noon", tick)"#);
+fn time_without_at_is_refused() {
+    let message = first_error(&listening("", r#"on("time", tick)"#));
 
-    assert_eq!(
-        first_error(&source),
-        "`at` needs an Instant, such as a signal holding one"
-    );
+    assert!(message.starts_with("the `time` event needs `at`"), "{message}");
 }
 
 #[test]
-fn at_a_signal_holding_an_instant_reads_that_signal() {
-    let source = subscribing(
+fn time_at_text_is_refused() {
+    let message = first_error(&listening("", r#"on("time", tick, { at: "noon" })"#));
+
+    assert_eq!(message, "`at` needs an Instant, such as a signal holding one");
+}
+
+#[test]
+fn time_at_a_signal_holding_an_instant_reads_that_signal() {
+    let subscription = only_subscription(&listening(
         "const ring_at = signal<Instant | null>(null);",
-        "at(ring_at, tick)",
-    );
-
-    let subscription = only_subscription(&source);
+        r#"on("time", tick, { at: ring_at })"#,
+    ));
 
     assert!(
         matches!(subscription.value, SubscriptionValue::Variable(_)),
@@ -427,18 +572,16 @@ fn at_a_signal_holding_an_instant_reads_that_signal() {
 }
 
 #[test]
-fn at_a_computed_time_is_kept_in_a_hidden_variable() {
-    let source = subscribing(
+fn time_at_a_computed_time_is_kept_in_a_hidden_variable() {
+    let subscriptions = subscriptions_of(&listening(
         "const start = signal<Instant>(0); const ring_at = computed(() => start.value + 60000);",
-        "at(ring_at, tick)",
-    );
-
-    let subscriptions = subscriptions_of(&source);
+        r#"on("time", tick, { at: ring_at })"#,
+    ));
 
     let at = subscriptions
         .iter()
         .find(|subscription| subscription.kind == SubscriptionKind::At)
-        .expect("an at subscription");
+        .expect("a time subscription");
     assert!(matches!(at.value, SubscriptionValue::Variable(_)), "{at:?}");
 }
 
@@ -448,9 +591,10 @@ fn at_a_computed_time_is_kept_in_a_hidden_variable() {
 
 #[test]
 fn daily_at_a_constant_time_keeps_the_minute_of_the_day_and_every_day() {
-    let source = subscribing("", "daily({ hour: 7, minute: 30 }, tick)");
-
-    let subscription = only_subscription(&source);
+    let subscription = only_subscription(&listening(
+        "",
+        r#"on("daily", tick, { at: { hour: 7, minute: 30 } })"#,
+    ));
 
     assert_eq!(subscription.value, SubscriptionValue::Constant(450));
     assert_eq!(subscription.days, 0b111_1111);
@@ -458,93 +602,90 @@ fn daily_at_a_constant_time_keeps_the_minute_of_the_day_and_every_day() {
 
 #[test]
 fn daily_keeps_the_days_given() {
-    let source = subscribing("", "daily({ hour: 0, minute: 0 }, tick, 0b0011111)");
+    let subscription = only_subscription(&listening(
+        "",
+        r#"on("daily", tick, { at: { hour: 0, minute: 0 }, days: 0b0011111 })"#,
+    ));
 
-    assert_eq!(only_subscription(&source).days, 0b001_1111);
+    assert_eq!(subscription.days, 0b001_1111);
 }
 
 #[test]
 fn daily_with_every_day_named_keeps_all_seven() {
-    let source = subscribing("", "daily({ hour: 23, minute: 59 }, tick, EVERY_DAY)");
-
-    let subscription = only_subscription(&source);
+    let subscription = only_subscription(&listening(
+        "",
+        r#"on("daily", tick, { at: { hour: 23, minute: 59 }, days: EVERY_DAY, while_open: true })"#,
+    ));
 
     assert_eq!(subscription.days, 0b111_1111);
     assert_eq!(subscription.value, SubscriptionValue::Constant(1439));
-}
-
-#[test]
-fn daily_with_undefined_days_rings_every_day() {
-    let source = subscribing(
-        "",
-        "daily({ hour: 6, minute: 0 }, tick, undefined, { only_while_open: true })",
-    );
-
-    let subscription = only_subscription(&source);
-
-    assert_eq!(subscription.days, 0b111_1111);
     assert!(subscription.only_while_open);
 }
 
 #[test]
-fn daily_with_no_days_is_refused() {
-    let source = subscribing("", "daily({ hour: 6, minute: 0 }, tick, 0)");
+fn daily_without_at_is_refused() {
+    let message = first_error(&listening("", r#"on("daily", tick)"#));
 
-    assert!(first_error(&source).starts_with("the days are a mask from 1 to 127"));
+    assert!(message.starts_with("the `daily` event needs `at`"), "{message}");
+}
+
+#[test]
+fn daily_with_no_days_is_refused() {
+    let message = first_error(&listening(
+        "",
+        r#"on("daily", tick, { at: { hour: 6, minute: 0 }, days: 0 })"#,
+    ));
+
+    assert!(
+        message.starts_with("the days are a mask from 1 to 127"),
+        "{message}"
+    );
 }
 
 #[test]
 fn daily_with_days_from_a_signal_is_refused() {
-    let source = subscribing("", "daily({ hour: 6, minute: 0 }, tick, count.value)");
+    let message = first_error(&listening(
+        "",
+        r#"on("daily", tick, { at: { hour: 6, minute: 0 }, days: count.value })"#,
+    ));
 
-    assert!(first_error(&source).starts_with("the days must be known when compiling"));
+    assert!(
+        message.starts_with("the days must be known when compiling"),
+        "{message}"
+    );
 }
 
 #[test]
 fn daily_at_null_is_switched_off() {
-    let source = subscribing("", "daily(null, tick)");
+    let subscription = only_subscription(&listening("", r#"on("daily", tick, { at: null })"#));
 
-    assert_eq!(
-        only_subscription(&source).value,
-        SubscriptionValue::Constant(NONE)
-    );
+    assert_eq!(subscription.value, SubscriptionValue::Constant(NONE));
 }
 
 #[test]
 fn daily_at_a_time_without_a_minute_is_refused() {
-    let source = subscribing("", "daily({ hour: 7 }, tick)");
+    let message = first_error(&listening("", r#"on("daily", tick, { at: { hour: 7 } })"#));
 
-    assert!(first_error(&source).starts_with("a time of day is `{ hour, minute }`"));
-}
-
-#[test]
-fn daily_at_an_hour_past_the_day_is_refused() {
-    let source = subscribing("", "daily({ hour: 24, minute: 0 }, tick)");
-
-    assert_eq!(
-        first_error(&source),
-        "the hour must be 0 to 23 and the minute 0 to 59"
+    assert!(
+        message.starts_with("a time of day is `{ hour, minute }`"),
+        "{message}"
     );
 }
 
 #[test]
-fn daily_at_a_minute_past_the_hour_is_refused() {
-    let source = subscribing("", "daily({ hour: 1, minute: 60 }, tick)");
-
-    assert_eq!(
-        first_error(&source),
-        "the hour must be 0 to 23 and the minute 0 to 59"
-    );
+fn daily_at_an_hour_or_minute_out_of_range_is_refused() {
+    for time in ["{ hour: 24, minute: 0 }", "{ hour: 1, minute: 60 }"] {
+        let message = first_error(&listening("", &format!(r#"on("daily", tick, {{ at: {time} }})"#)));
+        assert_eq!(message, "the hour must be 0 to 23 and the minute 0 to 59");
+    }
 }
 
 #[test]
 fn daily_at_a_signal_holding_a_time_of_day_is_kept_in_a_variable() {
-    let source = subscribing(
+    let subscriptions = subscriptions_of(&listening(
         "const wake = signal<TimeOfDay>({ hour: 8, minute: 0 });",
-        "daily(wake, tick)",
-    );
-
-    let subscriptions = subscriptions_of(&source);
+        r#"on("daily", tick, { at: wake })"#,
+    ));
 
     let daily = subscriptions
         .iter()
@@ -555,9 +696,10 @@ fn daily_at_a_signal_holding_a_time_of_day_is_kept_in_a_variable() {
 
 #[test]
 fn daily_at_a_signal_holding_the_minute_of_the_day_reads_that_signal() {
-    let source = subscribing("const minute_of_day = signal(480);", "daily(minute_of_day, tick)");
-
-    let subscription = only_subscription(&source);
+    let subscription = only_subscription(&listening(
+        "const minute_of_day = signal(480);",
+        r#"on("daily", tick, { at: minute_of_day })"#,
+    ));
 
     assert!(
         matches!(subscription.value, SubscriptionValue::Variable(_)),
@@ -567,54 +709,140 @@ fn daily_at_a_signal_holding_the_minute_of_the_day_reads_that_signal() {
 
 #[test]
 fn daily_at_text_held_in_a_signal_is_refused() {
-    let source = subscribing(r#"const label = signal("seven");"#, "daily(label, tick)");
+    let message = first_error(&listening(
+        r#"const label = signal("seven");"#,
+        r#"on("daily", tick, { at: label })"#,
+    ));
 
-    assert!(first_error(&source).starts_with("`daily` needs a time of day known when compiling"));
+    assert!(
+        message.starts_with("`daily` needs a time of day known when compiling"),
+        "{message}"
+    );
 }
 
 // ============================================================================
-// Details
+// At most every
+// ============================================================================
+
+struct Clock {
+    now: Value,
+}
+
+impl SystemValues for Clock {
+    fn read(&self, value: SystemValue) -> Value {
+        match value {
+            SystemValue::Now => self.now,
+            _ => 0,
+        }
+    }
+
+    fn read_text(&self, _value: SystemValue) -> &str {
+        ""
+    }
+
+    fn random_number(&self) -> u32 {
+        0
+    }
+}
+
+#[test]
+fn at_most_every_skips_the_handler_until_the_pause_has_passed() {
+    let output = compile_source(&listening(
+        "",
+        r#"on("shake", tick, { while_open: true, at_most_every: SECOND })"#,
+    ));
+    let bytes = output.image.expect("an image");
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut state = AppState::new(&image).unwrap();
+    let handler = image.subscription(0).unwrap().handler;
+    let count_slot = (0..image.state_count())
+        .find(|slot| image.string(image.state_variable(*slot).unwrap().key_string) == Some("count"))
+        .unwrap();
+
+    let mut shakes_at = |milliseconds: Value| {
+        let clock = Clock {
+            now: 1_000_000 + milliseconds,
+        };
+        Interpreter::new()
+            .run_handler(&image, handler, &mut state, &[0; 8], &clock)
+            .unwrap();
+    };
+    shakes_at(0);
+    shakes_at(400);
+    shakes_at(999);
+    shakes_at(1000);
+    shakes_at(1500);
+    shakes_at(2100);
+
+    assert_eq!(state.get(count_slot as u8), Some(3));
+}
+
+#[test]
+fn at_most_every_keeps_its_last_run_in_a_hidden_variable() {
+    let output = compile_source(&listening("", r#"on("shake", tick, { at_most_every: SECOND })"#));
+    let image = AppImage::parse(output.image.as_ref().expect("an image")).unwrap();
+
+    let keys: Vec<&str> = (0..image.state_count())
+        .map(|slot| {
+            image
+                .string(image.state_variable(slot).unwrap().key_string)
+                .unwrap()
+        })
+        .collect();
+
+    assert!(keys.iter().any(|key| key.starts_with("~last_run")), "{keys:?}");
+}
+
+#[test]
+fn at_most_every_needs_a_function_the_app_defines() {
+    let source = r#"
+import { define_app, on, back, SECOND } from "neotime";
+import { Screen } from "neotime/widgets";
+function Main() { return <Screen></Screen>; }
+on("shake", back, { while_open: true, at_most_every: SECOND });
+export default define_app({ id: "t", name: "T", screens: { main: Main } });
+"#;
+
+    assert_eq!(
+        first_error(source),
+        "`at_most_every` needs a function the app defines as the handler"
+    );
+}
+
+#[test]
+fn at_most_every_takes_a_period_too() {
+    let source = listening("", r#"on("shake", tick, { at_most_every: { seconds: 2 } })"#);
+
+    assert_eq!(only_subscription(&source).kind, SubscriptionKind::Motion);
+}
+
+// ============================================================================
+// Permissions
 // ============================================================================
 
 #[test]
-fn each_detail_name_becomes_its_position() {
-    let source = subscribing(
+fn the_permissions_an_app_needs_are_worked_out_from_its_events() {
+    let source = app_with(
         "",
-        r#"clock_change("day", tick), battery("completes", tick), phone("disconnects", tick), motion("moving", tick)"#,
+        r#"on("shake", tick, { while_open: true }); on("heart_rate", tick, { every: 5 * MINUTE }); on("notification", tick);"#,
     );
 
-    let details: Vec<(SubscriptionKind, u8)> = subscriptions_of(&source)
-        .iter()
-        .map(|subscription| (subscription.kind, subscription.detail))
-        .collect();
+    let output = compile_source(&source);
 
     assert_eq!(
-        details,
+        output.permissions,
         [
-            (SubscriptionKind::ClockChange, 2),
-            (SubscriptionKind::Battery, 3),
-            (SubscriptionKind::Phone, 1),
-            (SubscriptionKind::Motion, 5),
+            Permission::HeartRate,
+            Permission::Motion,
+            Permission::Notifications,
+            Permission::Background
         ]
     );
 }
 
 #[test]
-fn an_unknown_detail_name_lists_the_choices() {
-    let source = subscribing("", r#"battery("empty", tick)"#);
+fn an_event_only_while_open_needs_no_background_permission() {
+    let output = compile_source(&listening("", r#"on("steps", tick, { while_open: true })"#));
 
-    assert_eq!(
-        first_error(&source),
-        "`battery` takes one of: low, starts, stops, completes"
-    );
-}
-
-#[test]
-fn a_detail_that_is_not_text_lists_the_choices() {
-    let source = subscribing("", "phone(1, tick)");
-
-    assert_eq!(
-        first_error(&source),
-        "`phone` takes one of: connects, disconnects"
-    );
+    assert!(output.permissions.is_empty(), "{:?}", output.permissions);
 }

@@ -1,9 +1,9 @@
 // Word clock watch face, ported from wasp-os's word_clock.
 // The time is written out in words, such as "Just gone / quarter past / three / in the afternoon", over the date.
 
-import { computed } from "@preact/signals";
 import {
   battery_percent,
+  computed,
   define_app,
   format_time,
   hour_of,

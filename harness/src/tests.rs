@@ -12,8 +12,7 @@ use super::*;
 /// Counts seconds and taps, shows the step count, and fails on purpose when asked.
 const COUNTER_APP: &str = r#"
 // A test app: it counts seconds and taps, and its Fail button divides by zero.
-import { signal } from "@preact/signals";
-import { define_app, every, show_toast, steps_today, vibrate } from "neotime";
+import { define_app, on, show_toast, signal, steps_today, vibrate, SECOND } from "neotime";
 import { Button, Label, Screen } from "neotime/widgets";
 
 const seconds = signal(0);
@@ -47,11 +46,12 @@ function Counter() {
   );
 }
 
+on("tick", count_second, { every: SECOND, while_open: true });
+
 export default define_app({
   id: "counter",
   name: "Counter",
   screens: { main: Counter },
-  subscriptions: [every({ seconds: 1 }, count_second, { only_while_open: true })],
 });
 "#;
 
@@ -185,8 +185,7 @@ fn setting_a_system_value_redraws_what_shows_it() {
 /// Counts the phone connecting and going away through `phone` subscriptions.
 const PHONE_LISTENER_APP: &str = r#"
 // A test app: it counts how often the phone connects and goes away.
-import { signal } from "@preact/signals";
-import { define_app, phone } from "neotime";
+import { define_app, on, signal } from "neotime";
 import { Label, Screen } from "neotime/widgets";
 
 const connects = signal(0);
@@ -209,14 +208,13 @@ function Listener() {
   );
 }
 
+on("phone_connects", count_connect, { while_open: true });
+on("phone_disconnects", count_disconnect, { while_open: true });
+
 export default define_app({
   id: "listener",
   name: "Listener",
   screens: { main: Listener },
-  subscriptions: [
-    phone("connects", count_connect, { only_while_open: true }),
-    phone("disconnects", count_disconnect, { only_while_open: true }),
-  ],
 });
 "#;
 

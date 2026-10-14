@@ -683,8 +683,7 @@ export default define_app({ id: "rows", name: "Rows", screens: { main: Rows } })
 #[test]
 fn a_cell_grid_draws_its_numbers_as_one_widget() {
     let source = r##"
-import { signal } from "@preact/signals";
-import { define_app } from "neotime";
+import { define_app, signal } from "neotime";
 import { CellGrid, Screen } from "neotime/widgets";
 
 const board = signal([0, 1, 2, 3]);
@@ -731,8 +730,7 @@ fn text_lines_showing(text: &str) -> TestWatch {
         .collect();
     let source = format!(
         r##"
-import {{ signal }} from "@preact/signals";
-import {{ define_app }} from "neotime";
+import {{ define_app, signal }} from "neotime";
 import {{ Screen, TextLines }} from "neotime/widgets";
 
 const codes = signal([{codes}, 32, 32]);

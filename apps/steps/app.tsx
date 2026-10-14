@@ -4,14 +4,15 @@
 // a day, for wasp-os's graph of a day by hour. The system keeps the history, so nothing here runs in
 // the background.
 
-import { computed, signal } from "@preact/signals";
 import {
+  computed,
   define_app,
   format_time,
   now,
   range,
   reset_step_trip,
   settings,
+  signal,
   step_history,
   steps_today,
   DAY,

@@ -2,24 +2,25 @@
 // From wasp-os: up to twelve alarms, each repeating on chosen weekdays, and a ten minute snooze.
 // From InfiniTime: the 12 hour clock, a repeat button that cycles common patterns, the time until the
 // next alarm, the side button stopping the ring as it leaves the ringing screen, and a ring that stops itself after a minute.
-// One `at` subscription follows whichever alarm is due first, so nothing ticks while waiting.
+// One `time` event follows whichever alarm is due first, so nothing ticks while waiting.
 
-import { computed, signal } from "@preact/signals";
 import {
-  at,
+  back,
   close,
+  computed,
   define_app,
   format_duration,
   format_time,
   go,
+  next_time_of_day,
   now,
+  on,
   persisted,
   range,
+  signal,
   stop_vibrating,
   vibrate_pattern,
   wake_screen,
-  back,
-  next_time_of_day,
   EVERY_DAY,
   MINUTE,
   type Instant,
@@ -110,7 +111,7 @@ const ring_ends_at = computed(() => (rang_at.value !== null ? rang_at.value + RI
 // Handlers
 // ============================================================================
 
-/** Points the subscription at whichever enabled alarm or snooze is due first. */
+/** Points the `time` event at whichever enabled alarm or snooze is due first. */
 function schedule() {
   let soonest: Instant | null = snoozed_until.value;
   let soonest_place = snoozed_until.value !== null ? snoozed_place.value : -1;
@@ -356,12 +357,13 @@ function Ringing() {
   );
 }
 
+on("time", ring, { at: next_ring_at });
+on("time", ring_timed_out, { at: ring_ends_at });
+
 export default define_app({
   id: "alarm",
   name: "Alarm",
   group: "time",
   icon: icons.alarm,
   screens: { main: AlarmList, edit_time: EditTime, edit_days: EditDays, ring: Ringing },
-  subscriptions: [at(next_ring_at, ring), at(ring_ends_at, ring_timed_out)],
-  permissions: ["wake", "background"],
 });

@@ -1,9 +1,9 @@
 // Terminal watch face, ported from InfiniTime's WatchFaceTerminal.
 // Each line is a white tag such as [TIME] followed by a coloured value, under a shell prompt.
 
-import { computed } from "@preact/signals";
 import {
   battery_percent,
+  computed,
   current_weather,
   define_app,
   format_temperature,

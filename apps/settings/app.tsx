@@ -7,11 +7,10 @@
 // The theme is one of the watch's presets; the companion app can also set colours of the user's own.
 // Every change goes to the watch's settings with `set_setting`, so the companion app sees it too.
 
-import { computed } from "@preact/signals";
 import {
   brightness,
+  computed,
   define_app,
-  type Color,
   go,
   is_bluetooth_enabled,
   is_do_not_disturb,
@@ -20,6 +19,7 @@ import {
   set_do_not_disturb,
   set_setting,
   settings,
+  type Color,
 } from "neotime";
 import { icons } from "neotime/icons";
 import { Button, Column, Grid, Icon, Label, Row, Screen, Scroll, Stepper, Switch } from "neotime/widgets";
@@ -295,5 +295,4 @@ export default define_app({
     wake: Wake,
     theme: Theme,
   },
-  permissions: ["settings"],
 });

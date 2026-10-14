@@ -298,7 +298,7 @@ import { Label, Screen } from "neotime/widgets";
 function Main() {
   return <Screen onClick={() => notify("Done", "Your timer ended")}><Label>{`${unread_notifications.value} unread`}</Label></Screen>;
 }
-export default define_app({ id: "notifier", name: "Notifier", permissions: ["notifications"], screens: { main: Main } });
+export default define_app({ id: "notifier", name: "Notifier", screens: { main: Main } });
 "#;
 
 #[test]

@@ -1,8 +1,7 @@
 // Accelerometer check, ported from InfiniTime's Motion.
 // It charts the last ten readings of each axis, shows the latest in thousandths of g, and the step count.
 
-import { signal } from "@preact/signals";
-import { acceleration, define_app, push_shift, steps_today, type AccelerationEvent } from "neotime";
+import { define_app, on, push_shift, signal, steps_today, type AccelerationEvent } from "neotime";
 import { icons } from "neotime/icons";
 import { Chart, Label, Row, Screen } from "neotime/widgets";
 
@@ -65,12 +64,12 @@ function Motion() {
   );
 }
 
+on("acceleration", record, { every: { milliseconds: 100 }, while_open: true });
+
 export default define_app({
   id: "motion",
   name: "Motion",
   group: "system",
   icon: icons.level,
   screens: { main: Motion },
-  subscriptions: [acceleration({ milliseconds: 100 }, record, { only_while_open: true })],
-  permissions: ["motion"],
 });

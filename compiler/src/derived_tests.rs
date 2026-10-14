@@ -25,12 +25,11 @@ impl SystemValues for FakeSystem {
     }
 }
 
-/// An app with the given declarations and main screen, granted the `background` permission.
-fn app_with(declarations: &str, screen_body: &str, options: &str) -> String {
+/// An app with the given declarations, main screen and `on(...)` calls.
+fn app_with(declarations: &str, screen_body: &str, listeners: &str) -> String {
     format!(
         r#"
-import {{ computed, signal }} from "@preact/signals";
-import {{ define_app, at, daily, now, type Instant, type TimeOfDay }} from "neotime";
+import {{ computed, define_app, now, on, signal, type Instant, type TimeOfDay }} from "neotime";
 import {{ Chart, Line, Roller, Screen }} from "neotime/widgets";
 
 {declarations}
@@ -39,10 +38,9 @@ function Main() {{
   return <Screen>{screen_body}</Screen>;
 }}
 
-export default define_app({{
-  id: "test", name: "Test", screens: {{ main: Main }}, permissions: ["background"],
-  {options}
-}});
+{listeners}
+
+export default define_app({{ id: "test", name: "Test", screens: {{ main: Main }} }});
 "#
     )
 }
@@ -367,7 +365,7 @@ fn at_a_number_signal_copies_it_into_a_hidden_instant() {
     let bytes = compile(&app_with(
         "const count = signal(0);",
         "",
-        "subscriptions: [at(count, tick)],",
+        "on(\"time\", tick, { at: count });",
     ));
     let image = AppImage::parse(&bytes).unwrap();
     let mut state = AppState::new(&image).unwrap();
@@ -385,7 +383,7 @@ fn at_a_computed_time_keeps_what_the_computed_gives() {
     let bytes = compile(&app_with(
         "const start = signal<Instant>(0); const ring_at = computed(() => start.value + 60000);",
         "",
-        "subscriptions: [at(ring_at, tick)],",
+        "on(\"time\", tick, { at: ring_at });",
     ));
     let image = AppImage::parse(&bytes).unwrap();
     let mut state = AppState::new(&image).unwrap();
@@ -402,7 +400,7 @@ fn at_an_inline_expression_keeps_its_value() {
     let bytes = compile(&app_with(
         "const start = signal<Instant>(0);",
         "",
-        "subscriptions: [at(start.value + 500, tick)],",
+        "on(\"time\", tick, { at: start.value + 500 });",
     ));
     let image = AppImage::parse(&bytes).unwrap();
     let mut state = AppState::new(&image).unwrap();
@@ -419,7 +417,7 @@ fn daily_at_a_time_of_day_signal_keeps_its_minute_of_the_day() {
     let bytes = compile(&app_with(
         "const wake = signal<TimeOfDay>({ hour: 8, minute: 0 });",
         "",
-        "subscriptions: [daily(wake, tick)],",
+        "on(\"daily\", tick, { at: wake });",
     ));
     let image = AppImage::parse(&bytes).unwrap();
     let mut state = AppState::new(&image).unwrap();
@@ -435,7 +433,7 @@ fn at_a_computed_that_gives_text_is_refused() {
     let source = app_with(
         r#"const count = signal(0); const label = computed(() => count.value > 0 ? "soon" : "later");"#,
         "",
-        "subscriptions: [at(label, tick)],",
+        "on(\"time\", tick, { at: label });",
     );
 
     let message = first_error(&source);
@@ -445,7 +443,7 @@ fn at_a_computed_that_gives_text_is_refused() {
 
 #[test]
 fn at_the_clock_itself_cannot_be_kept_in_a_variable() {
-    let source = app_with("", "", "subscriptions: [at(now, tick)],");
+    let source = app_with("", "", "on(\"time\", tick, { at: now });");
 
     assert_eq!(first_error(&source), "this cannot be kept in a state variable");
 }

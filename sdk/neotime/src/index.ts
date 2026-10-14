@@ -7,7 +7,7 @@ import type { ComponentType } from "preact";
 import { emit, now_milliseconds, read_stored, storage, write_stored } from "./host.ts";
 import type { LibraryIcon } from "./icons.ts";
 
-export type { ReadonlySignal, Signal } from "@preact/signals";
+export { computed, signal, useSignal, type ReadonlySignal, type Signal } from "@preact/signals";
 
 // ============================================================================
 // Types
@@ -475,11 +475,7 @@ export function period_in_milliseconds(period: Period): Duration {
 
 type Handler<Event> = (event: Event) => void;
 
-export interface SubscriptionOptions {
-  /** Runs only while the app is open, which needs no `background` permission. */
-  only_while_open?: boolean;
-}
-
+/** What the preview runs for an event connected with `on`. */
 export type Subscription = { only_while_open: boolean } & (
   | { kind: "every"; period: Period; handler: Handler<TimeEvent> }
   | { kind: "at"; when: ReadonlySignal<Instant | null>; handler: Handler<TimeEvent> }
@@ -507,98 +503,193 @@ export type Subscription = { only_while_open: boolean } & (
   | { kind: "settings_change"; handler: Handler<SettingsEvent> }
 );
 
-/** Repeatedly; periods shorter than a minute run only while the app is open. */
-export function every(period: Period, handler: Handler<TimeEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "every", period, handler, only_while_open: options.only_while_open ?? false };
+// ============================================================================
+// Events
+// ============================================================================
+
+/** Every event `on` can connect to, with what its handler receives. */
+export interface EventMap {
+  open: undefined;
+  close: undefined;
+  screen_on: undefined;
+  screen_off: undefined;
+  tick: TimeEvent;
+  time: TimeEvent;
+  daily: TimeEvent;
+  minute: TimeEvent;
+  hour: TimeEvent;
+  day: TimeEvent;
+  heart_rate: HeartRateEvent;
+  steps: StepsEvent;
+  step_goal: StepsEvent;
+  wrist_raise: MotionEvent;
+  shake: MotionEvent;
+  wrist_tap: MotionEvent;
+  wrist_double_tap: MotionEvent;
+  still: MotionEvent;
+  moving: MotionEvent;
+  acceleration: AccelerationEvent;
+  battery_low: BatteryEvent;
+  charging_starts: BatteryEvent;
+  charging_stops: BatteryEvent;
+  charging_completes: BatteryEvent;
+  phone_connects: PhoneEvent;
+  phone_disconnects: PhoneEvent;
+  notification: NotificationEvent;
+  call: CallEvent;
+  music: MusicEvent;
+  weather: WeatherEvent;
+  navigation: NavigationEvent;
+  settings_change: SettingsEvent;
 }
 
-/** Once, at an absolute time; changing the signal reschedules it, and null cancels it. */
-export function at(when: ReadonlySignal<Instant | null>, handler: Handler<TimeEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "at", when, handler, only_while_open: options.only_while_open ?? false };
+export type EventName = keyof EventMap;
+
+export interface ListenerOptions {
+  /** Comes only while the app is open, which needs no `background` permission. */
+  while_open?: boolean;
+  /** How often `tick`, `heart_rate` and `acceleration` come, such as `MINUTE` or `{ seconds: 1 }`. */
+  every?: Duration | Period;
+  /** When `time` comes, an Instant or a signal holding one, or the time of day `daily` comes. */
+  at?: Instant | ReadonlySignal<Instant | null> | TimeOfDay | ReadonlySignal<TimeOfDay | null>;
+  /** The weekdays `daily` comes on, a 7-bit mask with Monday first; every day when left out. */
+  days?: number;
+  /** Skips the handler until this long has passed since it last ran, such as `SECOND`. */
+  at_most_every?: Duration | Period;
 }
 
-/** At a local time on the weekdays in `days` (Monday first, every day when left out); null turns it off. */
-export function daily(
-  time_of_day: TimeOfDay | ReadonlySignal<TimeOfDay | null>,
-  handler: Handler<TimeEvent>,
-  days: number | ReadonlySignal<number> = EVERY_DAY,
-  options: SubscriptionOptions = {},
-): Subscription {
-  return { kind: "daily", time_of_day, handler, days, only_while_open: options.only_while_open ?? false };
+/** A lifecycle event's handler, kept until `define_app` collects it. */
+interface LifecycleListener {
+  event: "open" | "close" | "screen_on" | "screen_off";
+  handler: () => void;
 }
 
-/** Raw accelerometer readings, only while the app is open and at most 10 a second. */
-export function acceleration(period: Period, handler: Handler<AccelerationEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "acceleration", period, handler, only_while_open: options.only_while_open ?? false };
+let waiting_subscriptions: Subscription[] = [];
+let waiting_lifecycle: LifecycleListener[] = [];
+
+const MOTION_EVENTS: Partial<Record<EventName, MotionKind>> = {
+  wrist_raise: "wrist_raise",
+  shake: "shake",
+  wrist_tap: "tap",
+  wrist_double_tap: "double_tap",
+  still: "still",
+  moving: "moving",
+};
+
+const BATTERY_EVENTS: Partial<Record<EventName, BatteryKind>> = {
+  battery_low: "low",
+  charging_starts: "starts",
+  charging_stops: "stops",
+  charging_completes: "completes",
+};
+
+function as_period(duration: Duration | Period | undefined): Period {
+  return typeof duration === "number" ? { milliseconds: duration } : duration ?? {};
 }
 
-/** When the local minute, hour or day changes, and when the phone sets the clock. */
-export function clock_change(unit: "minute" | "hour" | "day", handler: Handler<TimeEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "clock_change", unit, handler, only_while_open: options.only_while_open ?? false };
+function as_signal<Value>(value: Value | ReadonlySignal<Value>): ReadonlySignal<Value> {
+  return typeof value === "object" && value !== null && "peek" in value ? (value as ReadonlySignal<Value>) : signal(value as Value);
 }
 
-/** A heart rate measurement every period, shared with any other app asking. */
-export function heart_rate_reading(period: Period, handler: Handler<HeartRateEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "heart_rate_reading", period, handler, only_while_open: options.only_while_open ?? false };
+/** The handler wrapped so it runs at most once every `pause`, by the watch's clock. */
+function at_most_every<Event>(pause: Duration | Period, handler: Handler<Event>): Handler<Event> {
+  const milliseconds = typeof pause === "number" ? pause : period_in_milliseconds(pause);
+  let last_run = 0;
+  return (event) => {
+    const current = now.peek();
+    if (current - last_run < milliseconds) return;
+    last_run = current;
+    handler(event);
+  };
 }
 
-/** The step count changes, at most once a minute. */
-export function steps(handler: Handler<StepsEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "steps", handler, only_while_open: options.only_while_open ?? false };
+/** Connects a handler to an event, at the top of the file and before `define_app`. */
+export function on<Name extends EventName>(event: Name, handler: Handler<EventMap[Name]>, options: ListenerOptions = {}) {
+  const run = options.at_most_every === undefined ? handler : at_most_every(options.at_most_every, handler);
+  if (event === "open" || event === "close" || event === "screen_on" || event === "screen_off") {
+    waiting_lifecycle.push({ event, handler: run as () => void });
+    return;
+  }
+  const only_while_open = options.while_open ?? false;
+  // Each subscription's handler type follows from its kind, which TypeScript cannot see through `event`.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handle = run as Handler<any>;
+  const motion_kind = MOTION_EVENTS[event];
+  const battery_kind = BATTERY_EVENTS[event];
+  let subscription: Subscription;
+  if (motion_kind) subscription = { kind: "motion", motion: motion_kind, handler: handle, only_while_open };
+  else if (battery_kind) subscription = { kind: "battery", battery: battery_kind, handler: handle, only_while_open };
+  else {
+    switch (event as EventName) {
+      case "tick":
+        subscription = { kind: "every", period: as_period(options.every), handler: handle, only_while_open };
+        break;
+      case "heart_rate":
+        subscription = { kind: "heart_rate_reading", period: as_period(options.every), handler: handle, only_while_open };
+        break;
+      case "acceleration":
+        subscription = { kind: "acceleration", period: as_period(options.every), handler: handle, only_while_open };
+        break;
+      case "time":
+        subscription = { kind: "at", when: as_signal(options.at as Instant | null), handler: handle, only_while_open };
+        break;
+      case "daily":
+        subscription = {
+          kind: "daily",
+          time_of_day: options.at as TimeOfDay | ReadonlySignal<TimeOfDay | null>,
+          days: options.days ?? EVERY_DAY,
+          handler: handle,
+          only_while_open,
+        };
+        break;
+      case "minute":
+      case "hour":
+      case "day":
+        subscription = { kind: "clock_change", unit: event as "minute" | "hour" | "day", handler: handle, only_while_open };
+        break;
+      case "phone_connects":
+      case "phone_disconnects":
+        subscription = {
+          kind: "phone",
+          phone: event === "phone_connects" ? "connects" : "disconnects",
+          handler: handle,
+          only_while_open,
+        };
+        break;
+      case "steps":
+        subscription = { kind: "steps", handler: handle, only_while_open };
+        break;
+      case "step_goal":
+        subscription = { kind: "step_goal", handler: handle, only_while_open };
+        break;
+      case "notification":
+        subscription = { kind: "notification", handler: handle, only_while_open };
+        break;
+      case "call":
+        subscription = { kind: "call", handler: handle, only_while_open };
+        break;
+      case "music":
+        subscription = { kind: "music", handler: handle, only_while_open };
+        break;
+      case "weather":
+        subscription = { kind: "weather", handler: handle, only_while_open };
+        break;
+      case "navigation":
+        subscription = { kind: "navigation", handler: handle, only_while_open };
+        break;
+      default:
+        subscription = { kind: "settings_change", handler: handle, only_while_open };
+    }
+  }
+  waiting_subscriptions.push(subscription);
 }
 
-/** The day's step goal is reached. */
-export function step_goal(handler: Handler<StepsEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "step_goal", handler, only_while_open: options.only_while_open ?? false };
-}
-
-export function motion(kind: MotionKind, handler: Handler<MotionEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "motion", motion: kind, handler, only_while_open: options.only_while_open ?? false };
-}
-
-export function battery(kind: BatteryKind, handler: Handler<BatteryEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "battery", battery: kind, handler, only_while_open: options.only_while_open ?? false };
-}
-
-export function phone(kind: "connects" | "disconnects", handler: Handler<PhoneEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "phone", phone: kind, handler, only_while_open: options.only_while_open ?? false };
-}
-
-export function notification(handler: Handler<NotificationEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "notification", handler, only_while_open: options.only_while_open ?? false };
-}
-
-export function call(handler: Handler<CallEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "call", handler, only_while_open: options.only_while_open ?? false };
-}
-
-/** The phone's music player changes. */
-export function music(handler: Handler<MusicEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "music", handler, only_while_open: options.only_while_open ?? false };
-}
-
-/** The phone sends a forecast. */
-export function weather(handler: Handler<WeatherEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "weather", handler, only_while_open: options.only_while_open ?? false };
-}
-
-/** The phone's navigation app gives the next turn. */
-export function navigation(handler: Handler<NavigationEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "navigation", handler, only_while_open: options.only_while_open ?? false };
-}
-
-/** The companion app sends this app a message on its own channel. */
-export function message(channel: string, handler: Handler<Record<string, unknown>>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "message", channel, handler, only_while_open: options.only_while_open ?? false };
-}
-
-export function http_response(handler: Handler<HttpResponseEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "http_response", handler, only_while_open: options.only_while_open ?? false };
-}
-
-/** The user changes a setting in `settings`. */
-export function settings_change(handler: Handler<SettingsEvent>, options: SubscriptionOptions = {}): Subscription {
-  return { kind: "settings_change", handler, only_while_open: options.only_while_open ?? false };
+/** Hands `define_app` every listener connected since the last app was defined. */
+function take_listeners(): { subscriptions: Subscription[]; lifecycle: LifecycleListener[] } {
+  const taken = { subscriptions: waiting_subscriptions, lifecycle: waiting_lifecycle };
+  waiting_subscriptions = [];
+  waiting_lifecycle = [];
+  return taken;
 }
 
 // ============================================================================
@@ -1209,18 +1300,16 @@ export interface AppOptions {
   /** The launcher group the app goes in until the wearer moves it, such as `"games"`; docs/apps.md lists the usual ones. */
   group?: string;
   screens: { main: ScreenComponent } & Record<string, ScreenComponent>;
-  subscriptions?: Subscription[];
-  permissions?: Permission[];
+}
+
+/** An app as the preview runs it, with the events its `on` calls connected. */
+export interface App extends AppOptions {
+  kind: "app" | "face";
+  subscriptions: Subscription[];
   onOpen?: () => void;
   onClose?: () => void;
   onScreenOff?: () => void;
   onScreenOn?: () => void;
-}
-
-export interface App extends AppOptions {
-  kind: "app" | "face";
-  subscriptions: Subscription[];
-  permissions: Permission[];
 }
 
 const persisted_slots_of_app = new WeakMap<App, PersistedSlot[]>();
@@ -1228,7 +1317,13 @@ const persisted_slots_of_app = new WeakMap<App, PersistedSlot[]>();
 /** Declares an app: who it is, its screens and the work it wants done in the background. */
 export function define_app(options: AppOptions): App {
   const slots = attach_persisted_slots(options.id);
-  const app: App = { kind: "app", subscriptions: [], permissions: [], ...options };
+  const listeners = take_listeners();
+  const app: App = { kind: "app", ...options, subscriptions: listeners.subscriptions };
+  const hooks = { open: "onOpen", close: "onClose", screen_on: "onScreenOn", screen_off: "onScreenOff" } as const;
+  for (const { event, handler } of listeners.lifecycle) {
+    const earlier = app[hooks[event]];
+    app[hooks[event]] = earlier ? () => (earlier(), handler()) : handler;
+  }
   persisted_slots_of_app.set(app, slots);
   return app;
 }

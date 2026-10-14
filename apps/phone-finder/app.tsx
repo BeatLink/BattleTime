@@ -1,8 +1,7 @@
 // Phone finder, ported from wasp-os's phone_finder.
 // A title card above a large button that makes the connected phone ring, and stops it again.
 
-import { signal } from "@preact/signals";
-import { define_app, find_phone, is_phone_connected, show_toast } from "neotime";
+import { define_app, find_phone, is_phone_connected, on, show_toast, signal } from "neotime";
 import { Card } from "neotime/components";
 import { icons } from "neotime/icons";
 import { Button, Icon, Label, Screen } from "neotime/widgets";
@@ -56,12 +55,12 @@ function PhoneFinder() {
   );
 }
 
+on("close", stop_when_closed);
+
 export default define_app({
   id: "phone-finder",
   name: "Finder",
   group: "phone",
   icon: icons.phone,
   screens: { main: PhoneFinder },
-  permissions: ["phone"],
-  onClose: stop_when_closed,
 });

@@ -17,9 +17,8 @@ use crate::diagnostics::Severity;
 // ============================================================================
 
 const HEADER: &str = r#"
-import { computed, signal } from "@preact/signals";
 import {
-  define_app, format_duration, format_number, format_time, now, persisted, random_int, range, vibrate,
+  computed, signal, define_app, format_duration, format_number, format_time, now, persisted, random_int, range, vibrate,
   vibrate_pattern, go, start_of_minute, start_of_hour, text_from_codes, join, to_upper, text_length,
   slice_text, pad_start, next_time_of_day, count_where, HOUR, MINUTE, SECOND, type Duration, type Instant, type SwipeEvent, type Color,
 } from "neotime";
@@ -458,9 +457,9 @@ fn subscriptions_of(image: &AppImage) -> Vec<neotime_runtime::subscriptions::Sub
 }
 
 #[test]
-fn subscriptions_and_lifecycle_handlers_are_written() {
+fn events_connected_with_on_are_written_in_order() {
     let source = format!(
-        "{HEADER}\nimport {{ every, motion }} from \"neotime\";\nconst count = signal(0);\nfunction tick() {{ count.value += 1; }}\nfunction Main() {{ return <Screen><Label>{{count.value}}</Label></Screen>; }}\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }}, onOpen: tick, permissions: [\"motion\"], subscriptions: [every({{ seconds: 1 }}, tick, {{ only_while_open: true }}), motion(\"shake\", tick, {{ only_while_open: true }})] }});"
+        "{HEADER}\nimport {{ on }} from \"neotime\";\nconst count = signal(0);\nfunction tick() {{ count.value += 1; }}\nfunction Main() {{ return <Screen><Label>{{count.value}}</Label></Screen>; }}\non(\"open\", tick);\non(\"tick\", tick, {{ every: SECOND, while_open: true }});\non(\"shake\", tick, {{ while_open: true }});\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }} }});"
     );
     let image = compile(&source);
     let image = AppImage::parse(&image).unwrap();
@@ -482,22 +481,18 @@ fn subscriptions_and_lifecycle_handlers_are_written() {
 }
 
 #[test]
-fn a_short_background_period_and_a_missing_permission_are_errors() {
+fn a_short_background_period_is_an_error_and_a_background_event_needs_background() {
     let short = format!(
-        "{HEADER}\nimport {{ every }} from \"neotime\";\nfunction Main() {{ return <Screen></Screen>; }}\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }}, permissions: [\"background\"], subscriptions: [every({{ seconds: 1 }}, () => {{}})] }});"
+        "{HEADER}\nimport {{ on }} from \"neotime\";\nfunction Main() {{ return <Screen></Screen>; }}\non(\"tick\", () => {{}}, {{ every: SECOND }});\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }} }});"
     );
     let output = compile_source(&short);
-    assert!(output
-        .errors()
-        .any(|error| error.message.contains("only_while_open")));
+    assert!(output.errors().any(|error| error.message.contains("while_open")));
 
-    let missing = format!(
-        "{HEADER}\nimport {{ every }} from \"neotime\";\nfunction Main() {{ return <Screen></Screen>; }}\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }}, subscriptions: [every({{ minutes: 1 }}, () => {{}})] }});"
+    let background = format!(
+        "{HEADER}\nimport {{ on }} from \"neotime\";\nfunction Main() {{ return <Screen></Screen>; }}\non(\"tick\", () => {{}}, {{ every: MINUTE }});\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }} }});"
     );
-    let output = compile_source(&missing);
-    assert!(output
-        .errors()
-        .any(|error| error.message.contains("`background` permission")));
+    let output = compile_source(&background);
+    assert_eq!(output.permissions, [crate::permissions::Permission::Background]);
 }
 
 #[test]
@@ -926,6 +921,33 @@ fn an_array_too_large_for_state_is_an_error() {
 }
 
 // ============================================================================
+// Imports
+// ============================================================================
+
+#[test]
+fn signals_imported_from_neotime_build_the_same_image_as_from_preact() {
+    let body = r#"
+        const count = persisted("count", 2);
+        const doubled = computed(() => count.value * 2);
+        function Main() {
+          const taps = useSignal(0);
+          return <Screen><Label>{`${doubled.value} ${taps.value}`}</Label>
+            <Button onClick={() => { taps.value++; count.value = signal_start.value; }}>Go</Button></Screen>;
+        }
+        const signal_start = signal(5);
+        export default define_app({ id: "test", name: "Test", screens: { main: Main } });"#;
+    let imports = |signals_from: &str| {
+        format!(
+            r#"import {{ computed, signal, useSignal }} from "{signals_from}";
+            import {{ define_app, persisted }} from "neotime";
+            import {{ Button, Label, Screen }} from "neotime/widgets";
+            {body}"#
+        )
+    };
+    assert_eq!(compile(&imports("neotime")), compile(&imports("@preact/signals")));
+}
+
+// ============================================================================
 // What the compiler rejects
 // ============================================================================
 
@@ -937,7 +959,7 @@ fn rejected_forms_name_the_declarative_alternative() {
         ("import { useState } from \"preact/hooks\";\nfunction Main() { const [a, b] = useState(0); return <Screen><Label>Hi</Label></Screen>; }", "signal"),
         ("import { thing } from \"lodash\";\nfunction Main() { return <Screen><Label>Hi</Label></Screen>; }", "copy the code into the app"),
         ("const n = signal(0);\nfunction Main() { return <Screen><Button onClick={() => { const s = signal(0); }}>Go</Button></Screen>; }", "top of the file"),
-        ("const n = signal(0);\nfunction Main() { return <Screen><Button onClick={() => { setTimeout(() => {}, 5); }}>Go</Button></Screen>; }", "subscriptions"),
+        ("const n = signal(0);\nfunction Main() { return <Screen><Button onClick={() => { setTimeout(() => {}, 5); }}>Go</Button></Screen>; }", "`on`"),
         ("const n = signal(0);\nfunction Main() { return <Screen><Label>{`${n.value}`}</Label><Button onClick={() => { n.value = 1.5; }}>Go</Button></Screen>; }", "whole"),
         ("const name = signal(\"a\");\nconst count = signal(0);\nfunction Main() { return <Screen><Button onClick={() => { name.value = `${count.value}`; }}>Go</Button></Screen>; }", "fixed text"),
         ("function count(n: number): number { return n === 0 ? 0 : count(n - 1); }\nconst value = signal(0);\nfunction Main() { return <Screen><Button onClick={() => { value.value = count(3); }}>Go</Button></Screen>; }", "recursion"),
@@ -1085,11 +1107,7 @@ fn an_exact_division_of_constants_is_allowed() {
 #[test]
 fn system_text_values_are_read_like_any_other() {
     let source = app(r#"import { current_music } from "neotime";
-        function Main() { return <Screen><Label>{current_music.value.artist}</Label></Screen>; }"#)
-    .replace(
-        "screens: { main: Main }",
-        "screens: { main: Main }, permissions: [\"phone\"]",
-    );
+        function Main() { return <Screen><Label>{current_music.value.artist}</Label></Screen>; }"#);
     let image = compile(&source);
     let image = AppImage::parse(&image).unwrap();
 
@@ -1413,7 +1431,7 @@ function Main() {
 #[test]
 fn the_kept_notifications_are_read_one_field_at_a_time() {
     let source = format!(
-        "{HEADER}\n{NOTIFICATIONS_SOURCE}\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }}, permissions: [\"notifications\"] }});"
+        "{HEADER}\n{NOTIFICATIONS_SOURCE}\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }} }});"
     );
     let image = compile(&source);
     let image = AppImage::parse(&image).unwrap();
@@ -1424,10 +1442,12 @@ fn the_kept_notifications_are_read_one_field_at_a_time() {
 
 #[test]
 fn reading_the_kept_notifications_needs_the_notifications_permission() {
-    let message = first_error(&app(NOTIFICATIONS_SOURCE));
+    let output = compile_source(&app(NOTIFICATIONS_SOURCE));
 
-    assert!(message.contains("`notifications` permission"), "{message}");
-    assert!(message.contains("reading the kept notifications"), "{message}");
+    assert_eq!(
+        output.permissions,
+        [crate::permissions::Permission::Notifications]
+    );
 }
 
 /// Whether any expression or handler of the image runs this instruction.
@@ -1504,7 +1524,7 @@ const PACKAGES_SOURCE: &str = r#"import { app_memory_budget, packages, set_app_e
 fn the_installed_packages_are_read_one_field_at_a_time_and_turned_on_by_id() {
     use neotime_runtime::instruction::Instruction;
     let source = format!(
-        "{HEADER}\n{PACKAGES_SOURCE}\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }}, permissions: [\"settings\"] }});"
+        "{HEADER}\n{PACKAGES_SOURCE}\nexport default define_app({{ id: \"t\", name: \"T\", screens: {{ main: Main }} }});"
     );
     let image = compile(&source);
     let image = AppImage::parse(&image).unwrap();
@@ -1530,24 +1550,22 @@ fn the_installed_packages_are_read_one_field_at_a_time_and_turned_on_by_id() {
 
 #[test]
 fn turning_apps_on_and_off_needs_the_settings_permission() {
-    let message = first_error(&app(PACKAGES_SOURCE));
+    let output = compile_source(&app(PACKAGES_SOURCE));
 
-    assert!(message.contains("`settings` permission"), "{message}");
+    assert_eq!(output.permissions, [crate::permissions::Permission::Settings]);
 }
 
 #[test]
-fn a_twenty_millisecond_timer_needs_only_while_open() {
+fn a_twenty_millisecond_timer_needs_while_open() {
     let source = |period: u32| {
         format!(
             r#"{HEADER}
-import {{ every }} from "neotime";
+import {{ on }} from "neotime";
 const ticks = signal(0);
 function tick() {{ ticks.value = ticks.value + 1; }}
 function Main() {{ return <Screen><Label>{{`${{ticks.value}}`}}</Label></Screen>; }}
-export default define_app({{
-  id: "test", name: "Test", screens: {{ main: Main }},
-  subscriptions: [every({{ milliseconds: {period} }}, tick, {{ only_while_open: true }})],
-}});
+on("tick", tick, {{ every: {period}, while_open: true }});
+export default define_app({{ id: "test", name: "Test", screens: {{ main: Main }} }});
 "#
         )
     };

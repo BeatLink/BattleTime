@@ -34,6 +34,7 @@ use oxc_span::{SourceType, Span};
 use crate::compiler::Compiler;
 use crate::diagnostics::{Diagnostic, Severity};
 use crate::functions::FunctionPlan;
+use crate::permissions::Permission;
 use crate::types::Range;
 
 pub use crate::diagnostics::Diagnostic as CompileDiagnostic;
@@ -54,6 +55,8 @@ const SDK_COMPONENTS: &str = include_str!("../../sdk/neotime/src/components.tsx"
 pub struct Output {
     pub image: Option<Vec<u8>>,
     pub diagnostics: Vec<Diagnostic>,
+    /// The permissions the app needs, worked out from the effects, events and system values it uses.
+    pub permissions: Vec<Permission>,
 }
 
 impl Output {
@@ -98,6 +101,7 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
     if !parse_errors.is_empty() {
         return Output {
             image: None,
+            permissions: Vec::new(),
             diagnostics: parse_errors,
         };
     }
@@ -117,6 +121,7 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
         Err(error) => {
             return Output {
                 image: None,
+                permissions: Vec::new(),
                 diagnostics: vec![error],
             }
         }
@@ -135,6 +140,7 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
                     Err(error) => {
                         return Output {
                             image: None,
+                            permissions: Vec::new(),
                             diagnostics: vec![error],
                         }
                     }
@@ -184,6 +190,7 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
         Ok(mut compiler) => {
             compiler.writer.share_repeated_code();
             let image = compiler.writer.build();
+            let permissions = compiler.permissions_needed();
             let mut diagnostics = compiler.warnings;
             let expressions = compiler.writer.expression_count();
             if expressions > neotime_runtime::bindings::MOST_EXPRESSIONS {
@@ -196,6 +203,7 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
                 ));
                 return Output {
                     image: None,
+                    permissions: Vec::new(),
                     diagnostics,
                 };
             }
@@ -203,6 +211,7 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
                 Ok(()) => Output {
                     image: Some(image),
                     diagnostics,
+                    permissions,
                 },
                 Err(problem) => {
                     diagnostics.push(Diagnostic::error(
@@ -211,6 +220,7 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
                     ));
                     Output {
                         image: None,
+                        permissions: Vec::new(),
                         diagnostics,
                     }
                 }
@@ -218,6 +228,7 @@ pub fn compile_source_in(source: &str, directory: Option<PathBuf>) -> Output {
         }
         Err(error) => Output {
             image: None,
+            permissions: Vec::new(),
             diagnostics: vec![error],
         },
     }

@@ -4,8 +4,7 @@
 // of the last lines as fit and the bottom card the dots and lines keyed so far with the letter they make. The text
 // persists, and a long press asks to clear it.
 
-import { computed, signal } from "@preact/signals";
-import { define_app, persisted, push_shift, range, text_from_codes, type SwipeEvent } from "neotime";
+import { computed, define_app, persisted, push_shift, range, signal, text_from_codes, type SwipeEvent } from "neotime";
 import { Card, ConfirmDialog } from "neotime/components";
 import { icons } from "neotime/icons";
 import { Label, Row, Screen, TextLines } from "neotime/widgets";

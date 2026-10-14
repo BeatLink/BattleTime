@@ -567,7 +567,7 @@ impl<'a> Compiler<'a> {
             }
             Expression::AwaitExpression(_) => fail(
                 span,
-                "`await` is not available; data from the phone arrives through a subscription",
+                "`await` is not available; data from the phone arrives through an event",
             ),
             Expression::NewExpression(_) | Expression::ClassExpression(_) | Expression::ThisExpression(_) => {
                 fail(span, "classes and `new` are not available; keep state in signals and write plain functions")

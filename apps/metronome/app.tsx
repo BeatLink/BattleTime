@@ -2,15 +2,16 @@
 // Each beat is scheduled at its exact time from the start, a long buzz opening every bar and a
 // short one for the other beats; drag the ring to set the tempo, or tap it from the beat of a song.
 
-import { computed, signal } from "@preact/signals";
 import {
-  at,
   clamp,
+  computed,
   define_app,
   format_number,
   keep_screen_on,
   now,
+  on,
   persisted,
+  signal,
   vibrate,
   MINUTE,
   SECOND,
@@ -149,12 +150,13 @@ function Metronome() {
   );
 }
 
+on("close", stop);
+on("time", beat, { at: next_beat, while_open: true });
+
 export default define_app({
   id: "metronome",
   name: "Metronome",
   group: "tools",
   icon: icons.metronome,
   screens: { main: Metronome },
-  subscriptions: [at(next_beat, beat, { only_while_open: true })],
-  onClose: stop,
 });

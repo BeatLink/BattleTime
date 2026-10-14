@@ -3,8 +3,7 @@
 // acorn, and every generation is drawn in a new colour, as on wasp-os. A tap starts the acorn again and
 // a long press scatters a random soup. The 16 by 16 board wraps at its edges.
 
-import { signal } from "@preact/signals";
-import { define_app, every, keep_screen_on, life_step, random_int, range, type Color } from "neotime";
+import { define_app, keep_screen_on, life_step, on, random_int, range, signal, type Color } from "neotime";
 import { icons } from "neotime/icons";
 import { CellGrid, Screen } from "neotime/widgets";
 
@@ -86,12 +85,13 @@ function GameOfLife() {
   );
 }
 
+on("open", () => keep_screen_on(true));
+on("tick", step, { every: { milliseconds: 625 }, while_open: true });
+
 export default define_app({
   id: "game-of-life",
   name: "Life",
   group: "games",
   icon: icons.game,
   screens: { main: GameOfLife },
-  subscriptions: [every({ milliseconds: 625 }, step, { only_while_open: true })],
-  onOpen: () => keep_screen_on(true),
 });

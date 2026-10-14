@@ -2,8 +2,8 @@
 // Big yellow hour digits sit over the minute digits, with the seconds beside them and the weather icon top right.
 // The short weekday in green and the day of the month in red sit along the bottom.
 
-import { computed } from "@preact/signals";
 import {
+  computed,
   current_weather,
   day_of,
   define_app,

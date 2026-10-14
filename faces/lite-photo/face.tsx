@@ -2,8 +2,19 @@
 // The time sits near the top with a colon that blinks each second, and the full date sits at the bottom.
 // PinetimeLite draws it over a photo; until faces can show pictures, each backdrop is a plain colour and a long press picks the next.
 
-import { computed } from "@preact/signals";
-import { define_app, format_number, format_time, hour_of, minute_of, now, persisted, second_of, settings, type Color } from "neotime";
+import {
+  computed,
+  define_app,
+  format_number,
+  format_time,
+  hour_of,
+  minute_of,
+  now,
+  persisted,
+  second_of,
+  settings,
+  type Color,
+} from "neotime";
 import { icons } from "neotime/icons";
 import { Label, Row, Screen } from "neotime/widgets";
 

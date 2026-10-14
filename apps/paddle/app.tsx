@@ -2,8 +2,17 @@
 // A ball bounces off the walls and the paddle on the left, which follows the finger up and down.
 // Each return scores a point and a miss starts the count again; the best score persists.
 
-import { signal } from "@preact/signals";
-import { clamp, define_app, every, format_number, persisted, random_int, vibrate, type ClickEvent } from "neotime";
+import {
+  clamp,
+  define_app,
+  format_number,
+  on,
+  persisted,
+  random_int,
+  signal,
+  vibrate,
+  type ClickEvent,
+} from "neotime";
 import { icons } from "neotime/icons";
 import { Column, Label, Screen } from "neotime/widgets";
 
@@ -101,11 +110,12 @@ function Paddle() {
   );
 }
 
+on("tick", step, { every: { milliseconds: 20 }, while_open: true });
+
 export default define_app({
   id: "paddle",
   name: "Paddle",
   group: "games",
   icon: icons.game,
   screens: { main: Paddle },
-  subscriptions: [every({ milliseconds: 20 }, step, { only_while_open: true })],
 });

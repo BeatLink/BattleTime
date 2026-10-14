@@ -3,8 +3,7 @@
 // dashes previews the pattern. The sensor times the flashes itself, so it costs little power,
 // and it keeps flashing with the screen off for as long as the app stays in front.
 
-import { computed, signal } from "@preact/signals";
-import { define_app, persisted, range, set_heart_rate_led } from "neotime";
+import { computed, define_app, on, persisted, range, set_heart_rate_led, signal } from "neotime";
 import { Card } from "neotime/components";
 import { icons } from "neotime/icons";
 import { CellGrid, Label, Row, Screen, Slider, Switch } from "neotime/widgets";
@@ -97,12 +96,12 @@ function Beacon() {
   );
 }
 
+on("close", turn_off);
+
 export default define_app({
   id: "beacon",
   name: "Beacon",
   group: "tools",
   icon: icons.flashlight,
   screens: { main: Beacon },
-  permissions: ["heart_rate"],
-  onClose: turn_off,
 });

@@ -2,8 +2,8 @@
 // InfiniTime gives the layout: status icons with the alarm bell, weather, date by clock type, heart rate and steps.
 // wasp-os gives the two-tone digits, with the tens dimmer than the units, and no leading zero on a 12 hour clock.
 
-import { computed } from "@preact/signals";
 import {
+  computed,
   current_weather,
   define_app,
   format_temperature,

@@ -1,13 +1,14 @@
 // Stopwatch with laps, merged from InfiniTime's StopWatch and wasp-os's stopwatch.
 // It stores when it started rather than ticking, so it keeps running while the app is closed.
 
-import { computed } from "@preact/signals";
 import {
+  computed,
   define_app,
   format_duration,
   format_number,
   keep_screen_on,
   now,
+  on,
   persisted,
   second_of,
   unshift_pop,
@@ -140,11 +141,12 @@ function Stopwatch() {
   );
 }
 
+on("open", () => keep_screen_on(is_running.value));
+
 export default define_app({
   id: "stopwatch",
   name: "Stopwatch",
   group: "time",
   icon: icons.stopwatch,
   screens: { main: Stopwatch },
-  onOpen: () => keep_screen_on(is_running.value),
 });

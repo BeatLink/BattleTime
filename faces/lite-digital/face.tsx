@@ -3,9 +3,9 @@
 // A blue bar under the band grows with the seconds.
 // Steps, Bluetooth, notifications and battery sit at the bottom.
 
-import { computed } from "@preact/signals";
 import {
   battery_percent,
+  computed,
   day_of,
   define_app,
   format_number,

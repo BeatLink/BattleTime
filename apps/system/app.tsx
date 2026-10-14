@@ -7,10 +7,10 @@
 // charge goes low.
 // The engine's page bar along the bottom shows which page is on show.
 
-import { computed } from "@preact/signals";
 import {
   battery_millivolts,
   battery_percent,
+  computed,
   define_app,
   firmware_version,
   format_duration,

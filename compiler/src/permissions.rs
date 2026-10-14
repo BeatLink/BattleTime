@@ -1,17 +1,13 @@
-//! The permissions an app lists in `define_app`, and the check that they cover every effect,
-//! subscription and system value the app uses, as docs/app-reference.md "Permissions" lists them.
+//! The permissions an app needs, worked out from every effect, event and system value it uses, as
+//! docs/app-reference.md "Permissions" lists them.
 //!
-//! The image has no place for permissions yet, so the check is all the compiler does with them.
+//! The image has no place for permissions yet, so the compiler only reports them.
 
 use neotime_runtime::instruction::{EffectKind, SystemValue};
 use neotime_runtime::subscriptions::SubscriptionKind;
-use oxc_ast::ast::Expression;
-use oxc_span::{GetSpan, Span};
+use oxc_span::Span;
 
 use crate::compiler::Compiler;
-use crate::constants::{strip_parentheses, Constant};
-use crate::diagnostics::{fail, Compiled};
-use crate::scope::Scope;
 
 // ============================================================================
 // Permissions
@@ -158,59 +154,15 @@ impl<'a> Compiler<'a> {
         self.note_permission(permission, what, span);
     }
 
-    /// Checks the app's `permissions` against everything it was found to use.
-    pub fn check_permissions(
-        &self,
-        listed: Option<&'a Expression<'a>>,
-        root: &std::rc::Rc<Scope<'a>>,
-        app_span: Span,
-    ) -> Compiled<()> {
-        let mut granted: Vec<Permission> = Vec::new();
-        if let Some(listed) = listed {
-            let Some(Constant::Array(names)) = self.evaluate_constant(listed, root) else {
-                return fail(
-                    listed.span(),
-                    "write `permissions` as an array of names, such as `[\"wake\", \"background\"]`",
-                );
-            };
-            let span = strip_parentheses(listed).span();
-            for name in names.iter() {
-                let Constant::Text(name) = name else {
-                    return fail(span, "each permission is a name, such as \"wake\"");
-                };
-                let Some(permission) = Permission::from_name(name) else {
-                    let known: Vec<&str> = Permission::ALL
-                        .iter()
-                        .map(|permission| permission.name())
-                        .collect();
-                    return fail(
-                        span,
-                        format!(
-                            "there is no permission `{name}`; choose from {}",
-                            known.join(", ")
-                        ),
-                    );
-                };
-                granted.push(permission);
-            }
-        }
-        for used in &self.permission_uses {
-            if !granted.contains(&used.permission) {
-                let name = used.permission.name();
-                let span = if used.span == Span::default() {
-                    app_span
-                } else {
-                    used.span
-                };
-                return fail(
-                    span,
-                    format!(
-                        "{} needs the `{name}` permission; add \"{name}\" to define_app's `permissions`",
-                        used.what
-                    ),
-                );
-            }
-        }
-        Ok(())
+    /// Every permission the app was found to need, in the order `Permission::ALL` lists them.
+    pub fn permissions_needed(&self) -> Vec<Permission> {
+        Permission::ALL
+            .into_iter()
+            .filter(|permission| {
+                self.permission_uses
+                    .iter()
+                    .any(|used| used.permission == *permission)
+            })
+            .collect()
     }
 }

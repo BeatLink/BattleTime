@@ -2,10 +2,10 @@
 // Coloured diagonal stripes cover the left side, with a pine logo whose fill shows the battery charge, and big condensed digits.
 // InfiniTime's pop-up colour and cover buttons are a settings screen here, opened by a long press.
 
-import { computed } from "@preact/signals";
 import {
   back,
   battery_percent,
+  computed,
   define_app,
   format_number,
   format_time,

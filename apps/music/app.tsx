@@ -3,17 +3,18 @@
 // and right to skip, and a second row of volume buttons that a swipe up brings in. It asks the phone
 // for its player's state when it opens.
 
-import { computed, useSignal } from "@preact/signals";
 import {
   back,
+  computed,
   current_music,
   define_app,
   format_duration,
-  music,
   music_control,
   now,
+  on,
   persisted,
   request_music_state,
+  useSignal,
   HOUR,
   MINUTE,
   type Duration,
@@ -136,13 +137,13 @@ function Music() {
   );
 }
 
+on("open", request_music_state);
+on("music", receive, { while_open: true });
+
 export default define_app({
   id: "music",
   name: "Music",
   group: "phone",
   icon: icons.music,
   screens: { main: Music },
-  subscriptions: [music(receive, { only_while_open: true })],
-  permissions: ["phone"],
-  onOpen: request_music_state,
 });

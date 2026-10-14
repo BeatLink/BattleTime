@@ -2,8 +2,7 @@
 // One card shows the app's name and the card below it the last swipe or touch it received. The side
 // button leaves, as it does in every app.
 
-import { computed, signal } from "@preact/signals";
-import { define_app, type ClickEvent, type SwipeEvent } from "neotime";
+import { computed, define_app, on, signal, type ClickEvent, type SwipeEvent } from "neotime";
 import { Card } from "neotime/components";
 import { icons } from "neotime/icons";
 import { Label, Screen } from "neotime/widgets";
@@ -75,13 +74,14 @@ function Template() {
   );
 }
 
+on("open", () => {
+  last_event_kind.value = "none";
+});
+
 export default define_app({
   id: "template",
   name: APP_NAME,
   group: "tools",
   icon: icons.settings,
   screens: { main: Template },
-  onOpen: () => {
-    last_event_kind.value = "none";
-  },
 });

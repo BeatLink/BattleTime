@@ -529,7 +529,7 @@ impl<'a> Compiler<'a> {
                         return fail(call.span, format!("`{name}` is not available; use `computed`"))
                     }
                     (LibraryModule::PreactHooks, "useEffect" | "useLayoutEffect") => {
-                        return fail(call.span, "`useEffect` is not available; use `subscriptions` in define_app, or a binding that reads `now`")
+                        return fail(call.span, "`useEffect` is not available; connect an event with `on` at the top of the file, or bind to `now`")
                     }
                     (LibraryModule::Signals, "signal" | "computed") | (LibraryModule::Neotime, "persisted") => {
                         return fail(call.span, format!("`{name}` inside a component would make a new one each time; declare it at the top of the file"))

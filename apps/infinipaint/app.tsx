@@ -3,8 +3,7 @@
 // colour with a short buzz, through InfiniTime's eight. The picture persists, and a double tap asks to
 // clear it. Swipes are ignored so a stroke never leaves the app; the button does that.
 
-import { signal } from "@preact/signals";
-import { define_app, persisted, range, show_toast, vibrate, type ChangeEvent, type Color } from "neotime";
+import { define_app, persisted, range, show_toast, signal, vibrate, type ChangeEvent, type Color } from "neotime";
 import { ConfirmDialog } from "neotime/components";
 import { icons } from "neotime/icons";
 import { CellGrid, Screen } from "neotime/widgets";

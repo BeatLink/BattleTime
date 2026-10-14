@@ -2,9 +2,9 @@
 // Five squares of sides 1, 1, 2, 3 and 5: red ones add up to the hour, green ones to the minutes in fives,
 // blue ones count for both, and white ones for neither.
 
-import { computed } from "@preact/signals";
 import {
   battery_percent,
+  computed,
   define_app,
   format_time,
   hour_of,

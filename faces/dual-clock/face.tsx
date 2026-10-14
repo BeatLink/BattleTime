@@ -1,9 +1,9 @@
 // Dual clock watch face, ported from wasp-os's dual_clock.
 // The hours sit above the minutes in big digits, hours dimmer than minutes, with wasp-os's status bar above.
 
-import { computed } from "@preact/signals";
 import {
   battery_percent,
+  computed,
   define_app,
   format_number,
   hour_of,

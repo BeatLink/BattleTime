@@ -1,243 +1,318 @@
-//! `define_app`'s subscriptions and lifecycle handlers, written into the image's subscriptions
-//! section as `runtime/src/subscriptions.rs` reads them.
+//! The events an app connects to with `on`, written into the image's subscriptions section as
+//! `runtime/src/subscriptions.rs` reads them.
 //!
 //! Every rule the runtime's install checks apply to a subscription is checked here first, so a
 //! mistake is a compile error at the call rather than an image the watch refuses.
 
 use std::rc::Rc;
 
+use neotime_runtime::instruction::Instruction;
 use neotime_runtime::subscriptions::{
     Subscription, SubscriptionKind, SubscriptionValue, SHORTEST_BACKGROUND_PERIOD_IN_MILLISECONDS,
     SHORTEST_PERIOD_IN_MILLISECONDS,
 };
-use neotime_runtime::{ValueType, NONE};
-use oxc_ast::ast::{Argument, CallExpression, Expression};
+use neotime_runtime::{SystemValue, ValueType, NONE};
+use oxc_ast::ast::{Argument, CallExpression, Expression, ObjectPropertyKind};
 use oxc_span::{GetSpan, Span};
 
-use crate::compiler::Compiler;
-use crate::constants::{strip_parentheses, Constant};
+use crate::compiler::{Compiler, DeclaredType};
+use crate::constants::{static_key, strip_parentheses, Constant};
 use crate::diagnostics::{fail, Compiled};
+use crate::emitter::{CodeKind, Emitter};
 use crate::permissions::{runs_in_background, subscription_permission, Permission};
-use crate::scope::{LibraryModule, Reference, Scope};
+use crate::scope::{Reference, Scope};
+use crate::statements::ArgumentSource;
 use crate::types::{NumberHint, Type};
 
 // ============================================================================
 // Names
 // ============================================================================
 
-/// The lifecycle options of `define_app` and the subscription each becomes.
-pub fn lifecycle_kind(option: &str) -> Option<SubscriptionKind> {
-    Some(match option {
-        "onOpen" => SubscriptionKind::Open,
-        "onClose" => SubscriptionKind::Close,
-        "onScreenOn" => SubscriptionKind::ScreenOn,
-        "onScreenOff" => SubscriptionKind::ScreenOff,
-        _ => return None,
-    })
-}
-
-/// The subscription a `neotime` function makes.
-fn subscription_kind(name: &str) -> Option<SubscriptionKind> {
-    use SubscriptionKind::*;
-    Some(match name {
-        "every" => Every,
-        "at" => At,
-        "daily" => Daily,
-        "clock_change" => ClockChange,
-        "heart_rate_reading" => HeartRate,
-        "steps" => Steps,
-        "step_goal" => StepGoal,
-        "motion" => Motion,
-        "acceleration" => Acceleration,
-        "battery" => Battery,
-        "phone" => Phone,
-        "notification" => Notification,
-        "call" => Call,
-        "music" => Music,
-        "weather" => Weather,
-        "navigation" => Navigation,
-        "settings_change" => SettingsChange,
-        _ => return None,
-    })
-}
-
-/// The names a subscription's `detail` numbers, in order, for the kinds that take one.
-fn detail_names(kind: SubscriptionKind) -> &'static [&'static str] {
-    match kind {
-        SubscriptionKind::ClockChange => &["minute", "hour", "day"],
-        SubscriptionKind::Motion => &["wrist_raise", "shake", "tap", "double_tap", "still", "moving"],
-        SubscriptionKind::Battery => &["low", "starts", "stops", "completes"],
-        SubscriptionKind::Phone => &["connects", "disconnects"],
-        _ => &[],
-    }
-}
-
-/// Where the handler is among a subscription's arguments, after its period, time or kind.
-fn handler_position(kind: SubscriptionKind) -> usize {
-    use SubscriptionKind::*;
-    match kind {
-        Every | At | Daily | ClockChange | HeartRate | Motion | Acceleration | Battery | Phone => 1,
-        _ => 0,
-    }
-}
-
 const ALL_DAYS: i64 = 0b111_1111;
+
+/// The subscription and detail each event name given to `on` stands for.
+const EVENTS: [(&str, SubscriptionKind, u8); 32] = {
+    use SubscriptionKind::*;
+    [
+        ("open", Open, 0),
+        ("close", Close, 0),
+        ("screen_on", ScreenOn, 0),
+        ("screen_off", ScreenOff, 0),
+        ("tick", Every, 0),
+        ("time", At, 0),
+        ("daily", Daily, 0),
+        ("minute", ClockChange, 0),
+        ("hour", ClockChange, 1),
+        ("day", ClockChange, 2),
+        ("heart_rate", HeartRate, 0),
+        ("steps", Steps, 0),
+        ("step_goal", StepGoal, 0),
+        ("wrist_raise", Motion, 0),
+        ("shake", Motion, 1),
+        ("wrist_tap", Motion, 2),
+        ("wrist_double_tap", Motion, 3),
+        ("still", Motion, 4),
+        ("moving", Motion, 5),
+        ("acceleration", Acceleration, 0),
+        ("battery_low", Battery, 0),
+        ("charging_starts", Battery, 1),
+        ("charging_stops", Battery, 2),
+        ("charging_completes", Battery, 3),
+        ("phone_connects", Phone, 0),
+        ("phone_disconnects", Phone, 1),
+        ("notification", Notification, 0),
+        ("call", Call, 0),
+        ("music", Music, 0),
+        ("weather", Weather, 0),
+        ("navigation", Navigation, 0),
+        ("settings_change", SettingsChange, 0),
+    ]
+};
+
+/// What `on`'s options say, before they are checked against the event.
+#[derive(Default)]
+struct ListenerOptions<'a> {
+    while_open: bool,
+    every: Option<&'a Expression<'a>>,
+    at: Option<&'a Expression<'a>>,
+    days: Option<&'a Expression<'a>>,
+    at_most_every: Option<&'a Expression<'a>>,
+}
 
 // ============================================================================
 // Compiling subscriptions
 // ============================================================================
 
 impl<'a> Compiler<'a> {
-    /// `onOpen`, `onClose`, `onScreenOn` or `onScreenOff`: a subscription to the app's own life.
-    pub fn compile_lifecycle(
-        &mut self,
-        kind: SubscriptionKind,
-        value: &'a Expression<'a>,
-        root: &Rc<Scope<'a>>,
-    ) -> Compiled<()> {
-        let handler = self.subscription_handler(value, root, kind, value.span())?;
-        self.writer.subscription(Subscription {
-            kind,
-            only_while_open: false,
-            handler,
-            detail: 0,
-            days: 0,
-            value: SubscriptionValue::Constant(0),
-        });
-        Ok(())
-    }
-
-    /// Every subscription in `define_app({ subscriptions: [...] })`.
-    pub fn compile_subscriptions(&mut self, value: &'a Expression<'a>, root: &Rc<Scope<'a>>) -> Compiled<()> {
-        let Expression::ArrayExpression(array) = strip_parentheses(value) else {
-            return fail(
-                value.span(),
-                "write `subscriptions` as an array, such as `[every({ minutes: 1 }, tick)]`",
-            );
-        };
-        for element in &array.elements {
-            let Some(Expression::CallExpression(call)) = element.as_expression().map(strip_parentheses)
-            else {
-                return fail(
-                    element.span(),
-                    "each subscription is a call, such as `every({ minutes: 1 }, tick)`",
-                );
-            };
-            self.compile_subscription(call, root)?;
-        }
-        Ok(())
-    }
-
-    fn compile_subscription(&mut self, call: &'a CallExpression<'a>, root: &Rc<Scope<'a>>) -> Compiled<()> {
+    /// `on("event", handler, { ...options })` at the top of the file: one subscription.
+    pub fn compile_listener(&mut self, call: &'a CallExpression<'a>, root: &Rc<Scope<'a>>) -> Compiled<()> {
         let span = call.span;
-        let name = match self.resolve_reference(&call.callee, root) {
-            Some(Reference::Library {
-                module: LibraryModule::Neotime,
-                name,
-            }) => name,
-            _ => {
-                return fail(
-                    span,
-                    "each subscription is a call to a `neotime` subscription, such as `every`",
-                )
-            }
-        };
-        if matches!(name.as_str(), "message" | "http_response") {
-            return fail(
-                span,
-                format!("the `{name}` subscription is not in the image format yet: the runtime has no subscription kind for it"),
-            );
-        }
-        let Some(kind) = subscription_kind(&name) else {
-            return fail(span, format!("`{name}` is not a subscription"));
-        };
         let mut arguments: Vec<&'a Expression<'a>> = Vec::new();
         for argument in &call.arguments {
             match argument {
                 Argument::SpreadElement(spread) => {
-                    return fail(spread.span, "`...` in a subscription is not supported")
+                    return fail(spread.span, "`...` in `on` is not supported")
                 }
                 other => arguments.extend(other.as_expression()),
             }
         }
-        let argument = |position: usize| -> Compiled<&'a Expression<'a>> {
-            arguments.get(position).copied().ok_or_else(|| {
-                crate::diagnostics::Diagnostic::error(span, format!("`{name}` needs more arguments"))
-            })
-        };
-
-        let handler_at = handler_position(kind);
-        let options_at = if kind == SubscriptionKind::Daily {
-            3
-        } else {
-            handler_at + 1
-        };
-        if arguments.len() > options_at + 1 {
+        let (Some(event), Some(handler)) = (arguments.first(), arguments.get(1)) else {
             return fail(
                 span,
-                format!("`{name}` takes at most {} arguments", options_at + 1),
+                "write `on(\"event\", handler)`, such as `on(\"shake\", roll)`",
+            );
+        };
+        if arguments.len() > 3 {
+            return fail(span, "`on` takes an event, a handler and its options");
+        }
+        let event_name = match self.evaluate_constant(event, root) {
+            Some(Constant::Text(name)) => name.to_string(),
+            _ => {
+                return fail(
+                    event.span(),
+                    "name the event with text written out, such as `\"shake\"`",
+                )
+            }
+        };
+        if matches!(event_name.as_str(), "message" | "http_response") {
+            return fail(
+                event.span(),
+                format!("the `{event_name}` event is not in the image format yet: the runtime has no subscription kind for it"),
             );
         }
-        let only_while_open = match arguments.get(options_at) {
-            Some(options) => self.only_while_open(options, root)?,
-            None => false,
+        let Some(&(_, kind, detail)) = EVENTS.iter().find(|(name, _, _)| *name == event_name) else {
+            let known: Vec<&str> = EVENTS.iter().map(|(name, _, _)| *name).collect();
+            return fail(
+                event.span(),
+                format!(
+                    "there is no event `{event_name}`; choose from {}",
+                    known.join(", ")
+                ),
+            );
         };
+        let options = match arguments.get(2) {
+            Some(options) => self.listener_options(options)?,
+            None => ListenerOptions::default(),
+        };
+        let what = format!("the `{event_name}` event");
+        let is_lifecycle = matches!(
+            kind,
+            SubscriptionKind::Open
+                | SubscriptionKind::Close
+                | SubscriptionKind::ScreenOn
+                | SubscriptionKind::ScreenOff
+        );
+        if is_lifecycle && options.while_open {
+            return fail(
+                span,
+                format!("{what} only comes while the app is open, so it takes no `while_open`"),
+            );
+        }
 
-        let mut detail = 0;
+        let needs = |option: Option<&'a Expression<'a>>,
+                     option_name: &str,
+                     example: &str|
+         -> Compiled<&'a Expression<'a>> {
+            option.ok_or_else(|| {
+                crate::diagnostics::Diagnostic::error(
+                    span,
+                    format!("{what} needs `{option_name}`, such as `{example}`"),
+                )
+            })
+        };
+        let takes_every = matches!(
+            kind,
+            SubscriptionKind::Every | SubscriptionKind::HeartRate | SubscriptionKind::Acceleration
+        );
+        let takes_at = matches!(kind, SubscriptionKind::At | SubscriptionKind::Daily);
+        for (given, option_name, allowed) in [
+            (options.every.is_some(), "every", takes_every),
+            (options.at.is_some(), "at", takes_at),
+            (options.days.is_some(), "days", kind == SubscriptionKind::Daily),
+        ] {
+            if given && !allowed {
+                return fail(span, format!("{what} takes no `{option_name}`"));
+            }
+        }
+
         let mut days = 0;
         let value = match kind {
             SubscriptionKind::Every | SubscriptionKind::HeartRate | SubscriptionKind::Acceleration => {
-                let period = argument(0)?;
-                let milliseconds = self.period_in_milliseconds(period, root)?;
-                check_period(kind, &name, milliseconds, only_while_open, period.span())?;
+                let every = needs(options.every, "every", "{ every: MINUTE }")?;
+                let milliseconds = self.duration_in_milliseconds(every, root)?;
+                check_period(kind, &event_name, milliseconds, options.while_open, every.span())?;
                 SubscriptionValue::Constant(milliseconds)
             }
-            SubscriptionKind::At => self.at_value(argument(0)?, root)?,
+            SubscriptionKind::At => self.at_value(needs(options.at, "at", "{ at: next_ring }")?, root)?,
             SubscriptionKind::Daily => {
-                days = match arguments.get(2) {
+                days = match options.days {
                     Some(days) => self.days_mask(days, root)?,
                     None => ALL_DAYS as u16,
                 };
-                self.daily_value(argument(0)?, root)?
-            }
-            SubscriptionKind::ClockChange
-            | SubscriptionKind::Motion
-            | SubscriptionKind::Battery
-            | SubscriptionKind::Phone => {
-                detail = self.detail_number(kind, &name, argument(0)?, root)?;
-                SubscriptionValue::Constant(0)
+                self.daily_value(needs(options.at, "at", "{ at: { hour: 7, minute: 30 } }")?, root)?
             }
             _ => SubscriptionValue::Constant(0),
         };
-        if kind == SubscriptionKind::Acceleration && !only_while_open {
+        if kind == SubscriptionKind::Acceleration && !options.while_open {
             return fail(
                 span,
-                "`acceleration` runs only while the app is open; add `{ only_while_open: true }`",
+                "`acceleration` comes only while the app is open; add `while_open: true`",
             );
         }
 
-        let handler = self.subscription_handler(argument(handler_at)?, root, kind, span)?;
-        self.note_permission(
-            subscription_permission(kind),
-            format!("the `{name}` subscription"),
-            span,
-        );
-        if runs_in_background(kind, only_while_open) {
+        let handler = match options.at_most_every {
+            Some(pause) => {
+                let milliseconds = self.duration_in_milliseconds(pause, root)?;
+                self.throttled_handler(handler, root, kind, milliseconds, pause.span())?
+            }
+            None => self.subscription_handler(handler, root, kind, span)?,
+        };
+        self.note_permission(subscription_permission(kind), what.clone(), span);
+        if runs_in_background(kind, options.while_open) {
             self.note_permission(
                 Some(Permission::Background),
-                format!("the `{name}` subscription, which runs while the app is closed,"),
+                format!("{what}, which comes while the app is closed,"),
                 span,
             );
         }
         self.writer.subscription(Subscription {
             kind,
-            only_while_open,
+            only_while_open: options.while_open,
             handler,
             detail,
             days,
             value,
         });
         Ok(())
+    }
+
+    /// `on`'s options object, each field kept as written so the event can check it.
+    fn listener_options(&self, options: &'a Expression<'a>) -> Compiled<ListenerOptions<'a>> {
+        let Expression::ObjectExpression(object) = strip_parentheses(options) else {
+            return fail(
+                options.span(),
+                "write `on`'s options as an object, such as `{ while_open: true }`",
+            );
+        };
+        let mut found = ListenerOptions::default();
+        for property in &object.properties {
+            let ObjectPropertyKind::ObjectProperty(property) = property else {
+                return fail(object.span, "write `on`'s options out one by one, without `...`");
+            };
+            let Some(name) = static_key(&property.key) else {
+                return fail(property.span, "write `on`'s options with plain names");
+            };
+            let value = &property.value;
+            match name.as_str() {
+                "while_open" => match strip_parentheses(value) {
+                    Expression::BooleanLiteral(literal) => found.while_open = literal.value,
+                    _ => return fail(value.span(), "`while_open` must be written out as true or false"),
+                },
+                "every" => found.every = Some(value),
+                "at" => found.at = Some(value),
+                "days" => found.days = Some(value),
+                "at_most_every" => found.at_most_every = Some(value),
+                other => {
+                    return fail(
+                        property.span,
+                        format!("`on` has no option `{other}`; it takes while_open, every, at, days and at_most_every"),
+                    )
+                }
+            }
+        }
+        Ok(found)
+    }
+
+    /// A length of time known when compiling: milliseconds such as `MINUTE`, or a period such as `{ seconds: 1 }`.
+    fn duration_in_milliseconds(&self, duration: &'a Expression<'a>, root: &Rc<Scope<'a>>) -> Compiled<i64> {
+        match self.evaluate_constant(duration, root) {
+            Some(Constant::Number(milliseconds)) if milliseconds > 0 => Ok(milliseconds),
+            Some(Constant::Object(_)) => self.period_in_milliseconds(duration, root),
+            _ => fail(
+                duration.span(),
+                "a length of time must be known when compiling and above zero, such as `MINUTE` or `{ seconds: 1 }`",
+            ),
+        }
+    }
+
+    /// A handler that runs only when `pause` has passed since it last ran, timed by a hidden variable.
+    fn throttled_handler(
+        &mut self,
+        value: &'a Expression<'a>,
+        root: &Rc<Scope<'a>>,
+        kind: SubscriptionKind,
+        pause: i64,
+        span: Span,
+    ) -> Compiled<u16> {
+        let Some(Reference::Function(function)) = self.resolve_reference(value, root) else {
+            return fail(
+                value.span(),
+                "`at_most_every` needs a function the app defines as the handler",
+            );
+        };
+        let key = format!("~last_run{}", self.slots.len());
+        let declared = DeclaredType {
+            value_type: Type::NUMBER,
+            hint: NumberHint::Instant,
+            is_array: false,
+        };
+        let last_run = self.add_signal_slot(key, false, declared, &Constant::Number(0), span)?;
+        let mut emitter = Emitter::new(CodeKind::Handler);
+        let skip = emitter.label();
+        emitter.emit(Instruction::ReadSystem(SystemValue::Now), span)?;
+        emitter.emit(Instruction::ReadState(last_run), span)?;
+        emitter.emit(Instruction::Subtract, span)?;
+        self.emit_number(&mut emitter, pause, span)?;
+        emitter.emit(Instruction::GreaterOrEqual, span)?;
+        emitter.jump_if_false(skip, span)?;
+        emitter.emit(Instruction::ReadSystem(SystemValue::Now), span)?;
+        emitter.emit(Instruction::WriteState(last_run), span)?;
+        self.note_write(last_run, crate::types::Range::ANY);
+        let arguments = vec![ArgumentSource::Reference(Reference::Event(kind.event()))];
+        self.inline_call(&mut emitter, &function, arguments, false, None, span)?;
+        emitter.place(skip);
+        let code = emitter.finish(span)?;
+        Ok(self.add_handler(code))
     }
 
     /// The handler a subscription or lifecycle option calls, compiled for its event.
@@ -267,24 +342,6 @@ impl<'a> Compiler<'a> {
     // ------------------------------------------------------------------------
     // Arguments
     // ------------------------------------------------------------------------
-
-    /// `{ only_while_open: true }` as a subscription's last argument.
-    fn only_while_open(&self, options: &'a Expression<'a>, root: &Rc<Scope<'a>>) -> Compiled<bool> {
-        let Some(Constant::Object(fields)) = self.evaluate_constant(options, root) else {
-            return fail(options.span(), "write the options as `{ only_while_open: true }`");
-        };
-        let mut only_while_open = false;
-        for (field, value) in fields.iter() {
-            match (field.as_str(), value) {
-                ("only_while_open", Constant::Bool(value)) => only_while_open = *value,
-                ("only_while_open", _) => {
-                    return fail(options.span(), "`only_while_open` must be true or false")
-                }
-                (other, _) => return fail(options.span(), format!("a subscription has no option `{other}`")),
-            }
-        }
-        Ok(only_while_open)
-    }
 
     /// A period such as `{ seconds: 1 }`, in milliseconds.
     fn period_in_milliseconds(&self, period: &'a Expression<'a>, root: &Rc<Scope<'a>>) -> Compiled<i64> {
@@ -403,28 +460,6 @@ impl<'a> Compiler<'a> {
             ),
         }
     }
-
-    /// The `detail` of a clock change, motion, battery or phone subscription, from its name.
-    fn detail_number(
-        &self,
-        kind: SubscriptionKind,
-        function: &str,
-        name: &'a Expression<'a>,
-        root: &Rc<Scope<'a>>,
-    ) -> Compiled<u8> {
-        let names = detail_names(kind);
-        let found = match self.evaluate_constant(name, root) {
-            Some(Constant::Text(text)) => names.iter().position(|candidate| **candidate == *text),
-            _ => None,
-        };
-        match found {
-            Some(position) => Ok(position as u8),
-            None => fail(
-                name.span(),
-                format!("`{function}` takes one of: {}", names.join(", ")),
-            ),
-        }
-    }
 }
 
 /// The period rules of `runtime/src/subscriptions.rs`, checked when compiling.
@@ -445,7 +480,7 @@ fn check_period(
     if milliseconds < minute && !only_while_open && kind != SubscriptionKind::Acceleration {
         return fail(
             span,
-            format!("a period under a minute only runs while the app is open; add `{{ only_while_open: true }}` to `{name}`, or make it at least {minute} milliseconds"),
+            format!("a period under a minute only runs while the app is open; add `while_open: true` to the `{name}` event, or make it at least {minute} milliseconds"),
         );
     }
     Ok(())

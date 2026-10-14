@@ -2,15 +2,16 @@
 // Roll one to nine dice of two to ninety-nine sides with the button or by shaking the watch.
 // A single two-sided die shows heads or tails, and each roll changes colour so a repeat is noticed.
 
-import { computed, signal } from "@preact/signals";
 import {
+  computed,
   define_app,
   format_number,
-  motion,
   now,
+  on,
   persisted,
   random_int,
   range,
+  signal,
   vibrate,
   SECOND,
   type Instant,
@@ -131,13 +132,13 @@ function Dice() {
   );
 }
 
+on("open", open);
+on("shake", roll_on_shake, { while_open: true });
+
 export default define_app({
   id: "dice",
   name: "Dice",
   group: "games",
   icon: icons.dice,
   screens: { main: Dice },
-  subscriptions: [motion("shake", roll_on_shake, { only_while_open: true })],
-  permissions: ["motion"],
-  onOpen: open,
 });

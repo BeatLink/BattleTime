@@ -2,15 +2,15 @@
 // InfiniTime gives the dial: minute and hour ticks, aqua marks at 3, 6 and 9, the "12", the date and status icons.
 // wasp-os draws no second hand to save power, so a long press switches the second hand off and on.
 
-import { computed } from "@preact/signals";
 import {
+  computed,
   define_app,
   format_time,
   is_charging,
   is_phone_connected,
   now,
-  start_of_minute,
   persisted,
+  start_of_minute,
   to_upper,
   unread_notifications,
   type Color,

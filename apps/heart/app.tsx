@@ -2,15 +2,16 @@
 // It starts measuring on open as wasp-os does, and has InfiniTime's large reading, status line and
 // Start/Stop button; wasp-os's live graph becomes a chart of the latest readings.
 
-import { computed, signal } from "@preact/signals";
 import {
+  computed,
   define_app,
   format_number,
-  heart_rate_reading,
   heart_rate_status,
   is_heart_rate_running,
   keep_screen_on,
+  on,
   push_shift,
+  signal,
   start_heart_rate,
   stop_heart_rate,
   type HeartRateEvent,
@@ -116,14 +117,14 @@ function HeartRate() {
   );
 }
 
+on("open", start);
+on("close", stop);
+on("heart_rate", record, { every: { seconds: 1 }, while_open: true });
+
 export default define_app({
   id: "heart",
   name: "Heart",
   group: "health",
   icon: icons.heart,
   screens: { main: HeartRate },
-  subscriptions: [heart_rate_reading({ seconds: 1 }, record, { only_while_open: true })],
-  permissions: ["heart_rate"],
-  onOpen: start,
-  onClose: stop,
 });

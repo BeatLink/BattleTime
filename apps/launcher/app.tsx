@@ -3,9 +3,9 @@
 // group, or a page per group swiped left and right; and the view: a row per app or a grid of icons. A swipe down
 // closes it to the watch face.
 // The watch draws the apps itself from `installed_apps`, so this is an ordinary app that any other launcher can replace.
-import { computed, signal } from "@preact/signals";
 import {
   close,
+  computed,
   define_app,
   go,
   installed_apps,
@@ -14,6 +14,7 @@ import {
   launcher_view,
   open_app,
   range,
+  signal,
   type ChangeEvent,
   type SwipeEvent,
 } from "neotime";

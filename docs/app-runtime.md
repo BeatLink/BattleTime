@@ -70,7 +70,10 @@ flowchart LR
 Apps are written as [Preact](https://preactjs.com) components in TypeScript, with state held in
 [Preact Signals](https://preactjs.com/guide/v10/signals/). Preact never runs on the watch. The
 compiler reads the components ahead of time and produces the app image, while the same source runs
-on real Preact in a browser for previews.
+on real Preact in a browser for previews. The language is a subset of TSX compiled ahead of time,
+not Preact itself: each component runs once while compiling, and [What the compiler
+accepts](#what-the-compiler-accepts) lists the limits. Apps import everything from `neotime`, which
+passes on `signal`, `computed` and `useSignal`, so only the SDK names Preact.
 
 Signals were chosen because they match what the runtime does. A `signal` holds a value, and a
 `computed` is a value worked out from other signals that knows which ones it reads. On the watch, a
@@ -79,8 +82,7 @@ expression with an input mask. Only expressions whose inputs change are evaluate
 nothing re-renders.
 
 ```tsx
-import { computed } from "@preact/signals";
-import { define_app, persisted, now, format_duration } from "neotime";
+import { computed, define_app, persisted, now, format_duration } from "neotime";
 import { Column, Label, Button } from "neotime/widgets";
 
 const started_at = persisted<Instant | null>("started_at", null);
@@ -156,19 +158,19 @@ without failing.
 
 ### Background work and screens
 
-Anything that would be a timer or a `useEffect` in a web app is declared in `define_app` instead,
-so the runtime can schedule it and run it while the app is closed:
+Anything that would be a timer or a `useEffect` in a web app is connected with `on` at the top of the
+file instead, so the runtime can schedule it and run it while the app is closed. `define_app` then
+only says who the app is:
 
 ```tsx
+on("tick", record_heart_rate, { every: 10 * MINUTE });
+on("time", ring, { at: next_alarm });
+
 export default define_app({
   id: "heart-log",
   name: "Heart log",
   icon: "./heart.png",
   screens: { main: History, settings: Settings },
-  subscriptions: [
-    every({ minutes: 10 }, record_heart_rate),
-    at(next_alarm, ring),
-  ],
 });
 ```
 
@@ -178,7 +180,10 @@ export default define_app({
 | `kind` | `app`, the default, or `face`; a watch face has one screen and no buttons. |
 | `group` | The launcher group the app starts in, such as `games`: up to 16 letters, digits, `-` and `_`. [apps.md](apps.md) lists the usual ones. |
 | `screens` | One component per screen. `main` opens first, and the `go(...)` effect moves between them. |
-| `subscriptions` | `every(period, handler)`, `sensor("heart_rate", handler)` and `at(instant, handler)`. An `at` time may be a signal, so changing an alarm reschedules it. |
+
+[app-reference.md](app-reference.md#events) lists every event `on` takes and its options. A `time`
+may be a signal, so changing an alarm reschedules it. The compiler works out the app's permissions
+from what it uses, so `define_app` takes no list of them.
 
 ### What the compiler accepts
 
@@ -198,10 +203,10 @@ names the declarative form to use instead:
 |---|---|
 | `useState`, `useReducer`, `useRef` | `signal` or `useSignal` |
 | `useMemo` | `computed` |
-| `useEffect`, `setTimeout`, `setInterval` | `subscriptions`, or a binding that reads `now` |
+| `useEffect`, `setTimeout`, `setInterval` | `on` at the top of the file, or a binding that reads `now` |
 | `while`, recursion | `for ... of` over a fixed-length array |
-| `async`, `fetch`, classes | Not available; data from the phone arrives through a subscription |
-| Imports other than `preact`, `@preact/signals` and `neotime` | Copy the code into the app |
+| `async`, `fetch`, classes | Not available; data from the phone arrives through an event |
+| Imports other than `neotime` | Copy the code into the app |
 | Creating a signal inside a handler | Declare it at the top of the file |
 
 ### Previewing in a browser
@@ -309,8 +314,8 @@ Each subscription is 16 bytes:
 | 6–7 | For a daily time, the weekdays it runs on, bit 0 for Monday. |
 | 8–15 | The value: a period in milliseconds, an instant, or a local minute of the day. |
 
-Open, close, screen on and screen off are the app's own life; the rest are what `subscriptions`
-in `define_app` lists. Every, heart rate and acceleration repeat with a period. A period under a
+Open, close, screen on and screen off are the app's own life; the rest are what the app's `on`
+calls connect. Every, heart rate and acceleration repeat with a period. A period under a
 minute, and any acceleration, must be marked only-while-open, so a closed app can never keep the
 watch busy. An `at` or daily value may name a state variable, so changing it, such as moving an
 alarm, reschedules without any other code. `Subscription::next_due` works out when a timer-like
@@ -742,7 +747,7 @@ When a handler or an expression fails, the host calls `System::app_failed` and k
 A failed handler changes nothing, and a failed expression leaves its property as it was. A
 subscription that fails 3 times in a row is turned off until the app is next opened.
 
-Timer subscriptions line up with the clock: `every(60_000)` fires on each whole minute, not a
+Timer subscriptions line up with the clock: `on("tick", update, { every: MINUTE })` fires on each whole minute, not a
 minute after opening. An `At` time that has passed fires once and is remembered until its value
 changes, but that memory is not saved, so after a restart a passed `At` fires again unless its
 handler moved the time. `Derive` subscriptions run when the app opens and whenever what they read

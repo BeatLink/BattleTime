@@ -2,8 +2,8 @@
 // Three rings fill clockwise from twelve: green for the hour, blue for the minute and red for the second.
 // The second ring is wider than the screen, so only its middle shows, as in PinetimeLite.
 
-import { computed } from "@preact/signals";
 import {
+  computed,
   define_app,
   format_number,
   format_time,

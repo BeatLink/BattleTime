@@ -2,8 +2,7 @@
 // The phone writes /remote/buttons: the format version (1), the button count, then each button's
 // shared library icon by its place in the library. The phone runs each button's action itself.
 
-import { computed, signal } from "@preact/signals";
-import { define_app, file_bytes, range, send_to_phone, vibrate_pattern } from "neotime";
+import { computed, define_app, file_bytes, on, range, send_to_phone, signal, vibrate_pattern } from "neotime";
 import { icons, library_icon } from "neotime/icons";
 import { Button, Column, Icon, Label, Screen } from "neotime/widgets";
 
@@ -84,13 +83,13 @@ function Remote() {
   );
 }
 
+on("open", read_buttons);
+on("screen_on", read_buttons);
+
 export default define_app({
   id: "remote",
   name: "Remote",
   group: "phone",
   icon: icons.phone,
   screens: { main: Remote },
-  permissions: ["phone_messages"],
-  onOpen: read_buttons,
-  onScreenOn: read_buttons,
 });

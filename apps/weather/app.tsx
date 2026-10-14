@@ -2,8 +2,8 @@
 // It shows wasp-os's place name and InfiniTime's sky icon, condition, temperature coloured from
 // freezing to hot, the day's low and high, and the coming days' forecast, in the user's unit.
 
-import { computed } from "@preact/signals";
 import {
+  computed,
   current_weather,
   define_app,
   format_temperature,

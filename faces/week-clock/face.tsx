@@ -1,9 +1,9 @@
 // Digital clock with the weekday, ported from wasp-os's week_clock, which extends its clock face.
 // Big two-tone digits, the tens dimmer than the units, over the weekday and date, with wasp-os's status bar above.
 
-import { computed } from "@preact/signals";
 import {
   battery_percent,
+  computed,
   define_app,
   format_time,
   hour_of,

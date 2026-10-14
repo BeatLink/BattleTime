@@ -3,8 +3,19 @@
 // buzz and the high score, a tap starts again and a swipe leaves. The snake can no longer turn straight
 // back into itself, and its first meal makes it grow like every other.
 
-import { computed, signal } from "@preact/signals";
-import { back, define_app, every, persisted, random_int, range, vibrate, type Color, type SwipeEvent } from "neotime";
+import {
+  back,
+  computed,
+  define_app,
+  on,
+  persisted,
+  random_int,
+  range,
+  signal,
+  vibrate,
+  type Color,
+  type SwipeEvent,
+} from "neotime";
 import { icons } from "neotime/icons";
 import { CellGrid, Column, Label, Screen } from "neotime/widgets";
 
@@ -199,11 +210,12 @@ function Snake() {
   );
 }
 
+on("tick", tick, { every: { milliseconds: 250 }, while_open: true });
+
 export default define_app({
   id: "snake",
   name: "Snake",
   group: "games",
   icon: icons.game,
   screens: { main: Snake },
-  subscriptions: [every({ milliseconds: 250 }, tick, { only_while_open: true })],
 });

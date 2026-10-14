@@ -3,7 +3,6 @@
 // with its title and the start of its text. A tap reads one in full and Dismiss removes it.
 // Opening the app, or the screen turning on while it is open, marks them all read.
 
-import { signal } from "@preact/signals";
 import {
   back,
   define_app,
@@ -12,7 +11,9 @@ import {
   go,
   mark_notifications_read,
   notifications,
+  on,
   range,
+  signal,
 } from "neotime";
 import { icons } from "neotime/icons";
 import { Button, Column, Icon, Label, List, Row, Screen, Scroll } from "neotime/widgets";
@@ -110,12 +111,12 @@ function Message() {
   );
 }
 
+on("open", mark_notifications_read);
+on("screen_on", mark_notifications_read);
+
 export default define_app({
   id: "notifications",
   name: "Notifications",
   icon: icons.notification,
-  permissions: ["notifications"],
   screens: { main: NotificationList, message: Message },
-  onOpen: mark_notifications_read,
-  onScreenOn: mark_notifications_read,
 });

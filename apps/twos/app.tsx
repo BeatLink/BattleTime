@@ -2,15 +2,17 @@
 // InfiniTime gives the score, the one-in-ten chance of a 4 and picking only empty cells; wasp-os gives
 // the classic tile colours and tap to restart with a question. The board and best score persist.
 
-import { computed, signal } from "@preact/signals";
 import {
   can_slide,
+  computed,
   count_of,
   define_app,
   nth_index_of,
+  on,
   persisted,
   random_int,
   range,
+  signal,
   slide_changes,
   slide_grid,
   slide_points,
@@ -147,13 +149,14 @@ function Twos() {
   );
 }
 
+on("open", () => {
+  if (count_of(board.value, 0) === CELLS.length) start_game();
+});
+
 export default define_app({
   id: "twos",
   name: "2048",
   group: "games",
   icon: icons.game,
   screens: { main: Twos },
-  onOpen: () => {
-    if (count_of(board.value, 0) === CELLS.length) start_game();
-  },
 });

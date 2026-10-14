@@ -2,17 +2,17 @@
 // Two rackets play an endless rally under the time; each moves toward the ball only once it is coming its way.
 // A missed ball waits a while, then the other side serves again from where its racket stands.
 
-import { signal } from "@preact/signals";
 import {
   define_app,
-  every,
   format_number,
   format_time,
   hour_of,
   minute_of,
   now,
+  on,
   random_int,
   settings,
+  signal,
   type Color,
 } from "neotime";
 import { BatteryIcon } from "neotime/components";
@@ -180,11 +180,12 @@ function LitePongFace() {
   );
 }
 
+on("tick", step, { every: { milliseconds: STEP_MILLISECONDS }, while_open: true });
+
 export default define_app({
   id: "lite-pong",
   name: "Lite Pong",
   icon: icons.game,
   kind: "face",
   screens: { main: LitePongFace },
-  subscriptions: [every({ milliseconds: STEP_MILLISECONDS }, step, { only_while_open: true })],
 });

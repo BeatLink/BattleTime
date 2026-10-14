@@ -3,12 +3,12 @@
 // From InfiniTime: pause and resume, a running count of time since the end, and the buzzing stops itself.
 // It stores when it ends rather than ticking, so it keeps running while the app is closed.
 
-import { computed } from "@preact/signals";
 import {
-  at,
+  computed,
   define_app,
   format_duration,
   now,
+  on,
   persisted,
   stop_vibrating,
   vibrate_pattern,
@@ -180,15 +180,16 @@ function Timer() {
   );
 }
 
+on("close", () => {
+  if (is_ringing.value) dismiss();
+});
+on("time", ring, { at: ends_at });
+on("time", silence, { at: silence_at });
+
 export default define_app({
   id: "timer",
   name: "Timer",
   group: "time",
   icon: icons.timer,
   screens: { main: Timer },
-  subscriptions: [at(ends_at, ring), at(silence_at, silence)],
-  permissions: ["wake", "background"],
-  onClose: () => {
-    if (is_ringing.value) dismiss();
-  },
 });

@@ -2,10 +2,10 @@
 // The screen is the flag's stripes, with battery, date, time, weekday and steps spaced down the middle.
 // InfiniTime's pop-up flag buttons are a settings screen here, opened by a long press.
 
-import { computed } from "@preact/signals";
 import {
   back,
   battery_percent,
+  computed,
   define_app,
   format_time,
   go,

@@ -2,8 +2,16 @@
 // It shows the next turn's arrow, the instruction, the distance to it in the wearer's units, and the
 // route's progress.
 
-import { computed, signal } from "@preact/signals";
-import { current_navigation, define_app, format_fixed, navigation, request_navigation_state, settings } from "neotime";
+import {
+  computed,
+  current_navigation,
+  define_app,
+  format_fixed,
+  on,
+  request_navigation_state,
+  settings,
+  signal,
+} from "neotime";
 import { icon_named, icons } from "neotime/icons";
 import { Bar, Icon, Label, Screen } from "neotime/widgets";
 
@@ -79,13 +87,13 @@ function Navigation() {
   );
 }
 
+on("open", open);
+on("navigation", receive, { while_open: true });
+
 export default define_app({
   id: "navigation",
   name: "Navigation",
   group: "phone",
   icon: icons.navigation,
   screens: { main: Navigation },
-  subscriptions: [navigation(receive, { only_while_open: true })],
-  permissions: ["phone"],
-  onOpen: open,
 });

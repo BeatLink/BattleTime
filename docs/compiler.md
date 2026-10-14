@@ -52,12 +52,13 @@ becomes bytecode.
 
 | Written | Becomes |
 |---|---|
-| `import` from `preact`, `preact/hooks`, `@preact/signals` and `neotime`, `neotime/widgets`, `neotime/components`, `neotime/icons`, `neotime/lib` | Names the compiler knows. Any other import is an error. |
+| `import` from `neotime`, `neotime/widgets`, `neotime/components`, `neotime/icons` and `neotime/lib` | Names the compiler knows. `neotime` passes on `signal`, `computed` and `useSignal` from Preact Signals. The compiler still reads imports from `preact`, `preact/hooks` and `@preact/signals`; any other import is an error. |
 | `const NAME = value` | A constant when it can be worked out now, otherwise an expression compiled where it is used. |
 | `signal(start)`, `persisted("key", start)` | A state variable; `persisted` sets the persist flag and uses the key. |
 | `computed(() => ...)` | Inlined wherever `.value` reads it. |
 | `function` declarations and arrow constants | Inlined wherever they are called. |
 | `type` aliases | Used to read type arguments such as `signal<Mode>(...)`. |
+| `on("event", handler, { ...options })` | One subscription; see [Events, images and permissions](#events-images-and-permissions). |
 | `export default define_app({...})` | The image's id, name, kind and screens. |
 
 ### Components
@@ -272,19 +273,22 @@ Swipe directions, button presses and every event's fields, such as the `value` a
 Effect arguments that are text may point into the call's text buffer, such as the text of
 `show_toast(\`${count} left\`)`, so the runtime must copy them before it runs the next call.
 
-## Subscriptions, images and permissions
+## Events, images and permissions
 
-- `define_app`'s `subscriptions` become the image's subscriptions: `every`, `at`, `daily`,
-  `clock_change`, `heart_rate_reading`, `steps`, `step_goal`, `motion`, `acceleration`, `battery`,
-  `phone`, `notification`, `call`, `music`, `weather`, `navigation` and `settings_change`, each with
-  an optional `{ only_while_open }`. `onOpen`, `onClose`, `onScreenOn` and `onScreenOff` become the
-  Open, Close, ScreenOn and ScreenOff subscriptions. A period under 20 ms, a period under a minute
-  without `only_while_open`, and `acceleration` without it are errors, as the runtime's checks have it.
+- Each `on(event, handler, options)` at the top of the file becomes one of the image's
+  subscriptions, in the order written (`EVENTS` in `subscriptions.rs` maps names to kinds and
+  details). `open`, `close`, `screen_on` and `screen_off` become the Open, Close, ScreenOn and
+  ScreenOff subscriptions. `on` after `define_app` or inside a handler is an error, and so are
+  `define_app`'s old `subscriptions`, `onOpen` and other lifecycle options. A period under 20 ms, a
+  period under a minute without `while_open: true`, and `acceleration` without it are errors, as
+  the runtime's checks have it.
+- `at_most_every` compiles to a handler that reads `now`, compares it with a hidden `~last_runN`
+  Instant, and skips the app's handler until the pause has passed; no runtime support is needed.
 - Handlers read event fields by name; text fields (a notification's `app`, `title` and `body`, a
   call's `caller`, a setting's `key`) use `ReadEventText`. Motion and call `kind`s are choices
   numbered as in `runtime/src/events.rs`'s docs; `is_connected` is a boolean.
-- `at` takes a signal holding an `Instant`; anything else, such as a `computed`, is kept in a hidden
-  `~derivedN` variable by a derive subscription. `daily` takes a constant `{ hour, minute }`, a
+- `time`'s `at` takes a signal holding an `Instant`; anything else, such as a `computed`, is kept in a hidden
+  `~derivedN` variable by a derive subscription. `daily`'s `at` takes a constant `{ hour, minute }`, a
   record signal (derived into a minute of the day) or a number signal; its days must be constant.
 - An array prop that changes while running (a `computed` array, a constant mapped with state, an
   array literal of `{ x, y }` points) is a hidden `~derivedN` array that a Derive subscription
@@ -294,8 +298,9 @@ Effect arguments that are text may point into the call's text buffer, such as th
   or alpha-only artwork is a mask; other artwork is a colour image blended onto black. The icon is
   image 0 with the icon flag; a library icon given as `icon` is image 0 of format 2, which only
   names the library icon.
-- `permissions` are checked against the effects, subscriptions and system values used, as
-  app-reference.md lists them; a missing one is an error. The image has no field for them.
+- Permissions are worked out from the effects, events and system values used, as app-reference.md
+  lists them, and returned in `Output::permissions`; `define_app` refuses a `permissions` list. The
+  image has no field for them.
 - `neotime-compiler library -o shared.ntlib` writes the shared library: every icon in `ICON_NAMES`
   as a 32 by 32 mask, drawn from `third_party/` (see its README), and the functions in
   `LIBRARY_FUNCTIONS` compiled from `sdk/neotime/src/lib.ts`. Images record library version 2.
@@ -310,7 +315,7 @@ arguments.
 
 ## Not supported yet
 
-- `message` and `http_response` subscriptions, `daily` days from a signal, ButtonMatrix
+- The `message` and `http_response` events, `daily` days from a signal, ButtonMatrix
   `highlighted` (an array of labels, which `Value` cannot hold), and a Chart's second and third series.
 - `vibrate_sequence` and `http_request`.
 - More than 16 loops, or more than 16 branches waiting to join, in one handler or expression.

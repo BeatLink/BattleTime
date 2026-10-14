@@ -35,7 +35,7 @@ time.
 | `heart_rate_status` | `Int` | The sensor's state: 0 stopped, 1 no skin, 2 settling, 3 measuring. |
 | `is_bluetooth_enabled` | `Bool` | Whether Bluetooth is on, whether or not the phone is connected. It is on again after every restart. |
 | `next_alarm` | `Instant \| null` | The next alarm any app has set to ring, or `null` if none is set. In app code an empty optional is always `null`. |
-| `current_weather` | object | The last forecast the phone sent: `temperature`, `condition`, `low`, `high`, `sunrise`, `sunset`, `location` and `received_at` (each `null` until the phone sends it), and `forecast`, up to 5 coming days, each with `condition`, `low` and `high`: read `current_weather.value.forecast.length` and `current_weather.value.forecast[day].high`. Reading it needs no permission, so faces need no subscription of their own. |
+| `current_weather` | object | The last forecast the phone sent: `temperature`, `condition`, `low`, `high`, `sunrise`, `sunset`, `location` and `received_at` (each `null` until the phone sends it), and `forecast`, up to 5 coming days, each with `condition`, `low` and `high`: read `current_weather.value.forecast.length` and `current_weather.value.forecast[day].high`. Reading it needs no permission, so faces need no event of their own. |
 | `installed_apps` | list | Every app a launcher lists, in order, group by group: `installed_apps.value.length`, and `installed_apps.value[i].name`, `.id` (for `open_app`) and `.icon` (for an `Icon`). `apps/launcher` is a launcher written this way. |
 | `launcher_groups` | list | The launcher groups that hold at least one app, in the order the companion set: `.name`, `.icon`, and `.first` and `.count`, the run of `installed_apps` each holds. With no launcher file every app is in one group, `Other`. |
 | `launcher_style` | `Text` | How the wearer wants the groups shown: `folders`, `sections`, `pages` or `list` (one list without groups, until the companion sets one). |
@@ -51,7 +51,7 @@ time.
 
 The system keeps the latest weather, music and navigation, including their text, and keeps them
 through a reboot, so an app shows them by reading these values rather than copying event text into
-its own state. The `weather`, `music` and `navigation` subscriptions are for reacting when they change.
+its own state. The `weather`, `music` and `navigation` events are for reacting when they change.
 
 ## Events
 
@@ -100,49 +100,63 @@ press on the screen and `go("settings")`.
 A widget whose value is bound to a signal, such as `<Slider value={volume} />` without `.value`,
 writes the new value back itself, so `onChange` is only needed for anything else to happen.
 
-### App and screen life
+### Screen life
 
 | Prop | Set on | When |
 |---|---|---|
-| `onOpen` | `define_app` | The app comes to the front. |
-| `onClose` | `define_app` | The app leaves the front, for another app or the watch face. |
 | `onShow`, `onHide` | a screen | A screen comes into view or leaves it. |
-| `onScreenOff`, `onScreenOn` | `define_app` | The display turns off or on while the app is in front. |
 
-Most apps need none of these, because state persists and bindings redraw themselves.
+### Events
 
-### Subscriptions
+An app connects a handler to an event with `on(event, handler, options)`, from `neotime`, at the top
+of the file and before `export default define_app`. The compiler turns each `on` into one of the
+image's subscriptions, so an `on` inside a handler is an error. Events other than the app's own life
+call their handler even while the app is closed; see [Background work](app-runtime.md#background-work).
 
-Subscriptions are declared in `define_app({ subscriptions: [...] })`. They call their handler even
-while the app is closed; see [Background work](app-runtime.md#background-work). Any subscription
-takes a last argument `{ only_while_open: true }`, which needs no `background` permission and
-stops when the app closes, such as for shaking to roll dice.
+```tsx
+on("open", start);
+on("tick", update, { every: MINUTE });
+on("time", ring, { at: next_ring_at });
+on("shake", roll, { while_open: true, at_most_every: SECOND });
+```
 
-An `at` time that has already passed, for example because the watch was off, fires once at once.
+| Option | Means |
+|---|---|
+| `while_open: true` | Comes only while the app is open, which needs no `background` permission, such as shaking to roll dice. Written out as `true` or `false`. |
+| `every` | How often `tick`, `heart_rate` and `acceleration` come: milliseconds such as `MINUTE`, or a period such as `{ seconds: 1 }`, known when compiling. |
+| `at` | When `time` comes, an Instant or a signal holding one; or the time of day `daily` comes, `{ hour, minute }` or a signal holding one. |
+| `days` | The weekdays `daily` comes on, a 7-bit mask with Monday first; every day when left out. |
+| `at_most_every` | Skips the handler until this long has passed since it last ran, timed by a hidden variable the compiler adds. The handler must be a function the app defines. |
+
+A `time` that has already passed, for example because the watch was off, comes once at once.
 A handler run in the background may vibrate and notify without the `wake` permission; it needs
 `wake` only to turn the screen on or to vibrate during do not disturb.
 
-| Subscription | Fields | When |
+| Event | Fields | When |
 |---|---|---|
-| `every(period, handler)` | `time` | Repeatedly, at most every 20 milliseconds. Periods shorter than a minute need `{ only_while_open: true }`, so they never run in the background. |
-| `at(instant, handler)` | `time` | Once, at an absolute time. The instant may be a signal, so changing it reschedules. |
-| `daily(time_of_day, handler, days?)` | `time` | At a local time of day, `{ hour, minute }`, on the weekdays in `days` (a 7-bit mask, Monday first; every day when left out). `time_of_day` may be a signal, and `null` turns the subscription off, as an alarm switch does. |
-| `clock_change(unit, handler)` | `time` | The local `minute`, `hour` or `day` changes, such as a reset at midnight. Also fires when the phone sets the clock. |
-| `heart_rate_reading(period, handler)` | `beats_per_minute`, `confidence` | A measurement every `period`. Several apps asking share one measurement. |
-| `steps(handler)` | `steps_today` | The step count changes, at most once a minute. |
-| `step_goal(handler)` | `steps_today` | The day's step goal is reached. |
-| `motion(kind, handler)` | `kind` | The accelerometer sees `wrist_raise`, `shake`, `tap`, `double_tap`, `still` or `moving`. Only `shake` is sent so far, found in software while the app is open and the screen is on. |
-| `acceleration(period, handler)` | `x`, `y`, `z` in thousandths of g | Raw readings, such as for a spirit level. Only while the app is open and the screen is on, and at most 10 a second; the accelerometer is read only while an app asks. |
-| `battery(kind, handler)` | `percent` | The battery goes `low`, or charging `starts`, `stops` or `completes`. |
-| `phone(kind, handler)` | `is_connected` | The phone `connects` or `disconnects`. |
-| `notification(handler)` | `id`, `app`, `title`, `body`, `time` | A notification arrives from the phone. The watch keeps up to 24 bytes of `app`, 32 of `title` and 120 of `body`. |
-| `call(handler)` | `kind`, `caller` | A call is `incoming`, `answered` or `ended`. |
-| `music(handler)` | none | The phone's player changes; read the new state from `current_music`. |
-| `weather(handler)` | none | The phone sends a forecast; read it from `current_weather`, coming days included. |
-| `navigation(handler)` | none | The phone's navigation app gives the next step; read it from `current_navigation`. |
-| `message(channel, handler)` | the message's fields | The companion app sends this app a message on its own channel. |
-| `http_response(handler)` | `request_id`, `status`, `body` | A reply to an `http_request` effect. |
-| `settings_change(handler)` | `key` | The user changes a setting, from the watch or the phone. `key` is its name as `set_setting` takes it, or `do_not_disturb`; one event comes for each setting changed. |
+| `open` | none | The app comes to the front. |
+| `close` | none | The app leaves the front, for another app or the watch face. |
+| `screen_on`, `screen_off` | none | The display turns on or off while the app is in front. |
+| `tick` | `time` | Repeatedly, `every` so often and at most every 20 milliseconds. Periods shorter than a minute need `while_open: true`, so they never run in the background. |
+| `time` | `time` | Once, `at` an absolute time. The instant may be a signal, so changing it reschedules, and `null` turns it off. |
+| `daily` | `time` | At a local time of day `at`, on the weekdays in `days`. A signal holding `null` turns it off, as an alarm switch does. |
+| `minute`, `hour`, `day` | `time` | The local minute, hour or day changes, such as a reset at midnight. Also comes when the phone sets the clock. |
+| `heart_rate` | `beats_per_minute`, `confidence` | A measurement `every` so often. Several apps asking share one measurement. |
+| `steps` | `steps_today` | The step count changes, at most once a minute. |
+| `step_goal` | `steps_today` | The day's step goal is reached. |
+| `wrist_raise`, `shake`, `wrist_tap`, `wrist_double_tap`, `still`, `moving` | `kind` | The accelerometer sees that motion. Only `shake` is sent so far, found in software while the app is open and the screen is on. |
+| `acceleration` | `x`, `y`, `z` in thousandths of g | Raw readings `every` so often, such as for a spirit level. Only with `while_open: true` and while the screen is on, and at most 10 a second; the accelerometer is read only while an app asks. |
+| `battery_low`, `charging_starts`, `charging_stops`, `charging_completes` | `percent` | The battery goes low, or charging starts, stops or completes. |
+| `phone_connects`, `phone_disconnects` | `is_connected` | The phone connects or disconnects. |
+| `notification` | `id`, `app`, `title`, `body`, `time` | A notification arrives from the phone. The watch keeps up to 24 bytes of `app`, 32 of `title` and 120 of `body`. |
+| `call` | `kind`, `caller` | A call is `incoming`, `answered` or `ended`. |
+| `music` | none | The phone's player changes; read the new state from `current_music`. |
+| `weather` | none | The phone sends a forecast; read it from `current_weather`, coming days included. |
+| `navigation` | none | The phone's navigation app gives the next step; read it from `current_navigation`. |
+| `settings_change` | `key` | The user changes a setting, from the watch or the phone. `key` is its name as `set_setting` takes it, or `do_not_disturb`; one event comes for each setting changed. |
+
+`message`, for messages the companion app sends on the app's own channel, and `http_response`, the
+reply to an `http_request` effect, are not in the image format yet.
 
 When several of the same event are waiting, the runtime delivers only the latest, so a slow handler
 never falls behind.
@@ -352,21 +366,21 @@ the `wake` permission for this yet.
 | `music_control(command)` | `play`, `pause`, `next`, `previous`, `volume_up` or `volume_down`. |
 | `call_control(command)` | `answer`, `reject` or `mute` the current call. |
 | `find_phone(on)` | Makes the phone ring, or stops it. |
-| `request_music_state()` | Asks the phone to send its player's state now, which arrives through the `music` subscription. |
-| `request_navigation_state()` | Asks the phone for the current navigation step, which arrives through the `navigation` subscription. |
+| `request_music_state()` | Asks the phone to send its player's state now, which arrives through the `music` event. |
+| `request_navigation_state()` | Asks the phone for the current navigation step, which arrives through the `navigation` event. |
 
 ### Sensors
 
 | Effect | Does |
 |---|---|
-| `measure_heart_rate()` | Takes one reading now. The result arrives through the `heart_rate` subscription and updates `heart_rate`. |
+| `measure_heart_rate()` | Takes one reading now. The result arrives through the `heart_rate` event and updates `heart_rate`. |
 | `start_heart_rate()`, `stop_heart_rate()` | Measures continuously while the app is open, such as during a workout. The runtime stops it when the app closes. |
 
 The sensor runs while anything needs it: an app that called `start_heart_rate()` and has not
-stopped or closed, a `heart_rate_reading` subscription when its next reading is due, or a
+stopped or closed, a `heart_rate` event when its next reading is due, or a
 `measure_heart_rate()` call. `stop_heart_rate()` ends only that app's own continuous measuring;
-subscriptions keep their schedules. A subscription period under a minute needs
-`{ only_while_open: true }`, so a background app cannot keep the sensor on all the time.
+events keep their schedules. An `every` under a minute needs `while_open: true`, so a background
+app cannot keep the sensor on all the time.
 | `reset_step_trip()` | Starts the trip count in `step_history` from zero. Today's count and the history stay. |
 
 ### System
@@ -555,20 +569,20 @@ several calls.
 
 ## Permissions
 
-An app lists what it needs in `define_app({ permissions: [...] })`. The watch asks the user once,
-when the app is installed. The compiler checks that every effect and subscription the app uses is
-covered, so a missing permission is a compile error, not a surprise on the watch.
+The compiler works out the permissions an app needs from the effects, events and system values it
+uses, so an app never lists them. The watch asks the user once, when the app is installed. The image
+has no place for them yet, so for now the compiler only reports them, in its `Output::permissions`.
 
 | Permission | Covers |
 |---|---|
-| `heart_rate` | The `heart_rate_reading` subscription, the heart rate effects and `set_heart_rate_led`. |
-| `motion` | The `motion` and `acceleration` subscriptions. |
-| `notifications` | Reading notifications, and the notification effects. |
-| `phone` | `call_control`, `music_control`, `find_phone`, and the `call`, `music` and `navigation` subscriptions. |
-| `phone_messages` | `send_to_phone` and the `message` subscription. |
+| `heart_rate` | The `heart_rate` event, the heart rate effects and `set_heart_rate_led`. |
+| `motion` | The motion events, such as `shake`, and `acceleration`. |
+| `notifications` | Reading notifications, the `notification` event and the notification effects. |
+| `phone` | `call_control`, `music_control`, `find_phone`, reading `current_music` and `current_navigation`, and the `call`, `music` and `navigation` events. |
+| `phone_messages` | `send_to_phone`. |
 | `internet` | `http_request`. |
 | `settings` | `set_setting`, `set_do_not_disturb`, `set_bluetooth` and `set_app_enabled`. |
 | `wake` | `wake_screen`, and vibration during do not disturb. |
-| `background` | Subscriptions that run while the app is closed. |
+| `background` | Events other than the app's own life connected without `while_open: true`, which come while the app is closed. |
 
 Reading system values and files, the screen, haptics and navigation need no permission.

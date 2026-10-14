@@ -715,16 +715,16 @@ watch face, the launcher and the apps through `neotime-app-host`:
   each reading to the step history (see [Step history](#step-history-servicessteps)), which it
   shares with the shell in a thread-mode mutex. It never resets the chip's count. It shares the
   I2C bus with the touch panel. A change redraws what shows the steps and `step_history`, and goes
-  to the app's `steps` subscriptions. `reset_step_trip` from an app only signals the task, which
+  to the app's `steps` events. `reset_step_trip` from an app only signals the task, which
   zeroes the trip and saves it, so no file is written from inside an app's handler.
 - **Acceleration and shakes.** While the screen is on, the shell asks
   `neotime_app_host::motion::reading_period_in_milliseconds` how often the open app needs readings:
   the shortest `acceleration` period, no faster than ten a second, or a tenth of a second for a
-  `motion("shake")` subscription. `motion.rs` reads acceleration only then, so the chip is read for
+  `shake` event. `motion.rs` reads acceleration only then, so the chip is read for
   steps alone the rest of the time, and feeds each reading to the shake detector. Readings and
   shakes reach the shell through `app_events.rs`, which keeps only the latest of each; the host
-  hands the latest reading to `acceleration` subscriptions at their period and a shake to
-  `motion("shake")` at once.
+  hands the latest reading to `acceleration` events at their period and a shake to `shake` events
+  at once.
 - **Phone connection.** `phone.rs` holds whether a phone is connected, which the Bluetooth task
   sets when a connection is accepted and clears when it ends. Each change wakes the shell, which
   redraws what reads `is_phone_connected` and sends the app's `phone` subscriptions `connects` or

@@ -3,8 +3,7 @@
 // memory it needs while open. The watch checks each change first, so an app that would not fit,
 // the launcher and the last face cannot be switched, and a tap on one says why.
 
-import { signal } from "@preact/signals";
-import { app_memory_budget, back, define_app, go, packages, range, set_app_enabled } from "neotime";
+import { app_memory_budget, back, define_app, go, packages, range, set_app_enabled, signal } from "neotime";
 import { Header } from "neotime/components";
 import { icons } from "neotime/icons";
 import { Button, Column, Label, List, Row, Screen, Switch } from "neotime/widgets";
@@ -138,6 +137,5 @@ export default define_app({
   name: "Software",
   group: "system",
   icon: icons.chart,
-  permissions: ["settings"],
   screens: { main: PackageList, refused: Refused },
 });

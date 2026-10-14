@@ -2,8 +2,7 @@
 // Each time it opens it shows the next verse, one line to a card, and swiping up leaves, as on wasp-os.
 // A tap or a swipe down moves on to the next verse without leaving. The verses are built in.
 
-import { computed } from "@preact/signals";
-import { back, define_app, persisted, type SwipeEvent } from "neotime";
+import { back, computed, define_app, on, persisted, type SwipeEvent } from "neotime";
 import { Card } from "neotime/components";
 import { icons } from "neotime/icons";
 import { Label, Screen } from "neotime/widgets";
@@ -87,11 +86,12 @@ function Haiku() {
   );
 }
 
+on("open", next_verse);
+
 export default define_app({
   id: "haiku",
   name: "Haiku",
   group: "tools",
   icon: icons.notification,
   screens: { main: Haiku },
-  onOpen: next_verse,
 });

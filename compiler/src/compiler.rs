@@ -12,19 +12,17 @@ use neotime_runtime::widgets::MOST_WIDGETS;
 use neotime_runtime::writer::ImageWriter;
 use neotime_runtime::{AppKind, Property, PropertySource};
 use oxc_ast::ast::{
-    ArrowFunctionBody, BindingPattern, Declaration, ExportDefaultDeclarationKind, Expression, Function,
-    ImportDeclarationSpecifier, ModuleExportName, ObjectExpression, ObjectPropertyKind, Program, Statement,
-    TSLiteral, TSType, TSTypeName, VariableDeclarationKind,
+    ArrowFunctionBody, BindingPattern, CallExpression, Declaration, ExportDefaultDeclarationKind, Expression,
+    Function, ImportDeclarationSpecifier, ModuleExportName, ObjectExpression, ObjectPropertyKind, Program,
+    Statement, TSLiteral, TSType, TSTypeName, VariableDeclarationKind,
 };
 use oxc_span::{GetSpan, Span};
 
 use crate::constants::{static_key, strip_parentheses, Constant};
 use crate::diagnostics::{fail, Compiled, Diagnostic};
 use crate::scope::{FunctionBodyReference, FunctionReference, LibraryModule, Reference, Scope};
-use crate::subscriptions::lifecycle_kind;
 use crate::types::{ChoiceSet, Kind, NumberHint, Range, Type};
 use crate::widgets::WidgetNode;
-use neotime_runtime::subscriptions::SubscriptionKind;
 
 // ============================================================================
 // Limits and versions
@@ -92,6 +90,8 @@ pub struct Module<'a> {
     pub names: HashMap<String, Reference<'a>>,
     pub type_aliases: HashMap<String, &'a TSType<'a>>,
     pub app_options: Option<&'a ObjectExpression<'a>>,
+    /// The `on(...)` calls at the top of the file, in the order written.
+    pub listeners: Vec<&'a CallExpression<'a>>,
 }
 
 /// A signal declared at the top of the file, before its slot is laid out.
@@ -398,6 +398,7 @@ impl<'a> Compiler<'a> {
             names: HashMap::new(),
             type_aliases: HashMap::new(),
             app_options: None,
+            listeners: Vec::new(),
         });
         let root = Scope::module_root(module_number);
         let mut signals: Vec<SignalDeclaration<'a>> = Vec::new();
@@ -432,7 +433,7 @@ impl<'a> Compiler<'a> {
                 let Some(library) = LibraryModule::for_source(source) else {
                     return fail(
                         import.span,
-                        format!("apps may only import from preact, @preact/signals and neotime, not `{source}`; copy the code into the app"),
+                        format!("apps may only import from neotime, not `{source}`; copy the code into the app"),
                     );
                 };
                 for specifier in import.specifiers.iter().flatten() {
@@ -458,7 +459,7 @@ impl<'a> Compiler<'a> {
                     self.modules[module].names.insert(
                         local.to_string(),
                         Reference::Library {
-                            module: library,
+                            module: library.owner_of(imported),
                             name: imported.to_string(),
                         },
                     );
@@ -484,6 +485,7 @@ impl<'a> Compiler<'a> {
             Statement::ExportFromDeclaration(export) => {
                 fail(export.span, "re-exporting other modules is not supported; copy the code into the app")
             }
+            Statement::ExpressionStatement(statement) => self.load_listener(&statement.expression, module, root),
             other => match other.as_declaration() {
                 Some(declaration) => self.load_declaration(declaration, module, root, signals),
                 None => fail(
@@ -492,6 +494,39 @@ impl<'a> Compiler<'a> {
                 ),
             },
         }
+    }
+
+    /// An `on(...)` call at the top of the file, kept until the app is compiled.
+    fn load_listener(
+        &mut self,
+        expression: &'a Expression<'a>,
+        module: usize,
+        root: &Rc<Scope<'a>>,
+    ) -> Compiled<()> {
+        let Expression::CallExpression(call) = strip_parentheses(expression) else {
+            return fail(
+                expression.span(),
+                "only declarations and `on(...)` may sit at the top of the file; put this code in a handler or a computed",
+            );
+        };
+        let is_on = matches!(
+            self.resolve_reference(&call.callee, root),
+            Some(Reference::Library { module: LibraryModule::Neotime, ref name }) if name == "on"
+        );
+        if !is_on {
+            return fail(
+                call.span,
+                "only declarations and `on(...)` may sit at the top of the file; put this call in a handler",
+            );
+        }
+        if self.modules[module].app_options.is_some() {
+            return fail(
+                call.span,
+                "connect events with `on` before `export default define_app`",
+            );
+        }
+        self.modules[module].listeners.push(call);
+        Ok(())
     }
 
     fn load_default_export(
@@ -665,7 +700,7 @@ impl<'a> Compiler<'a> {
                     | Some((LibraryModule::PreactHooks, "useEffect")) => {
                         return fail(
                             call.span,
-                            "effects are not available; use `subscriptions` in define_app, or a binding that reads `now`",
+                            "effects are not available; connect an event with `on` at the top of the file, or bind to `now`",
                         );
                     }
                     _ => {}
@@ -1069,7 +1104,6 @@ impl<'a> Compiler<'a> {
         };
         let root = Scope::module_root(module);
 
-        let mut lifecycle: Vec<(SubscriptionKind, &'a Expression<'a>)> = Vec::new();
         for property in &options.properties {
             let ObjectPropertyKind::ObjectProperty(property) = property else {
                 return fail(
@@ -1081,11 +1115,26 @@ impl<'a> Compiler<'a> {
                 return fail(property.span, "write define_app's options with plain names");
             };
             match name.as_str() {
-                "id" | "name" | "kind" | "group" | "screens" | "icon" | "subscriptions" | "permissions" => {}
-                other => match lifecycle_kind(other) {
-                    Some(kind) => lifecycle.push((kind, &property.value)),
-                    None => return fail(property.span, format!("define_app has no option `{other}`")),
-                },
+                "id" | "name" | "kind" | "group" | "screens" | "icon" => {}
+                "permissions" => {
+                    return fail(
+                        property.span,
+                        "remove `permissions`: the compiler works out what the app needs from what it uses",
+                    )
+                }
+                "subscriptions" => {
+                    return fail(
+                        property.span,
+                        "connect events with `on` above define_app instead, such as `on(\"tick\", update, { every: MINUTE })`",
+                    )
+                }
+                "onOpen" | "onClose" | "onScreenOn" | "onScreenOff" => {
+                    return fail(
+                        property.span,
+                        format!("connect `{name}` with `on` above define_app instead, such as `on(\"open\", start)`"),
+                    )
+                }
+                other => return fail(property.span, format!("define_app has no option `{other}`")),
             }
         }
 
@@ -1093,11 +1142,8 @@ impl<'a> Compiler<'a> {
         if let Some(icon) = option(options, "icon") {
             self.add_app_icon(icon, &root)?;
         }
-        for (kind, handler) in lifecycle {
-            self.compile_lifecycle(kind, handler, &root)?;
-        }
-        if let Some(subscriptions) = option(options, "subscriptions") {
-            self.compile_subscriptions(subscriptions, &root)?;
+        for call in self.modules[module].listeners.clone() {
+            self.compile_listener(call, &root)?;
         }
 
         let Some(screens) = option(options, "screens") else {
@@ -1154,7 +1200,7 @@ impl<'a> Compiler<'a> {
         for tree in &trees {
             self.write_widget(tree, screens.span)?;
         }
-        self.check_permissions(option(options, "permissions"), &root, options.span)
+        Ok(())
     }
 
     fn write_widget(&mut self, node: &WidgetNode, span: Span) -> Compiled<()> {

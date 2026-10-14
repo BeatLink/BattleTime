@@ -45,6 +45,14 @@ impl LibraryModule {
             _ => return None,
         })
     }
+
+    /// The module a name imported from `self` really comes from, since `neotime` passes on Signals' own.
+    pub fn owner_of(self, name: &str) -> LibraryModule {
+        match (self, name) {
+            (LibraryModule::Neotime, "signal" | "computed" | "useSignal") => LibraryModule::Signals,
+            _ => self,
+        }
+    }
 }
 
 /// A function written in the source, with the scope it was written in.

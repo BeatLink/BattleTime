@@ -1,9 +1,9 @@
 // Resistor clock watch face, ported from wasp-os's resistor_clock.
 // Each digit of the time (hhmmss) and the date (ddmmyyyy) is a band in the resistor colour code.
 
-import { computed } from "@preact/signals";
 import {
   battery_percent,
+  computed,
   day_of,
   define_app,
   hour_of,

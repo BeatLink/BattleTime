@@ -4,8 +4,7 @@
 // From wasp-os: a key for each operator, a clear key, and keeping the sum when the app is closed.
 // Numbers are whole on the watch, so every value is held in millionths.
 
-import { computed } from "@preact/signals";
-import { define_app, format_fixed, persisted, range, vibrate, type ChangeEvent } from "neotime";
+import { computed, define_app, format_fixed, persisted, range, vibrate, type ChangeEvent } from "neotime";
 import { icons } from "neotime/icons";
 import { ButtonMatrix, Column, Label, Screen } from "neotime/widgets";
 

@@ -1,12 +1,13 @@
 // Sports timer, ported from wasp-os's sports app: a stopwatch that also counts the steps taken while
 // it runs. The Start button starts and stops it, and a tap clears it once stopped.
 
-import { computed } from "@preact/signals";
 import {
+  computed,
   define_app,
   format_duration,
   keep_screen_on,
   now,
+  on,
   persisted,
   steps_today,
   HOUR,
@@ -99,11 +100,12 @@ function Sports() {
   );
 }
 
+on("open", () => keep_screen_on(is_running.value));
+
 export default define_app({
   id: "sports",
   name: "Sports",
   group: "time",
   icon: icons.stopwatch,
   screens: { main: Sports },
-  onOpen: () => keep_screen_on(is_running.value),
 });

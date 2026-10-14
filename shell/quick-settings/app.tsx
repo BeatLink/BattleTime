@@ -3,10 +3,10 @@
 // over six buttons: brightness, the flashlight, do not disturb, Bluetooth, the always-on screen
 // and the full Settings app. A swipe up or the side button puts it away.
 
-import { computed } from "@preact/signals";
 import {
   battery_percent,
   brightness,
+  computed,
   define_app,
   format_time,
   is_bluetooth_enabled,
@@ -110,6 +110,5 @@ export default define_app({
   id: "quick-settings",
   name: "Quick settings",
   icon: icons.settings,
-  permissions: ["settings"],
   screens: { main: QuickSettings },
 });

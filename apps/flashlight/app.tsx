@@ -4,8 +4,17 @@
 // From wasp-os: it opens already lit at full brightness, and a red light that keeps night vision,
 // chosen here by swiping up or down.
 
-import { computed, signal } from "@preact/signals";
-import { define_app, keep_screen_on, persisted, set_brightness, type Color, type SwipeEvent } from "neotime";
+import {
+  computed,
+  define_app,
+  keep_screen_on,
+  on,
+  persisted,
+  set_brightness,
+  signal,
+  type Color,
+  type SwipeEvent,
+} from "neotime";
 import { icons } from "neotime/icons";
 import { Column, Icon, Row, Screen } from "neotime/widgets";
 
@@ -91,11 +100,12 @@ function Flashlight() {
   );
 }
 
+on("open", open);
+
 export default define_app({
   id: "flashlight",
   name: "Flashlight",
   group: "tools",
   icon: icons.flashlight,
   screens: { main: Flashlight },
-  onOpen: open,
 });

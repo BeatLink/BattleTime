@@ -87,7 +87,7 @@ impl<'a> Compiler<'a> {
         if function.is_async {
             return fail(
                 function.span,
-                "`async` functions are not available; data from the phone arrives through a subscription",
+                "`async` functions are not available; data from the phone arrives through an event",
             );
         }
         let identity = function.identity();

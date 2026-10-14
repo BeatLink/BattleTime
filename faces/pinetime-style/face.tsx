@@ -2,9 +2,9 @@
 // A coloured time panel of giant digits on the left and a sidebar with status icons, weather, a calendar and a step gauge with a needle.
 // InfiniTime's pop-up colour and option buttons are a settings screen here, opened by a long press.
 
-import { computed } from "@preact/signals";
 import {
   back,
+  computed,
   current_weather,
   day_of,
   define_app,

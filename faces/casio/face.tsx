@@ -2,9 +2,9 @@
 // Green-grey text on black: weekday and week number in a box, day of the year and days left, the date and a big 7-segment time.
 // On a 24 hour clock the date is day-month and weeks start on Monday; on a 12 hour clock it is month-day and weeks start on Sunday.
 
-import { computed } from "@preact/signals";
 import {
   battery_percent,
+  computed,
   day_of,
   day_of_year,
   define_app,

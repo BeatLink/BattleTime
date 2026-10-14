@@ -4,17 +4,18 @@
 // move more for each level, taking any win and blocking any threat. Swipe down after the game ends.
 // The watch's search runs a few steps per call, carried on by a fast tick, so no call runs long.
 
-import { computed, signal } from "@preact/signals";
 import {
   back,
   clamp,
+  computed,
   define_app,
-  every,
   go,
   line_through,
+  on,
   persisted,
   random_int,
   range,
+  signal,
   vibrate,
   type ClickEvent,
   type Color,
@@ -398,11 +399,12 @@ function Game() {
   );
 }
 
+on("tick", think, { every: { milliseconds: 100 }, while_open: true });
+
 export default define_app({
   id: "four-in-a-row",
   name: "4 in a row",
   group: "games",
   icon: icons.game,
   screens: { main: Menu, game: Game },
-  subscriptions: [every({ milliseconds: 100 }, think, { only_while_open: true })],
 });

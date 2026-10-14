@@ -13,8 +13,7 @@ use super::*;
 /// A test app that counts each kind of touch and every notification; its Fail button divides by zero.
 const SCRIPTED_APP: &str = r#"
 // A test app for scripts: it counts each kind of touch and every notification, and can fail.
-import { signal } from "@preact/signals";
-import { battery_percent, define_app, notification, vibrate } from "neotime";
+import { battery_percent, define_app, on, signal, vibrate } from "neotime";
 import { Button, Label, Screen } from "neotime/widgets";
 
 const taps = signal(0);
@@ -52,14 +51,12 @@ function Scripted() {
   );
 }
 
+on("notification", () => { notifications.value = notifications.value + 1; }, { while_open: true });
+
 export default define_app({
   id: "scripted",
   name: "Scripted",
   screens: { main: Scripted },
-  subscriptions: [
-    notification(() => { notifications.value = notifications.value + 1; }, { only_while_open: true }),
-  ],
-  permissions: ["notifications"],
 });
 "#;
 

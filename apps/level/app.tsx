@@ -1,8 +1,17 @@
 // Spirit level, ported from wasp-os's level app.
 // A bubble moves against the pull of gravity; a tap opens a menu to calibrate on a flat surface or reset.
 
-import { computed, signal } from "@preact/signals";
-import { acceleration, back, clamp, define_app, go, persisted, type AccelerationEvent } from "neotime";
+import {
+  back,
+  clamp,
+  computed,
+  define_app,
+  go,
+  on,
+  persisted,
+  signal,
+  type AccelerationEvent,
+} from "neotime";
 import { icons } from "neotime/icons";
 import { Button, Column, Label, Line, Screen, Stack } from "neotime/widgets";
 
@@ -108,12 +117,12 @@ function Menu() {
   );
 }
 
+on("acceleration", record, { every: { milliseconds: 125 }, while_open: true });
+
 export default define_app({
   id: "level",
   name: "Level",
   group: "tools",
   icon: icons.level,
   screens: { main: Level, menu: Menu },
-  subscriptions: [acceleration({ milliseconds: 125 }, record, { only_while_open: true })],
-  permissions: ["motion"],
 });

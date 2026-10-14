@@ -6,8 +6,7 @@ use neotime_runtime::SystemValues;
 /// Counts the calls of each kind, as the `call` subscription reports them.
 const CALL_LISTENER_APP: &str = r#"
 // Counts the phone's calls by kind.
-import { signal } from "@preact/signals";
-import { call, define_app, type CallEvent } from "neotime";
+import { define_app, on, signal, type CallEvent } from "neotime";
 import { Label, Screen } from "neotime/widgets";
 
 const incoming = signal(0);
@@ -30,12 +29,12 @@ function Calls() {
   );
 }
 
+on("call", count, { while_open: true });
+
 export default define_app({
   id: "calls",
   name: "Calls",
   screens: { main: Calls },
-  subscriptions: [call(count, { only_while_open: true })],
-  permissions: ["phone"],
 });
 "#;
 

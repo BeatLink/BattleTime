@@ -3,13 +3,13 @@
 // each, until stopped or after 99 rounds. Swipe left or right for a preset queue, and up or down to
 // change how many seconds each buzz lasts.
 
-import { computed } from "@preact/signals";
 import {
-  at,
+  computed,
   define_app,
   format_duration,
   format_number,
   now,
+  on,
   persisted,
   range,
   stop_vibrating,
@@ -272,12 +272,13 @@ function Pomodoro() {
   );
 }
 
+on("time", ring, { at: ends_at });
+on("time", start_next_entry, { at: next_entry_at });
+
 export default define_app({
   id: "pomodoro",
   name: "Pomodoro",
   group: "time",
   icon: icons.timer,
   screens: { main: Pomodoro },
-  subscriptions: [at(ends_at, ring), at(next_entry_at, start_next_entry)],
-  permissions: ["wake", "background"],
 });

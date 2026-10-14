@@ -2,8 +2,19 @@
 // Swipes slide a tile into the gap and a tap asks to start again, as on wasp-os; the board, the move
 // count and the fewest moves to a solution persist, and a solved board says so.
 
-import { computed, signal } from "@preact/signals";
-import { count_inversions, define_app, persisted, range, shuffled, vibrate_pattern, type Color, type SwipeEvent } from "neotime";
+import {
+  computed,
+  count_inversions,
+  define_app,
+  on,
+  persisted,
+  range,
+  shuffled,
+  signal,
+  vibrate_pattern,
+  type Color,
+  type SwipeEvent,
+} from "neotime";
 import { ConfirmDialog } from "neotime/components";
 import { icons } from "neotime/icons";
 import { CellGrid, Label, Row, Screen } from "neotime/widgets";
@@ -147,13 +158,14 @@ function Puzzle15() {
   );
 }
 
+on("open", () => {
+  if (move_count.value === 0 && is_solved(board.value)) start_game();
+});
+
 export default define_app({
   id: "puzzle15",
   name: "15",
   group: "games",
   icon: icons.game,
   screens: { main: Puzzle15 },
-  onOpen: () => {
-    if (move_count.value === 0 && is_solved(board.value)) start_game();
-  },
 });
