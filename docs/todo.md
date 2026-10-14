@@ -453,6 +453,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 - [ ] **Set the date and time on the watch,** with rollers for the date and the time (with AM/PM on
   a 12 hour clock), for when no phone has set the clock.
+
 ### Settings
 
 - [ ] **The rest of InfiniTime's settings screens:** Watch face, Date and time, Shake calibration,
