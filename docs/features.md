@@ -239,6 +239,9 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Firmware updates over Bluetooth** with Nordic's legacy DFU, the protocol InfiniTime uses, so
   Gadgetbridge, ITD, Siglo and NeoTime's own tools can update the watch unchanged. See
   [updates.md](updates.md). The image's CRC is checked by reading it back from the flash.
+- **Updates carry on after a lost link.** The watch keeps what it stored. The companion app
+  reconnects up to four times and sends only the rest of the image, and the status page says
+  `Update paused` with how much was kept.
 - **Update progress you can watch.** While an update arrives the status page takes the screen and
   keeps it lit: which step it is at (starting, receiving, checking, installing), the kilobytes of the
   image received with a percentage, and the reason in words if the watch refuses it or the phone

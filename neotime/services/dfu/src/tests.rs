@@ -510,6 +510,223 @@ fn reports_the_received_size_on_request() {
 }
 
 // ============================================================================
+// Carrying on after a lost link
+// ============================================================================
+
+/// Announces an image up to its first packet, asking where to carry on when `asks` is set, and gives the answer.
+fn announce(phone: &mut Phone, image_type: u8, image: &[u8], asks: bool) -> Option<u32> {
+    phone.command(&[command::START_DFU, image_type]);
+    phone.packet(&Phone::sizes_packet(image.len() as u32));
+    phone.command(&[command::INITIALIZE_DFU, 0]);
+    phone.packet(&Phone::init_packet(image));
+    phone.command(&[command::INITIALIZE_DFU, 1]);
+    let mut carries_on_from = None;
+    if asks {
+        phone.take_notifications();
+        phone.command(&[command::REPORT_RECEIVED_IMAGE_SIZE]);
+        let answer = phone.take_notifications().pop().unwrap();
+        carries_on_from = Some(u32::from_le_bytes(answer[3..7].try_into().unwrap()));
+    }
+    phone.command(&[command::RECEIVE_FIRMWARE_IMAGE]);
+    carries_on_from
+}
+
+/// Sends `image` from `offset` in 20-byte packets, then asks for the check.
+fn send_from(phone: &mut Phone, image: &[u8], offset: usize) {
+    for chunk in image[offset..].chunks(20) {
+        phone.packet(chunk);
+    }
+    phone.command(&[command::VALIDATE_FIRMWARE]);
+}
+
+#[test]
+fn an_upload_cut_off_carries_on_from_what_was_stored() {
+    let image = image(5000);
+    let mut phone = Phone::new();
+    announce(&mut phone, image_type::APPLICATION, &image, true);
+    for chunk in image[..2000].chunks(20) {
+        phone.packet(chunk);
+    }
+
+    phone.dfu.pause();
+    assert!(!phone.dfu.is_updating());
+    // What was still waiting in the write buffer never reached the flash, so it is sent again.
+    let stored = phone.dfu.paused_bytes().unwrap();
+    assert_eq!(stored, 1920);
+
+    assert_eq!(
+        announce(&mut phone, image_type::APPLICATION, &image, true),
+        Some(stored)
+    );
+    phone.take_notifications();
+    send_from(&mut phone, &image, stored as usize);
+
+    assert_eq!(
+        phone.take_notifications().last(),
+        Some(&response(command::VALIDATE_FIRMWARE, result::SUCCESS))
+    );
+    phone.command(&[command::ACTIVATE_IMAGE_AND_RESET]);
+    assert!(phone.reset_requested);
+    let targets = phone.dfu.release();
+    assert_eq!(targets.stored, image);
+    assert_eq!(
+        targets.calls,
+        [
+            Call::Begin(ImageKind::Firmware, 5000),
+            Call::Finish(ImageKind::Firmware)
+        ]
+    );
+}
+
+#[test]
+fn a_phone_that_does_not_ask_sends_the_whole_image_again() {
+    let image = image(5000);
+    let mut phone = Phone::new();
+    announce(&mut phone, image_type::APPLICATION, &image, false);
+    for chunk in image[..2000].chunks(20) {
+        phone.packet(chunk);
+    }
+    phone.dfu.pause();
+
+    announce(&mut phone, image_type::APPLICATION, &image, false);
+    phone.take_notifications();
+    send_from(&mut phone, &image, 0);
+
+    assert_eq!(
+        phone.take_notifications().last(),
+        Some(&response(command::VALIDATE_FIRMWARE, result::SUCCESS))
+    );
+    let targets = phone.dfu.release();
+    assert_eq!(targets.stored, image);
+    assert_eq!(
+        targets.calls,
+        [
+            Call::Begin(ImageKind::Firmware, 5000),
+            Call::Begin(ImageKind::Firmware, 5000)
+        ]
+    );
+}
+
+#[test]
+fn a_different_image_of_the_same_size_starts_from_the_first_byte() {
+    let first = image(5000);
+    let second: StdVec<u8> = first.iter().map(|byte| byte ^ 0xFF).collect();
+    let mut phone = Phone::new();
+    announce(&mut phone, image_type::APPLICATION, &first, true);
+    for chunk in first[..2000].chunks(20) {
+        phone.packet(chunk);
+    }
+    phone.dfu.pause();
+
+    assert_eq!(
+        announce(&mut phone, image_type::APPLICATION, &second, true),
+        Some(0)
+    );
+    phone.take_notifications();
+    send_from(&mut phone, &second, 0);
+
+    assert_eq!(
+        phone.take_notifications().last(),
+        Some(&response(command::VALIDATE_FIRMWARE, result::SUCCESS))
+    );
+    assert_eq!(phone.dfu.paused_bytes(), None);
+    assert_eq!(phone.dfu.release().stored, second);
+}
+
+#[test]
+fn an_image_of_another_size_or_slot_forgets_the_paused_one() {
+    let image = image(5000);
+    let mut phone = Phone::new();
+    announce(&mut phone, image_type::APPLICATION, &image, true);
+    for chunk in image[..2000].chunks(20) {
+        phone.packet(chunk);
+    }
+    phone.dfu.pause();
+
+    let recovery = self::image(3000);
+    assert_eq!(
+        announce(&mut phone, image_type::RECOVERY, &recovery, true),
+        Some(0)
+    );
+
+    assert_eq!(phone.dfu.paused_bytes(), None);
+    assert_eq!(
+        phone.dfu.release().calls,
+        [
+            Call::Begin(ImageKind::Firmware, 5000),
+            Call::Abort(ImageKind::Firmware),
+            Call::Begin(ImageKind::Recovery, 3000)
+        ]
+    );
+}
+
+#[test]
+fn losing_the_phone_again_before_the_image_keeps_the_paused_upload() {
+    let image = image(5000);
+    let mut phone = Phone::new();
+    announce(&mut phone, image_type::APPLICATION, &image, true);
+    for chunk in image[..2000].chunks(20) {
+        phone.packet(chunk);
+    }
+    phone.dfu.pause();
+    phone.command(&[command::START_DFU, image_type::APPLICATION]);
+    phone.packet(&Phone::sizes_packet(5000));
+
+    phone.dfu.pause();
+
+    assert_eq!(phone.dfu.paused_bytes(), Some(1920));
+    assert_eq!(
+        announce(&mut phone, image_type::APPLICATION, &image, true),
+        Some(1920)
+    );
+}
+
+#[test]
+fn a_whole_image_cut_off_before_its_check_needs_no_more_bytes() {
+    let image = image(480);
+    let mut phone = Phone::new();
+    announce(&mut phone, image_type::APPLICATION, &image, true);
+    for chunk in image.chunks(20) {
+        phone.packet(chunk);
+    }
+    phone.dfu.pause();
+
+    assert_eq!(
+        announce(&mut phone, image_type::APPLICATION, &image, true),
+        Some(480)
+    );
+
+    assert_eq!(
+        phone.take_notifications(),
+        [response(command::RECEIVE_FIRMWARE_IMAGE, result::SUCCESS)]
+    );
+    phone.command(&[command::VALIDATE_FIRMWARE]);
+    assert_eq!(
+        phone.take_notifications(),
+        [response(command::VALIDATE_FIRMWARE, result::SUCCESS)]
+    );
+}
+
+#[test]
+fn abort_forgets_a_paused_upload() {
+    let image = image(5000);
+    let mut phone = Phone::new();
+    announce(&mut phone, image_type::APPLICATION, &image, true);
+    for chunk in image[..2000].chunks(20) {
+        phone.packet(chunk);
+    }
+    phone.dfu.pause();
+
+    phone.dfu.abort();
+
+    assert_eq!(phone.dfu.paused_bytes(), None);
+    assert_eq!(
+        phone.dfu.release().calls.last(),
+        Some(&Call::Abort(ImageKind::Firmware))
+    );
+}
+
+// ============================================================================
 // What the status page shows
 // ============================================================================
 

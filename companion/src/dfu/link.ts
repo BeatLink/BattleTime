@@ -22,6 +22,9 @@ export interface DfuLink {
 
 export class DfuError extends Error {}
 
+// The watch answered and said no, so sending the same image again would only be refused again.
+export class DfuRefusal extends DfuError {}
+
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

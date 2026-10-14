@@ -5,6 +5,10 @@
 //! point and gets answers back as notifications; it streams the image through the packet
 //! characteristic, 20 bytes at a time. `LegacyDfu` is the state machine, with no Bluetooth code in
 //! it, and hands the bytes to `neotime-updates`; the `trouble` feature adds the GATT service.
+//!
+//! An upload cut off by a lost link is kept, and the same image sent again carries on from where it
+//! stopped for a phone that asks with `REPORT_RECEIVED_IMAGE_SIZE` before `RECEIVE_FIRMWARE_IMAGE`.
+//! A phone that does not ask starts from the first byte, as the protocol always did.
 
 #![no_std]
 
@@ -210,6 +214,16 @@ enum State {
     Validated,
 }
 
+/// An upload a lost link cut off, kept so the same image sent again carries on from where it stopped.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PausedUpload {
+    kind: ImageKind,
+    image_size_in_bytes: u32,
+    init_packet: Vec<u8, LARGEST_INIT_PACKET>,
+    /// The bytes written to flash; what was still in the write buffer is lost and sent again.
+    bytes_stored: u32,
+}
+
 pub struct LegacyDfu<Targets: UpdateTargets> {
     targets: Targets,
     state: State,
@@ -222,6 +236,9 @@ pub struct LegacyDfu<Targets: UpdateTargets> {
     expected_crc: u16,
     write_buffer: Vec<u8, WRITE_BUFFER_SIZE>,
     allows_updates: bool,
+    paused: Option<PausedUpload>,
+    /// Where the image carries on, once the phone asked and the paused upload is this one.
+    resume_from: Option<u32>,
 }
 
 impl<Targets: UpdateTargets> LegacyDfu<Targets> {
@@ -238,6 +255,8 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
             expected_crc: 0,
             write_buffer: Vec::new(),
             allows_updates: true,
+            paused: None,
+            resume_from: None,
         }
     }
 
@@ -258,16 +277,48 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
         self.image_size_in_bytes
     }
 
-    /// Called when the phone goes away or stays silent too long.
+    /// Forgets the upload under way and any paused one.
     pub fn abort(&mut self) {
         if self.state != State::Idle {
             self.targets.abort(self.kind);
         }
+        if let Some(paused) = self.paused.take() {
+            self.targets.abort(paused.kind);
+        }
+        self.reset_to_idle();
+    }
+
+    /// Called when the phone goes away: keeps an image partly stored, so it can carry on, and forgets anything else.
+    pub fn pause(&mut self) {
+        match self.state {
+            State::ReceivingImage | State::ImageReceived => {
+                self.paused = Some(PausedUpload {
+                    kind: self.kind,
+                    image_size_in_bytes: self.image_size_in_bytes,
+                    init_packet: self.init_packet.clone(),
+                    bytes_stored: self.bytes_received - self.write_buffer.len() as u32,
+                });
+            }
+            // A paused upload whose image was being announced again is still untouched in flash.
+            _ if self.paused.is_some() => {}
+            State::Idle => {}
+            _ => self.targets.abort(self.kind),
+        }
+        self.reset_to_idle();
+    }
+
+    /// How much of a cut-off image is kept, or None when nothing is.
+    pub fn paused_bytes(&self) -> Option<u32> {
+        self.paused.as_ref().map(|paused| paused.bytes_stored)
+    }
+
+    fn reset_to_idle(&mut self) {
         self.state = State::Idle;
         self.bytes_received = 0;
         self.packets_received = 0;
         self.init_packet.clear();
         self.write_buffer.clear();
+        self.resume_from = None;
     }
 
     pub fn release(self) -> Targets {
@@ -303,7 +354,7 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
 
         match procedure {
             command::START_DFU => self.start(parameters),
-            command::INITIALIZE_DFU => self.initialize(parameters),
+            command::INITIALIZE_DFU => self.initialize(parameters).await,
             command::SET_RECEIPT_INTERVAL => {
                 self.receipt_interval = u16::from_le_bytes([
                     parameters.first().copied().unwrap_or(0),
@@ -311,7 +362,7 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
                 ]);
                 Outcome::none()
             }
-            command::RECEIVE_FIRMWARE_IMAGE => self.begin_image(),
+            command::RECEIVE_FIRMWARE_IMAGE => self.begin_image().await,
             command::VALIDATE_FIRMWARE => self.validate().await,
             command::ACTIVATE_IMAGE_AND_RESET => self.activate().await,
             command::RESET_SYSTEM => {
@@ -323,8 +374,16 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
                 }
             }
             command::REPORT_RECEIVED_IMAGE_SIZE => {
+                let received = match (self.state, &self.paused) {
+                    // Asked before the image, it says where this image carries on from.
+                    (State::ReadyForImage, Some(paused)) => {
+                        self.resume_from = Some(paused.bytes_stored);
+                        paused.bytes_stored
+                    }
+                    _ => self.bytes_received,
+                };
                 let mut outcome = Outcome::response(procedure, result::SUCCESS);
-                let _ = outcome.notifications[0].extend_from_slice(&self.bytes_received.to_le_bytes());
+                let _ = outcome.notifications[0].extend_from_slice(&received.to_le_bytes());
                 outcome
             }
             _ => Outcome::response(procedure, result::NOT_SUPPORTED),
@@ -351,7 +410,7 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
         Outcome::none()
     }
 
-    fn initialize(&mut self, parameters: &[u8]) -> Outcome {
+    async fn initialize(&mut self, parameters: &[u8]) -> Outcome {
         match (self.state, parameters.first()) {
             (State::WaitingForInitPacket, Some(0)) | (State::ReceivingInitPacket, Some(0)) => {
                 self.init_packet.clear();
@@ -368,6 +427,15 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
                     return Outcome::response(command::INITIALIZE_DFU, result::OPERATION_FAILED);
                 };
                 self.expected_crc = u16::from_le_bytes([crc_bytes[0], crc_bytes[1]]);
+                // The init packet holds the image's checksum, so a different one means a different image.
+                if self
+                    .paused
+                    .as_ref()
+                    .is_some_and(|paused| paused.init_packet != self.init_packet)
+                    && self.start_afresh().await.is_err()
+                {
+                    return Outcome::response(command::INITIALIZE_DFU, result::OPERATION_FAILED);
+                }
                 self.state = State::ReadyForImage;
                 Outcome::response(command::INITIALIZE_DFU, result::SUCCESS)
             }
@@ -375,14 +443,47 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
         }
     }
 
-    fn begin_image(&mut self) -> Outcome {
+    async fn begin_image(&mut self) -> Outcome {
         if self.state != State::ReadyForImage {
             return Outcome::response(command::RECEIVE_FIRMWARE_IMAGE, result::INVALID_STATE);
         }
-        self.state = State::ReceivingImage;
         self.bytes_received = 0;
         self.packets_received = 0;
+        match self.resume_from.take() {
+            Some(bytes_stored) => {
+                self.paused = None;
+                self.bytes_received = bytes_stored;
+            }
+            // A phone that did not ask where to carry on sends the whole image.
+            None if self.paused.is_some() => {
+                if self.start_afresh().await.is_err() {
+                    return self.fail_image();
+                }
+            }
+            None => {}
+        }
+        self.state = State::ReceivingImage;
+        if self.bytes_received == self.image_size_in_bytes {
+            self.state = State::ImageReceived;
+            let mut outcome = Outcome::none();
+            outcome.push(&[
+                command::RESPONSE,
+                command::RECEIVE_FIRMWARE_IMAGE,
+                result::SUCCESS,
+            ]);
+            return outcome;
+        }
         Outcome::none()
+    }
+
+    /// Drops the paused upload and starts the announced image from its first byte.
+    async fn start_afresh(&mut self) -> Result<(), UpdateError> {
+        if let Some(paused) = self.paused.take() {
+            if paused.kind != self.kind {
+                self.targets.abort(paused.kind);
+            }
+        }
+        self.targets.begin(self.kind, self.image_size_in_bytes).await
     }
 
     async fn validate(&mut self) -> Outcome {
@@ -467,6 +568,22 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
         if softdevice_size != 0 || bootloader_size != 0 || application_size == 0 {
             self.abort();
             return Outcome::response(command::START_DFU, result::NOT_SUPPORTED);
+        }
+
+        // The same slot and size may be the paused image again, so its flash is left alone until the init packet says.
+        let may_resume = self
+            .paused
+            .as_ref()
+            .is_some_and(|paused| paused.kind == self.kind && paused.image_size_in_bytes == application_size);
+        if may_resume {
+            self.image_size_in_bytes = application_size;
+            self.state = State::WaitingForInitPacket;
+            return Outcome::response(command::START_DFU, result::SUCCESS);
+        }
+        if let Some(paused) = self.paused.take() {
+            if paused.kind != self.kind {
+                self.targets.abort(paused.kind);
+            }
         }
 
         match self.targets.begin(self.kind, application_size).await {

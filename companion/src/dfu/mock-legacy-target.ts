@@ -27,6 +27,8 @@ import {
 
 const SUCCESS = 1;
 const RECEIPT_INTERVAL = 5;
+// NeoTime writes the image to flash 240 bytes at a time, so a lost link keeps a multiple of this.
+const WRITE_PIECE = 240;
 
 type Stage = 'idle' | 'size' | 'init' | 'image';
 
@@ -46,6 +48,13 @@ export class MockLegacyDfuTarget implements DfuLink {
   private expected = 0;
   private packets = 0;
   private activated = false;
+  // What NeoTime kept of an upload a lost link cut off, and where the image carries on once asked.
+  private kept: { size: number; init: Uint8Array; image: Uint8Array } | null = null;
+  private resumeFrom: number | null = null;
+  // Lose the link once this many image bytes have arrived, as a radio dropping out would.
+  dropAfterBytes: number[] = [];
+  // How many times the link was lost mid-image.
+  drops = 0;
   // The image type of every START_DFU, which says which slot an update is for.
   readonly imageTypes: number[] = [];
   // Every Current Time value written, which is what keeps a NeoTime update.
@@ -210,14 +219,37 @@ export class MockLegacyDfuTarget implements DfuLink {
           this.received.init = new Uint8Array(0);
         } else {
           this.stage = 'idle';
+          const sameImage =
+            this.kept?.size === this.expected &&
+            this.kept.init.length === this.received.init.length &&
+            this.kept.init.every((byte, index) => byte === this.received.init[index]);
+          if (!sameImage) {
+            this.kept = null;
+          }
+          this.resumeFrom = null;
           this.respond(Procedure.INITIALIZE_DFU);
         }
         return;
+      case Procedure.REPORT_RECEIVED_IMAGE_SIZE: {
+        const kept = this.neotime ? (this.kept?.image.length ?? 0) : this.received.image.length;
+        if (this.kept && this.neotime) {
+          this.resumeFrom = kept;
+        }
+        this.emit(LEGACY_CONTROL_POINT, concat([Procedure.RESPONSE, Procedure.REPORT_RECEIVED_IMAGE_SIZE, SUCCESS], u32le(kept)));
+        return;
+      }
       case Procedure.PRN_REQUEST:
         return;
       case Procedure.RECEIVE_FIRMWARE_IMAGE:
         this.stage = 'image';
         this.packets = 0;
+        this.received.image = this.resumeFrom !== null && this.kept ? this.kept.image : new Uint8Array(0);
+        this.kept = null;
+        this.resumeFrom = null;
+        if (this.expected > 0 && this.received.image.length >= this.expected) {
+          this.stage = 'idle';
+          this.respond(Procedure.RECEIVE_FIRMWARE_IMAGE);
+        }
         return;
       case Procedure.VALIDATE_FIRMWARE:
         this.respond(Procedure.VALIDATE_FIRMWARE);
@@ -246,6 +278,16 @@ export class MockLegacyDfuTarget implements DfuLink {
       return;
     }
 
+    if (this.dropAfterBytes.length && this.received.image.length >= this.dropAfterBytes[0]) {
+      this.dropAfterBytes.shift();
+      this.drops += 1;
+      this.stage = 'idle';
+      if (this.neotime) {
+        const stored = this.received.image.length - (this.received.image.length % WRITE_PIECE);
+        this.kept = { size: this.expected, init: this.received.init, image: this.received.image.slice(0, stored) };
+      }
+      throw new Error('The link to the watch was lost.');
+    }
     this.received.image = concat(this.received.image, chunk);
     this.packets += 1;
     if (this.packets % RECEIPT_INTERVAL === 0) {

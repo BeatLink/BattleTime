@@ -51,7 +51,19 @@ supported, 4 too large, 5 CRC error, 6 failed). A command out of turn gets "wron
 image larger than the slot gets "too large" at step 1; a SoftDevice or bootloader image gets "not
 supported".
 
-NeoTime's one addition is an image type for the recovery slot: `START_DFU` with type `0x08` (the
+### Carrying on after a lost link
+
+When the link drops partway through the image, the watch keeps what reached the flash instead of
+throwing it away. The phone reconnects and starts again from step 1 with the same image. After step
+2 it sends `REPORT_RECEIVED_IMAGE_SIZE` (7), and the watch answers with how many bytes it kept. That
+is a multiple of 240, since the bytes still waiting to be written are lost. The phone then sends
+`RECEIVE_FIRMWARE_IMAGE` and the image from that byte on. The same image means the same image type,
+size and init packet, and the init packet carries the image's CRC-16. A different image, or a phone
+that skips step 7, starts from the first byte as before. So Gadgetbridge and other clients work
+unchanged. The checks at steps 5 and 6 still cover the whole slot, so a resumed image is held to
+the same checksums as one sent in one go. The kept upload lives in RAM, so a restart forgets it.
+
+NeoTime's other addition is an image type for the recovery slot: `START_DFU` with type `0x08` (the
 standard types are 1, 2 and 4) sends the image to the recovery slot instead of the update slot.
 The companion's command line tool sends it with `neotime recovery dist/recovery.zip`, which
 `tools/build_images.sh` packages; the running firmware stores the image and restarts, with nothing
@@ -127,8 +139,8 @@ Receiving firmware
 | Firmware | the mode, below |
 | Filesystem | `OK`, `Formatted`, `Damaged` or `No chip` |
 | Bluetooth | `Off`, `Advertising` or `Connected` |
-| Action | what the mode means while idle; during an update `Starting`, `Receiving`, `Checking` or `Installing` with `firmware` or `recovery`, then `Restarting to install`, `Update failed` or `Update stopped` |
-| Progress | `received / size KB  percent`, or why the update stopped: `Steps out of order`, `Image not supported`, `Image too large`, `Checksum did not match`, `Could not store image`, or `Lost phone at N KB` |
+| Action | what the mode means while idle; during an update `Starting`, `Receiving`, `Checking` or `Installing` with `firmware` or `recovery`, then `Restarting to install`, `Update failed` or `Update paused` |
+| Progress | `received / size KB  percent`, or why the update stopped: `Steps out of order`, `Image not supported`, `Image too large`, `Checksum did not match`, `Could not store image`, or `Kept N KB` when the phone went away mid-image |
 
 The background colour and the Firmware and Action lines say which mode the firmware is in
 (`firmware/src/status.rs`, colours in `neotime_boot::status_colour`):

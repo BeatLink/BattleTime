@@ -279,6 +279,11 @@ there is no reset into a bootloader first. After the image is activated the watc
 bootloader swaps it in, and the app reconnects and writes the time. That exchange is what makes
 NeoTime keep the new firmware; without it the next reset rolls back to the old one.
 
+When the link drops partway through, the app reconnects and starts the same image again, up to
+four more times. After the init packet it asks with `REPORT_RECEIVED_IMAGE_SIZE` how much the watch
+kept, then sends only the rest. A refusal from the watch is not retried. A watch in an old system's
+bootloader keeps nothing, so it gets one try, as before.
+
 A watch still on wasp-os is moved over by sending it NeoTime's `reloader-from-wasp-os.zip`. The
 app restarts wasp-os into its bootloader with `machine.enter_ota_dfu()` over the UART, finds the
 bootloader at the watch's address or the one above it, and sends the image there.

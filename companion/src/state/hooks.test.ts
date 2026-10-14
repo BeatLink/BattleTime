@@ -211,6 +211,10 @@ describe('useFirmware', () => {
     [{ step: 'progress', progress: part('validating') }, 'Checking application'],
     [{ step: 'progress', progress: part('done') }, 'Sent application'],
     [{ step: 'progress', progress: part('unheard-of') }, 'Sending application'],
+    [
+      { step: 'reconnecting', attempt: 1, attempts: 4 },
+      'Lost the watch; reconnecting to carry on (try 1 of 4)',
+    ],
     [{ step: 'confirming' }, 'Waiting for the new firmware to start'],
     [{ step: 'finished', confirmed: true }, 'The new firmware is running and kept'],
     [

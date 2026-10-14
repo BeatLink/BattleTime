@@ -40,6 +40,10 @@ export async function flash(session: WatchSession, path: string): Promise<void> 
         case 'progress':
           bar.update(step.progress.sent, total, step.progress.part);
           break;
+        case 'reconnecting':
+          bar.done();
+          say(`Lost the watch; reconnecting to carry on (try ${step.attempt} of ${step.attempts})...`);
+          break;
         case 'confirming':
           bar.done();
           say('Sent. Waiting for the new firmware to start...');

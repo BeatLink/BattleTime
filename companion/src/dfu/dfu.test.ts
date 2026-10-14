@@ -121,6 +121,7 @@ describe('notification parsing', () => {
       kind: 'response',
       procedure: 3,
       result: 1,
+      value: Uint8Array.from([16, 3, 1]),
     });
   });
 
@@ -168,6 +169,95 @@ describe('flashing a NeoTime watch', () => {
     });
     expect(sent.at(-1)).toBe(image.length);
     expect(sent.every((value, index) => index === 0 || value >= sent[index - 1])).toBe(true);
+  });
+});
+
+describe('carrying on after a lost link', () => {
+  const quickly = { resumePauseMs: 0 };
+
+  it('reconnects and sends only what the watch did not keep', async () => {
+    const image = pattern(5000);
+    const target = new MockLegacyDfuTarget();
+    target.dropAfterBytes = [2000];
+    const steps: FlashStep[] = [];
+
+    await flashFirmware(target, readFirmwarePackage(firmwareZip(pattern(64), image)), {
+      ...quickly,
+      onStep: (step) => steps.push(step),
+    });
+
+    expect(target.drops).toBe(1);
+    expect(target.received.image).toEqual(image);
+    expect(target.finished).toBe(true);
+    const reconnected = steps.findIndex((step) => step.step === 'reconnecting');
+    expect(steps[reconnected]).toEqual({ step: 'reconnecting', attempt: 1, attempts: 4 });
+    // The watch wrote 1920 of the 2000 bytes to flash, so the second try starts there.
+    expect(steps.slice(reconnected)).toContainEqual({
+      step: 'progress',
+      progress: { part: 'application', phase: 'sending', sent: 1920, total: 5000 },
+    });
+  });
+
+  it('carries on a recovery firmware too', async () => {
+    const image = pattern(3000);
+    const target = new MockLegacyDfuTarget();
+    target.dropAfterBytes = [1000, 2500];
+
+    await flashRecovery(target, readFirmwarePackage(firmwareZip(pattern(64), image)), quickly);
+
+    expect(target.drops).toBe(2);
+    expect(target.received.image).toEqual(image);
+    expect(target.imageTypes).toEqual([0x08, 0x08, 0x08]);
+  });
+
+  it('gives up after five tries', async () => {
+    const target = new MockLegacyDfuTarget();
+    target.dropAfterBytes = [100, 100, 100, 100, 100, 100];
+
+    await expect(
+      flashFirmware(target, readFirmwarePackage(firmwareZip(pattern(64), pattern(5000))), quickly),
+    ).rejects.toThrow('The link to the watch was lost.');
+    expect(target.drops).toBe(5);
+    expect(target.finished).toBe(false);
+  });
+
+  it('does not try again when the watch refuses the image', async () => {
+    let notify: (value: Uint8Array) => void = () => {};
+    let reconnects = 0;
+    const link = {
+      deviceId: 'AA:BB:CC:DD:EE:00',
+      hasCharacteristic: async () => true,
+      reconnect: async () => {
+        reconnects += 1;
+      },
+      subscribe: async (_service: string, _characteristic: string, onValue: (value: Uint8Array) => void) => {
+        notify = onValue;
+        return () => {};
+      },
+      write: async (_service: string, characteristic: string, data: Uint8Array) => {
+        if (characteristic === LEGACY_CONTROL_POINT) {
+          notify(Uint8Array.from([16, data[0], 4]));
+        }
+      },
+    } as unknown as DfuLink;
+
+    await expect(
+      flashFirmware(link, readFirmwarePackage(firmwareZip(pattern(14), pattern(64))), quickly),
+    ).rejects.toThrow('The bootloader rejected start: data size exceeds limits.');
+    expect(reconnects).toBe(0);
+  });
+
+  it('gives an old system\'s bootloader one try, since it keeps nothing', async () => {
+    const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'wasp-os');
+    target.dropAfterBytes = [2000];
+
+    await expect(
+      flashFirmware(target, readFirmwarePackage(firmwareZip(pattern(64), pattern(5000))), {
+        ...quickly,
+        enterDfu: async () => target.enterBootloader(),
+      }),
+    ).rejects.toThrow('The link to the watch was lost.');
+    expect(target.drops).toBe(1);
   });
 });
 

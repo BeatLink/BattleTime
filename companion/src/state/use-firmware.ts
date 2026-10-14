@@ -47,6 +47,8 @@ function describe(step: FlashStep): string {
       }
       return `Sending ${part}`;
     }
+    case 'reconnecting':
+      return `Lost the watch; reconnecting to carry on (try ${step.attempt} of ${step.attempts})`;
     case 'confirming':
       return 'Waiting for the new firmware to start';
     case 'finished':

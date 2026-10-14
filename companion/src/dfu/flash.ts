@@ -5,9 +5,9 @@
 // answers at the address one above the watch's.
 
 import { nextAddress } from './bytes';
-import { DfuError, sleep, type DfuLink } from './link';
+import { DfuError, DfuRefusal, sleep, type DfuLink } from './link';
 import { LegacyDfuController, type DfuProgress } from './legacy';
-import type { FirmwarePackage } from './package';
+import type { FirmwareImage, FirmwarePackage } from './package';
 import { LEGACY_CONTROL_POINT, LEGACY_DFU_SERVICE } from './uuids';
 
 export type FlashStep =
@@ -15,6 +15,7 @@ export type FlashStep =
   | { step: 'connecting' }
   | { step: 'detected' }
   | { step: 'progress'; progress: DfuProgress }
+  | { step: 'reconnecting'; attempt: number; attempts: number }
   | { step: 'confirming' }
   | { step: 'finished'; confirmed: boolean };
 
@@ -25,6 +26,8 @@ export type FlashOptions = {
   // at its next reset unless a phone does this.
   confirm?: (link: DfuLink) => Promise<void>;
   onStep?: (step: FlashStep) => void;
+  // How long to wait after a lost link before reconnecting to carry on.
+  resumePauseMs?: number;
 };
 
 // The line wasptool sends to make wasp-os restart into its bootloader.
@@ -35,6 +38,12 @@ const REBOOT_MS = 3000;
 
 // How long the bootloader may take to swap the new image in before the firmware advertises.
 const SWAP_MS = 20000;
+
+// How many times a lost link is reconnected to carry on with an upload, and how long to wait first.
+const RESUME_ATTEMPTS = 5;
+const RESUME_PAUSE_MS = 2000;
+
+type CarryOnOptions = Pick<FlashOptions, 'onStep' | 'resumePauseMs'>;
 
 function hasDfu(link: DfuLink): Promise<boolean> {
   return link.hasCharacteristic(LEGACY_DFU_SERVICE, LEGACY_CONTROL_POINT);
@@ -83,6 +92,33 @@ async function reconnectAfterSwap(link: DfuLink, address: string): Promise<boole
   return false;
 }
 
+// Sends an image to a watch running NeoTime, reconnecting after a lost link to carry on where the watch stopped.
+//
+// A refusal from the watch ends it at once, since sending the same image again would be refused again.
+async function sendCarryingOn(
+  link: DfuLink,
+  address: string,
+  image: FirmwareImage,
+  { onStep, resumePauseMs = RESUME_PAUSE_MS }: CarryOnOptions,
+): Promise<void> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await new LegacyDfuController(link).run(image, (progress) => onStep?.({ step: 'progress', progress }), {
+        resume: true,
+      });
+      return;
+    } catch (error) {
+      if (error instanceof DfuRefusal || attempt >= RESUME_ATTEMPTS) {
+        throw error;
+      }
+      onStep?.({ step: 'reconnecting', attempt, attempts: RESUME_ATTEMPTS - 1 });
+      await sleep(resumePauseMs);
+      // A reconnect that fails leaves the next attempt to fail fast and try again.
+      await link.reconnect(address).catch(() => undefined);
+    }
+  }
+}
+
 // Sends a firmware package to NeoTime's recovery slot, which the bootloader menu installs from.
 //
 // The running firmware takes it with DFU image type 0x08 and stays where it is, so nothing is swapped
@@ -90,7 +126,7 @@ async function reconnectAfterSwap(link: DfuLink, address: string): Promise<boole
 export async function flashRecovery(
   link: DfuLink,
   firmware: FirmwarePackage,
-  options: Pick<FlashOptions, 'confirm' | 'onStep'> = {},
+  options: Pick<FlashOptions, 'confirm' | 'onStep' | 'resumePauseMs'> = {},
 ): Promise<void> {
   const { onStep } = options;
   if (!(await hasDfu(link))) {
@@ -99,7 +135,7 @@ export async function flashRecovery(
   onStep?.({ step: 'detected' });
 
   const image = { ...firmware.image, part: 'recovery' as const };
-  await new LegacyDfuController(link).run(image, (progress) => onStep?.({ step: 'progress', progress }));
+  await sendCarryingOn(link, link.deviceId, image, options);
 
   let confirmed = false;
   if (options.confirm) {
@@ -120,8 +156,9 @@ export async function flashFirmware(
 ): Promise<void> {
   const { onStep } = options;
   const address = link.deviceId;
+  const runsNeoTime = await hasDfu(link);
 
-  if (!(await hasDfu(link))) {
+  if (!runsNeoTime) {
     if (!options.enterDfu) {
       throw new DfuError('This watch serves no firmware update and has no way into a bootloader.');
     }
@@ -135,7 +172,12 @@ export async function flashFirmware(
   }
   onStep?.({ step: 'detected' });
 
-  await new LegacyDfuController(link).run(firmware.image, (progress) => onStep?.({ step: 'progress', progress }));
+  if (runsNeoTime) {
+    await sendCarryingOn(link, address, firmware.image, options);
+  } else {
+    // An old system's bootloader keeps nothing of a cut-off upload, so it gets one try.
+    await new LegacyDfuController(link).run(firmware.image, (progress) => onStep?.({ step: 'progress', progress }));
+  }
 
   let confirmed = false;
   if (options.confirm) {

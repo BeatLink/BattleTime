@@ -1,7 +1,7 @@
 // Nordic legacy DFU, which NeoTime's firmware speaks, as do the old systems' bootloaders a reloader goes through.
 
 import { concat, u16le, u32le, readU32le } from './bytes';
-import { DfuError, NotifyQueue, sleep, type DfuLink } from './link';
+import { DfuError, DfuRefusal, NotifyQueue, sleep, type DfuLink } from './link';
 import type { FirmwareImage, FirmwarePart } from './package';
 import {
   DFU_PAYLOAD_SIZE,
@@ -57,7 +57,7 @@ const IMAGE_TYPE: Record<FirmwarePart, number> = {
 const RECEIPT_INTERVAL = 5;
 
 export type ParsedNotification =
-  | { kind: 'response'; procedure: number; result: number }
+  | { kind: 'response'; procedure: number; result: number; value: Uint8Array }
   | { kind: 'receipt'; received: number };
 
 export function parseNotification(value: Uint8Array): ParsedNotification {
@@ -70,7 +70,7 @@ export function parseNotification(value: Uint8Array): ParsedNotification {
   if (value[0] !== Procedure.RESPONSE) {
     throw new DfuError(`Unexpected notification opcode 0x${value[0].toString(16)}.`);
   }
-  return { kind: 'response', procedure: value[1], result: value[2] };
+  return { kind: 'response', procedure: value[1], result: value[2], value };
 }
 
 export type DfuProgress = {
@@ -80,13 +80,22 @@ export type DfuProgress = {
   total: number;
 };
 
+export type DfuOptions = {
+  // Ask a NeoTime watch how much of this image it kept from an upload a lost link cut off, and send only the rest.
+  resume?: boolean;
+};
+
 export class LegacyDfuController {
   private readonly notifications = new NotifyQueue();
   private unsubscribe: (() => void) | null = null;
 
   constructor(private readonly link: DfuLink) {}
 
-  async run(image: FirmwareImage, onProgress?: (progress: DfuProgress) => void): Promise<void> {
+  async run(
+    image: FirmwareImage,
+    onProgress?: (progress: DfuProgress) => void,
+    options: DfuOptions = {},
+  ): Promise<void> {
     const total = image.image.length;
     const report = (phase: DfuProgress['phase'], sent: number) =>
       onProgress?.({ part: image.part, phase, sent, total });
@@ -114,11 +123,14 @@ export class LegacyDfuController {
       // Answered once the bootloader has finished erasing flash.
       await this.expect(Procedure.INITIALIZE_DFU, 120000);
 
+      const start = options.resume ? await this.keptBytes(total) : 0;
+
       await this.command(Procedure.PRN_REQUEST, u16le(RECEIPT_INTERVAL));
       await this.command(Procedure.RECEIVE_FIRMWARE_IMAGE);
+      report('sending', start);
 
       let segments = 0;
-      for (let offset = 0; offset < total; offset += DFU_PAYLOAD_SIZE) {
+      for (let offset = start; offset < total; offset += DFU_PAYLOAD_SIZE) {
         await this.packet(image.image.subarray(offset, offset + DFU_PAYLOAD_SIZE));
         segments += 1;
         // The bootloader answers on every interval boundary, including the
@@ -150,13 +162,33 @@ export class LegacyDfuController {
     }
   }
 
+  // How much of this image the watch kept from a cut-off upload; it answers 0 for a different image.
+  private async keptBytes(total: number): Promise<number> {
+    await this.command(Procedure.REPORT_RECEIVED_IMAGE_SIZE);
+    const notification = parseNotification(await this.notifications.next());
+    if (
+      notification.kind !== 'response' ||
+      notification.procedure !== Procedure.REPORT_RECEIVED_IMAGE_SIZE ||
+      notification.result !== SUCCESS ||
+      notification.value.length < 7
+    ) {
+      throw this.failure(notification);
+    }
+    const kept = readU32le(notification.value, 3);
+    // The watch now waits for the bytes after what it kept, so a place no packet starts at cannot be sent.
+    if (kept % DFU_PAYLOAD_SIZE !== 0 || kept > total) {
+      throw new DfuError(`The watch kept ${kept} bytes, which is not a place this image can carry on from.`);
+    }
+    return kept;
+  }
+
   private failure(notification: ParsedNotification): DfuError {
     if (notification.kind === 'receipt') {
       return new DfuError('The bootloader sent a packet receipt out of turn.');
     }
     const procedure = PROCEDURE_NAMES[notification.procedure] ?? `procedure ${notification.procedure}`;
     const result = RESPONSE_NAMES[notification.result] ?? `error ${notification.result}`;
-    return new DfuError(`The bootloader rejected ${procedure}: ${result}.`);
+    return new DfuRefusal(`The bootloader rejected ${procedure}: ${result}.`);
   }
 
   private async expect(procedure: number, timeoutMs?: number): Promise<void> {

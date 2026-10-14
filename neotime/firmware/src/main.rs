@@ -1012,16 +1012,18 @@ async fn serve_connection(
         };
         match event {
             GattConnectionEvent::Disconnected { .. } => {
-                if dfu.is_updating() {
+                let was_updating = dfu.is_updating();
+                // What reached the flash is kept, so the same image sent again carries on from there.
+                dfu.pause();
+                if was_updating {
                     let mut text = StatusLine::new();
                     let _ = core::fmt::write(
                         &mut text,
-                        format_args!("Lost phone at {} KB", dfu.bytes_received() / 1024),
+                        format_args!("Kept {} KB", dfu.paused_bytes().unwrap_or(0) / 1024),
                     );
-                    screen.write_line(line::ACTION, "Update stopped");
+                    screen.write_line(line::ACTION, "Update paused");
                     screen.write_line(line::PROGRESS, &text);
                 }
-                dfu.abort();
                 screen.release_status();
                 return;
             }

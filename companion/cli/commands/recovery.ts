@@ -29,6 +29,10 @@ export async function recovery(session: WatchSession, path: string): Promise<voi
         case 'progress':
           bar.update(step.progress.sent, total, 'recovery');
           break;
+        case 'reconnecting':
+          bar.done();
+          say(`Lost the watch; reconnecting to carry on (try ${step.attempt} of ${step.attempts})...`);
+          break;
         case 'confirming':
           bar.done();
           say('Stored. Waiting for the watch to restart...');
