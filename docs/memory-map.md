@@ -145,9 +145,9 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 <!-- measure_memory:file-system -->
 | What | Bytes | File sectors |
 |---|---:|---:|
-| `/settings/system` and `/settings/theme`, kept as records | 82 | 0 |
-| 12 app images, 739 B (flashlight) to 4,416 B (settings); those of 1 KB or less are records | 24,009 | 12 |
-| **In use** | | **12 of 512: 48 KB of 2 MB, and 932 B of records in the 256 KB records ring** |
+| `/settings/system` and `/settings/theme`, kept as records | 107 | 0 |
+| 12 app images, 739 B (flashlight) to 6,096 B (settings); those of 1 KB or less are records | 25,689 | 12 |
+| **In use** | | **12 of 512: 48 KB of 2 MB, and 956 B of records in the 256 KB records ring** |
 <!-- /measure_memory:file-system -->
 
 The rest, almost 2 MB of files and most of the records ring, is free for apps, saved state and
@@ -220,6 +220,13 @@ starts but keeps clear of it: its statics are 336 B at the bottom of RAM and its
 4.7 KB below the alive marker in an ordinary start, measured in the emulator, against the record's
 10.3 KB. A stack that grew into the record would only happen after the firmware's own stack had
 already overflowed.
+The wake gestures (raise, lower and shake to wake, sleep mode and the face's double tap) took 3,808 B
+of flash, 16 B of data and 312 B of static RAM, against `cargo size` of master 97551242: the wake
+gesture detector, about 130 B, lives in the motion task's state and the double tap finder in the
+shell's. With them, a typical install with the settings app opened from the launcher peaked at
+6,132 B, 3,836 B spare. The companion's longest line went from 512 to 640 bytes for the longer
+settings report, which is built on the shell's stack only while it is sent.
+
 To measure it again after a change, build the firmware and run, inside `nix develop`:
 
 ```sh
@@ -340,7 +347,8 @@ every app, 11,832 B; the harness works the launcher's need out at 17,169 B with 
 faces on, so it fits with room to spare. A launcher's need is its own, plus the names and icons of
 the apps it lists, plus the largest of their images, which it reads one at a time for the icons.
 
-The largest app in the repository, `settings`, needs 19.6 KB,
+The largest app in the repository, `settings`, needs 21.8 KB since it gained the wake list and the
+shake calibration screen,
 so every app fits with room to spare, and `harness/tests/quality.rs` fails any app or face whose
 estimate is over the budget, or whose opening screen builds more nodes than it counts. Before the
 saved-state buffer was sized for each app, closing any app borrowed 18,694 B for it, which took
