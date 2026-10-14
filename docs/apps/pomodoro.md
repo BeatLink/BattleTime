@@ -32,7 +32,7 @@ The six-length preset, after a swipe left.
 
 ![The pomodoro running](../../neotime/harness/snapshots/screens/app-pomodoro-running.png)
 
-Running the first length, with Stop and +1.
+Running the first length in seven-segment digits, with Stop and +1.
 
 ![The pomodoro buzzing](../../neotime/harness/snapshots/screens/app-pomodoro-ringing.png)
 

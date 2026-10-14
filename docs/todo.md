@@ -356,8 +356,6 @@ each item says what it costs and what it would save.
 
 Found by the harness's snapshots and quality checks; see [testing.md](testing.md).
 
-- [ ] **Calculator's 7 key is always highlighted,** because the compiler cannot pass labels to
-  `highlighted` (see [compiler.md](compiler.md)).
 - [ ] **Terminal face overflow.** Its last line falls off the bottom of the screen and
   "[STAT] Connected" is cut in half.
 - [ ] **Check the free heap before reading an image beside an open app.** A packages `install`, the

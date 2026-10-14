@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use neotime_app_testing::{Direction, EffectKind, EventResult, SystemValue, TestWatch};
+use neotime_app_testing::{Direction, EffectKind, EventResult, SystemValue, TestWatch, WidgetKind};
 
 // ============================================================================
 // Named numbers
@@ -651,4 +651,76 @@ fn a_swipe_past_the_system_apps_pages_goes_on_to_the_shell() {
     assert_eq!(watch.swipe(Direction::Left), EventResult::NotHandled);
     assert_eq!(watch.swipe(Direction::Down), EventResult::NotHandled);
     assert!(watch.effects_of(EffectKind::Back).is_empty());
+}
+
+// ============================================================================
+// Highlighted keys
+// ============================================================================
+
+/// A point on one key of the open screen's ButtonMatrix, a quarter of the way across it.
+fn key_point(watch: &TestWatch, row: i32, column: i32, keys_in_row: i32, row_count: i32) -> (i32, i32) {
+    let keypad = watch
+        .tappable_widgets()
+        .into_iter()
+        .find(|&widget_index| watch.widget_kind(widget_index) == Some(WidgetKind::ButtonMatrix))
+        .expect("a keypad");
+    let area = watch.visible_area(keypad).unwrap();
+    let key_width = area.width / keys_in_row;
+    let key_height = area.height / row_count;
+    let x = area.x + key_width * column + key_width / 4;
+    let y = area.y + key_height * row + key_height / 2;
+    (x, y)
+}
+
+/// The fill of one key of the open screen's ButtonMatrix, sampled beside its label.
+fn key_fill(watch: &mut TestWatch, row: i32, column: i32, keys_in_row: i32, row_count: i32) -> String {
+    let (x, y) = key_point(watch, row, column, keys_in_row, row_count);
+    format!("{:?}", watch.frame().pixel(x as usize, y as usize))
+}
+
+/// Taps one key of the open screen's ButtonMatrix.
+fn tap_key(watch: &mut TestWatch, row: i32, column: i32, keys_in_row: i32, row_count: i32) {
+    let (x, y) = key_point(watch, row, column, keys_in_row, row_count);
+    watch.tap(x, y);
+}
+
+#[test]
+fn the_calculator_lights_only_the_operation_chosen() {
+    let mut watch = TestWatch::open_app("calculator").unwrap();
+    let plain = key_fill(&mut watch, 0, 1, 5, 4);
+
+    assert_eq!(
+        key_fill(&mut watch, 0, 0, 5, 4),
+        plain,
+        "the 7 key is unlit at first"
+    );
+    assert_eq!(
+        key_fill(&mut watch, 1, 3, 5, 4),
+        plain,
+        "the + key is unlit at first"
+    );
+    tap_key(&mut watch, 0, 0, 5, 4);
+    tap_key(&mut watch, 1, 3, 5, 4);
+    assert_ne!(key_fill(&mut watch, 1, 3, 5, 4), plain, "the + key is lit");
+    assert_eq!(key_fill(&mut watch, 0, 0, 5, 4), plain, "the 7 key stays unlit");
+    assert_eq!(key_fill(&mut watch, 2, 3, 5, 4), plain, "the × key stays unlit");
+}
+
+#[test]
+fn the_pomodoro_lights_go_only_while_it_can_start() {
+    let mut watch = TestWatch::open_app("pomodoro").unwrap();
+    let plain = key_fill(&mut watch, 0, 1, 5, 3);
+
+    assert_ne!(
+        key_fill(&mut watch, 2, 2, 3, 3),
+        plain,
+        "Go is lit with a queue typed"
+    );
+    assert_eq!(key_fill(&mut watch, 0, 0, 5, 3), plain, "the 1 key is unlit");
+    tap_key(&mut watch, 2, 1, 3, 3);
+    assert_eq!(
+        key_fill(&mut watch, 2, 2, 3, 3),
+        plain,
+        "Go is unlit while the next entry is awaited"
+    );
 }

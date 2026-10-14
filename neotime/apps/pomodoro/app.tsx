@@ -36,6 +36,9 @@ const QUEUE_LENGTH_LIMIT = 6;
 const LONGEST_ENTRY_MINUTES = 999;
 
 const ROUND_LIMIT = 99;
+
+/** Times from this long up have three digits of minutes, too wide for the seven-segment font. */
+const LONGEST_SEVEN_SEGMENT_TIME = 100 * MINUTE;
 const LONGEST_BUZZ_SECONDS = 15;
 
 /** The places of a queue's entries. */
@@ -231,7 +234,11 @@ function Pomodoro() {
     <Screen padding={8} gap={6} onSwipe={swipe}>
       <Row justify="space_between" height={44} padding={8} background="surface" radius={12}>
         <Label color="muted">{is_stopped.value ? `V${buzz_seconds.value}` : progress_text.value}</Label>
-        {is_stopped.value && <Label long_mode="clip">{queue_text.value}</Label>}
+        {is_stopped.value && (
+          <Label font="small" long_mode="clip">
+            {queue_text.value}
+          </Label>
+        )}
       </Row>
 
       {is_stopped.value && (
@@ -245,7 +252,9 @@ function Pomodoro() {
 
       {is_running.value && (
         <Card grow={1} align_items="center" justify="center" padding={0}>
-          <Label font="huge">{format_duration(remaining.value, "mm:ss")}</Label>
+          <Label font={remaining.value < LONGEST_SEVEN_SEGMENT_TIME ? "seven_segment" : "large"}>
+            {format_duration(remaining.value, "mm:ss")}
+          </Label>
         </Card>
       )}
 

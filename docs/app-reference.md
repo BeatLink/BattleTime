@@ -290,7 +290,7 @@ Every angle, in every widget and function, is in degrees clockwise from twelve o
 | `Arc` | `value`, `minimum` and `maximum`. Given a signal, the arc can be dragged and writes back to it, with `onChange`. |
 | `Image` | `recolor`: draws a one-colour image, such as a logo, in this colour. |
 | `AnalogClock` | `time` (normally `now`), `show_seconds`, `hour_color`, `minute_color`, `second_color`, `hour_length`, `minute_length`, `second_length`, and `hand_style`: `line`, `tapered` or `rounded`. |
-| `ButtonMatrix` | `rows`: an array of rows of labels. `onClick` receives `{ value }`, the number of the button counted across the rows. |
+| `ButtonMatrix` | `rows`: an array of rows of labels, written out. `onClick` receives `{ value }`, the number of the button counted across the rows. `highlighted`: the labels whose buttons are drawn in the accent colour, such as `[symbol.value]` or `ready.value ? ["Go"] : []`; none are lit without it. Each label is fixed text, and only the first 32 buttons can be lit. |
 | `Roller`, `Dropdown` | `options`, and `value` as the number of the chosen option. |
 | `Slider`, `Switch`, `Checkbox`, `Roller`, `Spinbox` | `value` may be a plain value or a signal. Given a signal, the widget writes changes back to it. |
 

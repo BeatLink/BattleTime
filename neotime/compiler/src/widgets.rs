@@ -288,6 +288,37 @@ fn array_property_for(name: &str, kind: WidgetKind) -> Option<(Property, Type, A
     })
 }
 
+/// How many of a ButtonMatrix's buttons `highlighted` can reach, one bit of `value` each.
+const HIGHLIGHTABLE_BUTTONS: usize = 32;
+
+/// What `highlighted` accepts, for its error messages.
+const HIGHLIGHTED_FORM: &str =
+    "`highlighted` must be an array of labels, such as `[symbol.value]`, or a choice between such arrays";
+
+/// The bits of every button with this label.
+fn label_bits(label: &str, labels: &[Rc<str>]) -> i32 {
+    labels
+        .iter()
+        .enumerate()
+        .filter(|(_, candidate)| &***candidate == label)
+        .fold(0, |mask, (number, _)| mask | (1u32 << number) as i32)
+}
+
+/// The bits of the buttons a constant array of labels lights.
+fn constant_highlight_mask(constant: &Constant, labels: &[Rc<str>], span: Span) -> Compiled<i32> {
+    let Constant::Array(elements) = constant else {
+        return fail(span, HIGHLIGHTED_FORM);
+    };
+    let mut mask = 0;
+    for element in elements.iter() {
+        let Constant::Text(label) = element else {
+            return fail(span, "each highlighted label must be text");
+        };
+        mask |= label_bits(label, labels);
+    }
+    Ok(mask)
+}
+
 /// JSX text as Preact shows it: lines trimmed, blank lines dropped, the rest joined by spaces.
 fn jsx_text(raw: &str) -> String {
     let lines: Vec<&str> = raw.split('\n').collect();
@@ -1171,6 +1202,7 @@ impl<'a> Compiler<'a> {
         let mut bound_value: Option<u8> = None;
         let mut change_handler: Option<Reference<'a>> = None;
         let attributes = self.expand_series(expand_aliases(attributes), kind, span);
+        let matrix_labels = self.matrix_labels(&attributes, kind);
         let mut scrolling = 0;
 
         for (prop, value) in attributes {
@@ -1208,6 +1240,12 @@ impl<'a> Compiler<'a> {
                         span,
                         "`src` is a PNG file of the app's, such as \"./logo.png\", or a shared library icon",
                     ),
+                }
+                continue;
+            }
+            if prop == "highlighted" && kind == WidgetKind::ButtonMatrix {
+                if let Some(source) = self.highlighted_source(value, matrix_labels.as_deref(), span)? {
+                    properties.push((Property::Value, source));
                 }
                 continue;
             }
@@ -1506,6 +1544,160 @@ impl<'a> Compiler<'a> {
         }
         let table = self.constant_table(&flat, element_type, span)?;
         Ok(Some(PropertySource::Constant(table as i32)))
+    }
+
+    /// A ButtonMatrix's labels in the order its buttons are numbered, when its `rows` are written out.
+    fn matrix_labels(
+        &self,
+        attributes: &[(String, Reference<'a>)],
+        kind: WidgetKind,
+    ) -> Option<Vec<Rc<str>>> {
+        if kind != WidgetKind::ButtonMatrix {
+            return None;
+        }
+        let (_, rows) = attributes.iter().find(|(prop, _)| prop == "rows")?;
+        let Some(Constant::Array(rows)) = self.reference_constant(rows) else {
+            return None;
+        };
+        let mut labels = Vec::new();
+        for row in rows.iter() {
+            let Constant::Array(row) = row else {
+                return None;
+            };
+            for label in row.iter() {
+                let Constant::Text(label) = label else {
+                    return None;
+                };
+                labels.push(label.clone());
+            }
+        }
+        Some(labels)
+    }
+
+    /// A ButtonMatrix's `highlighted` labels as its `value`: one bit for each button to light.
+    fn highlighted_source(
+        &mut self,
+        value: Reference<'a>,
+        labels: Option<&[Rc<str>]>,
+        span: Span,
+    ) -> Compiled<Option<PropertySource>> {
+        let Some(labels) = labels else {
+            return fail(span, "`highlighted` needs the ButtonMatrix's `rows` written out");
+        };
+        if labels.len() > HIGHLIGHTABLE_BUTTONS {
+            return fail(
+                span,
+                format!("`highlighted` works on at most {HIGHLIGHTABLE_BUTTONS} buttons"),
+            );
+        }
+        if let Some(constant) = self.reference_constant(&value) {
+            if matches!(constant, Constant::Undefined) {
+                return Ok(None);
+            }
+            let mask = constant_highlight_mask(&constant, labels, span)?;
+            return Ok(Some(PropertySource::Constant(mask)));
+        }
+        let Reference::Expression { expression, scope } = value else {
+            return fail(span, HIGHLIGHTED_FORM);
+        };
+        let mut emitter = Emitter::new(CodeKind::Expression);
+        self.emit_highlight_mask(&mut emitter, expression, &scope, labels)?;
+        let code = emitter.finish(span)?;
+        Ok(Some(PropertySource::Expression(self.add_expression(code))))
+    }
+
+    /// Leaves the bits of the buttons an array of labels lights, from a literal or a choice between them.
+    fn emit_highlight_mask(
+        &mut self,
+        emitter: &mut Emitter,
+        expression: &'a Expression<'a>,
+        scope: &Rc<Scope<'a>>,
+        labels: &[Rc<str>],
+    ) -> Compiled<()> {
+        let span = expression.span();
+        if let Some(constant) = self.evaluate_constant(expression, scope) {
+            let mask = constant_highlight_mask(&constant, labels, span)?;
+            return self.emit_number(emitter, i64::from(mask), span);
+        }
+        match strip_parentheses(expression) {
+            Expression::ConditionalExpression(conditional) => {
+                let otherwise = emitter.label();
+                let end = emitter.label();
+                self.compile_condition(emitter, &conditional.test, scope)?;
+                emitter.jump_if_false(otherwise, span)?;
+                self.emit_highlight_mask(emitter, &conditional.consequent, scope, labels)?;
+                emitter.jump(end, span)?;
+                emitter.place(otherwise);
+                self.emit_highlight_mask(emitter, &conditional.alternate, scope, labels)?;
+                emitter.place(end);
+                Ok(())
+            }
+            Expression::ArrayExpression(array) => {
+                let mut known_mask = 0;
+                emitter.emit(Instruction::PushSmall(0), span)?;
+                for element in &array.elements {
+                    let Some(element) = element.as_expression() else {
+                        return fail(span, HIGHLIGHTED_FORM);
+                    };
+                    match self.evaluate_constant(element, scope) {
+                        Some(Constant::Text(label)) => known_mask |= label_bits(&label, labels),
+                        Some(_) => return fail(element.span(), "each highlighted label must be text"),
+                        None => {
+                            self.emit_label_bits(emitter, element, scope, labels)?;
+                            emitter.emit(Instruction::BitOr, span)?;
+                        }
+                    }
+                }
+                self.emit_number(emitter, i64::from(known_mask), span)?;
+                emitter.emit(Instruction::BitOr, span)
+            }
+            _ => match self.resolve_reference(expression, scope) {
+                Some(Reference::Expression {
+                    expression: inner,
+                    scope: inner_scope,
+                }) if !std::ptr::eq(inner, expression) => {
+                    self.emit_highlight_mask(emitter, inner, &inner_scope, labels)
+                }
+                _ => fail(span, HIGHLIGHTED_FORM),
+            },
+        }
+    }
+
+    /// Leaves the bits of the buttons whose label equals one label worked out while running.
+    fn emit_label_bits(
+        &mut self,
+        emitter: &mut Emitter,
+        element: &'a Expression<'a>,
+        scope: &Rc<Scope<'a>>,
+        labels: &[Rc<str>],
+    ) -> Compiled<()> {
+        let span = element.span();
+        emitter.emit(Instruction::PushSmall(0), span)?;
+        let typed = self.compile_value(emitter, element, scope, Some(Type::NAME))?;
+        if typed.value_type.kind != Kind::Name {
+            return fail(
+                span,
+                "a highlighted label must be fixed text, such as a signal holding one of the labels",
+            );
+        }
+        let mut compared: Vec<&str> = Vec::new();
+        for label in labels {
+            if compared.contains(&&**label) {
+                continue;
+            }
+            compared.push(label);
+            let skip = emitter.label();
+            emitter.emit(Instruction::Duplicate, span)?;
+            self.emit_constant(emitter, &Constant::Text(label.clone()), Some(Type::NAME), span)?;
+            emitter.emit(Instruction::Equal, span)?;
+            emitter.jump_if_false(skip, span)?;
+            emitter.emit(Instruction::Swap, span)?;
+            self.emit_number(emitter, i64::from(label_bits(label, labels)), span)?;
+            emitter.emit(Instruction::BitOr, span)?;
+            emitter.emit(Instruction::Swap, span)?;
+            emitter.place(skip);
+        }
+        emitter.emit(Instruction::Drop, span)
     }
 
     /// An event prop: the handler compiled from the function given, or nothing if none is given.

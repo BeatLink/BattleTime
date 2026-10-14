@@ -1211,6 +1211,69 @@ fn button_matrix_rows_become_options_with_row_breaks() {
 }
 
 #[test]
+fn button_matrix_highlighted_labels_become_bits_of_its_value() {
+    let image = compile(&app(r#"import { ButtonMatrix } from "neotime/widgets";
+        const symbol = signal("+");
+        const ready = signal(true);
+        function Main() {
+          return <Screen>
+            <ButtonMatrix rows={[["1", "+"], ["Go", "+"]]} highlighted={[symbol.value, "1"]} onClick={() => {}} />
+            <ButtonMatrix rows={[["1", "Go"]]} highlighted={ready.value ? ["Go"] : []} onClick={() => {}} />
+            <ButtonMatrix rows={[["1", "Go"]]} highlighted={["Go"]} onClick={() => {}} />
+            <ButtonMatrix rows={[["1", "Go"]]} onClick={() => {}} />
+          </Screen>;
+        }"#));
+    let image = AppImage::parse(&image).unwrap();
+    let mut state = AppState::new(&image).unwrap();
+    let value = |state: &AppState, nth: usize| {
+        value_of(
+            &image,
+            state,
+            property_of(&image, WidgetKind::ButtonMatrix, Property::Value, nth),
+            &SYSTEM,
+        )
+    };
+
+    assert_eq!(value(&state, 0), 0b1011);
+    assert_eq!(value(&state, 1), 0b10);
+    assert_eq!(value(&state, 2), 0b10);
+    let unhighlighted = widgets(&image)
+        .into_iter()
+        .filter(|(kind, _)| *kind == WidgetKind::ButtonMatrix)
+        .nth(3)
+        .unwrap();
+    assert!(!unhighlighted
+        .1
+        .iter()
+        .any(|(property, _)| *property == Property::Value));
+    let symbol = variable_named(&image, "symbol");
+    let go = (0..image.string_count())
+        .find(|&index| image.string(index) == Some("Go"))
+        .unwrap() as Value;
+    state.set(symbol, go).unwrap();
+    state.set(variable_named(&image, "ready"), 0).unwrap();
+    assert_eq!(value(&state, 0), 0b0101);
+    assert_eq!(value(&state, 1), 0);
+}
+
+#[test]
+fn button_matrix_highlighted_needs_fixed_labels() {
+    let rows_unknown = app(r#"import { ButtonMatrix } from "neotime/widgets";
+        const label = signal("1");
+        function Main() {
+          return <Screen><ButtonMatrix rows={[["1"], [label.value]]} highlighted={["1"]} onClick={() => {}} /></Screen>;
+        }"#);
+    let not_an_array = app(r#"import { ButtonMatrix } from "neotime/widgets";
+        const symbol = signal("1");
+        function Main() {
+          return <Screen><ButtonMatrix rows={[["1"]]} highlighted={symbol.value} onClick={() => {}} /></Screen>;
+        }"#);
+
+    assert!(first_error(&rows_unknown).contains("`rows` written out"));
+    assert!(first_error(&not_an_array).contains("must be an array of labels"));
+}
+
+#[test]
 fn arrays_may_start_with_different_values() {
     let declarations = "const tiles = signal([3, 1, 2, 0]);";
 

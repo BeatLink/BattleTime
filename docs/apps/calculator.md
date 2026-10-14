@@ -7,7 +7,8 @@ fifteen digits, six of them after the point.
 
 - Tap the **digit** keys and the **.** key to type a number. The number being typed shows in large
   text; the result so far and the waiting operation show small above it.
-- Tap **+**, **-**, **×** or **÷** to apply the waiting operation and choose the next one.
+- Tap **+**, **-**, **×** or **÷** to apply the waiting operation and choose the next one, whose key
+  stays lit.
 - Tap **=** to work out the sum. Tapping **=** again repeats the last operation.
 - Tap **±** to change the sign of the number being typed.
 - Tap **←** to delete the last digit typed; with nothing typed it clears the result.

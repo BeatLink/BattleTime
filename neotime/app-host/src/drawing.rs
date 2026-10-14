@@ -2127,7 +2127,7 @@ fn draw_button_matrix(node: &Node, context: &DrawContext, renderer: &mut dyn Ren
     let highlight = resolve(settings.background, ThemeColor::Accent, theme);
     let text_color = resolve(settings.color, ThemeColor::Text, theme);
     for (number, place, text) in matrix_buttons(node, context) {
-        let is_highlighted = number == settings.value;
+        let is_highlighted = number < 32 && (settings.value as u32 >> number) & 1 == 1;
         let fill = if is_highlighted { highlight } else { surface };
         fill_rounded_rect(renderer, place, fill, MATRIX_RADIUS);
         draw_text_block(

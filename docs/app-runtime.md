@@ -856,7 +856,7 @@ library has), in the order above. The app host's font slots start empty, and the
 | `AppList` | The host | A row per installed app, its icon and name read from the system values; scrolls like a `List`, with a bar when its items at full width are taller than it, and a click sends `{value}`, the app's place. |
 | `TextFile` | The host | A text file read through `SystemValues::read_file`, which the firmware answers from littlefs. When its screen opens the host wraps the whole file once, 512 bytes at a time, keeping where every eighth line starts (4 bytes each); scrolling then reads back only the lines near the view, up to eight more past each edge. Scrolls like a `List`. |
 | `Line`, `Chart`, `Scale`, `AnalogClock` | The host | `Chart` draws one series. |
-| `ButtonMatrix` | The host | `"\n"` breaks rows; a press sends `{value}`; the button numbered `value` is highlighted. |
+| `ButtonMatrix` | The host | `"\n"` breaks rows; a press sends `{value}`; `value` holds one bit per button, counted across the rows, and lights the buttons whose bit is set. |
 | `Roller`, `Dropdown`, `Checkbox`, `Radio` | The host | A dropdown opens its list on a tap. |
 
 `Tabs`, `RichText`, `AnimatedImage`, `ArcLabel`, `Spinner`, `Table`, `Calendar`,

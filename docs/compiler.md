@@ -94,7 +94,9 @@ becomes bytecode.
   while running but is not an array signal is left out with a warning.
 - `points` are stored as x and y one after the other. A `ButtonMatrix`'s `rows` become its
   `options`, with a `"\n"` element between rows, as LVGL's button matrix map has it; a click
-  reports the label's place counted across all rows, without the row breaks.
+  reports the label's place counted across all rows, without the row breaks. Its `highlighted`
+  labels become its `value`, one bit per button: an array literal, a constant or a `? :` choice
+  between them, where a label worked out while running is compared with every label.
 - Components from `neotime/components` are inlined from the SDK source, because the image format
   cannot refer to the shared library yet.
 
@@ -319,8 +321,8 @@ arguments.
 
 ## Not supported yet
 
-- The `message` and `http_response` events, `daily` days from a signal, ButtonMatrix
-  `highlighted` (an array of labels, which `Value` cannot hold), and a Chart's second and third series.
+- The `message` and `http_response` events, `daily` days from a signal, and a Chart's second and
+  third series.
 - `vibrate_sequence` and `http_request`.
 - More than 16 loops, or more than 16 branches waiting to join, in one handler or expression.
 - A screen component that returns different roots, such as an early `return <Screen>`.
