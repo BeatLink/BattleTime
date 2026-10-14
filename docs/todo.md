@@ -20,6 +20,11 @@ document for its part instead.
   that the three length pages are reached by swiping right and their - and + buttons set the
   lengths, and that a round runs work and short breaks in turn with a long break after the set
   number of work sessions, buzzing and waking the screen between each.
+- [ ] **Files on the PineTime.** The Files app and its `open_folder` listing (960ce130) have run
+  only in the harness and the browser preview. Check on the watch that it opens at `/` with each
+  folder's size and no stall or watchdog reset, that tapping `apps` and then an app's folder lists
+  its files with byte sizes, and that each side button press goes up one folder, wiping the
+  opposite way, until one more press at `/` leaves the app.
 
 - [ ] **Touch panel on the PineTime.** The firmware runs `neotime-touch` on the watch, but these
   checks have not been made:
