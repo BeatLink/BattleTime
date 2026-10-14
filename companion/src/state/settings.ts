@@ -1,0 +1,82 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import type { NoteFont, NoteOnWatch } from '@/protocol/notes';
+import { readRemoteButtons, type RemoteButton, type RemoteOnWatch } from '@/protocol/remote';
+import type { NoteFileRef } from '@/services/note-file';
+import type { Place } from '@/services/weather';
+
+// User settings that survive restarts, stored as one JSON blob.
+export type Settings = {
+  lastWatchId: string | null;
+  lastWatchName: string | null;
+  autoReconnect: boolean;
+  forwardNotifications: boolean;
+  forwardMusic: boolean;
+  forwardWeather: boolean;
+  forwardCalls: boolean;
+  // Hold notifications back while the phone is in Do Not Disturb.
+  respectDoNotDisturb: boolean;
+  // The place weather reports are for, as the user typed it and as it was found.
+  weatherQuery: string;
+  weatherPlace: Place | null;
+  // Report the weather where the device is, found by the computer's location service, instead of the place above.
+  weatherFromDevice: boolean;
+  // Whether watch apps may fetch URLs through the phone, and from which hosts.
+  httpEnabled: boolean;
+  httpAllowedHosts: string;
+  // Where firmware builds are listed from, and the token GitHub wants for Actions builds.
+  githubRepo: string;
+  githubToken: string;
+  firmwareBoard: string;
+  // The text file the watch's notes app shows, the font it is drawn in, and what the watch was last sent.
+  noteFile: NoteFileRef | null;
+  noteFont: NoteFont;
+  noteOnWatch: NoteOnWatch | null;
+  // The watch's remote buttons, in order, and the layout the watch was last sent.
+  remoteButtons: RemoteButton[];
+  remoteOnWatch: RemoteOnWatch | null;
+};
+
+export const defaultSettings: Settings = {
+  lastWatchId: null,
+  lastWatchName: null,
+  autoReconnect: true,
+  forwardNotifications: true,
+  forwardMusic: true,
+  forwardWeather: false,
+  forwardCalls: true,
+  respectDoNotDisturb: true,
+  weatherQuery: '',
+  weatherPlace: null,
+  weatherFromDevice: false,
+  httpEnabled: false,
+  httpAllowedHosts: '',
+  githubRepo: 'BeatLink/NeoTime',
+  githubToken: '',
+  firmwareBoard: 'pinetime',
+  noteFile: null,
+  noteFont: 'normal',
+  noteOnWatch: null,
+  remoteButtons: [],
+  remoteOnWatch: null,
+};
+
+const STORAGE_KEY = 'neotime.settings.v1';
+
+export async function loadSettings(): Promise<Settings> {
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return defaultSettings;
+    }
+    const stored = { ...defaultSettings, ...JSON.parse(raw) };
+    // Buttons are checked one by one, so a malformed one never reaches the watch or runs.
+    return { ...stored, remoteButtons: readRemoteButtons(stored.remoteButtons) };
+  } catch {
+    return defaultSettings;
+  }
+}
+
+export async function saveSettings(settings: Settings): Promise<void> {
+  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+}

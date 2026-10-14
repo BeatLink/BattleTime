@@ -1,0 +1,15 @@
+[package]
+name = "neotime-companion-core"
+description = "The watch connection and protocols shared by every NeoTime Companion build"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+btleplug = "0.13"
+futures = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+uuid = "1"

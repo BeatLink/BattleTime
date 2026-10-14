@@ -1,0 +1,64 @@
+# Runs the tests with coverage, the type check, the lint, the CLI build and the Nix package on each push and pull request.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to a pull request replaces its older run; every commit on main keeps its own result.
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pull-request' || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Tests, coverage, types and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install the dependencies
+        run: npm ci
+      - name: Run the tests with coverage and check the floors
+        run: npm run coverage
+      - name: Check the types
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Build the command line tool
+        run: npm run build:cli
+      - name: Keep the coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+
+  rust:
+    name: Rust tests and clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      # The Tauri crate embeds dist/ when it builds, so an empty page stands in for the web export.
+      - name: Stand in for the web export
+        run: mkdir -p dist && echo '<!doctype html>' > dist/index.html
+      - name: Run the tests
+        run: nix develop --command cargo test --workspace
+      - name: Run clippy
+        run: nix develop --command cargo clippy --workspace --all-targets -- -D warnings
+
+  nix:
+    name: Nix package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      # Fails when package-lock.json changes without npmDepsHash in flake.nix.
+      - name: Build the desktop app and command line tool
+        run: nix build .#default --print-build-logs

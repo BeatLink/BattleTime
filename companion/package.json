@@ -1,0 +1,97 @@
+{
+  "name": "neotime-companion",
+  "main": "expo-router/entry",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
+    "test": "jest",
+    "coverage": "jest --coverage",
+    "desktop": "expo export --platform web --output-dir dist && node scripts/electron.mjs",
+    "desktop:dev": "node scripts/electron.mjs",
+    "tauri": "expo export --platform web --output-dir dist && cargo run --release -p neotime-companion",
+    "build:cli": "esbuild cli/neotime.ts --bundle --platform=node --target=node20 --format=cjs --external:node-ble --alias:@=./src --outfile=build/neotime.cjs",
+    "neotime": "npm run build:cli --silent && node build/neotime.cjs",
+    "import-watch-apps": "node scripts/import-watch-apps.mjs",
+    "import-icon-names": "node scripts/import-icon-names.mjs"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "dbus-next": "^0.10.2",
+    "expo": "~57.0.24",
+    "expo-constants": "~57.0.19",
+    "expo-dev-client": "~57.0.19",
+    "expo-document-picker": "^57.0.2",
+    "expo-font": "~57.0.4",
+    "expo-linking": "~57.0.10",
+    "expo-router": "~57.0.22",
+    "expo-splash-screen": "~57.0.9",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.4",
+    "fflate": "^0.8.3",
+    "node-ble": "^1.13.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-ble-plx": "^3.5.1",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-web": "~0.21.0",
+    "react-native-worklets": "0.10.1"
+  },
+  "devDependencies": {
+    "@types/jest": "29.5.14",
+    "@types/react": "~19.2.2",
+    "esbuild": "^0.28.2",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "~57.0.2",
+    "jest": "~29.7.0",
+    "jest-expo": "~57.0.5",
+    "typescript": "~6.0.3"
+  },
+  "license": "LGPL-3.0-or-later",
+  "jest": {
+    "preset": "jest-expo",
+    "testMatch": [
+      "**/*.test.ts",
+      "**/*.test.tsx"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.{ts,tsx}",
+      "cli/**/*.ts",
+      "!**/*.test.{ts,tsx}",
+      "!**/*.d.ts",
+      "!src/app/**",
+      "!src/components/**",
+      "!src/ble/ble-transport.ts",
+      "!src/ble/electron-transport.ts",
+      "!src/ble/create-transport*.ts",
+      "!cli/neotime.ts",
+      "!cli/ble.ts"
+    ],
+    "coverageReporters": [
+      "text-summary",
+      "text",
+      "lcov"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "lines": 77,
+        "statements": 77,
+        "branches": 75,
+        "functions": 75
+      }
+    }
+  },
+  "bin": {
+    "neotime": "./build/neotime.cjs"
+  }
+}
