@@ -10,27 +10,52 @@ import {
   shake_speed,
   watch_face_name,
 } from "neotime";
-import { install_apps, open, OpenScreen, press_button, screen_stack, start_scheduler } from "neotime/preview";
+import {
+  effect_log,
+  freeze_clock,
+  install_apps,
+  open,
+  OpenScreen,
+  press_button,
+  screen_stack,
+  start_scheduler,
+  swipe,
+  unfreeze_clock,
+} from "neotime/preview";
 import app, {
   calibrate,
   calibration_stage,
+  chosen_day,
+  chosen_minute_of_day,
+  chosen_month,
+  chosen_month_length,
   chosen_shake_threshold,
+  chosen_year,
   next_calibration_stage,
   next_shake_sample_at,
   sample_shake,
+  save_date_time,
   set_brightness_level,
   set_shake_threshold,
   set_timeout,
   toggle_24_hour_clock,
   toggle_alarms_in_do_not_disturb,
   toggle_bluetooth,
+  toggle_always_on_screen,
   toggle_do_not_disturb,
+  toggle_lower_to_sleep,
+  toggle_metric_units,
+  toggle_raise_to_wake,
+  toggle_shake_to_wake,
+  toggle_sleep_mode,
 } from "./app.tsx";
 
 let stop_scheduler = () => {};
 
 function widgets(container: Element, kind: string): HTMLElement[] {
-  return [...container.querySelectorAll(`[data-widget=${kind}]`)] as HTMLElement[];
+  return [
+    ...container.querySelectorAll(`[data-widget=${kind}]`),
+  ] as HTMLElement[];
 }
 
 function tap(element: HTMLElement) {
@@ -39,7 +64,9 @@ function tap(element: HTMLElement) {
 
 /** Taps the row whose first label reads `title`. */
 function open_row(container: Element, title: string) {
-  const row = widgets(container, "row").find((candidate) => candidate.textContent?.startsWith(title));
+  const row = widgets(container, "row").find((candidate) =>
+    candidate.textContent?.startsWith(title),
+  );
   tap(row as HTMLElement);
 }
 
@@ -110,7 +137,10 @@ describe("settings", () => {
   it("keeps the step goal between 1,000 and 50,000", () => {
     const { container } = render(<OpenScreen />);
     open_row(container, "Step goal");
-    const button = (place: number) => widgets(container, "stepper")[0].querySelectorAll("button")[place] as HTMLElement;
+    const button = (place: number) =>
+      widgets(container, "stepper")[0].querySelectorAll("button")[
+        place
+      ] as HTMLElement;
     act(() => {
       settings.step_goal.value = 1000;
     });
@@ -161,9 +191,30 @@ describe("settings", () => {
 
   it("steps on and back through the faces turned on, wrapping round", () => {
     packages.value = [
-      { id: "analog", name: "Analog", is_face: true, enabled: true, memory: 9_000, refusal: 0 },
-      { id: "casio", name: "Casio", is_face: true, enabled: false, memory: 9_000, refusal: 0 },
-      { id: "digital", name: "Digital", is_face: true, enabled: true, memory: 9_000, refusal: 0 },
+      {
+        id: "analog",
+        name: "Analog",
+        is_face: true,
+        enabled: true,
+        memory: 9_000,
+        refusal: 0,
+      },
+      {
+        id: "casio",
+        name: "Casio",
+        is_face: true,
+        enabled: false,
+        memory: 9_000,
+        refusal: 0,
+      },
+      {
+        id: "digital",
+        name: "Digital",
+        is_face: true,
+        enabled: true,
+        memory: 9_000,
+        refusal: 0,
+      },
     ];
     watch_face_name.value = "Digital";
     const { container } = render(<OpenScreen />);
@@ -290,5 +341,111 @@ describe("settings", () => {
 
     expect(calibration_stage.value).toBe(0);
     expect(settings.shake_threshold.value).toBe(400);
+  });
+
+  it("opens the date and time pages on the local time now", () => {
+    freeze_clock(Date.UTC(2026, 3, 15, 9, 30));
+    const { container } = render(<OpenScreen />);
+    open_row(container, "Date & time");
+    unfreeze_clock();
+
+    expect(screen_stack.value.at(-1)).toBe("clock");
+    expect([chosen_day.value, chosen_month.value, chosen_year.value]).toEqual([
+      15, 4, 2026,
+    ]);
+    expect(chosen_minute_of_day.value).toBe(9 * 60 + 30);
+    expect(widgets(container, "roller").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("knows how long each month is, February from the year", () => {
+    const lengths = (year: number) =>
+      Array.from({ length: 12 }, (_, month) => {
+        chosen_year.value = year;
+        chosen_month.value = month + 1;
+        return chosen_month_length.value;
+      });
+    expect(lengths(2026)).toEqual([
+      31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+    ]);
+    expect(lengths(2028)[1]).toBe(29);
+  });
+
+  it("sets the clock to the chosen day of the year and minute, then goes back", () => {
+    const { container } = render(<OpenScreen />);
+    open_row(container, "Date & time");
+    chosen_year.value = 2028;
+    chosen_month.value = 3;
+    chosen_day.value = 1;
+    chosen_minute_of_day.value = 23 * 60 + 59;
+
+    save_date_time();
+
+    expect(
+      effect_log.value.filter((effect) => effect.kind === "set_clock").at(-1),
+    ).toMatchObject({ year: 2028, day_of_year: 61, minute_of_day: 1439 });
+    expect(screen_stack.value.at(-1)).toBe("main");
+  });
+
+  it("sets a day past the month's end as its last day", () => {
+    chosen_year.value = 2026;
+    chosen_month.value = 4;
+    chosen_day.value = 31;
+    chosen_minute_of_day.value = 0;
+
+    save_date_time();
+
+    expect(
+      effect_log.value.filter((effect) => effect.kind === "set_clock").at(-1),
+    ).toMatchObject({ year: 2026, day_of_year: 120 });
+  });
+
+  it("turns the day, month, year and hour rollers", () => {
+    freeze_clock(Date.UTC(2026, 3, 15, 9, 30));
+    const { container } = render(<OpenScreen />);
+    open_row(container, "Date & time");
+    unfreeze_clock();
+    const step = (place: number) =>
+      act(() =>
+        (
+          widgets(container, "roller")[place].querySelector(
+            "[data-roller-offset='1']",
+          ) as HTMLElement
+        ).click(),
+      );
+
+    for (let place = 0; place < 3; place++) step(place);
+    act(() => swipe("left"));
+    step(0);
+
+    expect([chosen_day.value, chosen_month.value, chosen_year.value]).toEqual([
+      16, 5, 2027,
+    ]);
+    expect(chosen_minute_of_day.value).toBe(10 * 60 + 30);
+  });
+
+  it("turns each switch off and back on", () => {
+    const switches = [
+      [toggle_24_hour_clock, settings.uses_24_hour_clock],
+      [toggle_metric_units, settings.uses_metric_units],
+      [toggle_always_on_screen, settings.always_on_screen],
+      [toggle_sleep_mode, settings.sleep_mode],
+      [toggle_raise_to_wake, settings.raise_to_wake],
+      [toggle_lower_to_sleep, settings.lower_to_sleep],
+      [toggle_shake_to_wake, settings.shake_to_wake],
+    ] as const;
+
+    for (const [toggle, value] of switches) {
+      const before = value.value;
+      toggle();
+      expect(value.value).toBe(!before);
+      toggle();
+      expect(value.value).toBe(before);
+    }
+  });
+
+  it("names a theme of the wearer's own colours", () => {
+    set_setting("theme", -1);
+    const { container } = render(<OpenScreen />);
+    expect(container.textContent).toContain("Own");
   });
 });

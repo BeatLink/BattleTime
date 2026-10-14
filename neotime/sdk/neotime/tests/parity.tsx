@@ -134,6 +134,7 @@ export const KNOWN_DIFFERENCES: KnownDifference[] = [
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Metric units", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Off", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Off", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-settings", screen: "main", side: "preview_only", text: "On", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Sleep mode", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Step goal", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "wake", side: "preview_only", text: "Lower to sleep", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },

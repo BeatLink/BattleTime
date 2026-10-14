@@ -322,7 +322,11 @@ impl Files {
     /// Restarts a firmware the boot state still says is on trial, so the bootloader brings back the one before.
     pub fn roll_back_firmware_now(&self) {
         let mut alignment = [0; 4];
-        if block_on(running_firmware_is_on_trial(&mut self.boot_state(), &mut alignment)) == Ok(true) {
+        if block_on(running_firmware_is_on_trial(
+            &mut self.boot_state(),
+            &mut alignment,
+        )) == Ok(true)
+        {
             cortex_m::peripheral::SCB::sys_reset();
         }
     }
@@ -604,7 +608,10 @@ impl FilePart {
 
 /// While updates are off the phone may not install, change or remove apps, nor run one from the temporary folder.
 fn folders_locked_by_settings() -> &'static [&'static str] {
-    const APP_FOLDERS: &[&str] = &[neotime_packages::APPS_DIRECTORY, neotime_packages::TEMPORARY_DIRECTORY];
+    const APP_FOLDERS: &[&str] = &[
+        neotime_packages::APPS_DIRECTORY,
+        neotime_packages::TEMPORARY_DIRECTORY,
+    ];
     match crate::settings::current().is_on(neotime_settings::Setting::AllowsUpdates) {
         true => &[],
         false => APP_FOLDERS,
