@@ -332,7 +332,9 @@ The shell draws through `DrawingScreen` (`drawing_screen.rs`) and the DMA code i
   it while drawing waits. The host draws a strip straight into the free buffer, awaits the bus, and
   starts it by EasyDMA, then draws the next into the other buffer while it goes out, with no copy
   between them; it awaits before each scroll command too. A drawing step returns as soon as its
-  last strip has started. `draw_host`'s future is polled out of line (`OutOfLine`), so its frames
+  last strip has started, and the shell does not await the bus before a host step, so the first
+  strip is drawn while the last one of the previous step is still going out; only the shell's own
+  blocking draws (the full clear, firmware pages, the help screen) await it first. `draw_host`'s future is polled out of line (`OutOfLine`), so its frames
   never sit under the shell task's other work.
 - **Sending a strip.** A strip is sent as equal pieces of at most 255 bytes, the most one EasyDMA
   transfer moves, in array-list mode; each piece's END starts the next through PPI channel 5, which

@@ -415,7 +415,6 @@ impl<'image> AppHost<'image> {
                 self.paint(screen, strip, rows_from(run.done, rows), -run.done)
                     .await?;
                 screen.ready().await;
-                screen.ready().await;
                 screen.scroll_by(rows)?;
                 rows
             }

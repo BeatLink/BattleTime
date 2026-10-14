@@ -1643,8 +1643,14 @@ impl Shell {
     }
 
     async fn draw(&mut self) {
-        // Drawing below sends without waiting, so a strip still going out is awaited here rather than spun on.
-        crate::display_dma::bus_is_free().await;
+        // The app host renders first and awaits the bus before each strip it sends, so only it skips the wait.
+        let only_the_host_draws = !REDRAW_EVERYTHING.load(Ordering::Relaxed)
+            && self.firmware_page.is_none()
+            && self.host.as_ref().is_some_and(|host| host.needs_drawing());
+        // The shell's other drawing blocks on the bus, so a strip going out is awaited here instead.
+        if !only_the_host_draws {
+            crate::display_dma::bus_is_free().await;
+        }
         if REDRAW_EVERYTHING.swap(false, Ordering::Relaxed) {
             self.display.lock(|display| {
                 let _ = display.borrow_mut().clear(Rgb565::BLACK);
