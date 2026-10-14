@@ -455,10 +455,8 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
                 self.bytes_received = bytes_stored;
             }
             // A phone that did not ask where to carry on sends the whole image.
-            None if self.paused.is_some() => {
-                if self.start_afresh().await.is_err() {
-                    return self.fail_image();
-                }
+            None if self.paused.is_some() && self.start_afresh().await.is_err() => {
+                return self.fail_image();
             }
             None => {}
         }

@@ -11,8 +11,8 @@
 
 #![no_std]
 #![no_main]
-// The gatt_service expansion trips this lint in the recovery build only.
-#![cfg_attr(feature = "recovery", allow(clippy::identity_op))]
+// The gatt_service expansion trips this lint on every characteristic field.
+#![allow(clippy::identity_op)]
 
 extern crate alloc;
 
@@ -35,7 +35,6 @@ use embassy_nrf::{
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, Mutex};
 use embassy_time::{Delay, Duration, Timer};
 use embedded_alloc::LlffHeap;
-use nrf_pac as pac;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_blefs::service::FileTransferService;
 use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
@@ -50,6 +49,7 @@ use neotime_dfu::{
 use neotime_display::Display;
 use neotime_settings::Setting;
 use neotime_updates::ImageKind;
+use nrf_pac as pac;
 use static_cell::StaticCell;
 use trouble_host::prelude::*;
 
