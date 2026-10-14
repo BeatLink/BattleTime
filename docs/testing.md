@@ -267,3 +267,7 @@ directly, without BlueZ or root. Drive the engine from a script that runs `emula
 "00:00:00.1"` every 100 ms of real time, because a plain script races ahead and quits. The bridge's
 ACL buffers are 27 bytes, so a client splits and rebuilds L2CAP packets itself. A file write takes
 emulated seconds, so allow many minutes.
+
+`../tools/check_call.py FIRMWARE_ELF [SCREENSHOT]` writes a phone's incoming call line to the Nordic
+UART through the bridge and checks that the call app opens, the motor keeps ringing, and the end
+line stops it and goes back to the face; it takes under two minutes.

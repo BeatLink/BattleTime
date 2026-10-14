@@ -2,7 +2,8 @@
 
 It needs no BlueZ and no root: it speaks HCI to the controller itself, connects to the watch, finds
 the packages characteristic, turns its notifications on, and writes each command line, 20 bytes a
-write, as the companion app does. See docs/companion-protocol.md.
+write, as the companion app does. See docs/companion-protocol.md. Other tools import `Watch` to
+find any characteristic by its UUID and write lines to it, such as the Nordic UART's.
 
     python3 -I tools/packages_over_hci.py /path/to/hci '{"c":"apps"}' '{"c":"install","id":"alarm"}'
 """
@@ -42,7 +43,16 @@ CHARACTERISTIC_DECLARATION = 0x2803
 
 # The emulated watch's address, from its FICR.
 WATCH_ADDRESS = "C0:DE:0A:1B:2C:3D"
-PACKAGES_UUID = bytes.fromhex("6e5400030000400080004e656f54696d")[::-1]
+
+
+def uuid_bytes(text):
+    """A 128-bit UUID as GATT sends it, least significant byte first."""
+    return bytes.fromhex(text.replace("-", ""))[::-1]
+
+
+PACKAGES_UUID = uuid_bytes("6e540003-0000-4000-8000-4e656f54696d")
+# Where the phone writes the companion app's JSON lines.
+NORDIC_UART_RECEIVE_UUID = uuid_bytes("6e400002-b5a3-f393-e0a9-e50e24dcca9e")
 READ_BD_ADDRESS = 0x1009
 # What the watch answers a line it could not parse.
 GARBLED_REPLY = '{"c":"?"'
@@ -137,6 +147,7 @@ class Watch:
         self.port = port
         self.handle = handle
         self.notified = b""
+        self.exchanged_mtu = False
 
     @staticmethod
     def connect(port, address=WATCH_ADDRESS, seconds=60):
@@ -191,8 +202,11 @@ class Watch:
             raise RuntimeError(f"ATT error 0x{reply[4]:02X}")
         return reply
 
-    def packages_handle(self):
-        self.request(bytes([EXCHANGE_MTU_REQUEST]) + (128).to_bytes(2, "little"), EXCHANGE_MTU_RESPONSE)
+    def characteristic_handle(self, uuid):
+        """The value handle of the characteristic with this 128-bit UUID, given as `uuid_bytes` makes it."""
+        if not self.exchanged_mtu:
+            self.request(bytes([EXCHANGE_MTU_REQUEST]) + (128).to_bytes(2, "little"), EXCHANGE_MTU_RESPONSE)
+            self.exchanged_mtu = True
         start = 1
         while start < 0xFFFF:
             answer = self.request(bytes([READ_BY_TYPE_REQUEST]) + start.to_bytes(2, "little")
@@ -201,25 +215,29 @@ class Watch:
             size = answer[1]
             for offset in range(2, len(answer), size):
                 entry = answer[offset:offset + size]
-                if entry[5:] == PACKAGES_UUID:
+                if entry[5:] == uuid:
                     return int.from_bytes(entry[3:5], "little")
                 start = int.from_bytes(entry[0:2], "little") + 1
-        raise RuntimeError("the watch has no packages characteristic")
+        raise RuntimeError(f"the watch has no characteristic {uuid[::-1].hex()}")
 
     def open_packages(self):
-        value_handle = self.packages_handle()
+        value_handle = self.characteristic_handle(PACKAGES_UUID)
         # Its client configuration descriptor follows the value.
         self.request(bytes([WRITE_REQUEST]) + (value_handle + 1).to_bytes(2, "little") + b"\x01\x00", WRITE_RESPONSE)
         return value_handle
 
-    def run_command(self, value_handle, line, seconds=60):
-        """Writes one command line and returns the reply line the watch notifies."""
-        self.notified = b""
+    def write_line(self, value_handle, line, seconds=60):
+        """Writes one line and a newline to the characteristic, 20 bytes a write, each acknowledged."""
         data = (line + "\n").encode()
         for offset in range(0, len(data), WRITE_BYTES):
             time.sleep(PAUSE_BEFORE_WRITE_SECONDS)
             self.request(bytes([WRITE_REQUEST]) + value_handle.to_bytes(2, "little")
                          + data[offset:offset + WRITE_BYTES], WRITE_RESPONSE, seconds)
+
+    def run_command(self, value_handle, line, seconds=60):
+        """Writes one command line and returns the reply line the watch notifies."""
+        self.notified = b""
+        self.write_line(value_handle, line, seconds)
         end = time.monotonic() + seconds
         while b"\n" not in self.notified and time.monotonic() < end:
             self.wait(set(), NUDGE_AFTER_SECONDS)

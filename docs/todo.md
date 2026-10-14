@@ -486,8 +486,8 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **The Heart Rate service (0x180D),** so Gadgetbridge and other phone apps read the pulse.
 - [ ] **Try the beacon on the watch.** The driver's register writes match wasp-os's, but the
   emulator cannot show the LED.
-- [ ] **Run `tools/check_heart_rate.py` in CI.** The emulator suites have no compiler to build the
-  apps it installs; the watch images job could build the install into `dist/` for them.
+- [ ] **Run `tools/check_heart_rate.py` and `tools/check_call.py` in CI.** The emulator suites have no
+  compiler to build the apps they install; the watch images job could build the install into `dist/` for them.
 
 ### UI toolkit
 
