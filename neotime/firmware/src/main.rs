@@ -177,6 +177,8 @@ async fn main(spawner: Spawner) {
     crate::tasks::name_this_task("main");
     let mut config = embassy_nrf::config::Config::default();
     config.lfclk_source = LfclkSource::ExternalXtal;
+    // The PineTime board carries the DCDC inductor, and the regulator draws less than the LDO while the radio runs.
+    config.dcdc.reg1 = true;
     // Leave the debug port's settings alone, so start-up never writes the protection word.
     config.debug = embassy_nrf::config::Debug::NotConfigured;
     let chip = embassy_nrf::init(config);

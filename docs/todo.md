@@ -8,6 +8,11 @@ document for its part instead.
 
 ## Hardware tests
 
+- [ ] **The DCDC regulator on the PineTime.** The firmware turns the nRF52832's DCDC regulator on
+  at start (`config.dcdc.reg1`), which has run only in the emulator, which models no regulator.
+  Flash it and check that the watch boots, connects, and that the battery percentage in the
+  System app and `neotime battery` reads about the same as before and falls no faster over a day.
+
 - [ ] **Paging on the PineTime.** `Pages` (2f9524a) and the system and steps apps built on it
   (5957275) have run only in the harness and the emulator; the watch still runs 3a5abe9. Flash a
   build with them and check on the watch that a swipe left or right wipes to the next page and

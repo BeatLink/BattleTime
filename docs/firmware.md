@@ -20,7 +20,8 @@ reaches a watch; what the wearer sees is in the [guide](guide/index.md).
    flash waits 2 cycles; with it a fetch from the 2 KB cache waits none. In the emulator, opening
    Settings draws in 222 ms with it and 297 ms without.
 3. Starts the heap, takes over the watchdog with the bootloader's settings, and spawns the watchdog
-   and button tasks.
+   and button tasks. The chip's DCDC regulator is on from `embassy_nrf::init`, since the PineTime
+   board carries its inductor and it draws less than the LDO while the radio runs.
 4. Sets up the SPI bus the screen and the external flash share, starts the screen and the
    backlight, and draws the status page: the version, the last restart and the files starting.
    The clock kept across a reset comes back here.
