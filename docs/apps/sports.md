@@ -9,6 +9,8 @@ A stopwatch that also counts the steps taken while it runs, ported from wasp-os'
   midnight keeps counting.
 - Tap **pause** to stop. Tap play again to carry on, adding to the same time and steps.
 - While stopped, tap anywhere else on the screen to **clear** the time and steps.
+- A cleared session is kept, with when it started, its time and its steps. The last five are
+  kept, for the companion to sync and show.
 
 ## Screens
 

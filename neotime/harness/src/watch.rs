@@ -227,6 +227,17 @@ impl TestWatch {
         image.string(image.name_string).unwrap_or_default()
     }
 
+    /// A value the open app persists, by the key its saved state uses, such as `sessions.steps`, at `index` of a list.
+    pub fn persisted_value(&self, key: &str, index: Value) -> Option<Value> {
+        let image = self.host.image();
+        let variable = (0..image.state_count()).find(|&variable| {
+            image
+                .state_variable(variable)
+                .is_some_and(|found| found.persists && image.string(found.key_string) == Some(key))
+        })?;
+        self.host.state().element(variable as u8, index)
+    }
+
     pub fn now(&self) -> Value {
         self.system.now_in_milliseconds
     }

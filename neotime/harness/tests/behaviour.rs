@@ -49,6 +49,57 @@ fn the_stopwatch_holds_its_time_while_paused() {
 }
 
 // ============================================================================
+// Sports
+// ============================================================================
+
+/// The sports app's start button, along the bottom, and a place on its time to clear it.
+const SPORTS_START: (i32, i32) = (120, 210);
+const SPORTS_CLEAR: (i32, i32) = (120, 60);
+
+/// Runs the sports timer once for `minutes`, taking `steps` from the day's 1,000, then stops and clears it.
+fn run_a_sports_session(watch: &mut TestWatch, minutes: u64, steps: i64) {
+    let steps_at_start = 1_000;
+    watch.set_system_value(SystemValue::StepsToday, steps_at_start);
+    watch.tap(SPORTS_START.0, SPORTS_START.1);
+    watch.advance(Duration::from_secs(minutes * 60));
+    watch.set_system_value(SystemValue::StepsToday, steps_at_start + steps);
+    watch.tap(SPORTS_START.0, SPORTS_START.1);
+    watch.tap(SPORTS_CLEAR.0, SPORTS_CLEAR.1);
+}
+
+#[test]
+fn a_cleared_sports_session_is_kept_with_its_start_time_and_steps() {
+    let mut watch = TestWatch::open_app("sports").unwrap();
+    let started_at = watch.now();
+    run_a_sports_session(&mut watch, 3, 250);
+    assert_eq!(watch.persisted_value("session_count", 0), Some(1));
+    assert_eq!(watch.persisted_value("sessions.started_at", 0), Some(started_at));
+    assert_eq!(watch.persisted_value("sessions.duration", 0), Some(3 * 60_000));
+    assert_eq!(watch.persisted_value("sessions.steps", 0), Some(250));
+    assert!(watch.shows_text("00:00.00"));
+}
+
+#[test]
+fn a_cleared_sports_timer_that_never_ran_keeps_no_session() {
+    let mut watch = TestWatch::open_app("sports").unwrap();
+    watch.tap(SPORTS_CLEAR.0, SPORTS_CLEAR.1);
+    assert_eq!(watch.persisted_value("session_count", 0), Some(0));
+}
+
+#[test]
+fn only_the_last_five_sports_sessions_are_kept_newest_first() {
+    let mut watch = TestWatch::open_app("sports").unwrap();
+    for session in 1..=6 {
+        run_a_sports_session(&mut watch, session, session as i64 * 10);
+    }
+    assert_eq!(watch.persisted_value("session_count", 0), Some(5));
+    let steps: Vec<_> = (0..5)
+        .map(|place| watch.persisted_value("sessions.steps", place))
+        .collect();
+    assert_eq!(steps, [Some(60), Some(50), Some(40), Some(30), Some(20)]);
+}
+
+// ============================================================================
 // Timer
 // ============================================================================
 

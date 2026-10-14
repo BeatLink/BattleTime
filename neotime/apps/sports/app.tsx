@@ -1,5 +1,6 @@
 // Sports timer, ported from wasp-os's sports app: a stopwatch that also counts the steps taken while
-// it runs. The Start button starts and stops it, and a tap clears it once stopped.
+// it runs. The Start button starts and stops it, and a tap clears it once stopped, keeping the
+// session among the last few for the companion to sync.
 
 import {
   computed,
@@ -9,6 +10,7 @@ import {
   now,
   on,
   persisted,
+  range,
   steps_today,
   HOUR,
   type Duration,
@@ -35,6 +37,29 @@ const steps_at_start = persisted("steps_at_start", 0);
 /** Steps counted by earlier runs since the last clear. */
 const steps_before = persisted("steps_before", 0);
 
+/** When the first run since the last clear started, or null before one has. */
+const session_started_at = persisted<Instant | null>("session_started_at", null);
+
+const SESSIONS_KEPT = 5;
+
+/** One finished session: when it started, the time it counted and its steps. */
+interface Session {
+  started_at: Instant;
+  duration: Duration;
+  steps: number;
+}
+
+const session_count = persisted("session_count", 0);
+
+/** The last finished sessions, newest first; only the first `session_count` are in use. */
+const sessions = persisted<Session[]>("sessions", [
+  { started_at: 0, duration: 0, steps: 0 },
+  { started_at: 0, duration: 0, steps: 0 },
+  { started_at: 0, duration: 0, steps: 0 },
+  { started_at: 0, duration: 0, steps: 0 },
+  { started_at: 0, duration: 0, steps: 0 },
+]);
+
 // ============================================================================
 // Derived values
 // ============================================================================
@@ -59,16 +84,37 @@ function start_or_stop() {
     started_at.value = null;
     keep_screen_on(false);
   } else {
+    if (session_started_at.value === null) {
+      session_started_at.value = now.value;
+    }
     started_at.value = now.value - stopped_after.value;
     steps_at_start.value = steps_today.value;
     keep_screen_on(true);
   }
 }
 
+/** Keeps the session being cleared as the newest, moving the others down a place and dropping the oldest. */
+function keep_session() {
+  for (const each of range(SESSIONS_KEPT - 1)) {
+    const place = SESSIONS_KEPT - 1 - each;
+    sessions.value[place].started_at = sessions.value[place - 1].started_at;
+    sessions.value[place].duration = sessions.value[place - 1].duration;
+    sessions.value[place].steps = sessions.value[place - 1].steps;
+  }
+  sessions.value[0].started_at = session_started_at.value ?? now.value - stopped_after.value;
+  sessions.value[0].duration = stopped_after.value;
+  sessions.value[0].steps = steps_before.value;
+  session_count.value = Math.min(session_count.value + 1, SESSIONS_KEPT);
+}
+
 function clear() {
   if (started_at.value !== null) return;
+  if (stopped_after.value > 0) {
+    keep_session();
+  }
   stopped_after.value = 0;
   steps_before.value = 0;
+  session_started_at.value = null;
 }
 
 // ============================================================================

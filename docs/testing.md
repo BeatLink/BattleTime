@@ -55,6 +55,7 @@ tests and given to every app.
 | `effects()`, `effects_of(kind)`, `take_effects()` | Every effect the app asked for, with text arguments as text. |
 | `phone_lines()` | Every line the app's effects sent the phone, as the firmware builds them, such as `send_to_phone`'s `app` line. |
 | `failures()` | Every `AppFailure` of the app's code. |
+| `persisted_value(key, index)` | A value the app persists, by the key its saved state uses, such as `sessions.steps`, at an index for a list. |
 | `frame()`, `pixels_left_stale()` | The drawn 240x240 RGB565 screen; how far drawing only the changes strays from drawing afresh. |
 
 A script's `snapshot` names its picture after the package open at that step, which a switch or a
