@@ -77,13 +77,16 @@ fn the_font_holds_ascii_and_the_extra_signs() {
     for character in "°±×÷←✓✕".chars() {
         assert!(FONT.glyph(character).is_some(), "{character:?} is missing");
     }
-    assert!(FONT.glyph('é').is_none());
+    for character in "éÉçñüßøÅ‘’“”–—…€£«»¡¿".chars() {
+        assert!(FONT.glyph(character).is_some(), "{character:?} is missing");
+    }
+    assert!(FONT.glyph('Ł').is_none());
     assert!(FONT.glyph('\u{1F600}').is_none());
 }
 
 #[test]
 fn the_font_is_small_enough_to_ship_in_place_of_the_bitmaps() {
-    assert!(text_font_bytes() < 4 * 1024, "{} bytes", text_font_bytes());
+    assert!(text_font_bytes() < 6 * 1024, "{} bytes", text_font_bytes());
 }
 
 #[test]
@@ -151,7 +154,8 @@ fn the_font_notes_which_ascii_it_has_and_looks_up_the_rest() {
     assert!(FONT.has('A') && FONT.has(' ') && FONT.has('~'));
     assert!(!FONT.has('\u{7F}'));
     assert!(FONT.has('°') && FONT.has('✓'));
-    assert!(!FONT.has('é'));
+    assert!(FONT.has('é'));
+    assert!(!FONT.has('Ł'));
 }
 
 #[test]
@@ -267,9 +271,9 @@ fn a_space_draws_nothing_but_moves_the_pen() {
 
 #[test]
 fn a_character_the_font_lacks_draws_nothing_and_takes_no_room() {
-    let recorder = drawn(FontName::Normal, 'é');
+    let recorder = drawn(FontName::Normal, 'Ł');
     assert!(recorder.rows.is_empty());
-    assert_eq!(character_advance(FontName::Normal.metrics(), 'é'), 0);
+    assert_eq!(character_advance(FontName::Normal.metrics(), 'Ł'), 0);
 }
 
 #[test]

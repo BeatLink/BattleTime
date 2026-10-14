@@ -875,7 +875,9 @@ Event fields `x`, `y`, `start_x` and `start_y` are screen pixels.
 
 Every text size is one font drawn from lines, arcs and dots. Its source is
 `app-host/fonts/geometric.txt`, one glyph a line, and `tools/generate_fonts.py` turns it into
-`app-host/fonts/geometric.ntfont`: 102 glyphs (printable ASCII and `°±×÷←✓✕`) in 2,289 B. A glyph
+`app-host/fonts/geometric.ntfont`: 192 glyphs in 4,945 B: printable ASCII, the Latin-1 letters and
+signs (an accented letter is its letter with an accent glyph moved over it, `@é dx dy` in the source),
+the curly quotes, dashes, ellipsis, bullet and euro sign notifications use, and `°±×÷←✓✕`. A glyph
 has at most 8 shapes, in units where capitals are 100 tall, the x-height 76 and descenders reach
 -26. Each size scales it and keeps the advance and line of the bitmap font it replaced, so layouts
 did not move:

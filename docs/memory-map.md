@@ -28,7 +28,7 @@ python3 tools/draw_memory_maps.py
 | Firmware | `0x08000` | 480 KB | The running firmware, to the end of flash: a 256-byte [image header](bootloader.md#the-image-header), then its code, linked to start at `0x08100`, then the shared library. No app, face, icon or font is built into the code apart from the notifications and quick settings screens (about 2.2 KB, compiled from `shell/`); [What fills the firmware](#what-fills-the-firmware) shows what is. The code and the library share the region, so either can grow into the other's room. |
 
 The shared library sits right after the code, on a word boundary, where the image header says. It
-holds what apps share: images, the app host's text font (2,289 B, one font of lines and arcs that
+holds what apps share: images, the app host's text font (4,945 B, one font of lines and arcs that
 every text size scales), Bosch's configuration file for each accelerometer (6,144 B each, which the
 firmware uploads to the chip; the library with all of it is 43,753 B), components, common functions
 and the preset themes. It arrives with each firmware

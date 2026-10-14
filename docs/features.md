@@ -211,7 +211,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   setting says. Plugins can change an app's state from the phone, and an open app redraws with the
   change at once. See [sync.md](sync.md).
 - **Text in one clear, smooth font at every size,** drawn from lines and arcs with its stems
-  and curves on whole pixels, in 2.3 KB where seven bitmap fonts took 48 KB.
+  and curves on whole pixels, in 4.9 KB where seven bitmap fonts took 48 KB. It has the Latin-1
+  accented letters and the curly quotes, dashes and ellipsis notifications use.
 
 ## Apps and watch faces
 

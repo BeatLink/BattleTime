@@ -619,9 +619,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   font of lines and arcs is about 2 KB, so another can be a file in `/resources/` read into the
   open app's heap. Check one as app images are checked, keeping the limit of 8 shapes a glyph so a
   bad font cannot slow drawing enough to trip the watchdog.
-- [ ] **Accented letters for notifications.** The text font holds ASCII and seven signs, so é, ü
-  and the like draw nothing. Let a glyph in `app-host/fonts/geometric.txt` be a letter and an
-  accent placed over it, and add the Latin-1 letters.
 - [ ] **The browser preview's text font.** `sdk/neotime/src/widgets.tsx` draws text in JetBrains
   Mono, which the watch no longer uses. Draw the font from lines and arcs on the preview's canvas,
   so its letters match the watch.

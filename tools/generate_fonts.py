@@ -52,13 +52,25 @@ def character_of(token):
     return token
 
 
+def moved(shape, across, up):
+    """A shape moved `across` and `up` font units."""
+    tag, numbers = shape
+    if tag == ARC:
+        return tag, [numbers[0] + across, numbers[1] + up] + numbers[2:]
+    return tag, [number + (across if index % 2 == 0 else up) for index, number in enumerate(numbers)]
+
+
 def parse_shape(text, glyphs, where):
-    """One shape, or every shape of an earlier glyph for @c."""
+    """One shape, or every shape of an earlier glyph for @c, moved by @c dx dy."""
     if text.startswith("@"):
-        named = character_of(text[1:])
+        name, *offset = text[1:].split()
+        named = character_of(name)
         if named not in glyphs:
-            raise ValueError(f"{where}: @{text[1:]} names a glyph not drawn yet")
-        return list(glyphs[named][1])
+            raise ValueError(f"{where}: @{name} names a glyph not drawn yet")
+        if len(offset) not in (0, 2):
+            raise ValueError(f"{where}: @{name} takes no offset or two numbers")
+        across, up = (int(number) for number in offset) if offset else (0, 0)
+        return [moved(shape, across, up) for shape in glyphs[named][1]]
     kind, *numbers = text.split()
     if kind not in SHAPE_FIELDS:
         raise ValueError(f"{where}: unknown shape {kind!r}")
