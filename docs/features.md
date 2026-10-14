@@ -88,7 +88,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   when some are unread.
 - **Notifications from any Bluetooth tool.** A New Alert written to the standard Alert Notification
   service shows as a notification, as on InfiniTime, so BlueZ's `bluetoothctl`, ITD or Amazfish can
-  send one without the companion app.
+  send one without the companion app. One in the incoming call category opens the call screen and
+  rings, as InfiniTime's does.
 - **A notification pops up a preview.** One that arrives lights the screen, if it is dark, on a
   preview of it over whatever was open, with a bar that runs out over 7 seconds before the watch
   goes back there, as InfiniTime's preview does. A tap keeps it and reads it in full. Do not disturb

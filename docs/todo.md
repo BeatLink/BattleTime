@@ -163,6 +163,7 @@ document for its part instead.
   - a write longer than 20 bytes arrives whole once BlueZ has raised the MTU, and the write is
     answered without an error, since the watch reads it without storing it;
   - ITD's `itctl notify` and Amazfish show their notifications the same way.
+  - a write of `03 01 00` then `Sam` opens the call screen for Sam and rings until Reject or the button.
 
 ## Bluetooth controller
 
@@ -679,7 +680,7 @@ InfiniTime has these and NeoTime has nothing for them yet:
 | Board and system loop | sleep and wake of the whole system, wake locks, a system monitor |
 | Heart rate | the Heart Rate service |
 | Clock | the Current Time client |
-| Notifications | the Alert Notification client, Immediate Alert, the call screen for a New Alert call |
+| Notifications | the Alert Notification client, Immediate Alert |
 | Other BLE services | Music, Navigation, Simple Weather |
 | System screens | the pass key, firmware validation |
 

@@ -16,6 +16,8 @@ Answers the phone's calls from the watch, after InfiniTime's and Bangle.js's cal
 - Pressing the button leaves the app and stops the watch ringing; the phone still rings.
 - Answering needs the NeoTime companion app on Android 8 or later, or Gadgetbridge; rejecting
   needs Android 9. Opened from the launcher with no call, the app says **No call**.
+- A Bluetooth tool can ring it too, by writing a New Alert in the incoming call category, as for
+  InfiniTime. No answer goes back to that tool, and the screen stays until you reject or leave it.
 
 ## Screens
 

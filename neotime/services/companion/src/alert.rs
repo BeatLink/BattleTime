@@ -2,15 +2,18 @@
 //!
 //! Any Bluetooth tool, such as BlueZ's `bluetoothctl` or ITD, can write one to show a notification.
 //! A write is a category byte, two more header bytes, then the text: a title, a zero byte and the
-//! body, or only a body when there is no zero byte.
+//! body, or only a body when there is no zero byte. An incoming call opens the call screen instead.
 
-use crate::PhoneNotification;
+use crate::{CallKind, Message, PhoneCall, PhoneNotification};
 
 /// The category, the count of new alerts, and the byte InfiniTime's writers leave before the text.
 pub const NEW_ALERT_HEADER_BYTES: usize = 3;
 
 /// The longest New Alert the watch takes: the most an ATT write holds at its 128-byte MTU.
 pub const MOST_NEW_ALERT_BYTES: usize = 125;
+
+/// The standard's category id for an incoming call.
+const INCOMING_CALL_CATEGORY: u8 = 3;
 
 /// The standard alert category ids, each named as the notification's app.
 const CATEGORY_NAMES: [&str; 10] = [
@@ -26,24 +29,31 @@ const CATEGORY_NAMES: [&str; 10] = [
     "Messages",
 ];
 
-/// The notification a New Alert write carries, with this id; none when it holds no text.
-pub fn parse_new_alert(write: &[u8], id: i64) -> Option<PhoneNotification> {
+/// The call or notification a New Alert write carries, a notification taking this id; none when it holds no text.
+pub fn parse_new_alert(write: &[u8], id: i64) -> Option<Message<'static>> {
     let (&category, _) = write.split_first()?;
     let text = whole_characters(write.get(NEW_ALERT_HEADER_BYTES..)?).trim_end_matches('\0');
     if text.is_empty() {
         return None;
     }
     let (title, body) = text.split_once('\0').unwrap_or(("", text));
+    if category == INCOMING_CALL_CATEGORY {
+        let caller = if title.is_empty() { body } else { title };
+        return Some(Message::Call(PhoneCall {
+            kind: CallKind::Incoming,
+            caller: cut_to_fit(caller),
+        }));
+    }
     let source = CATEGORY_NAMES
         .get(usize::from(category))
         .copied()
         .unwrap_or("Alert");
-    Some(PhoneNotification {
+    Some(Message::Notification(PhoneNotification {
         id,
         source: cut_to_fit(source),
         title: cut_to_fit(title),
         body: cut_to_fit(body),
-    })
+    }))
 }
 
 /// The text up to its first byte that is not part of a whole UTF-8 character.

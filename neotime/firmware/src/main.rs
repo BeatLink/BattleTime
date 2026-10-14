@@ -643,12 +643,16 @@ struct AlertNotificationService {
 /// The id the next New Alert gets, counted above Gadgetbridge's 32-bit ids so the two never meet.
 static NEXT_NEW_ALERT: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
-/// Shows a New Alert written to the Alert Notification service as a notification.
+/// Shows a New Alert written to the Alert Notification service as a notification, or as a call when it is one.
 fn read_new_alert(write: &[u8]) {
     let count = NEXT_NEW_ALERT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let id = (1 << 32) + i64::from(count);
-    if let Some(notification) = neotime_companion::parse_new_alert(write, id) {
-        app_events::notification_arrived(notification);
+    match neotime_companion::parse_new_alert(write, id) {
+        Some(neotime_companion::Message::Notification(notification)) => {
+            app_events::notification_arrived(notification)
+        }
+        Some(call) => app_events::phone_message_arrived(call),
+        None => {}
     }
 }
 
