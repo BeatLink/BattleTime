@@ -95,10 +95,12 @@ pub enum WidgetKind {
     /// The end of a text kept as character codes in an array, wrapped to the widget's width and broken at
     /// each new line, showing as many of the last lines as fit.
     TextLines,
+    /// A one-bit picture from a file on the watch's storage, such as a QR code the phone made, scaled up to fit.
+    BitmapFile,
 }
 
 impl WidgetKind {
-    const ALL: [WidgetKind; 51] = {
+    const ALL: [WidgetKind; 52] = {
         use WidgetKind::*;
         [
             Column,
@@ -152,6 +154,7 @@ impl WidgetKind {
             NumberRoller,
             TextFile,
             TextLines,
+            BitmapFile,
         ]
     };
 
@@ -295,7 +298,7 @@ pub enum Property {
     ShowHours,
     /// How many digits a NumberRoller pads its numbers to.
     Digits,
-    /// The file a TextFile shows.
+    /// The file a TextFile or BitmapFile shows.
     Path,
     /// A file holding the name of the font a TextFile uses, such as `small`, set from the phone.
     FontPath,
@@ -320,6 +323,13 @@ pub enum Property {
     /// Whether an AppList shows every app with a heading above each launcher group.
     Sections,
 }
+
+/// The widest and tallest picture a BitmapFile shows, in its own pixels; a larger one shows nothing.
+pub const BITMAP_FILE_MOST_SIDE: u8 = 120;
+
+/// The bytes of a BitmapFile's largest picture: its width and height, then each row packed eight pixels to a byte.
+pub const BITMAP_FILE_MOST_BYTES: usize =
+    2 + BITMAP_FILE_MOST_SIDE as usize * (BITMAP_FILE_MOST_SIDE as usize).div_ceil(8);
 
 /// A `Scrolling` flag: a drag moves a whole page at a time, and the scroll bar has a segment per page.
 pub const SCROLLS_BY_PAGES: i32 = 1;
@@ -579,7 +589,8 @@ impl Property {
             TwelveHour => kind == Kind::TimeRollers,
             ShowHours => kind == Kind::DurationRollers,
             Digits => kind == Kind::NumberRoller,
-            Path | FontPath | Placeholder => kind == Kind::TextFile,
+            Path => matches!(kind, Kind::TextFile | Kind::BitmapFile),
+            FontPath | Placeholder => kind == Kind::TextFile,
             Codes | CodeCount => kind == Kind::TextLines,
             Scrolling => matches!(kind, Kind::Scroll | Kind::List | Kind::AppList | Kind::TextFile),
             OnClick | OnLongPress | OnDoubleClick | OnPress | OnRelease => {

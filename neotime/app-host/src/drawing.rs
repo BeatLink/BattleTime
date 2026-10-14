@@ -43,6 +43,8 @@ pub struct DrawContext<'context, 'image> {
     pub now: Value,
     /// The part of the screen being painted, so a widget with much to draw can skip the rest.
     pub clip: Rect,
+    /// Each BitmapFile's picture by its widget number, empty when its file is missing or not a picture.
+    pub bitmap_files: &'context [(u16, Vec<u8>)],
 }
 
 impl<'image> DrawContext<'_, 'image> {
@@ -274,6 +276,10 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
         TextFile => {
             plain_frame(renderer);
             draw_text_file(node, context, renderer);
+        }
+        BitmapFile => {
+            plain_frame(renderer);
+            draw_bitmap_file(node, context, renderer);
         }
         TextLines => {
             plain_frame(renderer);
@@ -1229,6 +1235,58 @@ pub fn cell_at(node: &Node, x: i32, y: i32) -> Option<i32> {
     let row = (y - cells.top).div_euclid(cells.pitch);
     let inside = (0..cells.columns).contains(&column) && (0..cells.rows).contains(&row);
     inside.then_some(row * cells.columns + column)
+}
+
+/// A BitmapFile's picture, each pixel the largest whole square that fits, centred, with runs of set pixels drawn as one rectangle.
+fn draw_bitmap_file(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
+    let Some((_, bitmap)) = context
+        .bitmap_files
+        .iter()
+        .find(|(widget_index, _)| *widget_index == node.widget_index)
+    else {
+        return;
+    };
+    let Some(&[width, height]) = bitmap.get(..2) else {
+        return;
+    };
+    let (width, height) = (i32::from(width), i32::from(height));
+    let row_bytes = (width as usize).div_ceil(8);
+    let area = inset(node.bounds, i32::from(node.settings.padding));
+    let scale = (area.width / width.max(1)).min(area.height / height.max(1));
+    if scale < 1 {
+        return;
+    }
+    let left = area.x + (area.width - width * scale) / 2;
+    let top = area.y + (area.height - height * scale) / 2;
+    let color = resolve(node.settings.color, ThemeColor::Text, context.theme);
+    let is_set = |row: &[u8], column: i32| row[column as usize / 8] & (0x80 >> (column % 8)) != 0;
+
+    let first_row = ((context.clip.y - top) / scale).max(0);
+    let end_row = (context.clip.y + context.clip.height - top + scale - 1) / scale;
+    for row_number in first_row..end_row.min(height) {
+        let start = 2 + row_number as usize * row_bytes;
+        let Some(row) = bitmap.get(start..start + row_bytes) else {
+            return;
+        };
+        let mut column = 0;
+        while column < width {
+            if !is_set(row, column) {
+                column += 1;
+                continue;
+            }
+            let run_start = column;
+            while column < width && is_set(row, column) {
+                column += 1;
+            }
+            let place = Rect {
+                x: left + run_start * scale,
+                y: top + row_number * scale,
+                width: (column - run_start) * scale,
+                height: scale,
+            };
+            renderer.fill_rect(place, color);
+        }
+    }
 }
 
 fn draw_cell_grid(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {

@@ -250,6 +250,27 @@ font file, or none, leaves the app's own font. The text is UTF-8; the watch show
 returns as spaces and other bytes as `?`, and draws only the characters its fonts have. Deleting
 `/notes/note.txt` brings back the app's hint to choose a file.
 
+### QR code
+
+The `qr-code` app shows the QR code in `/qr/code`, with the caption in `/qr/label` under it. The
+companion app makes the code and writes both files whole with the file transfer above.
+
+`/qr/code` is a 1-bit bitmap of the code's modules with no quiet zone; the watch paints the white
+margin itself.
+
+| Bytes | Holds |
+|---|---|
+| 0 | width in modules, 1 to 120 |
+| 1 | height in modules, the same as the width for a QR code |
+| 2.. | `height` rows of `ceil(width / 8)` bytes each; the most significant bit is the leftmost module, and a set bit is a dark module |
+
+The watch refuses a code over 120 by 120 modules. Above 74 modules a module is under 3 pixels on
+the 240 pixel screen and may not scan, so the companion warns but still sends it.
+
+`/qr/label` is optional: printable ASCII only (`0x20` to `0x7e`), at most 24 bytes, with no newline.
+The companion drops accents and writes `?` for anything else, and deletes the file when there is
+no caption. Deleting `/qr/code` brings back the app's hint.
+
 ### Launcher
 
 The launcher groups the apps as the companion app sets up, in `/settings/launcher`, which the

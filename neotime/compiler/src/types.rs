@@ -378,7 +378,7 @@ impl ChoiceSet {
 // ============================================================================
 
 /// The shared library's icons, numbered in this order; icons added later go at the end so numbers stay.
-pub const ICON_NAMES: [&str; 65] = [
+pub const ICON_NAMES: [&str; 66] = [
     "alarm",
     "backspace",
     "battery",
@@ -444,6 +444,7 @@ pub const ICON_NAMES: [&str; 65] = [
     "info",
     "remote",
     "note",
+    "qr_code",
 ];
 
 /// An icon's value: a reference to its image in the shared library, which numbers icons in this order.

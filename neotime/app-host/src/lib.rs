@@ -10,6 +10,7 @@
 
 extern crate alloc;
 
+mod bitmap_file;
 mod drawing;
 pub mod fonts;
 pub mod haptics;

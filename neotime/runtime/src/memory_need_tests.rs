@@ -61,14 +61,15 @@ fn fixed_text_counts_its_length_and_worked_out_text_a_guess() {
     let mut image = writer();
     let hello = image.string("Hello there") as i32;
     let worked_out = image.expression(vec![]);
-    image.widget(WidgetKind::Column, 3, &[]);
+    image.widget(WidgetKind::Column, 4, &[]);
     image.widget(WidgetKind::Label, 0, &[(Property::Text, Constant(hello))]);
     image.widget(WidgetKind::Label, 0, &[(Property::Text, Expression(worked_out))]);
     image.widget(WidgetKind::TextFile, 0, &[]);
+    image.widget(WidgetKind::BitmapFile, 0, &[]);
 
     assert_eq!(
         need_of(&image).text_bytes,
-        12 + WORKED_OUT_TEXT_BYTES + TEXT_FILE_BYTES
+        12 + WORKED_OUT_TEXT_BYTES + TEXT_FILE_BYTES + BITMAP_FILE_BYTES
     );
 }
 

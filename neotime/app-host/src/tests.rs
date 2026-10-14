@@ -1692,6 +1692,7 @@ fn an_image_that_names_a_library_image_draws_that_image() {
         utc_offset: 0,
         now: 0,
         clip: crate::SCREEN_AREA,
+        bitmap_files: &[],
     };
     let size_of = |context: &crate::drawing::DrawContext, reference: ImageReference| {
         context
@@ -2234,6 +2235,7 @@ fn a_text_file_draws_only_the_lines_inside_the_part_being_painted() {
         utc_offset: 0,
         now: 0,
         clip: strip,
+        bitmap_files: &[],
     };
     let mut tops = Tops::default();
 
@@ -2244,6 +2246,153 @@ fn a_text_file_draws_only_the_lines_inside_the_part_being_painted() {
         tops.0.iter().all(|top| (3 * height..4 * height).contains(top)),
         "{:?}",
         tops.0
+    );
+}
+
+// ============================================================================
+// Bitmap files
+// ============================================================================
+
+/// One BitmapFile filling the screen with no padding, showing `/qr/code` in black.
+fn bitmap_file_image() -> Vec<u8> {
+    let mut writer = ImageWriter::new("qr-code", "QR code", AppKind::App, 1);
+    let main = writer.string("main");
+    let path = writer.string("/qr/code");
+    let constant = PropertySource::Constant;
+    writer.widget(
+        WidgetKind::BitmapFile,
+        0,
+        &[
+            (Property::ScreenName, constant(main as i32)),
+            (Property::Path, constant(path as i32)),
+            (
+                Property::Color,
+                constant(ColorValue::Fixed(0x0000).to_value() as i32),
+            ),
+            (
+                Property::Background,
+                constant(ColorValue::Fixed(0xffff).to_value() as i32),
+            ),
+        ],
+    );
+    writer.build()
+}
+
+fn system_with_bitmap(bitmap: &[u8]) -> FakeSystem {
+    FakeSystem {
+        files: alloc::vec![(String::from("/qr/code"), bitmap.to_vec())],
+        ..Default::default()
+    }
+}
+
+#[test]
+fn a_bitmap_file_scales_each_pixel_to_the_largest_square_that_fits_and_centres_it() {
+    let image = bitmap_file_image();
+    // Three by two: the top row's left pixel and the bottom row's right pixel are set.
+    let mut system = system_with_bitmap(&[3, 2, 0b1000_0000, 0b0010_0000]);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+
+    host.draw(&mut screen).unwrap();
+
+    // 240 / 3 = 80 pixels a side, so the picture is 240 by 160, starting 40 pixels down.
+    let black = rgb565(0x0000);
+    let white = rgb565(0xffff);
+    assert_eq!(screen.pixel(0, 40), black);
+    assert_eq!(screen.pixel(79, 119), black);
+    assert_eq!(screen.pixel(80, 40), white);
+    assert_eq!(screen.pixel(239, 199), black);
+    assert_eq!(screen.pixel(120, 20), white);
+    assert_eq!(screen.pixel(239, 39), white);
+    assert!(system.failures.is_empty());
+}
+
+#[test]
+fn a_missing_or_malformed_bitmap_file_draws_only_the_background() {
+    let image = bitmap_file_image();
+    let white = rgb565(0xffff);
+    for mut system in [
+        FakeSystem::default(),
+        system_with_bitmap(&[200, 200, 0xff]),
+        system_with_bitmap(&[8, 2, 0xff]),
+    ] {
+        let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+        let mut screen = FakeScreen::new();
+
+        host.draw(&mut screen).unwrap();
+
+        assert!((0..240)
+            .step_by(7)
+            .all(|x| (0..240).step_by(7).all(|y| screen.pixel(x, y) == white)));
+        assert!(system.failures.is_empty());
+    }
+}
+
+#[test]
+fn a_bitmap_file_draws_one_rectangle_per_run_and_only_rows_inside_the_part_being_painted() {
+    use neotime_ui::geometry::{Color, Rect};
+    use neotime_ui::renderer::Renderer;
+
+    /// Records everything filled.
+    #[derive(Default)]
+    struct Fills(Vec<Rect>);
+    impl Renderer for Fills {
+        fn fill_rect(&mut self, rect: Rect, _color: Color) {
+            self.0.push(rect);
+        }
+        fn blend_rect(&mut self, _rect: Rect, _color: Color) {}
+        fn draw_text(&mut self, _position: (i32, i32), _text: &str, _color: Color) {}
+    }
+
+    let bytes = ImageWriter::new("qr-code", "QR code", AppKind::App, 1).build();
+    let image = neotime_runtime::AppImage::parse(&bytes).unwrap();
+    let state = neotime_runtime::AppState::new(&image).unwrap();
+    let mut node = crate::nodes::Node::new(0, WidgetKind::BitmapFile, 1, None, SCREEN_AREA);
+    node.shown = true;
+    // Ten pixels square, so 24 screen pixels each; every row is two runs: three set, a gap, then two set.
+    let mut bitmap = alloc::vec![10, 10];
+    for _ in 0..10 {
+        bitmap.extend([0b1110_0110, 0b0000_0000]);
+    }
+    let bitmap_files = [(0, bitmap)];
+    let strip = Rect {
+        x: 0,
+        y: 50,
+        width: 240,
+        height: 4,
+    };
+    let context = crate::drawing::DrawContext {
+        image: &image,
+        library: None,
+        installed_app_icons: &[],
+        state: &state,
+        theme: &neotime_runtime::DEFAULT_THEME,
+        utc_offset: 0,
+        now: 0,
+        clip: strip,
+        bitmap_files: &bitmap_files,
+    };
+    let mut fills = Fills::default();
+
+    crate::drawing::draw_node(&node, &context, &mut fills);
+
+    let runs: Vec<Rect> = fills.0.into_iter().filter(|fill| fill.height == 24).collect();
+    assert_eq!(
+        runs,
+        [
+            Rect {
+                x: 0,
+                y: 48,
+                width: 72,
+                height: 24
+            },
+            Rect {
+                x: 120,
+                y: 48,
+                width: 48,
+                height: 24
+            },
+        ]
     );
 }
 

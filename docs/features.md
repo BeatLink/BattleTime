@@ -178,6 +178,10 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   wearer goes back, the phone stops it or the phone disconnects. Its image stays in `/temp` on the
   external flash, so running it again sends only its data. See
   [companion-protocol.md](companion-protocol.md#temporary-apps-served).
+- **QR code.** Type a link or text, or fill in a Wi-Fi network, in the companion app, and it makes
+  the QR code and sends it to the watch with a caption; the QR code app shows it black on white at
+  full brightness for another phone to scan. See [apps/qr-code.md](apps/qr-code.md) and
+  [companion-protocol.md](companion-protocol.md#qr-code).
 - **31 apps** ported from InfiniTime and wasp-os, merged where both firmwares had the same app:
   stopwatch, timer, alarm, pomodoro, calculator, dice, flashlight, phone finder, system, heart rate, steps,
   sports, music, weather, navigation, metronome, motion, level, beacon, 2048, paddle,

@@ -1,0 +1,8 @@
+# Every screen of the QR code app, for docs/apps/qr-code.md: a code with its caption, then with no code.
+open app qr-code
+expect text "example.com"
+write "/qr/code" ""   # the phone clears the code
+reopen
+expect text "No QR code yet"
+snapshot empty
+expect no failures

@@ -26,6 +26,9 @@ pub const WORKED_OUT_TEXT_BYTES: u32 = 16;
 /// A TextFile's line places, the lines near its view and the buffer it reads into.
 pub const TEXT_FILE_BYTES: u32 = 2_560;
 
+/// A BitmapFile's picture, held while its screen is open.
+pub const BITMAP_FILE_BYTES: u32 = rounded(crate::widgets::BITMAP_FILE_MOST_BYTES as u32);
+
 /// What drawing borrows from the heap for a moment, and the image checks when the app opens.
 pub const PASSING_BYTES: u32 = 1_536;
 
@@ -283,6 +286,9 @@ fn widget_text_bytes(tree: &WidgetTree, widget: &crate::widgets::Widget) -> u32 
     if widget.kind == WidgetKind::TextFile {
         return TEXT_FILE_BYTES;
     }
+    if widget.kind == WidgetKind::BitmapFile {
+        return BITMAP_FILE_BYTES;
+    }
     match widget.property(Property::Text) {
         Some(PropertySource::Constant(string)) => tree
             .image()
@@ -326,6 +332,6 @@ fn system_values_read(image: &AppImage) -> u128 {
 }
 
 /// A size rounded up to the heap's allocation step, and none for nothing.
-fn rounded(bytes: u32) -> u32 {
+const fn rounded(bytes: u32) -> u32 {
     bytes.div_ceil(ALLOCATION_STEP) * ALLOCATION_STEP
 }

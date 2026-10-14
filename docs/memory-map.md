@@ -46,22 +46,22 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 106.3 KB | 48.0 KB |
-| App host (with `neotime-ui`) | 83.2 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 106.4 KB | 48.5 KB |
+| App host (with `neotime-ui`) | 84.1 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 43.6 KB | 43.6 KB |
 | App runtime | 35.0 KB | 0.1 KB |
-| core, alloc and compiler builtins | 24.8 KB | 13.2 KB |
+| core, alloc and compiler builtins | 25.0 KB | 13.1 KB |
 | Embassy, allocator and Cortex-M | 19.8 KB | 16.7 KB |
 | Storage (flash store) | 17.0 KB | 16.8 KB |
 | Settings, companion and notifications (with serde) | 12.1 KB | 10.2 KB |
-| BLEFS file service | 9.1 KB | 9.2 KB |
-| Packages | 6.0 KB | 2.0 KB |
+| BLEFS file service | 9.0 KB | 9.1 KB |
+| Packages | 6.1 KB | 2.0 KB |
 | Display, graphics and drivers | 5.1 KB | 3.1 KB |
 | Updates (DFU) | 2.1 KB | 2.1 KB |
-| Other constants and padding | 29.7 KB | 13.5 KB |
-| **Code and data** | **393.7 KB** | **178.6 KB** |
-| Shared library, after the code | 42.7 KB | none |
-| Free of the 480 KB region, after its header | 43.3 KB | 301.2 KB |
+| Other constants and padding | 29.8 KB | 13.5 KB |
+| **Code and data** | **395.1 KB** | **178.9 KB** |
+| Shared library, after the code | 43.0 KB | none |
+| Free of the 480 KB region, after its header | 41.6 KB | 300.9 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -207,21 +207,21 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (system 10 KB, UI 20.25 KB; the recovery build has no UI heap) | 30,976 B | 10,240 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 22,187 B | 13,814 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 22,203 B | 13,814 B |
 | Bluetooth controller | 2,545 B | 2,545 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | BLEFS file service | 122 B | 122 B |
 | App host (with `neotime-ui`) | 8 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **56,252 B** | **27,140 B** |
-| Left for the stack | 9,268 B | 38,380 B |
+| **Static RAM** (`.data` and `.bss`) | **56,268 B** | **27,140 B** |
+| Left for the stack | 9,252 B | 38,380 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
 
 | Region | Budget | Holds | Status |
 |---|---|---|---|
-| UI heap | 20.25 KB | The heap the open app lives in. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (6,628 B), one 160 B node per widget of the open screen that is not inside a hidden one, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. The system's 10 KB shares the same heap. How much an app needs is worked out from its image, as [below](#how-much-heap-an-app-needs). The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. A `TextFile` holds 4 B for every eighth line of its file and the text of the lines near the view, under 2 KB in the small font, and borrows a 512 B buffer while it reads; a 2,000-line note takes about 1 KB of places. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
+| UI heap | 20.25 KB | The heap the open app lives in. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (6,628 B), one 160 B node per widget of the open screen that is not inside a hidden one, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. The system's 10 KB shares the same heap. How much an app needs is worked out from its image, as [below](#how-much-heap-an-app-needs). The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. A `TextFile` holds 4 B for every eighth line of its file and the text of the lines near the view, under 2 KB in the small font, and borrows a 512 B buffer while it reads; a 2,000-line note takes about 1 KB of places. A `BitmapFile` holds its picture while its screen is open, at most 1,802 B for 120 by 120 pixels. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
 | Bluetooth | 12 KB | The controller and the TrouBLE host: connection state, packet buffers and the GATT tables. | Partly measured: the controller is 1.5 KB; TrouBLE's example with it is 12.0 KB in all, executor included |
 | Apps | 6 KB | Memory for the app that is open beyond the UI heap, such as the parts of its file read from `/apps`. The runtime's working memory in it is measured: 2,168 B for the interpreter, 2,056 B for the bindings and 2,440 B for the state. `AppHost` keeps all three on the UI heap. | Partly measured |
 | Stack | 8 KB | The main stack, for interrupts and code that is not in a task. | Planned |

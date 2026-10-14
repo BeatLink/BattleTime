@@ -112,6 +112,7 @@ pub fn icon_source(name: &str) -> Option<IconSource> {
         "info" => FontAwesome(0xf05a),
         "remote" => MaterialIcons(0xe8c7),
         "note" => MaterialIcons(0xf1fc),
+        "qr_code" => FontAwesome(0xf029),
         _ => return None,
     })
 }

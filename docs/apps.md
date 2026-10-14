@@ -22,7 +22,7 @@ can move it, and an app whose group the watch does not have goes to Other:
 | `games` | dice, four-in-a-row, game-of-life, infinipaint, paddle, puzzle15, snake, twos |
 | `tools` | beacon, calculator, flashlight, haiku, hello, level, metronome, morse, template |
 | `time` | alarm, pomodoro, sports, stopwatch, timer |
-| `phone` | call, music, navigation, notes, phone-finder, prompt, remote, weather |
+| `phone` | call, music, navigation, notes, phone-finder, prompt, qr-code, remote, weather |
 | `health` | heart, steps |
 | [`system`](apps/system.md) | launcher, motion, settings, software, system |
 
@@ -110,6 +110,7 @@ there, never listed in the launcher, and cannot be removed. The shell opens them
 | [`infinipaint`](apps/infinipaint.md) | InfiniTime InfiniPaint | A 20 by 20 grid of cells instead of free drawing, since there is no canvas. | <img src="../neotime/harness/snapshots/screens/app-infinipaint.png" width="120" alt="infinipaint"> |
 | [`haiku`](apps/haiku.md) | wasp-os haiku | Built-in verses, since apps cannot read files. | <img src="../neotime/harness/snapshots/screens/app-haiku.png" width="120" alt="haiku"> |
 | [`notes`](apps/notes.md) | new | A text file the companion app keeps on the watch, read only and scrolled, in the font the companion app chose. | <img src="../neotime/harness/snapshots/screens/app-notes.png" width="120" alt="notes"> |
+| [`qr-code`](apps/qr-code.md) | new | A QR code the companion app made, such as a link or a Wi-Fi network, black on white at full brightness, drawn by the `BitmapFile` widget from a file the phone wrote. | <img src="../neotime/harness/snapshots/screens/app-qr-code.png" width="120" alt="qr code"> |
 | [`morse`](apps/morse.md) | wasp-os morse | Typing in Morse code with taps and swipes. | <img src="../neotime/harness/snapshots/screens/app-morse.png" width="120" alt="morse"> |
 | [`settings`](apps/settings.md) | InfiniTime Settings, wasp-os settings | The watch-wide settings: brightness, screen timeout, always on, 12 or 24 hour clock, units, step goal, chimes, what wakes the screen, do not disturb and whether alarms ring in it, the theme, Bluetooth and firmware updates. | <img src="../neotime/harness/snapshots/screens/app-settings.png" width="120" alt="settings"> |
 | [`hello`](apps/hello.md), [`template`](apps/template.md) | wasp-os hello and template | Starting points for new apps. | <img src="../neotime/harness/snapshots/screens/app-hello.png" width="120" alt="hello"> <img src="../neotime/harness/snapshots/screens/app-template.png" width="120" alt="template"> |

@@ -1666,6 +1666,31 @@ fn a_text_file_keeps_its_paths_as_strings() {
 }
 
 #[test]
+fn a_bitmap_file_keeps_its_path_as_a_string() {
+    let image = compile(&app(r##"import { BitmapFile } from "neotime/widgets";
+        function Main() { return <Screen><BitmapFile path="/qr/code" color="#000000" grow={1} /></Screen>; }"##));
+    let image = AppImage::parse(&image).unwrap();
+
+    let PropertySource::Constant(string) = property_of(&image, WidgetKind::BitmapFile, Property::Path, 0)
+    else {
+        panic!("the path is not a constant");
+    };
+    assert_eq!(image.string(string as u16), Some("/qr/code"));
+}
+
+#[test]
+fn a_bitmap_file_path_must_be_written_out() {
+    let error = first_error(&app(r##"import { BitmapFile } from "neotime/widgets";
+        const name = signal(0);
+        function Main() { return <Screen><BitmapFile path={`/qr/${name.value}`} /></Screen>; }"##));
+
+    assert!(
+        error.contains("`path` on `BitmapFile` must be text written out"),
+        "{error}"
+    );
+}
+
+#[test]
 fn a_text_file_path_must_be_written_out() {
     let error = first_error(&app(r##"import { TextFile } from "neotime/widgets";
         const name = signal(0);

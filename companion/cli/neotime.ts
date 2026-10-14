@@ -9,6 +9,7 @@ import { ask, ASK_EXIT, ASK_TIMEOUT_MS, askUsage, requirePromptImage } from './c
 import { debug, debugUsage } from './commands/debug';
 import { flash, flashUsage } from './commands/flash';
 import { launcher, launcherUsage } from './commands/launcher';
+import { qr, qrUsage } from './commands/qr';
 import { recovery, recoveryUsage } from './commands/recovery';
 import { remote, REMOTE_OFFLINE, remoteUsage } from './commands/remote';
 import { scan, scanUsage } from './commands/scan';
@@ -60,6 +61,8 @@ ${askUsage}
 ${remoteUsage}
 
 ${launcherUsage}
+
+${qrUsage}
 
 ${debugUsage}
 
@@ -127,6 +130,7 @@ const NEEDS_WATCH = new Set([
   'weather',
   'files',
   'note',
+  'qr',
   'remote',
   'launcher',
   'apps',
@@ -284,6 +288,10 @@ async function main(argv: string[]): Promise<number> {
 
       case 'note':
         await note(session, rest);
+        break;
+
+      case 'qr':
+        await qr(session, rest);
         break;
 
       case 'remote':

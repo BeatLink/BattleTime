@@ -42,6 +42,7 @@ export default function RootLayout() {
           <Stack.Screen name="watch-settings" options={{ headerShown: true, title: 'Watch settings' }} />
           <Stack.Screen name="files" options={{ headerShown: true, title: 'Files' }} />
           <Stack.Screen name="notes" options={{ headerShown: true, title: 'Notes' }} />
+          <Stack.Screen name="qr-code" options={{ headerShown: true, title: 'QR code' }} />
           <Stack.Screen name="remote" options={{ headerShown: true, title: 'Remote' }} />
           <Stack.Screen name="quick-apps" options={{ headerShown: true, title: 'Quick apps' }} />
           <Stack.Screen name="backup" options={{ headerShown: true, title: 'Backup' }} />

@@ -852,6 +852,48 @@ export function TextFile(props: TextFileProps) {
   );
 }
 
+export interface BitmapFileProps extends CommonProps {
+  /**
+   * The file to show, written out, such as `"/qr/code"`: its width and height in pixels, one byte each and at most
+   * 120, then each row packed eight pixels to a byte with the leftmost in the high bit. Set bits draw in `color`.
+   */
+  path: string;
+}
+
+/** The pixels a BitmapFile's file sets, as rows of booleans, or none when it is missing, too large or cut short. */
+export function bitmap_rows(file: string): boolean[][] {
+  const bytes = Array.from(file, (character) => character.charCodeAt(0) & 0xff);
+  const [width = 0, height = 0] = bytes;
+  const row_bytes = Math.ceil(width / 8);
+  const fits = (side: number) => side >= 1 && side <= 120;
+  if (!fits(width) || !fits(height) || bytes.length < 2 + height * row_bytes) return [];
+  return Array.from({ length: height }, (_, row) =>
+    Array.from({ length: width }, (_, column) => (bytes[2 + row * row_bytes + (column >> 3)] & (0x80 >> (column % 8))) !== 0),
+  );
+}
+
+/**
+ * A one-bit picture from a file on the watch's storage, such as a QR code the phone made, each pixel scaled up to the
+ * largest whole square that fits and centred. The preview reads the file from `preview_files`, one byte per character.
+ */
+export function BitmapFile(props: BitmapFileProps) {
+  const { path, ...common } = props;
+  const rows = bitmap_rows(preview_files.value[path] ?? "");
+  const width = rows[0]?.length ?? 0;
+  const color = css_color(common.color) ?? theme.text;
+  return (
+    <div data-widget="bitmap-file" style={{ display: "flex", ...common_style(common) }}>
+      {rows.length > 0 && (
+        <svg viewBox={`0 0 ${width} ${rows.length}`} shape-rendering="crispEdges" style={{ flex: 1, alignSelf: "stretch" }}>
+          {rows.flatMap((row, top) =>
+            row.map((is_set, left) => (is_set ? <rect data-widget="bitmap-pixel" x={left} y={top} width={1} height={1} fill={color} /> : null)),
+          )}
+        </svg>
+      )}
+    </div>
+  );
+}
+
 /** The props every widget shares, without the ones `AppList` handles itself. */
 function common_props_only(props: AppListProps): CommonProps & Omit<ScrollingProps, "direction"> {
   const {

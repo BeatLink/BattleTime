@@ -29,10 +29,11 @@ describe("library icons by number", () => {
     expect(library_icon(62)).toEqual(icons.info);
     expect(library_icon(63)).toEqual(icons.remote);
     expect(library_icon(64)).toEqual(icons.note);
+    expect(library_icon(65)).toEqual(icons.qr_code);
   });
 
   it("give none outside the library", () => {
-    expect(library_icon(65)).toEqual(icons.none);
+    expect(library_icon(66)).toEqual(icons.none);
     expect(library_icon(-1)).toEqual(icons.none);
   });
 });

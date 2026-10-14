@@ -103,6 +103,8 @@ npm run neotime -- time
 npm run neotime -- diag
 npm run neotime -- files ls /settings
 npm run neotime -- note shopping.txt large
+npm run neotime -- qr https://example.org --label Example
+npm run neotime -- qr wifi Home secret --label "Home Wi-Fi"
 npm run neotime -- remote push
 npm run neotime -- launcher style folders
 npm run neotime -- apps setup
@@ -203,6 +205,7 @@ src/app/                 Expo Router screens
   apps.tsx               Install a compiled .ntapp image, hide or remove an app, see its memory
   setup.tsx              Set up a new watch: the shared icons, a face, the launcher and apps
   notes.tsx              The text file the watch's Notes app shows, and its font there
+  qr-code.tsx            A QR code for text, a link or a Wi-Fi network, for the watch's qr-code app
   remote.tsx             The watch's Remote app: its buttons, what each runs here, and recent taps
   launcher.tsx           The launcher's style, view and groups, and which group each app is in
   quick-apps.tsx         The apps a swipe left or right on the watch face steps through
@@ -319,6 +322,18 @@ in a file dialog and reads it from disk in the main process
 moment. A phone or a browser keeps the document picker's link and reads it again on each check; a
 browser can read it only until the page reloads, and a phone may withdraw the app's access to it
 after a restart, in which case the screen asks for the file again.
+
+## QR code
+
+The QR code screen makes a code from text, a link or a Wi-Fi network (name, password, security
+and whether it is hidden), shows it on the phone, and sends it to the watch's `qr-code` app with an
+optional caption. [src/protocol/qr-code.ts](src/protocol/qr-code.ts) encodes it with the
+[qrcode](https://github.com/soldair/node-qrcode) package's encoder at error correction M unless
+another level is chosen, packs it one bit a module into `/qr/code`, and writes the caption,
+cut to 24 plain ASCII characters, to `/qr/label` (the layout is in
+[companion-protocol.md](../docs/companion-protocol.md)). A code over 120 modules is refused, and
+one over 74 is sent with a warning that it may not scan. `neotime qr <text>|wifi <ssid>
+[password]|remove` does the same from a terminal.
 
 ## Remote
 

@@ -65,6 +65,12 @@ mock watch only.
   which may stop working after the app restarts; keeping access would need
   `takePersistableUriPermission` in the native module.
 
+## QR code
+
+- **Untried with a watch.** `/qr/code` and `/qr/label` have run only against the mock watch.
+  With the `qr-code` app installed, check that a sent code scans from the watch, also one near
+  74 modules, and that the caption and `neotime qr` work over BlueZ.
+
 ## Remote
 
 - **Untried with a watch.** The layout file and taps have run only against the mock watch. Check

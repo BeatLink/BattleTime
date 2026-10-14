@@ -120,6 +120,7 @@ fn widget_kind(name: &str) -> Option<WidgetKind> {
         "NumberRoller" => NumberRoller,
         "TextFile" => TextFile,
         "TextLines" => TextLines,
+        "BitmapFile" => BitmapFile,
         _ => return None,
     })
 }

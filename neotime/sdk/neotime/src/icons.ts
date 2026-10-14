@@ -71,6 +71,7 @@ const ICON_SYMBOLS = {
   info: "ℹ",
   remote: "🎛",
   note: "📝",
+  qr_code: "▦",
 } as const;
 
 export type IconName = keyof typeof ICON_SYMBOLS;

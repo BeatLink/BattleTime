@@ -170,7 +170,7 @@
           src = lib.cleanSource ./companion;
 
           nodejs = pkgs.nodejs_22;
-          npmDepsHash = "sha256-eG9/Mu6QRXpRRDTL0LGrW37SXUKINJzwsqeSMnm+J3M=";
+          npmDepsHash = "sha256-3dAdDnct/C6GZpm0WVoJyKzu902DjMOP5JstEOwfuxI=";
           makeCacheWritable = true;
 
           nativeBuildInputs = [ pkgs.makeWrapper pkgs.copyDesktopItems ];
