@@ -19,6 +19,6 @@ expect text "Charge now"
 snapshot battery-low
 set battery_percent 4
 set battery_millivolts 3420
-expect text "Battery critical"
+expect text "Almost empty"
 snapshot battery-critical
 expect no failures

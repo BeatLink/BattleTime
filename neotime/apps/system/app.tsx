@@ -67,7 +67,7 @@ const status_text = computed(() =>
         ? "Discharging"
         : battery_percent.value > CRITICAL_PERCENT
           ? "Battery low"
-          : "Battery critical",
+          : "Almost empty",
 );
 
 const status_color = computed<Color>(() =>

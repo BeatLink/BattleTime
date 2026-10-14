@@ -2790,6 +2790,42 @@ fn a_stepper_steps_within_its_limits() {
     assert_eq!(sent_by_tap(&image, 120, 120), None);
 }
 
+/// How many text-coloured pixels a large-font Stepper showing `value` draws over its buttons, laid out as
+/// the settings app's step goal.
+fn stepper_text_pixels_on_buttons(value: i32) -> usize {
+    let properties = [
+        (Property::Value, value),
+        (Property::Minimum, 1000),
+        (Property::Maximum, 20000),
+        (Property::Width, 224),
+        (Property::Height, 52),
+        (Property::Gap, 6),
+        (Property::Font, 3),
+    ];
+    let image = picker_image(WidgetKind::Stepper, &properties, "");
+    let mut system = FakeSystem::default();
+    let mut screen = FakeScreen::new();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    host.draw(&mut screen).unwrap();
+    let (bounds, _) = host.widget_bounds(0).unwrap();
+    let surface = rgb565(DEFAULT_THEME.color(ThemeColor::Surface));
+    let text = rgb565(DEFAULT_THEME.color(ThemeColor::Text));
+    let rows = bounds.y..bounds.y + bounds.height;
+
+    let is_button_column = |x: i32| rows.clone().any(|y| screen.pixel(x, y) == surface);
+    (bounds.x..bounds.x + bounds.width)
+        .filter(|&x| is_button_column(x))
+        .map(|x| rows.clone().filter(|&y| screen.pixel(x, y) == text).count())
+        .sum()
+}
+
+#[test]
+fn a_stepper_keeps_its_widest_value_off_its_buttons() {
+    let signs_only = stepper_text_pixels_on_buttons(1000);
+
+    assert_eq!(stepper_text_pixels_on_buttons(10000), signs_only);
+}
+
 #[test]
 fn a_confirm_sends_one_for_its_confirm_button_and_zero_for_the_other() {
     let image = picker_image(WidgetKind::Confirm, &[], "Keep\nClear\nClear the picture?");

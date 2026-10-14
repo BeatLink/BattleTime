@@ -96,7 +96,7 @@ describe("system: the battery page", () => {
     expect(screen.getByText("Battery low")).toBeTruthy();
     expect(screen.getByText("3.68 volts")).toBeTruthy();
     set_battery(4, 3600, false);
-    expect(screen.getByText("Battery critical")).toBeTruthy();
+    expect(screen.getByText("Almost empty")).toBeTruthy();
   });
 
   it("warns to charge below ten percent, until the charger is on", () => {

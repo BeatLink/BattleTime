@@ -132,7 +132,7 @@ function Puzzle15() {
           {solved.value ? `Solved in ${move_count.value}` : `${move_count.value} moves`}
         </Label>
         <Label font="small" color="muted">
-          {solved.value ? "Tap to play" : fewest_moves.value > 0 ? `Best ${fewest_moves.value}` : ""}
+          {fewest_moves.value > 0 ? `Best ${fewest_moves.value}` : ""}
         </Label>
       </Row>
       <Row grow={1} justify="center">

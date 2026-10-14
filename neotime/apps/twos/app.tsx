@@ -125,7 +125,7 @@ function Twos() {
           <Label font="small" color="warning">{`${score.value}`}</Label>
         </Row>
         <Label font="small" color={is_game_over.value ? "danger" : "muted"}>
-          {is_game_over.value ? "Game over, tap" : `Best ${best_score.value}`}
+          {is_game_over.value ? "Game over" : `Best ${best_score.value}`}
         </Label>
       </Row>
       <Row grow={1} justify="center">

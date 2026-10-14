@@ -10,8 +10,8 @@ so equal numbers join, and try to make 2048.
 - Each slide that moves anything adds a new tile, a 2 or, one time in ten, a 4.
 - The top shows the score and your best score.
 - **Tap** to ask to restart, then tap **Yes** to start again or **No** to carry on.
-- When no slide can move anything the game is over: the watch buzzes and the top says **Game over,
-  tap**. Tap to start a new game.
+- When no slide can move anything the game is over: the watch buzzes and the top says **Game over**.
+  Tap to start a new game.
 - The board, the score and the best are kept for next time.
 
 ## Screens

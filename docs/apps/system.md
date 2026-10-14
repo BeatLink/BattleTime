@@ -40,4 +40,4 @@ Low, below 10 %, with the warning to charge.
 
 ![The battery critical](../../neotime/harness/snapshots/screens/app-system-battery-critical.png)
 
-Critical, at 5 % or less.
+Critical, at 5 % or less, where it says **Almost empty**.

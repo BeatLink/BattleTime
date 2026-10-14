@@ -351,10 +351,13 @@ fn weekdays_tapped(node: &Node, x: i32, y: i32) -> Option<Value> {
 // ============================================================================
 
 /// A Stepper's minus button, the place for its value, and its plus button.
+///
+/// The buttons narrow when the widest value would not fit between them.
 fn stepper_places(node: &Node) -> (Rect, Rect, Rect) {
     let inner = inset(node.bounds, i32::from(node.settings.padding));
-    let side = inner.height.min(inner.width / 3).max(0);
     let gap = i32::from(node.settings.gap);
+    let room_beside_value = (inner.width - widest_stepper_text(node) - 2 * gap) / 2;
+    let side = inner.height.min(inner.width / 3).min(room_beside_value).max(0);
     let minus = Rect { width: side, ..inner };
     let plus = Rect {
         x: inner.x + inner.width - side,
@@ -377,9 +380,21 @@ fn stepper_text(node: &Node) -> String {
     }
 }
 
+/// The width of the widest text a Stepper can show: its `text`, or the wider of its limits and value.
+fn widest_stepper_text(node: &Node) -> i32 {
+    let font = node.settings.font.metrics();
+    let settings = &node.settings;
+    let limits = [settings.minimum, settings.maximum].map(|limit| text_width(font, &format!("{limit}")));
+    let shown = text_width(font, &stepper_text(node));
+    match node.text.is_empty() {
+        true => shown.max(limits[0]).max(limits[1]),
+        false => shown,
+    }
+}
+
 pub fn stepper_size(node: &Node) -> (i32, i32) {
     let gap = i32::from(node.settings.gap);
-    let text = text_width(node.settings.font.metrics(), &stepper_text(node));
+    let text = widest_stepper_text(node);
     let height = BUTTON_HEIGHT.max(line_height(node.settings.font.metrics()));
     (2 * height + 2 * gap + text, height)
 }
