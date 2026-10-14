@@ -48,9 +48,10 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
 
 ## Every change
 
-- Tests go in the same commit as the change, and coverage never drops. `tools/check_coverage.sh`
-  inside `nix develop` runs both gates (Rust floor in the script, TypeScript floors in
-  `neotime/vite.config.ts`). When coverage rises, raise the floor in the same change.
+- **Run only the tests for the code you changed**, then land it. Never run whole-workspace suites,
+  `tools/check_coverage.sh`, workspace clippy, snapshot sweeps or firmware builds for parts you did
+  not touch; CI runs those, and fixing what it finds comes after. New tests still go in the same
+  commit as the change.
 - App behaviour is tested in `neotime/harness/` ([docs/testing.md](docs/testing.md)), not vitest. A
   change to what an app shows rewrites its snapshots with `NEOTIME_UPDATE_SNAPSHOTS=1` in the same commit.
 - Every app has a tour in `neotime/tests/tours/<id>.neotime` that snapshots each of its screens, and
@@ -206,11 +207,9 @@ relative to `companion/`.
   `flake.nix` (`nix run nixpkgs#prefetch-npm-deps -- package-lock.json`).
 - Open work is in [companion/TODO.md](companion/TODO.md); remove an item there in the same change
   that finishes it.
-- Every change ships with tests in the same commit. `npm run coverage` runs them with coverage and
-  fails below the floors in `package.json` (`jest.coverageThreshold`); CI runs it whenever
-  `companion/` changes. When coverage rises, raise the floors in the same change.
-- Verify with `npm run coverage`, `npm run typecheck` and `npm run lint`. BLE needs a dev build; web and
-  Expo Go use the mock transport.
+- Every change ships with tests in the same commit. Run only the test files for what you changed
+  (`npx jest <path>`); CI runs `npm run coverage`, typecheck and lint whenever `companion/` changes.
+  BLE needs a dev build; web and Expo Go use the mock transport.
 
 ## Companion traps
 
