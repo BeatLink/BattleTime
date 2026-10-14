@@ -32,8 +32,11 @@ pub enum Counter {
     /// Microseconds spent sending to the display, the status page and help screen included, counting round the same way.
     DisplaySendMicroseconds,
     /// Sectors the flash store erased.
+    // The rehearsals have no flash store, so nothing counts these two there.
+    #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
     StoreSectorsErased,
     /// Store calls the shell made while another task held the store, which then found nothing.
+    #[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
     StoreCallsFoundBusy,
     /// The heart rate sensor: 1 started, 2 failed to start, 3 failed to read.
     HeartRateState,

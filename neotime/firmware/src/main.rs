@@ -811,7 +811,7 @@ async fn run_bluetooth(
             else {
                 continue;
             };
-            let Ok(connection) = connection.with_attribute_server(&server) else {
+            let Ok(connection) = connection.with_attribute_server(server) else {
                 continue;
             };
             screen.write_line(line::BLUETOOTH, "Connected");
@@ -819,7 +819,7 @@ async fn run_bluetooth(
             phone::set_connected(true);
             serve_connection(
                 &connection,
-                &server,
+                server,
                 dfu,
                 screen,
                 confirmation,

@@ -406,7 +406,7 @@ impl<Targets: UpdateTargets> LegacyDfu<Targets> {
             }
             crc = crc16(crc, &chunk[..length]);
             offset += length as u32;
-            if (offset / CRC_READ_CHUNK as u32) % CRC_CHUNKS_BETWEEN_YIELDS == 0 {
+            if (offset / CRC_READ_CHUNK as u32).is_multiple_of(CRC_CHUNKS_BETWEEN_YIELDS) {
                 embassy_futures::yield_now().await;
             }
         }

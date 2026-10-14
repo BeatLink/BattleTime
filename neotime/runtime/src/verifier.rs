@@ -61,7 +61,7 @@ pub fn verify_with(image: &AppImage, functions: &mut CheckedFunctions) -> Result
             local_count: function.local_count,
             callable_functions: index,
         };
-        let summary = verify_code(image, function.code, unit, &functions)?;
+        let summary = verify_code(image, function.code, unit, functions)?;
         let in_library = image.kind == crate::image::AppKind::Library;
         if in_library && (summary.acts_like_handler || summary.touches_the_app) {
             return Err(ImageError::BadCode {
@@ -84,12 +84,12 @@ pub fn verify_with(image: &AppImage, functions: &mut CheckedFunctions) -> Result
     for index in 0..image.expression_count() {
         let code = image.expression_code(index).unwrap_or_default();
         let unit = CodeUnit::top_level(image, CodeBlock::Expression(index));
-        verify_code(image, code, unit, &functions)?;
+        verify_code(image, code, unit, functions)?;
     }
     for index in 0..image.handler_count() {
         let code = image.handler_code(index).unwrap_or_default();
         let unit = CodeUnit::top_level(image, CodeBlock::Handler(index));
-        verify_code(image, code, unit, &functions)?;
+        verify_code(image, code, unit, functions)?;
     }
     verify_widgets(image)?;
     verify_subscriptions(image)?;

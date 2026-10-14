@@ -10,6 +10,8 @@ mod controller;
 mod host_interface;
 mod link_layer;
 mod packets;
+// Only the watch's radio and the tests use the sleep plan.
+#[cfg(any(target_os = "none", test))]
 mod wake_plan;
 
 #[cfg(target_os = "none")]

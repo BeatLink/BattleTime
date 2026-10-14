@@ -311,7 +311,7 @@ impl<'image> AppHost<'image> {
             }
         }
 
-        let mut host = AppHost {
+        let host = AppHost {
             image,
             tree,
             library: None,
@@ -1223,9 +1223,8 @@ impl<'image> AppHost<'image> {
                     let most_lines = (i16::MAX as i32 - 2 * padding) / line_height(font.metrics()).max(1);
                     let mut index = LineIndex::build(&mut read_file, font, width, most_lines);
                     // A file longer than the widget keeps room for its scroll bar, so it wraps narrower.
-                    let file_height = |index: &LineIndex| {
-                        i32::from(index.line_count) * line_height(font.metrics()) + 2 * padding
-                    };
+                    let file_height =
+                        |index: &LineIndex| index.line_count * line_height(font.metrics()) + 2 * padding;
                     let shows_scroll_bar =
                         node.wants_scroll_bar() && file_height(&index) > node.bounds.height;
                     if shows_scroll_bar != node.shows_scroll_bar {
