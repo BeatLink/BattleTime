@@ -4,7 +4,7 @@ import { zipSync } from 'fflate';
 import { bytesToBase64, utf8Encode } from '@/ble/encoding';
 import { BUNDLED_IMAGES } from '@/bundles/watch-apps';
 import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
-import { PackagesClient, type FileWriter } from '@/protocol/packages';
+import { installImage, PackagesClient, type FileWriter } from '@/protocol/packages';
 import { testImage } from '@/test-support/app-images';
 
 import {
@@ -159,7 +159,8 @@ const entry = (overrides: Partial<StoreEntry>): StoreEntry => ({
   ...overrides,
 });
 
-function fakePlugins(): { plugins: Plugins; installed: number[][]; removed: string[] } {
+// A desktop app whose core puts the plugin's one watch app, Buzz, on the given watch.
+function fakePlugins(files: FileWriter, packages: PackagesClient): { plugins: Plugins; installed: number[][]; removed: string[] } {
   const installed: number[][] = [];
   const removed: string[] = [];
   const bridge: PluginBridge = {
@@ -175,6 +176,10 @@ function fakePlugins(): { plugins: Plugins; installed: number[][]; removed: stri
     },
     setEnabled: async () => ({ ok: true }),
     watchApps: async () => ({ ok: true, value: [{ name: 'buzz.ntapp', data: Array.from(testImage('buzz', 'Buzz')) }] }),
+    installOnWatch: async () => {
+      await installImage(files, packages, testImage('buzz', 'Buzz'));
+      return { ok: true, value: [{ id: 'buzz', name: 'Buzz' }] };
+    },
     uiMessage: async () => ({ ok: true }),
     onUi: () => () => {},
     onLog: () => () => {},
@@ -214,7 +219,7 @@ describe('installing from the store', () => {
 
   it('installs a plugin in the desktop app with its watch app, and uninstalls both', async () => {
     const { files, packages } = await watchTargets();
-    const { plugins, installed, removed } = fakePlugins();
+    const { plugins, installed, removed } = fakePlugins(files, packages);
     const plugin = entry({ key: 'plugin:buzz-back', kind: 'plugin', id: 'buzz-back', watch: ['buzz', 'gone'] });
 
     await installEntry(plugin, Uint8Array.of(1, 2), { files, packages, plugins });

@@ -12,7 +12,7 @@ import { readImageHeader } from '@/protocol/app-image';
 import { installImage, type FileWriter, type PackagesClient, type Progress, type WatchApp } from '@/protocol/packages';
 import { TEMPORARY_ONLY_IDS } from '@/protocol/prompt';
 
-import { installPluginWatchApps, type PluginManifest, type Plugins, type PluginStatus } from './plugins';
+import { type PluginManifest, type Plugins, type PluginStatus } from './plugins';
 
 // ============================================================================
 // Entries
@@ -283,9 +283,7 @@ export async function installEntry(
   }
   const plugins = needPlugins(targets);
   await plugins.install(data);
-  await installPluginWatchApps(plugins, entry.id, (image) =>
-    installImage(targets.files, targets.packages, image, onProgress),
-  );
+  await plugins.installOnWatch(entry.id);
 }
 
 // Removes an app or face from the watch, or a plugin from the desktop app with its watch apps.
