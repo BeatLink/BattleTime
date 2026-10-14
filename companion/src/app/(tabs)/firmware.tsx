@@ -40,16 +40,7 @@ export default function FirmwareScreen() {
 
       <Card title="Package">
         {firmware.firmware ? (
-          <>
-            <Row label={firmware.firmware.name} detail={kilobytes(firmware.total)} />
-            {firmware.firmware.images.map((image) => (
-              <Row
-                key={image.part}
-                label={image.part}
-                detail={kilobytes(image.image.length)}
-              />
-            ))}
-          </>
+          <Row label={firmware.firmware.name} detail={kilobytes(firmware.total)} />
         ) : (
           <ThemedText type="small" themeColor="textSecondary">
             No package chosen yet.

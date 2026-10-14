@@ -100,10 +100,7 @@ describe('useTask', () => {
 describe('useFirmware', () => {
   const firmware: FirmwarePackage = {
     name: 'firmware.zip',
-    images: [
-      { part: 'softdevice', init: new Uint8Array(1), image: new Uint8Array(3) },
-      { part: 'application', init: new Uint8Array(1), image: new Uint8Array(4) },
-    ],
+    image: { part: 'application', init: new Uint8Array(1), image: new Uint8Array(4) },
   };
   const link = {} as DfuLink;
   const sendRaw = jest.fn(async (_text: string) => {});
@@ -132,11 +129,11 @@ describe('useFirmware', () => {
     fetchSpy.mockRestore();
   });
 
-  it('takes a package and totals the size of every image', () => {
+  it('takes a package and its size', () => {
     const state = renderFirmware();
     act(() => state.current.load(firmware));
     expect(state.current.firmware).toBe(firmware);
-    expect(state.current.total).toBe(7);
+    expect(state.current.total).toBe(4);
     expect(state.current.sent).toBe(0);
     expect(state.current.finished).toBe(false);
   });
@@ -189,7 +186,7 @@ describe('useFirmware', () => {
     expect(flashMock).not.toHaveBeenCalled();
   });
 
-  it('resets wasp-os over the UART line and sets the time to confirm the update', async () => {
+  it('resets wasp-os over the UART line for the reloader and sets the time to confirm the update', async () => {
     flashMock.mockImplementationOnce(async (dfu, _firmware, options) => {
       await options?.enterDfu?.();
       await options?.confirm?.(dfu);
@@ -209,11 +206,11 @@ describe('useFirmware', () => {
     [{ step: 'resetting' }, 'Restarting wasp-os in its bootloader'],
     [{ step: 'connecting' }, 'Waiting for the bootloader'],
     [{ step: 'detected' }, 'Talking to the watch'],
-    [{ step: 'progress', progress: part('preparing'), image: 1, images: 1 }, 'Preparing application'],
-    [{ step: 'progress', progress: part('sending'), image: 2, images: 2 }, 'Sending application (2 of 2)'],
-    [{ step: 'progress', progress: part('validating'), image: 1, images: 1 }, 'Checking application'],
-    [{ step: 'progress', progress: part('done'), image: 1, images: 1 }, 'Sent application'],
-    [{ step: 'progress', progress: part('unheard-of'), image: 1, images: 1 }, 'Sending application'],
+    [{ step: 'progress', progress: part('preparing') }, 'Preparing application'],
+    [{ step: 'progress', progress: part('sending') }, 'Sending application'],
+    [{ step: 'progress', progress: part('validating') }, 'Checking application'],
+    [{ step: 'progress', progress: part('done') }, 'Sent application'],
+    [{ step: 'progress', progress: part('unheard-of') }, 'Sending application'],
     [{ step: 'confirming' }, 'Waiting for the new firmware to start'],
     [{ step: 'finished', confirmed: true }, 'The new firmware is running and kept'],
     [
@@ -228,17 +225,15 @@ describe('useFirmware', () => {
     expect(state.current.status).toBe(status);
   });
 
-  it('counts progress across every image in the package', async () => {
+  it('counts the bytes sent so far', async () => {
     flashReports({
       step: 'progress',
       progress: { part: 'application', phase: 'sending', sent: 2, total: 4 },
-      image: 2,
-      images: 2,
     });
     const state = renderFirmware();
     act(() => state.current.load(firmware));
     await act(() => state.current.flash());
-    expect(state.current.sent).toBe(5);
+    expect(state.current.sent).toBe(2);
     expect(state.current.finished).toBe(false);
   });
 

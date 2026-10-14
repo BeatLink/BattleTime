@@ -15,14 +15,13 @@ export const flashUsage = `neotime flash <package.zip> [--address <mac>]
   Sends a Nordic DFU package, such as the zip tools/package_dfu.py makes in
   the NeoTime tree. NeoTime takes it in its running firmware, restarts, and
   keeps it once this tool reconnects and sets the time. A watch still on
-  wasp-os is first restarted into its bootloader.`;
+  wasp-os, taking NeoTime's reloader, is first restarted into its bootloader.`;
 
 export async function flash(session: WatchSession, path: string): Promise<void> {
   const firmware = readFirmwarePackage(new Uint8Array(readFileSync(path)), basename(path));
-  const sizes = firmware.images.map((image) => image.image.length);
-  const total = sizes.reduce((sum, size) => sum + size, 0);
+  const total = firmware.image.image.length;
 
-  say(`${firmware.name}: ${firmware.images.map((image) => image.part).join(', ')}, ${kilobytes(total)}`);
+  say(`${firmware.name}: ${kilobytes(total)}`);
 
   const bar = new ProgressBar();
   await flashFirmware(session, firmware, {
@@ -38,11 +37,9 @@ export async function flash(session: WatchSession, path: string): Promise<void> 
           break;
         case 'detected':
           break;
-        case 'progress': {
-          const before = sizes.slice(0, step.image - 1).reduce((sum, size) => sum + size, 0);
-          bar.update(before + step.progress.sent, total, step.progress.part);
+        case 'progress':
+          bar.update(step.progress.sent, total, step.progress.part);
           break;
-        }
         case 'confirming':
           bar.done();
           say('Sent. Waiting for the new firmware to start...');

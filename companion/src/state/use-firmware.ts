@@ -34,7 +34,7 @@ function describe(step: FlashStep): string {
     case 'detected':
       return 'Talking to the watch';
     case 'progress': {
-      const part = step.images > 1 ? `${step.progress.part} (${step.image} of ${step.images})` : step.progress.part;
+      const part = step.progress.part;
       switch (step.progress.phase) {
         case 'preparing':
           return `Preparing ${part}`;
@@ -76,7 +76,7 @@ export function useFirmware(link: () => DfuLink | null, sendRaw: (text: string) 
     setStatus(null);
     setSent(0);
     setError(null);
-    setTotal(parsed.images.reduce((sum, image) => sum + image.image.length, 0));
+    setTotal(parsed.image.image.length);
   }, []);
 
   const choose = useCallback(async () => {
@@ -109,8 +109,6 @@ export function useFirmware(link: () => DfuLink | null, sendRaw: (text: string) 
     setError(null);
     setSent(0);
 
-    // Every image in the package counts towards the one bar.
-    const sizes = firmware.images.map((image) => image.image.length);
     try {
       await flashFirmware(dfu, firmware, {
         enterDfu: () => sendRaw(ENTER_DFU_COMMAND),
@@ -118,8 +116,7 @@ export function useFirmware(link: () => DfuLink | null, sendRaw: (text: string) 
         onStep: (step) => {
           setStatus(describe(step));
           if (step.step === 'progress') {
-            const before = sizes.slice(0, step.image - 1).reduce((sum, size) => sum + size, 0);
-            setSent(before + step.progress.sent);
+            setSent(step.progress.sent);
           }
           if (step.step === 'finished') {
             setFinished(true);

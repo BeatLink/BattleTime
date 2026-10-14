@@ -1,8 +1,8 @@
 // Runs a whole firmware update over Nordic legacy DFU, then reconnects so the watch keeps the new firmware.
 //
 // NeoTime takes the update in the running firmware, at the watch's own address. A watch still on wasp-os
-// takes it in its bootloader instead, which it reaches over the UART line and which answers at the
-// address one above the watch's.
+// takes NeoTime's reloader in its bootloader instead, which it reaches over the UART line and which
+// answers at the address one above the watch's.
 
 import { nextAddress } from './bytes';
 import { DfuError, sleep, type DfuLink } from './link';
@@ -14,12 +14,12 @@ export type FlashStep =
   | { step: 'resetting' }
   | { step: 'connecting' }
   | { step: 'detected' }
-  | { step: 'progress'; progress: DfuProgress; image: number; images: number }
+  | { step: 'progress'; progress: DfuProgress }
   | { step: 'confirming' }
   | { step: 'finished'; confirmed: boolean };
 
 export type FlashOptions = {
-  // Reset a watch that serves no DFU itself into its bootloader, the way wasptool does on wasp-os.
+  // Reset a watch still on wasp-os, which serves no DFU itself, into its bootloader to take the reloader.
   enterDfu?: () => Promise<void>;
   // Exchange data with the watch once it is back on the new firmware; NeoTime rolls an update back
   // at its next reset unless a phone does this.
@@ -93,18 +93,13 @@ export async function flashRecovery(
   options: Pick<FlashOptions, 'confirm' | 'onStep'> = {},
 ): Promise<void> {
   const { onStep } = options;
-  if (firmware.images.length !== 1) {
-    throw new DfuError('A recovery package holds one firmware image.');
-  }
   if (!(await hasDfu(link))) {
     throw new DfuError('Only a watch running NeoTime keeps a recovery firmware.');
   }
   onStep?.({ step: 'detected' });
 
-  const image = { ...firmware.images[0], part: 'recovery' };
-  await new LegacyDfuController(link).run(image, (progress) =>
-    onStep?.({ step: 'progress', progress, image: 1, images: 1 }),
-  );
+  const image = { ...firmware.image, part: 'recovery' as const };
+  await new LegacyDfuController(link).run(image, (progress) => onStep?.({ step: 'progress', progress }));
 
   let confirmed = false;
   if (options.confirm) {
@@ -140,12 +135,7 @@ export async function flashFirmware(
   }
   onStep?.({ step: 'detected' });
 
-  const controller = new LegacyDfuController(link);
-  for (const [index, image] of firmware.images.entries()) {
-    await controller.run(image, (progress) =>
-      onStep?.({ step: 'progress', progress, image: index + 1, images: firmware.images.length }),
-    );
-  }
+  await new LegacyDfuController(link).run(firmware.image, (progress) => onStep?.({ step: 'progress', progress }));
 
   let confirmed = false;
   if (options.confirm) {

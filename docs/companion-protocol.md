@@ -89,8 +89,7 @@ it changes nothing. Either way the watch answers with the settings as they now a
 | `alarms_in_dnd` | `false` silences alarms and timers in do not disturb too. |
 | `heart_rate_interval` | How often the watch measures the heart rate with no app asking: `0` off, `1` continuously, then `2` to `6` for every 30 seconds, minute, 5, 10 or 30 minutes. |
 
-The key names after `theme_colors` are the ones the wasp-os companion's settings screen already
-sends. An unknown preset, a colour not written `#rrggbb`, `units` other than the two names, or any
+An unknown preset, a colour not written `#rrggbb`, `units` other than the two names, or any
 value outside its range is refused with an `error` reply, and nothing in that message is applied.
 
 The reply:

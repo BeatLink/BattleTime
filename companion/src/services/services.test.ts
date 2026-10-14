@@ -101,7 +101,7 @@ describe('GitHub firmware', () => {
         prerelease: false,
         assets: [
           { id: 7, name: 'firmware.zip', size: 300, browser_download_url: 'https://dl/release.zip' },
-          { id: 8, name: 'rehearsal-upload.zip', size: 300, browser_download_url: 'https://dl/rehearsal.zip' },
+          { id: 8, name: 'symbols.zip', size: 300, browser_download_url: 'https://dl/symbols.zip' },
         ],
       },
     ],
@@ -131,10 +131,10 @@ describe('GitHub firmware', () => {
 
   it('unpacks the firmware from a release and from an artifact', async () => {
     const [artifact, release] = await listFirmwareBuilds('BeatLink/NeoTime', 'pinetime', { fetcher });
-    expect((await downloadFirmware(release, { fetcher })).images[0].image).toEqual(new Uint8Array([1, 2, 3]));
+    expect((await downloadFirmware(release, { fetcher })).image.image).toEqual(new Uint8Array([1, 2, 3]));
     await expect(downloadFirmware(artifact, { fetcher })).rejects.toThrow('token');
     const fromArtifact = await downloadFirmware(artifact, { fetcher, token: 't' });
-    expect(fromArtifact.images[0].part).toBe('application');
+    expect(fromArtifact.image.part).toBe('application');
   });
 
   it('rejects a repository that is not owner/name', async () => {

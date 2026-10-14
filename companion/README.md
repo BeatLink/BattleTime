@@ -1,9 +1,9 @@
 # NeoTime Companion
 
 A React Native (Expo) phone, desktop and command line companion for watches running
-[NeoTime](https://github.com/BeatLink/NeoTime), the Rust firmware for the PineTime. It started as
-the wasp-os companion and keeps its screens, but talks to the watch through the services NeoTime
-serves.
+[NeoTime](https://github.com/BeatLink/NeoTime), the Rust firmware for the PineTime. It talks to the
+watch through the services NeoTime serves, and supports no other firmware beyond sending a watch
+the reloader that moves it onto NeoTime.
 
 ## Status
 
@@ -268,7 +268,7 @@ bootloader, `DfuTarg (mock)`, so both states can be worked on with no hardware.
 ## Firmware updates
 
 Firmware is sent as a Nordic DFU zip, the one NeoTime's `tools/package_dfu.py` makes from
-`firmware.bin`. NeoTime takes the update in its running firmware, at the watch's own address, so
+`firmware.bin`, holding one application image; a zip with a SoftDevice or bootloader part is refused. NeoTime takes the update in its running firmware, at the watch's own address, so
 there is no reset into a bootloader first. After the image is activated the watch restarts, the
 bootloader swaps it in, and the app reconnects and writes the time. That exchange is what makes
 NeoTime keep the new firmware; without it the next reset rolls back to the old one.

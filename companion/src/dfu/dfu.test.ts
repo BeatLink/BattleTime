@@ -11,10 +11,11 @@ import {
   setWatchTime,
 } from '@/protocol/neotime';
 import { flashFirmware, flashRecovery, type FlashStep } from './flash';
-import { parseNotification } from './legacy';
+import { LegacyDfuController, parseNotification } from './legacy';
 import type { DfuLink } from './link';
 import { MockLegacyDfuTarget } from './mock-legacy-target';
 import { FirmwarePackageError, readFirmwarePackage } from './package';
+import { LEGACY_CONTROL_POINT } from './uuids';
 
 function firmwareZip(init: Uint8Array, image: Uint8Array): Uint8Array {
   return zipSync({
@@ -53,15 +54,15 @@ describe('bytes', () => {
 });
 
 describe('the firmware package', () => {
-  it('reads the images the manifest names', () => {
+  it('reads the application the manifest names', () => {
     const firmware = readFirmwarePackage(firmwareZip(pattern(20), pattern(300)), 'firmware.zip');
     expect(firmware.name).toBe('firmware.zip');
-    expect(firmware.images).toHaveLength(1);
-    expect(firmware.images[0].part).toBe('application');
-    expect(firmware.images[0].image).toEqual(pattern(300));
+    expect(firmware.image.part).toBe('application');
+    expect(firmware.image.init).toEqual(pattern(20));
+    expect(firmware.image.image).toEqual(pattern(300));
   });
 
-  it('sends the softdevice before the application', () => {
+  it('refuses a package with a part other than the application', () => {
     const zip = zipSync({
       'manifest.json': new TextEncoder().encode(
         JSON.stringify({
@@ -76,15 +77,24 @@ describe('the firmware package', () => {
       'sd.dat': pattern(8),
       'sd.bin': pattern(16),
     });
-    expect(readFirmwarePackage(zip).images.map((image) => image.part)).toEqual([
-      'softdevice',
-      'application',
-    ]);
+    expect(() => readFirmwarePackage(zip)).toThrow(/only an application image, and this package holds softdevice/);
+  });
+
+  it('refuses a manifest that is not JSON, or names a file the zip lacks', () => {
+    const broken = zipSync({ 'manifest.json': new TextEncoder().encode('{') });
+    expect(() => readFirmwarePackage(broken)).toThrow(/not valid JSON/);
+    const missing = zipSync({
+      'manifest.json': new TextEncoder().encode(
+        JSON.stringify({ manifest: { application: { bin_file: 'app.bin', dat_file: 'app.dat' } } }),
+      ),
+      'app.dat': pattern(8),
+    });
+    expect(() => readFirmwarePackage(missing)).toThrow(/names app.bin but does not contain it/);
   });
 
   it('falls back to a bare pair of files', () => {
     const zip = zipSync({ 'app.dat': pattern(8), 'app.bin': pattern(64) });
-    expect(readFirmwarePackage(zip).images[0].image).toEqual(pattern(64));
+    expect(readFirmwarePackage(zip).image.image).toEqual(pattern(64));
   });
 
   it('refuses a file that is not a zip', () => {
@@ -193,10 +203,22 @@ describe('sending a recovery firmware', () => {
     expect(target.imageTypes).toEqual([]);
   });
 
-  it('refuses a package with more than one image', async () => {
-    const firmware = readFirmwarePackage(firmwareZip(pattern(14), pattern(64)));
-    const twoImages = { ...firmware, images: [firmware.images[0], firmware.images[0]] };
-    await expect(flashRecovery(new MockLegacyDfuTarget(), twoImages)).rejects.toThrow(/one firmware image/);
+  it('names the procedure and the reason when the watch refuses one', async () => {
+    // A watch that answers every command with "not supported".
+    let notify: (value: Uint8Array) => void = () => {};
+    const link = {
+      subscribe: async (_service: string, _characteristic: string, onValue: (value: Uint8Array) => void) => {
+        notify = onValue;
+        return () => {};
+      },
+      write: async (_service: string, characteristic: string, data: Uint8Array) => {
+        if (characteristic === LEGACY_CONTROL_POINT) {
+          notify(Uint8Array.from([16, data[0], 3]));
+        }
+      },
+    } as unknown as DfuLink;
+    const { image } = readFirmwarePackage(firmwareZip(pattern(14), pattern(64)));
+    await expect(new LegacyDfuController(link).run(image)).rejects.toThrow('The bootloader rejected start: not supported.');
   });
 
   it('leaves an ordinary update on the application image type', async () => {
@@ -206,7 +228,7 @@ describe('sending a recovery firmware', () => {
   });
 });
 
-describe('flashing a watch still on wasp-os', () => {
+describe('sending the reloader to a watch still on wasp-os', () => {
   it('resets it into its bootloader first, then sends the image', async () => {
     const image = pattern(3333);
     const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'wasp-os');

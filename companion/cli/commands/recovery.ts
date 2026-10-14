@@ -18,7 +18,7 @@ export const recoveryUsage = `neotime recovery <package.zip> [--address <mac>]
 
 export async function recovery(session: WatchSession, path: string): Promise<void> {
   const firmware = readFirmwarePackage(new Uint8Array(readFileSync(path)), basename(path));
-  const total = firmware.images.reduce((sum, image) => sum + image.image.length, 0);
+  const total = firmware.image.image.length;
   say(`${firmware.name}: recovery firmware, ${kilobytes(total)}`);
 
   const bar = new ProgressBar();

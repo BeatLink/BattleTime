@@ -1,8 +1,8 @@
-// Nordic legacy DFU, which NeoTime's firmware and wasp-os's bootloader speak. Ported from wasp-os's tools/ota-dfu.
+// Nordic legacy DFU, which NeoTime's firmware speaks, as do the old systems' bootloaders a reloader goes through.
 
 import { concat, u16le, u32le, readU32le } from './bytes';
 import { DfuError, NotifyQueue, sleep, type DfuLink } from './link';
-import type { FirmwareImage } from './package';
+import type { FirmwareImage, FirmwarePart } from './package';
 import {
   DFU_PAYLOAD_SIZE,
   LEGACY_CONTROL_POINT,
@@ -45,11 +45,8 @@ const RESPONSE_NAMES: Record<number, string> = {
 
 const SUCCESS = 1;
 
-// Which image types the START_DFU command asks the bootloader to expect.
-const IMAGE_TYPE: Record<string, number> = {
-  softdevice: 0x01,
-  bootloader: 0x02,
-  softdevice_bootloader: 0x03,
+// Which image type the START_DFU command asks the watch to expect.
+const IMAGE_TYPE: Record<FirmwarePart, number> = {
   application: 0x04,
   // NeoTime's own type: the running firmware stores the image in its recovery slot and keeps running.
   recovery: 0x08,
@@ -77,7 +74,7 @@ export function parseNotification(value: Uint8Array): ParsedNotification {
 }
 
 export type DfuProgress = {
-  part: string;
+  part: FirmwarePart;
   phase: 'preparing' | 'sending' | 'validating' | 'done';
   sent: number;
   total: number;
@@ -102,11 +99,10 @@ export class LegacyDfuController {
     );
 
     try {
-      const type = IMAGE_TYPE[image.part] ?? IMAGE_TYPE.application;
+      const type = IMAGE_TYPE[image.part];
       await this.command(Procedure.START_DFU, [type]);
 
-      // The bootloader expects softdevice, bootloader and application sizes,
-      // in that order, even when only one of them is being sent.
+      // The watch expects softdevice, bootloader and application sizes, in that order; only the last is sent.
       const sizes = new Uint8Array(12);
       sizes.set(u32le(total), 8);
       await this.packet(sizes);
