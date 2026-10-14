@@ -7,8 +7,8 @@ and how it compares with littlefs, ekv and sequential-storage, is in
 
 The store knows how data is written, not what it is, so a new kind of data needs no new format and
 no new firmware. It survives a power cut at any point, spreads its wear, is `async` over
-`embedded-storage-async`, and keeps fixed tables; only a file written a part at a time holds about
-200 B of heap while it is written.
+`embedded-storage-async`, and keeps fixed tables; it borrows 4 KB of heap while it mounts, and a
+file written a part at a time holds about 200 B of heap while it is written.
 
 ## The three containers
 
@@ -129,7 +129,9 @@ its future in RAM for good. So the firmware awaits the store in one task only, a
 mounts the store outside any `async` function.
 
 Mounting reads every file header and checks every record in both rings, about 1 MB of reads,
-roughly a second at start-up; a checkpoint of the RAM tables could shorten it later.
+roughly a second at start-up; a checkpoint of the RAM tables could shorten it later. Each used ring
+sector is read whole, in one read, into a 4 KB buffer on the heap that lives only while the store
+mounts, and its records are checked from there.
 
 ## Tests
 

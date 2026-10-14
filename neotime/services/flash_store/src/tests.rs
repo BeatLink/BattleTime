@@ -378,6 +378,29 @@ fn wear_spreads_over_the_whole_records_ring() {
 }
 
 #[test]
+fn mounting_reads_each_ring_sector_whole_once() {
+    let mut store = blank_store();
+    for round in 0..300 {
+        block_on(store.write_record(record_key(SYSTEM, round % 40), &filler(8, round as usize))).unwrap();
+    }
+
+    let store = remount(store);
+
+    let ring_sectors = LAYOUT.record_sectors + LAYOUT.log_sectors;
+    let most_reads = LAYOUT.file_sectors + 2 * ring_sectors;
+    assert!(
+        store.flash().reads <= most_reads as u64,
+        "{} reads",
+        store.flash().reads
+    );
+    let mut store = store;
+    assert_eq!(
+        read_record(&mut store, record_key(SYSTEM, 19)).unwrap(),
+        filler(8, 299)
+    );
+}
+
+#[test]
 fn a_write_after_preparing_room_erases_nothing() {
     let mut store = blank_store();
 

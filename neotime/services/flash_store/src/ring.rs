@@ -170,16 +170,25 @@ impl<const SECTORS: usize> Ring<SECTORS> {
                 SectorHeader::Invalid => {}
             }
         }
+        // Each sector is read whole into this buffer, which lives only while the store mounts.
+        let mut sector_bytes = alloc::vec![0u8; SECTOR_BYTES as usize];
         for position in 0..self.order.len() {
             let index = self.order[position];
             let mut table_full = false;
             let start_address = self.start_address;
-            let end = scan_sector(flash, start_address, index as usize, |record| {
-                self.next_record_sequence = self.next_record_sequence.max(record.sequence + 1);
-                if self.note_record(keys, record).is_err() {
-                    table_full = true;
-                }
-            })
+            read(flash, self.sector_address(index as usize), &mut sector_bytes).await?;
+            let end = scan_sector(
+                flash,
+                start_address,
+                index as usize,
+                Some(&sector_bytes),
+                |record| {
+                    self.next_record_sequence = self.next_record_sequence.max(record.sequence + 1);
+                    if self.note_record(keys, record).is_err() {
+                        table_full = true;
+                    }
+                },
+            )
             .await?;
             if table_full {
                 return Err(StoreError::KeyTableFull);
@@ -385,7 +394,7 @@ impl<const SECTORS: usize> Ring<SECTORS> {
             .filter(|index| *index != excluding)
         {
             let mut found = false;
-            scan_sector(flash, self.start_address, index, |record| {
+            scan_sector(flash, self.start_address, index, None, |record| {
                 found |= record.key == key
             })
             .await?;
@@ -647,7 +656,7 @@ impl<const SECTORS: usize> Ring<SECTORS> {
         for index in self.order.iter().map(|index| *index as usize) {
             let mut offset = SECTOR_HEADER_BYTES;
             while let RecordAt::Record { record, next_offset } =
-                record_at(flash, self.start_address, index, offset).await?
+                record_at(flash, self.start_address, index, None, offset).await?
             {
                 offset = next_offset;
                 if record.key != key {
@@ -685,11 +694,29 @@ enum RecordAt {
     CutShort,
 }
 
+/// Reads bytes at `offset` in a sector, from the sector already read into RAM when there is one.
+async fn read_in_sector<Flash: NorFlash>(
+    flash: &mut Flash,
+    sector_address: u32,
+    sector_in_ram: Option<&[u8]>,
+    offset: usize,
+    bytes: &mut [u8],
+) -> Result<(), StoreError<Flash::Error>> {
+    match sector_in_ram {
+        Some(sector) => {
+            bytes.copy_from_slice(&sector[offset..offset + bytes.len()]);
+            Ok(())
+        }
+        None => read(flash, sector_address + offset as u32, bytes).await,
+    }
+}
+
 /// Reads and checks the record at `offset` in a sector.
 async fn record_at<Flash: NorFlash>(
     flash: &mut Flash,
     ring_start_address: u32,
     index: usize,
+    sector_in_ram: Option<&[u8]>,
     offset: usize,
 ) -> Result<RecordAt, StoreError<Flash::Error>> {
     let sector_bytes = SECTOR_BYTES as usize;
@@ -698,7 +725,7 @@ async fn record_at<Flash: NorFlash>(
         return Ok(RecordAt::End);
     }
     let mut header = [0u8; RECORD_HEADER_BYTES];
-    read(flash, sector_address + offset as u32, &mut header).await?;
+    read_in_sector(flash, sector_address, sector_in_ram, offset, &mut header).await?;
     if header.iter().all(|byte| *byte == 0xff) {
         return Ok(RecordAt::End);
     }
@@ -712,9 +739,11 @@ async fn record_at<Flash: NorFlash>(
     let mut done = 0;
     while done < length {
         let size = PIECE_BYTES.min(length - done);
-        read(
+        read_in_sector(
             flash,
-            sector_address + (offset + RECORD_HEADER_BYTES + done) as u32,
+            sector_address,
+            sector_in_ram,
+            offset + RECORD_HEADER_BYTES + done,
             &mut piece[..size],
         )
         .await?;
@@ -722,8 +751,8 @@ async fn record_at<Flash: NorFlash>(
         done += size;
     }
     let mut trailer = [0u8; RECORD_TRAILER_BYTES];
-    let trailer_address = sector_address + (offset + RECORD_HEADER_BYTES + rounded_to_word(length)) as u32;
-    read(flash, trailer_address, &mut trailer).await?;
+    let trailer_offset = offset + RECORD_HEADER_BYTES + rounded_to_word(length);
+    read_in_sector(flash, sector_address, sector_in_ram, trailer_offset, &mut trailer).await?;
     if word(&trailer, 0) != checksum.value() {
         return Ok(RecordAt::CutShort);
     }
@@ -748,11 +777,12 @@ async fn scan_sector<Flash: NorFlash>(
     flash: &mut Flash,
     ring_start_address: u32,
     index: usize,
+    sector_in_ram: Option<&[u8]>,
     mut visit: impl FnMut(ScannedRecord),
 ) -> Result<usize, StoreError<Flash::Error>> {
     let mut offset = SECTOR_HEADER_BYTES;
     loop {
-        match record_at(flash, ring_start_address, index, offset).await? {
+        match record_at(flash, ring_start_address, index, sector_in_ram, offset).await? {
             RecordAt::Record { record, next_offset } => {
                 visit(record);
                 offset = next_offset;

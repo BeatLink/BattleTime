@@ -10,7 +10,8 @@
 //! - **Logs** are appended over time, batched in RAM, and drop their oldest sector when their ring wraps.
 //!
 //! Everything survives a power cut at any point. Its tables are fixed in size by the type's parameters; only a
-//! file written a part at a time holds a little heap while it is written. See docs/flash-store.md.
+//! file written a part at a time holds a little heap while it is written, and mount borrows 4 KB of
+//! heap to read each ring sector whole. See docs/flash-store.md.
 
 #![no_std]
 
