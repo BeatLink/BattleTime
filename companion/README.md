@@ -17,8 +17,7 @@ Early. What works today against NeoTime's firmware:
   card on the Watch tab, or `neotime debug [file]`), which lets the watch leave its crash screen.
 
 Built and tested against the mock watch, waiting for the firmware side
-([docs/companion-protocol.md](https://github.com/BeatLink/NeoTime/blob/master/docs/companion-protocol.md)
-in the NeoTime tree):
+([companion-protocol.md](../neotime/docs/companion-protocol.md) in the watch's docs):
 
 - the battery level from the standard Battery service;
 - the Gadgetbridge-style messages over the Nordic UART Service: notifications, calls, music,
@@ -34,10 +33,11 @@ the computer is.
 
 ## Getting started
 
-Everything the project needs is in the flake:
+The app lives in `companion/` of the NeoTime repository. Everything it needs is in the
+repository's flake; run these from `companion/`:
 
 ```bash
-nix develop
+nix develop .#companion
 npm install
 ```
 
@@ -56,7 +56,7 @@ browser has no Bluetooth either, and the mock is enough to work on screens witho
 The Android SDK, NDK and JDK live in a shell of their own, since they come to a few gigabytes:
 
 ```bash
-nix develop .#android
+nix develop .#companion-android
 npm run android                       # build, install and start on a phone over adb
 npx expo prebuild -p android && (cd android && ./gradlew assembleRelease)   # an APK, no phone needed
 ```
@@ -70,14 +70,14 @@ downloads does not run on NixOS.
 The flake also builds the desktop app and the command line tool as one package, with a menu entry:
 
 ```bash
-nix run github:BeatLink/neotime-companion                  # the desktop app
-nix run github:BeatLink/neotime-companion#neotime -- scan  # the command line tool
-nix profile install github:BeatLink/neotime-companion      # neotime-companion and neotime on PATH
+nix run github:BeatLink/NeoTime#companion                # the desktop app
+nix run github:BeatLink/NeoTime#companion-cli -- scan    # the command line tool
+nix profile install github:BeatLink/NeoTime#companion    # neotime-companion and neotime on PATH
 ```
 
 On NixOS it can go in `environment.systemPackages` or `home.packages` as
-`inputs.neotime-companion.packages.${system}.default`. When `package-lock.json` changes,
-`npmDepsHash` in `flake.nix` must change with it; `nix run nixpkgs#prefetch-npm-deps --
+`inputs.neotime.packages.${system}.companion`. When `package-lock.json` changes,
+`npmDepsHash` in the repository's `flake.nix` must change with it; `nix run nixpkgs#prefetch-npm-deps --
 package-lock.json` prints the new one, and CI's Nix job fails until it matches.
 
 ```bash
@@ -133,7 +133,7 @@ phone uses, which is why every screen, every protocol and the tests are shared u
 Electron comes from the flake rather than npm, because the binary npm downloads does not run on
 NixOS. `npm run desktop` starts it through [scripts/electron.mjs](scripts/electron.mjs), which
 skips the launcher npm would otherwise put first on `PATH`; that launcher starts Electron's
-unwrapped binary, which dies with SIGILL. Run it inside `nix develop`, or the script says so.
+unwrapped binary, which dies with SIGILL. Run it inside `nix develop .#companion`, or the script says so.
 
 ### The Tauri desktop app
 
@@ -243,7 +243,7 @@ The app reads which services the watch serves right after connecting, in
 | Nordic UART | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` | the Gadgetbridge messages |
 
 The NeoTime UUIDs share the base `6e54xxxx-0000-4000-8000-4e656f54696d`. The full description,
-which the firmware and this app both follow, is `docs/companion-protocol.md` in the NeoTime tree.
+which the firmware and this app both follow, is [companion-protocol.md](../neotime/docs/companion-protocol.md) in the watch's docs.
 
 | State | Tabs |
 | --- | --- |
@@ -362,7 +362,7 @@ to another place in its own.
 Each app's image declares the group it starts in, such as `games`, and the `apps` reply carries it.
 [src/protocol/launcher.ts](src/protocol/launcher.ts) works out where every installed app goes, each
 in the group it declares until the wearer moves it, and writes that to `/settings/launcher` over the
-file service as a few hundred bytes (the layout is in NeoTime's `docs/companion-protocol.md`), then
+file service as a few hundred bytes (the layout is in [companion-protocol.md](../neotime/docs/companion-protocol.md)), then
 sends `{"c":"launcher"}` on the packages characteristic so the launcher shows it at once. Installing
 an app writes the file again, so a new app lands in its group. The file lives on the watch, so
 every phone and the command line see the same groups; with no file the screen starts from the
@@ -415,4 +415,4 @@ own header ([src/protocol/app-image.ts](src/protocol/app-image.ts)). The Apps sc
 
 ## License
 
-LGPL v3 or later. See [COPYING](COPYING) and [COPYING.LGPL](COPYING.LGPL).
+GPL v3 or later, like the rest of NeoTime. See [LICENSE](../LICENSE).

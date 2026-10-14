@@ -30,7 +30,7 @@ function findElectron() {
 const electron = findElectron();
 if (!electron) {
   process.stderr.write(
-    'No Electron on PATH. Run `nix develop` first, which puts the one this app needs there.\n',
+    'No Electron on PATH. Run `nix develop .#companion` first, which puts the one this app needs there.\n',
   );
   process.exit(1);
 }

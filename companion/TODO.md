@@ -4,7 +4,7 @@ What is known to be unfinished in this app. Remove an item in the same change th
 
 ## Waiting for the firmware
 
-The firmware side is described in `docs/companion-protocol.md` in the NeoTime repo and is being
+The firmware side is described in `../neotime/docs/companion-protocol.md` and is being
 built in this order: the UART channel with the settings message, the Battery service, the remaining
 Gadgetbridge messages. Each of these is built and tested here against the
 mock watch only.
@@ -75,7 +75,7 @@ mock watch only.
 ## Notification forwarding
 
 The Android bridge in [src/services/phone](src/services/phone/README.md) is wired into the
-Notifications tab and the watch provider, and compiles in a debug APK from `nix develop .#android`,
+Notifications tab and the watch provider, and compiles in a debug APK from `nix develop .#companion-android`,
 but has never run on a phone. The keep-alive notification needs `POST_NOTIFICATIONS` asked for on
 Android 13 and later.
 

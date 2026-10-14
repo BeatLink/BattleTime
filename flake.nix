@@ -1,5 +1,5 @@
 {
-  description = "NeoTime: a Rust firmware for the PineTime";
+  description = "NeoTime: a Rust firmware for the PineTime, and its companion app";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -19,9 +19,14 @@
   outputs = { self, nixpkgs, flake-utils, rust-overlay, infinisim }:
     flake-utils.lib.eachDefaultSystem (system:
       let
+        # The companion's Android SDK is unfree and asks for its licence to be accepted.
         pkgs = import nixpkgs {
           inherit system;
           overlays = [ rust-overlay.overlays.default ];
+          config = {
+            allowUnfree = true;
+            android_sdk.accept_license = true;
+          };
         };
         lib = pkgs.lib;
 
@@ -123,18 +128,171 @@
           '';
           meta.mainProgram = "infinisim";
         };
+
+        # ====================================================================
+        # The companion app
+        # ====================================================================
+
+        # The versions React Native 0.86 and Expo SDK 57 build against.
+        companionAndroid = {
+          platform = "36";
+          buildTools = "36.0.0";
+          ndk = "27.1.12297006";
+          cmake = "3.22.1";
+        };
+
+        companionAndroidSdk = (pkgs.androidenv.composeAndroidPackages {
+          platformVersions = [ companionAndroid.platform ];
+          # Some Expo modules still ask for build tools 35 as well.
+          buildToolsVersions = [ companionAndroid.buildTools "35.0.0" ];
+          includeNDK = true;
+          ndkVersions = [ companionAndroid.ndk ];
+          cmakeVersions = [ companionAndroid.cmake ];
+          includeEmulator = false;
+          includeSystemImages = false;
+        }).androidsdk;
+        companionAndroidSdkRoot = "${companionAndroidSdk}/libexec/android-sdk";
+
+        # The desktop app runs the Electron from nixpkgs rather than the prebuilt binary npm
+        # downloads, which does not run on NixOS.
+        companionElectron = pkgs.electron;
+
+        # The installable desktop app and command line tool.
+        companion = pkgs.buildNpmPackage {
+          pname = "neotime-companion";
+          version = (lib.importJSON ./companion/package.json).version;
+          src = lib.cleanSource ./companion;
+
+          nodejs = pkgs.nodejs_22;
+          npmDepsHash = "sha256-eG9/Mu6QRXpRRDTL0LGrW37SXUKINJzwsqeSMnm+J3M=";
+          makeCacheWritable = true;
+
+          nativeBuildInputs = [ pkgs.makeWrapper pkgs.copyDesktopItems ];
+
+          env = {
+            ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
+            # Expo would otherwise try to reach its servers during the build.
+            EXPO_OFFLINE = "1";
+            EXPO_NO_TELEMETRY = "1";
+            CI = "1";
+          };
+
+          buildPhase = ''
+            runHook preBuild
+
+            npx expo export --platform web --output-dir dist
+
+            # Both bundles carry their Bluetooth and D-Bus code, so nothing
+            # from node_modules is needed at run time.
+            npx esbuild electron/main.js --bundle --platform=node --target=node20 \
+              --format=cjs --external:electron --external:x11 --external:usocket \
+              --outfile=build/electron/main.js
+            cp electron/preload.js build/electron/preload.js
+            # Electron takes the app's name and version from a package.json beside its main script.
+            cat > build/electron/package.json <<EOF
+            {"name": "neotime-companion", "productName": "NeoTime Companion", "version": "$version", "main": "main.js"}
+            EOF
+            npx esbuild cli/neotime.ts --bundle --platform=node --target=node20 \
+              --format=cjs --alias:@=./src --external:x11 --external:usocket \
+              --outfile=build/neotime.cjs
+
+            runHook postBuild
+          '';
+
+          installPhase = ''
+            runHook preInstall
+
+            share=$out/share/neotime-companion
+            mkdir -p $share $out/bin
+            cp -r build/electron $share/electron
+            cp -r dist $share/dist
+            cp build/neotime.cjs $share/neotime.cjs
+
+            makeWrapper ${companionElectron}/bin/electron $out/bin/neotime-companion \
+              --unset ELECTRON_RUN_AS_NODE \
+              --add-flags $share/electron/main.js
+
+            makeWrapper ${pkgs.nodejs_22}/bin/node $out/bin/neotime \
+              --add-flags $share/neotime.cjs
+
+            install -Dm644 assets/images/icon.png \
+              $out/share/icons/hicolor/512x512/apps/neotime-companion.png
+
+            runHook postInstall
+          '';
+
+          desktopItems = [
+            (pkgs.makeDesktopItem {
+              name = "neotime-companion";
+              desktopName = "NeoTime Companion";
+              comment = "Companion for watches running NeoTime";
+              exec = "neotime-companion";
+              icon = "neotime-companion";
+              categories = [ "Utility" ];
+              startupWMClass = "NeoTime Companion";
+            })
+          ];
+
+          meta = {
+            description = "Desktop app and command line tool for watches running NeoTime";
+            homepage = "https://github.com/BeatLink/NeoTime";
+            license = lib.licenses.gpl3Plus;
+            mainProgram = "neotime-companion";
+            platforms = lib.platforms.linux;
+          };
+        };
+
+        # The Tauri desktop app: Rust, the Tauri CLI, and the WebKitGTK window it draws in.
+        companionTauriPackages = with pkgs; [
+          cargo
+          rustc
+          clippy
+          rustfmt
+          cargo-tauri
+          pkg-config
+          webkitgtk_4_1
+          gtk3
+          libsoup_3
+          glib
+          openssl
+        ];
+
+        # Chromium is the browser with Web Bluetooth, for testing the web build against a real watch.
+        companionPackages = with pkgs; [
+          nodejs_22
+          companionElectron
+          bluez
+          dbus
+          git
+        ] ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux ([ pkgs.chromium ] ++ companionTauriPackages);
+
+        # Nothing here should download an Electron of its own; the one on PATH is the wrapper that
+        # works, and the unwrapped binary under libexec dies with SIGILL.
+        companionEnvironment = {
+          ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
+        };
+
+        # The VSCode terminal exports ELECTRON_RUN_AS_NODE, which makes Electron start as a bare
+        # Node process and exit at once.
+        companionShellHook = ''
+          unset ELECTRON_RUN_AS_NODE
+        '';
       in
       {
         packages = {
           default = simulator;
           simulator = simulator;
           infinisim = infinisimPackage;
+          companion = companion;
+          companion-android-sdk = companionAndroidSdk;
         };
 
         apps = {
           default = flake-utils.lib.mkApp { drv = simulator; };
           simulator = flake-utils.lib.mkApp { drv = simulator; };
           infinisim = flake-utils.lib.mkApp { drv = infinisimPackage; };
+          companion = flake-utils.lib.mkApp { drv = companion; };
+          companion-cli = flake-utils.lib.mkApp { drv = companion; name = "neotime"; };
         };
 
         checks = {
@@ -186,5 +344,39 @@
             echo "  tools/build_site.sh                                    build the GitHub Pages site into target/site/out"
           '';
         };
+
+        devShells.companion = pkgs.mkShell (companionEnvironment // {
+          packages = companionPackages;
+
+          shellHook = companionShellHook + ''
+            echo "NeoTime Companion (run these from companion/)"
+            echo "  npm install          install dependencies"
+            echo "  npm start            phone and web, via Expo"
+            echo "  npm run desktop      build the web export and open the Electron desktop app"
+            echo "  npm run tauri        build the web export and open the Tauri desktop app"
+            echo "  npm test             protocol tests"
+            echo "  cargo test --workspace   the Rust core and the Tauri app"
+            echo "  nix develop .#companion-android   the shell with the Android SDK"
+          '';
+        });
+
+        # The Android SDK is several gigabytes, so it has a shell of its own.
+        devShells.companion-android = pkgs.mkShell (companionEnvironment // {
+          packages = companionPackages ++ [ companionAndroidSdk pkgs.jdk17 ];
+
+          ANDROID_HOME = companionAndroidSdkRoot;
+          ANDROID_SDK_ROOT = companionAndroidSdkRoot;
+          ANDROID_NDK_ROOT = "${companionAndroidSdkRoot}/ndk/${companionAndroid.ndk}";
+          JAVA_HOME = pkgs.jdk17.home;
+          # Gradle's own aapt2 is built for other Linux systems and does not run on NixOS.
+          GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${companionAndroidSdkRoot}/build-tools/${companionAndroid.buildTools}/aapt2";
+
+          shellHook = companionShellHook + ''
+            echo "NeoTime Companion, with the Android SDK (run these from companion/)"
+            echo "  npm run android      build, install and start the app on a phone over adb"
+            echo "  npx expo prebuild -p android && (cd android && ./gradlew assembleRelease)"
+            echo "                       build an APK without a phone"
+          '';
+        });
       });
 }

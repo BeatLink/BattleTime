@@ -1,16 +1,22 @@
-# Runs the tests with coverage, the type check, the lint, the CLI build and the Nix package on each push and pull request.
-name: CI
+# Runs the companion's tests with coverage, the type check, the lint, the CLI build, the Rust core and the Nix package whenever companion/ or the flake changes.
+name: Companion
 
 on:
   push:
-    branches: [main]
+    branches: [master]
+    paths: ["companion/**", "flake.nix", "flake.lock", ".github/workflows/companion.yml"]
   pull_request:
+    paths: ["companion/**", "flake.nix", "flake.lock", ".github/workflows/companion.yml"]
   workflow_dispatch:
 
-# A newer push to a pull request replaces its older run; every commit on main keeps its own result.
+# A newer push to a pull request replaces its older run; every commit on master keeps its own result.
 concurrency:
-  group: ci-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pull-request' || github.sha }}
+  group: companion-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pull-request' || github.sha }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: companion
 
 jobs:
   checks:
@@ -22,6 +28,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: companion/package-lock.json
       - name: Install the dependencies
         run: npm ci
       - name: Run the tests with coverage and check the floors
@@ -36,8 +43,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage
-          path: coverage/
+          name: companion-coverage
+          path: companion/coverage/
 
   rust:
     name: Rust tests and clippy
@@ -49,9 +56,9 @@ jobs:
       - name: Stand in for the web export
         run: mkdir -p dist && echo '<!doctype html>' > dist/index.html
       - name: Run the tests
-        run: nix develop --command cargo test --workspace
+        run: nix develop ..#companion --command cargo test --workspace
       - name: Run clippy
-        run: nix develop --command cargo clippy --workspace --all-targets -- -D warnings
+        run: nix develop ..#companion --command cargo clippy --workspace --all-targets -- -D warnings
 
   nix:
     name: Nix package
@@ -61,4 +68,4 @@ jobs:
       - uses: cachix/install-nix-action@v31
       # Fails when package-lock.json changes without npmDepsHash in flake.nix.
       - name: Build the desktop app and command line tool
-        run: nix build .#default --print-build-logs
+        run: nix build ..#companion --print-build-logs
