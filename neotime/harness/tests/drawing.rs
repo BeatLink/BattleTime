@@ -306,7 +306,7 @@ fn the_settings_list_scrolls_with_the_panel_and_shows_what_drawing_afresh_would(
     let sent_going_up = drag_drawing_each_move(&mut app, &mut watch, 60, 160);
 
     // Only the band of the list scrolls, and each move draws a handful of rows rather than the list.
-    assert_eq!(watch.scrolling_band(), (42, 232));
+    assert_eq!(watch.scrolling_band(), (8, 232));
     let most_sent = sent_going_down
         .iter()
         .chain(&sent_going_up)
@@ -641,7 +641,7 @@ fn a_list_opened_after_a_scrolled_launcher_still_scrolls_with_the_panel() {
     assert_eq!(watch.pixels_unlike(&settings.fresh_frame()), 0);
     let sent = drag_drawing_each_move(&mut settings, &mut watch, 220, 120);
 
-    assert_eq!(watch.scrolling_band(), (42, 232));
+    assert_eq!(watch.scrolling_band(), (8, 232));
     assert!(
         sent.iter().all(|&pixels| pixels <= 6 * SIDE + SCROLL_BAR_PIXELS),
         "{sent:?}"

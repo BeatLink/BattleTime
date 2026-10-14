@@ -69,6 +69,8 @@ const ICON_SYMBOLS = {
   none: " ",
   pine_logo: "🌲",
   info: "ℹ",
+  remote: "🎛",
+  note: "📝",
 } as const;
 
 export type IconName = keyof typeof ICON_SYMBOLS;

@@ -65,6 +65,8 @@ export const LIBRARY_ICON_NAMES = [
   'weather_night_cloudy',
   'pine_logo',
   'info',
+  'remote',
+  'note',
 ] as const;
 
 export type LibraryIconName = (typeof LIBRARY_ICON_NAMES)[number];

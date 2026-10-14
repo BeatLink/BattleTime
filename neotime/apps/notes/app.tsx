@@ -28,6 +28,6 @@ export default define_app({
   id: "notes",
   name: "Notes",
   group: "phone",
-  icon: icons.info,
+  icon: icons.note,
   screens: { main: Note },
 });

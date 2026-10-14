@@ -135,10 +135,6 @@ function SwitchRow(props: { title: string; value: boolean; onChange: () => void 
 function SettingsList() {
   return (
     <Screen padding={8} gap={6}>
-      <Row gap={6} height={28}>
-        <Icon icon={icons.settings} size={22} color="accent" />
-        <Label color="muted">Settings</Label>
-      </Row>
       <Scroll grow={1} gap={6}>
         <ChoiceRow title="Brightness" value={brightness_name.value} onClick={() => go("brightness")} />
         <ChoiceRow title="Screen off" value={timeout_text.value} onClick={() => go("timeout")} />

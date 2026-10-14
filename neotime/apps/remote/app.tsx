@@ -90,6 +90,6 @@ export default define_app({
   id: "remote",
   name: "Remote",
   group: "phone",
-  icon: icons.phone,
+  icon: icons.remote,
   screens: { main: Remote },
 });

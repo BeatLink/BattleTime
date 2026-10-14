@@ -298,7 +298,7 @@ Every angle, in every widget and function, is in degrees clockwise from twelve o
 ### Shared library images and icons
 
 Besides the system icons, the shared library holds a `pine_logo` image and icons for `alarm`,
-`info`, `weather_night_clear`, `weather_night_cloudy` and `none`, the empty icon.
+`info`, `remote`, `note`, `weather_night_clear`, `weather_night_cloudy` and `none`, the empty icon.
 
 `library_icon(index)`, from `neotime/icons`, gives the icon at that place in the library's own
 order, `ICON_NAMES` in `compiler/src/types.rs`, or `none` outside it, for an icon chosen by number

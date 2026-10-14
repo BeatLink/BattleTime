@@ -34,7 +34,8 @@ describe('the remote layout file', () => {
   });
 
   it('numbers the last icon in the library by its place too', () => {
-    expect(Array.from(encodeRemoteLayout(['info']))).toEqual([1, 1, LIBRARY_ICON_NAMES.length - 1]);
+    const last = LIBRARY_ICON_NAMES[LIBRARY_ICON_NAMES.length - 1];
+    expect(Array.from(encodeRemoteLayout([last]))).toEqual([1, 1, LIBRARY_ICON_NAMES.length - 1]);
   });
 
   it('takes nine buttons but refuses a tenth', () => {
