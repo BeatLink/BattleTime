@@ -135,8 +135,8 @@ export const settings = {
   chimes: signal(0),
   /** The preset theme in use, from 0 in the watch's order, or -1 for colours of the user's own. */
   theme: signal(0),
-  /** Whether the watch takes firmware updates from a phone. */
-  allows_updates: signal(true),
+  /** Whether the watch takes firmware updates and app installs from a phone: 0 off, 1 on, 2 on until the next restart. */
+  allows_updates: signal(1),
   /** What turns a dark screen on besides the button: 0 nothing, 1 a tap, 2 a double tap. */
   wake_on_touch: signal(1),
   /** Whether alarms and timers still ring in do not disturb. */
@@ -189,6 +189,9 @@ export const reset_reason = signal("power on");
 
 /** The day the firmware was built, such as `2026-10-13`. */
 export const firmware_build_date = signal("2026-10-13");
+
+/** Whether the bootloader keeps the running firmware: 0 confirmed, 1 on trial until confirmed, 2 rolled back to it after an update failed. */
+export const firmware_state = signal(0);
 
 /** The bootloader's version and commit, or `""` when it carries no version record. */
 export const bootloader_version = signal("0.1.0+preview");
@@ -997,6 +1000,16 @@ export function start_heart_rate() {
 
 export function stop_heart_rate() {
   emit({ kind: "stop_heart_rate" });
+}
+
+/** Tells the bootloader to keep a firmware on trial, so a restart no longer rolls it back. Needs `settings`. */
+export function confirm_firmware() {
+  emit({ kind: "confirm_firmware" });
+}
+
+/** Restarts a firmware on trial without confirming it, so the bootloader brings back the one before. Needs `settings`. */
+export function roll_back_firmware() {
+  emit({ kind: "roll_back_firmware" });
 }
 
 /** Starts the trip count in `step_history` again from zero. */

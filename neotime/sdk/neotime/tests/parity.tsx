@@ -19,6 +19,7 @@ import {
   current_navigation,
   current_weather,
   firmware_build_date,
+  firmware_state,
   firmware_version,
   flash_id,
   free_heap_bytes,
@@ -224,7 +225,7 @@ export function set_fake_system_values() {
   settings.always_on_screen.value = false;
   settings.chimes.value = 0;
   settings.theme.value = 0;
-  settings.allows_updates.value = true;
+  settings.allows_updates.value = 1;
   settings.wake_on_touch.value = 1;
   settings.alarms_in_do_not_disturb.value = true;
   settings.heart_rate_interval.value = 0;
@@ -246,6 +247,7 @@ export function set_fake_system_values() {
   reset_reason.value = "watchdog";
   // As harness/src/fake_system.rs starts them.
   firmware_build_date.value = "2026-01-04";
+  firmware_state.value = 0;
   bootloader_version.value = "0.1.0+0c4e2d1";
   bootloader_build_date.value = "2025-12-20";
   bootloader_crc.value = 0x0c4e2d17;

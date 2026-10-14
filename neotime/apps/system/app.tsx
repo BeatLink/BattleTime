@@ -6,6 +6,8 @@
 // the charge, whether it is charging, full, low or critical in its colour, the voltage and a warning
 // to charge below 10 %. The shell opens straight onto it when the charger is plugged in or out, or the
 // charge goes low.
+// The system page also says whether the bootloader keeps the firmware, and while it is on trial
+// offers Confirm and Roll back, as InfiniTime's FirmwareValidation screen does.
 // The firmware gives chip IDs and addresses as numbers, and this app writes them in hex.
 // The engine's page bar along the bottom shows which page is on show.
 
@@ -19,8 +21,10 @@ import {
   bootloader_crc,
   bootloader_version,
   computed,
+  confirm_firmware,
   define_app,
   firmware_build_date,
+  firmware_state,
   firmware_version,
   flash_id,
   format_duration,
@@ -32,6 +36,7 @@ import {
   now,
   range,
   reset_reason,
+  roll_back_firmware,
   stack_overflows,
   started_at,
   pad_start,
@@ -46,7 +51,7 @@ import {
 } from "neotime";
 import { Header } from "neotime/components";
 import { icons } from "neotime/icons";
-import { Column, Label, Page, Pages, Row, Screen } from "neotime/widgets";
+import { Button, Column, Label, Page, Pages, Row, Screen } from "neotime/widgets";
 
 // ============================================================================
 // State
@@ -229,6 +234,18 @@ const free_storage_text = computed(() => {
 // System page
 // ============================================================================
 
+/** What the bootloader thinks of the running firmware, in the order `firmware_state` numbers it. */
+const FIRMWARE_STATE_NAMES = ["Confirmed", "On trial", "Rolled back"];
+const FIRMWARE_ON_TRIAL = 1;
+
+/** Each of the two firmware buttons, side by side across the page. */
+const FIRMWARE_BUTTON_WIDTH = 109;
+const FIRMWARE_BUTTON_HEIGHT = 36;
+
+const firmware_state_name = computed(() => FIRMWARE_STATE_NAMES[firmware_state.value]);
+
+const firmware_on_trial = computed(() => firmware_state.value === FIRMWARE_ON_TRIAL);
+
 /** A fact whose value may be long, on its own line under its name. */
 function LongFact(props: { name: string; value: string }) {
   return (
@@ -259,6 +276,34 @@ function SystemPage() {
       <Header title="System" icon={icons.info} />
       <LongFact name="Firmware" value={firmware_version.value} />
       <Fact name="Built" value={firmware_build_date.value} />
+      <Fact name="State" value={firmware_state_name.value} />
+      {firmware_on_trial.value && (
+        <Label font="small" color="warning">
+          Any restart rolls back
+        </Label>
+      )}
+      {firmware_on_trial.value && (
+        <Row gap={6}>
+          <Button
+            width={FIRMWARE_BUTTON_WIDTH}
+            height={FIRMWARE_BUTTON_HEIGHT}
+            font="small"
+            background="accent"
+            onClick={confirm_firmware}
+          >
+            Confirm
+          </Button>
+          <Button
+            width={FIRMWARE_BUTTON_WIDTH}
+            height={FIRMWARE_BUTTON_HEIGHT}
+            font="small"
+            background="danger"
+            onClick={roll_back_firmware}
+          >
+            Roll back
+          </Button>
+        </Row>
+      )}
       <Fact name="Uptime" value={uptime_text.value} />
       <LongFact name="Last restart" value={reset_reason.value} />
     </Page>

@@ -12,7 +12,7 @@ extern crate alloc;
 use core::fmt::Write;
 
 use neotime_runtime::{preset_matching, preset_named, PresetTheme, Theme, ThemeColor, PRESET_THEMES};
-use neotime_settings::{Setting, Settings};
+use neotime_settings::{allows_updates, Setting, Settings};
 use serde::Deserialize;
 use serde_json_core::str::{EscapedStr, EscapedStringFragment};
 
@@ -53,8 +53,11 @@ pub const MOST_LINE_BYTES: usize = 640;
 /// What the report calls a theme that matches no preset.
 pub const CUSTOM_THEME: &str = "custom";
 
+/// The longest line the watch sends, newline included, which leaves room for the settings reply to grow.
+pub const MOST_REPLY_BYTES: usize = 704;
+
 /// One line the watch sends, newline included.
-pub type ReplyLine = heapless::String<MOST_LINE_BYTES>;
+pub type ReplyLine = heapless::String<MOST_REPLY_BYTES>;
 
 // ============================================================================
 // Lines
@@ -227,7 +230,12 @@ enum Shape {
     TrueOrFalse,
     /// `"Metric"` for 1 and `"Imperial"` for 0, as the wasp-os companion writes units.
     Units,
+    /// Whether updates are on, then a second key saying whether only until the next restart.
+    Updates,
 }
+
+/// The key that turns updates on only until the next restart, written after `updates`.
+const UPDATES_UNTIL_RESTART: &str = "updates_until_restart";
 
 /// Each setting's key, the same names the wasp-os companion's settings screen uses where it has one.
 const KEYS: [(Setting, &str, Shape); Setting::COUNT] = [
@@ -240,7 +248,7 @@ const KEYS: [(Setting, &str, Shape); Setting::COUNT] = [
     (Setting::Chimes, "chimes", Shape::Number),
     (Setting::DoNotDisturb, "do_not_disturb", Shape::TrueOrFalse),
     (Setting::Bluetooth, "bluetooth", Shape::TrueOrFalse),
-    (Setting::AllowsUpdates, "updates", Shape::TrueOrFalse),
+    (Setting::AllowsUpdates, "updates", Shape::Updates),
     (Setting::WakeOnTouch, "wake_on_touch", Shape::Number),
     (Setting::AlarmsInDoNotDisturb, "alarms_in_dnd", Shape::TrueOrFalse),
     (Setting::HeartRateInterval, "heart_rate_interval", Shape::Number),
@@ -284,6 +292,8 @@ struct Envelope<'line> {
     bluetooth: Option<bool>,
     #[serde(default)]
     updates: Option<bool>,
+    #[serde(default)]
+    updates_until_restart: Option<bool>,
     #[serde(default)]
     wake_on_touch: Option<i64>,
     #[serde(default)]
@@ -334,7 +344,10 @@ impl Envelope<'_> {
                 Setting::Chimes => number(self.chimes),
                 Setting::DoNotDisturb => self.do_not_disturb.map(i32::from),
                 Setting::Bluetooth => self.bluetooth.map(i32::from),
-                Setting::AllowsUpdates => self.updates.map(i32::from),
+                Setting::AllowsUpdates => match self.updates_until_restart {
+                    Some(true) => Some(allows_updates::UNTIL_RESTART),
+                    _ => self.updates.map(i32::from),
+                },
                 Setting::WakeOnTouch => number(self.wake_on_touch),
                 Setting::AlarmsInDoNotDisturb => self.alarms_in_dnd.map(i32::from),
                 Setting::HeartRateInterval => number(self.heart_rate_interval),
@@ -532,6 +545,12 @@ pub fn settings_report(theme: &Theme, settings: &Settings) -> ReplyLine {
         let _ = match shape {
             Shape::Number => write!(line, ",\"{key}\":{value}"),
             Shape::TrueOrFalse => write!(line, ",\"{key}\":{}", value != 0),
+            Shape::Updates => write!(
+                line,
+                ",\"{key}\":{},\"{UPDATES_UNTIL_RESTART}\":{}",
+                value != allows_updates::OFF,
+                value == allows_updates::UNTIL_RESTART
+            ),
             Shape::Units => write!(
                 line,
                 ",\"{key}\":\"{}\"",

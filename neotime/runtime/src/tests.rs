@@ -2315,8 +2315,29 @@ fn the_watch_face_and_its_name_are_settings_numbered_108_and_109_and_stepped_by_
     assert!(!SystemValue::WatchFace.is_text());
     assert_eq!(EffectKind::from_byte(35), Some(EffectKind::StepWatchFace));
     assert_eq!(EffectKind::StepWatchFace as u8, 35);
-    assert_eq!(EffectKind::from_byte(34), None);
+    assert_eq!(EffectKind::from_byte(37), None);
     assert_eq!(EffectKind::StepWatchFace.argument_count(), 1);
+}
+
+#[test]
+fn the_firmware_state_is_value_112_and_a_system_info_value() {
+    assert_eq!(SystemValue::from_byte(112), Some(SystemValue::FirmwareState));
+    assert_eq!(SystemValue::FirmwareState as u8, 112);
+    assert_eq!(
+        SystemValue::FirmwareState.bit(),
+        SystemValue::FirmwareVersion.bit()
+    );
+    assert!(!SystemValue::FirmwareState.is_text());
+    assert!((110..112).all(|byte| SystemValue::from_byte(byte).is_none()));
+}
+
+#[test]
+fn confirming_and_rolling_back_the_firmware_are_effects_34_and_36_with_no_arguments() {
+    assert_eq!(EffectKind::from_byte(34), Some(EffectKind::ConfirmFirmware));
+    assert_eq!(EffectKind::from_byte(36), Some(EffectKind::RollBackFirmware));
+    assert_eq!(EffectKind::ConfirmFirmware as u8, 34);
+    assert_eq!(EffectKind::ConfirmFirmware.argument_count(), 0);
+    assert_eq!(EffectKind::RollBackFirmware.argument_count(), 0);
 }
 
 #[test]

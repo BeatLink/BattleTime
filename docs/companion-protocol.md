@@ -66,7 +66,7 @@ Messages travel over the Nordic UART service, as Gadgetbridge's Bangle.js driver
 - Every message is an object whose `t` names it.
 - Lines are ASCII: write any other character as `\uXXXX`.
 - A line may take several writes, and a reply several notifications of up to 20 bytes each; the
-  reader joins them until the newline. Lines are at most 640 bytes; the watch drops a longer one.
+  reader joins them until the newline. The watch reads lines of at most 640 bytes and drops a longer one; its own lines run to 704, for the full settings reply.
 - The watch ignores keys it does not know, and messages it does not handle yet. It answers a line
   it cannot read with `{"t":"error","msg":"..."}`.
 
@@ -88,7 +88,8 @@ it changes nothing. Either way the watch answers with the settings as they now a
 | `chimes` | `0` off, `1` a buzz every hour, `2` every half hour. |
 | `do_not_disturb` | `true` to silence chimes, notifications and every vibration but alarms. |
 | `bluetooth` | `false` drops the phone and stops advertising until the wearer turns it on again or the watch restarts. |
-| `updates` | `false` refuses firmware updates until turned on again. |
+| `updates` | `false` refuses firmware updates, and any change to `/apps` and `/temp` over the file service, until turned on again; `true` lets them through for good. |
+| `updates_until_restart` | `true` turns updates on only until the watch next restarts, which then starts with them off, as InfiniTime's "till reboot". It wins over `updates` when both are sent; `false` alone changes nothing. |
 | `wake_on_touch` | What turns a dark screen on besides the button: `0` nothing, `1` a tap, `2` a double tap. |
 | `alarms_in_dnd` | `false` silences alarms and timers in do not disturb too. |
 | `heart_rate_interval` | How often the watch measures the heart rate with no app asking: `0` off, `1` continuously, then `2` to `6` for every 30 seconds, minute, 5, 10 or 30 minutes. |
@@ -110,6 +111,7 @@ The reply:
  "danger":"#e74539"},"themes":["dark","light","ocean","forest","sunset","contrast"],
  "clock_24h":true,"units":"Metric","step_goal":10000,"brightness":2,"blank_after":15,
  "always_on":false,"chimes":0,"do_not_disturb":false,"bluetooth":true,"updates":true,
+ "updates_until_restart":false,
  "wake_on_touch":1,"alarms_in_dnd":true,"heart_rate_interval":0,"raise_to_wake":false,
  "lower_to_sleep":false,"shake_to_wake":false,"shake_threshold":150,"sleep_mode":false,
  "watch_face":0}

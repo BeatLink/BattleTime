@@ -68,6 +68,8 @@ pub fn effect_signature(name: &str) -> Option<(EffectKind, &'static [Type])> {
         "set_clock" => (EffectKind::SetClock, &[NUMBER, NUMBER, NUMBER]),
         "step_watch_face" => (EffectKind::StepWatchFace, &[NUMBER]),
         "open_folder" => (EffectKind::OpenFolder, &[TEXT]),
+        "confirm_firmware" => (EffectKind::ConfirmFirmware, &[]),
+        "roll_back_firmware" => (EffectKind::RollBackFirmware, &[]),
         _ => return None,
     })
 }

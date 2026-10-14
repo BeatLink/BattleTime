@@ -2,6 +2,13 @@
 open app system
 expect text "0d 03:25:00"
 expect text "2026-01-04"
+expect text "Confirmed"
+set firmware_state 1        # a firmware on trial, until confirmed or rolled back
+expect text "Any restart rolls back"
+snapshot firmware-trial
+tap "Confirm"
+expect effect confirm-firmware
+expect text "Confirmed"
 swipe left
 expect text "Discharging"
 set is_charging true

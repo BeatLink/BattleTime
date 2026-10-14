@@ -225,6 +225,7 @@ enum Request {
     Nothing,
     Open(Showing),
     Back,
+    RollBackFirmware,
 }
 
 /// The system values apps read, and the effects the shell carries out.
@@ -340,6 +341,7 @@ impl SystemValues for WatchSystem {
             SystemValue::AllocationFailures => crate::restart::allocation_failures() as Value,
             SystemValue::StackOverflows => crate::restart::stack_overflows() as Value,
             SystemValue::TaskCount => tasks::count() as Value,
+            SystemValue::FirmwareState => storage::firmware_state() as Value,
             _ => 0,
         }
     }
@@ -622,6 +624,10 @@ impl System for WatchSystem {
                 }
             }
             EffectKind::OpenFolder => self.folder_wanted = effect.text(0).map(alloc::string::String::from),
+            EffectKind::ConfirmFirmware => {
+                self.files.confirm_firmware_now();
+            }
+            EffectKind::RollBackFirmware => self.request = Request::RollBackFirmware,
             EffectKind::PrefetchFile => {
                 self.prefetch_file(effect.text(0).unwrap_or(""), effect.number(1), effect.number(2))
             }
@@ -1548,6 +1554,10 @@ impl Shell {
             Request::Nothing => {}
             Request::Open(showing) => self.go_forward(showing, Transition::Up, false),
             Request::Back => self.go_back(Transition::Down),
+            Request::RollBackFirmware => {
+                self.save_settings();
+                self.files.roll_back_firmware_now();
+            }
         }
         screen_request == Some(true)
     }

@@ -800,6 +800,15 @@ watch face, the launcher and the apps through `neotime-app-host`:
 - **Bluetooth and updates.** Turning the `bluetooth` setting off stops advertising and drops a
   connected phone; turning it on advertises again. With `allows_updates` off, `neotime-dfu` refuses
   a DFU start and the status page says "Updates are off"; an update already running carries on.
+  The storage task also locks `/apps` and `/temp` in `neotime-blefs`, so the file service refuses
+  any write, delete, new folder or move that touches them, or the root above them, while reads and
+  other folders work as before. The third value, on until the next restart, lets both through, and
+  `/settings/system` reads it back as off.
+- **Confirming a firmware from an app.** `firmware_state` comes from the boot state read at start,
+  and turns confirmed when the Bluetooth task or the shell confirms. `confirm_firmware` makes the
+  shell mark the boot state booted itself, a blocking write of one page; `roll_back_firmware` saves
+  the settings and, if the boot state still says on trial, resets, so the bootloader's ordinary
+  revert brings the firmware before back. A closed app's `roll_back_firmware` is dropped.
 - **Chimes.** With chimes on, the shell also wakes on the local hour or half hour and buzzes, twice
   on the hour and once on the half hour, unless do not disturb is on. A chime more than a minute
   late, such as after the phone moved the clock on, is skipped.

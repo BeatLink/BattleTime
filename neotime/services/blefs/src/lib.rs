@@ -11,6 +11,10 @@
 //! with exactly its total size, a write answer gives the offset of the next write, and missing files
 //! report the no-file status. The store has no folders of their own, so a folder exists through the
 //! files in it, and a new upload replaces the old file only when its last piece arrives.
+//!
+//! Top-level folders can be locked, as the firmware locks the apps while updates are off: a command
+//! that would change anything in a locked folder, the folder itself or the root above it is answered
+//! with the error status.
 
 #![no_std]
 
@@ -121,6 +125,8 @@ impl Upload {
 pub struct FileTransfer {
     reading: Option<String>,
     writing: Option<Upload>,
+    /// Top-level folders, such as `/apps`, whose files the phone may read but not change.
+    locked_folders: &'static [&'static str],
 }
 
 impl Default for FileTransfer {
@@ -134,7 +140,13 @@ impl FileTransfer {
         FileTransfer {
             reading: None,
             writing: None,
+            locked_folders: &[],
         }
+    }
+
+    /// Sets the top-level folders whose files the phone may read but not write, delete, make or move.
+    pub fn lock_folders(&mut self, folders: &'static [&'static str]) {
+        self.locked_folders = folders;
     }
 
     /// Forgets a read or write the phone left unfinished, such as when it disconnects.
@@ -173,6 +185,9 @@ impl FileTransfer {
         let Some(files) = files else {
             return failure_for(command_byte, status::ERROR).into_iter().collect();
         };
+        if self.changes_a_locked_folder(request) {
+            return failure_for(command_byte, status::ERROR).into_iter().collect();
+        }
         match command_byte {
             command::READ => vec![self.start_read(files, request, notification_room).await],
             command::READ_PACING => vec![self.continue_read(files, request, notification_room).await],
@@ -184,6 +199,56 @@ impl FileTransfer {
             command::MOVE => vec![move_entry(files, request).await],
             _ => Vec::new(),
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // Locked folders
+    // ------------------------------------------------------------------------
+
+    /// Whether a command would change a locked folder or anything in it.
+    #[inline(never)]
+    fn changes_a_locked_folder(&self, request: &[u8]) -> bool {
+        let header_size = match request.first().copied() {
+            Some(command::WRITE) => WRITE_HEADER_SIZE,
+            Some(command::DELETE) => DELETE_HEADER_SIZE,
+            Some(command::MAKE_DIRECTORY) => MAKE_DIRECTORY_HEADER_SIZE,
+            Some(command::MOVE) => MOVE_HEADER_SIZE,
+            Some(command::WRITE_DATA) => {
+                return self
+                    .writing
+                    .as_ref()
+                    .is_some_and(|upload| self.is_locked(upload.path.as_bytes()));
+            }
+            _ => return false,
+        };
+        if request.len() < header_size {
+            return false;
+        }
+        let first_length = read_u16(request, 2) as usize;
+        let first_path = request
+            .get(header_size..header_size + first_length)
+            .unwrap_or(&[]);
+        let second_path = match request[0] {
+            command::MOVE => {
+                let second_start = header_size + first_length + 1;
+                request
+                    .get(second_start..second_start + read_u16(request, 4) as usize)
+                    .unwrap_or(&[])
+            }
+            _ => &[],
+        };
+        self.is_locked(first_path) || (!second_path.is_empty() && self.is_locked(second_path))
+    }
+
+    /// Whether a path is a locked folder, inside one, or the root that holds them.
+    fn is_locked(&self, path: &[u8]) -> bool {
+        let top_folder = without_leading_slashes(path)
+            .split(|&byte| byte == b'/')
+            .next()
+            .unwrap_or(&[]);
+        self.locked_folders
+            .iter()
+            .any(|folder| top_folder.is_empty() || without_leading_slashes(folder.as_bytes()) == top_folder)
     }
 
     // ------------------------------------------------------------------------
@@ -629,6 +694,14 @@ fn directory_entry(status: u8, entry: u32, total: u32, flags: u32, size: u32, na
 }
 
 /// The failure answer each command expects, or nothing for a command the watch does not know.
+/// A path with the slashes at its start taken off.
+fn without_leading_slashes(mut bytes: &[u8]) -> &[u8] {
+    while let [b'/', rest @ ..] = bytes {
+        bytes = rest;
+    }
+    bytes
+}
+
 fn failure_for(command_byte: u8, status: u8) -> Option<Vec<u8>> {
     match command_byte {
         command::READ | command::READ_PACING => Some(read_data(status, 0, 0, &[])),

@@ -519,6 +519,38 @@ fn the_date_and_time_pages_start_from_the_local_time() {
 }
 
 // ============================================================================
+// Settings: updates
+// ============================================================================
+
+/// Scrolls the settings list down until the Updates row shows.
+fn open_updates_row() -> TestWatch {
+    let mut watch = TestWatch::open_app("settings").unwrap();
+    while !watch.shows_text("Updates") {
+        watch.swipe(Direction::Up);
+    }
+    watch
+}
+
+#[test]
+fn the_updates_row_steps_through_off_on_and_until_restart() {
+    let mut watch = open_updates_row();
+    assert!(watch.shows_text("On"), "{:?}", watch.visible_texts());
+
+    watch.tap_text("Updates");
+    watch.set_system_value(SystemValue::AllowsUpdates, 2);
+    watch.tap_text("Updates");
+
+    let chosen: Vec<i64> = watch
+        .effects_of(EffectKind::SetSetting)
+        .iter()
+        .filter(|effect| effect.text(0) == Some("allows_updates"))
+        .map(|effect| effect.number(1))
+        .collect();
+    assert_eq!(chosen, [2, 0]);
+    assert!(watch.shows_text("Temporary"), "{:?}", watch.visible_texts());
+}
+
+// ============================================================================
 // Template
 // ============================================================================
 
@@ -545,6 +577,52 @@ fn open_system_page() -> TestWatch {
     let watch = TestWatch::open_app("system").unwrap();
     assert_eq!(watch.screen_name(), Some("main"));
     watch
+}
+
+/// `firmware_state` while the bootloader waits for the firmware to be confirmed.
+const FIRMWARE_ON_TRIAL: i64 = 1;
+
+#[test]
+fn the_system_page_says_a_kept_firmware_is_confirmed_and_offers_nothing() {
+    let watch = open_system_page();
+
+    assert!(watch.shows_text("Confirmed"), "{:?}", watch.visible_texts());
+    assert!(!watch.shows_text("Roll back"));
+}
+
+#[test]
+fn a_firmware_on_trial_is_kept_with_confirm() {
+    let mut watch = open_system_page();
+    watch.set_system_value(SystemValue::FirmwareState, FIRMWARE_ON_TRIAL);
+    assert!(watch.shows_text("On trial"), "{:?}", watch.visible_texts());
+    assert!(watch.shows_text("Any restart rolls back"));
+
+    watch.tap_text("Confirm");
+
+    assert_eq!(watch.effects_of(EffectKind::ConfirmFirmware).len(), 1);
+    assert!(watch.shows_text("Confirmed"), "{:?}", watch.visible_texts());
+    assert!(!watch.shows_text("Roll back"));
+}
+
+#[test]
+fn a_firmware_on_trial_is_rolled_back_by_the_watch() {
+    let mut watch = open_system_page();
+    watch.set_system_value(SystemValue::FirmwareState, FIRMWARE_ON_TRIAL);
+
+    watch.tap_text("Roll back");
+
+    assert_eq!(watch.effects_of(EffectKind::RollBackFirmware).len(), 1);
+    assert!(watch.effects_of(EffectKind::ConfirmFirmware).is_empty());
+}
+
+#[test]
+fn a_rolled_back_firmware_says_so_and_offers_nothing() {
+    let mut watch = open_system_page();
+
+    watch.set_system_value(SystemValue::FirmwareState, 2);
+
+    assert!(watch.shows_text("Rolled back"), "{:?}", watch.visible_texts());
+    assert!(!watch.shows_text("Confirm"));
 }
 
 #[test]

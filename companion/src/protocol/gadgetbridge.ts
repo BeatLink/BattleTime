@@ -63,6 +63,10 @@ export type WatchSettingValues = {
   sleep_mode?: boolean;
   // The face to show, by the number watchFaceNumber gives for its id; 0 chooses none.
   watch_face?: number;
+  // Whether the watch takes firmware updates and app installs.
+  updates?: boolean;
+  // True turns updates on only until the watch next restarts; it wins over updates when both are sent.
+  updates_until_restart?: boolean;
 };
 
 // With no other keys the watch only reports its settings. Colours given are applied after the preset.

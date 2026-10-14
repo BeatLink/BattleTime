@@ -6,7 +6,7 @@
 // Also from InfiniTime: raise to wake, lower to sleep and shake to wake, with a screen that sets how
 // hard a shake must be by dragging an arc or by recording a shake, and sleep mode.
 // Also: what touch wakes the screen, whether alarms ring in do not disturb, Bluetooth until the next
-// restart, and whether the watch takes firmware updates.
+// restart, and whether the watch takes firmware updates, with InfiniTime's "until restart" choice.
 // Also from InfiniTime: choosing the watch face, here by stepping through the faces turned on in Software.
 // Also from InfiniTime: setting the date and the time by hand, on two pages, for when no phone has.
 // The theme is one of the watch's presets; the companion app can also set colours of the user's own.
@@ -74,6 +74,10 @@ const CHIME_NAMES = ["Off", "Every hour", "Every half hour"];
 
 const WAKE_NAMES = ["Button only", "Tap", "Double tap"];
 
+/** Whether the watch takes updates, in the order the watch numbers them, Temporary lasting until the next restart. */
+const UPDATES_NAMES = ["Off", "On", "Temporary"];
+const UPDATES_CHOICE_COUNT = 3;
+
 /** InfiniTime's background heart rate choices, in the order the watch numbers them. */
 const HEART_RATE_INTERVAL_NAMES = ["Off", "Always", "30 s", "1 min", "5 min", "10 min", "30 min"];
 const HEART_RATE_INTERVAL_COUNT = 7;
@@ -131,6 +135,8 @@ const heart_rate_interval_name = computed(() => HEART_RATE_INTERVAL_NAMES[settin
 
 const theme_name = computed(() => (settings.theme.value < 0 ? "Own" : THEME_NAMES[settings.theme.value]));
 
+const updates_name = computed(() => UPDATES_NAMES[settings.allows_updates.value]);
+
 // ============================================================================
 // Changes
 // ============================================================================
@@ -179,13 +185,15 @@ export function toggle_alarms_in_do_not_disturb() {
   set_setting("alarms_in_do_not_disturb", settings.alarms_in_do_not_disturb.value ? 0 : 1);
 }
 
+/** Steps the updates choice on: off, on, then on only until the next restart. */
+export function step_updates() {
+  set_setting("allows_updates", (settings.allows_updates.value + 1) % UPDATES_CHOICE_COUNT);
+}
+
 export function toggle_bluetooth() {
   set_bluetooth(!is_bluetooth_enabled.value);
 }
 
-export function toggle_updates() {
-  set_setting("allows_updates", settings.allows_updates.value ? 0 : 1);
-}
 
 // ============================================================================
 // Shake calibration, from InfiniTime's SettingShakeThreshold
@@ -338,7 +346,7 @@ function SettingsList() {
         <ChoiceRow title="Face" value={watch_face_name.value} onClick={() => go("watch_face")} />
         <ChoiceRow title="Theme" value={theme_name.value} onClick={() => go("theme")} />
         <SwitchRow title="Bluetooth" value={is_bluetooth_enabled.value} onChange={toggle_bluetooth} />
-        <SwitchRow title="Updates" value={settings.allows_updates.value} onChange={toggle_updates} />
+        <ChoiceRow title="Updates" value={updates_name.value} onClick={step_updates} />
         <Row padding={8} height={48} background="surface" radius={12} onClick={open_date_time}>
           <Label grow={1}>Date & time</Label>
         </Row>

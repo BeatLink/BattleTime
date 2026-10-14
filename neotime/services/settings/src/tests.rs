@@ -171,6 +171,39 @@ fn bluetooth_turns_on_again_after_a_restart() {
 }
 
 #[test]
+fn updates_on_until_the_next_restart_read_back_as_off() {
+    let mut settings = Settings::default();
+    settings
+        .set(Setting::AllowsUpdates, allows_updates::UNTIL_RESTART)
+        .unwrap();
+    let mut buffer = [0; FILE_BYTES];
+
+    let length = settings.write_file(&mut buffer);
+    let read_back = Settings::from_file(&buffer[..length]);
+
+    assert!(settings.is_on(Setting::AllowsUpdates));
+    assert_eq!(read_back.get(Setting::AllowsUpdates), allows_updates::OFF);
+}
+
+#[test]
+fn updates_take_three_choices_and_no_more() {
+    let mut settings = Settings::default();
+
+    assert_eq!(settings.get(Setting::AllowsUpdates), allows_updates::ON);
+    assert_eq!(
+        settings.set(Setting::AllowsUpdates, allows_updates::UNTIL_RESTART),
+        Ok(true)
+    );
+    assert_eq!(
+        settings.set(Setting::AllowsUpdates, 3),
+        Err(SettingError::OutOfLimits {
+            lowest: allows_updates::OFF,
+            highest: allows_updates::UNTIL_RESTART,
+        })
+    );
+}
+
+#[test]
 fn a_file_from_before_the_newer_settings_reads_them_as_their_defaults() {
     let old_file = [FILE_FORMAT, 7, 1, 0, 0, 0];
 

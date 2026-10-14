@@ -823,6 +823,131 @@ fn moving_something_missing_or_garbled_fails() {
 }
 
 // ============================================================================
+// Locked folders
+// ============================================================================
+
+const LOCKED: &[&str] = &["/apps", "/temp"];
+
+#[test]
+fn a_locked_folder_refuses_every_change_but_still_reads() {
+    let mut files = store();
+    put(&mut files, "/apps/timer/app.ntapp", b"image");
+    let mut transfer = FileTransfer::new();
+    transfer.lock_folders(LOCKED);
+
+    let write = one_answer(
+        &mut transfer,
+        &mut files,
+        &write_request("/apps/timer/app.ntapp", 0, 3),
+    );
+    let delete = one_answer(
+        &mut transfer,
+        &mut files,
+        &path_request(command::DELETE, "/apps/timer"),
+    );
+    let make = one_answer(&mut transfer, &mut files, &make_directory_request("/temp/new"));
+    let move_out = one_answer(&mut transfer, &mut files, &move_request("/apps/timer", "/old"));
+    let move_in = one_answer(&mut transfer, &mut files, &move_request("/notes/a", "/apps/a"));
+    let read = one_answer(
+        &mut transfer,
+        &mut files,
+        &read_request("/apps/timer/app.ntapp", 0, 5),
+    );
+
+    assert_eq!(write[1], status::ERROR);
+    assert_eq!(delete[1], status::ERROR);
+    assert_eq!(make[1], status::ERROR);
+    assert_eq!(move_out[1], status::ERROR);
+    assert_eq!(move_in[1], status::ERROR);
+    assert_eq!(read[1], status::OK);
+    assert_eq!(get(&mut files, "/apps/timer/app.ntapp").unwrap(), b"image");
+}
+
+#[test]
+fn a_folder_holding_a_locked_one_cannot_be_deleted_or_moved_either() {
+    let mut files = store();
+    put(&mut files, "/apps/timer/app.ntapp", b"image");
+    let mut transfer = FileTransfer::new();
+    transfer.lock_folders(LOCKED);
+
+    let delete_root = one_answer(&mut transfer, &mut files, &path_request(command::DELETE, "/"));
+    let move_root = one_answer(&mut transfer, &mut files, &move_request("/", "/backup"));
+
+    assert_eq!(delete_root[1], status::ERROR);
+    assert_eq!(move_root[1], status::ERROR);
+    assert!(get(&mut files, "/apps/timer/app.ntapp").is_some());
+}
+
+#[test]
+fn files_beside_a_locked_folder_still_change() {
+    let mut files = store();
+    let mut transfer = FileTransfer::new();
+    transfer.lock_folders(LOCKED);
+
+    upload(&mut transfer, &mut files, "/notes/shopping", b"milk");
+    upload(&mut transfer, &mut files, "/apps-list", b"x");
+
+    assert_eq!(get(&mut files, "/notes/shopping").unwrap(), b"milk");
+    assert_eq!(get(&mut files, "/apps-list").unwrap(), b"x");
+}
+
+#[test]
+fn locking_part_way_through_an_upload_stops_it() {
+    let mut files = store();
+    let mut transfer = FileTransfer::new();
+    let started = one_answer(
+        &mut transfer,
+        &mut files,
+        &write_request("/apps/new/app.ntapp", 0, 4),
+    );
+
+    transfer.lock_folders(LOCKED);
+    let piece = one_answer(&mut transfer, &mut files, &write_data_request(0, b"data"));
+
+    assert_eq!(started[1], status::OK);
+    assert_eq!(piece[1], status::ERROR);
+    assert!(get(&mut files, "/apps/new/app.ntapp").is_none());
+}
+
+#[test]
+fn data_without_a_write_is_still_a_protocol_error_while_locked() {
+    let mut files = store();
+    let mut transfer = FileTransfer::new();
+    transfer.lock_folders(LOCKED);
+
+    let answer = one_answer(&mut transfer, &mut files, &write_data_request(0, b"abc"));
+
+    assert_eq!(answer[1], status::PROTOCOL_ERROR);
+}
+
+#[test]
+fn a_move_names_its_new_path_by_its_length() {
+    let mut files = store();
+    put(&mut files, "/notes/a", b"note");
+    let mut transfer = FileTransfer::new();
+    transfer.lock_folders(LOCKED);
+    let mut request = move_request("/notes/a", "/notes/b");
+    request.extend_from_slice(b"/apps");
+
+    let answer = one_answer(&mut transfer, &mut files, &request);
+
+    assert_eq!(answer[1], status::OK);
+    assert_eq!(get(&mut files, "/notes/b").unwrap(), b"note");
+}
+
+#[test]
+fn unlocking_lets_changes_through_again() {
+    let mut files = store();
+    let mut transfer = FileTransfer::new();
+    transfer.lock_folders(LOCKED);
+    transfer.lock_folders(&[]);
+
+    upload(&mut transfer, &mut files, "/apps/timer/app.ntapp", b"image");
+
+    assert_eq!(get(&mut files, "/apps/timer/app.ntapp").unwrap(), b"image");
+}
+
+// ============================================================================
 // Without a store, and unknown commands
 // ============================================================================
 

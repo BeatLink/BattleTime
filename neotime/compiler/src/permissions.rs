@@ -70,9 +70,8 @@ pub fn effect_permission(effect: EffectKind) -> Option<Permission> {
             Permission::Phone
         }
         SendToPhone => Permission::PhoneMessages,
-        SetSetting | SetDoNotDisturb | SetBluetooth | SetAppEnabled | SetClock | StepWatchFace => {
-            Permission::Settings
-        }
+        SetSetting | SetDoNotDisturb | SetBluetooth | SetAppEnabled | SetClock | StepWatchFace
+        | ConfirmFirmware | RollBackFirmware => Permission::Settings,
         WakeScreen => Permission::Wake,
         _ => return None,
     })

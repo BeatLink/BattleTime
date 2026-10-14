@@ -14,6 +14,10 @@ swipe up
 swipe up
 swipe up
 expect text "Updates"
+tap "Updates"               # the updates row steps through off, on and until restart
+expect effect set-setting allows_updates 2
+set settings.allows_updates 2
+expect text "Temporary"
 snapshot list-end
 open app settings
 set settings.screen_timeout_seconds 15

@@ -1691,6 +1691,43 @@ fn turning_apps_on_and_off_needs_the_settings_permission() {
     assert_eq!(output.permissions, [crate::permissions::Permission::Settings]);
 }
 
+const FIRMWARE_SOURCE: &str = r#"import { confirm_firmware, firmware_state, roll_back_firmware, settings } from "neotime";
+        function Main() {
+          return (
+            <Screen>
+              <Label>{`${firmware_state.value} ${settings.allows_updates.value + 1}`}</Label>
+              <Button onClick={confirm_firmware}>Confirm</Button>
+              <Button onClick={roll_back_firmware}>Roll back</Button>
+            </Screen>
+          );
+        }"#;
+
+#[test]
+fn the_firmware_state_is_read_and_confirmed_or_rolled_back_with_the_settings_permission() {
+    use neotime_runtime::instruction::Instruction;
+    let output = compile_source(&app(FIRMWARE_SOURCE));
+    let image = compile(&app(FIRMWARE_SOURCE));
+    let image = AppImage::parse(&image).unwrap();
+
+    assert_eq!(output.permissions, [crate::permissions::Permission::Settings]);
+    assert!(image_runs(
+        &image,
+        Instruction::ReadSystem(SystemValue::FirmwareState)
+    ));
+    assert!(image_runs(
+        &image,
+        Instruction::ReadSystem(SystemValue::AllowsUpdates)
+    ));
+    assert!(image_runs(
+        &image,
+        Instruction::Effect(EffectKind::ConfirmFirmware)
+    ));
+    assert!(image_runs(
+        &image,
+        Instruction::Effect(EffectKind::RollBackFirmware)
+    ));
+}
+
 #[test]
 fn setting_the_clock_is_an_effect_that_needs_the_settings_permission() {
     use neotime_runtime::instruction::Instruction;

@@ -340,3 +340,19 @@ fn a_closed_app_never_reads_a_file_ahead_into_the_open_apps_slot() {
 
     assert!(ClosedRun::default().hold_back(&effect));
 }
+
+#[test]
+fn a_closed_app_never_rolls_the_firmware_back_but_may_confirm_it() {
+    let bytes = ImageWriter::new("updater", "Updater", AppKind::App, 1).build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let interpreter = std::boxed::Box::new(neotime_runtime::Interpreter::new());
+    let effect_of = |kind| AppEffect {
+        kind,
+        arguments: [0; neotime_runtime::instruction::MOST_EFFECT_ARGUMENTS],
+        image: &image,
+        interpreter: &interpreter,
+    };
+
+    assert!(ClosedRun::default().hold_back(&effect_of(EffectKind::RollBackFirmware)));
+    assert!(!ClosedRun::default().hold_back(&effect_of(EffectKind::ConfirmFirmware)));
+}

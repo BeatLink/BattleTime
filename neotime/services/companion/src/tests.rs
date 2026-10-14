@@ -251,6 +251,56 @@ fn every_setting_has_a_key_the_wasp_os_companion_already_knows_where_it_can() {
 }
 
 #[test]
+fn updates_turn_on_until_the_next_restart_with_a_key_of_their_own() {
+    let until_restart = br#"{"t":"settings","updates":false,"updates_until_restart":true}"#;
+    let for_good = br#"{"t":"settings","updates":true,"updates_until_restart":false}"#;
+    let neither = br#"{"t":"settings","updates_until_restart":false}"#;
+
+    let value_of = |line: &[u8]| match parse_line(line) {
+        Ok(Message::Settings(change)) => change.value(Setting::AllowsUpdates),
+        _ => panic!(),
+    };
+
+    assert_eq!(value_of(until_restart), Some(allows_updates::UNTIL_RESTART));
+    assert_eq!(value_of(for_good), Some(allows_updates::ON));
+    assert_eq!(value_of(neither), None);
+}
+
+#[test]
+fn the_reply_says_whether_updates_are_on_and_whether_only_until_the_next_restart() {
+    let mut settings = Settings::default();
+    let report = |settings: &Settings| settings_report(&DEFAULT_THEME, settings);
+
+    assert!(report(&settings).contains("\"updates\":true,\"updates_until_restart\":false"));
+    settings
+        .set(Setting::AllowsUpdates, allows_updates::UNTIL_RESTART)
+        .unwrap();
+    assert!(report(&settings).contains("\"updates\":true,\"updates_until_restart\":true"));
+    settings.set(Setting::AllowsUpdates, allows_updates::OFF).unwrap();
+    assert!(report(&settings).contains("\"updates\":false,\"updates_until_restart\":false"));
+}
+
+#[test]
+fn the_longest_settings_reply_is_whole() {
+    let mut settings = Settings::default();
+    for setting in Setting::ALL {
+        let limits = setting.limits();
+        let longest = if limits.highest > 1 {
+            limits.highest
+        } else {
+            limits.lowest
+        };
+        settings.set(setting, longest).unwrap();
+    }
+    settings.set(Setting::AllowsUpdates, allows_updates::OFF).unwrap();
+    let contrast = neotime_runtime::preset_named("contrast").unwrap().theme;
+
+    let report = settings_report(&contrast, &settings);
+
+    assert!(report.ends_with("}\n"), "{report}");
+}
+
+#[test]
 fn the_wake_gestures_and_sleep_mode_have_keys_of_their_own() {
     let line = br#"{"t":"settings","raise_to_wake":true,"lower_to_sleep":true,"shake_to_wake":false,"shake_threshold":900,"sleep_mode":true}"#;
     let Ok(Message::Settings(change)) = parse_line(line) else {
@@ -304,7 +354,7 @@ fn the_report_gives_every_setting_and_reads_back_the_same() {
 
     let report = settings_report(&DEFAULT_THEME, &settings);
 
-    assert!(report.len() < MOST_LINE_BYTES);
+    assert!(report.len() < MOST_REPLY_BYTES);
     assert!(report.contains("\"units\":\"Imperial\""), "{report}");
     assert!(report.contains("\"clock_24h\":true"), "{report}");
     assert!(report.contains("\"do_not_disturb\":false"), "{report}");

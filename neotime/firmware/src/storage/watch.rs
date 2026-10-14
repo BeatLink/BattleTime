@@ -39,7 +39,7 @@ use alloc::boxed::Box;
 use core::{
     cell::RefCell,
     future::Future,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicU8, Ordering},
 };
 
 use crate::display_dma::{start_flash_read, FlashReadInProgress, MOST_READ_EXTENTS};
@@ -186,6 +186,14 @@ pub async fn start(
     if status::recovery_was_just_installed() || status::IS_RECOVERY_BUILD {
         mode = Mode::Recovery;
     }
+    FIRMWARE_STATE.store(
+        match mode {
+            Mode::OnTrial => firmware_state::ON_TRIAL,
+            Mode::RolledBack => firmware_state::ROLLED_BACK,
+            _ => firmware_state::CONFIRMED,
+        },
+        Ordering::Relaxed,
+    );
     let identity = bootloader_identity(&mut status::BootloaderPages).map_err(|_| ());
     if let Ok(Some(crc)) = identity {
         crate::about::note_bootloader_crc(crc);
@@ -252,9 +260,71 @@ impl Confirmation {
 
     /// True once the bootloader will keep this firmware.
     pub async fn confirm(&mut self) -> bool {
-        confirm_running_firmware(&mut self.boot_state, self.alignment)
+        let kept = confirm_running_firmware(&mut self.boot_state, self.alignment)
             .await
-            .is_ok()
+            .is_ok();
+        if kept {
+            note_firmware_confirmed();
+        }
+        kept
+    }
+}
+
+/// What apps read as `firmware_state`.
+mod firmware_state {
+    pub const CONFIRMED: u8 = 0;
+    pub const ON_TRIAL: u8 = 1;
+    pub const ROLLED_BACK: u8 = 2;
+}
+
+/// The running firmware's state, set at start and changed only when a firmware on trial is confirmed.
+static FIRMWARE_STATE: AtomicU8 = AtomicU8::new(firmware_state::CONFIRMED);
+
+/// Whether the bootloader keeps the running firmware, as `firmware_state` numbers it.
+pub fn firmware_state() -> u8 {
+    FIRMWARE_STATE.load(Ordering::Relaxed)
+}
+
+/// Marks a firmware on trial as kept, and tells the open app.
+fn note_firmware_confirmed() {
+    let was = FIRMWARE_STATE.compare_exchange(
+        firmware_state::ON_TRIAL,
+        firmware_state::CONFIRMED,
+        Ordering::Relaxed,
+        Ordering::Relaxed,
+    );
+    if was.is_ok() {
+        crate::system_values::changed(&[neotime_runtime::SystemValue::FirmwareState]);
+    }
+}
+
+#[cfg_attr(not(with_shell), allow(dead_code))]
+impl Files {
+    /// The boot state page, for the shell's own confirm or rollback.
+    fn boot_state(&self) -> BootStatePage {
+        BlockingAsync::new(BlockingPartition::new(
+            self.internal_flash,
+            BOOT_STATE.start,
+            BOOT_STATE.size,
+        ))
+    }
+
+    /// Tells the bootloader to keep a firmware on trial, as the wearer asked; true once it will.
+    pub fn confirm_firmware_now(&self) -> bool {
+        let mut alignment = [0; 4];
+        let kept = block_on(confirm_running_firmware(&mut self.boot_state(), &mut alignment)).is_ok();
+        if kept {
+            note_firmware_confirmed();
+        }
+        kept
+    }
+
+    /// Restarts a firmware the boot state still says is on trial, so the bootloader brings back the one before.
+    pub fn roll_back_firmware_now(&self) {
+        let mut alignment = [0; 4];
+        if block_on(running_firmware_is_on_trial(&mut self.boot_state(), &mut alignment)) == Ok(true) {
+            cortex_m::peripheral::SCB::sys_reset();
+        }
     }
 }
 
@@ -532,6 +602,15 @@ impl FilePart {
 // Files for apps, settings and the step log
 // ============================================================================
 
+/// While updates are off the phone may not install, change or remove apps, nor run one from the temporary folder.
+fn folders_locked_by_settings() -> &'static [&'static str] {
+    const APP_FOLDERS: &[&str] = &[neotime_packages::APPS_DIRECTORY, neotime_packages::TEMPORARY_DIRECTORY];
+    match crate::settings::current().is_on(neotime_settings::Setting::AllowsUpdates) {
+        true => &[],
+        false => APP_FOLDERS,
+    }
+}
+
 /// Runs a store call to its end with its state on the heap, since a call's state can be 1.8 KB and the shell calls
 /// from deep in its stack.
 fn run_on_heap<Call: Future>(call: Call) -> Call::Output {
@@ -709,6 +788,7 @@ impl Files {
         match request {
             StorageRequest::FileTransfer { request, room } => {
                 foreground::wait_for_a_pause().await;
+                transfer.lock_folders(folders_locked_by_settings());
                 let answers = transfer.answer(Some(store), &request, room).await;
                 storage_requests::FILE_ANSWERS.send(answers).await;
             }

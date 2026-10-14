@@ -291,6 +291,12 @@ turned on and a 5 second screen timeout, then tilts the emulated accelerometer: 
 for a raised wrist after timing out, go dark for a lowered arm before the timeout, and go dark for
 two taps on the face; it needs no Bluetooth and takes about a minute.
 
+`../tools/check_firmware_trial.py [DIST [PICTURE_FOLDER]]` starts the bootloader with `dist/`'s
+firmware waiting in the update slot over the recovery firmware, lets it swap in on trial, opens the
+System app from the launcher and taps **Confirm**, then checks the boot state says booted and a
+restart keeps the firmware; in a second run it taps **Roll back** and checks the bootloader brings
+the firmware before back. It needs `tools/build_images.sh` run first and takes about three minutes.
+
 `../tools/check_set_clock.py FIRMWARE_ELF [PICTURE_FOLDER]` installs the digital face, the launcher
 and Settings, opens Settings from the launcher, scrolls to **Date & time**, moves the year and the
 hour on by one and taps **Set**, then checks that the clock kept across a reset reads that local

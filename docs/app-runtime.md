@@ -553,7 +553,9 @@ the other settings' bit, and `shake_speed`, which has bit 25 to itself since it 
 second. 108 and 109 are the settings' `watch_face`, the number of the face shown, and
 `watch_face_name`, its name as text, which share the other settings' bit. 114 to 118 are the open
 folder's `path`, its entry count and its entries' lists of `name`, `size` and `is_folder`, which
-share bit 26 of their own.
+share bit 26 of their own. 112 is `firmware_state`, whether the bootloader keeps the running
+firmware, which shares the system info bit. `allows_updates` is a number: 0 off, 1 on, 2 on until
+the next restart.
 `read system element` reads a list's elements through `SystemValues::read_element`, or
 `read_element_text` for the names, ids and notification texts, the packages' too. The location, artist, track,
 instruction, firmware version, reset reason, build dates, bootloader version, task names, watch face name, folder path and entry names are text: the system hands them
@@ -569,7 +571,8 @@ Effects, in the order `effect` numbers them, with how many arguments each takes:
 `start_heart_rate`, `stop_heart_rate`, `reset_step_trip`, `set_setting` (2), `set_do_not_disturb` (1),
 `log` (1), `request_music_state`, `set_heart_rate_led` (3), `set_bluetooth` (1),
 `request_navigation_state`, `set_app_enabled` (2), `prefetch_file` (3), `open_folder` (1), then,
-numbered 33, `set_clock` (3), and, numbered 35, `step_watch_face` (1).
+numbered 33, `set_clock` (3), then `confirm_firmware` (34), `step_watch_face` (1) (35) and
+`roll_back_firmware` (36).
 `send_to_phone`'s two arguments are texts: the channel, and the data as the JSON object the compiler
 builds, which the firmware sends as `{"t":"app","ch":...,"d":...}`.
 `vibrate_sequence` and `http_request` need arrays and more arguments, and come later.

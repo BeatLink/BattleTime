@@ -8,8 +8,15 @@ InfiniTime's BatteryInfo with PinetimeLite's charging and low battery screens.
 
 - **Swipe left** for the next page and **right** to go back. The bar along the bottom shows which
   page is on show.
-- The system page shows the **firmware** version, the day it was **built**, the **uptime** and why
-  the watch **last restarted**.
+- The system page shows the **firmware** version and commit, the day it was **built**, its
+  **state**, the **uptime** and why the watch **last restarted**.
+- The state is **Confirmed** when the bootloader keeps the firmware, **On trial** after an update
+  until something confirms it, and **Rolled back** when the last update never confirmed itself and
+  the firmware before it came back. A phone writing the time or reading anything over Bluetooth
+  confirms an update by itself, so the state is mostly Confirmed.
+- While the firmware is on trial the page warns that **any restart rolls back** and offers two
+  buttons, as InfiniTime's firmware validation screen does: **Confirm** keeps it, and **Roll back**
+  restarts at once into the firmware before it.
 - The battery page shows the charge, whether it is charging, full, low or critical in its own
   colour, and the voltage. Below 10 % off the charger it says **Charge now**.
 - While charging, the battery on the left fills up again and again.
@@ -35,6 +42,10 @@ InfiniTime's BatteryInfo with PinetimeLite's charging and low battery screens.
 ![The system page](../../neotime/harness/snapshots/screens/app-system.png)
 
 The system page, where the app opens.
+
+![The system page with a firmware on trial](../../neotime/harness/snapshots/screens/app-system-firmware-trial.png)
+
+A firmware on trial, with Confirm and Roll back.
 
 ![The battery page](../../neotime/harness/snapshots/screens/app-system-battery.png)
 

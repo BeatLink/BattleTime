@@ -77,7 +77,10 @@ document for its part instead.
     the button, with the panel asleep;
   - Bluetooth off drops the phone and stops advertising, on brings it back, and a restart turns
     it on again;
-  - with updates off a phone's DFU is refused and the status page says "Updates are off";
+  - with updates off a phone's DFU is refused and the status page says "Updates are off", and an
+    app install is refused; with Temporary both go through until the next restart;
+  - on a firmware sent and not yet confirmed, the System app's Confirm keeps it and Roll back
+    restarts into the one before;
   - a preset theme recolours the open app and the next one opened;
   - settings survive a restart, from `/settings/system` and `/settings/theme`;
   - a `settings` message from the companion app changes them and the reply lists every key.
@@ -456,8 +459,8 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### Settings
 
-- [ ] **The rest of InfiniTime's settings screens:** Shake calibration, Firmware and About. Each
-  needs its feature first.
+- [ ] **The rest of InfiniTime's settings screens:** Shake calibration and About. Each needs its
+  feature first.
 
 ### Bluetooth
 
@@ -505,7 +508,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   measurement itself, and no log of the readings is kept beside the step log.
 - [ ] **Try the beacon on the watch.** The driver's register writes match wasp-os's, but the
   emulator cannot show the LED.
-- [ ] **Run `tools/check_heart_rate.py`, `tools/check_call.py` and `tools/check_wake_gestures.py` in CI.** The emulator suites have no
+- [ ] **Run `tools/check_heart_rate.py`, `tools/check_call.py`, `tools/check_wake_gestures.py` and `tools/check_firmware_trial.py` in CI.** The emulator suites have no
   compiler to build the apps they install; the watch images job could build the install into `dist/` for them.
 
 ### UI toolkit
@@ -610,14 +613,12 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   reloader straight into its slot. Watches carry JF002's bootloader 1.0.0 and get the reloader
   through InfiniTime's DFU, which swaps it in from SPI 0x40000. Fetch both bootloaders in the
   flake and drive the real swap.
-- [ ] **Confirm or reject a new firmware** from settings, as InfiniTime's firmware screen does.
 - [ ] **Update progress as a bar.** The status page shows the kilobytes, the image size and a
   percentage in words. Draw a bar under them as well, as InfiniTime does.
 - [ ] **Give up on a stalled update.** InfiniTime aborts an update when no packet has arrived for
   10 seconds; NeoTime only aborts when the link drops.
 - [ ] **A swap progress bar on the bootloader screen.** It says "Installing firmware" for up to 30
   seconds with nothing moving. Its 20 KB has about 2.7 KB to spare.
-- [ ] **Updates on only until the next reset,** as a third choice beside the on and off switch.
 
 ### Developer tools and docs
 

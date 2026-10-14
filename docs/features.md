@@ -115,7 +115,10 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   the taps itself.
 - **Bluetooth off,** from settings or quick settings, until it is turned on again or the watch restarts, so
   a watch can never be left out of reach. Not tried on the watch yet.
-- **Updates off,** so no phone can install firmware until they are turned on again in settings.
+- **Updates off, on, or on until the next restart,** stepped through on Settings' Updates row. Off
+  refuses a phone's firmware update and any change to the installed apps over the file service,
+  until updates are turned on again. **Temporary**, InfiniTime's "till reboot", lets them through
+  only until the watch restarts, so it starts again with updates off.
 - **Chimes.** A buzz every hour, or every half hour, chosen in settings; a double buzz on the hour.
   Do not disturb silences them.
 - **Vibration** for apps that buzz, alarms and timers that ring, and notifications from the phone.
@@ -273,6 +276,12 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   screen times out.
 - **A bad update rolls itself back.** A new firmware runs on trial until it confirms itself; if it
   never does, the bootloader puts the previous firmware back.
+- **Confirm or roll back a firmware on trial** from the System app's first page, as InfiniTime's
+  firmware validation screen does. It shows the firmware's version and commit and whether it is
+  confirmed, on trial or rolled back to. While it is on trial it warns that any restart rolls back
+  and offers **Confirm**, which keeps it, and **Roll back**, which restarts at once into the
+  firmware before it. A phone writing the time or reading anything still confirms an update by
+  itself, so most updates show as confirmed by the time the page is opened.
 - **A bootloader menu on the side button.** Hold the button for about 10 seconds and the watch
   restarts into a menu: a short press moves between Start firmware, Roll back and Install recovery,
   and a one-second hold picks one. Roll back puts back the firmware the last update replaced, even

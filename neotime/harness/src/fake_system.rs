@@ -231,6 +231,8 @@ pub struct FakeSystem {
     pub packages_changed: bool,
     /// Set when an app set the clock, so the watch tells the app once the call returns.
     pub clock_changed: bool,
+    /// Set when an app confirmed the firmware on trial, so the watch tells the app once the call returns.
+    pub firmware_state_changed: bool,
     /// The notifications the watch keeps, which `notify` and the phone add to.
     pub notifications: NotificationList,
     /// The open app's name, which a notification it makes shows as its source.
@@ -286,6 +288,7 @@ impl FakeSystem {
             packages: starting_packages(),
             packages_changed: false,
             clock_changed: false,
+            firmware_state_changed: false,
             notifications: NotificationList::new(),
             app_name: String::new(),
             notifications_changed: false,
@@ -601,6 +604,11 @@ impl System for FakeSystem {
         }
         if effect.kind == EffectKind::SetClock {
             self.set_clock_by_hand(effect.number(0), effect.number(1), effect.number(2));
+        }
+        if effect.kind == EffectKind::ConfirmFirmware && self.values[SystemValue::FirmwareState as usize] == 1
+        {
+            self.values[SystemValue::FirmwareState as usize] = 0;
+            self.firmware_state_changed = true;
         }
         if let Some(line) = neotime_app_host::phone::line_for_effect(effect.kind, effect.number(0)) {
             self.phone_lines.push(line.to_string());

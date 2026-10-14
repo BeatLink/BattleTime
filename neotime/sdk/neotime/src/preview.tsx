@@ -10,6 +10,7 @@ import {
   current_navigation,
   current_weather,
   current_folder,
+  firmware_state,
   heart_rate,
   heart_rate_status,
   is_bluetooth_enabled,
@@ -205,6 +206,12 @@ function carry_out(effect: Effect) {
     }
     case "open_folder":
       current_folder.value = list_preview_folder(preview_files.peek(), effect.path as string);
+      break;
+    case "confirm_firmware":
+      if (firmware_state.peek() === 1) firmware_state.value = 0;
+      break;
+    case "roll_back_firmware":
+      if (firmware_state.peek() === 1) firmware_state.value = 2;
       break;
     case "reset_step_trip":
       step_history.value = { ...step_history.peek(), trip: 0 };

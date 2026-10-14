@@ -132,8 +132,8 @@ impl ClosedRun {
     /// Takes an effect that needs a screen, which a closed app has none of; true when it was taken.
     ///
     /// `wake_screen` and `go` become the wake request, and turning the screen off, keeping it on, the
-    /// brightness, going back, closing, opening another app and reading a file ahead are dropped. Anything else, such as a
-    /// vibration, is left for the embedder to carry out.
+    /// brightness, going back, closing, opening another app, reading a file ahead and rolling the firmware back are
+    /// dropped. Anything else, such as a vibration, is left for the embedder to carry out.
     pub fn hold_back(&mut self, effect: &AppEffect) -> bool {
         match effect.kind {
             EffectKind::WakeScreen => self.wakes = true,
@@ -144,7 +144,8 @@ impl ClosedRun {
             | EffectKind::Back
             | EffectKind::Close
             | EffectKind::OpenApp
-            | EffectKind::PrefetchFile => {}
+            | EffectKind::PrefetchFile
+            | EffectKind::RollBackFirmware => {}
             _ => return false,
         }
         true

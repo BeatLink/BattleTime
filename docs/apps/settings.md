@@ -38,7 +38,10 @@ saved on the watch, so the companion app sees it too.
 - **Theme**: one of six preset themes, each shown in its own colours. The companion app can set
   colours of your own, which show here as **Own**.
 - **Bluetooth**: off until the next restart.
-- **Updates**: whether the watch takes firmware updates.
+- **Updates**: whether the watch takes firmware updates and app installs over Bluetooth. A tap
+  steps through **On**, **Temporary** and **Off**; Temporary is on only until the watch next
+  restarts, as InfiniTime's "till reboot", so it starts again with updates off. Confirming or
+  rolling back a new firmware is on the System app's first page.
 - **Date & time** sets the clock by hand, for when no phone has, as
   InfiniTime's date and time screens do. It opens on today's date as rollers for the day, month and
   year; tap a number above or below the middle one to step it. The day stops at the month's last
@@ -55,7 +58,7 @@ The top of the list.
 
 ![The end of the settings list](../../neotime/harness/snapshots/screens/app-settings-list-end.png)
 
-The end of the list, scrolled down.
+The end of the list, scrolled down, with updates on until the next restart.
 
 ![The brightness choices](../../neotime/harness/snapshots/screens/app-settings-brightness.png)
 

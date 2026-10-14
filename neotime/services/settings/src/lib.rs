@@ -5,8 +5,9 @@
 //! limits never gets in. They are saved in `/settings/system` as records: one byte naming the
 //! setting, then its value as a little-endian `i32`. A setting this firmware does not know is
 //! skipped, so a file from older or newer firmware still reads. Bluetooth is saved too but never read
-//! back, so a restart always turns the radio on again. Sleep mode is a third state of do not
-//! disturb: turning it on turns do not disturb on, and turning do not disturb off ends it.
+//! back, so a restart always turns the radio on again. Updates on until the next restart read back as
+//! off. Sleep mode is a third state of do not disturb: turning it on turns do not disturb on, and
+//! turning do not disturb off ends it.
 
 #![no_std]
 
@@ -74,6 +75,13 @@ pub mod heart_rate_interval {
             _ => return None,
         })
     }
+}
+
+/// What `Setting::AllowsUpdates` holds, as InfiniTime's firmware update screen offers it.
+pub mod allows_updates {
+    pub const OFF: i32 = 0;
+    pub const ON: i32 = 1;
+    pub const UNTIL_RESTART: i32 = 2;
 }
 
 /// What `Setting::WakeOnTouch` holds.
@@ -176,7 +184,11 @@ impl Setting {
             Setting::Chimes => limits(chimes::OFF, chimes::EVERY_HALF_HOUR, chimes::OFF),
             Setting::DoNotDisturb => limits(0, 1, 0),
             Setting::Bluetooth => limits(0, 1, 1),
-            Setting::AllowsUpdates => limits(0, 1, 1),
+            Setting::AllowsUpdates => limits(
+                allows_updates::OFF,
+                allows_updates::UNTIL_RESTART,
+                allows_updates::ON,
+            ),
             Setting::WakeOnTouch => limits(wake_on_touch::OFF, wake_on_touch::DOUBLE_TAP, wake_on_touch::TAP),
             Setting::AlarmsInDoNotDisturb => limits(0, 1, 1),
             Setting::HeartRateInterval => limits(
@@ -358,6 +370,8 @@ impl Settings {
     }
 
     /// Reads a saved file; anything missing, unknown, out of limits or not kept across a restart keeps its default.
+    ///
+    /// Updates turned on only until the next restart read back as off.
     pub fn from_file(bytes: &[u8]) -> Settings {
         let mut settings = Settings::default();
         if let [FILE_FORMAT, records @ ..] = bytes {
@@ -368,6 +382,9 @@ impl Settings {
             .filter(|setting| !setting.survives_restart())
         {
             settings.values[setting as usize] = setting.limits().default;
+        }
+        if settings.get(Setting::AllowsUpdates) == allows_updates::UNTIL_RESTART {
+            settings.values[Setting::AllowsUpdates as usize] = allows_updates::OFF;
         }
         settings
     }

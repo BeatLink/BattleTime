@@ -111,6 +111,14 @@ The first firmware (`firmware/`) does the little an update needs and not much mo
 - confirms itself at start instead when a rollback could not help: when the replaced firmware,
   which embassy-boot keeps one page into the update slot (`Slots::previous_firmware`), has no sound header
   at all, as after a migration, or when the running image is the recovery image, which must stay;
+- lets the wearer confirm or roll back a firmware still on trial from the System app's first page,
+  as InfiniTime's firmware validation screen does. Roll back restarts without confirming, so the
+  bootloader's ordinary revert puts the firmware before back. The first Bluetooth exchange still
+  confirms by itself: waiting for the wearer instead would roll back every update whose wearer
+  restarted before thinking of the screen, and a phone that can talk to the new firmware is the
+  proof that matters most, since a firmware that cannot take the next update is the one that
+  strands a watch. So the buttons mostly matter for an update sent from a phone that went away
+  at once, or one the wearer wants gone before any phone reconnects;
 - serves the DFU service on every connection, shows progress on the screen, and resets when the
   protocol asks;
 - mounts the file system, so that an update which breaks storage is noticed on the screen;
@@ -339,3 +347,8 @@ read the replaced image from the wrong page after a swap. The plan:
 5. **Migration from InfiniTime.** The same from MCUBoot with the MCUBoot image.
 6. **Watchdog.** With the button held, the firmware must stop feeding the watchdog and the watch
    must reset into the bootloader within about five seconds.
+7. **Confirm and roll back from the System app.** `tools/check_firmware_trial.py` lets the
+   bootloader swap `dist/`'s firmware in on trial over the recovery build, opens the System app
+   through the touch panel, and taps Confirm, after which the boot state must say booted and a
+   restart keep the firmware, or Roll back, after which the bootloader must bring the recovery
+   build back with the boot state saying reverted. It installs apps, so it runs by hand, not in CI.

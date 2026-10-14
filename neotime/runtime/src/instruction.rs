@@ -99,7 +99,7 @@ pub enum SystemValue {
     FreeStorageKilobytes,
     /// Text: why the watch last restarted, such as `watchdog` or `Fault at 0x0001a2b4`.
     ResetReason,
-    /// Whether the watch takes firmware updates.
+    /// Whether the watch takes firmware updates: 0 off, 1 on, 2 on until the next restart.
     AllowsUpdates,
     /// 0 only the button wakes the screen, 1 a tap does, 2 a double tap does.
     WakeOnTouch,
@@ -186,6 +186,8 @@ pub enum SystemValue {
     WatchFace,
     /// Text: the name of the face the watch shows, or nothing with no face on.
     WatchFaceName,
+    /// Whether the bootloader keeps the running firmware: 0 confirmed, 1 on trial, 2 rolled back to it.
+    FirmwareState = 112,
     /// Text: the folder `open_folder` last listed, such as `/apps`, or nothing before the first.
     FolderPath = 114,
     /// How many entries that folder holds, folders first and then files, each by name.
@@ -331,6 +333,7 @@ impl SystemValue {
             107 => ShakeSpeed,
             108 => WatchFace,
             109 => WatchFaceName,
+            112 => FirmwareState,
             114 => FolderPath,
             115 => FolderEntryCount,
             116 => FolderEntryName,
@@ -377,7 +380,7 @@ impl SystemValue {
             | FirmwareBuildDate | BootloaderVersion | BootloaderBuildDate | BootloaderCrc
             | BluetoothAddress | FlashId | TouchChipId | TouchFirmwareVersion | AccelerometerChipId
             | FreeHeapBytes | LeastFreeHeapBytes | AllocationFailures | StackOverflows | TaskCount
-            | TaskName | TaskRuns | TaskBusyMilliseconds => SYSTEM_INFO_BIT,
+            | TaskName | TaskRuns | TaskBusyMilliseconds | FirmwareState => SYSTEM_INFO_BIT,
             CallCaller | CallState => CALL_BIT,
             FolderPath | FolderEntryCount | FolderEntryName | FolderEntrySize | FolderEntryIsFolder => {
                 FOLDER_BIT
@@ -644,8 +647,12 @@ pub enum EffectKind {
     OpenFolder = 32,
     /// Sets the wall clock to a local time: a year, a day of it from 1 and a minute of that day from 0.
     SetClock = 33,
+    /// Tells the bootloader to keep the firmware on trial.
+    ConfirmFirmware = 34,
     /// Chooses the face that many places on among the faces turned on, wrapping round, or back when negative.
     StepWatchFace = 35,
+    /// Restarts a firmware on trial without confirming it, so the bootloader brings back the one before.
+    RollBackFirmware = 36,
 }
 
 impl EffectKind {
@@ -686,7 +693,9 @@ impl EffectKind {
             31 => PrefetchFile,
             32 => OpenFolder,
             33 => SetClock,
+            34 => ConfirmFirmware,
             35 => StepWatchFace,
+            36 => RollBackFirmware,
             _ => return None,
         })
     }
@@ -706,7 +715,9 @@ impl EffectKind {
             | MeasureHeartRate
             | StartHeartRate
             | StopHeartRate
-            | ResetStepTrip => 0,
+            | ResetStepTrip
+            | ConfirmFirmware
+            | RollBackFirmware => 0,
             Vibrate | VibratePattern | SetBrightness | KeepScreenOn | Go | OpenApp | ShowToast
             | DismissNotification | MusicControl | CallControl | SetDoNotDisturb | Log | FindPhone
             | SetBluetooth | StepWatchFace | OpenFolder => 1,

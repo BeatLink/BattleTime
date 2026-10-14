@@ -25,7 +25,6 @@ import app, {
   toggle_alarms_in_do_not_disturb,
   toggle_bluetooth,
   toggle_do_not_disturb,
-  toggle_updates,
 } from "./app.tsx";
 
 let stop_scheduler = () => {};
@@ -89,21 +88,17 @@ describe("settings", () => {
     expect(is_do_not_disturb.value).toBe(true);
   });
 
-  it("turns Bluetooth, updates and alarms in do not disturb off and on again", () => {
+  it("turns Bluetooth and alarms in do not disturb off and on again", () => {
     toggle_bluetooth();
-    toggle_updates();
     toggle_alarms_in_do_not_disturb();
 
     expect(is_bluetooth_enabled.value).toBe(false);
-    expect(settings.allows_updates.value).toBe(false);
     expect(settings.alarms_in_do_not_disturb.value).toBe(false);
 
     toggle_bluetooth();
-    toggle_updates();
     toggle_alarms_in_do_not_disturb();
 
     expect(is_bluetooth_enabled.value).toBe(true);
-    expect(settings.allows_updates.value).toBe(true);
     expect(settings.alarms_in_do_not_disturb.value).toBe(true);
   });
 
@@ -141,7 +136,6 @@ describe("settings", () => {
     expect(settings.sleep_mode.value).toBe(true);
     expect(settings.alarms_in_do_not_disturb.value).toBe(false);
     expect(is_bluetooth_enabled.value).toBe(false);
-    expect(settings.allows_updates.value).toBe(false);
   });
 
   it("opens each screen of choices from its row and goes back with the button", () => {
@@ -220,6 +214,17 @@ describe("settings", () => {
     expect(settings.wake_on_touch.value).toBe(2);
     expect(settings.heart_rate_interval.value).toBe(6);
     expect(settings.step_goal.value).toBe(10500);
+  });
+
+  it("steps updates through off, on and until the next restart", () => {
+    const { container } = render(<OpenScreen />);
+
+    open_row(container, "Updates");
+    expect(settings.allows_updates.value).toBe(2);
+    open_row(container, "Updates");
+    expect(settings.allows_updates.value).toBe(0);
+    open_row(container, "Updates");
+    expect(settings.allows_updates.value).toBe(1);
   });
 
   it("turns each wake gesture on from the wake screen", () => {
