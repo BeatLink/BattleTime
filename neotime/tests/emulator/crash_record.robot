@@ -10,8 +10,9 @@ Library           screen_pixels.py
 Library           elf_symbols.py
 
 *** Variables ***
-# Erased flash near the end of the firmware slot, past the end of any firmware image.
-${UNDEFINED_INSTRUCTION_ADDRESS}    0x68FF0
+# Erased flash just past the firmware image, worked out from its size because the image grows.
+${FREE_FLASH}                       ${{ (${FIRMWARE_START} + __import__('os').path.getsize($FIRMWARE_BIN) + 0xFF) // 0x100 * 0x100 }}
+${UNDEFINED_INSTRUCTION_ADDRESS}    ${{ ${FREE_FLASH} + 0x20 }}
 # Two Thumb UDF #254 instructions, which fault on the first.
 ${UNDEFINED_INSTRUCTIONS}           0xDEFEDEFE
 # CFSR's UNDEFINSTR bit, which a UDF sets.
@@ -24,7 +25,7 @@ ${REFUSED_BYTES}                    4321
 # Zeroed words the poked panic reads as its information, high in the stack and clear of the alive marker.
 ${PANIC_INFORMATION}                0x2000FF00
 # Erased flash below the undefined instructions, for a few instructions that call the panic handler.
-${PANIC_CALL_ADDRESS}               0x68FE0
+${PANIC_CALL_ADDRESS}               ${FREE_FLASH}
 # ldr r0, [pc, #8]; ldr r1, [pc, #12]; bx r1; nops; then the two addresses those loads read.
 ${PANIC_CALL_CODE}                  0x49034802
 ${PANIC_CALL_BRANCH}                0xBF004708
