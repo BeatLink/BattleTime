@@ -9,7 +9,7 @@ Shows a text note that the NeoTime companion app keeps on the watch, read only.
   and the font's name to `/notes/font`, again whenever it changes.
 - Drag up and down to scroll through a note longer than the screen. A bar at the right edge shows
   where you are.
-- Without a note the app says to choose a text file in the companion app.
+- Without a note the app says to write or choose one in the companion app.
 - The watch reads only the lines on screen, so a long note uses no more memory than a short one.
 
 ## Screens

@@ -16,7 +16,7 @@ function Note() {
       <TextFile
         path="/notes/note.txt"
         font_path="/notes/font"
-        placeholder="No note yet. Choose a text file in the NeoTime companion app."
+        placeholder="No note yet. Write or choose one in the NeoTime companion app."
         grow={1}
         padding={8}
       />

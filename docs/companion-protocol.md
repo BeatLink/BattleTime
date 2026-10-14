@@ -254,7 +254,7 @@ file transfer above whenever the note, typed there or read from a chosen file or
 the name of the font to show it in: `small`, `normal`, `medium` or `large`, without quotes. Any other
 font file, or none, leaves the app's own font. The text is UTF-8; the watch shows tabs and carriage
 returns as spaces and other bytes as `?`, and draws only the characters its fonts have. Deleting
-`/notes/note.txt` brings back the app's hint to choose a file.
+`/notes/note.txt` brings back the app's hint to write or choose a note.
 
 ### QR code
 
