@@ -32,6 +32,7 @@ function fakeBridge(overrides: Partial<PluginBridge> = {}): PluginBridge {
   return {
     list: async () => ({ ok: true, value: [status] }),
     installPick: async () => ({ ok: true, value: null }),
+    install: async (data) => ({ ok: true, value: { ...status, manifest: { ...manifest, version: String(data.length) } } }),
     remove: async () => ({ ok: true }),
     setEnabled: async () => ({ ok: true }),
     watchApps: async () => ({ ok: true, value: [{ name: 'a.ntapp', data: [1, 2] }, { name: 'b.ntapp', data: [3] }] }),
@@ -68,6 +69,7 @@ describe('plugins', () => {
     );
     expect(await plugins.list()).toEqual([status]);
     expect(await plugins.installPick()).toBeNull();
+    expect((await plugins.install(Uint8Array.of(1, 2, 3))).manifest.version).toBe('3');
     await plugins.setEnabled('weather-demo', false);
     expect(calls).toEqual([['weather-demo', false]]);
     await expect(plugins.remove('x')).rejects.toThrow('No plugin "x" is installed.');

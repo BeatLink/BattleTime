@@ -1,5 +1,5 @@
 // Setting up a new watch: NeoTime ships with no apps, so the companion installs a watch face, the launcher
-// and the apps it bundles. The shared library comes inside the firmware, so it is never sent.
+// and the apps its bundle marks for setup; the rest of the bundle waits in the store. The shared library comes inside the firmware, so it is never sent.
 
 import { base64ToBytes } from '@/ble/encoding';
 import { BUNDLED_IMAGES, type BundledImage } from '@/bundles/watch-apps';
@@ -25,6 +25,7 @@ function rank(item: SetupItem): number {
 
 export function setupItems(bundle: BundledImage[] = BUNDLED_IMAGES): SetupItem[] {
   return bundle
+    .filter((item) => item.setup !== false)
     .map(({ file, base64 }) => {
       const image = base64ToBytes(base64);
       const header = readImageHeader(image);

@@ -198,6 +198,10 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   image how much heap it needs, and refuses one that would not fit, or that would leave the launcher
   without room for its longer list, saying why. The launcher and the last face stay on. See
   [apps.md](apps.md) and [memory-map.md](memory-map.md#how-much-heap-an-app-needs).
+- **An app store in the companion app.** Every app, face and plugin in this repository, ready to
+  install or uninstall on the watch, plus any added from files or downloaded from a GitHub
+  repository's releases. Each release, and the `apps-latest` pre-release that follows master, carries
+  them all. See [app-store.md](app-store.md).
 
 - **Notes.** Type a note in the companion app, pick a text file, or give a URL it fetches every
   minute, and the note is copied to the watch, again whenever it changes; the notes app shows it, read only and scrolled, in the font chosen in the companion app.

@@ -115,6 +115,7 @@ npm run neotime -- remote push
 npm run neotime -- launcher style folders
 npm run neotime -- apps setup
 npm run neotime -- apps install path/to/timer.ntapp
+npm run neotime -- store fetch BeatLink/NeoTime 1 apps
 npm run neotime -- apps list
 npm run neotime -- apps hide dice
 npm run neotime -- apps run path/to/prompt.ntapp --text text="Lunch now?"
@@ -457,17 +458,18 @@ terminal.
 NeoTime ships with no apps, faces or icons: a new watch shows only a help screen. When a watch with
 the packages characteristic has no face, the Watch tab offers **Set up the watch**, which installs
 a face, the launcher and the apps chosen, in that order. The images come from
-[src/bundles/watch-apps.ts](src/bundles/watch-apps.ts), generated from a folder of images compiled
-with NeoTime's `neotime-compiler`: one `.ntapp` per app (the face as `face.ntapp`) and the library
-from `neotime-compiler library -o shared.ntlib`. The images must match the firmware's runtime, so
-rebuild the bundle when the widget or instruction numbering changes.
+[src/bundles/watch-apps.ts](src/bundles/watch-apps.ts), which holds every app and face in the
+repository and the shared library, generated from the folder `tools/build_store.py` fills; the setup
+offers only those the bundle marks for it, and the rest wait in the store. The images must match the
+firmware's runtime, so rebuild the bundle when the widget or instruction numbering changes.
 
 The shared library, with its icons, fonts and the accelerometer's configuration, ships inside the
 firmware image, so a firmware update brings it and the companion never sends it. The bundle keeps
 a copy only so the screens can draw the library's icons.
 
 ```bash
-npm run import-watch-apps path/to/images
+(cd ../neotime && nix develop --command python3 -I ../tools/build_store.py)
+npm run import-watch-apps ../neotime/dist/store
 ```
 
 [src/protocol/packages.ts](src/protocol/packages.ts) installs one image: an app or face is written
@@ -476,6 +478,14 @@ characteristic, which checks it on the watch; a shared library image is refused,
 the firmware. The id and kind come from the image's
 own header ([src/protocol/app-image.ts](src/protocol/app-image.ts)). The Apps screen and
 `neotime apps` also list, hide, show and remove apps.
+
+## The store
+
+The Store screen offers every bundled app and face, and the apps, faces and plugins added from files
+or downloaded from a GitHub repository's releases and Actions builds, and installs or uninstalls
+each on the watch. `neotime store` lists the bundle and fetches from GitHub, and `neotime apps
+install <id>` installs a bundled app. [docs/app-store.md](../docs/app-store.md) describes the store,
+the files a release carries and the CI that builds them.
 
 ## Temporary apps
 

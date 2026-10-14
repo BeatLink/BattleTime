@@ -1,7 +1,7 @@
 // Watch data from the terminal: settings, alarms, steps, weather, files and backups.
 // Each command runs the same protocol code as the screen that does the same job.
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 
 import type { SettingsMessage } from '@/protocol/gadgetbridge';
@@ -33,6 +33,7 @@ import {
 } from '@/protocol/requests';
 import type { SlotRange } from '@/protocol/gadgetbridge';
 import { readStepHistory } from '@/protocol/steps';
+import { bundledOffers } from '@/services/app-store';
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
 import { fetchNote } from '@/services/note-source';
 import type { WebRequester } from '@/services/web-request';
@@ -52,7 +53,7 @@ neotime files [ls [dir]|get <path> [dest]|put <file> <path>|rm <path>|df]
 neotime note <file>|text <text>|url <url> [small|normal|medium|large]
              [--header 'Name: value']... [--user name:password] [--pin <sha256>|--insecure]
 neotime note remove
-neotime apps [list|install <image>|remove <id>|hide <id>|show <id>|setup]
+neotime apps [list|install <image|id>|remove <id>|hide <id>|show <id>|setup]
 neotime apps run <image> [--data <name>=<file>]... [--text <name>=<text>]...
 neotime apps stop|forget [id]
 neotime quick-apps [list|set <id> ...|reset]
@@ -68,7 +69,7 @@ neotime slots [fit|recovery <start> <size>|update <start>]
   weekend alarm turned off, and a bare time rings once. files uses NeoTime's
   file service; paths are absolute, such as /settings. note sends a text file
   for the watch's Notes app to show, in the font given, or removes it. apps installs a .ntapp
-  image, list shows each app with the memory it needs, hide and show
+  image or a bundled app by id, list shows each app with the memory it needs, hide and show
   turn one off and on unless the watch refuses, saying why, and setup installs the
   face, launcher and apps this tool bundles onto a new watch; the shared library comes with the firmware. apps run
   opens an image as a temporary app, on top of the screen and never installed, with each --data file or
@@ -304,6 +305,14 @@ function needText(answer: MemoryAnswer): string {
   return answer.room === null ? `; it needs ${memoryText(answer.need)}` : `; it needs ${memoryText(answer.need)} of ${memoryText(answer.room)}`;
 }
 
+// A file's image, or when no such file exists, the bundled image of the app with that id.
+export function imageToInstall(fileOrId: string): Uint8Array {
+  if (existsSync(fileOrId)) return new Uint8Array(readFileSync(fileOrId));
+  const bundled = bundledOffers().find((offer) => offer.entry.id === fileOrId);
+  if (!bundled) throw new Error(`${fileOrId} is neither a file nor an app this tool bundles; neotime store list shows those.`);
+  return bundled.data;
+}
+
 export async function apps(session: WatchSession, args: string[]) {
   const [action = 'list', first] = args;
   const packages = await session.packages();
@@ -318,9 +327,9 @@ export async function apps(session: WatchSession, args: string[]) {
       return;
     }
     case 'install': {
-      if (!first) throw new Error('Give the compiled .ntapp image.');
+      if (!first) throw new Error('Give the compiled .ntapp image, or the id of an app this tool bundles.');
       const bar = new ProgressBar();
-      const header = await installImage(await session.files(), packages, new Uint8Array(readFileSync(first)), (p) =>
+      const header = await installImage(await session.files(), packages, imageToInstall(first), (p) =>
         bar.update(p.sent, p.total, p.file),
       );
       bar.done();

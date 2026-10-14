@@ -4,7 +4,6 @@ name: NeoTime
 on:
   push:
     branches: [master]
-    tags: ["v*"]
     paths: ["neotime/**", "docs/**", "tools/**", "flake.nix", "flake.lock", ".github/workflows/neotime.yml"]
   pull_request:
     paths: ["neotime/**", "docs/**", "tools/**", "flake.nix", "flake.lock", ".github/workflows/neotime.yml"]
@@ -207,21 +206,3 @@ jobs:
           name: emulator-results
           path: emulator-results/
 
-  release:
-    # Publishes the images built above as the assets of a GitHub release, one per version tag.
-    name: Release
-    runs-on: ubuntu-latest
-    needs: watch-images
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: watch-images
-          path: dist
-      - name: Publish the images to the release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*
-          generate_release_notes: true

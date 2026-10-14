@@ -14,6 +14,7 @@ import { recovery, recoveryUsage } from './commands/recovery';
 import { remote, REMOTE_OFFLINE, remoteUsage } from './commands/remote';
 import { scan, scanUsage } from './commands/scan';
 import { diag, line, send, sendUsage } from './commands/send';
+import { store, storeUsage } from './commands/store';
 import {
   alarms,
   apps,
@@ -61,6 +62,8 @@ ${askUsage}
 ${remoteUsage}
 
 ${launcherUsage}
+
+${storeUsage}
 
 ${qrUsage}
 
@@ -158,6 +161,12 @@ async function main(argv: string[]): Promise<number> {
   try {
     if (command === 'scan') {
       await scan(session, options.timeout ?? DEFAULT_SCAN_MS);
+      return 0;
+    }
+
+    // The store lists and downloads on this computer alone.
+    if (command === 'store') {
+      await store(rest, { token: process.env.GITHUB_TOKEN || undefined });
       return 0;
     }
 

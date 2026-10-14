@@ -78,6 +78,7 @@ export default function AppsScreen() {
           it. Removing an app also deletes what it saved. The watch works out how much memory each app
           needs and refuses to turn on one that would not fit.
         </ThemedText>
+        <Button title="Open the store" onPress={() => router.push('/store')} />
         <Button title="Set up this watch" variant="secondary" onPress={() => router.push('/setup')} />
       </Card>
 

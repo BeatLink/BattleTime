@@ -641,8 +641,8 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   including type `0x08` for the recovery slot, which no client sends yet.
 - [ ] **Flashing a watch over SWD.** One image with the bootloader and the firmware, a way to fill
   the recovery slot on a watch flashed this way, and a page on probes, the SWD pins and RTT logs.
-- [ ] **Releases.** A version scheme, tagged releases carrying `dist/`, and a page saying what
-  each file is for.
+- [ ] **Releases.** A version scheme, and a page saying what each firmware file in a release is
+  for; `.github/workflows/release.yml` already publishes `dist/` and the store for each `v*` tag.
 - [ ] **How to measure memory.** Say in [memory-map.md](memory-map.md) how each figure is measured
   on the watch: flash by crate and symbol, the stack's high-water mark, and heap peaks.
 - [ ] **Firmware logic where tests reach it.** Coverage measures only the workspace. Move logic out

@@ -81,6 +81,7 @@
   const plugins = {
     list: () => call('plugins_list'),
     installPick: () => call('plugins_install_pick'),
+    install: (data) => call('plugins_install', { data }),
     remove: (id) => call('plugins_remove', { id }),
     setEnabled: (id, enabled) => call('plugins_set_enabled', { id, enabled }),
     watchApps: (id) => call('plugins_watch_apps', { id }),

@@ -72,6 +72,11 @@ npm run build-plugin -- plugins/buzz-back
 `phone/main.ts` with esbuild, copies `phone/ui/`, and writes `build/plugins/<id>.ntplugin`. In the
 desktop app, Watch, then Plugins, then Install a plugin installs it and its watch app.
 
+CI builds every plugin in `companion/plugins/` into the store's files, and each release and the
+`apps-latest` pre-release carry them, so the companion's Store screen can download and install them.
+A plugin published elsewhere reaches the store as a `.ntplugin` file on a GitHub release, or as a
+file added by hand; [app-store.md](app-store.md) describes both.
+
 ## The logic
 
 `phone/main.js` runs in QuickJS inside the companion's Rust core, on a thread of its own, so it

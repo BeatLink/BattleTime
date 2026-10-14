@@ -1290,7 +1290,9 @@ out. `nix flake check` runs the tests, the watch build, clippy and two headless 
 screenshots, one of them of the stopwatch app after a click, in a clean sandbox.
 
 The bootloader, the firmware and the reloader are outside the workspace and build only for the
-watch. `tools/build_images.sh` builds all of them and packs the update zips into `dist/`; by hand:
+watch. `tools/build_images.sh` builds all of them and packs the update zips into `dist/`, and
+`tools/build_store.py` compiles every app, face and plugin into `dist/store/` for the companion's
+store ([app-store.md](app-store.md)). The bootloader, firmware and reloader by hand:
 
 ```sh
 cd bootloader && cargo build --release

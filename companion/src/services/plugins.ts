@@ -30,6 +30,7 @@ type BridgeResult<Value> = { ok: boolean; error?: string; value?: Value };
 export type PluginBridge = {
   list(): Promise<BridgeResult<PluginStatus[]>>;
   installPick(): Promise<BridgeResult<PluginStatus | null>>;
+  install(data: number[]): Promise<BridgeResult<PluginStatus>>;
   remove(id: string): Promise<BridgeResult<void>>;
   setEnabled(id: string, enabled: boolean): Promise<BridgeResult<void>>;
   watchApps(id: string): Promise<BridgeResult<{ name: string; data: number[] }[]>>;
@@ -64,6 +65,11 @@ export class Plugins {
   // Lets the user choose a .ntplugin file; null when they cancel.
   async installPick(): Promise<PluginStatus | null> {
     return valueOf(await this.bridge.installPick());
+  }
+
+  // Installs a .ntplugin file's contents, replacing any plugin with the same id.
+  async install(data: Uint8Array): Promise<PluginStatus> {
+    return valueOf(await this.bridge.install(Array.from(data)));
   }
 
   async remove(id: string): Promise<void> {

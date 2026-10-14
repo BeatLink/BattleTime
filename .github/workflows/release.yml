@@ -1,0 +1,79 @@
+# Publishes a GitHub release for each version tag: the bootloader, firmware and reloader images, and every
+# app, face and plugin with the store's neotime-store.zip, all under one SHA256SUMS.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  watch-images:
+    name: Watch images
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: neotime
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            neotime -> target
+            neotime/bootloader -> target
+            neotime/firmware -> target
+            neotime/reloader -> target
+      - name: Build the bootloader, firmware and reloaders
+        run: nix develop --command ../tools/build_images.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: watch-images
+          path: neotime/dist/
+
+  store:
+    name: Store
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: neotime -> target
+      - name: Install the companion's dependencies, which build the plugins
+        working-directory: companion
+        run: nix develop .. --command npm ci
+      - name: Compile every app and face and pack every plugin
+        working-directory: neotime
+        run: nix develop --command python3 -I ../tools/build_store.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: neotime-store
+          path: neotime/dist/store/
+
+  publish:
+    name: Publish the release
+    needs: [watch-images, store]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: watch-images
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: neotime-store
+          path: store
+      # The firmware's images already hold the shared library, and one list of sums covers everything.
+      - name: Gather the files
+        run: |
+          rm store/shared.ntlib store/SHA256SUMS release/SHA256SUMS
+          mv store/* release/
+          (cd release && sha256sum ./* > SHA256SUMS)
+          ls -l release
+      - name: Publish them to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true

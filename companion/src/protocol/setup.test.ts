@@ -27,10 +27,17 @@ describe('setting up a new watch', () => {
     expect(items.map((item) => item.required)).toEqual([true, true, false, false]);
   });
 
-  it('reads every image this app bundles except the shared library and the temporary apps', () => {
+  it('offers only what the bundle marks for setup', () => {
+    const marked = bundle.map((item) => ({ ...item, setup: item.file !== 'dice.ntapp' }));
+    expect(setupItems(marked).map((item) => item.header.id)).toEqual(['digital', 'launcher', 'timer']);
+  });
+
+  it('reads every image this app bundles for setup except the shared library and the temporary apps', () => {
     const items = setupItems(BUNDLED_IMAGES);
-    const temporary = BUNDLED_IMAGES.filter(({ base64 }) => TEMPORARY_ONLY_IDS.has(readImageHeader(base64ToBytes(base64)).id));
-    expect(items.length).toBe(BUNDLED_IMAGES.length - 1 - temporary.length);
+    const forSetup = BUNDLED_IMAGES.filter((item) => item.setup !== false);
+    const temporary = forSetup.filter(({ base64 }) => TEMPORARY_ONLY_IDS.has(readImageHeader(base64ToBytes(base64)).id));
+    expect(items.length).toBe(forSetup.length - 1 - temporary.length);
+    expect(forSetup.length).toBeLessThan(BUNDLED_IMAGES.length);
     expect(items.some((item) => TEMPORARY_ONLY_IDS.has(item.header.id))).toBe(false);
     expect(items.some((item) => item.header.kind === 'face')).toBe(true);
     expect(items.some((item) => item.header.kind === 'library')).toBe(false);
