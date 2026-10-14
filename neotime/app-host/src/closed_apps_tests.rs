@@ -164,15 +164,15 @@ fn a_closed_app_is_recorded_with_its_next_due_time_and_forgotten_once_nothing_is
 
     closed.record("timer", &host, START_TIME);
 
-    assert_eq!(closed.next_due(""), Some(START_TIME + 5 * MINUTE));
-    assert_eq!(closed.due(START_TIME, ""), None);
-    assert_eq!(closed.due(START_TIME + 5 * MINUTE, ""), Some("timer"));
+    assert_eq!(closed.next_due(&[]), Some(START_TIME + 5 * MINUTE));
+    assert_eq!(closed.due(START_TIME, &[]), None);
+    assert_eq!(closed.due(START_TIME + 5 * MINUTE, &[]), Some("timer"));
     assert!(closed.run_bytes("timer").unwrap() > image.len() as u32);
     assert_eq!(closed.ids().collect::<Vec<_>>(), vec!["timer"]);
 
     let idle = closed_ringer(&image, NONE, &mut system);
     closed.record("timer", &idle, START_TIME);
-    assert_eq!(closed.next_due(""), None);
+    assert_eq!(closed.next_due(&[]), None);
     assert_eq!(closed.ids().count(), 0);
 }
 
@@ -184,8 +184,8 @@ fn an_open_app_is_never_recorded_and_its_entry_is_left_out() {
     let host = closed_ringer(&image, START_TIME + MINUTE, &mut system);
     closed.record("timer", &host, START_TIME);
 
-    assert_eq!(closed.next_due("timer"), None);
-    assert_eq!(closed.due(START_TIME + MINUTE, "timer"), None);
+    assert_eq!(closed.next_due(&["timer"]), None);
+    assert_eq!(closed.due(START_TIME + MINUTE, &["timer"]), None);
 
     let open = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
     closed.record("timer", &open, START_TIME);
@@ -202,11 +202,11 @@ fn the_soonest_due_app_runs_first() {
     closed.record("later", &later, START_TIME);
     closed.record("sooner", &sooner, START_TIME);
 
-    assert_eq!(closed.due(START_TIME + 3 * MINUTE, ""), Some("sooner"));
+    assert_eq!(closed.due(START_TIME + 3 * MINUTE, &[]), Some("sooner"));
     closed.forget("sooner");
-    assert_eq!(closed.due(START_TIME + 3 * MINUTE, ""), Some("later"));
+    assert_eq!(closed.due(START_TIME + 3 * MINUTE, &[]), Some("later"));
     closed.clear();
-    assert_eq!(closed.next_due(""), None);
+    assert_eq!(closed.next_due(&[]), None);
 }
 
 #[test]
@@ -277,7 +277,7 @@ fn a_passed_ring_comes_once_at_once() {
     let mut host = closed_ringer(&image, START_TIME - 3 * MINUTE, &mut system);
     let mut closed = ClosedApps::NONE;
     closed.record("timer", &host, START_TIME);
-    assert_eq!(closed.due(START_TIME, ""), Some("timer"));
+    assert_eq!(closed.due(START_TIME, &[]), Some("timer"));
 
     assert!(run_while_closed(&mut host, START_TIME, START_TIME, &mut system).is_some());
     closed.record("timer", &host, START_TIME);
@@ -292,7 +292,7 @@ fn a_closed_heart_rate_subscription_gets_the_reading_kept_for_it() {
     let mut system = RecordingSystem::default();
     let mut closed = ClosedApps::NONE;
     closed.record("heart-log", &closed_ringer(&image, NONE, &mut system), START_TIME);
-    assert_eq!(closed.next_due(""), Some(START_TIME + MINUTE));
+    assert_eq!(closed.next_due(&[]), Some(START_TIME + MINUTE));
     let checked_at = closed.checked_at("heart-log").unwrap();
 
     // Loaded as it comes due, its timers count from the record, not from the load.
@@ -355,4 +355,101 @@ fn a_closed_app_never_rolls_the_firmware_back_but_may_confirm_it() {
 
     assert!(ClosedRun::default().hold_back(&effect_of(EffectKind::RollBackFirmware)));
     assert!(!ClosedRun::default().hold_back(&effect_of(EffectKind::ConfirmFirmware)));
+}
+
+// ============================================================================
+// Holding an app's state for the phone
+// ============================================================================
+
+const HOLD: u64 = 30_000;
+
+#[test]
+fn a_held_app_is_left_out_like_the_open_one() {
+    let image = ringer_image("alarm", true);
+    let mut system = RecordingSystem::default();
+    let mut closed = ClosedApps::NONE;
+    let alarm = closed_ringer(&image, START_TIME + MINUTE, &mut system);
+    let timer = closed_ringer(&image, START_TIME + 2 * MINUTE, &mut system);
+    closed.record("alarm", &alarm, START_TIME);
+    closed.record("timer", &timer, START_TIME);
+
+    assert_eq!(closed.due(START_TIME + 3 * MINUTE, &["", "alarm"]), Some("timer"));
+    assert!(closed.is_due("alarm", START_TIME + MINUTE));
+    assert!(!closed.is_due("timer", START_TIME + MINUTE));
+    assert_eq!(closed.next_due(&["timer", "alarm"]), None);
+    // The faces still show the held alarm's next ring.
+    assert_eq!(closed.next_alarm("timer"), START_TIME + MINUTE);
+}
+
+#[test]
+fn a_hold_lasts_until_the_phone_lets_go_or_its_time_runs_out() {
+    let mut hold = StateHold::NONE;
+    assert_eq!(hold.held(0), None);
+    hold.hold("alarm", 1_000 + HOLD);
+    assert_eq!(hold.held(1_000), Some("alarm"));
+    assert_eq!(hold.ends_at(), Some(1_000 + HOLD));
+
+    hold.release("timer", true);
+    assert_eq!(hold.held(2_000), Some("alarm"));
+    hold.release("alarm", true);
+    assert_eq!(hold.held(2_000), None);
+    assert_eq!(hold.ends_at(), None);
+
+    hold.hold("alarm", 3_000 + HOLD);
+    assert_eq!(hold.held(3_000 + HOLD), None);
+    assert_eq!(hold.take_released_save(3_000 + HOLD), None);
+    assert_eq!(
+        hold.ends_at(),
+        None,
+        "a hold that ran out is ended once looked at"
+    );
+}
+
+#[test]
+fn a_save_while_held_is_dropped_when_the_phone_writes() {
+    let mut hold = StateHold::NONE;
+    assert!(!hold.keep_save("alarm", b"mine", 0), "nothing is held");
+    hold.hold("alarm", HOLD);
+    assert!(!hold.keep_save("timer", b"other", 0));
+    assert!(hold.keep_save("alarm", b"mine", 0));
+    assert_eq!(hold.take_released_save(0), None, "the hold goes on");
+    hold.release("alarm", true);
+    assert_eq!(hold.take_released_save(0), None);
+}
+
+#[test]
+fn a_save_while_held_is_handed_back_when_the_hold_ends_without_a_write() {
+    let mut hold = StateHold::NONE;
+    hold.hold("alarm", HOLD);
+    hold.keep_save("alarm", b"first", 0);
+    hold.release("alarm", false);
+    assert_eq!(hold.take_released_save(0), Some(("alarm", b"first".to_vec())));
+
+    hold.hold("alarm", HOLD);
+    hold.keep_save("alarm", b"timed out", 0);
+    assert_eq!(
+        hold.take_released_save(HOLD),
+        Some(("alarm", b"timed out".to_vec()))
+    );
+
+    hold.hold("alarm", HOLD);
+    hold.keep_save("alarm", b"link dropped", 0);
+    hold.release_all();
+    assert_eq!(
+        hold.take_released_save(0),
+        Some(("alarm", b"link dropped".to_vec()))
+    );
+    assert_eq!(hold.take_released_save(0), None);
+}
+
+#[test]
+fn holding_again_before_a_handed_back_save_is_written_keeps_it_waiting() {
+    let mut hold = StateHold::NONE;
+    hold.hold("alarm", HOLD);
+    hold.keep_save("alarm", b"mine", 0);
+    hold.release("alarm", false);
+    hold.hold("alarm", HOLD);
+    assert_eq!(hold.take_released_save(0), None);
+    hold.release_all();
+    assert_eq!(hold.take_released_save(0), Some(("alarm", b"mine".to_vec())));
 }

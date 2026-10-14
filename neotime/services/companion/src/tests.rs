@@ -96,7 +96,28 @@ fn unknown_keys_and_messages_are_passed_over() {
 fn a_state_message_names_the_app_whose_state_the_phone_rewrote() {
     assert_eq!(
         parse_line(br#"GB({"app":"alarm","t":"state"})"#),
-        Ok(Message::StateWritten { app: "alarm" })
+        Ok(Message::AppState {
+            app: "alarm",
+            step: StateStep::Written
+        })
+    );
+    assert_eq!(
+        parse_line(br#"GB({"app":"alarm","hold":true,"t":"state"})"#),
+        Ok(Message::AppState {
+            app: "alarm",
+            step: StateStep::Hold
+        })
+    );
+    assert_eq!(
+        parse_line(br#"{"t":"state","app":"alarm","hold":false}"#),
+        Ok(Message::AppState {
+            app: "alarm",
+            step: StateStep::Released
+        })
+    );
+    assert_eq!(
+        parse_line(br#"{"t":"state","hold":true}"#),
+        Err(MessageError::NotJson)
     );
     assert_eq!(parse_line(br#"{"t":"state"}"#), Err(MessageError::NotJson));
     assert_eq!(

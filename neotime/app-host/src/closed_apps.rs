@@ -68,26 +68,32 @@ impl ClosedApps {
         self.apps.iter().map(|app| app.id.as_str())
     }
 
-    /// The closed apps other than the open one, which runs its own subscriptions.
-    fn others<'table>(
-        &'table self,
-        open_id: &'table str,
-    ) -> impl Iterator<Item = &'table ClosedApp> + 'table {
-        self.apps.iter().filter(move |app| app.id != open_id)
+    /// Whether the app may run, being neither the open one nor one whose state the phone holds.
+    fn may_run(app: &ClosedApp, skipped: &[&str]) -> bool {
+        !skipped.contains(&app.id.as_str())
     }
 
-    /// When the next closed app comes due.
-    pub fn next_due(&self, open_id: &str) -> Option<Value> {
-        self.others(open_id).map(|app| app.next_due).min()
-    }
-
-    /// The closed app due soonest, if one is due by `now`.
-    pub fn due(&self, now: Value, open_id: &str) -> Option<&str> {
+    /// When the next closed app not in `skipped` comes due.
+    pub fn next_due(&self, skipped: &[&str]) -> Option<Value> {
         self.apps
             .iter()
-            .filter(|app| app.id != open_id && app.next_due <= now)
+            .filter(|app| Self::may_run(app, skipped))
+            .map(|app| app.next_due)
+            .min()
+    }
+
+    /// The closed app not in `skipped` due soonest, if one is due by `now`.
+    pub fn due(&self, now: Value, skipped: &[&str]) -> Option<&str> {
+        self.apps
+            .iter()
+            .filter(|app| Self::may_run(app, skipped) && app.next_due <= now)
             .min_by_key(|app| app.next_due)
             .map(|app| app.id.as_str())
+    }
+
+    /// Whether the app has come due by `now`, such as while the phone held its state.
+    pub fn is_due(&self, id: &str, now: Value) -> bool {
+        self.apps.iter().any(|app| app.id == id && app.next_due <= now)
     }
 
     /// The heap a run of the app needs, its image and the host's working memory.
@@ -105,8 +111,9 @@ impl ClosedApps {
 
     /// When the closed alarm app rings next, or `NONE`, as the `next_alarm` system value reads.
     pub fn next_alarm(&self, open_id: &str) -> Value {
-        self.others(open_id)
-            .find(|app| app.id == ALARM_APP_ID)
+        self.apps
+            .iter()
+            .find(|app| app.id == ALARM_APP_ID && app.id != open_id)
             .map_or(NONE, |app| app.next_due)
     }
 }
@@ -171,6 +178,85 @@ pub fn run_while_closed<Embedder: RunsClosedApps>(
     host.tick(now, system);
     let run = system.closed_run().take()?;
     run.wakes.then_some(WakeRequest { screen: run.screen })
+}
+
+// ============================================================================
+// Holding an app's state for the phone
+// ============================================================================
+
+/// The app whose saved state the phone is rewriting, which neither runs while closed nor saves until the phone is done.
+///
+/// Times are the embedder's own clock ticks, which only need to count up.
+/// A save the open app makes meanwhile waits here: the phone's write replaces it, and a hold that ends
+/// without one, by `hold: false`, the time running out or the link dropping, hands it back to write.
+#[derive(Default)]
+pub struct StateHold {
+    app: String,
+    /// When the hold runs out, or 0 once it has ended.
+    ends_at: u64,
+    waiting_save: Option<Vec<u8>>,
+}
+
+impl StateHold {
+    pub const NONE: StateHold = StateHold {
+        app: String::new(),
+        ends_at: 0,
+        waiting_save: None,
+    };
+
+    /// Holds the app's state until `ends_at`, ending a hold on any other app.
+    pub fn hold(&mut self, app: &str, ends_at: u64) {
+        // The shell writes a save handed back before the phone can hold another app, so none is dropped here.
+        if self.app != app {
+            self.app = String::from(app);
+            self.waiting_save = None;
+        }
+        self.ends_at = ends_at;
+    }
+
+    /// Ends the hold on `app`: a save that waited is dropped when the phone wrote, or else handed back to write.
+    pub fn release(&mut self, app: &str, written: bool) {
+        if self.app == app {
+            self.ends_at = 0;
+            if written {
+                self.waiting_save = None;
+            }
+        }
+    }
+
+    /// Ends any hold without a write from the phone, such as when the link drops.
+    pub fn release_all(&mut self) {
+        self.ends_at = 0;
+    }
+
+    /// The held app at `now`, if its hold has neither ended nor run out.
+    pub fn held(&self, now: u64) -> Option<&str> {
+        (now < self.ends_at).then_some(self.app.as_str())
+    }
+
+    /// When the hold runs out, if it has not ended.
+    pub fn ends_at(&self) -> Option<u64> {
+        (self.ends_at != 0).then_some(self.ends_at)
+    }
+
+    /// Keeps a save of `app` while it is held, and true when it did; otherwise the caller writes it.
+    pub fn keep_save(&mut self, app: &str, save: &[u8], now: u64) -> bool {
+        let kept = self.held(now) == Some(app);
+        if kept {
+            self.waiting_save = Some(Vec::from(save));
+        }
+        kept
+    }
+
+    /// Once the hold has ended or run out by `now`, the save it handed back, for its app, which the caller writes.
+    pub fn take_released_save(&mut self, now: u64) -> Option<(&str, Vec<u8>)> {
+        if self.held(now).is_some() {
+            return None;
+        }
+        self.ends_at = 0;
+        let save = self.waiting_save.take()?;
+        Some((self.app.as_str(), save))
+    }
 }
 
 #[cfg(test)]

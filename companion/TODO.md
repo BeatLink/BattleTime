@@ -154,11 +154,6 @@ Android 13 and later.
 [Sync](../docs/sync.md) mirrors the watch's settings, app state, steps and logs in the Rust core,
 and lets plugins read them and change their own app's state.
 
-- **A closed app's run between the companion's read and write.** The watch now runs a closed app
-  only once no store write is under way, so it always loads the state as last written. But the
-  companion reads `/apps/<id>/state`, changes it and writes it back in separate requests, so a run
-  that saves between them, such as an alarm switching itself off, is lost under the companion's
-  write. Closing that needs the write to name what it read, or the watch to apply the change itself.
 - **Untried with a watch.** The sync has run only against the core's fake watch.
 
 ## Linked companions

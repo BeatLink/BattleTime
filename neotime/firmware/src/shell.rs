@@ -48,7 +48,7 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channe
 use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_accelerometer::wake_gestures::WakeGesture;
-use neotime_app_host::closed_apps::{ClosedApps, ClosedRun};
+use neotime_app_host::closed_apps::{ClosedApps, ClosedRun, StateHold};
 use neotime_app_host::{
     folder::FolderListing,
     haptics::{self, Vibration},
@@ -646,6 +646,7 @@ impl System for WatchSystem {
 }
 
 /// Where an app's saved state lives: `/apps/<id>/state`.
+#[inline(never)]
 fn state_path(id: &str) -> heapless::String<64> {
     let mut path = heapless::String::new();
     let _ = write!(path, "{}/{}/state", neotime_packages::APPS_DIRECTORY, id);
@@ -969,7 +970,7 @@ impl Shell {
         }
         let mut buffer = vec![0; size];
         if let Ok(Some(length)) = host.save_changed_state(&mut buffer) {
-            self.files.write_now(&state_path(id), &buffer[..length]);
+            self.write_state(id, &buffer[..length]);
         }
     }
 
@@ -1241,6 +1242,7 @@ impl Shell {
         self.settings_changed();
         if changed & SystemValue::IsPhoneConnected.bit() != 0 && !phone::is_connected() {
             self.stop_temporary();
+            app_events::with_state_hold(StateHold::release_all);
         }
         if changed & SystemValue::HeartRate.bit() != 0 {
             let (beats_per_minute, confidence) = heart_rate::latest_reading();
@@ -1332,7 +1334,12 @@ impl Shell {
             AppEvent::NotificationDismissed(id) => {
                 self.system.notifications_changed |= self.system.notifications.dismiss(id);
             }
-            AppEvent::StateWritten(app) => self.state_written(&app),
+            // A hold let go of without a write leaves only a kept save to write, which the loop does next.
+            AppEvent::StateWritten(app, written) => {
+                if written {
+                    self.state_written(&app);
+                }
+            }
             AppEvent::Acceleration(reading) => self.deliver(PushedEvent::Acceleration {
                 x: reading.x_in_milli_g as Value,
                 y: reading.y_in_milli_g as Value,
@@ -1942,6 +1949,7 @@ pub async fn run_shell(
 
         // A closed app must load its whole saved state, so a store write under way, such as the phone's, ends first.
         shell.files.wait_until_free().await;
+        shell.write_released_saves();
         // A closed app that ran may have opened itself or changed the screen, so the loop draws again first.
         if shell.run_due_closed_apps() {
             if shell.follow_requests() {

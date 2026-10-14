@@ -73,7 +73,9 @@ document for its part instead.
   and leave the Alarm app open. Rewrite `/apps/alarm/state` with the hour changed to 08, as the
   companion core's `sync::pass::write_app_state` does, and send `GB({"app":"alarm","t":"state"})`.
   Expect the open app to redraw in place at 08:00 with no reset, 08:00 again after reopening it,
-  and the alarm ringing at 08:00. Repeat with the app closed; it rings at the new time.
+  and the alarm ringing at 08:00. Repeat with the app closed; it rings at the new time. Then hold
+  it with `GB({"app":"alarm","hold":true,"t":"state"})` a minute before a one-time alarm: expect
+  no ring until the plain `state` message follows, or until 30 seconds pass.
 
 - [ ] **The companion app store with the PineTime.** The store (51d5de81, b0909f02) has not
   installed anything on a real watch; no firmware change is needed. From `companion/`:

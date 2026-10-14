@@ -209,14 +209,27 @@ impl Syncer {
         Ok(settings)
     }
 
-    // Writes the app's state file, then tells the watch so an open app takes it up instead of saving over it.
+    // Holds the app's state on the watch, rewrites it, then lets go, so nothing the watch saves meanwhile is lost under the write.
     pub async fn write_app_state(&self, id: &str, changes: &Value) -> Result<Value, String> {
         let _turn = self.turn.lock().await;
-        let state = pass::write_app_state(&self.files, &self.store, id, changes).await?;
-        self.output
-            .write_to_watch(encode_for_watch(&json!({ "t": "state", "app": id })));
-        self.announce(vec![format!("apps/{id}")]);
-        Ok(state)
+        self.output.write_to_watch(encode_for_watch(
+            &json!({ "t": "state", "app": id, "hold": true }),
+        ));
+        match pass::write_app_state(&self.files, &self.store, id, changes).await {
+            Ok(state) => {
+                // An open app then takes up the new state instead of saving over it.
+                self.output
+                    .write_to_watch(encode_for_watch(&json!({ "t": "state", "app": id })));
+                self.announce(vec![format!("apps/{id}")]);
+                Ok(state)
+            }
+            Err(error) => {
+                self.output.write_to_watch(encode_for_watch(
+                    &json!({ "t": "state", "app": id, "hold": false }),
+                ));
+                Err(error)
+            }
+        }
     }
 
     fn announce(&self, changed: Vec<String>) {
@@ -349,10 +362,31 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            link.lines.lock().unwrap()[0],
-            "GB({\"app\":\"alarm\",\"t\":\"state\"})\n"
+            *link.lines.lock().unwrap(),
+            vec![
+                "GB({\"app\":\"alarm\",\"hold\":true,\"t\":\"state\"})\n",
+                "GB({\"app\":\"alarm\",\"t\":\"state\"})\n",
+            ]
         );
         assert_eq!(link.reports.lock().unwrap()[0].changed, vec!["apps/alarm"]);
+    }
+
+    #[tokio::test]
+    async fn a_failed_state_write_lets_the_watch_go_without_saying_it_wrote() {
+        let root = tempfile::tempdir().unwrap();
+        let (syncer, link) = syncer(root.path(), &FakeWatch::with(&[]));
+        assert!(syncer
+            .write_app_state("alarm", &json!({ "alarm_count": 1 }))
+            .await
+            .is_err());
+        assert_eq!(
+            *link.lines.lock().unwrap(),
+            vec![
+                "GB({\"app\":\"alarm\",\"hold\":true,\"t\":\"state\"})\n",
+                "GB({\"app\":\"alarm\",\"hold\":false,\"t\":\"state\"})\n",
+            ]
+        );
+        assert!(link.reports.lock().unwrap().is_empty());
     }
 
     #[tokio::test(start_paused = true)]

@@ -5,7 +5,9 @@
 //! and again whenever an app closes. When one comes due the shell loads it without a screen, runs
 //! what is due and saves its state. When the heap lacks room beside the open app, the open app is
 //! closed first and opened again afterwards. A run waits until no other task is in the store, so it
-//! loads the state as last written, a write from the phone included. A handler that calls
+//! loads the state as last written, a write from the phone included. While the phone holds an app's
+//! state to rewrite it, that app neither runs nor saves: a run that comes due waits for the hold to
+//! end, and a save waits with the hold, dropped if the phone writes and written if it does not. A handler that calls
 //! `wake_screen` opens its app over what is open, on the screen its `go` named, and lights the
 //! screen, as InfiniTime opens its alarm.
 
@@ -19,7 +21,7 @@ use neotime_app_host::{AppHost, Transition};
 use neotime_runtime::{SystemValue, Value};
 
 use super::{app_name_of, state_path, Shell, Showing};
-use crate::{apps, apps::Lent, clock, heart_rate};
+use crate::{app_events, apps, apps::Lent, clock, heart_rate};
 
 // ============================================================================
 // Limits
@@ -85,10 +87,14 @@ impl Shell {
             self.open(self.showing, Transition::None);
             return;
         }
+        let now = clock::utc_now();
+        // One that came due while held runs next on the new state, counting its timers from before the hold.
+        if self.system.closed_apps.is_due(id, now) {
+            return;
+        }
         if self.system.installed.place_of(id).is_none() || !self.files.runs_while_closed_now(id) {
             return;
         }
-        let now = clock::utc_now();
         let mut slot = None;
         if let Some(image) = self.load_closed_app(id, now, &mut slot) {
             if let Some(host) = &slot {
@@ -99,12 +105,42 @@ impl Shell {
         }
     }
 
-    /// When the next closed app comes due, as the shell's clock counts.
+    /// When the next closed app comes due, as the shell's clock counts, or the phone's hold runs out.
+    #[inline(never)]
     pub(super) fn next_closed_app_due(&self) -> Instant {
-        self.system
-            .closed_apps
-            .next_due(&self.system.open_app_id)
-            .map_or(Instant::MAX, clock::instant_at)
+        let now = Instant::now().as_ticks();
+        let (due, hold_ends) = app_events::with_state_hold(|hold| {
+            let held = hold.held(now).unwrap_or_default();
+            let due = self
+                .system
+                .closed_apps
+                .next_due(&[&self.system.open_app_id, held]);
+            (due, hold.ends_at())
+        });
+        let due = due.map_or(Instant::MAX, clock::instant_at);
+        due.min(hold_ends.map_or(Instant::MAX, Instant::from_ticks))
+    }
+
+    /// Writes an app's state, or keeps it with the hold while the phone is rewriting it.
+    pub(super) fn write_state(&self, id: &str, bytes: &[u8]) {
+        let now = Instant::now().as_ticks();
+        if !app_events::with_state_hold(|hold| hold.keep_save(id, bytes, now)) {
+            self.files.write_now(&state_path(id), bytes);
+        }
+    }
+
+    /// Writes the save a hold kept once the hold ended without the phone writing.
+    #[inline(never)]
+    pub(super) fn write_released_saves(&self) {
+        let now = Instant::now().as_ticks();
+        // The write happens outside the lock, which holds off interrupts.
+        let released = app_events::with_state_hold(|hold| {
+            let (id, bytes) = hold.take_released_save(now)?;
+            Some((app_events::StateWritten::try_from(id).ok()?, bytes))
+        });
+        if let Some((id, bytes)) = released {
+            self.files.write_now(&state_path(&id), &bytes);
+        }
     }
 }
 
@@ -121,12 +157,15 @@ impl Shell {
         let mut ran_any = false;
         let mut closed_for_room = false;
         let mut woke = false;
-        while let Some(id) = self
-            .system
-            .closed_apps
-            .due(now, &self.system.open_app_id)
-            .map(String::from)
-        {
+        let ticks_now = Instant::now().as_ticks();
+        while let Some(id) = app_events::with_state_hold(|hold| {
+            let held = hold.held(ticks_now).unwrap_or_default();
+            let due = self
+                .system
+                .closed_apps
+                .due(now, &[&self.system.open_app_id, held]);
+            due.map(String::from)
+        }) {
             ran_any = true;
             if self.system.installed.place_of(&id).is_none() {
                 self.system.closed_apps.forget(&id);
@@ -238,7 +277,7 @@ impl Shell {
         }
         let mut buffer = vec![0; size];
         if let Ok(Some(length)) = host.save_changed_state(&mut buffer) {
-            self.files.write_now(&state_path(id), &buffer[..length]);
+            self.write_state(id, &buffer[..length]);
         }
     }
 

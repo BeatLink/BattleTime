@@ -64,13 +64,15 @@ its copy can be a little behind.
 Changes go back the same two ways:
 
 - **Settings** are sent as a `settings` message. The watch's reply is kept as the new `settings`.
-- **App state** is changed in place. The core first reads the file again, then takes the new values,
-  keeping each value's type, length and width so the app still loads it, and writes the file back. It
-  then sends `{"t":"state","app":"<id>"}` ([companion-protocol.md](companion-protocol.md#app-state-served)).
-  The watch runs a closed app only once no store write is under way, so the run loads what was
-  written; a run that saves between the core's read and its write is still lost under the write.
-  An open app then opens again on the new state rather than saving over it, and a closed alarm or
-  timer notes its new time. A value that would not fit its width, or a list of the wrong length, is refused, and
+- **App state** is changed in place. The core first sends `{"t":"state","app":"<id>","hold":true}`
+  ([companion-protocol.md](companion-protocol.md#app-state-served)), so until it is done the watch
+  neither runs that app while closed nor saves its state. It then reads the file again, takes the new
+  values, keeping each value's type, length and width so the app still loads it, and writes the file
+  back. Last it sends `{"t":"state","app":"<id>"}`, or `"hold":false` if anything failed, so the watch
+  is never left holding. An open app then opens again on the new state rather than saving over it,
+  and a closed alarm or timer notes its new time; one that came due during the hold rings then. A save
+  the open app made during the hold is replaced by the core's write. The watch lets go by itself
+  after 30 seconds or when the link drops. A value that would not fit its width, or a list of the wrong length, is refused, and
   nothing is written.
 
 ## Sharing the file service

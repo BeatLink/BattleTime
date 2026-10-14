@@ -207,10 +207,21 @@ pub enum Message<'line> {
     NotificationDismissed { id: i64 },
     /// `slots`: where the update and recovery slots are, or a request to move them.
     Slots(SlotsRequest),
-    /// `state`: the phone rewrote this app's saved state, so an open app loads it again.
-    StateWritten { app: &'line str },
+    /// `state`: the phone holds, rewrote or lets go of this app's saved state.
+    AppState { app: &'line str, step: StateStep },
     /// A message this watch does not act on yet, by its `t`.
     Unknown { kind: &'line str },
+}
+
+/// Where the phone is in rewriting an app's saved state, from a `state` message's `hold`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StateStep {
+    /// `"hold":true`: the phone is about to read and rewrite the state, so the watch leaves it alone.
+    Hold,
+    /// No `hold`: the phone rewrote the state, so an open app loads it again.
+    Written,
+    /// `"hold":false`: the phone gave up without writing, so the watch may save the state again.
+    Released,
 }
 
 /// The settings a `settings` message changes; anything left out stays as it is.
@@ -347,6 +358,8 @@ struct Envelope<'line> {
     t: &'line str,
     #[serde(default, borrow)]
     app: Option<&'line str>,
+    #[serde(default)]
+    hold: Option<bool>,
     #[serde(default, borrow)]
     theme: Option<&'line str>,
     #[serde(default, borrow)]
@@ -538,7 +551,12 @@ pub fn parse_line(line: &[u8]) -> Result<Message<'_>, MessageError> {
         "state" => {
             return match envelope.app {
                 Some(app) if !app.is_empty() && app.len() <= MOST_APP_ID_BYTES => {
-                    Ok(Message::StateWritten { app })
+                    let step = match envelope.hold {
+                        Some(true) => StateStep::Hold,
+                        Some(false) => StateStep::Released,
+                        None => StateStep::Written,
+                    };
+                    Ok(Message::AppState { app, step })
                 }
                 _ => Err(MessageError::NotJson),
             }

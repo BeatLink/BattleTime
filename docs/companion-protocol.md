@@ -237,17 +237,28 @@ image with `neotime slots fit`, and moves one with `neotime slots recovery <star
 
 ### App state (served)
 
-`{"t":"state","app":"<id>"}` says the phone has just rewritten `/apps/<id>/state` with the file
-transfer below, as [sync.md](sync.md) describes:
+The phone rewrites `/apps/<id>/state` with the file transfer below in three steps, as
+[sync.md](sync.md) describes:
 
-- If that app is open, the watch opens it again on the new state without saving the old one. The
-  wearer sees it redrawn in place.
-- If the app is closed but runs while closed, such as an alarm, the watch notes again when it next
-  comes due.
-- Any other app reads the new state the next time it opens.
+1. `{"t":"state","app":"<id>","hold":true}` holds the app's state before the phone reads it. While
+   it is held, the watch neither runs the app while closed nor writes its state: a run that comes
+   due waits, and a save the open app makes on closing or on the screen turning off is kept aside.
+2. The phone reads the file, changes it and writes it back.
+3. `{"t":"state","app":"<id>"}` says the phone has written the file, and lets go of it:
+   - If that app is open, the watch opens it again on the new state without saving the old one. The
+     wearer sees it redrawn in place.
+   - If the app is closed but runs while closed, such as an alarm, the watch notes again when it
+     next comes due; a run that came due during the hold goes ahead at once, on the new state.
+   - Any other app reads the new state the next time it opens.
+
+   A save kept aside during the hold is dropped, since the phone's write replaced it.
+
+If the phone gives up instead, it sends `{"t":"state","app":"<id>","hold":false}`: the watch lets go
+and writes any save it kept aside. A hold also ends that way after 30 seconds, or when the link
+drops. One app is held at a time; holding another lets go of the first.
 
 The watch sends no reply. A message with no `app`, or an id longer than 32 characters, is answered
-with an `error` reply.
+with an `error` reply. A watch that knows no `hold` takes every `state` message as step 3.
 
 ### Other messages (not served yet)
 
