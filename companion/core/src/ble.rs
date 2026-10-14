@@ -131,6 +131,18 @@ pub fn subscription_key(service: &str, characteristic: &str) -> String {
     format!("{service}/{characteristic}")
 }
 
+// The adapter to use: the current one while it is not off, else the first that is on, else the first not known to be off.
+pub fn choose_adapter(states: &[Option<CentralState>], current: Option<usize>) -> Option<usize> {
+    let off = |at: usize| matches!(states.get(at), Some(Some(CentralState::PoweredOff)));
+    if let Some(current) = current.filter(|current| *current < states.len() && !off(*current)) {
+        return Some(current);
+    }
+    states
+        .iter()
+        .position(|state| matches!(state, Some(CentralState::PoweredOn)))
+        .or_else(|| (0..states.len()).find(|at| !off(*at)))
+}
+
 fn parse_uuid(text: &str) -> Result<Uuid, BleError> {
     Uuid::parse_str(text).or_else(|_| fail(format!("{text} is not a Bluetooth UUID.")))
 }
@@ -166,7 +178,9 @@ struct Scan {
 
 struct Inner {
     sink: EventSink,
-    adapter: tokio::sync::OnceCell<Adapter>,
+    // Every adapter BlueZ has, in the order of their names, and the one in use.
+    adapters: tokio::sync::OnceCell<Vec<Adapter>>,
+    chosen: Mutex<Option<usize>>,
     link: Mutex<Link>,
     scan: Mutex<Scan>,
     // Connecting, reconnecting and disconnecting take turns, so one never undoes another half way.
@@ -183,7 +197,8 @@ impl WatchBle {
         WatchBle {
             inner: Arc::new(Inner {
                 sink,
-                adapter: tokio::sync::OnceCell::new(),
+                adapters: tokio::sync::OnceCell::new(),
+                chosen: Mutex::new(None),
                 link: Mutex::new(Link::default()),
                 scan: Mutex::new(Scan::default()),
                 operation: tokio::sync::Mutex::new(()),
@@ -199,27 +214,36 @@ impl WatchBle {
     // Adapter
     // ========================================================================
 
+    // BlueZ lists adapters in no fixed order and one may be off, so the one in use is kept only while it stays on.
     async fn adapter(&self) -> Result<Adapter, BleError> {
-        let adapter = self
+        let adapters = self
             .inner
-            .adapter
+            .adapters
             .get_or_try_init(|| async {
                 let manager = Manager::new().await?;
-                let adapter = manager
-                    .adapters()
-                    .await?
-                    .into_iter()
-                    .next()
-                    .ok_or_else(|| BleError("This computer has no Bluetooth adapter.".into()))?;
-                self.follow_adapter_events(&adapter).await?;
-                Ok::<_, BleError>(adapter)
+                let mut named = Vec::new();
+                for adapter in manager.adapters().await? {
+                    let name = adapter.adapter_info().await.unwrap_or_default();
+                    self.follow_adapter_events(&adapter).await?;
+                    named.push((name, adapter));
+                }
+                named.sort_by(|a, b| a.0.cmp(&b.0));
+                Ok::<_, BleError>(named.into_iter().map(|(_, adapter)| adapter).collect::<Vec<_>>())
             })
-            .await?
-            .clone();
-        if adapter.adapter_state().await.ok() == Some(CentralState::PoweredOff) {
-            return fail("The Bluetooth adapter is powered off.");
+            .await?;
+        if adapters.is_empty() {
+            return fail("This computer has no Bluetooth adapter.");
         }
-        Ok(adapter)
+        let mut states = Vec::new();
+        for adapter in adapters {
+            states.push(adapter.adapter_state().await.ok());
+        }
+        let current = *self.inner.chosen.lock().unwrap();
+        let Some(chosen) = choose_adapter(&states, current) else {
+            return fail("The Bluetooth adapter is powered off.");
+        };
+        *self.inner.chosen.lock().unwrap() = Some(chosen);
+        Ok(adapters[chosen].clone())
     }
 
     // One task follows the adapter for the app's whole life: it reports scan results and notices a dropped link.
@@ -264,8 +288,9 @@ impl WatchBle {
 
     pub async fn stop_scan(&self) -> Result<(), BleError> {
         self.inner.scan.lock().unwrap().reporting = false;
-        if let Some(adapter) = self.inner.adapter.get() {
-            let _ = adapter.stop_scan().await;
+        let chosen = *self.inner.chosen.lock().unwrap();
+        if let (Some(adapters), Some(chosen)) = (self.inner.adapters.get(), chosen) {
+            let _ = adapters[chosen].stop_scan().await;
         }
         Ok(())
     }
@@ -712,6 +737,26 @@ mod tests {
         assert_eq!(watch_mode(&[NEOTIME_SERVICE]), "application");
         assert_eq!(watch_mode(&[NUS_SERVICE]), "application");
         assert_eq!(watch_mode(&[DFU_SERVICE]), "bootloader");
+    }
+
+    #[test]
+    fn an_adapter_that_is_off_is_passed_over() {
+        use CentralState::{PoweredOff, PoweredOn};
+        assert_eq!(
+            choose_adapter(&[Some(PoweredOff), Some(PoweredOn)], None),
+            Some(1)
+        );
+        assert_eq!(
+            choose_adapter(&[Some(PoweredOn), Some(PoweredOn)], Some(1)),
+            Some(1)
+        );
+        assert_eq!(
+            choose_adapter(&[Some(PoweredOn), Some(PoweredOff)], Some(1)),
+            Some(0)
+        );
+        assert_eq!(choose_adapter(&[None, Some(PoweredOff)], None), Some(0));
+        assert_eq!(choose_adapter(&[Some(PoweredOff)], Some(0)), None);
+        assert_eq!(choose_adapter(&[], None), None);
     }
 
     #[test]
