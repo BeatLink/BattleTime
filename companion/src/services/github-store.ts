@@ -1,6 +1,9 @@
 // Finds apps, faces and plugins on GitHub for the store: on releases, as neotime-store.zip or loose
 // .ntapp and .ntplugin files, and in the neotime-store artifact each Actions run uploads. An artifact
 // can only be downloaded with a GitHub token, even from a public repository.
+//
+// GitHub's API answers a window's fetch, but the host it redirects downloads to does not, so files
+// come down through the desktop or Android app's native requests where there are some.
 
 import { unzipSync } from 'fflate';
 
@@ -8,10 +11,15 @@ import { utf8Decode } from '@/ble/encoding';
 
 import { AppStoreError, offerFromFile, type StoreOffer, type StoreSource } from './app-store';
 import { checkRepo } from './github-firmware';
+import { fetchRequester, webRequester, type WebRequester } from './web-request';
 
 type Fetch = typeof fetch;
 
-type Options = { token?: string; fetcher?: Fetch };
+// `fetcher` lists and, unless `requester` is given, also downloads; `requester` downloads the files.
+type Options = { token?: string; fetcher?: Fetch; requester?: WebRequester };
+
+// How long one file may take to come down.
+const DOWNLOAD_TIMEOUT_MS = 60000;
 
 const API = 'https://api.github.com';
 
@@ -177,12 +185,18 @@ export function offersFromStoreZip(data: Uint8Array, source: StoreSource): Store
 // Downloading
 // ============================================================================
 
-async function download(file: StoreFile, token: string | undefined, fetcher: Fetch): Promise<Uint8Array> {
-  const response = await fetcher(file.url, { headers: headers(token, 'application/octet-stream') });
-  if (!response.ok) {
-    throw new Error(`Downloading ${file.name} failed (${response.status}).`);
+async function download(file: StoreFile, token: string | undefined, requester: WebRequester): Promise<Uint8Array> {
+  const reply = await requester({
+    method: 'GET',
+    url: file.url,
+    headers: headers(token, 'application/octet-stream'),
+    access: {},
+    timeoutMs: DOWNLOAD_TIMEOUT_MS,
+  });
+  if (reply.status < 200 || reply.status >= 300) {
+    throw new Error(`Downloading ${file.name} failed (${reply.status}).`);
   }
-  return new Uint8Array(await response.arrayBuffer());
+  return reply.body;
 }
 
 // Downloads what a release or build offers: its store zip in one go, or else each loose file.
@@ -194,14 +208,14 @@ export async function fetchStoreRelease(
   if (release.needsToken && !options.token) {
     throw new Error('GitHub only hands out Actions builds with a token. Add one in Settings.');
   }
-  const fetcher = options.fetcher ?? fetch;
+  const requester = options.requester ?? (options.fetcher ? fetchRequester(options.fetcher) : webRequester());
   const source: StoreSource = { type: 'github', repo: checkRepo(repo), release: release.title };
   if (release.bundle) {
-    return offersFromStoreZip(await download(release.bundle, options.token, fetcher), source);
+    return offersFromStoreZip(await download(release.bundle, options.token, requester), source);
   }
   const offers: StoreOffer[] = [];
   for (const file of release.files) {
-    offers.push(offerFromFile(await download(file, options.token, fetcher), source));
+    offers.push(offerFromFile(await download(file, options.token, requester), source));
   }
   return offers;
 }

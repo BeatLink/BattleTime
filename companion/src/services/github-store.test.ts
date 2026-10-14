@@ -14,7 +14,7 @@ function fakeFetch(answers: Record<string, unknown>, calls: Call[] = []): typeof
     calls.push({ url, headers: init?.headers ?? {} });
     const answer = answers[url];
     if (answer === undefined) {
-      return { ok: false, status: 404 } as Response;
+      return { ok: false, status: 404, statusText: 'Not Found', arrayBuffer: async () => new ArrayBuffer(0) } as Response;
     }
     return {
       ok: true,
@@ -166,6 +166,23 @@ describe('downloading from GitHub', () => {
     });
     expect(offers.map((offer) => offer.entry.id)).toEqual(['timer']);
     await expect(fetchStoreRelease('a/b', release, { fetcher: fakeFetch({}) })).rejects.toThrow('timer.ntapp failed (404)');
+  });
+
+  it('downloads through the native requester when given one', async () => {
+    const asked: string[] = [];
+    const offers = await fetchStoreRelease('a/b', zipRelease, {
+      requester: async (request) => {
+        asked.push(`${request.method} ${request.url} ${request.headers?.Accept}`);
+        return { status: 200, statusText: 'OK', body: storeZip(null) };
+      },
+    });
+    expect(asked).toEqual(['GET https://api/assets/10 application/octet-stream']);
+    expect(offers).toHaveLength(2);
+    await expect(
+      fetchStoreRelease('a/b', zipRelease, {
+        requester: async () => ({ status: 302, statusText: 'Found', body: new Uint8Array() }),
+      }),
+    ).rejects.toThrow('neotime-store.zip failed (302)');
   });
 
   it('needs a token for an Actions build and sends it', async () => {
