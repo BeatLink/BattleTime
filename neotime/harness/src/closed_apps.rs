@@ -133,7 +133,7 @@ impl TestWatch {
     pub(super) fn run_due_closed_apps(&mut self) {
         let now = self.now();
         let mut runs = 0;
-        while let Some(id) = self.closed_apps.due(now, self.id()).map(String::from) {
+        while let Some(id) = self.closed_apps.due(now, &[self.id()]).map(String::from) {
             runs += 1;
             assert!(runs <= MOST_WAKEUPS_PER_ADVANCE, "{id}: came due again at once");
             let (Some(image), Some(mut host)) = (self.images.get(&id).copied(), self.load_closed(&id)) else {

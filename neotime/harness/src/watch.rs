@@ -443,7 +443,7 @@ impl TestWatch {
     /// The earliest time the open app or a closed one asked to wake.
     fn next_wakeup(&self) -> Option<Value> {
         let now = self.now();
-        let closed = self.closed_apps.next_due(self.id());
+        let closed = self.closed_apps.next_due(&[self.id()]);
         [self.host.next_wakeup(now), closed].into_iter().flatten().min()
     }
 
