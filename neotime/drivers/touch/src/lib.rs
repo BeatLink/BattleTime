@@ -180,6 +180,91 @@ impl Finger {
     }
 }
 
+// ============================================================================
+// Gestures read from the finger's path
+// ============================================================================
+
+/// How far a finger moves before a touch counts as a drag, not a tap or a long press.
+pub const DRAG_THRESHOLD_IN_PIXELS: i32 = 10;
+
+/// How far a finger moves along one direction before the touch is a swipe, while it is still down.
+pub const SWIPE_DISTANCE_IN_PIXELS: i32 = 40;
+
+/// How far a quick flick moves before its lift counts as a swipe.
+pub const FLICK_DISTANCE_IN_PIXELS: i32 = 20;
+
+/// How long a flick may last from landing to lifting.
+pub const FLICK_MILLISECONDS: u64 = 250;
+
+/// How long a finger stays still before the touch is a long press.
+pub const LONG_PRESS_MILLISECONDS: u64 = 500;
+
+/// Finds a touch's one tap, long press or swipe from where and when the finger lands, moves and lifts.
+///
+/// The panel's own gestures come late and only for long straight strokes, so they are not used.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GestureFinder {
+    landing: Option<(Point, u64)>,
+    dragged: bool,
+    found: bool,
+}
+
+impl GestureFinder {
+    /// Takes one finger step, where the finger was and when, and gives the touch's gesture once.
+    pub fn step(&mut self, step: FingerStep, position: Point, now_in_milliseconds: u64) -> Gesture {
+        if step == FingerStep::Lands {
+            *self = GestureFinder {
+                landing: Some((position, now_in_milliseconds)),
+                ..GestureFinder::default()
+            };
+            return Gesture::None;
+        }
+        if step == FingerStep::Nothing {
+            return Gesture::None;
+        }
+        // A move whose landing was lost starts the touch where it is.
+        let (start, landed_at) = *self.landing.get_or_insert((position, now_in_milliseconds));
+        let moved = position - start;
+        let held_for = now_in_milliseconds.saturating_sub(landed_at);
+        self.dragged |= moved.x.abs().max(moved.y.abs()) > DRAG_THRESHOLD_IN_PIXELS;
+        let lifted = step == FingerStep::Lifts;
+        if lifted {
+            self.landing = None;
+        }
+        if self.found {
+            return Gesture::None;
+        }
+
+        let gesture = match (lifted, self.dragged) {
+            (false, true) => swipe_along(moved, SWIPE_DISTANCE_IN_PIXELS),
+            (false, false) if held_for >= LONG_PRESS_MILLISECONDS => Gesture::LongPress,
+            (false, false) => Gesture::None,
+            (true, true) if held_for <= FLICK_MILLISECONDS => swipe_along(moved, FLICK_DISTANCE_IN_PIXELS),
+            (true, true) => swipe_along(moved, SWIPE_DISTANCE_IN_PIXELS),
+            (true, false) if held_for >= LONG_PRESS_MILLISECONDS => Gesture::LongPress,
+            (true, false) => Gesture::Tap,
+        };
+        self.found = gesture != Gesture::None;
+        gesture
+    }
+}
+
+/// The swipe a movement makes when it goes at least this far, mostly along one direction.
+fn swipe_along(moved: Point, distance: i32) -> Gesture {
+    let (across, down) = (moved.x.abs(), moved.y.abs());
+    let along = across.max(down);
+    // The main direction must be half as long again as the other, so a diagonal stroke is no swipe.
+    if along < distance || along * 2 < across.min(down) * 3 {
+        return Gesture::None;
+    }
+    match (across > down, moved.x > 0, moved.y > 0) {
+        (true, true, _) => Gesture::SlideRight,
+        (true, false, _) => Gesture::SlideLeft,
+        (false, _, true) => Gesture::SlideDown,
+        (false, _, false) => Gesture::SlideUp,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ChipInfo {
     pub chip_id: u8,

@@ -3,11 +3,15 @@
 use embassy_futures::select::{select, Either};
 use embassy_nrf::gpio::{Input, Output};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, signal::Signal};
-use embassy_time::{Delay, Duration, Timer};
+use embassy_time::{Delay, Duration, Instant, Timer};
+use embedded_graphics::geometry::Point;
 use neotime_app_host::Touch;
 use neotime_runtime::events::SwipeDirection;
 use neotime_settings::wake_on_touch;
-use neotime_touch::{Finger as PanelFinger, FingerStep, Gesture, Settings, TouchPanel, TouchReport};
+use neotime_touch::{
+    Finger as PanelFinger, FingerStep, Gesture, GestureFinder, Settings, TouchPanel, TouchReport,
+    DRAG_THRESHOLD_IN_PIXELS,
+};
 
 use crate::{
     diagnostics::{self, Counter},
@@ -43,23 +47,22 @@ pub static STARTED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 const START_ATTEMPTS: usize = 5;
 const RETRY_DELAY: Duration = Duration::from_millis(100);
 
-/// How far a finger moves before a touch counts as a drag.
-const DRAG_THRESHOLD_IN_PIXELS: i32 = 10;
-
 /// Follows one finger from press to lift, so each touch gives at most one gesture.
 #[derive(Default)]
 struct Finger {
     panel_finger: PanelFinger,
+    gestures: GestureFinder,
     start: Option<(i32, i32)>,
     dragging: bool,
-    gesture_sent: bool,
+    swiped: bool,
 }
 
 impl Finger {
-    fn touches_for(&mut self, report: &TouchReport, mut send: impl FnMut(Touch)) {
+    fn touches_for(&mut self, report: &TouchReport, now_in_milliseconds: u64, mut send: impl FnMut(Touch)) {
         let x = report.position.column as i32;
         let y = report.position.row as i32;
-        match self.panel_finger.step(report) {
+        let step = self.panel_finger.step(report);
+        match step {
             FingerStep::Lands => {
                 *self = Finger {
                     panel_finger: self.panel_finger,
@@ -69,6 +72,8 @@ impl Finger {
                 foreground::set_finger_down(true);
                 send(Touch::Press { x, y });
             }
+            // A swipe can open another screen under the finger, so the rest of its touch drags nothing there.
+            FingerStep::Moves if self.swiped => {}
             FingerStep::Moves => {
                 let (start_x, start_y) = *self.start.get_or_insert((x, y));
                 let moved = (x - start_x).abs().max((y - start_y).abs());
@@ -89,20 +94,16 @@ impl Finger {
             FingerStep::Nothing => {}
         }
 
-        if self.gesture_sent {
-            return;
-        }
-        let gesture = match report.gesture {
-            Gesture::Tap if !self.dragging => Touch::Click { x, y },
-            Gesture::DoubleTap => Touch::DoubleClick { x, y },
-            Gesture::LongPress if !self.dragging => Touch::LongPress { x, y },
+        let gesture = match self.gestures.step(step, Point::new(x, y), now_in_milliseconds) {
+            Gesture::Tap => Touch::Click { x, y },
+            Gesture::LongPress => Touch::LongPress { x, y },
             Gesture::SlideUp => Touch::Swipe(SwipeDirection::Up),
             Gesture::SlideDown => Touch::Swipe(SwipeDirection::Down),
             Gesture::SlideLeft => Touch::Swipe(SwipeDirection::Left),
             Gesture::SlideRight => Touch::Swipe(SwipeDirection::Right),
             _ => return,
         };
-        self.gesture_sent = true;
+        self.swiped = matches!(gesture, Touch::Swipe(_));
         send(gesture);
     }
 }
@@ -190,7 +191,7 @@ pub async fn read_touches(
             sender.send(Touch::DoubleClick { x, y });
             continue;
         }
-        finger.touches_for(&report, |touch| {
+        finger.touches_for(&report, Instant::now().as_millis(), |touch| {
             diagnostics::add_one(Counter::TouchesSent);
             sender.send(touch);
         });

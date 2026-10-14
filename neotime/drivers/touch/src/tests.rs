@@ -471,3 +471,175 @@ fn a_report_with_no_finger_ends_a_touch_whose_lift_was_lost() {
         FingerStep::Lands
     );
 }
+
+// ============================================================================
+// Gestures read from the finger's path
+// ============================================================================
+
+/// Lands a finger at a place, then gives every gesture the path's later steps make, one per step.
+fn gestures_for(landing: (i32, i32), path: &[(FingerStep, i32, i32, u64)]) -> Vec<Gesture> {
+    let mut finder = GestureFinder::default();
+    let mut gestures = vec![finder.step(FingerStep::Lands, Point::new(landing.0, landing.1), 0)];
+    for &(step, x, y, at) in path {
+        gestures.push(finder.step(step, Point::new(x, y), at));
+    }
+    gestures
+}
+
+#[test]
+fn a_short_still_touch_is_a_tap() {
+    let gestures = gestures_for(
+        (120, 120),
+        &[
+            (FingerStep::Moves, 123, 118, 30),
+            (FingerStep::Lifts, 123, 118, 60),
+        ],
+    );
+
+    assert_eq!(gestures, vec![Gesture::None, Gesture::None, Gesture::Tap]);
+}
+
+#[test]
+fn a_held_still_finger_is_a_long_press_before_it_lifts() {
+    let gestures = gestures_for(
+        (120, 120),
+        &[
+            (FingerStep::Moves, 121, 120, 499),
+            (FingerStep::Moves, 121, 120, 500),
+            (FingerStep::Moves, 121, 120, 900),
+            (FingerStep::Lifts, 121, 120, 1000),
+        ],
+    );
+
+    assert_eq!(
+        gestures,
+        vec![
+            Gesture::None,
+            Gesture::None,
+            Gesture::LongPress,
+            Gesture::None,
+            Gesture::None
+        ]
+    );
+}
+
+#[test]
+fn a_long_touch_whose_reports_stopped_is_a_long_press_at_its_lift() {
+    let gestures = gestures_for((120, 120), &[(FingerStep::Lifts, 120, 120, 700)]);
+
+    assert_eq!(gestures, vec![Gesture::None, Gesture::LongPress]);
+}
+
+#[test]
+fn a_swipe_is_found_while_the_finger_is_still_down() {
+    let gestures = gestures_for(
+        (120, 200),
+        &[
+            (FingerStep::Moves, 120, 170, 20),
+            (FingerStep::Moves, 122, 160, 40),
+            (FingerStep::Moves, 124, 100, 60),
+            (FingerStep::Lifts, 124, 90, 80),
+        ],
+    );
+
+    assert_eq!(
+        gestures,
+        vec![
+            Gesture::None,
+            Gesture::None,
+            Gesture::SlideUp,
+            Gesture::None,
+            Gesture::None
+        ]
+    );
+}
+
+#[test]
+fn each_direction_gives_its_own_swipe() {
+    let swipe_to = |x, y| gestures_for((120, 120), &[(FingerStep::Moves, x, y, 50)])[1];
+
+    assert_eq!(swipe_to(120, 60), Gesture::SlideUp);
+    assert_eq!(swipe_to(120, 180), Gesture::SlideDown);
+    assert_eq!(swipe_to(60, 120), Gesture::SlideLeft);
+    assert_eq!(swipe_to(180, 120), Gesture::SlideRight);
+}
+
+#[test]
+fn a_quick_short_flick_is_a_swipe_when_it_lifts() {
+    let gestures = gestures_for(
+        (120, 120),
+        &[
+            (FingerStep::Moves, 100, 121, 60),
+            (FingerStep::Lifts, 95, 121, 120),
+        ],
+    );
+
+    assert_eq!(gestures, vec![Gesture::None, Gesture::None, Gesture::SlideLeft]);
+}
+
+#[test]
+fn a_slow_short_drag_is_no_gesture() {
+    let gestures = gestures_for(
+        (120, 120),
+        &[
+            (FingerStep::Moves, 100, 120, 200),
+            (FingerStep::Lifts, 95, 120, 600),
+        ],
+    );
+
+    assert_eq!(gestures, vec![Gesture::None, Gesture::None, Gesture::None]);
+}
+
+#[test]
+fn a_diagonal_stroke_is_no_swipe() {
+    let gestures = gestures_for(
+        (60, 60),
+        &[
+            (FingerStep::Moves, 120, 110, 50),
+            (FingerStep::Lifts, 120, 110, 100),
+        ],
+    );
+
+    assert_eq!(gestures, vec![Gesture::None, Gesture::None, Gesture::None]);
+}
+
+#[test]
+fn a_drag_that_stops_still_is_no_long_press() {
+    let gestures = gestures_for(
+        (120, 120),
+        &[
+            (FingerStep::Moves, 135, 120, 50),
+            (FingerStep::Moves, 135, 120, 800),
+        ],
+    );
+
+    assert_eq!(gestures, vec![Gesture::None, Gesture::None, Gesture::None]);
+}
+
+#[test]
+fn a_new_landing_starts_a_new_touch() {
+    let mut finder = GestureFinder::default();
+    finder.step(FingerStep::Lands, Point::new(120, 120), 0);
+    finder.step(FingerStep::Lifts, Point::new(120, 120), 50);
+
+    finder.step(FingerStep::Lands, Point::new(120, 120), 1000);
+
+    assert_eq!(
+        finder.step(FingerStep::Lifts, Point::new(120, 120), 1050),
+        Gesture::Tap
+    );
+}
+
+#[test]
+fn a_move_whose_landing_was_lost_starts_the_touch_there() {
+    let mut finder = GestureFinder::default();
+
+    assert_eq!(
+        finder.step(FingerStep::Moves, Point::new(120, 120), 0),
+        Gesture::None
+    );
+    assert_eq!(
+        finder.step(FingerStep::Moves, Point::new(120, 60), 40),
+        Gesture::SlideUp
+    );
+}

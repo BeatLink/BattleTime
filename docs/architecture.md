@@ -232,6 +232,12 @@ interrupt is P0.28 and its reset P0.10, on the I2C bus at SDA P0.06 and SCL P0.0
   down, lifted or is still touching, and whether anything is touching at all.
 - **Garbled reads are dropped.** A report with a position off the 240x240 panel or an unknown
   gesture is skipped, as InfiniTime does.
+- **Gestures come from the finger's path.** The panel's own gestures arrive late and only for long
+  straight strokes, so `GestureFinder` works out each touch's one gesture from where and when the
+  finger lands, moves and lifts. A finger that moves 10 px is dragging; a drag 40 px along one
+  direction is a swipe at once, and a flick of 20 px within 250 ms is a swipe when it lifts. A
+  finger held still for 500 ms is a long press, and one lifted sooner a tap. A diagonal stroke,
+  whose main direction is not half as long again as the other, is no swipe.
 - **Double taps are off by default.** With them on, the panel holds back every single tap while it
   waits to see if a second follows. `Settings { report_double_taps: true }` turns them on.
 - **Sleep.** `sleep` puts the panel into deep sleep, holding it in reset if it does not answer.
@@ -751,7 +757,8 @@ watch face, the launcher and the apps through `neotime-app-host`:
   of a few pixels at a time. Screenshots of the face, the launcher and a scroll in the emulator
   match the earlier drivers' pixel for pixel.
 - **Input.** `touch.rs` turns the panel's reports into the host's touches: press, drag and release
-  from the finger, and one click, long press or swipe from each touch's gesture. Touches wait in a
+  from the finger, and one click, long press or swipe from each touch's `GestureFinder`. Once a
+  swipe is sent the rest of its touch sends no drags, so a screen the swipe opened is not dragged. Touches wait in a
   queue of 4 in which drags never take the last two places, so a lift and its gesture always fit;
   while the queue is that full, only the newest drag is held back. The shell merges the drags
   waiting in the queue into the latest one, so a list follows the finger however far drawing falls

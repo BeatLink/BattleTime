@@ -24,7 +24,9 @@ document for its part instead.
 - [ ] **Touch panel on the PineTime.** The firmware runs `neotime-touch` on the watch, but these
   checks have not been made:
   - `start` succeeds and `read_chip_info` gives a sensible chip ID (0xb4 or a near value);
-  - taps, long presses and slides in all four directions come through as the right `Gesture`;
+  - taps, long presses and swipes in all four directions, found by `GestureFinder` from the
+    finger's path, come through quickly and as the right gesture, short flicks included, and a
+    scroll in a list never turns into a swipe;
   - a drag streams reports while the finger stays down, and the finger lifting is reported;
   - positions match the display, with column 0 and row 0 at the top left;
   - `sleep` stops the interrupts, and `sleep_until_double_tap` wakes on a double tap only;
