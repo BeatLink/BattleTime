@@ -75,7 +75,7 @@ neotime slots [fit|recovery <start> <size>|update <start>]
   opens an image as a temporary app, on top of the screen and never installed, with each --data file or
   --text string (4 kB at most each) written beside it under /temp/<id>/ for the app to read; the image
   stays there as a cache. With --listen it stays connected, printing each message the app sends,
-  until Ctrl+C closes the app. apps stop closes it, and apps forget closes it and deletes one temporary
+  until Ctrl+C closes the app, or stops with an error when the link drops. apps stop closes it, and apps forget closes it and deletes one temporary
   app's files, or all of them. quick-apps
   lists the apps a swipe left or right on the face steps through, set replaces them with
   the ids given in order, and reset goes back to the watch's default. listen stays
@@ -396,7 +396,14 @@ export async function apps(session: WatchSession, args: string[], untilStopped: 
       say(`Opened ${run.header.name} as temporary app ${run.header.id}${needText(run)}.`);
       if (listen) {
         say("Printing the app's messages. Press Ctrl+C to close it.");
-        await untilStopped();
+        const ending = await Promise.race([
+          untilStopped().then(() => 'stopped' as const),
+          session.whenDisconnected().then(() => 'dropped' as const),
+        ]);
+        // A temporary app closes itself when the link drops, so there is nothing left to stop.
+        if (ending === 'dropped') {
+          throw new Error(`The link to the watch dropped, which closed ${run.header.name}.`);
+        }
         await packages.stop();
         say(`Closed ${run.header.name}.`);
       }

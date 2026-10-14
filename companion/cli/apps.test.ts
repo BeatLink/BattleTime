@@ -112,7 +112,10 @@ describe('the apps command', () => {
   it('prints what a temporary app sends while it listens, then closes the app', async () => {
     const session = new FakeSession();
     let onLine: (line: string) => void = () => {};
-    const listening = Object.assign(session, { listen: (handler: (line: string) => void) => (onLine = handler) });
+    const listening = Object.assign(session, {
+      listen: (handler: (line: string) => void) => (onLine = handler),
+      whenDisconnected: () => new Promise<void>(() => {}),
+    });
     const said: string[] = [];
     const log = jest.spyOn(process.stdout, 'write').mockImplementation((text) => {
       said.push(String(text).trimEnd());
@@ -131,6 +134,29 @@ describe('the apps command', () => {
     expect(said.some((line) => line.includes('notify'))).toBe(false);
     expect(said).toContain('Closed Touch test.');
     expect(stop).toHaveBeenCalled();
+    stop.mockRestore();
+  });
+
+  it('stops listening with an error when the link drops', async () => {
+    const session = new FakeSession();
+    let drop: () => void = () => {};
+    const dropping = Object.assign(session, {
+      listen: () => {},
+      whenDisconnected: () => new Promise<void>((resolve) => (drop = resolve)),
+    });
+    const log = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const stop = jest.spyOn(PackagesClient.prototype, 'stop');
+    const image = imageFile(testImage('touchtest', 'Touch test'));
+
+    // The link drops once the command has started listening for it.
+    const running = apps(dropping as unknown as WatchSession, ['run', image, '--listen'], () => {
+      setTimeout(() => drop(), 0);
+      return new Promise<void>(() => {});
+    });
+
+    await expect(running).rejects.toThrow('The link to the watch dropped, which closed Touch test.');
+    expect(stop).not.toHaveBeenCalled();
+    log.mockRestore();
     stop.mockRestore();
   });
 

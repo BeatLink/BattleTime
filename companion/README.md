@@ -559,7 +559,7 @@ The bundled `prompt` app ([src/protocol/prompt.ts](src/protocol/prompt.ts)) show
 
 | Command | What it does |
 | --- | --- |
-| `neotime apps run <image> [--data <name>=<file>]... [--text <name>=<text>]... [--listen]` | runs the image as a temporary app with those data files (4 kB at most each), saying whether the image was sent or already there; with `--listen` it stays connected and prints each message the app sends until Ctrl+C closes the app |
+| `neotime apps run <image> [--data <name>=<file>]... [--text <name>=<text>]... [--listen]` | runs the image as a temporary app with those data files (4 kB at most each), saying whether the image was sent or already there; with `--listen` it stays connected and prints each message the app sends until Ctrl+C closes the app, or stops with an error when the link drops |
 | `neotime apps stop` | closes the open temporary app; its files stay |
 | `neotime apps forget [id]` | closes the temporary app and deletes one temporary app's files, or all of them |
 | `neotime ask "<question>" [--timeout <seconds>]` | asks with the prompt app and prints `yes` (exit 0) or `no` (exit 1); with no tap in time (60 s unless given) it closes the prompt and exits 2, and it exits 3 when it cannot ask, such as when the bundle has no `prompt.ntapp` |

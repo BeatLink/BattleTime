@@ -25,6 +25,7 @@ export class WatchSession implements DfuLink {
   private readonly notifyListeners = new Map<string, (value: Uint8Array) => void>();
   private readonly found = new Map<string, ScannedDevice>();
   private onLine: ((line: string) => void) | null = null;
+  private readonly disconnectListeners: (() => void)[] = [];
   private mode: WatchMode = 'application';
   private id = '';
 
@@ -55,6 +56,10 @@ export class WatchSession implements DfuLink {
       }
       if (name === 'mode') {
         this.mode = payload as WatchMode;
+        return;
+      }
+      if (name === 'state' && payload === 'disconnected') {
+        for (const listener of this.disconnectListeners.splice(0)) listener();
         return;
       }
       if (name === 'error' && this.verbose) {
@@ -103,6 +108,11 @@ export class WatchSession implements DfuLink {
       process.stderr.write(`> ${text.trimEnd()}\n`);
     }
     await this.ble.write(text);
+  }
+
+  // Resolves when the link to the watch drops, or is closed.
+  whenDisconnected(): Promise<void> {
+    return new Promise((resolve) => this.disconnectListeners.push(resolve));
   }
 
   // Lines the watch sends that are not replies to a request.
