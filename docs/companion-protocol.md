@@ -63,7 +63,7 @@ Messages travel over the Nordic UART service, as Gadgetbridge's Bangle.js driver
 - Every message is an object whose `t` names it.
 - Lines are ASCII: write any other character as `\uXXXX`.
 - A line may take several writes, and a reply several notifications of up to 20 bytes each; the
-  reader joins them until the newline. Lines are at most 512 bytes; the watch drops a longer one.
+  reader joins them until the newline. Lines are at most 640 bytes; the watch drops a longer one.
 - The watch ignores keys it does not know, and messages it does not handle yet. It answers a line
   it cannot read with `{"t":"error","msg":"..."}`.
 
@@ -89,6 +89,11 @@ it changes nothing. Either way the watch answers with the settings as they now a
 | `wake_on_touch` | What turns a dark screen on besides the button: `0` nothing, `1` a tap, `2` a double tap. |
 | `alarms_in_dnd` | `false` silences alarms and timers in do not disturb too. |
 | `heart_rate_interval` | How often the watch measures the heart rate with no app asking: `0` off, `1` continuously, then `2` to `6` for every 30 seconds, minute, 5, 10 or 30 minutes. |
+| `raise_to_wake` | `true` to wake a dark screen when the wrist is raised. |
+| `lower_to_sleep` | `true` to turn the screen off when the arm is lowered. |
+| `shake_to_wake` | `true` to wake a dark screen with a shake. |
+| `shake_threshold` | How fast a shake must be to wake the screen, 0 to 4095, as InfiniTime counts it. |
+| `sleep_mode` | `true` for do not disturb that also stops every wake gesture, touch included, and the always-on screen. It turns `do_not_disturb` on, and `do_not_disturb` set `false` ends it. |
 
 An unknown preset, a colour not written `#rrggbb`, `units` other than the two names, or any
 value outside its range is refused with an `error` reply, and nothing in that message is applied.
@@ -101,7 +106,8 @@ The reply:
  "danger":"#e74539"},"themes":["dark","light","ocean","forest","sunset","contrast"],
  "clock_24h":true,"units":"Metric","step_goal":10000,"brightness":2,"blank_after":15,
  "always_on":false,"chimes":0,"do_not_disturb":false,"bluetooth":true,"updates":true,
- "wake_on_touch":1,"alarms_in_dnd":true,"heart_rate_interval":0}
+ "wake_on_touch":1,"alarms_in_dnd":true,"heart_rate_interval":0,"raise_to_wake":false,
+ "lower_to_sleep":false,"shake_to_wake":false,"shake_threshold":150,"sleep_mode":false}
 ```
 
 `theme` is the preset whose colours match exactly, or `custom`. Colours are stored as RGB565, so a

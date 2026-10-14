@@ -2291,6 +2291,17 @@ fn every_system_value_has_a_bit_in_the_mask_and_related_values_share_one() {
     );
     assert_eq!(SystemValue::StepHourSteps.bit(), SystemValue::StepsToday.bit());
     assert_eq!(SystemValue::StepTrip.bit(), SystemValue::StepsToday.bit());
+    assert_eq!(SystemValue::SleepMode.bit(), SystemValue::WakeOnTouch.bit());
+    assert_eq!(SystemValue::ShakeThreshold.bit(), SystemValue::WakeOnTouch.bit());
+    assert_ne!(SystemValue::ShakeSpeed.bit(), SystemValue::ShakeThreshold.bit());
+}
+
+#[test]
+fn the_wake_gesture_values_are_numbered_from_102() {
+    assert_eq!(SystemValue::from_byte(102), Some(SystemValue::RaiseToWake));
+    assert_eq!(SystemValue::from_byte(106), Some(SystemValue::SleepMode));
+    assert_eq!(SystemValue::from_byte(107), Some(SystemValue::ShakeSpeed));
+    assert_eq!(SystemValue::ShakeSpeed as u8, 107);
 }
 
 #[test]

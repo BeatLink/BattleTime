@@ -281,3 +281,8 @@ line stops it and goes back to the face; it takes under two minutes.
 Heart Rate Measurement (0x2A37): nothing is notified and the sensor stays off until a settings line
 turns the background interval to always, then each reading arrives as `00` and the pulse, a read
 gives the latest, and turning notifications off stops them.
+
+`../tools/check_wake_gestures.py FIRMWARE_ELF` installs a face with raise to wake and lower to sleep
+turned on and a 5 second screen timeout, then tilts the emulated accelerometer: the screen must light
+for a raised wrist after timing out, go dark for a lowered arm before the timeout, and go dark for
+two taps on the face; it needs no Bluetooth and takes about a minute.

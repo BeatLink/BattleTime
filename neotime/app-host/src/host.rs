@@ -1588,6 +1588,11 @@ impl<'image> AppHost<'image> {
         })
     }
 
+    /// Whether something on the open screen shows this system value, so the system works it out only while it is seen.
+    pub fn screen_shows(&self, value: SystemValue) -> bool {
+        mask_of(self.bindings.affected_by(Inputs::system_value(value))) & self.screen_expressions != 0
+    }
+
     /// The shortest period of the running subscriptions of a periodic kind, such as `acceleration`.
     pub fn shortest_period_of(&self, kind: SubscriptionKind) -> Option<Value> {
         self.running_subscriptions()

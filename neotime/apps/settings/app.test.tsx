@@ -1,9 +1,16 @@
 import { act, cleanup, render } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { brightness, is_bluetooth_enabled, is_do_not_disturb, set_setting, settings } from "neotime";
+import { brightness, is_bluetooth_enabled, is_do_not_disturb, set_setting, settings, shake_speed } from "neotime";
 import { install_apps, open, OpenScreen, press_button, screen_stack, start_scheduler } from "neotime/preview";
 import app, {
+  calibrate,
+  calibration_stage,
+  chosen_shake_threshold,
+  next_calibration_stage,
+  next_shake_sample_at,
+  sample_shake,
   set_brightness_level,
+  set_shake_threshold,
   set_timeout,
   toggle_24_hour_clock,
   toggle_alarms_in_do_not_disturb,
@@ -46,6 +53,12 @@ describe("settings", () => {
     set_setting("wake_on_touch", 1);
     set_setting("alarms_in_do_not_disturb", 1);
     set_setting("heart_rate_interval", 0);
+    set_setting("sleep_mode", 0);
+    set_setting("raise_to_wake", 0);
+    set_setting("lower_to_sleep", 0);
+    set_setting("shake_to_wake", 0);
+    set_setting("shake_threshold", 150);
+    shake_speed.value = 0;
     open(app);
   });
 
@@ -116,6 +129,7 @@ describe("settings", () => {
     expect(settings.uses_24_hour_clock.value).toBe(false);
     expect(settings.uses_metric_units.value).toBe(false);
     expect(is_do_not_disturb.value).toBe(true);
+    expect(settings.sleep_mode.value).toBe(true);
     expect(settings.alarms_in_do_not_disturb.value).toBe(false);
     expect(is_bluetooth_enabled.value).toBe(false);
     expect(settings.allows_updates.value).toBe(false);
@@ -157,7 +171,9 @@ describe("settings", () => {
     widgets(container, "button").forEach(tap);
     act(() => press_button());
     open_row(container, "Wake");
+    open_row(container, "Touch");
     widgets(container, "button").forEach(tap);
+    act(() => press_button());
     act(() => press_button());
     open_row(container, "Heart rate");
     widgets(container, "button").forEach(tap);
@@ -175,5 +191,70 @@ describe("settings", () => {
     expect(settings.wake_on_touch.value).toBe(2);
     expect(settings.heart_rate_interval.value).toBe(6);
     expect(settings.step_goal.value).toBe(10500);
+  });
+
+  it("turns each wake gesture on from the wake screen", () => {
+    const { container } = render(<OpenScreen />);
+    open_row(container, "Wake");
+
+    for (const toggle of widgets(container, "switch")) tap(toggle);
+
+    expect(settings.raise_to_wake.value).toBe(true);
+    expect(settings.shake_to_wake.value).toBe(true);
+    expect(settings.lower_to_sleep.value).toBe(true);
+  });
+
+  it("opens the touch choices and the shake calibration from the wake screen", () => {
+    const { container } = render(<OpenScreen />);
+    open_row(container, "Wake");
+
+    open_row(container, "Touch");
+    expect(screen_stack.value.at(-1)).toBe("wake_touch");
+    act(() => press_button());
+    open_row(container, "Shake strength");
+    expect(screen_stack.value.at(-1)).toBe("shake_threshold");
+    expect(chosen_shake_threshold.value).toBe(150);
+    expect(container.textContent).toContain("Calibrate");
+  });
+
+  it("sets the shake threshold from the arc", () => {
+    set_shake_threshold(900);
+
+    expect(chosen_shake_threshold.value).toBe(900);
+    expect(settings.shake_threshold.value).toBe(900);
+  });
+
+  it("records a shake as the threshold, just below its peak", () => {
+    calibrate();
+    expect(calibration_stage.value).toBe(1);
+    expect(chosen_shake_threshold.value).toBe(0);
+
+    next_calibration_stage();
+    expect(calibration_stage.value).toBe(2);
+    shake_speed.value = 1500;
+    sample_shake();
+    shake_speed.value = 900;
+    sample_shake();
+    expect(chosen_shake_threshold.value).toBe(1200);
+    expect(next_shake_sample_at.value).not.toBeNull();
+
+    next_calibration_stage();
+    expect(calibration_stage.value).toBe(0);
+    expect(next_shake_sample_at.value).toBeNull();
+    expect(settings.shake_threshold.value).toBe(1200);
+    sample_shake();
+    expect(chosen_shake_threshold.value).toBe(1200);
+  });
+
+  it("stops recording a shake when the button is tapped again", () => {
+    calibrate();
+    next_calibration_stage();
+    shake_speed.value = 700;
+    sample_shake();
+
+    calibrate();
+
+    expect(calibration_stage.value).toBe(0);
+    expect(settings.shake_threshold.value).toBe(400);
   });
 });

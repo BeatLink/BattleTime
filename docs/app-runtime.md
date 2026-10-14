@@ -547,7 +547,10 @@ then the About facts `firmware_build_date`, `bootloader_version`, `bootloader_bu
 `accelerometer_chip_id`, `free_heap_bytes`, `least_free_heap_bytes`, `allocation_failures` and
 `stack_overflows`, and the tasks' count followed by their lists of `name`, `runs` and
 `busy_milliseconds`, which all share the system info bit, then the kept notifications' list of
-`icon`, a shared library icon the watch picks from each one's app, which shares their bit.
+`icon`, a shared library icon the watch picks from each one's app, which shares their bit. From 102 come the settings'
+`raise_to_wake`, `lower_to_sleep`, `shake_to_wake`, `shake_threshold` and `sleep_mode`, which share
+the other settings' bit, and `shake_speed`, which has bit 25 to itself since it changes ten times a
+second.
 `read system element` reads a list's elements through `SystemValues::read_element`, or
 `read_element_text` for the names, ids and notification texts, the packages' too. The location, artist, track,
 instruction, firmware version, reset reason, build dates, bootloader version and task names are text: the system hands them

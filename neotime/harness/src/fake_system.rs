@@ -329,6 +329,7 @@ impl FakeSystem {
             (WakeOnTouch, 1),
             (AlarmsInDoNotDisturb, 1),
             (HeartRateInterval, 0),
+            (ShakeThreshold, 150),
             (CallState, 2),
             (AppMemoryBudget, STARTING_APP_MEMORY_BUDGET),
             (BootloaderCrc, 0x0C4E_2D17),

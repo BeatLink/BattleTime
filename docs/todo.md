@@ -37,6 +37,9 @@ document for its part instead.
     expected signs on x and y, which settles whether `Orientation::PINETIME` is right;
   - walking raises `read_step_count`, and `reset_step_count` sets it back to 0;
   - the upload still works with chunks larger than 16 bytes, which would make starting faster.
+  - raise to wake, lower to sleep and shake to wake act on a real wrist as in the emulator, the
+    default shake strength of 150 is neither too eager nor too hard, and reading ten times a
+    second while the screen is dark costs little battery.
 
 - [ ] **Step history on the PineTime.** It has run only in host tests and the test watch. On the
   watch, check that:
@@ -445,8 +448,6 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 ### Accelerometer
 
-- [ ] **Raise to wake and lower to sleep,** in software on `read_acceleration`.
-- [ ] **Shake to wake,** with an adjustable threshold.
 - [ ] **Motion service over BLE,** sending steps and raw x, y and z to the phone.
 
 ### Clock
@@ -506,7 +507,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   measurement itself, and no log of the readings is kept beside the step log.
 - [ ] **Try the beacon on the watch.** The driver's register writes match wasp-os's, but the
   emulator cannot show the LED.
-- [ ] **Run `tools/check_heart_rate.py` and `tools/check_call.py` in CI.** The emulator suites have no
+- [ ] **Run `tools/check_heart_rate.py`, `tools/check_call.py` and `tools/check_wake_gestures.py` in CI.** The emulator suites have no
   compiler to build the apps they install; the watch images job could build the install into `dist/` for them.
 
 ### UI toolkit
@@ -755,15 +756,9 @@ only by its Gadgetbridge fork and web app, so they are not worth copying.
 
 ### Watch faces
 
-- [ ] **Double tap on a watch face puts the watch to sleep,** whichever face is showing.
 - [ ] **Quick face switching.** PinetimeLite moves to the next face on a long press of any face.
   Decide whether NeoTime has a gesture for this, since several faces use the long press for their
   own settings.
-
-### Quick settings
-
-- [ ] **A sleep mode in quick settings,** as InfiniTime's do not disturb switch has: a third
-  setting that also turns off the wake gestures and the always-on screen.
 
 ### Notifications
 

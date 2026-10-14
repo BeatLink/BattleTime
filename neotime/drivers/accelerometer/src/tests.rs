@@ -475,3 +475,225 @@ fn readings_after_a_gap_are_not_compared_with_the_one_before() {
     assert!(!detector.feed(reading(-1000, 0), 2100));
     assert!(!detector.feed(reading(1000, 0), 2200));
 }
+
+// ============================================================================
+// Wake gestures
+// ============================================================================
+
+const WAKE_READING_PERIOD_IN_MILLISECONDS: u64 = 100;
+
+const WATCHING_EVERYTHING: wake_gestures::Watching = wake_gestures::Watching {
+    raise: true,
+    lower: true,
+    shake: true,
+    shake_threshold: 150,
+};
+
+const WATCHING_ONLY_SHAKES: wake_gestures::Watching = wake_gestures::Watching {
+    raise: false,
+    lower: false,
+    ..WATCHING_EVERYTHING
+};
+
+/// What the detector watches for while the screen is lit.
+const WATCHING_WHILE_LIT: wake_gestures::Watching = wake_gestures::Watching {
+    lower: true,
+    ..wake_gestures::Watching::NOTHING
+};
+
+/// A reading given in InfiniTime's units and axes: 1024 to a g, with y reversed.
+fn infinitime_reading(x: i32, y: i32, z: i32) -> Acceleration {
+    let to_milli_g = |value: i32| (value * 1000 / 1024) as i16;
+    Acceleration {
+        x_in_milli_g: to_milli_g(x),
+        y_in_milli_g: -to_milli_g(y),
+        z_in_milli_g: to_milli_g(z),
+    }
+}
+
+/// Feeds readings a tenth of a second apart from `start`, and gives each gesture found with its time.
+fn gestures_found(
+    detector: &mut wake_gestures::WakeGestureDetector,
+    start: u64,
+    readings: &[Acceleration],
+    watching: wake_gestures::Watching,
+) -> Vec<(u64, wake_gestures::WakeGesture)> {
+    let mut found = Vec::new();
+    for (place, reading) in readings.iter().enumerate() {
+        let time = start + place as u64 * WAKE_READING_PERIOD_IN_MILLISECONDS;
+        if let Some(gesture) = detector.feed(*reading, time, watching) {
+            found.push((time, gesture));
+        }
+    }
+    found
+}
+
+/// The watch lying face up, then turned towards the wearer's eyes over a few readings.
+fn raise() -> Vec<Acceleration> {
+    let lying = infinitime_reading(0, 0, -1024);
+    let turning = infinitime_reading(0, -400, -900);
+    let raised = infinitime_reading(0, -800, -640);
+    vec![lying, lying, lying, turning, turning, turning, raised, raised]
+}
+
+/// The arm let fall to the side, so the watch's y axis comes to point down.
+fn lowering() -> Vec<Acceleration> {
+    let tilted = infinitime_reading(0, 300, -980);
+    let hanging = infinitime_reading(0, 1000, -200);
+    vec![tilted, tilted, tilted, tilted, tilted, tilted, hanging, hanging]
+}
+
+#[test]
+fn raising_the_wrist_wakes_the_screen() {
+    let mut detector = wake_gestures::WakeGestureDetector::new();
+
+    let found = gestures_found(&mut detector, 0, &raise(), WATCHING_EVERYTHING);
+
+    assert_eq!(found, vec![(700, wake_gestures::WakeGesture::Raise)]);
+}
+
+#[test]
+fn a_raise_is_not_reported_unless_watched_for() {
+    let mut detector = wake_gestures::WakeGestureDetector::new();
+    let watching = wake_gestures::Watching {
+        raise: false,
+        ..WATCHING_EVERYTHING
+    };
+
+    assert!(gestures_found(&mut detector, 0, &raise(), watching).is_empty());
+}
+
+#[test]
+fn lowering_the_arm_puts_the_screen_to_sleep() {
+    let mut detector = wake_gestures::WakeGestureDetector::new();
+
+    let found = gestures_found(&mut detector, 0, &lowering(), WATCHING_WHILE_LIT);
+
+    assert_eq!(found, vec![(700, wake_gestures::WakeGesture::Lower)]);
+}
+
+#[test]
+fn a_lowered_arm_that_was_not_held_down_first_does_not_sleep() {
+    let mut detector = wake_gestures::WakeGestureDetector::new();
+    let mut readings = lowering();
+    readings[3] = infinitime_reading(0, 100, -1000);
+
+    assert!(gestures_found(&mut detector, 0, &readings, WATCHING_WHILE_LIT).is_empty());
+}
+
+#[test]
+fn rolling_the_watch_sideways_puts_the_screen_to_sleep() {
+    let mut detector = wake_gestures::WakeGestureDetector::new();
+    let flat = infinitime_reading(300, 0, -980);
+    let on_its_side = infinitime_reading(1000, 0, -200);
+    let readings = [flat, flat, flat, flat, flat, flat, on_its_side, on_its_side];
+
+    let found = gestures_found(&mut detector, 0, &readings, WATCHING_WHILE_LIT);
+
+    assert_eq!(found, vec![(700, wake_gestures::WakeGesture::Lower)]);
+}
+
+#[test]
+fn a_still_watch_makes_no_gesture() {
+    let mut detector = wake_gestures::WakeGestureDetector::new();
+    let readings = [infinitime_reading(0, -300, -980); 20];
+
+    assert!(gestures_found(&mut detector, 0, &readings, WATCHING_EVERYTHING).is_empty());
+    assert_eq!(detector.shake_speed(), 0);
+}
+
+#[test]
+fn a_shake_past_the_threshold_wakes_the_screen() {
+    let mut detector = wake_gestures::WakeGestureDetector::new();
+    let readings: Vec<Acceleration> = (0..4)
+        .map(|place| infinitime_reading(0, 0, if place % 2 == 0 { -1000 } else { 1000 }))
+        .collect();
+    let watching = WATCHING_ONLY_SHAKES;
+
+    let found = gestures_found(&mut detector, 0, &readings, watching);
+
+    assert_eq!(found, vec![(100, wake_gestures::WakeGesture::Shake)]);
+    assert!(detector.shake_speed() > 150);
+}
+
+#[test]
+fn a_gentle_movement_stays_under_the_shake_threshold() {
+    let mut detector = wake_gestures::WakeGestureDetector::new();
+    let readings: Vec<Acceleration> = (0..20)
+        .map(|place| infinitime_reading(0, 0, -1000 + (place % 2) * 100))
+        .collect();
+    let watching = WATCHING_ONLY_SHAKES;
+
+    assert!(gestures_found(&mut detector, 0, &readings, watching).is_empty());
+    assert!(detector.shake_speed() < 150);
+}
+
+#[test]
+fn a_gesture_counts_once_then_the_detector_waits_a_second() {
+    let mut detector = wake_gestures::WakeGestureDetector::new();
+    let readings: Vec<Acceleration> = (0..30)
+        .map(|place| infinitime_reading(0, 0, if place % 2 == 0 { -1000 } else { 1000 }))
+        .collect();
+    let watching = WATCHING_ONLY_SHAKES;
+
+    let found = gestures_found(&mut detector, 0, &readings, watching);
+
+    let times: Vec<u64> = found.iter().map(|(time, _)| *time).collect();
+    assert_eq!(times, vec![100, 1100, 2100]);
+}
+
+#[test]
+fn readings_after_a_long_gap_start_the_history_afresh() {
+    let mut detector = wake_gestures::WakeGestureDetector::new();
+    let readings = raise();
+    gestures_found(&mut detector, 0, &readings[..6], wake_gestures::Watching::NOTHING);
+
+    let found = gestures_found(&mut detector, 5_000, &readings[6..], WATCHING_EVERYTHING);
+
+    assert!(found.is_empty());
+    assert_eq!(detector.shake_speed(), 0);
+}
+
+#[test]
+fn resetting_forgets_the_shake_speed() {
+    let mut detector = wake_gestures::WakeGestureDetector::new();
+    gestures_found(
+        &mut detector,
+        0,
+        &[infinitime_reading(0, 0, -1000), infinitime_reading(0, 0, 1000)],
+        wake_gestures::Watching::NOTHING,
+    );
+    assert!(detector.shake_speed() > 0);
+
+    detector.reset();
+
+    assert_eq!(detector.shake_speed(), 0);
+}
+
+#[test]
+fn watching_nothing_is_told_apart_from_watching_a_gesture() {
+    assert!(!wake_gestures::Watching::NOTHING.anything());
+    assert!(WATCHING_EVERYTHING.anything());
+}
+
+#[test]
+fn the_arcsine_gives_whole_degrees_either_way() {
+    assert_eq!(wake_gestures::arcsine_in_degrees(0), 0);
+    assert_eq!(wake_gestures::arcsine_in_degrees(32767), 90);
+    assert_eq!(wake_gestures::arcsine_in_degrees(16383), 30);
+    assert_eq!(wake_gestures::arcsine_in_degrees(-23170), -45);
+    assert_eq!(wake_gestures::arcsine_in_degrees(16700), 31);
+    assert_eq!(wake_gestures::arcsine_in_degrees(40000), 90);
+}
+
+#[test]
+fn the_roll_follows_infinitimes_cases_for_each_side_of_the_watch() {
+    let half_g = 512;
+
+    assert_eq!(wake_gestures::degrees_rolled(half_g, -1, 0, -1), 30);
+    assert_eq!(wake_gestures::degrees_rolled(half_g, 1, 0, 1), -30);
+    assert_eq!(wake_gestures::degrees_rolled(half_g, 1, 0, -1), 150);
+    assert_eq!(wake_gestures::degrees_rolled(-half_g, 1, 0, -1), -150);
+    assert_eq!(wake_gestures::degrees_rolled(half_g, -1, 0, 1), -150);
+    assert_eq!(wake_gestures::degrees_rolled(-half_g, -1, 0, 1), 150);
+}

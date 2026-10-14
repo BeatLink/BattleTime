@@ -38,6 +38,7 @@ import {
   reset_persisted,
   reset_reason,
   settings,
+  shake_speed,
   stack_overflows,
   started_at,
   step_history,
@@ -128,7 +129,9 @@ export const KNOWN_DIFFERENCES: KnownDifference[] = [
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Metric units", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Off", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Off", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Sleep mode", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Step goal", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
+  { snapshot: "app-settings", screen: "wake", side: "preview_only", text: "Lower to sleep", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Theme", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Updates", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-software", screen: "main", side: "preview_only", text: "12 KB", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
@@ -221,6 +224,12 @@ export function set_fake_system_values() {
   settings.wake_on_touch.value = 1;
   settings.alarms_in_do_not_disturb.value = true;
   settings.heart_rate_interval.value = 0;
+  settings.raise_to_wake.value = false;
+  settings.lower_to_sleep.value = false;
+  settings.shake_to_wake.value = false;
+  settings.shake_threshold.value = 150;
+  settings.sleep_mode.value = false;
+  shake_speed.value = 0;
   is_heart_rate_running.value = false;
   heart_rate_status.value = 0;
   is_bluetooth_enabled.value = true;

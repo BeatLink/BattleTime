@@ -298,6 +298,13 @@ the touch panel. PineTimes carry either a BMA421 (chip ID 0x11) or a BMA425 (chi
   feature memory only takes writes with that mode off, so the driver pauses it around each one.
 - **Bus watchdog.** The chip's I2C watchdog is on, so a transfer cut off part way frees the bus
   after 40 ms instead of holding it.
+- **Wake gestures.** `wake_gestures::WakeGestureDetector`, ported from InfiniTime's
+  `MotionController`, keeps the last eight readings in InfiniTime's units (1024 to a g, the y axis
+  reversed) and finds a raised wrist (`ShouldRaiseWake`), a lowered arm (`ShouldLowerSleep`) and a
+  shake faster than the threshold, from InfiniTime's shake speed: an average of how far each
+  reading moved from the one before. It judges the roll between the mean of the newest two
+  readings and of the oldest two with a whole-degree arcsine table, starts afresh after a gap of
+  more than 500 ms, and reports one gesture a second at most.
 
 The files are not in the firmware: the shared library carries both, as its data 0 and 1
 (`LibraryData`), which saves the firmware 12 KB and keeps one image for every watch. The
@@ -500,7 +507,7 @@ uploads an image and the bootloader that installs it. It knows nothing of the up
 `neotime-companion` reads the companion app's messages and writes the watch's replies, as
 [companion-protocol.md](companion-protocol.md) sets out: newline-ended JSON lines, `GB({...})` as
 Gadgetbridge sends them or bare. `LineAssembler` joins writes into lines and drops one longer than
-512 bytes; `parse_line` reads a message with `serde-json-core`, without allocating; and
+640 bytes; `parse_line` reads a message with `serde-json-core`, without allocating; and
 `settings_report` writes the `settings` reply. It knows nothing of Bluetooth, so its tests run on
 a computer. So far it reads `settings` (a preset theme, single colours and every watch-wide
 setting, each checked against its limits) and `notify` (a notification's id, app, title and body,
@@ -803,6 +810,20 @@ watch face, the launcher and the apps through `neotime-app-host`:
   shakes reach the shell through `app_events.rs`, which keeps only the latest of each; the host
   hands the latest reading to `acceleration` events at their period and a shake to `shake` events
   at once.
+- **Wake gestures.** `neotime_app_host::wake::gestures_to_watch` says what the accelerometer
+  watches for from the settings and the screen: a raised or shaken wrist while it is dark, a
+  lowered arm while it is lit and not held on, nothing in sleep mode. The shell hands that to
+  `motion.rs` on every pass of its loop, which then reads ten times a second while anything is
+  watched, feeds every reading to the wake gesture detector and sends what it finds through
+  `app_events.rs`; the shell wakes the screen or turns it off as for any other request. Each
+  reading also updates the shake speed, and while the open screen shows `shake_speed`
+  (`AppHost::screen_shows`) the accelerometer is read for it and each new speed redraws it.
+  `wake::DoubleTapFinder` turns two taps the face does not take, within 500 ms and 40 pixels, or a
+  double tap from the panel, into putting the watch to sleep, since the panel reports no double
+  taps while the screen is lit. Sleep mode, a setting kept inside do not disturb by
+  `neotime-settings`, also makes `app_settings::wake_on_touch` say nothing wakes the screen by
+  touch and `screen_dims_instead_of_sleeping` turn the always-on screen off.
+  `tools/check_wake_gestures.py` proves raise, lower and the face's double tap in the emulator.
 - **Heart rate.** `heart_rate.rs` runs the sensor as `Schedule::mode` says. The open app asks
   with `start_heart_rate` until `stop_heart_rate`, `measure_heart_rate` until the first reading,
   or `set_heart_rate_led` to flash it as a beacon; opening another screen ends what it asked, so

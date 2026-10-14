@@ -45,6 +45,13 @@ export type WatchSettingValues = {
   // 0 off, 1 hourly, 2 half-hourly.
   chimes?: 0 | 1 | 2;
   do_not_disturb?: boolean;
+  raise_to_wake?: boolean;
+  lower_to_sleep?: boolean;
+  shake_to_wake?: boolean;
+  // How fast a shake must be to wake the screen, 0 to 4095.
+  shake_threshold?: number;
+  // Do not disturb that also stops every wake gesture and the always-on screen; it turns do_not_disturb on.
+  sleep_mode?: boolean;
 };
 
 // With no other keys the watch only reports its settings. Colours given are applied after the preset.

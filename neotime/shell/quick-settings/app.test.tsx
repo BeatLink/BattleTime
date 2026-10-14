@@ -1,6 +1,14 @@
 import { act, cleanup, render, screen } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { battery_percent, brightness, define_app, is_bluetooth_enabled, is_do_not_disturb, settings } from "neotime";
+import {
+  battery_percent,
+  brightness,
+  define_app,
+  is_bluetooth_enabled,
+  is_do_not_disturb,
+  set_do_not_disturb,
+  settings,
+} from "neotime";
 import { install_apps, open, open_app, OpenScreen, start_scheduler } from "neotime/preview";
 import { icons } from "neotime/icons";
 import { Screen } from "neotime/widgets";
@@ -48,23 +56,32 @@ describe("quick settings", () => {
     expect(brightness.value).toBe(start);
   });
 
-  it("switches do not disturb, Bluetooth and the always-on screen", () => {
+  it("switches Bluetooth and the always-on screen", () => {
     render(<OpenScreen />);
-    const was_silent = is_do_not_disturb.value;
     const had_bluetooth = is_bluetooth_enabled.value;
     const was_always_on = settings.always_on_screen.value;
-    tap("Silent");
     tap("Bluetooth");
     tap("Always on");
-    expect(is_do_not_disturb.value).toBe(!was_silent);
     expect(is_bluetooth_enabled.value).toBe(!had_bluetooth);
     expect(settings.always_on_screen.value).toBe(!was_always_on);
-    tap("Silent");
     tap("Bluetooth");
     tap("Always on");
-    expect(is_do_not_disturb.value).toBe(was_silent);
     expect(is_bluetooth_enabled.value).toBe(had_bluetooth);
     expect(settings.always_on_screen.value).toBe(was_always_on);
+  });
+
+  it("steps do not disturb from off to silent to sleep and back to off", () => {
+    set_do_not_disturb(false);
+    render(<OpenScreen />);
+    tap("Silent");
+    expect(is_do_not_disturb.value).toBe(true);
+    expect(settings.sleep_mode.value).toBe(false);
+    tap("Silent");
+    expect(is_do_not_disturb.value).toBe(true);
+    expect(settings.sleep_mode.value).toBe(true);
+    tap("Sleep");
+    expect(is_do_not_disturb.value).toBe(false);
+    expect(settings.sleep_mode.value).toBe(false);
   });
 
   it("opens the flashlight and Settings", () => {

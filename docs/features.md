@@ -48,7 +48,8 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
 - **Notifications and quick settings are part of the firmware.** They are written like apps but
   compiled into the firmware, so they are always there and never in the launcher. Quick settings
   shows the time and battery over six buttons: brightness, the flashlight, do not disturb,
-  Bluetooth, the always-on screen and Settings.
+  Bluetooth, the always-on screen and Settings. As InfiniTime's, its do not disturb button steps
+  through off, silent and sleep.
 - **Only what changed is drawn,** each part composed in memory first, so the screen never shows a
   half-drawn widget.
 - **Going back retraces the way.** Every way back, the button, a swipe up on the pulled-down
@@ -87,6 +88,18 @@ What NeoTime can do, added as each feature is finished. Work not done yet is in
   and the theme. They are kept through a restart, except Bluetooth, and apps follow them at once.
 - **Waking the screen by touch.** A tap, a double tap, or only the button, chosen in settings. With
   only the button, the touch panel sleeps while the screen is off. Not tried on the watch yet.
+- **Raise to wake, lower to sleep and shake to wake,** ported from InfiniTime and each turned on in
+  Settings under Wake. The accelerometer is read ten times a second only while one of them could
+  act: raise and shake while the screen is dark, lower while it is lit and no app holds it on.
+  Proven in the emulator, not tried on the watch yet.
+- **Shake strength,** as InfiniTime's wake sensitivity screen: an arc of how hard a shake must be,
+  which the finger drags, over a live arc of the wrist's motion, and a Calibrate button that
+  records a shake and sets the strength just below it.
+- **Sleep mode,** the third state of do not disturb, from quick settings or Settings: it silences
+  like do not disturb and also stops touch, raise and shake from waking the screen and turns the
+  always-on screen off, so only the button wakes the watch.
+- **A double tap on the face puts the watch to sleep,** whichever face shows, unless the face takes
+  the taps itself.
 - **Bluetooth off,** from settings or quick settings, until it is turned on again or the watch restarts, so
   a watch can never be left out of reach. Not tried on the watch yet.
 - **Updates off,** so no phone can install firmware until they are turned on again in settings.

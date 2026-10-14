@@ -5,7 +5,8 @@
 //! limits never gets in. They are saved in `/settings/system` as records: one byte naming the
 //! setting, then its value as a little-endian `i32`. A setting this firmware does not know is
 //! skipped, so a file from older or newer firmware still reads. Bluetooth is saved too but never read
-//! back, so a restart always turns the radio on again.
+//! back, so a restart always turns the radio on again. Sleep mode is a third state of do not
+//! disturb: turning it on turns do not disturb on, and turning do not disturb off ends it.
 
 #![no_std]
 
@@ -29,6 +30,11 @@ pub enum Setting {
     WakeOnTouch = 10,
     AlarmsInDoNotDisturb = 11,
     HeartRateInterval = 12,
+    RaiseToWake = 13,
+    LowerToSleep = 14,
+    ShakeToWake = 15,
+    ShakeThreshold = 16,
+    SleepMode = 17,
 }
 
 /// The lowest and highest value a setting takes, both included, and the value it starts at.
@@ -76,8 +82,15 @@ pub mod wake_on_touch {
     pub const DOUBLE_TAP: i32 = 2;
 }
 
+/// What `Setting::ShakeThreshold` holds: InfiniTime's shake speed a wrist must pass to wake the screen.
+pub mod shake_threshold {
+    pub const LOWEST: i32 = 0;
+    pub const HIGHEST: i32 = 4095;
+    pub const DEFAULT: i32 = 150;
+}
+
 impl Setting {
-    pub const COUNT: usize = 13;
+    pub const COUNT: usize = 18;
 
     pub const ALL: [Setting; Setting::COUNT] = [
         Setting::Uses24HourClock,
@@ -93,6 +106,11 @@ impl Setting {
         Setting::WakeOnTouch,
         Setting::AlarmsInDoNotDisturb,
         Setting::HeartRateInterval,
+        Setting::RaiseToWake,
+        Setting::LowerToSleep,
+        Setting::ShakeToWake,
+        Setting::ShakeThreshold,
+        Setting::SleepMode,
     ];
 
     pub fn from_number(number: u8) -> Option<Setting> {
@@ -119,6 +137,11 @@ impl Setting {
             Setting::WakeOnTouch => "wake_on_touch",
             Setting::AlarmsInDoNotDisturb => "alarms_in_do_not_disturb",
             Setting::HeartRateInterval => "heart_rate_interval",
+            Setting::RaiseToWake => "raise_to_wake",
+            Setting::LowerToSleep => "lower_to_sleep",
+            Setting::ShakeToWake => "shake_to_wake",
+            Setting::ShakeThreshold => "shake_threshold",
+            Setting::SleepMode => "sleep_mode",
         }
     }
 
@@ -152,6 +175,15 @@ impl Setting {
                 heart_rate_interval::EVERY_30_MINUTES,
                 heart_rate_interval::OFF,
             ),
+            Setting::RaiseToWake => limits(0, 1, 0),
+            Setting::LowerToSleep => limits(0, 1, 0),
+            Setting::ShakeToWake => limits(0, 1, 0),
+            Setting::ShakeThreshold => limits(
+                shake_threshold::LOWEST,
+                shake_threshold::HIGHEST,
+                shake_threshold::DEFAULT,
+            ),
+            Setting::SleepMode => limits(0, 1, 0),
         }
     }
 
@@ -219,7 +251,34 @@ impl Settings {
         }
         let changed = self.get(setting) != value;
         self.values[setting as usize] = value;
+        self.keep_sleep_mode_inside_do_not_disturb(setting);
         Ok(changed)
+    }
+
+    /// Sleep mode is the third state of do not disturb, so turning it on turns do not disturb on, and turning do not disturb off ends it.
+    fn keep_sleep_mode_inside_do_not_disturb(&mut self, changed: Setting) {
+        match changed {
+            Setting::SleepMode if self.is_on(Setting::SleepMode) => {
+                self.values[Setting::DoNotDisturb as usize] = 1;
+            }
+            Setting::DoNotDisturb if !self.is_on(Setting::DoNotDisturb) => {
+                self.values[Setting::SleepMode as usize] = 0;
+            }
+            _ => {}
+        }
+    }
+
+    /// The bits of every setting whose value differs from `before`.
+    pub fn differences_from(&self, before: &Settings) -> u32 {
+        Setting::ALL
+            .into_iter()
+            .filter(|&setting| self.get(setting) != before.get(setting))
+            .fold(0, |bits, setting| bits | setting.bit())
+    }
+
+    /// Whether sleep mode is on, which also turns off every wake gesture and the always-on screen.
+    pub fn is_sleep_mode(&self) -> bool {
+        self.is_on(Setting::SleepMode)
     }
 
     /// Sets a setting by the name apps use, taking any number an app can hold.
@@ -265,17 +324,15 @@ impl Settings {
     ///
     /// Returns the bits of the settings whose value changed. A short record at the end is ignored.
     pub fn apply_records(&mut self, bytes: &[u8]) -> u32 {
-        let mut changed = 0;
+        let before = *self;
         for record in bytes.as_chunks::<RECORD_BYTES>().0 {
             let Some(setting) = Setting::from_number(record[0]) else {
                 continue;
             };
             let value = i32::from_le_bytes([record[1], record[2], record[3], record[4]]);
-            if let Ok(true) = self.set(setting, value) {
-                changed |= setting.bit();
-            }
+            let _ = self.set(setting, value);
         }
-        changed
+        self.differences_from(&before)
     }
 
     pub fn write_file(&self, buffer: &mut [u8; FILE_BYTES]) -> usize {

@@ -31,7 +31,32 @@ snapshot timeout
 button
 tap "Wake"                  # the wake row
 expect screen wake
+set settings.raise_to_wake true
+expect text "Shake strength"
 snapshot wake
+tap "Touch"                 # which touch wakes the screen
+expect screen wake_touch
+snapshot wake-touch
+tap "Double tap"
+expect effect set-setting wake_on_touch 2
+button
+tap "Shake strength"        # the shake calibration
+expect screen shake_threshold
+set shake_speed 900
+expect text "Calibrate"
+snapshot shake
+tap "Calibrate"
+expect text "Ready!"
+wait 2s
+expect text "Shake!"
+set shake_speed 1500
+wait 300ms
+expect text "1200"
+snapshot shake-recording
+wait 8s
+expect text "Calibrate"
+expect effect set-setting shake_threshold 1200
+button
 button
 swipe up
 swipe up

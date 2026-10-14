@@ -245,6 +245,9 @@ function change_setting(key: string, value: number) {
     const setting = settings[key as keyof typeof settings];
     setting.value = (typeof setting.peek() === "boolean" ? value !== 0 : value) as never;
   } else return;
+  // Sleep mode is the third state of do not disturb, as the watch's settings keep it.
+  if (key === "sleep_mode" && value !== 0) is_do_not_disturb.value = true;
+  if (key === "do_not_disturb" && value === 0) settings.sleep_mode.value = false;
   deliver("settings_change", { key });
 }
 

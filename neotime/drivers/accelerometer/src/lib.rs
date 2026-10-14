@@ -4,7 +4,8 @@
 //! watch only reads the count. The files are not built into the firmware: the shared library
 //! carries them, and `start` takes them from the caller. The `configuration-files` feature gives
 //! them to the compiler, which puts them in the library. Acceleration is read on demand, turned to the watch's own axes, and
-//! `shake::ShakeDetector` finds shakes in those readings.
+//! `shake::ShakeDetector` finds shakes in those readings, while `wake_gestures::WakeGestureDetector`
+//! finds a raised or lowered wrist and a shake strong enough to wake the screen.
 
 #![no_std]
 
@@ -12,6 +13,7 @@ use embedded_hal::i2c::ErrorType as I2cErrorType;
 use embedded_hal_async::{delay::DelayNs, i2c::I2c};
 
 pub mod shake;
+pub mod wake_gestures;
 
 // ============================================================================
 // Chip registers

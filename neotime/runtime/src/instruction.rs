@@ -172,6 +172,16 @@ pub enum SystemValue {
     TaskBusyMilliseconds,
     /// List: each kept notification's icon, a shared library icon picked from its app's name.
     NotificationIcon,
+    /// Whether raising the wrist, lowering it or shaking it wakes or sleeps the screen; see `neotime_settings`.
+    RaiseToWake,
+    LowerToSleep,
+    ShakeToWake,
+    /// The shake speed a wrist must pass to wake the screen, 0 to 4095 as InfiniTime counts it.
+    ShakeThreshold,
+    /// Whether sleep mode is on: do not disturb with every wake gesture and the always-on screen off.
+    SleepMode,
+    /// The wrist's shake speed now, as `ShakeThreshold` counts it, kept current only while a screen shows it.
+    ShakeSpeed,
 }
 
 /// Bits 19 and 20 are free because every weather value uses bit 18, so music and navigation take them.
@@ -185,9 +195,11 @@ const SETTINGS_BIT: u32 = 22;
 const SYSTEM_INFO_BIT: u32 = 23;
 /// The call values share one bit, as the phone sends them together.
 const CALL_BIT: u32 = 24;
+/// The shake speed changes ten times a second, so it has a bit of its own.
+const SHAKE_SPEED_BIT: u32 = 25;
 
 impl SystemValue {
-    pub const COUNT: usize = 102;
+    pub const COUNT: usize = 108;
 
     pub fn from_byte(byte: u8) -> Option<SystemValue> {
         use SystemValue::*;
@@ -294,6 +306,12 @@ impl SystemValue {
             99 => TaskRuns,
             100 => TaskBusyMilliseconds,
             101 => NotificationIcon,
+            102 => RaiseToWake,
+            103 => LowerToSleep,
+            104 => ShakeToWake,
+            105 => ShakeThreshold,
+            106 => SleepMode,
+            107 => ShakeSpeed,
             _ => return None,
         })
     }
@@ -325,7 +343,9 @@ impl SystemValue {
             | LauncherStyle | LauncherView | LauncherGroupCount | LauncherGroupName | LauncherGroupIcon
             | LauncherGroupFirst | LauncherGroupSize => INSTALLED_APPS_BIT,
             ScreenTimeoutSeconds | AlwaysOnScreen | Chimes | ThemePreset | AllowsUpdates | WakeOnTouch
-            | AlarmsInDoNotDisturb | HeartRateInterval => SETTINGS_BIT,
+            | AlarmsInDoNotDisturb | HeartRateInterval | RaiseToWake | LowerToSleep | ShakeToWake
+            | ShakeThreshold | SleepMode => SETTINGS_BIT,
+            ShakeSpeed => SHAKE_SPEED_BIT,
             NotificationCount | NotificationId | NotificationApp | NotificationTitle | NotificationBody
             | NotificationTime | NotificationIcon => UnreadNotifications as u32,
             StepTrip | StepDayCount | StepDayTotal | StepHourCount | StepHourSteps => StepsToday as u32,

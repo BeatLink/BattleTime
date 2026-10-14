@@ -1,4 +1,4 @@
-# Every screen of quick settings, for docs/apps/quick-settings.md: the tiles, then with some turned on.
+# Every screen of quick settings, for docs/apps/quick-settings.md: the tiles, then with some turned on, then in sleep mode.
 open app quick-settings
 expect text "Medium"
 tap "Medium"                # the brightness tile
@@ -12,6 +12,16 @@ set settings.always_on_screen true
 set is_charging true
 expect text "High"
 snapshot tiles-on
+tap "Silent"                # silent steps on to sleep
+expect effect set-setting sleep_mode 1
+set settings.sleep_mode true
+expect text "Sleep"
+snapshot sleep
+tap "Sleep"                 # sleep steps back to off
+expect effect set-do-not-disturb false
+set settings.sleep_mode false
+set is_do_not_disturb false
+expect text "Silent"
 tap "Settings"              # the settings tile
 expect effect open-app settings
 expect no failures

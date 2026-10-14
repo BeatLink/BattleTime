@@ -236,6 +236,24 @@ fn every_setting_has_a_key_the_wasp_os_companion_already_knows_where_it_can() {
 }
 
 #[test]
+fn the_wake_gestures_and_sleep_mode_have_keys_of_their_own() {
+    let line = br#"{"t":"settings","raise_to_wake":true,"lower_to_sleep":true,"shake_to_wake":false,"shake_threshold":900,"sleep_mode":true}"#;
+    let Ok(Message::Settings(change)) = parse_line(line) else {
+        panic!();
+    };
+
+    assert_eq!(change.value(Setting::RaiseToWake), Some(1));
+    assert_eq!(change.value(Setting::LowerToSleep), Some(1));
+    assert_eq!(change.value(Setting::ShakeToWake), Some(0));
+    assert_eq!(change.value(Setting::ShakeThreshold), Some(900));
+    assert_eq!(change.value(Setting::SleepMode), Some(1));
+    assert_eq!(
+        parse_line(br#"{"t":"settings","shake_threshold":5000}"#),
+        Err(MessageError::BadSetting)
+    );
+}
+
+#[test]
 fn one_bad_setting_refuses_the_whole_message() {
     let too_short = br#"{"t":"settings","brightness":3,"blank_after":1}"#;
     let unknown_units = br#"{"t":"settings","units":"Furlongs"}"#;
@@ -261,7 +279,10 @@ fn the_report_gives_every_setting_and_reads_back_the_same() {
     assert!(report.contains("\"clock_24h\":true"), "{report}");
     assert!(report.contains("\"do_not_disturb\":false"), "{report}");
     assert!(report.contains("\"alarms_in_dnd\":true"), "{report}");
-    assert!(report.ends_with("\"heart_rate_interval\":0}\n"), "{report}");
+    assert!(report.contains("\"heart_rate_interval\":0"), "{report}");
+    assert!(report.contains("\"raise_to_wake\":false"), "{report}");
+    assert!(report.contains("\"shake_threshold\":150"), "{report}");
+    assert!(report.ends_with("\"sleep_mode\":false}\n"), "{report}");
     let Ok(Message::Settings(reread)) = parse_line(report.trim_end().as_bytes()) else {
         panic!("{report}");
     };

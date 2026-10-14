@@ -40,10 +40,12 @@
       "name": "wake",
       "reached_by": "tap \"Wake\"",
       "texts": [
-        "Button only",
-        "Double tap",
+        "150",
+        "Raise wrist",
+        "Shake",
+        "Shake strength",
         "Tap",
-        "Wake the screen with"
+        "Touch"
       ]
     }
   ]

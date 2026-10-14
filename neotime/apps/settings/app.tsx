@@ -3,6 +3,8 @@
 // display timeout, the 12 or 24 hour clock, the step goal, the hourly chimes and how often the heart
 // rate is measured in the background.
 // From wasp-os: brightness in three steps, units, and do not disturb.
+// Also from InfiniTime: raise to wake, lower to sleep and shake to wake, with a screen that sets how
+// hard a shake must be by dragging an arc or by recording a shake, and sleep mode.
 // Also: what touch wakes the screen, whether alarms ring in do not disturb, Bluetooth until the next
 // restart, and whether the watch takes firmware updates.
 // The theme is one of the watch's presets; the companion app can also set colours of the user's own.
@@ -15,15 +17,20 @@ import {
   go,
   is_bluetooth_enabled,
   is_do_not_disturb,
+  now,
+  on,
   range,
   set_bluetooth,
   set_do_not_disturb,
   set_setting,
   settings,
+  shake_speed,
+  signal,
   type Color,
+  type Instant,
 } from "neotime";
 import { icons } from "neotime/icons";
-import { Button, Column, Grid, Icon, Label, Row, Screen, Scroll, Stepper, Switch } from "neotime/widgets";
+import { Arc, Button, Column, Grid, Icon, Label, Row, Screen, Scroll, Stepper, Switch } from "neotime/widgets";
 
 // ============================================================================
 // Choices
@@ -47,6 +54,25 @@ const THEME_NAMES = ["Dark", "Light", "Ocean", "Forest", "Sunset", "Contrast"];
 const THEME_BACKGROUNDS: Color[] = ["#000000", "#ffffff", "#000a1e", "#08140a", "#180810", "#000000"];
 const THEME_ACCENTS: Color[] = ["#00aaa0", "#008096", "#28a0ff", "#78c850", "#ff783c", "#ffdc00"];
 const THEME_COUNT = 6;
+
+/** InfiniTime's shake speeds, which the threshold and the live motion arc are drawn against. */
+const HIGHEST_SHAKE_THRESHOLD = 4095;
+
+/** A recorded shake sets the threshold this far below its peak, as InfiniTime does, so a slightly weaker shake still wakes. */
+const CALIBRATION_MARGIN = 300;
+
+/** How long the wearer gets ready, then shakes, while a shake is recorded. */
+const GET_READY_MILLISECONDS = 2000;
+const SHAKE_MILLISECONDS = 7500;
+
+/** How often the shake speed is looked at while a shake is recorded. */
+const SHAKE_SAMPLE_MILLISECONDS = 100;
+
+const CALIBRATION_IDLE = 0;
+const CALIBRATION_GETTING_READY = 1;
+const CALIBRATION_SHAKING = 2;
+const CALIBRATE_LABELS = ["Calibrate", "Ready!", "Shake!"];
+const CALIBRATE_COLORS: Color[] = ["surface", "accent", "danger"];
 
 const STEP_GOAL_STEP = 500;
 const LOWEST_STEP_GOAL = 1000;
@@ -96,6 +122,22 @@ export function toggle_do_not_disturb() {
   set_do_not_disturb(!is_do_not_disturb.value);
 }
 
+export function toggle_sleep_mode() {
+  set_setting("sleep_mode", settings.sleep_mode.value ? 0 : 1);
+}
+
+export function toggle_raise_to_wake() {
+  set_setting("raise_to_wake", settings.raise_to_wake.value ? 0 : 1);
+}
+
+export function toggle_lower_to_sleep() {
+  set_setting("lower_to_sleep", settings.lower_to_sleep.value ? 0 : 1);
+}
+
+export function toggle_shake_to_wake() {
+  set_setting("shake_to_wake", settings.shake_to_wake.value ? 0 : 1);
+}
+
 export function toggle_alarms_in_do_not_disturb() {
   set_setting("alarms_in_do_not_disturb", settings.alarms_in_do_not_disturb.value ? 0 : 1);
 }
@@ -106,6 +148,68 @@ export function toggle_bluetooth() {
 
 export function toggle_updates() {
   set_setting("allows_updates", settings.allows_updates.value ? 0 : 1);
+}
+
+// ============================================================================
+// Shake calibration, from InfiniTime's SettingShakeThreshold
+// ============================================================================
+
+/** The threshold the arc shows and drags, saved whenever it is let go or a recorded shake ends. */
+export const chosen_shake_threshold = signal(150);
+
+export const calibration_stage = signal(CALIBRATION_IDLE);
+
+/** When getting ready or shaking ends, while a shake is recorded. */
+export const calibration_stage_ends_at = signal<Instant | null>(null);
+
+/** When the shake speed is next looked at, while the wearer shakes. */
+export const next_shake_sample_at = signal<Instant | null>(null);
+
+export function open_shake_calibration() {
+  chosen_shake_threshold.value = settings.shake_threshold.value;
+  calibration_stage.value = CALIBRATION_IDLE;
+  go("shake_threshold");
+}
+
+export function set_shake_threshold(threshold: number) {
+  chosen_shake_threshold.value = threshold;
+  set_setting("shake_threshold", threshold);
+}
+
+/** Starts recording a shake, or stops one being recorded and keeps what it found so far. */
+export function calibrate() {
+  if (calibration_stage.value === CALIBRATION_IDLE) {
+    chosen_shake_threshold.value = 0;
+    calibration_stage.value = CALIBRATION_GETTING_READY;
+    calibration_stage_ends_at.value = now.value + GET_READY_MILLISECONDS;
+  } else {
+    finish_calibration();
+  }
+}
+
+export function next_calibration_stage() {
+  if (calibration_stage.value === CALIBRATION_GETTING_READY) {
+    calibration_stage.value = CALIBRATION_SHAKING;
+    calibration_stage_ends_at.value = now.value + SHAKE_MILLISECONDS;
+    next_shake_sample_at.value = now.value + SHAKE_SAMPLE_MILLISECONDS;
+  } else {
+    finish_calibration();
+  }
+}
+
+/** Raises the threshold to just below the hardest shake so far. */
+export function sample_shake() {
+  if (calibration_stage.value !== CALIBRATION_SHAKING) return;
+  const reached = shake_speed.value - CALIBRATION_MARGIN;
+  if (reached > chosen_shake_threshold.value) chosen_shake_threshold.value = Math.min(reached, HIGHEST_SHAKE_THRESHOLD);
+  next_shake_sample_at.value = now.value + SHAKE_SAMPLE_MILLISECONDS;
+}
+
+function finish_calibration() {
+  calibration_stage.value = CALIBRATION_IDLE;
+  calibration_stage_ends_at.value = null;
+  next_shake_sample_at.value = null;
+  set_setting("shake_threshold", chosen_shake_threshold.value);
 }
 
 // ============================================================================
@@ -150,6 +254,7 @@ function SettingsList() {
           onClick={() => go("heart_rate_interval")}
         />
         <SwitchRow title="Do not disturb" value={is_do_not_disturb.value} onChange={toggle_do_not_disturb} />
+        <SwitchRow title="Sleep mode" value={settings.sleep_mode.value} onChange={toggle_sleep_mode} />
         <SwitchRow
           title="Alarms in DND"
           value={settings.alarms_in_do_not_disturb.value}
@@ -264,6 +369,24 @@ function HeartRateInterval() {
 function Wake() {
   return (
     <Screen padding={8} gap={6}>
+      <Scroll grow={1} gap={6}>
+        <ChoiceRow title="Touch" value={wake_name.value} onClick={() => go("wake_touch")} />
+        <SwitchRow title="Raise wrist" value={settings.raise_to_wake.value} onChange={toggle_raise_to_wake} />
+        <SwitchRow title="Shake" value={settings.shake_to_wake.value} onChange={toggle_shake_to_wake} />
+        <ChoiceRow
+          title="Shake strength"
+          value={`${settings.shake_threshold.value}`}
+          onClick={open_shake_calibration}
+        />
+        <SwitchRow title="Lower to sleep" value={settings.lower_to_sleep.value} onChange={toggle_lower_to_sleep} />
+      </Scroll>
+    </Screen>
+  );
+}
+
+function WakeTouch() {
+  return (
+    <Screen padding={8} gap={6}>
       <Label color="muted">Wake the screen with</Label>
       <Column grow={1} gap={6} justify="center">
         {range(3).map((place) => (
@@ -274,6 +397,54 @@ function Wake() {
           />
         ))}
       </Column>
+    </Screen>
+  );
+}
+
+/** The threshold as an outer arc the finger drags, the wrist's motion now as an inner arc, and a button that records a shake. */
+function ShakeThreshold() {
+  return (
+    <Screen>
+      <Label x={0} y={4} width={240} text_align="center" color="muted">
+        Shake to wake
+      </Label>
+      <Arc
+        x={10}
+        y={30}
+        diameter={220}
+        thickness={14}
+        start_angle={270}
+        end_angle={90}
+        minimum={0}
+        maximum={HIGHEST_SHAKE_THRESHOLD}
+        value={chosen_shake_threshold}
+        onChange={(event) => set_shake_threshold(event.value)}
+      />
+      <Arc
+        x={30}
+        y={50}
+        diameter={180}
+        thickness={8}
+        start_angle={270}
+        end_angle={90}
+        minimum={0}
+        maximum={HIGHEST_SHAKE_THRESHOLD}
+        value={shake_speed.value}
+        color="danger"
+      />
+      <Label x={0} y={100} width={240} text_align="center" font="large">
+        {`${chosen_shake_threshold.value}`}
+      </Label>
+      <Button
+        x={20}
+        y={166}
+        width={200}
+        height={64}
+        background={CALIBRATE_COLORS[calibration_stage.value]}
+        onClick={calibrate}
+      >
+        {CALIBRATE_LABELS[calibration_stage.value]}
+      </Button>
     </Screen>
   );
 }
@@ -306,6 +477,9 @@ function Theme() {
   );
 }
 
+on("time", next_calibration_stage, { at: calibration_stage_ends_at, while_open: true });
+on("time", sample_shake, { at: next_shake_sample_at, while_open: true });
+
 export default define_app({
   id: "settings",
   name: "Settings",
@@ -319,6 +493,9 @@ export default define_app({
     chimes: Chimes,
     heart_rate_interval: HeartRateInterval,
     wake: Wake,
+    wake_touch: WakeTouch,
+    shake_threshold: ShakeThreshold,
     theme: Theme,
   },
 });
+

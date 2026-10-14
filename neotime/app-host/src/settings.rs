@@ -1,5 +1,6 @@
 //! The watch-wide settings as apps see them: the system values each one shows as, the theme picked
-//! by preset number, telling the open app what changed, and which touch wakes a dark screen.
+//! by preset number, telling the open app what changed, and which touch wakes a dark screen and
+//! whether it dims, both of which sleep mode overrules.
 
 use neotime_runtime::{preset_matching, SystemValue, Theme, Value, PRESET_THEMES};
 use neotime_settings::{wake_on_touch, Setting, Settings};
@@ -22,6 +23,11 @@ pub fn system_value_of(setting: Setting) -> SystemValue {
         Setting::WakeOnTouch => SystemValue::WakeOnTouch,
         Setting::AlarmsInDoNotDisturb => SystemValue::AlarmsInDoNotDisturb,
         Setting::HeartRateInterval => SystemValue::HeartRateInterval,
+        Setting::RaiseToWake => SystemValue::RaiseToWake,
+        Setting::LowerToSleep => SystemValue::LowerToSleep,
+        Setting::ShakeToWake => SystemValue::ShakeToWake,
+        Setting::ShakeThreshold => SystemValue::ShakeThreshold,
+        Setting::SleepMode => SystemValue::SleepMode,
     }
 }
 
@@ -67,9 +73,22 @@ pub fn tell_app_about_changes(host: &mut AppHost<'_>, changed: u32, now: Value, 
     }
 }
 
+/// Which touch wakes a dark screen, as `wake_on_touch` holds it; none in sleep mode.
+pub fn wake_on_touch(settings: &Settings) -> i32 {
+    match settings.is_sleep_mode() {
+        true => wake_on_touch::OFF,
+        false => settings.get(Setting::WakeOnTouch),
+    }
+}
+
+/// Whether the screen dims rather than sleeps once it times out: the always-on screen, which sleep mode turns off.
+pub fn screen_dims_instead_of_sleeping(settings: &Settings) -> bool {
+    settings.is_on(Setting::AlwaysOnScreen) && !settings.is_sleep_mode()
+}
+
 /// Whether a touch on a dark screen turns it on: a lifted finger for a tap, a double tap, or nothing.
 pub fn touch_wakes_screen(settings: &Settings, touch: &Touch) -> bool {
-    match settings.get(Setting::WakeOnTouch) {
+    match wake_on_touch(settings) {
         wake_on_touch::TAP => matches!(touch, Touch::Release { .. }),
         wake_on_touch::DOUBLE_TAP => matches!(touch, Touch::DoubleClick { .. }),
         _ => false,

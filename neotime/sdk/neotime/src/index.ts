@@ -143,7 +143,20 @@ export const settings = {
   alarms_in_do_not_disturb: signal(true),
   /** How often the watch measures the heart rate with no app asking: 0 off, 1 continuously, then every 30 seconds, minute, 5, 10 or 30 minutes. */
   heart_rate_interval: signal(0),
+  /** Whether raising the wrist turns a dark screen on. */
+  raise_to_wake: signal(false),
+  /** Whether lowering the arm turns the screen off. */
+  lower_to_sleep: signal(false),
+  /** Whether shaking the wrist turns a dark screen on. */
+  shake_to_wake: signal(false),
+  /** How fast a shake must be to wake the screen, 0 to 4095 as `shake_speed` counts it. */
+  shake_threshold: signal(150),
+  /** Whether sleep mode is on: do not disturb with every wake gesture and the always-on screen off. */
+  sleep_mode: signal(false),
 };
+
+/** How fast the wrist is shaking, 0 to about 4095, kept current only while a screen shows it. */
+export const shake_speed = signal(0);
 
 /** Whether the heart rate sensor is measuring for any app. */
 export const is_heart_rate_running = signal(false);

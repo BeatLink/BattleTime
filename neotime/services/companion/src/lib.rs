@@ -48,7 +48,7 @@ pub use phone::{
 };
 
 /// The longest line either side sends; a longer one is dropped whole.
-pub const MOST_LINE_BYTES: usize = 512;
+pub const MOST_LINE_BYTES: usize = 640;
 
 /// What the report calls a theme that matches no preset.
 pub const CUSTOM_THEME: &str = "custom";
@@ -239,6 +239,11 @@ const KEYS: [(Setting, &str, Shape); Setting::COUNT] = [
     (Setting::WakeOnTouch, "wake_on_touch", Shape::Number),
     (Setting::AlarmsInDoNotDisturb, "alarms_in_dnd", Shape::TrueOrFalse),
     (Setting::HeartRateInterval, "heart_rate_interval", Shape::Number),
+    (Setting::RaiseToWake, "raise_to_wake", Shape::TrueOrFalse),
+    (Setting::LowerToSleep, "lower_to_sleep", Shape::TrueOrFalse),
+    (Setting::ShakeToWake, "shake_to_wake", Shape::TrueOrFalse),
+    (Setting::ShakeThreshold, "shake_threshold", Shape::Number),
+    (Setting::SleepMode, "sleep_mode", Shape::TrueOrFalse),
 ];
 
 const METRIC: &str = "Metric";
@@ -278,6 +283,16 @@ struct Envelope<'line> {
     #[serde(default)]
     heart_rate_interval: Option<i64>,
     #[serde(default)]
+    raise_to_wake: Option<bool>,
+    #[serde(default)]
+    lower_to_sleep: Option<bool>,
+    #[serde(default)]
+    shake_to_wake: Option<bool>,
+    #[serde(default)]
+    shake_threshold: Option<i64>,
+    #[serde(default)]
+    sleep_mode: Option<bool>,
+    #[serde(default)]
     id: Option<i64>,
     #[serde(default, borrow)]
     src: Option<EscapedStr<'line>>,
@@ -313,6 +328,11 @@ impl Envelope<'_> {
                 Setting::WakeOnTouch => number(self.wake_on_touch),
                 Setting::AlarmsInDoNotDisturb => self.alarms_in_dnd.map(i32::from),
                 Setting::HeartRateInterval => number(self.heart_rate_interval),
+                Setting::RaiseToWake => self.raise_to_wake.map(i32::from),
+                Setting::LowerToSleep => self.lower_to_sleep.map(i32::from),
+                Setting::ShakeToWake => self.shake_to_wake.map(i32::from),
+                Setting::ShakeThreshold => number(self.shake_threshold),
+                Setting::SleepMode => self.sleep_mode.map(i32::from),
             };
         }
         let mut checked = Settings::default();

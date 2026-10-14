@@ -104,6 +104,12 @@ pub fn system_signal(name: &str) -> Option<SystemSignal> {
         "settings.wake_on_touch" => (SystemValue::WakeOnTouch, Type::NUMBER),
         "settings.alarms_in_do_not_disturb" => (SystemValue::AlarmsInDoNotDisturb, Type::BOOL),
         "settings.heart_rate_interval" => (SystemValue::HeartRateInterval, Type::NUMBER),
+        "settings.raise_to_wake" => (SystemValue::RaiseToWake, Type::BOOL),
+        "settings.lower_to_sleep" => (SystemValue::LowerToSleep, Type::BOOL),
+        "settings.shake_to_wake" => (SystemValue::ShakeToWake, Type::BOOL),
+        "settings.shake_threshold" => (SystemValue::ShakeThreshold, Type::NUMBER),
+        "settings.sleep_mode" => (SystemValue::SleepMode, Type::BOOL),
+        "shake_speed" => (SystemValue::ShakeSpeed, Type::NUMBER),
         "current_weather.temperature" => (SystemValue::WeatherTemperature, Type::NUMBER.or_null()),
         "current_weather.condition" => (
             SystemValue::WeatherCondition,

@@ -1212,6 +1212,18 @@ fn the_accelerometer_is_read_only_as_often_as_the_open_app_needs() {
 }
 
 #[test]
+fn a_screen_showing_the_shake_speed_has_the_accelerometer_read() {
+    let mut system = FakeSystem::default();
+    let image = toast_image();
+    let host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    assert!(host.screen_shows(SystemValue::WeatherLocation));
+    assert!(!host.screen_shows(SystemValue::ShakeSpeed));
+    assert!(!motion::shows_shake_speed(&host));
+    assert_eq!(motion::reading_period_in_milliseconds(&host), None);
+}
+
+#[test]
 fn an_acceleration_subscription_gets_the_latest_reading_at_its_period() {
     let mut system = FakeSystem::default();
     let image = sensor_image(Some(100), false);
@@ -1500,6 +1512,27 @@ fn the_wake_setting_picks_which_touch_turns_a_dark_screen_on() {
     settings.set(Setting::WakeOnTouch, wake_on_touch::OFF).unwrap();
     assert!(!settings::touch_wakes_screen(&settings, &lift));
     assert!(!settings::touch_wakes_screen(&settings, &double_tap));
+}
+
+#[test]
+fn sleep_mode_stops_touch_waking_the_screen_and_the_screen_dimming() {
+    use neotime_settings::{wake_on_touch, Setting, Settings};
+    let lift = Touch::Release { x: 1, y: 2 };
+    let mut settings = Settings::default();
+    settings.set(Setting::AlwaysOnScreen, 1).unwrap();
+    assert!(settings::screen_dims_instead_of_sleeping(&settings));
+    assert_eq!(settings::wake_on_touch(&settings), wake_on_touch::TAP);
+
+    settings.set(Setting::SleepMode, 1).unwrap();
+
+    assert!(!settings::touch_wakes_screen(&settings, &lift));
+    assert_eq!(settings::wake_on_touch(&settings), wake_on_touch::OFF);
+    assert!(!settings::screen_dims_instead_of_sleeping(&settings));
+    assert_eq!(settings::read_setting(&settings, SystemValue::SleepMode), Some(1));
+    assert_eq!(
+        settings::read_setting(&settings, SystemValue::ShakeThreshold),
+        Some(150)
+    );
 }
 
 #[test]

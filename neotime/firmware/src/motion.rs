@@ -1,5 +1,7 @@
 //! The accelerometer: the step history from the chip's own step counter, and acceleration readings
-//! with the shakes found in them, taken only while the open app wants them.
+//! with the shakes found in them, taken only while the open app wants them or the shell watches for
+//! a wake gesture: a raised or shaken wrist while the screen is dark, a lowered arm while it is lit.
+//! Each reading also updates the wrist's shake speed, which apps see only while a screen shows it.
 //!
 //! `neotime-steps` keeps the history: today and the six days before by hour, and the trip count.
 //! Each six-minute slot with steps is added to that day's file in `/steps` as it ends, and the
@@ -7,7 +9,7 @@
 
 use core::{
     cell::RefCell,
-    sync::atomic::{AtomicU32, Ordering},
+    sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering},
 };
 
 use embassy_futures::select::{select3, Either3};
@@ -19,7 +21,12 @@ use embassy_sync::{
     signal::Signal,
 };
 use embassy_time::{Delay, Duration, Instant, Timer};
-use neotime_accelerometer::{shake::ShakeDetector, Accelerometer, Configurations, Error, Settings};
+use neotime_accelerometer::{
+    shake::ShakeDetector,
+    wake_gestures::{WakeGestureDetector, Watching},
+    Accelerometer, Configurations, Error, Settings,
+};
+use neotime_app_host::wake::WakeGestures;
 use neotime_runtime::{AppImage, LibraryData, SystemValue, Value};
 use neotime_steps::{DayChange, StepHistory, HOURS_PER_DAY};
 
@@ -42,6 +49,21 @@ static READING_PERIOD_IN_MILLISECONDS: AtomicU32 = AtomicU32::new(0);
 static READING_PERIOD_CHANGED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 const STEP_READ_INTERVAL: Duration = Duration::from_secs(30);
+
+/// The wake gestures the shell watches for, packed by `pack_watching`.
+static WATCHING: AtomicU32 = AtomicU32::new(0);
+
+/// Whether a screen shows the shake speed, so each new speed is passed on.
+static SHAKE_SPEED_WANTED: AtomicBool = AtomicBool::new(false);
+static SHAKE_SPEED: AtomicI32 = AtomicI32::new(0);
+
+/// Wake gestures are looked for in readings taken ten times a second, as InfiniTime takes them.
+const WAKE_GESTURE_PERIOD_IN_MILLISECONDS: u32 = 100;
+
+const RAISE_BIT: u32 = 1 << 0;
+const LOWER_BIT: u32 = 1 << 1;
+const SHAKE_BIT: u32 = 1 << 2;
+const THRESHOLD_SHIFT: u32 = 8;
 
 /// Reads the step history, as apps see it.
 pub fn read_history<Answer>(read: impl FnOnce(&StepHistory) -> Answer) -> Answer {
@@ -73,6 +95,73 @@ pub fn read_acceleration_every(period_in_milliseconds: Option<Value>) {
     let period = period_in_milliseconds.map_or(0, |period| period.clamp(1, u32::MAX as Value) as u32);
     if READING_PERIOD_IN_MILLISECONDS.swap(period, Ordering::Relaxed) != period {
         READING_PERIOD_CHANGED.signal(());
+    }
+}
+
+/// Sets the wake gestures to watch for; the accelerometer is read while any is watched.
+pub fn watch_for(gestures: WakeGestures) {
+    let packed = pack_watching(gestures);
+    if WATCHING.swap(packed, Ordering::Relaxed) != packed {
+        READING_PERIOD_CHANGED.signal(());
+    }
+}
+
+/// Whether a screen shows the shake speed; while one does, each new speed tells the shell.
+pub fn report_shake_speed(wanted: bool) {
+    SHAKE_SPEED_WANTED.store(wanted, Ordering::Relaxed);
+}
+
+/// The wrist's shake speed at the latest reading, as InfiniTime counts it.
+pub fn shake_speed() -> i32 {
+    SHAKE_SPEED.load(Ordering::Relaxed)
+}
+
+fn pack_watching(gestures: WakeGestures) -> u32 {
+    let threshold = gestures.shake_threshold.clamp(0, u16::MAX as i32) as u32;
+    let mut packed = threshold << THRESHOLD_SHIFT;
+    for (is_watched, bit) in [
+        (gestures.raise, RAISE_BIT),
+        (gestures.lower, LOWER_BIT),
+        (gestures.shake, SHAKE_BIT),
+    ] {
+        if is_watched {
+            packed |= bit;
+        }
+    }
+    packed
+}
+
+fn unpack_watching(packed: u32) -> Watching {
+    Watching {
+        raise: packed & RAISE_BIT != 0,
+        lower: packed & LOWER_BIT != 0,
+        shake: packed & SHAKE_BIT != 0,
+        shake_threshold: (packed >> THRESHOLD_SHIFT) as i32,
+    }
+}
+
+/// Passes a reading to the open app and the detectors, and on to the shell whatever they find.
+fn take_reading(
+    reading: neotime_accelerometer::Acceleration,
+    time_in_milliseconds: u64,
+    app_wants_readings: bool,
+    shakes: &mut ShakeDetector,
+    wake_gestures: &mut WakeGestureDetector,
+) {
+    if app_wants_readings {
+        app_events::acceleration_read(reading);
+        if shakes.feed(reading, time_in_milliseconds) {
+            app_events::shake_found();
+        }
+    }
+    let watching = unpack_watching(WATCHING.load(Ordering::Relaxed));
+    if let Some(gesture) = wake_gestures.feed(reading, time_in_milliseconds, watching) {
+        app_events::wake_gesture_found(gesture);
+    }
+    let speed = wake_gestures.shake_speed();
+    let speed_changed = SHAKE_SPEED.swap(speed, Ordering::Relaxed) != speed;
+    if speed_changed && SHAKE_SPEED_WANTED.load(Ordering::Relaxed) {
+        system_values::changed(&[SystemValue::ShakeSpeed]);
     }
 }
 
@@ -167,6 +256,7 @@ pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus) {
     }
     diagnostics::set(Counter::AccelerometerState, 1);
     let mut shakes = ShakeDetector::new();
+    let mut wake_gestures = WakeGestureDetector::new();
     let mut next_step_read = Instant::now();
     let mut next_acceleration_read = Instant::now();
     loop {
@@ -182,15 +272,30 @@ pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus) {
             next_step_read = now + STEP_READ_INTERVAL;
         }
 
-        let period = READING_PERIOD_IN_MILLISECONDS.load(Ordering::Relaxed);
-        if period == 0 {
+        let app_period = READING_PERIOD_IN_MILLISECONDS.load(Ordering::Relaxed);
+        let gesture_period = match unpack_watching(WATCHING.load(Ordering::Relaxed)).anything() {
+            true => WAKE_GESTURE_PERIOD_IN_MILLISECONDS,
+            false => 0,
+        };
+        let period = match (app_period, gesture_period) {
+            (0, other) | (other, 0) => other,
+            (app, gesture) => app.min(gesture),
+        };
+        if app_period == 0 {
             shakes.reset();
+        }
+        if period == 0 {
+            wake_gestures.reset();
         } else if now >= next_acceleration_read {
             if let Ok(reading) = accelerometer.read_acceleration().await {
-                app_events::acceleration_read(reading);
-                if shakes.feed(reading, now.as_millis()) {
-                    app_events::shake_found();
-                }
+                let app_wants_readings = app_period != 0;
+                take_reading(
+                    reading,
+                    now.as_millis(),
+                    app_wants_readings,
+                    &mut shakes,
+                    &mut wake_gestures,
+                );
             }
             next_acceleration_read = now + Duration::from_millis(period as u64);
         }

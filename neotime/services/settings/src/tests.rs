@@ -181,6 +181,73 @@ fn a_file_from_before_the_newer_settings_reads_them_as_their_defaults() {
     assert!(settings.is_on(Setting::AlarmsInDoNotDisturb));
     assert_eq!(settings.get(Setting::WakeOnTouch), wake_on_touch::TAP);
     assert_eq!(settings.get(Setting::HeartRateInterval), heart_rate_interval::OFF);
+    assert!(!settings.is_on(Setting::RaiseToWake));
+    assert!(!settings.is_on(Setting::LowerToSleep));
+    assert!(!settings.is_on(Setting::ShakeToWake));
+    assert_eq!(settings.get(Setting::ShakeThreshold), shake_threshold::DEFAULT);
+    assert!(!settings.is_sleep_mode());
+}
+
+// ============================================================================
+// Sleep mode
+// ============================================================================
+
+#[test]
+fn sleep_mode_turns_do_not_disturb_on_with_it() {
+    let mut settings = Settings::default();
+    let before = settings;
+
+    assert_eq!(settings.set(Setting::SleepMode, 1), Ok(true));
+
+    assert!(settings.is_sleep_mode());
+    assert!(settings.is_on(Setting::DoNotDisturb));
+    assert_eq!(
+        settings.differences_from(&before),
+        Setting::SleepMode.bit() | Setting::DoNotDisturb.bit()
+    );
+}
+
+#[test]
+fn turning_do_not_disturb_off_ends_sleep_mode() {
+    let mut settings = Settings::default();
+    settings.set(Setting::SleepMode, 1).unwrap();
+
+    settings.set(Setting::DoNotDisturb, 0).unwrap();
+
+    assert!(!settings.is_sleep_mode());
+    assert!(!settings.is_on(Setting::DoNotDisturb));
+}
+
+#[test]
+fn ending_sleep_mode_leaves_do_not_disturb_on() {
+    let mut settings = Settings::default();
+    settings.set(Setting::SleepMode, 1).unwrap();
+
+    settings.set(Setting::SleepMode, 0).unwrap();
+
+    assert!(!settings.is_sleep_mode());
+    assert!(settings.is_on(Setting::DoNotDisturb));
+}
+
+#[test]
+fn records_report_the_settings_sleep_mode_changed_with_it() {
+    let mut settings = Settings::default();
+
+    let changed = settings.apply_records(&[17, 1, 0, 0, 0]);
+
+    assert_eq!(changed, Setting::SleepMode.bit() | Setting::DoNotDisturb.bit());
+}
+
+#[test]
+fn the_shake_threshold_keeps_to_infinitimes_range() {
+    let mut settings = Settings::default();
+
+    assert!(settings.set(Setting::ShakeThreshold, 4096).is_err());
+    assert_eq!(
+        settings.set_by_name("shake_threshold", 900),
+        Ok(Setting::ShakeThreshold)
+    );
+    assert_eq!(settings.get(Setting::ShakeThreshold), 900);
 }
 
 #[test]

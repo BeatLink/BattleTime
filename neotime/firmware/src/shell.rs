@@ -15,8 +15,12 @@
 //! notifications on their preview of it, lighting a dark screen, and the preview goes back by
 //! itself after 7 seconds. Do not
 //! disturb silences all of it, keeps the screen dark, and silences every app vibration but the
-//! alarm pattern. The accelerometer is read only while the screen is on and the open app
-//! subscribes to acceleration or shakes, and the heart rate sensor while an app asks for it until
+//! alarm pattern. The accelerometer is read while the screen is on and the open app
+//! subscribes to acceleration or shakes or shows the shake speed, and while a wake gesture is
+//! watched for: a raised or shaken wrist wakes a dark screen and a lowered arm puts a lit one to
+//! sleep, as `neotime_app_host::wake` says. A double tap on the face that the face does not take
+//! puts the watch to sleep too. Sleep mode, the third state of do not disturb, turns off every
+//! wake gesture, touch included, and the always-on screen. The heart rate sensor runs while an app asks for it until
 //! that app closes, or as often as the heart rate interval setting says. Plugging the charger in or out, or the charge going low,
 //! lights the screen on the battery app, which goes back to what was open when the screen sleeps
 //! or the wearer goes back. The phone's music and weather are kept for apps to read, an incoming
@@ -42,6 +46,7 @@ use embassy_futures::{
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, signal::Signal};
 use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
+use neotime_accelerometer::wake_gestures::WakeGesture;
 use neotime_app_host::closed_apps::{ClosedApps, ClosedRun};
 use neotime_app_host::{
     haptics::{self, Vibration},
@@ -50,6 +55,7 @@ use neotime_app_host::{
     settings as app_settings,
     side_button::{self, ButtonAction, ButtonSituation, OpenScreen},
     swipes::{self, SwipeAction, SwipeScreen},
+    wake::{self as wake_gestures, DoubleTapFinder, ScreenState},
     way_back::WayBack,
     AppEffect, AppFailure, AppHost, BatteryChange, EventResult, MotionKind, OpenError, PushedEvent, System,
     Touch, Transition,
@@ -118,7 +124,7 @@ fn is_do_not_disturb() -> bool {
 /// What the touch panel listens for while the screen is dark.
 fn listening_while_dark() -> touch::Listening {
     touch::Listening::WhileDark {
-        wake_on_touch: settings::current().get(Setting::WakeOnTouch),
+        wake_on_touch: app_settings::wake_on_touch(&settings::current()),
     }
 }
 
@@ -293,6 +299,7 @@ impl SystemValues for WatchSystem {
             SystemValue::IsCharging => battery::is_charging() as Value,
             SystemValue::BatteryMillivolts => battery::millivolts() as Value,
             SystemValue::StepsToday => motion::steps_today() as Value,
+            SystemValue::ShakeSpeed => motion::shake_speed() as Value,
             SystemValue::StepTrip => motion::read_history(StepHistory::trip_steps) as Value,
             SystemValue::StepDayCount => DAYS_REMEMBERED as Value,
             SystemValue::StepHourCount => (DAYS_REMEMBERED * HOURS_PER_DAY) as Value,
@@ -645,6 +652,8 @@ struct Shell {
     firmware_page: Option<ShownPage>,
     /// The id of the temporary app the phone ran, until it closes it or disconnects.
     temporary_id: Option<AppId>,
+    /// The face's last tap, which a second close by makes a double tap that puts the watch to sleep.
+    face_double_tap: DoubleTapFinder,
     /// How opening the temporary app went: the heap it needs, or why it would not open.
     temporary_outcome: Option<Result<u32, PackageError>>,
     /// Set while a closed app that just vibrated is opened, so opening does not stop the vibration.
@@ -964,7 +973,7 @@ impl Shell {
             heart_rate::interval_changed();
         }
         if !self.lit {
-            if changed & Setting::WakeOnTouch.bit() != 0 {
+            if changed & (Setting::WakeOnTouch.bit() | Setting::SleepMode.bit()) != 0 {
                 touch::listen_for(listening_while_dark());
             }
             self.save_settings();
@@ -1056,7 +1065,15 @@ impl Shell {
         let Some(host) = &mut self.host else {
             return;
         };
-        let result = host.touch(touch, clock::utc_now(), &mut self.system);
+        let now = clock::utc_now();
+        let result = host.touch(touch, now, &mut self.system);
+        if self.showing == Showing::Face {
+            let taken_by_face = result != EventResult::NotHandled;
+            if self.face_double_tap.touch(&touch, taken_by_face, now) {
+                self.system.screen_request = Some(false);
+                return;
+            }
+        }
         if let (EventResult::NotHandled, Touch::Swipe(direction)) = (result, touch) {
             self.swipe(direction);
         }
@@ -1253,7 +1270,24 @@ impl Shell {
                 z: reading.z_in_milli_g as Value,
             }),
             AppEvent::Shake => self.deliver(PushedEvent::Motion(MotionKind::Shake)),
+            AppEvent::WakeGesture(gesture) => self.take_wake_gesture(gesture),
         }
+    }
+
+    /// Wakes a dark screen for a raised or shaken wrist, and puts a lit one to sleep for a lowered arm.
+    fn take_wake_gesture(&mut self, gesture: WakeGesture) {
+        let screen_request = match gesture {
+            WakeGesture::Raise | WakeGesture::Shake => !self.lit,
+            WakeGesture::Lower => self.lit && !self.screen_is_held_on(),
+        };
+        if screen_request {
+            self.system.screen_request = Some(!self.lit);
+        }
+    }
+
+    /// Whether the open app or a status page keeps the screen on.
+    fn screen_is_held_on(&self) -> bool {
+        self.system.keep_screen_on || status_holds_screen()
     }
 
     fn deliver(&mut self, event: PushedEvent) {
@@ -1323,7 +1357,7 @@ impl Shell {
         }
     }
 
-    /// Reads the accelerometer only as often as the open app needs while the screen is on.
+    /// Reads the accelerometer only as often as the open app needs while the screen is on, and for the wake gestures watched for.
     #[inline(never)]
     fn match_accelerometer_to_app(&self) {
         let period = match &self.host {
@@ -1331,6 +1365,13 @@ impl Shell {
             _ => None,
         };
         motion::read_acceleration_every(period);
+        let screen = ScreenState {
+            is_lit: self.lit,
+            is_held_on: self.screen_is_held_on(),
+        };
+        motion::watch_for(wake_gestures::gestures_to_watch(&settings::current(), screen));
+        let shows_shake_speed = self.lit && self.host.as_ref().is_some_and(app_motion::shows_shake_speed);
+        motion::report_shake_speed(shows_shake_speed);
     }
 
     /// Turns the backlight off and puts the display to sleep, or dims both for an always-on screen.
@@ -1347,7 +1388,7 @@ impl Shell {
         // A finger still down as the panel stops reporting would otherwise never be seen to lift.
         foreground::set_finger_down(false);
         touch::listen_for(listening_while_dark());
-        self.dimmed = settings::current().is_on(Setting::AlwaysOnScreen);
+        self.dimmed = app_settings::screen_dims_instead_of_sleeping(&settings::current());
         if self.dimmed {
             self.backlight.dim();
             self.display.lock(|display| {
@@ -1794,6 +1835,7 @@ pub async fn run_shell(
         temporary_id: None,
         temporary_outcome: None,
         keeps_vibration_on_open: false,
+        face_double_tap: DoubleTapFinder::default(),
     };
     shell.show_first_screen();
     let mut last_input = Instant::now();

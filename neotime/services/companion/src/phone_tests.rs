@@ -404,7 +404,7 @@ fn an_app_message_names_its_channel_and_carries_its_data() {
 
 #[test]
 fn an_app_message_that_could_break_the_line_is_not_sent() {
-    let long_data = format!("{{\"a\":\"{}\"}}", "x".repeat(500));
+    let long_data = format!("{{\"a\":\"{}\"}}", "x".repeat(crate::MOST_LINE_BYTES));
 
     assert_eq!(app_message_line("", "{}"), None);
     assert_eq!(app_message_line("a\"b", "{}"), None);

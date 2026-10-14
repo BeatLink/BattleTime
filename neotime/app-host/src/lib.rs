@@ -28,6 +28,7 @@ pub mod swipes;
 mod system;
 mod text;
 mod text_file;
+pub mod wake;
 pub mod way_back;
 mod widgets;
 
