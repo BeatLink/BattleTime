@@ -838,11 +838,10 @@ impl Files {
             #[cfg(with_shell)]
             StorageRequest::StoreSteps(recorded) => {
                 if let Some(finished) = recorded.finished {
-                    if log::write_slot(store, finished).await.is_ok() {
-                        let _ = log::save_trip(store, motion::trip_steps()).await;
-                    }
+                    let _ = log::write_slot(store, finished).await;
                 }
                 if recorded.day_change != DayChange::SameDay {
+                    let _ = log::save_trip_if_changed(store, motion::trip_steps()).await;
                     let _ = log::forget_old_days(store, motion::recording_day()).await;
                 }
                 if recorded.day_change == DayChange::Jump {
@@ -878,6 +877,15 @@ impl Files {
         if let Some(store) = self.store.lock().await.as_mut() {
             let _ = store.prepare_room().await;
         }
+    }
+
+    /// Saves the trip count kept in RAM, then erases ahead, for when the screen goes dark.
+    async fn use_dark_screen(&self) {
+        #[cfg(with_shell)]
+        if let Some(store) = self.store.lock().await.as_mut() {
+            let _ = log::save_trip_if_changed(store, motion::trip_steps()).await;
+        }
+        self.prepare_room().await;
     }
 
     /// Runs one line from the packages characteristic, returning the reply line and what changed.
@@ -972,7 +980,7 @@ impl neotime_packages::commands::ReplySink for ToBluetooth {
     }
 }
 
-/// Raised when the screen goes dark, so the storage task erases ahead while nothing waits on it.
+/// Raised when the screen goes dark, so the storage task saves the trip count and erases ahead while nothing waits.
 static ROOM_WANTED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 /// Runs every store call other tasks ask for, and the packages characteristic's commands, one at a time.
@@ -994,7 +1002,7 @@ pub async fn run_storage(files: &'static Files) {
                 alloc::boxed::Box::pin(files.carry_out(&mut transfer, request)).await;
                 alloc::boxed::Box::pin(files.prepare_room()).await;
             }
-            Either3::Third(()) => alloc::boxed::Box::pin(files.prepare_room()).await,
+            Either3::Third(()) => alloc::boxed::Box::pin(files.use_dark_screen()).await,
             Either3::Second(line) => {
                 foreground::wait_for_a_pause().await;
                 let change = alloc::boxed::Box::pin(files.run_packages_command(&line)).await;

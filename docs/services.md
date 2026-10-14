@@ -183,13 +183,15 @@ calendar events in a fixed purple and the rest in the accent.
   local midnight each day moves one back. A clock set to another day, such as by the phone after
   a restart, forgets them, and `log::store` reads them again from the log.
 - **The log.** When a slot ends with steps, `log::store` adds them to that slot's place in the
-  day's file, `/steps/<year>/<month>-<day>`, padding earlier slots with zeros, and saves the trip
-  count in `/steps/trip`. Each slot is a little-endian `u16`, as wasp-os's step logger writes them,
+  day's file, `/steps/<year>/<month>-<day>`, padding earlier slots with zeros. The trip count stays
+  in RAM and is saved in `/steps/trip` when a day ends and when the screen goes dark, and only when
+  it changed, through `log::save_trip_if_changed`. Each slot is a little-endian `u16`, as wasp-os's step logger writes them,
   so a full day is 480 bytes, which the flash store keeps as a record. Slots without steps are never
   written, so a quiet night costs no flash writes. When a new day starts, `log::forget_old_days`
   deletes the days older than 90, taken from the slot logs.
 - **Start.** `log::load_history` reads the remembered days and the trip count back. The chip starts
-  its count from 0 at every start, so a restart loses only the slot in progress.
+  its count from 0 at every start, so a restart loses only the slot in progress, and the trip
+  steps taken since the screen last went dark.
 
 Midnight is local midnight, from the clock's time zone.
 

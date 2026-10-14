@@ -395,7 +395,7 @@ fn a_trip_file_of_the_wrong_size_is_ignored() {
 // ============================================================================
 
 #[test]
-fn storing_a_finished_slot_writes_it_and_the_trip_count() {
+fn storing_a_finished_slot_writes_it_and_keeps_the_trip_count_in_ram() {
     let mut files = file_system();
     let mut history = history_at(MIDNIGHT + 9 * HOUR);
     history.record(MIDNIGHT + 9 * HOUR + MINUTE, 64);
@@ -404,7 +404,33 @@ fn storing_a_finished_slot_writes_it_and_the_trip_count() {
     block_on(store(&mut files, &mut history, recorded)).unwrap();
 
     assert_eq!(block_on(read_hours(&mut files, DAY_OF_MIDNIGHT))[9], 64);
-    assert_eq!(block_on(load_trip(&mut files)), Some(64));
+    assert_eq!(block_on(load_trip(&mut files)), None);
+    assert_eq!(history.trip_steps(), 64);
+}
+
+#[test]
+fn a_new_day_saves_the_trip_count() {
+    let mut files = file_system();
+    let mut history = history_at(MIDNIGHT - 30 * MINUTE);
+    history.record(MIDNIGHT - 29 * MINUTE, 50);
+
+    let recorded = history.record(MIDNIGHT + 10 * MINUTE, 80);
+    block_on(store(&mut files, &mut history, recorded)).unwrap();
+
+    assert_eq!(block_on(load_trip(&mut files)), Some(history.trip_steps()));
+}
+
+#[test]
+fn an_unchanged_trip_count_is_not_written_again() {
+    let mut files = file_system();
+    block_on(save_trip_if_changed(&mut files, 7)).unwrap();
+    let written = read_whole(&mut files, TRIP_PATH);
+
+    block_on(save_trip_if_changed(&mut files, 7)).unwrap();
+    block_on(save_trip_if_changed(&mut files, 9)).unwrap();
+
+    assert_eq!(written.unwrap(), 7u32.to_le_bytes());
+    assert_eq!(block_on(load_trip(&mut files)), Some(9));
 }
 
 #[test]
@@ -426,6 +452,7 @@ fn a_restart_reads_the_week_and_the_trip_back_from_the_log() {
         let recorded = history.record(MIDNIGHT - 30 * MINUTE + minutes * MINUTE, count);
         block_on(store(&mut files, &mut history, recorded)).unwrap();
     }
+    block_on(save_trip_if_changed(&mut files, history.trip_steps())).unwrap();
 
     let mut restarted = StepHistory::new();
     restarted.start(MIDNIGHT + 30 * MINUTE);

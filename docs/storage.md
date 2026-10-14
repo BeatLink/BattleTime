@@ -59,7 +59,7 @@ as each slot ends. The last 90 days of each are kept; older days are deleted whe
 | Path | Holds |
 |---|---|
 | `/steps/<year>/<month>-<day>` | one day's steps, a `u16` a slot, up to 480 bytes |
-| `/steps/trip` | the trip count, a `u32` |
+| `/steps/trip` | the trip count, a `u32`, saved when a day ends and when the screen goes dark |
 | `/logs/heart/<year>/<month>-<day>` | one day's average heart rate a slot, a byte each, 0 for none |
 | `/logs/battery/<year>/<month>-<day>` | one day's battery charge at the end of each slot, the top bit set while charging, `0xff` while the watch was off |
 

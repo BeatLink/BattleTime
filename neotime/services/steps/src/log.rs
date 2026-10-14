@@ -4,7 +4,8 @@
 //! from midnight as a little-endian `u16`. A slot is added when it ends with steps in it, so a file
 //! stops after the day's last slot with steps, and a slot past its end had none. Days older than
 //! `DAYS_KEPT` are deleted when a new day starts, by `neotime_slot_log`, which the heart rate and
-//! battery logs share. The trip count is kept apart, in `/steps/trip`, as a little-endian `u32`.
+//! battery logs share. The trip count is kept apart, in `/steps/trip`, as a little-endian `u32`; it lives in
+//! RAM and is written when a day ends and, through `save_trip_if_changed`, when the screen goes dark.
 
 use neotime_flash_store::{FileAccess, FileError};
 
@@ -114,6 +115,14 @@ pub async fn save_trip<Files: FileAccess>(files: &mut Files, steps: u32) -> Resu
     files.write_file(TRIP_PATH, &steps.to_le_bytes()).await
 }
 
+/// Writes the trip count only when it differs from the saved one, so an idle moment costs a read and no write.
+pub async fn save_trip_if_changed<Files: FileAccess>(files: &mut Files, steps: u32) -> Result<(), FileError> {
+    if load_trip(files).await == Some(steps) {
+        return Ok(());
+    }
+    save_trip(files, steps).await
+}
+
 /// The saved trip count, or `None` when there is none or it is not four bytes.
 pub async fn load_trip<Files: FileAccess>(files: &mut Files) -> Option<u32> {
     let mut bytes = [0u8; TRIP_FILE_BYTES + 1];
@@ -142,20 +151,18 @@ pub async fn load_history<Files: FileAccess>(files: &mut Files, history: &mut St
     }
 }
 
-/// Writes the slot a reading ended, with the trip count, and reads the days again after the clock jumped.
+/// Writes the slot a reading ended, the trip count when a day ended, and reads the days again after the clock jumped.
 pub async fn store<Files: FileAccess>(
     files: &mut Files,
     history: &mut StepHistory,
     recorded: Recorded,
 ) -> Result<(), FileError> {
     let written = match recorded.finished {
-        Some(finished) => match write_slot(files, finished).await {
-            Ok(()) => save_trip(files, history.trip_steps()).await,
-            Err(error) => Err(error),
-        },
+        Some(finished) => write_slot(files, finished).await,
         None => Ok(()),
     };
     if recorded.day_change != DayChange::SameDay {
+        let _ = save_trip_if_changed(files, history.trip_steps()).await;
         let _ = forget_old_days(files, history.recording().day).await;
     }
     if recorded.day_change == DayChange::Jump {
