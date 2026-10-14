@@ -84,7 +84,7 @@ plugin in `companion/plugins/` with `scripts/build-plugin.mjs` (which needs `npm
 }
 ```
 
-An app's description is the first paragraph of its page in [apps/](apps/), and a face's comes from
+An app's description is the first paragraph of its page in [docs/apps](apps.md), and a face's comes from
 the table in [faces.md](faces.md). The companion refuses a `store.json` of another format. Another
 repository can offer apps the same way: a release with `.ntapp` and `.ntplugin` files is enough, and
 `neotime-store.zip` with `store.json` adds descriptions.
