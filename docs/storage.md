@@ -37,18 +37,6 @@ with it. Files of 1 KB or less are kept as records, so most of these cost no sec
   commands, the step log and the time zone reach it as requests, one at a time.
 - **The shell** calls the store directly, without awaiting, once no request is under way, so its
   reads and writes always find the store free. These calls poll the chip, so they block the CPU
-  while an erase runs, as littlefs did; every other task's calls let the CPU go meanwhile.
+  while an erase runs; every other task's calls let the CPU go meanwhile.
 
 See [architecture.md](architecture.md#firmware-firmware) for the details.
-
-## littlefs for the wasp-os storage rehearsal
-
-`neotime-storage` (`services/storage/`) still puts a [littlefs](https://github.com/littlefs-project/littlefs)
-file system on the flash for one build: the wasp-os storage rehearsal, which runs as a wasp-os app to
-prove the flash driver and the file system on a watch before it moves to NeoTime. It uses
-[littlefs-rust](https://github.com/light-player/littlefs-rust), a function-by-function Rust
-translation of the C littlefs with the same on-disk format, with two fixes kept in
-`third_party/littlefs-rust` (see its `NEOTIME.md`): the workspace builds `littlefs-rust-core` without
-overflow checks, as C behaves, and a cap of 256 entries per metadata block that panics on file
-systems written by the C littlefs is turned off. Its `ErasedBlocks` and `next_block_to_erase_ahead`
-can erase free blocks ahead of littlefs, though no build uses them now.

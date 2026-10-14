@@ -156,7 +156,6 @@ pub fn stack_overflows() -> u32 {
 }
 
 /// Called from the stack guard's fault handler, so it takes no lock and no stack to speak of.
-#[cfg(not(feature = "wasp-os-rehearsal"))]
 pub fn count_stack_overflow() {
     let count = stack_overflows().wrapping_add(1);
     unsafe {

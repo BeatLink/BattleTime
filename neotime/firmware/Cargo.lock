@@ -991,20 +991,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
-name = "littlefs-rust"
-version = "0.1.0"
-dependencies = [
- "bitflags",
- "littlefs-rust-core",
-]
-
-[[package]]
-name = "littlefs-rust-core"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2d6b76e6d4cd1878ee2433fbe8c8933d4da0733496be7b4a838f14fc31cf14a"
-
-[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1250,7 +1236,6 @@ dependencies = [
  "embedded-storage",
  "embedded-storage-async",
  "heapless 0.9.3",
- "littlefs-rust",
  "neotime-accelerometer",
  "neotime-app-host",
  "neotime-battery",
@@ -1275,7 +1260,6 @@ dependencies = [
  "neotime-settings",
  "neotime-status-screen",
  "neotime-steps",
- "neotime-storage",
  "neotime-task-table",
  "neotime-touch",
  "neotime-ui",
@@ -1356,15 +1340,6 @@ dependencies = [
  "heapless 0.9.3",
  "neotime-current-time",
  "neotime-flash-store",
-]
-
-[[package]]
-name = "neotime-storage"
-version = "0.1.0"
-dependencies = [
- "embedded-storage",
- "littlefs-rust",
- "neotime-boot",
 ]
 
 [[package]]

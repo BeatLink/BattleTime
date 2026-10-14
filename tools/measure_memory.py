@@ -65,8 +65,6 @@ COMPONENTS = [
     ("neotime_updates", "Updates (DFU)"),
     ("embassy_boot", "Updates (DFU)"),
     ("neotime_flash_store", "Storage (flash store)"),
-    ("neotime_storage", "Storage (littlefs, wasp-os rehearsal only)"),
-    ("littlefs_rust", "Storage (littlefs, wasp-os rehearsal only)"),
     ("neotime_display", "Display, graphics and drivers"),
     ("neotime_touch", "Display, graphics and drivers"),
     ("neotime_accelerometer", "Display, graphics and drivers"),

@@ -1,7 +1,0 @@
-# ekv's layout is fixed when it is built: a 3 MB store of 4 KB pages, 4-byte keys and values up to 8 KB.
-[env]
-EKV_PAGE_SIZE = "4096"
-EKV_MAX_PAGE_COUNT = "768"
-EKV_MAX_KEY_SIZE = "4"
-EKV_MAX_VALUE_SIZE = "8192"
-EKV_MAX_CHUNK_SIZE = "4096"

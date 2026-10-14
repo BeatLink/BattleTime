@@ -144,13 +144,10 @@ firmware) and on DFU in the firmware.
   render black in the emulator. Running the emulator is in [docs/testing.md](docs/testing.md#the-emulator).
 - **`tools/measure_stack.py` starts with erased external flash**, so it measures only the help
   screen unless given `--flash` and `--library`. It measures whatever ELF sits at the release path,
-  and `tools/build_images.sh` leaves a rehearsal build there, so run `cargo build --release` in
-  `neotime/firmware/` first. The recovery build has its own profile, so it lands in
-  `target/thumbv7em-none-eabihf/recovery/` instead.
+  and the recovery build has its own profile, so it lands in `target/thumbv7em-none-eabihf/recovery/`
+  instead.
   `--packages` runs `pinetime-engine --bluetooth` and needs a library built from the same commit
   as the firmware, or the firmware faults at start and the watch never connects.
-- **littlefs-rust is patched.** `neotime/third_party/littlefs-rust` raises a loop limit that panics
-  on blocks written by C littlefs, and the workspace builds `littlefs-rust-core` without overflow checks.
 - **The emulator models no chip anomalies.** The SAADC never ends a sample started straight after an
   offset calibration (nRF52832 anomaly 86), so the blocking reader stops the converter in between;
   code that drives a peripheral's registers itself needs a check on the watch, not only the suites.

@@ -37,16 +37,6 @@ echo "recovery firmware (the status page, Bluetooth and updates, without the she
 add_header recovery "$dist/recovery.code.bin" "$dist/recovery.bin"
 python3 -I ../tools/package_dfu.py "$dist/recovery.bin" "$dist/recovery.zip"
 
-echo "rehearsal (an app for wasp-os that writes no flash)"
-(cd firmware && cargo objcopy -q --release --features wasp-os-rehearsal -- -O binary "../$dist/rehearsal-under-wasp-os.bin")
-python3 -I ../tools/package_dfu.py "$dist/rehearsal-under-wasp-os.bin" "$dist/rehearsal-under-wasp-os.zip" --sd-req 0xB8
-echo "storage rehearsal (also erases wasp-os's files on the external flash)"
-(cd firmware && cargo objcopy -q --release --features wasp-os-storage-rehearsal -- -O binary "../$dist/storage-rehearsal-under-wasp-os.bin")
-python3 -I ../tools/package_dfu.py "$dist/storage-rehearsal-under-wasp-os.bin" "$dist/storage-rehearsal-under-wasp-os.zip" --sd-req 0xB8
-# A 16 KB upload for the rehearsal's update service, which keeps it in RAM and checks it.
-python3 -I -c "import random; random.seed(1); open('$dist/rehearsal-upload.bin', 'wb').write(bytes(random.getrandbits(8) for _ in range(16384)))"
-python3 -I ../tools/package_dfu.py "$dist/rehearsal-upload.bin" "$dist/rehearsal-upload.zip"
-
 echo "bootloader updater (a firmware update that installs dist/bootloader.bin on a watch already on NeoTime)"
 (cd bootloader-updater && NEOTIME_NEW_BOOTLOADER_BIN="$PWD/../$dist/bootloader.bin" cargo objcopy -q --release -- -O binary "../$dist/bootloader-updater.code.bin")
 add_header bootloader-updater "$dist/bootloader-updater.code.bin" "$dist/bootloader-updater.bin"

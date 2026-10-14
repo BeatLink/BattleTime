@@ -9,10 +9,6 @@ publish = false
 [workspace]
 
 [features]
-# An app for wasp-os that proves Bluetooth on the watch and writes no flash; see docs/updates.md.
-wasp-os-rehearsal = ["cortex-m-rt/set-vtor"]
-# The rehearsal plus NeoTime's flash driver and littlefs on the real chip; erases wasp-os's files.
-wasp-os-storage-rehearsal = ["wasp-os-rehearsal"]
 # The image for the recovery slot: its status page always says it is the recovery firmware.
 recovery = []
 
@@ -32,7 +28,6 @@ embedded-hal = "1.0"
 embedded-storage = "0.3"
 embedded-storage-async = "0.4"
 heapless = "0.9"
-littlefs-rust = "0.1"
 nrf-pac = { version = "0.4", features = ["nrf52832"] }
 static_cell = "2.1"
 trouble-host = { version = "0.8", default-features = false, features = ["peripheral", "gatt", "derive", "default-packet-pool", "default-packet-pool-mtu-128", "default-packet-pool-size-8"] }
@@ -62,7 +57,6 @@ neotime-runtime = { path = "../runtime" }
 neotime-settings = { path = "../services/settings" }
 neotime-steps = { path = "../services/steps" }
 neotime-status-screen = { path = "../drivers/status_screen" }
-neotime-storage = { path = "../services/storage" }
 neotime-touch = { path = "../drivers/touch" }
 neotime-vibrator = { path = "../drivers/vibrator" }
 neotime-updates = { path = "../services/updates" }
@@ -71,9 +65,7 @@ neotime-updates = { path = "../services/updates" }
 neotime-boot = { path = "../boot", features = ["build-script"] }
 neotime-compiler = { path = "../compiler" }
 
-# littlefs-rust with the core's panicking loop caps turned off; see third_party/littlefs-rust/NEOTIME.md.
 [patch.crates-io]
-littlefs-rust = { path = "../third_party/littlefs-rust" }
 # trouble-host with discovery responses that never cut a 128-bit UUID short; see third_party/trouble-host/NEOTIME.md.
 trouble-host = { path = "../third_party/trouble-host" }
 # The GATT server macro that builds a server in place; see third_party/trouble-host-macros/NEOTIME.md.
@@ -90,6 +82,3 @@ opt-level = "s"
 [profile.recovery]
 inherits = "release"
 opt-level = "z"
-
-[profile.dev.package.littlefs-rust-core]
-overflow-checks = false

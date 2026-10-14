@@ -93,7 +93,7 @@ the watch.
 ## Size
 
 Built for the watch with 128 files, 128 record keys and rings of up to 192 sectors
-(`FlashStore<Flash, 128, 128, 192>`), measured by `tools/storage-benchmark/size-probe`:
+(`FlashStore<Flash, 128, 128, 192>`), measured by `tools/storage-benchmark/size-probe`, which is in the history up to 9a54d693:
 
 | | Bytes |
 |---|---:|
@@ -121,5 +121,5 @@ files that move between small and large, deletes and log appends, in which both 
 the power at every single write and erase of the run in turn, leaving that one half done, mounts
 again and checks that every record, file, listing and the log is as before the interrupted
 operation or as it left it (an older log entry may only have lost its start). Each cut is repeated
-with a second cut during the recovery. `tools/storage_benchmark.sh` runs a larger version of the
-same test, over 16,000 runs, and the speed comparison.
+with a second cut during the recovery. `tools/storage_benchmark.sh`, in the history up to
+9a54d693, ran a larger version of the same test, over 16,000 runs, and the speed comparison.

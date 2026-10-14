@@ -33,7 +33,7 @@ flowchart TB
     runtime["App runtime<br/>runtime: images, checks, interpreter, started"]
     ui["UI toolkit<br/>ui: renderer, shapes, strips, started"]
     system["System<br/>settings started; planned: power, events, notifications"]
-    services["Services<br/>services/storage, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/steps,<br/>services/liveness, services/foreground,<br/>services/task_table"]
+    services["Services<br/>services/flash_store, services/updates,<br/>services/dfu, services/blefs, services/companion,<br/>services/packages, services/settings,<br/>services/current_time, services/steps,<br/>services/liveness, services/foreground,<br/>services/task_table"]
     drivers["Drivers<br/>drivers/display, drivers/touch,<br/>drivers/vibrator, drivers/button,<br/>drivers/accelerometer, drivers/heart_rate,<br/>drivers/bluetooth, drivers/external_flash, ..."]
     board["Board<br/>(planned: PineTime pins and buses)"]
     hal["embassy-nrf<br/>(chip support)"]
@@ -170,13 +170,11 @@ NeoTime/
 │   ├── packages/     neotime-packages: the apps installed in /apps and the shared library's install
 │   ├── settings/     neotime-settings: the watch-wide settings, their limits and their file
 │   ├── steps/        neotime-steps: the step history by hour, the trip count and the daily step log
-│   ├── storage/      neotime-storage: littlefs in the external flash, for the wasp-os storage rehearsal
 │   ├── task_table/   neotime-task-table: the firmware's tasks with their runs and busy time, for the system app
 │   └── updates/      neotime-updates: stores an uploaded firmware and hands it to the bootloader
 ├── simulator/        neotime-simulator: the drivers in a desktop window
 ├── site/             the GitHub Pages site: its MkDocs config, front page and colours
 ├── third_party/
-│   ├── littlefs-rust/  littlefs-rust with its panicking loop caps turned off
 │   ├── trouble-host/   TrouBLE with its GATT table in flash and discovery that never cuts a 128-bit UUID short
 │   └── trouble-host-macros/  TrouBLE's GATT macros, building the attribute table in a constant
 ├── tools/            scripts: drawing the memory maps, packaging images, building every image
@@ -470,13 +468,6 @@ kind of data needs no new format:
 It survives a power cut at any write or erase, which its tests check exhaustively. Built for the
 watch it takes 2,700 B of RAM and about 26 KB of code. The firmware reaches it through its storage
 task; see [Firmware](#firmware-firmware) and [flash-store.md](flash-store.md).
-
-## littlefs (`services/storage`)
-
-`neotime-storage` puts a [littlefs](https://github.com/littlefs-project/littlefs) file system on the
-external flash through [`littlefs-rust`](https://github.com/light-player/littlefs-rust), a pure Rust
-translation of the C littlefs. Only the wasp-os storage rehearsal uses it now; see
-[storage.md](storage.md).
 
 ## Updates (`services/updates`)
 
@@ -896,7 +887,7 @@ watch face, the launcher and the apps through `neotime-app-host`:
   moves the stack pointer back to the top before it uses any stack, records a HardFault whose
   `CFSR` shows a MemManage fault and whose address is `MMFAR`, inside the guard, and halts for the
   watchdog. A frame bigger than the guard can step over it, so it catches the usual overflow of a
-  few hundred bytes rather than every one. The rehearsals leave the unit to wasp-os's SoftDevice.
+  few hundred bytes rather than every one.
 - **Saved state.** An app's persistent variables are written to `/apps/<id>/state` on the external
   flash when it closes or the screen turns off, only when one changed, and put back when it opens.
 - **Battery service.** The standard Battery service (0x180F) answers a read of 0x2A19 with the

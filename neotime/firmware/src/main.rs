@@ -6,9 +6,8 @@
 //! After start-up the shell takes the screen and runs the watch face, the launcher and the apps the
 //! companion app installed in `/apps`; a phone sets the clock through the Current Time service.
 //!
-//! The `wasp-os-rehearsal` feature builds it as an app for wasp-os instead, which touches no flash;
-//! see docs/updates.md. The `recovery` feature builds the small recovery firmware: the status page,
-//! Bluetooth and updates, without the shell.
+//! The `recovery` feature builds the small recovery firmware: the status page, Bluetooth and
+//! updates, without the shell.
 
 #![no_std]
 #![no_main]
@@ -51,18 +50,13 @@ use neotime_updates::ImageKind;
 use static_cell::StaticCell;
 use trouble_host::prelude::*;
 
-#[cfg_attr(not(feature = "wasp-os-rehearsal"), path = "storage/watch.rs")]
-#[cfg_attr(
-    all(feature = "wasp-os-rehearsal", not(feature = "wasp-os-storage-rehearsal")),
-    path = "storage/rehearsal.rs"
-)]
-#[cfg_attr(feature = "wasp-os-storage-rehearsal", path = "storage/storage_rehearsal.rs")]
+#[path = "storage/watch.rs"]
 mod storage;
 mod storage_requests;
 
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod about;
-// The rehearsals and the recovery firmware run without the shell, which leaves these unused there.
+// The recovery firmware runs without the shell, which leaves these unused there.
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod app_events;
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -88,8 +82,6 @@ mod restart;
 mod settings;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod shell;
-// wasp-os's SoftDevice owns the memory protection unit under the rehearsals.
-#[cfg(not(feature = "wasp-os-rehearsal"))]
 mod stack_guard;
 // Under wasp-os the firmware is never rolled back or installed as recovery.
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -97,7 +89,6 @@ mod motion;
 mod packages;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod phone;
-#[cfg_attr(feature = "wasp-os-rehearsal", allow(dead_code))]
 mod status;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod system_values;
@@ -179,13 +170,8 @@ static HOST_RESOURCES: StaticCell<HostResources<DefaultPacketPool, 1, 2>> = Stat
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    #[cfg(not(feature = "wasp-os-rehearsal"))]
     stack_guard::start();
     crate::tasks::name_this_task("main");
-    let previous_run = storage::previous_breadcrumbs();
-    storage::leave_breadcrumb(stage::ENTERED_MAIN);
-    storage::prepare_clocks();
-    storage::leave_breadcrumb(stage::CLOCKS_PREPARED);
     let mut config = embassy_nrf::config::Config::default();
     config.lfclk_source = LfclkSource::ExternalXtal;
     // Leave the debug port's settings alone, so start-up never writes the protection word.
@@ -193,10 +179,8 @@ async fn main(spawner: Spawner) {
     let chip = embassy_nrf::init(config);
 
     start_heap();
-    storage::leave_breadcrumb(stage::CHIP_STARTED);
     mark_alive();
     let watchdog = take_over_watchdog(chip.WDT);
-    storage::leave_breadcrumb(stage::WATCHDOG_TAKEN_OVER);
 
     let button_pin = Input::new(chip.P0_13, Pull::Down);
     let power_pin = Output::new(chip.P0_15, Level::Low, OutputDrive::Standard);
@@ -247,25 +231,10 @@ async fn main(spawner: Spawner) {
     let mut title = StatusLine::new();
     let _ = core::fmt::write(&mut title, format_args!("NeoTime {FIRMWARE_VERSION}"));
     screen.write_line(line::TITLE, &title);
-    screen.write_line(line::BUILD, storage::BUILD_NAME);
     screen.write_line(line::FILES, "Starting");
     screen.write_line(line::BLUETOOTH, "Off");
-    storage::leave_breadcrumb(stage::SCREEN_STARTED);
     let last_restart = restart::take_last_restart();
-    // The rehearsals' breadcrumbs say more than the reset reasons, so they keep the line when there are any.
-    if let Some(previous) = previous_run {
-        let mut text = heapless::String::<24>::new();
-        let _ = core::fmt::write(
-            &mut text,
-            format_args!(
-                "last {:x} {:x} {:x}",
-                previous.stage, previous.detail, previous.fault_status
-            ),
-        );
-        screen.write_line(line::LAST_RUN, &text);
-    } else {
-        show_last_restart(&mut screen, last_restart);
-    }
+    show_last_restart(&mut screen, last_restart);
 
     let storage_peripherals = storage::StoragePeripherals {
         flash_chip_select: chip.P0_05,
@@ -278,7 +247,6 @@ async fn main(spawner: Spawner) {
     };
     screen.set_mode(mode);
 
-    storage::leave_breadcrumb(stage::STORAGE_READY);
     #[cfg(with_shell)]
     {
         // The touch panel, accelerometer and heart rate sensor share one I2C bus; 32 bytes fits the largest write.
@@ -353,45 +321,23 @@ fn start_bluetooth(
     files: &'static storage::Files,
 ) {
     let controller = neotime_bluetooth::start(radio, Interrupts);
-    storage::leave_breadcrumb(stage::RADIO_STARTED);
     let parts = BLUETOOTH_PARTS.init(parts);
     spawner.spawn(storage::run_storage(files).unwrap());
     spawner.spawn(run_bluetooth(controller, parts, files).unwrap());
 }
 
 // ============================================================================
-// Start-up stages, and what happens on a panic or a fault
+// What happens on a panic or a fault
 // ============================================================================
-
-mod stage {
-    pub const ENTERED_MAIN: u32 = 1;
-    pub const CLOCKS_PREPARED: u32 = 2;
-    pub const CHIP_STARTED: u32 = 3;
-    pub const WATCHDOG_TAKEN_OVER: u32 = 4;
-    pub const SCREEN_STARTED: u32 = 5;
-    pub const STORAGE_READY: u32 = 6;
-    pub const RADIO_STARTED: u32 = 7;
-    pub const ADVERTISING: u32 = 8;
-    pub const CONNECTED: u32 = 9;
-    pub const RESET_REQUESTED: u32 = 10;
-    pub const PANICKED: u32 = 0xE0;
-    pub const FAULTED: u32 = 0xF0;
-}
 
 const CONFIGURABLE_FAULT_STATUS: *const u32 = 0xE000_ED28 as *const u32;
 const BUS_FAULT_ADDRESS: *const u32 = 0xE000_ED38 as *const u32;
 
 /// Halting lets the watchdog reset the watch, which a reset loop would never do.
 #[panic_handler]
-fn halt_on_panic(information: &core::panic::PanicInfo) -> ! {
+fn halt_on_panic(_information: &core::panic::PanicInfo) -> ! {
     // Taken first, so the search starts above the frames that record the panic.
     let stack_pointer = cortex_m::register::msp::read();
-    let line = information.location().map_or(0, |location| location.line());
-    storage::record(storage::Breadcrumbs {
-        stage: stage::PANICKED,
-        detail: line,
-        fault_status: 0,
-    });
     restart::record_panic(stack_pointer);
     loop {
         cortex_m::asm::wfe();
@@ -401,11 +347,6 @@ fn halt_on_panic(information: &core::panic::PanicInfo) -> ! {
 #[cortex_m_rt::exception]
 unsafe fn HardFault(frame: &cortex_m_rt::ExceptionFrame) -> ! {
     let fault_status = unsafe { CONFIGURABLE_FAULT_STATUS.read_volatile() };
-    storage::record(storage::Breadcrumbs {
-        stage: stage::FAULTED,
-        detail: frame.pc(),
-        fault_status,
-    });
     restart::record_crash(&Crash::HardFault {
         program_counter: frame.pc(),
         link_register: frame.lr(),
@@ -488,7 +429,7 @@ fn shell_loops() -> Option<u32> {
     (loops > 0).then_some(loops)
 }
 
-/// The recovery firmware and the rehearsals have no shell to wait for.
+/// The recovery firmware has no shell to wait for.
 #[cfg(not(with_shell))]
 fn shell_loops() -> Option<u32> {
     None
@@ -847,7 +788,6 @@ async fn run_bluetooth(
                 .unwrap();
             if !advertising_shown {
                 screen.write_line(line::BLUETOOTH, "Advertising");
-                storage::leave_breadcrumb(stage::ADVERTISING);
                 advertising_shown = true;
             }
 
@@ -860,7 +800,6 @@ async fn run_bluetooth(
                 continue;
             };
             screen.write_line(line::BLUETOOTH, "Connected");
-            storage::leave_breadcrumb(stage::CONNECTED);
             phone::set_connected(true);
             serve_connection(
                 &connection,
@@ -1195,7 +1134,6 @@ async fn serve_connection(
                 show_update(screen, dfu, &outcome, &mut shown_progress);
                 if outcome.reset_requested {
                     screen.write_line(line::ACTION, "Restarting to install");
-                    storage::leave_breadcrumb(stage::RESET_REQUESTED);
                     storage::reset(screen).await;
                 }
             }

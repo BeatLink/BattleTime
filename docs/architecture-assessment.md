@@ -252,8 +252,8 @@ the button on the higher-priority executor the watch still responds while one ru
 
 ### Measured: the storage benchmark
 
-`tools/storage_benchmark.sh` (inside `nix develop`) compiles all 55 apps and faces and runs
-`tools/storage-benchmark` on them. Each run formats a simulated flash that counts every read, write
+`tools/storage_benchmark.sh` compiled all 55 apps and faces and ran `tools/storage-benchmark` on
+them; both went with littlefs and are in the history up to 9a54d693. Each run formats a simulated flash that counts every read, write
 and erase, installs every app, writes a year of step logs, runs 120 days of use (a step slot every
 6 minutes, 30 saved states and 20 notifications a day), then opens every app and reads each of its
 chunks. Split into keys as proposed, the apps are 1,608 keys: 183 functions of 62 B on average,
@@ -311,7 +311,7 @@ notifications):
 | sequential-storage, every key cached | 6,124 B | under 0.1 ms | 2 ms, 3.8 s |
 | sequential-storage, page caches and 64 keys | 2,236 B | 85 ms | 2 ms, 3.5 min |
 
-Code size on the watch, measured by `tools/storage-benchmark/size-probe`: a watch build with the
+Code size on the watch, measured by `tools/storage-benchmark/size-probe` (in the history up to 9a54d693): a watch build with the
 firmware's release settings that calls each store as NeoTime would (mount or format, read, write,
 delete, and for ekv a range read to list apps), less the same build with no store:
 

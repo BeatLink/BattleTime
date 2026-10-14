@@ -83,8 +83,6 @@ jobs:
         build:
           - { name: firmware, crate: firmware, features: "--release" }
           - { name: recovery firmware, crate: firmware, features: "--profile recovery --features recovery" }
-          - { name: wasp-os rehearsal, crate: firmware, features: "--release --features wasp-os-rehearsal" }
-          - { name: storage rehearsal, crate: firmware, features: "--release --features wasp-os-storage-rehearsal" }
           - { name: bootloader, crate: bootloader, features: "--release" }
     defaults:
       run:

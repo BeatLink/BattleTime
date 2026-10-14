@@ -129,7 +129,7 @@ fn app_id(id: &str) -> AppId {
     AppId::try_from(id).unwrap_or_default()
 }
 
-/// Answers a command this build cannot run, such as in a rehearsal with no file system.
+/// Answers a command this build cannot run, such as in the recovery firmware or without a file system.
 pub fn refuse_command(line: &[u8], message: &str) -> (String, Change) {
     let name = serde_json_core::from_slice::<Command>(line).map_or("?", |(command, _)| command.c);
     (error_reply(name, message), Change::None)

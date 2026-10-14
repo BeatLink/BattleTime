@@ -1,6 +1,6 @@
 //! Whether the wearer is watching the screen move, so background work that blocks every task waits for a pause.
 //!
-//! Every task shares one executor, and littlefs and the flash chips block it while they work: a
+//! Every task shares one executor, and the flash store and the flash chips block it while they work: a
 //! sector erase holds every task for tens of milliseconds. Work the wearer is not waiting on, such
 //! as the step log, package commands and files from the phone, asks `may_start` before it begins,
 //! and holds back while the screen is drawing or a finger is down, but never for longer than

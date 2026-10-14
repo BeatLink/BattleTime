@@ -10,7 +10,7 @@ use core::ptr::addr_of;
 
 use neotime_crash_record::Crash;
 
-use crate::{restart, stage, storage};
+use crate::restart;
 
 // ============================================================================
 // The guard
@@ -94,11 +94,6 @@ unsafe extern "C" fn record_memory_fault(faulting_stack_pointer: u32) -> ! {
     };
     let program_counter = stacked_word(6);
     restart::count_stack_overflow();
-    storage::record(storage::Breadcrumbs {
-        stage: stage::FAULTED,
-        detail: program_counter,
-        fault_status,
-    });
     restart::record_crash(&Crash::HardFault {
         program_counter,
         link_register: stacked_word(5),

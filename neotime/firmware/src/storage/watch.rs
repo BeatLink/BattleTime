@@ -48,7 +48,6 @@ use crate::{
 // What this build is
 // ============================================================================
 
-pub const BUILD_NAME: &str = "";
 pub const WATCHDOG_HALT: HaltConfig = HaltConfig::Pause;
 /// The bootloader takes over at the next start, swapping in an update if one was marked.
 pub async fn reset(_screen: &mut Screen) -> ! {
@@ -58,27 +57,6 @@ pub async fn reset(_screen: &mut Screen) -> ! {
 
 /// The flash store keeps its tables in static RAM, so storage needs little of the heap.
 pub const HEAP_SIZE: usize = 10 * 1024;
-
-pub fn prepare_clocks() {}
-
-// ============================================================================
-// Breadcrumbs are only kept in the rehearsal
-// ============================================================================
-
-#[derive(Clone, Copy)]
-pub struct Breadcrumbs {
-    pub stage: u32,
-    pub detail: u32,
-    pub fault_status: u32,
-}
-
-pub fn previous_breadcrumbs() -> Option<Breadcrumbs> {
-    None
-}
-
-pub fn leave_breadcrumb(_stage: u32) {}
-
-pub fn record(_breadcrumbs: Breadcrumbs) {}
 
 // ============================================================================
 // Starting the storage

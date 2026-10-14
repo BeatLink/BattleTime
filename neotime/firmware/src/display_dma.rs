@@ -321,20 +321,11 @@ impl PanelInterface for DmaInterface {
 // ============================================================================
 
 /// The flash's side of the bus: each transaction first waits for a strip going out to the display.
-// The plain rehearsal touches no flash, so it never builds one.
-#[cfg_attr(
-    all(feature = "wasp-os-rehearsal", not(feature = "wasp-os-storage-rehearsal")),
-    allow(dead_code)
-)]
 pub struct FlashOnBus {
     bus: &'static SpiBus,
     chip_select: Output<'static>,
 }
 
-#[cfg_attr(
-    all(feature = "wasp-os-rehearsal", not(feature = "wasp-os-storage-rehearsal")),
-    allow(dead_code)
-)]
 impl FlashOnBus {
     pub fn new(bus: &'static SpiBus, chip_select: Output<'static>) -> FlashOnBus {
         FlashOnBus { bus, chip_select }
