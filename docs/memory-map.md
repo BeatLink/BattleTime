@@ -47,7 +47,7 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Component | Full build | Recovery build |
 |---|---:|---:|
 | Firmware (start-up, shell, tasks) | 115.8 KB | 45.3 KB |
-| App host (with `neotime-ui`) | 87.3 KB | 0.0 KB |
+| App host (with `neotime-ui`) | 87.8 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 42.7 KB | 45.4 KB |
 | App runtime | 35.5 KB | 0.0 KB |
 | core, alloc and compiler builtins | 25.9 KB | 14.7 KB |
@@ -59,9 +59,9 @@ the files the firmware embeds, such as the Bosch configuration, are found by the
 | Display, graphics and drivers | 5.6 KB | 3.2 KB |
 | Updates (DFU) | 2.6 KB | 2.5 KB |
 | Other constants and padding | 30.1 KB | 15.2 KB |
-| **Code and data** | **414.4 KB** | **152.0 KB** |
+| **Code and data** | **414.8 KB** | **152.0 KB** |
 | Shared library, after the code | 45.7 KB | none |
-| Free of the 480 KB region, after its header | 19.6 KB | 327.7 KB |
+| Free of the 480 KB region, after its header | 19.2 KB | 327.7 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -265,10 +265,10 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Firmware: task storage, the Bluetooth host's resources and packet pool | 21,625 B | 12,413 B |
 | Bluetooth controller | 2,545 B | 2,545 B |
 | Display, graphics and drivers | 372 B | 372 B |
-| App host (with `neotime-ui`) | 8 B | 0 B |
+| App host (with `neotime-ui`) | 28 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **55,584 B** | **25,596 B** |
-| Left for the stack | 9,936 B | 39,924 B |
+| **Static RAM** (`.data` and `.bss`) | **55,600 B** | **25,596 B** |
+| Left for the stack | 9,920 B | 39,924 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
