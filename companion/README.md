@@ -381,8 +381,10 @@ The watch's launcher groups the apps, and the Launcher screen arranges it. The *
 shows the groups: folders (a list of groups, each opening its apps), sections (one list with a
 heading above each group), pages (a page per group, swiped left and right) or one plain list. The
 **view** is how a group's apps are drawn: a row each, or a grid of icons. Groups can be renamed,
-given a shared library icon, reordered, added and removed, and an app moved to another group or
-to another place in its own.
+given a shared library icon, added and removed, and an app moved to another group. The **sort** puts
+the groups (Other last) and each group's apps in order of their names, or, set to custom, keeps the
+order the wearer gives them; switching to custom starts from the order shown, and only then can
+groups and apps be moved up and down.
 
 Each app's image declares the group it starts in, such as `games`, and the `apps` reply carries it.
 [src/protocol/launcher.ts](src/protocol/launcher.ts) works out where every installed app goes, each
@@ -391,11 +393,12 @@ file service as a few hundred bytes (the layout is in [companion-protocol.md](..
 sends `{"c":"launcher"}` on the packages characteristic so the launcher shows it at once. Installing
 an app writes the file again, so a new app lands in its group. The file lives on the watch, so
 every phone and the command line see the same groups; with no file the screen starts from the
-default groups: Games, Tools, Communication, Time, Phone, Health, System (settings included) and Other.
-Setting up a watch writes those defaults, as folders. An app whose group is missing goes to Other,
+default groups: Communication, Games, Health, Phone, System (settings included), Time, Tools and
+Other. Setting up a watch writes those defaults, as folders sorted by name. The sort travels in a
+byte after the groups that the watch ignores; a file without it reads as sorted by name. An app whose group is missing goes to Other,
 and so does one installed another way, until the companion next writes the file.
 
-`neotime launcher show|style <s>|view <v>|move <app> <group> [place]|add <name> [icon]|rename <group> <name>|icon <group> <icon>|order <group> <place>|remove <group>|reset`
+`neotime launcher show|style <s>|view <v>|sort <name|custom>|move <app> <group> [place]|add <name> [icon]|rename <group> <name>|icon <group> <icon>|order <group> <place>|remove <group>|reset`
 does all of the same from a terminal.
 
 ## Quick apps

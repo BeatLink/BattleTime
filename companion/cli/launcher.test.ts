@@ -35,7 +35,7 @@ describe('neotime launcher', () => {
   it('shows the default groups on a watch without a file', async () => {
     const { session: watch } = await session();
     await launcher(watch, []);
-    expect(output()).toContain('Style folders, apps as a list (the defaults');
+    expect(output()).toContain('Style folders, apps as a list, sorted by name (the defaults');
     expect(output()).toContain('Games [games, game]: Snake');
     expect(output()).toContain('Other [other, pine_logo]: Hello');
   });
@@ -55,7 +55,7 @@ describe('neotime launcher', () => {
     await launcher(watch, ['move', 'hello', 'tools']);
     expect(onWatch()?.placements).toContainEqual({ app: 'hello', group: 'tools' });
     await launcher(watch, ['add', 'Fitness', 'heart']);
-    expect(onWatch()?.groups.at(-1)).toEqual({ id: 'fitness', name: 'Fitness', icon: 'heart' });
+    expect(onWatch()?.groups).toContainEqual({ id: 'fitness', name: 'Fitness', icon: 'heart' });
     await launcher(watch, ['remove', 'tools']);
     expect(onWatch()?.groups.some((group) => group.id === 'tools')).toBe(false);
     await launcher(watch, ['reset']);
@@ -64,6 +64,21 @@ describe('neotime launcher', () => {
       { app: 'snake', group: 'games' },
       { app: 'hello', group: 'other' },
     ]);
+  });
+
+  it('sorts by name, and switches to custom keeping the order shown', async () => {
+    const { session: watch, onWatch } = await session();
+    await launcher(watch, ['show']);
+    expect(output()).toContain('sorted by name');
+    await launcher(watch, ['sort', 'custom']);
+    expect(onWatch()?.sort).toBe('custom');
+    expect(onWatch()?.groups.map((group) => group.id).slice(0, 3)).toEqual(['communication', 'games', 'health']);
+    await launcher(watch, ['sort', 'name']);
+    expect(onWatch()?.sort).toBe('name');
+    await launcher(watch, ['order', 'time', '1']);
+    expect(onWatch()?.sort).toBe('custom');
+    expect(onWatch()?.groups[0].id).toBe('time');
+    await expect(launcher(watch, ['sort', 'random'])).rejects.toThrow('Give a sort');
   });
 
   it('refuses what it cannot do', async () => {

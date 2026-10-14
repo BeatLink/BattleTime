@@ -3,7 +3,8 @@
 // The file says where every app goes, as services/packages/src/launcher.rs in the NeoTime tree reads it:
 // byte 0 the format version (1), byte 1 the style, byte 2 the view, byte 3 the group count, then per group
 // its icon's place in the shared library, its id, its name, and its apps' ids in order, each text behind a
-// length byte. This app keeps the wearer's choices as settings and works out the file from them and the
+// length byte, and after the groups one byte of this app's own, how it sorts (0 by name, 1 the wearer's
+// order), which the watch ignores. This app keeps the wearer's choices as settings and works out the file from them and the
 // installed apps, each placed in the group its image declares until the wearer moves it. After writing
 // the file, the `launcher` packages command makes the watch show it.
 
@@ -29,6 +30,10 @@ export type LauncherStyle = (typeof LAUNCHER_STYLES)[number];
 export const LAUNCHER_VIEWS = ['list', 'grid'] as const;
 export type LauncherView = (typeof LAUNCHER_VIEWS)[number];
 
+// By name puts the groups and each group's apps in order of their names; custom keeps the wearer's order.
+export const LAUNCHER_SORTS = ['name', 'custom'] as const;
+export type LauncherSort = (typeof LAUNCHER_SORTS)[number];
+
 export type LauncherGroup = { id: string; name: string; icon: LibraryIconName };
 
 // One app placed in a group by the wearer; the list's order is the apps' order within each group.
@@ -37,25 +42,27 @@ export type Placement = { app: string; group: string };
 export type LauncherSettings = {
   style: LauncherStyle;
   view: LauncherView;
+  sort: LauncherSort;
   groups: LauncherGroup[];
   placements: Placement[];
 };
 
-// The groups a watch starts with, which the usual apps declare.
+// The groups a watch starts with, which the usual apps declare, in order of their names.
 export const DEFAULT_GROUPS: LauncherGroup[] = [
-  { id: 'games', name: 'Games', icon: 'game' },
-  { id: 'tools', name: 'Tools', icon: 'calculator' },
   { id: 'communication', name: 'Communication', icon: 'notification' },
-  { id: 'time', name: 'Time', icon: 'clock' },
-  { id: 'phone', name: 'Phone', icon: 'phone' },
+  { id: 'games', name: 'Games', icon: 'game' },
   { id: 'health', name: 'Health', icon: 'heart' },
+  { id: 'phone', name: 'Phone', icon: 'phone' },
   { id: 'system', name: 'System', icon: 'settings' },
+  { id: 'time', name: 'Time', icon: 'clock' },
+  { id: 'tools', name: 'Tools', icon: 'calculator' },
   { id: OTHER_GROUP_ID, name: 'Other', icon: 'pine_logo' },
 ];
 
 export const DEFAULT_LAUNCHER: LauncherSettings = {
   style: 'folders',
   view: 'list',
+  sort: 'name',
   groups: DEFAULT_GROUPS,
   placements: [],
 };
@@ -77,6 +84,7 @@ const MOST_TEXT_BYTES = 255;
 
 const STYLE_NUMBERS: Record<LauncherStyle, number> = { list: 0, folders: 1, sections: 2, pages: 3 };
 const VIEW_NUMBERS: Record<LauncherView, number> = { list: 0, grid: 1 };
+const SORT_NUMBERS: Record<LauncherSort, number> = { name: 0, custom: 1 };
 
 // A length byte and the text, cut to whole characters within 255 bytes.
 function textBytes(text: string): number[] {
@@ -94,7 +102,7 @@ export function launcherFile(settings: LauncherSettings, apps: readonly WatchApp
   }
   const bytes = [LAUNCHER_FILE_VERSION, STYLE_NUMBERS[settings.style], VIEW_NUMBERS[settings.view], settings.groups.length];
   const grouped = new Map(groupApps(settings, apps).map(({ group, apps: members }) => [group.id, members]));
-  for (const group of settings.groups) {
+  for (const group of orderedGroups(settings)) {
     if (!isPlainId(group.id)) {
       throw new LauncherError(`A group id is 1 to 16 letters, digits, "-" and "_", not "${group.id}".`);
     }
@@ -109,6 +117,7 @@ export function launcherFile(settings: LauncherSettings, apps: readonly WatchApp
       bytes.push(...textBytes(member.id));
     }
   }
+  bytes.push(SORT_NUMBERS[settings.sort]);
   return new Uint8Array(bytes);
 }
 
@@ -128,6 +137,7 @@ export function readLauncherFile(file: Uint8Array): LauncherSettings | null {
   const settings: LauncherSettings = {
     style: LAUNCHER_STYLES.find((style) => STYLE_NUMBERS[style] === file[1]) ?? 'list',
     view: LAUNCHER_VIEWS.find((view) => VIEW_NUMBERS[view] === file[2]) ?? 'list',
+    sort: 'name',
     groups: [],
     placements: [],
   };
@@ -146,6 +156,7 @@ export function readLauncherFile(file: Uint8Array): LauncherSettings | null {
         settings.placements.push({ app: text(), group: id });
       }
     }
+    settings.sort = LAUNCHER_SORTS.find((sort) => SORT_NUMBERS[sort] === file[at]) ?? 'name';
   } catch {
     // The groups before the cut stay, as on the watch.
   }
@@ -156,11 +167,22 @@ export function readLauncherFile(file: Uint8Array): LauncherSettings | null {
 // Grouping, as the watch does
 // ============================================================================
 
+// Orders two names as people read them, ignoring case.
+const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+
+// The groups in the launcher's order: by name with `other` last, or as the wearer put them.
+function orderedGroups(settings: LauncherSettings): LauncherGroup[] {
+  if (settings.sort === 'custom') {
+    return settings.groups;
+  }
+  return [...settings.groups].sort((a, b) => Number(a.id === OTHER_GROUP_ID) - Number(b.id === OTHER_GROUP_ID) || byName(a, b));
+}
+
 // Each group with the apps the launcher shows in it, in order; `other` is added when apps land there.
 export function groupApps(settings: LauncherSettings, apps: readonly WatchApp[]): { group: LauncherGroup; apps: WatchApp[] }[] {
   // Hidden apps keep their place too, so turning one back on puts it where it was.
   const listed = apps.filter((app) => app.kind === 'app' && app.id !== 'launcher');
-  const groups = [...settings.groups];
+  const groups = [...orderedGroups(settings)];
   if (!groups.some((group) => group.id === OTHER_GROUP_ID)) {
     groups.push(DEFAULT_GROUPS.find((group) => group.id === OTHER_GROUP_ID)!);
   }
@@ -169,14 +191,28 @@ export function groupApps(settings: LauncherSettings, apps: readonly WatchApp[])
     const wanted = settings.placements.find((placement) => placement.app === app.id)?.group ?? app.group;
     return wanted && ids.has(wanted) ? wanted : OTHER_GROUP_ID;
   };
+  // Apps the wearer has not ordered come after those they have, by name.
   const rank = (app: WatchApp) => {
     const placed = settings.placements.findIndex((placement) => placement.app === app.id);
-    return placed >= 0 ? placed : settings.placements.length + listed.indexOf(app);
+    return settings.sort === 'custom' && placed >= 0 ? placed : settings.placements.length;
   };
   return groups.map((group) => ({
     group,
-    apps: listed.filter((app) => groupOf(app) === group.id).sort((a, b) => rank(a) - rank(b)),
+    apps: listed.filter((app) => groupOf(app) === group.id).sort((a, b) => rank(a) - rank(b) || byName(a, b)),
   }));
+}
+
+// Changes how the launcher sorts; going to custom keeps the order shown, so the wearer moves things from there.
+export function sortLauncher(settings: LauncherSettings, apps: readonly WatchApp[], sort: LauncherSort): LauncherSettings {
+  if (sort === 'name') {
+    return { ...settings, sort };
+  }
+  return {
+    ...settings,
+    sort,
+    groups: orderedGroups(settings),
+    placements: groupApps(settings, apps).flatMap(({ group, apps: members }) => members.map((member) => ({ app: member.id, group: group.id }))),
+  };
 }
 
 // Moves an app into a group, last there, or to `place` among that group's apps.

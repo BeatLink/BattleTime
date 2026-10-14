@@ -140,15 +140,29 @@ fn an_app_named_twice_shows_only_where_it_is_first_named() {
 }
 
 #[test]
-fn with_no_file_every_app_is_in_one_group_in_the_order_given() {
-    let installed = apps(&["alarm", "dice"]);
+fn with_no_file_every_app_is_in_one_group_in_order_of_name() {
+    let mut installed = apps(&["zen", "alarm", "dice", "beat"]);
+    installed[0].name = String::from("Abacus");
+    installed[2].name = String::from("calendar");
+    installed[3].name = String::from("Calendar");
     let arrangement = arrange(&[], &installed.iter().collect::<Vec<_>>());
 
-    assert_eq!(arrangement.order, vec![0, 1]);
+    assert_eq!(arrangement.order, vec![0, 1, 3, 2]);
     assert_eq!(arrangement.look, LauncherLook::default());
     assert_eq!(
         shown(&[], &installed),
-        expect(&[("Other", None, &["alarm", "dice"])])
+        expect(&[("Other", None, &["zen", "alarm", "beat", "dice"])])
+    );
+}
+
+#[test]
+fn the_companions_byte_after_the_groups_is_ignored() {
+    let mut with_sort = file(1, 1, &GAMES_AND_TIME);
+    with_sort.push(1);
+
+    assert_eq!(
+        shown(&with_sort, &apps(&["alarm", "dice", "snake"])),
+        shown(&file(1, 1, &GAMES_AND_TIME), &apps(&["alarm", "dice", "snake"]))
     );
 }
 

@@ -286,11 +286,12 @@ app goes; the companion places each app in the group its image declares (the las
 | 2 | The view: 0 rows, 1 a grid. |
 | 3 | How many groups follow, in the launcher's order. |
 | then, per group | Its icon as its place in the shared library's icons (255 for none, which shows its first app's), its id's length and id (such as `games`, kept for the companion; the watch skips it), its name's length and the name in UTF-8, how many apps it holds, then each app's id length and id, in the order the group shows them. |
+| then | The companion's sort: 0 by name, 1 the wearer's order. The watch ignores it; the companion writes the groups and apps already in that order, and reads a file without it as by name. |
 
 Apps the file does not name, such as one installed another way, go in a group of their own at the
-end, named Other. Ids of apps that are not installed are skipped, and a group with no installed
+end, named Other, in order of their names. Ids of apps that are not installed are skipped, and a group with no installed
 app is not shown. A group cut short ends the groups there. With no file, or one of another
-version, the launcher shows one plain list.
+version, the launcher shows one plain list, in order of the apps' names.
 
 ### Remote
 

@@ -4,14 +4,17 @@ import { isLibraryIcon } from '@/protocol/remote';
 import {
   DEFAULT_LAUNCHER,
   groupApps,
+  LAUNCHER_SORTS,
   LAUNCHER_STYLES,
   LAUNCHER_VIEWS,
   newGroupId,
   placeApp,
   readLauncher,
   removeGroup,
+  sortLauncher,
   writeLauncher,
   type LauncherSettings,
+  type LauncherSort,
   type LauncherStyle,
   type LauncherView,
 } from '@/protocol/launcher';
@@ -19,11 +22,12 @@ import {
 import type { WatchSession } from '../ble';
 import { say } from '../output';
 
-export const launcherUsage = `neotime launcher [show|style <s>|view <v>|move <app> <group> [place]|add <name> [icon]|
+export const launcherUsage = `neotime launcher [show|style <s>|view <v>|sort <name|custom>|move <app> <group> [place]|add <name> [icon]|
                   rename <group> <name>|icon <group> <icon>|order <group> <place>|remove <group>|reset]
 
   launcher shows how the watch's launcher groups the apps. style is ${LAUNCHER_STYLES.join(', ')};
-  view is ${LAUNCHER_VIEWS.join(' or ')}. move puts an app in a group, at a place counting from 1 or
+  view is ${LAUNCHER_VIEWS.join(' or ')}. sort name puts groups and apps in order of their names; sort
+  custom keeps the order shown, and ordering a group or placing an app at a place sorts custom. move puts an app in a group, at a place counting from 1 or
   last; add makes a group with a shared library icon (pine_logo when left out); rename, icon and
   order change a group's name, icon and place among the groups; remove deletes one, and reset goes
   back to the default groups. Every change is written to /settings/launcher and shown at once.`;
@@ -42,7 +46,7 @@ export async function launcher(session: LauncherSession, args: string[]) {
   };
   switch (action) {
     case 'show':
-      say(`Style ${settings.style}, apps as a ${settings.view}${onWatch ? '' : ' (the defaults; the watch has no launcher file yet)'}.`);
+      say(`Style ${settings.style}, apps as a ${settings.view}, sorted ${settings.sort === 'name' ? 'by name' : 'as placed'}${onWatch ? '' : ' (the defaults; the watch has no launcher file yet)'}.`);
       for (const { group, apps: members } of groupApps(settings, apps)) {
         say(`${group.name} [${group.id}, ${group.icon}]: ${members.map((member) => member.name).join(', ') || '-'}`);
       }
@@ -57,12 +61,20 @@ export async function launcher(session: LauncherSession, args: string[]) {
         throw new Error(`Give a view: ${LAUNCHER_VIEWS.join(' or ')}.`);
       }
       return save({ ...settings, view: first as LauncherView }, `The launcher shows apps as a ${first}.`);
+    case 'sort':
+      if (!(LAUNCHER_SORTS as readonly string[]).includes(first)) {
+        throw new Error(`Give a sort: ${LAUNCHER_SORTS.join(' or ')}.`);
+      }
+      return save(sortLauncher(settings, apps, first as LauncherSort), `The launcher sorts ${first === 'name' ? 'by name' : 'as placed'}.`);
     case 'move': {
       if (!apps.some((app) => app.id === first) || !settings.groups.some((group) => group.id === second)) {
         throw new Error('Give an installed app and a group id, as show lists them.');
       }
-      const place = rest[0] === undefined ? undefined : placeNumber(rest[0]);
-      return save(placeApp(settings, apps, first, second, place), `${first} is in ${second}.`);
+      if (rest[0] === undefined) {
+        return save(placeApp(settings, apps, first, second), `${first} is in ${second}.`);
+      }
+      const place = placeNumber(rest[0]);
+      return save(placeApp(customised(settings, apps), apps, first, second, place), `${first} is in ${second}.`);
     }
     case 'rename': {
       const name = [second, ...rest].filter(Boolean).join(' ').trim();
@@ -80,11 +92,12 @@ export async function launcher(session: LauncherSession, args: string[]) {
       if (!hasGroup(settings, first) || second === undefined) {
         throw new Error('Give a group id, as show lists them, and its place counting from 1.');
       }
-      const from = settings.groups.findIndex((group) => group.id === first);
-      const to = Math.min(placeNumber(second), settings.groups.length - 1);
-      const groups = settings.groups.filter((group) => group.id !== first);
-      groups.splice(to, 0, settings.groups[from]);
-      return save({ ...settings, groups }, `${first} is group ${to + 1}.`);
+      const custom = customised(settings, apps);
+      const from = custom.groups.findIndex((group) => group.id === first);
+      const to = Math.min(placeNumber(second), custom.groups.length - 1);
+      const groups = custom.groups.filter((group) => group.id !== first);
+      groups.splice(to, 0, custom.groups[from]);
+      return save({ ...custom, groups }, `${first} is group ${to + 1}.`);
     }
     case 'add': {
       const icon = second ?? 'pine_logo';
@@ -104,6 +117,11 @@ export async function launcher(session: LauncherSession, args: string[]) {
     default:
       throw new Error(`Unknown launcher action: ${action}`);
   }
+}
+
+// The settings sorted custom, keeping the order shown, so the wearer's own order can be changed.
+function customised(settings: LauncherSettings, apps: Parameters<typeof sortLauncher>[1]): LauncherSettings {
+  return settings.sort === 'custom' ? settings : sortLauncher(settings, apps, 'custom');
 }
 
 function hasGroup(settings: LauncherSettings, id: string | undefined): boolean {

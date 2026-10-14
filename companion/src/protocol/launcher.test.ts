@@ -13,10 +13,12 @@ import {
   LauncherError,
   launcherFile,
   newGroupId,
+  OTHER_GROUP_ID,
   readLauncherFile,
   placeApp,
   readLauncher,
   removeGroup,
+  sortLauncher,
   writeLauncher,
   type LauncherSettings,
 } from './launcher';
@@ -38,6 +40,7 @@ const app = (id: string, group = '', extra: Partial<WatchApp> = {}): WatchApp =>
 const TWO_GROUPS: LauncherSettings = {
   style: 'folders',
   view: 'grid',
+  sort: 'custom',
   groups: [
     { id: 'games', name: 'Games', icon: 'game' },
     { id: 'time', name: 'Time apps', icon: 'clock' },
@@ -57,6 +60,7 @@ describe('the launcher file', () => {
       1, 1, 1, 2,
       icon('game'), ...text('games'), ...text('Games'), 1, ...text('dice'),
       icon('clock'), ...text('time'), ...text('Time apps'), 2, ...text('snake'), ...text('alarm'),
+      1,
     ]);
   });
 
@@ -71,6 +75,13 @@ describe('the launcher file', () => {
       ],
     });
     expect(readLauncherFile(launcherFile(DEFAULT_LAUNCHER, [])) ).toEqual(DEFAULT_LAUNCHER);
+  });
+
+  it('keeps the sort in the byte after the groups, and reads a file without it as by name', () => {
+    const file = launcherFile({ ...TWO_GROUPS, sort: 'name' }, installed);
+    expect(file.at(-1)).toBe(0);
+    expect(readLauncherFile(file)?.sort).toBe('name');
+    expect(readLauncherFile(launcherFile(TWO_GROUPS, installed).subarray(0, -1))?.sort).toBe('name');
   });
 
   it('is not a launcher file in another version, and keeps the groups before a cut', () => {
@@ -113,6 +124,35 @@ describe('grouping the apps', () => {
       ['time', ['snake', 'alarm']],
       ['other', ['hello']],
     ]);
+  });
+
+  it('sorts groups and apps by name, other last, ignoring placements', () => {
+    const named = [app('zen', 'games', { name: 'Abacus' }), app('dice', 'games', { name: 'dice' }), app('beat', 'games', { name: 'Chess' }), app('hello')];
+    const groups = [{ id: OTHER_GROUP_ID, name: 'Aaa', icon: 'pine_logo' as const }, ...[...TWO_GROUPS.groups].reverse()];
+    const settings: LauncherSettings = { ...TWO_GROUPS, sort: 'name', groups, placements: [{ app: 'dice', group: 'games' }] };
+    expect(ids(groupApps(settings, named))).toEqual([
+      ['games', ['zen', 'beat', 'dice']],
+      ['time', []],
+      ['other', ['hello']],
+    ]);
+    expect(readLauncherFile(launcherFile(settings, named))?.groups.map((group) => group.id)).toEqual(['games', 'time', OTHER_GROUP_ID]);
+  });
+
+  it('puts apps the wearer has not ordered after the ordered ones, by name', () => {
+    const named = [app('zed', 'games'), app('apple', 'games'), app('snake', 'games')];
+    expect(ids(groupApps({ ...TWO_GROUPS, placements: [{ app: 'snake', group: 'games' }] }, named))[0]).toEqual(['games', ['snake', 'apple', 'zed']]);
+  });
+
+  it('goes to custom keeping the order shown', () => {
+    const custom = sortLauncher({ ...TWO_GROUPS, sort: 'name', groups: [...TWO_GROUPS.groups].reverse() }, apps, 'custom');
+    expect(custom.groups.map((group) => group.id)).toEqual(['games', 'time']);
+    expect(custom.placements).toEqual([
+      { app: 'dice', group: 'games' },
+      { app: 'alarm', group: 'time' },
+      { app: 'snake', group: 'time' },
+      { app: 'hello', group: 'other' },
+    ]);
+    expect(sortLauncher(custom, apps, 'name')).toEqual({ ...custom, sort: 'name' });
   });
 
   it('leaves out faces and the launcher, but keeps hidden apps in their place', () => {

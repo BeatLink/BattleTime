@@ -14,7 +14,9 @@
 //! The groups are in the launcher's order, and each group's apps in the order it shows them. The
 //! companion places each app in the group its image declares until the wearer moves it, and writes
 //! the file again whenever it installs one. Apps the file does not name, such as one installed
-//! another way, go in a group of their own at the end, named Other. A missing file, or one of
+//! another way, go in a group of their own at the end, named Other, in order of their names. After the
+//! groups the companion may add a byte of its own, how it sorts (0 by name, 1 the wearer's order), which
+//! the watch ignores. A missing file, or one of
 //! another version, shows one list; a group cut short ends the groups there.
 
 use alloc::vec::Vec;
@@ -139,10 +141,13 @@ pub fn arrange(file: &[u8], apps: &[&InstalledApp]) -> Arrangement {
             });
         }
     }
-    // Apps the file leaves out, or every app when there is no file.
+    // Apps the file leaves out, or every app when there is no file, in order of their names.
     let first = arrangement.order.len();
-    for place in 0..apps.len() {
-        push_once(&mut arrangement.order, place);
+    while let Some(place) = (0..apps.len())
+        .filter(|&place| !arrangement.order.contains(&(place as u16)))
+        .min_by(|&a, &b| by_name(apps[a], apps[b]))
+    {
+        arrangement.order.push(place as u16);
     }
     if arrangement.order.len() > first {
         arrangement.groups.push(ShownGroup {
@@ -153,6 +158,13 @@ pub fn arrange(file: &[u8], apps: &[&InstalledApp]) -> Arrangement {
         });
     }
     arrangement
+}
+
+/// Orders two apps by name, ignoring case, then by id so equal names keep one order.
+fn by_name(a: &InstalledApp, b: &InstalledApp) -> core::cmp::Ordering {
+    let a_name = a.name.bytes().map(|byte| byte.to_ascii_lowercase());
+    let b_name = b.name.bytes().map(|byte| byte.to_ascii_lowercase());
+    a_name.cmp(b_name).then_with(|| a.id.cmp(&b.id))
 }
 
 fn push_once(order: &mut Vec<u16>, place: usize) {

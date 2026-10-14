@@ -19,8 +19,10 @@ import {
   placeApp,
   readLauncher,
   removeGroup,
+  sortLauncher,
   writeLauncher,
   type LauncherSettings,
+  type LauncherSort,
   type LauncherStyle,
   type LauncherView,
 } from '@/protocol/launcher';
@@ -46,6 +48,16 @@ const VIEW_CHOICES: { value: LauncherView; label: string }[] = [
   { value: 'list', label: 'List' },
   { value: 'grid', label: 'Grid' },
 ];
+
+const SORT_CHOICES: { value: LauncherSort; label: string }[] = [
+  { value: 'name', label: 'By name' },
+  { value: 'custom', label: 'Custom' },
+];
+
+const SORT_DETAILS: Record<LauncherSort, string> = {
+  name: 'Groups, and the apps in each, in order of their names.',
+  custom: 'Groups and apps in the order you put them.',
+};
 
 // Arranges the watch's launcher: how it shows the groups, what the groups are, and which apps each holds.
 export default function LauncherScreen() {
@@ -122,6 +134,7 @@ export default function LauncherScreen() {
       <Card title="On the watch">
         <ChoiceRow label="Style" detail={STYLE_DETAILS[settings.style]} options={STYLE_CHOICES} value={settings.style} onChange={(style) => change({ ...settings, style })} />
         <ChoiceRow label="Apps as" options={VIEW_CHOICES} value={settings.view} onChange={(view) => change({ ...settings, view })} />
+        <ChoiceRow label="Sort" detail={SORT_DETAILS[settings.sort]} options={SORT_CHOICES} value={settings.sort} onChange={(sort) => change(sortLauncher(settings, apps, sort))} />
         <View style={styles.actions}>
           <Button title={saved ? 'Sent' : 'Send to watch'} busy={task.busy !== null} disabled={saved} onPress={save} />
           <Button title="Start over" variant="secondary" onPress={() => change(DEFAULT_LAUNCHER)} />
@@ -131,6 +144,7 @@ export default function LauncherScreen() {
       {grouped.map(({ group, apps: members }) => {
         const place = placeOf(group.id);
         const isOther = group.id === OTHER_GROUP_ID;
+        const custom = settings.sort === 'custom';
         return (
           <Card key={group.id}>
             <View style={styles.groupHeader}>
@@ -142,8 +156,12 @@ export default function LauncherScreen() {
             </View>
             {place >= 0 ? (
               <View style={styles.actions}>
-                <Button title="Up" variant="secondary" disabled={place === 0} onPress={() => moveGroup(group.id, -1)} />
-                <Button title="Down" variant="secondary" disabled={place === settings.groups.length - 1} onPress={() => moveGroup(group.id, 1)} />
+                {custom ? (
+                  <>
+                    <Button title="Up" variant="secondary" disabled={place === 0} onPress={() => moveGroup(group.id, -1)} />
+                    <Button title="Down" variant="secondary" disabled={place === settings.groups.length - 1} onPress={() => moveGroup(group.id, 1)} />
+                  </>
+                ) : null}
                 <Button title={editing === group.id ? 'Done' : 'Edit'} variant="secondary" onPress={() => setEditing(editing === group.id ? null : group.id)} />
                 {isOther ? null : <Button title="Remove" variant="danger" onPress={() => change(removeGroup(settings, group.id))} />}
               </View>
@@ -162,10 +180,12 @@ export default function LauncherScreen() {
                 </Pressable>
                 {chosenApp === member.id ? (
                   <>
-                    <View style={styles.actions}>
-                      <Button title="Earlier" variant="secondary" disabled={index === 0} onPress={() => change(placeApp(settings, apps, member.id, group.id, index - 1))} />
-                      <Button title="Later" variant="secondary" disabled={index === members.length - 1} onPress={() => change(placeApp(settings, apps, member.id, group.id, index + 1))} />
-                    </View>
+                    {custom ? (
+                      <View style={styles.actions}>
+                        <Button title="Earlier" variant="secondary" disabled={index === 0} onPress={() => change(placeApp(settings, apps, member.id, group.id, index - 1))} />
+                        <Button title="Later" variant="secondary" disabled={index === members.length - 1} onPress={() => change(placeApp(settings, apps, member.id, group.id, index + 1))} />
+                      </View>
+                    ) : null}
                     <ChoiceRow
                       label="Move to"
                       options={grouped.filter((entry) => entry.group.id !== group.id).map((entry) => ({ value: entry.group.id, label: entry.group.name }))}

@@ -12,6 +12,8 @@ up. It is NeoTime's own, an ordinary app that any other launcher can replace.
 - In the folders style, tap a folder to open it. In an open folder or in the pages style,
   **swipe left** and **right** to move to the next or the last group.
 - The companion app also chooses the **view**: a row per app, or a grid of icons three across.
+- Groups, and the apps in each, are in order of their names, unless the companion app sets an
+  order of its own.
 - The list scrolls when the apps do not fit.
 
 ## Screens
