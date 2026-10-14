@@ -630,10 +630,15 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 
 - [ ] **Double line buffers with DMA,** so one is filled while the other is sent. InfiniTime uses
   two of 240 x 4 pixels. This also fixes the text edges listed above.
-- [ ] **More fonts and pictures** loaded from the external flash, beyond the shared library's. A
-  font of lines and arcs is about 2 KB, so another can be a file in `/resources/` read into the
-  open app's heap. Check one as app images are checked, keeping the limit of 8 shapes a glyph so a
-  bad font cannot slow drawing enough to trip the watchdog.
+- [ ] **An app's own font,** for a face or app whose lettering the shared font cannot give, such as
+  Infineat's below. Build it the first time one needs it. Let the compiler embed the font in the
+  app's image, cut down to the characters the app can show: its fixed text, and the digits and signs
+  of any value it formats. The watch already reads the image into the heap while the app is open,
+  so the font needs no file of its own, the heap estimate already counts it, and the image's checks
+  cover it; keep the limit of 8 shapes a glyph so a bad font cannot slow drawing enough to trip the
+  watchdog. A face's digits and a few letters come to a few hundred bytes. Rejected: a font file in
+  external flash, which would cost every app using it a whole font of heap, or else glyph reads on
+  the SPI bus the display shares.
 - [ ] **Drag to change an Arc.** The app host gives `Arc` no `onChange`, so the metronome's tempo
   ring cannot be dragged; only tap tempo works.
 - [ ] **A canvas widget for free drawing.** Paint fills cells of a 20 by 20 grid; InfiniTime
