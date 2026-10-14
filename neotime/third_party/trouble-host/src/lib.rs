@@ -104,7 +104,7 @@ pub mod prelude {
     pub use crate::iso::Iso;
     pub use crate::l2cap::*;
     #[cfg(feature = "default-packet-pool")]
-    pub use crate::packet_pool::DefaultPacketPool;
+    pub use crate::packet_pool::{free_default_packets, DefaultPacketPool};
     pub use crate::pdu::Sdu;
     #[cfg(feature = "peripheral")]
     pub use crate::peripheral::*;

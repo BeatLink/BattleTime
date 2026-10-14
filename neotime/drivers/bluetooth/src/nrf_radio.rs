@@ -151,6 +151,7 @@ pub struct RadioPeripherals {
 pub fn start(
     _peripherals: RadioPeripherals,
     _interrupts: impl Binding<interrupt::typelevel::RADIO, RadioInterruptHandler>,
+    free_host_packets: fn() -> usize,
 ) -> BluetoothController<'static, NrfRadio> {
     configure_radio();
     configure_timer();
@@ -158,7 +159,10 @@ pub fn start(
     fall_asleep();
 
     let device_address = read_device_address();
-    STATE.start(HostInterface::new(device_address, read_random_bytes));
+    STATE.start(
+        HostInterface::new(device_address, read_random_bytes),
+        free_host_packets,
+    );
 
     interrupt::RADIO.set_priority(Priority::P0);
     interrupt::typelevel::RADIO::unpend();

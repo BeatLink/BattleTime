@@ -362,7 +362,13 @@ pub struct LinkLayer {
     /// Host packets the central has acknowledged since the host last asked.
     pub completed_packets: u16,
     pub last_signal_strength: i8,
+    /// How many packets the host has free to take data into, asked before the start of each message is acknowledged.
+    pub free_host_packets: fn() -> usize,
     random_state: u32,
+}
+
+fn no_host_packet_limit() -> usize {
+    usize::MAX
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -380,6 +386,7 @@ impl LinkLayer {
             events: Deque::new(),
             completed_packets: 0,
             last_signal_strength: 127,
+            free_host_packets: no_host_packet_limit,
             random_state: random_seed | 1,
         }
     }
@@ -474,8 +481,15 @@ impl LinkLayer {
         let _ = self.events.push_back(event);
     }
 
-    fn has_room_for_incoming_data(&self) -> bool {
-        self.events.len() + EVENT_SLOTS_KEPT_FOR_NOTICES < EVENT_QUEUE_LENGTH
+    /// Whether data of this kind can be taken: an event slot for it, and a free host packet for each message start.
+    fn has_room_for_incoming_data(&self, kind: DataKind) -> bool {
+        let starts_waiting = self
+            .events
+            .iter()
+            .filter(|event| matches!(event, LinkEvent::Received(packet) if packet.kind == DataKind::Start))
+            .count();
+        let host_has_a_packet = kind != DataKind::Start || starts_waiting < (self.free_host_packets)();
+        self.events.len() + EVENT_SLOTS_KEPT_FOR_NOTICES < EVENT_QUEUE_LENGTH && host_has_a_packet
     }
 
     // ------------------------------------------------------------------------
@@ -1022,7 +1036,7 @@ impl LinkLayer {
         match kind {
             DataKind::Control => self.handle_control(payload),
             _ if payload.is_empty() => Acceptance::Accepted,
-            _ if !self.has_room_for_incoming_data() => Acceptance::NoRoom,
+            _ if !self.has_room_for_incoming_data(kind) => Acceptance::NoRoom,
             _ => {
                 let length = payload.len().min(MAXIMUM_DATA_PAYLOAD_LENGTH);
                 let _ = self

@@ -66,7 +66,9 @@ impl ControllerState {
         }
     }
 
-    pub fn start(&self, host_interface: HostInterface) {
+    /// Starts the controller, with the host's count of free packets to refuse data it could not take.
+    pub fn start(&self, mut host_interface: HostInterface, free_host_packets: fn() -> usize) {
+        host_interface.link_layer.free_host_packets = free_host_packets;
         critical_section::with(|critical_section| {
             self.host_interface
                 .borrow_ref_mut(critical_section)

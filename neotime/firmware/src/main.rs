@@ -330,7 +330,7 @@ fn start_bluetooth(
     parts: BluetoothParts,
     files: &'static storage::Files,
 ) {
-    let controller = neotime_bluetooth::start(radio, Interrupts);
+    let controller = neotime_bluetooth::start(radio, Interrupts, free_default_packets);
     let parts = BLUETOOTH_PARTS.init(parts);
     spawner.spawn(storage::run_storage(files).unwrap());
     spawner.spawn(run_bluetooth(controller, parts, files).unwrap());
@@ -961,8 +961,10 @@ const NOTIFY_RETRY_DELAY: Duration = Duration::from_millis(20);
 const NOTIFY_ATTEMPTS: usize = 50;
 /// The bytes a notification spends on its opcode and handle.
 const NOTIFICATION_HEADER_BYTES: usize = 3;
+/// Packets a long answer leaves free, so what the phone sends meanwhile still has somewhere to land.
+const PACKETS_KEPT_FOR_INCOMING: usize = 2;
 
-/// Sends a BLEFS command's answers, one notification each; see docs/companion-protocol.md.
+/// Sends a BLEFS command's answers, one notification each, waiting while fewer than two packets are free.
 async fn send_file_answers(
     connection: &GattConnection<'_, '_, DefaultPacketPool>,
     server: &Server<'_>,
@@ -970,6 +972,10 @@ async fn send_file_answers(
 ) {
     for answer in answers {
         for _ in 0..NOTIFY_ATTEMPTS {
+            if free_default_packets() < PACKETS_KEPT_FOR_INCOMING {
+                Timer::after(NOTIFY_RETRY_DELAY).await;
+                continue;
+            }
             match server
                 .file_transfer
                 .transfer
@@ -983,8 +989,8 @@ async fn send_file_answers(
     }
 }
 
-/// Sends a packages reply in 20-byte notifications, waiting for a free packet when the reply fills
-/// the send queue, since an app list takes more notifications than the pool has packets.
+/// Sends a packages reply in 20-byte notifications, waiting while fewer than two packets are free,
+/// since an app list takes more notifications than the pool has packets.
 async fn send_packages_reply(
     connection: &GattConnection<'_, '_, DefaultPacketPool>,
     server: &Server<'_>,
@@ -992,6 +998,10 @@ async fn send_packages_reply(
 ) {
     for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
         for _ in 0..NOTIFY_ATTEMPTS {
+            if free_default_packets() < PACKETS_KEPT_FOR_INCOMING {
+                Timer::after(NOTIFY_RETRY_DELAY).await;
+                continue;
+            }
             match server.neotime.packages.notify_raw(connection, piece, false).await {
                 Err(trouble_host::Error::OutOfMemory) => Timer::after(NOTIFY_RETRY_DELAY).await,
                 _ => break,

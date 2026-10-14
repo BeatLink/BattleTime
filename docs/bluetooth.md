@@ -78,7 +78,10 @@ access in `nrf_radio.rs`, behind the small `Radio` trait, is the substitute.
 - **Data** in packets of up to 27 bytes each way, with TrouBLE splitting and joining larger
   messages. Four packets can wait to be sent.
 - **Flow control:** a packet from the central is acknowledged only when there is room to pass it
-  on, so the central resends it rather than it being lost.
+  on, so the central resends it rather than it being lost. The start of each message also needs a
+  free packet in TrouBLE's pool beyond those already waiting, since the host drops a message it has
+  no packet for; the firmware passes `free_default_packets` to `start` for this, and its long
+  replies to the companion wait while fewer than two packets are free.
 - **Control procedures:** connection parameter updates and channel map updates at their instants,
   feature exchange, version exchange, ping, and termination from either side. Anything else is
   answered with "unknown response", which tells the central the feature is missing. Up to four

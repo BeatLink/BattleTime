@@ -1187,6 +1187,10 @@ fn fake_random_bytes(destination: &mut [u8]) {
     }
 }
 
+fn plenty_of_host_packets() -> usize {
+    usize::MAX
+}
+
 fn host_interface() -> HostInterface {
     HostInterface::new(OWN_ADDRESS, fake_random_bytes)
 }
@@ -1452,7 +1456,10 @@ mod end_to_end {
     use embassy_futures::select::{select, Either};
     use trouble_host::prelude::*;
 
-    use super::{connect_request, fake_random_bytes, vec, CentralPacket, Vec, DEFAULT_CONNECT, OWN_ADDRESS};
+    use super::{
+        connect_request, fake_random_bytes, plenty_of_host_packets, vec, CentralPacket, Vec, DEFAULT_CONNECT,
+        OWN_ADDRESS,
+    };
     use crate::controller::{BluetoothController, ControllerState, Radio, RadioEvent};
     use crate::host_interface::HostInterface;
     use crate::link_layer::{disconnect_reason, RadioOperation};
@@ -1557,7 +1564,10 @@ mod end_to_end {
     fn trouble_advertises_accepts_a_connection_and_sees_the_central_leave() {
         let radio = FakeRadio::new();
         let state = ControllerState::new();
-        state.start(HostInterface::new(OWN_ADDRESS, fake_random_bytes));
+        state.start(
+            HostInterface::new(OWN_ADDRESS, fake_random_bytes),
+            plenty_of_host_packets,
+        );
         let controller: ExternalController<_, 4> =
             ExternalController::new(BluetoothController::new(&state, &radio));
         let mut resources: HostResources<DefaultPacketPool, 1, 2> = HostResources::new();
@@ -1676,7 +1686,10 @@ mod end_to_end {
     fn a_central_reads_a_characteristic_through_the_controller() {
         let radio = FakeRadio::new();
         let state = ControllerState::new();
-        state.start(HostInterface::new(OWN_ADDRESS, fake_random_bytes));
+        state.start(
+            HostInterface::new(OWN_ADDRESS, fake_random_bytes),
+            plenty_of_host_packets,
+        );
         let controller: ExternalController<_, 4> =
             ExternalController::new(BluetoothController::new(&state, &radio));
         let mut resources: HostResources<DefaultPacketPool, 1, 2> = HostResources::new();
@@ -1812,7 +1825,10 @@ mod end_to_end {
         fn discovery_never_cuts_a_128_bit_uuid_after_16_bit_ones() {
             let radio = FakeRadio::new();
             let state = ControllerState::new();
-            state.start(HostInterface::new(OWN_ADDRESS, fake_random_bytes));
+            state.start(
+                HostInterface::new(OWN_ADDRESS, fake_random_bytes),
+                plenty_of_host_packets,
+            );
             let controller: ExternalController<_, 4> =
                 ExternalController::new(BluetoothController::new(&state, &radio));
             let mut resources: HostResources<DefaultPacketPool, 1, 2> = HostResources::new();
@@ -2141,7 +2157,10 @@ mod end_to_end {
         fn transcript() -> Vec<Vec<u8>> {
             let radio = FakeRadio::new();
             let state = ControllerState::new();
-            state.start(HostInterface::new(OWN_ADDRESS, fake_random_bytes));
+            state.start(
+                HostInterface::new(OWN_ADDRESS, fake_random_bytes),
+                plenty_of_host_packets,
+            );
             let controller: ExternalController<_, 4> =
                 ExternalController::new(BluetoothController::new(&state, &radio));
             let mut resources: HostResources<DefaultPacketPool, 1, 2> = HostResources::new();

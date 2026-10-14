@@ -104,9 +104,16 @@ fn fake_random_bytes(destination: &mut [u8]) {
     }
 }
 
+fn plenty_of_host_packets() -> usize {
+    usize::MAX
+}
+
 fn started_state() -> ControllerState {
     let state = ControllerState::new();
-    state.start(HostInterface::new(OWN_ADDRESS, fake_random_bytes));
+    state.start(
+        HostInterface::new(OWN_ADDRESS, fake_random_bytes),
+        plenty_of_host_packets,
+    );
     state
 }
 
@@ -211,15 +218,37 @@ fn central_sends_empty_packet(
     next_expected_sequence_number: bool,
     address_time: u32,
 ) {
-    let mut packet = [0; 2];
+    central_sends_data(
+        state,
+        radio,
+        DataKind::Continuation,
+        &[],
+        sequence_number,
+        next_expected_sequence_number,
+        address_time,
+    );
+}
+
+/// Plays the central: sends a data packet with the given sequence numbers at `address_time`.
+fn central_sends_data(
+    state: &ControllerState,
+    radio: &FakeRadio,
+    kind: DataKind,
+    payload: &[u8],
+    sequence_number: bool,
+    next_expected_sequence_number: bool,
+    address_time: u32,
+) {
+    let mut packet = vec![0; 2];
     DataHeader {
-        kind: DataKind::Continuation,
+        kind,
         next_expected_sequence_number,
         sequence_number,
         more_data: false,
-        length: 0,
+        length: payload.len() as u8,
     }
     .write(&mut packet);
+    packet.extend_from_slice(payload);
 
     state.on_radio_event(
         &radio,
@@ -288,7 +317,10 @@ fn read_errors_other_than_a_small_buffer_mean_a_malformed_packet() {
 fn a_default_state_answers_a_reset_once_started() {
     let radio = FakeRadio::new();
     let state = ControllerState::default();
-    state.start(HostInterface::new(OWN_ADDRESS, fake_random_bytes));
+    state.start(
+        HostInterface::new(OWN_ADDRESS, fake_random_bytes),
+        plenty_of_host_packets,
+    );
     let controller = BluetoothController::new(&state, &radio);
 
     block_on(controller.write(&Reset::new())).unwrap();
@@ -583,4 +615,68 @@ fn the_radio_is_idle_until_it_advertises_or_connects() {
     assert!(!state.radio_is_idle());
     central_connects(&state, &radio);
     assert!(!state.radio_is_idle());
+}
+
+// ============================================================================
+// Room in the host
+// ============================================================================
+
+static FAKE_HOST_FREE_PACKETS: AtomicUsize = AtomicUsize::new(0);
+
+fn fake_host_free_packets() -> usize {
+    FAKE_HOST_FREE_PACKETS.load(Ordering::SeqCst)
+}
+
+fn reply_acknowledges(radio: &FakeRadio) -> bool {
+    DataHeader::parse(&radio.transmit_buffer.borrow()[..])
+        .unwrap()
+        .next_expected_sequence_number
+}
+
+#[test]
+fn a_message_is_refused_until_the_host_has_a_free_packet_for_it() {
+    let radio = FakeRadio::new();
+    let state = ControllerState::new();
+    state.start(
+        HostInterface::new(OWN_ADDRESS, fake_random_bytes),
+        fake_host_free_packets,
+    );
+    let controller = BluetoothController::new(&state, &radio);
+    start_advertising(&controller);
+    let anchor = central_connects(&state, &radio);
+    let attribute_read = [3, 0, 4, 0, 0x0A, 0x03, 0x00];
+    let interval_in_microseconds = 24 * 1250;
+
+    FAKE_HOST_FREE_PACKETS.store(0, Ordering::SeqCst);
+    central_sends_data(
+        &state,
+        &radio,
+        DataKind::Start,
+        &attribute_read,
+        false,
+        false,
+        anchor,
+    );
+    let acknowledged_with_no_packet = reply_acknowledges(&radio);
+    state.on_radio_event(
+        &&radio,
+        RadioEvent::Transmitted {
+            end_time: anchor + 500,
+        },
+    );
+    FAKE_HOST_FREE_PACKETS.store(1, Ordering::SeqCst);
+    let next_anchor = anchor + interval_in_microseconds;
+    central_sends_data(
+        &state,
+        &radio,
+        DataKind::Start,
+        &attribute_read,
+        false,
+        false,
+        next_anchor,
+    );
+    let acknowledged_with_a_packet = reply_acknowledges(&radio);
+
+    assert!(!acknowledged_with_no_packet);
+    assert!(acknowledged_with_a_packet);
 }

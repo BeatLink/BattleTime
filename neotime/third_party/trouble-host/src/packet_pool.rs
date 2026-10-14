@@ -120,6 +120,11 @@ static DEFAULT_POOL: StaticPacketPool<
     { config::DEFAULT_PACKET_POOL_SIZE },
 > = StaticPacketPool::new();
 
+/// NeoTime patch: how many packets the default pool has free, so a controller can refuse data the host could not take.
+pub fn free_default_packets() -> usize {
+    DEFAULT_POOL.available()
+}
+
 impl PacketPool for DefaultPacketPool {
     type Packet = DefaultPacket;
     const MTU: usize = { config::DEFAULT_PACKET_POOL_MTU };
@@ -190,5 +195,13 @@ mod tests {
 
         let b2 = pool.alloc();
         assert!(b2.is_none());
+    }
+
+    #[test]
+    fn a_packet_held_is_not_counted_as_free() {
+        let held = DefaultPacketPool::allocate();
+
+        assert!(held.is_some());
+        assert!(free_default_packets() < DefaultPacketPool::capacity());
     }
 }
