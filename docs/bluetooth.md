@@ -96,7 +96,7 @@ access in `nrf_radio.rs`, behind the small `Radio` trait, is the substitute.
 
 | Missing | What it costs |
 |---|---|
-| **Encryption and pairing** (`LL_ENC_REQ`) | Only unencrypted connections. Gadgetbridge works without bonding, as it does with InfiniTime, but phones that insist on pairing will fail. The chip's CCM and ECB peripherals do the AES work. |
+| **Encryption and pairing** (`LL_ENC_REQ`) | Only unencrypted connections. Gadgetbridge works without bonding, as it does with InfiniTime, but phones that insist on pairing will fail. A Pairing Request is answered at once with Pairing Failed, "pairing not supported", so a phone that only offers pairing gives up straight away and keeps the plain link. The chip's CCM and ECB peripherals do the AES work. |
 | **Peripheral latency** | It listens at every connection event even when the central allows it to skip some. |
 | **Longer packets** (data length extension), **2 Mbit PHY**, **channel selection #2** | Slower transfers, for example of firmware updates. |
 | **A connection parameter request** from the peripheral | TrouBLE falls back to asking over L2CAP, which works. |

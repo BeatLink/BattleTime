@@ -22,6 +22,14 @@ use crate::prelude::sar::PacketReassembly;
 use crate::security_manager::{SecurityEventData, SecurityManager};
 use crate::{config, Address, Error, Identity, PacketPool};
 
+/// The Security Manager opcode a central opens pairing with.
+#[cfg(not(feature = "security"))]
+const SMP_PAIRING_REQUEST: u8 = 0x01;
+
+/// An L2CAP frame on the Security Manager channel holding Pairing Failed, reason Pairing Not Supported.
+#[cfg(not(feature = "security"))]
+const SMP_PAIRING_NOT_SUPPORTED_REPLY: [u8; 6] = [2, 0, 0x06, 0x00, 0x05, 0x05];
+
 /// Resolvable private addresses used on a connection.
 ///
 /// Holds the Resolvable Private Addresses (RPAs) for a connection that were
@@ -960,6 +968,13 @@ impl<'d, P: PacketPool> ConnectionManager<'d, P> {
                 }
             }
         }
+        // NeoTime patch: without pairing, a Pairing Request is refused at once so the phone keeps the plain link.
+        #[cfg(not(feature = "security"))]
+        if pdu.as_ref().first() == Some(&SMP_PAIRING_REQUEST) {
+            let mut packet = pdu.into_inner();
+            packet.as_mut()[..SMP_PAIRING_NOT_SUPPORTED_REPLY.len()].copy_from_slice(&SMP_PAIRING_NOT_SUPPORTED_REPLY);
+            self.try_outbound(handle, Pdu::new(packet, SMP_PAIRING_NOT_SUPPORTED_REPLY.len()))?;
+        }
         Ok(())
     }
 
@@ -1867,5 +1882,33 @@ pub(crate) mod tests {
         handle.disconnect();
 
         assert!(!mgr.is_handle_connected(ConnHandle::new(3)));
+    }
+
+    struct NoEvents;
+    impl crate::host::EventHandler for NoEvents {}
+
+    #[cfg(not(feature = "security"))]
+    #[test]
+    fn a_pairing_request_is_answered_with_pairing_not_supported() {
+        let mgr = setup();
+        unwrap!(mgr.connect(
+            ConnHandle::new(0),
+            Address::new(AddrKind::RANDOM, BdAddr::new(ADDR_1)),
+            LeConnRole::Peripheral,
+            ConnParams::new(),
+        ));
+        let pairing_request = [0x01, 0x04, 0x00, 0x2D, 0x10, 0x0F, 0x0F];
+        let mut packet = unwrap!(DefaultPacketPool::allocate());
+        packet.as_mut()[..pairing_request.len()].copy_from_slice(&pairing_request);
+
+        unwrap!(mgr.handle_security_channel(
+            ConnHandle::new(0),
+            Pdu::new(packet, pairing_request.len()),
+            &NoEvents,
+        ));
+        let (handle, reply) = block_on(mgr.outbound());
+
+        assert_eq!(handle, ConnHandle::new(0));
+        assert_eq!(reply.as_ref(), [2, 0, 0x06, 0x00, 0x05, 0x05]);
     }
 }

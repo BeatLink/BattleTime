@@ -1,7 +1,7 @@
 # NeoTime's copy of trouble-host
 
 This is [trouble-host](https://github.com/embassy-rs/trouble) 0.8.0 from crates.io (Apache-2.0 OR
-MIT), with four changes, each marked "NeoTime patch".
+MIT), with five changes, each marked "NeoTime patch".
 
 The attribute server builds a Read By Type or Read By Group Type response by reading each matching
 attribute straight into the space left in the response and comparing the length it got with the
@@ -50,6 +50,11 @@ copies out the peer's next ATT response, notification or indication, from the qu
 `GattClient` reads. They let the firmware's small client for the phone's own services
 (`services/phone_client`) carry its requests without `GattClient`, which cost about 12.6 KB of
 flash in the watch's firmware against about 3 KB for the small client.
+
+Without the `security` feature, upstream drops a Pairing Request without a word, so a phone waits
+out its 30-second pairing timeout before giving up. `handle_security_channel` answers it at once
+with Pairing Failed, reason Pairing Not Supported, and the phone carries on over the unencrypted
+link.
 
 The test and example targets are left out of this copy, since their sources are not included.
 The workspace and the firmware swap this copy in with `[patch.crates-io]`. Drop it once upstream
