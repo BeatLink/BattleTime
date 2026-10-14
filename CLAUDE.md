@@ -211,3 +211,8 @@ relative to `companion/`.
 - **A BlueZ link can wedge.** `bluetoothctl info` says `Connected: yes` with no RSSI, and
   `disconnect` and `remove` both hang. Only switching the adapter off and on clears it, which drops
   every Bluetooth link on the computer, so ask the user first.
+- **Install `node_modules` in your own worktree.** Run `npm ci` in `nix develop .#companion` (about
+  30 s); never link another worktree's, because its session can remove that worktree mid-task.
+- **Node's fetch gives up on slow hosts.** Its 10 s connect timeout is too short for Open-Meteo from
+  this machine, so a CLI command such as `neotime weather` fails with "fetch failed". Preload
+  undici's `setGlobalDispatcher(new Agent({ connect: { timeout: 60000 } }))` through `NODE_OPTIONS=-r`.
