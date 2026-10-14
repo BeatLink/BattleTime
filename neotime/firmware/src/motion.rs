@@ -60,10 +60,38 @@ static SHAKE_SPEED: AtomicI32 = AtomicI32::new(0);
 /// Wake gestures are looked for in readings taken ten times a second, as InfiniTime takes them.
 const WAKE_GESTURE_PERIOD_IN_MILLISECONDS: u32 = 100;
 
+/// Whether the touch task wants to know when the wrist has been still a while.
+static STILLNESS_WANTED: AtomicBool = AtomicBool::new(false);
+static IS_STILL: AtomicBool = AtomicBool::new(false);
+
+/// Raised when the wrist turns still or starts moving again.
+pub static STILLNESS_CHANGED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
+/// With nothing else reading acceleration, the stillness detector reads it this often.
+const STILLNESS_PERIOD_IN_MILLISECONDS: u32 = 2000;
+
+/// The wrist counts as still once no reading has moved for this long.
+const STILL_AFTER: Duration = Duration::from_secs(60);
+
+/// A change on any axis bigger than this between readings counts as movement.
+const MOVEMENT_IN_MILLI_G: i32 = 80;
+
 const RAISE_BIT: u32 = 1 << 0;
 const LOWER_BIT: u32 = 1 << 1;
 const SHAKE_BIT: u32 = 1 << 2;
 const THRESHOLD_SHIFT: u32 = 8;
+
+/// Starts or stops watching for a still wrist; stopping it counts the wrist as moving.
+pub fn watch_for_stillness(wanted: bool) {
+    if STILLNESS_WANTED.swap(wanted, Ordering::Relaxed) != wanted {
+        READING_PERIOD_CHANGED.signal(());
+    }
+}
+
+/// Whether the wrist has been still for a minute while stillness is watched for.
+pub fn is_still() -> bool {
+    IS_STILL.load(Ordering::Relaxed)
+}
 
 /// Reads the step history, as apps see it.
 pub fn read_history<Answer>(read: impl FnOnce(&StepHistory) -> Answer) -> Answer {
@@ -166,6 +194,46 @@ fn take_reading(
 }
 
 // ============================================================================
+// Stillness
+// ============================================================================
+
+/// Finds a wrist that has not moved for a minute, from readings however far apart.
+#[derive(Default)]
+struct StillnessDetector {
+    last_reading: Option<neotime_accelerometer::Acceleration>,
+    moved_at: Option<Instant>,
+}
+
+impl StillnessDetector {
+    fn feed(&mut self, reading: neotime_accelerometer::Acceleration, now: Instant) {
+        let has_moved = self.last_reading.is_none_or(|last| {
+            let change = |from: i16, to: i16| (to as i32 - from as i32).abs();
+            change(last.x_in_milli_g, reading.x_in_milli_g)
+                .max(change(last.y_in_milli_g, reading.y_in_milli_g))
+                .max(change(last.z_in_milli_g, reading.z_in_milli_g))
+                > MOVEMENT_IN_MILLI_G
+        });
+        self.last_reading = Some(reading);
+        if has_moved {
+            self.moved_at = Some(now);
+        }
+        let moved_at = *self.moved_at.get_or_insert(now);
+        set_still(now.saturating_duration_since(moved_at) >= STILL_AFTER);
+    }
+
+    fn reset(&mut self) {
+        *self = StillnessDetector::default();
+        set_still(false);
+    }
+}
+
+fn set_still(is_still: bool) {
+    if IS_STILL.swap(is_still, Ordering::Relaxed) != is_still {
+        STILLNESS_CHANGED.signal(());
+    }
+}
+
+// ============================================================================
 // The step history and its log
 // ============================================================================
 
@@ -257,6 +325,7 @@ pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus) {
     diagnostics::set(Counter::AccelerometerState, 1);
     let mut shakes = ShakeDetector::new();
     let mut wake_gestures = WakeGestureDetector::new();
+    let mut stillness = StillnessDetector::default();
     let mut next_step_read = Instant::now();
     let mut next_acceleration_read = Instant::now();
     loop {
@@ -277,17 +346,29 @@ pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus) {
             true => WAKE_GESTURE_PERIOD_IN_MILLISECONDS,
             false => 0,
         };
-        let period = match (app_period, gesture_period) {
-            (0, other) | (other, 0) => other,
-            (app, gesture) => app.min(gesture),
+        let is_stillness_wanted = STILLNESS_WANTED.load(Ordering::Relaxed);
+        let stillness_period = match is_stillness_wanted {
+            true => STILLNESS_PERIOD_IN_MILLISECONDS,
+            false => 0,
         };
+        let period = [app_period, gesture_period, stillness_period]
+            .into_iter()
+            .filter(|&period| period != 0)
+            .min()
+            .unwrap_or(0);
         if app_period == 0 {
             shakes.reset();
+        }
+        if !is_stillness_wanted {
+            stillness.reset();
         }
         if period == 0 {
             wake_gestures.reset();
         } else if now >= next_acceleration_read {
             if let Ok(reading) = accelerometer.read_acceleration().await {
+                if is_stillness_wanted {
+                    stillness.feed(reading, now);
+                }
                 let app_wants_readings = app_period != 0;
                 take_reading(
                     reading,

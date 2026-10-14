@@ -2,7 +2,7 @@
 
 use core::future::pending;
 
-use embassy_futures::select::{select3, Either3};
+use embassy_futures::select::{select4, Either4};
 use embassy_nrf::gpio::{Input, Output};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, signal::Signal};
 use embassy_time::{Delay, Duration, Instant, Timer};
@@ -19,7 +19,7 @@ type Panel = TouchPanel<I2cDeviceOnBus, Input<'static>, Output<'static>>;
 
 use crate::{
     diagnostics::{self, Counter},
-    foreground, I2cDeviceOnBus,
+    foreground, motion, I2cDeviceOnBus,
 };
 
 /// Touches waiting for the UI, which merges queued drags.
@@ -40,8 +40,14 @@ pub enum Listening {
 
 static LISTENING: Signal<CriticalSectionRawMutex, Listening> = Signal::new();
 
+/// While dark and woken by a tap, the panel sleeps once the wrist has been still a while.
+const WAITS_FOR_A_TAP: Listening = Listening::WhileDark {
+    wake_on_touch: wake_on_touch::TAP,
+};
+
 /// Tells the touch task what to listen for; only the newest request counts.
 pub fn listen_for(listening: Listening) {
+    motion::watch_for_stillness(listening == WAITS_FOR_A_TAP);
     LISTENING.signal(listening);
 }
 
@@ -204,6 +210,7 @@ pub async fn read_touches(
     let mut finger = Finger::default();
     let mut sender = TouchSender::default();
     let mut listening = Listening::Everything;
+    let mut is_asleep_while_still = false;
     loop {
         let is_finger_down = finger.panel_finger.is_down();
         let lost_lift = async {
@@ -212,26 +219,53 @@ pub async fn read_touches(
                 false => pending().await,
             }
         };
-        let (report, reported_at) =
-            match select3(read_timed_report(&mut panel), LISTENING.wait(), lost_lift).await {
-                Either3::First(Ok(timed_report)) => timed_report,
-                Either3::First(Err(())) => continue,
-                Either3::Second(next) => {
-                    if next != listening {
-                        let _ = switch_panel(&mut panel, listening, next).await;
-                        listening = next;
-                        finger = Finger::default();
-                    }
-                    continue;
+        let stillness_changed = async {
+            match listening == WAITS_FOR_A_TAP {
+                true => motion::STILLNESS_CHANGED.wait().await,
+                false => pending().await,
+            }
+        };
+        let (report, reported_at) = match select4(
+            read_timed_report(&mut panel),
+            LISTENING.wait(),
+            lost_lift,
+            stillness_changed,
+        )
+        .await
+        {
+            Either4::First(Ok(timed_report)) => timed_report,
+            Either4::First(Err(())) => continue,
+            Either4::Second(next) => {
+                if next != listening {
+                    let is_awake = !is_asleep_while_still
+                        && (listening == Listening::Everything || listening == WAITS_FOR_A_TAP);
+                    let _ = switch_panel(&mut panel, is_awake, next).await;
+                    listening = next;
+                    is_asleep_while_still = false;
+                    finger = Finger::default();
                 }
-                Either3::Third(()) => {
-                    finger.lift_lost(Instant::now().as_millis(), |touch| {
-                        diagnostics::add_one(Counter::TouchesSent);
-                        sender.send(touch);
-                    });
-                    continue;
+                continue;
+            }
+            Either4::Fourth(()) => {
+                let is_still = motion::is_still();
+                if is_still != is_asleep_while_still {
+                    let switched = match is_still {
+                        true => panel.sleep(&mut Delay).await,
+                        false => panel.wake(&mut Delay).await,
+                    };
+                    is_asleep_while_still = is_still && switched.is_ok();
+                    finger = Finger::default();
                 }
-            };
+                continue;
+            }
+            Either4::Third(()) => {
+                finger.lift_lost(Instant::now().as_millis(), |touch| {
+                    diagnostics::add_one(Counter::TouchesSent);
+                    sender.send(touch);
+                });
+                continue;
+            }
+        };
         diagnostics::add_one(Counter::TouchReports);
         // Asleep for double taps, the panel interrupts only for one, so any report means a double tap.
         if listening
@@ -263,13 +297,8 @@ async fn read_timed_report(panel: &mut Panel) -> Result<(TouchReport, u64), ()> 
 }
 
 /// Puts the panel to sleep, to sleep listening for a double tap, or back to work, as the new listening needs.
-async fn switch_panel(panel: &mut Panel, from: Listening, to: Listening) -> Result<(), ()> {
-    if from != Listening::Everything
-        && from
-            != (Listening::WhileDark {
-                wake_on_touch: wake_on_touch::TAP,
-            })
-    {
+async fn switch_panel(panel: &mut Panel, is_awake: bool, to: Listening) -> Result<(), ()> {
+    if !is_awake {
         panel.wake(&mut Delay).await.map_err(|_| ())?;
     }
     match to {

@@ -22,7 +22,8 @@ Any press of the side button wakes the screen. Under **Wake** in Settings you ca
 ported from InfiniTime:
 
 - **Touch:** a tap, a double tap, or the button only. With the button only, the touch panel sleeps
-  while the screen is off, saving power.
+  while the screen is off, saving power. With a tap, it also sleeps once the watch has lain still
+  for a minute, so after setting the watch down, move it before tapping it awake.
 - **Raise wrist:** turning the watch towards you wakes it.
 - **Shake:** shaking your wrist harder than the **Shake strength** wakes it. The strength screen
   shows the setting as an arc you can drag, over a live arc of how hard your wrist is moving, and
