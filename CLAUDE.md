@@ -26,9 +26,13 @@ workflow under `.github/workflows`, run only when its files or the flake change.
   `SendMessage`. Agree on an order when one feature depends on another's landing, say which files
   you are about to change when they might be editing them too, and ask before touching a part
   another session owns.
-- Work lands by pushing to GitHub's `master`, so the local `master` is often behind. Run
-  `git fetch origin`, rebase onto `origin/master`, rerun the tests, then push without force.
+- Work lands by pushing to GitHub's `master`. Run `git fetch origin`, rebase onto `origin/master`,
+  rerun the tests, then push without force.
   When `master` has moved folders, rebase with `git -c merge.directoryRenames=true -c merge.renameLimit=20000`.
+- After every push to `origin/master`, bring the main checkout up to date with
+  `git -C <main checkout> merge --ff-only origin/master`, because the user opens and runs files there.
+  Keep it on the `master` branch, never a detached HEAD. If its tree has changes or the merge
+  refuses, leave it and tell the user rather than stashing or discarding anything.
 - Never name a commit to anyone until it is on `origin/master`.
 - Never revert or reformat another session's files. Run `cargo fmt -p <crate>`, not a bare
   `cargo fmt` over a whole workspace.
