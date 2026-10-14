@@ -43,6 +43,8 @@ watch from InfiniTime has run only in the emulator.
   updates the firmware and forwards notifications. See [its README](companion/README.md).
 - [docs/](docs/) is the documentation for both, also published as the website.
 - [tools/](tools/) builds the watch images, packages firmware updates and measures memory use.
+  [tools/appbuilder/](tools/appbuilder/) is the App Builder, a VS Code extension that builds apps
+  from a palette of widgets, events and effects with the simulated watch beside the code.
 
 `nix develop` gives the watch's toolchain and `nix develop .#companion` the companion's; both work
 from anywhere in the repository.

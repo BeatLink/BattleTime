@@ -1,0 +1,66 @@
+{
+  "name": "neotime-appbuilder",
+  "displayName": "NeoTime App Builder",
+  "description": "Builds NeoTime watch apps from a palette of widgets, events and effects, with the simulator running beside the code",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "publisher": "neotime",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "main": "./out/src/extension.js",
+  "activationEvents": [
+    "workspaceContains:**/neotime/sdk/neotime/package.json"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "neotime.appBuilder.open",
+        "title": "Open App Builder",
+        "category": "NeoTime",
+        "icon": "$(device-mobile)"
+      },
+      {
+        "command": "neotime.appBuilder.newApp",
+        "title": "New App",
+        "category": "NeoTime"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "neotime.appBuilder.open",
+          "when": "resourceExtname == .tsx",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "NeoTime App Builder",
+      "properties": {
+        "neotime.appBuilder.toolchainCommand": {
+          "type": "string",
+          "default": "nix develop --command",
+          "description": "Put in front of cargo to reach the Rust toolchain; empty runs cargo as it is."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "typescript": "5.6.3"
+  },
+  "devDependencies": {
+    "@types/node": "20.17.6",
+    "@types/vscode": "1.90.0",
+    "@vitest/coverage-v8": "2.1.4",
+    "vitest": "2.1.4"
+  }
+}

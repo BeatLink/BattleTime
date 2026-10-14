@@ -1,0 +1,37 @@
+# Runs the App Builder extension's tests with coverage and its build whenever it or the SDK its palette reads changes.
+name: App Builder
+
+on:
+  push:
+    branches: [master]
+    paths: ["tools/appbuilder/**", "neotime/sdk/**", ".github/workflows/appbuilder.yml"]
+  pull_request:
+    paths: ["tools/appbuilder/**", "neotime/sdk/**", ".github/workflows/appbuilder.yml"]
+  workflow_dispatch:
+
+# A newer push to a pull request replaces its older run; every commit on master keeps its own result.
+concurrency:
+  group: appbuilder-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pull-request' || github.sha }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: tools/appbuilder
+
+jobs:
+  checks:
+    name: Tests, coverage and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/appbuilder/package-lock.json
+      - name: Install the dependencies
+        run: npm ci
+      - name: Run the tests with coverage and check the floors
+        run: npm run coverage
+      - name: Build the extension, which also checks the types
+        run: npm run build

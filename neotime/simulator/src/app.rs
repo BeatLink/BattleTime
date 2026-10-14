@@ -53,7 +53,7 @@ const SIMULATED_FIRMWARE_VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "+si
 const SIMULATED_FREE_STORAGE_KILOBYTES: Value = 2840;
 
 /// A light theme, for trying `set_theme` with the T key.
-const LIGHT_THEME: Theme = Theme::new([0xFFFF, 0xDEFB, 0x0000, 0x6B4D, 0x04B3, 0x2589, 0xFC40, 0xD8A7]);
+pub const LIGHT_THEME: Theme = Theme::new([0xFFFF, 0xDEFB, 0x0000, 0x6B4D, 0x04B3, 0x2589, 0xFC40, 0xD8A7]);
 
 /// Where to touch before a screenshot, so it can show a screen after a click.
 #[derive(Clone, Copy, Debug)]
@@ -71,7 +71,7 @@ pub fn parse_click(text: &str) -> Result<Click, String> {
     })
 }
 
-fn wall_clock_in_milliseconds() -> Value {
+pub fn wall_clock_in_milliseconds() -> Value {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |elapsed| elapsed.as_millis() as Value)
@@ -112,7 +112,7 @@ struct HeartRateReading {
 }
 
 impl SimulatedSystem {
-    fn new(
+    pub fn new(
         vibrator_requests: Option<mpsc::Sender<&'static [Step]>>,
         heart_rate_link: Option<HeartRateLink>,
         random_seed: u32,
@@ -155,7 +155,7 @@ impl SimulatedSystem {
     }
 
     /// Tells the app about settings its own handlers changed, once the host call has returned.
-    fn tell_app_about_settings(&mut self, host: &mut AppHost<'_>, now: Value) {
+    pub fn tell_app_about_settings(&mut self, host: &mut AppHost<'_>, now: Value) {
         let changed = core::mem::take(&mut self.changed_settings);
         if changed != 0 {
             settings::tell_app_about_changes(host, changed, now, self);
@@ -518,7 +518,7 @@ pub struct AppFiles<'image> {
 }
 
 /// Opens the app, with the shared library when one was given.
-fn open<'image>(
+pub fn open<'image>(
     files: AppFiles<'image>,
     now: Value,
     system: &mut SimulatedSystem,
@@ -606,7 +606,7 @@ pub fn run(
     }
 }
 
-fn report(result: EventResult, what: &str) {
+pub fn report(result: EventResult, what: &str) {
     if result == EventResult::NotHandled {
         println!("{what}: the app does not take it, so the system's own meaning would apply");
     }
@@ -638,7 +638,7 @@ impl TouchTracker {
         self.has_dragged = false;
     }
 
-    fn drag(&mut self, point: Point) -> Option<Touch> {
+    pub fn drag(&mut self, point: Point) -> Option<Touch> {
         let (start, _) = self.start?;
         let distance = (point - start).x.abs().max((point - start).y.abs());
         if distance < DRAG_DISTANCE_IN_PIXELS && !self.has_dragged {

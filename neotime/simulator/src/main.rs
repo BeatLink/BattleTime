@@ -4,13 +4,15 @@
 //! of the ST7789, the vibrator driver to a motor pin and the heart rate driver to a simulated
 //! HRS3300. The mouse is the touch panel and the space bar is the side button. With `--app` or
 //! `--demo` it runs an app image instead of the demo pages, and with `--script` it runs a test
-//! script headless through the test watch.
+//! script headless through the test watch. With `--stream` an app runs with no window, taking
+//! commands on standard input and writing frames to standard output, for the app builder.
 
 mod app;
 mod hardware;
 mod heart_rate;
 mod pages;
 mod panel;
+mod stream;
 #[cfg(test)]
 mod tests;
 
@@ -68,6 +70,7 @@ struct Options {
     storage_folder: Option<String>,
     clicks: Vec<Click>,
     script_path: Option<String>,
+    stream: bool,
 }
 
 // ============================================================================
@@ -82,8 +85,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let panel = SimulatedPanel::new();
     let mut display = Display::new(panel.clone(), UnconnectedPin, &mut ThreadDelay)
         .map_err(|error| format!("the display did not start: {error:?}"))?;
-    draw_page(&mut display, options.first_page).unwrap_or_else(|never| match never {});
-
     let output_settings = OutputSettingsBuilder::new().scale(options.window_scale).build();
     let mut screen = SimulatorDisplay::<Rgb565>::new(Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32));
 
@@ -121,6 +122,25 @@ fn main() -> Result<(), Box<dyn Error>> {
             installed_app_icons: &installed_app_icons,
             storage_folder: options.storage_folder.as_deref().map(std::path::Path::new),
         };
+        if options.stream {
+            let motor_running = Arc::new(AtomicBool::new(false));
+            let system = app::SimulatedSystem::new(
+                Some(start_vibrator(motor_running.clone())),
+                Some(heart_rate::start_heart_rate_sensor()),
+                app::wall_clock_in_milliseconds() as u32 | 1,
+                &files,
+            );
+            let commands = stream::read_commands(std::io::BufReader::new(std::io::stdin()));
+            return stream::run(
+                files,
+                panel,
+                display,
+                system,
+                motor_running,
+                commands,
+                &mut std::io::stdout(),
+            );
+        }
         return match &options.screenshot_path {
             Some(path) => app::save_screenshot(
                 files,
@@ -135,6 +155,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
     }
 
+    draw_page(&mut display, options.first_page).unwrap_or_else(|never| match never {});
     if let Some(screenshot_path) = options.screenshot_path {
         copy_panel_to_screen(&panel, &mut screen, false);
         screen
@@ -174,6 +195,7 @@ fn read_options() -> Result<Options, String> {
         storage_folder: None,
         clicks: Vec::new(),
         script_path: None,
+        stream: false,
     };
     let mut arguments = std::env::args().skip(1);
 
@@ -190,10 +212,11 @@ fn read_options() -> Result<Options, String> {
             "--files" => options.storage_folder = Some(value()?),
             "--click" => options.clicks.push(parse_click(&value()?)?),
             "--script" => options.script_path = Some(value()?),
+            "--stream" => options.stream = true,
             _ => {
                 return Err(format!(
                     "unknown option {argument}; use --screenshot PATH, --page N, --scale N, --app PATH, \
-                     --demo, --library PATH, --installed PATH, --files FOLDER, --click X,Y, --script PATH"
+                     --demo, --library PATH, --installed PATH, --files FOLDER, --click X,Y, --script PATH, --stream"
                 ))
             }
         }

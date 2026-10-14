@@ -283,6 +283,35 @@
         companionShellHook = ''
           unset ELECTRON_RUN_AS_NODE
         '';
+        # The App Builder, a VS Code extension; the editor module names its folder from the passthru values.
+        appbuilderVersion = (lib.importJSON ./tools/appbuilder/package.json).version;
+        appbuilder = pkgs.buildNpmPackage {
+          pname = "neotime-appbuilder";
+          version = appbuilderVersion;
+          src = lib.cleanSource ./tools/appbuilder;
+
+          nodejs = pkgs.nodejs_22;
+          npmDepsHash = "sha256-5yp+SYXose9RS5JC7aKowgCi0q7KJlYRboPfkIjeZcc=";
+
+          installPhase = ''
+            runHook preInstall
+
+            # TypeScript reads the SDK for the palette at run time, so it is the one dependency kept.
+            npm prune --omit=dev
+            target=$out/share/vscode/extensions/neotime.neotime-appbuilder
+            mkdir -p $target
+            cp -r package.json README.md out media node_modules $target/
+
+            runHook postInstall
+          '';
+
+          passthru = {
+            vscodeExtUniqueId = "neotime.neotime-appbuilder";
+            vscodeExtPublisher = "neotime";
+            vscodeExtName = "neotime-appbuilder";
+            vscodeExtVersion = appbuilderVersion;
+          };
+        };
       in
       {
         packages = {
@@ -291,6 +320,7 @@
           infinisim = infinisimPackage;
           companion = companion;
           companion-android-sdk = companionAndroidSdk;
+          appbuilder = appbuilder;
         };
 
         apps = {

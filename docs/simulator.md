@@ -79,6 +79,21 @@ what it expected and what it found. It exits with 0 when every step passes, 1 wh
 2 when the script cannot be read. A relative `screenshot` path is saved under the current folder.
 [testing.md](testing.md) lists the commands.
 
+## Streaming to another program
+
+`--stream` runs an app with no window, for the App Builder
+([tools/appbuilder](../tools/appbuilder/README.md)), which shows the screen in VS Code:
+
+```sh
+cargo run -p neotime-simulator -- --app app.ntapp --library shared.ntlib --stream
+```
+
+It reads one command a line on standard input: `press X Y`, `move X Y` and `release X Y` touch the
+screen as the mouse does in the window, `button` presses the side button, `theme` switches theme,
+and `quit` or the end of the input stops it. Each time the screen changes it writes
+`frame <base64>`, the 240x240 screen row by row as little-endian RGB565, and `motor on` or
+`motor off` when the motor starts or stops. Every other line is the usual log text, such as effects.
+
 ## How it works
 
 The drivers talk to hardware only through `embedded-hal` traits and `neotime-display`'s
