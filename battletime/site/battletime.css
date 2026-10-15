@@ -34,6 +34,15 @@
 .md-typeset .screens { display: flex; gap: 16px; flex-wrap: wrap; }
 .md-typeset .screens p { display: contents; }
 
+/* The companion's window is a tall phone screen, so its screenshots get a narrow rounded frame. */
+.md-typeset img.phone {
+  display: block;
+  width: 100%;
+  max-width: 260px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 16px;
+}
+
 .md-typeset .gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));

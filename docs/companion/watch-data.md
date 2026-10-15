@@ -32,6 +32,8 @@ alarm that rings once) and a switch. **Add an alarm**, change the times and days
 you no longer need, then **Save to watch**. The watch takes up the new alarms at once, even while
 its Alarm app is open.
 
+![The Alarms screen with a weekday alarm at 7:00 and a one-off alarm at 9:30](../images/companion/alarms.png){ .phone }
+
 The **Alarm** plugin's page does the same: each alarm with a time picker, weekday buttons and a
 switch.
 
@@ -73,6 +75,8 @@ day's average, lowest and highest.
 - **Units and goals**: metric or imperial units, and the daily step goal;
 - **Bluetooth**: **Show as InfiniTime**, for Gadgetbridge;
 - **Theme**: a preset, or your own colours, then **Save colours**.
+
+![The Display part of the Watch settings screen: brightness, screen timeout, always on and clock](../images/companion/watch-settings.png){ .phone }
 
 ## Backups
 

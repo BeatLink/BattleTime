@@ -7,6 +7,10 @@ weather, keeps a copy of the watch's steps, heart rate and settings, and sends i
 A new BattleTime watch has no apps, faces or launcher, only a help screen, so the companion is how a
 watch is set up in the first place.
 
+![The Watch screen with a watch connected, showing its battery, steps and last sync](../images/companion/watch.png){ .phone }
+
+The Watch screen once a watch is connected.
+
 ## Ways to run it
 
 | Build | Runs on | Good for |

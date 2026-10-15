@@ -14,6 +14,8 @@ The switches are on the **Notifications** screen, under **Forwarding**:
 | **Weather** | Sends the current weather every half hour |
 | **Respect Do Not Disturb** | Holds back notifications and calls while the phone or computer is in Do Not Disturb |
 
+![The Forwarding switches on the Notifications screen](../images/companion/notifications.png){ .phone }
+
 Under **Status** the screen says whether the app has notification access, with **Grant access** to
 open the phone's setting, and whether Do Not Disturb is on.
 

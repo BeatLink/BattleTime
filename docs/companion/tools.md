@@ -8,16 +8,18 @@ from the companion, and look after the watch's files.
 The watch's [Notes](../apps/notes.md) app shows one note, read only, that the companion keeps up to
 date. On the **Notes** screen choose where it comes from:
 
-- **Typed** here: it is sent a moment after you stop typing.
-- **A text file**: the desktop app watches the file and sends it again within a moment of each
+- **Typed here**: it is sent a moment after you stop typing.
+- **A file**, a text file: the desktop app watches the file and sends it again within a moment of each
   save. On a phone the file is read again every minute.
-- **A web address**: fetched again every minute, with optional extra headers, a login and a choice
+- **A URL**: fetched again every minute, with optional extra headers, a login and a choice
   of certificate (see [Web requests](#web-requests)).
 
 Under **Text size**, choose the font the watch shows it in: small, normal, medium or large. A note
 may be up to 64 kB. **Send now** sends it at once, and **Clear and remove it from the watch** takes
 it off. The companion sends the note only when it has changed,
 and sends it again if it was deleted on the watch.
+
+![The Notes screen with a shopping list typed in](../images/companion/notes.png){ .phone }
 
 ![The Notes app showing a note](../../battletime/harness/snapshots/screens/app-notes.png)
 
@@ -56,6 +58,8 @@ An action the device cannot run is marked unavailable. The watch only says which
 the action itself stays in the companion, so the watch can never send a command or an address. The
 screen keeps a log of recent taps.
 
+![The Remote screen with two web request buttons, Porch light and Garage door](../images/companion/remote.png){ .phone }
+
 ![The Remote app with four buttons](../../battletime/harness/snapshots/screens/app-remote-4.png)
 
 ## Web requests
@@ -71,6 +75,8 @@ kept unencrypted in the app's settings.
 **Files** browses the watch's file system: open folders, **Download** a file, **Send a file
 here**, delete files and folders, and **Check free space**. Changing files by hand can break an app;
 the other screens are the safer way to change what they look after.
+
+![The Files screen at the top of the watch's file system](../images/companion/files.png){ .phone }
 
 ## Debug report
 

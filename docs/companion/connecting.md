@@ -14,6 +14,10 @@ time.
 3. Choose the watch. The companion connects, sets the watch's clock and time zone, and reads what
    the watch serves.
 
+![The Find a watch screen listing one watch and one waiting in its bootloader](../images/companion/find-a-watch.png){ .phone }
+
+The scan list, with a watch waiting in its bootloader below the running one.
+
 The watch advertises the name **BattleTime**. With **Show as InfiniTime** turned on in the watch's
 settings it advertises **InfiniTime** instead, for Gadgetbridge; see
 [Using Gadgetbridge instead](phone-features.md#using-gadgetbridge-instead).
@@ -37,7 +41,7 @@ Once connected, the Watch screen shows:
   notes, QR codes, the launcher, the remote, files and backups;
 - **Store**, which opens even with no watch connected;
 - **Quick actions**: find the watch (it vibrates until tapped), send a test notification, one
-  short buzz, and send the weather now.
+  short buzz, and, once a place is chosen for the weather, send the weather now.
 
 A new watch with no face shows **This watch has no face yet** and a **Set up the watch** button;
 [Apps, faces and the store](apps-and-store.md#setting-up-a-new-watch) describes it.

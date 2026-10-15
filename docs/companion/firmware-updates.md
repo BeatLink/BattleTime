@@ -17,6 +17,8 @@ describes what happens inside the watch.
 4. The watch restarts, its bootloader swaps the new firmware in, and the companion reconnects and
    sets the time. That exchange tells the watch the new firmware works, so it keeps it.
 
+![The Firmware tab with Choose a package, Look for builds and Send to the watch](../images/companion/firmware.png){ .phone }
+
 If the link drops partway through, the companion reconnects and carries on from where the watch got
 to, up to four more times. A package the watch refuses is not sent again.
 

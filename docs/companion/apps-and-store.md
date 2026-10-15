@@ -11,12 +11,19 @@ connects to a watch with no face, the Watch screen says **This watch has no face
 
 1. Choose **Set up the watch**.
 2. Tick the apps to install. The list offers the ones most people keep: the digital face, the
-   launcher, Calculator, Dice, Flashlight, Heart, Notes, 15, Remote, Snake, Steps, Stopwatch and
+   launcher (named Apps), Calculator, Dice, Flashlight, Heart, Notes, 15, Remote, Snake, Steps, Stopwatch and
    Timer. Everything else waits in the store.
 3. Choose **Install** and keep the watch close. It takes a minute or two.
 
 The face and the launcher go first, so the watch shows its face as soon as they land. Swipe up on
 the face to open the launcher. Setting up also writes the launcher's default groups.
+
+<div class="screens" markdown>
+![The Set up the watch screen with a switch for each app to install](../images/companion/setup.png){ .phone }
+![The Apps screen listing the apps on the watch with the memory each needs](../images/companion/apps.png){ .phone }
+</div>
+
+Setting up a new watch, and the Apps screen once it is done.
 
 The shared library, which holds the icons and fonts every app uses, comes inside the firmware, so
 the companion never sends it.
@@ -36,6 +43,8 @@ from. It opens without a watch, so it can be filled before one is connected.
 - **Look on GitHub** lists the releases of a repository, `BeatLink/BattleTime` unless changed, that
   carry apps or plugins. Choose one to download it and pick what to add. With a GitHub token in
   Settings, recent Actions builds are listed too.
+
+![The Store with the 2048 game chosen, offering Install and Remove from the store](../images/companion/store.png){ .phone }
 
 An entry added later replaces one with the same id, so adding a newer release and installing again
 updates the app on the watch. Added files are kept on the device, so installing needs no download.
