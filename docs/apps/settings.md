@@ -31,10 +31,11 @@ the watch face and the theme. Merged from InfiniTime's Settings and wasp-os's se
 - **DND** (do not disturb), and **DND alarms**: whether alarms still ring while it is on.
 - **Sleep mode**: do not disturb that also stops every way of waking the screen but the button, and
   the always-on screen. Turning do not disturb off ends it.
-- **Face**: the watch face, shown by name. Its screen steps back and on through the faces turned
-  on in Software with the two arrow buttons, wrapping round, and the face changes at once, as
-  InfiniTime's watch face setting does. If the chosen face is turned off or removed, the first face
-  turned on shows instead.
+- **Face**: the watch face, shown by name. Tapping it opens the face chooser, which shows the face
+  itself full screen, as wasp-os's Faces app does: swipe left or right to step through the faces
+  turned on in Software, wrapping round, each chosen as it slides in, and click the side button to
+  come back here with it kept. If the chosen face is turned off or removed, the first face turned
+  on shows instead.
 - **Theme**: one of six preset themes, each shown in its own colours. The companion app can set
   colours of your own, which show here as **Own**.
 - **Bluetooth**: off until the next restart.
@@ -96,9 +97,10 @@ Chimes, opened from its row.
 
 How often to measure the heart rate in the background, opened from **Heart rate**.
 
-![The watch face chooser](../../battletime/harness/snapshots/screens/app-settings-watch-face.png)
+![The face chooser showing the Digital face](../../battletime/harness/snapshots/screens/app-settings-face-chooser.png)
 
-The watch face, opened from **Face**; the arrows step to the face before or after it.
+The face chooser, opened from **Face**: the face itself, here Digital; a swipe left or right
+slides in the next or previous face and chooses it, and the side button comes back here.
 
 ![The six themes](../../battletime/harness/snapshots/screens/app-settings-theme.png)
 

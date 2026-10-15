@@ -987,9 +987,9 @@ export function set_app_enabled(id: string, on: boolean) {
   emit({ kind: "set_app_enabled", id, on });
 }
 
-/** Chooses the face `steps` places on from the one shown among the faces turned on, wrapping round; negative goes back. Needs `settings`. */
-export function step_watch_face(steps: number) {
-  emit({ kind: "step_watch_face", steps });
+/** Opens the face chooser: each face turned on full screen, swiped left and right, kept on going back. Needs `settings`. */
+export function choose_watch_face() {
+  emit({ kind: "choose_watch_face" });
 }
 
 /** Takes one heart rate reading now. */

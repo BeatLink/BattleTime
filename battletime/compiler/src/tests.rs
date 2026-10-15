@@ -1622,15 +1622,15 @@ fn the_installed_packages_are_read_one_field_at_a_time_and_turned_on_by_id() {
 }
 
 #[test]
-fn the_watch_face_is_read_by_number_and_name_and_stepped_with_the_settings_permission() {
+fn the_watch_face_is_read_by_number_and_name_and_chosen_with_the_settings_permission() {
     use battletime_runtime::instruction::Instruction;
     let source = app(
-        r#"import { settings, step_watch_face, watch_face_name } from "battletime";
+        r#"import { choose_watch_face, settings, watch_face_name } from "battletime";
         function Main() {
           return (
             <Screen>
               <Label>{`${watch_face_name.value} ${settings.watch_face.value}`}</Label>
-              <Button onClick={() => step_watch_face(-1)}>Back</Button>
+              <Button onClick={() => choose_watch_face()}>Choose</Button>
             </Screen>
           );
         }"#,
@@ -1646,7 +1646,10 @@ fn the_watch_face_is_read_by_number_and_name_and_stepped_with_the_settings_permi
         &image,
         Instruction::ReadSystem(SystemValue::WatchFace)
     ));
-    assert!(image_runs(&image, Instruction::Effect(EffectKind::StepWatchFace)));
+    assert!(image_runs(
+        &image,
+        Instruction::Effect(EffectKind::ChooseWatchFace)
+    ));
     assert_eq!(
         compile_source(&source).permissions,
         [crate::permissions::Permission::Settings]

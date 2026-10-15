@@ -4,7 +4,8 @@
 //! On the face a swipe up opens the launcher, a swipe down pulls the notifications down, and a
 //! swipe left or right steps round the quick apps. On the notifications a swipe down pulls quick
 //! settings down after them. A swipe up on either, or down on the launcher, goes back a step, the
-//! way the side button does. On a quick app a swipe left or right steps on round the ring.
+//! way the side button does. On a quick app a swipe left or right steps on round the ring. On the
+//! face chooser a swipe left shows the next face turned on and a swipe right the one before.
 
 use battletime_runtime::events::SwipeDirection;
 
@@ -21,6 +22,8 @@ pub enum SwipeScreen {
     QuickSettings,
     /// An app the shell opened from the quick-app ring.
     QuickApp,
+    /// The face chooser, a face shown to pick, which hears no touches itself.
+    FaceChooser,
     /// Any other app, which keeps every swipe to itself.
     Other,
 }
@@ -34,6 +37,8 @@ pub enum SwipeAction {
     OpenQuickSettings,
     NextQuickApp,
     PreviousQuickApp,
+    NextFace,
+    PreviousFace,
     GoBack,
 }
 
@@ -51,6 +56,8 @@ pub fn action_for(direction: SwipeDirection, screen: SwipeScreen) -> SwipeAction
         (SwipeScreen::Notifications, Down) => SwipeAction::OpenQuickSettings,
         (SwipeScreen::Notifications | SwipeScreen::QuickSettings, Up) => SwipeAction::GoBack,
         (SwipeScreen::Launcher, Down) => SwipeAction::GoBack,
+        (SwipeScreen::FaceChooser, Left) => SwipeAction::NextFace,
+        (SwipeScreen::FaceChooser, Right) => SwipeAction::PreviousFace,
         _ => SwipeAction::Nothing,
     }
 }

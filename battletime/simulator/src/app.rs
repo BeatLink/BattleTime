@@ -496,6 +496,7 @@ impl System for SimulatedSystem {
             EffectKind::SetBluetooth => self.change_setting(Setting::Bluetooth.name(), effect.number(0)),
             EffectKind::OpenFolder => self.list_folder(effect.text(0).unwrap_or("")),
             EffectKind::ConfirmFirmware => println!("  the simulated firmware is always confirmed"),
+            EffectKind::ChooseWatchFace => println!("  the watch would open the face chooser"),
             EffectKind::RollBackFirmware => {
                 println!("  the watch would restart into the firmware before this one")
             }

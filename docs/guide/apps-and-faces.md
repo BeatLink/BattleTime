@@ -59,8 +59,9 @@ A few work hand in hand with the companion app:
 ## Watch faces
 
 There are 28 faces, ported from InfiniTime, wasp-os, PinetimeLite and ZephyrLabs' Watchfaces and
-listed in [faces.md](../faces.md). **Face** in Settings steps back and on through the faces turned on in
-Software, as InfiniTime's watch face setting does, and the companion app can choose one too. The
+listed in [faces.md](../faces.md). **Face** in Settings opens the face chooser, which shows each face
+itself, full screen: swipe left or right through the faces turned on in Software and click the side
+button to keep the one shown, as wasp-os's Faces app does. The companion app can choose one too. The
 chosen face shows at once and after a restart; if it is turned off or removed, the first face
 turned on shows instead. Some faces open their own settings on a long press.
 

@@ -53,6 +53,7 @@ tests and given to every app.
 | `receive_from_phone(line)` | A companion line from the phone, read by `battletime-companion` as the watch reads it. |
 | `set_system_value`, `set_system_text`, `screen_off`, `screen_on`, `install_apps(&["timer"])` | Change the battery, the firmware version or another value, the screen, or the launcher's list. |
 | `switch_to_app(id)`, `switch_to_face(id)` | Leaves the open app closed with its state, as the shell does, and opens another. Installed and left apps with timers or alarms run when those come due, and one that calls `wake_screen` opens on the screen its `go` named, with the screen lit; `closed_app_ids()` lists those waiting. |
+| `is_choosing_face()` | Whether the face chooser shows. An app's `choose_watch_face` opens it as the shell does: the face `settings.watch_face` names among the faces turned on in `system().packages` opens, hears no touches, steps to the next or previous one on a swipe left or right, saving it in `watch_face` and `watch_face_name`, and `press_button()` goes back to the app. |
 | `write_file(path, bytes)`, `reopen()`, `start_on_screen(name)` | Write a file as the phone does, and leave the app and open it again, so it reads the file afresh, or start it on another screen as the shell does. |
 
 | Inspect | Gives |
@@ -66,7 +67,8 @@ tests and given to every app.
 | `frame()`, `pixels_left_stale()` | The drawn 240x240 RGB565 screen; how far drawing only the changes strays from drawing afresh. |
 
 A script's `snapshot` names its picture after the package open at that step, which a switch or a
-closed app that woke may have changed.
+closed app that woke may have changed; the face chooser's pictures are named after the app that
+opened it.
 
 The fake system starts at 09:00 UTC on Monday 5 January 2026, with plausible readings such as 87%
 battery, and gives the same random numbers on every run.

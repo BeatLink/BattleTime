@@ -97,3 +97,29 @@ fn other_apps_keep_every_swipe() {
         assert_eq!(action_for(direction, SwipeScreen::Other), SwipeAction::Nothing);
     }
 }
+
+// ============================================================================
+// The face chooser
+// ============================================================================
+
+#[test]
+fn on_the_face_chooser_left_shows_the_next_face_and_right_the_one_before() {
+    assert_eq!(
+        action_for(SwipeDirection::Left, SwipeScreen::FaceChooser),
+        SwipeAction::NextFace
+    );
+    assert_eq!(
+        action_for(SwipeDirection::Right, SwipeScreen::FaceChooser),
+        SwipeAction::PreviousFace
+    );
+}
+
+#[test]
+fn the_face_chooser_opens_neither_the_launcher_nor_the_notifications() {
+    for direction in [SwipeDirection::Up, SwipeDirection::Down] {
+        assert_eq!(
+            action_for(direction, SwipeScreen::FaceChooser),
+            SwipeAction::Nothing
+        );
+    }
+}

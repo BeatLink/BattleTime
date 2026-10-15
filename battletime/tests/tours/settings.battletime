@@ -97,15 +97,13 @@ swipe up
 swipe up
 swipe up
 swipe up
-tap "Face"                  # the watch face chooser
-expect screen watch_face
 expect text "Digital"
-snapshot watch-face
-tap 204 140                 # the next face
-expect effect step-watch-face 1
-tap 36 140                  # the face before
-expect effect step-watch-face -1
-button
+tap "Face"                  # the face chooser, which shows the face itself to swipe between
+expect effect choose-watch-face
+snapshot face-chooser
+swipe left                  # with only one face turned on, a swipe keeps it
+button                      # back to the list, with the face kept
+expect screen main
 swipe up
 swipe up
 swipe up

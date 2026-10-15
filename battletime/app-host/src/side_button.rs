@@ -4,6 +4,7 @@
 //! open app first goes back one of its own screens, then the shell goes back a step along the way
 //! the wearer came, and on the face a click puts the watch to sleep. A long press, or holding for 2
 //! seconds, goes to the face. A double click opens the notifications, or goes from them to the face.
+//! On the face chooser a click goes back at once, keeping the face shown, since the face is not asked.
 
 use battletime_button::Gesture;
 
@@ -18,6 +19,8 @@ pub enum OpenScreen {
     Launcher,
     App,
     Notifications,
+    /// A face shown to pick, whose own screens the button never steps back through.
+    FaceChooser,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -43,7 +46,8 @@ pub enum ButtonAction {
 
 /// Whether the open app is asked first to go back one of its own screens.
 pub fn goes_back_in_the_app_first(gesture: Gesture, situation: &ButtonSituation) -> bool {
-    situation.screen_is_lit && gesture == Gesture::Click && situation.open_screen != OpenScreen::Face
+    let shows_an_app = !matches!(situation.open_screen, OpenScreen::Face | OpenScreen::FaceChooser);
+    situation.screen_is_lit && gesture == Gesture::Click && shows_an_app
 }
 
 /// What the shell does when the open app had no earlier screen to go back to, or was not asked.

@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 embedded-graphics = "0.8"
 battletime-app-host = { path = "../app-host" }
+battletime-button = { path = "../drivers/button" }
 battletime-companion = { path = "../services/companion" }
 battletime-compiler = { path = "../compiler" }
 battletime-current-time = { path = "../services/current_time" }

@@ -33,6 +33,13 @@ document for its part instead.
   panel and DISPLAY_ON after waking it. Check that the screen turns off and on cleanly with no
   flash of old content.
 
+- [ ] **The face chooser on the PineTime.** Settings' **Face** row opens the shown face full
+  screen, where swipes left and right change it; it has run only in the harness and the emulator,
+  which showed the chooser opening, a swipe choosing the next face and the button going back to the
+  app. On the watch, check that each face slides in the swipe's way with the time live, a tap or
+  long press on a face such as PineTimeStyle changes nothing, and the button comes back to Settings
+  showing the new face's name, which the face then keeps after a restart.
+
 - [ ] **Paging on the PineTime.** `Pages` (2f9524a) and the system and steps apps built on it
   (5957275) have run only in the harness and the emulator; the watch still runs 3a5abe9. Flash a
   build with them and check on the watch that a swipe left or right wipes to the next page and
@@ -856,7 +863,6 @@ BattleTime already ported are left out. Most also appear in the InfiniTime table
 | Area | What the fork has |
 |---|---|
 | Heart rate | raw data logging |
-| Watch faces | Chrono, a Faces app with previews |
 | Apps | Gallery, Self test |
 | Companion app | WaspOSCompanion: themes, face previews |
 | Developer tools | `wasptool`, `pkgpush.py`, `nus.py` |

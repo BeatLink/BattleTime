@@ -12,11 +12,13 @@ flowchart TD
     quick["Quick settings"]
     settings["Settings app"]
     ring["Quick apps:<br/>steps, stopwatch, heart,<br/>weather, music"]
+    chooser["Face chooser:<br/>swipe left or right<br/>for another face"]
     face -- "swipe up" --> launcher
     launcher -- "tap an app" --> app
     face -- "swipe down" --> notifications
     notifications -- "swipe down" --> quick
     quick -- "Settings tile" --> settings
+    settings -- "Face" --> chooser
     face -- "swipe left or right" --> ring
     ring -- "past either end" --> face
 ```
@@ -30,6 +32,10 @@ The face shows the time and, depending on the face, the date, the battery, wheth
 connected, unread notifications, the next alarm, steps, heart rate and the weather. Some faces
 open their own settings, such as colours or a layout, on a long press. You choose the face in
 Settings or the companion app; see [Apps and watch faces](apps-and-faces.md#watch-faces).
+
+**Face** in Settings opens the face chooser, the face itself full screen. There a swipe left or
+right slides in the next or previous face turned on and chooses it, swipes up and down do nothing,
+and the face ignores taps. A click of the side button goes back to Settings with that face kept.
 
 While no face is installed, the watch shows the time and a note to install one with the BattleTime
 companion app.

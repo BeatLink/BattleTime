@@ -90,6 +90,7 @@ name = "battletime-app-testing"
 version = "0.1.0"
 dependencies = [
  "battletime-app-host",
+ "battletime-button",
  "battletime-companion",
  "battletime-compiler",
  "battletime-crash-record",

@@ -7,6 +7,7 @@ enum Screen {
     QuickSettings,
     Launcher,
     App(u8),
+    FaceChooser,
 }
 
 use Screen::*;
@@ -112,5 +113,23 @@ fn a_screen_that_is_gone_is_skipped_on_the_way_back() {
     assert_eq!(
         all_the_way_back(&mut way_back),
         [(Launcher, Transition::Down), (Face, Transition::Down)]
+    );
+}
+
+#[test]
+fn the_face_chooser_goes_back_to_the_app_that_opened_it_and_on_back_the_way_it_came() {
+    let mut way_back = WayBack::default();
+    way_back.forward(Face, Launcher, Transition::Up);
+    way_back.forward(Launcher, App(1), Transition::Up);
+    way_back.forward(App(1), FaceChooser, Transition::Up);
+
+    // Stepping between faces in the chooser opens each in its place and records no step.
+    assert_eq!(
+        all_the_way_back(&mut way_back),
+        [
+            (App(1), Transition::Down),
+            (Launcher, Transition::Down),
+            (Face, Transition::Down)
+        ]
     );
 }

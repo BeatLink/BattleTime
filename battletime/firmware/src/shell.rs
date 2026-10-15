@@ -3,7 +3,10 @@
 //! The face, the one the watch face setting names, is shown at start and again at once when the
 //! setting changes. A swipe up on the face opens the launcher, a tap there opens an app,
 //! a swipe down pulls the notifications and then quick settings down, and a swipe left or right
-//! steps round the quick apps, as `battletime_app_host::swipes` says. The side button's gestures act as
+//! steps round the quick apps, as `battletime_app_host::swipes` says. The face chooser, which Settings
+//! opens, shows the face itself and hears none of its touches: a swipe left or right changes the
+//! `watch_face` setting to the next or previous face turned on and slides that face in, and going
+//! back leaves it chosen. The side button's gestures act as
 //! `battletime_app_host::side_button` says: a click goes back a step, retracing the way the wearer came,
 //! and from the face to sleep. The backlight and display turn off, or dim for an always-on screen, after the settings' timeout
 //! without input, unless the app keeps the screen on, and the next touch or button gesture turns
@@ -201,6 +204,8 @@ enum Showing {
     QuickSettings,
     /// The app the phone ran from `/temp`, which is never installed and keeps no state.
     Temporary,
+    /// The face, shown to pick with swipes, which hears none of its touches.
+    FaceChooser,
 }
 
 /// A screen as the way back remembers it: what showed, and whether it was reached round the quick-app ring.
@@ -623,11 +628,8 @@ impl System for WatchSystem {
             EffectKind::SetClock => {
                 clock::set_by_hand(effect.number(0), effect.number(1), effect.number(2));
             }
-            EffectKind::StepWatchFace => {
-                let steps = i32::try_from(effect.number(0)).unwrap_or(0);
-                if let Some(number) = self.installed.stepped_face_number(steps) {
-                    settings::set_by_name(Setting::WatchFace.name(), number as Value);
-                }
+            EffectKind::ChooseWatchFace if self.installed.face.is_some() => {
+                self.request = Request::Open(Showing::FaceChooser)
             }
             EffectKind::OpenFolder => self.folder_wanted = effect.text(0).map(alloc::string::String::from),
             EffectKind::ConfirmFirmware => {
@@ -752,7 +754,7 @@ impl Shell {
         self.showing = showing;
         let installed = &self.system.installed;
         let (id, built_in) = match showing {
-            Showing::Face => (installed.face.clone(), None),
+            Showing::Face | Showing::FaceChooser => (installed.face.clone(), None),
             Showing::Launcher => (installed.has_launcher.then(|| apps::LAUNCHER_ID.into()), None),
             Showing::App(place) => (installed.listed_id(place).map(alloc::string::String::from), None),
             Showing::Notifications => (Some("notifications".into()), Some(NOTIFICATIONS_IMAGE)),
@@ -1028,7 +1030,7 @@ impl Shell {
         }
         // The face is picked first, so the open app redraws with the new face's name.
         if changed & Setting::WatchFace.bit() != 0 {
-            self.face_choice_changed();
+            self.face_choice_changed(Transition::None);
         }
         if let Some(host) = &mut self.host {
             app_settings::tell_app_about_changes(host, changed, clock::utc_now(), &mut self.system);
@@ -1044,14 +1046,23 @@ impl Shell {
         }
     }
 
-    /// Picks the face again, and shows the new one at once when the face is on the screen.
+    /// Picks the face again, and shows the new one at once, coming in by `transition`, when the face or the chooser is on the screen.
     #[inline(never)]
-    fn face_choice_changed(&mut self) {
+    fn face_choice_changed(&mut self, transition: Transition) {
         let face_before = self.system.installed.face.clone();
         self.system.installed.choose_face_again(self.files);
-        let face_showing = self.showing == Showing::Face && self.firmware_page.is_none();
+        let face_showing =
+            matches!(self.showing, Showing::Face | Showing::FaceChooser) && self.firmware_page.is_none();
         if face_showing && self.system.installed.face != face_before {
-            self.open(Showing::Face, Transition::None);
+            self.open(self.showing, transition);
+        }
+    }
+
+    /// Chooses the face `steps` places on among the faces turned on and slides it in by `transition`; with one face nothing moves.
+    fn step_face(&mut self, steps: i32, transition: Transition) {
+        if let Some(number) = self.system.installed.stepped_face_number(steps) {
+            settings::set_by_name(Setting::WatchFace.name(), number as Value);
+            self.face_choice_changed(transition);
         }
     }
 
@@ -1137,6 +1148,13 @@ impl Shell {
             }
             return;
         }
+        // The chooser's face never hears a touch, so picking it cannot change its options.
+        if self.showing == Showing::FaceChooser {
+            if let Touch::Swipe(direction) = touch {
+                self.swipe(direction);
+            }
+            return;
+        }
         let Some(host) = &mut self.host else {
             return;
         };
@@ -1163,6 +1181,7 @@ impl Shell {
             Showing::QuickSettings => SwipeScreen::QuickSettings,
             Showing::App(_) if self.in_quick_ring => SwipeScreen::QuickApp,
             Showing::App(_) | Showing::Temporary => SwipeScreen::Other,
+            Showing::FaceChooser => SwipeScreen::FaceChooser,
         };
         match swipes::action_for(direction, screen) {
             SwipeAction::Nothing => {}
@@ -1176,6 +1195,8 @@ impl Shell {
             SwipeAction::GoBack => self.go_back(Transition::Down),
             SwipeAction::NextQuickApp => self.step_round_quick_apps(Step::Next, Transition::Left),
             SwipeAction::PreviousQuickApp => self.step_round_quick_apps(Step::Previous, Transition::Right),
+            SwipeAction::NextFace => self.step_face(1, Transition::Left),
+            SwipeAction::PreviousFace => self.step_face(-1, Transition::Right),
         }
     }
 
@@ -1236,6 +1257,7 @@ impl Shell {
             Showing::Launcher => OpenScreen::Launcher,
             Showing::Notifications => OpenScreen::Notifications,
             Showing::App(_) | Showing::QuickSettings | Showing::Temporary => OpenScreen::App,
+            Showing::FaceChooser => OpenScreen::FaceChooser,
         };
         ButtonSituation {
             screen_is_lit: self.lit,

@@ -1593,3 +1593,114 @@ fn the_files_app_taps_on_a_file_open_nothing() {
     assert_eq!(watch.system().folder.path(), "/qr");
     assert_eq!(watch.effects_of(EffectKind::OpenFolder).len(), 2);
 }
+
+// ============================================================================
+// Settings: the face chooser
+// ============================================================================
+
+/// Settings on a watch with the analog and digital faces turned on and casio off, scrolled down to the Face row.
+fn open_face_row(faces: &[(&str, &str, bool)]) -> TestWatch {
+    use battletime_app_testing::{compile_package, FakePackage, FakeSystem, PackageKind};
+    let mut system = FakeSystem::new();
+    system.packages.retain(|package| !package.is_face);
+    for (id, name, enabled) in faces {
+        system.packages.push(FakePackage {
+            id: id.to_string(),
+            name: name.to_string(),
+            is_face: true,
+            enabled: *enabled,
+            memory: 9_000,
+            refusal: 0,
+        });
+    }
+    let image = compile_package(PackageKind::App, "settings").unwrap();
+    let mut watch = TestWatch::open_image_on(image, system).unwrap();
+    while !watch.shows_text("Face") {
+        watch.swipe(Direction::Up);
+    }
+    watch
+}
+
+const THREE_FACES: [(&str, &str, bool); 3] = [
+    ("analog", "Analog", true),
+    ("casio", "Casio", false),
+    ("digital", "Digital", true),
+];
+
+#[test]
+fn the_face_row_opens_the_chooser_on_the_face_shown() {
+    let mut watch = open_face_row(&THREE_FACES);
+    assert!(watch.shows_text("Digital"), "{:?}", watch.visible_texts());
+
+    watch.tap_text("Face");
+
+    assert_eq!(watch.effects_of(EffectKind::ChooseWatchFace).len(), 1);
+    assert!(watch.is_choosing_face());
+    assert_eq!(watch.id(), "digital");
+}
+
+#[test]
+fn swipes_in_the_chooser_step_round_the_faces_turned_on_and_save_each() {
+    use battletime_packages::faces::face_number;
+    let mut watch = open_face_row(&THREE_FACES);
+    watch.tap_text("Face");
+
+    assert_eq!(watch.swipe(Direction::Left), EventResult::Handled);
+    assert_eq!(watch.id(), "analog");
+    assert_eq!(
+        watch.system().read(SystemValue::WatchFace),
+        face_number("analog") as i64
+    );
+    watch.swipe(Direction::Right);
+    assert_eq!(watch.id(), "digital");
+    watch.swipe(Direction::Right);
+    assert_eq!(watch.id(), "analog");
+
+    for direction in [Direction::Up, Direction::Down] {
+        assert_eq!(watch.swipe(direction), EventResult::NotHandled);
+        assert_eq!(watch.id(), "analog");
+    }
+}
+
+#[test]
+fn the_chooser_keeps_taps_from_the_face() {
+    let mut watch = open_face_row(&THREE_FACES);
+    watch.tap_text("Face");
+    let effects_before = watch.effects().len();
+
+    assert_eq!(watch.tap(120, 120), EventResult::NotHandled);
+    assert_eq!(watch.long_press(120, 120), EventResult::NotHandled);
+
+    assert_eq!(watch.effects().len(), effects_before);
+    assert!(watch.is_choosing_face());
+}
+
+#[test]
+fn the_button_leaves_the_chooser_for_settings_with_the_new_face_kept() {
+    let mut watch = open_face_row(&THREE_FACES);
+    watch.tap_text("Face");
+    watch.swipe(Direction::Left);
+
+    assert_eq!(watch.press_button(), EventResult::Handled);
+
+    assert!(!watch.is_choosing_face());
+    assert_eq!(watch.id(), "settings");
+    assert_eq!(watch.screen_name(), Some("main"));
+    assert_eq!(watch.system().read_text(SystemValue::WatchFaceName), "Analog");
+    while !watch.shows_text("Face") {
+        watch.swipe(Direction::Up);
+    }
+    assert!(watch.shows_text("Analog"), "{:?}", watch.visible_texts());
+}
+
+#[test]
+fn with_one_face_on_the_chooser_swipes_change_nothing() {
+    let mut watch = open_face_row(&[("digital", "Digital", true), ("analog", "Analog", false)]);
+    watch.tap_text("Face");
+
+    watch.swipe(Direction::Left);
+    watch.swipe(Direction::Right);
+
+    assert_eq!(watch.id(), "digital");
+    assert!(watch.is_choosing_face());
+}

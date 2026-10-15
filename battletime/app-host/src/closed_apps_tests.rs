@@ -357,6 +357,21 @@ fn a_closed_app_never_rolls_the_firmware_back_but_may_confirm_it() {
     assert!(!ClosedRun::default().hold_back(&effect_of(EffectKind::ConfirmFirmware)));
 }
 
+#[test]
+fn a_closed_app_never_opens_the_face_chooser() {
+    let bytes = ImageWriter::new("settings", "Settings", AppKind::App, 1).build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let interpreter = std::boxed::Box::new(battletime_runtime::Interpreter::new());
+    let effect = AppEffect {
+        kind: EffectKind::ChooseWatchFace,
+        arguments: [0; battletime_runtime::instruction::MOST_EFFECT_ARGUMENTS],
+        image: &image,
+        interpreter: &interpreter,
+    };
+
+    assert!(ClosedRun::default().hold_back(&effect));
+}
+
 // ============================================================================
 // Holding an app's state for the phone
 // ============================================================================

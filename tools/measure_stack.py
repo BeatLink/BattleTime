@@ -5,7 +5,10 @@ It presets the UICR words embassy-nrf writes on the first start, so the emulated
 starts the firmware, can swipe up to the launcher and open its first app, and reports the lowest stack word that changed.
 
     python3 -I tools/measure_stack.py FIRMWARE_ELF [seconds] [--launcher [--open-first-app]] [--flash IMAGE] [--library FILE]
-                                      [--packages LINE ...]
+                                      [--packages LINE ...] [--then TOUCH ...]
+
+`--then` sends more touches after those, each two seconds after the last, written as the
+emulator's touch commands take them, such as `Tap 120 120` or `Swipe "left"`.
 
 `--flash` loads a whole external flash image, such as `filesystem_use --image` writes, so apps are
 installed; `--library` puts a compiled shared library where the firmware looks for it.
@@ -45,6 +48,7 @@ FIRMWARE_VECTOR_TABLE = 0x8100
 SECONDS_BEFORE_SWIPE = 4
 IMAGE_HEADER_SIZE = 256
 SECONDS_BEFORE_TAP = 3
+SECONDS_BETWEEN_TOUCHES = 2
 # The middle of the launcher's first row.
 FIRST_APP_TAP = (120, 40)
 # As in firmware/src/stack_guard.rs.
@@ -135,13 +139,15 @@ def reading_lines(end):
 # Running it
 # ============================================================================
 
-def run_in_one_go(emulator, lines, end, seconds, swipe_to_launcher, open_first_app):
+def run_in_one_go(emulator, lines, end, seconds, swipe_to_launcher, open_first_app, touches=()):
     """Runs the emulator for a fixed time without Bluetooth, and gives back its readings."""
     if swipe_to_launcher:
         lines += [f'emulation RunFor "00:00:{SECONDS_BEFORE_SWIPE:02}"', 'sysbus.serial1.touch Swipe "up"']
     if open_first_app:
         x, y = FIRST_APP_TAP
         lines += [f'emulation RunFor "00:00:{SECONDS_BEFORE_TAP:02}"', f"sysbus.serial1.touch Tap {x} {y}"]
+    for touch in touches:
+        lines += [f'emulation RunFor "00:00:{SECONDS_BETWEEN_TOUCHES:02}"', f"sysbus.serial1.touch {touch}"]
     lines += [f'emulation RunFor "00:00:{seconds:05.2f}"'] + reading_lines(end) + ["quit"]
     with tempfile.NamedTemporaryFile("w", suffix=".resc", delete=False) as script:
         script.write("\n".join(lines) + "\n")
@@ -245,6 +251,7 @@ def main():
     parser.add_argument("--flash", help="an external flash image to load")
     parser.add_argument("--library", help="a compiled shared library to load")
     parser.add_argument("--packages", nargs="+", metavar="LINE", help="packages command lines to send over Bluetooth")
+    parser.add_argument("--then", nargs="+", default=[], metavar="TOUCH", help="touch commands to send next, such as 'Tap 120 120'")
     arguments = parser.parse_args()
 
     firmware = Path(arguments.firmware).resolve()
@@ -256,7 +263,7 @@ def main():
             words = run_with_bluetooth(emulator, lines, end, arguments.seconds, arguments.launcher, arguments.packages)
         else:
             words = run_in_one_go(
-                emulator, lines, end, arguments.seconds, arguments.launcher, arguments.open_first_app
+                emulator, lines, end, arguments.seconds, arguments.launcher, arguments.open_first_app, arguments.then
             )
 
     usable_end = guard_top(end)

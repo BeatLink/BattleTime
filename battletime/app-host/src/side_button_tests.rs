@@ -7,11 +7,12 @@ const ALL_GESTURES: [Gesture; 4] = [
     Gesture::LongerPress,
 ];
 
-const ALL_SCREENS: [OpenScreen; 4] = [
+const ALL_SCREENS: [OpenScreen; 5] = [
     OpenScreen::Face,
     OpenScreen::Launcher,
     OpenScreen::App,
     OpenScreen::Notifications,
+    OpenScreen::FaceChooser,
 ];
 
 const OFF_THE_FACE: [OpenScreen; 3] = [OpenScreen::Launcher, OpenScreen::App, OpenScreen::Notifications];
@@ -115,5 +116,28 @@ fn a_double_click_in_the_notifications_goes_to_the_face() {
     assert_eq!(
         action_for(Gesture::DoubleClick, &lit_on(OpenScreen::Notifications)),
         ButtonAction::GoToFace
+    );
+}
+
+// ============================================================================
+// The face chooser
+// ============================================================================
+
+#[test]
+fn a_click_on_the_face_chooser_goes_back_without_asking_the_face() {
+    let situation = lit_on(OpenScreen::FaceChooser);
+
+    assert!(!goes_back_in_the_app_first(Gesture::Click, &situation));
+    assert_eq!(action_for(Gesture::Click, &situation), ButtonAction::GoBack);
+}
+
+#[test]
+fn the_face_chooser_leaves_holds_and_double_clicks_as_any_app_does() {
+    let situation = lit_on(OpenScreen::FaceChooser);
+
+    assert_eq!(action_for(Gesture::LongPress, &situation), ButtonAction::GoToFace);
+    assert_eq!(
+        action_for(Gesture::DoubleClick, &situation),
+        ButtonAction::OpenNotifications
     );
 }

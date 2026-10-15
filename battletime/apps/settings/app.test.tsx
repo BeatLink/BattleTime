@@ -4,7 +4,6 @@ import {
   brightness,
   is_bluetooth_enabled,
   is_do_not_disturb,
-  packages,
   set_setting,
   settings,
   shake_speed,
@@ -177,7 +176,6 @@ describe("settings", () => {
       ["Chimes", "chimes"],
       ["Heart rate", "heart_rate_interval"],
       ["Wake", "wake"],
-      ["Face", "watch_face"],
       ["Theme", "theme"],
     ];
 
@@ -189,44 +187,16 @@ describe("settings", () => {
     }
   });
 
-  it("steps on and back through the faces turned on, wrapping round", () => {
-    packages.value = [
-      {
-        id: "analog",
-        name: "Analog",
-        is_face: true,
-        enabled: true,
-        memory: 9_000,
-        refusal: 0,
-      },
-      {
-        id: "casio",
-        name: "Casio",
-        is_face: true,
-        enabled: false,
-        memory: 9_000,
-        refusal: 0,
-      },
-      {
-        id: "digital",
-        name: "Digital",
-        is_face: true,
-        enabled: true,
-        memory: 9_000,
-        refusal: 0,
-      },
-    ];
-    watch_face_name.value = "Digital";
+  it("opens the face chooser from the Face row, which names the face shown", () => {
+    watch_face_name.value = "Analog";
     const { container } = render(<OpenScreen />);
 
     open_row(container, "Face");
-    const [before, next] = widgets(container, "button");
-    tap(next);
-    expect(watch_face_name.value).toBe("Analog");
-    tap(before);
 
-    expect(watch_face_name.value).toBe("Digital");
-    packages.value = [];
+    expect(effect_log.value.at(-1)).toEqual({ kind: "choose_watch_face" });
+    expect(screen_stack.value.at(-1)).toBe("main");
+    expect(container.textContent).toContain("Analog");
+    watch_face_name.value = "Digital";
   });
 
   it("takes the last choice tapped on each screen", () => {

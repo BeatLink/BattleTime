@@ -89,6 +89,13 @@ flowchart LR
 - **Quick apps.** `battletime_app_host::quick_apps` steps round the ring read from
   `/settings/quick_apps` on each step, with the face as the place before the first app, and the
   shell remembers that the open app came from the ring so its own unused swipes step on.
+- **The face chooser.** An app's `choose_watch_face`, from Settings' **Face** row, opens
+  `Showing::FaceChooser` as a step forward: the shown face, full screen and live, which hears no
+  touch. A swipe left or right sets `watch_face` to the next or previous face turned on
+  (`InstalledApps::stepped_face_number`) and opens it in the chooser's place by a wipe that way,
+  recording no step, so a click of the side button goes straight back to the app that opened it,
+  without asking the face, with the face kept. Swipes up and down do nothing there. The face's name
+  is not drawn over it, since the shell has no way to draw over an app.
 - **The way back.** Each step forward, by a swipe, the launcher, a double click, an app opening
   another or a notification waking the screen, records the screen left and how the new one came in
   (`battletime_app_host::way_back`, the newest 8). Going back, by the button, a swipe up on the
@@ -193,7 +200,7 @@ or swipe from each touch's `GestureFinder` (see [drivers.md](drivers.md#touch-pa
   one the `watch_face` setting names, or else the first face turned on, the app with id `launcher`
   is the launcher, and every other app turned on is listed in `installed_apps`. The ids of the
   faces turned on and the shown face's name stay when the full list is dropped, so
-  `step_watch_face` and a changed `watch_face` pick a face with no list. Icons are copied out of
+  the face chooser's swipes and a changed `watch_face` pick a face with no list. Icons are copied out of
   their images only while the launcher is open. `packages::CHANGED` makes the shell read everything
   again after an install. With no face the shell shows `help.rs`: the time and how to install one.
 - **Turning apps on and off.** `set_app_enabled` from an app runs the package manager's checks on

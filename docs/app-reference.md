@@ -483,7 +483,7 @@ During do not disturb the watch plays only `vibrate_pattern("alarm")`, and only 
 | `set_do_not_disturb(on)` | Turns do not disturb on or off. |
 | `set_bluetooth(on)` | Turns Bluetooth on or off; a restart turns it on again. |
 | `set_clock(year, day_of_year, minute_of_day)` | Sets the clock to a local time at 00 seconds; `day_of_year` counts from 1, `minute_of_day` from 0. A day or minute that does not exist, or a year outside 1970 to 2200, is ignored. |
-| `step_watch_face(steps)` | Shows the face `steps` places on among the faces turned on, wrapping round, and saves it in `watch_face`. |
+| `choose_watch_face()` | Opens the face chooser once the handler ends: the shown face full screen, which hears no touches, where a swipe left or right saves the next or previous face turned on in `watch_face` and slides it in, wrapping round, and the side button comes back to the app. Does nothing with no face installed. |
 | `set_app_enabled(id, on)` | Turns an installed app or face on or off; does nothing when `packages` gives a refusal. |
 | `confirm_firmware()` | Keeps a firmware on trial, so a restart no longer rolls it back. |
 | `roll_back_firmware()` | Restarts a firmware on trial without confirming it, bringing back the one before. |
@@ -657,7 +657,7 @@ uses, and reports them; the image does not hold them yet.
 | `phone` | `call_control`, `music_control`, `find_phone`, `request_music_state`, `request_navigation_state`, reading `current_call`, `current_music` and `current_navigation`, and the `call`, `music` and `navigation` events. |
 | `phone_messages` | `send_to_phone`. |
 | `internet` | Web requests, which the bytecode does not carry yet. |
-| `settings` | `set_setting`, `set_do_not_disturb`, `set_bluetooth`, `set_app_enabled`, `set_clock`, `step_watch_face`, `confirm_firmware` and `roll_back_firmware`. |
+| `settings` | `set_setting`, `set_do_not_disturb`, `set_bluetooth`, `set_app_enabled`, `set_clock`, `choose_watch_face`, `confirm_firmware` and `roll_back_firmware`. |
 | `wake` | `wake_screen`. |
 | `background` | Events other than the app's own life connected without `while_open: true`. |
 

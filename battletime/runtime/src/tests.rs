@@ -2317,7 +2317,7 @@ fn the_gadgetbridge_name_is_a_setting_numbered_122() {
 }
 
 #[test]
-fn the_watch_face_and_its_name_are_settings_numbered_108_and_109_and_stepped_by_effect_35() {
+fn the_watch_face_and_its_name_are_settings_numbered_108_and_109_and_chosen_by_effect_37() {
     assert_eq!(SystemValue::from_byte(108), Some(SystemValue::WatchFace));
     assert_eq!(SystemValue::from_byte(109), Some(SystemValue::WatchFaceName));
     assert_eq!(SystemValue::from_byte(110), None);
@@ -2325,10 +2325,12 @@ fn the_watch_face_and_its_name_are_settings_numbered_108_and_109_and_stepped_by_
     assert_eq!(SystemValue::WatchFaceName.bit(), SystemValue::WakeOnTouch.bit());
     assert!(SystemValue::WatchFaceName.is_text());
     assert!(!SystemValue::WatchFace.is_text());
-    assert_eq!(EffectKind::from_byte(35), Some(EffectKind::StepWatchFace));
-    assert_eq!(EffectKind::StepWatchFace as u8, 35);
-    assert_eq!(EffectKind::from_byte(37), None);
-    assert_eq!(EffectKind::StepWatchFace.argument_count(), 1);
+    // Number 35 stepped the face from Settings before the chooser, and stays unused so old images are refused.
+    assert_eq!(EffectKind::from_byte(35), None);
+    assert_eq!(EffectKind::from_byte(37), Some(EffectKind::ChooseWatchFace));
+    assert_eq!(EffectKind::ChooseWatchFace as u8, 37);
+    assert_eq!(EffectKind::from_byte(38), None);
+    assert_eq!(EffectKind::ChooseWatchFace.argument_count(), 0);
 }
 
 #[test]

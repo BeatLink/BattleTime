@@ -656,10 +656,10 @@ pub enum EffectKind {
     SetClock = 33,
     /// Tells the bootloader to keep the firmware on trial.
     ConfirmFirmware = 34,
-    /// Chooses the face that many places on among the faces turned on, wrapping round, or back when negative.
-    StepWatchFace = 35,
     /// Restarts a firmware on trial without confirming it, so the bootloader brings back the one before.
     RollBackFirmware = 36,
+    /// Opens the face chooser, which shows each face turned on full screen to swipe between.
+    ChooseWatchFace = 37,
 }
 
 impl EffectKind {
@@ -701,8 +701,8 @@ impl EffectKind {
             32 => OpenFolder,
             33 => SetClock,
             34 => ConfirmFirmware,
-            35 => StepWatchFace,
             36 => RollBackFirmware,
+            37 => ChooseWatchFace,
             _ => return None,
         })
     }
@@ -724,10 +724,11 @@ impl EffectKind {
             | StopHeartRate
             | ResetStepTrip
             | ConfirmFirmware
-            | RollBackFirmware => 0,
+            | RollBackFirmware
+            | ChooseWatchFace => 0,
             Vibrate | VibratePattern | SetBrightness | KeepScreenOn | Go | OpenApp | ShowToast
             | DismissNotification | MusicControl | CallControl | SetDoNotDisturb | Log | FindPhone
-            | SetBluetooth | StepWatchFace | OpenFolder => 1,
+            | SetBluetooth | OpenFolder => 1,
             Notify | SendToPhone | SetSetting | SetAppEnabled => 2,
             SetHeartRateLed | PrefetchFile | SetClock => 3,
         }

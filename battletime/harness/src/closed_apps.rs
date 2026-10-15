@@ -42,10 +42,11 @@ impl TestWatch {
         self.switch_to(image)
     }
 
-    /// The open package as reference pictures name it, such as `app-stopwatch` or `face-digital`.
+    /// The open package as reference pictures name it, such as `app-stopwatch` or `face-digital`; the face chooser's pictures belong to the app that opened it.
     pub fn package_name(&self) -> String {
-        let id = self.id();
-        let kind = if self.host.image().kind == AppKind::Face {
+        let choosing = self.face_chooser_returns_to.as_deref();
+        let id = choosing.unwrap_or_else(|| self.id());
+        let kind = if choosing.is_none() && self.host.image().kind == AppKind::Face {
             "face"
         } else if !package_source(PackageKind::App, id).is_file()
             && package_source(PackageKind::Shell, id).is_file()

@@ -253,6 +253,8 @@ pub struct FakeSystem {
     pub folder: FolderListing,
     /// Set when the app opened a folder, so the watch tells the app once the call returns.
     pub folder_changed: bool,
+    /// Set when an app asked for the face chooser, which the test watch opens once the handler returns.
+    pub face_chooser_wanted: bool,
     random_state: Cell<u32>,
     effects: Vec<RecordedEffect>,
     failures: Vec<AppFailure>,
@@ -307,6 +309,7 @@ impl FakeSystem {
             phone_lines: Vec::new(),
             folder: FolderListing::new(),
             folder_changed: false,
+            face_chooser_wanted: false,
             random_state: Cell::new(RANDOM_SEED),
             effects: Vec::new(),
             failures: Vec::new(),
@@ -601,6 +604,9 @@ impl System for FakeSystem {
         }
         if effect.kind == EffectKind::OpenFolder {
             self.list_folder(effect.text(0).unwrap_or_default());
+        }
+        if effect.kind == EffectKind::ChooseWatchFace {
+            self.face_chooser_wanted = true;
         }
         if effect.kind == EffectKind::SetClock {
             self.set_clock_by_hand(effect.number(0), effect.number(1), effect.number(2));

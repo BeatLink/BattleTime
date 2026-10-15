@@ -9,8 +9,13 @@ Faces install and uninstall from the companion app's store like any app, and
 
 ## Choosing a face
 
-- Open [Settings](apps/settings.md) and tap **Face**, then step through the faces with the arrows.
-  Only faces turned on in Software are offered.
+- Open [Settings](apps/settings.md) and tap **Face**. The face chooser shows the face itself, full
+  screen and running, as wasp-os's Faces app does. Swipe left for the next face and right for the
+  one before, wrapping round; each slides in and is chosen at once. Click the side button to go
+  back to Settings with the face shown kept. Only faces turned on in Software are offered, and
+  with one face on a swipe keeps it.
+- In the chooser the face hears no touches, so a tap or long press cannot change its own options,
+  and swipes up and down do nothing.
 - If the chosen face is uninstalled or turned off, the watch shows the first face that is turned
   on, in order of their ids.
 - From the face, a swipe down opens the [notifications](apps/notifications.md), a swipe up the

@@ -28,6 +28,8 @@ use crate::sources::{
 
 #[path = "closed_apps.rs"]
 mod closed_apps;
+#[path = "face_chooser.rs"]
+mod face_chooser;
 
 // ============================================================================
 // Limits
@@ -70,6 +72,8 @@ pub struct TestWatch {
     installed_icons: &'static [&'static [u8]],
     /// The latest heart rate reading and its confidence, which a closed app's heart rate subscription gets.
     latest_heart_rate: (Value, Value),
+    /// While the face chooser shows, the id of the app that opened it, which the side button goes back to.
+    face_chooser_returns_to: Option<String>,
 }
 
 impl TestWatch {
@@ -134,6 +138,7 @@ impl TestWatch {
             saved_states: HashMap::new(),
             installed_icons: &[],
             latest_heart_rate: (0, 0),
+            face_chooser_returns_to: None,
         })
     }
 
@@ -260,9 +265,13 @@ impl TestWatch {
     }
 
     fn send(&mut self, touch: Touch) -> EventResult {
+        if self.is_choosing_face() {
+            return self.face_chooser_touch(touch);
+        }
         let now = self.now();
         let result = self.host.touch(touch, now, &mut self.system);
         self.report_notification_changes();
+        self.open_face_chooser_if_asked();
         result
     }
 
@@ -361,8 +370,11 @@ impl TestWatch {
         self.send(Touch::Swipe(direction))
     }
 
-    /// A click of the side button, which goes back a screen in the app; on its first screen the shell takes it.
+    /// A click of the side button, which goes back a screen in the app; on its first screen the shell takes it, and on the face chooser it goes back to the app that opened it.
     pub fn press_button(&mut self) -> EventResult {
+        if self.is_choosing_face() {
+            return self.face_chooser_button();
+        }
         let now = self.now();
         let result = self.host.go_back_a_screen(now, &mut self.system);
         self.report_notification_changes();
