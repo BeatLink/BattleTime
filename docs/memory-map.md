@@ -163,7 +163,7 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 | What | Bytes | File sectors |
 |---|---:|---:|
 | `/settings/system` and `/settings/theme`, kept as records | 117 | 0 |
-| 12 app images, 739 B (flashlight) to 7,490 B (settings); those of 1 KB or less are records | 26,640 | 12 |
+| 12 app images, 739 B (flashlight) to 7,464 B (settings); those of 1 KB or less are records | 26,614 | 12 |
 | **In use** | | **12 of 512: 48 KB of 2 MB, and 968 B of records in the 256 KB records ring** |
 <!-- /measure_memory:file-system -->
 
