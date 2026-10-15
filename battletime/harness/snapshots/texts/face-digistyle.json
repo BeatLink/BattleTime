@@ -1,0 +1,20 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "---",
+        "00",
+        "09",
+        "4321",
+        ":",
+        "MON 5 JAN 2026",
+        "PINETIME",
+        "RESIST",
+        "WATER",
+        "WR"
+      ]
+    }
+  ]
+}

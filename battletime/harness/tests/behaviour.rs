@@ -837,6 +837,38 @@ fn the_lite_analog_face_moves_its_second_hand_each_second_until_switched_off() {
     assert_eq!(wakes_in(&watch), Some(60_000));
 }
 
+#[test]
+fn the_phrase_clock_says_the_time_in_words_and_wakes_once_a_minute() {
+    let mut watch = TestWatch::open_face("phrase-clock").unwrap();
+    assert!(watch.shows_text("nine"), "{:?}", watch.visible_texts());
+    assert!(watch.shows_text("o' clock"), "{:?}", watch.visible_texts());
+    assert!(watch.shows_text("mon. 5 jan 2026"), "{:?}", watch.visible_texts());
+    assert_eq!(wakes_in(&watch), Some(60_000));
+
+    watch.advance(Duration::from_secs(41 * 60));
+
+    assert!(
+        watch.shows_text("nineteen minutes"),
+        "{:?}",
+        watch.visible_texts()
+    );
+    assert!(watch.shows_text("to ten"), "{:?}", watch.visible_texts());
+}
+
+#[test]
+fn the_digistyle_face_wakes_once_a_minute() {
+    let watch = TestWatch::open_face("digistyle").unwrap();
+    assert!(watch.shows_text("MON 5 JAN 2026"), "{:?}", watch.visible_texts());
+    assert_eq!(wakes_in(&watch), Some(60_000));
+}
+
+#[test]
+fn the_rgb_face_wakes_each_second_to_change_colour() {
+    let watch = TestWatch::open_face("rgb").unwrap();
+    assert!(watch.shows_text("mon 5 jan 2026"), "{:?}", watch.visible_texts());
+    assert_eq!(wakes_in(&watch), Some(1_000));
+}
+
 // ============================================================================
 // Notifications
 // ============================================================================

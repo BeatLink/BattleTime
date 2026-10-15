@@ -2,9 +2,10 @@
 
 BattleTime ships every face from [InfiniTime](https://github.com/InfiniTimeOrg/InfiniTime),
 [wasp-os](https://github.com/wasp-os/wasp-os) and
-[PinetimeLite](https://github.com/joaquimorg/PinetimeLite), each redrawn for BattleTime. Faces install
-and uninstall from the companion app's store like any app, and [Software](apps/software.md) turns
-each one on or off.
+[PinetimeLite](https://github.com/joaquimorg/PinetimeLite), and faces from ZephyrLabs'
+[Watchfaces](https://zephyrlabs.github.io/Watchfaces/) collection, each redrawn for BattleTime.
+Faces install and uninstall from the companion app's store like any app, and
+[Software](apps/software.md) turns each one on or off.
 
 ## Choosing a face
 
@@ -38,11 +39,14 @@ each one on or off.
 ![The Lite Pong face](../battletime/harness/snapshots/screens/face-lite-pong.png){ .screen }
 ![The Lite Photo face](../battletime/harness/snapshots/screens/face-lite-photo.png){ .screen }
 ![The Lite Weather face](../battletime/harness/snapshots/screens/face-lite-weather.png){ .screen }
+![The Phrase clock face](../battletime/harness/snapshots/screens/face-phrase-clock.png){ .screen }
+![The Digistyle face](../battletime/harness/snapshots/screens/face-digistyle.png){ .screen }
+![The RGB face](../battletime/harness/snapshots/screens/face-rgb.png){ .screen }
 </div>
 
 In order: Digital, Analog, Terminal, PineTimeStyle, Casio G7710, Infineat, Pride flag, Week clock,
 Dual clock, Fibonacci clock, Word clock, Resistor clock, Lite Digital, Lite Analog, Lite Rings,
-Lite Pong, Lite Photo and Lite Weather.
+Lite Pong, Lite Photo, Lite Weather, Phrase clock, Digistyle and RGB.
 
 ## Every face
 
@@ -68,6 +72,9 @@ The Notes column is also each face's description in the companion app's store.
 | `lite-pong` | PinetimeLite WatchFacePong | Two rackets play an endless rally under the time. |
 | `lite-photo` | PinetimeLite WatchFaceCustom | The time with a blinking colon and the full date over a coloured backdrop; a long press picks the next backdrop. |
 | `lite-weather` | PinetimeLite WatchFaceWeather | Big stacked digits with the seconds, the weather icon, and the weekday and day. |
+| `phrase-clock` | ZephyrLabs Wordclock | The time as a lower-case phrase, such as "nineteen minutes to nine", over the date, with heart rate and steps below. |
+| `digistyle` | ZephyrLabs Digistyle | An old digital watch: a pale LCD panel with big digits and the date inside a bezel lettered PINETIME and WATER WR RESIST. |
+| `rgb` | ZephyrLabs RGB | InfiniTime's classic digital face, its time, date and icons cycling round the colour wheel every 12 seconds. |
 
 ## Differences from the originals
 
@@ -75,6 +82,14 @@ The Notes column is also each face's description in the companion app's store.
   pop up over the face in InfiniTime.
 - Lite Photo shows plain coloured backdrops in place of PinetimeLite's photos.
 - Lite Weather draws its big digits plain rather than striped, and Lite Analog uses plain hands.
+- Digistyle redraws its bezel, a picture in the original, with lines and boxes, and shows the time in
+  the huge font in place of the original's seven-segment font; its panel is a pale grey, lighter
+  than the picture's mid grey, as the panel looks on the watch.
+- RGB steps its colour 30 degrees each second, where the original shifts it a few degrees many times
+  a second; both go round the wheel in about 12 seconds. Its time uses the huge font in place of
+  JetBrains Mono ExtraBold.
+- Phrase clock keeps the original's wording, which counts the hours past the hour on a 24 hour dial
+  ("twenty minutes past thirteen") but the hours to the hour on a 12 hour one ("ten minutes to one").
 - Faces that show seconds redraw every second; the others redraw once a minute, as does Analog
   while its second hand is off.
 
