@@ -81,17 +81,29 @@ describe("stopwatch", () => {
     expect(screen.queryByText("#1")).toBeNull();
   });
 
-  it("switches to hours after an hour and shows one lap fewer", () => {
+  it("switches to hours after an hour and keeps every lap in the list", () => {
     render(<OpenScreen />);
     act(() => start_or_pause_button().click());
     for (let lap = 1; lap <= 4; lap++) {
       act(() => advance_clock(SECOND));
       act(() => lap_or_reset_button().click());
     }
-    expect(screen.getByText("#1")).toBeTruthy();
     act(() => freeze_clock(START + 3605 * SECOND));
     expect(screen.getByText("1:00:05")).toBeTruthy();
-    expect(screen.queryByText("#1")).toBeNull();
+    expect(screen.getByText("#1")).toBeTruthy();
+    expect(screen.getByText("#4")).toBeTruthy();
+  });
+
+  it("keeps the latest twenty laps in a scrolling list", () => {
+    render(<OpenScreen />);
+    act(() => start_or_pause_button().click());
+    for (let lap = 1; lap <= 21; lap++) {
+      act(() => advance_clock(SECOND));
+      act(() => lap_or_reset_button().click());
+    }
+    expect(document.querySelector("[data-widget=list]")).toBeTruthy();
+    expect(screen.getByText("#21")).toBeTruthy();
     expect(screen.getByText("#2")).toBeTruthy();
+    expect(screen.queryByText("#1")).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-# Every screen of the stopwatch, for docs/apps/stopwatch.md: counting with laps, then paused.
+# Every screen of the stopwatch, for docs/apps/stopwatch.md: counting with more laps than the card shows, then paused.
 open app stopwatch
 tap 178 200                 # start
 wait 12s
@@ -10,8 +10,15 @@ tap 62 200                  # lap
 wait 3s
 tap 62 200                  # lap
 wait 2s
-expect text "00:30"
+tap 62 200                  # lap
+wait 1s
+tap 62 200                  # lap
+wait 1s
+expect text "00:32"
 snapshot laps
+drag 120 160 120 90          # scroll the laps
+expect text "#1"
+snapshot laps-scrolled
 tap 178 200                 # pause
 expect effect keep-screen-on false
 snapshot paused

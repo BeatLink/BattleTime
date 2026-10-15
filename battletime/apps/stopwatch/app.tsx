@@ -10,6 +10,7 @@ import {
   now,
   on,
   persisted,
+  range,
   second_of,
   unshift_pop,
   HOUR,
@@ -17,13 +18,17 @@ import {
   type Instant,
 } from "battletime";
 import { icons } from "battletime/icons";
-import { Button, Column, Icon, Label, Row, Screen } from "battletime/widgets";
+import { Button, Column, Icon, Label, List, Row, Screen } from "battletime/widgets";
 
 // ============================================================================
 // State
 // ============================================================================
 
-const LAPS_SHOWN = 4;
+/** How many of the latest laps are kept; the card scrolls through them. */
+const MOST_LAPS = 20;
+
+/** No laps taken: every place empty. */
+const NO_LAPS = range(MOST_LAPS).map(() => 0);
 
 /** When the current run started, shifted back by any time already counted, or null while stopped. */
 const started_at = persisted<Instant | null>("started_at", null);
@@ -32,7 +37,7 @@ const started_at = persisted<Instant | null>("started_at", null);
 const paused_after = persisted<Duration>("paused_after", 0);
 
 /** The latest laps, newest first, as times since the start; 0 marks an empty place. */
-const laps = persisted<Duration[]>("laps", [0, 0, 0, 0]);
+const laps = persisted<Duration[]>("laps", NO_LAPS);
 
 /** How many laps have been taken, so the shown ones keep their numbers. */
 const lap_count = persisted("lap_count", 0);
@@ -77,7 +82,7 @@ function lap_or_reset() {
     lap_count.value = lap_count.value + 1;
   } else {
     paused_after.value = 0;
-    laps.value = [0, 0, 0, 0];
+    laps.value = NO_LAPS;
     lap_count.value = 0;
   }
 }
@@ -88,7 +93,7 @@ function lap_or_reset() {
 
 function LapRow(props: { place: number }) {
   const lap_time = laps.value[props.place];
-  const previous = props.place + 1 < LAPS_SHOWN ? laps.value[props.place + 1] : 0;
+  const previous = props.place + 1 < MOST_LAPS ? laps.value[props.place + 1] : 0;
   return (
     <>
       {lap_time > 0 && (
@@ -112,11 +117,12 @@ function Stopwatch() {
         </Label>
         <Label color={is_dimmed.value ? "muted" : "text"}>{format_number(Math.floor(elapsed.value / 10) % 100, 2)}</Label>
       </Column>
-      <Column grow={1} justify="end" gap={2}>
-        <LapRow place={0} />
-        <LapRow place={1} />
-        <LapRow place={2} />
-        {!shows_hours.value && <LapRow place={3} />}
+      <Column grow={1} height={0} padding={6} background="surface" radius={12}>
+        <List grow={1} gap={2}>
+          {range(MOST_LAPS).map((place) => (
+            <LapRow place={place} />
+          ))}
+        </List>
       </Column>
       <Row gap={6} height={56}>
         <Button

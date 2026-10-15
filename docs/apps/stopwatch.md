@@ -6,25 +6,31 @@ the moment it started, so it keeps running while the app is closed or the watch 
 ## Using it
 
 - Tap **play**, the right button, to start. The screen stays on while the stopwatch runs.
-- Tap the **flag**, the left button, to take a lap; it is greyed out until the first start. The last four laps show above the buttons:
-  the lap number, the lap's own time and the total time when it was taken.
+- Tap the **flag**, the left button, to take a lap; it is greyed out until the first start. The laps show in a card above the buttons,
+  newest first: the lap number, the lap's own time and the total time when it was taken. Drag the card
+  up and down to see older laps; it keeps the latest 20.
 - Tap **pause** to stop counting. The time blinks while paused; tap play to carry on.
 - While paused, the left button turns red: tap it to **reset** the time and the laps.
-- After an hour the time shows hours, and only three laps fit.
+- After an hour the time shows hours in a larger font, and the lap card gets shorter.
 
 ## Screens
 
 ![The stopwatch, cleared](../../battletime/harness/snapshots/screens/app-stopwatch.png)
 
-Cleared, before the first start, with the lap button greyed out.
+Cleared, before the first start, with the lap card empty and the lap button greyed out.
 
 ![The stopwatch three seconds after starting](../../battletime/harness/snapshots/screens/app-stopwatch-running.png)
 
 Running: the time with its hundredths below, and the lap and pause buttons.
 
-![The stopwatch with four laps](../../battletime/harness/snapshots/screens/app-stopwatch-laps.png)
+![The stopwatch with six laps](../../battletime/harness/snapshots/screens/app-stopwatch-laps.png)
 
-Four laps taken, newest first: each lap's number, its own time and the total when it was taken.
+Six laps taken, newest first: each lap's number, its own time and the total when it was taken.
+The bar at the card's right edge shows there are more laps below.
+
+![The lap card scrolled to the oldest lap](../../battletime/harness/snapshots/screens/app-stopwatch-laps-scrolled.png)
+
+The card dragged up to the first lap.
 
 ![The stopwatch paused](../../battletime/harness/snapshots/screens/app-stopwatch-paused.png)
 
