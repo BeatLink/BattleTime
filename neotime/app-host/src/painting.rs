@@ -11,7 +11,7 @@ use alloc::{vec, vec::Vec};
 use embassy_futures::block_on;
 
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
-use neotime_runtime::ThemeColor;
+use neotime_runtime::{ThemeColor, WidgetKind};
 use neotime_ui::{geometry::Rect, renderer::Renderer};
 use neotime_ui::{FixedScreen, ScrollBand, ScrollingScreen, Strip, StripRenderer};
 
@@ -19,7 +19,7 @@ use super::{AppHost, DISABLED_OPACITY, SCREEN_AREA};
 use crate::drawing::{
     draw_node, draw_scroll_bar, scroll_bar_thumb_at, scroll_bar_track, DrawContext, SCROLL_BAR_INSET,
 };
-use crate::layout::{clips_children, content_length, farthest_scroll};
+use crate::layout::{clips_children, content_length, farthest_scroll, runs_across};
 use crate::nodes::{to_color, OPAQUE};
 
 // ============================================================================
@@ -533,7 +533,9 @@ impl<'image> AppHost<'image> {
 
     /// Lays out a list that scrolled by `rows`, and keeps the move for the panel to make if it can.
     pub(super) fn note_scroll(&mut self, node_index: usize, rows: i32) {
-        self.measure_and_lay_out();
+        if !self.move_scrolled_content(node_index, rows) {
+            self.measure_and_lay_out();
+        }
         // Slices still to paint are painted after the panel moves, so a scroll can wait alongside them.
         let can_wait = !self.whole_screen_dirty
             && self
@@ -551,6 +553,40 @@ impl<'image> AppHost<'image> {
             self.mark_subtree_dirty(waiting.node_index);
         }
         self.mark_subtree_dirty(node_index);
+    }
+
+    /// Moves a list's content by the `rows` it scrolled in place of a layout; false when a layout is needed.
+    fn move_scrolled_content(&mut self, node_index: usize, rows: i32) -> bool {
+        let inside = node_index + 1..self.nodes[node_index].subtree_end as usize;
+        let has_nested_clip = self.nodes[inside.clone()]
+            .iter()
+            .any(|node| clips_children(node.kind));
+        let has_text_file = self.nodes.iter().any(|node| node.kind == WidgetKind::TextFile);
+        if !clips_children(self.nodes[node_index].kind) || has_nested_clip || has_text_file {
+            return false;
+        }
+        let across = runs_across(&self.nodes, node_index);
+        for node in &mut self.nodes[inside] {
+            match across {
+                true => node.bounds.x -= rows,
+                false => node.bounds.y -= rows,
+            }
+        }
+        true
+    }
+
+    /// Whether every widget's place, clip and visibility are what a fresh layout gives.
+    #[cfg(test)]
+    pub(crate) fn layout_is_up_to_date(&mut self) -> bool {
+        let places = |host: &Self| -> Vec<_> {
+            host.nodes
+                .iter()
+                .map(|node| (node.bounds, node.clip, node.shown))
+                .collect()
+        };
+        let before = places(self);
+        self.measure_and_lay_out();
+        before == places(self)
     }
 
     pub(super) fn mark_subtree_dirty(&mut self, node_index: usize) {

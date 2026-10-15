@@ -2805,6 +2805,28 @@ fn scrolling_builds_the_rows_that_come_into_view_and_drops_the_rest() {
 }
 
 #[test]
+fn a_list_dragged_a_little_is_placed_as_a_fresh_layout_places_it() {
+    let image = repeated_rows_image(Some(40));
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let (first_row_before, _) = host.widget_bounds(ROW).unwrap();
+
+    for y in [197, 194, 191] {
+        let drag = Touch::Drag {
+            x: 120,
+            y,
+            start_x: 120,
+            start_y: 200,
+        };
+        host.touch(drag, START_TIME, &mut system);
+        assert!(host.layout_is_up_to_date(), "after a drag to {y}");
+    }
+
+    let (first_row_after, _) = host.widget_bounds(ROW).unwrap();
+    assert_eq!(first_row_after.y, first_row_before.y - 9);
+}
+
+#[test]
 fn a_tap_on_a_row_runs_its_handler_for_that_row() {
     let image = repeated_rows_image(Some(40));
     let mut system = FakeSystem::default();

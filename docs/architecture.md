@@ -286,7 +286,9 @@ describes its calls, the layout rules and what each property value means.
   it. A drag lifted at 300 px/s or more, by the `Fling` before the lift, glides on: `tick` moves the
   list every 20 ms, its speed falling by about two thirds each 325 ms, until it slows under
   40 px/s or reaches an end, and only then is `onScrollEnd` sent. A finger landing stops a glide
-  where it is. A list set to scroll by pages settles on a whole page instead. On a
+  where it is. A list set to scroll by pages settles on a whole page instead. A scroll moves the
+  list's content by the rows it scrolled rather than laying the screen out again, unless a list
+  nested inside it clips its own content or the screen shows a text file. On a
   `ScrollingScreen` the panel moves the list's rows, and the host draws only the rows coming into
   view and the edges the move put out of place; it falls back to drawing the list again when
   anything else crosses those rows, the move is more than half the band, or the panel has another
