@@ -2,9 +2,8 @@
 //!
 //! `page` sets out the page: which line says what, its labels, font and colours. The firmware, the
 //! recovery firmware, the bootloader and the bootloader updater all draw through it, so the page
-//! looks the same whichever of them is running. The firmware's display driver is built on mipidsi,
-//! which does not fit in the bootloader's 16 KB, so `Screen` sends the few commands a status page
-//! needs and nothing else.
+//! looks the same whichever of them is running. The firmware's DMA display driver is too big for the
+//! bootloader's 20 KB, so `Screen` sends the few commands a status page needs and nothing else.
 
 #![no_std]
 
