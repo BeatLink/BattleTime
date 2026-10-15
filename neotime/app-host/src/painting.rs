@@ -567,10 +567,12 @@ impl<'image> AppHost<'image> {
         }
         let across = runs_across(&self.nodes, node_index);
         for node in &mut self.nodes[inside] {
+            let mut bounds = node.bounds();
             match across {
-                true => node.bounds.x -= rows,
-                false => node.bounds.y -= rows,
+                true => bounds.x -= rows,
+                false => bounds.y -= rows,
             }
+            node.set_bounds(bounds);
         }
         true
     }
@@ -581,7 +583,7 @@ impl<'image> AppHost<'image> {
         let places = |host: &Self| -> Vec<_> {
             host.nodes
                 .iter()
-                .map(|node| (node.bounds, node.clip, node.shown))
+                .map(|node| (node.bounds(), node.clip(), node.shown))
                 .collect()
         };
         let before = places(self);
