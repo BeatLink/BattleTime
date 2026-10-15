@@ -73,10 +73,12 @@ fn advertising_is_fast_for_thirty_seconds_then_about_once_a_second() {
     assert_eq!(advertising_interval(1_000, 31_000), SLOW_INTERVAL);
     assert_eq!(FAST_INTERVAL.shortest_in_microseconds, 20_000);
     assert!((1_000_000..1_040_000).contains(&SLOW_INTERVAL.shortest_in_microseconds));
-    assert!(SLOW_INTERVAL.shortest_in_microseconds < SLOW_INTERVAL.longest_in_microseconds);
 }
 
 #[test]
 fn a_clock_behind_the_start_counts_as_fast() {
     assert_eq!(advertising_interval(5_000, 0), FAST_INTERVAL);
 }
+
+// The slow interval's range runs upwards, checked when the tests are built.
+const _: () = assert!(SLOW_INTERVAL.shortest_in_microseconds < SLOW_INTERVAL.longest_in_microseconds);
