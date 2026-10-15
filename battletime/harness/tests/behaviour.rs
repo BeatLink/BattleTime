@@ -829,6 +829,47 @@ fn the_analog_face_moves_its_second_hand_each_second_until_switched_off() {
 }
 
 #[test]
+fn the_terminal_face_fits_every_line_on_screen_with_or_without_a_notification() {
+    let mut watch = TestWatch::open_face("terminal").unwrap();
+    let first_top = |watch: &TestWatch| {
+        watch
+            .visible_text_areas()
+            .iter()
+            .map(|(_, area)| area.y)
+            .min()
+            .unwrap()
+    };
+    let last_bottom = |watch: &TestWatch| {
+        watch
+            .visible_text_areas()
+            .iter()
+            .map(|(_, area)| area.bottom())
+            .max()
+            .unwrap()
+    };
+    assert!(!watch.shows_text("[1]+ Notify"));
+    let top_without = first_top(&watch);
+    assert_eq!(
+        top_without,
+        240 - last_bottom(&watch),
+        "the lines sit in the middle"
+    );
+
+    let time = watch.now();
+    watch.deliver(battletime_app_testing::PushedEvent::Notification {
+        id: 1,
+        app: "Messages",
+        title: "Sam",
+        body: "On my way",
+        time,
+    });
+
+    assert!(watch.shows_text("[1]+ Notify"), "{:?}", watch.visible_texts());
+    assert!(first_top(&watch) >= 0 && last_bottom(&watch) <= 240);
+    assert!(first_top(&watch) < top_without);
+}
+
+#[test]
 fn the_lite_analog_face_moves_its_second_hand_each_second_until_switched_off() {
     let mut watch = TestWatch::open_face("lite-analog").unwrap();
     assert_eq!(wakes_in(&watch), Some(1_000));

@@ -81,8 +81,8 @@ function TaggedLine(props: { tag: string; value: string; color: Color }) {
 function TerminalFace() {
   return (
     <Screen>
-      <Column x={0} y={7} width={240}>
-        <Label font="small">{unread_notifications.value > 0 ? "[1]+ Notify" : ""}</Label>
+      <Column x={4} y={0} width={236} height={240} justify="center">
+        {unread_notifications.value > 0 && <Label font="small">[1]+ Notify</Label>}
         <Label font="small" color={LIGHT_GRAY}>user@watch:~ $ now</Label>
         <TaggedLine tag="[TIME]" value={time_text.value} color={GREEN} />
         <TaggedLine tag="[DATE]" value={format_time(now.value, "date")} color={BLUE} />
