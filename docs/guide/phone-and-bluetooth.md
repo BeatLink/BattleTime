@@ -31,7 +31,7 @@ the temperature now with the day's low and high, and up to five coming days. Gad
 InfiniTime support sends the coming days, sunrise and sunset through InfiniTime's weather service,
 which the watch serves; its Bangle.js line carries only today. Faces that show the weather use the
 same report. Weather more than three hours old is dimmed. Temperatures follow the
-**Metric units** setting.
+**Metric** setting.
 
 ## Music
 

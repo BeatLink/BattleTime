@@ -77,7 +77,7 @@ The do not disturb tile in quick settings steps through three states, as InfiniT
 
 - **Off.**
 - **Silent:** no buzz and no lit screen for notifications, calls or chimes. Alarms and timers still
-  ring, unless **Alarms in DND** is turned off in Settings.
+  ring, unless **DND alarms** is turned off in Settings.
 - **Sleep:** silent, and only the button wakes the screen; see
   [Sleep mode](screen-and-battery.md#sleep-mode).
 

@@ -4,7 +4,7 @@
 
 The watch keeps the time in UTC together with your time zone and summer time, and shows local
 time. Alarms, chimes and the step count's new day at midnight all follow local time, and apps can
-show UTC and other zones too. **24 hour clock** in Settings switches between the 24 and 12 hour
+show UTC and other zones too. **24 hour** in Settings switches between the 24 and 12 hour
 clock everywhere.
 
 ## Setting the time from the phone
@@ -64,6 +64,6 @@ and opens its app on the ringing screen over whatever was open, as InfiniTime's 
 returns to what was open. While an alarm is set, faces show a bell.
 
 Do not disturb silences everything but alarms and timers, and those too if you turn off
-**Alarms in DND** in Settings.
+**DND alarms** in Settings.
 
 ![An alarm ringing](../../battletime/harness/snapshots/screens/app-alarm-ringing.png){ .screen }

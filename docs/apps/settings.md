@@ -22,13 +22,13 @@ the watch face and the theme. Merged from InfiniTime's Settings and wasp-os's se
     while it says **Shake!**; the strength is set just below your hardest shake. Tap the button
     again to stop early.
   - **Lower to sleep**: letting your arm fall turns the screen off.
-- **24 hour clock** and **Metric units**.
+- **24 hour** (the 24 hour clock) and **Metric** (metric units).
 - **Step goal**: the daily goal, set with **-** and **+** in steps of 500, from 1000 to 50000.
 - **Chimes**: off, every hour or every half hour.
 - **Heart rate**: how often the watch measures your heart rate when no app asks, as InfiniTime
   offers: off, always, or every 30 seconds, minute, 5, 10 or 30 minutes. Each measurement lasts
   until a reading, or 30 seconds at most, and runs with the screen off too.
-- **Do not disturb**, and **Alarms in DND**: whether alarms still ring while it is on.
+- **DND** (do not disturb), and **DND alarms**: whether alarms still ring while it is on.
 - **Sleep mode**: do not disturb that also stops every way of waking the screen but the button, and
   the always-on screen. Turning do not disturb off ends it.
 - **Face**: the watch face, shown by name. Its screen steps back and on through the faces turned

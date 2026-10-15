@@ -327,8 +327,8 @@ function SettingsList() {
         <ChoiceRow title="Screen off" value={timeout_text.value} onClick={() => go("timeout")} />
         <SwitchRow title="Always on" value={settings.always_on_screen.value} onChange={toggle_always_on_screen} />
         <ChoiceRow title="Wake" value={wake_name.value} onClick={() => go("wake")} />
-        <SwitchRow title="24 hour clock" value={settings.uses_24_hour_clock.value} onChange={toggle_24_hour_clock} />
-        <SwitchRow title="Metric units" value={settings.uses_metric_units.value} onChange={toggle_metric_units} />
+        <SwitchRow title="24 hour" value={settings.uses_24_hour_clock.value} onChange={toggle_24_hour_clock} />
+        <SwitchRow title="Metric" value={settings.uses_metric_units.value} onChange={toggle_metric_units} />
         <ChoiceRow title="Step goal" value={`${settings.step_goal.value}`} onClick={() => go("step_goal")} />
         <ChoiceRow title="Chimes" value={chime_name.value} onClick={() => go("chimes")} />
         <ChoiceRow
@@ -336,10 +336,10 @@ function SettingsList() {
           value={heart_rate_interval_name.value}
           onClick={() => go("heart_rate_interval")}
         />
-        <SwitchRow title="Do not disturb" value={is_do_not_disturb.value} onChange={toggle_do_not_disturb} />
+        <SwitchRow title="DND" value={is_do_not_disturb.value} onChange={toggle_do_not_disturb} />
         <SwitchRow title="Sleep mode" value={settings.sleep_mode.value} onChange={toggle_sleep_mode} />
         <SwitchRow
-          title="Alarms in DND"
+          title="DND alarms"
           value={settings.alarms_in_do_not_disturb.value}
           onChange={toggle_alarms_in_do_not_disturb}
         />
