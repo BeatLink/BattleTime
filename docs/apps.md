@@ -26,7 +26,6 @@ These screens are part of the firmware, so they are always there and never liste
 | [Timer](apps/timer.md) | A countdown of up to 99 minutes that keeps running while the app is closed. |
 | [Stopwatch](apps/stopwatch.md) | A stopwatch with laps, still counting while the watch sleeps. |
 | [Pomodoro](apps/pomodoro.md) | Work and break sessions in turn, with a long break every few rounds. |
-| [Sports](apps/sports.md) | A stopwatch that counts steps too, keeping the last five sessions for the companion. |
 
 ## Phone
 
@@ -50,6 +49,7 @@ These need the phone or computer connected through the companion app.
 |---|---|
 | [Heart](apps/heart.md) | Measures the heart rate and charts the latest readings. |
 | [Steps](apps/steps.md) | Today's steps against the goal, the last seven days and a day by hour. |
+| [Sports](apps/sports.md) | A stopwatch that counts steps too, keeping the last five sessions for the companion. |
 
 ## Games
 

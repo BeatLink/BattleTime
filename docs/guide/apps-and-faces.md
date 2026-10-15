@@ -36,12 +36,12 @@ off, and put back when it opens.
 There are 39 apps, ported from InfiniTime and wasp-os and merged where both had the same one, plus
 apps of BattleTime's own. Each has a page under [apps.md](../apps.md). Among them:
 
-- **Time:** alarm, timer, stopwatch, pomodoro and sports.
-- **Health:** steps and heart rate.
+- **Time:** alarm, timer, stopwatch and pomodoro.
 - **Phone:** call, music, weather, navigation, phone finder, notes, remote and QR code.
-- **Tools:** calculator, flashlight, metronome, level, beacon, Morse, haiku and more.
+- **Health:** steps, heart rate and sports.
 - **Games:** 2048, snake, paddle, puzzle 15, four in a row, Game of Life, dice and paint.
-- **System:** the launcher, Settings, Software, System and Files.
+- **Tools:** calculator, flashlight, metronome, level, motion, beacon, Morse, haiku and more.
+- **System:** the launcher, Settings, Software, About and Files.
 
 A few work hand in hand with the companion app:
 
