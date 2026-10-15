@@ -48,7 +48,7 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 136.7 KB | 46.4 KB |
+| Firmware (start-up, shell, tasks) | 137.2 KB | 46.4 KB |
 | App host (with `neotime-ui`) | 93.2 KB | 0.0 KB |
 | App runtime | 36.2 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 33.7 KB | 43.3 KB |
@@ -61,9 +61,9 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 | Display, graphics and drivers | 5.4 KB | 3.2 KB |
 | Updates (DFU) | 3.0 KB | 2.8 KB |
 | Other constants and padding | 33.1 KB | 14.3 KB |
-| **Code and data** | **430.7 KB** | **152.4 KB** |
+| **Code and data** | **431.2 KB** | **152.4 KB** |
 | Shared library, after the code | 48.3 KB | none |
-| Free of the 480 KB region, after its header | 0.7 KB | 327.3 KB |
+| Free of the 480 KB region, after its header | 0.3 KB | 327.3 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
