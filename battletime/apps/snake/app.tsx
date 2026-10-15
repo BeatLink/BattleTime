@@ -198,7 +198,7 @@ function Snake() {
         />
       )}
       {!is_running.value && (
-        <Column x={0} y={50} width={240} align_items="center" gap={4}>
+        <Column x={0} y={0} width={240} height={240} align_items="center" justify="center" gap={4}>
           <Label font="large" color="danger">GAME</Label>
           <Label font="large" color="danger">OVER</Label>
           <Label color="danger">{`Score: ${score.value}`}</Label>
