@@ -22,6 +22,11 @@ const SECTORS_AT: usize = 20;
 const PATH_AT: usize = SECTORS_AT + 2 * MOST_SECTORS_PER_FILE;
 const HEADER_CHECKSUM_AT: usize = PATH_AT + LONGEST_PATH_BYTES;
 const RETIRED_AT: usize = HEADER_CHECKSUM_AT + 4;
+/// The content checksum of a blank file, that of no bytes, which a whole read does not check, since a blank file's
+/// contents are programmed after it is written.
+const UNCHECKED_CONTENTS: u32 = 0;
+/// A blank file fills its one sector after its header.
+pub const BLANK_FILE_BYTES: usize = SECTOR_BYTES as usize - FILE_HEADER_BYTES;
 /// The file area may be at most this many sectors, one bit each in RAM, as the watch's layout has.
 pub(crate) const MOST_FILE_SECTORS: usize = 512;
 
@@ -319,6 +324,39 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
         Ok(())
     }
 
+    /// Starts a blank file: one erased sector, all of it the file's, with the checksum of no bytes.
+    pub(crate) async fn begin_blank<Flash: NorFlash>(
+        &mut self,
+        flash: &mut Flash,
+        path: &str,
+    ) -> Result<Upload, StoreError<Flash::Error>> {
+        let mut upload = self.begin(flash, path).await?;
+        upload.length = BLANK_FILE_BYTES;
+        Ok(upload)
+    }
+
+    /// Writes up to 4 bytes in place into a file's first sector, where all of a blank file lies, unless any of them
+    /// is already written; programming only clears bits, so written bytes are kept as they are.
+    pub(crate) async fn program<Flash: NorFlash>(
+        &self,
+        flash: &mut Flash,
+        header: &FileHeader,
+        offset: usize,
+        bytes: &[u8],
+    ) -> Result<(), StoreError<Flash::Error>> {
+        let mut stored = [0u8; 4];
+        let stored = stored.get_mut(..bytes.len()).ok_or(StoreError::TooLarge)?;
+        if offset + bytes.len() > header.length.min(BLANK_FILE_BYTES) {
+            return Err(StoreError::TooLarge);
+        }
+        let address = self.sector_address(header.sectors[0] as usize) + (FILE_HEADER_BYTES + offset) as u32;
+        read(flash, address, stored).await?;
+        if stored.iter().all(|byte| *byte == 0xff) {
+            write(flash, address, bytes).await?;
+        }
+        Ok(())
+    }
+
     /// Writes the header, which makes the upload the file, then retires any older version.
     pub(crate) async fn finish<Flash: NorFlash>(
         &mut self,
@@ -453,7 +491,8 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
             done += size;
         }
         let read_whole = offset == 0 && wanted == header.length;
-        if read_whole && Checksum::of(&buffer[..wanted]) != header.content_checksum {
+        let checked = header.content_checksum != UNCHECKED_CONTENTS;
+        if read_whole && checked && Checksum::of(&buffer[..wanted]) != header.content_checksum {
             return Err(StoreError::Corrupted);
         }
         Ok(Some(wanted))

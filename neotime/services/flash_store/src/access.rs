@@ -58,6 +58,8 @@ pub trait FileAccess {
     /// The path of the upload in progress and how many bytes it holds so far.
     fn upload_progress(&self) -> Option<(&str, usize)>;
     async fn delete_file(&mut self, path: &str) -> Result<(), FileError>;
+    /// Writes up to 4 bytes into a blank file in place, making the file when it is missing, unless any is already written.
+    async fn program_file(&mut self, path: &str, offset: usize, bytes: &[u8]) -> Result<(), FileError>;
     /// Gives `visit` every file's path that starts with `prefix`, each once.
     async fn for_each_file(&mut self, prefix: &str, visit: &mut dyn FnMut(&str)) -> Result<(), FileError>;
     /// Gives `visit` every file's path that starts with `prefix` and its length in bytes, each once.
@@ -113,6 +115,10 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
 
     async fn delete_file(&mut self, path: &str) -> Result<(), FileError> {
         Ok(FlashStore::delete_file(self, path).await?)
+    }
+
+    async fn program_file(&mut self, path: &str, offset: usize, bytes: &[u8]) -> Result<(), FileError> {
+        Ok(FlashStore::program_file(self, path, offset, bytes).await?)
     }
 
     async fn for_each_file(&mut self, prefix: &str, visit: &mut dyn FnMut(&str)) -> Result<(), FileError> {

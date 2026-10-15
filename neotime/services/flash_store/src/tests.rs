@@ -725,6 +725,51 @@ fn colliding_paths() -> (String, String) {
 }
 
 // ============================================================================
+// Blank files
+// ============================================================================
+
+#[test]
+fn programming_a_missing_file_makes_it_blank_and_later_parts_need_no_erase_nor_change_written_bytes() {
+    let mut store = blank_store();
+    block_on(store.program_file("/blocks/1", 10, &[1, 2])).unwrap();
+    let erases_after_making: u32 = store.flash().erases_per_sector.iter().sum();
+
+    block_on(store.program_file("/blocks/1", BLANK_FILE_BYTES - 2, &[3, 4])).unwrap();
+    block_on(store.program_file("/blocks/1", 11, &[0])).unwrap();
+
+    let erases_after: u32 = store.flash().erases_per_sector.iter().sum();
+    assert_eq!(erases_after, erases_after_making);
+    assert_eq!(BLANK_FILE_BYTES, 3872);
+    let mut store = remount(store);
+    let bytes = read_file(&mut store, "/blocks/1").unwrap();
+    assert_eq!(bytes.len(), BLANK_FILE_BYTES);
+    assert_eq!(&bytes[9..13], &[0xff, 1, 2, 0xff]);
+    assert_eq!(&bytes[BLANK_FILE_BYTES - 2..], &[3, 4]);
+    assert_eq!(list(&mut store, "/blocks/"), ["/blocks/1"]);
+}
+
+#[test]
+fn programming_past_a_blank_file_or_outside_a_large_files_first_sector_is_refused() {
+    let mut store = blank_store();
+    block_on(store.program_file("/blocks/2", 0, &[5])).unwrap();
+    assert_eq!(
+        block_on(store.program_file("/blocks/2", BLANK_FILE_BYTES - 1, &[1, 2])),
+        Err(StoreError::TooLarge)
+    );
+    block_on(store.write_file("/large", &vec![0xff; 9000])).unwrap();
+    assert_eq!(
+        block_on(store.program_file("/large", BLANK_FILE_BYTES, &[1])),
+        Err(StoreError::TooLarge)
+    );
+    block_on(store.program_file("/large", 100, &[1])).unwrap();
+    assert_eq!(
+        block_on(store.program_file("/blocks/2", 8, &[1; 5])),
+        Err(StoreError::TooLarge)
+    );
+    assert_eq!(read_file(&mut store, "/blocks/2").unwrap()[..2], [5, 0xff]);
+}
+
+// ============================================================================
 // Logs
 // ============================================================================
 

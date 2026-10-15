@@ -3,7 +3,8 @@
 //!
 //! - **Files** are named by path and written whole, at once or a part at a time: each is a list of up to 64 sectors
 //!   in any order, committed by a header written last, so a cut-off write never replaces the old file. Files of
-//!   1 KB or less are kept as records instead, so they cost no sector of their own.
+//!   1 KB or less are kept as records instead, so they cost no sector of their own. A blank file is one sector of
+//!   erased bytes, programmed in place a part at a time, without an erase.
 //! - **Records** are small values rewritten often, such as each app's saved values and the settings. Each key
 //!   carries its owner's app number in its top 12 bits. They are appended to a ring with a table in RAM of each
 //!   key's newest copy; when the ring wraps, newest copies are carried forward.
@@ -36,6 +37,7 @@ use alloc::boxed::Box;
 use embedded_storage_async::nor_flash::NorFlash;
 use heapless::Vec;
 
+pub use files::BLANK_FILE_BYTES;
 use files::{FileArea, FileHeader, Upload, FILE_HEADER_BYTES};
 use ring::{find_newest, Newest, Ring, APPENDS, TOMBSTONE};
 
@@ -501,6 +503,30 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
             (None, Some(large)) => self.files.read(&mut self.flash, &large, offset, buffer).await,
             (None, None) => Ok(None),
         }
+    }
+
+    /// Writes up to 4 bytes, such as a slot of a log, into a blank file in place, making the file first when it is
+    /// missing, unless any of them is already written.
+    ///
+    /// A blank file is one sector of erased bytes, `BLANK_FILE_BYTES` long, whose contents carry no checksum since
+    /// they change after it is written. Programming only clears bits and needs no erase; a power cut spoils at most
+    /// the bytes being written.
+    pub async fn program_file(
+        &mut self,
+        path: &str,
+        offset: usize,
+        bytes: &[u8],
+    ) -> Result<(), StoreError<Flash::Error>> {
+        // The second time round the blank file just made is found.
+        for _ in 0..2 {
+            if let Some((_, header)) = self.files.find(&mut self.flash, path).await? {
+                return self.files.program(&mut self.flash, &header, offset, bytes).await;
+            }
+            let upload = self.files.begin_blank(&mut self.flash, path).await?;
+            self.files.finish(&mut self.flash, &upload).await?;
+            self.share_sequence();
+        }
+        Err(StoreError::Corrupted)
     }
 
     /// Where part of a file lies in the flash, for a caller that reads it itself, such as by DMA.

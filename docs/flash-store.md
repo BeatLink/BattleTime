@@ -14,13 +14,13 @@ file written a part at a time holds about 200 B of heap while it is written.
 
 | Container | For | Examples |
 |---|---|---|
-| Files | Data named by path, written whole, read whole or from an offset | app images, the note, `/remote/buttons`, the step, heart rate and battery days |
-| Records | Small values, up to 2,112 bytes, rewritten often | every file of 1 KB or less, such as the settings, an app's saved state or a day's steps |
+| Files | Data named by path, written whole, read whole or from an offset; blank files programmed in place | app images, the note, `/remote/buttons`, the step, heart rate and battery blocks |
+| Records | Small values, up to 2,112 bytes, rewritten often | every file of 1 KB or less, such as the settings or an app's saved state |
 | Logs | Data appended over time, with the oldest dropped | nothing yet; kept for recordings too long to rewrite whole |
 
 The firmware reaches all of it through paths: the files API keeps a small file as a record by
-itself, and the step, heart rate and battery logs are day files ([storage.md](storage.md#logs)), so
-nothing in the firmware calls the record or log APIs directly.
+itself, and the step, heart rate and battery logs are blank files programmed a slot at a time
+([storage.md](storage.md#logs)), so nothing in the firmware calls the record or log APIs directly.
 
 ### Files
 
@@ -46,6 +46,14 @@ reading a file again, or asking its length, reads only its data; any file retire
 replaced, and every mount, drops it. A small file's record header and path come in one read.
 `for_each_file` lists every path under a prefix, and
 `for_each_file_with_length` gives each one's length too.
+
+`program_file` writes up to 4 bytes into a blank file in place, making the file first when it is
+missing: one sector of erased bytes, 3,872 long after its header. Programming only clears bits, so
+it needs no erase, and bytes already written are left as they are. A blank file's header carries
+the checksum of no bytes, which a whole read does not check, since its contents change after the
+header is written. A power cut while programming spoils at most the bytes being written. The logs
+use it so that a day of six-minute slots costs no erase; it is why a 4 KB block of them can take a
+value every few minutes for weeks.
 
 `read_file` reads a file whole or from an offset and checks the contents' checksum when it reads
 the whole file. `file_extents` instead says where a part of a file lies in the flash, as up to a
@@ -141,4 +149,5 @@ files that move between small and large, deletes and log appends, in which both 
 the power at every single write and erase of the run in turn, leaving that one half done, mounts
 again and checks that every record, file, listing and the log is as before the interrupted
 operation or as it left it (an older log entry may only have lost its start). Each cut is repeated
-with a second cut during the recovery.
+with a second cut during the recovery. A second run programs a blank file a slot at a time and
+cuts the power at every write, checking that only the slot being written can be spoiled.

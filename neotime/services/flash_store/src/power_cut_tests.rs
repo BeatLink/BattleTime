@@ -297,3 +297,60 @@ fn every_value_survives_a_power_cut_at_any_write_or_erase() {
         failures.first()
     );
 }
+
+// ============================================================================
+// Programming a blank file in place
+// ============================================================================
+
+const BLANK_PATH: &str = "/blocks/7";
+const SLOT_COUNT: usize = 40;
+
+/// Two bytes a slot, every slot different, none of them erased.
+fn slot_value(slot: usize) -> [u8; 2] {
+    [slot as u8, 0x80 | slot as u8]
+}
+
+/// Programs one slot at a time into a blank file the first makes; gives how many were written before the power went.
+fn program_slots(store: &mut TestStore) -> usize {
+    for slot in 0..SLOT_COUNT {
+        let _ = block_on(store.program_file(BLANK_PATH, 1024 + 2 * slot, &slot_value(slot)));
+        if store.flash().power_lost {
+            return slot;
+        }
+    }
+    SLOT_COUNT
+}
+
+#[test]
+fn a_power_cut_while_programming_a_blank_file_spoils_at_most_the_slot_being_written() {
+    let mut store = mount(TestFlash::blank(LAYOUT.total_sectors()));
+    assert_eq!(program_slots(&mut store), SLOT_COUNT);
+    let total = store.flash().changes;
+
+    for cut in 1..=total {
+        let mut flash = TestFlash::blank(LAYOUT.total_sectors());
+        flash.cut_power_at(cut, cut.wrapping_mul(0x9e37_79b9));
+        let mut store = mount(flash);
+        let written = program_slots(&mut store);
+        let mut store = restart(&store, None);
+        let Some(bytes) = read_file(&mut store, BLANK_PATH) else {
+            assert_eq!(written, 0, "cut {cut}: the file is gone after {written} slots");
+            continue;
+        };
+        assert_eq!(bytes.len(), BLANK_FILE_BYTES, "cut {cut}");
+        let slots = &bytes[1024..];
+        for slot in 0..SLOT_COUNT {
+            let found = [slots[2 * slot], slots[2 * slot + 1]];
+            let as_expected = match slot.cmp(&written) {
+                core::cmp::Ordering::Less => found == slot_value(slot),
+                core::cmp::Ordering::Equal => true,
+                core::cmp::Ordering::Greater => found == [0xff, 0xff],
+            };
+            assert!(
+                as_expected,
+                "cut {cut}: slot {slot} holds {found:?} after {written} slots"
+            );
+        }
+        assert!(bytes[..1024].iter().all(|byte| *byte == 0xff), "cut {cut}");
+    }
+}

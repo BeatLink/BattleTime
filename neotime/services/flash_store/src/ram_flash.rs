@@ -10,12 +10,15 @@ use crate::SECTOR_BYTES;
 
 pub struct RamFlash {
     pub bytes: Vec<u8>,
+    /// How many sectors have been erased, for tests that count wear.
+    pub erases: u32,
 }
 
 impl RamFlash {
     pub fn blank(sectors: usize) -> RamFlash {
         RamFlash {
             bytes: vec![0xff; sectors * SECTOR_BYTES as usize],
+            erases: 0,
         }
     }
 }
@@ -52,6 +55,7 @@ impl NorFlash for RamFlash {
             .get_mut(from as usize..to as usize)
             .ok_or(NorFlashErrorKind::OutOfBounds)?;
         range.fill(0xff);
+        self.erases += (to - from) / SECTOR_BYTES;
         Ok(())
     }
 
