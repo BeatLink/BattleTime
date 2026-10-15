@@ -1250,31 +1250,6 @@ fn cover_row(shapes: &[Placed], half: f32, y: f32, left: i32, coverage: &mut [u8
 }
 
 // ============================================================================
-// Shapes worked out as they are drawn
-// ============================================================================
-
-/// Samples taken across and down each pixel to find how much of it a shape covers.
-const SAMPLES_PER_SIDE: i32 = 4;
-const FULL_COVERAGE: i32 = 255;
-
-/// How much of each pixel in one glyph row a shape covers, from a test of points in glyph pixels.
-fn sample_row(row: u16, x_offset: u16, coverage: &mut [u8], is_inside: impl Fn(f32, f32) -> bool) {
-    let samples = (SAMPLES_PER_SIDE * SAMPLES_PER_SIDE) as f32;
-    for (index, slot) in coverage.iter_mut().enumerate() {
-        let column = x_offset as f32 + index as f32;
-        let mut hits = 0;
-        for down in 0..SAMPLES_PER_SIDE {
-            for across in 0..SAMPLES_PER_SIDE {
-                let x = column + (across as f32 + 0.5) / SAMPLES_PER_SIDE as f32;
-                let y = row as f32 + (down as f32 + 0.5) / SAMPLES_PER_SIDE as f32;
-                hits += is_inside(x, y) as i32;
-            }
-        }
-        *slot = (hits as f32 * FULL_COVERAGE as f32 / samples) as u8;
-    }
-}
-
-// ============================================================================
 // Dot matrix
 // ============================================================================
 
@@ -1360,18 +1335,23 @@ impl FontMetrics for DotMatrixFont {
         let Some(rows) = dot_rows(character) else {
             return false;
         };
-        sample_row(row, x_offset, coverage, |x, y| {
-            let column = (x / DOT_PITCH) as i32;
-            let dot_row = (y / DOT_PITCH) as i32;
-            if !(0..DOT_COLUMNS as i32).contains(&column) || !(0..DOT_ROWS as i32).contains(&dot_row) {
-                return false;
-            }
-            let is_lit = rows[dot_row as usize] & (1 << (DOT_COLUMNS as i32 - 1 - column)) != 0;
-            let centre_x = (column as f32 + 0.5) * DOT_PITCH;
-            let centre_y = (dot_row as f32 + 0.5) * DOT_PITCH;
-            let distance_squared = (x - centre_x) * (x - centre_x) + (y - centre_y) * (y - centre_y);
-            is_lit && distance_squared <= DOT_RADIUS * DOT_RADIUS
-        });
+        // Dots sit over a pixel apart, so a pixel takes ink only from the dot whose cell holds its centre.
+        let y = row as f32 + 0.5;
+        let dot_row = (y / DOT_PITCH) as usize;
+        let centre_y = (dot_row as f32 + 0.5) * DOT_PITCH;
+        let lit_columns = rows.get(dot_row).copied().unwrap_or(0);
+        for (index, slot) in coverage.iter_mut().enumerate() {
+            let x = x_offset as f32 + index as f32 + 0.5;
+            let column = (x / DOT_PITCH) as u16;
+            let is_lit = column < DOT_COLUMNS && lit_columns & (1 << (DOT_COLUMNS - 1 - column)) != 0;
+            *slot = match is_lit {
+                true => {
+                    let centre_x = (column as f32 + 0.5) * DOT_PITCH;
+                    ink_of(DOT_RADIUS - length(x - centre_x, y - centre_y) + 0.5)
+                }
+                false => 0,
+            };
+        }
         true
     }
 }

@@ -315,7 +315,8 @@ describes its calls, the layout rules and what each property value means.
   shared library; `fonts::install_from_library` takes it from there, so the firmware carries none
   of its own. Each size puts the glyph's straight strokes and arc edges on whole pixels. Each strip
   a glyph crosses draws it again, so the last glyph placed is kept (about 400 B of RAM) and reused
-  while the same glyph is drawn from the same pen position. The dot-matrix font is worked out from its dots as it is drawn. See
+  while the same glyph is drawn from the same pen position. The dot-matrix font is worked out from
+  its dots as it is drawn, each pixel's ink from its distance to the nearest dot's centre. See
   [app-runtime.md](app-runtime.md#property-values).
 - **Rules for the shell.** `swipes`, `side_button`, `way_back`, `quick_apps`, `wake`, `haptics`,
   `motion`, `phone` and `settings` hold the system's rules, so the firmware's shell follows them and

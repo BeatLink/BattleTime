@@ -653,3 +653,38 @@ fn coverage_ramps_over_one_pixel() {
 fn the_unused_font_number_draws_as_huge() {
     assert_eq!(FontName::from_value(6), FontName::Huge);
 }
+
+// ============================================================================
+// Dot matrix
+// ============================================================================
+
+/// One row of a dot-matrix glyph's coverage across its whole box.
+fn dot_matrix_row(character: char, row: u16) -> Vec<u8> {
+    let width = DOT_MATRIX.glyph_metrics(character).unwrap().width as usize;
+    let mut coverage = std::vec![7u8; width];
+    assert!(DOT_MATRIX.glyph_coverage_row(character, row, 0, &mut coverage));
+    coverage
+}
+
+#[test]
+fn a_dot_matrix_dot_is_solid_in_the_middle_soft_at_its_edge_and_apart_from_the_next() {
+    // The top row of an 8 lights the middle three dots, whose centres are 5.5 pixels apart.
+    let through_the_centres = dot_matrix_row('8', 2);
+
+    assert_eq!(through_the_centres[8], 255);
+    assert_eq!(through_the_centres[13], 255);
+    assert!(
+        (1..255).contains(&through_the_centres[10]),
+        "{through_the_centres:?}"
+    );
+    assert_eq!(through_the_centres[2], 0);
+    assert_eq!(through_the_centres[24], 0);
+}
+
+#[test]
+fn a_dot_matrix_row_between_dots_and_an_unknown_character_have_no_ink() {
+    let between_rows = dot_matrix_row('8', 5);
+
+    assert!(between_rows.iter().all(|&ink| ink == 0), "{between_rows:?}");
+    assert!(!DOT_MATRIX.glyph_coverage_row('~', 0, 0, &mut [0u8; 4]));
+}
