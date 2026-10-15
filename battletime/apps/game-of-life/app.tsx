@@ -3,7 +3,7 @@
 // acorn, and every generation is drawn in a new colour, as on wasp-os. A tap starts the acorn again and
 // a long press scatters a random soup. The 16 by 16 board wraps at its edges.
 
-import { define_app, keep_screen_on, life_step, on, random_int, range, signal, type Color } from "battletime";
+import { define_app, keep_screen_on, on, random_int, range, signal, type Color } from "battletime";
 import { icons } from "battletime/icons";
 import { CellGrid, Screen } from "battletime/widgets";
 
@@ -26,9 +26,37 @@ const ACORN_CELLS = [118, 136, 149, 150, 153, 154, 155];
 /** Each cell holds 0 when dead, or the place of its generation's colour in the palette when alive. */
 export const ACORN = CELLS.map((cell) => (ACORN_CELLS.includes(cell) ? 1 : 0));
 
+/** How many of a cell's eight neighbours are alive, counting round the edges; `Math.min(cell, 1)` is 1 for any live colour. */
+function live_neighbours(board: number[], cell: number): number {
+  // Each is a `let` so the compiler keeps it in a local rather than working it out again at every use.
+  let row = Math.floor(cell / BOARD_SIZE);
+  let column = cell % BOARD_SIZE;
+  let above = ((row + BOARD_SIZE - 1) % BOARD_SIZE) * BOARD_SIZE;
+  let middle = row * BOARD_SIZE;
+  let below = ((row + 1) % BOARD_SIZE) * BOARD_SIZE;
+  let left = (column + BOARD_SIZE - 1) % BOARD_SIZE;
+  let right = (column + 1) % BOARD_SIZE;
+  return (
+    Math.min(board[above + left], 1) +
+    Math.min(board[above + column], 1) +
+    Math.min(board[above + right], 1) +
+    Math.min(board[middle + left], 1) +
+    Math.min(board[middle + right], 1) +
+    Math.min(board[below + left], 1) +
+    Math.min(board[below + column], 1) +
+    Math.min(board[below + right], 1)
+  );
+}
+
+/** Whether a cell is alive in the next generation: born with three live neighbours, living on with two or three. */
+function lives_on(board: number[], cell: number): boolean {
+  const neighbours = live_neighbours(board, cell);
+  return neighbours === 3 || (neighbours === 2 && board[cell] !== 0);
+}
+
 /** The next generation, with every live cell holding `live_value`, on a board that wraps at its edges. */
 export function next_generation(board: number[], live_value: number): number[] {
-  return life_step(board, BOARD_SIZE, live_value);
+  return CELLS.map((cell) => (lives_on(board, cell) ? live_value : 0));
 }
 
 // ============================================================================

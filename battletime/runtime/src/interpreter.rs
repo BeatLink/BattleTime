@@ -12,8 +12,6 @@
 #[path = "array_work.rs"]
 mod array_work;
 
-pub use array_work::MOST_GRID_SIDE;
-
 use crate::image::{AppImage, Function};
 use crate::instruction::{
     decode, ArrayWork, EffectKind, Instruction, SystemValue, TimeUnit, MOST_EFFECT_ARGUMENTS,

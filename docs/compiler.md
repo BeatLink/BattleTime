@@ -180,8 +180,8 @@ to locals, because a loop needs an empty stack.
   signal or a constant array, compiled as a loop; with everything known when compiling they are
   worked out then. Text elements must be fixed text. `includes` and `indexOf` on an array signal of
   numbers compile to one `AskArray` instead of the loop.
-- The array functions from `count_of` to `life_step` (`array_builtins.rs`) take array signals and
-  compile to `AskArray`, or to `WorkArray` for `arrays_equal`. `slide_grid`, `life_step`, `push_shift`, `unshift_pop` and
+- The array functions from `count_of` to `count_inversions` (`array_builtins.rs`) take array signals and
+  compile to `AskArray`, or to `WorkArray` for `arrays_equal`. `push_shift`, `unshift_pop` and
   `shuffled` compile only as the whole right side of an assignment to an array signal, written straight into it.
 - `library_icon(index)`: the index plus 32768 while it is from 0 to the last of `ICON_NAMES`, else
   `none`, worked out with a local and one jump.

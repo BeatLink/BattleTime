@@ -489,24 +489,20 @@ impl TimeUnit {
     }
 }
 
-/// A question `AskArray` answers about one array, natively instead of in a bytecode loop.
+/// A question `AskArray` answers about one array, natively instead of in a bytecode loop; 3 and 4 are unused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum ArrayQuestion {
     /// Takes a value and pushes how many elements equal it.
-    CountOf,
+    CountOf = 0,
     /// Takes a value and `n`, and pushes the index of the `n`th element equal to it, counting from 0, or -1.
-    NthIndexOf,
+    NthIndexOf = 1,
     /// Takes a grid's width, a cell and a value, and pushes the longest line of that value through the cell
     /// across, down or along either diagonal, counting the cell itself as holding it. Lines stop at the edges.
-    LineThrough,
-    /// Takes a grid's width and a direction, and pushes 1 if sliding the tiles that way would change the grid.
-    /// Direction 4 asks about every direction at once.
-    SlideChanges,
-    /// Takes a grid's width and a direction, and pushes the points the merges of that slide score.
-    SlidePoints,
+    LineThrough = 2,
     /// Pushes how many pairs of elements are out of order, the earlier one greater; its parity says whether a
     /// sliding puzzle can be solved.
-    Inversions,
+    Inversions = 5,
 }
 
 impl ArrayQuestion {
@@ -515,8 +511,6 @@ impl ArrayQuestion {
             0 => ArrayQuestion::CountOf,
             1 => ArrayQuestion::NthIndexOf,
             2 => ArrayQuestion::LineThrough,
-            3 => ArrayQuestion::SlideChanges,
-            4 => ArrayQuestion::SlidePoints,
             5 => ArrayQuestion::Inversions,
             _ => return None,
         })
@@ -527,43 +521,36 @@ impl ArrayQuestion {
         match self {
             ArrayQuestion::Inversions => 0,
             ArrayQuestion::CountOf => 1,
-            ArrayQuestion::NthIndexOf | ArrayQuestion::SlideChanges | ArrayQuestion::SlidePoints => 2,
+            ArrayQuestion::NthIndexOf => 2,
             ArrayQuestion::LineThrough => 3,
         }
     }
 }
 
-/// Work `WorkArray` does natively on two arrays of the same length.
+/// Work `WorkArray` does natively on two arrays of the same length; 1 and 2 are unused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum ArrayWork {
     /// Pushes 1 if the two arrays hold the same elements.
-    Equal,
-    /// Takes a grid's width and a live value, and writes the next generation of Conway's Game of Life on a grid
-    /// that wraps at its edges: any element not 0 is alive, and each live cell of the result holds the value.
-    LifeStep,
-    /// Takes a grid's width and a direction, and writes the grid with its tiles slid that way, each pair of equal
-    /// tiles merging once into one a level higher, as in 2048.
-    Slide,
+    Equal = 0,
     /// Takes a value and writes the source moved one place towards its start, the value in the last place.
-    PushLast,
+    PushLast = 3,
     /// Takes a value and writes the source moved one place towards its end, the value in the first place.
-    PushFirst,
+    PushFirst = 4,
     /// Takes a first place and a count, and writes the source with the elements in those places in a random
     /// order.
-    Shuffle,
+    Shuffle = 5,
     /// Takes a path and writes the first bytes of that file, one per element, with 0 past its end or for a
     /// missing file; `source` is the destination.
-    FileBytes,
+    FileBytes = 6,
     /// Takes a path and an offset, and writes the file's bytes from that offset on, as `FileBytes` does.
-    FileBytesFrom,
+    FileBytesFrom = 7,
 }
 
 impl ArrayWork {
     pub fn from_byte(byte: u8) -> Option<ArrayWork> {
         Some(match byte {
             0 => ArrayWork::Equal,
-            1 => ArrayWork::LifeStep,
-            2 => ArrayWork::Slide,
             3 => ArrayWork::PushLast,
             4 => ArrayWork::PushFirst,
             5 => ArrayWork::Shuffle,

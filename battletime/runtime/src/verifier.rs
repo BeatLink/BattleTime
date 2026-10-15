@@ -341,9 +341,7 @@ fn is_handler_only(instruction: Instruction) -> bool {
             | Instruction::FillArray(_)
             | Instruction::CopyArray { .. }
             | Instruction::WorkArray {
-                work: ArrayWork::LifeStep
-                    | ArrayWork::Slide
-                    | ArrayWork::PushLast
+                work: ArrayWork::PushLast
                     | ArrayWork::PushFirst
                     | ArrayWork::Shuffle
                     | ArrayWork::FileBytes

@@ -8,23 +8,11 @@ use crate::state::AppState;
 // Grids
 // ============================================================================
 
-/// The longest side of a grid that `LifeStep` and the slides take, which sets the size of their row buffers.
-pub const MOST_GRID_SIDE: usize = 16;
-
 /// The longest array `Inversions` counts in, since it compares every pair.
 pub const MOST_INVERSION_ELEMENTS: usize = 64;
 
 /// How many bytes of a file `FileBytes` reads at a time, so a long array never needs a long buffer.
 const FILE_CHUNK_BYTES: usize = 32;
-
-/// Directions as the swipe event gives them.
-const UP: Value = 0;
-const DOWN: Value = 1;
-const LEFT: Value = 2;
-const RIGHT: Value = 3;
-
-/// `SlideChanges` with this direction asks about all four.
-const ANY_DIRECTION: Value = 4;
 
 /// An array seen as rows of `width` cells, numbered across each row from the top left.
 #[derive(Clone, Copy)]
@@ -44,57 +32,6 @@ impl Grid {
             rows: length / width,
         })
     }
-
-    /// The lines a slide moves tiles along, and how long each is.
-    fn slide_lines(self, direction: Value) -> Result<(usize, usize), Failure> {
-        let (count, length) = match direction {
-            UP | DOWN => (self.width, self.rows),
-            LEFT | RIGHT => (self.rows, self.width),
-            _ => return Err(Failure::IndexOutOfRange),
-        };
-        match length <= MOST_GRID_SIDE {
-            true => Ok((count, length)),
-            false => Err(Failure::IndexOutOfRange),
-        }
-    }
-
-    /// The cell at `place` along slide line `line`, counted from the edge the tiles move to.
-    fn slide_cell(self, direction: Value, line: usize, place: usize) -> usize {
-        match direction {
-            UP => place * self.width + line,
-            DOWN => (self.rows - 1 - place) * self.width + line,
-            LEFT => line * self.width + place,
-            _ => line * self.width + self.width - 1 - place,
-        }
-    }
-}
-
-/// Slides one line of tile levels towards its start, merging each pair of equal tiles once into one a level up.
-/// Gives the points scored, two to the power of each merged tile's new level, and whether the line changed.
-fn slide_line(line: &[Value], slid: &mut [Value]) -> (Value, bool) {
-    let mut placed = 0;
-    let mut waiting = 0;
-    let mut points = 0;
-    for &level in line.iter().filter(|&&level| level != 0) {
-        if waiting == level {
-            slid[placed] = level + 1;
-            points += 1i64 << (level + 1).clamp(0, 62);
-            placed += 1;
-            waiting = 0;
-        } else {
-            if waiting != 0 {
-                slid[placed] = waiting;
-                placed += 1;
-            }
-            waiting = level;
-        }
-    }
-    if waiting != 0 {
-        slid[placed] = waiting;
-        placed += 1;
-    }
-    slid[placed..line.len()].fill(0);
-    (points, slid[..line.len()] != *line)
 }
 
 // ============================================================================
@@ -162,25 +99,6 @@ impl Interpreter {
                 }
                 inversions
             }
-            ArrayQuestion::SlideChanges | ArrayQuestion::SlidePoints => {
-                let direction = self.pop()?;
-                let grid = Grid::new(length, self.pop()?)?;
-                let directions = match direction {
-                    ANY_DIRECTION if question == ArrayQuestion::SlideChanges => UP..ANY_DIRECTION,
-                    _ => direction..direction + 1,
-                };
-                let mut changes = false;
-                let mut points = 0;
-                for direction in directions {
-                    let (line_points, line_changes) = self.slide(state, array, None, grid, direction)?;
-                    points += line_points;
-                    changes |= line_changes;
-                }
-                match question {
-                    ArrayQuestion::SlideChanges => changes as Value,
-                    _ => points,
-                }
-            }
         };
         self.push(answer)
     }
@@ -207,17 +125,6 @@ impl Interpreter {
                         == self.element_of(state, destination, index)?;
                 }
                 self.push(equal as Value)
-            }
-            ArrayWork::LifeStep => {
-                let live_value = self.pop()?;
-                let grid = Grid::new(length, self.pop()?)?;
-                self.life_step(state, destination, source, grid, live_value)
-            }
-            ArrayWork::Slide => {
-                let direction = self.pop()?;
-                let grid = Grid::new(length, self.pop()?)?;
-                self.slide(state, source, Some(destination), grid, direction)
-                    .map(|_| ())
             }
             // The interpreter reads files itself, since only it has the system and the path's text.
             ArrayWork::FileBytes | ArrayWork::FileBytesFrom => Err(Failure::BadInstruction),
@@ -348,88 +255,5 @@ impl Interpreter {
             longest = longest.max(length);
         }
         Ok(longest)
-    }
-
-    /// Slides every line of `source` one way, writing the result to `destination` if there is one.
-    /// Gives the points the merges score and whether anything moved.
-    fn slide(
-        &mut self,
-        state: &AppState,
-        source: u8,
-        destination: Option<u8>,
-        grid: Grid,
-        direction: Value,
-    ) -> Result<(Value, bool), Failure> {
-        let (line_count, line_length) = grid.slide_lines(direction)?;
-        let mut line = [0; MOST_GRID_SIDE];
-        let mut slid = [0; MOST_GRID_SIDE];
-        let mut points = 0;
-        let mut changes = false;
-        for line_number in 0..line_count {
-            for (place, level) in line[..line_length].iter_mut().enumerate() {
-                *level = self.element_of(state, source, grid.slide_cell(direction, line_number, place))?;
-            }
-            let (line_points, line_changes) = slide_line(&line[..line_length], &mut slid);
-            points += line_points;
-            changes |= line_changes;
-            if let Some(destination) = destination {
-                for (place, &level) in slid[..line_length].iter().enumerate() {
-                    let cell = grid.slide_cell(direction, line_number, place);
-                    self.write_element(state, destination, cell as Value, level, true)?;
-                }
-            }
-        }
-        Ok((points, changes))
-    }
-
-    /// Writes the next generation of `source` to `destination`, which may be the same array: each row is
-    /// written only after the rows around it were read as they were.
-    fn life_step(
-        &mut self,
-        state: &AppState,
-        destination: u8,
-        source: u8,
-        grid: Grid,
-        live_value: Value,
-    ) -> Result<(), Failure> {
-        let Grid { width, rows } = grid;
-        if width > MOST_GRID_SIDE {
-            return Err(Failure::IndexOutOfRange);
-        }
-        if rows == 0 {
-            return Ok(());
-        }
-        let read_row = |interpreter: &Self, row: usize| -> Result<[bool; MOST_GRID_SIDE], Failure> {
-            let mut alive = [false; MOST_GRID_SIDE];
-            for (column, cell) in alive[..width].iter_mut().enumerate() {
-                *cell = interpreter.element_of(state, source, row * width + column)? != 0;
-            }
-            Ok(alive)
-        };
-        let first = read_row(self, 0)?;
-        let mut above = read_row(self, rows - 1)?;
-        let mut current = first;
-        for row in 0..rows {
-            let below = match row + 1 == rows {
-                true => first,
-                false => read_row(self, row + 1)?,
-            };
-            for column in 0..width {
-                let left = (column + width - 1) % width;
-                let right = (column + 1) % width;
-                let neighbours = [above, current, below]
-                    .iter()
-                    .flat_map(|line| [line[left], line[column], line[right]])
-                    .filter(|&alive| alive)
-                    .count()
-                    - current[column] as usize;
-                let lives = neighbours == 3 || (current[column] && neighbours == 2);
-                let value = if lives { live_value } else { 0 };
-                self.write_element(state, destination, (row * width + column) as Value, value, true)?;
-            }
-            above = current;
-            current = below;
-        }
-        Ok(())
     }
 }

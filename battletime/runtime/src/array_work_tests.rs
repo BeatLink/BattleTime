@@ -25,12 +25,6 @@ impl SystemValues for System {
     }
 }
 
-const UP: i8 = 0;
-const DOWN: i8 = 1;
-const LEFT: i8 = 2;
-const RIGHT: i8 = 3;
-const ANY: i8 = 4;
-
 fn code(instructions: &[Instruction]) -> Vec<u8> {
     let mut writer = CodeWriter::new();
     for instruction in instructions {
@@ -149,103 +143,9 @@ fn line_through_refuses_a_cell_off_the_grid_or_a_ragged_width() {
     );
 }
 
-/// A 2 by 2 grid of levels whose top row can merge and whose columns cannot move up.
-const TILES: [i64; 4] = [
-    1, 1, //
-    2, 3, //
-];
-
-#[test]
-fn slide_changes_says_whether_a_slide_moves_anything() {
-    assert_eq!(answer(&TILES, Question::SlideChanges, &[2, LEFT]), Ok(1));
-    assert_eq!(answer(&TILES, Question::SlideChanges, &[2, UP]), Ok(0));
-    assert_eq!(answer(&TILES, Question::SlideChanges, &[2, ANY]), Ok(1));
-    assert_eq!(answer(&[1, 2, 3, 1], Question::SlideChanges, &[2, ANY]), Ok(0));
-}
-
-#[test]
-fn slide_points_score_each_merge_at_its_new_value() {
-    assert_eq!(answer(&TILES, Question::SlidePoints, &[2, RIGHT]), Ok(4));
-    assert_eq!(answer(&[1, 1, 1, 1], Question::SlidePoints, &[4, LEFT]), Ok(8));
-    assert_eq!(
-        answer(&TILES, Question::SlidePoints, &[2, ANY]),
-        Err(Failure::IndexOutOfRange)
-    );
-}
-
 // ============================================================================
 // Work
 // ============================================================================
-
-#[test]
-fn a_slide_merges_each_pair_once_towards_the_edge() {
-    assert_eq!(
-        worked(&[1, 1, 1, 1], Work::Slide, &[4, LEFT]),
-        Ok(std::vec![2, 2, 0, 0])
-    );
-    assert_eq!(
-        worked(&[1, 0, 1, 2], Work::Slide, &[4, RIGHT]),
-        Ok(std::vec![0, 0, 2, 2])
-    );
-    assert_eq!(
-        worked(&[2, 1, 1, 0], Work::Slide, &[4, LEFT]),
-        Ok(std::vec![2, 2, 0, 0])
-    );
-}
-
-#[test]
-fn a_slide_moves_columns_up_and_down() {
-    let board = [
-        1, 0, //
-        0, 2, //
-        1, 2, //
-    ];
-
-    assert_eq!(
-        worked(&board, Work::Slide, &[2, UP]),
-        Ok(std::vec![2, 3, 0, 0, 0, 0])
-    );
-    assert_eq!(
-        worked(&board, Work::Slide, &[2, DOWN]),
-        Ok(std::vec![0, 0, 0, 0, 2, 3])
-    );
-}
-
-#[test]
-fn a_blinker_turns_on_a_wrapping_grid() {
-    let mut board = [0; 25];
-    board[11] = 1;
-    board[12] = 1;
-    board[13] = 1;
-    let mut turned = std::vec![0; 25];
-    turned[7] = 5;
-    turned[12] = 5;
-    turned[17] = 5;
-
-    assert_eq!(worked(&board, Work::LifeStep, &[5, 5]), Ok(turned));
-}
-
-#[test]
-fn life_wraps_neighbours_round_the_edges() {
-    let mut board = [0; 16];
-    // A blinker along the top row's wrapped edge: columns 3, 0 and 1.
-    board[3] = 1;
-    board[0] = 1;
-    board[1] = 1;
-
-    let next = worked(&board, Work::LifeStep, &[4, 1]).unwrap();
-
-    assert_eq!(next.iter().filter(|&&cell| cell != 0).count(), 3);
-    assert_eq!((next[0], next[4], next[12]), (1, 1, 1));
-}
-
-#[test]
-fn life_refuses_a_grid_wider_than_its_row_buffers() {
-    assert_eq!(
-        worked(&[0; 34], Work::LifeStep, &[17, 1]),
-        Err(Failure::IndexOutOfRange)
-    );
-}
 
 #[test]
 fn a_push_moves_the_history_along_in_place() {
@@ -318,9 +218,8 @@ fn an_expression_may_compare_arrays_but_not_rewrite_them() {
     let board = writer.array("board", ValueType::Int, false, 4, 1, 0);
     writer.expression(code(&[
         Instruction::PushSmall(2),
-        Instruction::PushSmall(LEFT),
         Instruction::WorkArray {
-            work: Work::Slide,
+            work: Work::PushLast,
             destination: board,
             source: board,
         },
@@ -374,21 +273,31 @@ fn array_work_names_arrays_of_one_length() {
 #[test]
 fn the_array_instructions_encode_and_decode() {
     let ask = Instruction::AskArray {
-        question: Question::SlidePoints,
+        question: Question::Inversions,
         array: 3,
     };
     let work = Instruction::WorkArray {
-        work: Work::LifeStep,
+        work: Work::PushLast,
         destination: 4,
         source: 5,
     };
 
-    assert_eq!(ask.encode().as_bytes(), &[0x64, 4, 3]);
-    assert_eq!(work.encode().as_bytes(), &[0x65, 1, 4, 5]);
+    assert_eq!(ask.encode().as_bytes(), &[0x64, 5, 3]);
+    assert_eq!(work.encode().as_bytes(), &[0x65, 3, 4, 5]);
     assert_eq!(decode(ask.encode().as_bytes(), 0), Ok((ask, 3)));
     assert_eq!(decode(work.encode().as_bytes(), 0), Ok((work, 4)));
     assert!(decode(&[0x64, 9, 0], 0).is_err());
     assert!(decode(&[0x65, 9, 0, 0], 0).is_err());
+}
+
+#[test]
+fn the_unused_array_codes_do_not_decode() {
+    for question in [3, 4] {
+        assert!(decode(&[0x64, question, 0], 0).is_err());
+    }
+    for work in [1, 2] {
+        assert!(decode(&[0x65, work, 0, 0], 0).is_err());
+    }
 }
 
 #[test]

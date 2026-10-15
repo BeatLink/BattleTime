@@ -287,7 +287,7 @@ the internal flash are read in place and cost none. So the work is split into th
 
 | Layer | Lives in | RAM while an app is open | Holds |
 |---|---|---|---|
-| Native widgets and builtins | The firmware, in Rust | One node per widget; the code costs none | Composite widgets with logic of their own, such as a time picker, the status icons or the list of installed apps, and work over whole arrays, such as sliding a 2048 board |
+| Native widgets and builtins | The firmware, in Rust | One node per widget; the code costs none | Composite widgets with logic of their own, such as a time picker, the status icons or the list of installed apps, and work over whole arrays common to many apps, such as counting or shuffling |
 | The shared library | Inside the firmware image, after its code, read in place | None | Functions, images and the font that two or more apps use |
 | The app | `/apps` on the external flash, read into the heap when it opens | All of it | Its own state, its layout, and the few lines that connect the shared parts |
 
@@ -310,8 +310,9 @@ Rules for each change:
 The compiler also compiles an app function it would otherwise copy into several places once and
 calls it, and turns code that repeats with only its constants changed into shared functions. The
 firmware draws the native composites, such as `AppList`, `StatusIcons`, the pickers and
-`ConfirmBox`, and answers the array functions of `battletime` (from `count_of` to `life_step`)
-natively. Library components and further builtins are open work, under "Shared library and smaller
+`ConfirmBox`, and answers the array functions of `battletime` (from `count_of` to `file_bytes`)
+natively. Work only one game needs, such as a 2048 slide or a Game of Life generation, stays in
+that game's own bytecode, so it costs the firmware no flash. Library components and further builtins are open work, under "Shared library and smaller
 apps" in [todo.md](todo.md).
 
 ## The bytecode
@@ -378,8 +379,8 @@ Each instruction is one opcode byte followed by its operands:
 | `61` | write element | array, 1 byte | Takes an index and a value and writes that element. A value too wide for the element fails the call. Handlers only. |
 | `62` | copy array | destination and source arrays, 1 byte each | Copies every element; the two must be the same length. Handlers only. |
 | `63` | fill array | array, 1 byte | Takes a value and writes it to every element. Handlers only. |
-| `64` | ask array | question, 1 byte; array, 1 byte | Takes the question's arguments and pushes the answer. Questions: 0 how many elements equal a value, 1 where the `n`th one is, 2 the longest line of a value through a cell of a grid, 3 whether a 2048 slide would change the grid, 4 what it scores, 5 how many pairs are out of order. |
-| `65` | work array | work, 1 byte; destination, 1 byte; source, 1 byte | Compares two arrays of one length, or writes the destination from the source. Works: 0 equal, 1 the Game of Life's next generation, 2 the grid after a 2048 slide, 3 push a value from the stack at the end, 4 at the front, 5 shuffle some places, 6 the first bytes of the file whose path, an image string, is on the stack, and 7 the same from an offset on the stack after the path. Files are read through `SystemValues::read_file`, with 0 past the end. Writing is for handlers only, and the source may be the destination. |
+| `64` | ask array | question, 1 byte; array, 1 byte | Takes the question's arguments and pushes the answer. Questions: 0 how many elements equal a value, 1 where the `n`th one is, 2 the longest line of a value through a cell of a grid, 5 how many pairs are out of order; 3 and 4 are unused. |
+| `65` | work array | work, 1 byte; destination, 1 byte; source, 1 byte | Compares two arrays of one length, or writes the destination from the source. Works: 0 equal, 3 push a value from the stack at the end, 4 at the front, 5 shuffle some places, 6 the first bytes of the file whose path, an image string, is on the stack, and 7 the same from an offset on the stack after the path. Files are read through `SystemValues::read_file`, with 0 past the end; 1 and 2 are unused. Writing is for handlers only, and the source may be the destination. |
 
 Only `loop back` goes backward. A call stops with a failure after 200,000 instructions.
 

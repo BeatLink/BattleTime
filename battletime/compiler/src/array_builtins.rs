@@ -13,23 +13,10 @@ use crate::diagnostics::{fail, Compiled};
 use crate::emitter::Emitter;
 use crate::expressions::Typed;
 use crate::scope::{Reference, Scope};
-use crate::types::{ChoiceSet, Kind, Range, Type};
-
-/// The highest tile level a slide writes, where its points stop doubling.
-const MOST_SLIDE_LEVEL: i64 = 62;
-
-/// `can_slide` asks `SlideChanges` about every direction with this one.
-const ANY_DIRECTION: i64 = 4;
+use crate::types::{Kind, Range, Type};
 
 /// The functions that give back a new array, which only an assignment to an array signal can take.
-pub const ARRAY_WORK_FUNCTIONS: [&str; 6] = [
-    "slide_grid",
-    "life_step",
-    "push_shift",
-    "unshift_pop",
-    "shuffled",
-    "file_bytes",
-];
+pub const ARRAY_WORK_FUNCTIONS: [&str; 4] = ["push_shift", "unshift_pop", "shuffled", "file_bytes"];
 
 /// The largest byte a file holds, the most `file_bytes` writes to an element.
 const LARGEST_BYTE: i64 = 255;
@@ -38,14 +25,7 @@ const LARGEST_BYTE: i64 = 255;
 pub fn is_array_question(name: &str) -> bool {
     matches!(
         name,
-        "count_of"
-            | "nth_index_of"
-            | "line_through"
-            | "slide_changes"
-            | "can_slide"
-            | "slide_points"
-            | "arrays_equal"
-            | "count_inversions"
+        "count_of" | "nth_index_of" | "line_through" | "arrays_equal" | "count_inversions"
     )
 }
 
@@ -84,9 +64,6 @@ impl<'a> Compiler<'a> {
             "count_inversions" => (ArrayQuestion::Inversions, 0, Type::NUMBER),
             "nth_index_of" => (ArrayQuestion::NthIndexOf, 2, Type::NUMBER),
             "line_through" => (ArrayQuestion::LineThrough, 3, Type::NUMBER),
-            "slide_changes" => (ArrayQuestion::SlideChanges, 2, Type::BOOL),
-            "can_slide" => (ArrayQuestion::SlideChanges, 1, Type::BOOL),
-            "slide_points" => (ArrayQuestion::SlidePoints, 2, Type::NUMBER),
             _ => {
                 let [first, second] = arguments else {
                     return fail(span, "`arrays_equal` takes two arrays");
@@ -114,16 +91,12 @@ impl<'a> Compiler<'a> {
             );
         }
         let array = self.array_signal_argument(arguments[0], scope, name)?;
-        let takes_direction = name != "can_slide" && question_takes_direction(question);
-        self.compile_array_arguments(emitter, takes_direction, &arguments[1..], scope)?;
-        if name == "can_slide" {
-            self.emit_number(emitter, ANY_DIRECTION, span)?;
-        }
+        self.compile_array_arguments(emitter, &arguments[1..], scope)?;
         emitter.emit(Instruction::AskArray { question, array }, span)?;
         Ok(Typed::new(result))
     }
 
-    /// `target.value = slide_grid(...)`, or one of the other functions that give a whole array, written straight
+    /// `target.value = push_shift(...)`, or one of the other functions that give a whole array, written straight
     /// into the target.
     pub(crate) fn compile_array_work_assignment(
         &mut self,
@@ -144,8 +117,6 @@ impl<'a> Compiler<'a> {
             return self.compile_file_bytes(emitter, target, arguments, scope, span);
         }
         let (work, numbers, takes) = match name {
-            "slide_grid" => (ArrayWork::Slide, 2, "a grid, its width and a direction"),
-            "life_step" => (ArrayWork::LifeStep, 2, "a grid, its width and the live value"),
             "push_shift" => (ArrayWork::PushLast, 1, "an array and a value"),
             "shuffled" => (
                 ArrayWork::Shuffle,
@@ -175,20 +146,9 @@ impl<'a> Compiler<'a> {
                 let pushed = self.compile_value_of_type(emitter, rest[0], scope, element_type)?;
                 source_range.union(pushed.range)
             }
-            ArrayWork::Shuffle => {
-                self.compile_array_arguments(emitter, false, rest, scope)?;
-                source_range
-            }
-            ArrayWork::LifeStep => {
-                let ranges = self.compile_array_arguments(emitter, false, rest, scope)?;
-                Range::exactly(0).union(ranges[1])
-            }
             _ => {
-                self.compile_array_arguments(emitter, true, rest, scope)?;
-                source_range.union(Range {
-                    lowest: 0,
-                    highest: MOST_SLIDE_LEVEL,
-                })
+                self.compile_array_arguments(emitter, rest, scope)?;
+                source_range
             }
         };
         self.note_write(target, written);
@@ -259,31 +219,18 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    /// Numbers, the second a swipe direction when `last_is_direction` is set; gives the range of each.
+    /// The numbers an array function takes after its array.
     fn compile_array_arguments(
         &mut self,
         emitter: &mut Emitter,
-        last_is_direction: bool,
         arguments: &[&'a Expression<'a>],
         scope: &Rc<Scope<'a>>,
-    ) -> Compiled<Vec<Range>> {
-        let mut ranges = Vec::new();
-        for (place, argument) in arguments.iter().enumerate() {
-            let expected = match last_is_direction && place + 1 == arguments.len() {
-                true => Type::choice(ChoiceSet::SwipeDirection),
-                false => Type::NUMBER,
-            };
-            ranges.push(
-                self.compile_value_of_type(emitter, argument, scope, expected)?
-                    .range,
-            );
+    ) -> Compiled<()> {
+        for argument in arguments {
+            self.compile_value_of_type(emitter, argument, scope, Type::NUMBER)?;
         }
-        Ok(ranges)
+        Ok(())
     }
-}
-
-fn question_takes_direction(question: ArrayQuestion) -> bool {
-    matches!(question, ArrayQuestion::SlideChanges | ArrayQuestion::SlidePoints)
 }
 
 #[cfg(test)]

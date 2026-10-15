@@ -85,6 +85,11 @@ Capitalising text with a Latin-1 table of its own instead of `char::to_uppercase
 empty constant all zeros so a new one is filled rather than copied from flash, saved 3,408 B of code and
 constants, measured with `cargo size` against master on 2026-10-15 (439,076 B to 435,668 B of text and rodata).
 
+Moving the 2048 slides and the Game of Life step out of the runtime and into those two games' own bytecode
+saved 2,304 B of code and constants, measured with `cargo size` against master on 2026-10-15 (435,464 B to
+433,160 B of text and rodata). The games' images grew instead, on the external flash: `twos` from 1,332 B to
+2,460 B and `game-of-life` from 2,752 B to 3,014 B.
+
 Running closed apps (`firmware/src/closed_apps.rs` and `battletime_app_host::closed_apps`) added
 5,008 B of code to the full build, measured with `cargo size` against master on 2026-10-14
 (405,496 B to 410,504 B of text), and 32 B of static RAM. A first version wrapped the shell's

@@ -3,9 +3,10 @@
 use std::time::Duration;
 
 use battletime_app_testing::{
-    Direction, EffectKind, EventResult, FakeTask, SystemValue, TestWatch, WidgetKind, NONE,
+    Direction, EffectKind, EventResult, FakeTask, SystemValue, TestWatch, Value, WidgetKind, NONE,
 };
 use battletime_runtime::SystemValues;
+use embedded_graphics::pixelcolor::Rgb565;
 
 // ============================================================================
 // Named numbers
@@ -1312,6 +1313,181 @@ fn four_in_a_row_drops_a_counter_into_the_right_column_on_screen() {
         red,
         "the board ends inside the screen"
     );
+}
+
+// ============================================================================
+// Life
+// ============================================================================
+
+/// The board's side in cells and each cell's side in pixels.
+const LIFE_SIDE: usize = 16;
+const LIFE_CELL_PIXELS: usize = 15;
+
+/// The acorn Life starts from.
+const ACORN_CELLS: [usize; 7] = [118, 136, 149, 150, 153, 154, 155];
+
+/// The next generation of a board that wraps at its edges, worked out here to check the app against.
+fn next_life_generation(board: &[bool]) -> Vec<bool> {
+    (0..board.len())
+        .map(|cell| {
+            let (row, column) = (cell / LIFE_SIDE, cell % LIFE_SIDE);
+            let mut neighbours = 0;
+            for row_step in [LIFE_SIDE - 1, 0, 1] {
+                for column_step in [LIFE_SIDE - 1, 0, 1] {
+                    let neighbour =
+                        ((row + row_step) % LIFE_SIDE) * LIFE_SIDE + (column + column_step) % LIFE_SIDE;
+                    neighbours += (neighbour != cell && board[neighbour]) as usize;
+                }
+            }
+            neighbours == 3 || (neighbours == 2 && board[cell])
+        })
+        .collect()
+}
+
+/// Which cells the screen draws alive, told by the middle of each cell differing from the dead colour.
+fn drawn_life_cells(watch: &mut TestWatch, dead: Rgb565) -> Vec<bool> {
+    let frame = watch.fresh_frame();
+    (0..LIFE_SIDE * LIFE_SIDE)
+        .map(|cell| {
+            let x = (cell % LIFE_SIDE) * LIFE_CELL_PIXELS + LIFE_CELL_PIXELS / 2;
+            let y = (cell / LIFE_SIDE) * LIFE_CELL_PIXELS + LIFE_CELL_PIXELS / 2;
+            frame.pixel(x, y) != dead
+        })
+        .collect()
+}
+
+#[test]
+fn life_grows_the_acorn_by_the_rules_on_a_wrapping_board() {
+    let mut watch = TestWatch::open_app("game-of-life").unwrap();
+    let dead = watch
+        .fresh_frame()
+        .pixel(LIFE_CELL_PIXELS / 2, LIFE_CELL_PIXELS / 2);
+    let mut expected: Vec<bool> = (0..LIFE_SIDE * LIFE_SIDE)
+        .map(|cell| ACORN_CELLS.contains(&cell))
+        .collect();
+    assert_eq!(drawn_life_cells(&mut watch, dead), expected);
+
+    for generation in 1..=40 {
+        watch.advance(Duration::from_millis(625));
+        expected = next_life_generation(&expected);
+        assert_eq!(
+            drawn_life_cells(&mut watch, dead),
+            expected,
+            "generation {generation}"
+        );
+    }
+    assert!(watch.failures().is_empty(), "{:?}", watch.failures());
+}
+
+// ============================================================================
+// 2048
+// ============================================================================
+
+/// The board's width and how many cells it has.
+const TWOS_WIDTH: usize = 4;
+const TWOS_CELLS: usize = 16;
+
+/// The cell at a place along a line, counting places from the edge the tiles slide towards.
+fn twos_cell_along(direction: Direction, line: usize, place: usize) -> usize {
+    match direction {
+        Direction::Up => place * TWOS_WIDTH + line,
+        Direction::Down => (TWOS_WIDTH - 1 - place) * TWOS_WIDTH + line,
+        Direction::Left => line * TWOS_WIDTH + place,
+        Direction::Right => line * TWOS_WIDTH + TWOS_WIDTH - 1 - place,
+    }
+}
+
+/// A board slid one way, worked out here to check the app against, and the points its joins score.
+fn slid_twos_board(board: &[Value], direction: Direction) -> (Vec<Value>, Value) {
+    let mut slid = board.to_vec();
+    let mut points = 0;
+    for line in 0..TWOS_WIDTH {
+        let mut packed = Vec::new();
+        let mut waiting = 0;
+        for place in 0..TWOS_WIDTH {
+            let level = board[twos_cell_along(direction, line, place)];
+            if level == 0 {
+                continue;
+            }
+            if waiting == level {
+                packed.push(level + 1);
+                points += 1 << (level + 1);
+                waiting = 0;
+            } else {
+                if waiting != 0 {
+                    packed.push(waiting);
+                }
+                waiting = level;
+            }
+        }
+        if waiting != 0 {
+            packed.push(waiting);
+        }
+        packed.resize(TWOS_WIDTH, 0);
+        for (place, level) in packed.into_iter().enumerate() {
+            slid[twos_cell_along(direction, line, place)] = level;
+        }
+    }
+    (slid, points)
+}
+
+fn twos_board(watch: &TestWatch) -> Vec<Value> {
+    (0..TWOS_CELLS as Value)
+        .map(|cell| watch.persisted_value("board", cell).unwrap())
+        .collect()
+}
+
+#[test]
+fn twos_slides_joins_and_scores_every_swipe_as_the_rules_say() {
+    let mut watch = TestWatch::open_app("twos").unwrap();
+    let directions = [
+        Direction::Down,
+        Direction::Left,
+        Direction::Down,
+        Direction::Right,
+        Direction::Up,
+    ];
+    let mut slides_that_changed = 0;
+    let mut game_over = false;
+
+    for swipe in 0..400 {
+        let board = twos_board(&watch);
+        let score = watch.persisted_value("score", 0).unwrap();
+        let direction = directions[swipe % directions.len()];
+        let (slid, points) = slid_twos_board(&board, direction);
+        watch.swipe(direction);
+        let after = twos_board(&watch);
+
+        if slid == board {
+            assert_eq!(after, board, "swipe {swipe} changes nothing");
+            continue;
+        }
+        slides_that_changed += 1;
+        assert_eq!(
+            watch.persisted_value("score", 0),
+            Some(score + points),
+            "swipe {swipe}"
+        );
+        let differences: Vec<usize> = (0..TWOS_CELLS)
+            .filter(|&cell| after[cell] != slid[cell])
+            .collect();
+        let [new_tile] = differences[..] else {
+            panic!("swipe {swipe} should add one tile to {slid:?}, but left {after:?}");
+        };
+        assert_eq!(slid[new_tile], 0);
+        assert!([1, 2].contains(&after[new_tile]));
+        let can_slide = [Direction::Up, Direction::Down, Direction::Left, Direction::Right]
+            .into_iter()
+            .any(|direction| slid_twos_board(&after, direction).0 != after);
+        assert_eq!(watch.shows_text("Game over"), !can_slide, "swipe {swipe}");
+        if !can_slide {
+            game_over = true;
+            break;
+        }
+    }
+    assert!(slides_that_changed > 50);
+    assert!(game_over, "the swipes fill the board in the end");
+    assert!(watch.failures().is_empty(), "{:?}", watch.failures());
 }
 
 // ============================================================================

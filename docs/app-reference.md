@@ -625,20 +625,18 @@ most 2 KB and 64 variables, one array at most 1 KB, and each array stores its el
 | `nth_index_of(array, value, n)` | Where the `n`th element equal to the value is, from 0, or -1. |
 | `arrays_equal(first, second)` | Whether two arrays of one length hold the same elements. |
 | `line_through(grid, width, cell, value)` | The longest line of the value through the cell, across, down or diagonally. |
-| `slide_grid(grid, width, direction)` | The grid slid as in 2048, equal pairs merging once. |
-| `slide_points(grid, width, direction)`, `slide_changes(...)`, `can_slide(grid, width)` | What a slide scores, whether it changes the grid, and whether any slide would. |
 | `count_inversions(array)` | How many pairs are out of order, at most 64 elements. |
 | `shuffled(array, first, count)` | The array with `count` elements from `first` in a random order. Handlers only. |
 | `push_shift(array, value)`, `unshift_pop(array, value)` | The array moved one place with the value added at the end or the front, as for a history of laps. |
-| `life_step(grid, width, live_value)` | The Game of Life's next generation on a wrapping grid, at most 16 wide. |
 | `file_bytes(path, length, offset?)` | `length` bytes of a file from `offset`, each 0 to 255, 0 past the end or when the file is missing. `path` is written out and `length` known when compiling; `offset` may be worked out, to page through a file larger than RAM. Read when the handler runs, unless `prefetch_file` already read that part. |
 
 The functions from `count_of` down, and `includes` and `indexOf` on an array signal of numbers, run
 natively in the firmware, so they cost a few bytes where a loop costs dozens. Their arrays must be
-signals of numbers or parameters given one. `slide_grid`, `life_step`, `push_shift`, `unshift_pop`,
-`shuffled` and `file_bytes` give a whole array, so they may only be assigned to an array signal of
-the same length in a handler, as in `board.value = life_step(board.value, 16, 1)`. A grid is
-numbered across each row from the top left.
+signals of numbers or parameters given one. `push_shift`, `unshift_pop`, `shuffled` and
+`file_bytes` give a whole array, so they may only be assigned to an array signal of the same length
+in a handler, as in `laps.value = push_shift(laps.value, lap)`. A grid is numbered across each row
+from the top left. Work only one game needs is written in the game itself, as `apps/twos` slides
+its tiles and `apps/game-of-life` steps its board with `.map` over their cells.
 
 ### Control flow
 

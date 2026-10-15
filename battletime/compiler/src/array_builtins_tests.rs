@@ -22,7 +22,7 @@ fn source(body: &str, screen: &str) -> String {
     format!(
         r#"
 import {{ signal }} from "@preact/signals";
-import {{ define_app, count_of, nth_index_of, line_through, can_slide, slide_changes, slide_points, slide_grid, life_step, arrays_equal, push_shift, unshift_pop, shuffled, count_inversions, format_fixed, file_bytes, prefetch_file, type SwipeEvent }} from "battletime";
+import {{ define_app, count_of, nth_index_of, line_through, arrays_equal, push_shift, unshift_pop, shuffled, count_inversions, format_fixed, file_bytes, prefetch_file, type SwipeEvent }} from "battletime";
 import {{ Label, Screen }} from "battletime/widgets";
 
 const board = signal([1, 0, 1, 2]);
@@ -99,36 +99,6 @@ fn questions_about_an_array_signal_are_asked_natively() {
 }
 
 #[test]
-fn slide_questions_take_a_direction_and_can_slide_asks_about_all_four() {
-    let bytes = compiled(
-        NO_SWIPE,
-        r#"<Label>{`${slide_points(board.value, 2, "left")} ${slide_changes(board.value, 2, "up") ? 1 : 0} ${can_slide(board.value, 2) ? 1 : 0}`}</Label>"#,
-    );
-
-    assert_eq!(shown(&bytes), "0 1 1");
-}
-
-#[test]
-fn a_handler_rewrites_a_grid_straight_into_its_signal() {
-    let bytes = compiled(
-        "function swipe(event: SwipeEvent) { board.value = slide_grid(board.value, 2, event.direction); other.value = life_step(board.value, 2, 1); }",
-        "<Label>{`${board.value[0]}`}</Label>",
-    );
-    let image = AppImage::parse(&bytes).unwrap();
-    let code = instructions(image.handler_code(0).unwrap());
-    let works: Vec<ArrayWork> = code
-        .iter()
-        .filter_map(|instruction| match instruction {
-            Instruction::WorkArray { work, .. } => Some(*work),
-            _ => None,
-        })
-        .collect();
-
-    assert_eq!(works, [ArrayWork::Slide, ArrayWork::LifeStep]);
-    assert!(!code.contains(&Instruction::LoopStart));
-}
-
-#[test]
 fn a_history_takes_a_new_value_without_a_copy() {
     let bytes = compiled(
         "function swipe(event: SwipeEvent) { board.value = push_shift(board.value, 7); other.value = unshift_pop(other.value, board.value[0]); }",
@@ -155,24 +125,24 @@ fn array_functions_need_array_signals_and_new_grids_need_an_assignment() {
         first_error(NO_SWIPE, "<Label>{`${count_of([1, 2], 1)}`}</Label>").contains("needs an array signal")
     );
     let error = first_error(
-        "function swipe(event: SwipeEvent) { life_step(board.value, 2, 1); }",
+        "function swipe(event: SwipeEvent) { push_shift(board.value, 1); }",
         "<Label>{`${board.value[0]}`}</Label>",
     );
     assert!(error.contains("assign what"), "{error}");
-    let error = first_error(NO_SWIPE, "<Label>{`${life_step(board.value, 2, 1)[0]}`}</Label>");
+    let error = first_error(NO_SWIPE, "<Label>{`${push_shift(board.value, 1)[0]}`}</Label>");
     assert!(error.contains("keep the array in a signal"), "{error}");
     assert!(
         first_error(NO_SWIPE, "<Label>{`${count_of(board.value)}`}</Label>")
             .contains("takes an array and 1 more")
     );
-    let short = "const short = signal([1, 2]);\nfunction swipe(event: SwipeEvent) { board.value = slide_grid(short.value, 2, event.direction); }";
+    let short = "const short = signal([1, 2]);\nfunction swipe(event: SwipeEvent) { board.value = push_shift(short.value, 1); }";
     assert!(first_error(short, "<Label>{`${board.value[0]}`}</Label>").contains("as long as"));
 }
 
 #[test]
 fn an_array_is_stored_wide_enough_for_what_native_work_writes_into_it() {
     let bytes = compiled(
-        "function swipe(event: SwipeEvent) { board.value = push_shift(board.value, 980); other.value = life_step(other.value, 2, 300); }",
+        "function swipe(event: SwipeEvent) { board.value = push_shift(board.value, 980); other.value = unshift_pop(other.value, 300); }",
         "<Label>{`${board.value[0]}`}</Label>",
     );
     let image = AppImage::parse(&bytes).unwrap();
