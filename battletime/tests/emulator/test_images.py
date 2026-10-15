@@ -23,10 +23,10 @@ def write_never_confirming_image(path):
 
 
 def write_older_bootloader(source, path):
-    """The built bootloader with one byte of its title changed, so the updater sees a different bootloader to replace."""
+    """The built bootloader with one byte of its menu hint changed, so the updater sees a different bootloader to replace."""
     data = bytearray(Path(source).read_bytes())
-    title = data.index(b"BattleTime bootloader")
-    data[title + len("BattleTime ")] = ord("B")
+    hint = data.index(b"Press: next Hold: pick")
+    data[hint] = ord("p")
     Path(path).write_bytes(bytes(data))
     return str(path)
 

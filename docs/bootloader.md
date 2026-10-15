@@ -206,7 +206,7 @@ Revert branch; see [updates.md](updates.md#confirming-or-rolling-back).
 
 On an ordinary start the screen stays dark and the firmware starts at once. Whenever the bootloader
 has work to do, it turns the screen blue (`status_colour::BOOTLOADER`) and shows the same page as
-the firmware ([updates.md](updates.md#the-status-page)), titled "BattleTime bootloader", with
+the firmware ([updates.md](updates.md#the-status-page)), titled "Bootloader" under the name line, with
 Bootloader `Working`, Filesystem `Not mounted` and Bluetooth `Off`. Below the progress line it shows
 the battery from one fresh reading each time the page changes, such as "Battery 87% charging",
 "Battery 100% charged" or "Battery 40% unplugged", with the charge read along the firmware's curve;
@@ -227,7 +227,7 @@ model, through the panel's SPI wires.
 | Nothing anywhere has a sound header | Damaged / No firmware found / Send an update |
 | Swapping in an update, or rolling one back | Swapping / Installing firmware / Do not unplug |
 
-The bootloader updater shows the page titled "BattleTime boot updater", with Firmware `Updater`, and
+The bootloader updater shows the page titled "Bootloader updater", with Firmware `Updater`, and
 its Bootloader line goes `Checking`, `Writing`, then `Updated` or `Up to date`.
 
 ## The note to the firmware

@@ -246,6 +246,7 @@ async fn main(spawner: Spawner) {
     );
     let mut title = StatusLine::new();
     let _ = core::fmt::write(&mut title, format_args!("{FIRMWARE_VERSION}"));
+    screen.write_line(line::NAME, line::PRODUCT_NAME);
     screen.write_line(line::TITLE, &title);
     screen.write_line(line::FILES, "Starting");
     screen.write_line(line::BLUETOOTH, "Off");

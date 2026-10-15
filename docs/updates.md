@@ -168,6 +168,7 @@ recovery firmware, the bootloader and the bootloader updater all lay it out thro
 `battletime_status_screen::page`, so it looks the same whichever is running:
 
 ```
+BattleTime
 0.1.0+1b19aed
 Bootloader OK 1a2b3c4
 Firmware   On trial
@@ -179,6 +180,7 @@ Receiving firmware
 
 | Line | Says |
 |---|---|
+| Name | `BattleTime`, on every page |
 | Title | the firmware's version; the bootloader and its updater name themselves instead |
 | Bootloader | `OK` or, after the updater wrote it, `New`, then the first 7 hex digits of the CRC-32 of the installed bootloader with its erased tail left off, which match `zlib.crc32` of its `.bin`; `Not found` or `Unreadable` otherwise |
 | Firmware | the mode, below |

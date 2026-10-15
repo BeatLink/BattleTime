@@ -24,6 +24,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "battletime-battery"
+version = "0.1.0"
+
+[[package]]
+name = "battletime-battery-reading"
+version = "0.1.0"
+dependencies = [
+ "battletime-battery",
+]
+
+[[package]]
+name = "battletime-boot"
+version = "0.1.0"
+dependencies = [
+ "embedded-storage",
+]
+
+[[package]]
+name = "battletime-bootloader-updater"
+version = "0.1.0"
+dependencies = [
+ "battletime-battery",
+ "battletime-battery-reading",
+ "battletime-boot",
+ "battletime-status-screen",
+ "cortex-m",
+ "cortex-m-rt",
+ "embassy-nrf",
+ "embedded-graphics",
+ "embedded-hal 1.0.0",
+ "embedded-hal-bus",
+ "embedded-storage",
+ "panic-halt",
+]
+
+[[package]]
+name = "battletime-status-screen"
+version = "0.1.0"
+dependencies = [
+ "embedded-graphics",
+ "embedded-hal 1.0.0",
+]
+
+[[package]]
 name = "bitfield"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -410,50 +454,6 @@ name = "nb"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d5439c4ad607c3c23abf66de8c8bf57ba8adcd1f129e699851a6e43935d339d"
-
-[[package]]
-name = "battletime-battery"
-version = "0.1.0"
-
-[[package]]
-name = "battletime-battery-reading"
-version = "0.1.0"
-dependencies = [
- "battletime-battery",
-]
-
-[[package]]
-name = "battletime-boot"
-version = "0.1.0"
-dependencies = [
- "embedded-storage",
-]
-
-[[package]]
-name = "battletime-bootloader-updater"
-version = "0.1.0"
-dependencies = [
- "cortex-m",
- "cortex-m-rt",
- "embassy-nrf",
- "embedded-graphics",
- "embedded-hal 1.0.0",
- "embedded-hal-bus",
- "embedded-storage",
- "battletime-battery",
- "battletime-battery-reading",
- "battletime-boot",
- "battletime-status-screen",
- "panic-halt",
-]
-
-[[package]]
-name = "battletime-status-screen"
-version = "0.1.0"
-dependencies = [
- "embedded-graphics",
- "embedded-hal 1.0.0",
-]
 
 [[package]]
 name = "nrf-pac"

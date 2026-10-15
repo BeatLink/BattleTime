@@ -389,7 +389,8 @@ impl<'bus, 'd> StatusPage<'bus, 'd> {
             };
             let backlight_on = Output::new(backlight, Level::Low, OutputDrive::Standard);
             let mut screen = screen;
-            screen.write_line(page::TITLE, "BattleTime bootloader");
+            screen.write_line(page::NAME, page::PRODUCT_NAME);
+            screen.write_line(page::TITLE, "Bootloader");
             screen.write_line(page::BOOTLOADER, "Working");
             screen.write_line(page::FILES, "Not mounted");
             screen.write_line(page::BLUETOOTH, "Off");

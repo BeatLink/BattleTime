@@ -7,21 +7,26 @@ use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
 // Lines
 // ============================================================================
 
-/// The firmware's version, or the name of the bootloader or its updater drawing the page.
-pub const TITLE: usize = 0;
-pub const BOOTLOADER: usize = 1;
-pub const FIRMWARE: usize = 2;
-pub const FILES: usize = 3;
-pub const BLUETOOTH: usize = 4;
+/// The project's name, on a line of its own at the top of every page.
+pub const NAME: usize = 0;
+/// The firmware's version, or which of the bootloader or its updater is drawing the page.
+pub const TITLE: usize = 1;
+pub const BOOTLOADER: usize = 2;
+pub const FIRMWARE: usize = 3;
+pub const FILES: usize = 4;
+pub const BLUETOOTH: usize = 5;
 /// What the watch is doing: an update's step, or what the mode means.
-pub const ACTION: usize = 5;
+pub const ACTION: usize = 6;
 /// How much of an update has arrived, why it stopped, or what the wearer should do.
-pub const PROGRESS: usize = 6;
+pub const PROGRESS: usize = 7;
 /// The battery's charge and the charger, on the pages of the bootloader and its updater.
-pub const BATTERY: usize = 7;
+pub const BATTERY: usize = 8;
 /// Why the watch last restarted.
-pub const LAST_RUN: usize = 8;
-pub const LINE_COUNT: usize = 9;
+pub const LAST_RUN: usize = 9;
+pub const LINE_COUNT: usize = 10;
+
+/// What the name line says.
+pub const PRODUCT_NAME: &str = "BattleTime";
 
 /// The grey name before a line's value, for the lines that have one.
 pub fn label(line: usize) -> Option<&'static str> {
@@ -43,8 +48,8 @@ const CHARACTER_WIDTH: i32 = 10;
 const CHARACTER_HEIGHT: i32 = 20;
 /// Rows of the character cell above the baseline.
 const FONT_BASELINE: i32 = 15;
-const LINE_HEIGHT: i32 = 24;
-const FIRST_BASELINE: i32 = 30;
+const LINE_HEIGHT: i32 = 22;
+const FIRST_BASELINE: i32 = 25;
 const LEFT_MARGIN: i32 = 12;
 
 /// Characters that fit between the left margin and the right edge.

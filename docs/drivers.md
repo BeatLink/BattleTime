@@ -281,7 +281,7 @@ itself reads the battery through embassy; see [firmware.md](firmware.md#battery)
 `battletime-status-screen` sets out the status page every part of BattleTime shows, and holds a small
 ST7789 driver to show it from the bootloader:
 
-- **`page`** says which of the nine lines shows what (the title, the bootloader, the firmware, the
+- **`page`** says which of the ten lines shows what (the name, the title, the bootloader, the firmware, the
   files, Bluetooth, what is happening, its progress, the battery and the last restart), with their
   labels, font and colours. The firmware, the recovery
   firmware, the bootloader and the bootloader updater all draw through it, so the page looks the

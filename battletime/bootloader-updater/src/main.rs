@@ -297,7 +297,8 @@ impl Status<'_, '_> {
     /// Fills the lines that stay the same for the whole run.
     fn start(&mut self) {
         if let Some(screen) = &mut self.screen {
-            screen.write_line(page::TITLE, "BattleTime boot updater");
+            screen.write_line(page::NAME, page::PRODUCT_NAME);
+            screen.write_line(page::TITLE, "Bootloader updater");
             screen.write_line(page::FIRMWARE, "Updater");
             screen.write_line(page::FILES, "Not mounted");
             screen.write_line(page::BLUETOOTH, "Off");

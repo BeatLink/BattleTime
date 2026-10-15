@@ -227,7 +227,7 @@ mod status_screen {
 
     /// The screen rows a line's text covers: the 20-pixel font cell at the page's baselines.
     fn line_rows(line: u16) -> core::ops::Range<u16> {
-        let baseline = 30 + line * 24;
+        let baseline = 25 + line * 22;
         let top = baseline - FONT_10X20.baseline as u16;
         top..top + 20
     }

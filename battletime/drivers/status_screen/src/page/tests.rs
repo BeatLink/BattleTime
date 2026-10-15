@@ -120,6 +120,8 @@ fn a_value_past_its_room_is_cut_at_the_edge() {
 fn a_labelled_value_gets_the_room_the_label_leaves() {
     assert_eq!(fitted(FILES, "Formatted and more"), "Formatted a");
     assert_eq!(fitted(TITLE, "0.1.0+1b19aed*"), "0.1.0+1b19aed*");
+    assert_eq!(label(NAME), None);
+    assert_eq!(fitted(NAME, PRODUCT_NAME), PRODUCT_NAME);
     assert_eq!(value_characters(FILES) + LABEL_CHARACTERS, LINE_CHARACTERS);
 }
 
