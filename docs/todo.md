@@ -442,6 +442,11 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   they call, which run on every redraw, in RAM and read a handler from `/apps` when its event
   comes. Apps stay on the external flash; nothing of an
   app is copied into the internal flash.
+- [ ] **Redraw periods per branch.** `analyse_expression` in `neotime/runtime/src/bindings.rs`
+  takes the finest step anywhere in an expression, so `on ? now.value : start_of_minute(now.value)`
+  redraws once a minute even when the raw branch shows. Treat a clock read that reaches the result
+  uncut as one second. Checking only the next instruction makes digital and casio wake each second,
+  because `minute_of` and `day_of_year` go through locals.
 
 ## Shared library and smaller apps
 
