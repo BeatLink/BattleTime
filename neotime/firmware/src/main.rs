@@ -986,7 +986,11 @@ async fn notify_bytes(
 }
 
 /// Sends a companion reply on the UART characteristic in 20-byte notifications.
-async fn send_uart_reply(connection: &GattConnection<'_, '_, DefaultPacketPool>, server: &Server<'_>, reply: &str) {
+async fn send_uart_reply(
+    connection: &GattConnection<'_, '_, DefaultPacketPool>,
+    server: &Server<'_>,
+    reply: &str,
+) {
     for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
         let _ = notify_bytes(connection, &server.uart.transmit.to_raw(), piece, false).await;
     }
@@ -1049,6 +1053,8 @@ async fn confirm_once(screen: &mut Screen, confirmation: &mut storage::Confirmat
 }
 
 /// The first data a phone exchanges proves the radio works end to end, so that is when the firmware confirms itself.
+///
+/// Each slow step is polled out of line, which keeps this function's state machine small.
 // Only the shell's builds move slots, the one use of `files` here.
 #[cfg_attr(not(with_shell), allow(unused_variables))]
 async fn serve_connection(
@@ -1083,19 +1089,32 @@ async fn serve_connection(
             settings::BLUETOOTH_SWITCHED.wait(),
             clock::SET_FROM_PHONE_SERVICE.wait()
         ));
-        let event = match select4(next_event, next_reply, reading_change, bluetooth_switched).await {
+        let event = match shell::OutOfLine(select4(
+            next_event,
+            next_reply,
+            reading_change,
+            bluetooth_switched,
+        ))
+        .await
+        {
             Either4::First(event) => event,
             Either4::Second(Either::First(reply)) => {
                 send_uart_reply(connection, server, &reply).await;
                 continue;
             }
             Either4::Second(Either::Second(reply)) => {
-                send_packages_reply(connection, server, &reply).await;
+                shell::OutOfLine(send_packages_reply(connection, server, &reply)).await;
                 continue;
             }
             Either4::Third(Either::First(())) => {
                 let percent = battery::percent();
-                let _ = notify_bytes(connection, &server.battery.level.to_raw(), percent.as_gatt(), true).await;
+                let _ = notify_bytes(
+                    connection,
+                    &server.battery.level.to_raw(),
+                    percent.as_gatt(),
+                    true,
+                )
+                .await;
                 continue;
             }
             Either4::Third(Either::Second(())) => {
@@ -1117,7 +1136,7 @@ async fn serve_connection(
                 continue;
             }
             Either4::Fourth(Either::Second(())) => {
-                confirm_once(screen, confirmation, confirmed).await;
+                shell::OutOfLine(confirm_once(screen, confirmation, confirmed)).await;
                 continue;
             }
         };
@@ -1180,9 +1199,11 @@ async fn serve_connection(
                                 .then(|| storage_requests::FileRequest::copy_of(bytes))
                         });
                         if let Some(file_request) = file_request {
-                            foreground::wait_for_a_pause().await;
+                            shell::OutOfLine(foreground::wait_for_a_pause()).await;
                             let room = connection.raw().att_mtu() as usize - NOTIFICATION_HEADER_BYTES;
-                            file_answers = storage_requests::answer_file_transfer(file_request, room).await;
+                            file_answers =
+                                shell::OutOfLine(storage_requests::answer_file_transfer(file_request, room))
+                                    .await;
                         }
                         // The recovery firmware has nowhere to show a notification.
                         #[cfg(with_shell)]
@@ -1228,40 +1249,48 @@ async fn serve_connection(
                     event => event.accept(),
                 };
                 if let Ok(reply) = reply {
-                    reply.send().await;
+                    shell::OutOfLine(reply.send()).await;
                 }
-                clock::save_time_zone_if_changed().await;
+                shell::OutOfLine(clock::save_time_zone_if_changed()).await;
                 for command in packages_commands.drain(..) {
-                    packages::COMMANDS.send(command).await;
+                    shell::OutOfLine(packages::COMMANDS.send(command)).await;
                 }
                 #[cfg(with_shell)]
                 if let Ok(request) = SLOTS_REQUESTS.try_receive() {
-                    let answer = storage::answer_slots(files, confirmation, request).await;
+                    let answer = shell::OutOfLine(storage::answer_slots(files, confirmation, request)).await;
                     let must_restart = matches!(answer, Ok((_, true)));
                     // Built on the heap after the flash work, so the connection's state never holds a reply line.
                     let answer = storage::slots_answer_line(files, answer);
                     send_uart_reply(connection, server, &answer).await;
                     if must_restart {
                         screen.write_line(line::ACTION, "Slots moved");
-                        storage::reset(screen).await;
+                        shell::OutOfLine(storage::reset(screen)).await;
                     }
                 }
-                confirm_once(screen, confirmation, confirmed).await;
-                send_file_answers(connection, server, file_answers).await;
+                shell::OutOfLine(confirm_once(screen, confirmation, confirmed)).await;
+                shell::OutOfLine(send_file_answers(connection, server, file_answers)).await;
 
                 dfu.set_allows_updates(settings::current().is_on(Setting::AllowsUpdates));
                 let outcome = match target {
-                    Some(DfuWrite::ControlPoint) => dfu.on_control_point(&dfu_written).await,
-                    Some(DfuWrite::Packet) => dfu.on_packet(&dfu_written).await,
+                    Some(DfuWrite::ControlPoint) => {
+                        shell::OutOfLine(dfu.on_control_point(&dfu_written)).await
+                    }
+                    Some(DfuWrite::Packet) => shell::OutOfLine(dfu.on_packet(&dfu_written)).await,
                     None => continue,
                 };
                 for notification in &outcome.notifications {
-                    let _ = notify_bytes(connection, &server.dfu.control_point.to_raw(), notification, false).await;
+                    let _ = notify_bytes(
+                        connection,
+                        &server.dfu.control_point.to_raw(),
+                        notification,
+                        false,
+                    )
+                    .await;
                 }
                 show_update(screen, dfu, &outcome, &mut shown_progress);
                 if outcome.reset_requested {
                     screen.write_line(line::ACTION, "Restarting to install");
-                    storage::reset(screen).await;
+                    shell::OutOfLine(storage::reset(screen)).await;
                 }
             }
             _ => {}
