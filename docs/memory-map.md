@@ -81,6 +81,10 @@ used by `battletime-slot-log`) added 1,432 B to the firmware image, measured aga
 three logs cost from about 80 a day, when each slot rewrote its whole day as a record, to one for
 each new block, about one every four days.
 
+Capitalising text with a Latin-1 table of its own instead of `char::to_uppercase`, and making the interpreter's
+empty constant all zeros so a new one is filled rather than copied from flash, saved 3,408 B of code and
+constants, measured with `cargo size` against master on 2026-10-15 (439,076 B to 435,668 B of text and rodata).
+
 Running closed apps (`firmware/src/closed_apps.rs` and `battletime_app_host::closed_apps`) added
 5,008 B of code to the full build, measured with `cargo size` against master on 2026-10-14
 (405,496 B to 410,504 B of text), and 32 B of static RAM. A first version wrapped the shell's

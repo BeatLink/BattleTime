@@ -527,6 +527,8 @@ Template literals, such as `` `${steps} steps` ``, join text and numbers.
 | `text_from_codes(codes, length)` | Text from the first `length` character codes of an array signal. |
 
 `.toUpperCase()`, `.slice()`, `.padStart()` and `.length` work on text too.
+`to_upper` and `.toUpperCase()` capitalise only the letters the font draws, ASCII and Latin-1, with ß as SS;
+other characters stay as they are.
 
 ### Format patterns
 

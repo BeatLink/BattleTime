@@ -39,6 +39,32 @@ impl TextReference {
 }
 
 // ============================================================================
+// Capitals
+// ============================================================================
+
+/// A character in capitals, for the letters the watch's font draws: ASCII and Latin-1, with ß as SS.
+///
+/// Other characters stay as they are, which keeps core's Unicode case tables, about 2 KB, out of the firmware.
+pub fn uppercase_of(character: char) -> (char, Option<char>) {
+    match character {
+        'a'..='z' | 'à'..='ö' | 'ø'..='þ' => {
+            (char::from_u32(character as u32 - 0x20).unwrap_or(character), None)
+        }
+        'ß' => ('S', Some('S')),
+        'ı' => ('I', None),
+        _ => (character, None),
+    }
+}
+
+/// A text in capitals, as `uppercase_of` gives each character.
+pub fn uppercase_chars(text: &str) -> impl Iterator<Item = char> + '_ {
+    text.chars().flat_map(|character| {
+        let (first, second) = uppercase_of(character);
+        core::iter::once(first).chain(second)
+    })
+}
+
+// ============================================================================
 // Calendar
 // ============================================================================
 

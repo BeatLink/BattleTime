@@ -21,8 +21,8 @@ use crate::instruction::{
 use crate::pattern;
 use crate::state::{read_packed, write_packed, AppState, Placement};
 use crate::text::{DateTime, TextReference, TextWriter, MOST_FIXED_PLACES};
+use alloc::boxed::Box;
 use alloc::vec;
-use alloc::vec::Vec;
 
 // ============================================================================
 // Values and limits
@@ -240,11 +240,30 @@ pub struct Interpreter {
     row: Value,
     text_buffer: [u8; TEXT_BUFFER_BYTES],
     text_used: usize,
-    /// A Vec rather than a boxed slice, so an interpreter with no scratch yet can be a constant built from flash.
-    scratch: Vec<u8>,
+    scratch: Scratch,
     scratch_used: usize,
     copies: [WorkingCopy; MOST_CHANGED_VARIABLES],
     copy_count: usize,
+}
+
+/// Room for working copies of changed variables, none until `allot_scratch`.
+///
+/// None is all zero bytes, so the interpreter's constant is too, and boxing one fills it with zeros rather than
+/// copying 1 KB from flash.
+struct Scratch(Option<Box<[u8]>>);
+
+impl core::ops::Deref for Scratch {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        self.0.as_deref().unwrap_or(&[])
+    }
+}
+
+impl core::ops::DerefMut for Scratch {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        self.0.as_deref_mut().unwrap_or(&mut [])
+    }
 }
 
 impl Default for Interpreter {
@@ -270,7 +289,7 @@ impl Interpreter {
 
     /// Gives the interpreter its scratch room, so a handler can change variables.
     pub fn allot_scratch(&mut self, bytes: usize) {
-        self.scratch = vec![0; bytes];
+        self.scratch = Scratch(Some(vec![0; bytes].into_boxed_slice()));
         self.scratch_used = 0;
     }
 
@@ -282,7 +301,7 @@ impl Interpreter {
             stack_floor: 0,
             locals: [0; LOCAL_POOL],
             locals_base: 0,
-            local_count: MOST_LOCALS,
+            local_count: 0,
             frames: [Frame {
                 caller: Running::Top,
                 return_offset: 0,
@@ -295,7 +314,7 @@ impl Interpreter {
             row: 0,
             text_buffer: [0; TEXT_BUFFER_BYTES],
             text_used: 0,
-            scratch: Vec::new(),
+            scratch: Scratch(None),
             scratch_used: 0,
             copies: [WorkingCopy {
                 variable: 0,
@@ -1039,7 +1058,7 @@ impl Interpreter {
         let (source, length) = self.copy_of_text(image, value)?;
         let text = core::str::from_utf8(&source[..length]).map_err(|_| Failure::BadText)?;
         self.write_text(|writer| {
-            for character in text.chars().flat_map(char::to_uppercase) {
+            for character in crate::text::uppercase_chars(text) {
                 let mut encoded = [0u8; 4];
                 writer.write_bytes(character.encode_utf8(&mut encoded).as_bytes())?;
             }

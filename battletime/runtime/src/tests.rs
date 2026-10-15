@@ -100,6 +100,9 @@ impl Code {
     fn join(self) -> Self {
         self.op(0x43)
     }
+    fn uppercase(self) -> Self {
+        self.op(0x45)
+    }
     fn read_local(self, local: u8) -> Self {
         self.op_byte(0x0C, local)
     }
@@ -1190,6 +1193,22 @@ fn joins_image_strings_and_formatted_text() {
         .unwrap();
 
     assert_eq!(interpreter.text(&image, value), Ok("8421 steps"));
+}
+
+#[test]
+fn capitalises_the_letters_the_font_draws_and_leaves_the_rest() {
+    let mut builder = ImageBuilder::new();
+    let mixed = builder.string("café straße ıx µ ÿ ж 9");
+    builder.expression(Code::new().text(mixed).uppercase());
+    let bytes = builder.build();
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut interpreter = Interpreter::new();
+
+    let value = interpreter
+        .evaluate_expression(&image, 0, &AppState::new(&image).unwrap(), &FakeSystem::default())
+        .unwrap();
+
+    assert_eq!(interpreter.text(&image, value), Ok("CAFÉ STRASSE IX µ ÿ ж 9"));
 }
 
 #[test]

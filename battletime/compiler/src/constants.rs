@@ -983,9 +983,13 @@ fn library_call_constant(module: LibraryModule, name: &str, arguments: &[Constan
                 .contains(&count)
                 .then(|| Constant::Array(Rc::new((0..count).map(Constant::Number).collect())))
         }
-        (LibraryModule::Battletime, "to_upper") => {
-            text(0).map(|value| Constant::Text(value.to_uppercase().into()))
-        }
+        (LibraryModule::Battletime, "to_upper") => text(0).map(|value| {
+            Constant::Text(
+                battletime_runtime::text::uppercase_chars(&value)
+                    .collect::<String>()
+                    .into(),
+            )
+        }),
         (LibraryModule::Battletime, "text_length") => {
             text(0).map(|value| Constant::Number(value.chars().count() as i64))
         }
