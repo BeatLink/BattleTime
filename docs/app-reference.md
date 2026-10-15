@@ -297,7 +297,9 @@ screen, such as a game board.
 | `dot_matrix` | 7 dots | Digits, capitals, `-`, `:`, `.` and `/` drawn as dots; lower case shows as capitals. |
 
 Every text font draws printable ASCII, the Latin-1 letters and signs, curly quotes, dashes, the
-ellipsis, bullet and euro sign, and `°±×÷←✓✕`. All live in the shared library.
+ellipsis, bullet and euro sign, and `°±×÷←✓✕`. All live in the shared library. `dot_matrix` is the
+exception: an app that uses it carries it in its own image, about 1.4 KB that takes RAM while the
+app is loaded, and an image built before it did shows `normal` in its place.
 
 ### Layout
 

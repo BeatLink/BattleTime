@@ -86,7 +86,7 @@ pub enum SectionKind {
     Resources,
     /// The starting elements of arrays whose elements do not all start the same.
     InitialValues,
-    /// The shared library's text fonts, in the order `font` numbers its bitmap fonts.
+    /// Text fonts: the shared library's text font, or the dot-matrix font of an app that uses it.
     Fonts,
     /// Code that expressions, handlers and other functions run with `Call`.
     Functions,

@@ -658,12 +658,12 @@ The full report is [InfiniTime files against BattleTime](https://claude.ai/artif
 ### UI toolkit
 
 - [ ] **An app's own font,** for a face or app whose lettering the shared font cannot give, such as
-  Infineat's below. Build it the first time one needs it. Let the compiler embed the font in the
-  app's image, cut down to the characters the app can show: its fixed text, and the digits and signs
-  of any value it formats. The watch already reads the image into the heap while the app is open,
-  so the font needs no file of its own, the heap estimate already counts it, and the image's checks
-  cover it; keep the limit of 8 shapes a glyph so a bad font cannot slow drawing enough to trip the
-  watchdog. A face's digits and a few letters come to a few hundred bytes. Rejected: a font file in
+  Infineat's below. Build it the first time one needs it. An app image can already carry a font:
+  the compiler embeds the dot-matrix font as font 0 of each app that uses `dot_matrix`, and the host
+  takes it from the image while the app is loaded (`fonts::install_app_font`). What is left is
+  letting an app name a font of its own beside that one, and cutting each embedded font down to
+  the characters the app can show: its fixed text, and the digits and signs of any value it
+  formats. A face's digits and a few letters come to a few hundred bytes. Rejected: a font file in
   external flash, which would cost every app using it a whole font of heap, or else glyph reads on
   the SPI bus the display shares.
 - [ ] **Drag to change an Arc.** The app host gives `Arc` no `onChange`, so the metronome's tempo

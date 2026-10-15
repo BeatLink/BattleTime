@@ -658,33 +658,158 @@ fn the_unused_font_number_draws_as_huge() {
 // Dot matrix
 // ============================================================================
 
-/// One row of a dot-matrix glyph's coverage across its whole box.
-fn dot_matrix_row(character: char, row: u16) -> Vec<u8> {
-    let width = DOT_MATRIX.glyph_metrics(character).unwrap().width as usize;
-    let mut coverage = std::vec![7u8; width];
-    assert!(DOT_MATRIX.glyph_coverage_row(character, row, 0, &mut coverage));
-    coverage
+/// Each dot-matrix glyph's rows from the top, bit 4 the leftmost dot, as the font must draw them.
+fn expected_dot_rows(character: char) -> Option<[u8; 7]> {
+    Some(match character.to_ascii_uppercase() {
+        '0' => [0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E],
+        '1' => [0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E],
+        '2' => [0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F],
+        '3' => [0x1F, 0x02, 0x04, 0x02, 0x01, 0x11, 0x0E],
+        '4' => [0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02],
+        '5' => [0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E],
+        '6' => [0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E],
+        '7' => [0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08],
+        '8' => [0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E],
+        '9' => [0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C],
+        'A' => [0x0E, 0x11, 0x11, 0x11, 0x1F, 0x11, 0x11],
+        'B' => [0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E],
+        'C' => [0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E],
+        'D' => [0x1C, 0x12, 0x11, 0x11, 0x11, 0x12, 0x1C],
+        'E' => [0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F],
+        'F' => [0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10],
+        'G' => [0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0F],
+        'H' => [0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11],
+        'I' => [0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E],
+        'J' => [0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C],
+        'K' => [0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11],
+        'L' => [0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F],
+        'M' => [0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11],
+        'N' => [0x11, 0x11, 0x19, 0x15, 0x13, 0x11, 0x11],
+        'O' => [0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E],
+        'P' => [0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10],
+        'Q' => [0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D],
+        'R' => [0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11],
+        'S' => [0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E],
+        'T' => [0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04],
+        'U' => [0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E],
+        'V' => [0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04],
+        'W' => [0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A],
+        'X' => [0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11],
+        'Y' => [0x11, 0x11, 0x11, 0x0A, 0x04, 0x04, 0x04],
+        'Z' => [0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F],
+        '-' => [0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00],
+        ':' => [0x00, 0x0C, 0x0C, 0x00, 0x0C, 0x0C, 0x00],
+        '.' => [0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C],
+        '/' => [0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x00],
+        ' ' => [0; 7],
+        _ => return None,
+    })
+}
+
+/// The grid cells a glyph's dots fall on, as rows from the top with bit 4 the leftmost dot.
+fn drawn_dot_rows(font: &GeometricFont, character: char) -> [u8; 7] {
+    let mut rows = [0u8; 7];
+    let mut light = |x: i32, y: i32| {
+        assert!(
+            x % 10 == 5 && y % 10 == 0,
+            "{character:?} has a dot off the grid at {x}, {y}"
+        );
+        let (column, row) = ((x - 5) / 10, 6 - y / 10);
+        rows[row as usize] |= 0x10 >> column;
+    };
+    for shape in font.shapes(font.glyph(character).unwrap()) {
+        match shape {
+            Shape::Dot { x, y } => light(x as i32, y as i32),
+            Shape::Dots {
+                x1,
+                y1,
+                x2,
+                y2,
+                count,
+            } => {
+                let gaps = count as i32 - 1;
+                for step in 0..count as i32 {
+                    let x = x1 as i32 + (x2 as i32 - x1 as i32) * step / gaps;
+                    let y = y1 as i32 + (y2 as i32 - y1 as i32) * step / gaps;
+                    light(x, y);
+                }
+            }
+            _ => panic!("{character:?} has a shape that is not a dot"),
+        }
+    }
+    rows
+}
+
+#[test]
+fn every_dot_matrix_glyph_lights_the_dots_of_its_grid() {
+    let characters = ('0'..='9').chain('A'..='Z').chain(['-', ':', '.', '/', ' ']);
+    for character in characters {
+        let expected = expected_dot_rows(character).unwrap();
+        assert_eq!(
+            drawn_dot_rows(&DOT_MATRIX_FONT, character),
+            expected,
+            "{character:?}"
+        );
+        let lower = character.to_ascii_lowercase();
+        assert_eq!(drawn_dot_rows(&DOT_MATRIX_FONT, lower), expected, "{lower:?}");
+    }
+    assert!(DOT_MATRIX_FONT.glyph('~').is_none());
+}
+
+/// The ink one character of the dot-matrix font leaves, its pen at the origin on the baseline at 41.
+fn drawn_dot_matrix(character: char) -> RowRecorder {
+    let mut recorder = RowRecorder::default();
+    FontName::DotMatrix.draw_character(&mut recorder, character, (0, 41), white());
+    recorder
 }
 
 #[test]
 fn a_dot_matrix_dot_is_solid_in_the_middle_soft_at_its_edge_and_apart_from_the_next() {
     // The top row of an 8 lights the middle three dots, whose centres are 5.5 pixels apart.
-    let through_the_centres = dot_matrix_row('8', 2);
+    let eight = drawn_dot_matrix('8');
+    let top = (0..41).find(|&y| eight.ink_at(8, y) == 255).unwrap();
+    let centre = top + 1;
 
-    assert_eq!(through_the_centres[8], 255);
-    assert_eq!(through_the_centres[13], 255);
-    assert!(
-        (1..255).contains(&through_the_centres[10]),
-        "{through_the_centres:?}"
-    );
-    assert_eq!(through_the_centres[2], 0);
-    assert_eq!(through_the_centres[24], 0);
+    assert_eq!(eight.ink_at(8, centre), 255);
+    assert_eq!(eight.ink_at(13, centre), 255);
+    assert!((1..255).contains(&eight.ink_at(10, centre)));
+    assert_eq!(eight.ink_at(2, centre), 0);
+    assert_eq!(eight.ink_at(24, centre), 0);
+    // Half a pitch below the top row's middle dots lies between the rows, with no ink.
+    assert!((6..22).all(|x| eight.ink_at(x, centre + 3) == 0));
 }
 
 #[test]
-fn a_dot_matrix_row_between_dots_and_an_unknown_character_have_no_ink() {
-    let between_rows = dot_matrix_row('8', 5);
+fn dot_matrix_text_keeps_its_advance_and_line() {
+    let font = FontName::DotMatrix.metrics();
+    assert_eq!(character_advance(font, '8'), 33);
+    assert_eq!(character_advance(font, ' '), 33);
+    assert_eq!(character_advance(font, '~'), 0);
+    assert_eq!(line_height(font), 44);
+    assert_eq!(font.line_metrics().ascent, 41);
+}
 
-    assert!(between_rows.iter().all(|&ink| ink == 0), "{between_rows:?}");
-    assert!(!DOT_MATRIX.glyph_coverage_row('~', 0, 0, &mut [0u8; 4]));
+#[test]
+fn a_row_of_dots_is_nearest_to_its_nearest_dot() {
+    let row = Placed::line_with_gaps(0.0, 0.0, 20.0, 0.0, 2.0);
+    assert!(row.distance(10.0, 0.0) < 0.01);
+    assert!((row.distance(6.0, 0.0) - 4.0).abs() < 0.01);
+    assert_eq!(row.distance_squared(14.0, 3.0), Some(25.0));
+    assert_eq!(row.radius(1.0), DOT_GROWTH);
+    assert!(Placed::line(0.0, 0.0, 20.0, 0.0).distance(6.0, 0.0) < 0.01);
+}
+
+#[test]
+fn an_app_font_is_let_go_only_by_the_image_that_gave_it() {
+    let given = Vec::from(include_bytes!("../fonts/dot-matrix.ntfont").as_slice());
+    let other = given.clone();
+    let font = GeometricFont::empty();
+    unsafe { font.install_borrowed(&given) };
+    assert!(font.has('8'));
+
+    font.remove_if_holding(&other);
+    assert!(font.has('8'));
+    font.remove_if_holding(&given);
+    assert!(!font.has('8'));
+    assert!(font.data().is_none());
 }

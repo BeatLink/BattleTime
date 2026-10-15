@@ -90,6 +90,13 @@ saved 2,304 B of code and constants, measured with `cargo size` against master o
 433,160 B of text and rodata). The games' images grew instead, on the external flash: `twos` from 1,332 B to
 2,460 B and `game-of-life` from 2,752 B to 3,014 B.
 
+Moving the `dot_matrix` font out of the firmware saved 3,444 B of code and constants, measured with
+`cargo size` against master on 2026-10-15 (435,580 B to 432,136 B of text and rodata), for 24 B more
+static RAM. Its 5 by 7 dot table and the code that drew it are gone: the font is now a 1,414 B file
+in the text font's format, made of rows of dots that the text font's own drawing code draws, and
+each app that uses it carries it in its image on the external flash. It takes RAM only while that
+app is loaded, as part of its image; only the hidden `casio` face uses it.
+
 Running closed apps (`firmware/src/closed_apps.rs` and `battletime_app_host::closed_apps`) added
 5,008 B of code to the full build, measured with `cargo size` against master on 2026-10-14
 (405,496 B to 410,504 B of text), and 32 B of static RAM. A first version wrapped the shell's

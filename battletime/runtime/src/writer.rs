@@ -164,8 +164,11 @@ impl ImageWriter {
 
     /// Adds an image from its pixels: RGB565 colours, or coverage from 0 to 255 for a mask.
     /// Runs are found here, so the caller gives every pixel, left to right and top to bottom.
-    /// Adds a text font, as `tools/generate_fonts.py` writes it; only the shared library has fonts.
+    /// Adds a text font, as `tools/generate_fonts.py` writes it, once however often it is added.
     pub fn font(&mut self, bytes: &[u8]) -> u16 {
+        if let Some(index) = self.fonts.iter().position(|font| font == bytes) {
+            return index as u16;
+        }
         self.fonts.push(bytes.to_vec());
         (self.fonts.len() - 1) as u16
     }
@@ -328,7 +331,7 @@ impl ImageWriter {
                 entry_table(&self.initial_values),
             ),
         ];
-        // Only the shared library has fonts, so app images keep their nine sections, the facts last.
+        // Only the library and apps that use the dot-matrix font have fonts, so other apps keep nine sections.
         if !self.fonts.is_empty() {
             sections.push((FONTS_SECTION, self.fonts.len() as u16, entry_table(&self.fonts)));
         }

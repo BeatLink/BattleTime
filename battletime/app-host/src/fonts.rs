@@ -3,7 +3,8 @@
 //! Every text size is one font drawn from lines, arcs and dots, made from `fonts/geometric.txt` by
 //! `tools/generate_fonts.py` and read in place from flash. Each size scales it and moves its straight
 //! strokes and the edges of its arcs onto whole pixels, so stems stay sharp and bowls stay even. The
-//! dot-matrix display font is worked out from its dots as it is drawn. docs/app-runtime.md lists the sizes.
+//! dot-matrix display font is a second such font, made of rows of dots, which an app that uses it
+//! carries in its own image. docs/app-runtime.md lists the sizes.
 
 use core::{
     cell::UnsafeCell,
@@ -31,6 +32,7 @@ const GLYPH_ENTRY_BYTES: usize = 6;
 const LINE: u8 = 0;
 const ARC: u8 = 1;
 const DOT: u8 = 2;
+const DOTS: u8 = 3;
 
 /// The most shapes a glyph may have, as `tools/generate_fonts.py` checks; a glyph with more draws only these.
 const MOST_SHAPES: usize = 8;
@@ -91,6 +93,14 @@ enum Shape {
         x: i8,
         y: i8,
     },
+    /// A row of `count` evenly spaced dots from one end to the other.
+    Dots {
+        x1: i8,
+        y1: i8,
+        x2: i8,
+        y2: i8,
+        count: u8,
+    },
 }
 
 fn read_u16(bytes: &[u8], at: usize) -> u16 {
@@ -125,10 +135,27 @@ impl GeometricFont {
     }
 
     fn install(&self, bytes: &'static [u8]) {
+        // Safety: a `'static` slice stays where it is.
+        unsafe { self.install_borrowed(bytes) };
+    }
+
+    /// Takes a font file that may move or go away later.
+    ///
+    /// # Safety
+    ///
+    /// The bytes must stay where they are until `remove_if_holding` is called with them.
+    unsafe fn install_borrowed(&self, bytes: &[u8]) {
         self.state.store(UNCHECKED, Ordering::Release);
         self.length.store(0, Ordering::Release);
         self.start.store(bytes.as_ptr() as *mut u8, Ordering::Release);
         self.length.store(bytes.len(), Ordering::Release);
+    }
+
+    /// Empties the font if it holds these bytes, before they go away.
+    fn remove_if_holding(&self, bytes: &[u8]) {
+        if !bytes.is_empty() && core::ptr::eq(self.start.load(Ordering::Acquire), bytes.as_ptr()) {
+            self.install(&[]);
+        }
     }
 
     fn bytes(&self) -> &'static [u8] {
@@ -333,6 +360,7 @@ impl Iterator for ShapeReader<'_> {
             LINE => 5,
             ARC => 7,
             DOT => 3,
+            DOTS => 6,
             _ => return None,
         };
         let fields = self.data.get(..size)?;
@@ -352,6 +380,13 @@ impl Iterator for ShapeReader<'_> {
                 start: fields[5],
                 end: fields[6],
             },
+            DOTS => Shape::Dots {
+                x1: signed(1),
+                y1: signed(2),
+                x2: signed(3),
+                y2: signed(4),
+                count: fields[5],
+            },
             _ => Shape::Dot {
                 x: signed(1),
                 y: signed(2),
@@ -364,10 +399,17 @@ impl Iterator for ShapeReader<'_> {
 }
 
 static FONT: GeometricFont = font_slot();
+/// The dot-matrix font, taken from the image of the app that uses it while that app is loaded.
+static DOT_MATRIX_FONT: GeometricFont = dot_matrix_slot();
 
-// The watch carries no font: it comes from the shared library. Tests and the simulator carry it.
+// The watch carries no font: they come from the shared library and the apps. Tests and the simulator carry them.
 #[cfg(not(any(test, feature = "built-in-fonts")))]
 const fn font_slot() -> GeometricFont {
+    GeometricFont::empty()
+}
+
+#[cfg(not(any(test, feature = "built-in-fonts")))]
+const fn dot_matrix_slot() -> GeometricFont {
     GeometricFont::empty()
 }
 
@@ -376,12 +418,18 @@ const fn font_slot() -> GeometricFont {
     GeometricFont::preinstalled(include_bytes!("../fonts/geometric.ntfont"))
 }
 
+#[cfg(any(test, feature = "built-in-fonts"))]
+const fn dot_matrix_slot() -> GeometricFont {
+    GeometricFont::preinstalled(include_bytes!("../fonts/dot-matrix.ntfont"))
+}
+
 // ============================================================================
 // Sizes
 // ============================================================================
 
-/// One size of the font: how large it is drawn, how thick its lines are, and the line it sits in.
+/// One size of a font: which font, how large it is drawn, how thick its lines are, and the line it sits in.
 pub struct StyledFont {
+    file: &'static GeometricFont,
     /// From the baseline to the top of a capital's ink, in pixels.
     capital_height: f32,
     /// How far the pen moves past a glyph of the font's standard width, in pixels.
@@ -403,6 +451,7 @@ static LARGE: StyledFont = StyledFont::text(31.0, 25, 6.0, 56, 43, 13);
 static HUGE: StyledFont = StyledFont::text(57.0, 46, 6.0, 62, 59, 3);
 static CONDENSED: StyledFont = StyledFont::text(35.0, 20, 4.0, 39, 37, 2);
 static GIANT: StyledFont = StyledFont {
+    file: &FONT,
     capital_height: 87.0,
     standard_advance: 68,
     monospaced: false,
@@ -411,6 +460,19 @@ static GIANT: StyledFont = StyledFont {
     ascent: 89,
     descent: 3,
 };
+/// Dots 5.5 pixels apart and 4.4 across, in the line the dot-matrix font has always had.
+static DOT_MATRIX: StyledFont = StyledFont {
+    file: &DOT_MATRIX_FONT,
+    capital_height: 6.0 * 5.5 + DOT_MATRIX_STROKE,
+    standard_advance: 33,
+    monospaced: true,
+    stroke: DOT_MATRIX_STROKE,
+    line_height: 44,
+    ascent: 41,
+    descent: 3,
+};
+/// The line a dot 4.4 pixels across grows from.
+const DOT_MATRIX_STROKE: f32 = 4.4 / DOT_GROWTH;
 
 /// How a size maps font units to pixels.
 #[derive(Clone, Copy)]
@@ -430,6 +492,7 @@ impl StyledFont {
         descent: i16,
     ) -> Self {
         StyledFont {
+            file: &FONT,
             capital_height,
             standard_advance,
             monospaced: true,
@@ -441,7 +504,7 @@ impl StyledFont {
     }
 
     fn scale(&self) -> Option<Scale> {
-        self.scale_in(&FONT.data()?)
+        self.scale_in(&self.file.data()?)
     }
 
     fn scale_in(&self, data: &FontData) -> Option<Scale> {
@@ -459,9 +522,9 @@ impl StyledFont {
     /// How far the pen moves past a character, without working out its box.
     fn advance_of(&self, character: char) -> Option<i32> {
         if self.monospaced {
-            return FONT.has(character).then_some(self.standard_advance as i32);
+            return self.file.has(character).then_some(self.standard_advance as i32);
         }
-        let data = FONT.data()?;
+        let data = self.file.data()?;
         let glyph = data.glyph(character)?;
         Some(self.advance(glyph, &self.scale_in(&data)?))
     }
@@ -523,7 +586,7 @@ impl StyledFont {
                     down.add(y as f32 - tall as f32);
                     down.add(y as f32 + tall as f32);
                 }
-                Shape::Dot { .. } => {}
+                Shape::Dot { .. } | Shape::Dots { .. } => {}
             }
         }
         across.fit(offset);
@@ -563,6 +626,19 @@ impl StyledFont {
                     x: across.place(x as f32),
                     y: down.place(y as f32),
                 },
+                Shape::Dots {
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    count,
+                } => Placed::line_with_gaps(
+                    across.place(x1 as f32),
+                    down.place(y1 as f32),
+                    across.place(x2 as f32),
+                    down.place(y2 as f32),
+                    count.saturating_sub(1) as f32,
+                ),
             };
             count += 1;
         }
@@ -641,7 +717,7 @@ impl StyledFont {
 
     /// Draws one glyph with its pen at `origin` on the baseline, only the rows the renderer shows.
     fn draw_character(&self, renderer: &mut dyn Renderer, character: char, origin: (i32, i32), color: Color) {
-        let Some(data) = FONT.data() else {
+        let Some(data) = self.file.data() else {
             return;
         };
         let Some(scale) = self.scale_in(&data) else {
@@ -693,7 +769,7 @@ impl StyledFont {
 
 impl FontMetrics for StyledFont {
     fn glyph_metrics(&self, character: char) -> Option<GlyphInfo> {
-        let glyph = FONT.glyph(character)?;
+        let glyph = self.file.glyph(character)?;
         let scale = self.scale()?;
         let advance_fp16 = (self.advance(glyph, &scale) * SUBPIXELS_PER_PIXEL) as u16;
         let Some(area) = self.rough_box(glyph, &scale) else {
@@ -730,7 +806,7 @@ impl FontMetrics for StyledFont {
         let Some(info) = self.glyph_metrics(character) else {
             return false;
         };
-        let Some(data) = FONT.data() else {
+        let Some(data) = self.file.data() else {
             return false;
         };
         let Some(glyph) = data.glyph(character) else {
@@ -979,12 +1055,14 @@ fn direction_of(steps: u8) -> (f32, f32) {
 /// A shape placed in pixels, with y growing downwards.
 #[derive(Clone, Copy)]
 enum Placed {
+    /// A line, or a row of dots when `gaps`, the spaces between its dots, is more than zero.
     Line {
         x1: f32,
         y1: f32,
         x2: f32,
         y2: f32,
         inverse_length_squared: f32,
+        gaps: f32,
     },
     Arc {
         x: f32,
@@ -1004,6 +1082,11 @@ enum Placed {
 impl Placed {
     /// A line from one point to another, with what working out a pixel's distance from it needs.
     fn line(x1: f32, y1: f32, x2: f32, y2: f32) -> Placed {
+        Placed::line_with_gaps(x1, y1, x2, y2, 0.0)
+    }
+
+    /// Dots evenly spaced from one point to another, `gaps` spaces apart, or a line for no gaps.
+    fn line_with_gaps(x1: f32, y1: f32, x2: f32, y2: f32, gaps: f32) -> Placed {
         let length_squared = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
         let inverse_length_squared = match length_squared > 0.0 {
             true => 1.0 / length_squared,
@@ -1015,6 +1098,7 @@ impl Placed {
             x2,
             y2,
             inverse_length_squared,
+            gaps,
         }
     }
 
@@ -1033,8 +1117,9 @@ impl Placed {
 
     /// How far from the centre line its ink reaches.
     fn radius(&self, half: f32) -> f32 {
-        match self {
+        match *self {
             Placed::Dot { .. } => half * DOT_GROWTH,
+            Placed::Line { gaps, .. } if gaps > 0.0 => half * DOT_GROWTH,
             _ => half,
         }
     }
@@ -1048,9 +1133,10 @@ impl Placed {
                 x2,
                 y2,
                 inverse_length_squared,
+                gaps,
             } => {
                 let (dx, dy) = (x2 - x1, y2 - y1);
-                let along = (((px - x1) * dx + (py - y1) * dy) * inverse_length_squared).clamp(0.0, 1.0);
+                let along = nearest_along(px - x1, py - y1, dx, dy, inverse_length_squared, gaps);
                 let (ex, ey) = (px - x1 - along * dx, py - y1 - along * dy);
                 Some(ex * ex + ey * ey)
             }
@@ -1108,9 +1194,10 @@ impl Placed {
                 x2,
                 y2,
                 inverse_length_squared,
+                gaps,
             } => {
                 let (dx, dy) = (x2 - x1, y2 - y1);
-                let along = (((px - x1) * dx + (py - y1) * dy) * inverse_length_squared).clamp(0.0, 1.0);
+                let along = nearest_along(px - x1, py - y1, dx, dy, inverse_length_squared, gaps);
                 length(px - x1 - along * dx, py - y1 - along * dy)
             }
             Placed::Dot { x, y } => length(px - x, py - y),
@@ -1213,6 +1300,17 @@ impl Placed {
     }
 }
 
+/// How far along a line, from 0 at its start to 1 at its end, its nearest point to a pixel lies.
+///
+/// A row of dots has points only at its dots, so the answer snaps to the nearest one.
+fn nearest_along(x: f32, y: f32, dx: f32, dy: f32, inverse_length_squared: f32, gaps: f32) -> f32 {
+    let along = ((x * dx + y * dy) * inverse_length_squared).clamp(0.0, 1.0);
+    match gaps > 0.0 {
+        true => round(along * gaps) / gaps,
+        false => along,
+    }
+}
+
 fn length(x: f32, y: f32) -> f32 {
     square_root(x * x + y * y)
 }
@@ -1260,113 +1358,6 @@ fn cover_row(shapes: &[Placed], half: f32, y: f32, left: i32, coverage: &mut [u8
 }
 
 // ============================================================================
-// Dot matrix
-// ============================================================================
-
-/// Digits and capitals drawn as round dots on a 5 by 7 grid, as on an old pager.
-pub struct DotMatrixFont;
-
-const DOT_COLUMNS: u16 = 5;
-const DOT_ROWS: u16 = 7;
-const DOT_PITCH: f32 = 5.5;
-const DOT_RADIUS: f32 = 2.2;
-const DOT_ROOM_AROUND: i16 = 3;
-
-/// Each glyph's rows from the top, bit 4 the leftmost dot.
-fn dot_rows(character: char) -> Option<[u8; 7]> {
-    Some(match character.to_ascii_uppercase() {
-        '0' => [0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E],
-        '1' => [0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E],
-        '2' => [0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F],
-        '3' => [0x1F, 0x02, 0x04, 0x02, 0x01, 0x11, 0x0E],
-        '4' => [0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02],
-        '5' => [0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E],
-        '6' => [0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E],
-        '7' => [0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08],
-        '8' => [0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E],
-        '9' => [0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C],
-        'A' => [0x0E, 0x11, 0x11, 0x11, 0x1F, 0x11, 0x11],
-        'B' => [0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E],
-        'C' => [0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E],
-        'D' => [0x1C, 0x12, 0x11, 0x11, 0x11, 0x12, 0x1C],
-        'E' => [0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F],
-        'F' => [0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10],
-        'G' => [0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0F],
-        'H' => [0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11],
-        'I' => [0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E],
-        'J' => [0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C],
-        'K' => [0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11],
-        'L' => [0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F],
-        'M' => [0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11],
-        'N' => [0x11, 0x11, 0x19, 0x15, 0x13, 0x11, 0x11],
-        'O' => [0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E],
-        'P' => [0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10],
-        'Q' => [0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D],
-        'R' => [0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11],
-        'S' => [0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E],
-        'T' => [0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04],
-        'U' => [0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E],
-        'V' => [0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04],
-        'W' => [0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A],
-        'X' => [0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11],
-        'Y' => [0x11, 0x11, 0x11, 0x0A, 0x04, 0x04, 0x04],
-        'Z' => [0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F],
-        '-' => [0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00],
-        ':' => [0x00, 0x0C, 0x0C, 0x00, 0x0C, 0x0C, 0x00],
-        '.' => [0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C],
-        '/' => [0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x00],
-        ' ' => [0; 7],
-        _ => return None,
-    })
-}
-
-impl FontMetrics for DotMatrixFont {
-    fn glyph_metrics(&self, character: char) -> Option<GlyphInfo> {
-        dot_rows(character)?;
-        Some(GlyphInfo {
-            advance_fp16: ((DOT_COLUMNS + 1) as f32 * DOT_PITCH * SUBPIXELS_PER_PIXEL as f32) as u16,
-            bearing_x: 0,
-            bearing_y: (DOT_ROWS as f32 * DOT_PITCH) as i16,
-            width: (DOT_COLUMNS as f32 * DOT_PITCH) as u16,
-            height: (DOT_ROWS as f32 * DOT_PITCH) as u16,
-        })
-    }
-
-    fn line_metrics(&self) -> FontLineMetrics {
-        let ascent = (DOT_ROWS as f32 * DOT_PITCH) as i16 + DOT_ROOM_AROUND;
-        FontLineMetrics {
-            line_height: (ascent + DOT_ROOM_AROUND) as u16,
-            ascent,
-            descent: DOT_ROOM_AROUND,
-        }
-    }
-
-    fn glyph_coverage_row(&self, character: char, row: u16, x_offset: u16, coverage: &mut [u8]) -> bool {
-        let Some(rows) = dot_rows(character) else {
-            return false;
-        };
-        // Dots sit over a pixel apart, so a pixel takes ink only from the dot whose cell holds its centre.
-        let y = row as f32 + 0.5;
-        let dot_row = (y / DOT_PITCH) as usize;
-        let centre_y = (dot_row as f32 + 0.5) * DOT_PITCH;
-        let lit_columns = rows.get(dot_row).copied().unwrap_or(0);
-        for (index, slot) in coverage.iter_mut().enumerate() {
-            let x = x_offset as f32 + index as f32 + 0.5;
-            let column = (x / DOT_PITCH) as u16;
-            let is_lit = column < DOT_COLUMNS && lit_columns & (1 << (DOT_COLUMNS - 1 - column)) != 0;
-            *slot = match is_lit {
-                true => {
-                    let centre_x = (column as f32 + 0.5) * DOT_PITCH;
-                    ink_of(DOT_RADIUS - length(x - centre_x, y - centre_y) + 0.5)
-                }
-                false => 0,
-            };
-        }
-        true
-    }
-}
-
-// ============================================================================
 // Font numbers
 // ============================================================================
 
@@ -1380,7 +1371,29 @@ pub fn install_from_library(library: &AppImage<'static>) -> usize {
     usize::from(!bytes.is_empty())
 }
 
-static DOT_MATRIX: DotMatrixFont = DotMatrixFont;
+/// Takes the dot-matrix font from an app's image, if the image carries it, as the font the
+/// `dot_matrix` value draws.
+///
+/// # Safety
+///
+/// The image's bytes must stay where they are until `remove_app_font` is called with the same image.
+pub unsafe fn install_app_font(image: &AppImage<'_>) {
+    // Tests and the simulator keep their built-in copy, which every image's copy matches.
+    if cfg!(not(any(test, feature = "built-in-fonts"))) {
+        if let Some(bytes) = image.font(0) {
+            DOT_MATRIX_FONT.install_borrowed(bytes);
+        }
+    }
+}
+
+/// Lets go of an app's dot-matrix font before its image goes away; `dot_matrix` then draws as `normal`.
+pub fn remove_app_font(image: &AppImage<'_>) {
+    if cfg!(not(any(test, feature = "built-in-fonts"))) {
+        if let Some(bytes) = image.font(0) {
+            DOT_MATRIX_FONT.remove_if_holding(bytes);
+        }
+    }
+}
 
 /// How many bytes of flash the text font takes, for the memory map.
 pub fn text_font_bytes() -> usize {
@@ -1418,27 +1431,27 @@ impl FontName {
         }
     }
 
-    /// The size of the text font this name draws, or nothing for the dot-matrix font drawn as shapes.
-    fn styled(self) -> Option<&'static StyledFont> {
+    /// The font and size this name draws; `dot_matrix` draws as `normal` while no app has given its font.
+    fn styled(self) -> &'static StyledFont {
         use FontName::*;
         match self {
-            Small => Some(&SMALL),
-            Normal => Some(&NORMAL),
-            Medium => Some(&MEDIUM),
-            Large => Some(&LARGE),
-            Huge => Some(&HUGE),
-            Giant => Some(&GIANT),
-            Condensed => Some(&CONDENSED),
-            DotMatrix => None,
+            Small => &SMALL,
+            Normal => &NORMAL,
+            Medium => &MEDIUM,
+            Large => &LARGE,
+            Huge => &HUGE,
+            Giant => &GIANT,
+            Condensed => &CONDENSED,
+            DotMatrix => match DOT_MATRIX_FONT.data() {
+                Some(_) => &DOT_MATRIX,
+                None => &NORMAL,
+            },
         }
     }
 
     /// The font drawn for this name.
     pub fn metrics(self) -> &'static dyn FontMetrics {
-        match self {
-            FontName::DotMatrix => &DOT_MATRIX,
-            other => other.styled().unwrap_or(&NORMAL),
-        }
+        self.styled()
     }
 
     /// Draws one character with its pen at `origin` on the baseline; returns how far the pen moves.
@@ -1449,16 +1462,9 @@ impl FontName {
         origin: (i32, i32),
         color: Color,
     ) -> i32 {
-        match self.styled() {
-            Some(font) => {
-                font.draw_character(renderer, character, origin, color);
-                font.advance_of(character).unwrap_or(0)
-            }
-            None => {
-                renderer.draw_glyph(self.metrics(), character, origin, color);
-                character_advance(self.metrics(), character)
-            }
-        }
+        let font = self.styled();
+        font.draw_character(renderer, character, origin, color);
+        font.advance_of(character).unwrap_or(0)
     }
 }
 

@@ -322,6 +322,25 @@ fn a_font_chosen_at_run_time_is_an_expression() {
 }
 
 #[test]
+fn an_app_that_uses_the_dot_matrix_font_carries_it_once() {
+    let fixed = compile(&app(
+        r#"function Main() { return <Screen><Label font="dot_matrix">WK</Label><Label font="dot_matrix">MON</Label></Screen>; }"#,
+    ));
+    let chosen = compile(&app(r#"const big = signal(true);
+        function Main() { return <Screen><Label font={big.value ? "dot_matrix" : "small"}>Hi</Label></Screen>; }"#));
+    let plain = compile(&app(
+        r#"function Main() { return <Screen><Label font="huge">Hi</Label></Screen>; }"#,
+    ));
+
+    for image in [&fixed, &chosen] {
+        let image = AppImage::parse(image).unwrap();
+        assert_eq!(image.font_count(), 1);
+        assert_eq!(image.font(0), Some(crate::library::DOT_MATRIX_FONT));
+    }
+    assert_eq!(AppImage::parse(&plain).unwrap().font_count(), 0);
+}
+
+#[test]
 fn props_the_format_has_no_place_for_are_left_out_with_a_warning() {
     let source =
         app(r#"function Main() { return <Screen><Row><Label wobble={3}>Hi</Label></Row></Screen>; }"#);

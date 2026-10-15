@@ -930,6 +930,11 @@ impl<'a> Compiler<'a> {
                     format!("`{text}` is not a colour; write `#rrggbb` or a theme colour such as \"accent\""),
                 )
             })?,
+            (Constant::Text(text), Kind::Choice(ChoiceSet::Font)) if &**text == "dot_matrix" => {
+                // The app carries the dot-matrix font, which the watch reads while the app is loaded.
+                self.writer.font(crate::library::DOT_MATRIX_FONT);
+                ChoiceSet::Font.number_of(text).unwrap_or_default()
+            }
             (Constant::Text(text), Kind::Choice(set)) => set.number_of(text).ok_or_else(|| {
                 Diagnostic::error(
                     span,

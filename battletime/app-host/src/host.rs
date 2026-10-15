@@ -241,6 +241,12 @@ pub struct AppHost<'image> {
     bitmap_files: Vec<ShownBitmap>,
 }
 
+impl Drop for AppHost<'_> {
+    fn drop(&mut self) {
+        crate::fonts::remove_app_font(&self.image);
+    }
+}
+
 impl<'image> AppHost<'image> {
     /// Checks an image, starts its state from the defaults and opens its first screen.
     pub fn open(
@@ -409,6 +415,8 @@ impl<'image> AppHost<'image> {
             text_files: Vec::new(),
             bitmap_files: Vec::new(),
         };
+        // Safety: the image's bytes outlive the host, whose drop lets go of the font.
+        unsafe { crate::fonts::install_app_font(&host.image) };
         Ok(host)
     }
 

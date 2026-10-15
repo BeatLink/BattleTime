@@ -1,10 +1,12 @@
-"""Turns the font drawn from lines, arcs and dots in app-host/fonts/geometric.txt into the file the app host reads.
+"""Turns the fonts drawn from lines, arcs and dots in app-host/fonts/ into the files the app host reads.
 
 Run it from anywhere after changing a glyph, then tools/generate_preview_font.py for the browser preview:
 
     python3 tools/generate_fonts.py
 
-It writes app-host/fonts/geometric.ntfont, which app-host/src/fonts.rs reads in place:
+It writes app-host/fonts/geometric.ntfont from geometric.txt, the text font the shared library
+carries, and dot-matrix.ntfont from dot-matrix.txt, which the compiler puts in the image of each app
+that uses the `dot_matrix` font. app-host/src/fonts.rs reads both:
 
     header, 16 bytes: magic "NTGF", version (1), reserved (1), glyph count (2), capital height (1),
                       x-height (1), standard width (1), descender (1, signed), then the lowest,
@@ -16,8 +18,10 @@ It writes app-host/fonts/geometric.ntfont, which app-host/src/fonts.rs reads in 
         1 arc:  centre x, centre y, radius across (unsigned), radius down (unsigned),
                 start and end angle, anticlockwise, in 256ths of a turn; equal angles draw it whole
         2 dot:  x, y
+        3 row of dots: first dot's x and y, last dot's x and y, how many dots (unsigned, 2 or more)
 
-Every size the app host draws (small to giant) is this one font, scaled.
+Glyphs whose shapes are the same share them, so lower case drawn as capitals costs only its entry.
+Every text size the app host draws (small to giant) is the geometric font, scaled.
 """
 
 import sys
@@ -32,11 +36,20 @@ X_HEIGHT = 76
 STANDARD_WIDTH = 82
 DESCENDER = -26
 
+DOT_MATRIX_SOURCE = ROOT / "app-host" / "fonts" / "dot-matrix.txt"
+DOT_MATRIX_OUTPUT = ROOT / "app-host" / "fonts" / "dot-matrix.ntfont"
+
+# Each font's source, output, capital height, x-height, standard width and descender, in font units.
+FONTS = [
+    (SOURCE, OUTPUT, CAPITAL_HEIGHT, X_HEIGHT, STANDARD_WIDTH, DESCENDER),
+    (DOT_MATRIX_SOURCE, DOT_MATRIX_OUTPUT, 60, 60, 60, 0),
+]
+
 # The app host keeps a glyph's placed shapes on the stack while it draws, so a glyph may have only this many.
 MOST_SHAPES = 8
 
-LINE, ARC, DOT = 0, 1, 2
-SHAPE_FIELDS = {"L": (LINE, 4), "A": (ARC, 6), "D": (DOT, 2)}
+LINE, ARC, DOT, DOTS = 0, 1, 2, 3
+SHAPE_FIELDS = {"L": (LINE, 4), "A": (ARC, 6), "D": (DOT, 2), "R": (DOTS, 5)}
 
 
 # ============================================================================
@@ -57,6 +70,8 @@ def moved(shape, across, up):
     tag, numbers = shape
     if tag == ARC:
         return tag, [numbers[0] + across, numbers[1] + up] + numbers[2:]
+    if tag == DOTS:
+        return tag, [numbers[0] + across, numbers[1] + up, numbers[2] + across, numbers[3] + up, numbers[4]]
     return tag, [number + (across if index % 2 == 0 else up) for index, number in enumerate(numbers)]
 
 
@@ -80,7 +95,7 @@ def parse_shape(text, glyphs, where):
     return [(tag, [int(number) for number in numbers])]
 
 
-def read_glyphs(path):
+def read_glyphs(path, standard_width=STANDARD_WIDTH):
     """Every glyph in the source, as character -> (width, shapes)."""
     glyphs = {}
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
@@ -91,7 +106,7 @@ def read_glyphs(path):
         key, _, rest = line.partition(" ")
         character = character_of(key)
         rest = rest.strip()
-        width = STANDARD_WIDTH
+        width = standard_width
         first, _, after = rest.partition(" ")
         if first.isdigit():
             width, rest = int(first), after.strip()
@@ -143,6 +158,11 @@ def encode_shape(tag, numbers, character):
             start_steps,
             end_steps,
         ])
+    if tag == DOTS:
+        *ends, count = numbers
+        if count < 2:
+            raise ValueError(f"{what} a row of dots needs at least two; draw one with D")
+        return bytes([tag] + [signed_byte(number, what) for number in ends] + [unsigned_byte(count, what)])
     return bytes([tag] + [signed_byte(number, what) for number in numbers])
 
 
@@ -150,7 +170,7 @@ def reach(shapes):
     """Every x and every y a glyph's centre lines reach, a whole arc's box counted for an arc."""
     xs, ys = [], []
     for tag, numbers in shapes:
-        if tag == LINE:
+        if tag in (LINE, DOTS):
             xs += [numbers[0], numbers[2]]
             ys += [numbers[1], numbers[3]]
         elif tag == ARC:
@@ -162,32 +182,37 @@ def reach(shapes):
     return xs, ys
 
 
-def build_font(glyphs):
+def build_font(glyphs, capital_height=CAPITAL_HEIGHT, x_height=X_HEIGHT, standard_width=STANDARD_WIDTH,
+               descender=DESCENDER):
     table = bytearray()
     data = bytearray()
+    offsets = {}
     for character in sorted(glyphs):
         width, shapes = glyphs[character]
+        encoded = b"".join(encode_shape(tag, numbers, character) for tag, numbers in shapes)
+        if encoded not in offsets:
+            offsets[encoded] = len(data)
+            data += encoded
         table += ord(character).to_bytes(2, "little")
         table += bytes([unsigned_byte(width, f"{character!r} width"), len(shapes)])
-        table += len(data).to_bytes(2, "little")
-        for tag, numbers in shapes:
-            data += encode_shape(tag, numbers, character)
+        table += offsets[encoded].to_bytes(2, "little")
 
     header = bytearray(b"NTGF")
     header += bytes([1, 0])
     header += len(glyphs).to_bytes(2, "little")
     xs = [x for _, shapes in glyphs.values() for x in reach(shapes)[0]]
     ys = [y for _, shapes in glyphs.values() for y in reach(shapes)[1]]
-    header += bytes([CAPITAL_HEIGHT, X_HEIGHT, STANDARD_WIDTH, DESCENDER & 0xFF])
+    header += bytes([capital_height, x_height, standard_width, descender & 0xFF])
     header += bytes(signed_byte(value, "reach") for value in (min(ys), max(ys), min(xs), max(xs)))
     return bytes(header + table + data)
 
 
 def main():
-    glyphs = read_glyphs(SOURCE)
-    font = build_font(glyphs)
-    OUTPUT.write_bytes(font)
-    print(f"{OUTPUT.name}: {len(glyphs)} glyphs, {len(font)} bytes")
+    for source, output, capital_height, x_height, standard_width, descender in FONTS:
+        glyphs = read_glyphs(source, standard_width)
+        font = build_font(glyphs, capital_height, x_height, standard_width, descender)
+        output.write_bytes(font)
+        print(f"{output.name}: {len(glyphs)} glyphs, {len(font)} bytes")
     return 0
 
 

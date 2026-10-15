@@ -173,7 +173,7 @@ Each kind of section appears at most once:
 | 6 | Subscriptions | 16 bytes per subscription, described below. |
 | 7 | Resources | The app's own images, as a table of (offset, length) pairs followed by the images. |
 | 8 | Initial values | Optional. For arrays whose elements do not all start the same: a table of (offset, length) pairs, then per array its number (1 byte) followed by its elements packed as they are stored in RAM. |
-| 9 | Fonts | The shared library only; see [Fonts](#fonts). |
+| 9 | Fonts | The shared library's text font, or the dot-matrix font of an app that uses it; see [Fonts](#fonts). |
 | 10 | Functions | Optional. Up to 256 functions, the same layout as expressions. Each function's bytes start with its argument count, its result count (0 or 1) and how many locals it uses, then its code. |
 | 11 | Launcher | Optional. 2 bytes: the string naming the launcher group the app declares. |
 | 12 | Data | The shared library only. Files the firmware reads, laid out as resources: number 0 is Bosch's configuration for a BMA421 accelerometer and 1 for a BMA425, in `LibraryData` order. |
@@ -701,8 +701,14 @@ shape, over a ramp one pixel wide, so joins have no seams. A row of a glyph visi
 each shape can reach, and only the rows the strip being drawn shows. Arcs need no trigonometry:
 their ends come from a table of sines.
 
-`dot_matrix` is drawn from dots on a 5 by 7 grid and takes no font data: digits, capital letters
-(lower case is drawn as capitals), `-`, `:`, `.`, `/` and the space.
+`dot_matrix` is drawn from dots on a 5 by 7 grid: digits, capital letters (lower case is drawn as
+capitals), `-`, `:`, `.`, `/` and the space. It is a second font in the same format, made from
+`app-host/fonts/dot-matrix.txt`, whose glyphs are rows of evenly spaced dots (shape 3), at most
+eight to a glyph, drawn by the same code as the text font. Only apps use it, so neither the
+firmware nor the shared library carries it: the compiler puts its 1,414 B in the font section of
+each app image that names `dot_matrix`, and the host takes it from the image when it loads the app
+and lets go of it when the app closes, so it costs RAM only while that app is loaded. An image
+without it, such as one built before, draws `dot_matrix` as `normal`.
 
 The font lives in the shared library's font section. The host's font starts empty, and the firmware
 calls `fonts::install_from_library` once with the library; until then text takes no room. The
