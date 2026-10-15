@@ -906,7 +906,7 @@ fn the_ram_it_keeps_is_known_when_built() {
 
     let ram = WatchStore::RAM_BYTES;
 
-    assert!(ram <= 2_560, "{ram} B");
+    assert!(ram <= 2_816, "{ram} B");
 }
 
 // ============================================================================

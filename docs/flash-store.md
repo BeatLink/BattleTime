@@ -114,7 +114,7 @@ Built for the watch with 128 files, 128 record keys and rings of up to 192 secto
 
 | | Bytes |
 |---|---:|
-| RAM, fixed when built, no heap | about 2,650 |
+| RAM, fixed when built, no heap | 2,744 |
 | Code and constants | about 26,200 |
 | Stack, at most, while cleaning a ring | about 1,000 |
 
