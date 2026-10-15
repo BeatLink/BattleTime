@@ -528,6 +528,8 @@ pub fn message_kind(line: &[u8]) -> Result<&str, MessageError> {
 }
 
 /// Reads one line: `GB({...})` as Gadgetbridge sends it, or a bare JSON object.
+// Kept out of line so it is built for size with this crate, never inlined into the firmware's own code.
+#[inline(never)]
 pub fn parse_line(line: &[u8]) -> Result<Message<'_>, MessageError> {
     let json = json_of(line)?;
     let (envelope, _) = serde_json_core::from_str::<Envelope>(json).map_err(|_| MessageError::NotJson)?;
