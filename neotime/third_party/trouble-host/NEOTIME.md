@@ -1,7 +1,7 @@
 # NeoTime's copy of trouble-host
 
 This is [trouble-host](https://github.com/embassy-rs/trouble) 0.8.0 from crates.io (Apache-2.0 OR
-MIT), with six changes, each marked "NeoTime patch".
+MIT), with seven changes, each marked "NeoTime patch".
 
 The attribute server builds a Read By Type or Read By Group Type response by reading each matching
 attribute straight into the space left in the response and comparing the length it got with the
@@ -59,6 +59,11 @@ link.
 `free_default_packets` says how many packets the default pool has free. The watch's controller
 asks it before acknowledging the start of an L2CAP PDU, since the host drops a PDU it has no packet
 for, and the firmware asks it so its long replies leave packets for what the phone sends.
+
+`Connection::try_request_connection_params` sends an L2CAP Connection Parameter Update Request
+without waiting and without a `Stack`, so the firmware can ask for a slower or faster link from the
+loop that serves the connection. Upstream's `update_connection_params` needs the stack and builds
+its request from durations; the central's answer is logged by the signalling handler as before.
 
 The test and example targets are left out of this copy, since their sources are not included.
 The workspace and the firmware swap this copy in with `[patch.crates-io]`. Drop it once upstream

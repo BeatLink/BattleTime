@@ -421,6 +421,8 @@ Two seconds after a central connects, if the supervision timeout it chose is und
 asks over L2CAP for 4 s, keeping the central's interval and latency, so phones that pick a fast
 interval for updates keep it. BlueZ picks 420 ms by default, so a computer's link otherwise drops
 after two or three missed packets. The request is boxed, so it does not grow the Bluetooth task.
+From 5 s after connecting, [the link's pace](bluetooth.md#the-links-pace) asks for slower or
+faster parameters with a 6 s timeout as transfers start and stop.
 
 ### GATT services
 

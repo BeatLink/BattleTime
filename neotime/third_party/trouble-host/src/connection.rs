@@ -629,6 +629,51 @@ impl<'stack, P: PacketPool> Connection<'stack, P> {
         Ok(())
     }
 
+    /// NeoTime patch: asks the central for new connection parameters with an L2CAP Connection
+    /// Parameter Update Request, the intervals in 1.25 ms steps and the timeout in 10 ms steps.
+    ///
+    /// It fails without waiting when no packet or queue space is free.
+    pub fn try_request_connection_params(
+        &self,
+        interval_min: u16,
+        interval_max: u16,
+        latency: u16,
+        timeout: u16,
+    ) -> Result<(), Error> {
+        static NEXT_IDENTIFIER: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(1);
+        // Identifier 0 is not allowed, so the count skips it.
+        let identifier = NEXT_IDENTIFIER
+            .fetch_add(1, core::sync::atomic::Ordering::Relaxed)
+            .max(1);
+        let [min_low, min_high] = interval_min.to_le_bytes();
+        let [max_low, max_high] = interval_max.to_le_bytes();
+        let [latency_low, latency_high] = latency.to_le_bytes();
+        let [timeout_low, timeout_high] = timeout.to_le_bytes();
+        // The L2CAP header for the LE signalling channel, the signal's header, then its eight bytes.
+        let request = [
+            12,
+            0,
+            crate::types::l2cap::L2CAP_CID_LE_U_SIGNAL as u8,
+            0,
+            crate::types::l2cap::L2capSignalCode::CONN_PARAM_UPDATE_REQ.0,
+            identifier,
+            8,
+            0,
+            min_low,
+            min_high,
+            max_low,
+            max_high,
+            latency_low,
+            latency_high,
+            timeout_low,
+            timeout_high,
+        ];
+        let mut packet = P::allocate().ok_or(Error::OutOfMemory)?;
+        let length = request.len();
+        packet.as_mut()[..length].copy_from_slice(&request);
+        self.try_send(Pdu::new(packet, length))
+    }
+
     /// NeoTime patch: waits for the peer's next ATT response, notification or indication and copies
     /// as much of it as fits into `destination`, giving the length copied, or `None` once disconnected.
     #[cfg(feature = "gatt")]

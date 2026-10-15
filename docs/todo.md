@@ -332,9 +332,10 @@ See [bluetooth.md](bluetooth.md) for the details of each.
 - [ ] **Peripheral latency on the watch.** The link layer skips the events the central's latency
   allows, tested only on the computer. On the watch, with a phone that grants latency, check that
   the link holds, that notifications still arrive promptly, and the current drawn while idle.
-- [ ] **Ask for slower parameters when idle.** Send an L2CAP Connection Parameter Update Request
-  about 5 s after connecting with no file transfer or update running (interval 160-320, latency 2,
-  timeout 600), ask for 12-24 with latency 0 while a BLEFS or DFU transfer runs, and go back after.
+- [ ] **The link's pace on the watch.** The watch asks for slow parameters while idle and fast ones
+  during transfers ([bluetooth.md](bluetooth.md#the-links-pace)), tested only on the computer. On the
+  watch, with `btmon` on a computer or a phone, check that the phone accepts the slow parameters, and
+  a file transfer runs at full speed.
 - [ ] **Faster transfers.** Data length extension, the 2 Mbit PHY and channel selection algorithm
   #2, mainly to speed up firmware updates.
 - [ ] **Connection parameter request** from the peripheral. TrouBLE falls back to L2CAP meanwhile.

@@ -100,6 +100,23 @@ access in `nrf_radio.rs`, behind the small `Radio` trait, is the substitute.
   only memory overwritten by something else gives, counts as nothing heard rather than leaving the
   radio off.
 
+## The link's pace
+
+Phones pick a fast connection interval and no latency, which keeps the radio busy while nothing is
+sent, so the firmware asks for the pace it needs with an L2CAP Connection Parameter Update Request
+(`Connection::try_request_connection_params`, a patch in `third_party/trouble-host`), since the
+controller has no connection parameter request of its own. `neotime_companion::link_pace` chooses:
+
+| When | Interval | Latency | Supervision timeout |
+|---|---|---|---|
+| Idle, from 5 s after connecting | 200 to 400 ms (160 to 320) | 2 | 6 s (600) |
+| A BLEFS transfer, a DFU update or a packages command, until 5 s after the last | 15 to 30 ms (12 to 24) | 0 | 6 s (600) |
+
+A request goes out only when the wanted set changes, from `serve_connection` before it waits for
+the next event, with a timer for the switch back to idle. The central answers with a Connection
+Parameter Update Response; a rejection is ignored and the link stays as it was. A request that
+could not be queued, for want of a free packet, is sent again a second later or with the next write.
+
 ## Not done yet
 
 | Missing | What it costs |

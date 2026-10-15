@@ -1911,4 +1911,33 @@ pub(crate) mod tests {
         assert_eq!(handle, ConnHandle::new(0));
         assert_eq!(reply.as_ref(), [2, 0, 0x06, 0x00, 0x05, 0x05]);
     }
+
+    #[test]
+    fn a_connection_parameter_request_goes_out_on_the_signalling_channel() {
+        let mgr = setup();
+        unwrap!(mgr.connect(
+            ConnHandle::new(0),
+            Address::new(AddrKind::RANDOM, BdAddr::new(ADDR_1)),
+            LeConnRole::Peripheral,
+            ConnParams::new(),
+        ));
+        let Poll::Ready(connection) = mgr.poll_accept(LeConnRole::Peripheral, &[], None) else {
+            panic!("expected connection to be accepted");
+        };
+
+        unwrap!(connection.try_request_connection_params(160, 320, 2, 600));
+        let (handle, first) = block_on(mgr.outbound());
+        unwrap!(connection.try_request_connection_params(12, 24, 0, 600));
+        let (_, second) = block_on(mgr.outbound());
+
+        assert_eq!(handle, ConnHandle::new(0));
+        let first = first.as_ref();
+        assert_eq!(first[..6], [12, 0, 0x05, 0x00, 0x12, first[5]]);
+        assert_eq!(first[6..], [8, 0, 160, 0, 0x40, 0x01, 2, 0, 0x58, 0x02]);
+        let second = second.as_ref();
+        assert_eq!(second[6..], [8, 0, 12, 0, 24, 0, 0, 0, 0x58, 0x02]);
+        assert_ne!(first[5], 0);
+        assert_ne!(second[5], 0);
+        assert_ne!(first[5], second[5]);
+    }
 }

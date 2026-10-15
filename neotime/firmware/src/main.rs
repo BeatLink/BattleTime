@@ -19,7 +19,7 @@ use core::cell::RefCell;
 use display_dma::DmaInterface;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::Spawner;
-use embassy_futures::select::{select, select4, Either, Either4};
+use embassy_futures::select::{select, select3, select4, Either, Either3, Either4};
 use embassy_nrf::{
     bind_interrupts,
     config::LfclkSource,
@@ -37,6 +37,7 @@ use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
 use neotime_blefs::service::FileTransferService;
 use neotime_boot::{FIRMWARE_ALIVE_MAGIC, FIRMWARE_ALIVE_MARKER, WATCHDOG_TIMEOUT_IN_TICKS};
 use neotime_button::Button;
+use neotime_companion::link_pace::LinkPace;
 use neotime_companion::LineAssembler;
 #[cfg(with_shell)]
 use neotime_companion::MOST_NEW_ALERT_BYTES;
@@ -1060,6 +1061,32 @@ async fn send_packages_reply(
     }
 }
 
+/// Asks the phone for the connection parameters the link's pace wants, if they changed, and gives
+/// when to look again.
+///
+/// A phone that turns the request down keeps the link as it was, but one that never went out is sent again.
+#[inline(never)]
+fn ask_for_link_pace(
+    connection: &GattConnection<'_, '_, DefaultPacketPool>,
+    link_pace: &mut LinkPace,
+) -> Instant {
+    let now = Instant::now().as_secs();
+    if let Some(wanted) = link_pace.request(now) {
+        let sent = connection.raw().try_request_connection_params(
+            wanted.interval_min,
+            wanted.interval_max,
+            wanted.latency,
+            wanted.supervision_timeout,
+        );
+        if sent.is_err() {
+            link_pace.retry_later(now);
+        }
+    }
+    link_pace
+        .next_change_seconds()
+        .map_or(Instant::MAX, Instant::from_secs)
+}
+
 /// Confirms the firmware the first time a phone exchanges data with it, and says so on the status page.
 async fn confirm_once(screen: &mut Screen, confirmation: &mut storage::Confirmation, confirmed: &mut bool) {
     if !*confirmed {
@@ -1101,7 +1128,9 @@ async fn serve_connection(
     let mut packages_commands: alloc::vec::Vec<alloc::vec::Vec<u8>> = alloc::vec::Vec::new();
     // A reply left from a phone that went away before it arrived is not this phone's.
     packages::REPLIES.clear();
+    let mut link_pace = LinkPace::new(Instant::now().as_secs());
     loop {
+        let pace_change = ask_for_link_pace(connection, &mut link_pace);
         // Pinned where they are made, so the connection's large future is never copied across the stack.
         let next_event = core::pin::pin!(connection.next());
         let next_reply = core::pin::pin!(select(settings::REPLIES.receive(), packages::REPLIES.receive()));
@@ -1109,9 +1138,10 @@ async fn serve_connection(
             battery::PERCENT_CHANGED.wait(),
             heart_rate::READING_TAKEN.wait()
         ));
-        let bluetooth_switched = core::pin::pin!(select(
+        let bluetooth_switched = core::pin::pin!(select3(
             settings::BLUETOOTH_SWITCHED.wait(),
-            clock::SET_FROM_PHONE_SERVICE.wait()
+            clock::SET_FROM_PHONE_SERVICE.wait(),
+            Timer::at(pace_change)
         ));
         let event = match shell::OutOfLine(select4(
             next_event,
@@ -1127,6 +1157,7 @@ async fn serve_connection(
                 continue;
             }
             Either4::Second(Either::Second(reply)) => {
+                link_pace.note_transfer(Instant::now().as_secs());
                 shell::OutOfLine(send_packages_reply(connection, server, &reply)).await;
                 continue;
             }
@@ -1153,16 +1184,18 @@ async fn serve_connection(
                 continue;
             }
             // The link stays until the controller reports it gone, which ends this connection as usual.
-            Either4::Fourth(Either::First(())) => {
+            Either4::Fourth(Either3::First(())) => {
                 if !settings::is_bluetooth_on() {
                     connection.raw().disconnect();
                 }
                 continue;
             }
-            Either4::Fourth(Either::Second(())) => {
+            Either4::Fourth(Either3::Second(())) => {
                 shell::OutOfLine(confirm_once(screen, confirmation, confirmed)).await;
                 continue;
             }
+            // The link has settled, so the top of the loop asks for the slower parameters.
+            Either4::Fourth(Either3::Third(())) => continue,
         };
         match event {
             GattConnectionEvent::Disconnected { .. } => {
@@ -1222,6 +1255,12 @@ async fn serve_connection(
                             (handle == server.file_transfer.transfer.handle)
                                 .then(|| storage_requests::FileRequest::copy_of(bytes))
                         });
+                        if file_request.is_some()
+                            || target.is_some()
+                            || handle == server.neotime.packages.handle
+                        {
+                            link_pace.note_transfer(Instant::now().as_secs());
+                        }
                         if let Some(file_request) = file_request {
                             shell::OutOfLine(foreground::wait_for_a_pause()).await;
                             let room = connection.raw().att_mtu() as usize - NOTIFICATION_HEADER_BYTES;
