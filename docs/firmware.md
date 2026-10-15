@@ -171,9 +171,9 @@ or swipe from each touch's `GestureFinder` (see [drivers.md](drivers.md#touch-pa
   button. When the screen turns off the shell tells the touch task, which puts the panel into deep
   sleep for none, leaves it scanning for a tap, or sleeps it listening for a double tap only;
   `neotime_app_host::settings::touch_wakes_screen` decides which touch wakes the shell. With a tap
-  waking the screen, the panel stays awake while the screen is off until the motion task finds the
-  wrist still for a minute, reading it every 2 s if nothing else does; it then sleeps the panel
-  as for none and wakes it again when the wrist moves or the screen turns on.
+  waking the screen, the panel stays awake while the screen is off. The motion task meanwhile
+  watches for a still wrist, reading it every 2 s if nothing else does, so background heart rate
+  can skip its attempts while the watch lies still.
 - **Wake gestures.** `neotime_app_host::wake::gestures_to_watch` says what the accelerometer
   watches for from the settings and the screen: a raised or shaken wrist while it is dark, a
   lowered arm while it is lit and not held on, nothing in sleep mode. The shell hands that to the

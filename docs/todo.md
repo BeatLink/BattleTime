@@ -18,12 +18,6 @@ document for its part instead.
   a heart rate measurement still work, then compare the battery's fall over a night, screen dark,
   with the build before it; the anomaly costs about 400 µA, roughly a quarter of the idle drain.
 
-- [ ] **Touch panel sleeping while still on the PineTime.** With tap to wake, the touch task puts
-  the panel into deep sleep once `motion.rs` finds the wrist still for a minute with the screen
-  dark, and resets it when the wrist moves or the screen turns on. Lay the watch down for over a
-  minute, then check that picking it up and tapping wakes the screen within about 2 s, that a tap
-  while worn wakes it as before, and that the idle drain over a night falls.
-
 - [ ] **Background heart rate waiting for movement on the PineTime.** Background measurements now
   give up after 15 s, and after one gives up the next waits for new steps or movement. With the
   interval at every minute, check that readings still come while worn, and that with the watch
