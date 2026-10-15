@@ -268,9 +268,9 @@ function ramTree() {
         { name: "Flash store tables", size: KB(2.4), kind: "data", holds: "About 2.4 KB: 1 KB of record keys, 512 B of files, the rings' sector order, the log batches and a 64 B map of the file sectors. An upload's state is on the heap while it runs." },
         { name: "Kept clock", size: 20, kind: "boot", holds: "20 B in .uninit beside the crash record: UTC and the time zone with a marker and a check, written twice a second, so a soft or watchdog reset keeps the time." },
         { name: "Crash record", size: 60, kind: "boot", holds: "60 B in .uninit just below the stack: a panic's return addresses or a HardFault's registers, with a checksum, kept across the reset. Start-up does not zero it, and the bootloader keeps clear of it." },
-        { name: "Other tasks and packet pool", rest: true, kind: "firmware", holds: "The other tasks' state and the Bluetooth host's packet pool." },
+        { name: "Other tasks and packet pool", rest: true, kind: "firmware", holds: "The other tasks' state and the Bluetooth host's packet pool, which starts as all zeros in .bss so it takes no flash." },
       ] },
-      { name: "Bluetooth controller", size: owners["Bluetooth (controller and TrouBLE)"] || 0, kind: "boot", holds: "The controller's state in drivers/bluetooth." },
+      { name: "Bluetooth controller", size: owners["Bluetooth (controller and TrouBLE)"] || 0, kind: "boot", holds: "The controller's state in drivers/bluetooth, all zeros until it starts, so it sits in .bss and takes no flash." },
       { name: "Drivers and services", kind: "firmware", holds: "Small statics owned by the drivers and services.", children: [
         { name: "Drivers", size: owners["Display, graphics and drivers"] || 0, kind: "firmware", holds: "Display, graphics and driver state." },
         { name: "BLEFS", size: owners["BLEFS file service"] || 0, kind: "boot", holds: "The BLEFS file service." },

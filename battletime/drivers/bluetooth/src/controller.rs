@@ -52,15 +52,38 @@ pub enum RadioEvent<'packet> {
 
 /// The controller's state, shared between the radio interrupt and the host's task.
 pub struct ControllerState {
-    host_interface: Mutex<RefCell<Option<HostInterface>>>,
+    host_interface: Mutex<RefCell<StartedInterface>>,
     host_waker: AtomicWaker,
     room_waker: AtomicWaker,
+}
+
+/// The host interface once started, its tag a byte of its own that is zero before then, so the static takes no flash.
+#[repr(u8)]
+enum StartedInterface {
+    NotStarted,
+    Started(HostInterface),
+}
+
+impl StartedInterface {
+    fn as_ref(&self) -> Option<&HostInterface> {
+        match self {
+            StartedInterface::NotStarted => None,
+            StartedInterface::Started(host_interface) => Some(host_interface),
+        }
+    }
+
+    fn as_mut(&mut self) -> Option<&mut HostInterface> {
+        match self {
+            StartedInterface::NotStarted => None,
+            StartedInterface::Started(host_interface) => Some(host_interface),
+        }
+    }
 }
 
 impl ControllerState {
     pub const fn new() -> ControllerState {
         ControllerState {
-            host_interface: Mutex::new(RefCell::new(None)),
+            host_interface: Mutex::new(RefCell::new(StartedInterface::NotStarted)),
             host_waker: AtomicWaker::new(),
             room_waker: AtomicWaker::new(),
         }
@@ -70,9 +93,7 @@ impl ControllerState {
     pub fn start(&self, mut host_interface: HostInterface, free_host_packets: fn() -> usize) {
         host_interface.link_layer.free_host_packets = free_host_packets;
         critical_section::with(|critical_section| {
-            self.host_interface
-                .borrow_ref_mut(critical_section)
-                .replace(host_interface);
+            *self.host_interface.borrow_ref_mut(critical_section) = StartedInterface::Started(host_interface);
         });
     }
 

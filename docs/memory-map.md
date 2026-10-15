@@ -277,11 +277,24 @@ The UI heap gave up 768 B for the heart rate work, so the launcher keeps as much
 without it.
 `--then` sends more touches after those, two seconds apart, such as `'Tap 120 120' 'Swipe "left"'`.
 
-The face chooser added 124 B of code against `cargo size` of master a7c8e696 (438,860 B to
-438,984 B of text) and no static RAM, leaving 29 B of the firmware region free beside the 49,467 B
-library. Its steps run on the same frames as opening an app: with the launcher, a one-button app
+The face chooser added 200 B to the firmware's code image, measured with `cargo objcopy` against its
+parent (441,472 B to 441,672 B, the code and its initialised data), and no static RAM. `cargo size`'s
+text left out the 2.8 KB of initialised data the image also carries, so it showed 29 B free where the
+image left 125 B beside the 49,467 B library. Measure the region with the image itself:
+`cargo objcopy --release -- -O binary` of `firmware/` plus the library must fit 491,264 B, the
+480 KB region less its header. Its steps run on the same frames as opening an app: with the launcher, a one-button app
 calling `choose_watch_face`, and the analog and digital faces installed, opening that app, tapping
 into the chooser, swiping left and right and pressing the button peaked at 6,088 B, 3,624 B spare.
+
+Three statics whose first value was all zeros but for a byte or two sat in `.data`, so the image
+carried a copy of each: the controller's state before it starts (1,032 B), TrouBLE's default packet
+pool (1,036 B) and the app host's last placed glyph (336 B). Each now keeps its empty mark as a zero:
+the controller and the glyph hold their value in a `#[repr(u8)]` enum whose empty variant comes
+first, and each packet marks itself `in_use` rather than `free`. They moved to `.bss`, taking the
+code image from 441,672 B to 439,300 B and `.data` from 2,784 B to 380 B, with static RAM the same,
+so the region has 2,497 B free beside the library. The stack did not move: the packages commands
+over Bluetooth with a typical install peaked at 7,364 B, 2,348 B spare (7,368 B before), and
+opening the launcher's first app at 6,228 B, 3,484 B spare (6,232 B before).
 
 With apps installed and packages commands sent over Bluetooth, as the companion app sends them:
 

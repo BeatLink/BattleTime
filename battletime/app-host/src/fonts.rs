@@ -805,7 +805,15 @@ struct PlacedGlyph {
 /// Whoever finds it in use, such as a second test thread, places the glyph itself instead of waiting.
 struct LastPlacedGlyph {
     is_in_use: AtomicBool,
-    entry: UnsafeCell<Option<PlacedGlyph>>,
+    entry: UnsafeCell<KeptGlyph>,
+}
+
+/// The kept glyph, its tag a byte of its own that is zero while empty, so the static takes no flash.
+#[repr(u8)]
+#[derive(Clone, Copy)]
+enum KeptGlyph {
+    Nothing,
+    Glyph(PlacedGlyph),
 }
 
 // The entry is only read or written by whoever set `is_in_use`.
@@ -813,7 +821,7 @@ unsafe impl Sync for LastPlacedGlyph {}
 
 static LAST_PLACED_GLYPH: LastPlacedGlyph = LastPlacedGlyph {
     is_in_use: AtomicBool::new(false),
-    entry: UnsafeCell::new(None),
+    entry: UnsafeCell::new(KeptGlyph::Nothing),
 };
 
 impl LastPlacedGlyph {
@@ -823,8 +831,10 @@ impl LastPlacedGlyph {
             return None;
         }
         // Safety: `is_in_use` was false, so nothing else holds the entry until it is cleared below.
-        let entry = unsafe { &*self.entry.get() };
-        let found = entry.filter(|placed| placed.key == key);
+        let found = match unsafe { &*self.entry.get() } {
+            KeptGlyph::Glyph(placed) if placed.key == key => Some(*placed),
+            _ => None,
+        };
         self.is_in_use.store(false, Ordering::Release);
         found
     }
@@ -835,7 +845,7 @@ impl LastPlacedGlyph {
             return;
         }
         // Safety: `is_in_use` was false, so nothing else holds the entry until it is cleared below.
-        unsafe { *self.entry.get() = Some(placed) };
+        unsafe { *self.entry.get() = KeptGlyph::Glyph(placed) };
         self.is_in_use.store(false, Ordering::Release);
     }
 }

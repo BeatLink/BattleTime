@@ -60,6 +60,10 @@ link.
 asks it before acknowledging the start of an L2CAP PDU, since the host drops a PDU it has no packet
 for, and the firmware asks it so its long replies leave packets for what the phone sends.
 
+Each packet in a pool marks itself `in_use` rather than upstream's `free`, so a new pool is all
+zeros. The default pool's static then lands in `.bss` instead of `.data`, which saves its 1 KB of
+flash.
+
 `Connection::try_request_connection_params` sends an L2CAP Connection Parameter Update Request
 without waiting and without a `Stack`, so the firmware can ask for a slower or faster link from the
 loop that serves the connection. Upstream's `update_connection_params` needs the stack and builds

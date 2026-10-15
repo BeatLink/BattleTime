@@ -8,7 +8,8 @@ use crate::{config, Packet, PacketPool};
 
 struct PacketBuf<const MTU: usize> {
     buf: [u8; MTU],
-    free: bool,
+    // BattleTime patch: false while free, so a new pool is all zeros and takes no flash.
+    in_use: bool,
 }
 
 impl<const MTU: usize> PacketBuf<MTU> {
@@ -17,7 +18,7 @@ impl<const MTU: usize> PacketBuf<MTU> {
     pub(crate) const fn new() -> Self {
         Self {
             buf: [0; MTU],
-            free: true,
+            in_use: false,
         }
     }
 }
@@ -35,9 +36,9 @@ impl<const MTU: usize, const N: usize> State<MTU, N> {
 
     fn alloc(&mut self) -> Option<PacketRef<MTU>> {
         for (idx, packet) in self.packets.iter_mut().enumerate() {
-            if packet.free {
+            if !packet.in_use {
                 // info!("[{}] alloc {}", id.0, idx);
-                packet.free = false;
+                packet.in_use = true;
                 packet.buf.iter_mut().for_each(|b| *b = 0);
                 return Some(PacketRef {
                     idx,
@@ -50,11 +51,11 @@ impl<const MTU: usize, const N: usize> State<MTU, N> {
 
     fn free(&mut self, p_ref: &PacketRef<MTU>) {
         // info!("[{}] free {}", id.0, p_ref.idx);
-        self.packets[p_ref.idx].free = true;
+        self.packets[p_ref.idx].in_use = false;
     }
 
     fn available(&mut self) -> usize {
-        self.packets.iter().filter(|p| p.free).count()
+        self.packets.iter().filter(|p| !p.in_use).count()
     }
 }
 
