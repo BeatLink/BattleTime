@@ -48,22 +48,22 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 125.4 KB | 47.1 KB |
+| Firmware (start-up, shell, tasks) | 125.8 KB | 47.1 KB |
 | App host (with `neotime-ui`) | 93.2 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 44.4 KB | 46.6 KB |
-| App runtime | 36.3 KB | 0.0 KB |
-| core, alloc and compiler builtins | 26.6 KB | 15.8 KB |
-| Embassy, allocator and Cortex-M | 21.1 KB | 5.6 KB |
+| App runtime | 36.2 KB | 0.0 KB |
+| core, alloc and compiler builtins | 27.4 KB | 15.9 KB |
+| Embassy, allocator and Cortex-M | 20.9 KB | 5.5 KB |
 | Storage (flash store) | 18.0 KB | 14.5 KB |
-| Settings, companion and notifications (with serde) | 17.7 KB | 2.4 KB |
+| Settings, companion and notifications (with serde) | 12.3 KB | 2.4 KB |
 | BLEFS file service | 9.5 KB | 3.1 KB |
-| Packages | 8.6 KB | 1.3 KB |
-| Display, graphics and drivers | 6.0 KB | 3.2 KB |
+| Packages | 7.8 KB | 1.3 KB |
+| Display, graphics and drivers | 5.8 KB | 3.2 KB |
 | Updates (DFU) | 2.8 KB | 2.8 KB |
-| Other constants and padding | 30.7 KB | 14.8 KB |
-| **Code and data** | **440.4 KB** | **157.3 KB** |
+| Other constants and padding | 31.9 KB | 14.8 KB |
+| **Code and data** | **436.1 KB** | **157.3 KB** |
 | Shared library, after the code | 48.3 KB | none |
-| Free of the 480 KB region, after its header | -8.9 KB | 322.5 KB |
+| Free of the 480 KB region, after its header | -4.6 KB | 322.4 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
