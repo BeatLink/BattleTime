@@ -48,9 +48,9 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 137.5 KB | 46.6 KB |
-| App host (with `battletime-ui`) | 93.1 KB | 0.0 KB |
-| App runtime | 36.2 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 137.9 KB | 46.6 KB |
+| App host (with `battletime-ui`) | 92.8 KB | 0.0 KB |
+| App runtime | 36.3 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 33.7 KB | 43.3 KB |
 | core, alloc and compiler builtins | 27.8 KB | 15.4 KB |
 | Storage (flash store) | 18.0 KB | 14.4 KB |
@@ -61,9 +61,9 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 | Display, graphics and drivers | 5.4 KB | 3.2 KB |
 | Updates (DFU) | 3.1 KB | 2.8 KB |
 | Other constants and padding | 32.6 KB | 14.3 KB |
-| **Code and data** | **431.2 KB** | **152.4 KB** |
+| **Code and data** | **431.4 KB** | **152.4 KB** |
 | Shared library, after the code | 48.3 KB | none |
-| Free of the 480 KB region, after its header | 0.3 KB | 327.3 KB |
+| Free of the 480 KB region, after its header | 0.0 KB | 327.3 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -163,7 +163,7 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 | What | Bytes | File sectors |
 |---|---:|---:|
 | `/settings/system` and `/settings/theme`, kept as records | 117 | 0 |
-| 12 app images, 739 B (flashlight) to 7,464 B (settings); those of 1 KB or less are records | 26,614 | 12 |
+| 12 app images, 739 B (flashlight) to 7,233 B (settings); those of 1 KB or less are records | 26,383 | 12 |
 | **In use** | | **12 of 512: 48 KB of 2 MB, and 968 B of records in the 256 KB records ring** |
 <!-- /measure_memory:file-system -->
 
