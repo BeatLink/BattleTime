@@ -774,6 +774,28 @@ impl<'image> AppHost<'image> {
         expressions
     }
 
+    /// The screen's expressions a clock change can show: those of shown widgets, and every widget's visibility.
+    fn expressions_that_wake(&self) -> u128 {
+        let mut expressions = 0u128;
+        for node in &self.nodes {
+            let Some(widget) = self.tree.widget(node.widget_index) else {
+                continue;
+            };
+            for entry in widget.properties().flatten() {
+                let counts = node.shown || entry.property == Property::Visible;
+                if let (true, PropertySource::Expression(expression)) = (counts, entry.source) {
+                    if (expression as usize) < MOST_BOUND_EXPRESSIONS {
+                        expressions |= 1 << expression;
+                    }
+                }
+            }
+            if let Some(expression) = self.row_visibility_expression(node) {
+                expressions |= 1 << expression;
+            }
+        }
+        expressions & self.screen_expressions
+    }
+
     // ------------------------------------------------------------------------
     // Repeated rows
     // ------------------------------------------------------------------------
@@ -2245,7 +2267,7 @@ impl<'image> AppHost<'image> {
         let redraw = match self.is_open {
             true => self
                 .bindings
-                .next_redraw_after_among(now, self.screen_expressions),
+                .next_redraw_after_among(now, self.expressions_that_wake()),
             false => None,
         };
         let scrolling = (self.is_open && self.nodes.iter().any(|node| node.shown && label_scrolls(node)))

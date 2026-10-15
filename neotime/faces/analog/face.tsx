@@ -78,17 +78,29 @@ function AnalogFace() {
         {date_text.value}
       </Label>
 
-      <AnalogClock
-        time={shows_seconds.value ? now.value : start_of_minute(now.value)}
-        show_seconds={shows_seconds.value}
-        hour_length={HOUR_LENGTH}
-        minute_length={MINUTE_LENGTH}
-        second_length={SECOND_LENGTH}
-        hand_style="rounded"
-        hour_color="#ffffff"
-        minute_color="#ffffff"
-        second_color="#ff0000"
-      />
+      {shows_seconds.value ? (
+        <AnalogClock
+          time={now.value}
+          show_seconds
+          hour_length={HOUR_LENGTH}
+          minute_length={MINUTE_LENGTH}
+          hand_style="rounded"
+          hour_color="#ffffff"
+          minute_color="#ffffff"
+          second_length={SECOND_LENGTH}
+          second_color="#ff0000"
+        />
+      ) : (
+        // Without a second hand the clock is cut to the minute, so the face wakes only once a minute.
+        <AnalogClock
+          time={start_of_minute(now.value)}
+          hour_length={HOUR_LENGTH}
+          minute_length={MINUTE_LENGTH}
+          hand_style="rounded"
+          hour_color="#ffffff"
+          minute_color="#ffffff"
+        />
+      )}
     </Screen>
   );
 }

@@ -810,6 +810,33 @@ fn the_digital_face_shows_the_date() {
     assert!(watch.shows_text("Mon 5 Jan 2026"), "{:?}", watch.visible_texts());
 }
 
+/// When the face next wakes, counted from now.
+fn wakes_in(watch: &TestWatch) -> Option<i64> {
+    let now = watch.now();
+    watch.host().next_wakeup(now).map(|wakeup| wakeup - now)
+}
+
+#[test]
+fn the_analog_face_moves_its_second_hand_each_second_until_switched_off() {
+    let mut watch = TestWatch::open_face("analog").unwrap();
+    assert_eq!(wakes_in(&watch), Some(1_000));
+
+    watch.long_press(120, 120);
+    assert_eq!(wakes_in(&watch), Some(60_000));
+
+    watch.long_press(120, 120);
+    assert_eq!(wakes_in(&watch), Some(1_000));
+}
+
+#[test]
+fn the_lite_analog_face_moves_its_second_hand_each_second_until_switched_off() {
+    let mut watch = TestWatch::open_face("lite-analog").unwrap();
+    assert_eq!(wakes_in(&watch), Some(1_000));
+
+    watch.double_tap(120, 120);
+    assert_eq!(wakes_in(&watch), Some(60_000));
+}
+
 // ============================================================================
 // Notifications
 // ============================================================================

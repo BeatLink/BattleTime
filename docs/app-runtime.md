@@ -541,7 +541,9 @@ is the smallest unit the expression's format patterns show; hundredths are cappe
 second, and an expression that reads the clock without formatting it redraws once a second. Steps
 are counted on the wall clock, so a minute display changes as each minute begins. The host sets one
 wake-up for the earliest of those times, and none when the screen is off or nothing on it depends
-on the clock. Timer subscriptions line up with the clock: `every: MINUTE` fires on each whole
+on the clock. Only shown widgets count, along with every widget's visibility, so a hidden seconds
+label wakes nothing. The period is read from the code, so in `on ? now.value : start_of_minute(now.value)`
+the cut branch wins and both redraw once a minute; give each pace its own widget instead. Timer subscriptions line up with the clock: `every: MINUTE` fires on each whole
 minute.
 
 ### Background work
