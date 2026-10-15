@@ -831,7 +831,7 @@ async fn run_bluetooth(
             let is_fast = interval == neotime_companion::advertising::FAST_INTERVAL;
             let name = settings::advertised_name();
             set_device_name(server, name);
-            let scan_response = neotime_companion::advertising::scan_response(*name);
+            let scan_response = neotime_companion::advertising::scan_response(name);
             let Ok(advertiser) = peripheral
                 .advertise(
                     &advertising_parameters(interval),
