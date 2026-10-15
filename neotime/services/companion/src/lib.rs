@@ -26,12 +26,12 @@ mod device_information_tests;
 mod heart_rate_measurement;
 #[cfg(test)]
 mod heart_rate_measurement_tests;
-pub mod link_pace;
-#[cfg(test)]
-mod link_pace_tests;
 mod infinitime;
 #[cfg(all(test, feature = "single-values"))]
 mod infinitime_tests;
+pub mod link_pace;
+#[cfg(test)]
+mod link_pace_tests;
 mod phone;
 mod slots;
 #[cfg(test)]

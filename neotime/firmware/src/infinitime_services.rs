@@ -183,25 +183,30 @@ fn number_in_run(first: u16, numbers: &[u8], handle: u16) -> Option<u8> {
     allow(unused_variables, unreachable_code, unused_labels)
 )]
 pub fn take_write(server: &Server<'_>, handle: u16, write: &[u8]) -> bool {
-    let message = 'message: {
+    let taken = 'message: {
         #[cfg(weather_service)]
         if handle == server.simple_weather.data.handle {
-            break 'message neotime_companion::simple_weather_write(write, local_midnight());
+            break 'message Some(neotime_companion::simple_weather_write(write, local_midnight()));
         }
         #[cfg(music_service)]
         if let Some(number) = number_in_run(server.music.status.handle, &MUSIC_NUMBERS, handle) {
-            break 'message neotime_companion::music_write(number, write);
+            break 'message Some(neotime_companion::music_write(number, write));
         }
         #[cfg(navigation_service)]
         if let Some(number) = number_in_run(server.navigation.flag.handle, &NAVIGATION_NUMBERS, handle) {
-            break 'message neotime_companion::navigation_write(number, write);
+            break 'message Some(neotime_companion::navigation_write(number, write));
         }
         #[cfg(alert_service)]
         if handle == server.immediate_alert.alert_level.handle {
-            break 'message write
-                .first()
-                .map(|&level| neotime_companion::Message::Find { is_on: level != 0 });
+            break 'message Some(
+                write
+                    .first()
+                    .map(|&level| neotime_companion::Message::Find { is_on: level != 0 }),
+            );
         }
+        None
+    };
+    let Some(message) = taken else {
         return false;
     };
     if let Some(message) = message {

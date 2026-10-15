@@ -242,7 +242,13 @@ fn current_weather(write: &[u8], has_sun_times: bool, local_midnight: Value) -> 
 fn forecast(write: &[u8]) -> Option<Message<'static>> {
     let day_count = usize::from(*write.get(DAY_COUNT_AT)?).min(MOST_FORECAST_DAYS);
     let mut days = Forecast::new();
-    for day in write.get(DAYS_AT..)?.chunks_exact(DAY_BYTES).take(day_count) {
+    for day in write
+        .get(DAYS_AT..)?
+        .as_chunks::<DAY_BYTES>()
+        .0
+        .iter()
+        .take(day_count)
+    {
         let _ = days.push(ForecastDay {
             low_in_celsius: whole_celsius(i16::from_le_bytes([day[0], day[1]])),
             high_in_celsius: whole_celsius(i16::from_le_bytes([day[2], day[3]])),
