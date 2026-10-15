@@ -76,14 +76,12 @@ export default function StoreScreen() {
   }, [packages, plugins, watchReady]);
 
   useEffect(() => {
-    void task.run('Reading the store', readStore);
-    // Read the store once when the screen opens.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    void task.run('Listing what is installed', readInstalled);
-    // List again whenever the watch connects or goes.
+    // One task reads both, since a task started while another runs is dropped.
+    void task.run('Reading the store', async () => {
+      await readStore();
+      await readInstalled();
+    });
+    // Read again whenever the watch connects or goes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchReady]);
 
