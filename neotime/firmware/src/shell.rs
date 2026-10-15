@@ -1799,7 +1799,7 @@ fn wait_until_panel_can_switch(switched_at: Instant) {
 }
 
 /// Polls a future in a stack frame of its own, so its locals never add to the frame of the task awaiting it.
-struct OutOfLine<Inner>(Inner);
+pub(crate) struct OutOfLine<Inner>(pub(crate) Inner);
 
 impl<Inner: core::future::Future> core::future::Future for OutOfLine<Inner> {
     type Output = Inner::Output;

@@ -975,49 +975,60 @@ const MOST_WRITE_BYTES: usize = 64;
 /// The most of one write the update service reads: legacy DFU sends 20-byte packets and shorter commands.
 const DFU_WRITE_BYTES: usize = 20;
 
-/// Sends a BLEFS command's answers, one notification each, waiting while fewer than two packets are free.
+/// Sends one notification through a single out-of-line copy of trouble's sending code, whatever the characteristic.
+async fn notify_bytes(
+    connection: &GattConnection<'_, '_, DefaultPacketPool>,
+    characteristic: &Characteristic<[u8]>,
+    value: &[u8],
+    store: bool,
+) -> Result<(), trouble_host::Error> {
+    shell::OutOfLine(characteristic.notify_raw(connection, value, store)).await
+}
+
+/// Sends a companion reply on the UART characteristic in 20-byte notifications.
+async fn send_uart_reply(connection: &GattConnection<'_, '_, DefaultPacketPool>, server: &Server<'_>, reply: &str) {
+    for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
+        let _ = notify_bytes(connection, &server.uart.transmit.to_raw(), piece, false).await;
+    }
+}
+
+/// Sends one notification, waiting while fewer than two packets are free or the send queue is full.
+async fn notify_patiently(
+    connection: &GattConnection<'_, '_, DefaultPacketPool>,
+    characteristic: &Characteristic<[u8]>,
+    piece: &[u8],
+) {
+    for _ in 0..NOTIFY_ATTEMPTS {
+        if free_default_packets() < PACKETS_KEPT_FOR_INCOMING {
+            Timer::after(NOTIFY_RETRY_DELAY).await;
+            continue;
+        }
+        match notify_bytes(connection, characteristic, piece, false).await {
+            Err(trouble_host::Error::OutOfMemory) => Timer::after(NOTIFY_RETRY_DELAY).await,
+            _ => break,
+        }
+    }
+}
+
+/// Sends a BLEFS command's answers, one notification each.
 async fn send_file_answers(
     connection: &GattConnection<'_, '_, DefaultPacketPool>,
     server: &Server<'_>,
     answers: alloc::vec::Vec<alloc::vec::Vec<u8>>,
 ) {
     for answer in answers {
-        for _ in 0..NOTIFY_ATTEMPTS {
-            if free_default_packets() < PACKETS_KEPT_FOR_INCOMING {
-                Timer::after(NOTIFY_RETRY_DELAY).await;
-                continue;
-            }
-            match server
-                .file_transfer
-                .transfer
-                .notify_raw(connection, &answer, false)
-                .await
-            {
-                Err(trouble_host::Error::OutOfMemory) => Timer::after(NOTIFY_RETRY_DELAY).await,
-                _ => break,
-            }
-        }
+        notify_patiently(connection, &server.file_transfer.transfer.to_raw(), &answer).await;
     }
 }
 
-/// Sends a packages reply in 20-byte notifications, waiting while fewer than two packets are free,
-/// since an app list takes more notifications than the pool has packets.
+/// Sends a packages reply in 20-byte notifications, since an app list takes more notifications than the pool has packets.
 async fn send_packages_reply(
     connection: &GattConnection<'_, '_, DefaultPacketPool>,
     server: &Server<'_>,
     reply: &str,
 ) {
     for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
-        for _ in 0..NOTIFY_ATTEMPTS {
-            if free_default_packets() < PACKETS_KEPT_FOR_INCOMING {
-                Timer::after(NOTIFY_RETRY_DELAY).await;
-                continue;
-            }
-            match server.neotime.packages.notify_raw(connection, piece, false).await {
-                Err(trouble_host::Error::OutOfMemory) => Timer::after(NOTIFY_RETRY_DELAY).await,
-                _ => break,
-            }
-        }
+        notify_patiently(connection, &server.neotime.packages.to_raw(), piece).await;
     }
 }
 
@@ -1075,9 +1086,7 @@ async fn serve_connection(
         let event = match select4(next_event, next_reply, reading_change, bluetooth_switched).await {
             Either4::First(event) => event,
             Either4::Second(Either::First(reply)) => {
-                for piece in reply.as_bytes().chunks(NOTIFICATION_BYTES) {
-                    let _ = server.uart.transmit.notify_raw(connection, piece, false).await;
-                }
+                send_uart_reply(connection, server, &reply).await;
                 continue;
             }
             Either4::Second(Either::Second(reply)) => {
@@ -1085,19 +1094,19 @@ async fn serve_connection(
                 continue;
             }
             Either4::Third(Either::First(())) => {
-                let _ = server
-                    .battery
-                    .level
-                    .notify(connection, &battery::percent(), true)
-                    .await;
+                let percent = battery::percent();
+                let _ = notify_bytes(connection, &server.battery.level.to_raw(), percent.as_gatt(), true).await;
                 continue;
             }
             Either4::Third(Either::Second(())) => {
-                let _ = server
-                    .heart_rate
-                    .measurement
-                    .notify(connection, &heart_rate::measurement(), true)
-                    .await;
+                let measurement = heart_rate::measurement();
+                let _ = notify_bytes(
+                    connection,
+                    &server.heart_rate.measurement.to_raw(),
+                    measurement.as_gatt(),
+                    true,
+                )
+                .await;
                 continue;
             }
             // The link stays until the controller reports it gone, which ends this connection as usual.
@@ -1231,9 +1240,7 @@ async fn serve_connection(
                     let must_restart = matches!(answer, Ok((_, true)));
                     // Built on the heap after the flash work, so the connection's state never holds a reply line.
                     let answer = storage::slots_answer_line(files, answer);
-                    for piece in answer.as_bytes().chunks(NOTIFICATION_BYTES) {
-                        let _ = server.uart.transmit.notify_raw(connection, piece, false).await;
-                    }
+                    send_uart_reply(connection, server, &answer).await;
                     if must_restart {
                         screen.write_line(line::ACTION, "Slots moved");
                         storage::reset(screen).await;
@@ -1249,11 +1256,7 @@ async fn serve_connection(
                     None => continue,
                 };
                 for notification in &outcome.notifications {
-                    let _ = server
-                        .dfu
-                        .control_point
-                        .notify_raw(connection, notification, false)
-                        .await;
+                    let _ = notify_bytes(connection, &server.dfu.control_point.to_raw(), notification, false).await;
                 }
                 show_update(screen, dfu, &outcome, &mut shown_progress);
                 if outcome.reset_requested {
