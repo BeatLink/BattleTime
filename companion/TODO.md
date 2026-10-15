@@ -151,6 +151,27 @@ and lets plugins read them and change their own app's state.
 
 - **Untried with a watch.** The sync has run only against the core's fake watch.
 
+## Background daemon
+
+The watch link should outlive the window: the Rust core owns it and the window is only a client.
+Nothing is built yet.
+
+- **The core owns the link.** Today the window's JavaScript holds the connection, so closing it
+  drops the watch. Move the link, sync, plugins and notification forwarding fully into `core/`.
+  On Android, Bluetooth runs through `NativeBluetooth.kt`, not btleplug, so the core needs a
+  transport there that runs without the web view.
+- **Desktop daemon.** Run the core headless as a systemd user unit or an autostart entry, perhaps
+  with a tray icon. The window and `cli/` connect to it over a Unix socket or D-Bus, so they stop
+  competing for the watch through BlueZ.
+- **Android service.** Host the core inside `KeepAliveService`, not the activity, and have the
+  window bind to it. Make it `START_STICKY` with a boot receiver, and keep its `connectedDevice`
+  notification.
+- **CompanionDeviceManager on Android.** Pair through it so the app is exempt from most background
+  limits, and use `CompanionDeviceService` (Android 12 and later) to wake the app when the watch
+  comes in range.
+- **Phones that kill services anyway.** Some makers stop foreground services regardless, so offer to
+  turn off battery optimisation from Settings.
+
 ## Linked companions
 
 [Linked companions](../docs/linked-companions.md) lets the phone hand the watch to the desktop at
