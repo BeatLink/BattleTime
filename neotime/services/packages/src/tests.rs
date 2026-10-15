@@ -200,7 +200,7 @@ fn huge_image(id: &str) -> Vec<u8> {
 /// An app that fits the heap by its image, but not with its widgets and working memory too.
 fn large_image(id: &str) -> Vec<u8> {
     let mut writer = ImageWriter::new(id, "Large", AppKind::App, 1);
-    writer.string(&"x".repeat(neotime_runtime::APP_HEAP_BUDGET_BYTES as usize - 4_000));
+    writer.string(&"x".repeat(neotime_runtime::APP_HEAP_BUDGET_BYTES as usize - 2_000));
     writer.widget(neotime_runtime::WidgetKind::Column, 0, &[]);
     writer.build()
 }
