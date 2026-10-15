@@ -78,6 +78,45 @@ watch, installing apps, phone features, watch data, firmware updates and the com
 drivers, services, firmware, bootloader, Bluetooth, storage and [memory map](docs/memory-map.md)
 pages. Open work is in [to do](docs/todo.md).
 
+## Credits
+
+BattleTime stands on the work of these projects and the people behind them.
+
+**The watch firmwares it grew from**
+
+- [InfiniTime](https://github.com/InfiniTimeOrg/InfiniTime): the user interface, watch faces,
+  apps, Bluetooth services and icon artwork BattleTime follows.
+- [wasp-os](https://github.com/wasp-os/wasp-os): loadable apps, the desktop simulator, and its
+  apps and faces.
+- [PinetimeLite](https://github.com/joaquimorg/PinetimeLite): its watch faces.
+- [ZephyrLabs' Watchfaces](https://github.com/ZephyrLabs/Watchfaces), by ZephyrLabs and jlukanc1:
+  the faces from its collection.
+
+**What the watch is built on**
+
+- [Embassy](https://embassy.dev): the async executor, the nRF52 drivers and the bootloader's update
+  logic.
+- [TrouBLE](https://github.com/embassy-rs/trouble): the Bluetooth host.
+- [rlvgl](https://github.com/softoboros/rlvgl) and [LVGL](https://lvgl.io): the drawing and the
+  widget set.
+- [embedded-graphics](https://github.com/embedded-graphics/embedded-graphics): the simulator's
+  display.
+- [Preact](https://preactjs.com) and [Signals](https://preactjs.com/guide/v10/signals/): the
+  language apps are written in.
+- [Font Awesome](https://fontawesome.com) and
+  [Material Icons](https://github.com/google/material-design-icons): the icons.
+
+**The companion, tools and website**
+
+- [Tauri](https://tauri.app), [btleplug](https://github.com/deviceplug/btleplug) and
+  [QuickJS](https://bellard.org/quickjs/) through [rquickjs](https://github.com/DelSkayn/rquickjs):
+  the companion app and its plugins.
+- [Gadgetbridge](https://gadgetbridge.org): the phone app whose protocol the watch speaks.
+- [InfiniEmu](https://github.com/pipe01/InfiniEmu): the emulator that
+  [PineTimeEmulator](https://github.com/BeatLink/PineTimeEmulator) is built from.
+- [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/): the website.
+- [PINE64](https://www.pine64.org/pinetime/): the PineTime itself.
+
 ## License
 
 BattleTime is free software under the GNU General Public License, version 3 or (at your option)

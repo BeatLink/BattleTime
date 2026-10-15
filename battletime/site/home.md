@@ -103,5 +103,42 @@ arranges. [All apps](apps.md)
 <figure markdown>![](screens/app-settings.png){ .screen loading=lazy }<figcaption>Settings</figcaption></figure>
 </div>
 
+## Credits
+
+BattleTime stands on the work of these projects and the people behind them.
+
+<div class="grid cards" markdown>
+
+-   :material-watch: **The firmwares it grew from**
+
+    [InfiniTime](https://github.com/InfiniTimeOrg/InfiniTime) for the interface, faces, apps and
+    Bluetooth services; [wasp-os](https://github.com/wasp-os/wasp-os) for loadable apps and the
+    simulator; [PinetimeLite](https://github.com/joaquimorg/PinetimeLite) and
+    [ZephyrLabs' Watchfaces](https://github.com/ZephyrLabs/Watchfaces) for their faces.
+
+-   :material-language-rust: **What the watch is built on**
+
+    [Embassy](https://embassy.dev) and its Bluetooth host
+    [TrouBLE](https://github.com/embassy-rs/trouble);
+    [rlvgl](https://github.com/softoboros/rlvgl) and [LVGL](https://lvgl.io) for drawing and
+    widgets; [embedded-graphics](https://github.com/embedded-graphics/embedded-graphics) for the
+    simulator; [Preact](https://preactjs.com) for the app language; and
+    [Font Awesome](https://fontawesome.com) and
+    [Material Icons](https://github.com/google/material-design-icons) for the icons.
+
+-   :material-cellphone-link: **The companion and tools**
+
+    [Tauri](https://tauri.app), [btleplug](https://github.com/deviceplug/btleplug) and
+    [QuickJS](https://bellard.org/quickjs/) for the companion; [Gadgetbridge](https://gadgetbridge.org)
+    for the protocol the watch speaks; [InfiniEmu](https://github.com/pipe01/InfiniEmu) for the
+    emulator.
+
+-   :material-heart: **And the rest**
+
+    [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/) for this website, and
+    [PINE64](https://www.pine64.org/pinetime/) for the PineTime itself.
+
+</div>
+
 Screenshots are drawn by the test suite, so they show the apps as they are now. BattleTime is free
 software under the GNU General Public License, version 3 or later.
