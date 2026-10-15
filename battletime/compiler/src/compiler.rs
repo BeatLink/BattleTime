@@ -141,6 +141,8 @@ pub struct Compiler<'a> {
     pub image_numbers: Vec<(PathBuf, u16)>,
     /// The hidden arrays derive subscriptions keep, by the expression they hold.
     pub derived_arrays: Vec<((usize, usize), u8)>,
+    /// The scopes those keys name, kept alive so a later scope cannot reuse an address and share an array.
+    pub derived_scopes: Vec<Rc<Scope<'a>>>,
     /// Every hidden array a derive handler writes, which needs no scratch copy.
     pub derived_targets: Vec<u8>,
     /// How many hidden derived variables there are, for their keys.
@@ -186,6 +188,7 @@ impl<'a> Compiler<'a> {
             source_directory: None,
             image_numbers: Vec::new(),
             derived_arrays: Vec::new(),
+            derived_scopes: Vec::new(),
             derived_targets: Vec::new(),
             derived_count: 0,
             permission_uses: Vec::new(),

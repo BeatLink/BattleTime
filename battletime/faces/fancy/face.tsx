@@ -142,37 +142,18 @@ function switch_look() {
 // Screen
 // ============================================================================
 
-/** The minute hand: two sides from the centre, a crossbar and a point beyond it, outlined in white. */
-function MinuteHand() {
+/** A hand: two sides from the centre, a crossbar `length` out and a point at `tip`, outlined in white. */
+function ArrowHand(props: { step: number; length: number; tip: number }) {
   return (
     <Line
       points={[
-        { x: x_at(HAND_BASE_LENGTH, minute_step.value + 59), y: y_at(HAND_BASE_LENGTH, minute_step.value + 59) },
-        { x: x_at(MINUTE_LENGTH, minute_step.value + 59), y: y_at(MINUTE_LENGTH, minute_step.value + 59) },
-        { x: x_at(MINUTE_TIP_LENGTH, minute_step.value), y: y_at(MINUTE_TIP_LENGTH, minute_step.value) },
-        { x: x_at(MINUTE_LENGTH, minute_step.value + 1), y: y_at(MINUTE_LENGTH, minute_step.value + 1) },
-        { x: x_at(MINUTE_LENGTH, minute_step.value + 59), y: y_at(MINUTE_LENGTH, minute_step.value + 59) },
-        { x: x_at(MINUTE_LENGTH, minute_step.value + 1), y: y_at(MINUTE_LENGTH, minute_step.value + 1) },
-        { x: x_at(HAND_BASE_LENGTH, minute_step.value + 1), y: y_at(HAND_BASE_LENGTH, minute_step.value + 1) },
-      ]}
-      thickness={2}
-      color={WHITE}
-    />
-  );
-}
-
-/** The hour hand, shaped like the minute hand; two uses of one component would share one point list. */
-function HourHand() {
-  return (
-    <Line
-      points={[
-        { x: x_at(HAND_BASE_LENGTH, hour_step.value + 59), y: y_at(HAND_BASE_LENGTH, hour_step.value + 59) },
-        { x: x_at(HOUR_LENGTH, hour_step.value + 59), y: y_at(HOUR_LENGTH, hour_step.value + 59) },
-        { x: x_at(HOUR_TIP_LENGTH, hour_step.value), y: y_at(HOUR_TIP_LENGTH, hour_step.value) },
-        { x: x_at(HOUR_LENGTH, hour_step.value + 1), y: y_at(HOUR_LENGTH, hour_step.value + 1) },
-        { x: x_at(HOUR_LENGTH, hour_step.value + 59), y: y_at(HOUR_LENGTH, hour_step.value + 59) },
-        { x: x_at(HOUR_LENGTH, hour_step.value + 1), y: y_at(HOUR_LENGTH, hour_step.value + 1) },
-        { x: x_at(HAND_BASE_LENGTH, hour_step.value + 1), y: y_at(HAND_BASE_LENGTH, hour_step.value + 1) },
+        { x: x_at(HAND_BASE_LENGTH, props.step + 59), y: y_at(HAND_BASE_LENGTH, props.step + 59) },
+        { x: x_at(props.length, props.step + 59), y: y_at(props.length, props.step + 59) },
+        { x: x_at(props.tip, props.step), y: y_at(props.tip, props.step) },
+        { x: x_at(props.length, props.step + 1), y: y_at(props.length, props.step + 1) },
+        { x: x_at(props.length, props.step + 59), y: y_at(props.length, props.step + 59) },
+        { x: x_at(props.length, props.step + 1), y: y_at(props.length, props.step + 1) },
+        { x: x_at(HAND_BASE_LENGTH, props.step + 1), y: y_at(HAND_BASE_LENGTH, props.step + 1) },
       ]}
       thickness={2}
       color={WHITE}
@@ -228,8 +209,8 @@ function AnalogLook() {
         radius={SECOND_DOT_HALF}
         background={WHITE}
       />
-      <MinuteHand />
-      <HourHand />
+      <ArrowHand step={minute_step.value} length={MINUTE_LENGTH} tip={MINUTE_TIP_LENGTH} />
+      <ArrowHand step={hour_step.value} length={HOUR_LENGTH} tip={HOUR_TIP_LENGTH} />
     </>
   );
 }

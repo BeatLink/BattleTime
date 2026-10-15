@@ -303,7 +303,8 @@ Effect arguments that are text may point into the call's text buffer, such as th
   record signal (derived into a minute of the day) or a number signal; its days must be constant.
 - An array prop that changes while running (a `computed` array, a constant mapped with state, an
   array literal of `{ x, y }` points) is a hidden `~derivedN` array that a Derive subscription
-  rebuilds. A `? :` between constant text arrays of different lengths is padded with `""`.
+  rebuilds. Each use of a component gets its own, while the same `computed` shown twice shares
+  one. A `? :` between constant text arrays of different lengths is padded with `""`.
 - A Chart's `series` uses its first series' `values` and `color`, with a warning for the rest.
 - `<Image src="./file.png">` and `icon: "./icon.png"` read PNGs relative to the source file. One-colour
   or alpha-only artwork is a mask; other artwork is a colour image blended onto black. The icon is

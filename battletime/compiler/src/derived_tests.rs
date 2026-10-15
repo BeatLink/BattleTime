@@ -203,6 +203,35 @@ export default define_app({ id: "test", name: "Test", screens: { main: Main } })
 }
 
 #[test]
+fn one_component_used_twice_gives_each_line_its_own_points() {
+    let source = r#"
+import { signal } from "@preact/signals";
+import { define_app } from "battletime";
+import { Line, Screen } from "battletime/widgets";
+const offset = signal(0);
+function Hand(props: { length: number }) {
+  return <Line points={[{ x: 0, y: 0 }, { x: props.length, y: offset.value }]} />;
+}
+function Main() {
+  return <Screen><Hand length={10} /><Hand length={20} /></Screen>;
+}
+export default define_app({ id: "test", name: "Test", screens: { main: Main } });
+"#;
+    let bytes = compile(source);
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut state = AppState::new(&image).unwrap();
+    let first = array_variable(&image, WidgetKind::Line, Property::Points, 0);
+    let second = array_variable(&image, WidgetKind::Line, Property::Points, 1);
+    state.set(variable_named(&image, "offset"), 3).unwrap();
+
+    run_derive_handlers(&image, &mut state);
+
+    assert_ne!(first, second);
+    assert_eq!(elements_of(&image, &state, first), vec![0, 0, 10, 3]);
+    assert_eq!(elements_of(&image, &state, second), vec![0, 0, 20, 3]);
+}
+
+#[test]
 fn line_points_not_written_as_points_are_left_out_with_a_warning() {
     let source = screen_app("const offset = signal(0);", "<Line points={[offset.value, 4]} />");
 

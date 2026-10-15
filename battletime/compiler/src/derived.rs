@@ -52,6 +52,7 @@ impl<'a> Compiler<'a> {
         };
         let variable = self.add_hidden_array(element_type, length, span)?;
         self.derived_arrays.push((key, variable));
+        self.derived_scopes.push(scope.clone());
         let mut emitter = Emitter::new(CodeKind::Handler);
         self.compile_array_assignment(&mut emitter, variable, expression, scope, span)?;
         self.add_derive_subscription(emitter, true, span)?;
@@ -75,6 +76,7 @@ impl<'a> Compiler<'a> {
         }
         let variable = self.add_hidden_array(Type::NUMBER, coordinates.len(), span)?;
         self.derived_arrays.push((key, variable));
+        self.derived_scopes.push(scope.clone());
         let mut emitter = Emitter::new(CodeKind::Handler);
         for (index, coordinate) in coordinates.into_iter().enumerate() {
             self.emit_number(&mut emitter, index as i64, span)?;
