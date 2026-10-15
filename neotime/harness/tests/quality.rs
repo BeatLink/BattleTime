@@ -43,14 +43,15 @@ fn listing_page(kind: PackageKind) -> (&'static str, String) {
     (page, text)
 }
 
-/// Whether the first column of some table row on the page names the id, as `` `id` ``.
+/// Whether the first column of some table row on the page names the id, as `` `id` `` or as a link to its own page.
 fn is_listed(page_text: &str, id: &str) -> bool {
     let quoted = format!("`{id}`");
+    let linked = format!("/{id}.md)");
     page_text
         .lines()
         .filter_map(|line| line.strip_prefix('|'))
         .filter_map(|row| row.split('|').next())
-        .any(|first_column| first_column.contains(&quoted))
+        .any(|first_column| first_column.contains(&quoted) || first_column.contains(&linked))
 }
 
 // ============================================================================
