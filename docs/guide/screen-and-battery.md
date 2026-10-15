@@ -90,8 +90,8 @@ The phone sees the charge too, through the standard Bluetooth Battery service, a
 it every six minutes; see [Health and fitness](health-and-fitness.md#heart-rate-and-battery-logs).
 
 <div class="screens" markdown>
-![The battery page while charging](../../battletime/harness/snapshots/screens/app-system-battery-charging.png){ .screen }
-![The battery page when the charge is low](../../battletime/harness/snapshots/screens/app-system-battery-low.png){ .screen }
+![The battery page while charging](../../battletime/harness/snapshots/screens/app-about-battery-charging.png){ .screen }
+![The battery page when the charge is low](../../battletime/harness/snapshots/screens/app-about-battery-low.png){ .screen }
 </div>
 
 ## Saving power

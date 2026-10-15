@@ -11,7 +11,7 @@ document for its part instead.
 - [ ] **The DCDC regulator on the PineTime.** The firmware turns the nRF52832's DCDC regulator on
   at start (`config.dcdc.reg1`), which has run only in the emulator, which models no regulator.
   Flash it and check that the watch boots, connects, and that the battery percentage in the
-  System app and `battletime battery` reads about the same as before and falls no faster over a day.
+  About app and `battletime battery` reads about the same as before and falls no faster over a day.
 
 - [ ] **TWIM power-down on the PineTime.** `i2c_bus::SleepingTwim` powers TWIM1 down after every
   transfer for nRF52832 anomaly 89, which the emulator does not model. Check that touch, steps and
@@ -66,7 +66,7 @@ document for its part instead.
   run `bluetoothctl disconnect FC:9B:D8:FD:4A:F8`. Expect "Update paused" and "Kept N KB" on the
   watch, "Lost the watch; reconnecting to carry on (try 1 of 4)..." from the CLI, its progress bar
   starting again near the kept amount rather than 0%, and the update validating, installing and
-  confirming, with the new build on the System app's firmware page. Once, the watch was seen
+  confirming, with the new build on the About app's firmware page. Once, the watch was seen
   pausing at "Kept 3 KB" each time with the transfer starting from scratch, so check for that.
 
 - [ ] **Text drawing time on the PineTime.** The geometric font's square roots in one instruction
@@ -199,7 +199,7 @@ document for its part instead.
     it on again;
   - with updates off a phone's DFU is refused and the status page says "Updates are off", and an
     app install is refused; with Temporary both go through until the next restart;
-  - on a firmware sent and not yet confirmed, the System app's Confirm keeps it and Roll back
+  - on a firmware sent and not yet confirmed, the About app's Confirm keeps it and Roll back
     restarts into the one before;
   - a preset theme recolours the open app and the next one opened;
   - settings survive a restart, from `/settings/system` and `/settings/theme`;
@@ -294,7 +294,7 @@ document for its part instead.
   updater's 3.7 V floor before a bootloader write (75f9bcde) have run only in the emulator. Send
   `dist/bootloader-updater.zip` with `battletime flash`, then on the watch check that:
   - off the charger the updater says "Plug in the charger" and its line reads "unplugged";
-  - on the charger the line reads "charging" with a charge close to the system app's, and the
+  - on the charger the line reads "charging" with a charge close to the About app's, and the
     updater writes the bootloader once the battery reads at least 3.7 V;
   - the new bootloader's blue "Keep holding for the menu" page shows the same line.
 
@@ -676,7 +676,7 @@ The full report is [InfiniTime files against BattleTime](https://claude.ai/artif
 
 ### Apps and faces
 
-- [ ] **Try the system app on the watch.** It has run only in the harness and the simulator.
+- [ ] **Try the About app on the watch.** It has run only in the harness and the simulator.
   Flash a firmware whose library carries its `info` icon first, then check the version,
   the uptime after the phone sets the clock, the reset reason after a button-hold reset, and the
   free storage before and after an install. On the About pages, check the Bluetooth address
@@ -684,7 +684,7 @@ The full report is [InfiniTime files against BattleTime](https://claude.ai/artif
   touch panel's three ID registers read in one go, and that the task table's shares add up to
   something sensible. The bootloader page shows `CRC` until a bootloader with the version record
   is sent with the bootloader updater.
-- [ ] **The display's state on the system app's pages,** as InfiniTime's System Info screen shows.
+- [ ] **The display's state on the About app's pages,** as InfiniTime's System Info screen shows.
 - [ ] **The full set of navigation turns.** Phones send about 50 icon names, such as forks,
   merges, ramps, ferries and roundabout exits, and the distance as text. BattleTime has 10 turns and
   always prints metres. Add InfiniTime's navigation pictures, map each name to one, and show the
@@ -762,7 +762,7 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   give each test its own font.
 - [ ] **Measure the stack with any app open.** `tools/measure_stack.py --open-first-app` opens
   the launcher's first row, so with only the heart app installed it measures that: 7,080 B, 1,608 B
-  spare, under the 2 KB the rest keep. The alarm's 10.5 KB peak and the system app's still cannot
+  spare, under the 2 KB the rest keep. The alarm's 10.5 KB peak and the About app's still cannot
   be measured again. Let it open a named app, and shrink the heart app's peak.
 - [ ] **Clippy fails with warnings denied.** `cargo clippy --release -- -D warnings` stops on two
   `needless_borrow`s in `firmware/src/main.rs` (`with_attribute_server(&server)`) and three in

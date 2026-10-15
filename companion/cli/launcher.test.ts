@@ -35,7 +35,7 @@ describe('battletime launcher', () => {
   it('shows the default groups on a watch without a file', async () => {
     const { session: watch } = await session();
     await launcher(watch, []);
-    expect(output()).toContain('Style folders, apps as a list, sorted by name (the defaults');
+    expect(output()).toContain('Style folders, apps as a list, sorted as placed (the defaults');
     expect(output()).toContain('Games [games, game]: Snake');
     expect(output()).toContain('Other [other, pine_logo]: Hello');
   });
@@ -69,7 +69,9 @@ describe('battletime launcher', () => {
   it('sorts by name, and switches to custom keeping the order shown', async () => {
     const { session: watch, onWatch } = await session();
     await launcher(watch, ['show']);
-    expect(output()).toContain('sorted by name');
+    expect(output()).toContain('sorted as placed');
+    await launcher(watch, ['sort', 'name']);
+    expect(onWatch()?.sort).toBe('name');
     await launcher(watch, ['sort', 'custom']);
     expect(onWatch()?.sort).toBe('custom');
     expect(onWatch()?.groups.map((group) => group.id).slice(0, 3)).toEqual(['communication', 'games', 'health']);

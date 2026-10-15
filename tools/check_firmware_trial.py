@@ -1,6 +1,6 @@
-"""Checks the System app's firmware buttons in the PineTime emulator: Confirm keeps a firmware on trial, and Roll back brings back the one before.
+"""Checks the About app's firmware buttons in the PineTime emulator: Confirm keeps a firmware on trial, and Roll back brings back the one before.
 
-It installs a face, the launcher and the System app on the emulated external flash, puts dist/'s
+It installs a face, the launcher and the About app on the emulated external flash, puts dist/'s
 firmware in the update slot with the recovery firmware standing in for the one before it, and marks
 the swap, as an update does. The bootloader swaps the firmware in on trial, and with no phone to
 connect it stays on trial. Through the touch panel the check opens the launcher, then the System
@@ -37,11 +37,11 @@ BATTLETIME = REPOSITORY / "battletime"
 
 FACE_ID = "digital"
 LAUNCHER_ID = "launcher"
-SYSTEM_ID = "system"
+ABOUT_ID = "about"
 PACKAGES = [
     (FACE_ID, "faces/digital/face.tsx"),
     (LAUNCHER_ID, "apps/launcher/app.tsx"),
-    (SYSTEM_ID, "apps/system/app.tsx"),
+    (ABOUT_ID, "apps/about/app.tsx"),
 ]
 OPEN_APP_SYMBOL = "battletime_firmware::restart::OPEN_APP"
 
@@ -73,7 +73,7 @@ SECONDS_TO_RESTART = 5.5
 # Where to touch, from the launcher and System snapshots
 # ============================================================================
 
-# The launcher's first row, the System app, the only app installed.
+# The launcher's first row, the About app, the only app installed.
 FIRST_LAUNCHER_ROW = (120, 34)
 # The two buttons side by side on the system page while the firmware is on trial.
 CONFIRM_BUTTON = (64, 183)
@@ -257,10 +257,10 @@ class Watch:
             self.engine.command(f"lcd SaveScreenshot @{self.screenshots / f'{self.shots:02}-{name}.png'}")
 
     def open_system_page(self):
-        """Opens the launcher from the face, and the System app from its first row."""
+        """Opens the launcher from the face, and the About app from its first row."""
         self.until_open(LAUNCHER_ID, lambda: self.engine.swipe("Up"))
         self.screenshot("launcher")
-        opened = self.until_open(SYSTEM_ID, lambda: self.engine.tap(FIRST_LAUNCHER_ROW))
+        opened = self.until_open(ABOUT_ID, lambda: self.engine.tap(FIRST_LAUNCHER_ROW))
         self.engine.wait_emulated(1)
         self.screenshot("system")
         return opened
@@ -296,7 +296,7 @@ def check_confirm(emulator, dist, flash, folder, open_app_symbol, screenshots):
     results = [started]
     try:
         opened = watch.open_system_page()
-        results.append(check("confirm: System opens from the launcher", opened == SYSTEM_ID, f"open app {opened!r}"))
+        results.append(check("confirm: About opens from the launcher", opened == ABOUT_ID, f"open app {opened!r}"))
         engine.tap(CONFIRM_BUTTON)
         engine.wait_emulated(1)
         watch.screenshot("confirmed")
@@ -324,7 +324,7 @@ def check_roll_back(emulator, dist, flash, folder, open_app_symbol, screenshots)
     results = [started]
     try:
         opened = watch.open_system_page()
-        results.append(check("roll back: System opens from the launcher", opened == SYSTEM_ID, f"open app {opened!r}"))
+        results.append(check("roll back: About opens from the launcher", opened == ABOUT_ID, f"open app {opened!r}"))
         engine.tap(ROLL_BACK_BUTTON)
         end = engine.emulated_seconds() + SECONDS_TO_SWAP
         while engine.emulated_seconds() < end and not (

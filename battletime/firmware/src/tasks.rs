@@ -1,4 +1,4 @@
-//! The task table the system app's task page lists, kept from embassy's trace hooks.
+//! The task table the About app's task page lists, kept from embassy's trace hooks.
 //!
 //! The busy time counts in the clock's 32,768 ticks a second and wraps after about 36 hours of running.
 //!

@@ -623,9 +623,9 @@ fn the_template_shows_the_last_event_it_received() {
 // System
 // ============================================================================
 
-/// Opens the system app on its system page, the first.
+/// Opens the About app on its system page, the first.
 fn open_system_page() -> TestWatch {
-    let watch = TestWatch::open_app("system").unwrap();
+    let watch = TestWatch::open_app("about").unwrap();
     assert_eq!(watch.screen_name(), Some("main"));
     watch
 }
@@ -677,8 +677,8 @@ fn a_rolled_back_firmware_says_so_and_offers_nothing() {
 }
 
 #[test]
-fn the_system_app_opens_on_the_system_page_and_pages_left_to_the_battery() {
-    let mut watch = TestWatch::open_app("system").unwrap();
+fn the_about_app_opens_on_the_system_page_and_pages_left_to_the_battery() {
+    let mut watch = TestWatch::open_app("about").unwrap();
     assert_eq!(watch.screen_name(), Some("main"));
     assert!(watch.shows_text("Last restart"), "{:?}", watch.visible_texts());
 
@@ -1219,8 +1219,8 @@ fn a_swipe_past_the_steps_pages_goes_on_to_the_shell() {
 }
 
 #[test]
-fn a_swipe_past_the_system_apps_pages_goes_on_to_the_shell() {
-    let mut watch = TestWatch::open_app("system").unwrap();
+fn a_swipe_past_the_about_apps_pages_goes_on_to_the_shell() {
+    let mut watch = TestWatch::open_app("about").unwrap();
 
     // Before the first page and past the seventh, the last, and up and down, the shell has the swipe.
     assert_eq!(watch.swipe(Direction::Right), EventResult::NotHandled);

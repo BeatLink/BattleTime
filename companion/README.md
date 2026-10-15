@@ -443,8 +443,8 @@ file service as a few hundred bytes (the layout is in [companion-protocol.md](..
 sends `{"c":"launcher"}` on the packages characteristic so the launcher shows it at once. Installing
 an app writes the file again, so a new app lands in its group. The file lives on the watch, so
 every phone and the command line see the same groups; with no file the screen starts from the
-default groups: Communication, Games, Health, Phone, System (settings included), Time, Tools and
-Other. Setting up a watch writes those defaults, as folders sorted by name. The sort travels in a
+default groups: Time, Phone, Communication, Health, Games, Tools, System (settings included) and
+Other. Setting up a watch writes those defaults, as folders in that order with each group's apps by name. The sort travels in a
 byte after the groups that the watch ignores; a file without it reads as sorted by name. An app whose group is missing goes to Other,
 and so does one installed another way, until the companion next writes the file.
 

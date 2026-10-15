@@ -69,7 +69,7 @@ on("acceleration", record, { every: { milliseconds: 100 }, while_open: true });
 export default define_app({
   id: "motion",
   name: "Motion",
-  group: "system",
+  group: "tools",
   icon: icons.level,
   screens: { main: Motion },
 });

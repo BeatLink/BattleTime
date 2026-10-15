@@ -41,7 +41,7 @@ the watch face and the theme. Merged from InfiniTime's Settings and wasp-os's se
 - **Updates**: whether the watch takes firmware updates and app installs over Bluetooth. A tap
   steps through **On**, **Temporary** and **Off**; Temporary is on only until the watch next
   restarts, as InfiniTime's "till reboot", so it starts again with updates off. Confirming or
-  rolling back a new firmware is on the System app's first page.
+  rolling back a new firmware is on the About app's first page.
 - **Date & time** sets the clock by hand, for when no phone has, as InfiniTime's date and time
   screens do. It opens on today's date as rollers for the day, month and year, with a page bar
   below; drag a roller up or down, or tap a number above or below the middle one to step it. The

@@ -63,7 +63,8 @@ The pages style: one group per page, swiped left and right.
 ## With the companion app
 
 The companion app sets up the launcher: the style and view, which group each app goes in, and the
-order of groups and apps, which is by name unless you set an order of your own. It places a newly
+order of groups and apps. Groups start as Time, Phone, Communication, Health, Games, Tools, System
+and Other, each group's apps by name, and you can sort by name or set an order of your own. It places a newly
 installed app in the group the app asks for, until you move it. An app it has not placed, such as
 one installed another way, goes in a group named **Other** at the end. The open launcher shows a
 change at once.

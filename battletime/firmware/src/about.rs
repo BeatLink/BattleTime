@@ -1,4 +1,4 @@
-//! The facts the system app's About pages show about the bootloader and the chips, kept as numbers
+//! The facts the About app's pages show about the bootloader and the chips, kept as numbers
 //! for the app to format.
 //!
 //! The parts that talk to a chip note its ID as they start it. The bootloader's version record is

@@ -375,7 +375,7 @@ two taps on the face; it needs no Bluetooth and takes about a minute.
 
 `../tools/check_firmware_trial.py [DIST [PICTURE_FOLDER]]` starts the bootloader with `dist/`'s
 firmware waiting in the update slot over the recovery firmware, lets it swap in on trial, opens the
-System app from the launcher and taps **Confirm**, then checks the boot state says booted and a
+About app from the launcher and taps **Confirm**, then checks the boot state says booted and a
 restart keeps the firmware; in a second run it taps **Roll back** and checks the bootloader brings
 the firmware before back. It needs `tools/build_images.sh` run first and takes about three minutes.
 

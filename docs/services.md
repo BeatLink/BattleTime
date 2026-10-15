@@ -355,6 +355,6 @@ screen kept busy cannot starve it. The firmware's use of it is in
 ### Task table (`services/task_table`)
 
 `battletime-task-table` keeps the firmware's tasks, with how often each has run and how long it has
-spent running, for the System app's Tasks page. The firmware feeds it from embassy's trace hooks: a
+spent running, for the About app's Tasks page. The firmware feeds it from embassy's trace hooks: a
 task is added when it is spawned, timed each time the executor polls it, and removed when it ends. A
 task names itself on its first run, since the hooks know a task only by its address.

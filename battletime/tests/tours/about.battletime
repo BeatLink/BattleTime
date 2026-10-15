@@ -1,5 +1,5 @@
-# Every screen of the system app, for docs/apps/system.md: the system page, each state of the battery page, then the memory, bootloader, hardware, tasks and licence pages.
-open app system
+# Every screen of the About app, for docs/apps/about.md: the system page, each state of the battery page, then the memory, bootloader, hardware, tasks and licence pages.
+open app about
 expect text "0d 03:25:00"
 expect text "2026-01-04"
 expect text "Confirmed"

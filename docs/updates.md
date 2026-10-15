@@ -144,7 +144,7 @@ sequenceDiagram
   really work rolls back by itself. Advertising alone proves nothing, since the host is told it
   started whether or not anything went out on air. The companion writes the time on every
   connection, which is enough.
-- **The wearer can decide.** The System app's first page says whether the bootloader keeps the
+- **The wearer can decide.** The About app's first page says whether the bootloader keeps the
   running firmware, and while it is on trial offers Confirm and Roll back, as InfiniTime's firmware
   validation screen does. Roll back restarts without confirming, so the bootloader's ordinary revert
   puts the firmware before back. The first Bluetooth exchange still confirms by itself: waiting for
@@ -382,8 +382,8 @@ read the replaced image from the wrong page after a swap. What the suites check:
 5. **Migration from InfiniTime.** The same from MCUBoot with the MCUBoot image.
 6. **Watchdog.** With the button held, the firmware must stop feeding the watchdog and the watch
    must reset into the bootloader within about five seconds.
-7. **Confirm and roll back from the System app.** `tools/check_firmware_trial.py` lets the
-   bootloader swap `dist/`'s firmware in on trial over the recovery build, opens the System app
+7. **Confirm and roll back from the About app.** `tools/check_firmware_trial.py` lets the
+   bootloader swap `dist/`'s firmware in on trial over the recovery build, opens the About app
    through the touch panel, and taps Confirm, after which the boot state must say booted and a
    restart keep the firmware, or Roll back, after which the bootloader must bring the recovery
    build back with the boot state saying reverted. It installs apps, so it runs by hand, not in CI.

@@ -29,12 +29,12 @@ A new firmware runs on trial until something confirms it. A phone writing the ti
 anything over Bluetooth confirms it by itself, so most updates are confirmed within moments. If it
 never is, the next restart puts the previous firmware back.
 
-The first page of the [System app](../apps/system.md) shows the firmware's version and commit and
+The first page of the [About app](../apps/about.md) shows the firmware's version and commit and
 whether it is confirmed, on trial or rolled back to. While it is on trial the page warns that any
 restart rolls back, and offers **Confirm**, which keeps it, and **Roll back**, which restarts at
 once into the firmware before it, as InfiniTime's firmware validation screen does.
 
-![A firmware on trial in the System app](../../battletime/harness/snapshots/screens/app-system-firmware-trial.png){ .screen }
+![A firmware on trial in the About app](../../battletime/harness/snapshots/screens/app-about-firmware-trial.png){ .screen }
 
 ## The side button menu
 
@@ -76,7 +76,7 @@ real watch.
 
 ## About the watch
 
-The System app's pages, swiped left from the system page, show the battery; the memory (free
+The About app's pages, swiped left from the system page, show the battery; the memory (free
 storage, free memory and the least it has been); the bootloader's version; the hardware (the
 Bluetooth address, the flash chip, the touch panel and the accelerometer); the firmware's tasks and
 their share of the time; and the licence.

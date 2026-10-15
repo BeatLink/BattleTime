@@ -568,7 +568,7 @@ impl TestWatch {
             .report_system_value_changes(value.bit(), now, &mut self.system);
     }
 
-    /// Replaces the firmware's tasks, as the system app's task page lists them, and redraws what shows them.
+    /// Replaces the firmware's tasks, as the About app's task page lists them, and redraws what shows them.
     pub fn set_tasks(&mut self, tasks: Vec<FakeTask>) {
         self.system.tasks = tasks;
         let now = self.now();

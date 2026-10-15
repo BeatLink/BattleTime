@@ -77,7 +77,7 @@ allows. Choose an app to:
 ## The launcher
 
 **Launcher** arranges the watch's launcher, the screen that opens with a swipe up the face. Apps sit
-in groups: Communication, Games, Health, Phone, System, Time, Tools and Other to start with, each
+in groups: Time, Phone, Communication, Health, Games, Tools, System and Other to start with, each
 app in the group it declares.
 
 - **Style** is how the groups show: **folders** (a list of groups, each opening its apps),

@@ -47,22 +47,22 @@ export type LauncherSettings = {
   placements: Placement[];
 };
 
-// The groups a watch starts with, which the usual apps declare, in order of their names.
+// The groups a watch starts with, which the usual apps declare, in the order the launcher shows them.
 export const DEFAULT_GROUPS: LauncherGroup[] = [
-  { id: 'communication', name: 'Communication', icon: 'notification' },
-  { id: 'games', name: 'Games', icon: 'game' },
-  { id: 'health', name: 'Health', icon: 'heart' },
-  { id: 'phone', name: 'Phone', icon: 'phone' },
-  { id: 'system', name: 'System', icon: 'settings' },
   { id: 'time', name: 'Time', icon: 'clock' },
+  { id: 'phone', name: 'Phone', icon: 'phone' },
+  { id: 'communication', name: 'Communication', icon: 'notification' },
+  { id: 'health', name: 'Health', icon: 'heart' },
+  { id: 'games', name: 'Games', icon: 'game' },
   { id: 'tools', name: 'Tools', icon: 'calculator' },
+  { id: 'system', name: 'System', icon: 'settings' },
   { id: OTHER_GROUP_ID, name: 'Other', icon: 'pine_logo' },
 ];
 
 export const DEFAULT_LAUNCHER: LauncherSettings = {
   style: 'folders',
   view: 'list',
-  sort: 'name',
+  sort: 'custom',
   groups: DEFAULT_GROUPS,
   placements: [],
 };

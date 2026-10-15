@@ -164,7 +164,7 @@ const EXPECTED_TO_COMPILE: [&str; 51] = [
     "apps/snake",
     "apps/sports",
     "apps/steps",
-    "apps/system",
+    "apps/about",
     "apps/stopwatch",
     "apps/template",
     "apps/timer",

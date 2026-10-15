@@ -1698,7 +1698,7 @@ impl Shell {
 // ============================================================================
 
 /// The app whose battery page shows when the charger is plugged in or out, or the charge goes low.
-const BATTERY_APP_ID: &str = "system";
+const BATTERY_APP_ID: &str = "about";
 
 /// The battery app's screen that opens for a battery event, in place of its first.
 const BATTERY_SCREEN: &str = "battery";

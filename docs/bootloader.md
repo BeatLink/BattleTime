@@ -246,7 +246,7 @@ The bootloader carries its version and build date in a 42-byte record in its con
 build date as `YYYY-MM-DD`. `bootloader/build.rs` writes it with
 `battletime_boot::version::VersionRecord` and the same version text the firmware's build uses, and
 the record starts on a word boundary. Nothing in the bootloader reads it, so `main` keeps it with
-`black_box`. The firmware's system app shows it: `VersionRecord::find` reads the bootloader's
+`black_box`. The firmware's About app shows it: `VersionRecord::find` reads the bootloader's
 pages a word at a time for the magic, the first time an app asks. A bootloader built before the
 record has none, and the app shows the start of its CRC-32 instead, as the status page does.
 Because the record holds the commit, every build of a new commit is a new bootloader to the

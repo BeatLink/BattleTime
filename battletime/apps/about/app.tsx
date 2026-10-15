@@ -1,4 +1,4 @@
-// System: how the watch is doing, on pages side by side, swiped left and right, as InfiniTime's
+// About: how the watch is doing, on pages side by side, swiped left and right, as InfiniTime's
 // SystemInfo screens are: the firmware, the battery, memory, the bootloader, the hardware, the tasks
 // and the licence.
 // The battery page merges InfiniTime's BatteryInfo with PinetimeLite's charging and low battery
@@ -499,8 +499,8 @@ function BatteryScreen() {
 }
 
 export default define_app({
-  id: "system",
-  name: "System",
+  id: "about",
+  name: "About",
   group: "system",
   icon: icons.info,
   screens: { main: SystemScreen, battery: BatteryScreen },

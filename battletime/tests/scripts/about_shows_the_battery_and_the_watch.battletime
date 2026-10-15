@@ -1,5 +1,5 @@
-# The system app opens on the firmware version and build date, the uptime and why the watch restarted, and keeps them current.
-open app system
+# The About app opens on the firmware version and build date, the uptime and why the watch restarted, and keeps them current.
+open app about
 expect screen main
 expect text "0.1.0+1b19aed"
 expect text "2026-01-04"

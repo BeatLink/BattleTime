@@ -77,6 +77,19 @@ describe('the launcher file', () => {
     expect(readLauncherFile(launcherFile(DEFAULT_LAUNCHER, [])) ).toEqual(DEFAULT_LAUNCHER);
   });
 
+  it('starts with time first and system last before other', () => {
+    expect(groupApps(DEFAULT_LAUNCHER, []).map(({ group }) => group.id)).toEqual([
+      'time',
+      'phone',
+      'communication',
+      'health',
+      'games',
+      'tools',
+      'system',
+      'other',
+    ]);
+  });
+
   it('keeps the sort in the byte after the groups, and reads a file without it as by name', () => {
     const file = launcherFile({ ...TWO_GROUPS, sort: 'name' }, installed);
     expect(file.at(-1)).toBe(0);

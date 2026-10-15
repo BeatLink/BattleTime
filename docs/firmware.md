@@ -311,7 +311,7 @@ into the charge; apps read it, `is_charging` and `battery_millivolts`.
 - **Battery screen.** The events of each reading (the charger plugged in or taken off, the battery
   full, the charge low) queue in `battery::EVENTS`, and the shell takes them when the battery values
   change. It hands each to the open app's `battery` subscriptions, and for the charger and, outside
-  do not disturb, the low warning, it opens the `system` app straight onto its `battery` screen
+  do not disturb, the low warning, it opens the `about` app straight onto its `battery` screen
   (`AppHost::start_on_screen`, which leaves nothing to go back to inside the app) over what is open
   and lights the screen. An app that keeps the screen on, such as a ringing alarm, stays in front,
   and the screen only lights. Without the app the screen just lights on what is open. When the
@@ -609,7 +609,7 @@ which dismisses it as Restart on the crash screen does.
   gives 0 and asks the shell's loop to count it, outside the redraw's deep stack; the app then
   redraws with the count, which is kept until the next app opens. An app's `open_folder` is listed
   the same way, once its handler has returned.
-- **About facts.** `about.rs` keeps what the System app's About pages show as numbers for the app
+- **About facts.** `about.rs` keeps what the About app's pages show as numbers for the app
   to format: the bootloader's CRC-32 from start-up, the external flash's JEDEC ID, the touch
   panel's chip ID and firmware version, read in one transaction once it starts, the
   accelerometer's chip ID, and the Bluetooth address from FICR. The bootloader's version record is

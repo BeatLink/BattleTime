@@ -36,7 +36,7 @@ Under **Firmware downloads** in **Settings**:
 
 A new firmware runs on trial until a phone or computer exchanges data with it, which the companion
 does as soon as it reconnects. Until then the watch's status page says **On trial**, and the next
-restart would put the previous firmware back. The System app's first page also offers to confirm
+restart would put the previous firmware back. The About app's first page also offers to confirm
 or roll back a firmware still on trial.
 
 If an update leaves the watch unable to start, the bootloader rolls back by itself. Holding the

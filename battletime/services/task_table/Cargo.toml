@@ -2,7 +2,7 @@
 name = "battletime-task-table"
 version = "0.1.0"
 edition = "2021"
-description = "The firmware's tasks with how often each has run and for how long, for the system app's task page"
+description = "The firmware's tasks with how often each has run and for how long, for the About app's task page"
 license.workspace = true
 publish = false
 

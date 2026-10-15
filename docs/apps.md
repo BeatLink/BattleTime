@@ -28,13 +28,6 @@ These screens are part of the firmware, so they are always there and never liste
 | [Pomodoro](apps/pomodoro.md) | Work and break sessions in turn, with a long break every few rounds. |
 | [Sports](apps/sports.md) | A stopwatch that counts steps too, keeping the last five sessions for the companion. |
 
-## Health
-
-| App | What it does |
-|---|---|
-| [Heart](apps/heart.md) | Measures the heart rate and charts the latest readings. |
-| [Steps](apps/steps.md) | Today's steps against the goal, the last seven days and a day by hour. |
-
 ## Phone
 
 These need the phone or computer connected through the companion app.
@@ -51,19 +44,12 @@ These need the phone or computer connected through the companion app.
 | [QR code](apps/qr-code.md) | Up to eight QR codes made in the companion, shown for another phone to scan. |
 | [Prompt](apps/prompt.md) | A yes or no question from the companion, answered on the watch. |
 
-## Tools
+## Health
 
 | App | What it does |
 |---|---|
-| [Calculator](apps/calculator.md) | Adds, subtracts, multiplies and divides numbers of up to fifteen digits. |
-| [Flashlight](apps/flashlight.md) | Turns the screen into a white or red light, at three brightness levels. |
-| [Beacon](apps/beacon.md) | Flashes the heart rate sensor's green LED at a chosen brightness and rate. |
-| [Level](apps/level.md) | A spirit level whose bubble turns green when the watch is level. |
-| [Metronome](apps/metronome.md) | Beats on the vibration motor, with tap tempo. |
-| [Morse](apps/morse.md) | A notepad you type in Morse code with swipes. |
-| [Haiku](apps/haiku.md) | A new short verse each time it opens. |
-| [Hello](apps/hello.md) | The smallest app, a starting point for reading app code. |
-| [Template](apps/template.md) | A starting point for a new app that answers every kind of input. |
+| [Heart](apps/heart.md) | Measures the heart rate and charts the latest readings. |
+| [Steps](apps/steps.md) | Today's steps against the goal, the last seven days and a day by hour. |
 
 ## Games
 
@@ -78,6 +64,21 @@ These need the phone or computer connected through the companion app.
 | [Snake](apps/snake.md) | Classic Snake on a 16 by 16 board, steered by swipes. |
 | [2048](apps/twos.md) | 2048: slide tiles to merge equal numbers. |
 
+## Tools
+
+| App | What it does |
+|---|---|
+| [Calculator](apps/calculator.md) | Adds, subtracts, multiplies and divides numbers of up to fifteen digits. |
+| [Flashlight](apps/flashlight.md) | Turns the screen into a white or red light, at three brightness levels. |
+| [Beacon](apps/beacon.md) | Flashes the heart rate sensor's green LED at a chosen brightness and rate. |
+| [Level](apps/level.md) | A spirit level whose bubble turns green when the watch is level. |
+| [Motion](apps/motion.md) | Charts the accelerometer's readings on each axis. |
+| [Metronome](apps/metronome.md) | Beats on the vibration motor, with tap tempo. |
+| [Morse](apps/morse.md) | A notepad you type in Morse code with swipes. |
+| [Haiku](apps/haiku.md) | A new short verse each time it opens. |
+| [Hello](apps/hello.md) | The smallest app, a starting point for reading app code. |
+| [Template](apps/template.md) | A starting point for a new app that answers every kind of input. |
+
 ## System
 
 | App | What it does |
@@ -85,9 +86,8 @@ These need the phone or computer connected through the companion app.
 | [Apps](apps/launcher.md) | The launcher: lists the installed apps by group and opens the one you tap. |
 | [Settings](apps/settings.md) | The watch's settings: screen, waking, clock, units, step goal, face and theme. |
 | [Software](apps/software.md) | Turns each installed app and face on or off. |
-| [System](apps/system.md) | Firmware, battery, memory and hardware details, a page each. |
+| [About](apps/about.md) | Firmware, battery, memory and hardware details, a page each. |
 | [Files](apps/files.md) | Browses the watch's storage a folder at a time, with sizes. |
-| [Motion](apps/motion.md) | Charts the accelerometer's readings on each axis. |
 
 An app whose group the watch does not have goes to Other.
 

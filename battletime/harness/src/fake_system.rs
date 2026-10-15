@@ -239,7 +239,7 @@ pub struct FakeSystem {
     pub app_name: String,
     /// Set when an effect changed the notifications, so the watch tells the app once the call returns.
     pub notifications_changed: bool,
-    /// The firmware's tasks, as the system app's task page lists them.
+    /// The firmware's tasks, as the About app's task page lists them.
     pub tasks: Vec<FakeTask>,
     /// The steps in each hour of the step history, at `days_back * 24 + hour`.
     pub step_hours: Vec<Value>,
