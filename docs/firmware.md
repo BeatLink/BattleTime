@@ -415,6 +415,13 @@ later. Turning the `bluetooth` setting off stops advertising and drops a connect
 it on advertises again. `tools/check_advertising.py` proves the advertising and the names in the
 emulator.
 
+### A steady link
+
+Two seconds after a central connects, if the supervision timeout it chose is under 4 s, the watch
+asks over L2CAP for 4 s, keeping the central's interval and latency, so phones that pick a fast
+interval for updates keep it. BlueZ picks 420 ms by default, so a computer's link otherwise drops
+after two or three missed packets. The request is boxed, so it does not grow the Bluetooth task.
+
 ### GATT services
 
 The services are declared with TrouBLE's `#[gatt_server]` and `#[gatt_service]` macros, patched in

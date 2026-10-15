@@ -787,6 +787,12 @@ fn advertising_parameters(
     }
 }
 
+/// A central that drops the link after half a second without a packet, as BlueZ does by default, loses it to the smallest stutter.
+const STEADY_SUPERVISION_TIMEOUT: Duration = Duration::from_secs(4);
+
+/// How long a new link is left before asking for more slack, since phones change it themselves straight after connecting.
+const STEADY_LINK_DELAY: Duration = Duration::from_secs(2);
+
 /// Its own task, so the Bluetooth loop's stack frame is not added to start-up's.
 #[embassy_executor::task]
 async fn run_bluetooth(
@@ -884,6 +890,24 @@ async fn run_bluetooth(
             // The phone's own services are used beside serving the watch's, and end with the connection.
             #[cfg(with_shell)]
             let serving = select(serving, phone_services::use_phone_services(connection.raw()));
+            // Boxed, so the host command it waits on does not grow the Bluetooth task, which is built on the stack.
+            let asking_for_slack = alloc::boxed::Box::pin(async {
+                Timer::after(STEADY_LINK_DELAY).await;
+                let current = connection.raw().params();
+                if current.supervision_timeout < STEADY_SUPERVISION_TIMEOUT {
+                    let slack = RequestedConnParams {
+                        min_connection_interval: current.conn_interval,
+                        max_connection_interval: current.conn_interval,
+                        max_latency: current.peripheral_latency,
+                        min_event_length: Duration::from_ticks(0),
+                        max_event_length: Duration::from_ticks(0),
+                        supervision_timeout: STEADY_SUPERVISION_TIMEOUT,
+                    };
+                    let _ = connection.raw().update_connection_params(&stack, &slack).await;
+                }
+                core::future::pending::<()>().await
+            });
+            let serving = select(serving, asking_for_slack);
             serving.await;
             phone::set_connected(false);
             screen.write_line(line::BLUETOOTH, "Advertising");
