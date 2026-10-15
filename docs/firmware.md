@@ -1,6 +1,6 @@
 # Firmware
 
-`neotime-firmware` (`neotime/firmware/`) is the program the watch runs. It takes over the
+`battletime-firmware` (`battletime/firmware/`) is the program the watch runs. It takes over the
 bootloader's watchdog, starts the [drivers](drivers.md) and [services](services.md) on
 [Embassy](https://embassy.dev), and spawns the tasks that run the watch. Its shell shows the watch
 face, the launcher and the apps through the [app host](app-runtime.md#the-app-host). It is outside
@@ -74,7 +74,7 @@ flowchart LR
 
 ## The shell
 
-`shell.rs` is the system's main loop. Many of its rules live in small modules of `neotime-app-host`
+`shell.rs` is the system's main loop. Many of its rules live in small modules of `battletime-app-host`
 (`swipes`, `side_button`, `way_back`, `quick_apps`, `wake`, `haptics`, `motion`, `phone`,
 `settings`, `closed_apps`), so they are tested on the computer.
 
@@ -82,30 +82,30 @@ flowchart LR
 
 - **Moving around.** The face shows first. A swipe up the face does not use opens the launcher, an
   ordinary app (`apps/launcher`) that lists `installed_apps` with their icons; a tap opens one.
-  Every swipe goes to the open screen first, and `neotime_app_host::swipes` says what the shell does
+  Every swipe goes to the open screen first, and `battletime_app_host::swipes` says what the shell does
   with one it leaves: on the face, down pulls the notifications down and left and right step round
   the quick apps; on the notifications, down pulls quick settings down after them; up on either,
   or down on the launcher, goes back a step. Inside any other app the shell takes no swipe.
-- **Quick apps.** `neotime_app_host::quick_apps` steps round the ring read from
+- **Quick apps.** `battletime_app_host::quick_apps` steps round the ring read from
   `/settings/quick_apps` on each step, with the face as the place before the first app, and the
   shell remembers that the open app came from the ring so its own unused swipes step on.
 - **The way back.** Each step forward, by a swipe, the launcher, a double click, an app opening
   another or a notification waking the screen, records the screen left and how the new one came in
-  (`neotime_app_host::way_back`, the newest 8). Going back, by the button, a swipe up on the
+  (`battletime_app_host::way_back`, the newest 8). Going back, by the button, a swipe up on the
   pulled-down screens, a swipe down on the launcher or an app's `back` or `close`, retraces them in
   exactly the reverse order, each coming in by the opposite movement, so quick settings goes back to
   the notifications and then the face. A step forward onto the screen just left counts as a step
   back. Reaching the face forgets the way back, and so does turning an app on or off, since that
   moves the launcher's places; with nothing recorded, back goes to the face.
 - **Built-in screens.** The notifications and quick settings are app sources in `shell/`, compiled
-  by `firmware/build.rs` with `neotime-compiler` and included in the firmware, about 2.2 KB
+  by `firmware/build.rs` with `battletime-compiler` and included in the firmware, about 2.2 KB
   together. The shell opens them like any app image but straight from flash, never from `/apps`,
   so they are not installed packages and the launcher never lists them.
 
 ### Side button
 
-`send_button_gestures` owns the `neotime-button` driver and sleeps on the pin's edge, sending each
-click, double click, long press and 2 second press to the shell. `neotime_app_host::side_button`
+`send_button_gestures` owns the `battletime-button` driver and sleeps on the pin's edge, sending each
+click, double click, long press and 2 second press to the shell. `battletime_app_host::side_button`
 decides what each does:
 
 - A dark screen only wakes.
@@ -170,11 +170,11 @@ or swipe from each touch's `GestureFinder` (see [drivers.md](drivers.md#touch-pa
 - **Waking by touch.** The `wake_on_touch` setting picks what turns a dark screen on besides the
   button. When the screen turns off the shell tells the touch task, which puts the panel into deep
   sleep for none, leaves it scanning for a tap, or sleeps it listening for a double tap only;
-  `neotime_app_host::settings::touch_wakes_screen` decides which touch wakes the shell. With a tap
+  `battletime_app_host::settings::touch_wakes_screen` decides which touch wakes the shell. With a tap
   waking the screen, the panel stays awake while the screen is off. The motion task meanwhile
   watches for a still wrist, reading it every 2 s if nothing else does, so background heart rate
   can skip its attempts while the watch lies still.
-- **Wake gestures.** `neotime_app_host::wake::gestures_to_watch` says what the accelerometer
+- **Wake gestures.** `battletime_app_host::wake::gestures_to_watch` says what the accelerometer
   watches for from the settings and the screen: a raised or shaken wrist while it is dark, a
   lowered arm while it is lit and not held on, nothing in sleep mode. The shell hands that to the
   motion task on every pass of its loop, which then reads ten times a second while lowering is
@@ -182,13 +182,13 @@ or swipe from each touch's `GestureFinder` (see [drivers.md](drivers.md#touch-pa
   off as for any other request. `wake::DoubleTapFinder` turns two taps the face does not take,
   within 500 ms and 40 pixels, or a double tap from the panel, into putting the watch to sleep,
   since the panel reports no double taps while the screen is lit. Sleep mode, kept inside do not
-  disturb by `neotime-settings`, also stops touch waking the screen and turns the always-on
+  disturb by `battletime-settings`, also stops touch waking the screen and turns the always-on
   screen off. `tools/check_wake_gestures.py` proves raise, lower and the face's double tap in the
   emulator.
 
 ### Apps
 
-- **The list.** `apps.rs` reads every installed app from `/apps` through `neotime-packages` and
+- **The list.** `apps.rs` reads every installed app from `/apps` through `battletime-packages` and
   keeps the list, turned-off apps included, for the `packages` system values: the watch face is the
   one the `watch_face` setting names, or else the first face turned on, the app with id `launcher`
   is the launcher, and every other app turned on is listed in `installed_apps`. The ids of the
@@ -202,7 +202,7 @@ or swipe from each touch's `GestureFinder` (see [drivers.md](drivers.md#touch-pa
 - **Images.** The open app's image is read into the heap when it opens and freed once its host is
   gone. The shared library is read in place from the internal flash, after the firmware's code.
 - **Memory check before an app opens.** Before the shell starts an app, it compares the app's need
-  from `neotime_runtime::memory_need` (less the image, already allocated) with the heap's free
+  from `battletime_runtime::memory_need` (less the image, already allocated) with the heap's free
   bytes, and when it would not fit shows a page saying how much the app needs and how much is free,
   with OK, instead of opening it. OK opens the face, or the help screen when the face itself was
   refused. Free bytes are the sum of every free block, so a fragmented heap can still refuse a
@@ -211,7 +211,7 @@ or swipe from each touch's `GestureFinder` (see [drivers.md](drivers.md#touch-pa
   the screen turns off, only when one changed, and put back when it opens. A `state` message from
   the companion, which follows its write of that file, opens the open app again on the new state
   without saving over it.
-- **Closed apps.** `closed_apps.rs` keeps `neotime_app_host::closed_apps::ClosedApps`, a few bytes
+- **Closed apps.** `closed_apps.rs` keeps `battletime_app_host::closed_apps::ClosedApps`, a few bytes
   for each listed app with a subscription that runs while closed, filled when the apps are read and
   again as each app closes. The loop sleeps until the next one too. When one comes due, and no store
   write is under way, the shell loads it with `open_in_background`, `run_while_closed` fires what is
@@ -251,11 +251,11 @@ or swipe from each touch's `GestureFinder` (see [drivers.md](drivers.md#touch-pa
 
 ### Vibration
 
-`neotime_app_host::haptics` decides what the motor plays: `vibrate`, `vibrate_pattern`,
+`battletime_app_host::haptics` decides what the motor plays: `vibrate`, `vibrate_pattern`,
 `stop_vibrating` and `notify` from apps, a notification or call from the phone, and the chimes. In
 do not disturb only the `alarm` pattern, which the alarm and timer ring with, and a stop get
 through; with the `alarms_in_do_not_disturb` setting off, only a stop does. Each `Vibration` goes to
-the vibrator task, which turns it into `neotime-vibrator` steps, so a pattern never holds up the
+the vibrator task, which turns it into `battletime-vibrator` steps, so a pattern never holds up the
 shell; opening another app stops what is playing.
 
 ## Sensors
@@ -268,7 +268,7 @@ shell; opening another app stops what is playing.
   `step_history`, and goes to the app's `steps` events. `reset_step_trip` from an app only signals
   the task, which zeroes the trip and saves it, so no file is written from inside an app's handler.
 - **Acceleration and shakes.** While the screen is on, the shell asks
-  `neotime_app_host::motion::reading_period_in_milliseconds` how often the open app needs readings:
+  `battletime_app_host::motion::reading_period_in_milliseconds` how often the open app needs readings:
   the shortest `acceleration` period, no faster than ten a second, or a tenth of a second for a
   `shake` event. The motion task reads acceleration only then, so the chip is read for steps alone
   the rest of the time, and feeds each reading to the shake detector. Readings and shakes reach the
@@ -305,7 +305,7 @@ task storage. `tools/check_heart_rate.py` runs it in the emulator against an emu
 
 `battery.rs` reads the battery's voltage through the SAADC once a minute, and half a second after
 power is plugged in or out, so both charger pins have settled. P0.19 says power is present and P0.12
-that it is charging. [`neotime-battery`](services.md#battery-servicesbattery) turns each reading
+that it is charging. [`battletime-battery`](services.md#battery-servicesbattery) turns each reading
 into the charge; apps read it, `is_charging` and `battery_millivolts`.
 
 - **Battery screen.** The events of each reading (the charger plugged in or taken off, the battery
@@ -393,7 +393,7 @@ erase for tens of milliseconds. Work the wearer is not waiting on first awaits
 `foreground::wait_for_a_pause`: each packages command, each file transfer write from the phone, and
 each step count reading before it goes to the log. It holds back while the shell is part way
 through a transition or a sliced redraw, or a finger is down, checking every 20 ms, and starts
-anyway after a second, as [`neotime-foreground`](services.md#foreground-servicesforeground)
+anyway after a second, as [`battletime-foreground`](services.md#foreground-servicesforeground)
 decides. The DFU image check yields every 4 KB, so the radio's host side keeps running while it
 reads up to 480 KB back.
 
@@ -409,7 +409,7 @@ The watch advertises as InfiniTime does, so phones find the two the same way: fa
 for 30 seconds after start, a disconnect or Bluetooth coming back on, then about once a second.
 The advertisement carries the flags, the Heart Rate and legacy DFU services and a transmit power of
 0 dBm, and the scan response carries the name; the GAP appearance is a smartwatch. The name is
-"NeoTime", or "InfiniTime" with the `gadgetbridge_name` setting on, so Gadgetbridge's InfiniTime
+"BattleTime", or "InfiniTime" with the `gadgetbridge_name` setting on, so Gadgetbridge's InfiniTime
 support takes the watch; the GAP device name follows it. A refused advertise retries a second
 later. Turning the `bluetooth` setting off stops advertising and drops a connected phone; turning
 it on advertises again. `tools/check_advertising.py` proves the advertising and the names in the
@@ -421,16 +421,16 @@ The services are declared with TrouBLE's `#[gatt_server]` and `#[gatt_service]` 
 `third_party/` so the attribute table is built in a constant and kept in flash: the declarations,
 UUIDs and `&'static` read-only values cost no RAM. Only the values written or set at run time are
 in RAM, in one byte array, beside the CCCDs TrouBLE keeps for each client; see
-`third_party/trouble-host/NEOTIME.md` and [memory-map.md](memory-map.md#ram-64-kb-planned).
+`third_party/trouble-host/BATTLETIME.md` and [memory-map.md](memory-map.md#ram-64-kb-planned).
 
 | Service | UUID | What it serves |
 |---|---|---|
-| Legacy DFU | `00001530-…` | Firmware updates through [`neotime-dfu`](services.md#firmware-updates-over-bluetooth-servicesdfu). |
+| Legacy DFU | `00001530-…` | Firmware updates through [`battletime-dfu`](services.md#firmware-updates-over-bluetooth-servicesdfu). |
 | Current Time | 0x1805 | The time (0x2A2B) and time zone (0x2A0F), read and written. |
-| NeoTime | `6e540001-…` | The [diagnostics](#diagnostics) (`6e540002`) and the packages commands (`6e540003`). |
+| BattleTime | `6e540001-…` | The [diagnostics](#diagnostics) (`6e540002`) and the packages commands (`6e540003`). |
 | Nordic UART | `6e400001-…` | The companion app's JSON lines. |
 | Battery | 0x180F | The charge (0x2A19), read or notified when it changes. |
-| File transfer | Adafruit's | Files through [`neotime-blefs`](services.md#files-over-bluetooth-servicesblefs). |
+| File transfer | Adafruit's | Files through [`battletime-blefs`](services.md#files-over-bluetooth-servicesblefs). |
 | Device Information | 0x180A | The six strings InfiniTime serves. |
 | Alert Notification | 0x1811 | New Alert (0x2A46), written by any Bluetooth tool to show a notification. |
 | Heart Rate | 0x180D | The latest reading (0x2A37), read or notified as each is taken. |
@@ -439,10 +439,10 @@ in RAM, in one byte array, beside the CCCDs TrouBLE keeps for each client; see
 | Music, Navigation, Motion | InfiniTime's | Only in builds with their cargo features; see [bluetooth.md](bluetooth.md#infinitimes-own-services). |
 
 - **Device Information.** Manufacturer `PINE64`, model `PineTime`, hardware revision `1.0.0` and
-  software revision `NeoTime`, all constants in `neotime_companion`, the firmware revision (the
+  software revision `BattleTime`, all constants in `battletime_companion`, the firmware revision (the
   [version](#version)), and a serial number: the chip's 64-bit factory id (FICR DEVICEID) as 16 hex
   digits, written into the table once at start-up.
-- **Heart Rate.** A read gives `neotime_companion::heart_rate_measurement` of the latest reading.
+- **Heart Rate.** A read gives `battletime_companion::heart_rate_measurement` of the latest reading.
   A subscription never starts the sensor, as on InfiniTime, since Gadgetbridge subscribes on every
   connection and the LED would then be lit for as long as the phone is near. The service comes last
   in the table, so the handles of the others stay where they are.
@@ -453,7 +453,7 @@ in RAM, in one byte array, beside the CCCDs TrouBLE keeps for each client; see
   `packages::CHANGED` for the shell; `run` and `stop` raise `packages::TEMPORARY`.
 - **InfiniTime's services.** `infinitime_services.rs` declares them, each under a cfg that
   `build.rs` sets from its cargo feature in the shell's builds only, and hands each write to
-  `neotime_companion::infinitime`, whose message goes to the shell through `app_events` like a
+  `battletime_companion::infinitime`, whose message goes to the shell through `app_events` like a
   Bangle.js line's. The music app's controls queue an event the Bluetooth task notifies, and the
   motion task signals new step counts and, while a phone subscribes to raw motion, each reading.
 - **File transfer.** The storage task answers each command, and the Bluetooth task sends each
@@ -463,8 +463,8 @@ in RAM, in one byte array, beside the CCCDs TrouBLE keeps for each client; see
 
 The first data a phone exchanges proves the radio works end to end, so that is when the firmware
 confirms itself to the bootloader, and the status page says so. With `allows_updates` off,
-`neotime-dfu` refuses a DFU start and the status page says "Updates are off"; an update already
-running carries on. The storage task also locks `/apps` and `/temp` in `neotime-blefs` then. The
+`battletime-dfu` refuses a DFU start and the status page says "Updates are off"; an update already
+running carries on. The storage task also locks `/apps` and `/temp` in `battletime-blefs` then. The
 third value, on until the next restart, lets both through, and `/settings/system` reads it back as
 off.
 
@@ -472,14 +472,14 @@ off.
 
 The Nordic UART service carries the companion's JSON lines. The Bluetooth task hands each write to
 `read_companion_line`, which gives a `setTime` line to the clock and the rest to
-[`neotime-companion`](services.md#companion-messages-servicescompanion):
+[`battletime-companion`](services.md#companion-messages-servicescompanion):
 
 - **`settings`** goes to the shell, which applies the theme to the open app at once, keeps it in
   `/settings/theme`, passes the other settings to the store and sends the settings back as a reply,
   which waits on the heap.
 - **`notify`** goes to the shell through `app_events.rs`. The shell hands it to the open app's
   `notification` subscriptions, keeps it in
-  [`neotime-notifications`](services.md#notifications-servicesnotifications), buzzes the
+  [`battletime-notifications`](services.md#notifications-servicesnotifications), buzzes the
   notification pattern unless do not disturb is on, and opens the notifications on their preview of
   it over what is open, lighting a dark screen; the preview goes back by itself after 7 seconds.
   While `find` rings or a call rings, a notification neither buzzes nor opens anything. Apps'
@@ -488,7 +488,7 @@ The Nordic UART service carries the companion's JSON lines. The Bluetooth task h
   once the host call returns.
 - **Calls, music, weather, navigation, `find` and `vibrate`** wait together in `app_events.rs` as
   one `PhoneUpdates`, the latest of each kind; the shell keeps the music, weather and navigation in
-  its `PhoneData` for apps to read, and `neotime_app_host::phone` hands the open app its `call`,
+  its `PhoneData` for apps to read, and `battletime_app_host::phone` hands the open app its `call`,
   `music`, `weather` and `navigation` events. An incoming call opens the `call` app over what is
   open and rings for up to two minutes, until it is answered, rejected, muted or ended; without the
   call app it buzzes once and lights the screen. `find` plays the alarm pattern until `n` is false,
@@ -509,7 +509,7 @@ Three seconds after a phone connects, `phone_services.rs` looks once for the pho
 service and sets the clock from 0x2A2B and 0x2A0F along the path a phone's time write takes, then
 for its Alert Notification service, turns New Alert notifications on and writes the control point
 for every category. Notified alerts show as notifications or ring as calls, as a New Alert written
-to the watch does. [`neotime-phone-client`](services.md#the-phones-services-servicesphone_client)
+to the watch does. [`battletime-phone-client`](services.md#the-phones-services-servicesphone_client)
 builds the requests and reads the answers; the firmware carries them through two raw ATT calls in
 the vendored TrouBLE, with a 5 second limit on each answer, and keeps reading what the phone sends
 for the rest of the connection. It starts only with 2 KB of heap to spare, keeps 368 B on the heap
@@ -521,7 +521,7 @@ phone through the emulator's Bluetooth bridge.
 A separate watchdog task reads the side button's pin straight from the port every 500 ms and feeds
 the watchdog only while it is up, so a hold of 4 to 5 seconds resets the watch into the bootloader
 whatever the button task does. It also feeds it only while the shell and the radio make progress,
-as [`neotime-liveness`](services.md#liveness-servicesliveness) judges: the shell's loop count must
+as [`battletime-liveness`](services.md#liveness-servicesliveness) judges: the shell's loop count must
 move, and a quiet shell is woken with an empty system value change to prove it still runs; the
 radio's interrupt count must move while it advertises or holds a connection. A shell stopped for six
 checks, or a radio with work stopped for twelve, lets the watchdog reset the watch.
@@ -555,7 +555,7 @@ screen, clears it at start.
   `addr2line -e <the firmware's ELF> <address>`.
 
 Both handlers then halt, so the watchdog resets the watch. The format and its decoding are in
-[`neotime-crash-record`](services.md#crash-record-servicescrash_record).
+[`battletime-crash-record`](services.md#crash-record-servicescrash_record).
 `tests/emulator/crash_record.robot` faults the running firmware, poke-calls the panic handler after
 a refused allocation, and checks the next start reports each and shows the crash screen;
 `tests/emulator/screen_power.robot` checks the kept clock across a soft reset, a watchdog reset and
@@ -565,7 +565,7 @@ screen is off.
 ### Crash screen
 
 After a start whose previous run crashed, the shell opens no app and shows the crash page instead:
-what stopped NeoTime in plain words ("out of memory", "out of stack space" for a stack guard fault,
+what stopped BattleTime in plain words ("out of memory", "out of stack space" for a stack guard fault,
 "a processor fault", "a software error") and which app was open, with two buttons. Restart dismisses
 the crash and opens the face; Send debug info shows a page asking for the companion app and opens
 the face once a debug report is saved, or when the wearer skips it with the side button or the Skip
@@ -586,14 +586,14 @@ catches the usual overflow of a few hundred bytes rather than every one.
 
 ### Diagnostics
 
-The NeoTime service's diagnostics characteristic (`6e540002-…`) is little-endian `u32` words from
+The BattleTime service's diagnostics characteristic (`6e540002-…`) is little-endian `u32` words from
 `diagnostics.rs`. Writing `01` to it says the companion app saved a debug report holding the crash,
 which dismisses it as Restart on the crash screen does.
 
 | Words | What they hold |
 |---|---|
 | 0 to 7 | Shell loops; what last woke the shell (1 touch, 2 button, 3 timer, 4 system values, 5 settings, 6 apps changed, 7 app event, 8 status page, 9 temporary app); whether the screen is lit; the touch panel's state; touch reports; touches sent; button presses; the accelerometer's state (4 while it waits for a shared library with its configuration). |
-| 8 to 21 | The last restart: `neotime_crash_record::last_restart_words`, the `RESETREAS` bits, the kind of crash (0 none, 1 panic, 2 HardFault, 3 out of memory), eight detail words and four words of the open app's id. Set once at start. |
+| 8 to 21 | The last restart: `battletime_crash_record::last_restart_words`, the `RESETREAS` bits, the kind of crash (0 none, 1 panic, 2 HardFault, 3 out of memory), eight detail words and four words of the open app's id. Set once at start. |
 | 22, 23 | Microseconds the shell spent drawing apps, and the CPU spent sending to the display or waiting for a send to end, both counting round. |
 | 24, 25 | Sectors the flash store erased, and store calls the shell made while another task held the store. |
 | 26, 27 | The heart rate sensor's state (1 started, 2 failed to start, 3 failed to read) and its latest reading. |
@@ -614,7 +614,7 @@ which dismisses it as Restart on the crash screen does.
   panel's chip ID and firmware version, read in one transaction once it starts, the
   accelerometer's chip ID, and the Bluetooth address from FICR. The bootloader's version record is
   looked for the first time an app reads it, from the shell's loop:
-  `neotime_boot::version::VersionRecord::find` reads the bootloader's pages word by word for its
+  `battletime_boot::version::VersionRecord::find` reads the bootloader's pages word by word for its
   magic. The firmware's build date comes from `build.rs`. The heap wrapper counts refused
   allocations and the fewest free bytes after any allocation, and the stack guard's fault handler
   adds one to a count kept in `.uninit` beside the crash record.
@@ -627,16 +627,16 @@ which dismisses it as Restart on the crash screen does.
 The start-up lines and an update's progress share the display with the shell; while the page is up
 the shell draws nothing. During an update the page holds the screen lit; once the update ends or
 fails it gives way to the next touch or press, or to the timeout. Its layout comes from
-[`neotime_status_screen::page`](drivers.md#status-screen-driversstatus_screen), the same one the
+[`battletime_status_screen::page`](drivers.md#status-screen-driversstatus_screen), the same one the
 bootloader draws, and the DFU state machine reports its step (`LegacyDfu::activity`) and why a step
 was refused (`Outcome::failure`).
 
 ### Version
 
 `build.rs` sets `FIRMWARE_VERSION` from the package version in `firmware/Cargo.toml` and the commit
-`git rev-parse HEAD` gives, through `neotime_boot::version`: `0.1.0+1b19aed`, with a `*` when
+`git rev-parse HEAD` gives, through `battletime_boot::version`: `0.1.0+1b19aed`, with a `*` when
 `git status` shows uncommitted changes. Where there is no `.git`, such as a Nix build, it reads the
-commit from `NEOTIME_GIT_COMMIT`, which takes Nix's `shortRev` or `dirtyShortRev`, and says
+commit from `BATTLETIME_GIT_COMMIT`, which takes Nix's `shortRev` or `dirtyShortRev`, and says
 `unknown` without either. The status page's title shows it, and Device Information's Firmware
 Revision (0x2A26) answers with it.
 

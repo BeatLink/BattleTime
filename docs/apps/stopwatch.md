@@ -14,19 +14,19 @@ the moment it started, so it keeps running while the app is closed or the watch 
 
 ## Screens
 
-![The stopwatch, cleared](../../neotime/harness/snapshots/screens/app-stopwatch.png)
+![The stopwatch, cleared](../../battletime/harness/snapshots/screens/app-stopwatch.png)
 
 Cleared, before the first start, with the lap button greyed out.
 
-![The stopwatch three seconds after starting](../../neotime/harness/snapshots/screens/app-stopwatch-running.png)
+![The stopwatch three seconds after starting](../../battletime/harness/snapshots/screens/app-stopwatch-running.png)
 
 Running: the time with its hundredths below, and the lap and pause buttons.
 
-![The stopwatch with two laps](../../neotime/harness/snapshots/screens/app-stopwatch-laps.png)
+![The stopwatch with two laps](../../battletime/harness/snapshots/screens/app-stopwatch-laps.png)
 
 Two laps taken, newest first: each lap's number, its own time and the total when it was taken.
 
-![The stopwatch paused](../../neotime/harness/snapshots/screens/app-stopwatch-paused.png)
+![The stopwatch paused](../../battletime/harness/snapshots/screens/app-stopwatch-paused.png)
 
 Paused, with the reset button in red.
 

@@ -1,10 +1,10 @@
-// Adafruit BLE file transfer, the file service InfiniTime calls FSService and NeoTime serves at 0xFEBB.
-// The watch side and the full description live in docs/companion-protocol.md in the NeoTime tree; keep them in step.
+// Adafruit BLE file transfer, the file service InfiniTime calls FSService and BattleTime serves at 0xFEBB.
+// The watch side and the full description live in docs/companion-protocol.md in the BattleTime tree; keep them in step.
 
 import type { DfuLink } from '@/dfu/link';
 import { NotifyQueue } from '@/dfu/link';
 
-import { FILE_TRANSFER, FILE_TRANSFER_SERVICE } from './neotime';
+import { FILE_TRANSFER, FILE_TRANSFER_SERVICE } from './battletime';
 
 // ============================================================================
 // Types

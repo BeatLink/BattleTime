@@ -17,16 +17,16 @@ and how much of the route is done. Ported from InfiniTime's Navigation.
 
 ## Screens
 
-![The navigation app waiting for directions](../../neotime/harness/snapshots/screens/app-navigation.png)
+![The navigation app waiting for directions](../../battletime/harness/snapshots/screens/app-navigation.png)
 
 On opening, before the phone has sent a step.
 
-![The navigation app showing the next turn](../../neotime/harness/snapshots/screens/app-navigation-turn.png)
+![The navigation app showing the next turn](../../battletime/harness/snapshots/screens/app-navigation-turn.png)
 
 A step from the phone: the instruction, 350 m to go and the route about a third done.
 
 ## With the companion app
 
 The directions come from a phone app that sends Gadgetbridge's Bangle.js navigation messages. The
-NeoTime companion app follows no navigation itself, so with it alone the app stays waiting. Those
+BattleTime companion app follows no navigation itself, so with it alone the app stays waiting. Those
 messages carry no progress, so the bar stays empty unless the sender supplies it.

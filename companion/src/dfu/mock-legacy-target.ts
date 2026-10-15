@@ -1,4 +1,4 @@
-// A stand-in watch that takes updates over legacy DFU: NeoTime, which serves DFU in its firmware,
+// A stand-in watch that takes updates over legacy DFU: BattleTime, which serves DFU in its firmware,
 // or wasp-os, which serves it only from its bootloader.
 
 import { concat, readU32le, u32le } from './bytes';
@@ -13,10 +13,10 @@ import {
   CURRENT_TIME_SERVICE,
   FILE_TRANSFER,
   LOCAL_TIME_INFORMATION,
-  NEOTIME_DIAGNOSTICS,
-  NEOTIME_PACKAGES,
-  NEOTIME_SERVICE,
-} from '@/protocol/neotime';
+  BATTLETIME_DIAGNOSTICS,
+  BATTLETIME_PACKAGES,
+  BATTLETIME_SERVICE,
+} from '@/protocol/battletime';
 
 import {
   LEGACY_CONTROL_POINT,
@@ -27,14 +27,14 @@ import {
 
 const SUCCESS = 1;
 const RECEIPT_INTERVAL = 5;
-// NeoTime writes the image to flash 240 bytes at a time, so a lost link keeps a multiple of this.
+// BattleTime writes the image to flash 240 bytes at a time, so a lost link keeps a multiple of this.
 const WRITE_PIECE = 240;
 
 type Stage = 'idle' | 'size' | 'init' | 'image';
 
 type Received = { init: Uint8Array; image: Uint8Array };
 
-export type MockFirmware = 'neotime' | 'wasp-os';
+export type MockFirmware = 'battletime' | 'wasp-os';
 
 export class MockLegacyDfuTarget implements DfuLink {
   readonly received: Received = { init: new Uint8Array(0), image: new Uint8Array(0) };
@@ -48,7 +48,7 @@ export class MockLegacyDfuTarget implements DfuLink {
   private expected = 0;
   private packets = 0;
   private activated = false;
-  // What NeoTime kept of an upload a lost link cut off, and where the image carries on once asked.
+  // What BattleTime kept of an upload a lost link cut off, and where the image carries on once asked.
   private kept: { size: number; init: Uint8Array; image: Uint8Array } | null = null;
   private resumeFrom: number | null = null;
   // Lose the link once this many image bytes have arrived, as a radio dropping out would.
@@ -57,7 +57,7 @@ export class MockLegacyDfuTarget implements DfuLink {
   drops = 0;
   // The image type of every START_DFU, which says which slot an update is for.
   readonly imageTypes: number[] = [];
-  // Every Current Time value written, which is what keeps a NeoTime update.
+  // Every Current Time value written, which is what keeps a BattleTime update.
   readonly timeWrites: Uint8Array[] = [];
   // Every Local Time Information value written, the time zone.
   readonly timeZoneWrites: Uint8Array[] = [];
@@ -69,15 +69,15 @@ export class MockLegacyDfuTarget implements DfuLink {
 
   constructor(
     private id = 'AA:BB:CC:DD:EE:00',
-    readonly firmware: MockFirmware = 'neotime',
+    readonly firmware: MockFirmware = 'battletime',
     // Whether the firmware also serves the UART message channel and the file service.
     private readonly uart = false,
   ) {
     this.fileService = new MockFileService((value) => this.emit(FILE_TRANSFER, value));
-    this.packagesService = new MockPackagesService(this.fileService.files, (value) => this.emit(NEOTIME_PACKAGES, value));
+    this.packagesService = new MockPackagesService(this.fileService.files, (value) => this.emit(BATTLETIME_PACKAGES, value));
   }
 
-  // NeoTime's files, which tests read back.
+  // BattleTime's files, which tests read back.
   readonly fileService: MockFileService;
   // The packages commands, which share the control characteristic and the files.
   readonly packagesService: MockPackagesService;
@@ -101,20 +101,20 @@ export class MockLegacyDfuTarget implements DfuLink {
     this.mode = 'bootloader';
   }
 
-  private get neotime() {
-    return this.firmware === 'neotime';
+  private get battletime() {
+    return this.firmware === 'battletime';
   }
 
-  // NeoTime's firmware serves DFU, time and diagnostics; wasp-os serves DFU only from its bootloader.
+  // BattleTime's firmware serves DFU, time and diagnostics; wasp-os serves DFU only from its bootloader.
   async hasCharacteristic(service: string, characteristic: string): Promise<boolean> {
     if (service === LEGACY_DFU_SERVICE) {
-      return this.neotime || this.mode === 'bootloader';
+      return this.battletime || this.mode === 'bootloader';
     }
     if (characteristic === FILE_TRANSFER) {
-      return this.neotime && this.uart && this.mode === 'application';
+      return this.battletime && this.uart && this.mode === 'application';
     }
-    if (service === CURRENT_TIME_SERVICE || service === NEOTIME_SERVICE || service === DEVICE_INFORMATION_SERVICE) {
-      return this.neotime && this.mode === 'application';
+    if (service === CURRENT_TIME_SERVICE || service === BATTLETIME_SERVICE || service === DEVICE_INFORMATION_SERVICE) {
+      return this.battletime && this.mode === 'application';
     }
     if (service === NUS_SERVICE) {
       return this.uart && this.mode === 'application';
@@ -123,14 +123,14 @@ export class MockLegacyDfuTarget implements DfuLink {
   }
 
   async read(_service: string, characteristic: string): Promise<Uint8Array> {
-    if (characteristic === LEGACY_VERSION && (this.neotime || this.mode === 'bootloader')) {
+    if (characteristic === LEGACY_VERSION && (this.battletime || this.mode === 'bootloader')) {
       return Uint8Array.from([0x08, 0x00]);
     }
-    if (characteristic === NEOTIME_DIAGNOSTICS && this.neotime) {
+    if (characteristic === BATTLETIME_DIAGNOSTICS && this.battletime) {
       const counters = [1234, 1, 1, 1, 56, 7, 3, 1];
       return concat(...[...counters, ...this.lastRestartWords].map(u32le));
     }
-    if (characteristic === FIRMWARE_REVISION && this.neotime) {
+    if (characteristic === FIRMWARE_REVISION && this.battletime) {
       return new TextEncoder().encode('0.1.0+mock');
     }
     return new Uint8Array(0);
@@ -152,7 +152,7 @@ export class MockLegacyDfuTarget implements DfuLink {
   // A watch that activated an update comes back on its firmware; wasp-os otherwise comes back in its bootloader.
   async reconnect(deviceId: string): Promise<void> {
     this.id = deviceId;
-    this.mode = this.activated || this.neotime ? 'application' : 'bootloader';
+    this.mode = this.activated || this.battletime ? 'application' : 'bootloader';
   }
 
   async write(
@@ -169,11 +169,11 @@ export class MockLegacyDfuTarget implements DfuLink {
       this.timeZoneWrites.push(data);
       return;
     }
-    if (characteristic === NEOTIME_PACKAGES) {
+    if (characteristic === BATTLETIME_PACKAGES) {
       this.routeControl(data);
       return;
     }
-    if (characteristic === NEOTIME_DIAGNOSTICS && data[0] === 1) {
+    if (characteristic === BATTLETIME_DIAGNOSTICS && data[0] === 1) {
       this.crashPending = false;
       this.debugReportsSaved += 1;
       return;
@@ -231,8 +231,8 @@ export class MockLegacyDfuTarget implements DfuLink {
         }
         return;
       case Procedure.REPORT_RECEIVED_IMAGE_SIZE: {
-        const kept = this.neotime ? (this.kept?.image.length ?? 0) : this.received.image.length;
-        if (this.kept && this.neotime) {
+        const kept = this.battletime ? (this.kept?.image.length ?? 0) : this.received.image.length;
+        if (this.kept && this.battletime) {
           this.resumeFrom = kept;
         }
         this.emit(LEGACY_CONTROL_POINT, concat([Procedure.RESPONSE, Procedure.REPORT_RECEIVED_IMAGE_SIZE, SUCCESS], u32le(kept)));
@@ -282,7 +282,7 @@ export class MockLegacyDfuTarget implements DfuLink {
       this.dropAfterBytes.shift();
       this.drops += 1;
       this.stage = 'idle';
-      if (this.neotime) {
+      if (this.battletime) {
         const stored = this.received.image.length - (this.received.image.length % WRITE_PIECE);
         this.kept = { size: this.expected, init: this.received.init, image: this.received.image.slice(0, stored) };
       }

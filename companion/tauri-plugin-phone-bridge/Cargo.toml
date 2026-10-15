@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-phone-bridge"
-description = "The phone's notifications, calls, media, Do Not Disturb, location and intents for the NeoTime Companion Android app"
+description = "The phone's notifications, calls, media, Do Not Disturb, location and intents for the BattleTime Companion Android app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

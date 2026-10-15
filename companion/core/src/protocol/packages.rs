@@ -1,6 +1,6 @@
 // The packages characteristic: lists, installs, turns on and off and removes apps and faces.
 // A file is sent first through the file transfer service; these commands then check it and act on it.
-// The watch side is neotime/services/packages, described in docs/companion-protocol.md.
+// The watch side is battletime/services/packages, described in docs/companion-protocol.md.
 
 use std::future::Future;
 use std::sync::{Arc, Mutex};
@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 
 use super::app_image::{read_image_header, ImageHeader, ImageKind};
 use super::link::{GattLink, WriteMode};
-use super::neotime::{NEOTIME_PACKAGES, NEOTIME_SERVICE};
+use super::battletime::{BATTLETIME_PACKAGES, BATTLETIME_SERVICE};
 
 // ============================================================================
 // Limits
@@ -163,8 +163,8 @@ impl<'link, Link: GattLink> PackagesClient<'link, Link> {
         let (sender, receiver) = mpsc::unbounded_channel();
         let pending = Arc::new(Mutex::new(String::new()));
         link.listen(
-            NEOTIME_SERVICE,
-            NEOTIME_PACKAGES,
+            BATTLETIME_SERVICE,
+            BATTLETIME_PACKAGES,
             Arc::new(move |value: &[u8]| {
                 let mut pending = pending.lock().unwrap();
                 pending.push_str(&String::from_utf8_lossy(value));
@@ -230,7 +230,7 @@ impl<'link, Link: GattLink> PackagesClient<'link, Link> {
         let line = format!("{message}\n");
         for piece in line.as_bytes().chunks(WRITE_BYTES) {
             self.link
-                .write(NEOTIME_SERVICE, NEOTIME_PACKAGES, piece, WriteMode::Request)
+                .write(BATTLETIME_SERVICE, BATTLETIME_PACKAGES, piece, WriteMode::Request)
                 .await
                 .map_err(PackagesError::plain)?;
         }
@@ -305,7 +305,7 @@ mod tests {
 
     // A watch that answers each whole command line with `answer(command)`, split into small notifications.
     fn watch_answering(answer: impl Fn(&Value) -> Value + Send + 'static) -> FakeWatch {
-        let watch = FakeWatch::serving(&[(NEOTIME_PACKAGES, vec![])]);
+        let watch = FakeWatch::serving(&[(BATTLETIME_PACKAGES, vec![])]);
         let mut pending = String::new();
         *watch.answer.lock().unwrap() = Some(Box::new(move |_, data| {
             pending.push_str(&String::from_utf8_lossy(data));

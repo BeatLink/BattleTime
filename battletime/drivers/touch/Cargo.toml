@@ -1,0 +1,15 @@
+[package]
+name = "battletime-touch"
+version = "0.1.0"
+edition = "2021"
+description = "PineTime CST816S touch panel driver, async over I2C"
+license.workspace = true
+publish = false
+
+[dependencies]
+embedded-graphics-core = "0.4"
+embedded-hal = "1.0"
+embedded-hal-async = "1.0"
+
+[dev-dependencies]
+embassy-futures = "0.1"

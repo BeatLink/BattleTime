@@ -1,0 +1,28 @@
+[package]
+name = "battletime-bluetooth"
+version = "0.1.0"
+edition = "2021"
+description = "Bluetooth LE controller for the PineTime's nRF52832 radio, in Rust, for the TrouBLE host"
+license.workspace = true
+publish = false
+
+[features]
+defmt = ["dep:defmt", "bt-hci/defmt"]
+
+[dependencies]
+bt-hci = "0.10"
+critical-section = "1.1"
+defmt = { version = "1.0", optional = true }
+embassy-sync = "0.8"
+embedded-io = "0.7"
+heapless = "0.9"
+
+[target.'cfg(target_os = "none")'.dependencies]
+embassy-nrf = { version = "0.11", features = ["nrf52832"] }
+nrf-pac = { version = "0.4", features = ["nrf52832"] }
+
+[dev-dependencies]
+critical-section = { version = "1.1", features = ["std"] }
+embassy-futures = "0.1"
+embassy-time = { version = "0.5", features = ["std", "generic-queue-8"] }
+trouble-host = "0.8"

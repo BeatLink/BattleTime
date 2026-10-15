@@ -53,7 +53,7 @@ When an incoming call ends, the watch gets a notification saying **Missed call**
 (rejected or muted on the watch) or **Accepted call**, with the caller's name. The caller's number
 needs the call log permission and the name needs contacts.
 
-![The call screen ringing](../../neotime/harness/snapshots/screens/app-call-ringing.png)
+![The call screen ringing](../../battletime/harness/snapshots/screens/app-call-ringing.png)
 
 ## Music
 

@@ -7,7 +7,7 @@ Run it from anywhere after changing app-host/fonts/geometric.txt, then commit wh
 Browsers draw only filled outlines, so each shape becomes the outline of its stroke, with round ends:
 a line becomes a capsule, an arc a band along it, and a dot a disc. Every outline runs clockwise and
 a ring's hole anticlockwise, so where two strokes overlap they stay filled. It writes two weights into
-sdk/neotime/src/preview_font.ts, as WOFF files in base64: the text sizes' and the light one the
+sdk/battletime/src/preview_font.ts, as WOFF files in base64: the text sizes' and the light one the
 huge and giant digits use. A CSS size of 16 px gives capitals 12 px tall, as the watch's small size.
 """
 
@@ -23,7 +23,7 @@ from fontTools.pens.ttGlyphPen import TTGlyphPen
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generate_fonts as source  # noqa: E402
 
-OUTPUT = source.ROOT / "sdk" / "neotime" / "src" / "preview_font.ts"
+OUTPUT = source.ROOT / "sdk" / "battletime" / "src" / "preview_font.ts"
 
 # Font units are tenths of the source's, so curves stay smooth once rounded.
 UNITS = 10
@@ -34,8 +34,8 @@ DESCENT = 380
 
 # The line's width against the capital height, as the watch draws its text sizes and its big digits.
 WEIGHTS = [
-    ("TEXT_FONT_WOFF", "NeoTime", 0.18),
-    ("LIGHT_FONT_WOFF", "NeoTime Light", 0.08),
+    ("TEXT_FONT_WOFF", "BattleTime", 0.18),
+    ("LIGHT_FONT_WOFF", "BattleTime Light", 0.08),
 ]
 DOT_GROWTH = 1.5
 # Points along each half turn of a round end or a whole circle.

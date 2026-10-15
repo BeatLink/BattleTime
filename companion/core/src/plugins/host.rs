@@ -331,10 +331,10 @@ mod tests {
     }
 
     const ECHO: &str = r#"
-        neotime.on('message', (d) => neotime.send({ t: 'vibrate', n: d.button + 1 }));
-        neotime.on('connect', () => console.log('connected'));
-        neotime.on('disconnect', () => console.log('disconnected'));
-        neotime.on('ui', (m) => neotime.ui.send({ echo: m }));
+        battletime.on('message', (d) => battletime.send({ t: 'vibrate', n: d.button + 1 }));
+        battletime.on('connect', () => console.log('connected'));
+        battletime.on('disconnect', () => console.log('disconnected'));
+        battletime.on('ui', (m) => battletime.ui.send({ echo: m }));
     "#;
 
     fn package(id: &str, main: &str) -> Vec<u8> {
@@ -426,7 +426,7 @@ mod tests {
     #[test]
     fn plugins_hear_only_the_synced_sources_they_may_read() {
         let (host, shell, _folder) = host();
-        let main = "neotime.on('sync', (changed) => neotime.ui.send({ changed, own: neotime.data.get(changed[0]) }));";
+        let main = "battletime.on('sync', (changed) => battletime.ui.send({ changed, own: battletime.data.get(changed[0]) }));";
         host.install(&package("echo", main)).unwrap();
         host.on_synced(&["settings".into(), "apps/echo".into()]);
         wait_for(|| shell.ui.lock().unwrap().len() == 1);

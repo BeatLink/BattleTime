@@ -1,6 +1,6 @@
 # Architecture
 
-NeoTime is a Rust firmware for the PineTime, built on [Embassy](https://embassy.dev). Its apps and
+BattleTime is a Rust firmware for the PineTime, built on [Embassy](https://embassy.dev). Its apps and
 watch faces are Preact components compiled on a computer into small bytecode images, which the
 watch keeps in its external flash and runs one at a time. This page is the overview: the hardware,
 the layers, the tasks and where the code lives, with a short section on each part that points to its
@@ -16,7 +16,7 @@ own page.
   stored and run, and what they can use.
 - [The app compiler](compiler.md), [Testing apps](testing.md) and the [Simulator](simulator.md).
 - [Bootloader](bootloader.md) and [Firmware updates](updates.md): starting, updating, recovery and
-  moving a watch onto NeoTime.
+  moving a watch onto BattleTime.
 - [Bluetooth controller](bluetooth.md), [Storage](storage.md), [Flash store](flash-store.md) and
   the [Memory map](memory-map.md).
 - [Companion protocol](companion-protocol.md): how a phone talks to the watch.
@@ -75,7 +75,7 @@ Each layer uses only the layers below it.
 - **Firmware** is the program the watch runs. It holds the PineTime's wiring, starts the drivers
   and services, and spawns the tasks; its shell is the system loop that runs the face, the launcher
   and the apps, sleeps and wakes, and turns button, touch and motion into events. Bluetooth runs
-  the [TrouBLE](https://github.com/embassy-rs/trouble) host on NeoTime's own controller. See
+  the [TrouBLE](https://github.com/embassy-rs/trouble) host on BattleTime's own controller. See
   [firmware.md](firmware.md).
 - **App host, runtime and UI toolkit** run one open app: the runtime checks and interprets its
   bytecode, the host builds its widgets, sends it events and draws what changed, and the UI toolkit
@@ -84,7 +84,7 @@ Each layer uses only the layers below it.
   compiler. None is built into the firmware except the notifications and quick settings screens.
 
 Beside the layers sit the programs that run before the firmware (the bootloader and the
-reloader, which share the flash layout in `neotime-boot`) and the ones that run on a computer (the
+reloader, which share the flash layout in `battletime-boot`) and the ones that run on a computer (the
 compiler, the simulator and the test harness).
 
 ## Tasks
@@ -98,60 +98,60 @@ slow job, such as a vibration pattern, waits without blocking the others.
 ## Repository layout
 
 ```text
-NeoTime/
+BattleTime/
 ├── flake.nix           development shells, the simulator package and checks
 ├── README.md
 ├── companion/          the phone and desktop companion app; see companion/README.md
 ├── docs/               these pages, the wearer's guide in guide/ and a page per app in apps/
 ├── tools/              scripts that build, package, measure and check in the emulator
-└── neotime/            the watch
+└── battletime/            the watch
     ├── Cargo.toml      one workspace for the watch's crates; the bootloader, its updater,
     │                   the firmware and the reloader build on their own
-    ├── package.json    the npm workspace for apps/, faces/, shell/ and sdk/neotime
+    ├── package.json    the npm workspace for apps/, faces/, shell/ and sdk/battletime
     ├── rust-toolchain.toml  the Rust version and the watch's target
-    ├── app-host/       neotime-app-host: runs an open app and draws its widgets
+    ├── app-host/       battletime-app-host: runs an open app and draws its widgets
     ├── apps/           the apps in the app language, one folder each; see apps.md
-    ├── boot/           neotime-boot: the flash layout, image header, slot table, version record and migration plan
-    ├── bootloader/     neotime-bootloader: the bootloader program, built only for the watch
-    ├── bootloader-updater/  neotime-bootloader-updater: a firmware update that replaces the bootloader
-    ├── compiler/       neotime-compiler: compiles apps, faces and the shared library; see compiler.md
+    ├── boot/           battletime-boot: the flash layout, image header, slot table, version record and migration plan
+    ├── bootloader/     battletime-bootloader: the bootloader program, built only for the watch
+    ├── bootloader-updater/  battletime-bootloader-updater: a firmware update that replaces the bootloader
+    ├── compiler/       battletime-compiler: compiles apps, faces and the shared library; see compiler.md
     ├── drivers/
-    │   ├── accelerometer/    neotime-accelerometer: the BMA421 or BMA425, steps, wake gestures and shakes
-    │   ├── battery_reading/  neotime-battery-reading: one blocking battery reading for the programs before the firmware
-    │   ├── bluetooth/        neotime-bluetooth: the Bluetooth LE controller for the chip's radio
-    │   ├── button/           neotime-button: the side button
-    │   ├── display/          neotime-display: the ST7789 screen and the backlight
-    │   ├── external_flash/   neotime-external-flash: the 4 MB SPI NOR flash
-    │   ├── heart_rate/       neotime-heart-rate: the HRS3300 and its pulse processing
-    │   ├── status_screen/    neotime-status-screen: the status page's layout, and the bootloader's small ST7789 driver
-    │   ├── touch/            neotime-touch: the CST816S touch panel and its gestures
-    │   └── vibrator/         neotime-vibrator: the vibration motor
+    │   ├── accelerometer/    battletime-accelerometer: the BMA421 or BMA425, steps, wake gestures and shakes
+    │   ├── battery_reading/  battletime-battery-reading: one blocking battery reading for the programs before the firmware
+    │   ├── bluetooth/        battletime-bluetooth: the Bluetooth LE controller for the chip's radio
+    │   ├── button/           battletime-button: the side button
+    │   ├── display/          battletime-display: the ST7789 screen and the backlight
+    │   ├── external_flash/   battletime-external-flash: the 4 MB SPI NOR flash
+    │   ├── heart_rate/       battletime-heart-rate: the HRS3300 and its pulse processing
+    │   ├── status_screen/    battletime-status-screen: the status page's layout, and the bootloader's small ST7789 driver
+    │   ├── touch/            battletime-touch: the CST816S touch panel and its gestures
+    │   └── vibrator/         battletime-vibrator: the vibration motor
     ├── faces/          the watch faces in the app language, one folder each; see faces.md
-    ├── firmware/       neotime-firmware: the firmware program, built only for the watch
-    ├── harness/        neotime-app-testing: a test watch that runs apps on the real app host; see testing.md
-    ├── reloader/       neotime-reloader: the one-time image that moves a watch over from InfiniTime or wasp-os
-    ├── runtime/        neotime-runtime: app images, their checks, the interpreter and bindings
-    ├── sdk/neotime/    the neotime package apps and faces import, and the browser preview
+    ├── firmware/       battletime-firmware: the firmware program, built only for the watch
+    ├── harness/        battletime-app-testing: a test watch that runs apps on the real app host; see testing.md
+    ├── reloader/       battletime-reloader: the one-time image that moves a watch over from InfiniTime or wasp-os
+    ├── runtime/        battletime-runtime: app images, their checks, the interpreter and bindings
+    ├── sdk/battletime/    the battletime package apps and faces import, and the browser preview
     ├── services/
-    │   ├── battery/        neotime-battery: the charge and battery events from each reading
-    │   ├── blefs/          neotime-blefs: Adafruit BLE file transfer, InfiniTime's file service
-    │   ├── companion/      neotime-companion: the companion's JSON lines, advertising and standard services' content
-    │   ├── crash_record/   neotime-crash-record: reset reasons, the crash record and the crash screen
-    │   ├── current_time/   neotime-current-time: the wall clock and the Current Time service's values
-    │   ├── dfu/            neotime-dfu: the legacy DFU update protocol
-    │   ├── flash_store/    neotime-flash-store: files, records and logs in the external flash
-    │   ├── foreground/     neotime-foreground: whether background work should wait for a pause
-    │   ├── liveness/       neotime-liveness: whether the shell and the radio still make progress
-    │   ├── notifications/  neotime-notifications: the latest notifications from the phone and apps
-    │   ├── packages/       neotime-packages: the apps installed in /apps, their checks and the launcher's order
-    │   ├── phone_client/   neotime-phone-client: the GATT client for the phone's own services
-    │   ├── settings/       neotime-settings: the watch-wide settings, their limits and their file
-    │   ├── slot_log/       neotime-slot-log: days of six-minute slots in blocks programmed in place, for the step, heart rate and battery logs
-    │   ├── steps/          neotime-steps: the step history by hour, the trip count and the step log
-    │   ├── task_table/     neotime-task-table: the firmware's tasks with their runs and busy time
-    │   └── updates/        neotime-updates: stores an uploaded firmware and hands it to the bootloader
+    │   ├── battery/        battletime-battery: the charge and battery events from each reading
+    │   ├── blefs/          battletime-blefs: Adafruit BLE file transfer, InfiniTime's file service
+    │   ├── companion/      battletime-companion: the companion's JSON lines, advertising and standard services' content
+    │   ├── crash_record/   battletime-crash-record: reset reasons, the crash record and the crash screen
+    │   ├── current_time/   battletime-current-time: the wall clock and the Current Time service's values
+    │   ├── dfu/            battletime-dfu: the legacy DFU update protocol
+    │   ├── flash_store/    battletime-flash-store: files, records and logs in the external flash
+    │   ├── foreground/     battletime-foreground: whether background work should wait for a pause
+    │   ├── liveness/       battletime-liveness: whether the shell and the radio still make progress
+    │   ├── notifications/  battletime-notifications: the latest notifications from the phone and apps
+    │   ├── packages/       battletime-packages: the apps installed in /apps, their checks and the launcher's order
+    │   ├── phone_client/   battletime-phone-client: the GATT client for the phone's own services
+    │   ├── settings/       battletime-settings: the watch-wide settings, their limits and their file
+    │   ├── slot_log/       battletime-slot-log: days of six-minute slots in blocks programmed in place, for the step, heart rate and battery logs
+    │   ├── steps/          battletime-steps: the step history by hour, the trip count and the step log
+    │   ├── task_table/     battletime-task-table: the firmware's tasks with their runs and busy time
+    │   └── updates/        battletime-updates: stores an uploaded firmware and hands it to the bootloader
     ├── shell/          the notifications and quick settings, built into the firmware
-    ├── simulator/      neotime-simulator: the drivers and the app host in a desktop window
+    ├── simulator/      battletime-simulator: the drivers and the app host in a desktop window
     ├── site/           the website's MkDocs config, front page and colours
     ├── tests/
     │   ├── emulator/   Robot Framework suites run against the PineTime emulator
@@ -161,7 +161,7 @@ NeoTime/
     │   ├── trouble-host/         TrouBLE with its GATT table in flash, full 128-bit UUIDs in discovery, and raw ATT for a small client
     │   ├── trouble-host-macros/  TrouBLE's GATT macros, building the attribute table in a constant
     │   └── font-awesome/, material-icons/, infinitime/  artwork the compiler draws the library's icons from
-    └── ui/             neotime-ui: renderer, shapes and strips that draw on the screen
+    └── ui/             battletime-ui: renderer, shapes and strips that draw on the screen
 ```
 
 Each driver, service, the runtime, the app host and the UI crate is a `no_std` crate with its code
@@ -191,7 +191,7 @@ Bluetooth, the watchdog and crash handling. See [firmware.md](firmware.md).
 
 ## App runtime (`runtime`)
 
-`neotime-runtime` is the core of the app runtime, with no hardware and no dependencies, so it is
+`battletime-runtime` is the core of the app runtime, with no hardware and no dependencies, so it is
 tested entirely on the computer. [app-runtime.md](app-runtime.md) gives the full design and the
 byte-level format.
 
@@ -227,7 +227,7 @@ plus 6 B for each variable's place.
 
 ## UI toolkit (`ui`)
 
-`neotime-ui` is the drawing layer every widget goes through. `geometry` holds `Rect`, `PointF` and
+`battletime-ui` is the drawing layer every widget goes through. `geometry` holds `Rect`, `PointF` and
 `Color`; `renderer` holds the `Renderer` trait widgets draw through, the `FontMetrics` trait fonts
 implement, and `ClipRenderer`, which drops every pixel outside a rectangle; `raster` works out how
 much of each pixel a disc, a line or part of a ring covers, a row at a time and only inside the
@@ -262,7 +262,7 @@ rasterizers and shapes follow [rlvgl](https://github.com/softoboros/rlvgl)'s (MI
 
 ## App host (`app-host`)
 
-`neotime-app-host` runs one open app. It ties the runtime to the UI toolkit and to whatever embeds
+`battletime-app-host` runs one open app. It ties the runtime to the UI toolkit and to whatever embeds
 it: the firmware's shell on the watch, or the simulator and the test harness on a computer. It is
 `no_std` with `alloc`, for the open app's nodes and state. [app-runtime.md](app-runtime.md#the-app-host)
 describes its calls, the layout rules and what each property value means.
@@ -335,7 +335,7 @@ the rest are slices of the image's size, never built on the stack, so opening an
 
 ## App compiler (`compiler`)
 
-`neotime-compiler` turns an app or watch face, written as Preact components with signals, into an
+`battletime-compiler` turns an app or watch face, written as Preact components with signals, into an
 app image, and builds the shared library. It is a `std` library and command, never built for the
 watch. [oxc](https://oxc.rs) reads the TSX; constants are worked out while compiling, each screen's
 component is run once into a fixed widget tree, changing properties become expressions and event
@@ -355,7 +355,7 @@ and wasp-os's, merged where both firmwares have the same one, and of PinetimeLit
 - **On the watch.** `tools/build_store.py` compiles each into `dist/store/`, and the companion app
   installs it in `/apps/<id>/` over Bluetooth ([app-store.md](app-store.md)). Only `shell/`'s
   notifications and quick settings are compiled into the firmware.
-- **`sdk/neotime`** is the `neotime` package both import: its widgets, components, icons and
+- **`sdk/battletime`** is the `battletime` package both import: its widgets, components, icons and
   shared functions, which the compiler turns into the image's parts, and a browser stand-in for the
   watch, so apps type-check and preview in a browser.
 - **Tests.** Behaviour is tested in `harness/` on the real app host, with a tour per app in
@@ -364,17 +364,17 @@ and wasp-os's, merged where both firmwares have the same one, and of PinetimeLit
 
 ## Simulator (`simulator`)
 
-`neotime-simulator` runs the drivers on a desktop in a 240x240 window, against a model of the
-ST7789 and a motor pin. With `--app` or `--demo` it runs an app image through `neotime-app-host`,
+`battletime-simulator` runs the drivers on a desktop in a 240x240 window, against a model of the
+ST7789 and a motor pin. With `--app` or `--demo` it runs an app image through `battletime-app-host`,
 with the computer's clock and a stand-in system. It is a `std` program, never built for the watch.
 See [simulator.md](simulator.md).
 
 ## Reloader (`reloader`)
 
-`neotime-reloader` moves a watch from InfiniTime or wasp-os onto NeoTime. It is an app for the old
+`battletime-reloader` moves a watch from InfiniTime or wasp-os onto BattleTime. It is an app for the old
 system, sent through that system's own update path, which stages the firmware and the small
-recovery firmware in the external flash, writes NeoTime's bootloader over the first pages of
-internal flash, and marks the swap. The order, from `neotime_boot::migration`, keeps to about a
+recovery firmware in the external flash, writes BattleTime's bootloader over the first pages of
+internal flash, and marks the swap. The order, from `battletime_boot::migration`, keeps to about a
 quarter of a second the time in which a power cut would leave the watch unable to start. Two
 builds, `from-wasp-os` and `from-infinitime`, link where each old system starts apps; the first has
 moved a real watch, the second has run only in the emulator. See [updates.md](updates.md).
@@ -386,10 +386,10 @@ update from external flash, rolls back a new firmware that never marked itself b
 the recovery firmware or the previous one from a menu the side button opens and drives. While it
 works it shows the status page, with the battery, and it leaves the firmware a note in RAM. It never
 starts a firmware whose image header is missing or damaged. It fills about 18.6 KB of its 20 KB.
-`neotime-bootloader-updater` is a firmware update that replaces the bootloader, and writes it only
+`battletime-bootloader-updater` is a firmware update that replaces the bootloader, and writes it only
 with power present and enough charge.
 
-`neotime-boot` holds the flash layout: in internal flash the bootloader, the slot table, its state
+`battletime-boot` holds the flash layout: in internal flash the bootloader, the slot table, its state
 page, the running firmware and the shared library apps draw on; in external flash the default
 update and recovery slots and the file system. It also holds the 256-byte image header every
 firmware image starts with (`image_header`), the slot table log that says where the external slots
@@ -399,12 +399,12 @@ side agrees. See [bootloader.md](bootloader.md).
 ## Building and testing
 
 `flake.nix` at the top of the repository holds everything needed. `nix develop` opens a shell with
-the Rust toolchain from `neotime/rust-toolchain.toml`, which includes the watch's
+the Rust toolchain from `battletime/rust-toolchain.toml`, which includes the watch's
 `thumbv7em-none-eabihf` target, SDL2 for the simulator, and probe-rs. Run cargo and npm from inside
-`neotime/`.
+`battletime/`.
 
 Every crate is tested on the computer, the drivers against fake hardware and the services against
-the flash store in RAM. Test the crate you changed, such as `cargo test -p neotime-settings`; CI
+the flash store in RAM. Test the crate you changed, such as `cargo test -p battletime-settings`; CI
 runs the whole workspace, clippy, formatting, coverage, the memory measurements and the emulator
 suites. To check that the `no_std` crates build for the watch:
 
@@ -423,10 +423,10 @@ put the images on a watch.
 
 ## Website
 
-The GitHub Pages site at <https://beatlink.github.io/NeoTime/> is built with MkDocs Material from
-`neotime/site/`: `site/home.md` is the front page, the README is the About page, and these docs
+The GitHub Pages site at <https://beatlink.github.io/BattleTime/> is built with MkDocs Material from
+`battletime/site/`: `site/home.md` is the front page, the README is the About page, and these docs
 follow, with a page for each app from `docs/apps`. `tools/build_site.sh` builds it into
-`neotime/target/site/out`, and `.github/workflows/pages.yml` builds it on every pull request and
+`battletime/target/site/out`, and `.github/workflows/pages.yml` builds it on every pull request and
 publishes it from `master`. Every page in `docs/` must be in the nav in `site/mkdocs.yml`, while the
 build adds each app's page to the Apps tab itself. Mermaid diagrams in ```` ```mermaid ```` fences
 are drawn on the site. The build is strict, so a broken link or a renamed screenshot fails it.

@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.neotime.companion.phonebridge"
+    namespace = "com.battletime.companion.phonebridge"
     compileSdk = 36
 
     defaultConfig {

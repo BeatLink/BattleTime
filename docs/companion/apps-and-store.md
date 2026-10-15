@@ -1,7 +1,7 @@
 # Apps, faces and the store
 
-A NeoTime watch carries no apps of its own. Every app, watch face and the launcher are installed
-from the companion, which carries every app and face in the NeoTime repository and can fetch more
+A BattleTime watch carries no apps of its own. Every app, watch face and the launcher are installed
+from the companion, which carries every app and face in the BattleTime repository and can fetch more
 from GitHub. [Apps](../apps.md) and [Watch faces](../faces.md) describe each one.
 
 ## Setting up a new watch
@@ -33,7 +33,7 @@ from. It opens without a watch, so it can be filled before one is connected.
 - **Remove from the store** takes an entry out of the list. A removed bundled entry comes back with
   **Bring back the bundled entries** at the bottom of the screen.
 - **Add from files** adds `.ntapp` apps and faces and `.ntplugin` plugins.
-- **Look on GitHub** lists the releases of a repository, `BeatLink/NeoTime` unless changed, that
+- **Look on GitHub** lists the releases of a repository, `BeatLink/BattleTime` unless changed, that
   carry apps or plugins. Choose one to download it and pick what to add. With a GitHub token in
   Settings, recent Actions builds are listed too.
 
@@ -45,7 +45,7 @@ updates the app on the watch. Added files are kept on the device, so installing 
 ## Plugins
 
 A plugin is the companion-side half of a watch app: it carries the app, keeps its settings, and
-answers it while the watch is connected. Each of NeoTime's own apps has one, and some, such as Alarm,
+answers it while the watch is connected. Each of BattleTime's own apps has one, and some, such as Alarm,
 Timer, Steps, Heart and System, show a page of their own; [Watch data](watch-data.md) describes
 those pages.
 
@@ -112,20 +112,20 @@ cache, so running the same app again sends only its data.
 Temporary apps run from the command line for now:
 
 ```bash
-neotime apps run prompt.ntapp --text text="Lunch now?"    # open an app with a data file
-neotime apps run my-app.ntapp --listen                    # stay connected and print what it sends
-neotime apps stop                                          # close it
-neotime apps forget                                        # close it and delete every cached one
-neotime ask "Lunch now?" --timeout 30                      # yes or no from the wearer
+battletime apps run prompt.ntapp --text text="Lunch now?"    # open an app with a data file
+battletime apps run my-app.ntapp --listen                    # stay connected and print what it sends
+battletime apps stop                                          # close it
+battletime apps forget                                        # close it and delete every cached one
+battletime ask "Lunch now?" --timeout 30                      # yes or no from the wearer
 ```
 
-`neotime ask` shows the question with **Yes** and **No** on the watch, using the bundled
+`battletime ask` shows the question with **Yes** and **No** on the watch, using the bundled
 [Prompt](../apps/prompt.md) app. It prints `yes` and exits 0, or prints `no` and exits 1; with no
 tap in time it closes the question and exits 2, and it exits 3 when it cannot ask at all. That makes
 it handy in scripts:
 
 ```bash
-neotime ask "Deploy now?" && ./deploy.sh
+battletime ask "Deploy now?" && ./deploy.sh
 ```
 
-![The prompt app asking a question](../../neotime/harness/snapshots/screens/app-prompt.png)
+![The prompt app asking a question](../../battletime/harness/snapshots/screens/app-prompt.png)

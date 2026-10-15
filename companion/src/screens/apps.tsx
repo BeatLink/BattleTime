@@ -69,7 +69,7 @@ export default function AppsScreen() {
     <Screen title="Apps">
       <Card>
         <ThemedText type="small" themeColor="textSecondary">
-          Apps and faces are compiled by the NeoTime compiler into .ntapp images, and the shared
+          Apps and faces are compiled by the BattleTime compiler into .ntapp images, and the shared
           library into a .ntlib. Installing one sends it to the watch, which checks it before using
           it. Removing an app also deletes what it saved. The watch works out how much memory each app
           needs and refuses to turn on one that would not fit.

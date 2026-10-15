@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Builds the GitHub Pages site into neotime/target/site/out with MkDocs Material: neotime/site/home.md as the front page and docs/ beside it.
+# Builds the GitHub Pages site into battletime/target/site/out with MkDocs Material: battletime/site/home.md as the front page and docs/ beside it.
 set -euo pipefail
 
-# The site's sources and build output sit in neotime/; the docs and the README at the top of the repository.
+# The site's sources and build output sit in battletime/; the docs and the README at the top of the repository.
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$repository_root/neotime"
+cd "$repository_root/battletime"
 
 # Links climbing out of docs/ land at the top of the repository.
-blob_url="https://github.com/BeatLink/NeoTime/blob/master"
+blob_url="https://github.com/BeatLink/BattleTime/blob/master"
 source_dir="target/site/src"
 
 # ---------------------------------------------------------------------------
@@ -19,26 +19,26 @@ mkdir -p "$source_dir/screens" "$source_dir/stylesheets"
 cp -r ../docs/. "$source_dir/"
 cp harness/snapshots/screens/*.png "$source_dir/screens/"
 cp site/home.md "$source_dir/index.md"
-cp site/neotime.css "$source_dir/stylesheets/neotime.css"
+cp site/battletime.css "$source_dir/stylesheets/battletime.css"
 
 # The repository's README becomes the About page, with its links into docs/ made local and the rest sent to GitHub.
-sed -e "s#](docs/)#](https://github.com/BeatLink/NeoTime/tree/master/docs/)#g" \
-    -e "s#](\(tools/[^)]*\|neotime/[^)]*\|companion/[^)]*\))#](https://github.com/BeatLink/NeoTime/tree/master/\1)#g" \
+sed -e "s#](docs/)#](https://github.com/BeatLink/BattleTime/tree/master/docs/)#g" \
+    -e "s#](\(tools/[^)]*\|battletime/[^)]*\|companion/[^)]*\))#](https://github.com/BeatLink/BattleTime/tree/master/\1)#g" \
     -e 's#](docs/#](#g' \
     ../README.md > "$source_dir/introduction.md"
 
 # Screens point into the staged copy; any other link out of docs/ goes to the file on GitHub.
 for page in "$source_dir"/*/*.md; do
     sed -i \
-        -e 's#](\.\./\.\./neotime/harness/snapshots/screens/#](../screens/#g' \
-        -e 's#src="\.\./\.\./neotime/harness/snapshots/screens/#src="../screens/#g' \
+        -e 's#](\.\./\.\./battletime/harness/snapshots/screens/#](../screens/#g' \
+        -e 's#src="\.\./\.\./battletime/harness/snapshots/screens/#src="../screens/#g' \
         -e "s#](\.\./\.\./\([^)]*\))#](${blob_url}/\1)#g" \
         "$page"
 done
 for page in "$source_dir"/*.md; do
     sed -i \
-        -e 's#](\.\./neotime/harness/snapshots/screens/#](screens/#g' \
-        -e 's#src="\.\./neotime/harness/snapshots/screens/#src="screens/#g' \
+        -e 's#](\.\./battletime/harness/snapshots/screens/#](screens/#g' \
+        -e 's#src="\.\./battletime/harness/snapshots/screens/#src="screens/#g' \
         -e "s#](\.\./\([^)]*\))#](${blob_url}/\1)#g" \
         -e "s#](\(LICENSE\))#](${blob_url}/\1)#g" \
         "$page"
@@ -74,8 +74,8 @@ done < site/mkdocs.yml | sed -e 's#\.\./target/site/##' > "$config"
 python3 -I -m mkdocs build --strict --config-file "$config"
 
 # The front page and the About page are not in docs/, so their edit buttons open the files they come from.
-edit_url="https://github.com/BeatLink/NeoTime/edit/master"
-sed -i "s#${edit_url}/docs/index.md#${edit_url}/neotime/site/home.md#" target/site/out/index.html
+edit_url="https://github.com/BeatLink/BattleTime/edit/master"
+sed -i "s#${edit_url}/docs/index.md#${edit_url}/battletime/site/home.md#" target/site/out/index.html
 sed -i "s#${edit_url}/docs/introduction.md#${edit_url}/README.md#" target/site/out/introduction/index.html
 
-echo "Built the site into neotime/target/site/out"
+echo "Built the site into battletime/target/site/out"

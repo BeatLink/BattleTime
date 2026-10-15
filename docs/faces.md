@@ -1,8 +1,8 @@
 # Watch faces
 
-NeoTime ships every face from [InfiniTime](https://github.com/InfiniTimeOrg/InfiniTime),
+BattleTime ships every face from [InfiniTime](https://github.com/InfiniTimeOrg/InfiniTime),
 [wasp-os](https://github.com/wasp-os/wasp-os) and
-[PinetimeLite](https://github.com/joaquimorg/PinetimeLite), each redrawn for NeoTime. Faces install
+[PinetimeLite](https://github.com/joaquimorg/PinetimeLite), each redrawn for BattleTime. Faces install
 and uninstall from the companion app's store like any app, and [Software](apps/software.md) turns
 each one on or off.
 
@@ -20,24 +20,24 @@ each one on or off.
 ## Gallery
 
 <div class="screens" markdown>
-![The Digital face](../neotime/harness/snapshots/screens/face-digital.png){ .screen }
-![The Analog face](../neotime/harness/snapshots/screens/face-analog.png){ .screen }
-![The Terminal face](../neotime/harness/snapshots/screens/face-terminal.png){ .screen }
-![The PineTimeStyle face](../neotime/harness/snapshots/screens/face-pinetime-style.png){ .screen }
-![The Casio G7710 face](../neotime/harness/snapshots/screens/face-casio.png){ .screen }
-![The Infineat face](../neotime/harness/snapshots/screens/face-infineat.png){ .screen }
-![The Pride flag face](../neotime/harness/snapshots/screens/face-pride-flag.png){ .screen }
-![The Week clock face](../neotime/harness/snapshots/screens/face-week-clock.png){ .screen }
-![The Dual clock face](../neotime/harness/snapshots/screens/face-dual-clock.png){ .screen }
-![The Fibonacci clock face](../neotime/harness/snapshots/screens/face-fibonacci-clock.png){ .screen }
-![The Word clock face](../neotime/harness/snapshots/screens/face-word-clock.png){ .screen }
-![The Resistor clock face](../neotime/harness/snapshots/screens/face-resistor-clock.png){ .screen }
-![The Lite Digital face](../neotime/harness/snapshots/screens/face-lite-digital.png){ .screen }
-![The Lite Analog face](../neotime/harness/snapshots/screens/face-lite-analog.png){ .screen }
-![The Lite Rings face](../neotime/harness/snapshots/screens/face-lite-rings.png){ .screen }
-![The Lite Pong face](../neotime/harness/snapshots/screens/face-lite-pong.png){ .screen }
-![The Lite Photo face](../neotime/harness/snapshots/screens/face-lite-photo.png){ .screen }
-![The Lite Weather face](../neotime/harness/snapshots/screens/face-lite-weather.png){ .screen }
+![The Digital face](../battletime/harness/snapshots/screens/face-digital.png){ .screen }
+![The Analog face](../battletime/harness/snapshots/screens/face-analog.png){ .screen }
+![The Terminal face](../battletime/harness/snapshots/screens/face-terminal.png){ .screen }
+![The PineTimeStyle face](../battletime/harness/snapshots/screens/face-pinetime-style.png){ .screen }
+![The Casio G7710 face](../battletime/harness/snapshots/screens/face-casio.png){ .screen }
+![The Infineat face](../battletime/harness/snapshots/screens/face-infineat.png){ .screen }
+![The Pride flag face](../battletime/harness/snapshots/screens/face-pride-flag.png){ .screen }
+![The Week clock face](../battletime/harness/snapshots/screens/face-week-clock.png){ .screen }
+![The Dual clock face](../battletime/harness/snapshots/screens/face-dual-clock.png){ .screen }
+![The Fibonacci clock face](../battletime/harness/snapshots/screens/face-fibonacci-clock.png){ .screen }
+![The Word clock face](../battletime/harness/snapshots/screens/face-word-clock.png){ .screen }
+![The Resistor clock face](../battletime/harness/snapshots/screens/face-resistor-clock.png){ .screen }
+![The Lite Digital face](../battletime/harness/snapshots/screens/face-lite-digital.png){ .screen }
+![The Lite Analog face](../battletime/harness/snapshots/screens/face-lite-analog.png){ .screen }
+![The Lite Rings face](../battletime/harness/snapshots/screens/face-lite-rings.png){ .screen }
+![The Lite Pong face](../battletime/harness/snapshots/screens/face-lite-pong.png){ .screen }
+![The Lite Photo face](../battletime/harness/snapshots/screens/face-lite-photo.png){ .screen }
+![The Lite Weather face](../battletime/harness/snapshots/screens/face-lite-weather.png){ .screen }
 </div>
 
 In order: Digital, Analog, Terminal, PineTimeStyle, Casio G7710, Infineat, Pride flag, Week clock,

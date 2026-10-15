@@ -1,12 +1,12 @@
 // A stand-in for the watch's packages characteristic, over the mock watch's files.
-// It answers as services/packages in the NeoTime tree does.
+// It answers as services/packages in the BattleTime tree does.
 
 import { readImageHeader } from './app-image';
 import { REFUSALS } from './packages';
 
 const ID = /^[A-Za-z0-9_-]{1,32}$/;
 
-// The most heap an app may need, as NeoTime's APP_HEAP_BUDGET_BYTES.
+// The most heap an app may need, as BattleTime's APP_HEAP_BUDGET_BYTES.
 export const MOCK_ROOM = 33792;
 
 // The mock's stand-in for the watch's estimate: the image, plus what the app host always holds.

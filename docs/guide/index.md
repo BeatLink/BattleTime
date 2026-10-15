@@ -1,16 +1,16 @@
-# What NeoTime does
+# What BattleTime does
 
-NeoTime turns a PineTime into a watch that merges the best of InfiniTime and wasp-os: a face and
+BattleTime turns a PineTime into a watch that merges the best of InfiniTime and wasp-os: a face and
 apps you choose and install from the phone, swipes and a side button that always take you back
 the way you came, and the phone's notifications, calls, music and weather on your wrist. This
 guide walks through it by topic. Work not done yet is in [todo.md](../todo.md), and how the parts
 are built is in [architecture.md](../architecture.md).
 
 <div class="screens" markdown>
-![The digital watch face](../../neotime/harness/snapshots/screens/face-digital.png){ .screen }
-![The launcher as a grid of icons](../../neotime/harness/snapshots/screens/app-launcher-grid.png){ .screen }
-![Quick settings](../../neotime/harness/snapshots/screens/shell-quick-settings.png){ .screen }
-![A notification arriving](../../neotime/harness/snapshots/screens/shell-notifications-preview.png){ .screen }
+![The digital watch face](../../battletime/harness/snapshots/screens/face-digital.png){ .screen }
+![The launcher as a grid of icons](../../battletime/harness/snapshots/screens/app-launcher-grid.png){ .screen }
+![Quick settings](../../battletime/harness/snapshots/screens/shell-quick-settings.png){ .screen }
+![A notification arriving](../../battletime/harness/snapshots/screens/shell-notifications-preview.png){ .screen }
 </div>
 
 ## Getting around
@@ -46,7 +46,7 @@ app. See [Health and fitness](health-and-fitness.md).
 
 ## Phone and Bluetooth
 
-The NeoTime companion app, Gadgetbridge and the other InfiniTime companions all work with the
+The BattleTime companion app, Gadgetbridge and the other InfiniTime companions all work with the
 watch. Between them they set the time, send notifications, weather, music and directions, find
 the watch or the phone, and keep a copy of everything the watch records. See
 [Phone and Bluetooth](phone-and-bluetooth.md).

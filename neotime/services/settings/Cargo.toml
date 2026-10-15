@@ -1,7 +1,0 @@
-[package]
-name = "neotime-settings"
-version = "0.1.0"
-edition = "2021"
-description = "The watch-wide settings: their limits, defaults and the bytes they are saved and sent as"
-license.workspace = true
-publish = false

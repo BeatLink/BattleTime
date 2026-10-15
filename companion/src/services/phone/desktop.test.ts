@@ -125,7 +125,7 @@ describe('DesktopEventTracker notifications', () => {
   it('never sends the desktop app its own notifications', () => {
     const { tracker, events } = track();
 
-    tracker.handle(notify({ appName: 'NeoTime Companion', replacesId: 3 }));
+    tracker.handle(notify({ appName: 'BattleTime Companion', replacesId: 3 }));
 
     expect(events).toEqual([]);
   });
@@ -245,7 +245,7 @@ describe('createDesktopPhoneBridge', () => {
     await expect(bridge.rejectCall()).rejects.toThrow('no calls');
     await expect(bridge.silenceCall()).rejects.toThrow('no calls');
     await expect(bridge.openNotificationAccessSettings()).rejects.toThrow();
-    await expect(bridge.startKeepAlive('NeoTime')).resolves.toBeUndefined();
+    await expect(bridge.startKeepAlive('BattleTime')).resolves.toBeUndefined();
     await expect(bridge.stopKeepAlive()).resolves.toBeUndefined();
   });
 
@@ -306,18 +306,18 @@ describe('createDesktopPhoneBridge', () => {
 
 describe('choosing the bridge', () => {
   afterEach(() => {
-    delete (globalThis as { neotime?: unknown }).neotime;
+    delete (globalThis as { battletime?: unknown }).battletime;
   });
 
   it('finds the bridge only in the desktop app', () => {
     expect(desktopDeviceBridge()).toBeNull();
     const { device } = fakeDevice();
-    (globalThis as { neotime?: unknown }).neotime = { desktop: device };
+    (globalThis as { battletime?: unknown }).battletime = { desktop: device };
     expect(desktopDeviceBridge()).toBe(device);
   });
 
   it('gives the desktop app the computer bridge', () => {
-    (globalThis as { neotime?: unknown }).neotime = { desktop: fakeDevice().device };
+    (globalThis as { battletime?: unknown }).battletime = { desktop: fakeDevice().device };
     let bridge!: PhoneBridge;
     jest.isolateModules(() => {
       bridge = jest.requireActual<typeof import('./index')>('./index').phoneBridge;

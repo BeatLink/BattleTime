@@ -1,4 +1,4 @@
-"""Draws the NeoTime memory maps in docs/memory-map.md as treemaps; run it after changing a size below."""
+"""Draws the BattleTime memory maps in docs/memory-map.md as treemaps; run it after changing a size below."""
 
 import sys
 from pathlib import Path

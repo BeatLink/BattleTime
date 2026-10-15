@@ -20,8 +20,8 @@ function routes(table: Record<string, unknown>) {
   return { fetcher, calls };
 }
 
-const RELEASES = 'https://api.github.com/repos/BeatLink/NeoTime/releases?per_page=10';
-const ARTIFACTS = 'https://api.github.com/repos/BeatLink/NeoTime/actions/artifacts?per_page=50';
+const RELEASES = 'https://api.github.com/repos/BeatLink/BattleTime/releases?per_page=10';
+const ARTIFACTS = 'https://api.github.com/repos/BeatLink/BattleTime/actions/artifacts?per_page=50';
 
 const firmwareZip = zipSync({
   'manifest.json': strToU8(JSON.stringify({ manifest: { application: { bin_file: 'a.bin', dat_file: 'a.dat' } } })),
@@ -45,7 +45,7 @@ function build(overrides: Partial<FirmwareBuild>): FirmwareBuild {
 
 describe('checkRepo', () => {
   it('trims an owner/name and rejects anything else', () => {
-    expect(checkRepo('  BeatLink/NeoTime ')).toBe('BeatLink/NeoTime');
+    expect(checkRepo('  BeatLink/BattleTime ')).toBe('BeatLink/BattleTime');
     expect(() => checkRepo('BeatLink')).toThrow('owner/name');
     expect(() => checkRepo('a/b/c')).toThrow('owner/name');
   });
@@ -70,7 +70,7 @@ describe('listFirmwareBuilds', () => {
       ],
       [ARTIFACTS]: { artifacts: [] },
     });
-    const builds = await listFirmwareBuilds('BeatLink/NeoTime', 'pinetime', { fetcher });
+    const builds = await listFirmwareBuilds('BeatLink/BattleTime', 'pinetime', { fetcher });
     expect(builds.map((entry) => [entry.title, entry.detail])).toEqual([
       ['Release candidate (pre-release)', 'PineTime-Firmware.zip'],
       ['Release candidate (pre-release)', 'reloader-from-wasp-os.zip'],
@@ -102,23 +102,23 @@ describe('listFirmwareBuilds', () => {
         ],
       },
     });
-    const builds = await listFirmwareBuilds('BeatLink/NeoTime', 'pinetime', { fetcher });
+    const builds = await listFirmwareBuilds('BeatLink/BattleTime', 'pinetime', { fetcher });
     expect(builds).toHaveLength(1);
     expect(builds[0]).toMatchObject({ id: 'actions-5', title: 'abcdef1', source: 'actions', needsToken: true });
   });
 
   it('sends the token to GitHub when there is one', async () => {
     const { fetcher, calls } = routes({ [RELEASES]: [], [ARTIFACTS]: { artifacts: [] } });
-    await listFirmwareBuilds('BeatLink/NeoTime', 'pinetime', { fetcher, token: 'secret' });
+    await listFirmwareBuilds('BeatLink/BattleTime', 'pinetime', { fetcher, token: 'secret' });
     expect(calls[0].headers).toEqual({ Accept: 'application/vnd.github+json', Authorization: 'Bearer secret' });
-    await listFirmwareBuilds('BeatLink/NeoTime', 'pinetime', { fetcher });
+    await listFirmwareBuilds('BeatLink/BattleTime', 'pinetime', { fetcher });
     expect(calls[2].headers).toEqual({ Accept: 'application/vnd.github+json' });
   });
 
   it('reports the status and path GitHub refused', async () => {
     const { fetcher } = routes({});
-    await expect(listFirmwareBuilds('BeatLink/NeoTime', 'pinetime', { fetcher })).rejects.toThrow(
-      'GitHub answered 404 for /repos/BeatLink/NeoTime/releases?per_page=10.',
+    await expect(listFirmwareBuilds('BeatLink/BattleTime', 'pinetime', { fetcher })).rejects.toThrow(
+      'GitHub answered 404 for /repos/BeatLink/BattleTime/releases?per_page=10.',
     );
   });
 });
@@ -158,7 +158,7 @@ describe('without options given', () => {
     const { fetcher, calls } = routes({ [RELEASES]: [], [ARTIFACTS]: { artifacts: [] }, 'https://dl/fw.zip': firmwareZip });
     const spy = jest.spyOn(globalThis, 'fetch').mockImplementation(fetcher);
     try {
-      await expect(listFirmwareBuilds('BeatLink/NeoTime', 'pinetime')).resolves.toEqual([]);
+      await expect(listFirmwareBuilds('BeatLink/BattleTime', 'pinetime')).resolves.toEqual([]);
       await expect(downloadFirmware(build({}))).resolves.toMatchObject({ name: 'firmware.zip' });
       expect(calls.map((call) => call.url)).toEqual([RELEASES, ARTIFACTS, 'https://dl/fw.zip']);
     } finally {

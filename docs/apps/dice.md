@@ -17,14 +17,14 @@ Dice that roll one to nine dice of two to ninety-nine sides, ported from InfiniT
 
 ## Screens
 
-![Dice with one six-sided die](../../neotime/harness/snapshots/screens/app-dice.png)
+![Dice with one six-sided die](../../battletime/harness/snapshots/screens/app-dice.png)
 
 One six-sided die, as the app opens.
 
-![Three dice rolled](../../neotime/harness/snapshots/screens/app-dice-three-dice.png)
+![Three dice rolled](../../battletime/harness/snapshots/screens/app-dice-three-dice.png)
 
 Three dice rolled: the total and each die's face. Step the count up twice and tap the dice button.
 
-![A coin toss](../../neotime/harness/snapshots/screens/app-dice-coin.png)
+![A coin toss](../../battletime/harness/snapshots/screens/app-dice-coin.png)
 
 One two-sided die rolled as a coin, showing tails.

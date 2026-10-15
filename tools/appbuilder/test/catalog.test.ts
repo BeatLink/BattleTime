@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { read_catalog, type CatalogEntry } from "../src/catalog";
 
-const SDK_SOURCE = path.resolve(__dirname, "../../../neotime/sdk/neotime/src");
+const SDK_SOURCE = path.resolve(__dirname, "../../../battletime/sdk/battletime/src");
 const catalog = read_catalog(SDK_SOURCE);
 
 function find(entries: CatalogEntry[], name: string): CatalogEntry {
@@ -15,7 +15,7 @@ function find(entries: CatalogEntry[], name: string): CatalogEntry {
 describe("the catalog read from the SDK", () => {
   it("lists widgets with their module, props and whether they take children", () => {
     const label = find(catalog.widgets, "Label");
-    expect(label.module).toBe("neotime/widgets");
+    expect(label.module).toBe("battletime/widgets");
     expect(label.takes_children).toBe(true);
     expect(label.parameters.map((parameter) => parameter.name)).toContain("text_align");
     expect(label.parameters.find((parameter) => parameter.name === "grow")?.documentation).toMatch(/spare space/);
@@ -26,7 +26,7 @@ describe("the catalog read from the SDK", () => {
     });
 
     expect(find(catalog.widgets, "Icon").takes_children).toBe(false);
-    expect(find(catalog.widgets, "Card").module).toBe("neotime/components");
+    expect(find(catalog.widgets, "Card").module).toBe("battletime/components");
   });
 
   it("leaves out helpers that are not widgets", () => {
@@ -37,7 +37,7 @@ describe("the catalog read from the SDK", () => {
 
   it("lists every event in EventMap with its fields", () => {
     const tick = find(catalog.events, "tick");
-    expect(tick.module).toBe("neotime");
+    expect(tick.module).toBe("battletime");
     expect(find(catalog.events, "heart_rate").parameters.map((field) => field.name)).toContain("beats_per_minute");
     expect(find(catalog.events, "open").parameters).toEqual([]);
   });

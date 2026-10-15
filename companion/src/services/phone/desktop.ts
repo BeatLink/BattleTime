@@ -1,6 +1,6 @@
 // The desktop app's stand-in for a phone: desktop notifications, media players and Do Not Disturb from the computer.
 //
-// tauri/src/desktop.rs reads them over D-Bus and passes raw facts through window.neotime.desktop;
+// tauri/src/desktop.rs reads them over D-Bus and passes raw facts through window.battletime.desktop;
 // this file turns those into the same events the Android bridge sends.
 
 import type { DeviceLocation, MediaCommand, PhoneBridge, PhoneEvent } from './types';
@@ -47,7 +47,7 @@ export type DesktopDeviceBridge = {
 };
 
 export function desktopDeviceBridge(): DesktopDeviceBridge | null {
-  return (globalThis as { neotime?: { desktop?: DesktopDeviceBridge } }).neotime?.desktop ?? null;
+  return (globalThis as { battletime?: { desktop?: DesktopDeviceBridge } }).battletime?.desktop ?? null;
 }
 
 async function unwrap<T>(pending: Promise<BridgeResult>): Promise<T> {
@@ -63,7 +63,7 @@ async function unwrap<T>(pending: Promise<BridgeResult>): Promise<T> {
 // ============================================================================
 
 // The desktop app's own notifications never go back to the watch.
-const OWN_APP_NAMES = new Set(['NeoTime Companion', 'neotime-companion']);
+const OWN_APP_NAMES = new Set(['BattleTime Companion', 'battletime-companion']);
 
 // Notifications waiting for the server to say which id it gave them; old ones are dropped past this many.
 const PENDING_LIMIT = 100;

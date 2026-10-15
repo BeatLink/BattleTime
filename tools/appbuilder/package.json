@@ -1,11 +1,11 @@
 {
-  "name": "neotime-appbuilder",
-  "displayName": "NeoTime App Builder",
-  "description": "Builds NeoTime watch apps from a palette of widgets, events and effects in the sidebar, with the app running in the simulator beside the code",
+  "name": "battletime-appbuilder",
+  "displayName": "BattleTime App Builder",
+  "description": "Builds BattleTime watch apps from a palette of widgets, events and effects in the sidebar, with the app running in the simulator beside the code",
   "version": "0.1.0",
   "private": true,
   "license": "GPL-3.0-or-later",
-  "publisher": "neotime",
+  "publisher": "battletime",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -14,54 +14,54 @@
   ],
   "main": "./out/src/extension.js",
   "activationEvents": [
-    "workspaceContains:**/neotime/sdk/neotime/package.json",
-    "onView:neotime.palette"
+    "workspaceContains:**/battletime/sdk/battletime/package.json",
+    "onView:battletime.palette"
   ],
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "neotime",
-          "title": "NeoTime",
+          "id": "battletime",
+          "title": "BattleTime",
           "icon": "media/watch.svg"
         }
       ]
     },
     "views": {
-      "neotime": [
+      "battletime": [
         {
           "type": "webview",
-          "id": "neotime.palette",
+          "id": "battletime.palette",
           "name": "Palette"
         }
       ]
     },
     "commands": [
       {
-        "command": "neotime.appBuilder.open",
+        "command": "battletime.appBuilder.open",
         "title": "Open App Builder",
-        "category": "NeoTime",
+        "category": "BattleTime",
         "icon": "$(device-mobile)"
       },
       {
-        "command": "neotime.appBuilder.newApp",
+        "command": "battletime.appBuilder.newApp",
         "title": "New App",
-        "category": "NeoTime"
+        "category": "BattleTime"
       }
     ],
     "menus": {
       "editor/title": [
         {
-          "command": "neotime.appBuilder.open",
+          "command": "battletime.appBuilder.open",
           "when": "resourceExtname == .tsx",
           "group": "navigation"
         }
       ]
     },
     "configuration": {
-      "title": "NeoTime App Builder",
+      "title": "BattleTime App Builder",
       "properties": {
-        "neotime.appBuilder.toolchainCommand": {
+        "battletime.appBuilder.toolchainCommand": {
           "type": "string",
           "default": "nix develop --command",
           "description": "Put in front of cargo to reach the Rust toolchain; empty runs cargo as it is."

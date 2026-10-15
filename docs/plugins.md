@@ -10,7 +10,7 @@ The window opened in a plain browser (`npm run dev`) has no core and so no plugi
 ## What stays in the core
 
 - finding, connecting to and reconnecting to the watch;
-- firmware updates, and writing the time after one so NeoTime keeps it;
+- firmware updates, and writing the time after one so BattleTime keeps it;
 - the watch's own settings, files, backups and the raw console;
 - installing, hiding and removing apps, and the launcher layout;
 - the plugin manager: installing, turning on and off, and removing plugins;
@@ -23,7 +23,7 @@ A plugin is one `.ntplugin` file, a zip holding:
 
 ```
 manifest.json          who it is, what it carries and what it may do
-watch/<id>.ntapp       the watch app, built by neotime-compiler (optional)
+watch/<id>.ntapp       the watch app, built by battletime-compiler (optional)
 phone/main.js          the logic, run in the companion (optional)
 phone/ui/index.html    the settings page, with any files beside it (optional)
 ```
@@ -79,10 +79,10 @@ file added by hand; [app-store.md](app-store.md) describes both.
 
 ## Plugins for the watch's own apps
 
-Every user-facing app in `neotime/apps` has a plugin in `companion/plugins/<id>`. Such a folder holds
+Every user-facing app in `battletime/apps` has a plugin in `companion/plugins/<id>`. Such a folder holds
 only a `plugin.json` that names the app with `"app"`. The build script then:
 
-- compiles `neotime/apps/<id>/app.tsx` as the plugin's watch app;
+- compiles `battletime/apps/<id>/app.tsx` as the plugin's watch app;
 - takes the shared logic and settings page from `companion/plugins/shared` unless the folder has its
   own `phone/main.ts` or `phone/ui/`.
 
@@ -121,16 +121,16 @@ build script bundle it. It sees:
 
 | | |
 |---|---|
-| `neotime.on("message", (d) => ...)` | The watch app sent `send_to_phone(id, d)`; `d` is its object of up to 4 numbers. |
-| `neotime.on("connect", () => ...)`, `neotime.on("disconnect", ...)` | The watch connected or went away. A plugin started while it is connected hears `connect` at once. |
-| `neotime.on("ui", (message) => ...)` | The settings page sent a message. |
-| `neotime.send({ t: "vibrate", n: 2 })` | Sends the watch a message from `permissions.messages`, as [companion-protocol.md](companion-protocol.md) describes it; throws on any other. |
-| `neotime.ui.send(message)` | Sends the settings page a message, when it is open. |
-| `neotime.settings.get(key)`, `neotime.settings.set(key, value)` | The plugin's own settings, kept as JSON and saved after each event. |
-| `neotime.data.get(source)`, `neotime.data.list(prefix)` | Synced watch data, as described below. |
-| `neotime.data.write(changes)`, `neotime.data.writeSettings(changes)` | Changes the plugin's own app's state, or the watch's settings, on the watch; each gives a promise of the result. |
-| `neotime.data.syncNow()` | Asks for a sync now instead of at the next interval. |
-| `neotime.on("sync", (changed) => ...)` | A sync changed these sources; only those the plugin may read are listed. |
+| `battletime.on("message", (d) => ...)` | The watch app sent `send_to_phone(id, d)`; `d` is its object of up to 4 numbers. |
+| `battletime.on("connect", () => ...)`, `battletime.on("disconnect", ...)` | The watch connected or went away. A plugin started while it is connected hears `connect` at once. |
+| `battletime.on("ui", (message) => ...)` | The settings page sent a message. |
+| `battletime.send({ t: "vibrate", n: 2 })` | Sends the watch a message from `permissions.messages`, as [companion-protocol.md](companion-protocol.md) describes it; throws on any other. |
+| `battletime.ui.send(message)` | Sends the settings page a message, when it is open. |
+| `battletime.settings.get(key)`, `battletime.settings.set(key, value)` | The plugin's own settings, kept as JSON and saved after each event. |
+| `battletime.data.get(source)`, `battletime.data.list(prefix)` | Synced watch data, as described below. |
+| `battletime.data.write(changes)`, `battletime.data.writeSettings(changes)` | Changes the plugin's own app's state, or the watch's settings, on the watch; each gives a promise of the result. |
+| `battletime.data.syncNow()` | Asks for a sync now instead of at the next interval. |
+| `battletime.on("sync", (changed) => ...)` | A sync changed these sources; only those the plugin may read are listed. |
 | `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval` | Timers; an interval is at least a second. |
 | `fetch(url, { method, headers, body })` | A request to a host in `permissions.hosts`, over https. Redirects come back unfollowed, and a reply is cut at 1 MB. |
 | `console.log`, `console.warn`, `console.error` | Lines in the plugin's log, shown on its page. |
@@ -155,8 +155,8 @@ in its settings ([sync.md](sync.md) has the details). A plugin reads that copy b
 | `logs/battery/<year>/<MM>-<DD>` | `{ slots, charging }`: the charge in percent at each slot's end, `null` while the watch was off, and whether it was charging |
 | `logs/...` | any other log's raw bytes |
 
-`neotime.data.get` returns `undefined` for a source not synced yet. It throws for one the manifest
-does not allow. `neotime.data.list("steps")` lists the sources under a prefix that the plugin may
+`battletime.data.get` returns `undefined` for a source not synced yet. It throws for one the manifest
+does not allow. `battletime.data.list("steps")` lists the sources under a prefix that the plugin may
 read.
 
 An app's state reads as JSON:
@@ -166,15 +166,15 @@ An app's state reads as JSON:
 - a record's fields come together as one object of lists, for example
   `state.alarms.hour[0]`.
 
-`neotime.data.write({ alarms: { hour: [6, 9] } })` changes only the values it names. Each value
+`battletime.data.write({ alarms: { hour: [6, 9] } })` changes only the values it names. Each value
 keeps its type and size, and the promise rejects a value that would not fit. The watch takes up the
 change even while the app is open.
 
 ```js
-neotime.on("sync", (changed) => {
+battletime.on("sync", (changed) => {
   if (changed.includes("apps/alarm")) {
-    const { state } = neotime.data.get("apps/alarm");
-    neotime.ui.send({ alarms: state.alarm_count });
+    const { state } = battletime.data.get("apps/alarm");
+    battletime.ui.send({ alarms: state.alarm_count });
   }
 });
 ```
@@ -183,12 +183,12 @@ neotime.on("sync", (changed) => {
 
 `phone/ui/index.html` opens in a sandboxed frame on the plugin's page, served from
 `plugin://<id>/`. It may run scripts and load its own files, and nothing else. It talks to the
-plugin with messages wrapped as `{ neotime: message }`:
+plugin with messages wrapped as `{ battletime: message }`:
 
 ```js
-parent.postMessage({ neotime: { buzzes: 3 } }, "*");   // reaches neotime.on("ui", ...)
+parent.postMessage({ battletime: { buzzes: 3 } }, "*");   // reaches battletime.on("ui", ...)
 window.addEventListener("message", (event) => {
-  const message = event.data && event.data.neotime;    // from neotime.ui.send(...)
+  const message = event.data && event.data.battletime;    // from battletime.ui.send(...)
 });
 ```
 

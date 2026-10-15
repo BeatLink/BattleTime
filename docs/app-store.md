@@ -20,9 +20,9 @@ shows whether it is installed, its size and where it came from.
 - **Remove from the store** takes the entry out of the list. A bundled entry stays out until
   **Bring back the bundled entries** at the bottom of the screen.
 - **Add from files** adds `.ntapp` and `.ntplugin` files, recognised by their contents.
-- **Look on GitHub** lists the releases of a repository, `BeatLink/NeoTime` unless changed, that
-  carry `neotime-store.zip` or loose `.ntapp` and `.ntplugin` files; with a GitHub token in Settings
-  it lists the `neotime-store` artifacts of Actions runs too. Choosing one downloads it and offers
+- **Look on GitHub** lists the releases of a repository, `BeatLink/BattleTime` unless changed, that
+  carry `battletime-store.zip` or loose `.ntapp` and `.ntplugin` files; with a GitHub token in Settings
+  it lists the `battletime-store` artifacts of Actions runs too. Choosing one downloads it and offers
   each app and plugin in it, all switched on, to add. The files come down through the app's own
   native requests, since GitHub's download host refuses a web page's.
 
@@ -42,11 +42,11 @@ downloading), with the screen in [companion/src/screens/store.tsx](../companion/
 ## From the command line
 
 ```bash
-npm run neotime -- store list                          # the bundled apps and faces
-npm run neotime -- store releases BeatLink/NeoTime     # releases with store files, numbered
-npm run neotime -- store fetch BeatLink/NeoTime 1 apps # download the newest into apps/
-npm run neotime -- apps install apps/dice.ntapp        # install a file
-npm run neotime -- apps install dice                   # install the bundled dice app
+npm run battletime -- store list                          # the bundled apps and faces
+npm run battletime -- store releases BeatLink/BattleTime     # releases with store files, numbered
+npm run battletime -- store fetch BeatLink/BattleTime 1 apps # download the newest into apps/
+npm run battletime -- apps install apps/dice.ntapp        # install a file
+npm run battletime -- apps install dice                   # install the bundled dice app
 ```
 
 `GITHUB_TOKEN` makes `releases` and `fetch` see Actions artifacts too. The command line keeps no
@@ -55,16 +55,16 @@ store of its own; plugins it fetches are installed in the app.
 ## Building the store's files
 
 [tools/build_store.py](../tools/build_store.py), inside `nix develop`, compiles every
-`neotime/apps/<id>/app.tsx` except the template and every `neotime/faces/<id>/face.tsx`, packs every
+`battletime/apps/<id>/app.tsx` except the template and every `battletime/faces/<id>/face.tsx`, packs every
 plugin in `companion/plugins/` with `scripts/build-plugin.mjs` (which needs `npm ci` in
-`companion/`, or pass `--no-plugins`), and writes `neotime/dist/store/`:
+`companion/`, or pass `--no-plugins`), and writes `battletime/dist/store/`:
 
 | File | What it is |
 |---|---|
 | `<id>.ntapp` | Each app and face, named by its id, which must match its folder. |
 | `<id>.ntplugin` | Each plugin, with its watch app inside. |
 | `store.json` | The list below. |
-| `neotime-store.zip` | `store.json` and every app and plugin file, in one download. |
+| `battletime-store.zip` | `store.json` and every app and plugin file, in one download. |
 | `shared.ntlib` | The shared library, for the companion's bundle only; the firmware carries its own. |
 | `SHA256SUMS` | The checksum of each file. |
 
@@ -89,13 +89,13 @@ plugin in `companion/plugins/` with `scripts/build-plugin.mjs` (which needs `npm
 An app's description is the first paragraph of its page in [docs/apps](apps.md), and a face's comes from
 the table in [faces.md](faces.md). The companion refuses a `store.json` of another format. Another
 repository can offer apps the same way: a release with `.ntapp` and `.ntplugin` files is enough, and
-`neotime-store.zip` with `store.json` adds descriptions.
+`battletime-store.zip` with `store.json` adds descriptions.
 
 The companion's bundle is the same folder:
 
 ```bash
-cd neotime && nix develop --command python3 -I ../tools/build_store.py
-cd ../companion && npm run import-watch-apps ../neotime/dist/store
+cd battletime && nix develop --command python3 -I ../tools/build_store.py
+cd ../companion && npm run import-watch-apps ../battletime/dist/store
 ```
 
 `import-watch-apps` marks the apps the setup screen offers; the list is at the top of
@@ -105,7 +105,7 @@ cd ../companion && npm run import-watch-apps ../neotime/dist/store
 
 - [.github/workflows/store.yml](../.github/workflows/store.yml) builds the store whenever an app,
   face, plugin, the compiler, the runtime, the sdk or their docs change, and keeps it as the
-  `neotime-store` artifact. On master it also moves the `apps-latest` pre-release to the commit and
+  `battletime-store` artifact. On master it also moves the `apps-latest` pre-release to the commit and
   replaces its files, so the companion finds the newest apps without a token.
 - [.github/workflows/release.yml](../.github/workflows/release.yml) runs for each `v*` tag. It builds
   the watch images with `tools/build_images.sh` and the store, and publishes both as the tag's

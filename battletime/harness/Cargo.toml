@@ -1,0 +1,24 @@
+[package]
+name = "battletime-app-testing"
+version = "0.1.0"
+edition = "2021"
+description = "Runs BattleTime apps compiled from source on the real app host, with a recording fake watch, for tests"
+license.workspace = true
+publish = false
+
+[dependencies]
+embedded-graphics = "0.8"
+battletime-app-host = { path = "../app-host" }
+battletime-companion = { path = "../services/companion" }
+battletime-compiler = { path = "../compiler" }
+battletime-current-time = { path = "../services/current_time" }
+battletime-notifications = { path = "../services/notifications" }
+battletime-packages = { path = "../services/packages" }
+battletime-runtime = { path = "../runtime" }
+png = "0.18"
+
+[dev-dependencies]
+embedded-hal = "1.0"
+battletime-crash-record = { path = "../services/crash_record" }
+battletime-display = { path = "../drivers/display" }
+battletime-ui = { path = "../ui" }

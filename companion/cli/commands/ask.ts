@@ -7,7 +7,7 @@ import { bundledPromptImage, PROMPT_IMAGE_FILE, PROMPT_TEXT_FILE, promptAnswer }
 import type { WatchSession } from '../ble';
 import { say, warn } from '../output';
 
-export const askUsage = `neotime ask "<question>" [--timeout <seconds>]
+export const askUsage = `battletime ask "<question>" [--timeout <seconds>]
 
   ask shows the question on the watch with Yes and No buttons and waits for a tap. It prints yes and
   exits 0, or prints no and exits 1. With no tap within --timeout seconds (60 unless given) it closes

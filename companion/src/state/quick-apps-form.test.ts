@@ -69,7 +69,7 @@ describe('choosing quick apps', () => {
 
 describe('loading the ring from the watch', () => {
   async function watchWith(...ids: string[]) {
-    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
     const files = await FileService.open(watch);
     const packages = await PackagesClient.open(watch);
     for (const id of ids) {

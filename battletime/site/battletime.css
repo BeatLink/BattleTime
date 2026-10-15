@@ -1,0 +1,44 @@
+/* BattleTime's colours on Material's white theme: a white header and #00acff for links and buttons. */
+:root {
+  --md-primary-fg-color: #00acff;
+  --md-primary-fg-color--light: #4dc5ff;
+  --md-primary-fg-color--dark: #0089cc;
+  --md-accent-fg-color: #00acff;
+  --md-accent-fg-color--transparent: #00acff1a;
+  --md-typeset-a-color: #0089cc;
+}
+
+.md-header,
+.md-tabs {
+  background-color: #ffffff;
+  color: #1b1f24;
+}
+
+.md-tabs { border-bottom: 1px solid #e5e8eb; }
+.md-tabs__link--active, .md-tabs__link:hover { color: #00acff; }
+.md-search__form { background-color: #f1f3f5; }
+.md-search__input { color: #1b1f24; }
+
+/* The PineTime screen is square, so screenshots sit in a square bezel, never a round one. */
+.md-typeset img.screen,
+.md-typeset img[src*="screens/"] {
+  display: block;
+  width: 100%;
+  max-width: 240px;
+  border: 8px solid #16191d;
+  border-radius: 12px;
+  background: #000000;
+  image-rendering: pixelated;
+}
+
+.md-typeset .screens { display: flex; gap: 16px; flex-wrap: wrap; }
+.md-typeset .screens p { display: contents; }
+
+.md-typeset .gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.md-typeset .gallery figure { margin: 0; }
+.md-typeset .gallery figcaption { font-style: normal; color: var(--md-default-fg-color--light); }

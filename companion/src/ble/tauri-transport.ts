@@ -8,7 +8,7 @@ import type {
   WatchTransport,
 } from './transport';
 
-// The Bluetooth part of window.neotime, which tauri/src/bridge.js gives the window.
+// The Bluetooth part of window.battletime, which tauri/src/bridge.js gives the window.
 export type BluetoothBridge = {
   startScan(): Promise<BridgeResult>;
   stopScan(): Promise<BridgeResult>;
@@ -42,7 +42,7 @@ type Notification = { key: string; value: number[] };
 type BridgeResult = { ok: boolean; error?: string; value?: unknown };
 
 export function bluetoothBridge(): BluetoothBridge | null {
-  const bridge = (globalThis as { neotime?: BluetoothBridge }).neotime;
+  const bridge = (globalThis as { battletime?: BluetoothBridge }).battletime;
   return bridge ?? null;
 }
 

@@ -1,0 +1,25 @@
+[package]
+name = "battletime-simulator"
+version = "0.1.0"
+edition = "2021"
+description = "Runs the BattleTime drivers on the desktop against a simulated PineTime"
+license.workspace = true
+publish = false
+
+[dependencies]
+embassy-futures = "0.1"
+embedded-graphics = "0.8"
+embedded-graphics-simulator = "0.7"
+embedded-hal = "1.0"
+embedded-hal-async = "1.0"
+battletime-app-host = { path = "../app-host", features = ["demo", "built-in-fonts"] }
+battletime-app-testing = { path = "../harness" }
+battletime-display = { path = "../drivers/display" }
+battletime-heart-rate = { path = "../drivers/heart_rate" }
+battletime-runtime = { path = "../runtime" }
+battletime-settings = { path = "../services/settings" }
+battletime-vibrator = { path = "../drivers/vibrator" }
+
+[dev-dependencies]
+# The status screen the bootloader uses is tested against this panel model too.
+battletime-status-screen = { path = "../drivers/status_screen" }

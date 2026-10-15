@@ -10,7 +10,7 @@ import { parseQrArguments, qr } from './commands/qr';
 // What the qr command needs from a session: the file service on one watch.
 class FakeSession extends MockLegacyDfuTarget {
   constructor() {
-    super('AA:BB:CC:DD:EE:00', 'neotime', true);
+    super('AA:BB:CC:DD:EE:00', 'battletime', true);
   }
   private filesOpened: Promise<FileService> | null = null;
   files() {

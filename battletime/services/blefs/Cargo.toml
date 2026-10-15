@@ -1,0 +1,18 @@
+[package]
+name = "battletime-blefs"
+version = "0.1.0"
+edition = "2021"
+description = "Adafruit BLE file transfer, the file service InfiniTime, ITD and Gadgetbridge speak"
+license.workspace = true
+publish = false
+
+[features]
+trouble = ["dep:trouble-host"]
+
+[dependencies]
+battletime-flash-store = { path = "../flash_store" }
+trouble-host = { version = "0.8", default-features = false, features = ["peripheral", "gatt", "derive"], optional = true }
+
+[dev-dependencies]
+embassy-futures = "0.1"
+battletime-flash-store = { path = "../flash_store", features = ["ram-flash"] }

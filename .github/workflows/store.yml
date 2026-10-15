@@ -1,16 +1,16 @@
 # Builds every app, face and plugin into the store's files whenever they or what compiles them change,
-# keeps them as the neotime-store artifact, and on master republishes them as the apps-latest pre-release.
+# keeps them as the battletime-store artifact, and on master republishes them as the apps-latest pre-release.
 name: Store
 
 on:
   push:
     branches: [master]
     paths:
-      - "neotime/apps/**"
-      - "neotime/faces/**"
-      - "neotime/compiler/**"
-      - "neotime/runtime/**"
-      - "neotime/sdk/**"
+      - "battletime/apps/**"
+      - "battletime/faces/**"
+      - "battletime/compiler/**"
+      - "battletime/runtime/**"
+      - "battletime/sdk/**"
       - "companion/plugins/**"
       - "companion/scripts/build-plugin.mjs"
       - "docs/apps/**"
@@ -21,11 +21,11 @@ on:
       - ".github/workflows/store.yml"
   pull_request:
     paths:
-      - "neotime/apps/**"
-      - "neotime/faces/**"
-      - "neotime/compiler/**"
-      - "neotime/runtime/**"
-      - "neotime/sdk/**"
+      - "battletime/apps/**"
+      - "battletime/faces/**"
+      - "battletime/compiler/**"
+      - "battletime/runtime/**"
+      - "battletime/sdk/**"
       - "companion/plugins/**"
       - "companion/scripts/build-plugin.mjs"
       - "docs/apps/**"
@@ -50,18 +50,18 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: neotime -> target
+          workspaces: battletime -> target
       - name: Install the companion's dependencies, which build the plugins
         working-directory: companion
         run: nix develop .. --command npm ci
       - name: Compile every app and face and pack every plugin
-        working-directory: neotime
+        working-directory: battletime
         run: nix develop --command python3 -I ../tools/build_store.py
       - name: Keep the store
         uses: actions/upload-artifact@v4
         with:
-          name: neotime-store
-          path: neotime/dist/store/
+          name: battletime-store
+          path: battletime/dist/store/
 
   latest:
     # The companion's store finds these without a GitHub token, unlike the artifact.
@@ -77,14 +77,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: neotime-store
+          name: battletime-store
           path: store
       - name: Move apps-latest to this commit and replace its files
         run: |
           rm store/shared.ntlib
           if ! gh release view apps-latest > /dev/null 2>&1; then
             gh release create apps-latest --prerelease --target "$GITHUB_SHA" --title "Apps (latest master)" \
-              --notes "Every app, face and plugin built from the newest master. The companion's store reads neotime-store.zip."
+              --notes "Every app, face and plugin built from the newest master. The companion's store reads battletime-store.zip."
           fi
           gh api --method PATCH "repos/$GH_REPO/git/refs/tags/apps-latest" -f sha="$GITHUB_SHA" -F force=true > /dev/null \
             || gh api --method POST "repos/$GH_REPO/git/refs" -f ref=refs/tags/apps-latest -f sha="$GITHUB_SHA" > /dev/null

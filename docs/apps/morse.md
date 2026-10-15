@@ -16,14 +16,14 @@ wasp-os's morse.
 
 ## Screens
 
-![Morse, empty](../../neotime/harness/snapshots/screens/app-morse.png)
+![Morse, empty](../../battletime/harness/snapshots/screens/app-morse.png)
 
 Empty, before anything is keyed: the text card above and the keying card below.
 
-![Morse with text and a letter in progress](../../neotime/harness/snapshots/screens/app-morse-keying.png)
+![Morse with text and a letter in progress](../../battletime/harness/snapshots/screens/app-morse-keying.png)
 
 "hi" keyed, with a line and a dot in progress that make an n.
 
-![Morse asking to clear the text](../../neotime/harness/snapshots/screens/app-morse-clear.png)
+![Morse asking to clear the text](../../battletime/harness/snapshots/screens/app-morse-clear.png)
 
 The question after a long press; **Yes** clears the text, **No** keeps it.

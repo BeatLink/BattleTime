@@ -6,7 +6,7 @@ import { base64ToBytes, bytesToBase64 } from '@/ble/encoding';
 import type { FileService, Progress, WatchFile } from './file-service';
 
 export type Backup = {
-  format: 'neotime-backup';
+  format: 'battletime-backup';
   version: 1;
   created: string;
   // File contents keyed by their path on the watch, base64 encoded.
@@ -70,7 +70,7 @@ export async function createBackup(
     options.onProgress?.(done, total, file.path);
   }
 
-  return { format: 'neotime-backup', version: 1, created: new Date().toISOString(), files };
+  return { format: 'battletime-backup', version: 1, created: new Date().toISOString(), files };
 }
 
 export function parseBackup(text: string): Backup {
@@ -80,7 +80,7 @@ export function parseBackup(text: string): Backup {
   } catch {
     throw new Error('That file is not a watch backup.');
   }
-  if (parsed.format !== 'neotime-backup' || parsed.version !== 1 || typeof parsed.files !== 'object') {
+  if (parsed.format !== 'battletime-backup' || parsed.version !== 1 || typeof parsed.files !== 'object') {
     throw new Error('That file is not a watch backup.');
   }
   return parsed as Backup;

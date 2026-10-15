@@ -1,5 +1,5 @@
 // The watch's launcher file, /settings/launcher, as src/protocol/launcher.ts writes it and
-// neotime/services/packages/src/launcher.rs reads it.
+// battletime/services/packages/src/launcher.rs reads it.
 //
 // Byte 0 the format version (1), byte 1 the style, byte 2 the view, byte 3 the group count, then per
 // group its icon's place in the shared library, its id, its name and its apps' ids in order, each text

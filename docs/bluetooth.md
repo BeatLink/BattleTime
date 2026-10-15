@@ -1,6 +1,6 @@
 # Bluetooth controller
 
-`neotime-bluetooth` (`drivers/bluetooth/`) is NeoTime's own Bluetooth LE controller, written in
+`battletime-bluetooth` (`drivers/bluetooth/`) is BattleTime's own Bluetooth LE controller, written in
 Rust. It drives the nRF52832's radio directly and gives the
 [TrouBLE](https://github.com/embassy-rs/trouble) host a standard HCI interface. No Nordic code is
 involved: no SoftDevice, no SoftDevice Controller and no MPSL.
@@ -12,7 +12,7 @@ checks under "Hardware tests" in [todo.md](todo.md) have not been made yet.
 This page covers the controller first, then what the firmware builds on it: advertising, a
 connection, the GATT services and the phone's own services.
 
-## Why NeoTime has its own
+## Why BattleTime has its own
 
 A Bluetooth stack has two halves. The *host* handles connections, GATT and pairing; TrouBLE does
 that. The *controller* handles the radio: advertising, timing every packet to the microsecond,
@@ -25,11 +25,11 @@ the two controllers compare like this:
 | Controller | Whole example, flash | Whole example, RAM |
 |---|---|---|
 | Nordic SDC + MPSL, through `nrf-sdc` | 102.8 KB | 17.3 KB |
-| `neotime-bluetooth` | 76.0 KB | 12.0 KB |
+| `battletime-bluetooth` | 76.0 KB | 12.0 KB |
 
 So it saves about 27 KB of flash and 5 KB of RAM. The controller's own code is about 7 to 10 KB,
 most of it inlined into the radio interrupt. It also keeps the whole firmware in Rust, which is one
-of NeoTime's goals.
+of BattleTime's goals.
 
 The other open-source options were weighed first. Rubble, the earlier pure-Rust stack, has been
 archived since 2022. The Rust bindings for Apache NimBLE's controller exist only as a personal
@@ -105,7 +105,7 @@ access in `nrf_radio.rs`, behind the small `Radio` trait, is the substitute.
 Phones pick a fast connection interval and no latency, which keeps the radio busy while nothing is
 sent, so the firmware asks for the pace it needs with an L2CAP Connection Parameter Update Request
 (`Connection::try_request_connection_params`, a patch in `third_party/trouble-host`), since the
-controller has no connection parameter request of its own. `neotime_companion::link_pace` chooses:
+controller has no connection parameter request of its own. `battletime_companion::link_pace` chooses:
 
 | When | Interval | Latency | Supervision timeout |
 |---|---|---|---|
@@ -202,12 +202,12 @@ TIMER0 is stopped with SHUTDOWN, as STOP alone leaves it drawing current on the 
 
 ```rust
 bind_interrupts!(struct Irqs {
-    RADIO => neotime_bluetooth::RadioInterruptHandler;
+    RADIO => battletime_bluetooth::RadioInterruptHandler;
 });
 
 let p = embassy_nrf::init(Default::default());
-let controller = neotime_bluetooth::start(
-    neotime_bluetooth::RadioPeripherals {
+let controller = battletime_bluetooth::start(
+    battletime_bluetooth::RadioPeripherals {
         radio: p.RADIO,
         timer: p.TIMER0,
         random_number_generator: p.RNG,
@@ -233,7 +233,7 @@ controller reports no public address.
 ## Advertising
 
 The firmware advertises as InfiniTime does (`run_bluetooth` in `firmware/src/main.rs`, with the
-bytes and intervals in `neotime_companion::advertising`):
+bytes and intervals in `battletime_companion::advertising`):
 
 - **How often.** Every 20 to 30 ms (32 to 47 units of 625 µs) for 30 seconds after the watch starts,
   a phone leaves or Bluetooth is turned back on, then every 1022 to 1032 ms (1636 to 1651 units).
@@ -243,7 +243,7 @@ bytes and intervals in `neotime_companion::advertising`):
   Rate service 0x180D as the complete list of 16-bit services, the legacy DFU service
   `00001530-1212-efde-1523-785feabcd123` as the complete list of 128-bit services, and a transmit
   power of 0 dBm.
-- **The scan response** holds only the complete name: `NeoTime`, or `InfiniTime` while the
+- **The scan response** holds only the complete name: `BattleTime`, or `InfiniTime` while the
   `gadgetbridge_name` setting is on, so Gadgetbridge's PineTime/InfiniTime coordinator takes the
   watch. Every time it starts advertising the firmware lends the GAP service's Device Name (handle
   3) the same name, so a phone that connects reads it there too. Changing the setting, and reading
@@ -269,7 +269,7 @@ sequenceDiagram
     participant Watch as Watch (TrouBLE and the firmware)
     Watch->>Phone: advertisement every 20 to 30 ms, then about once a second
     Phone->>Watch: scan request
-    Watch-->>Phone: scan response: NeoTime or InfiniTime
+    Watch-->>Phone: scan response: BattleTime or InfiniTime
     Phone->>Watch: connect
     Phone->>Watch: first GATT read or write
     Note over Watch: a firmware on trial confirms itself
@@ -289,7 +289,7 @@ what reached the flash, so the same image sent again carries on; see
 ## The services on top
 
 The firmware's GATT server is declared in `firmware/src/main.rs`, and its attribute table is a
-constant in flash. After the GAP service it serves Legacy DFU, Current Time, the NeoTime service,
+constant in flash. After the GAP service it serves Legacy DFU, Current Time, the BattleTime service,
 the Nordic UART, Battery, file transfer, Device Information, Alert Notification and Heart Rate, in
 that order, so a new service goes at the end and the others keep their handles. The recovery
 firmware serves the same table. What each one carries is in
@@ -315,7 +315,7 @@ Gadgetbridge's InfiniTime support and other InfiniTime phone apps work. Flash is
 a cargo feature of the firmware. Simple Weather and Immediate Alert are in the default build; Music,
 Navigation and Motion build with `--features music-service,navigation-service,motion-service` and
 are left out of the shipped image until room is found. None is in the recovery firmware. Each write
-is read by `neotime_companion::infinitime` into the same phone messages the Bangle.js lines give, so
+is read by `battletime_companion::infinitime` into the same phone messages the Bangle.js lines give, so
 the shell keeps them in `PhoneData`, and the music, navigation and weather apps and faces show them.
 
 | Feature | Service | Flash, on top of the default build |
@@ -366,7 +366,7 @@ lets either side of a connection ask the other. Three seconds after a phone conn
    category byte, a count byte and the text, and shown as a notification, or rings as a call,
    through the same path as a New Alert written to the watch.
 
-What it asks and how it reads the answers is `neotime-phone-client`, a state machine with no I/O,
+What it asks and how it reads the answers is `battletime-phone-client`, a state machine with no I/O,
 tested on the computer against a pretend phone. A phone that has neither service answers two
 requests with errors and is left alone. Each answer may take 5 seconds; one that misses that ends
 the asking for the connection, since a late answer would be taken for the next request's. The
@@ -377,7 +377,7 @@ It runs beside the connection's own loop in the Bluetooth task, on the heap: 368
 connected, and only when the heap has that plus 2 KB free. It is polled out of line, so its 268 B
 frame is on the stack only while it runs. TrouBLE's own `GattClient` would have cost about 12.6 KB
 of flash, so the client sends and receives raw ATT through two calls added to the vendored TrouBLE
-([NEOTIME.md](../neotime/third_party/trouble-host/NEOTIME.md)), for about 3 KB in all. The recovery
+([BATTLETIME.md](../battletime/third_party/trouble-host/BATTLETIME.md)), for about 3 KB in all. The recovery
 firmware leaves it out.
 
 It asks only for 16-bit UUIDs and never raises the ATT MTU, so each answer is at most 23 bytes.
@@ -386,7 +386,7 @@ link, which the controller cannot make yet; see [todo.md](todo.md).
 
 ## Tests
 
-`cargo test -p neotime-bluetooth` runs 137 tests on the computer:
+`cargo test -p battletime-bluetooth` runs 137 tests on the computer:
 
 - **The link layer, against a simulated central:**
   - advertising on each channel in turn;
@@ -412,7 +412,7 @@ link, which the controller cannot make yet; see [todo.md](todo.md).
   - only the values that change take RAM, constants and declarations refuse writes, and a server
     is built only once, since its values are a static.
 
-`cargo test -p neotime-phone-client` plays the client against pretend phones: with both
+`cargo test -p battletime-phone-client` plays the client against pretend phones: with both
 services, with neither, without Local Time Information or the control point, a New Alert without
 its own CCCD, declarations over several pages with 128-bit UUIDs between them, answers cut at the
 end of the watch's buffer, a refused CCCD write, and a phone that stops answering after each

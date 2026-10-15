@@ -20,27 +20,27 @@ InfiniTime's Alarm. Nothing runs while it waits: the watch wakes the app when th
 
 ## Screens
 
-![The alarm list with no alarms](../../neotime/harness/snapshots/screens/app-alarm.png)
+![The alarm list with no alarms](../../battletime/harness/snapshots/screens/app-alarm.png)
 
 No alarms yet, with only the plus button.
 
-![The time rollers for a new alarm](../../neotime/harness/snapshots/screens/app-alarm-time.png)
+![The time rollers for a new alarm](../../battletime/harness/snapshots/screens/app-alarm-time.png)
 
 Choosing the time, after tapping plus.
 
-![The weekday buttons for a new alarm](../../neotime/harness/snapshots/screens/app-alarm-days.png)
+![The weekday buttons for a new alarm](../../battletime/harness/snapshots/screens/app-alarm-days.png)
 
 Choosing the days, here Weekdays, after tapping the next arrow.
 
-![The alarm list with one alarm](../../neotime/harness/snapshots/screens/app-alarm-list.png)
+![The alarm list with one alarm](../../battletime/harness/snapshots/screens/app-alarm-list.png)
 
 The list after saving, with the next ring time at the top.
 
-![The days screen of an existing alarm](../../neotime/harness/snapshots/screens/app-alarm-edit.png)
+![The days screen of an existing alarm](../../battletime/harness/snapshots/screens/app-alarm-edit.png)
 
 Changing a saved alarm: tap its time, then next. Delete removes it.
 
-![An alarm ringing](../../neotime/harness/snapshots/screens/app-alarm-ringing.png)
+![An alarm ringing](../../battletime/harness/snapshots/screens/app-alarm-ringing.png)
 
 Ringing, with Snooze and stop.
 

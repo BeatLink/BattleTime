@@ -14,15 +14,15 @@ Snake on a 16 by 16 board, ported from wasp-os's snake. Steer the snake to the f
 
 ## Screens
 
-![The snake at the start](../../neotime/harness/snapshots/screens/app-snake.png)
+![The snake at the start](../../battletime/harness/snapshots/screens/app-snake.png)
 
 The start: a one-square white snake in the middle and the food below it.
 
-![The snake after a meal](../../neotime/harness/snapshots/screens/app-snake-playing.png)
+![The snake after a meal](../../battletime/harness/snapshots/screens/app-snake-playing.png)
 
 The snake two squares long after its first meal, heading right, with new food up and to the right.
 
-![Game over](../../neotime/harness/snapshots/screens/app-snake-game-over.png)
+![Game over](../../battletime/harness/snapshots/screens/app-snake-game-over.png)
 
 Game over after hitting the right wall, with a score and high score of 1. The **Tap to play again**
 hint at the bottom is cut off by the screen edge.

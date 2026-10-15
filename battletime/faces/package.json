@@ -1,0 +1,12 @@
+{
+  "name": "battletime-faces",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "description": "BattleTime watch faces",
+  "type": "module",
+  "dependencies": {
+    "battletime": "*",
+    "@preact/signals": "1.3.0",
+    "preact": "10.24.3"
+  }
+}

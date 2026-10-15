@@ -1,7 +1,7 @@
 # Apps
 
 The launcher lists every installed app with its icon and name, grouped the way you set up in the
-companion app, and opens the one you tap. It is NeoTime's own, an ordinary app that any other
+companion app, and opens the one you tap. It is BattleTime's own, an ordinary app that any other
 launcher can replace.
 
 ## Using it
@@ -28,35 +28,35 @@ It also chooses the **view**: a row per app, or a grid of icons three across.
 
 ## Screens
 
-![The launcher with no apps installed](../../neotime/harness/snapshots/screens/app-launcher.png)
+![The launcher with no apps installed](../../battletime/harness/snapshots/screens/app-launcher.png)
 
 No apps installed yet.
 
-![The launcher listing four apps](../../neotime/harness/snapshots/screens/app-launcher-installed.png)
+![The launcher listing four apps](../../battletime/harness/snapshots/screens/app-launcher-installed.png)
 
 The plain list style, a row per app.
 
-![The launcher as a grid](../../neotime/harness/snapshots/screens/app-launcher-grid.png)
+![The launcher as a grid](../../battletime/harness/snapshots/screens/app-launcher-grid.png)
 
 The plain list style in the grid view.
 
-![The launcher's folders](../../neotime/harness/snapshots/screens/app-launcher-folders.png)
+![The launcher's folders](../../battletime/harness/snapshots/screens/app-launcher-folders.png)
 
 The folders style: each group with its icon and how many apps it holds.
 
-![An open folder](../../neotime/harness/snapshots/screens/app-launcher-folder-open.png)
+![An open folder](../../battletime/harness/snapshots/screens/app-launcher-folder-open.png)
 
 A folder opened by tapping it, here in the grid view.
 
-![The launcher with a heading per group](../../neotime/harness/snapshots/screens/app-launcher-sections.png)
+![The launcher with a heading per group](../../battletime/harness/snapshots/screens/app-launcher-sections.png)
 
 The headings style: one list, with each group's name above its apps.
 
-![Headings in the grid view](../../neotime/harness/snapshots/screens/app-launcher-sections-grid.png)
+![Headings in the grid view](../../battletime/harness/snapshots/screens/app-launcher-sections-grid.png)
 
 The headings style in the grid view.
 
-![One group's page](../../neotime/harness/snapshots/screens/app-launcher-pages.png)
+![One group's page](../../battletime/harness/snapshots/screens/app-launcher-pages.png)
 
 The pages style: one group per page, swiped left and right.
 

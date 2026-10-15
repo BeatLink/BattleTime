@@ -18,10 +18,10 @@ so you can see what fills the storage.
 
 ## Screens
 
-![The files app listing the top folder](../../neotime/harness/snapshots/screens/app-files.png)
+![The files app listing the top folder](../../battletime/harness/snapshots/screens/app-files.png)
 
 The top folder, `/`: the notes, qr and temp folders, each with the size of everything inside it.
 
-![The files app inside a folder](../../neotime/harness/snapshots/screens/app-files-inside.png)
+![The files app inside a folder](../../battletime/harness/snapshots/screens/app-files-inside.png)
 
 Inside `/qr`, after tapping qr: its two files, each with its size.

@@ -6,7 +6,7 @@ import { useCallback, useState } from 'preact/hooks';
 import { ENTER_DFU_COMMAND, flashFirmware, type FlashStep } from '@/dfu/flash';
 import type { DfuLink } from '@/dfu/link';
 import { readFirmwarePackage, type FirmwarePackage } from '@/dfu/package';
-import { setWatchTime } from '@/protocol/neotime';
+import { setWatchTime } from '@/protocol/battletime';
 import { pickFile } from '@/services/device-files';
 
 export type FirmwareState = {

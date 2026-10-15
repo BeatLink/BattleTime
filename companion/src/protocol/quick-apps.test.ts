@@ -18,7 +18,7 @@ import {
 const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 const bytes = (value: string) => new TextEncoder().encode(value);
 
-const mockWatch = () => new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+const mockWatch = () => new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
 
 describe('the quick-app ring file', () => {
   it('lives in the watch settings folder', () => {

@@ -17,18 +17,18 @@ the bottom right corner.
 
 ## Screens
 
-![A freshly dealt board](../../neotime/harness/snapshots/screens/app-puzzle15.png)
+![A freshly dealt board](../../battletime/harness/snapshots/screens/app-puzzle15.png)
 
 A freshly dealt board, before the first move.
 
-![Two moves in](../../neotime/harness/snapshots/screens/app-puzzle15-moves.png)
+![Two moves in](../../battletime/harness/snapshots/screens/app-puzzle15-moves.png)
 
 Two moves in, after swiping right twice slid the 12 and then the 7 across into the gap.
 
-![The restart question](../../neotime/harness/snapshots/screens/app-puzzle15-restart.png)
+![The restart question](../../battletime/harness/snapshots/screens/app-puzzle15-restart.png)
 
 The question a tap asks before dealing a new board, naming the two moves made so far.
 
-![A solved board](../../neotime/harness/snapshots/screens/app-puzzle15-solved.png)
+![A solved board](../../battletime/harness/snapshots/screens/app-puzzle15-solved.png)
 
 The board solved in 52 moves, which is also the best so far.

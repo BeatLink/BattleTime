@@ -19,10 +19,10 @@ val keystorePropertiesFile = rootProject.file("keystore.properties")
 
 android {
     compileSdk = 36
-    namespace = "com.neotime.companion.tauri"
+    namespace = "com.battletime.companion.tauri"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "com.neotime.companion.tauri"
+        applicationId = "com.battletime.companion.tauri"
         minSdk = 24
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()

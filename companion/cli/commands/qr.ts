@@ -25,12 +25,12 @@ import {
 import type { WatchSession } from '../ble';
 import { say, warn } from '../output';
 
-export const qrUsage = `neotime qr <text> [--label <label>] [--level L|M|Q|H]
-neotime qr wifi <ssid> [password] [--security WPA|WEP|nopass] [--hidden] [--label <label>] [--level L|M|Q|H]
-neotime qr list
-neotime qr rename <number> <label>
-neotime qr move <number> up|down
-neotime qr remove <number>|all
+export const qrUsage = `battletime qr <text> [--label <label>] [--level L|M|Q|H]
+battletime qr wifi <ssid> [password] [--security WPA|WEP|nopass] [--hidden] [--label <label>] [--level L|M|Q|H]
+battletime qr list
+battletime qr rename <number> <label>
+battletime qr move <number> up|down
+battletime qr remove <number>|all
 
   qr adds a QR code for the text, such as a link, to the end of the watch's qr-code app's list, which
   holds up to ${MOST_QR_CODES}. The label, plain ASCII of up to 24 characters, names it in the list and

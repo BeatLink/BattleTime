@@ -1,6 +1,6 @@
 # Firmware updates
 
-The companion sends the watch new firmware over Bluetooth. NeoTime takes the update while it runs,
+The companion sends the watch new firmware over Bluetooth. BattleTime takes the update while it runs,
 restarts into it, and keeps it once the companion reconnects. [Firmware updates](../updates.md)
 describes what happens inside the watch.
 
@@ -9,7 +9,7 @@ describes what happens inside the watch.
 1. Connect the watch and open the **Firmware** tab.
 2. Choose the firmware:
     - **Choose a package** picks a firmware zip from the phone or computer, such as `firmware.zip`
-      from a NeoTime release; or
+      from a BattleTime release; or
     - **Look for builds** lists the releases of the repository set in **Settings**, and recent
       Actions builds when a GitHub token is set there. Choose one to download it.
 3. Choose **Send to the watch** and keep the watch close. The screen shows the progress, and the
@@ -27,7 +27,7 @@ is refused.
 
 Under **Firmware downloads** in **Settings**:
 
-- **Repository**: where builds are listed from, `BeatLink/NeoTime` unless changed;
+- **Repository**: where builds are listed from, `BeatLink/BattleTime` unless changed;
 - **Board**: the watch the builds are for, such as `pinetime`;
 - **GitHub token**: needed only for Actions builds. A token with no scopes is enough, and it is kept
   on the device.
@@ -47,24 +47,24 @@ side button for a long time brings up the bootloader's recovery firmware; see
 
 A watch that shows its bootloader, or the recovery firmware, appears in the scan list marked
 **(bootloader)**, or connects as waiting in its bootloader. The Watch screen then points to the
-Firmware tab, which is all such a watch can take. Send it a NeoTime firmware package the same way.
+Firmware tab, which is all such a watch can take. Send it a BattleTime firmware package the same way.
 
-## Moving a watch onto NeoTime
+## Moving a watch onto BattleTime
 
-A watch still running wasp-os is moved over by sending it NeoTime's `reloader-from-wasp-os.zip`
+A watch still running wasp-os is moved over by sending it BattleTime's `reloader-from-wasp-os.zip`
 from the Firmware tab. The companion restarts wasp-os into its bootloader, finds it, and sends the
-reloader, which then installs NeoTime. [The reloader](../updates.md#the-reloader-getting-onto-neotime)
+reloader, which then installs BattleTime. [The reloader](../updates.md#the-reloader-getting-onto-battletime)
 explains the steps and their risks.
 
 ## From the command line
 
 ```bash
-neotime flash firmware.zip       # send a firmware update
-neotime recovery recovery.zip    # replace the recovery firmware in its slot
-neotime slots                    # where the update and recovery slots sit
-neotime slots fit                # shrink the recovery slot to its image
-neotime debug                    # save a debug report after a crash
+battletime flash firmware.zip       # send a firmware update
+battletime recovery recovery.zip    # replace the recovery firmware in its slot
+battletime slots                    # where the update and recovery slots sit
+battletime slots fit                # shrink the recovery slot to its image
+battletime debug                    # save a debug report after a crash
 ```
 
-The recovery firmware sits in a slot of its own; `neotime recovery` replaces it while the running
+The recovery firmware sits in a slot of its own; `battletime recovery` replaces it while the running
 firmware stays, and the bootloader menu's **Install recovery** puts it in when it is needed.

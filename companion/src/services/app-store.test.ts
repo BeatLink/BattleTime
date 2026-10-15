@@ -75,7 +75,7 @@ describe('store entries', () => {
 
   it('refuses the shared library and files that are not apps or plugins', () => {
     expect(() => entryFromImage(testImage('shared', 'Shared', 'library'), { type: 'bundled' })).toThrow(AppStoreError);
-    expect(() => offerFromFile(utf8Encode('PK not a zip'), { type: 'bundled' })).toThrow('not a NeoTime plugin');
+    expect(() => offerFromFile(utf8Encode('PK not a zip'), { type: 'bundled' })).toThrow('not a BattleTime plugin');
     expect(() => offerFromFile(zipSync({ 'a.txt': utf8Encode('a') }), { type: 'bundled' })).toThrow('no manifest');
     expect(() => offerFromFile(zipSync({ 'manifest.json': utf8Encode('{}') }), { type: 'bundled' })).toThrow('id and name');
   });
@@ -119,7 +119,7 @@ describe('the store', () => {
     await store.remove('watch:digital');
     expect((await store.entries()).map((entry) => entry.key)).toEqual(['plugin:buzz-back']);
     expect(await store.hiddenCount()).toBe(2);
-    expect(storage.values.has('neotime.store.data.watch:timer')).toBe(false);
+    expect(storage.values.has('battletime.store.data.watch:timer')).toBe(false);
 
     await store.restoreBundled();
     expect((await store.entries()).map((entry) => entry.name)).toEqual(['Timer', 'Digital', 'Buzz back']);
@@ -136,7 +136,7 @@ describe('the store', () => {
 
   it('starts empty when what was saved cannot be read', async () => {
     const storage = memoryStorage();
-    storage.values.set('neotime.store.v1', '{not json');
+    storage.values.set('battletime.store.v1', '{not json');
     expect((await new AppStore(storage, bundle).entries()).length).toBe(2);
   });
 });
@@ -188,7 +188,7 @@ function fakePlugins(files: FileWriter, packages: PackagesClient): { plugins: Pl
 }
 
 async function watchTargets() {
-  const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+  const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
   const files: FileWriter = {
     write: async (path, data) => {
       target.fileService.files.set(path, data);

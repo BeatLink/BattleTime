@@ -1,6 +1,6 @@
 # QR code
 
-Keeps up to eight QR codes made in the NeoTime companion app, such as links, text or Wi-Fi
+Keeps up to eight QR codes made in the BattleTime companion app, such as links, text or Wi-Fi
 networks, so another phone can scan them from the watch.
 
 ## Using it
@@ -16,15 +16,15 @@ networks, so another phone can scan them from the watch.
 
 ## Screens
 
-![The QR code app listing two codes by caption](../../neotime/harness/snapshots/screens/app-qr-code.png)
+![The QR code app listing two codes by caption](../../battletime/harness/snapshots/screens/app-qr-code.png)
 
 The list, one row a code: a link and a Wi-Fi network.
 
-![The QR code app showing a code with its caption](../../neotime/harness/snapshots/screens/app-qr-code-code.png)
+![The QR code app showing a code with its caption](../../battletime/harness/snapshots/screens/app-qr-code-code.png)
 
 A link's code, tapped in the list, with its caption underneath.
 
-![The QR code app with no codes](../../neotime/harness/snapshots/screens/app-qr-code-empty.png)
+![The QR code app with no codes](../../battletime/harness/snapshots/screens/app-qr-code-empty.png)
 
 No codes yet, with a reminder to make them in the companion app.
 
@@ -39,6 +39,6 @@ No codes yet, with a reminder to make them in the companion app.
   Codes too large to scan on the watch's screen are refused.
 - The same screen lists the codes on the watch, to **Rename** them, move them **Up** or **Down**,
   **Remove** one, or **Remove every code**. Once the watch holds eight, remove one to add another.
-- On a computer, `neotime qr` does the same from the command line: `neotime qr https://example.com
-  --label Example` or `neotime qr wifi Home secret` adds a code, and `neotime qr list`, `rename`,
+- On a computer, `battletime qr` does the same from the command line: `battletime qr https://example.com
+  --label Example` or `battletime qr wifi Home secret` adds a code, and `battletime qr list`, `rename`,
   `move` and `remove` look after the list.

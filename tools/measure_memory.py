@@ -11,7 +11,7 @@ the crate that owns it. The firmware is linked with LTO into one object, so a li
 say where a byte came from; demangled symbol paths can. Unnamed constants are matched by content
 against the files the firmware embeds (fonts, built-in apps, the accelerometer's configuration).
 Then it compiles a typical install, the face, the launcher and the apps in TYPICAL_APPS, and runs
-the `filesystem_use` example of neotime-packages, which installs them into a flash store mounted
+the `filesystem_use` example of battletime-packages, which installs them into a flash store mounted
 as the watch mounts it.
 
 It writes its tables into docs/memory-map.md, between the `<!-- measure_memory:NAME -->` markers,
@@ -29,8 +29,8 @@ import sys
 
 REPOSITORY = pathlib.Path(__file__).resolve().parent.parent
 # The watch's crates, apps and build output, beside the docs at the top of the repository.
-NEOTIME = REPOSITORY / "neotime"
-FIRMWARE = NEOTIME / "firmware"
+BATTLETIME = REPOSITORY / "battletime"
+FIRMWARE = BATTLETIME / "firmware"
 MEMORY_MAP = REPOSITORY / "docs" / "memory-map.md"
 TREEMAP = REPOSITORY / "docs" / "memory-treemap.html"
 FIRMWARE_START = 0x8100
@@ -48,36 +48,36 @@ RAM_FOR_THE_FIRMWARE = 64 * 1024 - 16
 
 # Crate name prefixes, in the order they are tried, and the component each belongs to.
 COMPONENTS = [
-    ("neotime_app_host", "App host (with `neotime-ui`)"),
-    ("neotime_ui", "App host (with `neotime-ui`)"),
-    ("neotime_runtime", "App runtime"),
-    ("neotime_bluetooth", "Bluetooth (controller and TrouBLE)"),
+    ("battletime_app_host", "App host (with `battletime-ui`)"),
+    ("battletime_ui", "App host (with `battletime-ui`)"),
+    ("battletime_runtime", "App runtime"),
+    ("battletime_bluetooth", "Bluetooth (controller and TrouBLE)"),
     ("trouble_host", "Bluetooth (controller and TrouBLE)"),
     ("bt_hci", "Bluetooth (controller and TrouBLE)"),
-    ("neotime_phone_client", "Bluetooth (controller and TrouBLE)"),
+    ("battletime_phone_client", "Bluetooth (controller and TrouBLE)"),
     ("RADIO", "Bluetooth (controller and TrouBLE)"),
-    ("neotime_blefs", "BLEFS file service"),
-    ("neotime_packages", "Packages"),
-    ("neotime_settings", "Settings, companion and notifications (with serde)"),
-    ("neotime_companion", "Settings, companion and notifications (with serde)"),
-    ("neotime_notifications", "Settings, companion and notifications (with serde)"),
+    ("battletime_blefs", "BLEFS file service"),
+    ("battletime_packages", "Packages"),
+    ("battletime_settings", "Settings, companion and notifications (with serde)"),
+    ("battletime_companion", "Settings, companion and notifications (with serde)"),
+    ("battletime_notifications", "Settings, companion and notifications (with serde)"),
     ("serde", "Settings, companion and notifications (with serde)"),
-    ("neotime_dfu", "Updates (DFU)"),
-    ("neotime_updates", "Updates (DFU)"),
+    ("battletime_dfu", "Updates (DFU)"),
+    ("battletime_updates", "Updates (DFU)"),
     ("embassy_boot", "Updates (DFU)"),
-    ("neotime_flash_store", "Storage (flash store)"),
-    ("neotime_display", "Display, graphics and drivers"),
-    ("neotime_touch", "Display, graphics and drivers"),
-    ("neotime_accelerometer", "Display, graphics and drivers"),
-    ("neotime_button", "Display, graphics and drivers"),
-    ("neotime_vibrator", "Display, graphics and drivers"),
-    ("neotime_external_flash", "Display, graphics and drivers"),
+    ("battletime_flash_store", "Storage (flash store)"),
+    ("battletime_display", "Display, graphics and drivers"),
+    ("battletime_touch", "Display, graphics and drivers"),
+    ("battletime_accelerometer", "Display, graphics and drivers"),
+    ("battletime_button", "Display, graphics and drivers"),
+    ("battletime_vibrator", "Display, graphics and drivers"),
+    ("battletime_external_flash", "Display, graphics and drivers"),
     ("mipidsi", "Display, graphics and drivers"),
     ("embedded_graphics", "Display, graphics and drivers"),
     ("embassy_nrf", "Display, graphics and drivers"),
     ("nrf_pac", "Display, graphics and drivers"),
-    ("neotime_firmware", "Firmware (start-up, shell, tasks)"),
-    ("neotime_boot", "Firmware (start-up, shell, tasks)"),
+    ("battletime_firmware", "Firmware (start-up, shell, tasks)"),
+    ("battletime_boot", "Firmware (start-up, shell, tasks)"),
     ("embassy_", "Embassy, allocator and Cortex-M"),
     ("_embassy", "Embassy, allocator and Cortex-M"),
     ("GPIOTE", "Embassy, allocator and Cortex-M"),
@@ -144,7 +144,7 @@ def build(features):
     run(["cargo", "build", "-q", *flags], FIRMWARE)
     symbols = run(["cargo", "nm", "-q", *flags, "--", "--print-size", "--demangle"], FIRMWARE)
     sections = run(["cargo", "size", "-q", *flags, "--", "-A"], FIRMWARE)
-    image_path = NEOTIME / "target" / f"measure-{features or 'full'}.bin"
+    image_path = BATTLETIME / "target" / f"measure-{features or 'full'}.bin"
     image_path.parent.mkdir(exist_ok=True)
     run(["cargo", "objcopy", "-q", *flags, "--", "-O", "binary", str(image_path)], FIRMWARE)
     section_sizes = {}
@@ -159,7 +159,7 @@ def embedded_files():
     """Each embedded file's bytes, with the component it counts towards."""
     found = []
     for pattern, component in EMBEDDED_FILES:
-        for path in sorted(NEOTIME.glob(pattern)):
+        for path in sorted(BATTLETIME.glob(pattern)):
             found.append((path.read_bytes(), component))
     return found
 
@@ -227,16 +227,16 @@ TYPICAL_APPS = ["alarm", "timer", "stopwatch", "settings", "weather", "steps", "
 
 def compile_typical_install():
     """Compiles the typical install's images and returns them as ID=FILE pairs."""
-    run(["cargo", "build", "-q", "-p", "neotime-compiler"], NEOTIME)
-    compiler = str(NEOTIME / "target" / "debug" / "neotime-compiler")
-    folder = NEOTIME / "target" / "measure-apps"
+    run(["cargo", "build", "-q", "-p", "battletime-compiler"], BATTLETIME)
+    compiler = str(BATTLETIME / "target" / "debug" / "battletime-compiler")
+    folder = BATTLETIME / "target" / "measure-apps"
     folder.mkdir(parents=True, exist_ok=True)
-    sources = [(TYPICAL_FACE, NEOTIME / "faces" / TYPICAL_FACE / "face.tsx")]
-    sources += [(app, NEOTIME / "apps" / app / "app.tsx") for app in ["launcher", *TYPICAL_APPS]]
+    sources = [(TYPICAL_FACE, BATTLETIME / "faces" / TYPICAL_FACE / "face.tsx")]
+    sources += [(app, BATTLETIME / "apps" / app / "app.tsx") for app in ["launcher", *TYPICAL_APPS]]
     pairs = []
     for app_id, source in sources:
         image = folder / f"{app_id}.ntapp"
-        run([compiler, str(source), "-o", str(image)], NEOTIME)
+        run([compiler, str(source), "-o", str(image)], BATTLETIME)
         pairs.append(f"{app_id}={image}")
     return pairs
 
@@ -244,8 +244,8 @@ def compile_typical_install():
 def file_system_use():
     pairs = compile_typical_install()
     output = run(
-        ["cargo", "run", "-q", "-p", "neotime-packages", "--example", "filesystem_use", "--", *pairs],
-        NEOTIME,
+        ["cargo", "run", "-q", "-p", "battletime-packages", "--example", "filesystem_use", "--", *pairs],
+        BATTLETIME,
     )
     rows = [line.split("\t") for line in output.splitlines()]
     values = {row[0]: int(row[1]) for row in rows if len(row) == 2}
@@ -267,10 +267,10 @@ RAM_LABELS = {
 
 
 def library_bytes():
-    """The size of the shared library the full build carries, as `neotime-compiler library` writes it."""
-    path = NEOTIME / "target" / "measure-shared.ntlib"
+    """The size of the shared library the full build carries, as `battletime-compiler library` writes it."""
+    path = BATTLETIME / "target" / "measure-shared.ntlib"
     path.parent.mkdir(exist_ok=True)
-    run(["cargo", "run", "-q", "--release", "-p", "neotime-compiler", "--", "library", "-o", str(path)], NEOTIME)
+    run(["cargo", "run", "-q", "--release", "-p", "battletime-compiler", "--", "library", "-o", str(path)], BATTLETIME)
     return path.stat().st_size
 
 

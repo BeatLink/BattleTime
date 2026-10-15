@@ -20,19 +20,19 @@ weather app.
 
 ## Screens
 
-![The weather app with today's weather and forecast](../../neotime/harness/snapshots/screens/app-weather.png)
+![The weather app with today's weather and forecast](../../battletime/harness/snapshots/screens/app-weather.png)
 
 Clear sky at 18°C, with the day's low and high and three coming days.
 
-![The weather app in Fahrenheit](../../neotime/harness/snapshots/screens/app-weather-fahrenheit.png)
+![The weather app in Fahrenheit](../../battletime/harness/snapshots/screens/app-weather-fahrenheit.png)
 
 The same weather in Fahrenheit, with **Metric units** off.
 
-![The weather app with old weather](../../neotime/harness/snapshots/screens/app-weather-stale.png)
+![The weather app with old weather](../../battletime/harness/snapshots/screens/app-weather-stale.png)
 
 Four hours later: the sky and the temperature now are dimmed, as they may be out of date.
 
-![The weather app with no weather](../../neotime/harness/snapshots/screens/app-weather-empty.png)
+![The weather app with no weather](../../battletime/harness/snapshots/screens/app-weather-empty.png)
 
 Before the phone has sent any weather.
 

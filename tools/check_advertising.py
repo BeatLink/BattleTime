@@ -10,7 +10,7 @@ must advertise as "InfiniTime" once the settings are read.
 
     python3 -I tools/check_advertising.py FIRMWARE_ELF
 
-Run it inside `nix develop`, with the firmware built (`cd neotime/firmware && cargo build --release`).
+Run it inside `nix develop`, with the firmware built (`cd battletime/firmware && cargo build --release`).
 It finds the emulator as tools/check_call.py does and takes about three minutes.
 """
 
@@ -175,12 +175,12 @@ def check_first_start(emulator, firmware, library, flash, folder):
         results.append(check_call.check("InfiniTime's advertisement", sent == {ADVERTISEMENT},
                                         ", ".join(data.hex() for data in sent)))
         names = scan_response_names(reports)
-        results.append(check_call.check("name in the scan response", names == {"NeoTime"}, f"{names}"))
+        results.append(check_call.check("name in the scan response", names == {"BattleTime"}, f"{names}"))
 
         watch = hci.Watch.connect(port)
         name = read_by_type(watch, DEVICE_NAME_UUID)
         appearance = read_by_type(watch, APPEARANCE_UUID)
-        results.append(check_call.check("GAP name", name == b"NeoTime", f"{name!r}"))
+        results.append(check_call.check("GAP name", name == b"BattleTime", f"{name!r}"))
         results.append(check_call.check("GAP appearance 0x00C2", appearance == APPEARANCE, appearance.hex()))
         receive = watch.characteristic_handle(hci.NORDIC_UART_RECEIVE_UUID)
         watch.write_line(receive, GADGETBRIDGE_NAME_LINE)

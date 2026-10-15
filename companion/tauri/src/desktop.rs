@@ -29,7 +29,7 @@ const GEOCLUE_CLIENT: &str = "org.freedesktop.GeoClue2.Client";
 const GEOCLUE_LOCATION: &str = "org.freedesktop.GeoClue2.Location";
 
 // GeoClue lets an app in only under the name of its desktop file.
-const DESKTOP_ID: &str = "neotime-companion";
+const DESKTOP_ID: &str = "battletime-companion";
 
 // GeoClue's accuracy levels; city level is enough for the weather.
 const CITY_ACCURACY: u32 = 4;
@@ -561,7 +561,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_missing_command_counts_as_no_answer() {
-        assert_eq!(run_command("neotime-no-such-command", &[]).await, None);
+        assert_eq!(run_command("battletime-no-such-command", &[]).await, None);
         assert_eq!(run_command("echo", &["true"]).await.as_deref(), Some("true"));
     }
 }

@@ -15,18 +15,18 @@ FlashLight and wasp-os's flashlight.
 
 ## Screens
 
-![The flashlight at full brightness](../../neotime/harness/snapshots/screens/app-flashlight.png)
+![The flashlight at full brightness](../../battletime/harness/snapshots/screens/app-flashlight.png)
 
 Lit white at full brightness, as it opens.
 
-![The flashlight at its lowest level](../../neotime/harness/snapshots/screens/app-flashlight-dim.png)
+![The flashlight at its lowest level](../../battletime/harness/snapshots/screens/app-flashlight-dim.png)
 
 At the lowest level after two swipes left, with one mark filled.
 
-![The red flashlight](../../neotime/harness/snapshots/screens/app-flashlight-red.png)
+![The red flashlight](../../battletime/harness/snapshots/screens/app-flashlight-red.png)
 
 The red light at the lowest level, after a swipe up.
 
-![The flashlight switched off](../../neotime/harness/snapshots/screens/app-flashlight-off.png)
+![The flashlight switched off](../../battletime/harness/snapshots/screens/app-flashlight-off.png)
 
 Switched off with a tap: a white icon on black, with the level still showing.

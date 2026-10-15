@@ -13,20 +13,20 @@ phone_finder.
 
 ## Screens
 
-![The phone finder ready to ring](../../neotime/harness/snapshots/screens/app-phone-finder.png)
+![The phone finder ready to ring](../../battletime/harness/snapshots/screens/app-phone-finder.png)
 
 Ready, with the phone connected.
 
-![The phone finder while the phone rings](../../neotime/harness/snapshots/screens/app-phone-finder-ringing.png)
+![The phone finder while the phone rings](../../battletime/harness/snapshots/screens/app-phone-finder-ringing.png)
 
 Ringing, after tapping **Ring**; the button now reads **Stop**.
 
-![The phone finder with no phone connected](../../neotime/harness/snapshots/screens/app-phone-finder-not-connected.png)
+![The phone finder with no phone connected](../../battletime/harness/snapshots/screens/app-phone-finder-not-connected.png)
 
 No phone connected, with the button dimmed.
 
 ## With the companion app
 
 The watch asks the phone to start or stop ringing with Gadgetbridge's find-phone message, which
-Gadgetbridge answers by ringing. The NeoTime companion app shows **The watch is looking for this
+Gadgetbridge answers by ringing. The BattleTime companion app shows **The watch is looking for this
 phone** on its main screen while the watch asks.

@@ -52,63 +52,63 @@ the watch face and the theme. Merged from InfiniTime's Settings and wasp-os's se
 
 ## Screens
 
-![The top of the settings list](../../neotime/harness/snapshots/screens/app-settings.png)
+![The top of the settings list](../../battletime/harness/snapshots/screens/app-settings.png)
 
 The top of the list.
 
-![The end of the settings list](../../neotime/harness/snapshots/screens/app-settings-list-end.png)
+![The end of the settings list](../../battletime/harness/snapshots/screens/app-settings-list-end.png)
 
 The end of the list, scrolled down, with updates on until the next restart.
 
-![The brightness choices](../../neotime/harness/snapshots/screens/app-settings-brightness.png)
+![The brightness choices](../../battletime/harness/snapshots/screens/app-settings-brightness.png)
 
 Brightness, opened from its row.
 
-![The screen timeout choices](../../neotime/harness/snapshots/screens/app-settings-timeout.png)
+![The screen timeout choices](../../battletime/harness/snapshots/screens/app-settings-timeout.png)
 
 How long until the screen turns off, opened from **Screen off**.
 
-![The wake choices](../../neotime/harness/snapshots/screens/app-settings-wake.png)
+![The wake choices](../../battletime/harness/snapshots/screens/app-settings-wake.png)
 
 What wakes the screen, opened from **Wake**.
 
-![The touch choices](../../neotime/harness/snapshots/screens/app-settings-wake-touch.png)
+![The touch choices](../../battletime/harness/snapshots/screens/app-settings-wake-touch.png)
 
 Which touch wakes the screen, opened from **Touch**.
 
-![The shake strength](../../neotime/harness/snapshots/screens/app-settings-shake.png)
+![The shake strength](../../battletime/harness/snapshots/screens/app-settings-shake.png)
 
 The shake strength, opened from **Shake strength**, with the wrist moving a little.
 
-![Recording a shake](../../neotime/harness/snapshots/screens/app-settings-shake-recording.png)
+![Recording a shake](../../battletime/harness/snapshots/screens/app-settings-shake-recording.png)
 
 Recording a shake: the strength follows the hardest shake so far.
 
-![The step goal](../../neotime/harness/snapshots/screens/app-settings-step-goal.png)
+![The step goal](../../battletime/harness/snapshots/screens/app-settings-step-goal.png)
 
 The daily step goal, opened from **Step goal**.
 
-![The chime choices](../../neotime/harness/snapshots/screens/app-settings-chimes.png)
+![The chime choices](../../battletime/harness/snapshots/screens/app-settings-chimes.png)
 
 Chimes, opened from its row.
 
-![The heart rate interval choices](../../neotime/harness/snapshots/screens/app-settings-heart-rate.png)
+![The heart rate interval choices](../../battletime/harness/snapshots/screens/app-settings-heart-rate.png)
 
 How often to measure the heart rate in the background, opened from **Heart rate**.
 
-![The watch face chooser](../../neotime/harness/snapshots/screens/app-settings-watch-face.png)
+![The watch face chooser](../../battletime/harness/snapshots/screens/app-settings-watch-face.png)
 
 The watch face, opened from **Face**; the arrows step to the face before or after it.
 
-![The six themes](../../neotime/harness/snapshots/screens/app-settings-theme.png)
+![The six themes](../../battletime/harness/snapshots/screens/app-settings-theme.png)
 
 The preset themes, opened from **Theme**; the chosen one has a thicker border.
 
-![The date page](../../neotime/harness/snapshots/screens/app-settings-date.png)
+![The date page](../../battletime/harness/snapshots/screens/app-settings-date.png)
 
 The date, opened from **Date & time** at the end of the list, starting from today.
 
-![The time page](../../neotime/harness/snapshots/screens/app-settings-time.png)
+![The time page](../../battletime/harness/snapshots/screens/app-settings-time.png)
 
 The time, a swipe left from the date, here on a 12 hour clock.
 

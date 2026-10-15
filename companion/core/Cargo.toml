@@ -1,6 +1,6 @@
 [package]
-name = "neotime-companion-core"
-description = "The watch connection and protocols shared by every NeoTime Companion build"
+name = "battletime-companion-core"
+description = "The watch connection and protocols shared by every BattleTime Companion build"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

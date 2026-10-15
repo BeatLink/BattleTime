@@ -1,7 +1,7 @@
-// The NeoTime Companion app, on the desktop and on Android.
+// The BattleTime Companion app, on the desktop and on Android.
 //
 // It runs the same interface as the phone app, from the web export, and answers the window's
-// `window.neotime` bridge (bridge.js) with Bluetooth, D-Bus, note files, remote commands, plugins and sync here.
+// `window.battletime` bridge (bridge.js) with Bluetooth, D-Bus, note files, remote commands, plugins and sync here.
 // D-Bus, note file watching and shell commands are the desktop's alone; Android has the phone bridge plugin.
 
 #[cfg(desktop)]
@@ -16,14 +16,14 @@ mod sync;
 
 use std::sync::{Arc, OnceLock};
 
-use neotime_companion_core::ble::{BleError, WatchBle};
-use neotime_companion_core::plugins::host::{Fetcher, PluginHost};
-use neotime_companion_core::plugins::http;
-use neotime_companion_core::plugins::store::PluginStore;
-use neotime_companion_core::sync::files::FileClient;
-use neotime_companion_core::sync::store::SyncStore;
-use neotime_companion_core::sync::Syncer;
-use neotime_companion_core::web_request;
+use battletime_companion_core::ble::{BleError, WatchBle};
+use battletime_companion_core::plugins::host::{Fetcher, PluginHost};
+use battletime_companion_core::plugins::http;
+use battletime_companion_core::plugins::store::PluginStore;
+use battletime_companion_core::sync::files::FileClient;
+use battletime_companion_core::sync::store::SyncStore;
+use battletime_companion_core::sync::Syncer;
+use battletime_companion_core::web_request;
 use serde::Serialize;
 use serde_json::json;
 #[cfg(desktop)]
@@ -36,12 +36,12 @@ use crate::desktop::DesktopIntegration;
 #[cfg(desktop)]
 use crate::notes::NoteFileWatches;
 
-// Builds `window.neotime` before the page's own scripts run.
+// Builds `window.battletime` before the page's own scripts run.
 const BRIDGE_SCRIPT: &str = include_str!("bridge.js");
 
 // The bridge script, told whether it runs on Android, where the phone takes the computer's part.
 fn bridge_script(on_android: bool) -> String {
-    format!("window.__NEOTIME_ANDROID__ = {on_android};\n{BRIDGE_SCRIPT}")
+    format!("window.__BATTLETIME_ANDROID__ = {on_android};\n{BRIDGE_SCRIPT}")
 }
 
 struct Companion {
@@ -70,7 +70,7 @@ async fn bluetooth_allowed(app: &AppHandle) -> Answer<()> {
     if app.phone_bridge().request_bluetooth_permissions().await? {
         Ok(())
     } else {
-        Err("Allow NeoTime Companion to find and connect to nearby devices.".into())
+        Err("Allow BattleTime Companion to find and connect to nearby devices.".into())
     }
 }
 
@@ -356,13 +356,13 @@ pub fn run() {
             tauri::async_runtime::spawn(syncer.run());
             std::thread::spawn(move || plugin_host.start_all());
 
-            // In development NEOTIME_DEV_URL points at the Vite dev server (`npm run dev`), so the interface reloads.
-            let url = match std::env::var("NEOTIME_DEV_URL") {
+            // In development BATTLETIME_DEV_URL points at the Vite dev server (`npm run dev`), so the interface reloads.
+            let url = match std::env::var("BATTLETIME_DEV_URL") {
                 Ok(dev_url) => WebviewUrl::External(dev_url.parse()?),
                 Err(_) => WebviewUrl::App("index.html".into()),
             };
             WebviewWindowBuilder::new(app, "main", url)
-                .title("NeoTime Companion")
+                .title("BattleTime Companion")
                 .inner_size(480.0, 860.0)
                 .background_color(tauri::window::Color(0, 0, 0, 255))
                 .initialization_script(bridge_script(cfg!(target_os = "android")))
@@ -439,8 +439,8 @@ mod tests {
 
     #[test]
     fn the_bridge_script_says_whether_it_runs_on_android() {
-        assert!(bridge_script(true).starts_with("window.__NEOTIME_ANDROID__ = true;\n"));
-        assert!(bridge_script(false).starts_with("window.__NEOTIME_ANDROID__ = false;\n"));
+        assert!(bridge_script(true).starts_with("window.__BATTLETIME_ANDROID__ = true;\n"));
+        assert!(bridge_script(false).starts_with("window.__BATTLETIME_ANDROID__ = false;\n"));
         assert!(bridge_script(false).ends_with(BRIDGE_SCRIPT));
     }
 }

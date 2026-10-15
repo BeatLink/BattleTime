@@ -5,11 +5,11 @@ use std::sync::{Arc, OnceLock};
 
 use crate::picked_file::{self, FileKind};
 use crate::Companion;
-use neotime_companion_core::ble::WatchBle;
-use neotime_companion_core::plugins::host::{HostOutput, PluginHost, PluginStatus};
-use neotime_companion_core::protocol::app_image::ImageHeader;
-use neotime_companion_core::protocol::launcher::place_new_apps;
-use neotime_companion_core::protocol::packages::{install_image, PackagesClient};
+use battletime_companion_core::ble::WatchBle;
+use battletime_companion_core::plugins::host::{HostOutput, PluginHost, PluginStatus};
+use battletime_companion_core::protocol::app_image::ImageHeader;
+use battletime_companion_core::protocol::launcher::place_new_apps;
+use battletime_companion_core::protocol::packages::{install_image, PackagesClient};
 use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::http::{Response, StatusCode};
@@ -90,7 +90,7 @@ pub async fn plugins_install_pick(
     companion: State<'_, Companion>,
 ) -> Answer<Option<PluginStatus>> {
     let plugin_files = FileKind {
-        name: "NeoTime plugin",
+        name: "BattleTime plugin",
         extensions: &["ntplugin"],
     };
     let Some(file) = picked_file::pick_file(&app, "Choose a plugin to install", &[plugin_files]).await else {
@@ -214,8 +214,8 @@ fn content_type(path: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neotime_companion_core::plugins::host::Fetcher;
-    use neotime_companion_core::plugins::store::PluginStore;
+    use battletime_companion_core::plugins::host::Fetcher;
+    use battletime_companion_core::plugins::store::PluginStore;
     use std::io::Write;
 
     struct Silent;

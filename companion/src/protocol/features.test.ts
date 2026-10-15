@@ -6,7 +6,7 @@ import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
 import { createBackup, parseBackup, restoreBackup } from './backup';
 import { FileService } from './file-service';
 import { decodeWatchLine, encodeForWatch, type PhoneToWatchMessage } from './gadgetbridge';
-import { readCapabilities } from './neotime';
+import { readCapabilities } from './battletime';
 import {
   fittedRecoverySlot,
   moveSlots,
@@ -18,8 +18,8 @@ import {
 } from './requests';
 import { changedColors, normaliseHex } from './theme';
 
-// NeoTime's file service on a mock watch, as the provider opens it.
-function fileService(watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true)): Promise<FileService> {
+// BattleTime's file service on a mock watch, as the provider opens it.
+function fileService(watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true)): Promise<FileService> {
   return FileService.open(watch);
 }
 
@@ -106,9 +106,9 @@ describe('files', () => {
     await expect(service.read('/apps/../x')).rejects.toThrow('absolute path');
   });
 
-  it('is offered only on a NeoTime watch that serves it', async () => {
-    const neotime = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
-    expect((await readCapabilities(neotime)).files).toBe(true);
+  it('is offered only on a BattleTime watch that serves it', async () => {
+    const battletime = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
+    expect((await readCapabilities(battletime)).files).toBe(true);
     const wasp = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'wasp-os', true);
     expect((await readCapabilities(wasp)).files).toBe(false);
   });

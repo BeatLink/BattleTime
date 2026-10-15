@@ -34,57 +34,57 @@ InfiniTime's BatteryInfo with PinetimeLite's charging and low battery screens.
   shows **No answer**.
 - The tasks page lists the firmware's tasks: how many times each has **run** and its share of the
   time since the watch started (**CPU**).
-- The licence page says NeoTime is free software under the GNU GPL, version 3 or later, with no
+- The licence page says BattleTime is free software under the GNU GPL, version 3 or later, with no
   warranty.
 - The memory, hardware and tasks pages show the values as they were when the app opened.
 
 ## Screens
 
-![The system page](../../neotime/harness/snapshots/screens/app-system.png)
+![The system page](../../battletime/harness/snapshots/screens/app-system.png)
 
 The system page, where the app opens: the firmware version, build day, state, uptime and why the watch last restarted.
 
-![The system page with a firmware on trial](../../neotime/harness/snapshots/screens/app-system-firmware-trial.png)
+![The system page with a firmware on trial](../../battletime/harness/snapshots/screens/app-system-firmware-trial.png)
 
 A firmware on trial, with the warning that any restart rolls back, and Confirm and Roll back.
 
-![The battery page](../../neotime/harness/snapshots/screens/app-system-battery.png)
+![The battery page](../../battletime/harness/snapshots/screens/app-system-battery.png)
 
 The battery page, a swipe left, discharging at 87 %.
 
-![The battery charging](../../neotime/harness/snapshots/screens/app-system-battery-charging.png)
+![The battery charging](../../battletime/harness/snapshots/screens/app-system-battery-charging.png)
 
 On the charger: the battery fills up from the charge again and again.
 
-![The battery full](../../neotime/harness/snapshots/screens/app-system-battery-full.png)
+![The battery full](../../battletime/harness/snapshots/screens/app-system-battery-full.png)
 
 Fully charged, at 100 %.
 
-![The battery low](../../neotime/harness/snapshots/screens/app-system-battery-low.png)
+![The battery low](../../battletime/harness/snapshots/screens/app-system-battery-low.png)
 
 Low at 9 %, with the warning to charge.
 
-![The battery critical](../../neotime/harness/snapshots/screens/app-system-battery-critical.png)
+![The battery critical](../../battletime/harness/snapshots/screens/app-system-battery-critical.png)
 
 Critical, at 5 % or less, where it says **Almost empty**.
 
-![The memory page](../../neotime/harness/snapshots/screens/app-system-memory.png)
+![The memory page](../../battletime/harness/snapshots/screens/app-system-memory.png)
 
 The memory page, the third: free storage and heap, the least free heap, refused allocations and stack overflows.
 
-![The bootloader page](../../neotime/harness/snapshots/screens/app-system-bootloader.png)
+![The bootloader page](../../battletime/harness/snapshots/screens/app-system-bootloader.png)
 
 The bootloader page, with its version and build day.
 
-![The hardware page](../../neotime/harness/snapshots/screens/app-system-hardware.png)
+![The hardware page](../../battletime/harness/snapshots/screens/app-system-hardware.png)
 
 The hardware page: the Bluetooth address, the flash chip, the touch panel and the accelerometer.
 
-![The tasks page](../../neotime/harness/snapshots/screens/app-system-tasks.png)
+![The tasks page](../../battletime/harness/snapshots/screens/app-system-tasks.png)
 
 The tasks page: each task's runs and share of the time.
 
-![The licence page](../../neotime/harness/snapshots/screens/app-system-licence.png)
+![The licence page](../../battletime/harness/snapshots/screens/app-system-licence.png)
 
 The licence page, the last.
 

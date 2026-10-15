@@ -1,5 +1,5 @@
-// The NeoTime Companion desktop app; the app itself is the library, which Android starts on its own.
+// The BattleTime Companion desktop app; the app itself is the library, which Android starts on its own.
 
 fn main() {
-    neotime_companion_lib::run();
+    battletime_companion_lib::run();
 }

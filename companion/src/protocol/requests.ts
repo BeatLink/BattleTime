@@ -1,5 +1,5 @@
 // Gadgetbridge messages that the watch answers: settings, status and slots.
-// The watch side is described in docs/companion-protocol.md in the NeoTime tree; keep the two in step.
+// The watch side is described in docs/companion-protocol.md in the BattleTime tree; keep the two in step.
 
 import type {
   PhoneToWatchMessage,

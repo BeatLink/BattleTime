@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn an_unreachable_host_is_an_error_not_a_hang() {
         let request = FetchRequest {
-            url: "https://neotime-plugin-test.invalid/".into(),
+            url: "https://battletime-plugin-test.invalid/".into(),
             method: "GET".into(),
             headers: Default::default(),
             body: None,

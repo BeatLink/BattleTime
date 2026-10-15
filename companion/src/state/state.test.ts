@@ -10,7 +10,7 @@ import { defaultSettings, loadSettings, saveSettings } from './settings';
 import { localKeyValueStorage } from './storage';
 
 function backupAt(created: string): Backup {
-  return { format: 'neotime-backup', version: 1, created, files: {} };
+  return { format: 'battletime-backup', version: 1, created, files: {} };
 }
 
 beforeEach(() => {
@@ -50,7 +50,7 @@ describe('backups', () => {
   });
 
   it('treats unreadable storage as no backups', async () => {
-    localStorage.setItem('neotime.backups.v1', '{not json');
+    localStorage.setItem('battletime.backups.v1', '{not json');
     await expect(loadBackups()).resolves.toEqual([]);
     jest.spyOn(Storage.prototype, 'getItem').mockImplementationOnce(() => {
       throw new Error('disk gone');
@@ -73,23 +73,23 @@ describe('settings', () => {
   it('reads back remote buttons, leaving out malformed ones', async () => {
     const play = { icon: 'play', label: 'Music', action: { kind: 'builtin', name: 'playpause' } };
     const stored = { remoteButtons: [play, { icon: 'play', action: { kind: 'shell', command: 'x' } }] };
-    localStorage.setItem('neotime.settings.v1', JSON.stringify(stored));
+    localStorage.setItem('battletime.settings.v1', JSON.stringify(stored));
     await expect(loadSettings()).resolves.toEqual({ ...defaultSettings, remoteButtons: [play] });
   });
 
   it('fills settings added since the blob was saved from the defaults', async () => {
-    localStorage.setItem('neotime.settings.v1', JSON.stringify({ autoReconnect: false }));
+    localStorage.setItem('battletime.settings.v1', JSON.stringify({ autoReconnect: false }));
     await expect(loadSettings()).resolves.toEqual({ ...defaultSettings, autoReconnect: false });
   });
 
   it('keeps a note file saved before there was a choice of source as the source', async () => {
     const noteFile = { name: 'list.txt', uri: '/home/me/list.txt' };
-    localStorage.setItem('neotime.settings.v1', JSON.stringify({ noteFile }));
+    localStorage.setItem('battletime.settings.v1', JSON.stringify({ noteFile }));
     await expect(loadSettings()).resolves.toEqual({ ...defaultSettings, noteFile, noteSource: 'file' });
   });
 
   it('falls back to the defaults when the blob is unreadable', async () => {
-    localStorage.setItem('neotime.settings.v1', 'garbage');
+    localStorage.setItem('battletime.settings.v1', 'garbage');
     await expect(loadSettings()).resolves.toEqual(defaultSettings);
   });
 });

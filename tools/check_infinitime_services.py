@@ -20,7 +20,7 @@ It runs one watch with the emulator's Bluetooth bridge and talks to it through
 Each service is a cargo feature of the firmware, and only the services the build serves are checked;
 build with `--features music-service,navigation-service,alert-service,motion-service` for all five.
 
-Run it inside `nix develop`, with the firmware built (`cd neotime/firmware && cargo build --release`). It
+Run it inside `nix develop`, with the firmware built (`cd battletime/firmware && cargo build --release`). It
 finds the emulator in $PINETIME_EMULATOR, or in a PineTimeEmulator folder beside the main checkout.
 With a folder, it saves the music, navigation and weather screens there.
 """
@@ -39,7 +39,7 @@ import check_heart_rate  # noqa: E402
 import packages_over_hci  # noqa: E402
 from packages_over_hci import uuid_bytes  # noqa: E402
 
-NEOTIME = check_heart_rate.NEOTIME
+BATTLETIME = check_heart_rate.BATTLETIME
 
 # ============================================================================
 # The install
@@ -56,8 +56,8 @@ TEMPORARY_APPS = [
 
 def compile_install(folder):
     """Compiles the face, the temporary apps and the shared library; gives the flash entries and the library."""
-    check_heart_rate.run(["cargo", "build", "-q", "-p", "neotime-compiler"])
-    compiler = str(NEOTIME / "target" / "debug" / "neotime-compiler")
+    check_heart_rate.run(["cargo", "build", "-q", "-p", "battletime-compiler"])
+    compiler = str(BATTLETIME / "target" / "debug" / "battletime-compiler")
     image = folder / "face.ntapp"
     check_heart_rate.run([compiler, FACE[1], "-o", str(image)])
     entries = [f"{FACE[0]}={image}"]

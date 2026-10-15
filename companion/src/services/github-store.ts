@@ -1,5 +1,5 @@
-// Finds apps, faces and plugins on GitHub for the store: on releases, as neotime-store.zip or loose
-// .ntapp and .ntplugin files, and in the neotime-store artifact each Actions run uploads. An artifact
+// Finds apps, faces and plugins on GitHub for the store: on releases, as battletime-store.zip or loose
+// .ntapp and .ntplugin files, and in the battletime-store artifact each Actions run uploads. An artifact
 // can only be downloaded with a GitHub token, even from a public repository.
 //
 // GitHub's API answers a window's fetch, but the host it redirects downloads to does not, so files
@@ -24,9 +24,9 @@ const DOWNLOAD_TIMEOUT_MS = 60000;
 const API = 'https://api.github.com';
 
 // tools/build_store.py's names: the zip holding everything, its list, and the artifact CI uploads.
-export const STORE_ZIP = 'neotime-store.zip';
+export const STORE_ZIP = 'battletime-store.zip';
 export const STORE_INDEX = 'store.json';
-export const STORE_ARTIFACT = 'neotime-store';
+export const STORE_ARTIFACT = 'battletime-store';
 
 // The store.json format this app reads.
 const STORE_FORMAT = 1;
@@ -34,7 +34,7 @@ const STORE_FORMAT = 1;
 export type StoreFile = { name: string; url: string; sizeBytes: number };
 
 // A release or Actions build with something for the store. `files` are its loose app and plugin
-// files, and `bundle` its neotime-store.zip, which holds them all in one download.
+// files, and `bundle` its battletime-store.zip, which holds them all in one download.
 export type StoreRelease = {
   id: string;
   source: 'release' | 'actions';

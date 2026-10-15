@@ -1,0 +1,5 @@
+# The remote before the companion app sets up its buttons, for docs/apps/remote.md.
+open app remote
+expect screen main
+expect text "Choose buttons in the BattleTime companion app."
+expect no failures

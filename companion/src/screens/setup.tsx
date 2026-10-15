@@ -48,7 +48,7 @@ export default function SetupScreen() {
     <Screen title="Set up the watch">
       <Card>
         <ThemedText type="small" themeColor="textSecondary">
-          NeoTime starts with no apps, only a help screen. This sends the shared icons, a watch face,
+          BattleTime starts with no apps, only a help screen. This sends the shared icons, a watch face,
           the launcher and the apps you choose. It takes a minute or two over Bluetooth; keep the
           watch close.
         </ThemedText>

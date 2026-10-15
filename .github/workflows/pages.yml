@@ -1,12 +1,12 @@
-# Builds the GitHub Pages site from docs/, neotime/ and the README whenever they change, and publishes it from master.
+# Builds the GitHub Pages site from docs/, battletime/ and the README whenever they change, and publishes it from master.
 name: Pages
 
 on:
   push:
     branches: [master]
-    paths: ["neotime/**", "docs/**", "tools/**", "README.md", "flake.nix", "flake.lock", ".github/workflows/pages.yml"]
+    paths: ["battletime/**", "docs/**", "tools/**", "README.md", "flake.nix", "flake.lock", ".github/workflows/pages.yml"]
   pull_request:
-    paths: ["neotime/**", "docs/**", "tools/**", "README.md", "flake.nix", "flake.lock", ".github/workflows/pages.yml"]
+    paths: ["battletime/**", "docs/**", "tools/**", "README.md", "flake.nix", "flake.lock", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 # Only the newest master push publishes; an older run still building is cancelled.
@@ -22,11 +22,11 @@ jobs:
       - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@v31
       - name: Build the landing page and the docs
-        working-directory: neotime
+        working-directory: battletime
         run: nix develop --command ../tools/build_site.sh
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: neotime/target/site/out
+          path: battletime/target/site/out
 
   deploy:
     name: Publish the site

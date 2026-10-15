@@ -5,14 +5,14 @@ import { basename } from 'node:path';
 
 import { flashRecovery } from '@/dfu/flash';
 import { readFirmwarePackage } from '@/dfu/package';
-import { setWatchTime } from '@/protocol/neotime';
+import { setWatchTime } from '@/protocol/battletime';
 
 import type { WatchSession } from '../ble';
 import { kilobytes, ProgressBar, say } from '../output';
 
-export const recoveryUsage = `neotime recovery <package.zip> [--address <mac>]
+export const recoveryUsage = `battletime recovery <package.zip> [--address <mac>]
 
-  Sends a recovery firmware, such as dist/recovery.zip from the NeoTime
+  Sends a recovery firmware, such as dist/recovery.zip from the BattleTime
   tree, to the watch's recovery slot. The running firmware stays; the
   bootloader menu's Install recovery puts the new one in when it is needed.`;
 

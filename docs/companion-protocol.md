@@ -1,6 +1,6 @@
 # Companion protocol
 
-How a phone or computer talks to a NeoTime watch over Bluetooth Low Energy. The NeoTime Companion
+How a phone or computer talks to a BattleTime watch over Bluetooth Low Energy. The BattleTime Companion
 app mirrors this page in its `src/protocol`, and its Rust core in `core/src/protocol`; this page is
 the single source for all of them. Each part says whether the watch serves it yet.
 
@@ -11,10 +11,10 @@ order. A new service goes at the end, so the others keep their handles.
 
 | Service | UUID | Characteristics | For |
 |---|---|---|---|
-| GAP | `0x1800` | Device Name `0x2A00`, Appearance `0x2A01` | The name (`NeoTime`, or `InfiniTime`) and a smartwatch appearance, 0x00C2 |
+| GAP | `0x1800` | Device Name `0x2A00`, Appearance `0x2A01` | The name (`BattleTime`, or `InfiniTime`) and a smartwatch appearance, 0x00C2 |
 | Legacy DFU | `00001530-1212-efde-1523-785feabcd123` | Control point `…1531` (write, notify), packet `…1532` (write without response), version `…1534` (read) | [Firmware updates](updates.md) |
 | Current Time | `0x1805` | `0x2A2B` (read, write), `0x2A0F` (read, write) | [Time and time zone](#time-and-time-zone) |
-| NeoTime | `6e540001-0000-4000-8000-4e656f54696d` | Diagnostics `6e540002-…` (read, write), packages `6e540003-…` (write, notify) | [The NeoTime service](#the-neotime-service) |
+| BattleTime | `6e540001-0000-4000-8000-4e656f54696d` | Diagnostics `6e540002-…` (read, write), packages `6e540003-…` (write, notify) | [The BattleTime service](#the-battletime-service) |
 | Nordic UART | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` | Receive `6e400002-…` (write, with or without response), transmit `6e400003-…` (notify) | [The message channel](#the-message-channel) |
 | Battery | `0x180F` | Battery Level `0x2A19` (read, notify) | [Standard services](#standard-services) |
 | File transfer | `0xFEBB` | Version `adaf0100-4669-6c65-5472-616e73666572` (read), transfer `adaf0200-4669-6c65-5472-616e73666572` (write, notify) | [File transfer](#file-transfer) |
@@ -50,7 +50,7 @@ and navigation reach the watch through the Bangle.js lines on the
 ## Finding the watch
 
 - The watch advertises as InfiniTime does: the Heart Rate service `0x180D`, the legacy DFU service
-  and a transmit power of 0 dBm in the advertisement, and the complete local name `NeoTime` in the
+  and a transmit power of 0 dBm in the advertisement, and the complete local name `BattleTime` in the
   scan response, so a phone must scan actively to see the name. It advertises every 20 to 30 ms for
   30 seconds after it starts or a phone leaves, then about once a second; see
   [bluetooth.md](bluetooth.md#advertising). Its GAP appearance is 0x00C2, a smartwatch.
@@ -59,7 +59,7 @@ and navigation reach the watch through the Bangle.js lines on the
   offers its InfiniTime support: notifications, calls, the time, the heart rate, the battery,
   firmware updates and files through the services above. Its music, navigation, weather and find
   features need InfiniTime's own services, which the watch does not serve yet.
-- After connecting, a NeoTime watch is recognised by the NeoTime service
+- After connecting, a BattleTime watch is recognised by the BattleTime service
   `6e540001-0000-4000-8000-4e656f54696d`.
 - A client should check which services are present and offer only the features they support, since
   older firmware serves fewer.
@@ -75,7 +75,7 @@ and navigation reach the watch through the Bangle.js lines on the
 | | | `0x2A0F`, read and write | Local Time Information: the time zone and daylight saving offset, in quarter hours. Writing it changes the zone and keeps the local time; reading it gives the zone the watch is in, or 0 and 0 until one is written. A value outside the field's range is ignored. Saved, so it survives a restart. | Yes |
 | Battery | `0x180F` | `0x2A19`, read and notify | The charge, 0 to 100, notified when it changes. | Yes |
 | Heart Rate | `0x180D` | `0x2A37` Heart Rate Measurement, read and notify | Two bytes, as InfiniTime sends: flags `0` (the rate is one byte, no other fields), then the latest reading in beats per minute, held at 255, or 0 before the first. Notified at each new reading while subscribed. Subscribing does not start the sensor; readings come from an app measuring or the `heart_rate_interval` setting. | Yes |
-| Device Information | `0x180A` | `0x2A29`, `0x2A24`, `0x2A25`, `0x2A26`, `0x2A27`, `0x2A28`, read | The same six strings InfiniTime serves: manufacturer `PINE64`, model `PineTime`, the serial number as the chip's 64-bit factory id in 16 upper-case hex digits, the firmware version as the status page shows it (such as `0.1.0+1b19aed`), hardware revision `1.0.0` and software revision `NeoTime`. | Yes |
+| Device Information | `0x180A` | `0x2A29`, `0x2A24`, `0x2A25`, `0x2A26`, `0x2A27`, `0x2A28`, read | The same six strings InfiniTime serves: manufacturer `PINE64`, model `PineTime`, the serial number as the chip's 64-bit factory id in 16 upper-case hex digits, the firmware version as the status page shows it (such as `0.1.0+1b19aed`), hardware revision `1.0.0` and software revision `BattleTime`. | Yes |
 | Alert Notification | `0x1811` | `0x2A46` New Alert, write | Shows a notification, read as InfiniTime reads it: a category byte, two more header bytes, then a title, a zero byte and the body, or only a body when there is no zero byte; at most 125 bytes. The category names the notification's app (`Email`, `Call`, `SMS`, `Messages` and the rest of the standard's list; `Alert` for any other). A write in category 3, an incoming call, opens the call screen and rings as a `call` `incoming` line does, naming the caller from the title, or from the body when there is no title; it is not kept as a notification. A write with no text is ignored. Each other one is kept as a new notification, as in [Notifications](#notifications-served). | Yes |
 
 The legacy DFU service is in [updates.md](updates.md#the-protocol-nordic-legacy-dfu), and the file
@@ -188,7 +188,7 @@ it changes nothing. Either way the watch answers with the settings as they now a
 | `shake_to_wake` | `true` to wake a dark screen with a shake. |
 | `shake_threshold` | How fast a shake must be to wake the screen, 0 to 4095, as InfiniTime counts it. |
 | `sleep_mode` | `true` for do not disturb that also stops every wake gesture, touch included, and the always-on screen. It turns `do_not_disturb` on, and `do_not_disturb` set `false` ends it. |
-| `gadgetbridge_name` | `true` to advertise and name the watch `InfiniTime`, so Gadgetbridge offers its InfiniTime support; `false`, the default, for `NeoTime`. Advertising starts again at once with the new name. |
+| `gadgetbridge_name` | `true` to advertise and name the watch `InfiniTime`, so Gadgetbridge offers its InfiniTime support; `false`, the default, for `BattleTime`. Advertising starts again at once with the new name. |
 | `watch_face` | The face to show, by its number: the 32-bit FNV-1a hash of its id with the top bit cleared, or `1` should that be `0`. `0`, the default, chooses none. When the chosen face is not installed or is turned off, the watch shows the first face turned on, in id order. |
 
 An unknown preset, a colour not written `#rrggbb`, `units` other than the two names, or any
@@ -312,9 +312,9 @@ use. A refusal answers `{"t":"slots","err":"..."}` and changes nothing, for exam
 waits or is on trial, when the image is larger than the new slot, or when the new recovery slot
 overlaps the old one at another start.
 
-The companion's command line shows them with `neotime slots`, shrinks the recovery slot to its
-image with `neotime slots fit`, and moves one with `neotime slots recovery <start> <size>` or
-`neotime slots update <start>`.
+The companion's command line shows them with `battletime slots`, shrinks the recovery slot to its
+image with `battletime slots fit`, and moves one with `battletime slots recovery <start> <size>` or
+`battletime slots update <start>`.
 
 ### App state (served)
 
@@ -360,7 +360,7 @@ with the file transfer below, or from its [sync](sync.md), and changes alarms th
 ## File transfer
 
 Files move through Adafruit's BLE file transfer protocol, the one InfiniTime's `FSService` serves,
-so ITD, Gadgetbridge and InfiniTime's resource loader work with NeoTime unchanged.
+so ITD, Gadgetbridge and InfiniTime's resource loader work with BattleTime unchanged.
 `services/blefs` speaks it.
 
 | Characteristic | UUID | Use |
@@ -401,11 +401,11 @@ progress).
 - The watch keeps no file times, so every time it reports is 0.
 - **Differences from InfiniTime.** InfiniTime never cuts a file back when it is written again,
   answers a data piece with that piece's own offset, and reports some failures as negative littlefs
-  codes. NeoTime follows Adafruit's description: status `3` for a missing file, the next offset in
+  codes. BattleTime follows Adafruit's description: status `3` for a missing file, the next offset in
   write answers, and a written file that ends at its total size.
 
 Each app keeps its folder under `/apps/<id>/`: `app.ntapp` is the compiled image, as
-`neotime-compiler` writes it, and `state` is its saved state. A temporary app's image and data go
+`battletime-compiler` writes it, and `state` is its saved state. A temporary app's image and data go
 in `/temp/<id>/`, as [Temporary apps](#temporary-apps-served) describes. Every path the watch keeps
 is listed in [storage.md](storage.md).
 
@@ -541,7 +541,7 @@ file's.
 Month and day have two digits, as in `/steps/2026/01-05`. The companion changes an app's state by
 writing its whole `state` file and then sending a [`state` line](#app-state-served).
 
-## The NeoTime service
+## The BattleTime service
 
 Service `6e540001-0000-4000-8000-4e656f54696d`, with its characteristics on the same base:
 
@@ -616,7 +616,7 @@ when memory is the reason. The numbers are the same as the `refusal` apps read i
 [memory-map.md](memory-map.md#how-much-heap-an-app-needs) explains how the need is worked out.
 
 An id is 1 to 32 letters, digits, `-` and `_`. The shared library is a single image that
-`neotime-compiler library -o shared.ntlib` writes, and `tools/build_images.sh` puts inside the
+`battletime-compiler library -o shared.ntlib` writes, and `tools/build_images.sh` puts inside the
 firmware image, so it arrives with each firmware update rather than as a package.
 
 ### Temporary apps (served)
@@ -663,8 +663,8 @@ CRC, before sending it again. To forget an app, the phone sends `stop`, then del
 the file transfer's delete. A restart opens nothing from `/temp`. A watch face's image runs like an
 app's; the companion sends only apps.
 
-The companion's `neotime apps run <image> [--data <name>=<file>] [--text <name>=<text>] [--listen]`,
-`neotime apps stop` and `neotime apps forget [id]` do these steps, and `neotime ask "<question>"`
+The companion's `battletime apps run <image> [--data <name>=<file>] [--text <name>=<text>] [--listen]`,
+`battletime apps stop` and `battletime apps forget [id]` do these steps, and `battletime ask "<question>"`
 runs the `prompt` app with the question as `text` and prints the answer: the app sends
 `{"t":"app","ch":"prompt","d":{"answer":1}}` for Yes and `0` for No, then goes back.
 

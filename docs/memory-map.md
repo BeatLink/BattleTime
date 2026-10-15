@@ -1,11 +1,11 @@
 # Memory map
 
 The PineTime has three kinds of memory: 512 KB of internal flash, 4 MB of external SPI flash and 64
-KB of RAM. This page shows how NeoTime divides each one. Each box is drawn in proportion to its
+KB of RAM. This page shows how BattleTime divides each one. Each box is drawn in proportion to its
 size. The [memory treemap](memory-treemap.html) shows all three at once, as one map you can zoom
 into, from each memory down to what fills its regions.
 
-The flash layouts are set in code by the `neotime-boot` crate (`boot/src/lib.rs`), which the
+The flash layouts are set in code by the `battletime-boot` crate (`boot/src/lib.rs`), which the
 bootloader and the firmware share, so that is the source of truth. [bootloader.md](bootloader.md)
 explains how the bootloader uses them. The RAM layout is a planned budget, and each figure gets
 replaced by a measurement as its part is built.
@@ -42,14 +42,14 @@ Measured on the release builds of `firmware/` by `tools/measure_memory.py` (see
 [Measuring again](#measuring-again)). Each symbol counts towards the crate that owns it; the
 firmware is linked with LTO into a single object, so the crate comes from the symbol's name, and
 the files the firmware embeds, such as the Bosch configuration, are found by their bytes. A few crates
-off the drawing and interpreter paths, such as `neotime-companion` and `neotime-packages`, are built
+off the drawing and interpreter paths, such as `battletime-companion` and `battletime-packages`, are built
 for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"s"`.
 
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
 | Firmware (start-up, shell, tasks) | 137.2 KB | 46.4 KB |
-| App host (with `neotime-ui`) | 93.2 KB | 0.0 KB |
+| App host (with `battletime-ui`) | 93.2 KB | 0.0 KB |
 | App runtime | 36.2 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 33.7 KB | 43.3 KB |
 | core, alloc and compiler builtins | 27.9 KB | 15.6 KB |
@@ -69,19 +69,19 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 The recovery build (`--features recovery`) leaves out the shell, so the app
 host and the runtime go with it.
 
-The heart rate and battery logs (`neotime-slot-log`, written by the battery task through the
+The heart rate and battery logs (`battletime-slot-log`, written by the battery task through the
 storage task) added 1,528 B of code to the full build, measured with `cargo size` against master on
 2026-10-14 (433,200 B to 434,728 B of text), and 136 B of static RAM, most of it the battery task's
 future holding the storage request while it waits to send it. The step log takes its paths and its
 forgetting of old days from the same crate.
 
 Keeping those logs' days in blocks programmed a slot at a time (`program_file` in the flash store,
-used by `neotime-slot-log`) added 1,432 B to the firmware image, measured against master on
+used by `battletime-slot-log`) added 1,432 B to the firmware image, measured against master on
 2026-10-15 (488,009 B to 489,441 B with the library), and no static RAM. It cut the erases the
 three logs cost from about 80 a day, when each slot rewrote its whole day as a record, to one for
 each new block, about one every four days.
 
-Running closed apps (`firmware/src/closed_apps.rs` and `neotime_app_host::closed_apps`) added
+Running closed apps (`firmware/src/closed_apps.rs` and `battletime_app_host::closed_apps`) added
 5,008 B of code to the full build, measured with `cargo size` against master on 2026-10-14
 (405,496 B to 410,504 B of text), and 32 B of static RAM. A first version wrapped the shell's
 system in a second `System` type, which built the host's handler path twice and cost 23.8 KB, so
@@ -142,7 +142,7 @@ records ring, so it costs no sector. There are no folders, so an app costs nothi
 
 | Path | Holds |
 |---|---|
-| `/apps/<id>/app.ntapp` | The compiled app or face, as `neotime-compiler` writes it. |
+| `/apps/<id>/app.ntapp` | The compiled app or face, as `battletime-compiler` writes it. |
 | `/apps/<id>/state` | What the app saved, written by the shell; a record. |
 | `/apps/<id>/disabled` | Present when the app is installed but hidden from the launcher. |
 | `/settings/system` | The watch-wide settings, 41 bytes. |
@@ -233,13 +233,13 @@ the 1.7 KB frame that loads it.
 
 The last 88 bytes of the firmware's static RAM, in the `.uninit` section just below the stack, are
 the kept clock (`firmware/src/clock.rs`, 20 B), the crash record (`firmware/src/restart.rs`, laid
-out by `neotime-crash-record`) and the 8-byte stack overflow count, kept as the count and its bits
+out by `battletime-crash-record`) and the 8-byte stack overflow count, kept as the count and its bits
 flipped. Start-up does not zero `.uninit`, so a panic or HardFault written there survives the reset
-that follows. The kept clock is five words, which `neotime-current-time` writes and checks: "TIME",
+that follows. The kept clock is five words, which `battletime-current-time` writes and checks: "TIME",
 UTC in milliseconds as two halves, the time zone and a check over the four. The watchdog task
 writes it twice a second and start-up takes it back, so after a soft or watchdog reset the clock
 counts on from it, and RAM after a power cut fails the check. A restored clock counts as set, the
-same as one a phone set: NeoTime has no separate "set by phone" state, and the step log and alarms
+same as one a phone set: BattleTime has no separate "set by phone" state, and the step log and alarms
 go by the clock whatever set it, so a reset no longer throws them back to the build date. A kept
 time earlier than the build time is moved up to it. It all sits at about `0x2000D61C`, wherever the
 linker puts the end of the other statics, so each build has its own address and a record from
@@ -266,7 +266,7 @@ settings report, which is built on the shell's stack only while it is sent.
 To measure it again after a change, build the firmware and run, inside `nix develop`:
 
 ```sh
-(ulimit -v 8000000; python3 -I tools/measure_stack.py firmware/target/thumbv7em-none-eabihf/release/neotime-firmware 8 --launcher)
+(ulimit -v 8000000; python3 -I tools/measure_stack.py firmware/target/thumbv7em-none-eabihf/release/battletime-firmware 8 --launcher)
 ```
 
 It fills the stack with a pattern in the PineTime emulator, starts the firmware without the reset
@@ -279,8 +279,8 @@ without it.
 With apps installed and packages commands sent over Bluetooth, as the companion app sends them:
 
 ```sh
-cargo run -p neotime-packages --example filesystem_use -- --no-theme --image flash.bin launcher=launcher.ntapp ...
-python3 -I tools/measure_stack.py firmware/target/thumbv7em-none-eabihf/release/neotime-firmware 3 \
+cargo run -p battletime-packages --example filesystem_use -- --no-theme --image flash.bin launcher=launcher.ntapp ...
+python3 -I tools/measure_stack.py firmware/target/thumbv7em-none-eabihf/release/battletime-firmware 3 \
     --flash flash.bin --library shared.ntlib --packages '{"c":"apps"}' '{"c":"install","id":"alarm"}'
 ```
 
@@ -301,7 +301,7 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Firmware: task storage, the Bluetooth host's resources and packet pool | 21,087 B | 11,214 B |
 | Bluetooth controller | 2,610 B | 2,610 B |
 | Display, graphics and drivers | 372 B | 372 B |
-| App host (with `neotime-ui`) | 364 B | 0 B |
+| App host (with `battletime-ui`) | 364 B | 0 B |
 | Other | 1 B | 1 B |
 | **Static RAM** (`.data` and `.bss`) | **55,476 B** | **24,464 B** |
 | Left for the stack | 10,044 B | 41,056 B |
@@ -311,14 +311,14 @@ The table below is the budget:
 
 | Region | Budget | Holds | Status |
 |---|---|---|---|
-| UI heap | 20.25 KB | The heap the open app lives in. The `neotime-ui` crate keeps no screen buffer of its own. `neotime-app-host` keeps the open app's state, interpreter and bindings here (1,156 B plus 16 B per expression, the variables' bytes twice and 6 B per variable, at most about 6.6 KB), one 128 B node per widget of the open screen that is not inside a hidden one, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. The system's 10 KB shares the same heap. How much an app needs is worked out from its image, as [below](#how-much-heap-an-app-needs). The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. A `TextFile` holds 4 B for every eighth line of its file and the text of the lines near the view, under 2 KB in the small font, and borrows a 512 B buffer while it reads; a 2,000-line note takes about 1 KB of places. A `BitmapFile` holds its picture while its screen is open, at most 1,802 B for 120 by 120 pixels, and frees it before reading another when its number changes. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
+| UI heap | 20.25 KB | The heap the open app lives in. The `battletime-ui` crate keeps no screen buffer of its own. `battletime-app-host` keeps the open app's state, interpreter and bindings here (1,156 B plus 16 B per expression, the variables' bytes twice and 6 B per variable, at most about 6.6 KB), one 128 B node per widget of the open screen that is not inside a hidden one, each its own allocation so no large free block is needed, plus its text, and the open app's image read from `/apps`. The system's 10 KB shares the same heap. How much an app needs is worked out from its image, as [below](#how-much-heap-an-app-needs). The stopwatch demo's screen holds 1,016 B on the computer and peaks at 1,080 B while drawing. A `TextFile` holds 4 B for every eighth line of its file and the text of the lines near the view, under 2 KB in the small font, and borrows a 512 B buffer while it reads; a 2,000-line note takes about 1 KB of places. A `BitmapFile` holds its picture while its screen is open, at most 1,802 B for 120 by 120 pixels, and frees it before reading another when its number changes. | Partly measured: node size with `size_of` for the watch, the heap peaks in the emulator, the demo screen with a counting allocator on the computer |
 | Bluetooth | 12 KB | The controller and the TrouBLE host: connection state, packet buffers and the GATT tables. | Partly measured: the controller is 1.5 KB; TrouBLE's example with it is 12.0 KB in all, executor included |
 | Apps | 6 KB | Memory for the app that is open beyond the UI heap, such as the parts of its file read from `/apps`. The runtime's working memory is sized to the app: 1,156 B for the interpreter, 16 B for each expression's bindings, and the variables' bytes for the state and again for the interpreter's scratch room, with 6 B for each variable's place. `AppHost` keeps all three on the UI heap. | Partly measured |
 | Stack | 8 KB | The main stack, for interrupts and code that is not in a task. | Planned |
 | Tasks | 6 KB | Embassy's tasks. Each task's state is fixed in size when the firmware is built. | Planned |
 | Reserve | 3 KB | Left free, so a budget that runs over does not crash the watch. | Planned |
 | System state | 4 KB | Settings, notifications, alarms and the step count. The latest 5 notifications are kept on the heap, about 200 B each, beside about 200 B of the shell task's state. | Planned |
-| Display buffer | 2 KB | The buffer `neotime-display` fills before each SPI transfer. | Planned |
+| Display buffer | 2 KB | The buffer `battletime-display` fills before each SPI transfer. | Planned |
 | Flash store | 2.4 KB | The store's tables, in a static rather than the heap: 1 KB of record keys, 512 B of files, the rings' sector order, the log batches and a 64 B map of the file sectors; an upload's state, about 200 B, is on the heap only while a file is written a part at a time. Its calls borrow up to about 1 KB of stack. | Measured with `size_of` for the watch |
 
 The 64 KB is all the chip has, so a part that needs more must take it from another row of this
@@ -326,7 +326,7 @@ table.
 
 ### How much heap an app needs
 
-`neotime_runtime::memory_need::estimate_memory_need` works out an app's need from its image alone,
+`battletime_runtime::memory_need::estimate_memory_need` works out an app's need from its image alone,
 so the package manager can check it before an app is installed or turned on, and the shell before
 it opens one. The parts, in bytes:
 
@@ -353,9 +353,9 @@ Measured in the PineTime emulator on 2026-10-12 with `tools/measure_heap.py`, wh
 its first screen open, against the estimate (which counts hidden widgets, so it is the larger):
 
 ```sh
-cargo run -p neotime-packages --example filesystem_use -- --no-theme --image flash.bin \
+cargo run -p battletime-packages --example filesystem_use -- --no-theme --image flash.bin \
     digital=digital.ntapp launcher=launcher.ntapp settings=settings.ntapp
-python3 -I tools/measure_heap.py firmware/target/thumbv7em-none-eabihf/release/neotime-firmware flash.bin shared.ntlib
+python3 -I tools/measure_heap.py firmware/target/thumbv7em-none-eabihf/release/battletime-firmware flash.bin shared.ntlib
 ```
 
 
@@ -417,7 +417,7 @@ inside `nix develop`; `--check` only reports whether either page is out of date:
 python3 -I tools/measure_memory.py
 ```
 
-CI's Memory map job (`.github/workflows/neotime.yml`) runs it on every push and pull request and keeps
+CI's Memory map job (`.github/workflows/battletime.yml`) runs it on every push and pull request and keeps
 both measured pages as an artifact. On master, when the figures change, it commits both pages as
 `docs(memory-map): measure <commit>`, so nobody needs to run it before landing; rebase over that
 commit as over any other. The prose around the tables still needs updating by hand, and so does the
@@ -425,12 +425,12 @@ treemap's hand-written part in `docs/memory-treemap.html`: the flash layouts, th
 shared library sizes, the deepest stack path and the split of the firmware's static RAM.
 
 It builds the full and the recovery firmware, sorts their symbols by crate, and runs the
-`filesystem_use` example of `neotime-packages`. That example also writes the whole 4 MB external
+`filesystem_use` example of `battletime-packages`. That example also writes the whole 4 MB external
 flash with `--image <file>`, for the emulator to load with
 `externalFlashMemory LoadBinary @<file> 0`:
 
 ```sh
-cargo run -p neotime-packages --example filesystem_use -- --image external.bin digital=firmware/apps/face.ntapp launcher=firmware/apps/launcher.ntapp
+cargo run -p battletime-packages --example filesystem_use -- --image external.bin digital=firmware/apps/face.ntapp launcher=firmware/apps/launcher.ntapp
 ```
 
 ## Watchdog

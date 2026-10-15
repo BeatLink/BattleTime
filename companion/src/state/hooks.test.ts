@@ -8,7 +8,7 @@ import { act } from 'preact/test-utils';
 import { ENTER_DFU_COMMAND, flashFirmware, type FlashStep } from '@/dfu/flash';
 import type { DfuLink } from '@/dfu/link';
 import { readFirmwarePackage, type FirmwarePackage } from '@/dfu/package';
-import { setWatchTime } from '@/protocol/neotime';
+import { setWatchTime } from '@/protocol/battletime';
 import { pickFile } from '@/services/device-files';
 
 import { useFirmware } from './use-firmware';
@@ -16,7 +16,7 @@ import { useTask } from './use-task';
 
 jest.mock('@/services/device-files', () => ({ pickFile: jest.fn() }));
 jest.mock('@/dfu/package', () => ({ readFirmwarePackage: jest.fn() }));
-jest.mock('@/protocol/neotime', () => ({ setWatchTime: jest.fn() }));
+jest.mock('@/protocol/battletime', () => ({ setWatchTime: jest.fn() }));
 jest.mock('@/dfu/flash', () => ({
   ...jest.requireActual<typeof import('@/dfu/flash')>('@/dfu/flash'),
   flashFirmware: jest.fn(),

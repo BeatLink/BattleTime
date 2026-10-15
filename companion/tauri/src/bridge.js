@@ -1,4 +1,4 @@
-// The only bridge between the window and the app, as `window.neotime`.
+// The only bridge between the window and the app, as `window.battletime`.
 //
 // It offers the API src/ble/tauri-transport.ts, src/services/phone/desktop.ts, note-file.ts,
 // remote-platform.ts, web-request.ts and plugins.ts read, and turns each call into a Tauri command answered by src/lib.rs.
@@ -6,7 +6,7 @@
 
 (() => {
   // src/lib.rs sets this before the script runs.
-  const onAndroid = window.__NEOTIME_ANDROID__ === true;
+  const onAndroid = window.__BATTLETIME_ANDROID__ === true;
 
   // Tauri's own scripts may run after this one, so its globals are looked up at call time.
   const invoke = (command, args) => window.__TAURI_INTERNALS__.invoke(command, args);
@@ -143,7 +143,7 @@
     onReport: (listener) => subscribe('sync:report', listener, (each, payload) => each(payload)),
   };
 
-  window.neotime = {
+  window.battletime = {
     ...(onAndroid ? { phone } : { desktop, remote }),
     notes,
     web,

@@ -1,4 +1,4 @@
-// The Tauri app on Android: the phone bridge plugin's Kotlin, reached through `window.neotime.phone` from tauri/src/bridge.js.
+// The Tauri app on Android: the phone bridge plugin's Kotlin, reached through `window.battletime.phone` from tauri/src/bridge.js.
 //
 // The plugin reads the notification listener, calls, media sessions and Do Not Disturb, and sends raw
 // events that events.ts checks.
@@ -38,7 +38,7 @@ export type TauriPhoneDevice = {
 
 // The phone half of the bridge, present only in the Tauri app on Android.
 export function tauriPhoneDevice(): TauriPhoneDevice | null {
-  return (globalThis as { neotime?: { phone?: TauriPhoneDevice } }).neotime?.phone ?? null;
+  return (globalThis as { battletime?: { phone?: TauriPhoneDevice } }).battletime?.phone ?? null;
 }
 
 async function unwrap<T>(pending: Promise<BridgeResult>): Promise<T> {

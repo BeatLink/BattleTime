@@ -1,6 +1,6 @@
 # The app compiler
 
-`neotime-compiler` (`compiler/`) turns an app or watch face written as Preact components with
+`battletime-compiler` (`compiler/`) turns an app or watch face written as Preact components with
 signals into an app image, the `.ntapp` file the runtime reads. It runs on the computer only.
 [writing-apps.md](writing-apps.md) shows how to use it while writing an app,
 [app-runtime.md](app-runtime.md) describes the design and the image format, and
@@ -9,10 +9,10 @@ signals into an app image, the `.ntapp` file the runtime reads. It runs on the c
 ## Using it
 
 ```sh
-nix develop -c cargo run -p neotime-compiler -- apps/stopwatch/app.tsx -o stopwatch.ntapp
-nix develop -c cargo run -p neotime-compiler -- apps/stopwatch/app.tsx --check
-nix develop -c cargo run -p neotime-compiler -- disassemble stopwatch.ntapp
-nix develop -c cargo run -p neotime-compiler -- library -o shared.ntlib
+nix develop -c cargo run -p battletime-compiler -- apps/stopwatch/app.tsx -o stopwatch.ntapp
+nix develop -c cargo run -p battletime-compiler -- apps/stopwatch/app.tsx --check
+nix develop -c cargo run -p battletime-compiler -- disassemble stopwatch.ntapp
+nix develop -c cargo run -p battletime-compiler -- library -o shared.ntlib
 ```
 
 - Without `-o`, the image is written next to the source with the `.ntapp` extension.
@@ -30,7 +30,7 @@ and `verify`.
 ## How it works
 
 1. **Parse** the file with [oxc](https://oxc.rs), and the shared components in
-   `sdk/neotime/src/components.tsx`, which the compiler carries inside it.
+   `sdk/battletime/src/components.tsx`, which the compiler carries inside it.
 2. **Load the top-level names**: imports, constants, functions, `computed` and signals. Each
    `signal`, `persisted` and `useSignal` gets a state variable.
 3. **Render each screen**: call its component once at compile time, inline every component, and
@@ -59,7 +59,7 @@ becomes bytecode.
 
 | Written | Becomes |
 |---|---|
-| `import` from `neotime`, `neotime/widgets`, `neotime/components`, `neotime/icons` and `neotime/lib` | Names the compiler knows. `neotime` passes on `signal`, `computed` and `useSignal` from Preact Signals. The compiler still reads imports from `preact`, `preact/hooks` and `@preact/signals`; any other import is an error. |
+| `import` from `battletime`, `battletime/widgets`, `battletime/components`, `battletime/icons` and `battletime/lib` | Names the compiler knows. `battletime` passes on `signal`, `computed` and `useSignal` from Preact Signals. The compiler still reads imports from `preact`, `preact/hooks` and `@preact/signals`; any other import is an error. |
 | `const NAME = value` | A constant when it can be worked out now, otherwise an expression compiled where it is used. |
 | `signal(start)`, `persisted("key", start)` | A state variable; `persisted` sets the persist flag and uses the key. |
 | `computed(() => ...)` | Inlined wherever `.value` reads it. |
@@ -100,12 +100,12 @@ becomes bytecode.
   reports the label's place counted across all rows, without the row breaks. Its `highlighted`
   labels become its `value`, one bit per button: an array literal, a constant or a `? :` choice
   between them, where a label worked out while running is compared with every label.
-- Components from `neotime/components` are inlined from the SDK source, because the image format
+- Components from `battletime/components` are inlined from the SDK source, because the image format
   cannot refer to library components yet.
 
 ### Handlers
 
-An event prop takes a named function, an inline arrow, or a `neotime` effect with no arguments,
+An event prop takes a named function, an inline arrow, or a `battletime` effect with no arguments,
 such as `onClick={back}`. The event is the function's first parameter; `event.x` reads its field
 by the position `runtime/src/events.rs` gives.
 
@@ -118,7 +118,7 @@ Inside handlers and the functions they call:
   records.
 - Writes to `signal.value`, `array.value[index]` and `record.value.field`, with `=`, `+=` and the
   other compound operators except `/=`, and `++` and `--`.
-- Effect calls from `neotime`, and `random_int`.
+- Effect calls from `battletime`, and `random_int`.
 - `send_to_phone(channel, { key: number, ... })` (`phone_messages.rs`), with the channel and keys
   written out and up to 4 whole-number values. The data becomes JSON text built while the handler
   runs, the literal pieces joined with each value's `FormatNumber`, such as `{"button":` and the
@@ -257,7 +257,7 @@ them the same way.
 | `grow` | a weight; `padding`, `margin`, `border_width` and `radius` are pixels |
 | `visible`, `show_seconds` | 0 or 1 |
 | `start_angle`, `end_angle`, and every other angle | degrees clockwise from twelve o'clock, passed through unchanged; the host turns them for its arc drawing |
-| `icon`, `src` | a shared library image reference, 32768 plus the icon's position in `ICON_NAMES` in `compiler/src/types.rs`, which is also its image number in the shared library: the first 58 in the order of `sdk/neotime/src/icons.ts` up to `weather` (57), then `none` 58, `weather_night_clear` 59, `weather_night_cloudy` 60, `pine_logo` 61, `info` 62, `remote` 63, `note` 64, `qr_code` 65, `phone_missed` 66, `sms` 67, `chat` 68, `news` 69, `voicemail` 70 and `calendar` 71; new icons go at the end so numbers never change |
+| `icon`, `src` | a shared library image reference, 32768 plus the icon's position in `ICON_NAMES` in `compiler/src/types.rs`, which is also its image number in the shared library: the first 58 in the order of `sdk/battletime/src/icons.ts` up to `weather` (57), then `none` 58, `weather_night_clear` 59, `weather_night_cloudy` 60, `pine_logo` 61, `info` 62, `remote` 63, `note` 64, `qr_code` 65, `phone_missed` 66, `sms` 67, `chat` 68, `news` 69, `voicemail` 70 and `calendar` 71; new icons go at the end so numbers never change |
 | `text`, screen names, `go`, `open_app`, `set_setting`'s key | a string of the image |
 | `opacity` | 0 to 255 |
 | `disabled` | 0 or 1 |
@@ -312,10 +312,10 @@ Effect arguments that are text may point into the call's text buffer, such as th
 - Permissions are worked out from the effects, events and system values used, as app-reference.md
   lists them, and returned in `Output::permissions`; `define_app` refuses a `permissions` list. The
   image has no field for them.
-- `neotime-compiler library -o shared.ntlib` writes the shared library: every icon in `ICON_NAMES`
+- `battletime-compiler library -o shared.ntlib` writes the shared library: every icon in `ICON_NAMES`
   as a 32 by 32 mask, drawn from `third_party/` (see its README), and the functions in
-  `LIBRARY_FUNCTIONS` compiled from `sdk/neotime/src/lib.ts`. Images record library version 2.
-- A call to one of those functions from `neotime/lib` compiles to `CallLibrary` with its arguments;
+  `LIBRARY_FUNCTIONS` compiled from `sdk/battletime/src/lib.ts`. Images record library version 2.
+- A call to one of those functions from `battletime/lib` compiles to `CallLibrary` with its arguments;
   the function's number and types come from compiling the library's own source.
 
 Prop mappings: `size` and `diameter` set `width` and `height`; `thickness` sets `border_width`;

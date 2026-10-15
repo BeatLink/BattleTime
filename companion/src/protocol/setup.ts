@@ -1,4 +1,4 @@
-// Setting up a new watch: NeoTime ships with no apps, so the companion installs a watch face, the launcher
+// Setting up a new watch: BattleTime ships with no apps, so the companion installs a watch face, the launcher
 // and the apps its bundle marks for setup; the rest of the bundle waits in the store. The shared library comes inside the firmware, so it is never sent.
 
 import { base64ToBytes } from '@/ble/encoding';

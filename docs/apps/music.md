@@ -6,7 +6,7 @@ and wasp-os's music_player.
 
 ## Using it
 
-- The phone must be connected through the NeoTime companion app. When the app opens it asks the
+- The phone must be connected through the BattleTime companion app. When the app opens it asks the
   phone what its player is doing, and it follows each report the phone sends.
 - The artist sits above the track's title. With no track, it says **Nothing playing**.
 - The top row shows the position and the track's length, and a music note that turns coloured while
@@ -21,19 +21,19 @@ and wasp-os's music_player.
 
 ## Screens
 
-![The music app with the starting track, paused](../../neotime/harness/snapshots/screens/app-music.png)
+![The music app with the starting track, paused](../../battletime/harness/snapshots/screens/app-music.png)
 
 A track paused at its start, before the phone has said where it is.
 
-![The music app playing a track](../../neotime/harness/snapshots/screens/app-music-playing.png)
+![The music app playing a track](../../battletime/harness/snapshots/screens/app-music-playing.png)
 
 A track playing, 42 seconds in, with the bar filling and the note lit.
 
-![The music app with the volume buttons](../../neotime/harness/snapshots/screens/app-music-volume.png)
+![The music app with the volume buttons](../../battletime/harness/snapshots/screens/app-music-volume.png)
 
 The volume down and up buttons in place of the skip buttons, after a swipe up.
 
-![The music app with nothing playing](../../neotime/harness/snapshots/screens/app-music-nothing-playing.png)
+![The music app with nothing playing](../../battletime/harness/snapshots/screens/app-music-nothing-playing.png)
 
 Nothing playing, when the phone reports no track.
 

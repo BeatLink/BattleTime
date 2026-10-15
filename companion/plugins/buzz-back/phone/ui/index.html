@@ -16,10 +16,10 @@
     <script>
       const buzzes = document.getElementById("buzzes");
       const presses = document.getElementById("presses");
-      const send = (message) => parent.postMessage({ neotime: message }, "*");
+      const send = (message) => parent.postMessage({ battletime: message }, "*");
 
       window.addEventListener("message", (event) => {
-        const message = event.data && event.data.neotime;
+        const message = event.data && event.data.battletime;
         if (!message) return;
         buzzes.value = message.buzzes;
         presses.textContent = `The watch's button has been pressed ${message.presses} times.`;

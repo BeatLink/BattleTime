@@ -23,7 +23,7 @@ const request = (overrides: Partial<WebRequest> = {}): WebRequest => ({
 });
 
 afterEach(() => {
-  delete (globalThis as { neotime?: unknown }).neotime;
+  delete (globalThis as { battletime?: unknown }).battletime;
 });
 
 // ============================================================================
@@ -130,7 +130,7 @@ describe('requesters', () => {
 
   it("picks the desktop app's bridge when the window has one", async () => {
     const web = { request: jest.fn(async () => ({ ok: true, value: { status: 200, statusText: '', body: [] } })) };
-    (globalThis as { neotime?: unknown }).neotime = { web };
+    (globalThis as { battletime?: unknown }).battletime = { web };
 
     await webRequester()(request({ access: { certificate: 'any' } }));
 

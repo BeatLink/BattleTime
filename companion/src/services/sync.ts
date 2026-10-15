@@ -1,7 +1,7 @@
 // Sync: the app's Rust core keeps a copy of every setting and record on the watch, read again
 // on one interval that the whole companion shares. docs/sync.md describes it in full.
 //
-// The window reaches it through `window.neotime.sync` (tauri/src/bridge.js). In a plain browser there is
+// The window reaches it through `window.battletime.sync` (tauri/src/bridge.js). In a plain browser there is
 // none, and the interval only paces the window's own status reads.
 
 // ============================================================================
@@ -44,7 +44,7 @@ export type SyncBridge = {
 };
 
 export function syncBridge(): SyncBridge | null {
-  return (globalThis as { neotime?: { sync?: SyncBridge } }).neotime?.sync ?? null;
+  return (globalThis as { battletime?: { sync?: SyncBridge } }).battletime?.sync ?? null;
 }
 
 function valueOf<Value>(result: BridgeResult<Value>): Value {

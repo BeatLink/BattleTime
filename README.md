@@ -1,6 +1,6 @@
-# NeoTime
+# BattleTime
 
-NeoTime is a firmware for the PineTime smartwatch, written in Rust.
+BattleTime is a firmware for the PineTime smartwatch, written in Rust.
 
 It aims to combine the best parts of the two existing PineTime firmwares:
 
@@ -21,7 +21,7 @@ It aims to combine the best parts of the two existing PineTime firmwares:
   live in the firmware and its shared library, and apps assemble them, so each app is small, easy
   to write and light on RAM, the scarcest resource on the watch.
 - **Pure Rust.** The whole firmware is Rust, including the Bluetooth stack: the
-  [TrouBLE](https://github.com/embassy-rs/trouble) host on NeoTime's own radio controller,
+  [TrouBLE](https://github.com/embassy-rs/trouble) host on BattleTime's own radio controller,
   built on [Embassy](https://embassy.dev).
 - **Safe updates.** A bad firmware image rolls back by itself.
 - **Battery life.** The watch sleeps whenever it can.
@@ -31,15 +31,15 @@ It aims to combine the best parts of the two existing PineTime firmwares:
 ## Status
 
 Early work. The drivers, the bootloader, a firmware with a watch face, a launcher and apps, and the
-reloader all run on a PineTime. On 2026-10-11 the reloader moved a watch from wasp-os onto NeoTime,
+reloader all run on a PineTime. On 2026-10-11 the reloader moved a watch from wasp-os onto BattleTime,
 and firmware updates over Bluetooth and the button-hold recovery have worked on it since. Moving a
 watch from InfiniTime has run only in the emulator.
 
 ## This repository
 
-- [neotime/](neotime/) is the watch: the firmware, bootloader, apps, faces, simulator and their
+- [battletime/](battletime/) is the watch: the firmware, bootloader, apps, faces, simulator and their
   tests. Run its commands from inside it.
-- [companion/](companion/) is the NeoTime Companion, the phone and desktop app that installs apps,
+- [companion/](companion/) is the BattleTime Companion, the phone and desktop app that installs apps,
   updates the firmware and forwards notifications. See [its README](companion/README.md).
 - [docs/](docs/) is the documentation for both, also published as the website.
 - [tools/](tools/) builds the watch images, packages firmware updates and measures memory use.
@@ -51,7 +51,7 @@ from anywhere in the repository.
 
 ## Documentation
 
-The docs are also on the website, <https://beatlink.github.io/NeoTime/>, in four parts.
+The docs are also on the website, <https://beatlink.github.io/BattleTime/>, in four parts.
 
 **Using the watch** — start at [the guide](docs/guide/index.md).
 
@@ -77,5 +77,5 @@ pages. Open work is in [to do](docs/todo.md).
 
 ## License
 
-NeoTime is free software under the GNU General Public License, version 3 or (at your option)
+BattleTime is free software under the GNU General Public License, version 3 or (at your option)
 any later version. The full text is in [LICENSE](LICENSE).

@@ -32,7 +32,7 @@
 
   <application>
     <service
-      android:name="com.neotime.companion.phonebridge.PhoneNotificationListener"
+      android:name="com.battletime.companion.phonebridge.PhoneNotificationListener"
       android:exported="true"
       android:label="@string/phone_bridge_listener_label"
       android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
@@ -42,7 +42,7 @@
     </service>
 
     <service
-      android:name="com.neotime.companion.phonebridge.KeepAliveService"
+      android:name="com.battletime.companion.phonebridge.KeepAliveService"
       android:exported="false"
       android:foregroundServiceType="connectedDevice" />
   </application>

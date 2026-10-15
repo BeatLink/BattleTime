@@ -1,4 +1,4 @@
-// Finds NeoTime firmware builds on GitHub: DFU zips on releases, and the
+// Finds BattleTime firmware builds on GitHub: DFU zips on releases, and the
 // artifacts each Actions run uploads. An artifact can only be downloaded with
 // a GitHub token, even from a public repository.
 
@@ -35,7 +35,7 @@ function headers(token?: string): Record<string, string> {
 export function checkRepo(repo: string): string {
   const trimmed = repo.trim();
   if (!/^[\w.-]+\/[\w.-]+$/.test(trimmed)) {
-    throw new Error('Give the repository as owner/name, for example BeatLink/NeoTime.');
+    throw new Error('Give the repository as owner/name, for example BeatLink/BattleTime.');
   }
   return trimmed;
 }

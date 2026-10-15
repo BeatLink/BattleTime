@@ -1,7 +1,7 @@
 // The phone side every app's plugin shares: it hands the page the app's synced state, and the page's changes to the watch.
 // It runs in the companion's QuickJS (docs/plugins.md). The build script fills in __PLUGIN_ID__ and __PLUGIN_VIEWS__.
 
-declare const neotime: {
+declare const battletime: {
   on(event: 'ui' | 'sync' | 'connect', handler: (data: any) => void): void;
   ui: { send(message: unknown): void };
   data: {
@@ -20,27 +20,27 @@ const STEP_DAYS_SHOWN = 14;
 
 // The newest days of a log under `logs/<folder>/<year>/<MM>-<DD>`, with their slots.
 function logDays(folder: string) {
-  return neotime.data
+  return battletime.data
     .list(`logs/${folder}`)
     .filter((source) => source.split('/').length === 4)
     .sort()
     .slice(-STEP_DAYS_SHOWN)
-    .map((source) => ({ source, slots: neotime.data.get(source)?.slots ?? [] }));
+    .map((source) => ({ source, slots: battletime.data.get(source)?.slots ?? [] }));
 }
 
 // What the page shows, read afresh from the companion's copy.
 function snapshot() {
-  const shown: Record<string, unknown> = { app: neotime.data.get(`apps/${__PLUGIN_ID__}`) ?? null };
+  const shown: Record<string, unknown> = { app: battletime.data.get(`apps/${__PLUGIN_ID__}`) ?? null };
   if (__PLUGIN_VIEWS__.includes('settings')) {
-    shown.settings = neotime.data.get('settings') ?? null;
+    shown.settings = battletime.data.get('settings') ?? null;
   }
   if (__PLUGIN_VIEWS__.includes('steps')) {
-    shown.steps = neotime.data
+    shown.steps = battletime.data
       .list('steps')
       .filter((source) => source.split('/').length === 3)
       .sort()
       .slice(-STEP_DAYS_SHOWN)
-      .map((source) => ({ source, slots: neotime.data.get(source)?.slots ?? [] }));
+      .map((source) => ({ source, slots: battletime.data.get(source)?.slots ?? [] }));
   }
   for (const log of ['heart', 'battery']) {
     if (__PLUGIN_VIEWS__.includes(log)) {
@@ -51,32 +51,32 @@ function snapshot() {
 }
 
 function report() {
-  neotime.ui.send({ snapshot: snapshot() });
+  battletime.ui.send({ snapshot: snapshot() });
 }
 
 // Sends the outcome of a write to the page, then the state as it now is.
 async function settle(write: Promise<unknown>) {
   try {
     await write;
-    neotime.ui.send({ error: null });
+    battletime.ui.send({ error: null });
   } catch (error) {
-    neotime.ui.send({ error: (error as Error).message });
+    battletime.ui.send({ error: (error as Error).message });
   }
   report();
 }
 
-neotime.on('ui', (message: { write?: object; writeSettings?: object; syncNow?: boolean }) => {
+battletime.on('ui', (message: { write?: object; writeSettings?: object; syncNow?: boolean }) => {
   if (message.write) {
-    return settle(neotime.data.write(message.write));
+    return settle(battletime.data.write(message.write));
   }
   if (message.writeSettings) {
-    return settle(neotime.data.writeSettings(message.writeSettings));
+    return settle(battletime.data.writeSettings(message.writeSettings));
   }
   if (message.syncNow) {
-    neotime.data.syncNow();
+    battletime.data.syncNow();
   }
   report();
 });
 
-neotime.on('sync', report);
-neotime.on('connect', report);
+battletime.on('sync', report);
+battletime.on('connect', report);

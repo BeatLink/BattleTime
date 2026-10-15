@@ -1,20 +1,20 @@
 # Testing apps
 
 This page describes how apps are tested; [writing-apps.md](writing-apps.md#testing) shows where
-it fits while writing one. `neotime-app-testing` in `harness/` runs apps and faces on a test watch, in the spirit of
-wasp-os's `make check`. It compiles each one from its source with `neotime-compiler`, opens the
-image on the real `neotime-app-host`, and drives it the way the watch would. Nothing is simulated
+it fits while writing one. `battletime-app-testing` in `harness/` runs apps and faces on a test watch, in the spirit of
+wasp-os's `make check`. It compiles each one from its source with `battletime-compiler`, opens the
+image on the real `battletime-app-host`, and drives it the way the watch would. Nothing is simulated
 above the host: the bytecode, bindings, layout and drawing are the watch's own.
 
 ```sh
-cargo test -p neotime-app-testing      # inside nix develop; cargo test --workspace runs it too
+cargo test -p battletime-app-testing      # inside nix develop; cargo test --workspace runs it too
 ```
 
 Like the simulator, it needs `std`, so it is a workspace member but not a default member. Run only
-the suite or test for what you changed, such as `cargo test -p neotime-app-testing --test tours`.
+the suite or test for what you changed, such as `cargo test -p battletime-app-testing --test tours`.
 
 The browser preview has tests of its own: each app's `app.test.tsx` renders it with the stand-in
-`neotime` package and `neotime/preview` under Vitest, run with `npm test` from `neotime/`, and
+`battletime` package and `battletime/preview` under Vitest, run with `npm test` from `battletime/`, and
 `npm run check` type-checks every app. They check the preview, not the watch; behaviour belongs in
 the harness.
 
@@ -24,7 +24,7 @@ A test opens an app by its folder name, drives it, and checks what it shows and 
 
 ```rust
 use std::time::Duration;
-use neotime_app_testing::{EffectKind, TestWatch};
+use battletime_app_testing::{EffectKind, TestWatch};
 
 #[test]
 fn the_stopwatch_counts_up_after_starting() {
@@ -50,7 +50,7 @@ tests and given to every app.
 | `press_button()` | A click of the side button, which goes back a screen. |
 | `advance(Duration)` | Moves the clock on, waking the app at each time it asked for on the way, in order. |
 | `deliver(PushedEvent::Steps { .. })` | An event from the phone or a sensor, with the system values it carries. |
-| `receive_from_phone(line)` | A companion line from the phone, read by `neotime-companion` as the watch reads it. |
+| `receive_from_phone(line)` | A companion line from the phone, read by `battletime-companion` as the watch reads it. |
 | `set_system_value`, `set_system_text`, `screen_off`, `screen_on`, `install_apps(&["timer"])` | Change the battery, the firmware version or another value, the screen, or the launcher's list. |
 | `switch_to_app(id)`, `switch_to_face(id)` | Leaves the open app closed with its state, as the shell does, and opens another. Installed and left apps with timers or alarms run when those come due, and one that calls `wake_screen` opens on the screen its `go` named, with the screen lit; `closed_app_ids()` lists those waiting. |
 | `write_file(path, bytes)`, `reopen()`, `start_on_screen(name)` | Write a file as the phone does, and leave the app and open it again, so it reads the file afresh, or start it on another screen as the shell does. |
@@ -130,12 +130,12 @@ before anything runs. In Rust, `parse_script` or `load_script` reads a script an
 plays it, giving a `ScriptRun` with the steps that passed and the `StepFailure`, if any;
 `run_script_on` plays one on a watch already open, such as one with an app written in a test.
 
-Example scripts live in `tests/scripts/*.neotime`, and `harness/tests/scripts.rs` plays every one,
+Example scripts live in `tests/scripts/*.battletime`, and `harness/tests/scripts.rs` plays every one,
 so `cargo test` and CI run them. The simulator plays one from the command line (see
 [simulator.md](simulator.md)):
 
 ```sh
-cargo run -p neotime-simulator -- --script tests/scripts/timer_rings_and_dismisses.neotime
+cargo run -p battletime-simulator -- --script tests/scripts/timer_rings_and_dismisses.battletime
 ```
 
 ## The suites
@@ -189,7 +189,7 @@ that reached it in `reached_by`.
 they open the app in the browser preview at the same moment, with every system value set as the
 fake system sets it and the preview's time zone in UTC, make the same gesture, and compare the
 texts. The shared code, and the one list of accepted differences, live in
-`sdk/neotime/tests/parity.tsx`. `KNOWN_DIFFERENCES` gives each real difference with a one-line
+`sdk/battletime/tests/parity.tsx`. `KNOWN_DIFFERENCES` gives each real difference with a one-line
 reason. A listed difference that goes away fails the test too, so the list only shrinks.
 
 The preview test leaves out what the test watch cannot read: an icon's symbol and the keys of a
@@ -205,7 +205,7 @@ its picture too.
 
 ### App tours
 
-Every app and shell screen has a tour, `tests/tours/<id>.neotime`: a script that opens it, visits
+Every app and shell screen has a tour, `tests/tours/<id>.battletime`: a script that opens it, visits
 each of its screens, pages and states, and takes a `snapshot` of each. Its page, `docs/apps/<id>.md`,
 says how to use the app and shows its main screen and every picture the tour takes; the website
 gives each app its page from there. `harness/tests/tours.rs` plays every tour and fails when an app
@@ -229,7 +229,7 @@ what an app shows updates its tour, pictures and page in the same commit.
 When a change to what an app shows is meant, rewrite the snapshots and commit them with it:
 
 ```sh
-NEOTIME_UPDATE_SNAPSHOTS=1 cargo test -p neotime-app-testing --test parity --test screenshots
+BATTLETIME_UPDATE_SNAPSHOTS=1 cargo test -p battletime-app-testing --test parity --test screenshots
 npm test   # the preview must agree with the new texts, or list why it does not
 ```
 
@@ -239,7 +239,7 @@ this way before the preview's parity test passes.
 ## The emulator
 
 The harness tests apps; the firmware itself runs in PineTimeEmulator, a Rust emulator of the whole
-watch. Its suites are in `neotime/tests/emulator`, described in
+watch. Its suites are in `battletime/tests/emulator`, described in
 [updates.md](updates.md#proving-it-on-the-emulator).
 
 ### Running suites
@@ -258,7 +258,7 @@ watch. Its suites are in `neotime/tests/emulator`, described in
 real install, build a flash image and pass it with the library:
 
 ```sh
-cargo run -p neotime-packages --example filesystem_use -- --image flash.bin --no-theme stopwatch=stopwatch.ntapp
+cargo run -p battletime-packages --example filesystem_use -- --image flash.bin --no-theme stopwatch=stopwatch.ntapp
 python3 -I ../tools/measure_stack.py FIRMWARE_ELF --launcher --flash flash.bin --library shared.ntlib
 ```
 

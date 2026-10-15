@@ -1,0 +1,25 @@
+[package]
+name = "battletime-app-host"
+version = "0.1.0"
+edition = "2021"
+description = "Runs a BattleTime app: builds its widgets, sends it touches, redraws on change and on time"
+license.workspace = true
+publish = false
+
+[dependencies]
+embassy-futures = "0.1"
+embedded-graphics = "0.8"
+battletime-button = { path = "../drivers/button" }
+battletime-companion = { path = "../services/companion", default-features = false }
+battletime-runtime = { path = "../runtime" }
+battletime-settings = { path = "../services/settings" }
+battletime-ui = { path = "../ui" }
+
+[dev-dependencies]
+battletime-runtime = { path = "../runtime", features = ["writer"] }
+
+[features]
+# The text fonts built in from fonts/, for the simulator and tools; the watch takes them from the shared library.
+built-in-fonts = []
+# The built-in stopwatch demo image, written with the runtime's image writer.
+demo = ["battletime-runtime/writer"]

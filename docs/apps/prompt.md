@@ -15,17 +15,17 @@ tapped on the watch.
 
 ## Screens
 
-![The prompt asking "Leave now?" with No and Yes buttons](../../neotime/harness/snapshots/screens/app-prompt.png)
+![The prompt asking "Leave now?" with No and Yes buttons](../../battletime/harness/snapshots/screens/app-prompt.png)
 
 The phone's question, with **No** and **Yes** underneath.
 
-![The prompt with no question](../../neotime/harness/snapshots/screens/app-prompt-empty.png)
+![The prompt with no question](../../battletime/harness/snapshots/screens/app-prompt-empty.png)
 
 No question from the phone.
 
 ## With the companion app
 
-- On a computer, `neotime ask "Leave for the station now?"` asks the question with the companion's
+- On a computer, `battletime ask "Leave for the station now?"` asks the question with the companion's
   command line tool and waits for a tap.
 - It prints `yes` or `no`, with a different exit status for each, so a script can act on the
   answer.

@@ -6,7 +6,7 @@ import { basename, dirname } from 'node:path';
 
 import type { SettingsMessage } from '@/protocol/gadgetbridge';
 import { createBackup, parseBackup, restoreBackup } from '@/protocol/backup';
-import { setWatchTime } from '@/protocol/neotime';
+import { setWatchTime } from '@/protocol/battletime';
 import { NOTE_FONTS, NOTE_PATH, removeNote, syncNote, type NoteFont } from '@/protocol/notes';
 import {
   forgetTemporaryApp,
@@ -43,30 +43,30 @@ import type { WatchSession } from '../ble';
 import { ProgressBar, say } from '../output';
 import { takeWebAccess, terminalRequester } from '../web';
 
-export const watchUsage = `neotime status
-neotime time
-neotime settings [key=value ...]
-neotime alarms [HH:MM[/days][/off] ...|none]
-neotime steps [days]
-neotime weather <place>
-neotime files [ls [dir]|get <path> [dest]|put <file> <path>|rm <path>|df]
-neotime note <file>|text <text>|url <url> [small|normal|medium|large]
+export const watchUsage = `battletime status
+battletime time
+battletime settings [key=value ...]
+battletime alarms [HH:MM[/days][/off] ...|none]
+battletime steps [days]
+battletime weather <place>
+battletime files [ls [dir]|get <path> [dest]|put <file> <path>|rm <path>|df]
+battletime note <file>|text <text>|url <url> [small|normal|medium|large]
              [--header 'Name: value']... [--user name:password] [--pin <sha256>|--insecure]
-neotime note remove
-neotime apps [list|install <image|id>|remove <id>|hide <id>|show <id>|setup]
-neotime apps run <image> [--data <name>=<file>]... [--text <name>=<text>]... [--listen]
-neotime apps stop|forget [id]
-neotime quick-apps [list|set <id> ...|reset]
-neotime backup <file>
-neotime restore <file>
-neotime listen [line] [--allow <hosts>] [--wait <seconds>]
-neotime slots [fit|recovery <start> <size>|update <start>]
+battletime note remove
+battletime apps [list|install <image|id>|remove <id>|hide <id>|show <id>|setup]
+battletime apps run <image> [--data <name>=<file>]... [--text <name>=<text>]... [--listen]
+battletime apps stop|forget [id]
+battletime quick-apps [list|set <id> ...|reset]
+battletime backup <file>
+battletime restore <file>
+battletime listen [line] [--allow <hosts>] [--wait <seconds>]
+battletime slots [fit|recovery <start> <size>|update <start>]
 
   status prints the battery and today's steps. time sets the watch clock from this computer's. settings with no arguments prints them;
   brightness=3, theme=ocean, theme_colors='{"accent":"#ff8000"}' and the like
   change them; gadgetbridge_name=true makes the watch advertise as InfiniTime for Gadgetbridge. alarms with no arguments lists them, otherwise replaces
   them all: 07:30/12345 rings on weekdays (1 is Monday), 06:00/67/off is a
-  weekend alarm turned off, and a bare time rings once. files uses NeoTime's
+  weekend alarm turned off, and a bare time rings once. files uses BattleTime's
   file service; paths are absolute, such as /settings. note sends a text file
   for the watch's Notes app to show, in the font given, or removes it. apps installs a .ntapp
   image or a bundled app by id, list shows each app with the memory it needs, hide and show
@@ -318,7 +318,7 @@ function needText(answer: MemoryAnswer): string {
 export function imageToInstall(fileOrId: string): Uint8Array {
   if (existsSync(fileOrId)) return new Uint8Array(readFileSync(fileOrId));
   const bundled = bundledOffers().find((offer) => offer.entry.id === fileOrId);
-  if (!bundled) throw new Error(`${fileOrId} is neither a file nor an app this tool bundles; neotime store list shows those.`);
+  if (!bundled) throw new Error(`${fileOrId} is neither a file nor an app this tool bundles; battletime store list shows those.`);
   return bundled.data;
 }
 

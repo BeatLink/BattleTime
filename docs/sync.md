@@ -93,5 +93,5 @@ Both clients drop answers left over from an operation that gave up before starti
 
 ## Plugins
 
-A plugin reads the synced data and writes its own app's state through `neotime.data` (see
+A plugin reads the synced data and writes its own app's state through `battletime.data` (see
 [plugins.md](plugins.md#synced-watch-data)), and hears `sync` events when its sources change.

@@ -14,7 +14,7 @@ class FakeSession extends MockLegacyDfuTarget {
   readonly requests = new ReplyRouter(undefined, 10);
   private filesOpened: Promise<FileService> | null = null;
   constructor() {
-    super('AA:BB:CC:DD:EE:00', 'neotime', true);
+    super('AA:BB:CC:DD:EE:00', 'battletime', true);
     this.fileService.addSampleRecords(new Date());
   }
   files() {

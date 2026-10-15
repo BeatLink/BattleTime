@@ -16,14 +16,14 @@ level. Ported from wasp-os's level app.
 
 ## Screens
 
-![The level, lying level](../../neotime/harness/snapshots/screens/app-level.png)
+![The level, lying level](../../battletime/harness/snapshots/screens/app-level.png)
 
 Level: the green bubble in the middle of the cross.
 
-![The level, tilted](../../neotime/harness/snapshots/screens/app-level-tilted.png)
+![The level, tilted](../../battletime/harness/snapshots/screens/app-level-tilted.png)
 
 Tilted, with the bubble off towards the lower left in white.
 
-![The level's menu](../../neotime/harness/snapshots/screens/app-level-menu.png)
+![The level's menu](../../battletime/harness/snapshots/screens/app-level-menu.png)
 
 The menu, opened with a tap: **Calibrate**, **Reset** and **Cancel**.

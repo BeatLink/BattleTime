@@ -1,5 +1,5 @@
 {
-  description = "NeoTime: a Rust firmware for the PineTime, and its companion app";
+  description = "BattleTime: a Rust firmware for the PineTime, and its companion app";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -31,37 +31,37 @@
         lib = pkgs.lib;
 
         # The toolchain file adds the watch's ARM target, which nixpkgs rustc lacks.
-        rust = pkgs.rust-bin.fromRustupToolchainFile ./neotime/rust-toolchain.toml;
+        rust = pkgs.rust-bin.fromRustupToolchainFile ./battletime/rust-toolchain.toml;
         rustPlatform = pkgs.makeRustPlatform { cargo = rust; rustc = rust; };
 
         # Only the Cargo files and the crates, so editing docs or the flake does not rebuild. The
-        # workspace is neotime/, and the docs the harness reads sit beside it.
+        # workspace is battletime/, and the docs the harness reads sit beside it.
         source = lib.fileset.toSource {
           root = ./.;
           fileset = lib.fileset.unions [
-            ./neotime/Cargo.toml
-            ./neotime/Cargo.lock
-            ./neotime/app-host
-            ./neotime/boot
-            ./neotime/compiler
-            ./neotime/drivers
-            ./neotime/harness
-            ./neotime/runtime
-            ./neotime/services
-            ./neotime/simulator
-            ./neotime/ui
+            ./battletime/Cargo.toml
+            ./battletime/Cargo.lock
+            ./battletime/app-host
+            ./battletime/boot
+            ./battletime/compiler
+            ./battletime/drivers
+            ./battletime/harness
+            ./battletime/runtime
+            ./battletime/services
+            ./battletime/simulator
+            ./battletime/ui
             # The compiler draws the shared library icons from these fonts and pictures.
-            ./neotime/third_party
+            ./battletime/third_party
             # The compiler inlines the shared components and functions, and its tests compile every app and face.
-            ./neotime/sdk/neotime/src/components.tsx
-            ./neotime/sdk/neotime/src/lib.ts
-            (lib.fileset.fileFilter (file: file.hasExt "tsx") ./neotime/apps)
-            (lib.fileset.fileFilter (file: file.hasExt "tsx") ./neotime/faces)
+            ./battletime/sdk/battletime/src/components.tsx
+            ./battletime/sdk/battletime/src/lib.ts
+            (lib.fileset.fileFilter (file: file.hasExt "tsx") ./battletime/apps)
+            (lib.fileset.fileFilter (file: file.hasExt "tsx") ./battletime/faces)
             # The harness's quality checks look for every app and face in these listings.
             ./docs/apps.md
             ./docs/faces.md
             # The harness plays every example script in this folder.
-            ./neotime/tests/scripts
+            ./battletime/tests/scripts
           ];
         };
 
@@ -71,16 +71,16 @@
 
         # Runs one cargo command over the workspace, with dependencies vendored from Cargo.lock.
         cargoCheck = name: command: rustPlatform.buildRustPackage {
-          pname = "neotime-${name}";
+          pname = "battletime-${name}";
           version = "0.1.0";
           src = source;
-          cargoLock.lockFile = ./neotime/Cargo.lock;
-          cargoRoot = "neotime";
+          cargoLock.lockFile = ./battletime/Cargo.lock;
+          cargoRoot = "battletime";
           nativeBuildInputs = simulatorBuildTools;
           buildInputs = simulatorLibraries;
           buildPhase = ''
             runHook preBuild
-            cd neotime
+            cd battletime
             ${command}
             runHook postBuild
           '';
@@ -89,17 +89,17 @@
         };
 
         simulator = rustPlatform.buildRustPackage {
-          pname = "neotime-simulator";
+          pname = "battletime-simulator";
           version = "0.1.0";
           src = source;
-          cargoLock.lockFile = ./neotime/Cargo.lock;
-          cargoRoot = "neotime";
-          buildAndTestSubdir = "neotime";
-          cargoBuildFlags = [ "--package" "neotime-simulator" ];
-          cargoTestFlags = [ "--package" "neotime-simulator" ];
+          cargoLock.lockFile = ./battletime/Cargo.lock;
+          cargoRoot = "battletime";
+          buildAndTestSubdir = "battletime";
+          cargoBuildFlags = [ "--package" "battletime-simulator" ];
+          cargoTestFlags = [ "--package" "battletime-simulator" ];
           nativeBuildInputs = simulatorBuildTools;
           buildInputs = simulatorLibraries;
-          meta.mainProgram = "neotime-simulator";
+          meta.mainProgram = "battletime-simulator";
         };
 
         # InfiniTime's fonts and images are generated at build time with lv_font_conv and lv_img_conv.
@@ -168,44 +168,44 @@
 
         # The command line tool, bundled with esbuild so it needs nothing from node_modules at run time.
         companionCli = pkgs.buildNpmPackage {
-          pname = "neotime-companion-cli";
+          pname = "battletime-companion-cli";
           version = (lib.importJSON ./companion/package.json).version;
           src = lib.cleanSource ./companion;
 
           nodejs = pkgs.nodejs_22;
-          npmDepsHash = "sha256-WewPJft4QoSC/Qg/Jb83UEpwRtVcwupHcVEmiGQQwCI=";
+          npmDepsHash = "sha256-y3T88lDElyTCOBvyg7qp4WMtGMBzpXWZh8M6qnmklaM=";
           makeCacheWritable = true;
 
           buildPhase = ''
             runHook preBuild
-            npx esbuild cli/neotime.ts --bundle --platform=node --target=node20 \
+            npx esbuild cli/battletime.ts --bundle --platform=node --target=node20 \
               --format=cjs --alias:@=./src --external:x11 --external:usocket \
-              --outfile=build/neotime.cjs
+              --outfile=build/battletime.cjs
             runHook postBuild
           '';
 
           installPhase = ''
             runHook preInstall
-            install -Dm644 build/neotime.cjs $out/share/neotime-companion/neotime.cjs
-            makeWrapper ${pkgs.nodejs_22}/bin/node $out/bin/neotime \
-              --add-flags $out/share/neotime-companion/neotime.cjs
+            install -Dm644 build/battletime.cjs $out/share/battletime-companion/battletime.cjs
+            makeWrapper ${pkgs.nodejs_22}/bin/node $out/bin/battletime \
+              --add-flags $out/share/battletime-companion/battletime.cjs
             runHook postInstall
           '';
 
           nativeBuildInputs = [ pkgs.makeWrapper ];
 
           meta = {
-            description = "Command line tool for watches running NeoTime";
-            homepage = "https://github.com/BeatLink/NeoTime";
+            description = "Command line tool for watches running BattleTime";
+            homepage = "https://github.com/BeatLink/BattleTime";
             license = lib.licenses.gpl3Plus;
-            mainProgram = "neotime";
+            mainProgram = "battletime";
             platforms = lib.platforms.linux;
           };
         };
 
         # The companion's window, built by Vite, which the Tauri desktop app embeds.
         companionWeb = pkgs.buildNpmPackage {
-          pname = "neotime-companion-web";
+          pname = "battletime-companion-web";
           version = (lib.importJSON ./companion/package.json).version;
           src = lib.cleanSource ./companion;
 
@@ -228,21 +228,21 @@
 
         # The desktop app and the command line tool together, as one installable package.
         companion = pkgs.symlinkJoin {
-          name = "neotime-companion-${(lib.importJSON ./companion/package.json).version}";
+          name = "battletime-companion-${(lib.importJSON ./companion/package.json).version}";
           paths = [ companionTauri companionCli ];
           meta = companionTauri.meta // {
-            description = "The NeoTime Companion desktop app and command line tool";
+            description = "The BattleTime Companion desktop app and command line tool";
           };
         };
 
         # The Tauri desktop app, with the Vite build built in and its Bluetooth, D-Bus and plugins in Rust.
         companionTauri = pkgs.rustPlatform.buildRustPackage {
-          pname = "neotime-companion-tauri";
+          pname = "battletime-companion-tauri";
           version = (lib.importJSON ./companion/package.json).version;
           src = lib.cleanSource ./companion;
           cargoLock.lockFile = ./companion/Cargo.lock;
 
-          cargoBuildFlags = [ "--package" "neotime-companion" "--features" "custom-protocol" ];
+          cargoBuildFlags = [ "--package" "battletime-companion" "--features" "custom-protocol" ];
           # The Rust tests run in CI's companion workflow.
           doCheck = false;
 
@@ -257,25 +257,25 @@
 
           postInstall = ''
             install -Dm644 assets/images/icon.png \
-              $out/share/icons/hicolor/512x512/apps/neotime-companion.png
+              $out/share/icons/hicolor/512x512/apps/battletime-companion.png
           '';
 
           desktopItems = [
             (pkgs.makeDesktopItem {
-              name = "neotime-companion";
-              desktopName = "NeoTime Companion";
-              comment = "Companion for watches running NeoTime";
-              exec = "neotime-companion";
-              icon = "neotime-companion";
+              name = "battletime-companion";
+              desktopName = "BattleTime Companion";
+              comment = "Companion for watches running BattleTime";
+              exec = "battletime-companion";
+              icon = "battletime-companion";
               categories = [ "Utility" ];
             })
           ];
 
           meta = {
-            description = "The NeoTime Companion desktop app, built with Tauri";
-            homepage = "https://github.com/BeatLink/NeoTime";
+            description = "The BattleTime Companion desktop app, built with Tauri";
+            homepage = "https://github.com/BeatLink/BattleTime";
             license = lib.licenses.gpl3Plus;
-            mainProgram = "neotime-companion";
+            mainProgram = "battletime-companion";
             platforms = lib.platforms.linux;
           };
         };
@@ -308,19 +308,19 @@
         # The App Builder, a VS Code extension; the editor module names its folder from the passthru values.
         appbuilderVersion = (lib.importJSON ./tools/appbuilder/package.json).version;
         appbuilder = pkgs.buildNpmPackage {
-          pname = "neotime-appbuilder";
+          pname = "battletime-appbuilder";
           version = appbuilderVersion;
           src = lib.cleanSource ./tools/appbuilder;
 
           nodejs = pkgs.nodejs_22;
-          npmDepsHash = "sha256-5yp+SYXose9RS5JC7aKowgCi0q7KJlYRboPfkIjeZcc=";
+          npmDepsHash = "sha256-x6bAc/LkBmPnP/fdRDy/YyHwhvRNUbUa6vNohv+P8CU=";
 
           installPhase = ''
             runHook preInstall
 
             # TypeScript reads the SDK for the palette at run time, so it is the one dependency kept.
             npm prune --omit=dev
-            target=$out/share/vscode/extensions/neotime.neotime-appbuilder
+            target=$out/share/vscode/extensions/battletime.battletime-appbuilder
             mkdir -p $target
             cp -r package.json README.md out media node_modules $target/
 
@@ -328,9 +328,9 @@
           '';
 
           passthru = {
-            vscodeExtUniqueId = "neotime.neotime-appbuilder";
-            vscodeExtPublisher = "neotime";
-            vscodeExtName = "neotime-appbuilder";
+            vscodeExtUniqueId = "battletime.battletime-appbuilder";
+            vscodeExtPublisher = "battletime";
+            vscodeExtName = "battletime-appbuilder";
             vscodeExtVersion = appbuilderVersion;
           };
         };
@@ -361,14 +361,14 @@
           watch-build = cargoCheck "watch-build"
             "cargo build --release --offline --target thumbv7em-none-eabihf";
           clippy = cargoCheck "clippy" "cargo clippy --workspace --offline -- --deny warnings";
-          simulator-screenshot = pkgs.runCommand "neotime-simulator-screenshot" { } ''
-            ${simulator}/bin/neotime-simulator --screenshot $out.png --page 2
+          simulator-screenshot = pkgs.runCommand "battletime-simulator-screenshot" { } ''
+            ${simulator}/bin/battletime-simulator --screenshot $out.png --page 2
             test -s $out.png
             mv $out.png $out
           '';
           # The built-in stopwatch app, after a click on its start button.
-          simulator-app-screenshot = pkgs.runCommand "neotime-simulator-app-screenshot" { } ''
-            ${simulator}/bin/neotime-simulator --demo --click 120,138 --screenshot $out.png
+          simulator-app-screenshot = pkgs.runCommand "battletime-simulator-app-screenshot" { } ''
+            ${simulator}/bin/battletime-simulator --demo --click 120,138 --screenshot $out.png
             test -s $out.png
             mv $out.png $out
           '';
@@ -391,12 +391,12 @@
             if [ ! -d .githooks ] && [ "$(git config --get core.hooksPath)" = .githooks ]; then
               git config --unset core.hooksPath
             fi
-            echo "NeoTime (run these from neotime/)"
+            echo "BattleTime (run these from battletime/)"
             echo "  cargo test --workspace                                 run every test, simulator included"
             echo "  cargo build --release --target thumbv7em-none-eabihf   build the drivers for the watch"
-            echo "  cargo run -p neotime-simulator                         open the simulator"
-            echo "  cargo run -p neotime-simulator -- --demo               run the built-in stopwatch app"
-            echo "  cargo run -p neotime-simulator -- --script FILE        play a test script, such as tests/scripts/*.neotime"
+            echo "  cargo run -p battletime-simulator                         open the simulator"
+            echo "  cargo run -p battletime-simulator -- --demo               run the built-in stopwatch app"
+            echo "  cargo run -p battletime-simulator -- --script FILE        play a test script, such as tests/scripts/*.battletime"
             echo "  ../tools/build_images.sh                               build the bootloader, firmware and reloaders into dist/"
             echo "  nix run .#infinisim                                    open InfiniTime's simulator to compare"
             echo "  ../tools/check_coverage.sh                             run every test with coverage and check the floors"
@@ -410,12 +410,12 @@
           packages = companionPackages;
 
           shellHook = ''
-            echo "NeoTime Companion (run these from companion/)"
+            echo "BattleTime Companion (run these from companion/)"
             echo "  npm ci               install dependencies"
             echo "  npm run tauri        build the window with Vite and open the desktop app"
             echo "  npm run dev          the window alone in a browser, with a mock watch"
             echo "  npm test             the TypeScript tests"
-            echo "  npm run neotime -- <command>   the command line tool"
+            echo "  npm run battletime -- <command>   the command line tool"
             echo "  cargo test --workspace   the Rust core and the Tauri app"
             echo "  nix develop .#companion-android   the shell with the Android SDK"
           '';
@@ -440,7 +440,7 @@
           GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${companionAndroidSdkRoot}/build-tools/${companionAndroid.buildTools}/aapt2";
 
           shellHook = ''
-            echo "NeoTime Companion, with the Android SDK (run these from companion/)"
+            echo "BattleTime Companion, with the Android SDK (run these from companion/)"
             echo "  npm run tauri-android           build the app's debug APK for arm64"
             echo "  npm run tauri-android:release   build the release APK for every ABI, signed when keystore.properties exists"
           '';

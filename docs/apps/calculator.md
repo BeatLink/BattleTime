@@ -19,18 +19,18 @@ of them after the point. Merged from wasp-os's calculator and InfiniTime's Calcu
 
 ## Screens
 
-![The calculator, cleared](../../neotime/harness/snapshots/screens/app-calculator.png)
+![The calculator, cleared](../../battletime/harness/snapshots/screens/app-calculator.png)
 
 Cleared, showing zero.
 
-![The calculator partway through a sum](../../neotime/harness/snapshots/screens/app-calculator-sum.png)
+![The calculator partway through a sum](../../battletime/harness/snapshots/screens/app-calculator-sum.png)
 
 Partway through 12 + 5: the result and the operation above, the number being typed below.
 
-![The calculator after 3.5 × 8 =](../../neotime/harness/snapshots/screens/app-calculator-result.png)
+![The calculator after 3.5 × 8 =](../../battletime/harness/snapshots/screens/app-calculator-result.png)
 
 After 3.5 × 8 =: the result 28 above, with the last number and operation kept so that = repeats.
 
-![The calculator after dividing by zero](../../neotime/harness/snapshots/screens/app-calculator-zero-division.png)
+![The calculator after dividing by zero](../../battletime/harness/snapshots/screens/app-calculator-zero-division.png)
 
 After 8 ÷ 0 =, the red "zero division" message.

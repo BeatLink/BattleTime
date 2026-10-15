@@ -22,14 +22,14 @@ built into the firmware, from InfiniTime's QuickSettings screen and Android's pu
 
 ## Screens
 
-![Quick settings](../../neotime/harness/snapshots/screens/shell-quick-settings.png)
+![Quick settings](../../battletime/harness/snapshots/screens/shell-quick-settings.png)
 
 As it opens, with only Bluetooth on.
 
-![Quick settings with tiles on](../../neotime/harness/snapshots/screens/shell-quick-settings-tiles-on.png)
+![Quick settings with tiles on](../../battletime/harness/snapshots/screens/shell-quick-settings-tiles-on.png)
 
 High brightness, with do not disturb, Bluetooth and the always-on screen on, on the charger.
 
-![Quick settings in sleep mode](../../neotime/harness/snapshots/screens/shell-quick-settings-sleep.png)
+![Quick settings in sleep mode](../../battletime/harness/snapshots/screens/shell-quick-settings-sleep.png)
 
 Sleep mode, the third state of the do not disturb tile, shown by a moon.

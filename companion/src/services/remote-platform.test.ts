@@ -6,7 +6,7 @@ import { desktopCommandRunner, desktopRemoteBridge, remotePlatform, type Desktop
 const parts = { media: null, isPlaying: () => false, findPhone: () => {} };
 
 afterEach(() => {
-  delete (globalThis as { neotime?: unknown }).neotime;
+  delete (globalThis as { battletime?: unknown }).battletime;
 });
 
 describe('shell commands in the desktop app', () => {
@@ -29,7 +29,7 @@ describe('shell commands in the desktop app', () => {
     expect(desktopRemoteBridge()).toBeNull();
     expect(remotePlatform(parts).runCommand).toBeNull();
     const remote: DesktopRemoteBridge = { runCommand: async () => ({ ok: true, value: { exitCode: 3, output: '', timedOut: false } }) };
-    (globalThis as { neotime?: unknown }).neotime = { remote };
+    (globalThis as { battletime?: unknown }).battletime = { remote };
     expect(desktopRemoteBridge()).toBe(remote);
     await expect(remotePlatform(parts).runCommand!('false')).resolves.toMatchObject({ exitCode: 3 });
   });

@@ -11,6 +11,6 @@ hello.
 
 ## Screens
 
-![The hello app](../../neotime/harness/snapshots/screens/app-hello.png)
+![The hello app](../../battletime/harness/snapshots/screens/app-hello.png)
 
 Its only screen: a check mark above "Hello, world!" on one card.

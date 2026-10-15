@@ -14,7 +14,7 @@ type Snapshot = {
   battery?: { source: string; slots: (number | null)[] }[];
 };
 
-const send = (message: unknown) => parent.postMessage({ neotime: message }, '*');
+const send = (message: unknown) => parent.postMessage({ battletime: message }, '*');
 const content = document.getElementById('content') as HTMLElement;
 const problem = document.getElementById('problem') as HTMLElement;
 
@@ -144,7 +144,7 @@ function logSection(title: string, unit: string, days: { source: string; slots: 
 // ============================================================================
 
 window.addEventListener('message', (event) => {
-  const message = event.data && event.data.neotime;
+  const message = event.data && event.data.battletime;
   if (!message) {
     return;
   }

@@ -1,6 +1,6 @@
 // The codes the watch's qr-code app lists: each a bitmap at /qr/<slot>, and their order and captions in /qr/list.
 //
-// docs/companion-protocol.md in the NeoTime repository describes the files. They travel over the file
+// docs/companion-protocol.md in the BattleTime repository describes the files. They travel over the file
 // service; adding a code writes its bitmap and the list, and renaming, moving or removing one rewrites
 // only the list.
 

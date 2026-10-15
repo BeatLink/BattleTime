@@ -16,25 +16,25 @@ The work of an update is split three ways:
 - **The bootloader** only acts on the watch: it swaps, rolls back and installs recovery.
 - **The firmware's Bluetooth** only uploads: it writes the new image into the update slot, marks it,
   and resets. It speaks Nordic's legacy DFU, as InfiniTime does, so Gadgetbridge and the other
-  companion apps update NeoTime unchanged; see [updates.md](updates.md).
-- **A reloader image** moves a watch onto NeoTime once, from InfiniTime or wasp-os (below).
+  companion apps update BattleTime unchanged; see [updates.md](updates.md).
+- **A reloader image** moves a watch onto BattleTime once, from InfiniTime or wasp-os (below).
 
 ## Crates
 
 | Crate | Path | Runs on | What it holds |
 |---|---|---|---|
-| `neotime-bootloader` | `bootloader/` | the watch only | the bootloader program |
-| `neotime-boot` | `boot/` | the watch and in tests | the flash layout, the image header, the slot table, the watchdog timeout, the recovery copy |
-| `neotime-external-flash` | `drivers/external_flash/` | the watch and in tests | the external flash driver |
-| `neotime-status-screen` | `drivers/status_screen/` | the watch, and in the simulator's tests | the small ST7789 driver for the blue status screen |
-| `neotime-battery-reading` | `drivers/battery_reading/` | the watch and in tests | one blocking reading of the battery's voltage, straight from the SAADC's registers |
-| `neotime-battery` | `services/battery/` | the watch and in tests | the charge curve, the battery line's words and the lowest voltage for a bootloader write, shared with the firmware |
-| `neotime-bootloader-updater` | `bootloader-updater/` | the watch only | the image that replaces this bootloader on a watch already on NeoTime |
+| `battletime-bootloader` | `bootloader/` | the watch only | the bootloader program |
+| `battletime-boot` | `boot/` | the watch and in tests | the flash layout, the image header, the slot table, the watchdog timeout, the recovery copy |
+| `battletime-external-flash` | `drivers/external_flash/` | the watch and in tests | the external flash driver |
+| `battletime-status-screen` | `drivers/status_screen/` | the watch, and in the simulator's tests | the small ST7789 driver for the blue status screen |
+| `battletime-battery-reading` | `drivers/battery_reading/` | the watch and in tests | one blocking reading of the battery's voltage, straight from the SAADC's registers |
+| `battletime-battery` | `services/battery/` | the watch and in tests | the charge curve, the battery line's words and the lowest voltage for a bootloader write, shared with the firmware |
+| `battletime-bootloader-updater` | `bootloader-updater/` | the watch only | the image that replaces this bootloader on a watch already on BattleTime |
 
-`neotime-boot` is shared with the firmware, which must use the same layout and watchdog timeout.
+`battletime-boot` is shared with the firmware, which must use the same layout and watchdog timeout.
 The bootloader's linker memory map is generated from it by `bootloader/build.rs`, so the two
 cannot drift apart. The layout rules embassy-boot checks at start-up are also checked when
-`neotime-boot` compiles, so a bad layout fails the build instead of the watch.
+`battletime-boot` compiles, so a bad layout fails the build instead of the watch.
 
 ## Flash layout
 
@@ -74,7 +74,7 @@ watch writes the library, which arrives with each firmware update.
 ## The image header
 
 Every image the bootloader runs, the firmware, the recovery firmware and the bootloader updater,
-starts with a 256-byte header (`neotime_boot::image_header`), which `tools/image_header.py` puts in
+starts with a 256-byte header (`battletime_boot::image_header`), which `tools/image_header.py` puts in
 front of the `.bin` after the build. All numbers are little-endian:
 
 | Offset | Size | Field |
@@ -97,7 +97,7 @@ front of the `.bin` after the build. All numbers are little-endian:
 A library must lie wholly inside the image, after the header, or the header counts as unsound.
 `tools/image_header.py --library dist/shared.ntlib` appends the library after the code on a word
 boundary and fills both fields; the recovery firmware carries none. The firmware finds the library
-by reading its own header at `0x08000` (`neotime_packages::library::firmware_library`). A header of
+by reading its own header at `0x08000` (`battletime_packages::library::firmware_library`). A header of
 any other version reads as unsound, so the bootloader never runs it.
 
 The vector table follows at offset 256, which is 256-byte aligned as the Cortex-M4 requires, and
@@ -116,7 +116,7 @@ firmware, so a damaged upload is refused while the phone is still connected.
 
 `SLOT_TABLE` holds where the update and recovery slots sit, so the firmware can move them without
 a new bootloader, for example to size the recovery slot to the recovery image. It is a log of
-32-byte records (`neotime_boot::slot_table`): magic `NTST`, a sequence number, the update slot's
+32-byte records (`battletime_boot::slot_table`): magic `NTST`, a sequence number, the update slot's
 start and size, the recovery slot's start and size, a spare word, and a CRC-32 of the rest.
 
 - **Reading** takes the newest record whose CRC matches and whose slots pass `Slots::check`: whole
@@ -128,14 +128,14 @@ start and size, the recovery slot's start and size, a spare word, and a CRC-32 o
   page fills. A full page moves the log to the other page, which is erased first; the old page keeps
   the newest record until the new one is whole, so a power cut leaves the old slots or the new ones,
   never neither. Each record is read back after it is written.
-- **The firmware** changes the slots with `neotime_updates::change_slots`, which refuses while a
+- **The firmware** changes the slots with `battletime_updates::change_slots`, which refuses while a
   swap is pending or a firmware is on trial, since moving the update slot then would lose the
   firmware a rollback needs. Moving a slot does not move its contents: send the recovery firmware
   again after moving the recovery slot.
 
 The companion moves them with the `slots` message ([companion-protocol.md](companion-protocol.md#slots-served)),
 which the firmware answers with `storage::answer_slots`: it carries the recovery image to a new
-recovery slot first (`neotime_boot::move_recovery`), then calls `change_slots` and restarts.
+recovery slot first (`battletime_boot::move_recovery`), then calls `change_slots` and restarts.
 
 ### Why the slot area stays at 1 MB
 
@@ -206,7 +206,7 @@ Revert branch; see [updates.md](updates.md#confirming-or-rolling-back).
 
 On an ordinary start the screen stays dark and the firmware starts at once. Whenever the bootloader
 has work to do, it turns the screen blue (`status_colour::BOOTLOADER`) and shows the same page as
-the firmware ([updates.md](updates.md#the-status-page)), titled "NeoTime bootloader", with
+the firmware ([updates.md](updates.md#the-status-page)), titled "BattleTime bootloader", with
 Bootloader `Working`, Filesystem `Not mounted` and Bluetooth `Off`. Below the progress line it shows
 the battery from one fresh reading each time the page changes, such as "Battery 87% charging",
 "Battery 100% charged" or "Battery 40% unplugged", with the charge read along the firmware's curve;
@@ -227,7 +227,7 @@ model, through the panel's SPI wires.
 | Nothing anywhere has a sound header | Damaged / No firmware found / Send an update |
 | Swapping in an update, or rolling one back | Swapping / Installing firmware / Do not unplug |
 
-The bootloader updater shows the page titled "NeoTime boot updater", with Firmware `Updater`, and
+The bootloader updater shows the page titled "BattleTime boot updater", with Firmware `Updater`, and
 its Bootloader line goes `Checking`, `Writing`, then `Updated` or `Up to date`.
 
 ## The note to the firmware
@@ -244,7 +244,7 @@ as a note.
 The bootloader carries its version and build date in a 42-byte record in its constants: the magic
 `NTBootV1`, the version text such as `0.1.0+1b19aed`, padded with zeros to 24 bytes, and the UTC
 build date as `YYYY-MM-DD`. `bootloader/build.rs` writes it with
-`neotime_boot::version::VersionRecord` and the same version text the firmware's build uses, and
+`battletime_boot::version::VersionRecord` and the same version text the firmware's build uses, and
 the record starts on a word boundary. Nothing in the bootloader reads it, so `main` keeps it with
 `black_box`. The firmware's system app shows it: `VersionRecord::find` reads the bootloader's
 pages a word at a time for the magic, the first time an app asks. A bootloader built before the
@@ -273,7 +273,7 @@ trial. It then:
 
 The updater never confirms itself, so its reset makes the new bootloader roll back to the firmware
 that was running before. That firmware reads the note, clears the rollback's mark with
-`neotime_updates::forget_rollback`, and its status page says "Bootloader updated" or "Bootloader up
+`battletime_updates::forget_rollback`, and its status page says "Bootloader updated" or "Bootloader up
 to date" instead of "Update failed". Quitting leaves no note, so a quit reads as the failed update
 it is. The write is five pages, half a second or so, and is the only part with no way back;
 [updates.md](updates.md#losing-power-during-the-bootloader-write) sets out what would have to go
@@ -284,7 +284,7 @@ of its title changed.
 
 ## What the firmware must do
 
-- **Mark itself booted** with `neotime_updates::confirm_running_firmware` once it is sure it works,
+- **Mark itself booted** with `battletime_updates::confirm_running_firmware` once it is sure it works,
   for example after the BLE stack and screen have started. Otherwise the next reset rolls it back,
   and no new update is accepted until it does. It only writes when the firmware is on trial, so
   after a rollback the Revert mark stays until the next update, and the status page can keep saying
@@ -292,11 +292,11 @@ of its title changed.
 - **Feed the watchdog.** It is still running when the firmware starts. Take it over with the
   same timeout, `WATCHDOG_TIMEOUT_IN_TICKS`, and feed it from the system loop.
 - **Install updates** by feeding the new image, a `.bin` with its header, linked at
-  `FIRMWARE_VECTOR_TABLE`, to `neotime_updates::UpdateReceiver`, which stores it in the update slot,
+  `FIRMWARE_VECTOR_TABLE`, to `battletime_updates::UpdateReceiver`, which stores it in the update slot,
   checks its header and CRC, and marks the swap, then resetting.
 - **Keep a recovery firmware** in the recovery slot, written with
-  `neotime_updates::RecoveryReceiver`, which writes the header's first bytes last.
-- **Read the slot table** with `neotime_boot::slot_table::read_slots` before using either slot.
+  `battletime_updates::RecoveryReceiver`, which writes the header's first bytes last.
+- **Read the slot table** with `battletime_boot::slot_table::read_slots` before using either slot.
 
 ## The menu: rollback and recovery
 
@@ -342,7 +342,7 @@ must confirm itself, or the next reset swaps the other one back.
 
 ```sh
 nix develop
-cd neotime/bootloader
+cd battletime/bootloader
 cargo build --release
 ```
 
@@ -353,5 +353,5 @@ cargo build --release
 ## Not done yet
 
 - **Signed updates.** embassy-boot's updater can check an ed25519 signature before marking a swap.
-  That check runs in the firmware, in `neotime-updates`, so it costs the bootloader nothing; it is
+  That check runs in the firmware, in `battletime-updates`, so it costs the bootloader nothing; it is
   not used yet.

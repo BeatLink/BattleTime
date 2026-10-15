@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Puts the 256-byte NeoTime image header in front of a firmware .bin, or prints the header of one.
+"""Puts the 256-byte BattleTime image header in front of a firmware .bin, or prints the header of one.
 
-The layout matches `neotime_boot::image_header`: magic "NTIM", header version and size, image type,
+The layout matches `battletime_boot::image_header`: magic "NTIM", header version and size, image type,
 version, the address the image is linked to run from, its length and CRC-32, the build time, the
 commit, where the shared library sits, and a CRC-32 of the header itself. The bootloader refuses to
 run or install an image whose header is missing, damaged or linked for another address.
@@ -87,7 +87,7 @@ def describe(image: bytes) -> str:
     ) = FIELDS.unpack(body[: FIELDS.size])
     problems = []
     if magic != MAGIC or header_size != HEADER_SIZE:
-        problems.append("not a NeoTime image header")
+        problems.append("not a BattleTime image header")
     elif header_version != HEADER_VERSION:
         problems.append(f"unknown header version {header_version}")
     if zlib.crc32(body) != header_crc:

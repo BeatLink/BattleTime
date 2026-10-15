@@ -9,7 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { theme } from '@/constants/theme';
 import { useWatch } from '@/hooks/use-watch';
 import { useRouter } from '@/navigation';
-import type { DiagnosticCounter } from '@/protocol/neotime';
+import type { DiagnosticCounter } from '@/protocol/battletime';
 import { needsSetup } from '@/protocol/setup';
 import { phoneBridge } from '@/services/phone';
 import { deviceWord } from '@/services/phone/words';
@@ -94,7 +94,7 @@ export default function WatchScreen() {
 
   const connected = connection === 'connected';
   const inBootloader = connected && watchMode === 'bootloader';
-  // The features that ride the UART message channel, which early NeoTime builds do not serve yet.
+  // The features that ride the UART message channel, which early BattleTime builds do not serve yet.
   const uartReady = watchReady && capabilities.uart;
   const showStatus = uartReady || (watchReady && capabilities.battery);
   const dotColor =
@@ -145,7 +145,7 @@ export default function WatchScreen() {
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             It is running no firmware, so nothing else here can reach it. Send it a firmware package
-            from the Firmware tab, such as the NeoTime reloader, and it will restart into it.
+            from the Firmware tab, such as the BattleTime reloader, and it will restart into it.
           </ThemedText>
           <Button title="Go to Firmware" onClick={() => router.push('/firmware')} />
         </Card>
@@ -249,7 +249,7 @@ export default function WatchScreen() {
             This watch has no face yet.
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            NeoTime starts with no apps. Install a watch face, the launcher and the apps from this{' '}
+            BattleTime starts with no apps. Install a watch face, the launcher and the apps from this{' '}
             {deviceWord(phoneBridge.kind)}.
           </ThemedText>
           <Button title="Set up the watch" onClick={() => router.push('/setup')} />
@@ -312,7 +312,7 @@ export default function WatchScreen() {
               send({
                 t: 'notify',
                 id: Date.now() % 100000,
-                src: 'NeoTime Companion',
+                src: 'BattleTime Companion',
                 title: `Hello from your ${deviceWord(phoneBridge.kind)}`,
                 body: 'Notifications are working.',
               })

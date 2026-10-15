@@ -1,0 +1,13 @@
+[package]
+name = "battletime-notifications"
+version = "0.1.0"
+edition = "2021"
+description = "The notifications the watch keeps: the latest few from the phone and from apps, for apps to list"
+license.workspace = true
+publish = false
+
+[dependencies]
+heapless = "0.9"
+battletime-app-host = { path = "../../app-host" }
+battletime-companion = { path = "../companion", default-features = false }
+battletime-runtime = { path = "../../runtime" }

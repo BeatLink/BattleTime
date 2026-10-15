@@ -1,4 +1,4 @@
-// Nordic legacy DFU, which NeoTime's firmware and wasp-os's bootloader both speak.
+// Nordic legacy DFU, which BattleTime's firmware and wasp-os's bootloader both speak.
 export const LEGACY_DFU_SERVICE = '00001530-1212-efde-1523-785feabcd123';
 export const LEGACY_CONTROL_POINT = '00001531-1212-efde-1523-785feabcd123';
 export const LEGACY_PACKET = '00001532-1212-efde-1523-785feabcd123';

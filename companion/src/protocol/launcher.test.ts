@@ -188,7 +188,7 @@ describe('grouping the apps', () => {
 
 describe('the launcher on the watch', () => {
   it('starts from the defaults on a watch without a file, then reads back what was written', async () => {
-    const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+    const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
     const files = await FileService.open(target);
     const packages = await PackagesClient.open(target);
 
@@ -203,7 +203,7 @@ describe('the launcher on the watch', () => {
   });
 
   it('lists each installed app with the group its image declares', async () => {
-    const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+    const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
     const files = await FileService.open(target);
     const packages = await PackagesClient.open(target);
 
@@ -219,7 +219,7 @@ describe('the launcher on the watch', () => {
   });
 
   it('places an app installed later in the group its image declares, once the watch has groups', async () => {
-    const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+    const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
     const files = await FileService.open(target);
     const packages = await PackagesClient.open(target);
     await installImage(files, packages, testImage('dice', 'Dice', 'app', 0, 'games'));

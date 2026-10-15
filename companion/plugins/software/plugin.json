@@ -2,7 +2,7 @@
   "id": "software",
   "name": "Software",
   "version": "1.0.0",
-  "description": "NeoTime's own app manager, after the app list of InfiniTime's settings and wasp-os's Software app. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "description": "BattleTime's own app manager, after the app list of InfiniTime's settings and wasp-os's Software app. Its plugin keeps the app's state in sync with the companion and changes it from here.",
   "app": "software",
   "permissions": {
     "messages": [],

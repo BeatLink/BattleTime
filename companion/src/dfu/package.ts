@@ -1,9 +1,9 @@
 // Reads a Nordic DFU zip: the manifest names the init packet (.dat) and the
-// image (.bin) of the application, the only part a NeoTime update carries.
+// image (.bin) of the application, the only part a BattleTime update carries.
 
 import { unzipSync } from 'fflate';
 
-// The image type the controller asks the watch for: an ordinary update, or NeoTime's recovery slot.
+// The image type the controller asks the watch for: an ordinary update, or BattleTime's recovery slot.
 export type FirmwarePart = 'application' | 'recovery';
 
 export type FirmwareImage = {
@@ -51,7 +51,7 @@ export function readFirmwarePackage(zip: Uint8Array, name = 'firmware.zip'): Fir
     const manifest = readManifest(files, manifestFile);
     const others = Object.keys(manifest).filter((part) => part !== 'application');
     if (others.length > 0) {
-      throw new FirmwarePackageError(`NeoTime takes only an application image, and this package holds ${others.join(', ')}.`);
+      throw new FirmwarePackageError(`BattleTime takes only an application image, and this package holds ${others.join(', ')}.`);
     }
     const entry = manifest.application;
     if (entry?.bin_file && entry?.dat_file) {

@@ -45,13 +45,13 @@ function fakeBridge(overrides: Partial<PluginBridge> = {}): PluginBridge {
 
 describe('plugins', () => {
   afterEach(() => {
-    delete (globalThis as { neotime?: unknown }).neotime;
+    delete (globalThis as { battletime?: unknown }).battletime;
   });
 
   it('finds the bridge only in the desktop app', () => {
     expect(pluginBridge()).toBeNull();
     const bridge = fakeBridge();
-    (globalThis as { neotime?: unknown }).neotime = { plugins: bridge };
+    (globalThis as { battletime?: unknown }).battletime = { plugins: bridge };
     expect(pluginBridge()).toBe(bridge);
   });
 
@@ -102,10 +102,10 @@ describe('plugins', () => {
   it('wraps messages between the window and the settings page', () => {
     expect(pluginPageUrl('weather-demo')).toBe('plugin://weather-demo/');
     expect(pluginPageUrl('weather demo', 'http://plugin.localhost/')).toBe('http://plugin.localhost/weather%20demo/');
-    expect(messageFromPage({ neotime: { city: 'Kingston' } })).toEqual({ message: { city: 'Kingston' } });
+    expect(messageFromPage({ battletime: { city: 'Kingston' } })).toEqual({ message: { city: 'Kingston' } });
     expect(messageFromPage({ other: 1 })).toBeNull();
     expect(messageFromPage('text')).toBeNull();
-    expect(messageToPage(3)).toEqual({ neotime: 3 });
+    expect(messageToPage(3)).toEqual({ battletime: 3 });
   });
 
   it('keeps only the newest log lines', () => {

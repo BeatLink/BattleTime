@@ -23,7 +23,7 @@ Every size the app host draws (small to giant) is this one font, scaled.
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent / "neotime"
+ROOT = Path(__file__).resolve().parent.parent / "battletime"
 SOURCE = ROOT / "app-host" / "fonts" / "geometric.txt"
 OUTPUT = ROOT / "app-host" / "fonts" / "geometric.ntfont"
 

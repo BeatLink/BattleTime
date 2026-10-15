@@ -1,6 +1,6 @@
 # Coding guidelines
 
-NeoTime code should read plainly. Make it readable by how it is named and laid out, never by
+BattleTime code should read plainly. Make it readable by how it is named and laid out, never by
 cutting features.
 
 ## Names
@@ -38,12 +38,12 @@ Prefer a standard helper over a hand-rolled trick, for example `embassy_futures:
 
 ## Drivers
 
-- Each driver is its own `no_std` crate under `drivers/`, named `neotime-<part>`.
+- Each driver is its own `no_std` crate under `drivers/`, named `battletime-<part>`.
 - A driver talks to hardware only through the `embedded-hal` traits, never a chip crate, so it
   can run in tests and the simulator. It may build on a portable crate such as `mipidsi`. The only
   exceptions are parts inside the nRF52832 itself, which `embedded-hal` has no traits for: the
   Bluetooth radio keeps all its register access in one file behind a small trait
-  ([bluetooth.md](bluetooth.md)), and `neotime-battery-reading` drives the SAADC for programs with
+  ([bluetooth.md](bluetooth.md)), and `battletime-battery-reading` drives the SAADC for programs with
   no executor.
 - A new driver gets a simulated part in `simulator/` and a line in [simulator.md](simulator.md).
 - Tests live in `src/tests.rs` beside `src/lib.rs`, or in `src/<module>_tests.rs` beside a module,

@@ -12,7 +12,7 @@ import { quickApps } from './commands/watch';
 // What the quick-apps command needs from a session: the file service and the packages client on one watch.
 class FakeSession extends MockLegacyDfuTarget {
   constructor() {
-    super('AA:BB:CC:DD:EE:00', 'neotime', true);
+    super('AA:BB:CC:DD:EE:00', 'battletime', true);
   }
   private filesOpened: Promise<FileService> | null = null;
   private packagesOpened: Promise<PackagesClient> | null = null;

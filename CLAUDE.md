@@ -1,13 +1,13 @@
-# NeoTime repository: notes for Claude
+# BattleTime repository: notes for Claude
 
-This repository holds both halves of NeoTime, licensed GPL-3.0-or-later:
+This repository holds both halves of BattleTime, licensed GPL-3.0-or-later:
 
-- [neotime/](neotime/) is the watch: firmware, bootloader, apps, faces and simulator. Run cargo and
-  npm for it from inside `neotime/`.
+- [battletime/](battletime/) is the watch: firmware, bootloader, apps, faces and simulator. Run cargo and
+  npm for it from inside `battletime/`.
 - [companion/](companion/) is the phone and desktop companion app. Run its commands from inside
   `companion/`.
 - [docs/](docs/) holds the documentation for both, and [tools/](tools/) the scripts that build,
-  measure and package; the tools find `neotime/` themselves, so they run from anywhere.
+  measure and package; the tools find `battletime/` themselves, so they run from anywhere.
 
 Paths below are relative to the repository root.
 
@@ -39,9 +39,9 @@ workflow under `.github/workflows`, run only when its files or the flake change.
 - `Cargo.lock` is the usual merge conflict; regenerate it rather than hand-merging.
 - Before using the real watch, tell the other sessions, so only one connects at a time.
 
-# The watch: neotime/
+# The watch: battletime/
 
-NeoTime is a Rust firmware for the PineTime that merges the best of InfiniTime and wasp-os. It is its
+BattleTime is a Rust firmware for the PineTime that merges the best of InfiniTime and wasp-os. It is its
 own product, licensed GPL-3.0-or-later, so code ported from InfiniTime or PinetimeLite is fine.
 Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.md); code style is in
 [docs/coding-guidelines.md](docs/coding-guidelines.md).
@@ -52,9 +52,9 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
   `tools/check_coverage.sh`, workspace clippy, snapshot sweeps or firmware builds for parts you did
   not touch; CI runs those, and fixing what it finds comes after. New tests still go in the same
   commit as the change.
-- App behaviour is tested in `neotime/harness/` ([docs/testing.md](docs/testing.md)), not vitest. A
-  change to what an app shows rewrites its snapshots with `NEOTIME_UPDATE_SNAPSHOTS=1` in the same commit.
-- Every app has a tour in `neotime/tests/tours/<id>.neotime` that snapshots each of its screens, and
+- App behaviour is tested in `battletime/harness/` ([docs/testing.md](docs/testing.md)), not vitest. A
+  change to what an app shows rewrites its snapshots with `BATTLETIME_UPDATE_SNAPSHOTS=1` in the same commit.
+- Every app has a tour in `battletime/tests/tours/<id>.battletime` that snapshots each of its screens, and
   a page in `docs/apps/<id>.md` with how to use it and those pictures. A new app, or a new or changed
   screen, updates both in the same commit.
 - Docs ship with the code, never as a follow-up. A new crate gets its place in
@@ -65,16 +65,16 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
   Before removing an item, check in the code that it is really done; keep any open part as a
   narrower item.
 - Anything to look at (screenshots, galleries, write-ups) goes in `docs/` and lands with the change.
-  Reference existing images such as `neotime/harness/snapshots/screens/*.png` so they stay current.
+  Reference existing images such as `battletime/harness/snapshots/screens/*.png` so they stay current.
   The PineTime screen is square, 240x240; never draw it round.
-- New drivers go in `neotime/drivers/<name>` and get a simulated part in `neotime/simulator/` plus a
+- New drivers go in `battletime/drivers/<name>` and get a simulated part in `battletime/simulator/` plus a
   line in `docs/simulator.md`.
 
 ## Design rules
 
 - Going back retraces navigation exactly: it revisits every screen passed on the way forward, in
   reverse order and moving the opposite way (face, notifications, quick settings goes back through
-  quick settings, notifications, face). The shell records this in `neotime_app_host::way_back`; a new
+  quick settings, notifications, face). The shell records this in `battletime_app_host::way_back`; a new
   way to move forward must record its step, and a new way back must take it.
 - A click of the side button always means back, and apps never hear it. Swipes inside an app are
   the app's own; never bring back swipe-right-to-go-back or a swipe that opens Settings.
@@ -82,17 +82,17 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
   and down is only for lists inside a page.
 - Prefer a toggle in Settings or quick settings over a new app that only switches one thing.
 - The firmware carries only the engine, plus the notifications and quick settings screens from
-  `neotime/shell/`, which it compiles in. No other built-in apps, faces, launcher, icons or fonts,
+  `battletime/shell/`, which it compiles in. No other built-in apps, faces, launcher, icons or fonts,
   and no fallback copies of them. Apps live in `/apps` on external flash; the shared library ships
   inside the firmware image, after the code, where the image header says.
 - Anything that changes often (notifications, settings, app state) goes on external flash, never
   internal flash.
 - Apps are Preact and Signals compiled on the computer to bytecode ([docs/app-runtime.md](docs/app-runtime.md)).
   About 12 KB of RAM per app rules out any JavaScript engine or Wasm on the watch.
-- New settings touch `neotime/services/settings`, `neotime/app-host/src/settings.rs`, `neotime/services/companion`, the
+- New settings touch `battletime/services/settings`, `battletime/app-host/src/settings.rs`, `battletime/services/companion`, the
   runtime's system values, the compiler and the sdk. The theme stays in `/settings/theme`.
 - Pure Rust only; no closed-source blobs and no C where a bug could brick the watch.
-- Flash layout changes go in `neotime/boot/src/lib.rs` and `docs/bootloader.md` together.
+- Flash layout changes go in `battletime/boot/src/lib.rs` and `docs/bootloader.md` together.
 
 ## Memory budget
 
@@ -111,7 +111,7 @@ firmware) and on DFU in the firmware.
 
 - Never write the bootloader pages from firmware, and keep the recovery slot valid.
 - Feed the watchdog only from the main loop and only while the side button is up.
-- Prove bootloader, reloader and update changes in the emulator suites under `neotime/tests/emulator`
+- Prove bootloader, reloader and update changes in the emulator suites under `battletime/tests/emulator`
   before any watch, and only flash with the user's go-ahead.
 - After a DFU update something must confirm the firmware (writing the time, or any GATT read), or
   the next reset rolls it back.
@@ -135,7 +135,7 @@ firmware) and on DFU in the firmware.
   lines must skip those outside `DrawContext::clip`, because every strip redraws it.
 - **New bytecode instructions need the analysis taught.** One that writes an array must call
   `note_write` with what it can store, or the compiler picks too narrow an element width.
-  `derive_inputs_in` in `neotime/app-host/src/subscriptions.rs` and the bindings must learn every
+  `derive_inputs_in` in `battletime/app-host/src/subscriptions.rs` and the bindings must learn every
   instruction that reads or writes state. A library function's declared return type must be
   passed as `expected`, or a `Color` comes back as text.
 - **A test compile error can pass unseen.** Grep test output for `^error` as well as `FAILED` and `panicked`.
@@ -161,7 +161,7 @@ firmware) and on DFU in the firmware.
 
 # The companion: companion/
 
-The companion app for watches running the NeoTime firmware: one Tauri app for the desktop and
+The companion app for watches running the BattleTime firmware: one Tauri app for the desktop and
 Android, and a command line tool. Read [companion/README.md](companion/README.md) for the layout and
 the protocol. Paths in this part are relative to `companion/`.
 
@@ -169,7 +169,7 @@ the protocol. Paths in this part are relative to `companion/`.
   `src/screens`, shared pieces in `src/components`, and the routes in `src/app.tsx`. It runs in
   WebKitGTK and in Android's WebView, so lay it out for a phone's width and use only web APIs.
 - Bluetooth stays behind `src/ble/transport.ts`; screens use the `useWatch` hook and never reach the
-  bridge directly. The window's transport is `src/ble/tauri-transport.ts`, over `window.neotime`
+  bridge directly. The window's transport is `src/ble/tauri-transport.ts`, over `window.battletime`
   from `tauri/src/bridge.js`; in a plain browser (`npm run dev`) the mock watch stands in.
 - `core/` is the Rust core with no Tauri in it (Bluetooth on btleplug, sync, plugins, web requests);
   `tauri/` is the app, whose `src/bridge.js` is the window's only way to the core. Every step in
@@ -190,24 +190,24 @@ the protocol. Paths in this part are relative to `companion/`.
   lists, so a new host function needs a matching permission check and test.
 - `cli/` is the command line tool. It imports the same `src/` modules the screens do, so a feature
   gets a command rather than a second implementation, and talks to BlueZ through `node/ble.js`.
-  `npm run neotime -- <command>` rebuilds it with esbuild and runs it.
+  `npm run battletime -- <command>` rebuilds it with esbuild and runs it.
 - Raw GATT goes through the `DfuLink` each transport supplies with `dfuLink()`. The DFU controller,
-  `src/protocol/neotime.ts` (time, battery, diagnostics, capabilities) and
+  `src/protocol/battletime.ts` (time, battery, diagnostics, capabilities) and
   `src/protocol/file-service.ts` all use it and never touch a Bluetooth library.
-  `src/dfu/mock-legacy-target.ts` is the mock watch behind it, NeoTime or wasp-os.
+  `src/dfu/mock-legacy-target.ts` is the mock watch behind it, BattleTime or wasp-os.
 - A feature is offered only when the watch serves what it needs. `useWatch` gives `watchReady`
   (connected and running firmware) and `capabilities` (`dfu`, `time`, `battery`, `diagnostics`,
   `files`, `uart`); use those, not `connection`, to decide whether a feature is shown.
-- `src/protocol/neotime.ts`, `file-service.ts`, `gadgetbridge.ts` and `requests.ts` mirror
+- `src/protocol/battletime.ts`, `file-service.ts`, `gadgetbridge.ts` and `requests.ts` mirror
   [docs/companion-protocol.md](docs/companion-protocol.md); change it there first, then here. The
-  Rust core carries its own copies as it takes the protocols over: `core/src/protocol/neotime.rs`,
+  Rust core carries its own copies as it takes the protocols over: `core/src/protocol/battletime.rs`,
   `packages.rs` and `app_image.rs`, and `core/src/gadgetbridge.rs`; a protocol change updates both
   until the TypeScript one is gone.
-- `src/bundles/watch-apps.ts` is generated by `npm run import-watch-apps ../neotime/dist/store` from
+- `src/bundles/watch-apps.ts` is generated by `npm run import-watch-apps ../battletime/dist/store` from
   the folder `tools/build_store.py` fills ([docs/app-store.md](docs/app-store.md)); do not edit it by
   hand. Rebuild it whenever the watch's widget or instruction numbering changes, or an app is added.
 - After a firmware update the app must exchange GATT data with the watch (it writes the time), or
-  NeoTime rolls the update back at its next reset.
+  BattleTime rolls the update back at its next reset.
 - Use `nix develop .#companion` for the toolchain, and `nix develop .#companion-android` for the
   Android SDK. A change to `package-lock.json` needs a new `npmDepsHash` in the repository's
   `flake.nix` (`nix run nixpkgs#prefetch-npm-deps -- package-lock.json`).
@@ -229,5 +229,5 @@ the protocol. Paths in this part are relative to `companion/`.
 - **jsdom lacks some web APIs**, such as `TextEncoder` and `Blob.arrayBuffer`, that WebKitGTK and
   Android's WebView have; a test fakes them rather than the code avoiding them.
 - **Node's fetch gives up on slow hosts.** Its 10 s connect timeout is too short for Open-Meteo from
-  this machine, so a CLI command such as `neotime weather` fails with "fetch failed". Preload
+  this machine, so a CLI command such as `battletime weather` fails with "fetch failed". Preload
   undici's `setGlobalDispatcher(new Agent({ connect: { timeout: 60000 } }))` through `NODE_OPTIONS=-r`.

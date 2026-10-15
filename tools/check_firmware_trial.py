@@ -11,7 +11,7 @@ app on its system page, and taps one of the two buttons it shows while the firmw
 
     python3 -I tools/check_firmware_trial.py [DIST [SCREENSHOTS]]
 
-DIST is the folder `tools/build_images.sh` fills, `neotime/dist` unless given; the apps are built
+DIST is the folder `tools/build_images.sh` fills, `battletime/dist` unless given; the apps are built
 here from the same commit, so they match the shared library inside its firmware. SCREENSHOTS, when
 given, is a folder that gets the screen at each step. Run it inside `nix develop`. It finds the
 emulator in $PINETIME_EMULATOR, or in a PineTimeEmulator folder beside the main checkout, and
@@ -29,7 +29,7 @@ import time
 from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parent.parent
-NEOTIME = REPOSITORY / "neotime"
+BATTLETIME = REPOSITORY / "battletime"
 
 # ============================================================================
 # The install and the flash layout
@@ -43,12 +43,12 @@ PACKAGES = [
     (LAUNCHER_ID, "apps/launcher/app.tsx"),
     (SYSTEM_ID, "apps/system/app.tsx"),
 ]
-OPEN_APP_SYMBOL = "neotime_firmware::restart::OPEN_APP"
+OPEN_APP_SYMBOL = "battletime_firmware::restart::OPEN_APP"
 
 # The settings file: its format byte, then a record of the screen timeout's number and 300 seconds, so the screen stays lit.
 SETTINGS_FILE = bytes([1, 4]) + struct.pack("<i", 300)
 
-# From neotime/boot/src/lib.rs.
+# From battletime/boot/src/lib.rs.
 BOOT_STATE = 0x7000
 FIRMWARE_START = 0x8000
 EXTERNAL_FLASH = 0x60000000
@@ -80,7 +80,7 @@ CONFIRM_BUTTON = (64, 183)
 ROLL_BACK_BUTTON = (176, 183)
 
 
-def run(command, folder=NEOTIME):
+def run(command, folder=BATTLETIME):
     return subprocess.run(command, capture_output=True, text=True, cwd=folder, check=True).stdout
 
 
@@ -102,8 +102,8 @@ def emulator_folder():
 
 def build_install(folder):
     """Compiles the face, the launcher and System, and writes the external flash image holding them and the settings file."""
-    run(["cargo", "build", "-q", "-p", "neotime-compiler"])
-    compiler = str(NEOTIME / "target" / "debug" / "neotime-compiler")
+    run(["cargo", "build", "-q", "-p", "battletime-compiler"])
+    compiler = str(BATTLETIME / "target" / "debug" / "battletime-compiler")
     pairs = []
     for package_id, source in PACKAGES:
         image = folder / f"{package_id}.ntapp"
@@ -112,7 +112,7 @@ def build_install(folder):
     settings = folder / "settings"
     settings.write_bytes(SETTINGS_FILE)
     flash = folder / "flash.bin"
-    run(["cargo", "run", "-q", "-p", "neotime-packages", "--example", "filesystem_use", "--",
+    run(["cargo", "run", "-q", "-p", "battletime-packages", "--example", "filesystem_use", "--",
          "--no-theme", "--image", str(flash), *pairs, f"/settings/system={settings}"])
     return flash
 
@@ -343,7 +343,7 @@ def check_roll_back(emulator, dist, flash, folder, open_app_symbol, screenshots)
 
 
 def main():
-    dist = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else NEOTIME / "dist"
+    dist = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else BATTLETIME / "dist"
     screenshots = Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else None
     for image in ("bootloader.bin", "firmware.bin", "firmware.elf", "recovery.bin"):
         if not (dist / image).exists():

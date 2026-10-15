@@ -1,4 +1,4 @@
-// What the Timer page shows from the timer app's saved state (neotime/apps/timer/app.tsx); kept apart from the page so it is tested.
+// What the Timer page shows from the timer app's saved state (battletime/apps/timer/app.tsx); kept apart from the page so it is tested.
 //
 // Times are milliseconds since 1970 in the watch's local time, and a time that is not set reads as a
 // large negative number, the runtime's null.

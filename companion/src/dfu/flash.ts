@@ -1,7 +1,7 @@
 // Runs a whole firmware update over Nordic legacy DFU, then reconnects so the watch keeps the new firmware.
 //
-// NeoTime takes the update in the running firmware, at the watch's own address. A watch still on wasp-os
-// takes NeoTime's reloader in its bootloader instead, which it reaches over the UART line and which
+// BattleTime takes the update in the running firmware, at the watch's own address. A watch still on wasp-os
+// takes BattleTime's reloader in its bootloader instead, which it reaches over the UART line and which
 // answers at the address one above the watch's.
 
 import { nextAddress } from './bytes';
@@ -22,7 +22,7 @@ export type FlashStep =
 export type FlashOptions = {
   // Reset a watch still on wasp-os, which serves no DFU itself, into its bootloader to take the reloader.
   enterDfu?: () => Promise<void>;
-  // Exchange data with the watch once it is back on the new firmware; NeoTime rolls an update back
+  // Exchange data with the watch once it is back on the new firmware; BattleTime rolls an update back
   // at its next reset unless a phone does this.
   confirm?: (link: DfuLink) => Promise<void>;
   onStep?: (step: FlashStep) => void;
@@ -92,7 +92,7 @@ async function reconnectAfterSwap(link: DfuLink, address: string): Promise<boole
   return false;
 }
 
-// Sends an image to a watch running NeoTime, reconnecting after a lost link to carry on where the watch stopped.
+// Sends an image to a watch running BattleTime, reconnecting after a lost link to carry on where the watch stopped.
 //
 // A refusal from the watch ends it at once, since sending the same image again would be refused again.
 async function sendCarryingOn(
@@ -119,7 +119,7 @@ async function sendCarryingOn(
   }
 }
 
-// Sends a firmware package to NeoTime's recovery slot, which the bootloader menu installs from.
+// Sends a firmware package to BattleTime's recovery slot, which the bootloader menu installs from.
 //
 // The running firmware takes it with DFU image type 0x08 and stays where it is, so nothing is swapped
 // and nothing needs keeping; it restarts, so the time is written again once it is back.
@@ -130,7 +130,7 @@ export async function flashRecovery(
 ): Promise<void> {
   const { onStep } = options;
   if (!(await hasDfu(link))) {
-    throw new DfuError('Only a watch running NeoTime keeps a recovery firmware.');
+    throw new DfuError('Only a watch running BattleTime keeps a recovery firmware.');
   }
   onStep?.({ step: 'detected' });
 
@@ -156,9 +156,9 @@ export async function flashFirmware(
 ): Promise<void> {
   const { onStep } = options;
   const address = link.deviceId;
-  const runsNeoTime = await hasDfu(link);
+  const runsBattleTime = await hasDfu(link);
 
-  if (!runsNeoTime) {
+  if (!runsBattleTime) {
     if (!options.enterDfu) {
       throw new DfuError('This watch serves no firmware update and has no way into a bootloader.');
     }
@@ -172,7 +172,7 @@ export async function flashFirmware(
   }
   onStep?.({ step: 'detected' });
 
-  if (runsNeoTime) {
+  if (runsBattleTime) {
     await sendCarryingOn(link, address, firmware.image, options);
   } else {
     // An old system's bootloader keeps nothing of a cut-off upload, so it gets one try.

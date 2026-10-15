@@ -159,7 +159,7 @@ function SettingsForm() {
       <Card title="About">
         <Row label="Version" detail={__APP_VERSION__} />
         <Row label="Transport" detail={transportLabel(transportKind)} />
-        <Row label="Firmware" detail="NeoTime on the PineTime" />
+        <Row label="Firmware" detail="BattleTime on the PineTime" />
       </Card>
     </Screen>
   );

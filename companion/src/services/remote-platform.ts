@@ -7,13 +7,13 @@ import { fetchRequester, webRequester, type WebRequester } from './web-request';
 
 type BridgeResult<Value> = { ok: boolean; error?: string; value?: Value };
 
-// What window.neotime.remote (tauri/src/bridge.js) offers on the desktop.
+// What window.battletime.remote (tauri/src/bridge.js) offers on the desktop.
 export type DesktopRemoteBridge = {
   runCommand(command: string): Promise<BridgeResult<CommandResult>>;
 };
 
 export function desktopRemoteBridge(): DesktopRemoteBridge | null {
-  return (globalThis as { neotime?: { remote?: DesktopRemoteBridge } }).neotime?.remote ?? null;
+  return (globalThis as { battletime?: { remote?: DesktopRemoteBridge } }).battletime?.remote ?? null;
 }
 
 // Runs a command through the desktop app's core and hands back how it ended.

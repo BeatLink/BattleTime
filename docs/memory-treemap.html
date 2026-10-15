@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NeoTime Memory Map</title>
+<title>BattleTime Memory Map</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap">
@@ -124,9 +124,9 @@ footer { color: var(--muted); font-size: 13px; display: flex; flex-direction: co
 
 <main>
   <header>
-    <nav class="back" aria-label="Site"><a href="./">NeoTime</a><a href="memory-map/">Memory map, in words</a></nav>
+    <nav class="back" aria-label="Site"><a href="./">BattleTime</a><a href="memory-map/">Memory map, in words</a></nav>
     <div class="eyebrow">PineTime · nRF52832 · XT25F32B</div>
-    <h1>NeoTime Memory Map</h1>
+    <h1>BattleTime Memory Map</h1>
     <p class="lede">The watch's internal flash, RAM and external SPI flash, each split into its regions, and each region into what fills it, drawn to scale. Click a box to zoom into it and read what it holds; the path above the map leads back out.</p>
   </header>
 
@@ -155,7 +155,7 @@ footer { color: var(--muted); font-size: 13px; display: flex; flex-direction: co
   </section>
 
   <footer>
-    <div>Flash layouts: <code>boot/src/lib.rs</code> (crate <code>neotime-boot</code>). Details: <a href="memory-map/">Memory map</a>, <a href="bootloader/">Bootloader</a> and <a href="storage/">Storage</a>; source in <a href="https://github.com/BeatLink/NeoTime">BeatLink/NeoTime</a>, this page at <code>docs/memory-treemap.html</code>.</div>
+    <div>Flash layouts: <code>boot/src/lib.rs</code> (crate <code>battletime-boot</code>). Details: <a href="memory-map/">Memory map</a>, <a href="bootloader/">Bootloader</a> and <a href="storage/">Storage</a>; source in <a href="https://github.com/BeatLink/BattleTime">BeatLink/BattleTime</a>, this page at <code>docs/memory-treemap.html</code>.</div>
     <div>The firmware builds, static RAM, stack and file system are measured by <code>tools/measure_memory.py</code>, which CI reruns on every push to master and writes into this page. The rest comes from the docs and is updated by hand: the bootloader and shared library sizes, the deepest stack path, and the split of the firmware's static RAM into tables, buffers and tasks.</div>
   </footer>
 </main>
@@ -189,7 +189,7 @@ function hex(value, digits) {
 // ===== Measured figures =====
 // tools/measure_memory.py rewrites the line between these markers; sizes are in bytes.
 // measure_memory:treemap
-const MEASURED = {"file_system": {"file_sectors": 512, "file_sectors_in_use": 12, "images": [["digital", 1296], ["launcher", 1037], ["alarm", 3067], ["timer", 1839], ["stopwatch", 1691], ["settings", 7490], ["weather", 1776], ["steps", 2314], ["heart", 1092], ["flashlight", 739], ["music", 1326], ["calculator", 3376]], "log_sectors": 192, "record_bytes_in_use": 968, "record_sectors": 64, "sector_size": 4096, "settings_bytes": 117}, "firmware": {"full": {"App host (with `neotime-ui`)": 95482, "App runtime": 37098, "BLEFS file service": 9678, "Bluetooth (controller and TrouBLE)": 34509, "Display, graphics and drivers": 5562, "Embassy, allocator and Cortex-M": 8638, "Firmware (start-up, shell, tasks)": 140452, "Other constants and padding": 33857, "Packages": 8032, "Settings, companion and notifications (with serde)": 18078, "Storage (flash store)": 18462, "Updates (DFU)": 3102, "core, alloc and compiler builtins": 28578}, "recovery": {"BLEFS file service": 3210, "Bluetooth (controller and TrouBLE)": 44361, "Display, graphics and drivers": 3286, "Embassy, allocator and Cortex-M": 5624, "Firmware (start-up, shell, tasks)": 47558, "Other constants and padding": 14627, "Packages": 1312, "Settings, companion and notifications (with serde)": 2498, "Storage (flash store)": 14808, "Updates (DFU)": 2884, "core, alloc and compiler builtins": 15940}}, "library_bytes": 49461, "ram": {"full": {"App host (with `neotime-ui`)": 364, "Bluetooth (controller and TrouBLE)": 2610, "Display, graphics and drivers": 372, "Firmware (start-up, shell, tasks)": 21087, "Heap": 30976, "Other constants and padding": 1}, "recovery_stack": 41056, "recovery_static_ram": 24464, "stack": 10044, "static_ram": 55476}};
+const MEASURED = {"file_system": {"file_sectors": 512, "file_sectors_in_use": 12, "images": [["digital", 1296], ["launcher", 1037], ["alarm", 3067], ["timer", 1839], ["stopwatch", 1691], ["settings", 7490], ["weather", 1776], ["steps", 2314], ["heart", 1092], ["flashlight", 739], ["music", 1326], ["calculator", 3376]], "log_sectors": 192, "record_bytes_in_use": 968, "record_sectors": 64, "sector_size": 4096, "settings_bytes": 117}, "firmware": {"full": {"App host (with `battletime-ui`)": 95482, "App runtime": 37098, "BLEFS file service": 9678, "Bluetooth (controller and TrouBLE)": 34509, "Display, graphics and drivers": 5562, "Embassy, allocator and Cortex-M": 8638, "Firmware (start-up, shell, tasks)": 140452, "Other constants and padding": 33857, "Packages": 8032, "Settings, companion and notifications (with serde)": 18078, "Storage (flash store)": 18462, "Updates (DFU)": 3102, "core, alloc and compiler builtins": 28578}, "recovery": {"BLEFS file service": 3210, "Bluetooth (controller and TrouBLE)": 44361, "Display, graphics and drivers": 3286, "Embassy, allocator and Cortex-M": 5624, "Firmware (start-up, shell, tasks)": 47558, "Other constants and padding": 14627, "Packages": 1312, "Settings, companion and notifications (with serde)": 2498, "Storage (flash store)": 14808, "Updates (DFU)": 2884, "core, alloc and compiler builtins": 15940}}, "library_bytes": 49461, "ram": {"full": {"App host (with `battletime-ui`)": 364, "Bluetooth (controller and TrouBLE)": 2610, "Display, graphics and drivers": 372, "Firmware (start-up, shell, tasks)": 21087, "Heap": 30976, "Other constants and padding": 1}, "recovery_stack": 41056, "recovery_static_ram": 24464, "stack": 10044, "static_ram": 55476}};
 // /measure_memory:treemap
 
 // ===== The memory tree =====
@@ -201,20 +201,20 @@ const FIRMWARE_PARTS = {
   "Settings, companion and notifications (with serde)": ["Settings", "firmware", "Settings, the companion app's JSON lines (calls, music, weather, navigation, find, status, notifications), what the watch advertises, and the notification list, with serde."],
   "Packages": ["Packages", "runtime", "The package manager: installing, listing and removing apps in /apps."],
   "Updates (DFU)": ["Updates", "boot", "Legacy DFU and the update and recovery receivers."],
-  "App host (with `neotime-ui`)": ["App host", "runtime", "Lays out and draws an app's widget tree with neotime-ui and NeoTime's own strip renderer."],
+  "App host (with `battletime-ui`)": ["App host", "runtime", "Lays out and draws an app's widget tree with battletime-ui and BattleTime's own strip renderer."],
   "App runtime": ["App runtime", "runtime", "The interpreter with its function calls, the image parser and verifier."],
   "Bluetooth (controller and TrouBLE)": ["Controller and host", "boot", "Our own controller in drivers/bluetooth and the TrouBLE host."],
   "BLEFS file service": ["BLEFS", "boot", "The Adafruit BLEFS file service, async over the flash store."],
   "core, alloc and compiler builtins": ["core and alloc", "firmware", "Rust's core and alloc libraries, compiler builtins and libm."],
   "Embassy, allocator and Cortex-M": ["Embassy", "firmware", "The executor, timers, the allocator and Cortex-M support."],
-  "Storage (flash store)": ["Storage", "boot", "The flash store, neotime-flash-store, and NeoTime's storage layer."],
+  "Storage (flash store)": ["Storage", "boot", "The flash store, battletime-flash-store, and BattleTime's storage layer."],
   "Display, graphics and drivers": ["Drivers", "firmware", "Display, touch, button, vibrator, external flash, embedded-graphics and embassy-nrf."],
   "Other constants and padding": ["Other", "spare", "Constants with no owning symbol, and padding."],
 };
 
 const FIRMWARE_GROUPS = [
   { name: "System", kind: "firmware", holds: "Start-up, the shell and the services around it.", parts: ["Firmware (start-up, shell, tasks)", "Settings, companion and notifications (with serde)", "Packages", "Updates (DFU)"] },
-  { name: "App engine", kind: "runtime", holds: "What runs the apps from /apps. The recovery build leaves the shell out, so these go with it.", parts: ["App host (with `neotime-ui`)", "App runtime"] },
+  { name: "App engine", kind: "runtime", holds: "What runs the apps from /apps. The recovery build leaves the shell out, so these go with it.", parts: ["App host (with `battletime-ui`)", "App runtime"] },
   { name: "Bluetooth", kind: "boot", holds: "The radio stack and the file service on top of it.", parts: ["Bluetooth (controller and TrouBLE)", "BLEFS file service"] },
   { name: "Platform", kind: "firmware", holds: "Libraries everything else stands on.", parts: ["core, alloc and compiler builtins", "Embassy, allocator and Cortex-M", "Storage (flash store)", "Display, graphics and drivers"] },
 ];
@@ -264,7 +264,7 @@ function ramTree() {
       { name: "Firmware", size: owners["Firmware (start-up, shell, tasks)"] || 0, kind: "firmware", holds: "Embassy's task storage, the Bluetooth host's resources and its eight 128-byte packets, the flash store's tables and the display's strip buffers. The split below uses the docs' rounded figures.", children: [
         { name: "Bluetooth task", size: KB(3.2), kind: "boot", holds: "About 3.2 KB, TrouBLE's runner (1.6 KB) much of it. Replies and half-received companion lines wait on the heap, and so does the client for the phone's own services, 368 B while a phone is connected." },
         { name: "GATT server", size: 1044, kind: "boot", holds: "SERVER, 656 B, mostly TrouBLE's CCCD table for each client, and the 388 B of GATT values written or set at run time. The attribute table itself, 61 attributes, is a 1,952 B constant in flash." },
-        { name: "Display strip buffers", size: 3840, kind: "firmware", holds: "The two 1,920 B strip buffers neotime-display fills for each SPI transfer." },
+        { name: "Display strip buffers", size: 3840, kind: "firmware", holds: "The two 1,920 B strip buffers battletime-display fills for each SPI transfer." },
         { name: "Flash store tables", size: KB(2.4), kind: "data", holds: "About 2.4 KB: 1 KB of record keys, 512 B of files, the rings' sector order, the log batches and a 64 B map of the file sectors. An upload's state is on the heap while it runs." },
         { name: "Kept clock", size: 20, kind: "boot", holds: "20 B in .uninit beside the crash record: UTC and the time zone with a marker and a check, written twice a second, so a soft or watchdog reset keeps the time." },
         { name: "Crash record", size: 60, kind: "boot", holds: "60 B in .uninit just below the stack: a panic's return addresses or a HardFault's registers, with a checksum, kept across the reset. Start-up does not zero it, and the bootloader keeps clear of it." },
@@ -274,7 +274,7 @@ function ramTree() {
       { name: "Drivers and services", kind: "firmware", holds: "Small statics owned by the drivers and services.", children: [
         { name: "Drivers", size: owners["Display, graphics and drivers"] || 0, kind: "firmware", holds: "Display, graphics and driver state." },
         { name: "BLEFS", size: owners["BLEFS file service"] || 0, kind: "boot", holds: "The BLEFS file service." },
-        { name: "App host", size: owners["App host (with `neotime-ui`)"] || 0, kind: "runtime", holds: "The app host's statics." },
+        { name: "App host", size: owners["App host (with `battletime-ui`)"] || 0, kind: "runtime", holds: "The app host's statics." },
       ] },
       { name: "Unattributed", rest: true, kind: "spare", holds: "Static bytes the measurement gives no owner, alignment among them." },
     ] },
@@ -337,7 +337,7 @@ const ROOT = { name: "PineTime", children: [
         firmwareBuild("Recovery slot", 0x0C6000, KB(232), MEASURED.firmware.recovery,
           "A known-good firmware to fall back to, here the recovery build (--features recovery), up to 0x100000. It leaves out the shell, so the app host and the runtime go with it, and carries no shared library."),
       ] },
-      { name: "File system", start: 0x100000, size: KB(3072), kind: "data", holds: "NeoTime's flash store, safe against power cuts, shown with a typical install: the digital face, the launcher and ten everyday apps. It has no folders; paths such as /apps/<id>/app.ntapp, /settings/system and /day_blocks/heart/<n> are names.", children: fileSystemTree() },
+      { name: "File system", start: 0x100000, size: KB(3072), kind: "data", holds: "BattleTime's flash store, safe against power cuts, shown with a typical install: the digital face, the launcher and ten everyday apps. It has no folders; paths such as /apps/<id>/app.ntapp, /settings/system and /day_blocks/heart/<n> are names.", children: fileSystemTree() },
     ],
   },
 ] };

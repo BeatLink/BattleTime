@@ -1,6 +1,6 @@
 # App runtime
 
-This page describes how NeoTime apps are stored and run: the design, the app image format, the
+This page describes how BattleTime apps are stored and run: the design, the app image format, the
 bytecode, the shared library and the runtime in the firmware. [writing-apps.md](writing-apps.md)
 shows how to write an app, [app-reference.md](app-reference.md) lists what apps can use, and
 [compiler.md](compiler.md) describes the compiler.
@@ -32,7 +32,7 @@ shows how to write an app, [app-reference.md](app-reference.md) lists what apps 
 | [Preact](https://preactjs.com) running on that engine | Apps are components that re-render on every change. | It needs the engine plus a virtual DOM, and re-renders on every change, which is the ticking this design avoids. Apps are still written as Preact components, but compiled ahead of time. |
 | WebAssembly, such as wasmi | Apps compile from any language to Wasm. | A Wasm memory page is 64 KB, all of the chip's RAM, and sandboxed native code is more than pure functions need. |
 | [Slint](https://slint.dev) | Its language has a widget tree with property bindings and callbacks. | Its runtime targets chips with around 264 KB of RAM. Its language is still a good model to borrow from. |
-| **NeoTime's own bytecode** | A compiler on the computer turns each app into a compact image that the runtime runs. | The choice. It costs a compiler and a small interpreter, both written in Rust. |
+| **BattleTime's own bytecode** | A compiler on the computer turns each app into a compact image that the runtime runs. | The choice. It costs a compiler and a small interpreter, both written in Rust. |
 
 The closest existing designs evaluate the screen's bindings in the renderer, not in app code:
 [Wear OS dynamic expressions](https://developer.android.com/training/wearables/data/dynamic),
@@ -52,7 +52,7 @@ worth it.
 flowchart LR
     source["app.tsx<br/>Preact components and signals"]
     preview["browser preview<br/>real Preact"]
-    compiler["neotime-compiler<br/>checks and compiles"]
+    compiler["battletime-compiler<br/>checks and compiles"]
     image["app image (.ntapp)"]
     install["companion installs it<br/>checked on the watch"]
     store["/apps on the external flash"]
@@ -75,9 +75,9 @@ becomes an expression with an input mask. Only expressions whose inputs change a
 and nothing re-renders.
 
 ```tsx
-import { computed, define_app, persisted, now, format_duration, type Duration, type Instant } from "neotime";
-import { icons } from "neotime/icons";
-import { Button, Label, Screen } from "neotime/widgets";
+import { computed, define_app, persisted, now, format_duration, type Duration, type Instant } from "battletime";
+import { icons } from "battletime/icons";
+import { Button, Label, Screen } from "battletime/widgets";
 
 const started_at = persisted<Instant | null>("started_at", null);
 const stopped_after = persisted<Duration>("stopped_after", 0);
@@ -131,7 +131,7 @@ stopwatch runs. The Reset button's `{... && ...}` becomes a binding on its `visi
 | `onClick`, `onSwipe` | Handlers. An inline arrow function is lifted out into a handler of its own. |
 | `on("event", handler, ...)` at the top of the file | A subscription. |
 | `now`, `heart_rate`, `steps_today` and the rest | System values the runtime provides. |
-| `neotime/lib` functions and `icons` | References by number into the [shared library](#the-shared-library). |
+| `battletime/lib` functions and `icons` | References by number into the [shared library](#the-shared-library). |
 
 A handler is compiled as one transaction, as Signals' own `batch` is: reads after a write see the
 new value, the writes are applied together when it returns, and a handler that fails changes
@@ -141,11 +141,11 @@ runtime can schedule it and run it while the app is closed.
 
 The compiler's steps, its language and its limits are in [compiler.md](compiler.md). Every image it
 writes has passed the same checks the watch runs at install. Editors get type errors from the type
-declarations in the `neotime` package; the compiler does not depend on them.
+declarations in the `battletime` package; the compiler does not depend on them.
 
 ## The app image
 
-The `neotime-runtime` crate (`neotime/runtime/`) reads and checks images. An image is little-endian.
+The `battletime-runtime` crate (`battletime/runtime/`) reads and checks images. An image is little-endian.
 It starts with a 20-byte header and a table of sections.
 
 | Bytes | Holds |
@@ -179,7 +179,7 @@ Each kind of section appears at most once:
 | 12 | Data | The shared library only. Files the firmware reads, laid out as resources: number 0 is Bosch's configuration for a BMA421 accelerometer and 1 for a BMA425, in `LibraryData` order. |
 | 13 | Facts | Every image, last. 12 bytes: the heap the app needs while open (4), what it adds to a launcher's list (4), a flags byte (bit 0: it shows the list of apps; bit 1: it reads the app list, so the shell keeps its full list while it is open), then 3 spare bytes. `ImageWriter` works them out from the finished image, and the package manager checks them against its own analysis at install. |
 
-A list of apps never reads an image whole. `neotime_packages::image_reader` reads the header and
+A list of apps never reads an image whole. `battletime_packages::image_reader` reads the header and
 the section table, then each part through its table entry: the facts, the id, name and group
 strings, and for the launcher the icon alone. Listing fifty apps holds no image on the heap. These
 reads trust the image's structure; install and opening both check its CRC, and an image that fails
@@ -261,7 +261,7 @@ It is itself an image of kind 2, checked by the same verifier as an app.
 |---|---|
 | Images | The icons, each a 32 by 32 mask, numbered in the order of `ICON_NAMES` in `compiler/src/types.rs`. |
 | Font | The one font every text size is drawn from; see [Fonts](#fonts). |
-| Functions | Bytecode for common work, compiled from `sdk/neotime/src/lib.ts` and numbered in the order of `LIBRARY_FUNCTIONS` in `compiler/src/shared_functions.rs`. |
+| Functions | Bytecode for common work, compiled from `sdk/battletime/src/lib.ts` and numbered in the order of `LIBRARY_FUNCTIONS` in `compiler/src/shared_functions.rs`. |
 | Data | The accelerometers' configuration files, for the firmware alone. |
 
 An app calls a library function with `call library`, which costs 5 bytes in place of the function's
@@ -275,7 +275,7 @@ install an app built against a newer library than the firmware's, and the watch 
 refused. A new library keeps the numbers of everything the old one had and adds new parts at the
 end, so installed apps keep working.
 
-Components from `neotime/components` are not in the library: the compiler inlines them into each
+Components from `battletime/components` are not in the library: the compiler inlines them into each
 app from the SDK's source.
 
 ## Building apps from shared parts
@@ -294,7 +294,7 @@ the internal flash are read in place and cost none. So the work is split into th
 Rules for each change:
 
 - **Look in the shared parts first.** Before writing a helper, a component or a table in an app,
-  check `neotime`, `neotime/components`, `neotime/lib` and the widgets in
+  check `battletime`, `battletime/components`, `battletime/lib` and the widgets in
   [app-reference.md](app-reference.md).
 - **Move what repeats.** When a second app needs code that one app has, move it into the shared
   library and make both use it, written generically so later apps can use it too.
@@ -310,7 +310,7 @@ Rules for each change:
 The compiler also compiles an app function it would otherwise copy into several places once and
 calls it, and turns code that repeats with only its constants changed into shared functions. The
 firmware draws the native composites, such as `AppList`, `StatusIcons`, the pickers and
-`ConfirmBox`, and answers the array functions of `neotime` (from `count_of` to `life_step`)
+`ConfirmBox`, and answers the array functions of `battletime` (from `count_of` to `life_step`)
 natively. Library components and further builtins are open work, under "Shared library and smaller
 apps" in [todo.md](todo.md).
 
@@ -478,8 +478,8 @@ fail rather than crash the watch.
 ## The runtime
 
 The runtime is part of the firmware, not a separate image, and runs in place from the internal
-flash. `neotime-app-host` (`neotime/app-host/`) is the loop that runs one open app on top of
-`neotime-runtime`; the firmware's shell, the [simulator](simulator.md) and the test harness all
+flash. `battletime-app-host` (`battletime/app-host/`) is the loop that runs one open app on top of
+`battletime-runtime`; the firmware's shell, the [simulator](simulator.md) and the test harness all
 embed it.
 
 ### Opening an app
@@ -528,7 +528,7 @@ in a CellGrid or ButtonMatrix, or the place of the app touched in an AppList, an
 widget. Event fields `x`, `y`, `start_x` and `start_y` are screen pixels.
 
 The firmware works out gestures itself from the touch panel's reports (`GestureFinder` in
-`neotime-touch`): a stroke of 40 pixels is a swipe while the finger is still down, a quick flick of
+`battletime-touch`): a stroke of 40 pixels is a swipe while the finger is still down, a quick flick of
 20 pixels at over 400 pixels a second is one on lift, half a second held still is a long press, and
 a touch under 30 ms is no tap. After a swipe the rest of its touch sends no drags. A touch that woke
 the screen goes no further.
@@ -548,7 +548,7 @@ minute.
 
 ### Background work
 
-A subscription runs its handler even when the app is closed. `neotime_app_host::closed_apps` keeps,
+A subscription runs its handler even when the app is closed. `battletime_app_host::closed_apps` keeps,
 for each closed app whose timers, alarms, daily times, clock changes or heart rate periods still have
 a time to come (`Subscription::runs_while_closed`), when it is next due and the heap a run needs
 (`memory_need::closed_run_bytes`: the image and the working memory, no nodes). Nothing else of the
@@ -707,7 +707,7 @@ calls `fonts::install_from_library` once with the library; until then text takes
 
 The browser preview draws text in the same letters: `tools/generate_preview_font.py` turns each
 glyph's strokes into filled outlines with round ends and writes them, in the text weight and a light
-one for `huge` and `giant`, as WOFF web fonts into `sdk/neotime/src/preview_font.ts`. Run it after
+one for `huge` and `giant`, as WOFF web fonts into `sdk/battletime/src/preview_font.ts`. Run it after
 `tools/generate_fonts.py` whenever a glyph changes.
 
 ### Widgets in the host
@@ -755,7 +755,7 @@ stored by an app changes. A watch face that wants its own look uses fixed colour
 
 ## Memory
 
-`neotime-runtime` allocates only the open app's working memory, sized to its image:
+`battletime-runtime` allocates only the open app's working memory, sized to its image:
 
 | Part | Size |
 |---|---|
@@ -778,7 +778,7 @@ lists each part.
 
 ## Crates
 
-`neotime-runtime` in `neotime/runtime/` is a `no_std` crate with no dependencies. It never
+`battletime-runtime` in `battletime/runtime/` is a `no_std` crate with no dependencies. It never
 allocates, and returns an error instead of panicking on any input; its tests check that flipping
 any single byte of an image never panics. Its modules:
 
@@ -799,8 +799,8 @@ any single byte of an image never panics. Its modules:
 | `theme` | Theme colours, colour references and the presets. |
 | `writer` | Writes images and assembles bytecode with labels, for the compiler and tests; built only with the `writer` feature. |
 
-`neotime-app-host` in `neotime/app-host/` runs an app on top of it, as [The app host](#the-app-host)
-says, and `neotime-compiler` in `neotime/compiler/` writes the images ([compiler.md](compiler.md)).
+`battletime-app-host` in `battletime/app-host/` runs an app on top of it, as [The app host](#the-app-host)
+says, and `battletime-compiler` in `battletime/compiler/` writes the images ([compiler.md](compiler.md)).
 
 ## Open questions
 

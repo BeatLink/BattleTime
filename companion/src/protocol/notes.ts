@@ -1,6 +1,6 @@
 // The note the watch's notes app shows: a text file kept at /notes/note.txt, and the font it is drawn in.
 //
-// docs/companion-protocol.md in the NeoTime repository describes both files. They travel over the
+// docs/companion-protocol.md in the BattleTime repository describes both files. They travel over the
 // file service, and each is written only when the watch does not already hold it.
 
 import type { FileService } from '@/protocol/file-service';

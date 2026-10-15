@@ -8,7 +8,7 @@ use jni::EnvUnowned;
 
 // Answers null once btleplug is ready, or the reason it could not start.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_neotime_companion_phonebridge_NativeBluetooth_start<'caller>(
+pub extern "system" fn Java_com_battletime_companion_phonebridge_NativeBluetooth_start<'caller>(
     mut unowned_env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
 ) -> JString<'caller> {

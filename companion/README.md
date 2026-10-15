@@ -1,9 +1,9 @@
-# NeoTime Companion
+# BattleTime Companion
 
-The companion app for watches running [NeoTime](https://github.com/BeatLink/NeoTime), the Rust
+The companion app for watches running [BattleTime](https://github.com/BeatLink/BattleTime), the Rust
 firmware for the PineTime: one [Tauri](https://tauri.app) app for the desktop and Android, and a
-command line tool. It talks to the watch through the services NeoTime serves, and supports no other
-firmware beyond sending a watch the reloader that moves it onto NeoTime.
+command line tool. It talks to the watch through the services BattleTime serves, and supports no other
+firmware beyond sending a watch the reloader that moves it onto BattleTime.
 
 How to install and use it is in the user guide, [docs/companion](../docs/companion/index.md):
 [connecting a watch](../docs/companion/connecting.md), [apps and the store](../docs/companion/apps-and-store.md),
@@ -13,14 +13,14 @@ and [the command line](../docs/companion/command-line.md). This file is for work
 
 ## Status
 
-Early. What works today against NeoTime's firmware:
+Early. What works today against BattleTime's firmware:
 
-- scanning, connecting, and telling a running NeoTime from a watch waiting in a bootloader;
+- scanning, connecting, and telling a running BattleTime from a watch waiting in a bootloader;
 - firmware updates over Nordic legacy DFU, from a file or a GitHub release, then reconnecting so
   the watch keeps the new firmware instead of rolling it back;
 - setting the clock and time zone over the standard Current Time service on every connection;
-- reading NeoTime's diagnostic counters, and saving a debug report after a crash (the Debug report
-  card on the Watch tab, or `neotime debug [file]`), which lets the watch leave its crash screen.
+- reading BattleTime's diagnostic counters, and saving a debug report after a crash (the Debug report
+  card on the Watch tab, or `battletime debug [file]`), which lets the watch leave its crash screen.
 
 Built and tested against the mock watch, waiting for the firmware side
 ([companion-protocol.md](../docs/companion-protocol.md) in the watch's docs):
@@ -80,25 +80,25 @@ dark theme ([src/styles.css](src/styles.css)).
   screen `useWatch()`.
 - Bluetooth stays behind `WatchTransport` ([src/ble/transport.ts](src/ble/transport.ts)).
   [src/ble/tauri-transport.ts](src/ble/tauri-transport.ts) carries it to the Rust core through
-  `window.neotime`, which [tauri/src/bridge.js](tauri/src/bridge.js) gives the window. Opened in a
+  `window.battletime`, which [tauri/src/bridge.js](tauri/src/bridge.js) gives the window. Opened in a
   plain browser there is no bridge, so [src/ble/mock-transport.ts](src/ble/mock-transport.ts), a
-  mock NeoTime watch and a mock wasp-os bootloader, stands in.
+  mock BattleTime watch and a mock wasp-os bootloader, stands in.
 - Settings, backups and the store are kept in the web view's local storage
   ([src/state/storage.ts](src/state/storage.ts)), and files are chosen and saved with the web view's
   own file chooser and downloads ([src/services/device-files.ts](src/services/device-files.ts)).
 
-Set `NEOTIME_DEV_URL=http://localhost:5173` while `npm run dev` runs, and `npm run tauri` loads the
+Set `BATTLETIME_DEV_URL=http://localhost:5173` while `npm run dev` runs, and `npm run tauri` loads the
 window from Vite's dev server, reloading it on each change.
 
 ## The command line tool
 
 Everything the app does to a watch can be done from a terminal on Linux; its commands are in
-[the command line guide](../docs/companion/command-line.md). `npm run neotime -- <command>` rebuilds
+[the command line guide](../docs/companion/command-line.md). `npm run battletime -- <command>` rebuilds
 it with esbuild and runs it. It imports the same `src/` modules the screens do, and talks to BlueZ
 through node-ble in [node/ble.js](node/ble.js), so each protocol exists only once.
 
-The first scan remembers the watch in `~/.config/neotime-companion/cli.json`, so later commands
-need no address; `--address` and `NEOTIME_ADDRESS` override it. The tool connects to a remembered
+The first scan remembers the watch in `~/.config/battletime-companion/cli.json`, so later commands
+need no address; `--address` and `BATTLETIME_ADDRESS` override it. The tool connects to a remembered
 address without scanning. BlueZ forgets an unpaired watch soon after it last saw one, so when it
 does not know the address the tool runs discovery until the watch appears, and says so if it never
 does.
@@ -109,7 +109,7 @@ does.
 
 - [core/src/ble.rs](core/src/ble.rs) is the Bluetooth layer, on btleplug. Every step has a timeout
   and a failed connect drops the link.
-  `cargo run -p neotime-companion-core --example probe` scans, connects and reads the battery and
+  `cargo run -p battletime-companion-core --example probe` scans, connects and reads the battery and
   the time, to check it against a real watch.
 - `core/src/sync` keeps a copy of the watch ([docs/sync.md](../docs/sync.md)), and
   `core/src/plugins` runs [plugins](../docs/plugins.md) in QuickJS.
@@ -142,11 +142,11 @@ hand, synced, a new time zone, waking from sleep), and every six hours anyway, b
 [src/state/clock-changes.ts](src/state/clock-changes.ts). That part runs on phones too.
 
 Weather from the computer's location needs GeoClue running; on NixOS that is
-`services.geoclue2.enable = true`, and GeoClue knows the app as `neotime-companion`.
+`services.geoclue2.enable = true`, and GeoClue knows the app as `battletime-companion`.
 
 ## The app on Android
 
-The same app builds for Android as `com.neotime.companion.tauri`. The Android SDK, NDK and JDK live
+The same app builds for Android as `com.battletime.companion.tauri`. The Android SDK, NDK and JDK live
 in a shell of their own, since they come to a few gigabytes:
 
 ```bash
@@ -172,7 +172,7 @@ The window, the core's Bluetooth, sync and plugins are the desktop app's; what d
   plugin whose Kotlin answers the window directly: the notification listener, call monitor, media
   tracker and keep-alive service, the phone's location for the weather and the remote buttons'
   intents. Its `build.rs` copies in btleplug's Java. `bridge.js` gives the window
-  `window.neotime.phone` in place of the desktop's `desktop` and `remote`, and
+  `window.battletime.phone` in place of the desktop's `desktop` and `remote`, and
   `src/services/phone/tauri-android.ts` turns it into the `phoneBridge`.
 - **Files** chosen for a note or a plugin come from Android's picker as `content://` links, read
   through Tauri's fs plugin; a note is read again on each check rather than watched.
@@ -183,7 +183,7 @@ The window, the core's Bluetooth, sync and plugins are the desktop app's; what d
 
 ### Releases
 
-Each `v*` tag publishes `NeoTime-Companion-<version>.apk` with the watch images and the store
+Each `v*` tag publishes `BattleTime-Companion-<version>.apk` with the watch images and the store
 ([release.yml](../.github/workflows/release.yml)). It is one APK for all four phone processors,
 built by `npm run tauri-android:release`, with the version taken from the tag.
 
@@ -232,7 +232,7 @@ src/ble/                 Transport layer: the bridge to the core, and a mock for
 src/dfu/                 Firmware updates: Nordic legacy DFU and the package reader
 cli/                     The command line tool, which runs the same code as the screens
 node/                    The command line tool's BlueZ over node-ble, web requests and shell commands
-src/protocol/            NeoTime's GATT services, the file service, the Gadgetbridge messages,
+src/protocol/            BattleTime's GATT services, the file service, the Gadgetbridge messages,
                          backups and the requests the watch answers
 src/services/            Weather, the watch apps' http proxy, GitHub builds, files on this device
 src/services/phone/      Notifications, calls, media and Do Not Disturb from the phone or computer
@@ -242,50 +242,50 @@ src/state/               Watch provider (connection, capabilities, traffic, sett
 ## What the watch serves
 
 The app reads which services the watch serves right after connecting, in
-[src/protocol/neotime.ts](src/protocol/neotime.ts), and offers each feature only where it works:
+[src/protocol/battletime.ts](src/protocol/battletime.ts), and offers each feature only where it works:
 
 | Service | UUID | Gives |
 | --- | --- | --- |
 | Legacy DFU | `00001530-1212-efde-1523-785feabcd123` | firmware updates |
 | Current Time | `0x1805` / `0x2A2B`, `0x2A0F` | the clock and time zone, set on every connection |
 | Battery | `0x180F` / `0x2A19` | the battery level |
-| NeoTime diagnostics | `6e540001-…` / `6e540002-…` | eight 32-bit counters and the last restart with its crash; a written `01` says a debug report holds the crash |
+| BattleTime diagnostics | `6e540001-…` / `6e540002-…` | eight 32-bit counters and the last restart with its crash; a written `01` says a debug report holds the crash |
 | Device Information | `0x180A` / `0x2A26` | the firmware version, for debug reports |
 | File transfer (BLEFS) | `0xFEBB` / `adaf0200-…` | files, backups, apps |
-| NeoTime packages | `6e540001-…` / `6e540003-…` | installing, hiding and removing apps, the memory each needs and the watch's refusals |
+| BattleTime packages | `6e540001-…` / `6e540003-…` | installing, hiding and removing apps, the memory each needs and the watch's refusals |
 | Nordic UART | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` | the Gadgetbridge messages |
 
-The NeoTime UUIDs share the base `6e54xxxx-0000-4000-8000-4e656f54696d`. The full description,
+The BattleTime UUIDs share the base `6e54xxxx-0000-4000-8000-4e656f54696d`. The full description,
 which the firmware and this app both follow, is [companion-protocol.md](../docs/companion-protocol.md) in the watch's docs.
 
 | State | Tabs |
 | --- | --- |
 | No watch connected | Watch, Settings |
-| NeoTime without the UART channel | Watch, Firmware, Settings |
+| BattleTime without the UART channel | Watch, Firmware, Settings |
 | A watch with the UART channel | all of them |
 | Waiting in a bootloader | Watch, Firmware, Settings |
 
-A watch counts as running firmware when it serves the UART or NeoTime's own service, and as a
-bootloader when it serves only DFU. NeoTime's advertisement has no room for its own 128-bit UUID,
-so a scan recognises it by the name "NeoTime".
+A watch counts as running firmware when it serves the UART or BattleTime's own service, and as a
+bootloader when it serves only DFU. BattleTime's advertisement has no room for its own 128-bit UUID,
+so a scan recognises it by the name "BattleTime".
 
-The mock watch comes as a NeoTime watch serving everything and a wasp-os watch waiting in its
+The mock watch comes as a BattleTime watch serving everything and a wasp-os watch waiting in its
 bootloader, `DfuTarg (mock)`, so both states can be worked on with no hardware.
 
 ## Firmware updates
 
-Firmware is sent as a Nordic DFU zip, the one NeoTime's `tools/package_dfu.py` makes from
-`firmware.bin`, holding one application image; a zip with a SoftDevice or bootloader part is refused. NeoTime takes the update in its running firmware, at the watch's own address, so
+Firmware is sent as a Nordic DFU zip, the one BattleTime's `tools/package_dfu.py` makes from
+`firmware.bin`, holding one application image; a zip with a SoftDevice or bootloader part is refused. BattleTime takes the update in its running firmware, at the watch's own address, so
 there is no reset into a bootloader first. After the image is activated the watch restarts, the
 bootloader swaps it in, and the app reconnects and writes the time. That exchange is what makes
-NeoTime keep the new firmware; without it the next reset rolls back to the old one.
+BattleTime keep the new firmware; without it the next reset rolls back to the old one.
 
 When the link drops partway through, the app reconnects and starts the same image again, up to
 four more times. After the init packet it asks with `REPORT_RECEIVED_IMAGE_SIZE` how much the watch
 kept, then sends only the rest. A refusal from the watch is not retried. A watch in an old system's
 bootloader keeps nothing, so it gets one try, as before.
 
-A watch still on wasp-os is moved over by sending it NeoTime's `reloader-from-wasp-os.zip`. The
+A watch still on wasp-os is moved over by sending it BattleTime's `reloader-from-wasp-os.zip`. The
 app restarts wasp-os into its bootloader with `machine.enter_ota_dfu()` over the UART, finds the
 bootloader at the watch's address or the one above it, and sends the image there.
 
@@ -320,7 +320,7 @@ Commands run one at a time, so answers never mix.
 
 ## Steps and alarms
 
-The Steps and Alarms screens and `neotime steps` and `neotime alarms` read the watch's own records
+The Steps and Alarms screens and `battletime steps` and `battletime alarms` read the watch's own records
 through [src/services/watch-records.ts](src/services/watch-records.ts). In the Tauri app they come
 from the core's [sync](../docs/sync.md) copy, refreshed on each sync report, and changes go through
 the core. Elsewhere they are read with the file service: a day's steps from its block,
@@ -334,7 +334,7 @@ takes the new alarms up. The mock watch serves a fortnight of steps and two alar
 
 ## Notes
 
-The Notes screen keeps a note on the watch, for NeoTime's `notes` app to show read only. The note
+The Notes screen keeps a note on the watch, for BattleTime's `notes` app to show read only. The note
 comes from one of three sources, chosen on the screen and read through
 [src/services/note-source.ts](src/services/note-source.ts): text typed on the screen, saved and sent
 once typing pauses for a moment; a text file of the user's choice; or an http or https URL, fetched
@@ -368,8 +368,8 @@ another level is chosen and packs it one bit a module into `/qr/<slot>`, in the 
 from 0 to 7. `/qr/list` holds the order and the captions, so renaming, moving or removing a code
 rewrites only the list (the layout is in [companion-protocol.md](../docs/companion-protocol.md)). A
 code over 120 modules is refused, and one over 74 is sent with a warning that it may not scan.
-`neotime qr <text>|wifi <ssid> [password]` adds a code from a terminal, and
-`neotime qr list|rename <n> <label>|move <n> up|down|remove <n>|remove all` manages the list by
+`battletime qr <text>|wifi <ssid> [password]` adds a code from a terminal, and
+`battletime qr list|rename <n> <label>|move <n> up|down|remove <n>|remove all` manages the list by
 the numbers `list` shows.
 
 ## Remote
@@ -415,14 +415,14 @@ in the app's settings, unencrypted, as the GitHub token is. The command line tak
 as `--header 'Name: value'`, `--user name:password`, `--pin <sha256>` and `--insecure`.
 `node/testdata` holds the self-signed certificate and key the tests serve, made for them only.
 
-The icon names are copied from `ICON_NAMES` in NeoTime's `compiler/src/types.rs` into
+The icon names are copied from `ICON_NAMES` in BattleTime's `compiler/src/types.rs` into
 [src/bundles/icon-names.ts](src/bundles/icon-names.ts) with `npm run import-icon-names
-path/to/NeoTime`; a test compares the two whenever a NeoTime checkout sits beside this one. The
+path/to/BattleTime`; a test compares the two whenever a BattleTime checkout sits beside this one. The
 picker draws each icon from the shared library image in the setup bundle
 ([src/protocol/library-icons.ts](src/protocol/library-icons.ts)), as the watch does.
 
-`neotime remote list|push|run <n>|listen` does the same from a terminal, with the buttons in
-`~/.config/neotime-companion/remote.json` (or `--buttons <file>`) in the form the app stores them.
+`battletime remote list|push|run <n>|listen` does the same from a terminal, with the buttons in
+`~/.config/battletime-companion/remote.json` (or `--buttons <file>`) in the form the app stores them.
 In the browser's mock mode each button has a "Tap as the watch" button.
 
 ## Launcher
@@ -448,12 +448,12 @@ Other. Setting up a watch writes those defaults, as folders sorted by name. The 
 byte after the groups that the watch ignores; a file without it reads as sorted by name. An app whose group is missing goes to Other,
 and so does one installed another way, until the companion next writes the file.
 
-`neotime launcher show|style <s>|view <v>|sort <name|custom>|move <app> <group> [place]|add <name> [icon]|rename <group> <name>|icon <group> <icon>|order <group> <place>|remove <group>|reset`
+`battletime launcher show|style <s>|view <v>|sort <name|custom>|move <app> <group> [place]|add <name> [icon]|rename <group> <name>|icon <group> <icon>|order <group> <place>|remove <group>|reset`
 does all of the same from a terminal.
 
 ## Quick apps
 
-A swipe left or right on NeoTime's watch face opens the next or previous app in its quick-app
+A swipe left or right on BattleTime's watch face opens the next or previous app in its quick-app
 ring, and a step past either end comes back to the face. The watch reads the ring from
 `/settings/quick_apps` on every step: UTF-8 text, one app id a line, in ring order, with blank
 lines, surrounding spaces and `\r` ignored and ids that are not installed skipped. Without the
@@ -463,12 +463,12 @@ The Quick apps screen reads the ring when it opens, falling back to that default
 missing, and lists it next to the installed apps that could join it (faces and the launcher are
 left out). Apps are added, removed and moved up or down, and Save writes the file over the file
 service; "Use the default" deletes it. [src/protocol/quick-apps.ts](src/protocol/quick-apps.ts)
-reads and writes the file, and `neotime quick-apps [list|set <id> ...|reset]` does the same from a
+reads and writes the file, and `battletime quick-apps [list|set <id> ...|reset]` does the same from a
 terminal.
 
 ## Apps and the first run
 
-NeoTime ships with no apps, faces or icons: a new watch shows only a help screen. When a watch with
+BattleTime ships with no apps, faces or icons: a new watch shows only a help screen. When a watch with
 the packages characteristic has no face, the Watch tab offers **Set up the watch**, which installs
 a face, the launcher and the apps chosen, in that order. The images come from
 [src/bundles/watch-apps.ts](src/bundles/watch-apps.ts), which holds every app and face in the
@@ -481,8 +481,8 @@ firmware image, so a firmware update brings it and the companion never sends it.
 a copy only so the screens can draw the library's icons.
 
 ```bash
-(cd ../neotime && nix develop --command python3 -I ../tools/build_store.py)
-npm run import-watch-apps ../neotime/dist/store
+(cd ../battletime && nix develop --command python3 -I ../tools/build_store.py)
+npm run import-watch-apps ../battletime/dist/store
 ```
 
 [src/protocol/packages.ts](src/protocol/packages.ts) installs one image: an app or face is written
@@ -490,13 +490,13 @@ to `/apps/<id>/app.ntapp` and then installed with `{"c":"install","id":...}` on 
 characteristic, which checks it on the watch; a shared library image is refused, since it comes with
 the firmware. The id and kind come from the image's
 own header ([src/protocol/app-image.ts](src/protocol/app-image.ts)). The Apps screen and
-`neotime apps` also list, hide, show and remove apps.
+`battletime apps` also list, hide, show and remove apps.
 
 ## The store
 
 The Store screen offers every bundled app and face, and the apps, faces and plugins added from files
 or downloaded from a GitHub repository's releases and Actions builds, and installs or uninstalls
-each on the watch. `neotime store` lists the bundle and fetches from GitHub, and `neotime apps
+each on the watch. `battletime store` lists the bundle and fetches from GitHub, and `battletime apps
 install <id>` installs a bundled app. [docs/app-store.md](../docs/app-store.md) describes the store,
 the files a release carries and the CI that builds them.
 
@@ -525,11 +525,11 @@ The bundled `prompt` app ([src/protocol/prompt.ts](src/protocol/prompt.ts)) show
 
 | Command | What it does |
 | --- | --- |
-| `neotime apps run <image> [--data <name>=<file>]... [--text <name>=<text>]... [--listen]` | runs the image as a temporary app with those data files (4 kB at most each), saying whether the image was sent or already there; with `--listen` it stays connected and prints each message the app sends until Ctrl+C closes the app, or stops with an error when the link drops |
-| `neotime apps stop` | closes the open temporary app; its files stay |
-| `neotime apps forget [id]` | closes the temporary app and deletes one temporary app's files, or all of them |
-| `neotime ask "<question>" [--timeout <seconds>]` | asks with the prompt app and prints `yes` (exit 0) or `no` (exit 1); with no tap in time (60 s unless given) it closes the prompt and exits 2, and it exits 3 when it cannot ask, such as when the bundle has no `prompt.ntapp` |
+| `battletime apps run <image> [--data <name>=<file>]... [--text <name>=<text>]... [--listen]` | runs the image as a temporary app with those data files (4 kB at most each), saying whether the image was sent or already there; with `--listen` it stays connected and prints each message the app sends until Ctrl+C closes the app, or stops with an error when the link drops |
+| `battletime apps stop` | closes the open temporary app; its files stay |
+| `battletime apps forget [id]` | closes the temporary app and deletes one temporary app's files, or all of them |
+| `battletime ask "<question>" [--timeout <seconds>]` | asks with the prompt app and prints `yes` (exit 0) or `no` (exit 1); with no tap in time (60 s unless given) it closes the prompt and exits 2, and it exits 3 when it cannot ask, such as when the bundle has no `prompt.ntapp` |
 
 ## License
 
-GPL v3 or later, like the rest of NeoTime. See [LICENSE](../LICENSE).
+GPL v3 or later, like the rest of BattleTime. See [LICENSE](../LICENSE).

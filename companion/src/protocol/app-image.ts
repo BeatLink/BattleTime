@@ -1,5 +1,5 @@
-// Reads the header of a compiled NeoTime image: its kind, id, name and launcher group, without checking its code.
-// The layout is runtime/src/image.rs in the NeoTime tree; keep the two in step.
+// Reads the header of a compiled BattleTime image: its kind, id, name and launcher group, without checking its code.
+// The layout is runtime/src/image.rs in the BattleTime tree; keep the two in step.
 
 export type ImageKind = 'app' | 'face' | 'library';
 
@@ -19,11 +19,11 @@ const KINDS: ImageKind[] = ['app', 'face', 'library'];
 
 export function readImageHeader(bytes: Uint8Array): ImageHeader {
   if (bytes.length < HEADER_BYTES || String.fromCharCode(...bytes.subarray(0, 4)) !== MAGIC) {
-    throw new AppImageError('That file is not a NeoTime app image.');
+    throw new AppImageError('That file is not a BattleTime app image.');
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (view.getUint16(4, true) !== FORMAT_VERSION) {
-    throw new AppImageError('That image was made for another version of NeoTime.');
+    throw new AppImageError('That image was made for another version of BattleTime.');
   }
   const kind = KINDS[bytes[6]];
   if (!kind) {

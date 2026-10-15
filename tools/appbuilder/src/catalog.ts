@@ -1,4 +1,4 @@
-// The palette's entries, read from the NeoTime SDK's own source so they always match what apps can use.
+// The palette's entries, read from the BattleTime SDK's own source so they always match what apps can use.
 
 import * as path from "node:path";
 import ts from "typescript";
@@ -19,7 +19,7 @@ export interface Parameter {
 export interface CatalogEntry {
   kind: EntryKind;
   name: string;
-  /** The module an app imports it from, such as `neotime/widgets`; events need `on` from `neotime`. */
+  /** The module an app imports it from, such as `battletime/widgets`; events need `on` from `battletime`. */
   module: string;
   documentation: string;
   /** A widget's props, an effect's arguments, or an event's fields. */
@@ -36,8 +36,8 @@ export interface Catalog {
 }
 
 const WIDGET_FILES: Record<string, string> = {
-  "widgets.tsx": "neotime/widgets",
-  "components.tsx": "neotime/components",
+  "widgets.tsx": "battletime/widgets",
+  "components.tsx": "battletime/components",
 };
 const INDEX_FILE = "index.ts";
 
@@ -45,7 +45,7 @@ const INDEX_FILE = "index.ts";
 // Reading the SDK
 // ============================================================================
 
-/** Reads the palette from the SDK's `src` folder, such as `neotime/sdk/neotime/src`. */
+/** Reads the palette from the SDK's `src` folder, such as `battletime/sdk/battletime/src`. */
 export function read_catalog(sdk_source_folder: string): Catalog {
   const files = [...Object.keys(WIDGET_FILES), INDEX_FILE].map((name) => path.join(sdk_source_folder, name));
   const program = ts.createProgram(files, {
@@ -132,7 +132,7 @@ function read_events(source: ts.SourceFile, checker: ts.TypeChecker): CatalogEnt
     return {
       kind: "event",
       name: member.name.getText(source),
-      module: "neotime",
+      module: "battletime",
       documentation: documentation_of(symbol, checker),
       parameters: event_type.getProperties().map((property) => parameter_of(property, checker, member)),
       takes_children: false,
@@ -152,7 +152,7 @@ function read_effects(source: ts.SourceFile, checker: ts.TypeChecker): CatalogEn
     .map((declaration) => ({
       kind: "effect",
       name: declaration.name!.text,
-      module: "neotime",
+      module: "battletime",
       documentation: documentation_of(checker.getSymbolAtLocation(declaration.name!), checker),
       parameters: declaration.parameters.map((parameter) => ({
         name: parameter.name.getText(source),
@@ -177,7 +177,7 @@ function read_values(source: ts.SourceFile, checker: ts.TypeChecker): CatalogEnt
       entries.push({
         kind: "value",
         name: declaration.name.text,
-        module: "neotime",
+        module: "battletime",
         documentation: documentation_of(checker.getSymbolAtLocation(declaration.name), checker),
         parameters: [],
         takes_children: false,

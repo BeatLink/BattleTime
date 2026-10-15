@@ -29,7 +29,7 @@ function fakeFetch(answers: Record<string, unknown>, calls: Call[] = []): typeof
 }
 
 const RELEASES = 'https://api.github.com/repos/a/b/releases?per_page=20';
-const ARTIFACTS = 'https://api.github.com/repos/a/b/actions/artifacts?per_page=50&name=neotime-store';
+const ARTIFACTS = 'https://api.github.com/repos/a/b/actions/artifacts?per_page=50&name=battletime-store';
 
 const releases = [
   {
@@ -39,7 +39,7 @@ const releases = [
     published_at: '2026-10-01T00:00:00Z',
     prerelease: false,
     assets: [
-      { id: 10, name: 'neotime-store.zip', size: 100, url: 'https://api/assets/10' },
+      { id: 10, name: 'battletime-store.zip', size: 100, url: 'https://api/assets/10' },
       { id: 11, name: 'dice.ntapp', size: 10, url: 'https://api/assets/11' },
       { id: 12, name: 'firmware.zip', size: 10, url: 'https://api/assets/12' },
     ],
@@ -59,14 +59,14 @@ const artifacts = {
   artifacts: [
     {
       id: 30,
-      name: 'neotime-store',
+      name: 'battletime-store',
       size_in_bytes: 300,
       expired: false,
       created_at: '2026-10-10T00:00:00Z',
       archive_download_url: 'https://api/artifacts/30/zip',
       workflow_run: { head_branch: 'master', head_sha: 'abcdef1234' },
     },
-    { id: 31, name: 'neotime-store', size_in_bytes: 1, expired: true, created_at: '2026-10-11T00:00:00Z', archive_download_url: '' },
+    { id: 31, name: 'battletime-store', size_in_bytes: 1, expired: true, created_at: '2026-10-11T00:00:00Z', archive_download_url: '' },
   ],
 };
 
@@ -87,7 +87,7 @@ describe('finding apps on GitHub', () => {
     const calls: Call[] = [];
     const found = await listStoreReleases('a/b', { fetcher: fakeFetch({ [RELEASES]: releases }, calls) });
     expect(found.map((release) => release.title)).toEqual(['apps-latest (pre-release)', 'Version 1']);
-    expect(found[1].bundle?.name).toBe('neotime-store.zip');
+    expect(found[1].bundle?.name).toBe('battletime-store.zip');
     expect(found[1].files.map((file) => file.name)).toEqual(['dice.ntapp']);
     expect(calls.map((call) => call.url)).toEqual([RELEASES]);
 
@@ -144,7 +144,7 @@ describe('downloading from GitHub', () => {
     source: 'release',
     title: 'Version 1',
     date: '',
-    bundle: { name: 'neotime-store.zip', url: 'https://api/assets/10', sizeBytes: 1 },
+    bundle: { name: 'battletime-store.zip', url: 'https://api/assets/10', sizeBytes: 1 },
     files: [],
     needsToken: false,
   };
@@ -182,7 +182,7 @@ describe('downloading from GitHub', () => {
       fetchStoreRelease('a/b', zipRelease, {
         requester: async () => ({ status: 302, statusText: 'Found', body: new Uint8Array() }),
       }),
-    ).rejects.toThrow('neotime-store.zip failed (302)');
+    ).rejects.toThrow('battletime-store.zip failed (302)');
   });
 
   it('needs a token for an Actions build and sends it', async () => {

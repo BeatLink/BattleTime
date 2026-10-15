@@ -154,7 +154,7 @@ export default function StoreScreen() {
       <Card>
         <ThemedText type="small" themeColor="textSecondary">
           The store holds the apps, watch faces and plugins this companion can install. It starts with every
-          app NeoTime ships, and you can add more from files or from a GitHub repository&apos;s releases, or
+          app BattleTime ships, and you can add more from files or from a GitHub repository&apos;s releases, or
           take out what you do not want. Plugins run in the app, which also installs the watch apps they
           carry.
         </ThemedText>
@@ -234,7 +234,7 @@ export default function StoreScreen() {
         <Button title="Add from files" variant="secondary" disabled={busy} onClick={() => void addFiles()} />
         <TextRow
           label="GitHub repository"
-          detail="Releases with neotime-store.zip, .ntapp or .ntplugin files; with a token, Actions builds too."
+          detail="Releases with battletime-store.zip, .ntapp or .ntplugin files; with a token, Actions builds too."
           value={repo}
           onChangeText={setRepo}
           placeholder="owner/name"

@@ -13,14 +13,14 @@ received. From wasp-os's template.
 
 ## Screens
 
-![The template](../../neotime/harness/snapshots/screens/app-template.png)
+![The template](../../battletime/harness/snapshots/screens/app-template.png)
 
 As it opens: its name on the upper card and the lower card empty.
 
-![The template after a touch](../../neotime/harness/snapshots/screens/app-template-touch.png)
+![The template after a touch](../../battletime/harness/snapshots/screens/app-template-touch.png)
 
 After a touch low on the left, showing where it landed: (60, 180).
 
-![The template after a swipe](../../neotime/harness/snapshots/screens/app-template-swipe.png)
+![The template after a swipe](../../battletime/harness/snapshots/screens/app-template-swipe.png)
 
 After a swipe to the left: "Swipe left".

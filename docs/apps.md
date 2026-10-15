@@ -1,6 +1,6 @@
 # All apps
 
-Every app NeoTime ships, by the name the launcher shows, grouped as the launcher groups them at first. Apps install and uninstall
+Every app BattleTime ships, by the name the launcher shows, grouped as the launcher groups them at first. Apps install and uninstall
 from the companion app's store, the companion can move an app to another group, and
 [Software](apps/software.md) turns each one on or off. Watch faces have their own page,
 [Watch faces](faces.md).

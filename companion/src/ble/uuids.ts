@@ -1,4 +1,4 @@
-// Nordic UART Service, which NeoTime uses for its Gadgetbridge-style message lines.
+// Nordic UART Service, which BattleTime uses for its Gadgetbridge-style message lines.
 export const NUS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 
 // The phone writes to RX and the watch notifies on TX.

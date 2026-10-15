@@ -12,10 +12,10 @@ opens. From wasp-os's haiku.
 
 ## Screens
 
-![A verse](../../neotime/harness/snapshots/screens/app-haiku.png)
+![A verse](../../battletime/harness/snapshots/screens/app-haiku.png)
 
 The first verse, "Morning on my wrist", as it opens the first time.
 
-![The next verse](../../neotime/harness/snapshots/screens/app-haiku-next.png)
+![The next verse](../../battletime/harness/snapshots/screens/app-haiku-next.png)
 
 The next verse, "Rain against the glass", after a tap.

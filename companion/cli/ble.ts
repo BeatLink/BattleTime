@@ -120,7 +120,7 @@ export class WatchSession implements DfuLink {
     this.onLine = onLine;
   }
 
-  // NeoTime's file service, opened on first use.
+  // BattleTime's file service, opened on first use.
   files(): Promise<FileService> {
     this.fileService ??= FileService.open(this);
     return this.fileService;

@@ -92,7 +92,7 @@ describe('GitHub firmware', () => {
   const artifactZip = zipSync({ 'firmware.zip': firmwareZip, 'bootloader.bin': strToU8(':00') });
 
   const fetcher = fakeFetch({
-    'https://api.github.com/repos/BeatLink/NeoTime/releases': [
+    'https://api.github.com/repos/BeatLink/BattleTime/releases': [
       {
         id: 1,
         tag_name: 'v0.5',
@@ -105,7 +105,7 @@ describe('GitHub firmware', () => {
         ],
       },
     ],
-    'https://api.github.com/repos/BeatLink/NeoTime/actions/artifacts': {
+    'https://api.github.com/repos/BeatLink/BattleTime/actions/artifacts': {
       artifacts: [
         {
           id: 9,
@@ -124,13 +124,13 @@ describe('GitHub firmware', () => {
   });
 
   it('lists builds for the board, newest first', async () => {
-    const builds = await listFirmwareBuilds('BeatLink/NeoTime', 'pinetime', { fetcher });
+    const builds = await listFirmwareBuilds('BeatLink/BattleTime', 'pinetime', { fetcher });
     expect(builds.map((build) => build.title)).toEqual(['master at 9128cdb', 'v0.5']);
     expect(builds[0].needsToken).toBe(true);
   });
 
   it('unpacks the firmware from a release and from an artifact', async () => {
-    const [artifact, release] = await listFirmwareBuilds('BeatLink/NeoTime', 'pinetime', { fetcher });
+    const [artifact, release] = await listFirmwareBuilds('BeatLink/BattleTime', 'pinetime', { fetcher });
     expect((await downloadFirmware(release, { fetcher })).image.image).toEqual(new Uint8Array([1, 2, 3]));
     await expect(downloadFirmware(artifact, { fetcher })).rejects.toThrow('token');
     const fromArtifact = await downloadFirmware(artifact, { fetcher, token: 't' });

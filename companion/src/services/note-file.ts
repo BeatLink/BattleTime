@@ -27,7 +27,7 @@ export type NoteFileAccess = {
 
 type BridgeResult<Value> = { ok: boolean; error?: string; value?: Value };
 
-// What window.neotime.notes (tauri/src/bridge.js) offers.
+// What window.battletime.notes (tauri/src/bridge.js) offers.
 export type NoteBridge = {
   pick(): Promise<BridgeResult<NoteFileRef | null>>;
   read(path: string): Promise<BridgeResult<Uint8Array>>;
@@ -37,7 +37,7 @@ export type NoteBridge = {
 };
 
 export function noteBridge(): NoteBridge | null {
-  return (globalThis as { neotime?: { notes?: NoteBridge } }).neotime?.notes ?? null;
+  return (globalThis as { battletime?: { notes?: NoteBridge } }).battletime?.notes ?? null;
 }
 
 function valueOf<Value>(result: BridgeResult<Value>): Value {

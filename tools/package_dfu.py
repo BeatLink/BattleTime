@@ -3,7 +3,7 @@
 
 The init packet carries a CRC-16 of the image, which the watch checks before installing. With
 --sd-req the zip is only accepted by a bootloader running that SoftDevice; wasp-os's S112
-bootloader is 0xB8, and NeoTime ignores the field.
+bootloader is 0xB8, and BattleTime ignores the field.
 """
 
 import argparse

@@ -62,8 +62,8 @@ GARBLED_REPLY = '{"c":"?"'
 PAUSE_BEFORE_WRITE_SECONDS = 0.3
 # How long to wait for an answer before nudging the controller with a harmless command.
 NUDGE_AFTER_SECONDS = 2
-# Set NEOTIME_HCI_VERBOSE to see each request on standard error.
-VERBOSE = bool(os.environ.get("NEOTIME_HCI_VERBOSE"))
+# Set BATTLETIME_HCI_VERBOSE to see each request on standard error.
+VERBOSE = bool(os.environ.get("BATTLETIME_HCI_VERBOSE"))
 # One write's payload at the smallest MTU, as the companion app sends.
 WRITE_BYTES = 20
 

@@ -1,9 +1,9 @@
 // Buzz back, the example plugin's watch app: one button that asks the companion to buzz the watch.
 // The plugin in ../phone answers on the "buzz-back" channel; its settings page chooses how many buzzes.
 
-import { define_app, send_to_phone, signal, vibrate_pattern } from "neotime";
-import { icons } from "neotime/icons";
-import { Button, Column, Label, Screen } from "neotime/widgets";
+import { define_app, send_to_phone, signal, vibrate_pattern } from "battletime";
+import { icons } from "battletime/icons";
+import { Button, Column, Label, Screen } from "battletime/widgets";
 
 /** How many times the button was pressed since the app opened. */
 const presses = signal(0);

@@ -8,14 +8,14 @@ import { base64ToBytes } from '@/ble/encoding';
 import { LIBRARY_ICON_NAMES } from './icon-names';
 import { BUNDLED_IMAGES } from './watch-apps';
 
-// NeoTime's list of icon names, from NEOTIME_DIR or a NeoTime checkout beside this one or any folder above it.
-function findNeoTimeTypes(): string | null {
+// BattleTime's list of icon names, from BATTLETIME_DIR or a BattleTime checkout beside this one or any folder above it.
+function findBattleTimeTypes(): string | null {
   const candidates: string[] = [];
-  if (process.env.NEOTIME_DIR) {
-    candidates.push(process.env.NEOTIME_DIR);
+  if (process.env.BATTLETIME_DIR) {
+    candidates.push(process.env.BATTLETIME_DIR);
   }
   for (let folder = __dirname; dirname(folder) !== folder; folder = dirname(folder)) {
-    candidates.push(join(folder, 'NeoTime'));
+    candidates.push(join(folder, 'BattleTime'));
   }
   const found = candidates.map((root) => join(root, 'compiler', 'src', 'types.rs')).find((path) => existsSync(path));
   return found ?? null;
@@ -29,12 +29,12 @@ function readIconNames(types: string): string[] {
   return [...match[2].matchAll(/"([^"]+)"/g)].map((found) => found[1]);
 }
 
-const typesPath = findNeoTimeTypes();
-// CI has no NeoTime checkout, so the comparison with it runs only where one is found.
-const withNeoTime = typesPath ? it : it.skip;
+const typesPath = findBattleTimeTypes();
+// CI has no BattleTime checkout, so the comparison with it runs only where one is found.
+const withBattleTime = typesPath ? it : it.skip;
 
 describe('the library icon names', () => {
-  withNeoTime('match ICON_NAMES in NeoTime, in the same order; run npm run import-icon-names if not', () => {
+  withBattleTime('match ICON_NAMES in BattleTime, in the same order; run npm run import-icon-names if not', () => {
     expect([...LIBRARY_ICON_NAMES]).toEqual(readIconNames(readFileSync(typesPath!, 'utf8')));
   });
 

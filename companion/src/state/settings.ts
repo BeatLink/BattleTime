@@ -61,7 +61,7 @@ export const defaultSettings: Settings = {
   weatherFromDevice: false,
   httpEnabled: false,
   httpAllowedHosts: '',
-  githubRepo: 'BeatLink/NeoTime',
+  githubRepo: 'BeatLink/BattleTime',
   githubToken: '',
   firmwareBoard: 'pinetime',
   noteSource: 'typed',
@@ -76,7 +76,7 @@ export const defaultSettings: Settings = {
   syncIntervalSeconds: DEFAULT_SYNC_INTERVAL_SECONDS,
 };
 
-const STORAGE_KEY = 'neotime.settings.v1';
+const STORAGE_KEY = 'battletime.settings.v1';
 
 export async function loadSettings(storage: KeyValueStorage = appStorage): Promise<Settings> {
   try {

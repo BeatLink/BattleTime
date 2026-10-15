@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Builds every image NeoTime ships and packs them into dist/: the bootloader, the firmware with the
+# Builds every image BattleTime ships and packs them into dist/: the bootloader, the firmware with the
 # shared library inside, the recovery firmware, the bootloader updater, and the two reloaders that
 # move a watch over from wasp-os or InfiniTime. Run it inside `nix develop`.
 
 set -euo pipefail
-cd "$(dirname "$0")/../neotime"
+cd "$(dirname "$0")/../battletime"
 
 dist=dist
 mkdir -p "$dist"
 
-# Every image the NeoTime bootloader runs carries a header naming its type, version, commit and CRC.
+# Every image the BattleTime bootloader runs carries a header naming its type, version, commit and CRC.
 version=$(sed -n 's/^version = "\(.*\)"/\1/p' firmware/Cargo.toml | head -1)
 commit=$(git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)
 if ! git diff --quiet HEAD 2>/dev/null; then commit="$commit*"; fi
@@ -23,13 +23,13 @@ echo "bootloader"
 (cd bootloader && cargo objcopy -q --release -- -O binary "../$dist/bootloader.bin")
 
 echo "shared library"
-cargo run -q --release -p neotime-compiler -- library -o "$dist/shared.ntlib"
+cargo run -q --release -p battletime-compiler -- library -o "$dist/shared.ntlib"
 
 echo "firmware, with the shared library after its code"
 (cd firmware && cargo objcopy -q --release -- -O binary "../$dist/firmware.code.bin")
 add_header firmware "$dist/firmware.code.bin" "$dist/firmware.bin" --library "$dist/shared.ntlib"
 # Its symbols, which the emulator suites look up to poke statics; the later builds share its target folder.
-cp firmware/target/thumbv7em-none-eabihf/release/neotime-firmware "$dist/firmware.elf"
+cp firmware/target/thumbv7em-none-eabihf/release/battletime-firmware "$dist/firmware.elf"
 python3 -I ../tools/package_dfu.py "$dist/firmware.bin" "$dist/firmware.zip"
 
 echo "recovery firmware (the status page, Bluetooth and updates, without the shell or the library)"
@@ -37,17 +37,17 @@ echo "recovery firmware (the status page, Bluetooth and updates, without the she
 add_header recovery "$dist/recovery.code.bin" "$dist/recovery.bin"
 python3 -I ../tools/package_dfu.py "$dist/recovery.bin" "$dist/recovery.zip"
 
-echo "bootloader updater (a firmware update that installs dist/bootloader.bin on a watch already on NeoTime)"
-(cd bootloader-updater && NEOTIME_NEW_BOOTLOADER_BIN="$PWD/../$dist/bootloader.bin" cargo objcopy -q --release -- -O binary "../$dist/bootloader-updater.code.bin")
+echo "bootloader updater (a firmware update that installs dist/bootloader.bin on a watch already on BattleTime)"
+(cd bootloader-updater && BATTLETIME_NEW_BOOTLOADER_BIN="$PWD/../$dist/bootloader.bin" cargo objcopy -q --release -- -O binary "../$dist/bootloader-updater.code.bin")
 add_header bootloader-updater "$dist/bootloader-updater.code.bin" "$dist/bootloader-updater.bin"
 python3 -I ../tools/package_dfu.py "$dist/bootloader-updater.bin" "$dist/bootloader-updater.zip"
 
 
 # The full firmware does not fit beside the bootloader in wasp-os's app slot, so the reloader installs
 # the recovery firmware in both places, and the full firmware follows as an ordinary update.
-export NEOTIME_BOOTLOADER_BIN="$PWD/$dist/bootloader.bin"
-export NEOTIME_FIRMWARE_BIN="$PWD/$dist/recovery.bin"
-export NEOTIME_RECOVERY_BIN="$PWD/$dist/recovery.bin"
+export BATTLETIME_BOOTLOADER_BIN="$PWD/$dist/bootloader.bin"
+export BATTLETIME_FIRMWARE_BIN="$PWD/$dist/recovery.bin"
+export BATTLETIME_RECOVERY_BIN="$PWD/$dist/recovery.bin"
 
 echo "reloader from wasp-os"
 (cd reloader && cargo objcopy -q --release --features from-wasp-os -- -O binary "../$dist/reloader-from-wasp-os.bin")

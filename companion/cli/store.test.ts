@@ -20,7 +20,7 @@ const releases = [
     name: 'Version 1',
     published_at: '2026-10-01T00:00:00Z',
     prerelease: false,
-    assets: [{ id: 10, name: 'neotime-store.zip', size: 100, url: 'https://api/assets/10' }],
+    assets: [{ id: 10, name: 'battletime-store.zip', size: 100, url: 'https://api/assets/10' }],
   },
 ];
 
@@ -56,7 +56,7 @@ describe('the store command', () => {
 
   it('lists releases and fetches one into a folder', async () => {
     const { said, stop } = capture();
-    const folder = join(mkdtempSync(join(tmpdir(), 'neotime-store-')), 'out');
+    const folder = join(mkdtempSync(join(tmpdir(), 'battletime-store-')), 'out');
     await store(['releases', 'a/b'], { fetcher });
     await store(['fetch', 'a/b', '1', folder], { fetcher });
     stop();

@@ -1,0 +1,16 @@
+[package]
+name = "battletime-slot-log"
+version = "0.1.0"
+edition = "2021"
+description = "Day files of six-minute slots in the flash store, shared by the step, heart rate and battery logs"
+license.workspace = true
+publish = false
+
+[dependencies]
+heapless = "0.9"
+battletime-flash-store = { path = "../flash_store" }
+battletime-current-time = { path = "../current_time" }
+
+[dev-dependencies]
+embassy-futures = "0.1"
+battletime-flash-store = { path = "../flash_store", features = ["ram-flash"] }

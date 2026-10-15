@@ -1,0 +1,10 @@
+[package]
+name = "battletime-battery-reading"
+version = "0.1.0"
+edition = "2021"
+description = "One blocking reading of the PineTime's battery voltage, for the bootloader, its updater and the reloader"
+license.workspace = true
+publish = false
+
+[dependencies]
+battletime-battery = { path = "../../services/battery" }

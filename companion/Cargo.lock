@@ -141,6 +141,45 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
+name = "battletime-companion"
+version = "0.1.0"
+dependencies = [
+ "battletime-companion-core",
+ "futures",
+ "notify",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
+ "tauri-plugin-phone-bridge",
+ "tempfile",
+ "tokio",
+ "zbus",
+ "zip",
+]
+
+[[package]]
+name = "battletime-companion-core"
+version = "0.1.0"
+dependencies = [
+ "btleplug",
+ "chrono",
+ "futures",
+ "rquickjs",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "ureq",
+ "uuid",
+ "zip",
+]
+
+[[package]]
 name = "bindgen"
 version = "0.72.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2250,45 +2289,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee6cda3051665f1fb8d9e08fc35c96d5a244fb1be711a03b71118828afc9a873"
 dependencies = [
  "jni-sys 0.3.1",
-]
-
-[[package]]
-name = "neotime-companion"
-version = "0.1.0"
-dependencies = [
- "futures",
- "neotime-companion-core",
- "notify",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-fs",
- "tauri-plugin-phone-bridge",
- "tempfile",
- "tokio",
- "zbus",
- "zip",
-]
-
-[[package]]
-name = "neotime-companion-core"
-version = "0.1.0"
-dependencies = [
- "btleplug",
- "chrono",
- "futures",
- "rquickjs",
- "rustls",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "tokio",
- "ureq",
- "uuid",
- "zip",
 ]
 
 [[package]]

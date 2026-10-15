@@ -39,7 +39,7 @@ function fakeDevice(answers: Partial<Record<keyof TauriPhoneDevice, Answer>> = {
 }
 
 afterEach(() => {
-  delete (globalThis as { neotime?: unknown }).neotime;
+  delete (globalThis as { battletime?: unknown }).battletime;
 });
 
 // ============================================================================
@@ -49,16 +49,16 @@ afterEach(() => {
 describe('tauriPhoneDevice', () => {
   it('is there only when the Tauri app on Android gives the window a phone', () => {
     expect(tauriPhoneDevice()).toBeNull();
-    (globalThis as { neotime?: unknown }).neotime = { desktop: {} };
+    (globalThis as { battletime?: unknown }).battletime = { desktop: {} };
     expect(tauriPhoneDevice()).toBeNull();
     const { device } = fakeDevice();
-    (globalThis as { neotime?: unknown }).neotime = { phone: device };
+    (globalThis as { battletime?: unknown }).battletime = { phone: device };
     expect(tauriPhoneDevice()).toBe(device);
   });
 
   it('is what index.ts chooses ahead of the desktop and the stub', () => {
     const { device } = fakeDevice();
-    (globalThis as { neotime?: unknown }).neotime = { phone: device };
+    (globalThis as { battletime?: unknown }).battletime = { phone: device };
     let bridge!: PhoneBridge;
     jest.isolateModules(() => {
       bridge = jest.requireActual<typeof import('./index')>('./index').phoneBridge;

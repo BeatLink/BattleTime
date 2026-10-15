@@ -1,4 +1,4 @@
-// The palette pane, in the NeoTime sidebar: widgets, events, effects and values to put into the app
+// The palette pane, in the BattleTime sidebar: widgets, events, effects and values to put into the app
 // open in the editor. It inserts into the last app source file that had focus.
 
 import * as crypto from "node:crypto";
@@ -7,7 +7,7 @@ import * as vscode from "vscode";
 
 import { read_catalog, type Catalog, type CatalogEntry } from "./catalog";
 import { page_html } from "./page";
-import { find_neotime_folder } from "./session";
+import { find_battletime_folder } from "./session";
 import { add_import, import_for, snippet_for } from "./snippets";
 
 // ============================================================================
@@ -28,23 +28,23 @@ const SECTIONS: Record<CatalogEntry["kind"], keyof Catalog> = {
 // ============================================================================
 
 export class PaletteView implements vscode.WebviewViewProvider {
-  static readonly view_id = "neotime.palette";
+  static readonly view_id = "battletime.palette";
 
   private view: vscode.WebviewView | undefined;
   private app: vscode.Uri | undefined;
-  private neotime_folder: string | undefined;
+  private battletime_folder: string | undefined;
   private catalog: Catalog | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
   /** Makes `app` the file the palette inserts into, reading the palette from its checkout's SDK. */
   set_app(app: vscode.Uri) {
-    const neotime_folder = find_neotime_folder(path.dirname(app.fsPath));
-    if (!neotime_folder) return;
+    const battletime_folder = find_battletime_folder(path.dirname(app.fsPath));
+    if (!battletime_folder) return;
     this.app = app;
-    if (neotime_folder !== this.neotime_folder) {
-      this.neotime_folder = neotime_folder;
-      this.catalog = read_catalog(path.join(neotime_folder, "sdk", "neotime", "src"));
+    if (battletime_folder !== this.battletime_folder) {
+      this.battletime_folder = battletime_folder;
+      this.catalog = read_catalog(path.join(battletime_folder, "sdk", "battletime", "src"));
     }
     this.show_state();
   }
@@ -72,7 +72,7 @@ export class PaletteView implements vscode.WebviewViewProvider {
 
   private show_state() {
     if (!this.view) return;
-    const target = this.app && this.neotime_folder ? path.relative(this.neotime_folder, this.app.fsPath) : undefined;
+    const target = this.app && this.battletime_folder ? path.relative(this.battletime_folder, this.app.fsPath) : undefined;
     void this.view.webview.postMessage({ type: "state", target, catalog: this.catalog });
   }
 

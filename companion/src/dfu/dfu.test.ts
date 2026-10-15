@@ -9,7 +9,7 @@ import {
   encodeLocalTimeInformation,
   LOCAL_TIME_INFORMATION,
   setWatchTime,
-} from '@/protocol/neotime';
+} from '@/protocol/battletime';
 import { flashFirmware, flashRecovery, type FlashStep } from './flash';
 import { LegacyDfuController, parseNotification } from './legacy';
 import type { DfuLink } from './link';
@@ -127,7 +127,7 @@ describe('notification parsing', () => {
 
 });
 
-describe('flashing a NeoTime watch', () => {
+describe('flashing a BattleTime watch', () => {
   it('sends the image straight to the running firmware', async () => {
     const init = pattern(141);
     const image = pattern(9000);
@@ -262,7 +262,7 @@ describe('carrying on after a lost link', () => {
 });
 
 describe('sending a recovery firmware', () => {
-  it('sends the image with NeoTime\'s recovery image type, to the running firmware', async () => {
+  it('sends the image with BattleTime\'s recovery image type, to the running firmware', async () => {
     const image = pattern(4000);
     const target = new MockLegacyDfuTarget();
     const steps: FlashStep[] = [];
@@ -285,11 +285,11 @@ describe('sending a recovery firmware', () => {
     expect(target.timeWrites).toHaveLength(1);
   });
 
-  it('refuses a watch that is not running NeoTime', async () => {
+  it('refuses a watch that is not running BattleTime', async () => {
     const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'wasp-os');
     await expect(
       flashRecovery(target, readFirmwarePackage(firmwareZip(pattern(14), pattern(64)))),
-    ).rejects.toThrow(/Only a watch running NeoTime/);
+    ).rejects.toThrow(/Only a watch running BattleTime/);
     expect(target.imageTypes).toEqual([]);
   });
 

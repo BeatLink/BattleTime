@@ -7,7 +7,7 @@ technical detail.
 ## Updating the firmware
 
 Firmware updates arrive over Bluetooth with Nordic's legacy DFU, the protocol InfiniTime uses, so
-Gadgetbridge, ITD, Siglo and the NeoTime companion app can all update the watch. The companion app
+Gadgetbridge, ITD, Siglo and the BattleTime companion app can all update the watch. The companion app
 lists release and test builds from GitHub.
 
 - While an update arrives, a status page takes the screen and keeps it lit: the step it is at
@@ -34,7 +34,7 @@ whether it is confirmed, on trial or rolled back to. While it is on trial the pa
 restart rolls back, and offers **Confirm**, which keeps it, and **Roll back**, which restarts at
 once into the firmware before it, as InfiniTime's firmware validation screen does.
 
-![A firmware on trial in the System app](../../neotime/harness/snapshots/screens/app-system-firmware-trial.png){ .screen }
+![A firmware on trial in the System app](../../battletime/harness/snapshots/screens/app-system-firmware-trial.png){ .screen }
 
 ## The side button menu
 
@@ -69,9 +69,9 @@ Nothing reopens the app that crashed. The crash screen has run in the emulator b
 real watch.
 
 <div class="screens" markdown>
-![The crash screen](../../neotime/harness/snapshots/screens/firmware-crash.png){ .screen }
-![Waiting for the companion app](../../neotime/harness/snapshots/screens/firmware-crash-waiting-for-companion.png){ .screen }
-![Not enough memory to open an app](../../neotime/harness/snapshots/screens/firmware-not-enough-memory.png){ .screen }
+![The crash screen](../../battletime/harness/snapshots/screens/firmware-crash.png){ .screen }
+![Waiting for the companion app](../../battletime/harness/snapshots/screens/firmware-crash-waiting-for-companion.png){ .screen }
+![Not enough memory to open an app](../../battletime/harness/snapshots/screens/firmware-not-enough-memory.png){ .screen }
 </div>
 
 ## About the watch
@@ -81,10 +81,10 @@ storage, free memory and the least it has been); the bootloader's version; the h
 Bluetooth address, the flash chip, the touch panel and the accelerometer); the firmware's tasks and
 their share of the time; and the licence.
 
-## Moving onto NeoTime
+## Moving onto BattleTime
 
-A watch running InfiniTime or wasp-os moves onto NeoTime through that system's own update path,
-with the reloader, and a watch already on NeoTime can have its bootloader updated the same way as
+A watch running InfiniTime or wasp-os moves onto BattleTime through that system's own update path,
+with the reloader, and a watch already on BattleTime can have its bootloader updated the same way as
 the firmware, only while it is on the charger. See
-[The reloader](../updates.md#the-reloader-getting-onto-neotime) and
+[The reloader](../updates.md#the-reloader-getting-onto-battletime) and
 [Updating the bootloader](../bootloader.md#updating-the-bootloader).

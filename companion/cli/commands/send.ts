@@ -1,22 +1,22 @@
-// Send one message over the UART channel, and read NeoTime's diagnostic counters.
+// Send one message over the UART channel, and read BattleTime's diagnostic counters.
 
 import { encodeForWatch, type PhoneToWatchMessage } from '@/protocol/gadgetbridge';
 import { crashSummary, decodeLastRestart } from '@/protocol/debug-report';
-import { decodeDiagnostics, NEOTIME_DIAGNOSTICS, NEOTIME_SERVICE } from '@/protocol/neotime';
+import { decodeDiagnostics, BATTLETIME_DIAGNOSTICS, BATTLETIME_SERVICE } from '@/protocol/battletime';
 
 import type { WatchSession } from '../ble';
 import { say } from '../output';
 
-export const sendUsage = `neotime notify <title> <body> [--sender <name>]
-neotime find [on|off]
-neotime vibrate [count]
-neotime send <json>
-neotime line <text> [--wait <seconds>]
-neotime diag
+export const sendUsage = `battletime notify <title> <body> [--sender <name>]
+battletime find [on|off]
+battletime vibrate [count]
+battletime send <json>
+battletime line <text> [--wait <seconds>]
+battletime diag
 
   notify, find and vibrate are the common Gadgetbridge messages; send takes
   any of them as JSON. These need a watch with the UART channel. line sends
-  text as it is and prints what comes back. diag reads NeoTime's diagnostic
+  text as it is and prints what comes back. diag reads BattleTime's diagnostic
   counters and why it last restarted.`;
 
 export async function send(session: WatchSession, message: PhoneToWatchMessage): Promise<void> {
@@ -31,7 +31,7 @@ export async function line(session: WatchSession, text: string, waitMs: number):
 }
 
 export async function diag(session: WatchSession): Promise<void> {
-  const bytes = await session.read(NEOTIME_SERVICE, NEOTIME_DIAGNOSTICS);
+  const bytes = await session.read(BATTLETIME_SERVICE, BATTLETIME_DIAGNOSTICS);
   for (const counter of decodeDiagnostics(bytes)) {
     say(`${counter.label}: ${counter.value}`);
   }

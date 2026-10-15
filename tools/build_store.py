@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Builds what the companion's app store offers into neotime/dist/store/.
+"""Builds what the companion's app store offers into battletime/dist/store/.
 
-Every app in `neotime/apps` and face in `neotime/faces` is compiled to `<id>.ntapp`, and every plugin
+Every app in `battletime/apps` and face in `battletime/faces` is compiled to `<id>.ntapp`, and every plugin
 in `companion/plugins` is packed into `<id>.ntplugin`. `store.json` lists them with a description
-taken from the docs, and `neotime-store.zip` holds all of it in one file, which is what the companion
+taken from the docs, and `battletime-store.zip` holds all of it in one file, which is what the companion
 downloads from a release. The shared library is written beside them for the companion's bundle, but
 stays out of the list and the zip because it ships inside the firmware.
 
@@ -23,14 +23,14 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-NEOTIME = ROOT / "neotime"
+BATTLETIME = ROOT / "battletime"
 COMPANION = ROOT / "companion"
 DOCS = ROOT / "docs"
 
 # The version of store.json; the companion refuses a list in a format it does not know.
 STORE_FORMAT = 1
 
-STORE_ZIP = "neotime-store.zip"
+STORE_ZIP = "battletime-store.zip"
 STORE_INDEX = "store.json"
 LIBRARY_FILE = "shared.ntlib"
 
@@ -58,7 +58,7 @@ IMAGE_KINDS = ["app", "face", "library"]
 def read_image_header(image: bytes) -> dict:
     """The kind, id, name and launcher group an image declares."""
     if len(image) < IMAGE_HEADER_BYTES or image[:4] != IMAGE_MAGIC:
-        raise ValueError("not a NeoTime app image")
+        raise ValueError("not a BattleTime app image")
     kind = IMAGE_KINDS[image[6]]
     (section_count,) = struct.unpack_from("<H", image, 10)
     id_string, name_string = struct.unpack_from("<HH", image, 16)
@@ -146,7 +146,7 @@ def sources() -> list:
     """Every app and face source, as (folder kind, id, path), sorted by id within each kind."""
     found = []
     for folder, file_name in (("apps", "app.tsx"), ("faces", "face.tsx")):
-        for directory in sorted((NEOTIME / folder).iterdir()):
+        for directory in sorted((BATTLETIME / folder).iterdir()):
             source = directory / file_name
             if source.exists() and not (folder == "apps" and directory.name in NOT_APPS):
                 found.append((folder, directory.name, source))
@@ -164,7 +164,7 @@ def build_apps(compiler: Path, out: Path) -> list:
     for folder, folder_id, source in sources():
         image = out / f"{folder_id}.ntapp"
         print(f"{folder}/{folder_id}")
-        run([str(compiler), str(source), "-o", str(image)], NEOTIME)
+        run([str(compiler), str(source), "-o", str(image)], BATTLETIME)
         header = read_image_header(image.read_bytes())
         if header["id"] != folder_id:
             sys.exit(f"{folder}/{folder_id} declares the id {header['id']}; a folder and its app share one id.")
@@ -218,7 +218,7 @@ def write_zip(out: Path, names: list) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--out", type=Path, default=NEOTIME / "dist" / "store", help="the folder to fill")
+    parser.add_argument("--out", type=Path, default=BATTLETIME / "dist" / "store", help="the folder to fill")
     parser.add_argument("--no-plugins", action="store_true", help="leave the companion's plugins out")
     arguments = parser.parse_args()
 
@@ -227,14 +227,14 @@ def main() -> None:
         shutil.rmtree(out)
     out.mkdir(parents=True)
 
-    run(["cargo", "build", "-q", "--release", "-p", "neotime-compiler"], NEOTIME)
-    compiler = NEOTIME / "target" / "release" / "neotime-compiler"
-    run([str(compiler), "library", "-o", str(out / LIBRARY_FILE)], NEOTIME)
+    run(["cargo", "build", "-q", "--release", "-p", "battletime-compiler"], BATTLETIME)
+    compiler = BATTLETIME / "target" / "release" / "battletime-compiler"
+    run([str(compiler), "library", "-o", str(out / LIBRARY_FILE)], BATTLETIME)
 
     apps = build_apps(compiler, out)
     plugins = [] if arguments.no_plugins else build_plugins(out)
 
-    version = re.search(r'^version = "(.*)"', (NEOTIME / "firmware" / "Cargo.toml").read_text(), re.M)
+    version = re.search(r'^version = "(.*)"', (BATTLETIME / "firmware" / "Cargo.toml").read_text(), re.M)
     index = {
         "format": STORE_FORMAT,
         "version": version.group(1) if version else "",

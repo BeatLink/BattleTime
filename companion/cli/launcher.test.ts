@@ -17,7 +17,7 @@ afterEach(() => {
 
 // A mock watch with Snake, which declares games, and Hello, which declares nothing.
 async function session() {
-  const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+  const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
   const files = await FileService.open(target);
   const packages = await PackagesClient.open(target);
   await installImage(files, packages, testImage('snake', 'Snake', 'app', 0, 'games'));
@@ -31,7 +31,7 @@ async function session() {
   return { target, onWatch, session: { files: async () => files, packages: async () => packages } };
 }
 
-describe('neotime launcher', () => {
+describe('battletime launcher', () => {
   it('shows the default groups on a watch without a file', async () => {
     const { session: watch } = await session();
     await launcher(watch, []);

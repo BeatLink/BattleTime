@@ -15,7 +15,7 @@ const TODAY = new Date(2026, 9, 14, 12, 0);
 
 // The mock watch with its sample records, its file service, and the lines the companion sends it.
 async function mockWatch() {
-  const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+  const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
   watch.fileService.addSampleRecords(TODAY);
   const service = await FileService.open(watch);
   const mock = new MockGadgetbridge();

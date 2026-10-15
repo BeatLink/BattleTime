@@ -11,7 +11,7 @@ document for its part instead.
 - [ ] **The DCDC regulator on the PineTime.** The firmware turns the nRF52832's DCDC regulator on
   at start (`config.dcdc.reg1`), which has run only in the emulator, which models no regulator.
   Flash it and check that the watch boots, connects, and that the battery percentage in the
-  System app and `neotime battery` reads about the same as before and falls no faster over a day.
+  System app and `battletime battery` reads about the same as before and falls no faster over a day.
 
 - [ ] **TWIM power-down on the PineTime.** `i2c_bus::SleepingTwim` powers TWIM1 down after every
   transfer for nRF52832 anomaly 89, which the emulator does not model. Check that touch, steps and
@@ -48,7 +48,7 @@ document for its part instead.
   display and flash-read waits could sleep in WFE after the bus had already been freed, and
   cad2538f makes the bus interrupt send SEV every time. With every app installed, open and close
   the launcher about ten times and open a few apps; expect no freeze and no "Last restart:
-  watchdog" in `neotime debug`.
+  watchdog" in `battletime debug`.
 
 - [ ] **DMA flash reads and prefetch on the PineTime.** Reading the external flash by DMA, with
   `file_bytes` offsets and `prefetch_file` (9d4987d7), has run only in the emulator, which models no
@@ -62,7 +62,7 @@ document for its part instead.
 
 - [ ] **Resuming a firmware update on the PineTime.** The watch keeping what reached flash and the
   companion reconnecting up to four times to send the rest (9c9cb262) has run only in the emulator.
-  An ordinary `neotime flash` finishes and confirms. Then flash the same zip again and, at 20-30%,
+  An ordinary `battletime flash` finishes and confirms. Then flash the same zip again and, at 20-30%,
   run `bluetoothctl disconnect FC:9B:D8:FD:4A:F8`. Expect "Update paused" and "Kept N KB" on the
   watch, "Lost the watch; reconnecting to carry on (try 1 of 4)..." from the CLI, its progress bar
   starting again near the kept amount rather than 0%, and the update validating, installing and
@@ -73,7 +73,7 @@ document for its part instead.
   (5b035fed), text advances without flash reads (4af364ab) and the flash instruction cache
   (d1e86190) have not been timed on the watch. Leave it untouched on the digital face and read the
   diagnostics characteristic `6e540002-0000-4000-8000-4e656f54696d` raw: words 22 and 23 (little
-  endian) are DrawMicroseconds and DisplaySendMicroseconds. Send `neotime notify --sender Messages
+  endian) are DrawMicroseconds and DisplaySendMicroseconds. Send `battletime notify --sender Messages
   "Dinner plans" "Running ten minutes late. Save me a seat by the window, and order the usual if
   they ask first."`, wait 12 s and read again, three times, then once more after 40 s of quiet.
   Earlier draw times were 419 ms with bitmap fonts and 379-749 ms with the geometric font; expect
@@ -104,15 +104,15 @@ document for its part instead.
 
 - [ ] **The companion app store with the PineTime.** The store (51d5de81, b0909f02) has not
   installed anything on a real watch; no firmware change is needed. From `companion/`:
-  - `neotime store list` lists 54 apps and faces, alarm to word-clock, leaving out the
+  - `battletime store list` lists 54 apps and faces, alarm to word-clock, leaving out the
     companion-only prompt app;
-  - `neotime apps install dice` installs the bundled dice app by id, printing "Installed Dice as
-    dice.", and dice shows in `neotime apps list`;
-  - `neotime store fetch BeatLink/NeoTime 1 <folder>` prints "Fetched 93 from v0.1.0 into
+  - `battletime apps install dice` installs the bundled dice app by id, printing "Installed Dice as
+    dice.", and dice shows in `battletime apps list`;
+  - `battletime store fetch BeatLink/BattleTime 1 <folder>` prints "Fetched 93 from v0.1.0 into
     <folder>." (56 apps and faces, 37 plugins);
   - installing an app from that folder that is not on the watch, such as `haiku.ntapp`, prints
     "Installed Haiku as haiku." and it appears in the launcher;
-  - `neotime apps remove` takes it, and dice if it was not there before, out of `apps list` and the
+  - `battletime apps remove` takes it, and dice if it was not there before, out of `apps list` and the
     launcher;
   - in the Tauri desktop app, Watch tab, Store, Look on GitHub, v0.1.0, adding and installing Buzz
     back puts the plugin under Plugins and a Buzz back app on the watch, and Uninstall removes both.
@@ -129,7 +129,7 @@ document for its part instead.
   opposite way, until one more press at `/` leaves the app. Afterwards Settings > System > memory
   shows nothing unusual.
 
-- [ ] **Touch panel on the PineTime.** The firmware runs `neotime-touch` on the watch, but these
+- [ ] **Touch panel on the PineTime.** The firmware runs `battletime-touch` on the watch, but these
   checks have not been made:
   - `start` succeeds and `read_chip_info` gives a sensible chip ID (0xb4 or a near value);
   - with the 30 px swipe distance, short upward swipes count and a scroll in a list never turns
@@ -147,7 +147,7 @@ document for its part instead.
   - `wake` brings back the settings `start` was given.
 
 - [ ] **Accelerometer on the PineTime.** The firmware counts steps with
-  `neotime-accelerometer` on the watch, but these checks have not been made:
+  `battletime-accelerometer` on the watch, but these checks have not been made:
   - `start` succeeds and names the chip the watch really has, which on this watch is a BMA425;
   - lying flat with the screen up reads about +1000 milli-g on z, and tilting it reads the
     expected signs on x and y, which settles whether `Orientation::PINETIME` is right;
@@ -170,7 +170,7 @@ document for its part instead.
   `/day_blocks/heart` fills while the Heart app or the background interval measures, that the
   charging bit follows the charger, and that the companion's Heart and System pages show the days.
 
-- [ ] **Bluetooth controller on the PineTime.** The firmware runs `neotime-bluetooth` on the watch and
+- [ ] **Bluetooth controller on the PineTime.** The firmware runs `battletime-bluetooth` on the watch and
   takes updates over it, but these checks, with a phone and with `btmon` on the computer, have not
   been made:
   - advertisements show up on all three channels, with the right name and address;
@@ -205,20 +205,20 @@ document for its part instead.
   - settings survive a restart, from `/settings/system` and `/settings/theme`;
   - a `settings` message from the companion app changes them and the reply lists every key.
 - [ ] **Files over BLEFS on the PineTime.** The file service has run only in the emulator, against a
-  raw HCI client. On the watch, with the companion's `neotime files` commands, check that:
+  raw HCI client. On the watch, with the companion's `battletime files` commands, check that:
   - the phone reaches an MTU of 124, so a write of up to 121 bytes is taken whole;
   - listing, making a folder, writing a file, reading it back, moving it and deleting a folder work;
   - a long listing arrives complete, with no notification lost while packets are short;
   - free space reads back through the companion's scratch-file write.
 - [ ] **Installing apps on the PineTime.** On the watch, firmware ae36259 took the shared library,
-  the launcher, a face and every app through `neotime apps install` and listed them with `apps`.
+  the launcher, a face and every app through `battletime apps install` and listed them with `apps`.
   Still check on the watch that:
   - the apps appear in the launcher without a restart;
   - hiding, showing and removing one updates the launcher;
   - an image with a bad id or a library that fails its check is refused with an error.
 - [ ] **The Software app and memory checks on the PineTime.** They have run only in the emulator.
   On the watch, check that the Software app lists every app with its memory, that its switches turn
-  apps off and on, that the launcher and the last face refuse to turn off, and that `neotime apps
+  apps off and on, that the launcher and the last face refuse to turn off, and that `battletime apps
   list` prints each app's memory.
 - [ ] **Bluetooth stopped advertising after an update.** Firmware 94e78c0, the first with the
   crystal and TIMER0 sleeping between radio events, stopped advertising on the watch soon after it
@@ -238,7 +238,7 @@ document for its part instead.
   - an ordinary start after that shows the crash no more.
 - [ ] **The crash screen on the PineTime.** It has run only in the emulator, and saving a debug report
   only against the companion's mock watch. On the watch, check that a crash shows the crash page
-  after the restart, that Restart and the side button go on to the face, and that `neotime debug`
+  after the restart, that Restart and the side button go on to the face, and that `battletime debug`
   saves a report naming the crash and the open app and then takes the watch to its face.
 - [ ] **A debug report saved over the emulator's Bluetooth bridge.** The write that dismisses the
   crash is tested only against the companion's mock; `tools/packages_over_hci.py` could write `01` to
@@ -255,9 +255,9 @@ document for its part instead.
   - a font chosen in the companion app shows the next time the app opens;
   - a long note scrolls smoothly to its last line, with no line drawn twice or out of place;
   - the stack keeps its margin with the app open, which in the emulator matches the launcher's;
-  - with no note (`neotime note remove`), the app shows "No note yet. Write or choose one in the
-    NeoTime companion app." over four lines, as in
-    `neotime/harness/snapshots/screens/app-notes-empty.png` (e266858f).
+  - with no note (`battletime note remove`), the app shows "No note yet. Write or choose one in the
+    BattleTime companion app." over four lines, as in
+    `battletime/harness/snapshots/screens/app-notes-empty.png` (e266858f).
 - [ ] **The remote app on the PineTime.** It has run only in the test harness. With the companion
   app's remote screen, check that:
   - buttons chosen in the companion app reach `/remote/buttons` and show the next time the app
@@ -265,19 +265,19 @@ document for its part instead.
   - each tap's `{"t":"app","ch":"remote",...}` line reaches the phone, which runs that button;
   - the stack keeps its margin while a tap's line is sent.
 - [ ] **The QR code app on the PineTime.** It (9e8f7b13) has run only in the test harness and the
-  companion's mock watch. With the companion app's QR code screen or `neotime qr`, check that:
+  companion's mock watch. With the companion app's QR code screen or `battletime qr`, check that:
   - `/qr/list` and the codes in `/qr/<slot>` arrive, the list shows them the next time the app
     opens, and a tapped code is read and drawn without a long pause;
   - another phone scans a short link, a Wi-Fi code and a code over 74 modules;
   - drawing the largest code stays quick enough for the watchdog.
   - with up to eight codes (87dff11f, which needs the qr-code app installed from the same commit):
-    `neotime qr https://example.com --label Example` and `neotime qr wifi Home secret` print
-    "Added ... as number 1" and "2", and `neotime qr list` prints "1. Example" and "2. Home";
+    `battletime qr https://example.com --label Example` and `battletime qr wifi Home secret` print
+    "Added ... as number 1" and "2", and `battletime qr list` prints "1. Example" and "2. Home";
   - the app lists "Example" and "Home" with the screen bright, and a tapped row draws its code
     black on white with its caption under it, without a long pause or watchdog reset;
-  - after `neotime qr move 2 up`, `neotime qr rename 1 "Guest Wi-Fi"` and `neotime qr remove 2`,
+  - after `battletime qr move 2 up`, `battletime qr rename 1 "Guest Wi-Fi"` and `battletime qr remove 2`,
     reopening shows only "Guest Wi-Fi";
-  - after `neotime qr remove all`, it shows "No QR codes yet. Make them in the NeoTime companion
+  - after `battletime qr remove all`, it shows "No QR codes yet. Make them in the BattleTime companion
     app."
   When these pass, also remove the QR item under "Untried with a watch" in companion/TODO.md.
 - [ ] **Transitions and scrolling on the PineTime.** Slides, wipes and hardware-scrolled lists have
@@ -292,7 +292,7 @@ document for its part instead.
   - the stack keeps 2 KB spare with the alarm open while its list scrolls.
 - [ ] **Battery line and charge floor on the PineTime.** The bootloader's battery line and the
   updater's 3.7 V floor before a bootloader write (75f9bcde) have run only in the emulator. Send
-  `dist/bootloader-updater.zip` with `neotime flash`, then on the watch check that:
+  `dist/bootloader-updater.zip` with `battletime flash`, then on the watch check that:
   - off the charger the updater says "Plug in the charger" and its line reads "unplugged";
   - on the charger the line reads "charging" with a charge close to the system app's, and the
     updater writes the bootloader once the battery reads at least 3.7 V;
@@ -309,7 +309,7 @@ document for its part instead.
   - a write of `03 01 00` then `Sam` opens the call screen for Sam and rings until Reject or the button.
 - [ ] **The phone's own services on the PineTime.** The client for the phone's Current Time and
   Alert Notification services has run only against `tools/check_phone_services.py` playing the
-  phone through the emulator's bridge, and against the pretend phone in `neotime-phone-client`'s
+  phone through the emulator's bridge, and against the pretend phone in `battletime-phone-client`'s
   tests. On the watch, with an Android phone serving both through nRF Connect's GATT server, check
   that a few seconds after connecting the clock takes the phone's time and zone, the firmware is
   confirmed after an update, a New Alert notified by the phone shows as a notification, and that
@@ -340,7 +340,7 @@ See [bluetooth.md](bluetooth.md) for the details of each.
 
 ## Firmware updates
 
-See [updates.md](updates.md). The reloader moved a watch from wasp-os onto NeoTime, and an update
+See [updates.md](updates.md). The reloader moved a watch from wasp-os onto BattleTime, and an update
 over Bluetooth and the button-hold recovery have both worked on that watch.
 
 - [ ] **Check why wasp-os's update mode gives way to the reloader** about 4 seconds after the
@@ -360,13 +360,13 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.
 - [ ] **Choose what runs over Bluetooth.** Rolling back to the previous firmware or installing the
   recovery firmware needs the bootloader's button menu. A companion command such as
-  `neotime boot previous|recovery` could do the same from the firmware: check the image's header and
+  `battletime boot previous|recovery` could do the same from the firmware: check the image's header and
   CRC, copy it into the update slot (`copy_previous_into_update_slot`, `copy_image_into_update_slot`),
   mark a swap and restart, so it runs on trial like any update.
 - [ ] **Find why the first `slots` after a flash timed out.** On 2026-10-13 the first
-  `neotime slots`, sent right after `neotime flash` and `neotime time`, got no reply; every later
+  `battletime slots`, sent right after `battletime flash` and `battletime time`, got no reply; every later
   request answered at once and it did not happen again.
-- [ ] **Install recovery from a resized slot on the watch.** After `neotime slots fit` shrank the
+- [ ] **Install recovery from a resized slot on the watch.** After `battletime slots fit` shrank the
   watch's recovery slot to 168 KB, the firmware read the record back, but the bootloader menu's
   Install recovery from that slot has only run in the emulator; it needs a button hold.
 - [ ] **Run the stack overflow test in the emulator.** `crash_record`'s "A Stack Overflow Faults At
@@ -380,7 +380,7 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   advertise as "InfiniTime" so Gadgetbridge's PineTime/InfiniTime coordinator takes it, but no real
   Gadgetbridge has paired with it yet. Try it with InfiniTime's Simple Weather and Immediate Alert
   services, and with a build that has the other three, and check whether Gadgetbridge insists on bonding, which
-  the controller cannot do yet. A coordinator of NeoTime's own in Gadgetbridge would need no setting.
+  the controller cannot do yet. A coordinator of BattleTime's own in Gadgetbridge would need no setting.
 
 ## UI toolkit
 
@@ -397,12 +397,12 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   profile is a small file in external flash listing app ids, their order, the watch face and which
   subscriptions are on. Switching profiles only reads files, so it writes nothing to flash.
 - [ ] **Temporary apps the companion sends by itself.** The watch runs temporary apps from `/temp`
-  and the companion can send one by hand (`neotime apps run`, `neotime ask`), but nothing sends a
+  and the companion can send one by hand (`battletime apps run`, `battletime ask`), but nothing sends a
   call screen, a custom notification page or a game score when a call, a notification or a score
   arrives on the phone, and the companion app has no screen for choosing them.
 - [ ] **Try temporary apps on the watch.** They have run only in the emulator. On the watch, check
-  that `neotime ask` opens the prompt over the face and over another app with the screen dark and
-  lit, that Yes and No reach the computer and go back, that a second `neotime ask` reuses the cached
+  that `battletime ask` opens the prompt over the face and over another app with the screen dark and
+  lit, that Yes and No reach the computer and go back, that a second `battletime ask` reuses the cached
   image, and that turning Bluetooth off on the computer closes the prompt.
 - [ ] **More phone data as inputs.** Weather, music, navigation and calls already reach apps as
   system values; others, such as the next calendar event, unread count or a game score, could
@@ -423,7 +423,7 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   them under "not served yet". `call`, `musicinfo`, `musicstate`, `weather`, `nav`, `find`, `vibrate`,
   `status` and the `music`, `call`, `findPhone`, `request` and `app` lines are served (`services/companion/src/phone.rs`).
   - `alarm` (set or report the alarms), `steps` (a day in 240 six-minute slots, read from the
-    step log with `neotime_steps::log`) and `http` (answers to an app's request, and the watch's `http`
+    step log with `battletime_steps::log`) and `http` (answers to an app's request, and the watch's `http`
     line).
   - The weather's coming days, sunrise and sunset: Gadgetbridge's `weather` line carries none, so
     only InfiniTime's Simple Weather service fills them; the companion app needs keys of its own.
@@ -442,7 +442,7 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   they call, which run on every redraw, in RAM and read a handler from `/apps` when its event
   comes. Apps stay on the external flash; nothing of an
   app is copied into the internal flash.
-- [ ] **Redraw periods per branch.** `analyse_expression` in `neotime/runtime/src/bindings.rs`
+- [ ] **Redraw periods per branch.** `analyse_expression` in `battletime/runtime/src/bindings.rs`
   takes the finest step anywhere in an expression, so `on ? now.value : start_of_minute(now.value)`
   redraws once a minute even when the raw branch shows. Treat a clock read that reaches the result
   uncut as one second. Checking only the next instruction makes digital and casio wake each second,
@@ -482,7 +482,7 @@ each item says what it costs and what it would save.
   puzzle15). Measured first: each of these is two or three assignments in its app, which a call
   with its slot numbers would not shrink, so it pays only if a longer shared routine turns up.
 - [ ] **Calls from apps that still compute shared things by hand.** Any app or face that repeats
-  what a `neotime/lib` function does should call it. One-line helpers such as `(x + 1) % n` stay
+  what a `battletime/lib` function does should call it. One-line helpers such as `(x + 1) % n` stay
   inlined, since a call costs as many bytes.
 - [ ] **Comparing with a constant array.** `arrays_equal` takes only signals, so puzzle15's check
   against its constant solved board still loops; the compiler could compare against a constant
@@ -525,7 +525,7 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
   heap. The package manager now refuses images larger than an app's budget, but one inside it can
   still meet a heap the open app has mostly taken; read `LlffHeap::free` first and refuse instead.
 - [ ] **Packages in the simulator.** The simulator gives no `packages` values, so the Software app
-  shows an empty list there; feed it the apps it loaded, through `neotime-packages`'s checks.
+  shows an empty list there; feed it the apps it loaded, through `battletime-packages`'s checks.
 - [ ] **Count the heap's peak exactly.** The emulator measures the allocator's bytes in use and
   the highest heap byte touched, which misses allocations filled with zeros. A peak counter in the
   allocator, read over the diagnostics characteristic, would check the heap estimate against every
@@ -539,12 +539,12 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
 
 ## Gaps against InfiniTime
 
-What InfiniTime has for each feature NeoTime already has, compared file by file with InfiniTime
+What InfiniTime has for each feature BattleTime already has, compared file by file with InfiniTime
 `6c119eb5` on 2026-10-11. Items already listed in the sections above are not repeated. On the
-`worktree-prune-superseded` branch of the BeatLink InfiniTime fork, the files NeoTime has fully
+`worktree-prune-superseded` branch of the BeatLink InfiniTime fork, the files BattleTime has fully
 replaced are removed, so what is left there is the porting reference for these items.
-The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact/LqGLNFf5MvT5D39o44hfUv); the earlier feature summary is
-[NeoTime vs InfiniTime: feature coverage](https://claude.ai/code/artifact/4a70bc3f-2b66-4bdf-8ba9-c9233c2f28ea).
+The full report is [InfiniTime files against BattleTime](https://claude.ai/artifact/LqGLNFf5MvT5D39o44hfUv); the earlier feature summary is
+[BattleTime vs InfiniTime: feature coverage](https://claude.ai/code/artifact/4a70bc3f-2b66-4bdf-8ba9-c9233c2f28ea).
 
 ### Board and system
 
@@ -553,10 +553,10 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   radio is on. Set `config.dcdc.reg1 = true` in the firmware and the bootloader.
 - [ ] **Recover the I2C bus.** InfiniTime clocks SCL 16 times at start to free a bus a sensor left
   held, runs the TWIM at about 390 kHz because of the nRF52832's 400 kHz timing erratum, and resets
-  the TWIM when a transfer never finishes. NeoTime runs at 400 kHz with no time limit, so a frozen
+  the TWIM when a transfer never finishes. BattleTime runs at 400 kHz with no time limit, so a frozen
   bus stops touch and steps for good. InfiniTime also turns the TWIM off between transfers.
 - [ ] **Warn when a part fails at start.** InfiniTime shows a warning screen when the touch
-  controller does not start; NeoTime shows nothing.
+  controller does not start; BattleTime shows nothing.
 
 ### Display
 
@@ -622,7 +622,7 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
 - [ ] **Pushed events for closed apps.** Closed apps run their timers, alarms, daily times, clock
   changes and heart rate periods, but steps, step goal, motion, battery, phone, notification, call,
   music, weather, navigation and settings-change subscriptions reach only the open app. Each would
-  load its listening closed apps through `neotime_app_host::closed_apps` as the timers do.
+  load its listening closed apps through `battletime_app_host::closed_apps` as the timers do.
 - [ ] **An emulator suite for closed apps.** A timer ringing while closed was measured by hand in
   the emulator ([memory-map.md](memory-map.md)); no suite under `tests/emulator` repeats it, so a
   later change to that path is not checked for its stack and heap.
@@ -686,12 +686,12 @@ The full report is [InfiniTime files against NeoTime](https://claude.ai/artifact
   is sent with the bootloader updater.
 - [ ] **The display's state on the system app's pages,** as InfiniTime's System Info screen shows.
 - [ ] **The full set of navigation turns.** Phones send about 50 icon names, such as forks,
-  merges, ramps, ferries and roundabout exits, and the distance as text. NeoTime has 10 turns and
+  merges, ramps, ferries and roundabout exits, and the distance as text. BattleTime has 10 turns and
   always prints metres. Add InfiniTime's navigation pictures, map each name to one, and show the
   distance as the phone writes it.
 - [ ] **Night icons in the weather app.** It shows the sun at night where InfiniTime shows the
   moon. One shared night-aware lookup would also replace the copies in the faces.
-- [ ] **Bebas Neue and Teko for Infineat,** which draws its time and date in them; NeoTime
+- [ ] **Bebas Neue and Teko for Infineat,** which draws its time and date in them; BattleTime
   substitutes its own font of lines and arcs.
 - [ ] **The rest of the music values.** InfiniTime's music service also carries the album, the track
   number and total, playback speed, repeat and shuffle, and moves the position on at the playback
@@ -731,7 +731,7 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 ### Firmware updates
 
 - [ ] **Escaping the reloader under InfiniTime leads back to the reloader.** InfiniTime's DFU
-  installs the reloader as an unconfirmed MCUBoot test image, and the reloader stages NeoTime over
+  installs the reloader as an unconfirmed MCUBoot test image, and the reloader stages BattleTime over
   MCUBoot's secondary slot (SPI 0x40000 to 0xB4000), where the previous InfiniTime waits. After
   that, a reset does not bring InfiniTime back. MCUBoot 1.5.0, which bootloader 1.0.0 is built on,
   checks the slot before reverting, finds no valid image, erases it and starts the reloader again,
@@ -749,7 +749,7 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **Update progress as a bar.** The status page shows the kilobytes, the image size and a
   percentage in words. Draw a bar under them as well, as InfiniTime does.
 - [ ] **Give up on a stalled update.** InfiniTime aborts an update when no packet has arrived for
-  10 seconds; NeoTime only aborts when the link drops.
+  10 seconds; BattleTime only aborts when the link drops.
 - [ ] **A swap progress bar on the bootloader screen.** It says "Installing firmware" for up to 30
   seconds with nothing moving. Its 20 KB has about 1.9 KB to spare.
 
@@ -766,7 +766,7 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   be measured again. Let it open a named app, and shrink the heart app's peak.
 - [ ] **Clippy fails with warnings denied.** `cargo clippy --release -- -D warnings` stops on two
   `needless_borrow`s in `firmware/src/main.rs` (`with_attribute_server(&server)`) and three in
-  `neotime-runtime`.
+  `battletime-runtime`.
 - [ ] **No MPU in pinetime-engine.** The engine models no memory protection unit, so the
   stack-guard test skips there.
 - [ ] **A DFU upload tool in `tools/`** that sends a zip over BlueZ, as wasp-os's `dfu.py` does,
@@ -791,12 +791,12 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **App host API for tests.** `widget_bounds` gives no clip rectangle, there is no iterator
   over the open screen's nodes, and there is no call to redraw the whole screen. The harness works
   around all three.
-- [ ] **Step-by-step moves onto NeoTime** in the [guide](guide/updates-and-recovery.md): from
+- [ ] **Step-by-step moves onto BattleTime** in the [guide](guide/updates-and-recovery.md): from
   InfiniTime and from wasp-os, and updating with Gadgetbridge or ITD.
 
 ### Not started
 
-InfiniTime has these and NeoTime has nothing for them yet:
+InfiniTime has these and BattleTime has nothing for them yet:
 
 | Area | What InfiniTime has |
 |---|---|
@@ -806,10 +806,10 @@ InfiniTime has these and NeoTime has nothing for them yet:
 
 ## Gaps against the wasp-os fork
 
-What the BeatLink wasp-os fork has for each feature NeoTime already has, compared with its
+What the BeatLink wasp-os fork has for each feature BattleTime already has, compared with its
 `development` branch at `4f065f7` on 2026-10-11. Items already listed above are not repeated. The
 full report is
-[NeoTime vs wasp-os: feature coverage](https://claude.ai/code/artifact/1676468a-1a4f-421b-ac54-345934b08570).
+[BattleTime vs wasp-os: feature coverage](https://claude.ai/code/artifact/1676468a-1a4f-421b-ac54-345934b08570).
 
 ### Display
 
@@ -850,8 +850,8 @@ full report is
 
 ### Not started
 
-The fork has these and NeoTime has nothing for them yet; the faces, apps and companion features
-NeoTime already ported are left out. Most also appear in the InfiniTime table.
+The fork has these and BattleTime has nothing for them yet; the faces, apps and companion features
+BattleTime already ported are left out. Most also appear in the InfiniTime table.
 
 | Area | What the fork has |
 |---|---|
@@ -874,7 +874,7 @@ only by its Gadgetbridge fork and web app, so they are not worth copying.
 ### Watch faces
 
 - [ ] **Quick face switching.** PinetimeLite moves to the next face on a long press of any face.
-  Decide whether NeoTime has a gesture for this, since several faces use the long press for their
+  Decide whether BattleTime has a gesture for this, since several faces use the long press for their
   own settings.
 
 ### Developer tools
@@ -889,7 +889,7 @@ only by its Gadgetbridge fork and web app, so they are not worth copying.
 
 ## Other firmware to study
 
-Not compared yet. Look through each for features worth bringing to NeoTime.
+Not compared yet. Look through each for features worth bringing to BattleTime.
 
 | Firmware | What it is |
 |---|---|

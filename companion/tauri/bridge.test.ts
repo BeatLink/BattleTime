@@ -22,14 +22,14 @@ function loadBridge(onAndroid: boolean) {
     pluginListener = listener;
   });
   const fakeWindow: Record<string, unknown> = {
-    __NEOTIME_ANDROID__: onAndroid,
+    __BATTLETIME_ANDROID__: onAndroid,
     __TAURI_INTERNALS__: { invoke },
     __TAURI__: { core: { addPluginListener }, event: { listen: jest.fn() } },
   };
   const source = readFileSync(join(__dirname, 'src', 'bridge.js'), 'utf8');
   new Function('window', source)(fakeWindow);
   return {
-    bridge: fakeWindow.neotime as Bridge,
+    bridge: fakeWindow.battletime as Bridge,
     invoke,
     addPluginListener,
     sendPhoneEvent: (payload: unknown) => pluginListener(payload),

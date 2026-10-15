@@ -1,6 +1,6 @@
 [package]
-name = "neotime-companion"
-description = "The NeoTime Companion app, on the desktop and on Android"
+name = "battletime-companion"
+description = "The BattleTime Companion app, on the desktop and on Android"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,11 +8,11 @@ repository.workspace = true
 
 # Android loads the app as a shared library, and the desktop binary calls the same `run`.
 [lib]
-name = "neotime_companion_lib"
+name = "battletime_companion_lib"
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "neotime-companion"
+name = "battletime-companion"
 path = "src/main.rs"
 
 [features]
@@ -23,7 +23,7 @@ custom-protocol = ["tauri/custom-protocol"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-neotime-companion-core = { path = "../core" }
+battletime-companion-core = { path = "../core" }
 futures = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

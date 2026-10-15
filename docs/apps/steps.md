@@ -18,19 +18,19 @@ system keeps the step history, so nothing here runs in the background.
 
 ## Screens
 
-![Today's steps](../../neotime/harness/snapshots/screens/app-steps.png)
+![Today's steps](../../battletime/harness/snapshots/screens/app-steps.png)
 
 Today's steps, short of the goal, with yesterday's total, the goal and the trip meter.
 
-![Today's steps past the goal](../../neotime/harness/snapshots/screens/app-steps-goal-met.png)
+![Today's steps past the goal](../../battletime/harness/snapshots/screens/app-steps-goal-met.png)
 
 The ring turns green once the goal is met.
 
-![The last seven days](../../neotime/harness/snapshots/screens/app-steps-week.png)
+![The last seven days](../../battletime/harness/snapshots/screens/app-steps-week.png)
 
 The last seven days, after a swipe left, with a button for each day.
 
-![One day by hour](../../neotime/harness/snapshots/screens/app-steps-day.png)
+![One day by hour](../../battletime/harness/snapshots/screens/app-steps-day.png)
 
 Today by hour, after a second swipe left or a tap on a day; > is greyed out on today.
 

@@ -7,7 +7,7 @@ must fall back to analog.
 
     python3 -I tools/check_watch_face.py FIRMWARE_ELF
 
-Run it inside `nix develop`, with the firmware built (`cd neotime/firmware && cargo build
+Run it inside `nix develop`, with the firmware built (`cd battletime/firmware && cargo build
 --release`). It finds the emulator in $PINETIME_EMULATOR, or in a PineTimeEmulator folder beside
 the main checkout, and takes about a minute.
 """
@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parent.parent
-NEOTIME = REPOSITORY / "neotime"
+BATTLETIME = REPOSITORY / "battletime"
 
 # ============================================================================
 # The install
@@ -33,7 +33,7 @@ FACE_IDS = ["analog", "digital"]
 FIRMWARE_VECTOR_TABLE = 0x8100
 IMAGE_HEADER_SIZE = 256
 FIRST_START_UICR = [(0x10001200, 0x15), (0x10001204, 0x15), (0x1000120C, 0xFFFFFFFE)]
-OPEN_APP_SYMBOL = "neotime_firmware::restart::OPEN_APP"
+OPEN_APP_SYMBOL = "battletime_firmware::restart::OPEN_APP"
 
 # The settings file: its format byte, then records of a setting's number and its value.
 SETTINGS_FILE_FORMAT = 1
@@ -42,7 +42,7 @@ WATCH_FACE_SETTING = 18
 SECONDS_TO_OPEN = 120
 
 
-def run(command, folder=NEOTIME):
+def run(command, folder=BATTLETIME):
     return subprocess.run(command, capture_output=True, text=True, cwd=folder, check=True).stdout
 
 
@@ -72,8 +72,8 @@ def face_number(face_id):
 
 def build_library(folder):
     """Compiles the two faces and the shared library; gives the faces' images and the library."""
-    run(["cargo", "build", "-q", "-p", "neotime-compiler"])
-    compiler = str(NEOTIME / "target" / "debug" / "neotime-compiler")
+    run(["cargo", "build", "-q", "-p", "battletime-compiler"])
+    compiler = str(BATTLETIME / "target" / "debug" / "battletime-compiler")
     faces = {}
     for face_id in FACE_IDS:
         faces[face_id] = folder / f"{face_id}.ntapp"
@@ -92,7 +92,7 @@ def build_flash(folder, faces, chosen_face_id):
         settings.write_bytes(bytes([SETTINGS_FILE_FORMAT]) + record)
         files.append(f"/settings/system={settings}")
     flash = folder / f"flash-{chosen_face_id}.bin"
-    run(["cargo", "run", "-q", "-p", "neotime-packages", "--example", "filesystem_use", "--",
+    run(["cargo", "run", "-q", "-p", "battletime-packages", "--example", "filesystem_use", "--",
          "--no-theme", "--image", str(flash), *files])
     return flash
 

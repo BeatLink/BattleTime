@@ -8,7 +8,7 @@ and leaves a picture of the face afterwards in the folder given, if one is.
 
     python3 -I tools/check_set_clock.py FIRMWARE_ELF [PICTURE_FOLDER]
 
-Run it inside `nix develop`, with the firmware built (`cd neotime/firmware && cargo build
+Run it inside `nix develop`, with the firmware built (`cd battletime/firmware && cargo build
 --release`). It finds the emulator in $PINETIME_EMULATOR, or in a PineTimeEmulator folder beside
 the main checkout, and takes about two minutes.
 """
@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parent.parent
-NEOTIME = REPOSITORY / "neotime"
+BATTLETIME = REPOSITORY / "battletime"
 
 # ============================================================================
 # The install
@@ -38,8 +38,8 @@ SETTINGS_ID = "settings"
 FIRMWARE_VECTOR_TABLE = 0x8100
 IMAGE_HEADER_SIZE = 256
 FIRST_START_UICR = [(0x10001200, 0x15), (0x10001204, 0x15), (0x1000120C, 0xFFFFFFFE)]
-OPEN_APP_SYMBOL = "neotime_firmware::restart::OPEN_APP"
-KEPT_CLOCK_SYMBOL = "neotime_firmware::clock::KEPT_CLOCK"
+OPEN_APP_SYMBOL = "battletime_firmware::restart::OPEN_APP"
+KEPT_CLOCK_SYMBOL = "battletime_firmware::clock::KEPT_CLOCK"
 KEPT_CLOCK_MARKER = 0x454D_4954
 
 # The settings file: its format byte, then records of a setting's number and its value.
@@ -61,7 +61,7 @@ SECONDS_TO_SETTLE = 1.0
 SECONDS_ALLOWED_FOR_THE_STEPS = 30
 
 
-def run(command, folder=NEOTIME):
+def run(command, folder=BATTLETIME):
     return subprocess.run(command, capture_output=True, text=True, cwd=folder, check=True).stdout
 
 
@@ -83,8 +83,8 @@ def emulator_folder():
 
 def build_install(folder):
     """Compiles the face, the launcher, Settings and the shared library, and writes the flash image; gives the flash and the library."""
-    run(["cargo", "build", "-q", "-p", "neotime-compiler"])
-    compiler = str(NEOTIME / "target" / "debug" / "neotime-compiler")
+    run(["cargo", "build", "-q", "-p", "battletime-compiler"])
+    compiler = str(BATTLETIME / "target" / "debug" / "battletime-compiler")
     packages = []
     for package_id, source in [(FACE_ID, "faces/digital/face.tsx"), (LAUNCHER_ID, "apps/launcher/app.tsx"),
                                (SETTINGS_ID, "apps/settings/app.tsx")]:
@@ -97,7 +97,7 @@ def build_install(folder):
     records = b"".join(struct.pack("<Bi", number, value) for number, value in [SCREEN_TIMEOUT_SECONDS, USES_24_HOUR_CLOCK])
     settings.write_bytes(bytes([SETTINGS_FILE_FORMAT]) + records)
     flash = folder / "flash.bin"
-    run(["cargo", "run", "-q", "-p", "neotime-packages", "--example", "filesystem_use", "--",
+    run(["cargo", "run", "-q", "-p", "battletime-packages", "--example", "filesystem_use", "--",
          "--no-theme", "--image", str(flash), *packages, f"/settings/system={settings}"])
     return flash, library
 

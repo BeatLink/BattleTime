@@ -16,18 +16,18 @@ so equal numbers join, and try to make 2048.
 
 ## Screens
 
-![A new game](../../neotime/harness/snapshots/screens/app-twos.png)
+![A new game](../../battletime/harness/snapshots/screens/app-twos.png)
 
 A new game with its first two tiles, both 2s.
 
-![A game in play](../../neotime/harness/snapshots/screens/app-twos-playing.png)
+![A game in play](../../battletime/harness/snapshots/screens/app-twos-playing.png)
 
 Six slides in, with a score and best of 12.
 
-![The restart question](../../neotime/harness/snapshots/screens/app-twos-restart.png)
+![The restart question](../../battletime/harness/snapshots/screens/app-twos-restart.png)
 
 The **Restart game?** question a tap asks, with **No** and **Yes** buttons.
 
-![Game over](../../neotime/harness/snapshots/screens/app-twos-game-over.png)
+![Game over](../../battletime/harness/snapshots/screens/app-twos-game-over.png)
 
 Game over at a score of 3928: the board is full and no slide can join two tiles.

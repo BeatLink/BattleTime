@@ -13,7 +13,7 @@ class FakeSession extends MockLegacyDfuTarget {
   private filesOpened: Promise<FileService> | null = null;
   private packagesOpened: Promise<PackagesClient> | null = null;
   constructor() {
-    super('AA:BB:CC:DD:EE:00', 'neotime', true);
+    super('AA:BB:CC:DD:EE:00', 'battletime', true);
   }
   listen(onLine: (line: string) => void) {
     this.onLine = onLine;

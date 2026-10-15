@@ -1,0 +1,123 @@
+[package]
+name = "battletime-firmware"
+version = "0.1.0"
+edition = "2021"
+description = "BattleTime's firmware for the PineTime: starts the drivers, advertises over Bluetooth and takes updates"
+license = "GPL-3.0-or-later"
+publish = false
+
+[workspace]
+
+[features]
+# The image for the recovery slot: its status page always says it is the recovery firmware.
+recovery = []
+# InfiniTime's own GATT services (src/infinitime_services.rs), one feature each since flash is short;
+# docs/bluetooth.md lists what each costs.
+default = ["weather-service", "alert-service"]
+weather-service = []
+music-service = ["battletime-companion/single-values"]
+navigation-service = ["battletime-companion/single-values"]
+alert-service = []
+motion-service = []
+
+[dependencies]
+cortex-m = { version = "0.7", features = ["critical-section-single-core", "inline-asm"] }
+cortex-m-rt = "0.7"
+embassy-embedded-hal = { version = "0.6", default-features = false }
+embassy-executor = { version = "0.10", features = ["platform-cortex-m", "executor-thread", "trace"] }
+embassy-futures = "0.1"
+# The NFC pins are plain GPIO on the PineTime; P0.10 resets the touch panel.
+embassy-nrf = { version = "0.11", features = ["nrf52832", "rt", "gpiote", "time-driver-rtc1", "time", "nfc-pins-as-gpio"] }
+embassy-sync = "0.8"
+embassy-time = { version = "0.5", features = ["tick-hz-32_768"] }
+embedded-alloc = "0.7"
+embedded-graphics = "0.8"
+embedded-hal = "1.0"
+embedded-hal-async = "1.0"
+embedded-storage = "0.3"
+embedded-storage-async = "0.4"
+heapless = "0.9"
+nrf-pac = { version = "0.4", features = ["nrf52832"] }
+static_cell = "2.1"
+trouble-host = { version = "0.8", default-features = false, features = ["peripheral", "gatt", "derive", "default-packet-pool", "default-packet-pool-mtu-128", "default-packet-pool-size-8"] }
+
+battletime-accelerometer = { path = "../drivers/accelerometer" }
+battletime-app-host = { path = "../app-host" }
+battletime-ui = { path = "../ui" }
+battletime-bluetooth = { path = "../drivers/bluetooth" }
+battletime-boot = { path = "../boot" }
+battletime-companion = { path = "../services/companion", default-features = false }
+battletime-current-time = { path = "../services/current_time" }
+battletime-crash-record = { path = "../services/crash_record" }
+battletime-liveness = { path = "../services/liveness" }
+battletime-task-table = { path = "../services/task_table" }
+battletime-foreground = { path = "../services/foreground" }
+battletime-battery = { path = "../services/battery" }
+battletime-blefs = { path = "../services/blefs", features = ["trouble"] }
+battletime-button = { path = "../drivers/button" }
+battletime-dfu = { path = "../services/dfu", features = ["trouble"] }
+battletime-notifications = { path = "../services/notifications" }
+battletime-flash-store = { path = "../services/flash_store" }
+battletime-packages = { path = "../services/packages" }
+battletime-phone-client = { path = "../services/phone_client" }
+battletime-display = { path = "../drivers/display" }
+battletime-heart-rate = { path = "../drivers/heart_rate" }
+battletime-external-flash = { path = "../drivers/external_flash", features = ["cortex-m"] }
+battletime-runtime = { path = "../runtime" }
+battletime-settings = { path = "../services/settings" }
+battletime-steps = { path = "../services/steps" }
+battletime-slot-log = { path = "../services/slot_log" }
+battletime-status-screen = { path = "../drivers/status_screen" }
+battletime-touch = { path = "../drivers/touch" }
+battletime-vibrator = { path = "../drivers/vibrator" }
+battletime-updates = { path = "../services/updates" }
+
+[build-dependencies]
+battletime-boot = { path = "../boot", features = ["build-script"] }
+battletime-compiler = { path = "../compiler" }
+
+[patch.crates-io]
+# trouble-host with discovery responses that never cut a 128-bit UUID short; see third_party/trouble-host/BATTLETIME.md.
+trouble-host = { path = "../third_party/trouble-host" }
+# The GATT server macro that builds a server in place; see third_party/trouble-host-macros/BATTLETIME.md.
+trouble-host-macros = { path = "../third_party/trouble-host-macros" }
+
+[profile.release]
+codegen-units = 1
+debug = true
+lto = true
+opt-level = "s"
+
+# The recovery firmware, built with `--profile recovery --features recovery`: smallest over fastest, since it only
+# takes updates.
+[profile.recovery]
+inherits = "release"
+opt-level = "z"
+
+# Crates off the drawing and interpreter paths, built for size; each one here measured smaller, and others grew.
+[profile.release.package.battletime-companion]
+opt-level = "z"
+
+[profile.release.package.battletime-packages]
+opt-level = "z"
+
+[profile.release.package.battletime-accelerometer]
+opt-level = "z"
+
+[profile.release.package.battletime-current-time]
+opt-level = "z"
+
+[profile.release.package.battletime-settings]
+opt-level = "z"
+
+[profile.release.package.battletime-touch]
+opt-level = "z"
+
+[profile.release.package.serde]
+opt-level = "z"
+
+[profile.release.package.heapless]
+opt-level = "z"
+
+[profile.release.package.embassy-sync]
+opt-level = "z"

@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   AppSession,
   decode_frame,
-  find_neotime_folder,
+  find_battletime_folder,
   parse_compile_errors,
   read_simulator_line,
   split_lines,
@@ -78,14 +78,14 @@ function recording_listener() {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
-let neotime_folder: string;
+let battletime_folder: string;
 
 beforeEach(() => {
-  neotime_folder = fs.mkdtempSync(path.join(os.tmpdir(), "appbuilder-"));
+  battletime_folder = fs.mkdtempSync(path.join(os.tmpdir(), "appbuilder-"));
 });
 
 afterEach(() => {
-  fs.rmSync(neotime_folder, { recursive: true, force: true });
+  fs.rmSync(battletime_folder, { recursive: true, force: true });
 });
 
 // ============================================================================
@@ -93,27 +93,27 @@ afterEach(() => {
 // ============================================================================
 
 describe("finding the watch code", () => {
-  it("finds neotime/ from a file inside it or from the repository above it", () => {
+  it("finds battletime/ from a file inside it or from the repository above it", () => {
     const repository = fs.mkdtempSync(path.join(os.tmpdir(), "appbuilder-repo-"));
-    const neotime = path.join(repository, "neotime");
+    const battletime = path.join(repository, "battletime");
     for (const crate of ["compiler", "simulator"]) {
-      fs.mkdirSync(path.join(neotime, crate), { recursive: true });
-      fs.writeFileSync(path.join(neotime, crate, "Cargo.toml"), "");
+      fs.mkdirSync(path.join(battletime, crate), { recursive: true });
+      fs.writeFileSync(path.join(battletime, crate, "Cargo.toml"), "");
     }
-    fs.mkdirSync(path.join(neotime, "apps", "hello"), { recursive: true });
+    fs.mkdirSync(path.join(battletime, "apps", "hello"), { recursive: true });
 
-    expect(find_neotime_folder(path.join(neotime, "apps", "hello"))).toBe(neotime);
-    expect(find_neotime_folder(repository)).toBe(neotime);
-    expect(find_neotime_folder(os.tmpdir())).toBeUndefined();
+    expect(find_battletime_folder(path.join(battletime, "apps", "hello"))).toBe(battletime);
+    expect(find_battletime_folder(repository)).toBe(battletime);
+    expect(find_battletime_folder(os.tmpdir())).toBeUndefined();
     fs.rmSync(repository, { recursive: true });
   });
 });
 
 describe("compiler messages", () => {
   it("read their file, line and column", () => {
-    const output = "/a/app.tsx:20:1: `Bogus` is not defined; import it from neotime/widgets\n";
+    const output = "/a/app.tsx:20:1: `Bogus` is not defined; import it from battletime/widgets\n";
     expect(parse_compile_errors(output, "/a/app.tsx")).toEqual([
-      { file: "/a/app.tsx", line: 20, column: 1, message: "`Bogus` is not defined; import it from neotime/widgets" },
+      { file: "/a/app.tsx", line: 20, column: 1, message: "`Bogus` is not defined; import it from battletime/widgets" },
     ]);
   });
 
@@ -156,14 +156,14 @@ describe("a session", () => {
   it("builds the tools once, compiles the app and runs it in the simulator", async () => {
     const pixel = Buffer.from([0x00, 0xf8]).toString("base64");
     const { spawn, started } = fake_spawn((process) => {
-      if (process.command.endsWith("neotime-simulator")) {
+      if (process.command.endsWith("battletime-simulator")) {
         process.stdout.write(`frame ${pixel}\nmotor on\neffect: Vibrate(30)\n`);
         return "keep running";
       }
       return { code: 0 };
     });
     const { heard, listener } = recording_listener();
-    const session = new AppSession(neotime_folder, "nix develop --command", spawn, listener);
+    const session = new AppSession(battletime_folder, "nix develop --command", spawn, listener);
 
     await session.run(app);
     await session.run(app);
@@ -171,12 +171,12 @@ describe("a session", () => {
 
     const commands = started.map((process) => [path.basename(process.command), ...process.arguments_.slice(0, 3)]);
     expect(commands[0]).toEqual(["nix", "develop", "--command", "cargo"]);
-    expect(started[0].arguments_).toEqual(["develop", "--command", "cargo", "build", "-q", "-p", "neotime-compiler", "-p", "neotime-simulator"]);
-    expect(commands[1]).toEqual(["neotime-compiler", "library", "-o", path.join(neotime_folder, "target/appbuilder/shared.ntlib")]);
-    expect(commands[2]).toEqual(["neotime-compiler", app, "-o", path.join(neotime_folder, "target/appbuilder/app.ntapp")]);
-    expect(commands[3][0]).toBe("neotime-simulator");
+    expect(started[0].arguments_).toEqual(["develop", "--command", "cargo", "build", "-q", "-p", "battletime-compiler", "-p", "battletime-simulator"]);
+    expect(commands[1]).toEqual(["battletime-compiler", "library", "-o", path.join(battletime_folder, "target/appbuilder/shared.ntlib")]);
+    expect(commands[2]).toEqual(["battletime-compiler", app, "-o", path.join(battletime_folder, "target/appbuilder/app.ntapp")]);
+    expect(commands[3][0]).toBe("battletime-simulator");
     expect(started[3].arguments_).toContain("--stream");
-    expect(commands.slice(4).map((command) => command[0])).toEqual(["neotime-compiler", "neotime-simulator"]);
+    expect(commands.slice(4).map((command) => command[0])).toEqual(["battletime-compiler", "battletime-simulator"]);
     expect(started[3].killed).toBe(true);
     expect(started[3].written.join("")).toBe("quit\n");
 
@@ -195,7 +195,7 @@ describe("a session", () => {
 
   it("runs cargo as it is with no toolchain command", async () => {
     const { spawn, started } = fake_spawn(() => ({ code: 0 }));
-    const session = new AppSession(neotime_folder, "  ", spawn, recording_listener().listener);
+    const session = new AppSession(battletime_folder, "  ", spawn, recording_listener().listener);
     await session.prepare();
     expect(started[0].command).toBe("cargo");
   });
@@ -205,18 +205,18 @@ describe("a session", () => {
       process.arguments_[0] === app ? { code: 1, output: `${app}:3:5: \`Bogus\` is not defined\n` } : { code: 0 },
     );
     const { heard, listener } = recording_listener();
-    await new AppSession(neotime_folder, "", spawn, listener).run(app);
+    await new AppSession(battletime_folder, "", spawn, listener).run(app);
 
     expect(heard.errors).toEqual([[{ file: app, line: 3, column: 5, message: "`Bogus` is not defined" }]]);
     expect(heard.statuses.at(-1)).toMatch(/^1 compile error;/);
-    expect(started.some((process) => process.command.endsWith("neotime-simulator"))).toBe(false);
+    expect(started.some((process) => process.command.endsWith("battletime-simulator"))).toBe(false);
   });
 
   it("reports a failed build and tries again next time", async () => {
     let builds = 0;
     const { spawn } = fake_spawn((process) => (process.command === "cargo" && builds++ === 0 ? { code: 101, output: "error[E0308]" } : { code: 0 }));
     const { heard, listener } = recording_listener();
-    const session = new AppSession(neotime_folder, "", spawn, listener);
+    const session = new AppSession(battletime_folder, "", spawn, listener);
 
     expect(await session.prepare()).toBe(false);
     expect(heard.statuses).toContain("The tools did not build");
@@ -227,7 +227,7 @@ describe("a session", () => {
   it("reports a shared library that does not build", async () => {
     const { spawn } = fake_spawn((process) => (process.arguments_[0] === "library" ? { code: 1, output: "no fonts" } : { code: 0 }));
     const { heard, listener } = recording_listener();
-    expect(await new AppSession(neotime_folder, "", spawn, listener).prepare()).toBe(false);
+    expect(await new AppSession(battletime_folder, "", spawn, listener).prepare()).toBe(false);
     expect(heard.statuses).toContain("The shared library did not build");
   });
 
@@ -238,36 +238,36 @@ describe("a session", () => {
       return emitter as ChildProcess;
     };
     const { heard, listener } = recording_listener();
-    expect(await new AppSession(neotime_folder, "", spawn, listener).prepare()).toBe(false);
+    expect(await new AppSession(battletime_folder, "", spawn, listener).prepare()).toBe(false);
     expect(heard.logs).toContain("spawn cargo ENOENT");
   });
 
   it("drops a run that a newer one overtook", async () => {
-    const { spawn, started } = fake_spawn((process) => (process.command.endsWith("neotime-simulator") ? "keep running" : { code: 0 }));
-    const session = new AppSession(neotime_folder, "", spawn, recording_listener().listener);
+    const { spawn, started } = fake_spawn((process) => (process.command.endsWith("battletime-simulator") ? "keep running" : { code: 0 }));
+    const session = new AppSession(battletime_folder, "", spawn, recording_listener().listener);
     await Promise.all([session.run("/first.tsx"), session.run("/second.tsx")]);
 
-    const compiled = started.filter((process) => process.command.endsWith("neotime-compiler") && process.arguments_[0] !== "library");
+    const compiled = started.filter((process) => process.command.endsWith("battletime-compiler") && process.arguments_[0] !== "library");
     expect(compiled.map((process) => process.arguments_[0])).toEqual(["/second.tsx"]);
     session.stop();
   });
 
   it("says when the simulator stops by itself", async () => {
-    const { spawn } = fake_spawn((process) => (process.command.endsWith("neotime-simulator") ? { code: 3 } : { code: 0 }));
+    const { spawn } = fake_spawn((process) => (process.command.endsWith("battletime-simulator") ? { code: 3 } : { code: 0 }));
     const { heard, listener } = recording_listener();
-    await new AppSession(neotime_folder, "", spawn, listener).run(app);
+    await new AppSession(battletime_folder, "", spawn, listener).run(app);
     await settle();
     expect(heard.statuses.at(-1)).toBe("The simulator stopped with code 3");
   });
 
   it("says plainly when the checkout's simulator is too old to stream", async () => {
     const { spawn } = fake_spawn((process) => {
-      if (!process.command.endsWith("neotime-simulator")) return { code: 0 };
+      if (!process.command.endsWith("battletime-simulator")) return { code: 0 };
       (process.child.stderr as PassThrough).write('Error: "unknown option --stream; use --screenshot PATH"\n');
       return { code: 1 };
     });
     const { heard, listener } = recording_listener();
-    await new AppSession(neotime_folder, "", spawn, listener).run(app);
+    await new AppSession(battletime_folder, "", spawn, listener).run(app);
     await settle();
     expect(heard.statuses.at(-1)).toBe(OLD_SIMULATOR_MESSAGE);
     expect(heard.logs.some((line) => line.includes("unknown option --stream"))).toBe(true);

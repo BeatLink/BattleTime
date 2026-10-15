@@ -14,7 +14,7 @@ gives the latest one, and turning notifications off stops them.
 
     python3 -I tools/check_heart_rate.py FIRMWARE_ELF [SCREENSHOT]
 
-Run it inside `nix develop`, with the firmware built (`cd neotime/firmware && cargo build --release`). It
+Run it inside `nix develop`, with the firmware built (`cd battletime/firmware && cargo build --release`). It
 finds the emulator in $PINETIME_EMULATOR, or in a PineTimeEmulator folder beside the main checkout.
 """
 
@@ -35,7 +35,7 @@ import packages_over_hci  # noqa: E402
 
 REPOSITORY = Path(__file__).resolve().parent.parent
 # The watch's crates, apps and build output.
-NEOTIME = REPOSITORY / "neotime"
+BATTLETIME = REPOSITORY / "battletime"
 
 # ============================================================================
 # The install and the watch
@@ -46,7 +46,7 @@ FIRMWARE_VECTOR_TABLE = 0x8100
 IMAGE_HEADER_SIZE = 256
 # The UICR words embassy-nrf writes on the first start, so the emulated chip is not reset.
 FIRST_START_UICR = [(0x10001200, 0x15), (0x10001204, 0x15), (0x1000120C, 0xFFFFFFFE)]
-COUNTERS_SYMBOL = "neotime_firmware::diagnostics::COUNTERS"
+COUNTERS_SYMBOL = "battletime_firmware::diagnostics::COUNTERS"
 # The heart rate counters are the last two of diagnostics.rs: the sensor's state, then the latest reading.
 STARTED = 1
 FIRST_PULSE = 84
@@ -74,7 +74,7 @@ UNSUBSCRIBED_SECONDS = 10
 MEASUREMENT_FLAGS = 0
 
 
-def run(command, folder=NEOTIME):
+def run(command, folder=BATTLETIME):
     return subprocess.run(command, capture_output=True, text=True, cwd=folder, check=True).stdout
 
 
@@ -96,8 +96,8 @@ def emulator_folder():
 
 def compile_install(folder):
     """Compiles the packages and the shared library; gives the packages as ID=FILE pairs and the library."""
-    run(["cargo", "build", "-q", "-p", "neotime-compiler"])
-    compiler = str(NEOTIME / "target" / "debug" / "neotime-compiler")
+    run(["cargo", "build", "-q", "-p", "battletime-compiler"])
+    compiler = str(BATTLETIME / "target" / "debug" / "battletime-compiler")
     pairs = []
     for package_id, source in PACKAGES:
         image = folder / f"{package_id}.ntapp"
@@ -121,7 +121,7 @@ def library_lines(library, folder):
 
 def write_flash(path, entries):
     """Writes the external flash image holding these ID=FILE packages and /PATH=FILE files."""
-    run(["cargo", "run", "-q", "-p", "neotime-packages", "--example", "filesystem_use", "--",
+    run(["cargo", "run", "-q", "-p", "battletime-packages", "--example", "filesystem_use", "--",
          "--no-theme", "--image", str(path), *entries])
     return path
 

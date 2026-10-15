@@ -1,14 +1,14 @@
 // Installs plugins into a folder and runs them against a real watch, without the desktop app.
 //
-// cargo run -p neotime-companion-core --example plugin_host -- install <file.ntplugin> <folder>
-// cargo run -p neotime-companion-core --example plugin_host -- run <folder> <watch address>
+// cargo run -p battletime-companion-core --example plugin_host -- install <file.ntplugin> <folder>
+// cargo run -p battletime-companion-core --example plugin_host -- run <folder> <watch address>
 
 use std::sync::{Arc, OnceLock};
 
-use neotime_companion_core::ble::WatchBle;
-use neotime_companion_core::plugins::host::{Fetcher, HostOutput, PluginHost};
-use neotime_companion_core::plugins::http;
-use neotime_companion_core::plugins::store::PluginStore;
+use battletime_companion_core::ble::WatchBle;
+use battletime_companion_core::plugins::host::{Fetcher, HostOutput, PluginHost};
+use battletime_companion_core::plugins::http;
+use battletime_companion_core::plugins::store::PluginStore;
 use serde_json::Value;
 
 struct Terminal {

@@ -19,7 +19,7 @@ may be up to 64 kB. **Send now** sends it at once, and **Clear and remove it fro
 it off. The companion sends the note only when it has changed,
 and sends it again if it was deleted on the watch.
 
-![The Notes app showing a note](../../neotime/harness/snapshots/screens/app-notes.png)
+![The Notes app showing a note](../../battletime/harness/snapshots/screens/app-notes.png)
 
 ## QR codes
 
@@ -36,7 +36,7 @@ the network's name is used. Below the form the screen lists the codes on the wat
 makes a code too dense to scan from the small screen; the companion warns, and refuses one that
 would not fit at all.
 
-![A QR code on the watch](../../neotime/harness/snapshots/screens/app-qr-code-code.png)
+![A QR code on the watch](../../battletime/harness/snapshots/screens/app-qr-code-code.png)
 
 ## Remote
 
@@ -56,7 +56,7 @@ An action the device cannot run is marked unavailable. The watch only says which
 the action itself stays in the companion, so the watch can never send a command or an address. The
 screen keeps a log of recent taps.
 
-![The Remote app with four buttons](../../neotime/harness/snapshots/screens/app-remote-4.png)
+![The Remote app with four buttons](../../battletime/harness/snapshots/screens/app-remote-4.png)
 
 ## Web requests
 

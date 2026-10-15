@@ -1,0 +1,107 @@
+# The GitHub Pages site, built with MkDocs Material; tools/build_site.sh stages docs/ and builds from a copy of this file.
+site_name: BattleTime
+site_description: A firmware for the PineTime smartwatch, written in Rust, with apps that install over Bluetooth.
+site_url: https://beatlink.github.io/BattleTime/
+repo_url: https://github.com/BeatLink/BattleTime
+repo_name: BeatLink/BattleTime
+edit_uri: edit/master/docs/
+docs_dir: ../target/site/src
+site_dir: ../target/site/out
+
+theme:
+  name: material
+  palette:
+    scheme: default
+    primary: custom
+    accent: custom
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - content.action.edit
+  icon:
+    repo: fontawesome/brands/github
+
+extra_css:
+  - stylesheets/battletime.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+# A broken link between pages fails the build under --strict.
+validation:
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: relative_to_docs
+    unrecognized_links: warn
+
+nav:
+  - Home: index.md
+  - Using the watch:
+      - What BattleTime does: guide/index.md
+      - Getting around: guide/getting-around.md
+      - Screen and battery: guide/screen-and-battery.md
+      - Time and alarms: guide/time-and-alarms.md
+      - Notifications and calls: guide/notifications-and-calls.md
+      - Health and fitness: guide/health-and-fitness.md
+      - Phone and Bluetooth: guide/phone-and-bluetooth.md
+      - Apps and watch faces: guide/apps-and-faces.md
+      - Updates and recovery: guide/updates-and-recovery.md
+      - Watch faces: faces.md
+      - About the project: introduction.md
+  - Apps:
+      - All apps: apps.md
+      # tools/build_site.sh lists a page for each app in docs/apps here.
+  - Companion app:
+      - The BattleTime Companion: companion/index.md
+      - Connecting a watch: companion/connecting.md
+      - Apps, faces and the store: companion/apps-and-store.md
+      - Phone features: companion/phone-features.md
+      - Watch data: companion/watch-data.md
+      - Notes, QR codes, remote and tools: companion/tools.md
+      - Firmware updates: companion/firmware-updates.md
+      - The command line: companion/command-line.md
+      - "Design: linked companions": linked-companions.md
+  - Writing apps:
+      - Writing an app: writing-apps.md
+      - App reference: app-reference.md
+      - App runtime: app-runtime.md
+      - The app compiler: compiler.md
+      - Testing apps: testing.md
+      - Companion plugins: plugins.md
+      - The app store: app-store.md
+      - Companion sync: sync.md
+      - Companion protocol: companion-protocol.md
+  - How it is built:
+      - Architecture: architecture.md
+      - Drivers: drivers.md
+      - Services: services.md
+      - Firmware: firmware.md
+      - Bootloader: bootloader.md
+      - Firmware updates: updates.md
+      - Bluetooth controller: bluetooth.md
+      - Storage: storage.md
+      - Flash store: flash-store.md
+      - Memory map: memory-map.md
+      - Memory treemap: memory-treemap.html
+      - Simulator: simulator.md
+      - Coding guidelines: coding-guidelines.md
+      - Architecture assessment: architecture-assessment.md
+      - To do: todo.md

@@ -22,18 +22,18 @@ plays yellow.
 
 ## Screens
 
-![The menu](../../neotime/harness/snapshots/screens/app-four-in-a-row.png)
+![The menu](../../battletime/harness/snapshots/screens/app-four-in-a-row.png)
 
 The menu, with level 0 chosen and no games won yet.
 
-![A new game](../../neotime/harness/snapshots/screens/app-four-in-a-row-game.png)
+![A new game](../../battletime/harness/snapshots/screens/app-four-in-a-row-game.png)
 
 A new game, with your red counter waiting over the middle column of the empty board.
 
-![The watch thinking](../../neotime/harness/snapshots/screens/app-four-in-a-row-thinking.png)
+![The watch thinking](../../battletime/harness/snapshots/screens/app-four-in-a-row-thinking.png)
 
 The watch working out its move after your second red counter.
 
-![A lost game](../../neotime/harness/snapshots/screens/app-four-in-a-row-lost.png)
+![A lost game](../../battletime/harness/snapshots/screens/app-four-in-a-row-lost.png)
 
 A lost game at level 2: the watch has four yellow counters up the middle column.

@@ -1,5 +1,5 @@
-// Message types for the Gadgetbridge (Bangle.js style) JSON lines NeoTime speaks over the Nordic UART Service.
-// The watch side is described in docs/companion-protocol.md in the NeoTime tree; keep the two in step.
+// Message types for the Gadgetbridge (Bangle.js style) JSON lines BattleTime speaks over the Nordic UART Service.
+// The watch side is described in docs/companion-protocol.md in the BattleTime tree; keep the two in step.
 
 export type NotificationMessage = {
   t: 'notify';

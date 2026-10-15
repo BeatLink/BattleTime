@@ -50,7 +50,7 @@ describe('setting up a new watch', () => {
   });
 
   it('installs everything chosen, reporting each step', async () => {
-    const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+    const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
     const files: FileWriter = {
       write: async (path, data, onProgress) => {
         target.fileService.files.set(path, data);

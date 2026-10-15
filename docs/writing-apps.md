@@ -1,6 +1,6 @@
 # Writing apps
 
-NeoTime apps are written like small web apps: [Preact](https://preactjs.com) components in
+BattleTime apps are written like small web apps: [Preact](https://preactjs.com) components in
 TypeScript, with [Preact Signals](https://preactjs.com/guide/v10/signals/) for state. Preact never
 runs on the watch. A compiler on the computer turns the source into a compact app image, and the
 watch's firmware runs that image. If you know JSX and signals, you already know most of what an app
@@ -13,7 +13,7 @@ compiler takes, and [app-runtime.md](app-runtime.md) how the watch runs the resu
 ```mermaid
 flowchart LR
     source["app.tsx<br/>Preact and Signals"]
-    compiler["neotime-compiler<br/>on the computer"]
+    compiler["battletime-compiler<br/>on the computer"]
     image["app image<br/>(.ntapp)"]
     companion["companion app<br/>or command line"]
     flash["/apps on the<br/>external flash"]
@@ -26,7 +26,7 @@ flowchart LR
 ```
 
 The shared library holds what apps have in common, such as the icons, the font and the functions of
-`neotime/lib`. The compiler refers to its parts by number instead of copying them into the app, and
+`battletime/lib`. The compiler refers to its parts by number instead of copying them into the app, and
 the watch reads them in place from the firmware image.
 
 ## Setting up
@@ -35,16 +35,16 @@ Everything an app needs comes from the repository's Nix flake. In a checkout:
 
 ```sh
 nix develop          # the watch's toolchain: Rust, Node and the rest
-cd neotime
-npm ci               # the stand-in neotime package, Preact and the test tools
+cd battletime
+npm ci               # the stand-in battletime package, Preact and the test tools
 ```
 
-Run cargo and npm commands for apps from inside `neotime/`. The companion app has its own shell,
+Run cargo and npm commands for apps from inside `battletime/`. The companion app has its own shell,
 `nix develop .#companion`, used below for installing.
 
 ## Making an app from the template
 
-`neotime/apps/template` is a starting point that answers every kind of input. Copy it to a folder
+`battletime/apps/template` is a starting point that answers every kind of input. Copy it to a folder
 named after your app's id:
 
 ```sh
@@ -53,22 +53,22 @@ cp -r apps/template apps/my-app
 
 Then change `id` and `name` in `define_app`. The id must match the folder: up to 32 bytes of
 lower-case words of letters and digits joined by single hyphens, such as `four-in-a-row`. The [App Builder](#the-app-builder) can make the folder for
-you with **NeoTime: New App**.
+you with **BattleTime: New App**.
 
-![The template as it opens](../neotime/harness/snapshots/screens/app-template.png)
+![The template as it opens](../battletime/harness/snapshots/screens/app-template.png)
 
 The template as it opens: its name on the upper card, and the lower card empty until it receives a
 touch or a swipe.
 
 ## The shape of an app
 
-The smallest app is `neotime/apps/hello/app.tsx`:
+The smallest app is `battletime/apps/hello/app.tsx`:
 
 ```tsx
-import { define_app } from "neotime";
-import { Card } from "neotime/components";
-import { icons } from "neotime/icons";
-import { Icon, Label, Screen } from "neotime/widgets";
+import { define_app } from "battletime";
+import { Card } from "battletime/components";
+import { icons } from "battletime/icons";
+import { Icon, Label, Screen } from "battletime/widgets";
 
 const GREETING = "Hello, world!";
 
@@ -92,12 +92,12 @@ export default define_app({
 });
 ```
 
-![The hello app](../neotime/harness/snapshots/screens/app-hello.png)
+![The hello app](../battletime/harness/snapshots/screens/app-hello.png)
 
 Every app has the same parts:
 
-- **Imports** come only from `neotime` and its parts: `neotime/widgets`, `neotime/components`,
-  `neotime/icons` and `neotime/lib`. `neotime` passes on `signal`, `computed` and `useSignal`.
+- **Imports** come only from `battletime` and its parts: `battletime/widgets`, `battletime/components`,
+  `battletime/icons` and `battletime/lib`. `battletime` passes on `signal`, `computed` and `useSignal`.
 - **State** is signals declared at the top of the file. `persisted("key", start)` is a signal that
   survives a restart.
 - **Screens** are function components. `<Screen>` may only be the outermost widget of one.
@@ -112,7 +112,7 @@ under `// ====` banners, as the quality suite and [coding-guidelines.md](coding-
 ### State and derived values
 
 The stopwatch keeps when it started rather than ticking, so it runs on while closed
-(`neotime/apps/stopwatch/app.tsx`):
+(`battletime/apps/stopwatch/app.tsx`):
 
 ```tsx
 const started_at = persisted<Instant | null>("started_at", null);
@@ -165,7 +165,7 @@ code. [app-reference.md](app-reference.md#events) lists every event and option.
 ### Reading data from the phone
 
 The phone can write files to the watch, and an app reads them by path. The remote reads the buttons
-the companion chose (`neotime/apps/remote/app.tsx`):
+the companion chose (`battletime/apps/remote/app.tsx`):
 
 ```tsx
 const button_file = signal([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
@@ -196,24 +196,24 @@ whole numbers. Its error messages name what to write instead:
 | `useEffect`, `setTimeout`, `setInterval` | `on` at the top of the file, or a binding that reads `now` |
 | `while`, recursion | `for ... of` over a fixed-length array |
 | `async`, `fetch`, classes | Not available; data from the phone arrives as a file or an event |
-| Imports other than `neotime` | Copy the code into the app |
+| Imports other than `battletime` | Copy the code into the app |
 | A bare `/` | `Math.trunc(a / b)` or `Math.floor(a / b)`, saying which way it rounds |
 | Creating a signal inside a handler | Declare it at the top of the file |
 
 Check a source without writing an image:
 
 ```sh
-nix develop -c cargo run -p neotime-compiler -- apps/my-app/app.tsx --check
+nix develop -c cargo run -p battletime-compiler -- apps/my-app/app.tsx --check
 ```
 
 ## Previewing
 
 ### In a browser
 
-The `neotime` package in `neotime/sdk/neotime` has a browser version of the watch. Every widget is a
+The `battletime` package in `battletime/sdk/battletime` has a browser version of the watch. Every widget is a
 Preact component drawn inside a 240x240 frame in the watch's colours, and text is drawn in the
 watch's own font of lines and arcs, turned into web fonts by `tools/generate_preview_font.py`.
-`neotime/preview` holds the stand-in runtime: `open(app)` opens an app, `<OpenScreen />` draws its
+`battletime/preview` holds the stand-in runtime: `open(app)` opens an app, `<OpenScreen />` draws its
 screen, `start_scheduler()` runs its timers from the computer's clock, and `press_button()` and
 `swipe(...)` drive it. `persisted` values live in the browser's storage, and `preview_files` stands
 in for the watch's files.
@@ -227,9 +227,9 @@ shows the real pixels. The repository's apps use the preview in their `app.test.
 The simulator runs a compiled image on the firmware's own app host, in a desktop window:
 
 ```sh
-nix develop -c cargo run -p neotime-compiler -- apps/my-app/app.tsx -o my-app.ntapp
-nix develop -c cargo run -p neotime-compiler -- library -o shared.ntlib
-nix develop -c cargo run -p neotime-simulator -- --app my-app.ntapp --library shared.ntlib
+nix develop -c cargo run -p battletime-compiler -- apps/my-app/app.tsx -o my-app.ntapp
+nix develop -c cargo run -p battletime-compiler -- library -o shared.ntlib
+nix develop -c cargo run -p battletime-simulator -- --app my-app.ntapp --library shared.ntlib
 ```
 
 A click is a tap, a drag of 40 pixels a swipe, and Space the side button. Each effect the app asks
@@ -238,23 +238,23 @@ for is printed, such as `effect: Vibrate(30)`. [simulator.md](simulator.md) has 
 ## The App Builder
 
 `tools/appbuilder` is a VS Code extension for building apps. Its palette of widgets, events, effects
-and values sits in a NeoTime sidebar and inserts the chosen entry with its import; the watch opens in
-its own pane beside the code. Saving compiles the app with `neotime-compiler` and restarts it in
-`neotime-simulator --stream`, so the pane shows exactly what the watch would, and compile errors
+and values sits in a BattleTime sidebar and inserts the chosen entry with its import; the watch opens in
+its own pane beside the code. Saving compiles the app with `battletime-compiler` and restarts it in
+`battletime-simulator --stream`, so the pane shows exactly what the watch would, and compile errors
 appear in the editor.
 
-- **NeoTime: Open App Builder** opens the palette and runs the app in the editor.
-- **NeoTime: New App** asks for an id, writes a starting app to `neotime/apps/<id>/app.tsx` and opens
+- **BattleTime: Open App Builder** opens the palette and runs the app in the editor.
+- **BattleTime: New App** asks for an id, writes a starting app to `battletime/apps/<id>/app.tsx` and opens
   the builder on it.
 
 Its [README](../tools/appbuilder/README.md) says how to install and develop it.
 
 ## Testing
 
-App behaviour is tested on a test watch in `neotime/harness`, which compiles the app and runs it on
+App behaviour is tested on a test watch in `battletime/harness`, which compiles the app and runs it on
 the real app host. [testing.md](testing.md) has the details.
 
-**A tour** is a script in `neotime/tests/tours/<id>.neotime` that visits every screen of the app
+**A tour** is a script in `battletime/tests/tours/<id>.battletime` that visits every screen of the app
 and snapshots each. The template's tour:
 
 ```text
@@ -268,13 +268,13 @@ snapshot swipe
 expect no failures
 ```
 
-![The template after a touch](../neotime/harness/snapshots/screens/app-template-touch.png)
+![The template after a touch](../battletime/harness/snapshots/screens/app-template-touch.png)
 
 Write the pictures the first time, look at them, and run the tour again to check them:
 
 ```sh
-NEOTIME_UPDATE_SNAPSHOTS=1 cargo test -p neotime-app-testing --test tours
-cargo test -p neotime-app-testing --test tours
+BATTLETIME_UPDATE_SNAPSHOTS=1 cargo test -p battletime-app-testing --test tours
+cargo test -p battletime-app-testing --test tours
 ```
 
 **A Rust test** drives the same watch for anything a script cannot say:
@@ -296,9 +296,9 @@ The companion app installs apps over Bluetooth, from its Apps and Store screens 
 From `companion/`, in `nix develop .#companion`:
 
 ```sh
-npm run neotime -- apps install ../neotime/my-app.ntapp   # install, or update, an image
-npm run neotime -- apps list                              # each app with the memory it needs
-npm run neotime -- apps remove my-app
+npm run battletime -- apps install ../battletime/my-app.ntapp   # install, or update, an image
+npm run battletime -- apps list                              # each app with the memory it needs
+npm run battletime -- apps remove my-app
 ```
 
 The watch checks every image as it arrives and refuses one that fails its checks or would not fit in
@@ -309,14 +309,14 @@ memory, saying why. [companion/command-line.md](companion/command-line.md) lists
 While developing, run an app without installing it:
 
 ```sh
-npm run neotime -- apps run ../neotime/my-app.ntapp --listen
+npm run battletime -- apps run ../battletime/my-app.ntapp --listen
 ```
 
 The companion writes the image to `/temp/<id>/` and the watch opens it over whatever shows. It never
 joins the launcher and never saves state, and it closes when you go back, on `apps stop`, or when the
 phone disconnects. `--data <name>=<file>` and `--text <name>=<text>` write files beside it for the
 app to read, and `--listen` stays connected, printing each `send_to_phone` message the app sends,
-until Ctrl+C closes it. `apps forget` deletes the cached files. `npm run neotime -- ask "Lunch now?"`
+until Ctrl+C closes it. `apps forget` deletes the cached files. `npm run battletime -- ask "Lunch now?"`
 works the same way with the bundled prompt app and prints the answer.
 
 ### On the emulator
@@ -327,10 +327,10 @@ with it, as [testing.md](testing.md#apps-installed) shows.
 ## Publishing to the store
 
 The companion's store lists every app in this repository. `tools/build_store.py` compiles each
-`neotime/apps/<id>/app.tsx`, and CI publishes the result on every push to master, so an app that
+`battletime/apps/<id>/app.tsx`, and CI publishes the result on every push to master, so an app that
 lands in the repository reaches the store with no further step. Its description is the first
 paragraph of its `docs/apps/<id>.md`.
 
 Another repository can offer apps too: a GitHub release carrying `.ntapp` files is enough, and a
-`neotime-store.zip` with a `store.json` adds descriptions. [app-store.md](app-store.md) describes the
+`battletime-store.zip` with a `store.json` adds descriptions. [app-store.md](app-store.md) describes the
 format, and the companion's **Look on GitHub** finds such releases.

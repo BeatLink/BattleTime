@@ -1,6 +1,6 @@
 // One plugin's logic, running in QuickJS on a thread of its own.
 //
-// The script sees `neotime` (events, messages to the watch and the settings page, settings, synced
+// The script sees `battletime` (events, messages to the watch and the settings page, settings, synced
 // watch data), timers, `fetch` and `console`. Each call out of the script goes through a few host functions that check it
 // against the manifest; everything else is the JavaScript in PRELUDE.
 
@@ -170,9 +170,9 @@ const PRELUDE: &str = r#"
       if (refusal) reject(new Error(refusal));
       else fetches.set(id, { resolve, reject });
     });
-  globalThis.neotime = Object.freeze({
+  globalThis.battletime = Object.freeze({
     on(kind, handler) {
-      if (!handlers[kind]) throw new Error(`neotime.on has no "${kind}" event`);
+      if (!handlers[kind]) throw new Error(`battletime.on has no "${kind}" event`);
       handlers[kind].push(handler);
     },
     send(message) {
@@ -857,7 +857,7 @@ pub(crate) mod tests {
     #[test]
     fn a_watch_message_gets_an_answer_the_manifest_allows() {
         let (plugin, recorder) = start(
-            "neotime.on('message', (d) => neotime.send({ t: 'vibrate', n: d.times }));",
+            "battletime.on('message', (d) => battletime.send({ t: 'vibrate', n: d.times }));",
             &["vibrate"],
             &[],
         );
@@ -872,7 +872,7 @@ pub(crate) mod tests {
     #[test]
     fn a_message_the_manifest_does_not_allow_throws_in_the_script() {
         let (plugin, recorder) = start(
-            "neotime.on('connect', () => { try { neotime.send({ t: 'vibrate' }); } catch (e) { console.log(e.message); } });",
+            "battletime.on('connect', () => { try { battletime.send({ t: 'vibrate' }); } catch (e) { console.log(e.message); } });",
             &[],
             &[],
         );
@@ -885,7 +885,7 @@ pub(crate) mod tests {
     #[test]
     fn settings_read_back_and_are_saved_once_per_event() {
         let (plugin, recorder) = start(
-            "neotime.on('ui', (m) => { neotime.settings.set('city', m.city); neotime.ui.send({ city: neotime.settings.get('city'), none: neotime.settings.get('none') === undefined }); });",
+            "battletime.on('ui', (m) => { battletime.settings.set('city', m.city); battletime.ui.send({ city: battletime.settings.get('city'), none: battletime.settings.get('none') === undefined }); });",
             &[],
             &[],
         );
@@ -922,13 +922,13 @@ pub(crate) mod tests {
     #[test]
     fn synced_data_reads_only_as_far_as_the_manifest_allows() {
         let (plugin, recorder) = start_with_data(
-            "neotime.on('connect', () => {
-               const refused = (source) => { try { neotime.data.get(source); return false; } catch (e) { return e.message; } };
-               neotime.ui.send({
-                 own: neotime.data.get('apps/demo').state.level,
-                 steps: neotime.data.get('steps/2026/10-14').slots,
-                 missing: neotime.data.get('steps/2026/10-13') === undefined,
-                 listed: neotime.data.list(''),
+            "battletime.on('connect', () => {
+               const refused = (source) => { try { battletime.data.get(source); return false; } catch (e) { return e.message; } };
+               battletime.ui.send({
+                 own: battletime.data.get('apps/demo').state.level,
+                 steps: battletime.data.get('steps/2026/10-14').slots,
+                 missing: battletime.data.get('steps/2026/10-13') === undefined,
+                 listed: battletime.data.list(''),
                  alarm: refused('apps/alarm'),
                  settings: refused('settings'),
                });
@@ -952,12 +952,12 @@ pub(crate) mod tests {
     #[test]
     fn writes_settle_their_promises_and_settings_need_the_permission() {
         let (plugin, recorder) = start_with_data(
-            "neotime.on('connect', async () => {
-               const own = await neotime.data.write({ level: 3 });
-               const refused = await neotime.data.write({ bad: 1 }).catch((e) => e.message);
-               const settings = await neotime.data.writeSettings({ brightness: 3 }).catch((e) => e.message);
-               neotime.data.syncNow();
-               neotime.ui.send({ own, refused, settings });
+            "battletime.on('connect', async () => {
+               const own = await battletime.data.write({ level: 3 });
+               const refused = await battletime.data.write({ bad: 1 }).catch((e) => e.message);
+               const settings = await battletime.data.writeSettings({ brightness: 3 }).catch((e) => e.message);
+               battletime.data.syncNow();
+               battletime.ui.send({ own, refused, settings });
              });",
             &[],
         );
@@ -977,7 +977,7 @@ pub(crate) mod tests {
     #[test]
     fn a_sync_reaches_the_plugin_with_what_changed() {
         let (plugin, recorder) = start_with_data(
-            "neotime.on('sync', (changed) => neotime.ui.send(changed));",
+            "battletime.on('sync', (changed) => battletime.ui.send(changed));",
             &["settings"],
         );
         plugin.send(Event::Synced(vec!["settings".into()]));
@@ -1006,7 +1006,7 @@ pub(crate) mod tests {
     fn fetch_reaches_only_the_hosts_the_manifest_names() {
         let (plugin, recorder) = start(
             r#"
-            neotime.on('connect', async () => {
+            battletime.on('connect', async () => {
               const reply = await fetch('https://api.example.com/now?x=1', { method: 'post', body: 'b' });
               console.log(reply.ok, (await reply.json()).temp);
               await fetch('https://other.example.com/').catch((e) => console.log(e.message));
@@ -1031,7 +1031,7 @@ pub(crate) mod tests {
     #[test]
     fn errors_in_handlers_are_logged_and_the_plugin_keeps_running() {
         let (plugin, recorder) = start(
-            "neotime.on('message', () => { throw new Error('boom'); }); neotime.on('message', () => console.log('still here'));",
+            "battletime.on('message', () => { throw new Error('boom'); }); battletime.on('message', () => console.log('still here'));",
             &[],
             &[],
         );
@@ -1045,7 +1045,7 @@ pub(crate) mod tests {
     #[test]
     fn an_endless_loop_is_stopped_and_the_next_event_still_runs() {
         let (plugin, recorder) = start(
-            "neotime.on('message', (d) => { if (d.spin) { for (;;) {} } console.log('next'); });",
+            "battletime.on('message', (d) => { if (d.spin) { for (;;) {} } console.log('next'); });",
             &[],
             &[],
         );
@@ -1077,7 +1077,7 @@ pub(crate) mod tests {
         let recorder = Arc::new(Recorder::default());
         let failed = RunningPlugin::start(
             manifest(&[], &[]),
-            "neotime.on('nope', () => {});".into(),
+            "battletime.on('nope', () => {});".into(),
             Map::new(),
             recorder,
         );

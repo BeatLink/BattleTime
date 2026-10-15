@@ -1,13 +1,13 @@
 // The packages characteristic: installs, lists, hides and removes apps, and runs temporary apps.
 // A file is sent first through the file transfer service; these commands then check it and act on it.
-// The watch side is services/packages in the NeoTime tree, described in docs/companion-protocol.md.
+// The watch side is services/packages in the BattleTime tree, described in docs/companion-protocol.md.
 
 import { NotifyQueue, type DfuLink } from '@/dfu/link';
 
 import { readImageHeader, type ImageHeader } from './app-image';
 import { FileMissingError } from './file-service';
 import { placeNewApps } from './launcher';
-import { NEOTIME_PACKAGES, NEOTIME_SERVICE } from './neotime';
+import { BATTLETIME_PACKAGES, BATTLETIME_SERVICE } from './battletime';
 
 // ============================================================================
 // Types
@@ -108,7 +108,7 @@ export class PackagesClient {
 
   static async open(link: DfuLink): Promise<PackagesClient> {
     const client = new PackagesClient(link);
-    client.unsubscribe = await link.subscribe(NEOTIME_SERVICE, NEOTIME_PACKAGES, (value) => client.onValue(value));
+    client.unsubscribe = await link.subscribe(BATTLETIME_SERVICE, BATTLETIME_PACKAGES, (value) => client.onValue(value));
     return client;
   }
 
@@ -172,7 +172,7 @@ export class PackagesClient {
   private async command(message: { c: string } & Record<string, unknown>): Promise<Reply> {
     const bytes = new TextEncoder().encode(`${JSON.stringify(message)}\n`);
     for (let offset = 0; offset < bytes.length; offset += WRITE_BYTES) {
-      await this.link.write(NEOTIME_SERVICE, NEOTIME_PACKAGES, bytes.subarray(offset, offset + WRITE_BYTES), 'request');
+      await this.link.write(BATTLETIME_SERVICE, BATTLETIME_PACKAGES, bytes.subarray(offset, offset + WRITE_BYTES), 'request');
     }
     for (;;) {
       const reply = JSON.parse(new TextDecoder().decode(await this.replies.next(REPLY_TIMEOUT_MS))) as Reply;

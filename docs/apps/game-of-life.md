@@ -14,14 +14,14 @@ neighbours and is born with exactly three, on a 16 by 16 board that wraps at its
 
 ## Screens
 
-![The acorn](../../neotime/harness/snapshots/screens/app-game-of-life.png)
+![The acorn](../../battletime/harness/snapshots/screens/app-game-of-life.png)
 
 The acorn the board starts from, in the first colour, red.
 
-![The acorn grown](../../neotime/harness/snapshots/screens/app-game-of-life-grown.png)
+![The acorn grown](../../battletime/harness/snapshots/screens/app-game-of-life-grown.png)
 
 The acorn ten seconds later, sixteen generations on and drawn in purple.
 
-![A random soup](../../neotime/harness/snapshots/screens/app-game-of-life-soup.png)
+![A random soup](../../battletime/harness/snapshots/screens/app-game-of-life-soup.png)
 
 A random soup scattered with a long press, about a third of the cells alive.

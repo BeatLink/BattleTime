@@ -24,9 +24,9 @@ import { say } from '../output';
 import { terminalRequester } from '../web';
 
 
-export const remoteUsage = `neotime remote [list|push|run <n>|listen] [--buttons <file>]
+export const remoteUsage = `battletime remote [list|push|run <n>|listen] [--buttons <file>]
 
-  remote reads the buttons from --buttons, or ~/.config/neotime-companion/remote.json: a JSON list of
+  remote reads the buttons from --buttons, or ~/.config/battletime-companion/remote.json: a JSON list of
   {"icon":"play","label":"Lights","action":{"kind":"http","method":"POST","url":"..."}} entries, as the
   app keeps them. list prints them, push writes their icons to ${REMOTE_BUTTONS_PATH} on the watch,
   run <n> runs button n here, and listen stays connected and runs each button tapped on the watch.
@@ -38,7 +38,7 @@ export const REMOTE_OFFLINE = new Set(['list', 'run']);
 export function remoteButtonsPath(given?: string): string {
   if (given) return given;
   const base = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
-  return join(base, 'neotime-companion', 'remote.json');
+  return join(base, 'battletime-companion', 'remote.json');
 }
 
 // The buttons in the file; a malformed entry is left out, as the app does.

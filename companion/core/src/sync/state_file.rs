@@ -1,4 +1,4 @@
-// An app's saved state, `/apps/<id>/state`, as the watch's runtime writes it (`neotime/runtime/src/state.rs`).
+// An app's saved state, `/apps/<id>/state`, as the watch's runtime writes it (`battletime/runtime/src/state.rs`).
 //
 // The file names every value, so it reads without the app's image: "NTST", version 1, a count, then for
 // each value its key, type, array length, element width and bytes.

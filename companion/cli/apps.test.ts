@@ -15,7 +15,7 @@ import { apps, parseRunArguments } from './commands/watch';
 // What the apps command needs from a session: the file service and the packages client on one watch.
 class FakeSession extends MockLegacyDfuTarget {
   constructor() {
-    super('AA:BB:CC:DD:EE:00', 'neotime', true);
+    super('AA:BB:CC:DD:EE:00', 'battletime', true);
   }
   private filesOpened: Promise<FileService> | null = null;
   private packagesOpened: Promise<PackagesClient> | null = null;
@@ -30,7 +30,7 @@ class FakeSession extends MockLegacyDfuTarget {
 }
 
 function imageFile(bytes: Uint8Array): string {
-  const path = join(mkdtempSync(join(tmpdir(), 'neotime-')), 'image.ntapp');
+  const path = join(mkdtempSync(join(tmpdir(), 'battletime-')), 'image.ntapp');
   writeFileSync(path, bytes);
   return path;
 }

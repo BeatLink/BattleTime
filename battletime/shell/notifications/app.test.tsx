@@ -1,0 +1,148 @@
+import { act, cleanup, render, screen } from "@testing-library/preact";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { define_app, notifications, notify, unread_notifications } from "battletime";
+import {
+  advance_clock,
+  clear_notifications,
+  deliver,
+  freeze_clock,
+  install_apps,
+  open,
+  open_app,
+  OpenScreen,
+  run_app_handler,
+  screen_stack,
+  start_scheduler,
+  unfreeze_clock,
+} from "battletime/preview";
+import { icons } from "battletime/icons";
+import { Screen } from "battletime/widgets";
+import notifications_app from "./app.tsx";
+
+let stop_scheduler = () => {};
+
+const timer = define_app({ id: "timer", name: "Timer", icon: icons.timer, screens: { main: () => <Screen /> } });
+
+function from_phone(id: number, title: string, body = "On my way") {
+  act(() => deliver("notification", { id, app: "Messages", title, body }));
+}
+
+describe("notifications", () => {
+  beforeEach(() => {
+    clear_notifications();
+    install_apps([notifications_app, timer]);
+    stop_scheduler = start_scheduler();
+  });
+
+  afterEach(() => {
+    cleanup();
+    stop_scheduler();
+    open(null);
+    clear_notifications();
+  });
+
+  it("says so when there are none", () => {
+    open(notifications_app);
+    render(<OpenScreen />);
+    expect(screen.getByText("No notifications")).toBeTruthy();
+  });
+
+  it("lists the newest first and marks them read when it opens", () => {
+    from_phone(1, "Sam");
+    from_phone(2, "Alex");
+    expect(unread_notifications.value).toBe(2);
+
+    open(notifications_app);
+    render(<OpenScreen />);
+
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+      expect.stringContaining("Alex"),
+      expect.stringContaining("Sam"),
+    ]);
+    expect(unread_notifications.value).toBe(0);
+  });
+
+  it("reads one in full and dismisses it", () => {
+    from_phone(1, "Sam", "On my way");
+    from_phone(2, "Alex", "Running late");
+    open(notifications_app);
+    render(<OpenScreen />);
+
+    act(() => screen.getByText("Sam").click());
+    expect(screen_stack.value).toEqual(["main", "message"]);
+    expect(screen.getByText("On my way")).toBeTruthy();
+
+    act(() => screen.getByText("Dismiss").click());
+    expect(screen_stack.value).toEqual(["main"]);
+    expect(notifications.value.map((kept) => kept.title)).toEqual(["Alex"]);
+  });
+
+  it("keeps an app's notification with the app's name", () => {
+    run_app_handler(timer, () => notify("Timer", "Time is up"), undefined);
+
+    expect(notifications.value[0]).toMatchObject({ app: "Timer", title: "Timer", body: "Time is up" });
+    expect(notifications.value[0].id).toBeLessThan(0);
+  });
+
+  it("keeps only the latest five, and a repeated id replaces the one it names", () => {
+    for (let id = 1; id <= 6; id++) from_phone(id, `Number ${id}`);
+    from_phone(4, "Number 4, edited");
+
+    expect(notifications.value.map((kept) => kept.title)).toEqual([
+      "Number 4, edited",
+      "Number 6",
+      "Number 5",
+      "Number 3",
+      "Number 2",
+    ]);
+  });
+
+  describe("preview", () => {
+    function open_preview() {
+      freeze_clock(1_000_000);
+      open(notifications_app);
+      screen_stack.value = ["preview"];
+      render(<OpenScreen />);
+    }
+
+    afterEach(unfreeze_clock);
+
+    it("shows the newest and goes back by itself after 7 seconds", () => {
+      from_phone(1, "Sam", "On my way");
+      from_phone(2, "Alex", "Running late");
+      open_preview();
+      expect(screen.getByText("Alex")).toBeTruthy();
+      expect(screen.getByText("Running late")).toBeTruthy();
+
+      act(() => advance_clock(6500));
+      expect(open_app.value).toBe(notifications_app);
+      act(() => advance_clock(1000));
+      expect(open_app.value).toBe(null);
+    });
+
+    it("starts again for a newer notification", () => {
+      from_phone(1, "Sam");
+      open_preview();
+      act(() => advance_clock(5000));
+      from_phone(2, "Alex");
+      act(() => advance_clock(5000));
+      expect(open_app.value).toBe(notifications_app);
+      expect(screen.getByText("Alex")).toBeTruthy();
+      act(() => advance_clock(2500));
+      expect(open_app.value).toBe(null);
+    });
+
+    it("stays once tapped, reading it in full", () => {
+      from_phone(1, "Sam", "On my way");
+      open_preview();
+      act(() => screen.getByText("Sam").click());
+      expect(screen.getByText("Dismiss")).toBeTruthy();
+
+      act(() => advance_clock(20_000));
+      expect(open_app.value).toBe(notifications_app);
+      act(() => screen.getByText("Dismiss").click());
+      expect(open_app.value).toBe(null);
+      expect(notifications.value).toEqual([]);
+    });
+  });
+});

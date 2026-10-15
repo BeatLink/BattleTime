@@ -25,23 +25,23 @@ notification list.
 
 ## Screens
 
-![No notifications](../../neotime/harness/snapshots/screens/shell-notifications.png)
+![No notifications](../../battletime/harness/snapshots/screens/shell-notifications.png)
 
 With no notifications.
 
-![Five notifications](../../neotime/harness/snapshots/screens/shell-notifications-list.png)
+![Five notifications](../../battletime/harness/snapshots/screens/shell-notifications-list.png)
 
 Five notifications from the phone, newest first: a chat, a missed call, an email, a calendar event and a text, each with its icon in its own colour.
 
-![A notification read in full](../../neotime/harness/snapshots/screens/shell-notifications-message.png)
+![A notification read in full](../../battletime/harness/snapshots/screens/shell-notifications-message.png)
 
 A chat opened by tapping it, with its app, the time it came and **Dismiss**.
 
-![The preview of a notification that just arrived](../../neotime/harness/snapshots/screens/shell-notifications-preview.png)
+![The preview of a notification that just arrived](../../battletime/harness/snapshots/screens/shell-notifications-preview.png)
 
 The preview a new missed call opens, its bar along the top running out.
 
-![The preview tapped to read the notification in full](../../neotime/harness/snapshots/screens/shell-notifications-preview-open.png)
+![The preview tapped to read the notification in full](../../battletime/harness/snapshots/screens/shell-notifications-preview-open.png)
 
 The preview tapped, which keeps the notification on screen with its time and **Dismiss**.
 

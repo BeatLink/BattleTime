@@ -26,8 +26,8 @@ export class MockTransport implements WatchTransport {
 
   async startScan(onFound: (watch: DiscoveredWatch) => void) {
     this.scanTimer = setTimeout(() => {
-      onFound({ id: MOCK_WATCH, name: 'NeoTime (mock)', rssi: -58 });
-      // A second mock watch, still on wasp-os and waiting in its bootloader, for the move onto NeoTime.
+      onFound({ id: MOCK_WATCH, name: 'BattleTime (mock)', rssi: -58 });
+      // A second mock watch, still on wasp-os and waiting in its bootloader, for the move onto BattleTime.
       onFound({ id: MOCK_BOOTLOADER, name: 'DfuTarg (mock)', rssi: -61, bootloader: true });
     }, 600);
   }
@@ -46,7 +46,7 @@ export class MockTransport implements WatchTransport {
     this.dfu =
       this.mode === 'bootloader'
         ? new MockLegacyDfuTarget(id, 'wasp-os')
-        : new MockLegacyDfuTarget(id, 'neotime', true);
+        : new MockLegacyDfuTarget(id, 'battletime', true);
     if (this.mode === 'bootloader') {
       this.dfu.enterBootloader();
     } else {

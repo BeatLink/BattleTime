@@ -22,7 +22,7 @@ import {
 } from './packages';
 
 function watch() {
-  return new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+  return new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
 }
 
 // A file writer that keeps what it was given, as the file transfer service would on the watch.

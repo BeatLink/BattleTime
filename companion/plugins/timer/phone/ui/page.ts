@@ -5,7 +5,7 @@ import { chosenDuration, durationText, statusText, timerStatus, watchNow, type T
 
 type Snapshot = { app: { state: TimerState | null } | null };
 
-const send = (message: unknown) => parent.postMessage({ neotime: message }, '*');
+const send = (message: unknown) => parent.postMessage({ battletime: message }, '*');
 const byId = <Kind extends HTMLElement>(id: string) => document.getElementById(id) as Kind;
 const chosen = byId<HTMLElement>('chosen');
 const status = byId<HTMLElement>('status');
@@ -23,7 +23,7 @@ function render() {
 }
 
 window.addEventListener('message', (event) => {
-  const message = event.data && event.data.neotime;
+  const message = event.data && event.data.battletime;
   if (!message) return;
   if ('error' in message) {
     problem.textContent = message.error ?? '';

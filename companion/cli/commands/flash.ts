@@ -5,17 +5,17 @@ import { basename } from 'node:path';
 
 import { ENTER_DFU_COMMAND, flashFirmware } from '@/dfu/flash';
 import { readFirmwarePackage } from '@/dfu/package';
-import { setWatchTime } from '@/protocol/neotime';
+import { setWatchTime } from '@/protocol/battletime';
 
 import type { WatchSession } from '../ble';
 import { kilobytes, ProgressBar, say } from '../output';
 
-export const flashUsage = `neotime flash <package.zip> [--address <mac>]
+export const flashUsage = `battletime flash <package.zip> [--address <mac>]
 
   Sends a Nordic DFU package, such as the zip tools/package_dfu.py makes in
-  the NeoTime tree. NeoTime takes it in its running firmware, restarts, and
+  the BattleTime tree. BattleTime takes it in its running firmware, restarts, and
   keeps it once this tool reconnects and sets the time. A watch still on
-  wasp-os, taking NeoTime's reloader, is first restarted into its bootloader.`;
+  wasp-os, taking BattleTime's reloader, is first restarted into its bootloader.`;
 
 export async function flash(session: WatchSession, path: string): Promise<void> {
   const firmware = readFirmwarePackage(new Uint8Array(readFileSync(path)), basename(path));

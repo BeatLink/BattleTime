@@ -6,7 +6,7 @@ you choose what is on your watch.
 
 ## Installing from the store
 
-The companion app has a store with every app, face and plugin made in the NeoTime repository, ready
+The companion app has a store with every app, face and plugin made in the BattleTime repository, ready
 to install or uninstall, plus any you add from a file or download from a GitHub repository's
 releases. Plugins are the phone-side halves of watch apps. See
 [app-store.md](../app-store.md).
@@ -27,14 +27,14 @@ is free. Apps remember where they were: an app's state is saved when it closes o
 off, and put back when it opens.
 
 <div class="screens" markdown>
-![The Software app's list](../../neotime/harness/snapshots/screens/app-software.png){ .screen }
-![An app refused for its memory](../../neotime/harness/snapshots/screens/app-software-refused.png){ .screen }
+![The Software app's list](../../battletime/harness/snapshots/screens/app-software.png){ .screen }
+![An app refused for its memory](../../battletime/harness/snapshots/screens/app-software-refused.png){ .screen }
 </div>
 
 ## The apps
 
 There are 39 apps, ported from InfiniTime and wasp-os and merged where both had the same one, plus
-apps of NeoTime's own. Each has a page under [apps.md](../apps.md). Among them:
+apps of BattleTime's own. Each has a page under [apps.md](../apps.md). Among them:
 
 - **Time:** alarm, timer, stopwatch, pomodoro and sports.
 - **Health:** steps and heart rate.
@@ -65,8 +65,8 @@ chosen face shows at once and after a restart; if it is turned off or removed, t
 turned on shows instead. Some faces open their own settings on a long press.
 
 <div class="screens" markdown>
-![The Infineat face](../../neotime/harness/snapshots/screens/face-infineat.png){ .screen }
-![The PineTimeStyle face](../../neotime/harness/snapshots/screens/face-pinetime-style.png){ .screen }
-![The Casio face](../../neotime/harness/snapshots/screens/face-casio.png){ .screen }
-![The word clock](../../neotime/harness/snapshots/screens/face-word-clock.png){ .screen }
+![The Infineat face](../../battletime/harness/snapshots/screens/face-infineat.png){ .screen }
+![The PineTimeStyle face](../../battletime/harness/snapshots/screens/face-pinetime-style.png){ .screen }
+![The Casio face](../../battletime/harness/snapshots/screens/face-casio.png){ .screen }
+![The word clock](../../battletime/harness/snapshots/screens/face-word-clock.png){ .screen }
 </div>

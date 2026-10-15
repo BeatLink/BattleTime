@@ -15,19 +15,19 @@ when it ends, so it keeps running while the app is closed or the watch sleeps.
 
 ## Screens
 
-![The timer's rollers](../../neotime/harness/snapshots/screens/app-timer.png)
+![The timer's rollers](../../battletime/harness/snapshots/screens/app-timer.png)
 
 Choosing a length, here ten minutes.
 
-![The timer running](../../neotime/harness/snapshots/screens/app-timer-running.png)
+![The timer running](../../battletime/harness/snapshots/screens/app-timer-running.png)
 
 Running, with the time left inside a ring that empties as it counts down, and the pause button.
 
-![The timer paused](../../neotime/harness/snapshots/screens/app-timer-paused.png)
+![The timer paused](../../battletime/harness/snapshots/screens/app-timer-paused.png)
 
 Paused: the time and the ring grey out, with stop and play buttons.
 
-![The timer ringing](../../neotime/harness/snapshots/screens/app-timer-ringing.png)
+![The timer ringing](../../battletime/harness/snapshots/screens/app-timer-ringing.png)
 
 Time's up, 35 seconds after the end, with Dismiss.
 

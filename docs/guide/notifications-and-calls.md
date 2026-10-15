@@ -2,7 +2,7 @@
 
 ## Where notifications come from
 
-- **The phone's companion app.** The NeoTime companion app forwards the phone's notifications, as
+- **The phone's companion app.** The BattleTime companion app forwards the phone's notifications, as
   does Gadgetbridge. A notification dismissed on the phone goes from the watch too.
 - **The phone itself.** A few seconds after a phone connects, the watch looks for the phone's own
   Alert Notification service, as InfiniTime does, and when there is one it subscribes to its new
@@ -25,9 +25,9 @@ While a call rings or the phone is ringing the watch to find it, a notification 
 buzz or a preview.
 
 <div class="screens" markdown>
-![The preview of a missed call, its bar running out](../../neotime/harness/snapshots/screens/shell-notifications-preview.png){ .screen }
-![Five notifications, newest first](../../neotime/harness/snapshots/screens/shell-notifications-list.png){ .screen }
-![A notification read in full](../../neotime/harness/snapshots/screens/shell-notifications-message.png){ .screen }
+![The preview of a missed call, its bar running out](../../battletime/harness/snapshots/screens/shell-notifications-preview.png){ .screen }
+![Five notifications, newest first](../../battletime/harness/snapshots/screens/shell-notifications-list.png){ .screen }
+![A notification read in full](../../battletime/harness/snapshots/screens/shell-notifications-message.png){ .screen }
 </div>
 
 ## The notifications
@@ -60,15 +60,15 @@ the call ends or two minutes pass.
 - After a call, the companion app leaves a notification saying whether it was missed, ignored on
   the watch or accepted, in place of the phone's own missed call notification.
 
-Answering needs the NeoTime companion app on Android 8 or later, or Gadgetbridge; rejecting needs
+Answering needs the BattleTime companion app on Android 8 or later, or Gadgetbridge; rejecting needs
 Android 9. A new alert in the incoming call category, from the phone's own Alert Notification
 service or a Bluetooth tool, rings the call screen too, though no answer goes back. Without the
 call app installed, a call buzzes once and lights the screen. Apps that listen for calls hear every
 call as well.
 
 <div class="screens" markdown>
-![A call ringing](../../neotime/harness/snapshots/screens/app-call-ringing.png){ .screen }
-![A call answered](../../neotime/harness/snapshots/screens/app-call-answered.png){ .screen }
+![A call ringing](../../battletime/harness/snapshots/screens/app-call-ringing.png){ .screen }
+![A call answered](../../battletime/harness/snapshots/screens/app-call-answered.png){ .screen }
 </div>
 
 ## Do not disturb

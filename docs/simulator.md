@@ -1,14 +1,14 @@
 # Simulator
 
-NeoTime's simulator runs the real drivers on a desktop, in a 240x240 window, so screen and input
+BattleTime's simulator runs the real drivers on a desktop, in a 240x240 window, so screen and input
 code can be tried without flashing the watch. It follows the idea of InfiniTime's
-[InfiniSim](https://github.com/InfiniTimeOrg/InfiniSim), but works differently, because NeoTime is
+[InfiniSim](https://github.com/InfiniTimeOrg/InfiniSim), but works differently, because BattleTime is
 Rust.
 
 ## Running it
 
 ```sh
-nix run                        # or, inside nix develop: cargo run -p neotime-simulator
+nix run                        # or, inside nix develop: cargo run -p battletime-simulator
 nix run . -- --page 2          # start on another page
 nix run . -- --scale 3         # a bigger window
 nix run . -- --screenshot out.png --page 3   # save one frame and exit, with no window
@@ -19,18 +19,18 @@ nix run . -- --screenshot out.png --page 3   # save one frame and exit, with no 
 | Drag up or down, or press Up and Down | Slide to the next or previous page |
 | Space | Press the side button, which gives one tap of the motor |
 | R | Ring the motor once |
-| S | Save a screenshot as `neotime-<time>.png` |
+| S | Save a screenshot as `battletime-<time>.png` |
 | Q or Escape | Quit |
 
 A red border shows while the motor is running.
 
 ## Running an app
 
-The simulator runs an app image through `neotime-app-host`, the same code the watch will use:
+The simulator runs an app image through `battletime-app-host`, the same code the watch will use:
 
 ```sh
-cargo run -p neotime-simulator -- --app path/to/app.ntapp   # an image file
-cargo run -p neotime-simulator -- --demo                    # the built-in stopwatch
+cargo run -p battletime-simulator -- --app path/to/app.ntapp   # an image file
+cargo run -p battletime-simulator -- --demo                    # the built-in stopwatch
 nix run . -- --demo --click 120,138 --screenshot out.png    # click Start, save one frame, exit
 ```
 
@@ -43,8 +43,8 @@ shows it. `--library path/to/shared.ntlib` gives the app the shared library, for
 from it:
 
 ```sh
-cargo run -q -p neotime-compiler -- faces/digital/face.tsx -o face.ntapp
-cargo run -q -p neotime-compiler -- library -o shared.ntlib
+cargo run -q -p battletime-compiler -- faces/digital/face.tsx -o face.ntapp
+cargo run -q -p battletime-compiler -- library -o shared.ntlib
 nix run . -- --app face.ntapp --library shared.ntlib
 ```
 
@@ -73,7 +73,7 @@ For automated checks of apps without a window, see [testing.md](testing.md).
 it compiles the apps from their source, so run it from the repository.
 
 ```sh
-cargo run -p neotime-simulator -- --script tests/scripts/stopwatch_start_and_pause.neotime
+cargo run -p battletime-simulator -- --script tests/scripts/stopwatch_start_and_pause.battletime
 ```
 
 It prints each step as `ok    line 6: button`, and stops at the first that fails with its line,
@@ -87,7 +87,7 @@ what it expected and what it found. It exits with 0 when every step passes, 1 wh
 ([tools/appbuilder](../tools/appbuilder/README.md)), which shows the screen in VS Code:
 
 ```sh
-cargo run -p neotime-simulator -- --app app.ntapp --library shared.ntlib --stream
+cargo run -p battletime-simulator -- --app app.ntapp --library shared.ntlib --stream
 ```
 
 It reads one command a line on standard input: `press X Y`, `move X Y` and `release X Y` touch the
@@ -98,22 +98,22 @@ and `quit` or the end of the input stops it. Each time the screen changes it wri
 
 ## How it works
 
-The drivers talk to hardware only through `embedded-hal` traits and `neotime-display`'s
+The drivers talk to hardware only through `embedded-hal` traits and `battletime-display`'s
 `PanelInterface`, so the simulator hands them simulated parts in place of the chip's. Every driver
 in `drivers/` is listed here, with its part or why it has none:
 
 | Driver | In the simulator |
 |---|---|
-| `neotime-display` (ST7789) | A model of the panel (`simulator/src/panel.rs`), below. |
-| `neotime-vibrator` | A pin that runs the motor while low, as P0.16 does; the window shows a red border while it runs. |
-| `neotime-heart-rate` (HRS3300) | A model of the sensor (`SimulatedHeartRateChip` in `simulator/src/hardware.rs`) on a wrist with a steady 72 beats a minute. |
-| `neotime-touch` (CST816S) | No chip model: the mouse stands in for the finger, and the simulator turns presses, moves and drags into taps, long presses, drags and swipes itself. |
-| `neotime-button` | No pin model: Space presses the side button. |
-| `neotime-accelerometer` (BMA421 or BMA425) | None yet: steps and motion come from the stand-in system's fixed values. |
-| `neotime-external-flash` (XT25F32B) | None: `--files FOLDER` stands in for the flash store above it. |
-| `neotime-bluetooth` | None: there is no radio. Its own tests run the link layer and TrouBLE against a simulated central instead; see [bluetooth.md](bluetooth.md#tests). |
-| `neotime-status-screen` | Not run in the window, but its tests draw the bootloader's status page through the panel model's SPI wires. |
-| `neotime-battery-reading` | None: only the bootloader, its updater and the reloader use it, and none of them runs here. PineTimeEmulator's battery and SAADC stand in for it in the emulator suites. |
+| `battletime-display` (ST7789) | A model of the panel (`simulator/src/panel.rs`), below. |
+| `battletime-vibrator` | A pin that runs the motor while low, as P0.16 does; the window shows a red border while it runs. |
+| `battletime-heart-rate` (HRS3300) | A model of the sensor (`SimulatedHeartRateChip` in `simulator/src/hardware.rs`) on a wrist with a steady 72 beats a minute. |
+| `battletime-touch` (CST816S) | No chip model: the mouse stands in for the finger, and the simulator turns presses, moves and drags into taps, long presses, drags and swipes itself. |
+| `battletime-button` | No pin model: Space presses the side button. |
+| `battletime-accelerometer` (BMA421 or BMA425) | None yet: steps and motion come from the stand-in system's fixed values. |
+| `battletime-external-flash` (XT25F32B) | None: `--files FOLDER` stands in for the flash store above it. |
+| `battletime-bluetooth` | None: there is no radio. Its own tests run the link layer and TrouBLE against a simulated central instead; see [bluetooth.md](bluetooth.md#tests). |
+| `battletime-status-screen` | Not run in the window, but its tests draw the bootloader's status page through the panel model's SPI wires. |
+| `battletime-battery-reading` | None: only the bootloader, its updater and the reloader use it, and none of them runs here. PineTimeEmulator's battery and SAADC stand in for it in the emulator suites. |
 
 - **The screen** keeps the ST7789's 240x320 memory and follows the commands the driver sends, as
   the datasheet describes them: the address window, memory writes, the scroll area and scroll
@@ -143,9 +143,9 @@ also run the stopwatch through the display driver, and check how mouse movements
 
 InfiniSim is not an emulator. It compiles InfiniTime's C++ source against stand-ins for the
 nRF52 and FreeRTOS headers and an LVGL screen drawn with SDL. It cannot run Rust code or a
-firmware image, so it cannot run NeoTime.
+firmware image, so it cannot run BattleTime.
 
-It is still useful as a reference for InfiniTime's UI, which NeoTime borrows from, so the flake
+It is still useful as a reference for InfiniTime's UI, which BattleTime borrows from, so the flake
 builds it:
 
 ```sh

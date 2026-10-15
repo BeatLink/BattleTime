@@ -20,23 +20,23 @@ measuring as soon as it opens.
 
 ## Screens
 
-![The heart rate app starting](../../neotime/harness/snapshots/screens/app-heart.png)
+![The heart rate app starting](../../battletime/harness/snapshots/screens/app-heart.png)
 
 Just opened, while the sensor starts: no reading yet, so the number shows dashes.
 
-![The heart rate app with no touch](../../neotime/harness/snapshots/screens/app-heart-no-touch.png)
+![The heart rate app with no touch](../../battletime/harness/snapshots/screens/app-heart-no-touch.png)
 
 The sensor does not feel skin, so it says No touch detected.
 
-![The heart rate app settling](../../neotime/harness/snapshots/screens/app-heart-settling.png)
+![The heart rate app settling](../../battletime/harness/snapshots/screens/app-heart-settling.png)
 
 The sensor needs more data before its first reading.
 
-![The heart rate app measuring](../../neotime/harness/snapshots/screens/app-heart-measuring.png)
+![The heart rate app measuring](../../battletime/harness/snapshots/screens/app-heart-measuring.png)
 
 Measuring: the latest reading, 74, with a chart of the readings so far.
 
-![The heart rate app stopped](../../neotime/harness/snapshots/screens/app-heart-stopped.png)
+![The heart rate app stopped](../../battletime/harness/snapshots/screens/app-heart-stopped.png)
 
 Stopped, after tapping Stop: the chart stays and the button reads Start.
 

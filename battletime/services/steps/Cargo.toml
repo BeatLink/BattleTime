@@ -1,0 +1,16 @@
+[package]
+name = "battletime-steps"
+version = "0.1.0"
+edition = "2021"
+description = "The step history: today's steps by hour, the last week, a trip count and the daily step log on the file system"
+license.workspace = true
+publish = false
+
+[dependencies]
+heapless = "0.9"
+battletime-flash-store = { path = "../flash_store" }
+battletime-slot-log = { path = "../slot_log" }
+
+[dev-dependencies]
+embassy-futures = "0.1"
+battletime-flash-store = { path = "../flash_store", features = ["ram-flash"] }

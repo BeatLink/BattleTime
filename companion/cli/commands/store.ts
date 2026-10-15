@@ -1,5 +1,5 @@
 // The app store from the terminal: what the companion bundles, and the apps and plugins on GitHub releases.
-// The terminal keeps no store of its own; fetched files land in a folder for `neotime apps install`.
+// The terminal keeps no store of its own; fetched files land in a folder for `battletime apps install`.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -9,17 +9,17 @@ import { fetchStoreRelease, listStoreReleases } from '@/services/github-store';
 
 import { say } from '../output';
 
-export const storeUsage = `neotime store [list]
-neotime store releases [owner/name]
-neotime store fetch [owner/name] [number] [folder]
+export const storeUsage = `battletime store [list]
+battletime store releases [owner/name]
+battletime store fetch [owner/name] [number] [folder]
 
   store list shows every app and face this tool bundles, which apps install takes by id. releases
   lists the GitHub releases carrying apps or plugins, newest first and numbered, with the Actions
   builds too when GITHUB_TOKEN is set. fetch downloads one of them, the newest unless numbered, into
   the folder, the current one unless given: each app as <id>.ntapp and each plugin as <id>.ntplugin.
-  The repository is BeatLink/NeoTime unless given.`;
+  The repository is BeatLink/BattleTime unless given.`;
 
-export const DEFAULT_STORE_REPO = 'BeatLink/NeoTime';
+export const DEFAULT_STORE_REPO = 'BeatLink/BattleTime';
 
 type StoreOptions = { token?: string; fetcher?: typeof fetch };
 

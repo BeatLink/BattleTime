@@ -1,11 +1,11 @@
-// A debug report: what NeoTime's diagnostics say about the last restart and the crash before it,
+// A debug report: what BattleTime's diagnostics say about the last restart and the crash before it,
 // with the firmware version, the counters, the installed apps and the free storage, as one JSON
 // object. Saving one tells the watch, which then forgets the crash and leaves its crash screen.
-// The watch side is firmware/src/diagnostics.rs and services/crash_record in the NeoTime tree.
+// The watch side is firmware/src/diagnostics.rs and services/crash_record in the BattleTime tree.
 
 import type { DfuLink } from '@/dfu/link';
 import type { WatchApp } from '@/protocol/packages';
-import { DIAGNOSTIC_COUNTERS, NEOTIME_DIAGNOSTICS, NEOTIME_SERVICE, decodeDiagnostics } from '@/protocol/neotime';
+import { DIAGNOSTIC_COUNTERS, BATTLETIME_DIAGNOSTICS, BATTLETIME_SERVICE, decodeDiagnostics } from '@/protocol/battletime';
 
 // ============================================================================
 // Where the last restart sits in the diagnostics
@@ -125,7 +125,7 @@ export function crashSummary(lastRestart: LastRestart | null): string {
     outOfMemory: 'out of memory',
     unknown: 'an unknown crash',
   }[crash.kind];
-  return lastRestart.openApp ? `NeoTime stopped: ${cause} while ${lastRestart.openApp} was open.` : `NeoTime stopped: ${cause}.`;
+  return lastRestart.openApp ? `BattleTime stopped: ${cause} while ${lastRestart.openApp} was open.` : `BattleTime stopped: ${cause}.`;
 }
 
 // ============================================================================
@@ -161,7 +161,7 @@ async function optional<Value>(read: (() => Promise<Value>) | undefined): Promis
 }
 
 export async function readDebugReport(link: DfuLink, sources: ReportSources = {}): Promise<DebugReport> {
-  const diagnostics = await link.read(NEOTIME_SERVICE, NEOTIME_DIAGNOSTICS);
+  const diagnostics = await link.read(BATTLETIME_SERVICE, BATTLETIME_DIAGNOSTICS);
   const firmwareBytes = await optional(() => link.read(DEVICE_INFORMATION_SERVICE, FIRMWARE_REVISION));
   const counters: Record<string, number> = {};
   for (const counter of decodeDiagnostics(diagnostics).slice(0, COUNTER_WORDS)) {
@@ -179,11 +179,11 @@ export async function readDebugReport(link: DfuLink, sources: ReportSources = {}
 
 // Tells the watch the crash is saved, so it forgets it and leaves its crash screen.
 export async function markDebugReportSaved(link: DfuLink): Promise<void> {
-  await link.write(NEOTIME_SERVICE, NEOTIME_DIAGNOSTICS, Uint8Array.from([DEBUG_REPORT_SAVED]), 'request');
+  await link.write(BATTLETIME_SERVICE, BATTLETIME_DIAGNOSTICS, Uint8Array.from([DEBUG_REPORT_SAVED]), 'request');
 }
 
 export function debugReportFileName(report: DebugReport): string {
-  return `neotime-debug-${report.created.slice(0, 19).replace(/:/g, '-')}.json`;
+  return `battletime-debug-${report.created.slice(0, 19).replace(/:/g, '-')}.json`;
 }
 
 // Reads a report, hands it to `save` as a file name and JSON text, then tells the watch when it held a crash.

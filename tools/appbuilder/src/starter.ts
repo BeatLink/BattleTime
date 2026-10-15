@@ -22,11 +22,11 @@ function component_from_id(id: string): string {
 export function starter_app(id: string): string {
   const name = name_from_id(id);
   const component = component_from_id(id);
-  return `// ${name}: made with the NeoTime App Builder.
+  return `// ${name}: made with the BattleTime App Builder.
 
-import { define_app } from "neotime";
-import { icons } from "neotime/icons";
-import { Label, Screen } from "neotime/widgets";
+import { define_app } from "battletime";
+import { icons } from "battletime/icons";
+import { Label, Screen } from "battletime/widgets";
 
 // ============================================================================
 // Screen

@@ -1,0 +1,20 @@
+[package]
+name = "battletime-companion"
+version = "0.1.0"
+edition = "2021"
+description = "The companion app's message channel: JSON lines over the Nordic UART service, in Gadgetbridge's shape"
+license.workspace = true
+publish = false
+
+[features]
+default = ["single-values"]
+# Music and navigation values written one at a time, as InfiniTime's services carry them.
+single-values = []
+
+[dependencies]
+heapless = "0.9"
+serde = { version = "1", default-features = false, features = ["derive"] }
+serde-json-core = "0.6"
+
+battletime-runtime = { path = "../../runtime" }
+battletime-settings = { path = "../settings" }

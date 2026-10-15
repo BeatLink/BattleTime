@@ -1,0 +1,7 @@
+[package]
+name = "battletime-phone-client"
+version = "0.1.0"
+edition = "2021"
+description = "A small GATT client for the phone's own Current Time and Alert Notification services"
+license.workspace = true
+publish = false

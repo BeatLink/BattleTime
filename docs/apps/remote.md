@@ -1,6 +1,6 @@
 # Remote
 
-Up to nine buttons set up in the NeoTime companion app, each running an action on the phone or
+Up to nine buttons set up in the BattleTime companion app, each running an action on the phone or
 computer when tapped, such as playing music, finding the phone or calling a web address.
 
 ## Using it
@@ -16,19 +16,19 @@ computer when tapped, such as playing music, finding the phone or calling a web 
 
 ## Screens
 
-![The remote with no buttons set up](../../neotime/harness/snapshots/screens/app-remote.png)
+![The remote with no buttons set up](../../battletime/harness/snapshots/screens/app-remote.png)
 
 No buttons set up yet, with a reminder to choose them in the companion app.
 
-![The remote with one button](../../neotime/harness/snapshots/screens/app-remote-1.png)
+![The remote with one button](../../battletime/harness/snapshots/screens/app-remote-1.png)
 
 One button, a phone icon, filling the screen.
 
-![The remote with four buttons](../../neotime/harness/snapshots/screens/app-remote-4.png)
+![The remote with four buttons](../../battletime/harness/snapshots/screens/app-remote-4.png)
 
 Four buttons in a 2 by 2 grid: phone, play, next and previous.
 
-![The remote with nine buttons](../../neotime/harness/snapshots/screens/app-remote-9.png)
+![The remote with nine buttons](../../battletime/harness/snapshots/screens/app-remote-9.png)
 
 Nine buttons in three columns, from phone and media controls to a torch and a bell.
 
@@ -47,6 +47,6 @@ Nine buttons in three columns, from phone and media controls to a torch and a be
 - **Send to watch** puts the buttons on the watch. The actions stay in the companion app, so it
   must be connected for a tap to do anything.
 - **Recent taps** lists each tap, from the watch or a test, and whether its action worked.
-- On a computer, `neotime remote push` sends the buttons from the command line, and `neotime remote
+- On a computer, `battletime remote push` sends the buttons from the command line, and `battletime remote
   listen` stays connected and runs each button tapped on the watch. Media keys and Android actions
   need the app.

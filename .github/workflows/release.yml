@@ -1,5 +1,5 @@
 # Publishes a GitHub release for each version tag: the bootloader, firmware and reloader images, every
-# app, face and plugin with the store's neotime-store.zip, and the companion's signed Android app, all
+# app, face and plugin with the store's battletime-store.zip, and the companion's signed Android app, all
 # under one SHA256SUMS.
 name: Release
 
@@ -13,23 +13,23 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: neotime
+        working-directory: battletime
     steps:
       - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@v31
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            neotime -> target
-            neotime/bootloader -> target
-            neotime/firmware -> target
-            neotime/reloader -> target
+            battletime -> target
+            battletime/bootloader -> target
+            battletime/firmware -> target
+            battletime/reloader -> target
       - name: Build the bootloader, firmware and reloaders
         run: nix develop --command ../tools/build_images.sh
       - uses: actions/upload-artifact@v4
         with:
           name: watch-images
-          path: neotime/dist/
+          path: battletime/dist/
 
   store:
     name: Store
@@ -39,17 +39,17 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: neotime -> target
+          workspaces: battletime -> target
       - name: Install the companion's dependencies, which build the plugins
         working-directory: companion
         run: nix develop .. --command npm ci
       - name: Compile every app and face and pack every plugin
-        working-directory: neotime
+        working-directory: battletime
         run: nix develop --command python3 -I ../tools/build_store.py
       - uses: actions/upload-artifact@v4
         with:
-          name: neotime-store
-          path: neotime/dist/store/
+          name: battletime-store
+          path: battletime/dist/store/
 
   android:
     name: Companion for Android
@@ -87,7 +87,7 @@ jobs:
           nix develop ..#companion-android --command npm run tauri-android:release -- --config "{\"version\":\"$version\"}"
           mkdir -p ../release
           cp tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk \
-            "../release/NeoTime-Companion-$version.apk"
+            "../release/BattleTime-Companion-$version.apk"
       - name: Delete the signing key
         if: always()
         working-directory: companion/tauri/gen/android
@@ -110,7 +110,7 @@ jobs:
           path: release
       - uses: actions/download-artifact@v4
         with:
-          name: neotime-store
+          name: battletime-store
           path: store
       - uses: actions/download-artifact@v4
         with:

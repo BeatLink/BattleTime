@@ -15,15 +15,15 @@ A stopwatch that also counts the steps taken while it runs, ported from wasp-os'
 
 ## Screens
 
-![The sports timer, cleared](../../neotime/harness/snapshots/screens/app-sports.png)
+![The sports timer, cleared](../../battletime/harness/snapshots/screens/app-sports.png)
 
 Cleared, before the first start.
 
-![The sports timer running](../../neotime/harness/snapshots/screens/app-sports-running.png)
+![The sports timer running](../../battletime/harness/snapshots/screens/app-sports-running.png)
 
 Running, just over two minutes and 200 steps in, with the pause button.
 
-![The sports timer stopped](../../neotime/harness/snapshots/screens/app-sports-stopped.png)
+![The sports timer stopped](../../battletime/harness/snapshots/screens/app-sports-stopped.png)
 
 Stopped, with the play button back; a tap on the cards clears it.
 

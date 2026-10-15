@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { NO_CAPABILITIES, type WatchCapabilities } from '@/protocol/neotime';
+import { NO_CAPABILITIES, type WatchCapabilities } from '@/protocol/battletime';
 import { isTabVisible, visibleTabs } from '@/state/visible-tabs';
 
 import { remoteTapLine } from './mock-gadgetbridge';
@@ -61,7 +61,7 @@ describe('the mock watches', () => {
     expect(seen.lines).toEqual([]);
   });
 
-  it('reports application mode for a NeoTime watch, which serves its own services', async () => {
+  it('reports application mode for a BattleTime watch, which serves its own services', async () => {
     const transport = new MockTransport();
     const seen = watch(transport);
     const found = await scan(transport);
@@ -80,8 +80,8 @@ describe('the mock watches', () => {
   });
 });
 
-const NEOTIME: WatchCapabilities = { dfu: true, time: true, battery: false, diagnostics: true, files: false, packages: false, uart: false };
-const WITH_UART: WatchCapabilities = { ...NEOTIME, uart: true };
+const BATTLETIME: WatchCapabilities = { dfu: true, time: true, battery: false, diagnostics: true, files: false, packages: false, uart: false };
+const WITH_UART: WatchCapabilities = { ...BATTLETIME, uart: true };
 
 describe('which tabs are offered', () => {
   it('offers only the connection screen and settings with no watch', () => {
@@ -93,8 +93,8 @@ describe('which tabs are offered', () => {
     expect(visibleTabs('connected', 'bootloader', NO_CAPABILITIES)).toEqual(['index', 'settings', 'firmware']);
   });
 
-  it('offers the firmware update to NeoTime without a UART channel, and nothing that needs one', () => {
-    expect(visibleTabs('connected', 'application', NEOTIME)).toEqual(['index', 'settings', 'firmware']);
+  it('offers the firmware update to BattleTime without a UART channel, and nothing that needs one', () => {
+    expect(visibleTabs('connected', 'application', BATTLETIME)).toEqual(['index', 'settings', 'firmware']);
   });
 
   it('offers everything to a watch with a UART channel', () => {
@@ -112,7 +112,7 @@ describe('which tabs are offered', () => {
   });
 
   it('never offers a firmware update without a watch to send it to', () => {
-    expect(isTabVisible('firmware', 'disconnected', 'application', NEOTIME)).toBe(false);
-    expect(isTabVisible('firmware', 'connecting', 'bootloader', NEOTIME)).toBe(false);
+    expect(isTabVisible('firmware', 'disconnected', 'application', BATTLETIME)).toBe(false);
+    expect(isTabVisible('firmware', 'connecting', 'bootloader', BATTLETIME)).toBe(false);
   });
 });

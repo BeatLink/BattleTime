@@ -12,7 +12,7 @@ buzz the motor, and an incoming call alert, which must open the call app.
     python3 -I tools/check_phone_services.py FIRMWARE_ELF [SCREENSHOT]
 
 SCREENSHOT, when given, saves the call screen the alert opened. Run it inside `nix develop`, with
-the firmware built (`cd neotime/firmware && cargo build --release`). It finds the emulator in
+the firmware built (`cd battletime/firmware && cargo build --release`). It finds the emulator in
 $PINETIME_EMULATOR, or in a PineTimeEmulator folder beside the main checkout, and takes about a
 minute.
 """
@@ -148,7 +148,7 @@ def answer(request, writes):
 
 # How long the watch may take to find the services, in wall clock seconds; it starts 3 emulated seconds after connecting.
 DISCOVERY_SECONDS = 40
-KEPT_CLOCK_SYMBOL = "neotime_firmware::clock::KEPT_CLOCK"
+KEPT_CLOCK_SYMBOL = "battletime_firmware::clock::KEPT_CLOCK"
 KEPT_CLOCK_MARKER = 0x454D_4954
 # The kept clock is written twice a second, and the phone's time is a few seconds old once it is read.
 CLOCK_TOLERANCE_MILLISECONDS = 10_000

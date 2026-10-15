@@ -1,6 +1,6 @@
 // Plugins: the phone-side halves of watch apps, which the desktop app installs and runs in its Rust core.
 //
-// The window lists and manages them through `window.neotime.plugins` (tauri/src/bridge.js), installs
+// The window lists and manages them through `window.battletime.plugins` (tauri/src/bridge.js), installs
 // the watch apps each one carries, and shows each one's settings page in a sandboxed frame that talks
 // to the plugin through messages. docs/plugins.md describes plugins in full.
 
@@ -43,7 +43,7 @@ export type PluginBridge = {
 };
 
 export function pluginBridge(): PluginBridge | null {
-  return (globalThis as { neotime?: { plugins?: PluginBridge } }).neotime?.plugins ?? null;
+  return (globalThis as { battletime?: { plugins?: PluginBridge } }).battletime?.plugins ?? null;
 }
 
 function valueOf<Value>(result: BridgeResult<Value>): Value {
@@ -141,16 +141,16 @@ export function pluginPageUrl(id: string, pageBase = 'plugin://'): string {
   return `${pageBase}${encodeURIComponent(id)}/`;
 }
 
-// The page and the window wrap each message as { neotime: message }, so other messages are ignored.
+// The page and the window wrap each message as { battletime: message }, so other messages are ignored.
 export function messageFromPage(data: unknown): { message: unknown } | null {
-  if (data && typeof data === 'object' && 'neotime' in data) {
-    return { message: (data as { neotime: unknown }).neotime };
+  if (data && typeof data === 'object' && 'battletime' in data) {
+    return { message: (data as { battletime: unknown }).battletime };
   }
   return null;
 }
 
-export function messageToPage(message: unknown): { neotime: unknown } {
-  return { neotime: message };
+export function messageToPage(message: unknown): { battletime: unknown } {
+  return { battletime: message };
 }
 
 // Keeps the newest log lines, at most `limit` of them.

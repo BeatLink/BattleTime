@@ -1,6 +1,6 @@
 # Storage
 
-NeoTime keeps its files, settings and logs in the external flash with `neotime-flash-store`
+BattleTime keeps its files, settings and logs in the external flash with `battletime-flash-store`
 (`services/flash_store/`). [flash-store.md](flash-store.md) describes the store itself: its files,
 records and logs, how it survives a power cut and what it costs. This page says what the watch
 keeps there and how the firmware reaches it.
@@ -25,7 +25,7 @@ own.
 
 | Path | Holds |
 |---|---|
-| `/apps/<id>/app.ntapp` | the compiled app or watch face, as `neotime-compiler` writes it |
+| `/apps/<id>/app.ntapp` | the compiled app or watch face, as `battletime-compiler` writes it |
 | `/apps/<id>/state` | what the app saved, written by the shell when the app closes or the screen turns off; the alarm app's alarms and the sports app's last sessions are kept here |
 | `/apps/<id>/disabled` | present when the app is installed but turned off |
 | `/temp/<id>/` | a temporary app's image and data files, which the phone writes and deletes; see [companion-protocol.md](companion-protocol.md#temporary-apps-served) |
@@ -57,7 +57,7 @@ The days are kept in blocks, blank files of one sector holding whole days, block
 blocks of days after 1970-01-01. Each slot is programmed into its place in its block, so a slot
 costs no erase, only a new block does, every 8 or 16 days. Each byte is stored flipped by its log's
 mask, so a slot never written reads as the empty value. A block is deleted once all its days are
-older than 90 days. `neotime-slot-log` (`services/slot_log/`) names the blocks, writes the slots
+older than 90 days. `battletime-slot-log` (`services/slot_log/`) names the blocks, writes the slots
 and forgets old days for all three.
 
 | Path | Holds |

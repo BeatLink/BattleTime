@@ -1,0 +1,29 @@
+[package]
+name = "battletime-packages"
+version = "0.1.0"
+edition = "2021"
+description = "BattleTime's package manager: the apps and watch faces installed in /apps on the external flash"
+license.workspace = true
+publish = false
+
+[dependencies]
+embedded-storage = "0.3"
+heapless = "0.9"
+battletime-flash-store = { path = "../flash_store" }
+serde = { version = "1", default-features = false, features = ["derive"] }
+serde-json-core = "0.6"
+
+battletime-boot = { path = "../../boot" }
+
+battletime-runtime = { path = "../../runtime" }
+
+[dev-dependencies]
+embassy-futures = "0.1"
+battletime-flash-store = { path = "../flash_store", features = ["ram-flash"] }
+battletime-runtime = { path = "../../runtime", features = ["writer"] }
+battletime-settings = { path = "../settings" }
+
+# Its argument parsing has tests, which `cargo test` runs.
+[[example]]
+name = "filesystem_use"
+test = true

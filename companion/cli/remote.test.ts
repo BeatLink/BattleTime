@@ -18,7 +18,7 @@ const BUTTONS = [
 ];
 
 function buttonsFile(contents: unknown = BUTTONS): string {
-  const path = join(mkdtempSync(join(tmpdir(), 'neotime-remote-')), 'remote.json');
+  const path = join(mkdtempSync(join(tmpdir(), 'battletime-remote-')), 'remote.json');
   writeFileSync(path, JSON.stringify(contents));
   return path;
 }
@@ -66,7 +66,7 @@ describe('the remote command', () => {
 
   it('sends the layout to the watch', async () => {
     capture();
-    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
     const service = FileService.open(watch);
     const session = { deviceId: watch.deviceId, files: () => service } as unknown as WatchSession;
     await remote(session, ['push'], buttonsFile());
@@ -94,7 +94,7 @@ describe('the remote command', () => {
 
   it('reads the buttons from the config folder unless given a file, and says when there are none', () => {
     process.env.XDG_CONFIG_HOME = '/somewhere';
-    expect(remoteButtonsPath()).toBe('/somewhere/neotime-companion/remote.json');
+    expect(remoteButtonsPath()).toBe('/somewhere/battletime-companion/remote.json');
     delete process.env.XDG_CONFIG_HOME;
     expect(remoteButtonsPath('mine.json')).toBe('mine.json');
     expect(() => loadRemoteButtons('/no/such/remote.json')).toThrow('No remote buttons at /no/such/remote.json');

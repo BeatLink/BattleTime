@@ -11,7 +11,7 @@ import {
   resetReasonNames,
   saveDebugReport,
 } from './debug-report';
-import { decodeDiagnostics } from './neotime';
+import { decodeDiagnostics } from './battletime';
 
 const COUNTERS = [10, 1, 1, 1, 5, 4, 2, 1];
 
@@ -53,7 +53,7 @@ describe('the last restart', () => {
 
     expect(lastRestart?.crash).toEqual({ kind: 'panic', returnAddresses: ['0x00005101', '0x0001a2b5'] });
     expect(lastRestart?.openApp).toBe('stopwatch');
-    expect(crashSummary(lastRestart)).toBe('NeoTime stopped: a software error while stopwatch was open.');
+    expect(crashSummary(lastRestart)).toBe('BattleTime stopped: a software error while stopwatch was open.');
   });
 
   it('reads a fault, and tells a stack overflow by its memory management bits', () => {
@@ -69,8 +69,8 @@ describe('the last restart', () => {
       stackOverflow: false,
     });
     expect(fault?.openApp).toBe('');
-    expect(crashSummary(fault)).toBe('NeoTime stopped: a processor fault.');
-    expect(crashSummary(overflow)).toBe('NeoTime stopped: out of stack space.');
+    expect(crashSummary(fault)).toBe('BattleTime stopped: a processor fault.');
+    expect(crashSummary(overflow)).toBe('BattleTime stopped: out of stack space.');
   });
 
   it('reads running out of memory and a kind it does not know', () => {
@@ -78,9 +78,9 @@ describe('the last restart', () => {
     const unknown = decodeLastRestart(diagnostics(2, 9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
 
     expect(memory?.crash).toEqual({ kind: 'outOfMemory', requestedBytes: 2048, freeBytes: 612, returnAddresses: ['0x00005101'] });
-    expect(crashSummary(memory)).toBe('NeoTime stopped: out of memory.');
+    expect(crashSummary(memory)).toBe('BattleTime stopped: out of memory.');
     expect(unknown?.crash).toMatchObject({ kind: 'unknown', code: 9 });
-    expect(crashSummary(unknown)).toBe('NeoTime stopped: an unknown crash.');
+    expect(crashSummary(unknown)).toBe('BattleTime stopped: an unknown crash.');
   });
 });
 
@@ -101,7 +101,7 @@ describe('a debug report', () => {
     expect(report.lastRestart?.openApp).toBe('alarm');
     expect(report.apps).toEqual(apps);
     expect(report.freeStorageBytes).toBe(123456);
-    expect(debugReportFileName(report)).toBe('neotime-debug-2026-10-12T08-30-15.json');
+    expect(debugReportFileName(report)).toBe('battletime-debug-2026-10-12T08-30-15.json');
   });
 
   it('leaves out what the watch does not serve or fails to answer', async () => {
@@ -125,7 +125,7 @@ describe('a debug report', () => {
       saved.push([name, json]);
     });
 
-    expect(saved[0][0]).toBe('neotime-debug-2026-10-12T08-30-15.json');
+    expect(saved[0][0]).toBe('battletime-debug-2026-10-12T08-30-15.json');
     expect(JSON.parse(saved[0][1]).lastRestart.crash.requestedBytes).toBe(2048);
     expect(watch.debugReportsSaved).toBe(1);
     expect(watch.crashPending).toBe(false);

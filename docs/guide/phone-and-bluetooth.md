@@ -2,8 +2,8 @@
 
 ## Which phone apps work
 
-- **The NeoTime companion app** does everything on this page and installs the watch's face, launcher
-  and apps. See [The NeoTime Companion](../companion/index.md).
+- **The BattleTime companion app** does everything on this page and installs the watch's face, launcher
+  and apps. See [The BattleTime Companion](../companion/index.md).
 - **Gadgetbridge** sends notifications, calls, music, weather and directions with the same
   messages it uses for a Bangle.js, reads the heart rate and battery, and updates the firmware.
 - **Other InfiniTime companions,** such as ITD, Siglo and Amazfish, use the standard services the
@@ -13,7 +13,7 @@
 The watch advertises as InfiniTime does: quickly for 30 seconds after it starts, after a phone
 leaves or when Bluetooth comes back on, then about once a second to save power. With
 **Show as InfiniTime** turned on in the companion app's watch settings (or
-`neotime settings gadgetbridge_name=true`), the watch names itself "InfiniTime", so Gadgetbridge's
+`battletime settings gadgetbridge_name=true`), the watch names itself "InfiniTime", so Gadgetbridge's
 PineTime support recognises it. Settings on the watch has no row for this.
 
 Faces show the Bluetooth icon while a phone is connected, and phone apps such as the phone finder
@@ -39,7 +39,7 @@ The [music app](../apps/music.md) shows what the phone is playing, with the trac
 length. Its buttons play, pause and skip on the phone's player, and a swipe up swaps them for
 volume down and up. When it opens it asks the phone what is playing.
 
-![The music app playing a track](../../neotime/harness/snapshots/screens/app-music-playing.png){ .screen }
+![The music app playing a track](../../battletime/harness/snapshots/screens/app-music-playing.png){ .screen }
 
 ## Navigation
 
@@ -47,7 +47,7 @@ The [navigation app](../apps/navigation.md) shows turn-by-turn directions from t
 turn's arrow, what to do there, the distance to it and how much of the route is done. When it opens
 it asks the phone for the current step.
 
-![The next turn from the phone](../../neotime/harness/snapshots/screens/app-navigation-turn.png){ .screen }
+![The next turn from the phone](../../battletime/harness/snapshots/screens/app-navigation-turn.png){ .screen }
 
 ## Finding the watch or the phone
 

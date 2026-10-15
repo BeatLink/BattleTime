@@ -1,11 +1,11 @@
-// A stand-in for NeoTime's BLEFS file service, so files, backups and app installs work with no watch.
-// It answers as services/blefs in the NeoTime tree does, one notification per answer.
+// A stand-in for BattleTime's BLEFS file service, so files, backups and app installs work with no watch.
+// It answers as services/blefs in the BattleTime tree does, one notification per answer.
 
 import { encodeAppState, type StateEntry } from './app-state';
 import { COMMAND, STATUS } from './file-service';
 import { SLOTS_PER_DAY, STEP_BLOCK_BYTES, startOfDay, stepBlockPath, writeSlotsIntoBlock } from './steps';
 
-// The folders NeoTime makes when it first prepares its file system.
+// The folders BattleTime makes when it first prepares its file system.
 const FOLDERS = ['/apps', '/settings', '/resources'];
 
 const TOTAL_BYTES = 3 * 1024 * 1024;

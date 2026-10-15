@@ -9,7 +9,7 @@ const SVG = 'http://www.w3.org/2000/svg';
 const WIDTH = 280;
 const LABEL_ROOM = 14;
 
-const send = (message: unknown) => parent.postMessage({ neotime: message }, '*');
+const send = (message: unknown) => parent.postMessage({ battletime: message }, '*');
 const byId = (id: string) => document.getElementById(id) as unknown as HTMLElement;
 
 function shape(tag: string, attributes: Record<string, string | number>, text?: string): SVGElement {
@@ -46,7 +46,7 @@ function drawChart(target: HTMLElement, values: number[], labels: string[], heig
 }
 
 window.addEventListener('message', (event) => {
-  const message = event.data && event.data.neotime;
+  const message = event.data && event.data.battletime;
   if (!message) return;
   if ('error' in message) byId('problem').textContent = message.error ?? '';
   const snapshot = message.snapshot as Snapshot | undefined;

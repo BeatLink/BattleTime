@@ -11,7 +11,7 @@ clock everywhere.
 
 The phone sets the clock and time zone whenever it connects, in any of these ways:
 
-- The NeoTime companion app writes the time when it connects.
+- The BattleTime companion app writes the time when it connects.
 - Gadgetbridge and other InfiniTime companions write it through the standard Bluetooth Current
   Time service, or with Gadgetbridge's `setTime` message.
 - A phone that serves the Current Time service itself sets the clock with no app at all: a few
@@ -40,8 +40,8 @@ hand, as InfiniTime's date and time screens do:
    that follows the clock behaves as if a phone had set it.
 
 <div class="screens" markdown>
-![Setting the date](../../neotime/harness/snapshots/screens/app-settings-date.png){ .screen }
-![Setting the time](../../neotime/harness/snapshots/screens/app-settings-time.png){ .screen }
+![Setting the date](../../battletime/harness/snapshots/screens/app-settings-date.png){ .screen }
+![Setting the time](../../battletime/harness/snapshots/screens/app-settings-time.png){ .screen }
 </div>
 
 ## Chimes
@@ -66,4 +66,4 @@ returns to what was open. While an alarm is set, faces show a bell.
 Do not disturb silences everything but alarms and timers, and those too if you turn off
 **Alarms in DND** in Settings.
 
-![An alarm ringing](../../neotime/harness/snapshots/screens/app-alarm-ringing.png){ .screen }
+![An alarm ringing](../../battletime/harness/snapshots/screens/app-alarm-ringing.png){ .screen }

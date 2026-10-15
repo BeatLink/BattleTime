@@ -22,31 +22,31 @@ in place of every few short ones, until you stop it.
 
 ## Screens
 
-![The pomodoro countdown before starting](../../neotime/harness/snapshots/screens/app-pomodoro.png)
+![The pomodoro countdown before starting](../../battletime/harness/snapshots/screens/app-pomodoro.png)
 
 The countdown page on opening, with the work length and the three lengths below it.
 
-![Setting the work length](../../neotime/harness/snapshots/screens/app-pomodoro-work.png)
+![Setting the work length](../../battletime/harness/snapshots/screens/app-pomodoro-work.png)
 
 The work length page, the first page.
 
-![Setting the short break length](../../neotime/harness/snapshots/screens/app-pomodoro-short-break.png)
+![Setting the short break length](../../battletime/harness/snapshots/screens/app-pomodoro-short-break.png)
 
 The short break length page.
 
-![Setting the long break](../../neotime/harness/snapshots/screens/app-pomodoro-long-break.png)
+![Setting the long break](../../battletime/harness/snapshots/screens/app-pomodoro-long-break.png)
 
 The long break page: its length, and how many work sessions come before it.
 
-![A work session counting down](../../neotime/harness/snapshots/screens/app-pomodoro-running.png)
+![A work session counting down](../../battletime/harness/snapshots/screens/app-pomodoro-running.png)
 
 The first work session of four, counting down.
 
-![The buzz between intervals](../../neotime/harness/snapshots/screens/app-pomodoro-ringing.png)
+![The buzz between intervals](../../battletime/harness/snapshots/screens/app-pomodoro-ringing.png)
 
 A work session has ended: the watch buzzes and names the short break that comes next.
 
-![A short break counting down](../../neotime/harness/snapshots/screens/app-pomodoro-short-break-running.png)
+![A short break counting down](../../battletime/harness/snapshots/screens/app-pomodoro-short-break-running.png)
 
 The short break after the first work session.
 

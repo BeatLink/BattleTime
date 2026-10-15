@@ -1,0 +1,14 @@
+[package]
+name = "battletime-boot"
+version = "0.1.0"
+edition = "2021"
+description = "BattleTime's flash layout and recovery install, shared by the bootloader and the firmware"
+license.workspace = true
+publish = false
+
+[features]
+# The helpers the firmware's and the bootloader's build scripts share, which need the standard library.
+build-script = []
+
+[dependencies]
+embedded-storage = "0.3"

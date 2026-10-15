@@ -4,9 +4,9 @@ name: App Builder
 on:
   push:
     branches: [master]
-    paths: ["tools/appbuilder/**", "neotime/sdk/**", ".github/workflows/appbuilder.yml"]
+    paths: ["tools/appbuilder/**", "battletime/sdk/**", ".github/workflows/appbuilder.yml"]
   pull_request:
-    paths: ["tools/appbuilder/**", "neotime/sdk/**", ".github/workflows/appbuilder.yml"]
+    paths: ["tools/appbuilder/**", "battletime/sdk/**", ".github/workflows/appbuilder.yml"]
   workflow_dispatch:
 
 # A newer push to a pull request replaces its older run; every commit on master keeps its own result.

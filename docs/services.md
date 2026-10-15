@@ -1,6 +1,6 @@
 # Services
 
-The services in `neotime/services/` keep the watch's state and speak its protocols: files in the
+The services in `battletime/services/` keep the watch's state and speak its protocols: files in the
 external flash, settings, the clock, the step and health logs, installed apps, updates, and what
 the phone sends. Each is a `no_std` crate with no Bluetooth and no hardware in it, so its tests run
 on a computer, most of them against the flash store in RAM. The [firmware](firmware.md) carries the
@@ -10,7 +10,7 @@ bytes between them and the radio, the screen and the flash.
 
 ### Flash store (`services/flash_store`)
 
-`neotime-flash-store` keeps the watch's files, records and logs in the 3 MB `FILE_SYSTEM` region of
+`battletime-flash-store` keeps the watch's files, records and logs in the 3 MB `FILE_SYSTEM` region of
 the external flash, `async` and with no heap. It knows how data is written, not what it is, so a new
 kind of data needs no new format:
 
@@ -33,7 +33,7 @@ the format, [storage.md](storage.md) what the watch keeps in it, and
 
 ### Slot logs (`services/slot_log`)
 
-`neotime-slot-log` keeps days of six-minute slots in the flash store, in blocks of whole days: blank
+`battletime-slot-log` keeps days of six-minute slots in the flash store, in blocks of whole days: blank
 files of one sector, `/day_blocks/<log>/<n>`, block `n` starting `n` blocks of days after
 1970-01-01. A slot is programmed into its place when it ends, with `program_file`, so it needs no
 erase and a block costs one erase in all. Each byte is stored flipped by the log's mask, so a slot
@@ -55,7 +55,7 @@ ended; the firmware's battery task holds it, as [firmware.md](firmware.md#batter
 
 ### Settings (`services/settings`)
 
-`neotime-settings` defines the watch-wide settings: the 12 or 24 hour clock, units, the step goal,
+`battletime-settings` defines the watch-wide settings: the 12 or 24 hour clock, units, the step goal,
 the brightness, the screen timeout, the always-on screen, chimes, do not disturb and sleep mode,
 whether alarms ring in do not disturb, which touch wakes the screen, raise to wake, lower to sleep,
 shake to wake and its threshold, Bluetooth, whether updates are taken, how often the heart rate is
@@ -72,7 +72,7 @@ name for Gadgetbridge.
   (`Setting::survives_restart`), so a restart always turns the radio on: every app, the Settings
   app included, is installed over Bluetooth, so a watch saved with it off could never be reached
   again. Updates allowed only until the next restart read back as off.
-- **Apps.** `neotime-app-host`'s `settings` module maps each setting to the system value apps read,
+- **Apps.** `battletime-app-host`'s `settings` module maps each setting to the system value apps read,
   such as `settings.chimes`, and hands the open app a `settings_change` event for each change.
 
 The theme is kept apart, as eight colours in `/settings/theme`, since the companion app can set any
@@ -80,7 +80,7 @@ colours; the Settings app and `settings.theme` pick and read it by preset number
 
 ### Current Time (`services/current_time`)
 
-`neotime-current-time` holds the wall clock's logic and turns its milliseconds since 1970 into the
+`battletime-current-time` holds the wall clock's logic and turns its milliseconds since 1970 into the
 Bluetooth Current Time service's two values and back, so the time handling is tested on a computer.
 
 - **`WallClock`** keeps UTC as an offset from the timer's uptime, which the caller passes in, plus a
@@ -103,7 +103,7 @@ Bluetooth Current Time service's two values and back, so the time handling is te
 
 ### Companion messages (`services/companion`)
 
-`neotime-companion` reads the companion app's messages and writes the watch's replies, as
+`battletime-companion` reads the companion app's messages and writes the watch's replies, as
 [companion-protocol.md](companion-protocol.md) sets out: newline-ended JSON lines, `GB({...})` as
 Gadgetbridge sends them or bare. `LineAssembler` joins writes into lines and drops one longer than
 640 bytes; `parse_line` reads a message with `serde-json-core`, without allocating, and rounds
@@ -150,7 +150,7 @@ It holds the standard services' content too, so the firmware only serves the byt
 
 ### The phone's services (`services/phone_client`)
 
-`neotime-phone-client` is the watch's GATT client for the phone's own Current Time and Alert
+`battletime-phone-client` is the watch's GATT client for the phone's own Current Time and Alert
 Notification services, which InfiniTime's ServiceDiscovery, CurrentTimeClient and
 AlertNotificationClient use. `PhoneClient` is a state machine with no I/O: `next` takes the answer
 to the last request and gives any value it read and the next request, so the firmware only carries
@@ -167,7 +167,7 @@ service is left alone. `firmware/src/phone_services.rs` drives it; see
 
 ### Notifications (`services/notifications`)
 
-`neotime-notifications` keeps the notifications the watch holds, newest first: the latest 5 from
+`battletime-notifications` keeps the notifications the watch holds, newest first: the latest 5 from
 the phone and from apps, as InfiniTime keeps. Each one's text waits on the heap, about 200 B each,
 so an empty list costs almost nothing, and a notification with the id of one already kept replaces
 it, since the phone sends an update that way. Apps' own notifications take ids counting down from
@@ -183,7 +183,7 @@ calendar events in a fixed purple and the rest in the accent.
 
 ### Steps (`services/steps`)
 
-`neotime-steps` keeps the step history the firmware serves to apps as `steps_today` and
+`battletime-steps` keeps the step history the firmware serves to apps as `steps_today` and
 `step_history`, and its log in `/steps`.
 
 - **Readings.** `StepHistory::record` takes the chip's count and the local time. It adds what the
@@ -209,7 +209,7 @@ Midnight is local midnight, from the clock's time zone.
 
 ### Battery (`services/battery`)
 
-`neotime-battery` turns each battery reading into the charge the watch shows. `Battery::measure`
+`battletime-battery` turns each battery reading into the charge the watch shows. `Battery::measure`
 moves a smoothed voltage a quarter of the way to each reading, reads the charge along InfiniTime's
 measured curve, lets the charge only rise on the charger and only fall off it, caps it at 99 % while
 charging, and calls the battery full, at 100 % and not charging, once two readings in a row find
@@ -220,14 +220,14 @@ charge below 10 % off the charger, once until the charger is next connected. `wa
 which of them light the screen, given do not disturb.
 
 For the bootloader, its updater and the reloader it turns a reading from
-[`neotime-battery-reading`](drivers.md#battery-reading-driversbattery_reading) into the status
+[`battletime-battery-reading`](drivers.md#battery-reading-driversbattery_reading) into the status
 page's battery line, and allows a bootloader write only with power present and at least 3.7 V.
 
 ## Apps and updates
 
 ### Packages (`services/packages`)
 
-`neotime-packages` is the package manager for the apps and watch faces on the external flash. Each
+`battletime-packages` is the package manager for the apps and watch faces on the external flash. Each
 app has a folder, `/apps/<id>/`, with `app.ntapp`, its compiled image, and `state`, what it saved.
 The folders are the whole record: there is no list of installed apps to fall out of step with them.
 
@@ -270,7 +270,7 @@ The folders are the whole record: there is no list of installed apps to fall out
 
 ### Updates (`services/updates`)
 
-`neotime-updates` is the on-watch half of a firmware update, between the Bluetooth layer that
+`battletime-updates` is the on-watch half of a firmware update, between the Bluetooth layer that
 uploads an image and the bootloader that installs it. It knows nothing of the upload protocol:
 
 - **`UpdateReceiver`** takes a firmware image with `begin(size)`, then `receive(chunk)` in order,
@@ -288,10 +288,10 @@ uploads an image and the bootloader that installs it. It knows nothing of the up
 
 ### Firmware updates over Bluetooth (`services/dfu`)
 
-`neotime-dfu` speaks Nordic's legacy DFU, the protocol InfiniTime uses, so Gadgetbridge, ITD, Siglo
-and NeoTime's tools update NeoTime without changes. `LegacyDfu` is the state machine, with no
+`battletime-dfu` speaks Nordic's legacy DFU, the protocol InfiniTime uses, so Gadgetbridge, ITD, Siglo
+and BattleTime's tools update BattleTime without changes. `LegacyDfu` is the state machine, with no
 Bluetooth in it: control point commands and packet writes go in, notifications and a reset request
-come out, and the bytes go to `neotime-updates`. `activity` reports the step it is on and
+come out, and the bytes go to `battletime-updates`. `activity` reports the step it is on and
 `Outcome::failure` why a step was refused, for the status page. Its 256-byte write buffer and
 64-byte init packet are on the heap only while an update runs; a heap without room for them
 answers `START_DFU` with `OPERATION_FAILED`.
@@ -304,7 +304,7 @@ the GATT service for TrouBLE, and the tests run whole updates through it. See
 
 ### Files over Bluetooth (`services/blefs`)
 
-`neotime-blefs` speaks Adafruit's BLE file transfer protocol, InfiniTime's `FSService`, so ITD,
+`battletime-blefs` speaks Adafruit's BLE file transfer protocol, InfiniTime's `FSService`, so ITD,
 Gadgetbridge and the companion app reach the watch's files. `FileTransfer` turns one command into
 its answers against the flash store's `FileAccess`; it remembers the file being read or written
 between commands.
@@ -326,7 +326,7 @@ The `trouble` feature adds the GATT service. See
 
 ### Crash record (`services/crash_record`)
 
-`neotime-crash-record` says why the watch last restarted: the chip's `RESETREAS` bits in words
+`battletime-crash-record` says why the watch last restarted: the chip's `RESETREAS` bits in words
 (`RestartReason`), and a record of the last panic, out-of-memory or HardFault. The record is 60
 bytes of little-endian words in RAM that a reset keeps: `CRSH`, the kind, eight detail words, 16
 bytes of the open app's id, and a CRC-32 of the rest, so RAM that came up with noise never reads as
@@ -337,7 +337,7 @@ is in [firmware.md](firmware.md#crashes).
 
 ### Liveness (`services/liveness`)
 
-`neotime-liveness` judges whether the shell and the radio still make progress, so the watchdog is
+`battletime-liveness` judges whether the shell and the radio still make progress, so the watchdog is
 fed only while they do. The watchdog task checks twice a second with each part's counter: the
 shell's loop count, and the radio's interrupt count while it advertises or holds a connection. A
 quiet shell is asked to prove it still runs (`ping_shell`). A shell stopped for six checks, or a
@@ -346,7 +346,7 @@ long blocking job that also stops the watchdog task never counts against a part.
 
 ### Foreground (`services/foreground`)
 
-`neotime-foreground` says whether the wearer is watching the screen move, so background work that
+`battletime-foreground` says whether the wearer is watching the screen move, so background work that
 blocks every task waits for a pause. `may_start` holds work back while the shell is part way
 through a transition or a sliced redraw, or a finger is down, but never longer than a second, so a
 screen kept busy cannot starve it. The firmware's use of it is in
@@ -354,7 +354,7 @@ screen kept busy cannot starve it. The firmware's use of it is in
 
 ### Task table (`services/task_table`)
 
-`neotime-task-table` keeps the firmware's tasks, with how often each has run and how long it has
+`battletime-task-table` keeps the firmware's tasks, with how often each has run and how long it has
 spent running, for the System app's Tasks page. The firmware feeds it from embassy's trace hooks: a
 task is added when it is spawned, timed each time the executor polls it, and removed when it ends. A
 task names itself on its first run, since the hooks know a task only by its address.

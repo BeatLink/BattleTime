@@ -171,7 +171,7 @@ describe('sending the layout', () => {
   });
 
   it('reaches the mock watch through the file service', async () => {
-    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
     const service = await FileService.open(watch);
     await syncRemoteLayout(service, [PLAY], watch.deviceId, null, true);
     expect(decodeRemoteLayout(await service.read(REMOTE_BUTTONS_PATH))).toEqual(['play']);

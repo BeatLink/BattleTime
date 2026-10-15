@@ -1,7 +1,7 @@
 // The shared library's icons as pictures the screens can show, drawn from the library image the setup bundle carries.
 //
 // The layout of the image and its resources section is runtime/src/image.rs and runtime/src/resources.rs in
-// the NeoTime tree. Each icon is a mask: runs of (count, coverage), which this file turns into a white PNG
+// the BattleTime tree. Each icon is a mask: runs of (count, coverage), which this file turns into a white PNG
 // whose alpha is the coverage, so a screen can tint it in any colour as the watch does.
 
 import { zlibSync } from 'fflate';

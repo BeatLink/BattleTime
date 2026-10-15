@@ -33,7 +33,7 @@ function fakeBridge() {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 afterEach(() => {
-  delete (globalThis as { neotime?: unknown }).neotime;
+  delete (globalThis as { battletime?: unknown }).battletime;
 });
 
 describe('the note file in the app', () => {
@@ -71,9 +71,9 @@ describe('the note file in the app', () => {
   });
 
   it('is the access used where the bridge is', () => {
-    (globalThis as { neotime?: unknown }).neotime = { notes: fakeBridge().bridge };
+    (globalThis as { battletime?: unknown }).battletime = { notes: fakeBridge().bridge };
     expect(noteFileAccess()).not.toBe(pickerNoteAccess);
-    delete (globalThis as { neotime?: unknown }).neotime;
+    delete (globalThis as { battletime?: unknown }).battletime;
     expect(noteFileAccess()).toBe(pickerNoteAccess);
   });
 });

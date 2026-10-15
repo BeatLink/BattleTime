@@ -1,5 +1,5 @@
-// Reads the header of a compiled NeoTime image: its kind, id, name and launcher group, without checking its code.
-// The layout is neotime/runtime/src/image.rs; src/protocol/app-image.ts reads the same.
+// Reads the header of a compiled BattleTime image: its kind, id, name and launcher group, without checking its code.
+// The layout is battletime/runtime/src/image.rs; src/protocol/app-image.ts reads the same.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -39,10 +39,10 @@ fn u32_at(bytes: &[u8], at: usize) -> Option<u32> {
 
 pub fn read_image_header(bytes: &[u8]) -> Result<ImageHeader, String> {
     if bytes.len() < HEADER_BYTES || &bytes[..4] != MAGIC {
-        return Err("That file is not a NeoTime app image.".into());
+        return Err("That file is not a BattleTime app image.".into());
     }
     if u16_at(bytes, 4) != Some(FORMAT_VERSION) {
-        return Err("That image was made for another version of NeoTime.".into());
+        return Err("That image was made for another version of BattleTime.".into());
     }
     let kind = match bytes[6] {
         0 => ImageKind::App,
@@ -176,7 +176,7 @@ pub(crate) mod tests {
     fn bad_images_say_what_is_wrong() {
         assert!(read_image_header(b"short")
             .unwrap_err()
-            .contains("not a NeoTime app image"));
+            .contains("not a BattleTime app image"));
         let mut old = image(0, &["a", "A"], None);
         old[4] = 1;
         assert!(read_image_header(&old).unwrap_err().contains("another version"));

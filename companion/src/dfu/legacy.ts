@@ -1,4 +1,4 @@
-// Nordic legacy DFU, which NeoTime's firmware speaks, as do the old systems' bootloaders a reloader goes through.
+// Nordic legacy DFU, which BattleTime's firmware speaks, as do the old systems' bootloaders a reloader goes through.
 
 import { concat, u16le, u32le, readU32le } from './bytes';
 import { DfuError, DfuRefusal, NotifyQueue, sleep, type DfuLink } from './link';
@@ -48,7 +48,7 @@ const SUCCESS = 1;
 // Which image type the START_DFU command asks the watch to expect.
 const IMAGE_TYPE: Record<FirmwarePart, number> = {
   application: 0x04,
-  // NeoTime's own type: the running firmware stores the image in its recovery slot and keeps running.
+  // BattleTime's own type: the running firmware stores the image in its recovery slot and keeps running.
   recovery: 0x08,
 };
 
@@ -81,7 +81,7 @@ export type DfuProgress = {
 };
 
 export type DfuOptions = {
-  // Ask a NeoTime watch how much of this image it kept from an upload a lost link cut off, and send only the rest.
+  // Ask a BattleTime watch how much of this image it kept from an upload a lost link cut off, and send only the rest.
   resume?: boolean;
 };
 

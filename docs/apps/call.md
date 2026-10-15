@@ -22,27 +22,27 @@ After InfiniTime's and Bangle.js's call screens.
 
 ## Screens
 
-![The call app while a call rings](../../neotime/harness/snapshots/screens/app-call-ringing.png)
+![The call app while a call rings](../../battletime/harness/snapshots/screens/app-call-ringing.png)
 
 A call ringing, with the caller's name, **Mute**, **Reject** and **Accept**.
 
-![The call app with the call muted](../../neotime/harness/snapshots/screens/app-call-muted.png)
+![The call app with the call muted](../../battletime/harness/snapshots/screens/app-call-muted.png)
 
 Muted: the button reads **Muted** and the call rings on silently until it is answered, rejected or
 ends.
 
-![The call app during a call](../../neotime/harness/snapshots/screens/app-call-answered.png)
+![The call app during a call](../../battletime/harness/snapshots/screens/app-call-answered.png)
 
 The call answered, with **End call**.
 
-![The call app with no call](../../neotime/harness/snapshots/screens/app-call.png)
+![The call app with no call](../../battletime/harness/snapshots/screens/app-call.png)
 
 Opened from the launcher with no call.
 
 ## With the companion app
 
 - **Accept**, **Reject**, **Mute** and **End call** go to the phone through the companion app.
-  Answering needs the NeoTime companion app on Android 8 or later, or Gadgetbridge; rejecting
+  Answering needs the BattleTime companion app on Android 8 or later, or Gadgetbridge; rejecting
   needs Android 9.
 - When an incoming call ends, the companion app leaves a notification on the watch saying whether
   it was missed, ignored on the watch or accepted, in place of the phone's own missed call

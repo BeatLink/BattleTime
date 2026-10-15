@@ -4,7 +4,7 @@ import type { Backup } from '@/protocol/backup';
 import type { KeyValueStorage } from '@/services/app-store';
 import { appStorage } from '@/state/storage';
 
-const STORAGE_KEY = 'neotime.backups.v1';
+const STORAGE_KEY = 'battletime.backups.v1';
 
 // Older backups are dropped beyond this many.
 const KEEP = 10;

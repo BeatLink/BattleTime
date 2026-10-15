@@ -125,7 +125,7 @@ pub(crate) mod tests {
         let package = Package::read(&zipped(&[
             ("manifest.json", MANIFEST),
             ("watch/demo.ntapp", b"NTAP"),
-            ("phone/main.js", b"neotime.on('connect', () => {});"),
+            ("phone/main.js", b"battletime.on('connect', () => {});"),
             ("phone/ui/index.html", b"<p>hi</p>"),
             ("phone/ui/style.css", b"p{}"),
             ("notes.txt", b"left out"),

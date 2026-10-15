@@ -16,10 +16,10 @@ the other beats. Ported from InfiniTime's Metronome.
 
 ## Screens
 
-![The metronome, stopped](../../neotime/harness/snapshots/screens/app-metronome.png)
+![The metronome, stopped](../../battletime/harness/snapshots/screens/app-metronome.png)
 
 Stopped at 120 beats a minute, four beats to the bar, with the play button lit.
 
-![The metronome beating](../../neotime/harness/snapshots/screens/app-metronome-running.png)
+![The metronome beating](../../battletime/harness/snapshots/screens/app-metronome-running.png)
 
 Beating at a tapped 100 beats a minute, three to the bar, with the pause button showing.

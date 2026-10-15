@@ -3,7 +3,7 @@
 # Run it inside `nix develop`; CI runs the same script, so raise a floor whenever coverage rises.
 
 set -euo pipefail
-cd "$(dirname "$0")/../neotime"
+cd "$(dirname "$0")/../battletime"
 
 rust_minimum_line_percent=91
 

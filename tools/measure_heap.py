@@ -28,8 +28,8 @@ REPOSITORY = Path(__file__).resolve().parent.parent
 # The firmware's heap
 # ============================================================================
 
-HEAP_SYMBOL = "neotime_firmware::HEAP"
-HEAP_MEMORY_SYMBOL = "neotime_firmware::start_heap::HEAP_MEMORY"
+HEAP_SYMBOL = "battletime_firmware::HEAP"
+HEAP_MEMORY_SYMBOL = "battletime_firmware::start_heap::HEAP_MEMORY"
 # The allocator's bytes in use are its second word.
 USED_WORD = 1
 FIRMWARE_VECTOR_TABLE = 0x8100

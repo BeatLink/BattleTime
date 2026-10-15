@@ -35,7 +35,7 @@ import {
   setWatchTime,
   type DiagnosticCounter,
   type WatchCapabilities,
-} from '@/protocol/neotime';
+} from '@/protocol/battletime';
 import { readStatus, ReplyRouter, type RequestChannel } from '@/protocol/requests';
 import { answerHttpRequest, parseHostList } from '@/services/http-proxy';
 import { noteFileAccess, type NoteFileAccess } from '@/services/note-file';
@@ -79,7 +79,7 @@ type WatchContextValue = {
   watchReady: boolean;
   // Which services the connected watch serves; the UART features need `uart`.
   capabilities: WatchCapabilities;
-  // NeoTime's diagnostic counters, read now.
+  // BattleTime's diagnostic counters, read now.
   readDiagnostics: () => Promise<DiagnosticCounter[]>;
   watch: DiscoveredWatch | null;
   scanning: boolean;
@@ -97,7 +97,7 @@ type WatchContextValue = {
   sendRaw: (text: string) => Promise<void>;
   updateSettings: (patch: Partial<Settings>) => Promise<void>;
   clearConsole: () => void;
-  // NeoTime's file service on the connected watch, opened on first use.
+  // BattleTime's file service on the connected watch, opened on first use.
   files: () => Promise<FileService>;
   // The packages characteristic on the connected watch, opened on first use.
   packages: () => Promise<PackagesClient>;
@@ -444,7 +444,7 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
   }, [send]);
 
   // Find out what the watch serves, then set its clock, as Gadgetbridge does. Writing the time is also
-  // the exchange that makes NeoTime keep a firmware it is trying out.
+  // the exchange that makes BattleTime keep a firmware it is trying out.
   useEffect(() => {
     if (!watchReady) {
       return;

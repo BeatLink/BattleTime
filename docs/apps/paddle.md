@@ -14,11 +14,11 @@ left edge.
 
 ## Screens
 
-![Paddle as it opens](../../neotime/harness/snapshots/screens/app-paddle.png)
+![Paddle as it opens](../../battletime/harness/snapshots/screens/app-paddle.png)
 
 The ball in the middle as the app opens, with no points scored yet.
 
-![Paddle after a return](../../neotime/harness/snapshots/screens/app-paddle-playing.png)
+![Paddle after a return](../../battletime/harness/snapshots/screens/app-paddle-playing.png)
 
 The paddle moved down to the bottom left after returning the ball, scoring the first point and
 setting the best to 1.

@@ -9,14 +9,14 @@ const NUS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const NUS_RX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
 const NUS_TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
-// NeoTime advertises the legacy DFU service while its firmware runs; wasp-os advertises it only from its bootloader.
+// BattleTime advertises the legacy DFU service while its firmware runs; wasp-os advertises it only from its bootloader.
 const DFU_SERVICE = '00001530-1212-efde-1523-785feabcd123';
 
-// NeoTime's own service, which only its running firmware serves.
-const NEOTIME_SERVICE = '6e540001-0000-4000-8000-4e656f54696d';
+// BattleTime's own service, which only its running firmware serves.
+const BATTLETIME_SERVICE = '6e540001-0000-4000-8000-4e656f54696d';
 
-// NeoTime has no room left in its advertisement for its own service, so it is recognised by name.
-const NEOTIME_NAME = 'NeoTime';
+// BattleTime has no room left in its advertisement for its own service, so it is recognised by name.
+const BATTLETIME_NAME = 'BattleTime';
 
 // BlueZ splits a write itself only up to the negotiated MTU, so stay at the
 // size every connection supports.
@@ -136,7 +136,7 @@ class WatchBle {
             bootloader:
               !uuids.includes(NUS_SERVICE) &&
               uuids.includes(DFU_SERVICE) &&
-              !name.startsWith(NEOTIME_NAME),
+              !name.startsWith(BATTLETIME_NAME),
           });
         }
       } catch (error) {
@@ -257,11 +257,11 @@ class WatchBle {
     this.pending = device;
     this.gatt = await this.resolveServices(device);
 
-    // A bootloader serves neither the UART nor NeoTime's own service. When neither is there, keep the
+    // A bootloader serves neither the UART nor BattleTime's own service. When neither is there, keep the
     // link, because that is what a firmware update needs, and say so.
     let mode = 'bootloader';
     if (uart) {
-      if (await this.gatt.getPrimaryService(NEOTIME_SERVICE).catch(() => null)) {
+      if (await this.gatt.getPrimaryService(BATTLETIME_SERVICE).catch(() => null)) {
         mode = 'application';
       }
       const service = await this.gatt.getPrimaryService(NUS_SERVICE).catch(() => null);

@@ -233,7 +233,7 @@ fn logged_json(folder: &str, bytes: &[u8]) -> Value {
 
 // A log newer firmware keeps in blocks, one sector each of whole days, the block numbered by its first
 // day from 1970-01-01 over the days it holds; each byte is stored flipped so an unwritten slot reads as
-// the log's empty value (neotime/services/slot_log/src/lib.rs).
+// the log's empty value (battletime/services/slot_log/src/lib.rs).
 pub struct BlockLog {
     pub folder: &'static str,
     // The folder of the day files it stands for, whose names its days take.

@@ -1,5 +1,5 @@
 <resources>
-  <string name="phone_bridge_listener_label">NeoTime Companion</string>
+  <string name="phone_bridge_listener_label">BattleTime Companion</string>
   <string name="phone_bridge_channel_name">Watch connection</string>
   <string name="phone_bridge_keepalive_title">Connected to %1$s</string>
   <string name="phone_bridge_keepalive_text">Forwarding notifications to your watch</string>

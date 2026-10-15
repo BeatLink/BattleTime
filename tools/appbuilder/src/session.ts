@@ -1,4 +1,4 @@
-// Runs an app the way the watch would: the NeoTime compiler turns its source into an image, and the
+// Runs an app the way the watch would: the BattleTime compiler turns its source into an image, and the
 // simulator runs that image with `--stream`, sending frames back and taking touches.
 
 import type { ChildProcess, SpawnOptions } from "node:child_process";
@@ -11,22 +11,22 @@ import * as path from "node:path";
 
 export const SCREEN_SIZE = 240;
 const OUTPUT_FOLDER = path.join("target", "appbuilder");
-const BUILT_TOOLS = ["neotime-compiler", "neotime-simulator"];
+const BUILT_TOOLS = ["battletime-compiler", "battletime-simulator"];
 /** What to say when the checkout's simulator predates `--stream`, which the builder needs. */
-export const OLD_SIMULATOR_MESSAGE = "This checkout's simulator is older than the App Builder; update the checkout to NeoTime master";
+export const OLD_SIMULATOR_MESSAGE = "This checkout's simulator is older than the App Builder; update the checkout to BattleTime master";
 
 // ============================================================================
 // Finding the watch code
 // ============================================================================
 
-/** The `neotime/` folder holding `start` or found below one of its parents, or nothing. */
-export function find_neotime_folder(start: string): string | undefined {
-  const is_neotime = (folder: string) =>
+/** The `battletime/` folder holding `start` or found below one of its parents, or nothing. */
+export function find_battletime_folder(start: string): string | undefined {
+  const is_battletime = (folder: string) =>
     fs.existsSync(path.join(folder, "compiler", "Cargo.toml")) && fs.existsSync(path.join(folder, "simulator", "Cargo.toml"));
   let folder = path.resolve(start);
   for (;;) {
-    if (is_neotime(folder)) return folder;
-    if (is_neotime(path.join(folder, "neotime"))) return path.join(folder, "neotime");
+    if (is_battletime(folder)) return folder;
+    if (is_battletime(path.join(folder, "battletime"))) return path.join(folder, "battletime");
     const parent = path.dirname(folder);
     if (parent === folder) return undefined;
     folder = parent;
@@ -116,7 +116,7 @@ export class AppSession {
   private run_number = 0;
 
   constructor(
-    private readonly neotime_folder: string,
+    private readonly battletime_folder: string,
     /** Put in front of cargo, such as `nix develop --command`; empty runs cargo as it is. */
     private readonly toolchain_command: string,
     private readonly spawn: Spawn,
@@ -124,17 +124,17 @@ export class AppSession {
   ) {}
 
   private output_path(name: string): string {
-    return path.join(this.neotime_folder, OUTPUT_FOLDER, name);
+    return path.join(this.battletime_folder, OUTPUT_FOLDER, name);
   }
 
   private tool_path(name: string): string {
-    return path.join(this.neotime_folder, "target", "debug", name);
+    return path.join(this.battletime_folder, "target", "debug", name);
   }
 
   /** Runs a program to its end, giving its exit code and everything it wrote. */
   private run_to_end(command: string, arguments_: string[]): Promise<{ code: number; output: string }> {
     return new Promise((resolve) => {
-      const child = this.spawn(command, arguments_, { cwd: this.neotime_folder });
+      const child = this.spawn(command, arguments_, { cwd: this.battletime_folder });
       let output = "";
       child.stdout?.on("data", (chunk) => (output += chunk.toString()));
       child.stderr?.on("data", (chunk) => (output += chunk.toString()));
@@ -160,8 +160,8 @@ export class AppSession {
       this.tools_ready = undefined;
       return false;
     }
-    fs.mkdirSync(path.join(this.neotime_folder, OUTPUT_FOLDER), { recursive: true });
-    const library = await this.run_to_end(this.tool_path("neotime-compiler"), ["library", "-o", this.output_path("shared.ntlib")]);
+    fs.mkdirSync(path.join(this.battletime_folder, OUTPUT_FOLDER), { recursive: true });
+    const library = await this.run_to_end(this.tool_path("battletime-compiler"), ["library", "-o", this.output_path("shared.ntlib")]);
     if (library.code !== 0) {
       this.listener.status("The shared library did not build");
       this.listener.log(library.output);
@@ -178,7 +178,7 @@ export class AppSession {
 
     this.listener.status(`Compiling ${path.basename(app_file)}…`);
     const image = this.output_path("app.ntapp");
-    const compile = await this.run_to_end(this.tool_path("neotime-compiler"), [app_file, "-o", image]);
+    const compile = await this.run_to_end(this.tool_path("battletime-compiler"), [app_file, "-o", image]);
     if (this_run !== this.run_number) return;
     if (compile.code !== 0) {
       const errors = parse_compile_errors(compile.output, app_file);
@@ -192,8 +192,8 @@ export class AppSession {
 
   private start_simulator(image: string) {
     this.stop();
-    const simulator = this.spawn(this.tool_path("neotime-simulator"), ["--app", image, "--library", this.output_path("shared.ntlib"), "--stream"], {
-      cwd: this.neotime_folder,
+    const simulator = this.spawn(this.tool_path("battletime-simulator"), ["--app", image, "--library", this.output_path("shared.ntlib"), "--stream"], {
+      cwd: this.battletime_folder,
     });
     this.simulator = simulator;
     this.listener.status("Running");

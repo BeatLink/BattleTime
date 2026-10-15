@@ -23,7 +23,7 @@ hour. **Read again** fetches them now. Today's count is also on the Watch screen
 
 The **Steps** plugin's page draws the last two weeks and today's steps in six-minute slots.
 
-![The watch's Steps app](../../neotime/harness/snapshots/screens/app-steps.png)
+![The watch's Steps app](../../battletime/harness/snapshots/screens/app-steps.png)
 
 ## Alarms
 
@@ -55,7 +55,7 @@ The **Heart** plugin's page lists the last two weeks of heart rate from the watc
 average, lowest and highest. The watch logs heart rate when an app measures it, or on its own when
 the heart rate interval is set in the watch's settings.
 
-![The watch's Heart app](../../neotime/harness/snapshots/screens/app-heart.png)
+![The watch's Heart app](../../battletime/harness/snapshots/screens/app-heart.png)
 
 ## Battery
 
@@ -86,14 +86,14 @@ out, since they can be installed again.
 ## From the command line
 
 ```bash
-neotime status                    # battery, voltage and today's steps
-neotime steps 14                  # the last two weeks of steps
-neotime alarms                    # list the alarms
-neotime alarms 07:30/12345 09:00/67/off   # weekdays at 7:30, and a weekend alarm switched off
-neotime settings                  # print the watch's settings
-neotime settings brightness=3     # change one
-neotime backup watch.json
-neotime restore watch.json
+battletime status                    # battery, voltage and today's steps
+battletime steps 14                  # the last two weeks of steps
+battletime alarms                    # list the alarms
+battletime alarms 07:30/12345 09:00/67/off   # weekdays at 7:30, and a weekend alarm switched off
+battletime settings                  # print the watch's settings
+battletime settings brightness=3     # change one
+battletime backup watch.json
+battletime restore watch.json
 ```
 
 [The command line](command-line.md) has the rest.

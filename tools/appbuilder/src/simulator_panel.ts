@@ -31,9 +31,9 @@ export class SimulatorPanel {
   private readonly disposables: vscode.Disposable[] = [];
 
   /** Runs `app` in the simulator pane, opening the pane if it is closed. */
-  static show(context: vscode.ExtensionContext, app: vscode.Uri, neotime_folder: string, diagnostics: vscode.DiagnosticCollection) {
+  static show(context: vscode.ExtensionContext, app: vscode.Uri, battletime_folder: string, diagnostics: vscode.DiagnosticCollection) {
     const current = SimulatorPanel.current;
-    if (current && current.neotime_folder === neotime_folder) {
+    if (current && current.battletime_folder === battletime_folder) {
       current.app = app;
       current.panel.title = SimulatorPanel.title_for(app);
       current.panel.reveal(vscode.ViewColumn.Beside, true);
@@ -42,7 +42,7 @@ export class SimulatorPanel {
     }
     current?.panel.dispose();
     const panel = vscode.window.createWebviewPanel(
-      "neotime.simulator",
+      "battletime.simulator",
       SimulatorPanel.title_for(app),
       { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
       {
@@ -51,7 +51,7 @@ export class SimulatorPanel {
         localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "media")],
       },
     );
-    SimulatorPanel.current = new SimulatorPanel(context, panel, app, neotime_folder, diagnostics);
+    SimulatorPanel.current = new SimulatorPanel(context, panel, app, battletime_folder, diagnostics);
   }
 
   private static title_for(app: vscode.Uri): string {
@@ -62,14 +62,14 @@ export class SimulatorPanel {
     context: vscode.ExtensionContext,
     private readonly panel: vscode.WebviewPanel,
     private app: vscode.Uri,
-    private readonly neotime_folder: string,
+    private readonly battletime_folder: string,
     private readonly diagnostics: vscode.DiagnosticCollection,
   ) {
-    const output = vscode.window.createOutputChannel("NeoTime App Builder");
+    const output = vscode.window.createOutputChannel("BattleTime App Builder");
     this.disposables.push(output);
 
-    const toolchain = vscode.workspace.getConfiguration("neotime.appBuilder").get<string>("toolchainCommand", "nix develop --command");
-    this.session = new AppSession(neotime_folder, toolchain, spawn, {
+    const toolchain = vscode.workspace.getConfiguration("battletime.appBuilder").get<string>("toolchainCommand", "nix develop --command");
+    this.session = new AppSession(battletime_folder, toolchain, spawn, {
       status: (text) => this.post({ type: "status", text }),
       frame: (pixels) => this.post({ type: "frame", pixels: new Uint8Array(pixels.buffer) }),
       motor: (running) => this.post({ type: "motor", running }),
@@ -112,10 +112,10 @@ export class SimulatorPanel {
     for (const error of errors) {
       const place = new vscode.Position(Math.max(error.line - 1, 0), Math.max(error.column - 1, 0));
       const diagnostic = new vscode.Diagnostic(new vscode.Range(place, place.translate(0, 1)), error.message, vscode.DiagnosticSeverity.Error);
-      diagnostic.source = "neotime-compiler";
+      diagnostic.source = "battletime-compiler";
       by_file.set(error.file, [...(by_file.get(error.file) ?? []), diagnostic]);
     }
-    for (const [file, list] of by_file) this.diagnostics.set(vscode.Uri.file(path.resolve(this.neotime_folder, file)), list);
+    for (const [file, list] of by_file) this.diagnostics.set(vscode.Uri.file(path.resolve(this.battletime_folder, file)), list);
     this.post({ type: "errors", errors });
   }
 

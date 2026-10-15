@@ -1,4 +1,4 @@
-// A small stand-in for NeoTime's message handling, so the settings and slots screens work against the mock watch.
+// A small stand-in for BattleTime's message handling, so the settings and slots screens work against the mock watch.
 // It answers with the same JSON the firmware sends.
 
 import { THEME_COLOR_KEYS, type SettingsReply, type ThemeColors, type WatchSettingValues } from '@/protocol/gadgetbridge';

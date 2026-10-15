@@ -10,7 +10,7 @@ shell goes back to the face.
     python3 -I tools/check_call.py FIRMWARE_ELF [SCREENSHOT]
 
 SCREENSHOT, when given, saves the ringing screen. Run it inside `nix develop`, with the firmware
-built (`cd neotime/firmware && cargo build --release`). It finds the emulator in
+built (`cd battletime/firmware && cargo build --release`). It finds the emulator in
 $PINETIME_EMULATOR, or in a PineTimeEmulator folder beside the main checkout, and takes about a
 minute.
 """
@@ -32,7 +32,7 @@ import packages_over_hci  # noqa: E402
 
 REPOSITORY = Path(__file__).resolve().parent.parent
 # The watch's crates, apps and build output.
-NEOTIME = REPOSITORY / "neotime"
+BATTLETIME = REPOSITORY / "battletime"
 
 # ============================================================================
 # The install and the watch
@@ -46,7 +46,7 @@ IMAGE_HEADER_SIZE = 256
 # The UICR words embassy-nrf writes on the first start, so the emulated chip is not reset.
 FIRST_START_UICR = [(0x10001200, 0x15), (0x10001204, 0x15), (0x1000120C, 0xFFFFFFFE)]
 # The id of the app, face or launcher open now, which restart.rs keeps for the crash record.
-OPEN_APP_SYMBOL = "neotime_firmware::restart::OPEN_APP"
+OPEN_APP_SYMBOL = "battletime_firmware::restart::OPEN_APP"
 MOTOR_STATE = "sysbus.gpio0.vibrationMotor State"
 
 INCOMING_LINE = 'GB({"t":"call","cmd":"incoming","name":"Sam","number":"+15550100"})'
@@ -63,7 +63,7 @@ STILL_SECONDS = 4
 SAMPLE_SECONDS = 0.02
 
 
-def run(command, folder=NEOTIME):
+def run(command, folder=BATTLETIME):
     return subprocess.run(command, capture_output=True, text=True, cwd=folder, check=True).stdout
 
 
@@ -85,8 +85,8 @@ def emulator_folder():
 
 def compile_install(folder):
     """Compiles the packages and the shared library; gives the packages as ID=FILE pairs and the library."""
-    run(["cargo", "build", "-q", "-p", "neotime-compiler"])
-    compiler = str(NEOTIME / "target" / "debug" / "neotime-compiler")
+    run(["cargo", "build", "-q", "-p", "battletime-compiler"])
+    compiler = str(BATTLETIME / "target" / "debug" / "battletime-compiler")
     pairs = []
     for package_id, source in PACKAGES:
         image = folder / f"{package_id}.ntapp"
@@ -110,7 +110,7 @@ def library_lines(library, folder):
 
 def write_flash(path, pairs):
     """Writes the external flash image holding these ID=FILE packages and a theme that is not all black."""
-    run(["cargo", "run", "-q", "-p", "neotime-packages", "--example", "filesystem_use", "--",
+    run(["cargo", "run", "-q", "-p", "battletime-packages", "--example", "filesystem_use", "--",
          "--no-theme", "--image", str(path), *pairs])
     return path
 

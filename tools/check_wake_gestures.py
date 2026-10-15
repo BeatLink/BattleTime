@@ -8,7 +8,7 @@ the button, taps the face twice and checks that the screen goes dark.
 
     python3 -I tools/check_wake_gestures.py FIRMWARE_ELF
 
-Run it inside `nix develop`, with the firmware built (`cd neotime/firmware && cargo build
+Run it inside `nix develop`, with the firmware built (`cd battletime/firmware && cargo build
 --release`). It finds the emulator in $PINETIME_EMULATOR, or in a PineTimeEmulator folder beside
 the main checkout, and takes about a minute.
 """
@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parent.parent
-NEOTIME = REPOSITORY / "neotime"
+BATTLETIME = REPOSITORY / "battletime"
 
 # ============================================================================
 # The install
@@ -34,8 +34,8 @@ FACE_ID = "digital"
 FIRMWARE_VECTOR_TABLE = 0x8100
 IMAGE_HEADER_SIZE = 256
 FIRST_START_UICR = [(0x10001200, 0x15), (0x10001204, 0x15), (0x1000120C, 0xFFFFFFFE)]
-OPEN_APP_SYMBOL = "neotime_firmware::restart::OPEN_APP"
-COUNTERS_SYMBOL = "neotime_firmware::diagnostics::COUNTERS"
+OPEN_APP_SYMBOL = "battletime_firmware::restart::OPEN_APP"
+COUNTERS_SYMBOL = "battletime_firmware::diagnostics::COUNTERS"
 SCREEN_LIT_COUNTER = 2
 
 # The settings file: its format byte, then records of a setting's number and its value.
@@ -55,7 +55,7 @@ SECONDS_TO_REACT = 1.5
 SECONDS_HELD = 1.0
 
 
-def run(command, folder=NEOTIME):
+def run(command, folder=BATTLETIME):
     return subprocess.run(command, capture_output=True, text=True, cwd=folder, check=True).stdout
 
 
@@ -77,8 +77,8 @@ def emulator_folder():
 
 def build_install(folder):
     """Compiles the face and the shared library, and writes the flash image with the settings file; gives the flash and the library."""
-    run(["cargo", "build", "-q", "-p", "neotime-compiler"])
-    compiler = str(NEOTIME / "target" / "debug" / "neotime-compiler")
+    run(["cargo", "build", "-q", "-p", "battletime-compiler"])
+    compiler = str(BATTLETIME / "target" / "debug" / "battletime-compiler")
     face = folder / "face.ntapp"
     run([compiler, "faces/digital/face.tsx", "-o", str(face)])
     library = folder / "library.bin"
@@ -88,7 +88,7 @@ def build_install(folder):
                        for number, value in [SCREEN_TIMEOUT_SECONDS, RAISE_TO_WAKE, LOWER_TO_SLEEP])
     settings.write_bytes(bytes([SETTINGS_FILE_FORMAT]) + records)
     flash = folder / "flash.bin"
-    run(["cargo", "run", "-q", "-p", "neotime-packages", "--example", "filesystem_use", "--",
+    run(["cargo", "run", "-q", "-p", "battletime-packages", "--example", "filesystem_use", "--",
          "--no-theme", "--image", str(flash), f"{FACE_ID}={face}", f"/settings/system={settings}"])
     return flash, library
 

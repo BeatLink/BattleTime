@@ -42,7 +42,7 @@ loses it. While the phone holds the watch at home, the desktop does not try to c
 
 ## Finding and pairing
 
-- **Finding:** each companion announces `_neotime._tcp` on the local network over mDNS, with its
+- **Finding:** each companion announces `_battletime._tcp` on the local network over mDNS, with its
   device id. A companion links only with the devices it has paired with.
 - **Pairing, once:** the desktop shows a QR code holding its address, its public key and a
   one-time code. The phone scans it and sends its own public key with the code. Each keeps the

@@ -8,13 +8,13 @@ time.
 
 1. Wake the watch. It advertises quickly for 30 seconds after it starts or after a phone leaves,
    then about once a second, so it can always be found, just more slowly after a while.
-2. On the **Watch** screen, choose **Find a watch**. The list shows every NeoTime watch in range
+2. On the **Watch** screen, choose **Find a watch**. The list shows every BattleTime watch in range
    with its address and signal strength, and any watch waiting in a bootloader, marked
    **(bootloader)**.
 3. Choose the watch. The companion connects, sets the watch's clock and time zone, and reads what
    the watch serves.
 
-The watch advertises the name **NeoTime**. With **Show as InfiniTime** turned on in the watch's
+The watch advertises the name **BattleTime**. With **Show as InfiniTime** turned on in the watch's
 settings it advertises **InfiniTime** instead, for Gadgetbridge; see
 [Using Gadgetbridge instead](phone-features.md#using-gadgetbridge-instead).
 
@@ -50,7 +50,7 @@ The companion offers only what the connected watch can do:
 |---|---|
 | Not connected | the Watch screen, the store and Settings |
 | Waiting in its bootloader | firmware updates only; the Watch screen points to the Firmware tab |
-| Running NeoTime | everything its services allow: files and apps through the file service, notifications, steps and alarms through the message channel |
+| Running BattleTime | everything its services allow: files and apps through the file service, notifications, steps and alarms through the message channel |
 
 A watch in its bootloader runs no firmware, so the companion can only send it a firmware package.
 [Firmware updates](firmware-updates.md) says how.
@@ -60,8 +60,8 @@ A watch in its bootloader runs no firmware, so the companion can only send it a 
 The desktop app and the command line tool use the computer's Bluetooth through BlueZ. When the
 computer has more than one adapter, they use one that is switched on.
 
-The command line remembers the watch from the first `neotime scan` and connects to that address
-later without scanning; `--address` or the `NEOTIME_ADDRESS` variable picks another. BlueZ forgets
+The command line remembers the watch from the first `battletime scan` and connects to that address
+later without scanning; `--address` or the `BATTLETIME_ADDRESS` variable picks another. BlueZ forgets
 an unpaired watch soon after it last saw it, so when it no longer knows the address the tool scans
 until the watch appears, and says so if it never does.
 

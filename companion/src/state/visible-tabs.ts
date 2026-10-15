@@ -5,7 +5,7 @@
 // shown as something that does not work.
 
 import type { ConnectionState, WatchMode } from '@/ble/transport';
-import type { WatchCapabilities } from '@/protocol/neotime';
+import type { WatchCapabilities } from '@/protocol/battletime';
 
 export type TabName =
   | 'index'
@@ -17,7 +17,7 @@ export type TabName =
 // The connection screen and the app's own settings never depend on a watch.
 const ALWAYS: TabName[] = ['index', 'settings'];
 
-// These speak messages over the UART channel, which a bootloader and an early NeoTime lack.
+// These speak messages over the UART channel, which a bootloader and an early BattleTime lack.
 const NEEDS_UART: TabName[] = ['notifications', 'console'];
 
 export function visibleTabs(

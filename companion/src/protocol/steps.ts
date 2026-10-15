@@ -3,7 +3,7 @@
 //
 // Each day holds the steps of each slot from midnight as a little-endian u16. The watch keeps eight days to
 // a block, `/day_blocks/steps/<n>`, block n starting n * 8 days after 1970-01-01, each byte flipped so a slot
-// never written reads 0 (neotime/services/slot_log/src/lib.rs). Older firmware kept each day as a file,
+// never written reads 0 (battletime/services/slot_log/src/lib.rs). Older firmware kept each day as a file,
 // `/steps/<year>/<MM>-<DD>`, ending after its last slot with steps; such a file stays beside the block.
 
 // ============================================================================

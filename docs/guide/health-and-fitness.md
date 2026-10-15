@@ -15,8 +15,8 @@ new day at local midnight. The history and the trip count are kept through a res
 the six minutes in progress. The daily goal is **Step goal** in Settings, from 1,000 to 50,000.
 
 <div class="screens" markdown>
-![Today's steps against the goal](../../neotime/harness/snapshots/screens/app-steps.png){ .screen }
-![The last seven days](../../neotime/harness/snapshots/screens/app-steps-week.png){ .screen }
+![Today's steps against the goal](../../battletime/harness/snapshots/screens/app-steps.png){ .screen }
+![The last seven days](../../battletime/harness/snapshots/screens/app-steps-week.png){ .screen }
 </div>
 
 ## Heart rate
@@ -36,7 +36,7 @@ service while the heart app or the background setting is measuring.
 Heart rate has run in the emulator but not yet on a real watch.
 
 <div class="screens" markdown>
-![The heart app measuring](../../neotime/harness/snapshots/screens/app-heart-measuring.png){ .screen }
+![The heart app measuring](../../battletime/harness/snapshots/screens/app-heart-measuring.png){ .screen }
 </div>
 
 ## Heart rate and battery logs
@@ -53,7 +53,7 @@ from wasp-os. The screen stays on while it runs. Pause and carry on as often as 
 stopped, a tap clears it. The watch keeps your last five sessions, each with when it started, its
 time and its steps, and the companion app syncs them.
 
-![The sports app running](../../neotime/harness/snapshots/screens/app-sports-running.png){ .screen }
+![The sports app running](../../battletime/harness/snapshots/screens/app-sports-running.png){ .screen }
 
 ## Motion
 

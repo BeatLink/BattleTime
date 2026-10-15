@@ -35,7 +35,7 @@ function packageFile(image: Uint8Array): string {
     'a.dat': Uint8Array.from([1, 2, 3, 4]),
     'a.bin': image,
   });
-  const path = join(mkdtempSync(join(tmpdir(), 'neotime-')), 'firmware.zip');
+  const path = join(mkdtempSync(join(tmpdir(), 'battletime-')), 'firmware.zip');
   writeFileSync(path, zip);
   return path;
 }
@@ -64,7 +64,7 @@ describe('the flash command', () => {
   }, 20000);
 
   it('refuses a file that is not a firmware package', async () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'neotime-')), 'not-firmware.zip');
+    const path = join(mkdtempSync(join(tmpdir(), 'battletime-')), 'not-firmware.zip');
     writeFileSync(path, 'hello');
     await expect(flash(new FakeSession() as unknown as WatchSession, path)).rejects.toThrow(
       /not a zip archive/,
@@ -88,14 +88,14 @@ describe('the recovery command', () => {
 describe('the note command', () => {
   // A session whose file service is the mock watch's.
   function noteSession() {
-    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
     const service = FileService.open(watch);
     return { session: { deviceId: watch.deviceId, files: () => service } as unknown as WatchSession, service };
   }
 
   it('sends a text file and its font, and removes it again', async () => {
     const { session, service } = noteSession();
-    const path = join(mkdtempSync(join(tmpdir(), 'neotime-')), 'list.txt');
+    const path = join(mkdtempSync(join(tmpdir(), 'battletime-')), 'list.txt');
     writeFileSync(path, 'Milk\nBread\n');
 
     await note(session, [path, 'large']);
@@ -146,12 +146,12 @@ describe('the note command', () => {
 
 describe('the debug command', () => {
   it('saves the report as JSON and tells the watch it has the crash', async () => {
-    const session = new FakeSession('AA:BB:CC:DD:EE:00', 'neotime', true);
+    const session = new FakeSession('AA:BB:CC:DD:EE:00', 'battletime', true);
     Object.assign(session, {
       packages: async () => ({ apps: async () => [] }),
       files: async () => ({ storage: async () => ({ free: 4096 }) }),
     });
-    const path = join(mkdtempSync(join(tmpdir(), 'neotime-')), 'report.json');
+    const path = join(mkdtempSync(join(tmpdir(), 'battletime-')), 'report.json');
 
     const written = await debug(session as unknown as WatchSession, path);
 
@@ -165,12 +165,12 @@ describe('the debug command', () => {
 
   it('names the file after the time when none is given', async () => {
     const session = new FakeSession();
-    const folder = mkdtempSync(join(tmpdir(), 'neotime-'));
+    const folder = mkdtempSync(join(tmpdir(), 'battletime-'));
     const before = process.cwd();
     process.chdir(folder);
     try {
       const written = await debug(session as unknown as WatchSession);
-      expect(written).toMatch(/^neotime-debug-.*\.json$/);
+      expect(written).toMatch(/^battletime-debug-.*\.json$/);
       expect(readFileSync(join(folder, written), 'utf8')).toContain('"outOfMemory"');
     } finally {
       process.chdir(before);
@@ -193,6 +193,6 @@ describe('the diag command', () => {
 
     expect(printed[0]).toBe('Shell loops: 1234\n');
     expect(printed).toContain('Last restart: watchdog\n');
-    expect(printed).toContain('NeoTime stopped: out of memory while alarm was open.\n');
+    expect(printed).toContain('BattleTime stopped: out of memory while alarm was open.\n');
   });
 });

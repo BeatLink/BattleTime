@@ -3,5 +3,5 @@
 pub mod app_image;
 pub mod launcher;
 pub mod link;
-pub mod neotime;
+pub mod battletime;
 pub mod packages;

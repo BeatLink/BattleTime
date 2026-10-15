@@ -6,12 +6,12 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use futures::future::BoxFuture;
-use neotime_companion_core::ble::{subscription_key, WatchBle};
-use neotime_companion_core::plugins::host::{PluginHost, WatchData};
-use neotime_companion_core::plugins::runtime::DataWrite;
-use neotime_companion_core::sync::files::{FileTransport, FILE_SERVICE, FILE_TRANSFER};
-use neotime_companion_core::sync::store::SyncSettings;
-use neotime_companion_core::sync::{SyncOutput, SyncReport, Syncer};
+use battletime_companion_core::ble::{subscription_key, WatchBle};
+use battletime_companion_core::plugins::host::{PluginHost, WatchData};
+use battletime_companion_core::plugins::runtime::DataWrite;
+use battletime_companion_core::sync::files::{FileTransport, FILE_SERVICE, FILE_TRANSFER};
+use battletime_companion_core::sync::store::SyncSettings;
+use battletime_companion_core::sync::{SyncOutput, SyncReport, Syncer};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::OwnedMutexGuard;
@@ -223,8 +223,8 @@ pub fn files_end(companion: State<'_, Companion>, lease: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neotime_companion_core::sync::files::FileClient;
-    use neotime_companion_core::sync::store::SyncStore;
+    use battletime_companion_core::sync::files::FileClient;
+    use battletime_companion_core::sync::store::SyncStore;
     use serde_json::json;
 
     struct Nowhere;

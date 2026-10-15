@@ -1,6 +1,6 @@
 // How the watch's launcher groups the apps: its style, its view and the groups, kept in /settings/launcher.
 //
-// The file says where every app goes, as services/packages/src/launcher.rs in the NeoTime tree reads it:
+// The file says where every app goes, as services/packages/src/launcher.rs in the BattleTime tree reads it:
 // byte 0 the format version (1), byte 1 the style, byte 2 the view, byte 3 the group count, then per group
 // its icon's place in the shared library, its id, its name, and its apps' ids in order, each text behind a
 // length byte, and after the groups one byte of this app's own, how it sorts (0 by name, 1 the wearer's

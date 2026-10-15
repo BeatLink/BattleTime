@@ -18,7 +18,7 @@ const when = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
 function exportBackup(backup: Backup) {
-  saveFile(`neotime-backup-${backup.created.slice(0, 10)}.json`, JSON.stringify(backup), 'application/json');
+  saveFile(`battletime-backup-${backup.created.slice(0, 10)}.json`, JSON.stringify(backup), 'application/json');
 }
 
 export default function BackupScreen() {

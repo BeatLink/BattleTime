@@ -18,10 +18,10 @@ using little power. Ported from wasp-os's beacon app.
 
 ## Screens
 
-![The beacon, switched off](../../neotime/harness/snapshots/screens/app-beacon.png)
+![The beacon, switched off](../../battletime/harness/snapshots/screens/app-beacon.png)
 
 Switched off, at the lowest intensity and frequency.
 
-![The beacon flashing](../../neotime/harness/snapshots/screens/app-beacon-on.png)
+![The beacon flashing](../../battletime/harness/snapshots/screens/app-beacon-on.png)
 
 Switched on with both sliders moved up; the preview shows thicker green dashes closer together.

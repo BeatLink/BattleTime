@@ -290,7 +290,7 @@ describe('the codes on the watch', () => {
   });
 
   it('works over the file service, making the folder as it writes', async () => {
-    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
     const service = await FileService.open(watch);
     const bitmap = qrBitmap(wifiText({ ssid: 'Home', password: 'secret', security: 'WPA', hidden: false }));
 

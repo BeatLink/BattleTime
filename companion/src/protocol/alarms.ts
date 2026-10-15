@@ -1,4 +1,4 @@
-// The alarm app's alarms, read from and written into its saved state (neotime/apps/alarm/app.tsx).
+// The alarm app's alarms, read from and written into its saved state (battletime/apps/alarm/app.tsx).
 // It imports nothing, so the Alarm plugin's page bundles it as the screens and the command line use it.
 //
 // The app keeps twelve alarm places in a record, `alarms.hour`, `alarms.minute`, `alarms.days` and

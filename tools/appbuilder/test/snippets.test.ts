@@ -12,7 +12,7 @@ function parameter(name: string, optional = false): Parameter {
 }
 
 function entry(kind: CatalogEntry["kind"], name: string, parameters: Parameter[] = [], takes_children = false): CatalogEntry {
-  const module = kind === "widget" ? "neotime/widgets" : "neotime";
+  const module = kind === "widget" ? "battletime/widgets" : "battletime";
   return { kind, name, module, documentation: "", parameters, takes_children };
 }
 
@@ -51,8 +51,8 @@ describe("snippets", () => {
   });
 
   it("import on for events and the entry's own name otherwise", () => {
-    expect(import_for(entry("event", "tick"))).toEqual({ name: "on", module: "neotime" });
-    expect(import_for(entry("widget", "Label"))).toEqual({ name: "Label", module: "neotime/widgets" });
+    expect(import_for(entry("event", "tick"))).toEqual({ name: "on", module: "battletime" });
+    expect(import_for(entry("widget", "Label"))).toEqual({ name: "Label", module: "battletime/widgets" });
   });
 });
 
@@ -61,41 +61,41 @@ describe("snippets", () => {
 // ============================================================================
 
 describe("adding an import", () => {
-  const app = 'import { define_app } from "neotime";\nimport { Label, Screen } from "neotime/widgets";\n\nconst x = 1;\n';
+  const app = 'import { define_app } from "battletime";\nimport { Label, Screen } from "battletime/widgets";\n\nconst x = 1;\n';
 
   it("joins an existing one-line import, in order", () => {
-    expect(apply(app, add_import(app, "Icon", "neotime/widgets"))).toContain('import { Icon, Label, Screen } from "neotime/widgets";');
+    expect(apply(app, add_import(app, "Icon", "battletime/widgets"))).toContain('import { Icon, Label, Screen } from "battletime/widgets";');
   });
 
   it("leaves the source alone when the name is already imported, even as a type or renamed", () => {
-    expect(add_import(app, "Label", "neotime/widgets")).toBeUndefined();
-    expect(add_import('import { type Foo } from "neotime";', "Foo", "neotime")).toBeUndefined();
-    expect(add_import('import { on as listen } from "neotime";', "on", "neotime")).toBeUndefined();
+    expect(add_import(app, "Label", "battletime/widgets")).toBeUndefined();
+    expect(add_import('import { type Foo } from "battletime";', "Foo", "battletime")).toBeUndefined();
+    expect(add_import('import { on as listen } from "battletime";', "on", "battletime")).toBeUndefined();
   });
 
   it("keeps a multi-line import multi-line", () => {
-    const source = 'import {\n  define_app,\n  type HeartRateEvent,\n  vibrate,\n} from "neotime";\n';
-    expect(apply(source, add_import(source, "on", "neotime"))).toBe(
-      'import {\n  define_app,\n  type HeartRateEvent,\n  on,\n  vibrate,\n} from "neotime";\n',
+    const source = 'import {\n  define_app,\n  type HeartRateEvent,\n  vibrate,\n} from "battletime";\n';
+    expect(apply(source, add_import(source, "on", "battletime"))).toBe(
+      'import {\n  define_app,\n  type HeartRateEvent,\n  on,\n  vibrate,\n} from "battletime";\n',
     );
   });
 
   it("does not mistake one module for another that starts the same way", () => {
-    const result = apply(app, add_import(app, "vibrate", "neotime"));
-    expect(result).toContain('import { define_app, vibrate } from "neotime";');
-    expect(result).toContain('import { Label, Screen } from "neotime/widgets";');
+    const result = apply(app, add_import(app, "vibrate", "battletime"));
+    expect(result).toContain('import { define_app, vibrate } from "battletime";');
+    expect(result).toContain('import { Label, Screen } from "battletime/widgets";');
   });
 
   it("adds a new import after the last one", () => {
-    expect(apply(app, add_import(app, "Card", "neotime/components"))).toBe(
-      'import { define_app } from "neotime";\nimport { Label, Screen } from "neotime/widgets";\nimport { Card } from "neotime/components";\n\nconst x = 1;\n',
+    expect(apply(app, add_import(app, "Card", "battletime/components"))).toBe(
+      'import { define_app } from "battletime";\nimport { Label, Screen } from "battletime/widgets";\nimport { Card } from "battletime/components";\n\nconst x = 1;\n',
     );
   });
 
   it("puts the first import after the file's opening comments", () => {
     const source = "// An app.\n// Second line.\n\nconst x = 1;\n";
-    expect(apply(source, add_import(source, "on", "neotime"))).toBe(
-      '// An app.\n// Second line.\n\nimport { on } from "neotime";\n\nconst x = 1;\n',
+    expect(apply(source, add_import(source, "on", "battletime"))).toBe(
+      '// An app.\n// Second line.\n\nimport { on } from "battletime";\n\nconst x = 1;\n',
     );
   });
 });

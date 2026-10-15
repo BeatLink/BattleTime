@@ -3,7 +3,7 @@
 //   npm run build-plugin -- plugins/buzz-back [out-folder]
 //
 // The folder holds plugin.json (the manifest without file names), watch/app.tsx (optional, compiled
-// with ../neotime's compiler), phone/main.ts (optional, bundled with esbuild) and phone/ui/ (optional,
+// with ../battletime's compiler), phone/main.ts (optional, bundled with esbuild) and phone/ui/ (optional,
 // copied as it is, with index.html as the page). docs/plugins.md describes the result.
 //
 // A plugin for one of the watch's own apps names it with "app" instead of carrying watch/app.tsx, and
@@ -26,7 +26,7 @@ if (!folderArgument) {
 const folder = resolve(folderArgument);
 const out = resolve(outArgument ?? 'build/plugins');
 const companion = resolve(import.meta.dirname, '..');
-const neotime = resolve(companion, '..', 'neotime');
+const battletime = resolve(companion, '..', 'battletime');
 
 const { app, views = [], fields = {}, ...manifest } = JSON.parse(readFileSync(join(folder, 'plugin.json'), 'utf8'));
 const files = {};
@@ -37,14 +37,14 @@ if (app !== undefined && app !== manifest.id) {
 }
 
 // The watch app, compiled to the image the watch runs.
-const watchSource = app ? join(neotime, 'apps', app, 'app.tsx') : join(folder, 'watch', 'app.tsx');
+const watchSource = app ? join(battletime, 'apps', app, 'app.tsx') : join(folder, 'watch', 'app.tsx');
 manifest.watch = [];
 if (existsSync(watchSource)) {
-  const image = join(mkdtempSync(join(tmpdir(), 'neotime-plugin-')), `${manifest.id}.ntapp`);
+  const image = join(mkdtempSync(join(tmpdir(), 'battletime-plugin-')), `${manifest.id}.ntapp`);
   execFileSync(
     'cargo',
-    ['run', '-q', '--release', '-p', 'neotime-compiler', '--', watchSource, '-o', image],
-    { cwd: neotime, stdio: 'inherit' },
+    ['run', '-q', '--release', '-p', 'battletime-compiler', '--', watchSource, '-o', image],
+    { cwd: battletime, stdio: 'inherit' },
   );
   manifest.watch.push(`watch/${manifest.id}.ntapp`);
   files[`watch/${manifest.id}.ntapp`] = readFileSync(image);

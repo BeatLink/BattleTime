@@ -1,9 +1,0 @@
-[package]
-name = "neotime-liveness"
-version = "0.1.0"
-edition = "2021"
-description = "Whether the shell and the radio are still making progress, so the watchdog is fed only while they are"
-license.workspace = true
-publish = false
-
-[dependencies]

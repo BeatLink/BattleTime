@@ -1,6 +1,6 @@
 # Firmware updates
 
-How a new firmware gets onto the watch, and how a watch gets onto NeoTime in the first place.
+How a new firmware gets onto the watch, and how a watch gets onto BattleTime in the first place.
 Four pieces share the work:
 
 | Piece | Where | Does |
@@ -8,16 +8,16 @@ Four pieces share the work:
 | Bluetooth upload | `services/dfu`, in the firmware | takes the image from the phone and hands it to the receivers |
 | Receivers | `services/updates`, in the firmware | store the image in the right slot and mark it for the bootloader |
 | Bootloader | `bootloader/` | swaps the image in at the next start and rolls back a bad one |
-| Reloader | `reloader/` | a one-time image that moves a watch from InfiniTime or wasp-os onto NeoTime |
+| Reloader | `reloader/` | a one-time image that moves a watch from InfiniTime or wasp-os onto BattleTime |
 
 [bootloader.md](bootloader.md) covers the bootloader and the flash layout. This page covers the
 rest.
 
 ## The protocol: Nordic legacy DFU
 
-NeoTime speaks the same update protocol as InfiniTime: Nordic's legacy DFU, the one the nRF5 SDK
-bootloaders spoke before secure DFU. Gadgetbridge, ITD, Siglo and NeoTime's own tools all have it,
-so they update NeoTime without changes.
+BattleTime speaks the same update protocol as InfiniTime: Nordic's legacy DFU, the one the nRF5 SDK
+bootloaders spoke before secure DFU. Gadgetbridge, ITD, Siglo and BattleTime's own tools all have it,
+so they update BattleTime without changes.
 
 Three characteristics under the service `00001530-1212-efde-1523-785feabcd123`:
 
@@ -63,13 +63,13 @@ that skips step 7, starts from the first byte as before. So Gadgetbridge and oth
 unchanged. The checks at steps 5 and 6 still cover the whole slot, so a resumed image is held to
 the same checksums as one sent in one go. The kept upload lives in RAM, so a restart forgets it.
 
-NeoTime's other addition is an image type for the recovery slot: `START_DFU` with type `0x08` (the
+BattleTime's other addition is an image type for the recovery slot: `START_DFU` with type `0x08` (the
 standard types are 1, 2 and 4) sends the image to the recovery slot instead of the update slot.
-The companion's command line tool sends it with `neotime recovery dist/recovery.zip`, which
+The companion's command line tool sends it with `battletime recovery dist/recovery.zip`, which
 `tools/build_images.sh` packages; the running firmware stores the image and restarts, with nothing
 swapped, and the bootloader menu's Install recovery puts it in when it is needed.
 
-`neotime-dfu` is the state machine, with no Bluetooth in it, so its tests drive a whole update
+`battletime-dfu` is the state machine, with no Bluetooth in it, so its tests drive a whole update
 through it against fake receivers. The `trouble` feature adds the GATT service definition the
 firmware registers with TrouBLE.
 
@@ -81,7 +81,7 @@ would an InfiniTime release.
 
 ## The receivers
 
-`neotime-updates` is the on-watch half, with no protocol in it:
+`battletime-updates` is the on-watch half, with no protocol in it:
 
 - **`UpdateReceiver`** takes an image with `begin(size)`, `receive(chunk)` in order, and
   `finish()`, writing through embassy-boot's updater into the update slot and erasing each sector
@@ -165,10 +165,10 @@ sequenceDiagram
 
 At start, and again while an update arrives, the firmware shows a status page. The firmware, the
 recovery firmware, the bootloader and the bootloader updater all lay it out through
-`neotime_status_screen::page`, so it looks the same whichever is running:
+`battletime_status_screen::page`, so it looks the same whichever is running:
 
 ```
-NeoTime 0.1.0+1b19aed
+0.1.0+1b19aed
 Bootloader OK 1a2b3c4
 Firmware   On trial
 Filesystem OK
@@ -179,7 +179,7 @@ Receiving firmware
 
 | Line | Says |
 |---|---|
-| Title | `NeoTime` and the version; the bootloader and its updater name themselves instead |
+| Title | the firmware's version; the bootloader and its updater name themselves instead |
 | Bootloader | `OK` or, after the updater wrote it, `New`, then the first 7 hex digits of the CRC-32 of the installed bootloader with its erased tail left off, which match `zlib.crc32` of its `.bin`; `Not found` or `Unreadable` otherwise |
 | Firmware | the mode, below |
 | Filesystem | `OK`, `Formatted`, `Damaged` or `No chip` |
@@ -188,7 +188,7 @@ Receiving firmware
 | Progress | `received / size KB  percent`, or why the update stopped: `Steps out of order`, `Image not supported`, `Image too large`, `Checksum did not match`, `Could not store image`, or `Kept N KB` when the phone went away mid-image |
 
 The background colour and the Firmware and Action lines say which mode the firmware is in
-(`firmware/src/status.rs`, colours in `neotime_boot::status_colour`):
+(`firmware/src/status.rs`, colours in `battletime_boot::status_colour`):
 
 | Mode | Background | Firmware / Action | How the firmware knows |
 |---|---|---|---|
@@ -220,19 +220,19 @@ A panic or a fault is recorded in RAM a reset keeps, then halts rather than rese
 brings the watch back to the bootloader instead of the firmware restarting in a loop. The next
 start shows the crash, and the companion reads it from the diagnostics.
 
-## The reloader: getting onto NeoTime
+## The reloader: getting onto BattleTime
 
 A watch running InfiniTime or wasp-os has their bootloader at the start of flash. The reloader is
 an ordinary app image for the old system, sent through its own update path, that replaces that
-bootloader with NeoTime's. It carries three images: NeoTime's bootloader, the firmware, and the
+bootloader with BattleTime's. It carries three images: BattleTime's bootloader, the firmware, and the
 recovery firmware. The full firmware no longer fits beside the bootloader in wasp-os's 380 KB app
 slot, so `tools/build_images.sh` gives it the small recovery firmware for both, and the full
-firmware follows as an ordinary update once the watch is on NeoTime. When both are the same
+firmware follows as an ordinary update once the watch is on BattleTime. When both are the same
 image, the reloader's build keeps one copy for both slots, since two copies overflow that slot.
 
 ### What it does
 
-The order comes from `neotime_boot::migration`, and its tests hold it to these rules:
+The order comes from `battletime_boot::migration`, and its tests hold it to these rules:
 
 1. **Wait for the charger and enough charge.** It does nothing until power is present on P0.19 and
    the battery reads at least 3.7 V, and shows why. A line under the progress bar shows the battery
@@ -268,8 +268,8 @@ MCUBoot starts images 32 bytes into their slot, which is not an address the CPU 
 vector table, so both builds put a two-word stub at the slot start and the table at the next
 256-byte boundary.
 
-The build takes the images from three environment variables, `NEOTIME_BOOTLOADER_BIN`,
-`NEOTIME_FIRMWARE_BIN` and `NEOTIME_RECOVERY_BIN`, and refuses an image that is linked for the
+The build takes the images from three environment variables, `BATTLETIME_BOOTLOADER_BIN`,
+`BATTLETIME_FIRMWARE_BIN` and `BATTLETIME_RECOVERY_BIN`, and refuses an image that is linked for the
 wrong address or does not fit its slot. `tools/build_images.sh` builds everything into `dist/`.
 
 ### The risk, honestly
@@ -295,7 +295,7 @@ For that to happen, all of these must go wrong at once:
    charges it. Lifting the watch off the charger does not cut the power, so the battery itself must
    be disconnected or collapse in that half second, while it is being charged. Neither program
    writes until the battery reads at least 3.7 V on the charger
-   (`neotime_battery::MINIMUM_MILLIVOLTS_TO_WRITE_BOOTLOADER`), a few percent above empty once the
+   (`battletime_battery::MINIMUM_MILLIVOLTS_TO_WRITE_BOOTLOADER`), a few percent above empty once the
    charger's lift is allowed for, so a nearly flat battery charges for a while first. A converter
    that never answers counts as too low.
 3. **Nothing else may stop it first.** Both programs feed the watchdog through every erase and
@@ -308,24 +308,24 @@ For that to happen, all of these must go wrong at once:
 So a watch is lost only by a battery failure during the half second of the write while it sits on
 its charger, or by internal flash that will not take a write. Cuts every 2 seconds through the
 wasp-os migration in the emulator once left the old system whole at 2, 4 and 6 seconds and
-NeoTime's bootloader whole at 8, 10 and 12 seconds, with none inside the write; those sweeps were
+BattleTime's bootloader whole at 8, 10 and 12 seconds, with none inside the write; those sweeps were
 then dropped from the suites as adding little.
 
 The larger risk is after it. Once the reloader has run, the only Bluetooth on the watch is
-NeoTime's own controller, and a controller that does not work on real hardware leaves a watch
+BattleTime's own controller, and a controller that does not work on real hardware leaves a watch
 that starts but can never take another update. The emulator cannot rule that out, because it
 does not model the radio's timing. Before the reloader first went to a watch, two builds that ran
-as wasp-os apps proved NeoTime's controller, TrouBLE, the DFU service and the external flash on the
+as wasp-os apps proved BattleTime's controller, TrouBLE, the DFU service and the external flash on the
 real chip while wasp-os stayed installed. Two lessons from them stay in the code: waiting for the
 32 kHz clock to stop hangs while the watchdog runs, and TrouBLE cut a 128-bit UUID short in
-discovery, which `third_party/trouble-host` fixes (see its `NEOTIME.md`).
+discovery, which `third_party/trouble-host` fixes (see its `BATTLETIME.md`).
 
 A panic in the reloader halts it rather than resetting: a reset would restart it under the old
 bootloader, which would feed the watchdog again, and the watch would loop with no way into the old
 update mode. Halting lets the watchdog reset the watch, which the old bootloader takes as a request
 for its update mode.
 
-Under InfiniTime a reset while the reloader stages NeoTime cannot brick the watch either.
+Under InfiniTime a reset while the reloader stages BattleTime cannot brick the watch either.
 InfiniTime's bootloader 1.0.0 is MCUBoot 1.5.0, which checks the secondary slot (external flash
 0x40000 to 0xB4000) before a revert as well as before an upgrade, and erases an invalid image
 instead of swapping it in. The reloader runs as an unconfirmed test image, so a reset part way
@@ -336,15 +336,15 @@ both end in that same check. This comes from reading MCUBoot 1.5.0's source; the
 When the reloader stops on purpose, for a damaged download, a missing flash chip or a write that
 fails three times, it says so on the screen and keeps feeding the watchdog only while the button is
 up, as it does while it waits for the charger. Holding the button for a few seconds then lets the
-watchdog reset the watch: into the old update mode before the bootloader write, or into NeoTime's
+watchdog reset the watch: into the old update mode before the bootloader write, or into BattleTime's
 bootloader after it, where holding on installs the recovery firmware.
 
 ### Checked on the watch
 
 - **The reloader from wasp-os.** Sent through wasp-os's own update mode (238 KB in about 4
-  minutes), it left the watch running NeoTime seconds later, with its file system found and the
+  minutes), it left the watch running BattleTime seconds later, with its file system found and the
   firmware confirmed.
-- **An update over Bluetooth.** A firmware sent to NeoTime itself uploads in under 2 minutes; the
+- **An update over Bluetooth.** A firmware sent to BattleTime itself uploads in under 2 minutes; the
   bootloader swaps it in, and it confirms itself after its first Bluetooth exchange.
 - **Recovery.** Holding the button resets the watch into the bootloader, and holding on installs the
   recovery firmware, which starts and confirms itself after its first Bluetooth exchange.

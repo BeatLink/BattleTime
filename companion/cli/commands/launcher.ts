@@ -22,7 +22,7 @@ import {
 import type { WatchSession } from '../ble';
 import { say } from '../output';
 
-export const launcherUsage = `neotime launcher [show|style <s>|view <v>|sort <name|custom>|move <app> <group> [place]|add <name> [icon]|
+export const launcherUsage = `battletime launcher [show|style <s>|view <v>|sort <name|custom>|move <app> <group> [place]|add <name> [icon]|
                   rename <group> <name>|icon <group> <icon>|order <group> <place>|remove <group>|reset]
 
   launcher shows how the watch's launcher groups the apps. style is ${LAUNCHER_STYLES.join(', ')};

@@ -1,6 +1,6 @@
 # Notes
 
-Shows a text note from the NeoTime companion app on the watch, read only, such as a packing list or
+Shows a text note from the BattleTime companion app on the watch, read only, such as a packing list or
 a shopping list.
 
 ## Using it
@@ -13,15 +13,15 @@ a shopping list.
 
 ## Screens
 
-![The notes app showing the top of a packing list](../../neotime/harness/snapshots/screens/app-notes.png)
+![The notes app showing the top of a packing list](../../battletime/harness/snapshots/screens/app-notes.png)
 
 The top of a note: a packing list.
 
-![The notes app scrolled to the end of the note](../../neotime/harness/snapshots/screens/app-notes-scrolled.png)
+![The notes app scrolled to the end of the note](../../battletime/harness/snapshots/screens/app-notes-scrolled.png)
 
 The same note dragged up to its last line.
 
-![The notes app with no note](../../neotime/harness/snapshots/screens/app-notes-empty.png)
+![The notes app with no note](../../battletime/harness/snapshots/screens/app-notes-empty.png)
 
 No note yet, with a reminder to write or choose one in the companion app.
 

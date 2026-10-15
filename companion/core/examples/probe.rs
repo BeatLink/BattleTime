@@ -1,11 +1,11 @@
 // Checks the Bluetooth layer against a real watch: scans, connects, reads the battery and the time, and disconnects.
 //
-// cargo run -p neotime-companion-core --example probe [address]
+// cargo run -p battletime-companion-core --example probe [address]
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use neotime_companion_core::ble::{WatchBle, NEOTIME_NAME};
+use battletime_companion_core::ble::{WatchBle, BATTLETIME_NAME};
 use serde_json::Value;
 
 const BATTERY_SERVICE: &str = "0000180f-0000-1000-8000-00805f9b34fb";
@@ -36,9 +36,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .find(|device| {
                     device["name"]
                         .as_str()
-                        .is_some_and(|name| name.starts_with(NEOTIME_NAME))
+                        .is_some_and(|name| name.starts_with(BATTLETIME_NAME))
                 })
-                .ok_or("No NeoTime watch answered the scan.")?;
+                .ok_or("No BattleTime watch answered the scan.")?;
             watch["id"].as_str().unwrap().to_string()
         }
     };

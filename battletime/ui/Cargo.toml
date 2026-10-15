@@ -1,0 +1,12 @@
+[package]
+name = "battletime-ui"
+version = "0.1.0"
+edition = "2021"
+description = "Draws widgets onto the PineTime display"
+license.workspace = true
+publish = false
+
+[dependencies]
+embedded-graphics = "0.8"
+embedded-hal = "1.0"
+battletime-display = { path = "../drivers/display" }

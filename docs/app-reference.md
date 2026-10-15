@@ -1,12 +1,12 @@
 # App reference
 
-This page lists what a NeoTime app can declare, read, answer, show and ask for.
+This page lists what a BattleTime app can declare, read, answer, show and ask for.
 [writing-apps.md](writing-apps.md) shows how an app is written, [compiler.md](compiler.md) the
 language the compiler takes, and [app-runtime.md](app-runtime.md) how the watch runs it.
 
-Every name comes from the `neotime` package: values, events, effects and functions from `neotime`,
-widgets from `neotime/widgets`, ready-made components from `neotime/components`, icons from
-`neotime/icons` and shared library functions from `neotime/lib`.
+Every name comes from the `battletime` package: values, events, effects and functions from `battletime`,
+widgets from `battletime/widgets`, ready-made components from `battletime/components`, icons from
+`battletime/icons` and shared library functions from `battletime/lib`.
 
 ## Declaring an app
 
@@ -379,7 +379,7 @@ components below bind them to signals.
 
 ### Components
 
-These come from `neotime/components`, built from the widgets above. The compiler inlines each into
+These come from `battletime/components`, built from the widgets above. The compiler inlines each into
 the app.
 
 | Component | Use |
@@ -576,7 +576,7 @@ All in local time.
 
 ### Shared library
 
-From `neotime/lib`. These run in the [shared library](app-runtime.md#the-shared-library), so an app
+From `battletime/lib`. These run in the [shared library](app-runtime.md#the-shared-library), so an app
 carries only a 5-byte call, except `sine`, `cosine` and `point_on_circle`, which work only with
 arguments known when compiling.
 

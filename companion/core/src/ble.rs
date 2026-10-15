@@ -23,19 +23,19 @@ use crate::text::Utf8Joiner;
 // Names the watch answers to
 // ============================================================================
 
-// Nordic UART Service, which carries NeoTime's Gadgetbridge-style message lines.
+// Nordic UART Service, which carries BattleTime's Gadgetbridge-style message lines.
 pub const NUS_SERVICE: Uuid = Uuid::from_u128(0x6e400001_b5a3_f393_e0a9_e50e24dcca9e);
 pub const NUS_RX: Uuid = Uuid::from_u128(0x6e400002_b5a3_f393_e0a9_e50e24dcca9e);
 pub const NUS_TX: Uuid = Uuid::from_u128(0x6e400003_b5a3_f393_e0a9_e50e24dcca9e);
 
-// NeoTime advertises the legacy DFU service while its firmware runs; wasp-os only from its bootloader.
+// BattleTime advertises the legacy DFU service while its firmware runs; wasp-os only from its bootloader.
 pub const DFU_SERVICE: Uuid = Uuid::from_u128(0x00001530_1212_efde_1523_785feabcd123);
 
-// NeoTime's own service, which only its running firmware serves.
-pub const NEOTIME_SERVICE: Uuid = Uuid::from_u128(0x6e540001_0000_4000_8000_4e656f54696d);
+// BattleTime's own service, which only its running firmware serves.
+pub const BATTLETIME_SERVICE: Uuid = Uuid::from_u128(0x6e540001_0000_4000_8000_4e656f54696d);
 
-// NeoTime has no room left in its advertisement for its own service, so it is recognised by name.
-pub const NEOTIME_NAME: &str = "NeoTime";
+// BattleTime has no room left in its advertisement for its own service, so it is recognised by name.
+pub const BATTLETIME_NAME: &str = "BattleTime";
 
 // BlueZ splits a write itself only up to the negotiated MTU, so stay at the size every link supports.
 const CHUNK: usize = 20;
@@ -102,9 +102,9 @@ async fn within<T, E: Into<BleError>>(
 // What a scan reports
 // ============================================================================
 
-// True for a watch sitting in its bootloader: DFU advertised, no UART, and not NeoTime's own name.
+// True for a watch sitting in its bootloader: DFU advertised, no UART, and not BattleTime's own name.
 pub fn is_bootloader(name: &str, advertised: &[Uuid]) -> bool {
-    !advertised.contains(&NUS_SERVICE) && advertised.contains(&DFU_SERVICE) && !name.starts_with(NEOTIME_NAME)
+    !advertised.contains(&NUS_SERVICE) && advertised.contains(&DFU_SERVICE) && !name.starts_with(BATTLETIME_NAME)
 }
 
 // The `device` event for one watch found while scanning.
@@ -120,7 +120,7 @@ pub fn device_event(address: &str, name: &str, rssi: Option<i16>, advertised: &[
 
 // What the watch turned out to be running, from the services it serves once connected.
 pub fn watch_mode(served: &[Uuid]) -> &'static str {
-    if served.contains(&NEOTIME_SERVICE) || served.contains(&NUS_SERVICE) {
+    if served.contains(&BATTLETIME_SERVICE) || served.contains(&NUS_SERVICE) {
         "application"
     } else {
         "bootloader"
@@ -707,8 +707,8 @@ mod tests {
     }
 
     #[test]
-    fn neotime_advertises_dfu_while_running_and_is_not_a_bootloader() {
-        assert!(!is_bootloader("NeoTime", &[DFU_SERVICE]));
+    fn battletime_advertises_dfu_while_running_and_is_not_a_bootloader() {
+        assert!(!is_bootloader("BattleTime", &[DFU_SERVICE]));
     }
 
     #[test]
@@ -729,12 +729,12 @@ mod tests {
 
     #[test]
     fn an_unknown_signal_strength_is_null() {
-        assert!(device_event("AA", "NeoTime", None, &[])["rssi"].is_null());
+        assert!(device_event("AA", "BattleTime", None, &[])["rssi"].is_null());
     }
 
     #[test]
-    fn running_firmware_serves_neotime_or_the_uart() {
-        assert_eq!(watch_mode(&[NEOTIME_SERVICE]), "application");
+    fn running_firmware_serves_battletime_or_the_uart() {
+        assert_eq!(watch_mode(&[BATTLETIME_SERVICE]), "application");
         assert_eq!(watch_mode(&[NUS_SERVICE]), "application");
         assert_eq!(watch_mode(&[DFU_SERVICE]), "bootloader");
     }

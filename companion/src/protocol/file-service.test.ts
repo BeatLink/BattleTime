@@ -20,14 +20,14 @@ import {
   writeCommand,
   writeDataCommand,
 } from './file-service';
-import { FILE_TRANSFER, FILE_TRANSFER_SERVICE } from './neotime';
+import { FILE_TRANSFER, FILE_TRANSFER_SERVICE } from './battletime';
 
 // ============================================================================
 // Watches to talk to
 // ============================================================================
 
 function mockWatch() {
-  return new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+  return new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
 }
 
 // A watch that answers every command with whatever the test hands it, and records what was written.

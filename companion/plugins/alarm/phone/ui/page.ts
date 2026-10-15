@@ -6,7 +6,7 @@ import { addAlarm, alarmRoom, removeAlarm, setEnabled, setTime, toggleDay } from
 
 type Snapshot = { app: { state: Record<string, unknown> | null } | null };
 
-const send = (message: unknown) => parent.postMessage({ neotime: message }, '*');
+const send = (message: unknown) => parent.postMessage({ battletime: message }, '*');
 const list = document.getElementById('alarms') as HTMLElement;
 const problem = document.getElementById('problem') as HTMLElement;
 const add = document.getElementById('add') as HTMLButtonElement;
@@ -81,7 +81,7 @@ function render() {
 }
 
 window.addEventListener('message', (event) => {
-  const message = event.data && event.data.neotime;
+  const message = event.data && event.data.battletime;
   if (!message) return;
   if ('error' in message) {
     problem.textContent = message.error ?? '';

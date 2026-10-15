@@ -134,7 +134,7 @@ describe('syncNote', () => {
   });
 
   it('works over the file service, making the folder as it writes', async () => {
-    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'neotime', true);
+    const watch = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
     const service = await FileService.open(watch);
     const note = encode('A longer note.\n'.repeat(40));
 

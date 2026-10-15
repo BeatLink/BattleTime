@@ -31,7 +31,7 @@ connected, unread notifications, the next alarm, steps, heart rate and the weath
 open their own settings, such as colours or a layout, on a long press. You choose the face in
 Settings or the companion app; see [Apps and watch faces](apps-and-faces.md#watch-faces).
 
-While no face is installed, the watch shows the time and a note to install one with the NeoTime
+While no face is installed, the watch shows the time and a note to install one with the BattleTime
 companion app.
 
 ## Swipes on the face
@@ -76,9 +76,9 @@ The companion app can also rename, add and remove groups, give each an icon, and
 them. See the [launcher's page](../apps/launcher.md).
 
 <div class="screens" markdown>
-![The launcher's groups as folders](../../neotime/harness/snapshots/screens/app-launcher-folders.png){ .screen }
-![The launcher as a grid of icons](../../neotime/harness/snapshots/screens/app-launcher-grid.png){ .screen }
-![The launcher with a page per group](../../neotime/harness/snapshots/screens/app-launcher-pages.png){ .screen }
+![The launcher's groups as folders](../../battletime/harness/snapshots/screens/app-launcher-folders.png){ .screen }
+![The launcher as a grid of icons](../../battletime/harness/snapshots/screens/app-launcher-grid.png){ .screen }
+![The launcher with a page per group](../../battletime/harness/snapshots/screens/app-launcher-pages.png){ .screen }
 </div>
 
 ## Quick apps

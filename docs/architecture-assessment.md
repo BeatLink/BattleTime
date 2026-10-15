@@ -1,13 +1,13 @@
 # Architecture assessment
 
-A review, dated 2026-10-12, of whether NeoTime makes the best use of the nRF52832's RAM, internal
+A review, dated 2026-10-12, of whether BattleTime makes the best use of the nRF52832's RAM, internal
 flash, external SPI flash and single CPU core, and of five choices: Embassy, the Bluetooth stack,
 the UI toolkit, littlefs, and how apps are stored and loaded. Figures come from
 [memory-map.md](memory-map.md) and from a release build of `firmware/` at `0068f33`, sorted by
 symbol.
 
-Two of its proposals have since been carried out: NeoTime draws its widgets with its own renderer
-instead of rlvgl, and keeps its files in `neotime-flash-store` instead of littlefs
+Two of its proposals have since been carried out: BattleTime draws its widgets with its own renderer
+instead of rlvgl, and keeps its files in `battletime-flash-store` instead of littlefs
 ([flash-store.md](flash-store.md)).
 
 ## In short
@@ -16,8 +16,8 @@ instead of rlvgl, and keeps its files in `neotime-flash-store` instead of little
 |---|---|
 | Embassy, or an RTOS? | Keep Embassy. Stop blocking inside it, and add a second, higher-priority executor for input. |
 | Our own Bluetooth host? | No. Keep TrouBLE on our own controller, and trim it. |
-| rlvgl, Slint, or our own? | Our own. NeoTime already has its own toolkit; rlvgl only draws six widget shapes. |
-| littlefs, or our own storage? | Our own: `neotime-flash-store`, measured faster, gentler on the flash and safe through every power cut tested; it replaces littlefs once the firmware moves over. |
+| rlvgl, Slint, or our own? | Our own. BattleTime already has its own toolkit; rlvgl only draws six widget shapes. |
+| littlefs, or our own storage? | Our own: `battletime-flash-store`, measured faster, gentler on the flash and safe through every power cut tested; it replaces littlefs once the firmware moves over. |
 | Split apps into chunks in ekv? | No: each app is one file read whole when it opens, its saved values one record. Chunk keys cost more lookups than the RAM they save. |
 
 The bigger problems are not these choices. One cooperative executor spends long stretches spinning
@@ -124,7 +124,7 @@ gains.
 
 ## The UI
 
-NeoTime already has its own toolkit. `app-host` (77 KB) owns the node tree, layout, events, dirty
+BattleTime already has its own toolkit. `app-host` (77 KB) owns the node tree, layout, events, dirty
 regions, strip painting, hardware scrolling and transitions. rlvgl is used only to draw six shapes:
 button, arc, bar, LED, switch and slider. Each is built when drawn and dropped afterwards.
 
@@ -312,13 +312,13 @@ notifications):
 | sequential-storage, page caches and 64 keys | 2,236 B | 85 ms | 2 ms, 3.5 min |
 
 Code size on the watch, measured by `tools/storage-benchmark/size-probe` (in the history up to 9a54d693): a watch build with the
-firmware's release settings that calls each store as NeoTime would (mount or format, read, write,
+firmware's release settings that calls each store as BattleTime would (mount or format, read, write,
 delete, and for ekv a range read to list apps), less the same build with no store:
 
 | Store | Code and constants |
 |---|---:|
 | ekv, 256-byte reads, checksums on | 32.8 KB |
-| littlefs, through `neotime-storage` | 23.7 KB |
+| littlefs, through `battletime-storage` | 23.7 KB |
 | sequential-storage, map with page and key caches | 12.8 KB |
 
 littlefs measures 21.6 KB inside the firmware, so the probe agrees within about 2 KB. Replacing
@@ -334,7 +334,7 @@ batch them and append the step log.
 
 ### Measured: a store of our own
 
-`neotime-flash-store` (`services/flash_store`, [flash-store.md](flash-store.md)) is a store that
+`battletime-flash-store` (`services/flash_store`, [flash-store.md](flash-store.md)) is a store that
 knows how data is written, not what it is, so a new kind of data needs no new format or firmware.
 It began as a prototype in the benchmark and is now a `no_std` workspace crate with no heap,
 generic over the async flash traits the firmware's driver implements; the firmware does not use it
@@ -379,7 +379,7 @@ third of it; the watch's would fill about a tenth. The crate therefore refuses a
 take the ring past half its usable space, limits each app to 4 KB of records, cleans the sector that
 gives most space back for its age rather than always the oldest, erases a cleaned sector at once so
 a deleted key can never come back, and returns an error, never a panic, when a ring, table or the
-file area is full. Its own tests (`cargo test -p neotime-flash-store`) include a smaller version of
+file area is full. Its own tests (`cargo test -p battletime-flash-store`) include a smaller version of
 the power-cut test with streamed uploads, and the benchmark's larger one, 16,796 runs, passes on the
 crate too.
 
@@ -387,7 +387,7 @@ In the benchmark's grouped layout, after 120 days of use:
 
 | Store | RAM | Open an app: median, slowest | One write: median, slowest | Erases a day | Code |
 |---|---:|---|---|---:|---:|
-| `neotime-flash-store` | 2,700 B | 1.5 ms, 5.8 ms | 0.6 ms, 105 ms | 8 | 26.2 KB |
+| `battletime-flash-store` | 2,700 B | 1.5 ms, 5.8 ms | 0.6 ms, 105 ms | 8 | 26.2 KB |
 | ekv, branching factor 2 | 1,672 B | 23 ms, 45 ms | 133 ms, 12 s | 688 | 32.8 KB |
 | ekv, branching factor 3 | 1,968 B | 19 ms, 40 ms | 72 ms, 11 s | 497 | |
 | ekv, branching factor 4 | 2,184 B | 22 ms, 37 ms | 70 ms, 11 s | 515 | |
@@ -407,7 +407,7 @@ setting removes the cleanup that blocks for 11 s.
 
 1. Async SPI for the screen and the flash.
 2. A higher-priority executor for touch, the button and the vibrator.
-3. Move the firmware onto `neotime-flash-store`, migrating littlefs once, then shrink the storage
+3. Move the firmware onto `battletime-flash-store`, migrating littlefs once, then shrink the storage
    share of the heap, measured on the watch.
 4. Replace rlvgl with our own shape drawing.
 5. The flash trims: the accelerometer configuration, the arc trigonometry, the unexplained 23 KB.

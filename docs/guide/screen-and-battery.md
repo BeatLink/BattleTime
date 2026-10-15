@@ -34,8 +34,8 @@ Raise, lower and shake have run in the emulator but not yet on a real watch; tou
 yet been tried on a real watch either.
 
 <div class="screens" markdown>
-![The ways to wake the screen in Settings](../../neotime/harness/snapshots/screens/app-settings-wake.png){ .screen }
-![Setting the shake strength](../../neotime/harness/snapshots/screens/app-settings-shake.png){ .screen }
+![The ways to wake the screen in Settings](../../battletime/harness/snapshots/screens/app-settings-wake.png){ .screen }
+![Setting the shake strength](../../battletime/harness/snapshots/screens/app-settings-shake.png){ .screen }
 </div>
 
 ## Sleep mode
@@ -90,8 +90,8 @@ The phone sees the charge too, through the standard Bluetooth Battery service, a
 it every six minutes; see [Health and fitness](health-and-fitness.md#heart-rate-and-battery-logs).
 
 <div class="screens" markdown>
-![The battery page while charging](../../neotime/harness/snapshots/screens/app-system-battery-charging.png){ .screen }
-![The battery page when the charge is low](../../neotime/harness/snapshots/screens/app-system-battery-low.png){ .screen }
+![The battery page while charging](../../battletime/harness/snapshots/screens/app-system-battery-charging.png){ .screen }
+![The battery page when the charge is low](../../battletime/harness/snapshots/screens/app-system-battery-low.png){ .screen }
 </div>
 
 ## Saving power

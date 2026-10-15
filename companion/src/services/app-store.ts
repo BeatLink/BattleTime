@@ -76,7 +76,7 @@ export function entryFromPlugin(data: Uint8Array, source: StoreSource): StoreEnt
   try {
     files = unzipSync(data);
   } catch {
-    throw new AppStoreError('That file is not a NeoTime plugin.');
+    throw new AppStoreError('That file is not a BattleTime plugin.');
   }
   const manifestFile = files['manifest.json'];
   if (!manifestFile) {
@@ -150,8 +150,8 @@ export type KeyValueStorage = {
   removeItem(key: string): Promise<void>;
 };
 
-const LIST_KEY = 'neotime.store.v1';
-const DATA_KEY_PREFIX = 'neotime.store.data.';
+const LIST_KEY = 'battletime.store.v1';
+const DATA_KEY_PREFIX = 'battletime.store.data.';
 
 // The entries the user added, and the keys of bundled entries the user removed.
 type StoredList = { added: StoreEntry[]; hidden: string[] };

@@ -1,6 +1,6 @@
 # Flash store
 
-`neotime-flash-store` (`services/flash_store/`) keeps NeoTime's data in the external flash; what the
+`battletime-flash-store` (`services/flash_store/`) keeps BattleTime's data in the external flash; what the
 watch keeps there, and how the firmware reaches it, is in [storage.md](storage.md). Why it exists,
 and how it compares with littlefs, ekv and sequential-storage, is in
 [architecture-assessment.md](architecture-assessment.md#apps-as-chunks-in-flash).

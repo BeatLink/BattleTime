@@ -12,7 +12,7 @@ use tauri::{Manager, Runtime};
 
 // The Kotlin side's package and class.
 #[cfg(target_os = "android")]
-const PLUGIN_PACKAGE: &str = "com.neotime.companion.phonebridge";
+const PLUGIN_PACKAGE: &str = "com.battletime.companion.phonebridge";
 #[cfg(target_os = "android")]
 const PLUGIN_CLASS: &str = "PhoneBridgePlugin";
 
