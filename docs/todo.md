@@ -393,6 +393,11 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   real app screens there through `ScreenRenderer`.
 ## App runtime
 
+- [ ] **Computed `points` shared between two uses of a component.** `derived_key` in
+  `battletime/compiler/src/derived.rs` keys a derived array by the expression and the address of its
+  scope, and a freed scope's address can be reused, so a component that computes a `Line`'s points
+  and is used twice can give both Lines one array. OmegaTime and Fancy write their hour and minute
+  hands as separate components to avoid it; keeping each scope alive in `derived_arrays` would fix it.
 - [ ] **Profiles.** Sets of apps such as work, gaming or comms, picked from the companion app. A
   profile is a small file in external flash listing app ids, their order, the watch face and which
   subscriptions are on. Switching profiles only reads files, so it writes nothing to flash.

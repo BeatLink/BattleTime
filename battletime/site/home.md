@@ -67,7 +67,8 @@ Early work. The firmware, bootloader and updates run on a real PineTime.
 
 ## Watch faces
 
-Every face from InfiniTime, wasp-os and PinetimeLite, ported to BattleTime's app language.
+Every face from InfiniTime, wasp-os and PinetimeLite, and the faces of ZephyrLabs' Watchfaces,
+ported to BattleTime's app language.
 [All faces](faces.md)
 
 <div class="gallery" markdown>
@@ -79,6 +80,10 @@ Every face from InfiniTime, wasp-os and PinetimeLite, ported to BattleTime's app
 <figure markdown>![](screens/face-word-clock.png){ .screen loading=lazy }<figcaption>Word clock</figcaption></figure>
 <figure markdown>![](screens/face-lite-rings.png){ .screen loading=lazy }<figcaption>Rings</figcaption></figure>
 <figure markdown>![](screens/face-pride-flag.png){ .screen loading=lazy }<figcaption>Pride flag</figcaption></figure>
+<figure markdown>![](screens/face-chrono.png){ .screen loading=lazy }<figcaption>Chrono</figcaption></figure>
+<figure markdown>![](screens/face-pinealog.png){ .screen loading=lazy }<figcaption>Pinealog</figcaption></figure>
+<figure markdown>![](screens/face-waves.png){ .screen loading=lazy }<figcaption>Waves</figcaption></figure>
+<figure markdown>![](screens/face-omega-time.png){ .screen loading=lazy }<figcaption>OmegaTime</figcaption></figure>
 </div>
 
 ## Apps

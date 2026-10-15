@@ -347,7 +347,8 @@ values fit. Every image is parsed and verified with the runtime's own checks bef
 
 Apps and watch faces are Preact and Signals source, written to [app-reference.md](app-reference.md)
 and kept as npm packages: `apps/`, `faces/` and `shell/`. The first ones are ports of InfiniTime's
-and wasp-os's, merged where both firmwares have the same one, and of PinetimeLite's watch faces.
+and wasp-os's, merged where both firmwares have the same one, and of PinetimeLite's and
+ZephyrLabs' watch faces.
 [apps.md](apps.md) and [faces.md](faces.md) list each, with a page per app in `docs/apps/`.
 
 - **One folder each,** named by its id: an app's source is `apps/<id>/app.tsx` and a face's is
