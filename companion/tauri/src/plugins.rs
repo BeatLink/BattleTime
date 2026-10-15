@@ -8,7 +8,7 @@ use crate::Companion;
 use battletime_companion_core::ble::WatchBle;
 use battletime_companion_core::plugins::host::{HostOutput, PluginHost, PluginStatus};
 use battletime_companion_core::protocol::app_image::ImageHeader;
-use battletime_companion_core::protocol::launcher::place_new_apps;
+use battletime_companion_core::protocol::launcher::{place_new_apps, regrouped_apps};
 use battletime_companion_core::protocol::packages::{install_image, PackagesClient};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -124,6 +124,7 @@ pub async fn plugins_install_on_watch(
     let images = companion.plugins.watch_apps(&id)?;
     let packages = PackagesClient::open(&companion.ble).await?;
     let files = companion.syncer.files();
+    let before = packages.listing().await.map_err(|error| error.to_string())?.apps;
     let mut installed = Vec::new();
     for (_, image) in images {
         installed.push(
@@ -132,7 +133,7 @@ pub async fn plugins_install_on_watch(
                 .map_err(|error| error.to_string())?,
         );
     }
-    place_new_apps(files, &packages)
+    place_new_apps(files, &packages, &regrouped_apps(&before, &installed))
         .await
         .map_err(|error| error.to_string())?;
     Ok(installed)

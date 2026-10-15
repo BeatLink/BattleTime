@@ -273,10 +273,23 @@ export async function writeLauncher(
   await packages.reloadLauncher();
 }
 
+// An app whose new image declares another group than the one it replaced.
+export type Regrouped = { app: string; from: string };
+
+// Lets each regrouped app still in the group its old image declared follow its new image; one the wearer moved stays.
+export function followNewGroups(settings: LauncherSettings, regrouped: readonly Regrouped[]): LauncherSettings {
+  const follows = (placement: Placement) => regrouped.some((move) => move.app === placement.app && move.from === placement.group);
+  return { ...settings, placements: settings.placements.filter((placement) => !follows(placement)) };
+}
+
 // After an install, places the new app where its image says, when the watch has launcher groups.
-export async function placeNewApps(files: LauncherFiles, packages: { apps(): Promise<WatchApp[]>; reloadLauncher(): Promise<void> }) {
+export async function placeNewApps(
+  files: LauncherFiles,
+  packages: { apps(): Promise<WatchApp[]>; reloadLauncher(): Promise<void> },
+  regrouped: readonly Regrouped[] = [],
+) {
   const { settings, onWatch } = await readLauncher(files);
   if (onWatch) {
-    await writeLauncher(files, packages, settings);
+    await writeLauncher(files, packages, followNewGroups(settings, regrouped));
   }
 }

@@ -231,11 +231,13 @@ export async function installImage(
     throw new PackagesError('The shared library ships inside the firmware; update the firmware instead.');
   }
   const path = appImagePath(header.id);
+  const replaced = files.read ? (await packages.apps()).find((app) => app.id === header.id) : undefined;
   await files.mkdir?.(`/apps/${header.id}`).catch(() => {});
   await files.write(path, image, onProgress);
   await packages.install(header.id);
   if (files.read) {
-    await placeNewApps({ read: files.read.bind(files), write: files.write.bind(files) }, packages);
+    const regrouped = replaced && replaced.group !== header.group ? [{ app: header.id, from: replaced.group }] : [];
+    await placeNewApps({ read: files.read.bind(files), write: files.write.bind(files) }, packages, regrouped);
   }
   return header;
 }

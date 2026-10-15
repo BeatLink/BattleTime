@@ -8,6 +8,7 @@ import { readImageHeader } from './app-image';
 import { FileService } from './file-service';
 import {
   DEFAULT_LAUNCHER,
+  followNewGroups,
   groupApps,
   LAUNCHER_PATH,
   LauncherError,
@@ -245,5 +246,40 @@ describe('the launcher on the watch', () => {
     expect(settings.placements.filter((placement) => placement.group === 'games').map((placement) => placement.app)).toEqual(['dice', 'snake']);
     expect(target.packagesService.launcherReloads).toBe(2);
     packages.close();
+  });
+
+  it('moves a reinstalled app to the group its new image declares, unless the wearer moved it', async () => {
+    const target = new MockLegacyDfuTarget('AA:BB:CC:DD:EE:00', 'battletime', true);
+    const files = await FileService.open(target);
+    const packages = await PackagesClient.open(target);
+    await installImage(files, packages, testImage('sports', 'Sports', 'app', 0, 'time'));
+    await installImage(files, packages, testImage('dice', 'Dice', 'app', 0, 'games'));
+    await writeLauncher(files, packages, DEFAULT_LAUNCHER);
+    const { settings: placed } = await readLauncher(files);
+    await writeLauncher(files, packages, placeApp(placed, await packages.apps(), 'dice', 'tools'));
+
+    await installImage(files, packages, testImage('sports', 'Sports', 'app', 0, 'health'));
+    await installImage(files, packages, testImage('dice', 'Dice', 'app', 0, 'phone'));
+
+    const { settings } = await readLauncher(files);
+    const shown = groupApps(settings, await packages.apps()).filter(({ apps }) => apps.length > 0);
+    expect(shown.map(({ group, apps }) => [group.id, apps.map((app) => app.id)])).toEqual([
+      ['health', ['sports']],
+      ['tools', ['dice']],
+    ]);
+    packages.close();
+  });
+
+  it('lets only an app still in its old declared group follow its new one', () => {
+    const placements = [
+      { app: 'sports', group: 'time' },
+      { app: 'dice', group: 'tools' },
+    ];
+    const moves = [
+      { app: 'sports', from: 'time' },
+      { app: 'dice', from: 'games' },
+    ];
+
+    expect(followNewGroups({ ...DEFAULT_LAUNCHER, placements }, moves).placements).toEqual([{ app: 'dice', group: 'tools' }]);
   });
 });

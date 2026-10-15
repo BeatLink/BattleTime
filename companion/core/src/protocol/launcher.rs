@@ -8,7 +8,7 @@
 
 use std::future::Future;
 
-use super::app_image::ImageKind;
+use super::app_image::{ImageHeader, ImageKind};
 use super::link::GattLink;
 use super::packages::{FileWriter, PackagesClient, PackagesError, WatchApp};
 
@@ -225,17 +225,40 @@ impl FileReader for crate::sync::files::FileClient {
     }
 }
 
+// An app whose new image declares another group than the one it replaced: its id and the old group.
+pub type Regrouped = (String, String);
+
+// The groups each app in `before` declared that `installed` now changes, as `follow_new_groups` takes them.
+pub fn regrouped_apps(before: &[WatchApp], installed: &[ImageHeader]) -> Vec<Regrouped> {
+    installed
+        .iter()
+        .filter_map(|header| {
+            let replaced = before.iter().find(|app| app.id == header.id)?;
+            (replaced.group != header.group).then(|| (header.id.clone(), replaced.group.clone()))
+        })
+        .collect()
+}
+
+// Lets each regrouped app still in the group its old image declared follow its new image; one the wearer moved stays.
+pub fn follow_new_groups(settings: &mut LauncherSettings, regrouped: &[Regrouped]) {
+    settings
+        .placements
+        .retain(|placement| !regrouped.iter().any(|moved| moved == placement));
+}
+
 // When the watch has launcher groups, writes the file again so every new app sits where its image says.
 pub async fn place_new_apps<Link: GattLink>(
     files: &(impl FileReader + FileWriter),
     packages: &PackagesClient<'_, Link>,
+    regrouped: &[Regrouped],
 ) -> Result<(), PackagesError> {
     let Ok(file) = files.read(LAUNCHER_PATH).await else {
         return Ok(());
     };
-    let Some(settings) = read_launcher_file(&file) else {
+    let Some(mut settings) = read_launcher_file(&file) else {
         return Ok(());
     };
+    follow_new_groups(&mut settings, regrouped);
     let apps = packages.listing().await?.apps;
     files
         .write(LAUNCHER_PATH, &launcher_file(&settings, &apps))
@@ -321,6 +344,52 @@ mod tests {
         assert_eq!(in_group("tools"), ["buzz-back", "timer"]);
         assert_eq!(in_group("other"), ["odd"]);
         assert_eq!(written.groups, settings.groups);
+    }
+
+    #[test]
+    fn a_reinstalled_app_follows_its_new_group_unless_the_wearer_moved_it() {
+        let header = |id: &str, group: &str| ImageHeader {
+            kind: ImageKind::App,
+            id: id.into(),
+            name: id.into(),
+            group: group.into(),
+            has_icon: false,
+            bytes: 100,
+        };
+        let before = [
+            app("sports", "Sports", "time"),
+            app("dice", "Dice", "games"),
+            app("timer", "Timer", "time"),
+        ];
+        let installed = [
+            header("sports", "health"),
+            header("dice", "phone"),
+            header("timer", "time"),
+            header("new", "games"),
+        ];
+        let regrouped = regrouped_apps(&before, &installed);
+        assert_eq!(
+            regrouped,
+            [
+                ("sports".to_string(), "time".to_string()),
+                ("dice".to_string(), "games".to_string())
+            ]
+        );
+
+        let mut settings = read_launcher_file(&file_with_tools_group()).unwrap();
+        settings.placements = vec![
+            ("sports".into(), "time".into()),
+            ("dice".into(), "tools".into()),
+            ("timer".into(), "time".into()),
+        ];
+        follow_new_groups(&mut settings, &regrouped);
+        assert_eq!(
+            settings.placements,
+            [
+                ("dice".to_string(), "tools".to_string()),
+                ("timer".to_string(), "time".to_string())
+            ]
+        );
     }
 
     #[test]

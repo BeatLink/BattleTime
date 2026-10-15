@@ -438,7 +438,8 @@ groups and apps be moved up and down.
 
 Each app's image declares the group it starts in, such as `games`, and the `apps` reply carries it.
 [src/protocol/launcher.ts](src/protocol/launcher.ts) works out where every installed app goes, each
-in the group it declares until the wearer moves it, and writes that to `/settings/launcher` over the
+in the group it declares until the wearer moves it (a new version declaring another group moves an
+app the wearer left alone), and writes that to `/settings/launcher` over the
 file service as a few hundred bytes (the layout is in [companion-protocol.md](../docs/companion-protocol.md)), then
 sends `{"c":"launcher"}` on the packages characteristic so the launcher shows it at once. Installing
 an app writes the file again, so a new app lands in its group. The file lives on the watch, so
