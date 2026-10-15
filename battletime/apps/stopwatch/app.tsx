@@ -92,7 +92,7 @@ function LapRow(props: { place: number }) {
   return (
     <>
       {lap_time > 0 && (
-        <Row justify="space_between" padding={2}>
+        <Row justify="space_between">
           <Label font="small" color="muted">{`#${lap_count.value - props.place}`}</Label>
           <Label font="small" color="muted">{format_duration(lap_time - previous, "mm:ss.cc")}</Label>
           <Label font="small">{format_duration(lap_time, "mm:ss.cc")}</Label>
@@ -112,13 +112,13 @@ function Stopwatch() {
         </Label>
         <Label color={is_dimmed.value ? "muted" : "text"}>{format_number(Math.floor(elapsed.value / 10) % 100, 2)}</Label>
       </Column>
-      <Column grow={1} justify="end" padding={4}>
+      <Column grow={1} justify="end" gap={2}>
         <LapRow place={0} />
         <LapRow place={1} />
         <LapRow place={2} />
         {!shows_hours.value && <LapRow place={3} />}
       </Column>
-      <Row gap={6} height={64}>
+      <Row gap={6} height={56}>
         <Button
           grow={1}
           height="100%"

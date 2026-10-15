@@ -22,9 +22,9 @@ Cleared, before the first start, with the lap button greyed out.
 
 Running: the time with its hundredths below, and the lap and pause buttons.
 
-![The stopwatch with two laps](../../battletime/harness/snapshots/screens/app-stopwatch-laps.png)
+![The stopwatch with four laps](../../battletime/harness/snapshots/screens/app-stopwatch-laps.png)
 
-Two laps taken, newest first: each lap's number, its own time and the total when it was taken.
+Four laps taken, newest first: each lap's number, its own time and the total when it was taken.
 
 ![The stopwatch paused](../../battletime/harness/snapshots/screens/app-stopwatch-paused.png)
 

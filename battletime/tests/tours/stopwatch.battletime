@@ -6,7 +6,11 @@ tap 62 200                  # lap
 wait 9s
 tap 62 200                  # lap
 wait 4s
-expect text "00:25"
+tap 62 200                  # lap
+wait 3s
+tap 62 200                  # lap
+wait 2s
+expect text "00:30"
 snapshot laps
 tap 178 200                 # pause
 expect effect keep-screen-on false
