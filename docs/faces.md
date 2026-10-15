@@ -42,11 +42,14 @@ Faces install and uninstall from the companion app's store like any app, and
 ![The Phrase clock face](../battletime/harness/snapshots/screens/face-phrase-clock.png){ .screen }
 ![The Digistyle face](../battletime/harness/snapshots/screens/face-digistyle.png){ .screen }
 ![The RGB face](../battletime/harness/snapshots/screens/face-rgb.png){ .screen }
+![The Chrono face](../battletime/harness/snapshots/screens/face-chrono.png){ .screen }
+![The Waves face](../battletime/harness/snapshots/screens/face-waves.png){ .screen }
+![The Park Skyline face](../battletime/harness/snapshots/screens/face-park-skyline.png){ .screen }
 </div>
 
 In order: Digital, Analog, Terminal, PineTimeStyle, Casio G7710, Infineat, Pride flag, Week clock,
 Dual clock, Fibonacci clock, Word clock, Resistor clock, Lite Digital, Lite Analog, Lite Rings,
-Lite Pong, Lite Photo, Lite Weather, Phrase clock, Digistyle and RGB.
+Lite Pong, Lite Photo, Lite Weather, Phrase clock, Digistyle, RGB, Chrono, Waves and Park Skyline.
 
 ## Every face
 
@@ -75,6 +78,9 @@ The Notes column is also each face's description in the companion app's store.
 | `phrase-clock` | ZephyrLabs Wordclock | The time as a lower-case phrase, such as "nineteen minutes to nine", over the date, with heart rate and steps below. |
 | `digistyle` | ZephyrLabs Digistyle | An old digital watch: a pale LCD panel with big digits and the date inside a bezel lettered PINETIME and WATER WR RESIST. |
 | `rgb` | ZephyrLabs RGB | InfiniTime's classic digital face, its time, date and icons cycling round the colour wheel every 12 seconds. |
+| `chrono` | ZephyrLabs Chrono | A chronograph dial with a pine cone, a small globe and two stopwatch subdials; a tap starts or stops the stopwatch and a long press clears it. |
+| `waves` | ZephyrLabs Waves | Big shadowed hours over the minutes, with the date between them, on a beach of sea, surf and sand. |
+| `park-skyline` | jlukanc1 Park Skyline | The date and a big black time on a pale sky, over a black treeline with the heart rate and steps. |
 
 ## Differences from the originals
 
@@ -90,6 +96,14 @@ The Notes column is also each face's description in the companion app's store.
   JetBrains Mono ExtraBold.
 - Phrase clock keeps the original's wording, which counts the hours past the hour on a 24 hour dial
   ("twenty minutes past thirteen") but the hours to the hour on a 12 hour one ("ten minutes to one").
+- Chrono, Waves and Park Skyline draw their pictures with coloured shapes in place of ZephyrLabs'
+  bitmaps, which do not fit in a face's memory: Chrono's globe is a blue disc with two continents,
+  Waves' beach is bands of sea, surf and sand, and Park Skyline's park is a row of black tree crowns.
+- Chrono's stopwatch starts and stops with a tap rather than a swipe right, which the face leaves to
+  the quick apps. It keeps running while the face is closed. Its dial is grey, as in its source, and
+  its hands use BattleTime's widths.
+- Waves and Park Skyline draw their digits in BattleTime's huge font rather than JetBrains Mono
+  ExtraBold, and Waves writes its date in the normal font.
 - Faces that show seconds redraw every second; the others redraw once a minute, as does Analog
   while its second hand is off.
 

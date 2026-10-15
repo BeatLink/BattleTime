@@ -869,6 +869,29 @@ fn the_rgb_face_wakes_each_second_to_change_colour() {
     assert_eq!(wakes_in(&watch), Some(1_000));
 }
 
+#[test]
+fn the_chrono_face_runs_its_stopwatch_from_a_tap_and_clears_it_with_a_long_press() {
+    let mut watch = TestWatch::open_face("chrono").unwrap();
+    assert_eq!(watch.persisted_value("started_at", 0), Some(NONE));
+
+    let started_at = watch.now();
+    watch.tap(120, 120);
+    assert_eq!(watch.persisted_value("started_at", 0), Some(started_at));
+
+    watch.advance(Duration::from_secs(65));
+    watch.long_press(120, 120);
+    assert_eq!(watch.persisted_value("started_at", 0), Some(started_at));
+
+    watch.tap(120, 120);
+    assert_eq!(watch.persisted_value("started_at", 0), Some(NONE));
+    let stopped_after = watch.persisted_value("stopped_after", 0).unwrap();
+    assert!((65_000..67_000).contains(&stopped_after), "{stopped_after}");
+
+    watch.long_press(120, 120);
+    assert_eq!(watch.persisted_value("stopped_after", 0), Some(0));
+    assert!(watch.failures().is_empty());
+}
+
 // ============================================================================
 // Notifications
 // ============================================================================

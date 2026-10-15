@@ -138,7 +138,7 @@ fn the_stopwatch_runs_on_the_runtime() {
 // ============================================================================
 
 /// The apps, shell screens and faces that are expected to compile, so a change that breaks one is caught: all of them.
-const EXPECTED_TO_COMPILE: [&str; 54] = [
+const EXPECTED_TO_COMPILE: [&str; 57] = [
     "apps/alarm",
     "apps/beacon",
     "apps/calculator",
@@ -174,6 +174,7 @@ const EXPECTED_TO_COMPILE: [&str; 54] = [
     "shell/quick-settings",
     "faces/analog",
     "faces/casio",
+    "faces/chrono",
     "faces/digistyle",
     "faces/digital",
     "faces/dual-clock",
@@ -185,12 +186,14 @@ const EXPECTED_TO_COMPILE: [&str; 54] = [
     "faces/lite-pong",
     "faces/lite-rings",
     "faces/lite-weather",
+    "faces/park-skyline",
     "faces/phrase-clock",
     "faces/pinetime-style",
     "faces/pride-flag",
     "faces/resistor-clock",
     "faces/rgb",
     "faces/terminal",
+    "faces/waves",
     "faces/week-clock",
     "faces/word-clock",
 ];

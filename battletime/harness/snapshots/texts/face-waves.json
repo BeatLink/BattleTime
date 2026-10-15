@@ -1,0 +1,18 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "00",
+        "00",
+        "09",
+        "09",
+        "4321",
+        "64 BPM",
+        "mon. 5 jan 2026",
+        "mon. 5 jan 2026"
+      ]
+    }
+  ]
+}
