@@ -85,3 +85,31 @@ opt-level = "s"
 [profile.recovery]
 inherits = "release"
 opt-level = "z"
+
+# Crates off the drawing and interpreter paths, built for size; each one here measured smaller, and others grew.
+[profile.release.package.neotime-companion]
+opt-level = "z"
+
+[profile.release.package.neotime-packages]
+opt-level = "z"
+
+[profile.release.package.neotime-accelerometer]
+opt-level = "z"
+
+[profile.release.package.neotime-current-time]
+opt-level = "z"
+
+[profile.release.package.neotime-settings]
+opt-level = "z"
+
+[profile.release.package.neotime-touch]
+opt-level = "z"
+
+[profile.release.package.serde]
+opt-level = "z"
+
+[profile.release.package.heapless]
+opt-level = "z"
+
+[profile.release.package.embassy-sync]
+opt-level = "z"

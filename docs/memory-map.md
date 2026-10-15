@@ -41,7 +41,9 @@ on the external flash. See [app-runtime.md](app-runtime.md#the-shared-library).
 Measured on the release builds of `firmware/` by `tools/measure_memory.py` (see
 [Measuring again](#measuring-again)). Each symbol counts towards the crate that owns it; the
 firmware is linked with LTO into a single object, so the crate comes from the symbol's name, and
-the files the firmware embeds, such as the Bosch configuration, are found by their bytes.
+the files the firmware embeds, such as the Bosch configuration, are found by their bytes. A few crates
+off the drawing and interpreter paths, such as `neotime-companion` and `neotime-packages`, are built
+for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"s"`.
 
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |

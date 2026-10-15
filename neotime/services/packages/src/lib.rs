@@ -279,11 +279,6 @@ impl<'files, Files: FileAccess> Packages<'files, Files> {
         matches!(self.files.file_length(path).await, Ok(Some(_)))
     }
 
-    async fn read_whole(&mut self, path: &str) -> Option<Vec<u8>> {
-        let length = self.files.file_length(path).await.ok()??;
-        self.read_whole_of_length(path, length).await
-    }
-
     /// Reads a file whose length the caller already has, so the store looks it up only once more.
     async fn read_whole_of_length(&mut self, path: &str, length: usize) -> Option<Vec<u8>> {
         let mut bytes = alloc::vec![0; length];
