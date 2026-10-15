@@ -502,17 +502,29 @@ and an icon beyond the library shows none. A tap sends `{"t":"app","ch":"remote"
 ## Records the companion reads
 
 The watch keeps its history in files, which the companion reads with the file transfer above, or
-copies on each [sync](sync.md) pass. Each log has a file for each day from local midnight, holding
-one value for each six-minute slot, 240 slots a day. A slot is written when it ends, so a file stops
-after the day's last written slot. The watch keeps 90 days of each and deletes older days when a new
-day starts.
+copies on each [sync](sync.md) pass. Each log holds one value for each six-minute slot from local
+midnight, 240 slots a day, written as the slot ends. The days are kept in blocks of whole days,
+3,872 bytes each: block `n` holds the days from `n` times the days a block holds, counted from
+1970-01-01 in local time, one after another. Each byte is stored flipped by the log's mask, so a
+slot never written reads as the empty value once flipped back. A slot is written once and never
+changes. The watch deletes a block once all its days are older than 90 days.
+
+| Path | Days a block | Mask | Each slot |
+|---|---|---|---|
+| `/day_blocks/steps/<n>` | 8 | `0xff` | The steps, a little-endian `u16`, in wasp-os's step logger format; 0 for none. |
+| `/day_blocks/heart/<n>` | 16 | `0xff` | The average beats per minute measured in it, one byte, 0 for none. |
+| `/day_blocks/battery/<n>` | 16 | `0x00` | The charge in percent at its end, one byte, with the top bit set while charging, or `0xff` for a slot the watch was off. |
+
+Older firmware kept each day as a file of its own, in the same form unflipped, stopping after the
+day's last written slot: `/steps/<year>/<month>-<day>`, `/logs/heart/<year>/<month>-<day>` and
+`/logs/battery/<year>/<month>-<day>`. A watch updated from it keeps those files until they are 90
+days old, and the day it was updated on may have slots in both its file and its block, each slot in
+one of them. The companion shows each day under its file's name, its block's slots laid over the
+file's.
 
 | Path | Holds |
 |---|---|
-| `/steps/<year>/<month>-<day>` | The steps in each slot, a little-endian `u16` each, in wasp-os's step logger format; a slot past the file's end had none. |
 | `/steps/trip` | The trip count, a little-endian `u32`. |
-| `/logs/heart/<year>/<month>-<day>` | The average beats per minute measured in each slot, one byte each, 0 for none. |
-| `/logs/battery/<year>/<month>-<day>` | The charge in percent at each slot's end, one byte each, with the top bit set while charging, or `0xff` for a slot the watch was off. |
 | `/apps/<id>/state` | An app's saved values, such as the alarm app's alarms or the sports app's last five sessions, in the format [sync.md](sync.md#app-state) decodes. |
 | `/apps/<id>/disabled` | Present while the app is turned off. |
 
@@ -656,7 +668,7 @@ runs the `prompt` app with the question as `text` and prints the answer: the app
 - `services/phone_client`: the watch's requests to the phone's own services, with no I/O in it.
 - `services/packages`: installs, lists and removes apps, and finds the shared library inside the
   firmware image, with no Bluetooth in it.
-- `services/slot_log` and `services/steps`: the day files of the heart rate, battery and step logs.
+- `services/slot_log` and `services/steps`: the blocks of days of the heart rate, battery and step logs.
 - `services/settings`: each setting's limits and default, and the `/settings/system` file.
 - `firmware/src/main.rs`: the GATT server, which hands lines to `services/companion` and sends its
   replies; `firmware/src/phone_services.rs` runs the phone client beside it.

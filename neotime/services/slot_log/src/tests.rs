@@ -1,7 +1,7 @@
 extern crate std;
 
 use embassy_futures::block_on;
-use neotime_flash_store::{ram_flash::RamFlash, FileAccess, FlashStore, Layout};
+use neotime_flash_store::{ram_flash::RamFlash, FlashStore, Layout};
 
 use super::*;
 
@@ -14,11 +14,11 @@ const MIDNIGHT: i64 = 1_767_571_200_000;
 const DAY_OF_MIDNIGHT: i64 = MIDNIGHT / MILLISECONDS_PER_DAY;
 const MINUTE: i64 = 60_000;
 
-type TestStore = FlashStore<RamFlash, 8, 32, 8>;
+type TestStore = FlashStore<RamFlash, 32, 32, 8>;
 
 const LAYOUT: Layout = Layout {
     start_address: 0,
-    file_sectors: 8,
+    file_sectors: 32,
     record_sectors: 8,
     log_sectors: 4,
 };
@@ -27,11 +27,15 @@ fn file_system() -> TestStore {
     block_on(TestStore::mount(RamFlash::blank(LAYOUT.total_sectors()), LAYOUT)).unwrap()
 }
 
-fn read_whole(files: &mut TestStore, path: &str) -> Option<std::vec::Vec<u8>> {
-    let length = block_on(FileAccess::file_length(files, path)).unwrap()?;
-    let mut bytes = std::vec![0; length];
-    block_on(FileAccess::read_file(files, path, 0, &mut bytes)).unwrap();
+/// A day's bytes as its block holds them, every slot, or nothing when its block is missing.
+fn block_day(files: &mut TestStore, log: &SlotLog, day: i64) -> Option<std::vec::Vec<u8>> {
+    let mut bytes = std::vec![0; log.day_bytes()];
+    block_on(read_block_day(files, log, day, &mut bytes)).unwrap()?;
     Some(bytes)
+}
+
+fn erases(files: &TestStore) -> u32 {
+    files.flash().erases
 }
 
 fn slot(day: i64, slot: usize) -> SlotTime {
@@ -130,55 +134,100 @@ fn a_day_path_reads_back_as_its_day_only_in_its_own_folder() {
     assert_eq!(day_of_path(BATTERY_DIRECTORY, "/logs/batteryx/2026/01-05"), None);
 }
 
+#[test]
+fn a_day_lies_in_a_block_of_whole_days() {
+    assert_eq!(STEPS.days_per_block(), 8);
+    assert_eq!(HEART_RATE.days_per_block(), 16);
+    let (path, start) = BATTERY.place_of_day(16 * 1273 + 2);
+    assert_eq!(
+        (path.as_str(), start),
+        ("/day_blocks/battery/1273", 2 * SLOTS_PER_DAY)
+    );
+    assert_eq!(BATTERY.block_of_path(&path), Some(1273));
+    assert_eq!(HEART_RATE.block_of_path(&path), None);
+    assert_eq!(STEPS.place_of_day(-1).0.as_str(), "/day_blocks/steps/-1");
+}
+
 // ============================================================================
-// Writing
+// Writing and reading
 // ============================================================================
 
 #[test]
-fn a_slot_is_written_after_empty_slots_before_it_and_keeps_the_others() {
+fn a_slot_is_written_in_its_place_and_unwritten_slots_read_as_empty() {
     let mut files = file_system();
-    let path = day_path(BATTERY_DIRECTORY, DAY_OF_MIDNIGHT);
-    block_on(write_byte_slot(
+    block_on(write_slot(&mut files, &BATTERY, slot(DAY_OF_MIDNIGHT, 3), 80)).unwrap();
+    block_on(write_slot(
         &mut files,
-        BATTERY_DIRECTORY,
-        slot(DAY_OF_MIDNIGHT, 3),
-        80,
-        0xff,
-    ))
-    .unwrap();
-    assert_eq!(read_whole(&mut files, &path).unwrap(), [0xff, 0xff, 0xff, 80]);
-    block_on(write_byte_slot(
-        &mut files,
-        BATTERY_DIRECTORY,
+        &BATTERY,
         slot(DAY_OF_MIDNIGHT, 1),
-        81,
-        0xff,
+        81 | CHARGING_BIT as u16,
     ))
     .unwrap();
-    assert_eq!(read_whole(&mut files, &path).unwrap(), [0xff, 81, 0xff, 80]);
-    block_on(write_byte_slot(
-        &mut files,
-        BATTERY_DIRECTORY,
-        slot(DAY_OF_MIDNIGHT, 5),
-        79,
-        0xff,
-    ))
-    .unwrap();
+    block_on(write_slot(&mut files, &HEART_RATE, slot(DAY_OF_MIDNIGHT, 2), 255)).unwrap();
+
+    let battery = block_day(&mut files, &BATTERY, DAY_OF_MIDNIGHT).unwrap();
+    assert_eq!(&battery[..5], [0xff, 81 | CHARGING_BIT, 0xff, 80, 0xff]);
+    assert!(battery[5..].iter().all(|&byte| byte == NO_BATTERY_READING));
+    let heart = block_day(&mut files, &HEART_RATE, DAY_OF_MIDNIGHT).unwrap();
+    assert_eq!(&heart[..4], [0, 0, 255, 0]);
+    assert_eq!(block_day(&mut files, &STEPS, DAY_OF_MIDNIGHT), None);
+}
+
+#[test]
+fn a_slot_keeps_the_first_value_written_to_it() {
+    let mut files = file_system();
+    block_on(write_slot(&mut files, &HEART_RATE, slot(DAY_OF_MIDNIGHT, 2), 70)).unwrap();
+    block_on(write_slot(&mut files, &HEART_RATE, slot(DAY_OF_MIDNIGHT, 2), 90)).unwrap();
     assert_eq!(
-        read_whole(&mut files, &path).unwrap(),
-        [0xff, 81, 0xff, 80, 0xff, 79]
+        block_day(&mut files, &HEART_RATE, DAY_OF_MIDNIGHT).unwrap()[2],
+        70
     );
 }
 
 #[test]
-fn the_last_slot_of_the_day_fills_the_whole_file() {
+fn neighbouring_days_share_a_block_without_touching_each_other() {
     let mut files = file_system();
-    let last = slot(DAY_OF_MIDNIGHT, SLOTS_PER_DAY - 1);
-    block_on(write_byte_slot(&mut files, HEART_RATE_DIRECTORY, last, 61, 0)).unwrap();
-    let bytes = read_whole(&mut files, &day_path(HEART_RATE_DIRECTORY, DAY_OF_MIDNIGHT)).unwrap();
-    assert_eq!(bytes.len(), SLOTS_PER_DAY);
-    assert_eq!(bytes[SLOTS_PER_DAY - 1], 61);
-    assert!(bytes[..SLOTS_PER_DAY - 1].iter().all(|&byte| byte == 0));
+    let first = 16 * 1273;
+    block_on(write_slot(
+        &mut files,
+        &HEART_RATE,
+        slot(first, SLOTS_PER_DAY - 1),
+        61,
+    ))
+    .unwrap();
+    block_on(write_slot(&mut files, &HEART_RATE, slot(first + 15, 0), 62)).unwrap();
+
+    let first_day = block_day(&mut files, &HEART_RATE, first).unwrap();
+    assert_eq!(first_day[SLOTS_PER_DAY - 1], 61);
+    assert!(first_day[..SLOTS_PER_DAY - 1].iter().all(|&byte| byte == 0));
+    assert_eq!(block_day(&mut files, &HEART_RATE, first + 15).unwrap()[0], 62);
+    assert_eq!(
+        block_day(&mut files, &HEART_RATE, first + 1).unwrap(),
+        [0; SLOTS_PER_DAY]
+    );
+    assert_eq!(block_day(&mut files, &HEART_RATE, first + 16), None);
+}
+
+#[test]
+fn a_whole_day_of_slots_costs_no_erase_once_its_blocks_are_made() {
+    let mut files = file_system();
+    let first = ended(DAY_OF_MIDNIGHT, 0, DAY_OF_MIDNIGHT);
+    block_on(store_ended_slot(&mut files, first, 60, 90)).unwrap();
+    block_on(write_slot(&mut files, &STEPS, first.time, 1000)).unwrap();
+    let erases_with_the_blocks = erases(&files);
+
+    for slot in 1..SLOTS_PER_DAY {
+        let time = ended(DAY_OF_MIDNIGHT, slot, DAY_OF_MIDNIGHT);
+        block_on(store_ended_slot(&mut files, time, 60 + slot as u8 % 50, 90)).unwrap();
+        block_on(write_slot(&mut files, &STEPS, time.time, 1000 + slot as u16)).unwrap();
+    }
+
+    assert_eq!(erases(&files), erases_with_the_blocks);
+    let steps = block_day(&mut files, &STEPS, DAY_OF_MIDNIGHT).unwrap();
+    assert_eq!(&steps[2..4], &1001u16.to_le_bytes());
+    assert_eq!(&steps[478..], &1239u16.to_le_bytes());
+    let heart = block_day(&mut files, &HEART_RATE, DAY_OF_MIDNIGHT).unwrap();
+    assert_eq!(heart[239], 60 + 239 % 50);
 }
 
 #[test]
@@ -191,10 +240,7 @@ fn an_ended_slot_writes_its_battery_always_and_its_heart_rate_only_when_measured
         90,
     ))
     .unwrap();
-    assert_eq!(
-        read_whole(&mut files, &day_path(HEART_RATE_DIRECTORY, DAY_OF_MIDNIGHT)),
-        None
-    );
+    assert_eq!(block_day(&mut files, &HEART_RATE, DAY_OF_MIDNIGHT), None);
     block_on(store_ended_slot(
         &mut files,
         ended(DAY_OF_MIDNIGHT, 1, DAY_OF_MIDNIGHT),
@@ -203,22 +249,31 @@ fn an_ended_slot_writes_its_battery_always_and_its_heart_rate_only_when_measured
     ))
     .unwrap();
     assert_eq!(
-        read_whole(&mut files, &day_path(HEART_RATE_DIRECTORY, DAY_OF_MIDNIGHT)).unwrap(),
-        [0, 64]
+        block_day(&mut files, &HEART_RATE, DAY_OF_MIDNIGHT).unwrap()[..3],
+        [0, 64, 0]
     );
     assert_eq!(
-        read_whole(&mut files, &day_path(BATTERY_DIRECTORY, DAY_OF_MIDNIGHT)).unwrap(),
-        [90, 89]
+        block_day(&mut files, &BATTERY, DAY_OF_MIDNIGHT).unwrap()[..3],
+        [90, 89, 0xff]
     );
 }
 
+// ============================================================================
+// Forgetting
+// ============================================================================
+
 #[test]
-fn days_older_than_the_log_keeps_are_forgotten_when_a_new_day_starts() {
+fn blocks_whose_days_are_all_older_than_the_log_keeps_are_forgotten_when_a_new_day_starts() {
     let mut files = file_system();
-    for days_back in [1, DAYS_KEPT - 1, DAYS_KEPT, DAYS_KEPT + 30] {
+    let oldest_kept_block = (DAY_OF_MIDNIGHT - DAYS_KEPT + 1).div_euclid(16);
+    for days_back in [1, DAYS_KEPT - 1, DAYS_KEPT + 16, DAYS_KEPT + 40] {
         let day = DAY_OF_MIDNIGHT - days_back;
         block_on(store_ended_slot(&mut files, ended(day, 3, day), 70, 50)).unwrap();
     }
+    let old_file = day_path(HEART_RATE_DIRECTORY, DAY_OF_MIDNIGHT - DAYS_KEPT);
+    let kept_file = day_path(HEART_RATE_DIRECTORY, DAY_OF_MIDNIGHT - DAYS_KEPT + 1);
+    block_on(files.write_file(&old_file, &[70])).unwrap();
+    block_on(files.write_file(&kept_file, &[71])).unwrap();
 
     block_on(store_ended_slot(
         &mut files,
@@ -228,16 +283,15 @@ fn days_older_than_the_log_keeps_are_forgotten_when_a_new_day_starts() {
     ))
     .unwrap();
 
-    for directory in [HEART_RATE_DIRECTORY, BATTERY_DIRECTORY] {
-        let mut kept = std::vec::Vec::new();
-        block_on(FileAccess::for_each_file(&mut files, directory, &mut |path| {
-            kept.push(day_of_path(directory, path))
+    for log in [HEART_RATE, BATTERY] {
+        let mut blocks = std::vec::Vec::new();
+        block_on(files.for_each_file(log.block_directory, |path| {
+            blocks.push(log.block_of_path(path).unwrap())
         }))
         .unwrap();
-        kept.sort();
-        assert_eq!(
-            kept,
-            [Some(DAY_OF_MIDNIGHT - DAYS_KEPT + 1), Some(DAY_OF_MIDNIGHT - 1)]
-        );
+        blocks.sort();
+        assert_eq!(blocks, [oldest_kept_block, (DAY_OF_MIDNIGHT - 1).div_euclid(16)]);
     }
+    assert_eq!(block_on(files.file_length(&old_file)).unwrap(), None);
+    assert_eq!(block_on(files.file_length(&kept_file)).unwrap(), Some(1));
 }

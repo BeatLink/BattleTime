@@ -33,10 +33,14 @@ the format, [storage.md](storage.md) what the watch keeps in it, and
 
 ### Slot logs (`services/slot_log`)
 
-`neotime-slot-log` keeps day files of six-minute slots in the flash store, each under its log's
-folder as `<folder>/<year>/<month>-<day>`, and deletes days older than `DAYS_KEPT` (90) when a new
-day starts. A slot is written only when it ends, and the slots before it that were never written
-hold the log's empty value. The step log takes its paths and its forgetting from here, and two more
+`neotime-slot-log` keeps days of six-minute slots in the flash store, in blocks of whole days: blank
+files of one sector, `/day_blocks/<log>/<n>`, block `n` starting `n` blocks of days after
+1970-01-01. A slot is programmed into its place when it ends, with `program_file`, so it needs no
+erase and a block costs one erase in all. Each byte is stored flipped by the log's mask, so a slot
+never written reads as the log's empty value, and a slot keeps the first value written to it. A
+block is deleted when a new day starts once all its days are older than `DAYS_KEPT` (90). Older
+firmware kept each day as a file of its own, `<folder>/<year>/<month>-<day>`; those are read beside
+the blocks and deleted once older than 90 days. The step log keeps its days here too, and two more
 logs live here whole:
 
 - **Heart rate,** `/logs/heart`: one byte a slot, the rounded average of the beats per minute the
@@ -44,7 +48,7 @@ logs live here whole:
 - **Battery,** `/logs/battery`: one byte a slot, the charge in percent at the slot's end, with the
   top bit set while charging. A slot the watch was off for holds `0xff`.
 
-A full day is 240 bytes, so the store keeps each as a record. `SlotClock` says when a slot has
+A block of 3,872 bytes holds 16 days of these, or 8 of steps. `SlotClock` says when a slot has
 ended; the firmware's battery task holds it, as [firmware.md](firmware.md#battery) describes.
 
 ## Settings and time
@@ -182,13 +186,14 @@ calendar events in a fixed purple and the rest in the accent.
 - **Days.** It remembers today and the six days before as 24 hourly counts each, 336 bytes. At
   local midnight each day moves one back. A clock set to another day, such as by the phone after
   a restart, forgets them, and `log::store` reads them again from the log.
-- **The log.** When a slot ends with steps, `log::store` adds them to that slot's place in the
-  day's file, `/steps/<year>/<month>-<day>`, padding earlier slots with zeros. The trip count stays
+- **The log.** When a slot ends with steps, `log::store` programs them into that slot's place in the
+  day's block, `/day_blocks/steps/<n>`, through the slot logs; a day older firmware kept as a file,
+  `/steps/<year>/<month>-<day>`, is read beside its block. The trip count stays
   in RAM and is saved in `/steps/trip` when a day ends and when the screen goes dark, and only when
   it changed, through `log::save_trip_if_changed`. Each slot is a little-endian `u16`, as wasp-os's step logger writes them,
-  so a full day is 480 bytes, which the flash store keeps as a record. Slots without steps are never
+  so a full day is 480 bytes and a block holds 8 days. Slots without steps are never
   written, so a quiet night costs no flash writes. When a new day starts, `log::forget_old_days`
-  deletes the days older than 90, taken from the slot logs.
+  deletes the blocks and files whose days are all older than 90, taken from the slot logs.
 - **Start.** `log::load_history` reads the remembered days and the trip count back. The chip starts
   its count from 0 at every start, so a restart loses only the slot in progress, and the trip
   steps taken since the screen last went dark.

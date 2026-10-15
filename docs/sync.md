@@ -21,14 +21,18 @@ Each pass reads the following. Each item is kept as one JSON file, named by its 
 | `settings` | the reply to a `settings` message ([companion-protocol.md](companion-protocol.md#settings-served)) | every setting by its key, the theme with its colours |
 | `apps/<id>` | `/apps/<id>/state` and `/apps/<id>/disabled` | `{ "hidden": bool, "state": {...}, "kinds": {...} }`: the state decoded as below, `null` for an app that keeps none, and which keys hold a `time`, `duration`, `color` or `text` |
 | `files/settings/<name>` | every file in `/settings` | `quick_apps` as `{ "apps": [ids] }`, the rest as `{ "bytes": [...] }` |
-| `steps/<year>/<MM>-<DD>` | that day's file | `{ "size": n, "slots": [...] }`, steps in each six-minute slot from midnight |
+| `steps/<year>/<MM>-<DD>` | that day in its block, laid over its own file when older firmware left one | `{ "size": n, "slots": [...] }`, steps in each six-minute slot from midnight |
 | `steps/trip` | `/steps/trip` | `{ "size": 4, "count": n }` |
-| `logs/heart/<year>/<MM>-<DD>` | that day's file | `{ "size": n, "slots": [...] }`, the average beats per minute in each six-minute slot from midnight, 0 for none |
-| `logs/battery/<year>/<MM>-<DD>` | that day's file | `{ "size": n, "slots": [...], "charging": [...] }`, the charge in percent at each slot's end, `null` while the watch was off, and whether it was charging |
+| `logs/heart/<year>/<MM>-<DD>` | that day, as for steps | `{ "size": n, "slots": [...] }`, the average beats per minute in each six-minute slot from midnight, 0 for none |
+| `logs/battery/<year>/<MM>-<DD>` | that day, as for steps | `{ "size": n, "slots": [...], "charging": [...] }`, the charge in percent at each slot's end, `null` while the watch was off, and whether it was charging |
 | `logs/...` | every other file under `/logs` | `{ "size": n, "bytes": [...] }` |
 
-A past day's file is read again only when its size has changed. The newest day, loose counters and
-everything else are read on every pass, since they change in place.
+| `day_blocks/<log>/<n>` | each block in `/day_blocks` | `{ "size": n }`, noting the block was read |
+
+A day's size is that of its own file, ending after its last written slot. A past day's file is read
+again only when its size has changed, and a block older than its log's two newest only when it has
+not been read before or holds a day whose own file is laid under it. The newest day, the newest
+blocks, loose counters and everything else are read on every pass, since they change in place.
 
 ### App state
 

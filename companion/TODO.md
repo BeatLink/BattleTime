@@ -47,7 +47,7 @@ mock watch only.
   read correctly on Cinnamon, but nothing has been forwarded to a real watch from the desktop yet.
   GeoClue's location is untried, since the development machine runs no GeoClue.
 - **Steps and alarms from the watch's files.** The Steps and Alarms screens, `neotime steps` and
-  `neotime alarms` have read `/steps/...` and read and written `/apps/alarm/state` only against the
+  `neotime alarms` have read `/day_blocks/steps/...` and `/steps/...`, and read and written `/apps/alarm/state` only against the
   mock watch and the core's byte layout. Check on a watch that a changed alarm rings, that an open
   Alarm app redraws with it, and that the synced copy in the Tauri app refreshes after a write.
 - **The NeoTime name check in scans.** A running NeoTime is told from a bootloader by its advertised

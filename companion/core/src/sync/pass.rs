@@ -3,8 +3,13 @@
 // - `/apps/<id>/state`, decoded, with whether the app is hidden, as `apps/<id>`;
 // - every file under `/settings` as `files/settings/<name>`;
 // - every file under the logged folders (`/steps`, `/logs`), steps, heart rate and battery days decoded;
-//   a past day is read again only when its size changed.
+//   a past day is read again only when its size changed;
+// - each day of the blocks newer firmware keeps those logs in (`/day_blocks`), under the same name as the
+//   day's own file, merged with it when older firmware left one.
 
+use std::collections::HashSet;
+
+use chrono::Datelike;
 use serde_json::{json, Value};
 
 use super::files::{FileClient, FileError};
@@ -39,8 +44,13 @@ pub async fn sync_files(files: &FileClient, store: &SyncStore) -> PassReport {
     let mut report = PassReport::default();
     sync_apps(files, store, &mut report).await;
     sync_settings_files(files, store, &mut report).await;
+    let blocks = list_blocks(files, &mut report).await;
+    let mut merged_day_files = HashSet::new();
     for folder in LOGGED_FOLDERS {
-        sync_logged(files, store, folder, &mut report).await;
+        sync_logged(files, store, folder, &blocks, &mut merged_day_files, &mut report).await;
+    }
+    for (log, numbers) in BLOCK_LOGS.iter().zip(&blocks) {
+        sync_blocks(files, store, log, numbers, &merged_day_files, &mut report).await;
     }
     report
 }
@@ -129,7 +139,15 @@ fn settings_file_json(name: &str, bytes: &[u8]) -> Value {
 // Logged folders
 // ============================================================================
 
-async fn sync_logged(files: &FileClient, store: &SyncStore, folder: &str, report: &mut PassReport) {
+// Mirrors a logged folder, leaving a day whose block exists to `sync_blocks`, noted in `merged_day_files`.
+async fn sync_logged(
+    files: &FileClient,
+    store: &SyncStore,
+    folder: &str,
+    blocks: &[Vec<i64>],
+    merged_day_files: &mut HashSet<String>,
+    report: &mut PassReport,
+) {
     let mut pending = vec![folder.to_string()];
     while let Some(folder) = pending.pop() {
         let entries = match files.list(&folder).await {
@@ -150,6 +168,10 @@ async fn sync_logged(files: &FileClient, store: &SyncStore, folder: &str, report
             let path = format!("{folder}/{}", entry.name);
             if entry.folder {
                 pending.push(path);
+                continue;
+            }
+            if has_block(&path, blocks) {
+                merged_day_files.insert(path);
                 continue;
             }
             let source = path.trim_start_matches('/').to_string();
@@ -203,6 +225,195 @@ fn logged_json(folder: &str, bytes: &[u8]) -> Value {
         return json!({ "size": 4, "count": trip });
     }
     json!({ "size": bytes.len(), "bytes": bytes })
+}
+
+// ============================================================================
+// Blocks of days
+// ============================================================================
+
+// A log newer firmware keeps in blocks, one sector each of whole days, the block numbered by its first
+// day from 1970-01-01 over the days it holds; each byte is stored flipped so an unwritten slot reads as
+// the log's empty value (neotime/services/slot_log/src/lib.rs).
+pub struct BlockLog {
+    pub folder: &'static str,
+    // The folder of the day files it stands for, whose names its days take.
+    pub days_folder: &'static str,
+    pub bytes_per_slot: usize,
+    pub flip: u8,
+}
+
+pub const BLOCK_LOGS: [BlockLog; 3] = [
+    BlockLog {
+        folder: "/day_blocks/steps",
+        days_folder: "/steps",
+        bytes_per_slot: 2,
+        flip: 0xff,
+    },
+    BlockLog {
+        folder: "/day_blocks/heart",
+        days_folder: "/logs/heart",
+        bytes_per_slot: 1,
+        flip: 0xff,
+    },
+    BlockLog {
+        folder: "/day_blocks/battery",
+        days_folder: "/logs/battery",
+        bytes_per_slot: 1,
+        flip: 0,
+    },
+];
+
+const SLOTS_PER_DAY: usize = 240;
+// The bytes of a block: a 4 KB sector less the file's header.
+const BLOCK_BYTES: usize = 3872;
+// Days from 0001-01-01 to 1970-01-01.
+const DAYS_BEFORE_1970: i64 = 719_163;
+
+impl BlockLog {
+    fn day_bytes(&self) -> usize {
+        SLOTS_PER_DAY * self.bytes_per_slot
+    }
+
+    fn days_per_block(&self) -> i64 {
+        (BLOCK_BYTES / self.day_bytes()) as i64
+    }
+
+    // A day's bytes as its own file would hold them, ending after its last written slot; empty when none is.
+    pub fn day_from_block(&self, block: &[u8], day_in_block: usize) -> Vec<u8> {
+        let start = (day_in_block * self.day_bytes()).min(block.len());
+        let stored = &block[start..(start + self.day_bytes()).min(block.len())];
+        let written = stored
+            .iter()
+            .rposition(|&byte| byte != 0xff)
+            .map_or(0, |last| last + 1);
+        let length = written.next_multiple_of(self.bytes_per_slot);
+        stored[..length.min(stored.len())]
+            .iter()
+            .map(|&byte| byte ^ self.flip)
+            .collect()
+    }
+}
+
+// The path of a day's own file, such as `/logs/heart/2026/01-05`, for a day counted from 1970-01-01.
+pub fn day_file_path(days_folder: &str, day: i64) -> Option<String> {
+    let date = chrono::NaiveDate::from_num_days_from_ce_opt(i32::try_from(DAYS_BEFORE_1970 + day).ok()?)?;
+    Some(format!("{days_folder}/{}", date.format("%Y/%m-%d")))
+}
+
+// A day's own file with its block's slots laid over it; each slot was written into one of them.
+fn merged(own_file: &[u8], from_block: &[u8], log: &BlockLog) -> Vec<u8> {
+    let mut bytes = own_file.to_vec();
+    bytes.resize(own_file.len().max(from_block.len()), 0);
+    let empty = log.flip ^ 0xff;
+    for (slot, piece) in from_block.chunks(log.bytes_per_slot).enumerate() {
+        if piece.iter().any(|&byte| byte != empty) {
+            let at = slot * log.bytes_per_slot;
+            bytes[at..at + piece.len()].copy_from_slice(piece);
+        }
+    }
+    bytes
+}
+
+// The block numbers of each log in `BLOCK_LOGS`, none for a log the watch keeps no blocks of.
+async fn list_blocks(files: &FileClient, report: &mut PassReport) -> Vec<Vec<i64>> {
+    let mut blocks = Vec::new();
+    for log in &BLOCK_LOGS {
+        let numbers = match files.list(log.folder).await {
+            Ok(entries) => entries
+                .iter()
+                .filter(|entry| !entry.folder)
+                .filter_map(|entry| entry.name.parse().ok())
+                .collect(),
+            Err(FileError::Missing(_)) => Vec::new(),
+            Err(error) => {
+                report.failed(error);
+                Vec::new()
+            }
+        };
+        blocks.push(numbers);
+    }
+    blocks
+}
+
+// Whether a path is a day's own file whose day also has a block, given each log's block numbers.
+fn has_block(path: &str, blocks: &[Vec<i64>]) -> bool {
+    BLOCK_LOGS.iter().zip(blocks).any(|(log, numbers)| {
+        let Some(name) = path
+            .strip_prefix(log.days_folder)
+            .and_then(|rest| rest.strip_prefix('/'))
+        else {
+            return false;
+        };
+        let Ok(date) = chrono::NaiveDate::parse_from_str(name, "%Y/%m-%d") else {
+            return false;
+        };
+        let day = date.num_days_from_ce() as i64 - DAYS_BEFORE_1970;
+        numbers.contains(&day.div_euclid(log.days_per_block()))
+    })
+}
+
+// Reads each block of a log and puts each day it holds under the name of the day's own file, merged with that
+// file when older firmware left one.
+//
+// A block older than the two newest holds only past days, so once read it is not read again, unless it holds a
+// day to merge, which `sync_logged` left for it.
+async fn sync_blocks(
+    files: &FileClient,
+    store: &SyncStore,
+    log: &BlockLog,
+    blocks: &[i64],
+    merged_day_files: &HashSet<String>,
+    report: &mut PassReport,
+) {
+    let newest = blocks.iter().copied().max().unwrap_or(0);
+    for &block in blocks {
+        let path = format!("{}/{block}", log.folder);
+        let source = path.trim_start_matches('/').to_string();
+        let days = block * log.days_per_block()..(block + 1) * log.days_per_block();
+        let day_paths: Vec<Option<String>> = days.map(|day| day_file_path(log.days_folder, day)).collect();
+        let merges = day_paths
+            .iter()
+            .flatten()
+            .any(|day_path| merged_day_files.contains(day_path));
+        if block + 1 < newest && !merges && store.get(&source).is_some() {
+            continue;
+        }
+        let bytes = match files.read(&path).await {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                report.failed(error);
+                continue;
+            }
+        };
+        for (day_in_block, day_path) in day_paths.iter().enumerate() {
+            let Some(day_path) = day_path else {
+                continue;
+            };
+            let from_block = log.day_from_block(&bytes, day_in_block);
+            let day_bytes = if merged_day_files.contains(day_path) {
+                match files.read(day_path).await {
+                    Ok(own_file) => merged(&own_file, &from_block, log),
+                    Err(error) => {
+                        report.failed(error);
+                        continue;
+                    }
+                }
+            } else {
+                from_block
+            };
+            if day_bytes.is_empty() {
+                continue;
+            }
+            let folder = day_path.rsplit_once('/').map_or("", |(folder, _)| folder);
+            report.put(
+                store,
+                day_path.trim_start_matches('/'),
+                logged_json(folder, &day_bytes),
+            );
+        }
+        // Remembers the block was read, so a past one is not read again.
+        let _ = store.put(&source, &json!({ "size": bytes.len() }));
+    }
 }
 
 // ============================================================================
@@ -321,6 +532,102 @@ mod tests {
             store.get("logs/battery/2026/10-13").unwrap()["slots"],
             json!([80, 79, 78])
         );
+    }
+
+    // The day number of a date, counted from 1970-01-01.
+    fn day_of(date: &str) -> i64 {
+        let date = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").unwrap();
+        date.num_days_from_ce() as i64 - DAYS_BEFORE_1970
+    }
+
+    // A block of a log with values written into some slots of some of its days, stored flipped.
+    fn block(log: &BlockLog, slots: &[(usize, usize, u16)]) -> Vec<u8> {
+        let mut bytes = vec![0xff; BLOCK_BYTES];
+        for &(day_in_block, slot, value) in slots {
+            let at = day_in_block * log.day_bytes() + slot * log.bytes_per_slot;
+            for (index, byte) in value.to_le_bytes()[..log.bytes_per_slot].iter().enumerate() {
+                bytes[at + index] = byte ^ log.flip;
+            }
+        }
+        bytes
+    }
+
+    #[test]
+    fn a_day_from_a_block_reads_as_its_own_file_would() {
+        let [steps, heart, battery] = &BLOCK_LOGS;
+        assert_eq!((steps.days_per_block(), heart.days_per_block()), (8, 16));
+        let steps_block = block(steps, &[(1, 0, 300), (1, 2, 5), (7, 239, 1)]);
+        assert_eq!(steps.day_from_block(&steps_block, 1), [44, 1, 0, 0, 5, 0]);
+        assert!(steps.day_from_block(&steps_block, 0).is_empty());
+        assert_eq!(steps.day_from_block(&steps_block, 7).len(), 480);
+        let battery_block = block(battery, &[(15, 1, 0x80 | 40)]);
+        assert_eq!(battery.day_from_block(&battery_block, 15), [0xff, 0x80 | 40]);
+        assert_eq!(
+            heart.day_from_block(&block(heart, &[(0, 3, 255)]), 0),
+            [0, 0, 0, 255]
+        );
+        assert_eq!(
+            day_file_path("/logs/heart", day_of("2026-01-05")).unwrap(),
+            "/logs/heart/2026/01-05"
+        );
+        assert_eq!(day_file_path("/steps", 0).unwrap(), "/steps/1970/01-01");
+    }
+
+    #[tokio::test]
+    async fn days_in_blocks_sync_under_their_own_names_merged_with_an_older_days_file() {
+        let root = tempfile::tempdir().unwrap();
+        let store = SyncStore::new(root.path());
+        let [steps, heart, _] = &BLOCK_LOGS;
+        let today = day_of("2026-10-14");
+        let (steps_block, today_in_steps) = (today.div_euclid(8), today.rem_euclid(8) as usize);
+        let heart_block = today.div_euclid(16);
+        let old_heart_block = heart_block - 3;
+        let own_file: Vec<u8> = [11u16, 0, 0].iter().flat_map(|n| n.to_le_bytes()).collect();
+        let watch = FakeWatch::with(&[
+            ("/steps/2026/10-14", &own_file),
+            ("/steps/trip", &7u32.to_le_bytes()),
+            (
+                &format!("/day_blocks/steps/{steps_block}"),
+                &block(steps, &[(today_in_steps, 3, 40)]),
+            ),
+            (
+                &format!("/day_blocks/heart/{heart_block}"),
+                &block(heart, &[(today.rem_euclid(16) as usize, 1, 70)]),
+            ),
+            (
+                &format!("/day_blocks/heart/{old_heart_block}"),
+                &block(heart, &[(0, 0, 60)]),
+            ),
+        ]);
+        let client = watch.client();
+
+        let report = sync_files(&client, &store).await;
+
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        assert_eq!(
+            store.get("steps/2026/10-14").unwrap()["slots"],
+            json!([11, 0, 0, 40])
+        );
+        assert_eq!(
+            store.get("logs/heart/2026/10-14").unwrap()["slots"],
+            json!([0, 70])
+        );
+        let old_day = day_file_path("logs/heart", old_heart_block * 16).unwrap();
+        assert_eq!(store.get(&old_day).unwrap()["slots"], json!([60]));
+        assert_eq!(store.get("steps/trip").unwrap()["count"], 7);
+
+        watch.commands.lock().unwrap().clear();
+        let report = sync_files(&client, &store).await;
+        assert!(report.changed.is_empty(), "{:?}", report.changed);
+        let reads = watch
+            .commands
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|&&c| c == 0x10)
+            .count();
+        // The trip, the newest heart block, and the steps block with its day's own file to merge; the past block is not.
+        assert_eq!(reads, 4);
     }
 
     #[tokio::test]

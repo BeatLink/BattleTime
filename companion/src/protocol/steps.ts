@@ -1,8 +1,10 @@
 // The watch's step log, one count per six-minute slot, and what the Steps screen makes of it.
 // It imports nothing, so the Steps plugin's page bundles it as the screens and the command line use it.
 //
-// Each day is a file, `/steps/<year>/<MM>-<DD>`, holding the steps of each slot from midnight as a
-// little-endian u16; it ends after the day's last slot with steps (neotime/services/steps/src/log.rs).
+// Each day holds the steps of each slot from midnight as a little-endian u16. The watch keeps eight days to
+// a block, `/day_blocks/steps/<n>`, block n starting n * 8 days after 1970-01-01, each byte flipped so a slot
+// never written reads 0 (neotime/services/slot_log/src/lib.rs). Older firmware kept each day as a file,
+// `/steps/<year>/<MM>-<DD>`, ending after its last slot with steps; such a file stays beside the block.
 
 // ============================================================================
 // The log's format
@@ -49,6 +51,60 @@ export function fileFromSlots(slots: number[]): Uint8Array {
     bytes[slot * 2 + 1] = steps >> 8;
   }
   return bytes;
+}
+
+// ============================================================================
+// Blocks of days
+// ============================================================================
+
+export const DAYS_PER_STEP_BLOCK = 8;
+// A block's bytes: a 4 KB sector less the file's header.
+export const STEP_BLOCK_BYTES = 3872;
+const DAY_BYTES = SLOTS_PER_DAY * 2;
+const MILLISECONDS_PER_DAY = 86_400_000;
+
+// The local day a date falls on, counted from 1970-01-01, as the watch counts its days.
+export function daysSince1970(date: Date): number {
+  return Math.round(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / MILLISECONDS_PER_DAY);
+}
+
+function dayInBlock(date: Date): number {
+  const day = daysSince1970(date);
+  return day - Math.floor(day / DAYS_PER_STEP_BLOCK) * DAYS_PER_STEP_BLOCK;
+}
+
+// The block holding a day, such as `/day_blocks/steps/2525`.
+export function stepBlockPath(date: Date): string {
+  return `/day_blocks/steps/${Math.floor(daysSince1970(date) / DAYS_PER_STEP_BLOCK)}`;
+}
+
+// A day's slots from its block, ending after the last slot with steps.
+export function slotsFromBlock(block: Uint8Array, date: Date): number[] {
+  const start = dayInBlock(date) * DAY_BYTES;
+  const flipped = block.subarray(start, start + DAY_BYTES).map((byte) => byte ^ 0xff);
+  const slots = slotsFromFile(flipped);
+  while (slots.length > 0 && !slots[slots.length - 1]) slots.pop();
+  return slots;
+}
+
+// Writes a day's slots into a block as the watch would, for the mock watch.
+export function writeSlotsIntoBlock(block: Uint8Array, date: Date, slots: number[]) {
+  const file = fileFromSlots(slots);
+  const start = dayInBlock(date) * DAY_BYTES;
+  file.forEach((byte, at) => {
+    block[start + at] = byte ^ 0xff;
+  });
+}
+
+// A day's slots from its own file, if older firmware left one, and from its block together, each slot having been
+// written into one of them; null when the day has no file and no steps in its block.
+export function mergeSlots(ownFile: number[] | null, fromBlock: number[]): number[] | null {
+  if (ownFile === null && fromBlock.length === 0) {
+    return null;
+  }
+  const own = ownFile ?? [];
+  const length = Math.max(own.length, fromBlock.length);
+  return Array.from({ length }, (_, slot) => (own[slot] ?? 0) + (fromBlock[slot] ?? 0));
 }
 
 // ============================================================================

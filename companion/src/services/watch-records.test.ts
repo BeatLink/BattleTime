@@ -6,7 +6,7 @@ import { decodeAppState, appStateJson } from '@/protocol/app-state';
 import { FileService } from '@/protocol/file-service';
 import { decodeWatchLine, encodeForWatch, type PhoneToWatchMessage } from '@/protocol/gadgetbridge';
 import { ReplyRouter } from '@/protocol/requests';
-import { readStepHistory } from '@/protocol/steps';
+import { fileFromSlots, readStepHistory, stepDayPath } from '@/protocol/steps';
 
 import type { SyncBridge, SyncReport } from './sync';
 import { changesAlarms, changesSteps, fileRecords, readAlarms, syncedRecords, watchRecords, writeAlarms } from './watch-records';
@@ -66,6 +66,21 @@ describe('records from the watch files', () => {
     // Today stops at noon.
     expect(history[0].slots?.length).toBeLessThanOrEqual(120);
     expect(await records.readStepGoal()).toBe(10000);
+  });
+
+  it('reads a day older firmware kept as a file together with its block', async () => {
+    const { watch, records } = await mockWatch();
+    const slots = new Array<number>(82).fill(0);
+    slots[0] = 40;
+    slots[81] = 7;
+    const ownFile = fileFromSlots(slots);
+    const withoutIt = await records.readStepDay(TODAY);
+    watch.fileService.files.set(stepDayPath(TODAY), ownFile);
+
+    const merged = await records.readStepDay(TODAY);
+
+    expect(merged?.[0]).toBe((withoutIt?.[0] ?? 0) + 40);
+    expect(merged?.[81]).toBe((withoutIt?.[81] ?? 0) + 7);
   });
 
   it('reads and writes the alarms, finds the next ring again, and tells the watch', async () => {

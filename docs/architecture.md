@@ -146,7 +146,7 @@ NeoTime/
     │   ├── packages/       neotime-packages: the apps installed in /apps, their checks and the launcher's order
     │   ├── phone_client/   neotime-phone-client: the GATT client for the phone's own services
     │   ├── settings/       neotime-settings: the watch-wide settings, their limits and their file
-    │   ├── slot_log/       neotime-slot-log: day files of six-minute slots, for the step, heart rate and battery logs
+    │   ├── slot_log/       neotime-slot-log: days of six-minute slots in blocks programmed in place, for the step, heart rate and battery logs
     │   ├── steps/          neotime-steps: the step history by hour, the trip count and the step log
     │   ├── task_table/     neotime-task-table: the firmware's tasks with their runs and busy time
     │   └── updates/        neotime-updates: stores an uploaded firmware and hands it to the bootloader

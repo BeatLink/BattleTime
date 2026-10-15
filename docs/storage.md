@@ -52,20 +52,29 @@ Their formats are in [companion-protocol.md](companion-protocol.md#files-the-com
 
 ### Logs
 
-Each log has a file a day, holding one value for each six-minute slot from local midnight, written
-as each slot ends. The last 90 days of each are kept; older days are deleted when a new day starts.
-`neotime-slot-log` (`services/slot_log/`) names the files and forgets old days for all three.
+Each log holds one value for each six-minute slot from local midnight, written as each slot ends.
+The days are kept in blocks, blank files of one sector holding whole days, block `n` starting `n`
+blocks of days after 1970-01-01. Each slot is programmed into its place in its block, so a slot
+costs no erase, only a new block does, every 8 or 16 days. Each byte is stored flipped by its log's
+mask, so a slot never written reads as the empty value. A block is deleted once all its days are
+older than 90 days. `neotime-slot-log` (`services/slot_log/`) names the blocks, writes the slots
+and forgets old days for all three.
 
 | Path | Holds |
 |---|---|
-| `/steps/<year>/<month>-<day>` | one day's steps, a `u16` a slot, up to 480 bytes |
+| `/day_blocks/steps/<n>` | 8 days of steps, a `u16` a slot, each byte flipped |
 | `/steps/trip` | the trip count, a `u32`, saved when a day ends and when the screen goes dark |
-| `/logs/heart/<year>/<month>-<day>` | one day's average heart rate a slot, a byte each, 0 for none |
-| `/logs/battery/<year>/<month>-<day>` | one day's battery charge at the end of each slot, the top bit set while charging, `0xff` while the watch was off |
+| `/day_blocks/heart/<n>` | 16 days of average heart rate, a byte a slot, flipped, so an unwritten slot reads 0 |
+| `/day_blocks/battery/<n>` | 16 days of battery charge at the end of each slot, the top bit set while charging, unflipped, so a slot the watch was off reads `0xff` |
+
+Older firmware kept each day as a file of its own, `/steps/<year>/<month>-<day>`,
+`/logs/heart/<year>/<month>-<day>` and `/logs/battery/<year>/<month>-<day>`, rewritten whole at
+every slot and each taking a record key. Those files stay and are read beside the blocks until
+they are older than 90 days.
 
 The battery task ends each slot: it takes the heart rate task's average for the slot and its own
-charge, and the storage task writes both. The companion reads these files with the file transfer,
-or copies them on each [sync](sync.md); the layout of each is in
+charge, and the storage task writes both. The companion reads the blocks with the file transfer,
+or copies their days on each [sync](sync.md); the layout of each is in
 [companion-protocol.md](companion-protocol.md#records-the-companion-reads).
 
 ## How the firmware reaches it

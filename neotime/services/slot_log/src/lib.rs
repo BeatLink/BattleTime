@@ -1,10 +1,16 @@
-//! Day files of six-minute slots in the flash store: the step, heart rate and battery logs.
+//! Days of six-minute slots in the flash store: the step, heart rate and battery logs.
 //!
-//! Each log keeps a folder, such as `/logs/heart`, with a file for each day,
-//! `<folder>/<year>/<month>-<day>`, holding one value for each six-minute slot from local midnight.
-//! A slot is written only when it ends, so a file stops after the day's last written slot, and the
-//! slots before it that were never written hold the log's empty value. Days older than
-//! `DAYS_KEPT` are deleted when a new day starts.
+//! Each log keeps its days in blocks, the store's blank files of one sector, `/day_blocks/<log>/<block>`,
+//! block `n` holding the days from `n` times the days a block holds, counted from 1970-01-01 in
+//! local time: 8 days of steps, or 16 of heart rate or battery. A day is one value for each
+//! six-minute slot from local midnight. A slot is programmed into its place when it ends, without an
+//! erase, so a block costs one erase in all. Each byte is stored flipped by the log's mask, so a slot
+//! never written reads as the log's empty value, and a slot keeps the first value written to it. A
+//! block is deleted once all its days are older than `DAYS_KEPT`.
+//!
+//! Older firmware kept each day as a file of its own, `<folder>/<year>/<month>-<day>`, such as
+//! `/logs/heart/2026/01-05`, in the same form unflipped and stopping after its last written slot.
+//! Those files stay, and are read beside the blocks, until they are older than `DAYS_KEPT`.
 //!
 //! The heart rate log keeps one byte a slot, the average beats per minute measured in it, or 0.
 //! The battery log keeps one byte a slot, the charge in percent at the slot's end with the top bit
@@ -15,7 +21,7 @@
 use core::fmt::Write;
 
 use neotime_current_time::{date_from_days_since_1970, days_since_1970, Date};
-use neotime_flash_store::{FileAccess, FileError};
+use neotime_flash_store::{FileAccess, FileError, BLANK_FILE_BYTES};
 
 #[cfg(test)]
 mod tests;
@@ -30,6 +36,7 @@ pub const SLOTS_PER_DAY: usize = 240;
 /// How many days each log keeps.
 pub const DAYS_KEPT: i64 = 90;
 
+pub const STEPS_DIRECTORY: &str = "/steps";
 pub const HEART_RATE_DIRECTORY: &str = "/logs/heart";
 pub const BATTERY_DIRECTORY: &str = "/logs/battery";
 /// A heart rate slot with no reading in it.
@@ -121,10 +128,82 @@ pub fn battery_byte(percent: u8, is_charging: bool) -> u8 {
 }
 
 // ============================================================================
+// Logs and their blocks
+// ============================================================================
+
+/// One log: the folder of the day files older firmware kept, the folder of its blocks, and how it keeps a slot.
+#[derive(Clone, Copy, Debug)]
+pub struct SlotLog {
+    pub directory: &'static str,
+    pub block_directory: &'static str,
+    pub bytes_per_slot: usize,
+    /// Each byte is stored flipped by this mask, so an erased slot reads as the log's empty value.
+    pub flip: u8,
+}
+
+pub const STEPS: SlotLog = SlotLog {
+    directory: STEPS_DIRECTORY,
+    block_directory: "/day_blocks/steps",
+    bytes_per_slot: 2,
+    flip: 0xff,
+};
+pub const HEART_RATE: SlotLog = SlotLog {
+    directory: HEART_RATE_DIRECTORY,
+    block_directory: "/day_blocks/heart",
+    bytes_per_slot: 1,
+    flip: !NO_HEART_RATE,
+};
+pub const BATTERY: SlotLog = SlotLog {
+    directory: BATTERY_DIRECTORY,
+    block_directory: "/day_blocks/battery",
+    bytes_per_slot: 1,
+    flip: !NO_BATTERY_READING,
+};
+
+impl SlotLog {
+    pub const fn day_bytes(&self) -> usize {
+        SLOTS_PER_DAY * self.bytes_per_slot
+    }
+
+    pub const fn days_per_block(&self) -> i64 {
+        (BLANK_FILE_BYTES / self.day_bytes()) as i64
+    }
+
+    /// The block holding a day, such as `/day_blocks/heart/1273`, and where the day starts in it.
+    pub fn place_of_day(&self, day: i64) -> (DayPath, usize) {
+        let mut path = DayPath::new();
+        let _ = write!(
+            path,
+            "{}/{}",
+            self.block_directory,
+            day.div_euclid(self.days_per_block())
+        );
+        let start = day.rem_euclid(self.days_per_block()) as usize * self.day_bytes();
+        (path, start)
+    }
+
+    /// The block a path names, or nothing for any other path.
+    pub fn block_of_path(&self, path: &str) -> Option<i64> {
+        path.strip_prefix(self.block_directory)?
+            .strip_prefix('/')?
+            .parse()
+            .ok()
+    }
+
+    /// The newest day a day file or block of this log holds, or nothing for any other path.
+    pub fn newest_day_of_path(&self, path: &str) -> Option<i64> {
+        match self.block_of_path(path) {
+            Some(block) => Some((block + 1) * self.days_per_block() - 1),
+            None => day_of_path(self.directory, path),
+        }
+    }
+}
+
+// ============================================================================
 // Paths
 // ============================================================================
 
-/// Long enough for `/logs/battery/` and a five-digit year, with the month and day.
+/// Long enough for `/logs/battery/` and a five-digit year, with the month and day, or a block's path.
 pub type DayPath = heapless::String<32>;
 
 /// The file holding a day of the log in `directory`, such as `/logs/heart/2026/01-05`.
@@ -153,54 +232,83 @@ pub fn day_of_path(directory: &str, path: &str) -> Option<i64> {
 }
 
 // ============================================================================
-// Writing
+// Writing and reading
 // ============================================================================
 
-/// Puts one byte into its slot of its day's file, filling any slots before it with `empty`.
-///
-/// A day is at most 240 bytes, so the file is read, changed and written whole, and the store keeps it as a record.
-pub async fn write_byte_slot<Files: FileAccess>(
+/// Programs a slot's value into its day's block, which the store makes when it is missing; a slot already written
+/// keeps its value.
+pub async fn write_slot<Files: FileAccess>(
     files: &mut Files,
-    directory: &str,
+    log: &SlotLog,
     time: SlotTime,
-    value: u8,
-    empty: u8,
+    value: u16,
 ) -> Result<(), FileError> {
-    let path = day_path(directory, time.day);
-    let mut bytes = [empty; SLOTS_PER_DAY];
-    let length = files.read_file(&path, 0, &mut bytes).await?.unwrap_or(0);
-    let slot = time.slot.min(SLOTS_PER_DAY - 1);
-    bytes[length.min(SLOTS_PER_DAY)..].fill(empty);
-    bytes[slot] = value;
-    files.write_file(&path, &bytes[..length.max(slot + 1)]).await
+    let (block, day_start) = log.place_of_day(time.day);
+    let at = day_start + time.slot.min(SLOTS_PER_DAY - 1) * log.bytes_per_slot;
+    let mut stored = value.to_le_bytes();
+    let stored = &mut stored[..log.bytes_per_slot];
+    flip(stored, log.flip);
+    files.program_file(&block, at, stored).await
 }
 
-/// Deletes the days in `directory` older than the log keeps, counting back from `today`.
+/// Reads a day from its block into the start of `buffer`, every slot of it, unwritten ones as the empty value;
+/// gives nothing when the day's block is missing.
+pub async fn read_block_day<Files: FileAccess>(
+    files: &mut Files,
+    log: &SlotLog,
+    day: i64,
+    buffer: &mut [u8],
+) -> Result<Option<usize>, FileError> {
+    let (block, day_start) = log.place_of_day(day);
+    let length = log.day_bytes().min(buffer.len());
+    let read = files.read_file(&block, day_start, &mut buffer[..length]).await?;
+    flip(&mut buffer[..length], log.flip);
+    Ok(read)
+}
+
+fn flip(bytes: &mut [u8], mask: u8) {
+    for byte in bytes {
+        *byte ^= mask;
+    }
+}
+
+// ============================================================================
+// Forgetting
+// ============================================================================
+
+/// Deletes a log's days older than it keeps, counting back from `today`: day files older firmware kept, and blocks
+/// all of whose days are that old.
 pub async fn forget_old_days<Files: FileAccess>(
     files: &mut Files,
-    directory: &str,
+    log: &SlotLog,
     today: i64,
 ) -> Result<(), FileError> {
     let mut old_paths: heapless::Vec<DayPath, 8> = heapless::Vec::new();
-    loop {
-        old_paths.clear();
-        files
-            .for_each_file(directory, &mut |path| {
-                if day_of_path(directory, path).is_some_and(|day| day <= today - DAYS_KEPT) {
-                    let mut kept = DayPath::new();
-                    if kept.push_str(path).is_ok() {
-                        let _ = old_paths.push(kept);
+    for directory in [log.directory, log.block_directory] {
+        loop {
+            old_paths.clear();
+            files
+                .for_each_file(directory, &mut |path| {
+                    if log
+                        .newest_day_of_path(path)
+                        .is_some_and(|day| day <= today - DAYS_KEPT)
+                    {
+                        let mut kept = DayPath::new();
+                        if kept.push_str(path).is_ok() {
+                            let _ = old_paths.push(kept);
+                        }
                     }
-                }
-            })
-            .await?;
-        if old_paths.is_empty() {
-            return Ok(());
-        }
-        for path in &old_paths {
-            files.delete_file(path).await?;
+                })
+                .await?;
+            if old_paths.is_empty() {
+                break;
+            }
+            for path in &old_paths {
+                files.delete_file(path).await?;
+            }
         }
     }
+    Ok(())
 }
 
 /// Writes an ended slot's heart rate, if it had one, and its battery byte, and forgets old days when a new day began.
@@ -212,20 +320,12 @@ pub async fn store_ended_slot<Files: FileAccess>(
 ) -> Result<(), FileError> {
     let mut written = Ok(());
     if beats_per_minute != NO_HEART_RATE {
-        written = write_byte_slot(
-            files,
-            HEART_RATE_DIRECTORY,
-            ended.time,
-            beats_per_minute,
-            NO_HEART_RATE,
-        )
-        .await;
+        written = write_slot(files, &HEART_RATE, ended.time, beats_per_minute as u16).await;
     }
-    let battery_written =
-        write_byte_slot(files, BATTERY_DIRECTORY, ended.time, battery, NO_BATTERY_READING).await;
+    let battery_written = write_slot(files, &BATTERY, ended.time, battery as u16).await;
     if ended.today != ended.time.day {
-        let _ = forget_old_days(files, HEART_RATE_DIRECTORY, ended.today).await;
-        let _ = forget_old_days(files, BATTERY_DIRECTORY, ended.today).await;
+        let _ = forget_old_days(files, &HEART_RATE, ended.today).await;
+        let _ = forget_old_days(files, &BATTERY, ended.today).await;
     }
     written.and(battery_written)
 }

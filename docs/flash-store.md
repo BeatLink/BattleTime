@@ -51,9 +51,8 @@ replaced, and every mount, drops it. A small file's record header and path come 
 missing: one sector of erased bytes, 3,872 long after its header. Programming only clears bits, so
 it needs no erase, and bytes already written are left as they are. A blank file's header carries
 the checksum of no bytes, which a whole read does not check, since its contents change after the
-header is written. A power cut while programming spoils at most the bytes being written. The logs
-use it so that a day of six-minute slots costs no erase; it is why a 4 KB block of them can take a
-value every few minutes for weeks.
+header is written. A power cut while programming spoils at most the bytes being written. The step,
+heart rate and battery logs keep their days this way, so a slot every six minutes costs no erase.
 
 `read_file` reads a file whole or from an offset and checks the contents' checksum when it reads
 the whole file. `file_extents` instead says where a part of a file lies in the flash, as up to a

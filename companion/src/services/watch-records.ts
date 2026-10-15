@@ -8,7 +8,15 @@ import { readAppStateFile, writeAppStateFile, type AppStateJson } from '@/protoc
 import { FileMissingError, type FileService } from '@/protocol/file-service';
 import type { PhoneToWatchMessage } from '@/protocol/gadgetbridge';
 import { readWatchSettings, type RequestChannel } from '@/protocol/requests';
-import { slotsFromFile, stepDayPath, stepDaySource, type StepDayReader } from '@/protocol/steps';
+import {
+  mergeSlots,
+  slotsFromBlock,
+  slotsFromFile,
+  stepBlockPath,
+  stepDayPath,
+  stepDaySource,
+  type StepDayReader,
+} from '@/protocol/steps';
 
 import type { SyncBridge } from './sync';
 
@@ -68,14 +76,10 @@ export function fileRecords({ files, send, requests }: WatchLink): WatchRecords 
   return {
     synced: false,
     async readStepDay(date) {
-      try {
-        return slotsFromFile(await (await files()).read(stepDayPath(date)));
-      } catch (error) {
-        if (error instanceof FileMissingError) {
-          return null;
-        }
-        throw error;
-      }
+      const service = await files();
+      const ownFile = await readIfThere(service, stepDayPath(date));
+      const block = await readIfThere(service, stepBlockPath(date));
+      return mergeSlots(ownFile && slotsFromFile(ownFile), block ? slotsFromBlock(block, date) : []);
     },
     async readStepGoal() {
       return (await readWatchSettings(requests)).step_goal || null;
@@ -89,6 +93,18 @@ export function fileRecords({ files, send, requests }: WatchLink): WatchRecords 
       return state;
     },
   };
+}
+
+// A file's bytes, or null when the watch has no such file.
+async function readIfThere(service: FileService, path: string): Promise<Uint8Array | null> {
+  try {
+    return await service.read(path);
+  } catch (error) {
+    if (error instanceof FileMissingError) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 // The sync's copy when the build has one, the watch's files otherwise.

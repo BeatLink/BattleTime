@@ -167,15 +167,15 @@ document for its part instead.
 
 - [ ] **Step history on the PineTime.** It has run only in host tests and the test watch. On the
   watch, check that:
-  - walking fills today's hours, and a file appears in `/steps/<year>` within six minutes;
+  - walking fills today's hours, and a block appears in `/day_blocks/steps` within six minutes;
   - a restart keeps the day, the week and the trip count, losing at most six minutes;
   - local midnight moves today to yesterday with the steps app closed;
   - the phone setting the clock after a restart reads the right week back;
   - the slot writes every six minutes do not upset the Bluetooth link.
 
 - [ ] **Heart rate and battery logs on the PineTime.** They have run only in host tests. On the
-  watch, check that a file appears in `/logs/battery/<year>` within seven minutes of a start, that
-  `/logs/heart/<year>` fills while the Heart app or the background interval measures, that the
+  watch, check that a block appears in `/day_blocks/battery` within seven minutes of a start, that
+  `/day_blocks/heart` fills while the Heart app or the background interval measures, that the
   charging bit follows the charger, and that the companion's Heart and System pages show the days.
 
 - [ ] **Bluetooth controller on the PineTime.** The firmware runs `neotime-bluetooth` on the watch and
@@ -713,10 +713,12 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
 - [ ] **Try the flash store on the watch.** It runs in the emulator, apps and icons included, but
   has not met the real chip. Measure the mount time (about a second estimated), the deepest stack
   with apps open and saving, and read the diagnostics' store counters after a day of use.
-- [ ] **The step log in the store's log ring.** Each day is a record rewritten whole at every slot,
-  and the oldest days are deleted past 90; the log ring appends each slot alone and drops the oldest
-  days by itself. The heart rate and battery day files would move with it, and raw accelerometer
-  recordings belong in a ring of their own.
+- [ ] **Raw accelerometer recordings in a ring of their own,** so that a recording cannot push out
+  months of the log ring.
+- [ ] **Day blocks on the PineTime.** The step, heart rate and battery logs program their slots into
+  blocks in place; check on the watch that a day costs no erase (the diagnostics' store counters),
+  that a watch updated from day files keeps its history on the watch and in the companion, and that
+  the record keys the old day files held come free as they age out.
 - [ ] **A checkpoint of the store's tables,** so mounting need not read every ring record.
 
 - [ ] **Use the file system:** save the BLE bond there.

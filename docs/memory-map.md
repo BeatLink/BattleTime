@@ -75,6 +75,12 @@ storage task) added 1,528 B of code to the full build, measured with `cargo size
 future holding the storage request while it waits to send it. The step log takes its paths and its
 forgetting of old days from the same crate.
 
+Keeping those logs' days in blocks programmed a slot at a time (`program_file` in the flash store,
+used by `neotime-slot-log`) added 1,432 B to the firmware image, measured against master on
+2026-10-15 (488,009 B to 489,441 B with the library), and no static RAM. It cut the erases the
+three logs cost from about 80 a day, when each slot rewrote its whole day as a record, to one for
+each new block, about one every four days.
+
 Running closed apps (`firmware/src/closed_apps.rs` and `neotime_app_host::closed_apps`) added
 5,008 B of code to the full build, measured with `cargo size` against master on 2026-10-14
 (405,496 B to 410,504 B of text), and 32 B of static RAM. A first version wrapped the shell's
@@ -143,10 +149,11 @@ records ring, so it costs no sector. There are no folders, so an app costs nothi
 | `/settings/theme` | The theme's colours, 16 bytes. |
 | `/settings/launcher` | The launcher's style, view and groups with their apps, which the companion writes; a few hundred bytes, kept in the system heap while the watch runs. |
 | `/resources/` | For resource packages; empty for now. |
-| `/steps/<year>/<month>-<day>` | One day's steps in six-minute slots, up to 480 bytes, a record; the last 90 days are kept, at most about 47 KB. |
+| `/day_blocks/steps/<n>` | 8 days of steps in six-minute slots, a blank file of one sector programmed a slot at a time; 90 to 97 days are kept, 12 or 13 sectors, about 52 KB. |
 | `/steps/trip` | The trip count, 4 bytes. |
-| `/logs/heart/<year>/<month>-<day>` | One day's average heart rate in six-minute slots, a byte each, up to 240 bytes, a record; 90 days kept, at most about 23 KB. |
-| `/logs/battery/<year>/<month>-<day>` | One day's battery charge at the end of each six-minute slot, with the top bit set while charging, up to 240 bytes, a record; 90 days kept, at most about 23 KB. |
+| `/day_blocks/heart/<n>` | 16 days of average heart rate in six-minute slots, a byte each, one sector; 90 to 105 days kept, 6 or 7 sectors. |
+| `/day_blocks/battery/<n>` | 16 days of battery charge at the end of each six-minute slot, with the top bit set while charging, one sector; 90 to 105 days kept, 6 or 7 sectors. |
+| `/steps/<year>/<month>-<day>`, `/logs/heart/...`, `/logs/battery/...` | Days older firmware kept as records, up to 480 bytes each and a record key each; kept until they are 90 days old. |
 
 A typical install is the digital face, the launcher and ten everyday apps (alarm, timer,
 stopwatch, settings, weather, steps, heart, flashlight, music and calculator), which

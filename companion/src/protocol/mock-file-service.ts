@@ -3,7 +3,7 @@
 
 import { encodeAppState, type StateEntry } from './app-state';
 import { COMMAND, STATUS } from './file-service';
-import { fileFromSlots, SLOTS_PER_DAY, startOfDay, stepDayPath } from './steps';
+import { SLOTS_PER_DAY, STEP_BLOCK_BYTES, startOfDay, stepBlockPath, writeSlotsIntoBlock } from './steps';
 
 // The folders NeoTime makes when it first prepares its file system.
 const FOLDERS = ['/apps', '/settings', '/resources'];
@@ -34,8 +34,11 @@ export class MockFileService {
       const day = startOfDay(today, back);
       // Some days have no log, as when the watch was off.
       if (day.getDate() % 5 !== 0) {
-        this.files.set(stepDayPath(day), fileFromSlots(sampleDay(day.getDate(), back === 0 ? today : null)));
-        this.makeParents(stepDayPath(day));
+        const path = stepBlockPath(day);
+        const block = this.files.get(path) ?? new Uint8Array(STEP_BLOCK_BYTES).fill(0xff);
+        writeSlotsIntoBlock(block, day, sampleDay(day.getDate(), back === 0 ? today : null));
+        this.files.set(path, block);
+        this.makeParents(path);
       }
     }
     this.files.set('/apps/alarm/state', encodeAppState(sampleAlarmState()));

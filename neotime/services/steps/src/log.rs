@@ -1,10 +1,10 @@
 //! The step log in the flash store, in wasp-os's step logger format.
 //!
-//! Each day has a file, `/steps/<year>/<month>-<day>`, holding the steps of each six-minute slot
-//! from midnight as a little-endian `u16`. A slot is added when it ends with steps in it, so a file
-//! stops after the day's last slot with steps, and a slot past its end had none. Days older than
-//! `DAYS_KEPT` are deleted when a new day starts, by `neotime_slot_log`, which the heart rate and
-//! battery logs share. The trip count is kept apart, in `/steps/trip`, as a little-endian `u32`; it lives in
+//! Each day holds the steps of each six-minute slot from midnight as a little-endian `u16`, written when
+//! the slot ends with steps in it. The days are kept in `neotime_slot_log`'s blocks, which the heart rate
+//! and battery logs share; a day older firmware kept as a file of its own, `/steps/<year>/<month>-<day>`,
+//! which stops after its last slot with steps, is read beside its block. Old days are deleted when a new
+//! day starts. The trip count is kept apart, in `/steps/trip`, as a little-endian `u32`; it lives in
 //! RAM and is written when a day ends and, through `save_trip_if_changed`, when the screen goes dark.
 
 use neotime_flash_store::{FileAccess, FileError};
@@ -14,9 +14,8 @@ use crate::{
     SLOTS_PER_HOUR,
 };
 
-pub const STEPS_DIRECTORY: &str = "/steps";
-/// How many days the log keeps; each is a record of up to 480 bytes, so 90 take at most about 47 KB of the
-/// store's records.
+pub const STEPS_DIRECTORY: &str = neotime_slot_log::STEPS_DIRECTORY;
+/// How many days the log keeps at least; a block of 8 days goes once all of them are older.
 pub const DAYS_KEPT: i64 = neotime_slot_log::DAYS_KEPT;
 pub const TRIP_PATH: &str = "/steps/trip";
 pub const BYTES_PER_SLOT: usize = 2;
@@ -24,6 +23,7 @@ pub const LARGEST_DAY_FILE_BYTES: usize = SLOTS_PER_DAY * BYTES_PER_SLOT;
 const TRIP_FILE_BYTES: usize = 4;
 
 pub use neotime_slot_log::DayPath;
+use neotime_slot_log::STEPS;
 
 // ============================================================================
 // Paths
@@ -62,49 +62,44 @@ pub fn hours_from_file(bytes: &[u8]) -> [u16; HOURS_PER_DAY] {
     hours
 }
 
-/// A day's file read into RAM, as long as it can grow.
-type DayBytes = heapless::Vec<u8, LARGEST_DAY_FILE_BYTES>;
-
-async fn read_day<Files: FileAccess>(files: &mut Files, day: i64) -> Result<DayBytes, FileError> {
-    let mut bytes = DayBytes::new();
-    let _ = bytes.resize(LARGEST_DAY_FILE_BYTES, 0);
-    let length = files.read_file(&day_path(day), 0, &mut bytes).await?.unwrap_or(0);
-    bytes.truncate(length);
-    Ok(bytes)
-}
-
-/// The steps in each hour of a day; a day with no file had none.
+/// The steps in each hour of a day, from its block and from the file older firmware kept for it; a day with
+/// neither had none.
 pub async fn read_hours<Files: FileAccess>(files: &mut Files, day: i64) -> [u16; HOURS_PER_DAY] {
-    read_day(files, day)
-        .await
-        .map_or([0; HOURS_PER_DAY], |bytes| hours_from_file(&bytes))
+    let mut hours = [0u16; HOURS_PER_DAY];
+    for in_own_file in [false, true] {
+        let mut bytes = [0u8; LARGEST_DAY_FILE_BYTES];
+        let read = match in_own_file {
+            false => neotime_slot_log::read_block_day(files, &STEPS, day, &mut bytes).await,
+            true => files.read_file(&day_path(day), 0, &mut bytes).await,
+        };
+        let length = read.ok().flatten().unwrap_or(0);
+        for (hour, steps) in hours.iter_mut().zip(hours_from_file(&bytes[..length])) {
+            *hour = hour.saturating_add(steps);
+        }
+    }
+    hours
 }
 
 // ============================================================================
 // Writing a slot
 // ============================================================================
 
-/// Adds a finished slot's steps to its day's file, padding any slots before it with zeros.
-///
-/// A day's file is at most 480 bytes, so it is read, changed and written whole, and the store keeps it as a record.
+/// Writes a finished slot's steps into its day's block; a slot already written keeps its count.
 pub async fn write_slot<Files: FileAccess>(
     files: &mut Files,
     finished: FinishedSlot,
 ) -> Result<(), FileError> {
-    let mut bytes = read_day(files, finished.time.day).await?;
-    let offset = finished.time.slot * BYTES_PER_SLOT;
-    if bytes.len() < offset + BYTES_PER_SLOT {
-        let _ = bytes.resize(offset + BYTES_PER_SLOT, 0);
-    }
-    let added = finished.steps.min(u16::MAX as u32) as u16;
-    let steps = slot_steps(&bytes, finished.time.slot).saturating_add(added);
-    bytes[offset..offset + BYTES_PER_SLOT].copy_from_slice(&steps.to_le_bytes());
-    files.write_file(&day_path(finished.time.day), &bytes).await
+    let steps = finished.steps.min(u16::MAX as u32) as u16;
+    let time = neotime_slot_log::SlotTime {
+        day: finished.time.day,
+        slot: finished.time.slot,
+    };
+    neotime_slot_log::write_slot(files, &STEPS, time, steps).await
 }
 
 /// Deletes the days older than the log keeps, counting back from `today`.
 pub async fn forget_old_days<Files: FileAccess>(files: &mut Files, today: i64) -> Result<(), FileError> {
-    neotime_slot_log::forget_old_days(files, STEPS_DIRECTORY, today).await
+    neotime_slot_log::forget_old_days(files, &STEPS, today).await
 }
 
 // ============================================================================

@@ -16,11 +16,11 @@ const DAY_OF_MIDNIGHT: i64 = MIDNIGHT / MILLISECONDS_PER_DAY;
 const MINUTE: i64 = 60_000;
 const HOUR: i64 = 60 * MINUTE;
 
-type TestStore = FlashStore<RamFlash, 8, 32, 8>;
+type TestStore = FlashStore<RamFlash, 32, 32, 8>;
 
 const LAYOUT: Layout = Layout {
     start_address: 0,
-    file_sectors: 8,
+    file_sectors: 32,
     record_sectors: 8,
     log_sectors: 4,
 };
@@ -36,13 +36,17 @@ fn read_whole(files: &mut TestStore, path: &str) -> Option<std::vec::Vec<u8>> {
     Some(bytes)
 }
 
-fn has_any_step_file(files: &mut TestStore) -> bool {
-    let mut found = false;
-    block_on(FileAccess::for_each_file(files, STEPS_DIRECTORY, &mut |_| {
-        found = true
-    }))
-    .unwrap();
-    found
+/// A day's bytes as its block holds them, every slot, or nothing when its block is missing.
+fn block_day(files: &mut TestStore, day: i64) -> Option<std::vec::Vec<u8>> {
+    let mut bytes = std::vec![0; LARGEST_DAY_FILE_BYTES];
+    block_on(neotime_slot_log::read_block_day(
+        files,
+        &neotime_slot_log::STEPS,
+        day,
+        &mut bytes,
+    ))
+    .unwrap()?;
+    Some(bytes)
 }
 
 fn history_at(local_time: i64) -> StepHistory {
@@ -309,31 +313,54 @@ fn finished(day: i64, slot: usize, steps: u32) -> FinishedSlot {
 }
 
 #[test]
-fn a_slot_is_written_after_zeros_for_the_slots_before_it() {
+fn a_slot_is_written_into_its_days_block_and_the_others_read_as_zero() {
     let mut files = file_system();
 
     block_on(write_slot(&mut files, finished(DAY_OF_MIDNIGHT, 3, 42))).unwrap();
 
-    let bytes = read_whole(&mut files, "/steps/2026/01-05").unwrap();
-    assert_eq!(bytes, [0, 0, 0, 0, 0, 0, 42, 0]);
+    let bytes = block_day(&mut files, DAY_OF_MIDNIGHT).unwrap();
+    assert_eq!(&bytes[..8], [0, 0, 0, 0, 0, 0, 42, 0]);
+    assert!(bytes[8..].iter().all(|byte| *byte == 0));
+    assert_eq!(
+        block_day(&mut files, DAY_OF_MIDNIGHT + 1).unwrap(),
+        [0; LARGEST_DAY_FILE_BYTES]
+    );
+    assert!(read_whole(&mut files, "/steps/2026/01-05").is_none());
 }
 
 #[test]
-fn a_later_slot_lengthens_the_file_and_an_earlier_one_adds_to_its_place() {
+fn a_slot_written_again_keeps_its_count() {
     let mut files = file_system();
     block_on(write_slot(&mut files, finished(DAY_OF_MIDNIGHT, 1, 10))).unwrap();
 
     block_on(write_slot(&mut files, finished(DAY_OF_MIDNIGHT, 4, 300))).unwrap();
     block_on(write_slot(&mut files, finished(DAY_OF_MIDNIGHT, 1, 5))).unwrap();
 
-    let bytes = read_whole(&mut files, &day_path(DAY_OF_MIDNIGHT)).unwrap();
-    assert_eq!(bytes.len(), 10);
-    assert_eq!(slot_steps(&bytes, 1), 15);
+    let bytes = block_day(&mut files, DAY_OF_MIDNIGHT).unwrap();
+    assert_eq!(slot_steps(&bytes, 1), 10);
     assert_eq!(slot_steps(&bytes, 4), 300);
 }
 
 #[test]
-fn the_last_slot_of_the_day_fills_the_whole_file() {
+fn a_day_older_firmware_kept_as_a_file_is_read_beside_its_block() {
+    let mut files = file_system();
+    let mut day = [0u8; 22];
+    day[18..20].copy_from_slice(&700u16.to_le_bytes());
+    block_on(FileAccess::write_file(
+        &mut files,
+        &day_path(DAY_OF_MIDNIGHT),
+        &day,
+    ))
+    .unwrap();
+
+    block_on(write_slot(&mut files, finished(DAY_OF_MIDNIGHT, 25, 40))).unwrap();
+
+    let hours = block_on(read_hours(&mut files, DAY_OF_MIDNIGHT));
+    assert_eq!((hours[0], hours[2]), (700, 40));
+}
+
+#[test]
+fn the_last_slot_of_the_day_is_the_last_of_its_block_day() {
     let mut files = file_system();
 
     block_on(write_slot(
@@ -342,8 +369,9 @@ fn the_last_slot_of_the_day_fills_the_whole_file() {
     ))
     .unwrap();
 
-    let bytes = read_whole(&mut files, &day_path(DAY_OF_MIDNIGHT)).unwrap();
-    assert_eq!(bytes.len(), LARGEST_DAY_FILE_BYTES);
+    let bytes = block_day(&mut files, DAY_OF_MIDNIGHT).unwrap();
+    assert_eq!(slot_steps(&bytes, SLOTS_PER_DAY - 1), 1);
+    assert_eq!(block_day(&mut files, DAY_OF_MIDNIGHT + 1).unwrap()[0], 0);
 }
 
 #[test]
@@ -441,7 +469,7 @@ fn storing_a_reading_without_a_finished_slot_writes_nothing() {
     let recorded = history.record(MIDNIGHT + 9 * HOUR + MINUTE, 64);
     block_on(store(&mut files, &mut history, recorded)).unwrap();
 
-    assert!(!has_any_step_file(&mut files));
+    assert!(block_day(&mut files, DAY_OF_MIDNIGHT).is_none());
 }
 
 #[test]
@@ -494,8 +522,8 @@ fn a_whole_day_of_readings_lands_in_the_log_slot_by_slot() {
         time += 30_000;
     }
 
-    let bytes = read_whole(&mut files, &day_path(DAY_OF_MIDNIGHT)).unwrap();
-    assert_eq!(bytes.len(), 180 * BYTES_PER_SLOT);
+    let bytes = block_day(&mut files, DAY_OF_MIDNIGHT).unwrap();
+    assert_eq!(slot_steps(&bytes, 180), 0);
     assert_eq!(slot_steps(&bytes, 79), 0);
     assert_eq!(slot_steps(&bytes, 80), 12);
     assert_eq!(slot_steps(&bytes, 179), 12);
@@ -516,34 +544,32 @@ fn a_day_path_reads_back_as_its_day() {
 }
 
 #[test]
-fn days_older_than_the_log_keeps_are_forgotten() {
+fn blocks_whose_days_are_all_older_than_the_log_keeps_are_forgotten() {
     let mut files = file_system();
-    for days_back in [0, 1, DAYS_KEPT - 1, DAYS_KEPT, DAYS_KEPT + 30] {
-        block_on(write_slot(
-            &mut files,
-            finished(DAY_OF_MIDNIGHT - days_back, 3, 10),
-        ))
-        .unwrap();
+    let oldest_kept = DAY_OF_MIDNIGHT - DAYS_KEPT + 1;
+    let first_of_its_block = oldest_kept.div_euclid(8) * 8;
+    let days = [
+        DAY_OF_MIDNIGHT - DAYS_KEPT - 30,
+        first_of_its_block - 1,
+        first_of_its_block,
+        DAY_OF_MIDNIGHT,
+    ];
+    for day in days {
+        block_on(write_slot(&mut files, finished(day, 3, 10))).unwrap();
     }
+    let old_file = day_path(DAY_OF_MIDNIGHT - DAYS_KEPT);
+    block_on(FileAccess::write_file(&mut files, &old_file, &[1, 0])).unwrap();
     block_on(save_trip(&mut files, 5)).unwrap();
 
     block_on(forget_old_days(&mut files, DAY_OF_MIDNIGHT)).unwrap();
 
-    let mut kept = std::vec::Vec::new();
-    block_on(FileAccess::for_each_file(
-        &mut files,
-        STEPS_DIRECTORY,
-        &mut |path| kept.push(day_of_path(path)),
-    ))
-    .unwrap();
-    kept.sort();
-    let expected = [
-        None,
-        Some(DAY_OF_MIDNIGHT - DAYS_KEPT + 1),
-        Some(DAY_OF_MIDNIGHT - 1),
-        Some(DAY_OF_MIDNIGHT),
-    ];
-    assert_eq!(kept, expected);
+    let kept: std::vec::Vec<i64> = days
+        .into_iter()
+        .filter(|day| block_day(&mut files, *day).is_some())
+        .collect();
+    assert_eq!(kept, [first_of_its_block, DAY_OF_MIDNIGHT]);
+    assert!(read_whole(&mut files, &old_file).is_none());
+    assert_eq!(block_on(load_trip(&mut files)), Some(5));
 }
 
 #[test]
@@ -551,7 +577,7 @@ fn a_new_day_forgets_the_oldest_as_it_is_stored() {
     let mut files = file_system();
     block_on(write_slot(
         &mut files,
-        finished(DAY_OF_MIDNIGHT - DAYS_KEPT, 3, 10),
+        finished(DAY_OF_MIDNIGHT - DAYS_KEPT - 8, 3, 10),
     ))
     .unwrap();
     let mut history = history_at(MIDNIGHT - 30 * MINUTE);
@@ -560,8 +586,5 @@ fn a_new_day_forgets_the_oldest_as_it_is_stored() {
     let recorded = history.record(MIDNIGHT + 10 * MINUTE, 80);
     block_on(store(&mut files, &mut history, recorded)).unwrap();
 
-    assert_eq!(
-        read_whole(&mut files, &day_path(DAY_OF_MIDNIGHT - DAYS_KEPT)),
-        None
-    );
+    assert_eq!(block_day(&mut files, DAY_OF_MIDNIGHT - DAYS_KEPT - 8), None);
 }

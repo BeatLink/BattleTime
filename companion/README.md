@@ -371,8 +371,9 @@ Commands run one at a time, so answers never mix.
 The Steps and Alarms screens and `neotime steps` and `neotime alarms` read the watch's own records
 through [src/services/watch-records.ts](src/services/watch-records.ts). In the Tauri app they come
 from the core's [sync](../docs/sync.md) copy, refreshed on each sync report, and changes go through
-the core. Elsewhere they are read with the file service: a day's steps from
-`/steps/<year>/<MM>-<DD>` ([src/protocol/steps.ts](src/protocol/steps.ts)), and the alarms from the
+the core. Elsewhere they are read with the file service: a day's steps from its block,
+`/day_blocks/steps/<n>`, laid over `/steps/<year>/<MM>-<DD>` where older firmware left that file
+([src/protocol/steps.ts](src/protocol/steps.ts)), and the alarms from the
 alarm app's saved state, `/apps/alarm/state`. [src/protocol/app-state.ts](src/protocol/app-state.ts)
 reads and writes that `NTST` file as the core's `state_file.rs` does, changing only the values named
 and keeping each one's type and width; [src/protocol/alarms.ts](src/protocol/alarms.ts) turns it into

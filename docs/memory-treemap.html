@@ -337,7 +337,7 @@ const ROOT = { name: "PineTime", children: [
         firmwareBuild("Recovery slot", 0x0C6000, KB(232), MEASURED.firmware.recovery,
           "A known-good firmware to fall back to, here the recovery build (--features recovery), up to 0x100000. It leaves out the shell, so the app host and the runtime go with it, and carries no shared library."),
       ] },
-      { name: "File system", start: 0x100000, size: KB(3072), kind: "data", holds: "NeoTime's flash store, safe against power cuts, shown with a typical install: the digital face, the launcher and ten everyday apps. It has no folders; paths such as /apps/<id>/app.ntapp, /steps/<year>/<month>-<day> and /logs/heart/<year>/<month>-<day> are names.", children: fileSystemTree() },
+      { name: "File system", start: 0x100000, size: KB(3072), kind: "data", holds: "NeoTime's flash store, safe against power cuts, shown with a typical install: the digital face, the launcher and ten everyday apps. It has no folders; paths such as /apps/<id>/app.ntapp, /settings/system and /day_blocks/heart/<n> are names.", children: fileSystemTree() },
     ],
   },
 ] };
