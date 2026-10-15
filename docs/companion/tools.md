@@ -38,6 +38,8 @@ the network's name is used. Below the form the screen lists the codes on the wat
 makes a code too dense to scan from the small screen; the companion warns, and refuses one that
 would not fit at all.
 
+![The QR code screen with a code's preview and the codes on the watch](../images/companion/qr-code.png){ .phone }
+
 ![A QR code on the watch](../../battletime/harness/snapshots/screens/app-qr-code-code.png)
 
 ## Remote

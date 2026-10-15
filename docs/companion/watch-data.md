@@ -23,6 +23,8 @@ hour. **Read again** fetches them now. Today's count is also on the Watch screen
 
 The **Steps** plugin's page draws the last two weeks and today's steps in six-minute slots.
 
+![The Steps screen with today's count, the last seven days and today hour by hour](../images/companion/steps.png){ .phone }
+
 ![The watch's Steps app](../../battletime/harness/snapshots/screens/app-steps.png)
 
 ## Alarms
